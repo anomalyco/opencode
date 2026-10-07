@@ -9,20 +9,25 @@ import type { Files } from "../sdk"
 export function resolveLink(files: Files, href: string, base?: string) {
   // Agents cite locations as path:line or path:line:col; the file is what opens.
   const value = href.replaceAll("\\", "/").replace(/:\d+(?::\d+)?$/, "")
+
   if (/^[a-z]:\//i.test(value) || value.startsWith("/")) return files.resolve(value)
   const relative = resolvePath(base ?? "", value)
+
   if (relative !== undefined) return files.resolve(relative)
   // Climbing past the workspace root: resolve from the referencing folder's absolute location.
   const root = workspaceRoot(files)
   const dir = base ? `${root}/${base.replace(/\/+$/, "")}` : root
+
   return files.resolve(resolvePath(dir, value) ?? value)
 }
 
 export function isHtml(path: string) {
   const name = path.split(/[\\/]/).pop() ?? ""
   const index = name.lastIndexOf(".")
+
   if (index <= 0) return false
   const extension = name.slice(index + 1).toLowerCase()
+
   return extension === "html" || extension === "htm"
 }
 
@@ -41,17 +46,22 @@ function workspaceRoot(files: Files) {
  */
 function resolvePath(base: string, href: string) {
   const target = href.replaceAll("\\", "/")
+
   if (target.startsWith("/")) return undefined
   const dir = base.replaceAll("\\", "/")
   const segments = [...dir.split("/").filter(Boolean)]
+
   for (const segment of target.split("/")) {
     if (!segment || segment === ".") continue
+
     if (segment !== "..") {
       segments.push(segment)
       continue
     }
+
     if (segments.length === 0) return undefined
     segments.pop()
   }
+
   return `${dir.startsWith("/") ? "/" : ""}${segments.join("/")}`
 }

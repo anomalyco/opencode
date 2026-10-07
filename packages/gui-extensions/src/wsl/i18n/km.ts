@@ -52,8 +52,5 @@ export default {
   "error.healthTimeout": "Sidecar សម្រាប់ការពិនិត្យសុខភាព {{distro}} អស់ពេលបន្ទាប់ពី {{timeout}}ms",
   "error.commandTimeout": "{{command}} {{args}} អស់ពេលបន្ទាប់ពី {{timeout}}ms",
   "error.failedPort": "បរាជ័យក្នុងការទទួលបានច្រក",
-  "server.default": "លំនាំដើម",
-  "menu.default": "កំណត់ជាលំនាំដើម",
-  "menu.defaultRemove": "លុបលំនាំដើមចេញ",
   "menu.remove": "ផ្អាក",
 }

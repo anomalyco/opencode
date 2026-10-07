@@ -1,9 +1,11 @@
 import type { FileContent } from "@/runtime/server/types"
 
 const MAX_FILE_CONTENT_ENTRIES = 40
+
 const MAX_FILE_CONTENT_BYTES = 20 * 1024 * 1024
 
 const lru = new Map<string, number>()
+
 let total = 0
 
 export function approxBytes(content: FileContent) {
@@ -12,11 +14,15 @@ export function approxBytes(content: FileContent) {
       return sum + hunk.lines.reduce((lineSum, line) => lineSum + line.length, 0)
     }, 0) ?? 0
 
-  return (content.content.length + (content.diff?.length ?? 0) + patchBytes) * 2
+  // V8 keeps an ASCII string such as base64 at one byte per character; other text may take two.
+  const body = content.content.length * (content.encoding === "base64" ? 1 : 2)
+
+  return body + ((content.diff?.length ?? 0) + patchBytes) * 2
 }
 
 function setBytes(path: string, nextBytes: number) {
   const prev = lru.get(path)
+
   if (prev !== undefined) total -= prev
   lru.delete(path)
   lru.set(path, nextBytes)
@@ -25,12 +31,14 @@ function setBytes(path: string, nextBytes: number) {
 
 function touch(path: string, bytes?: number) {
   const prev = lru.get(path)
+
   if (prev === undefined && bytes === undefined) return
   setBytes(path, bytes ?? prev ?? 0)
 }
 
 function remove(path: string) {
   const prev = lru.get(path)
+
   if (prev === undefined) return
   lru.delete(path)
   total -= prev
@@ -46,10 +54,12 @@ export function evictContentLru(keep: Set<string> | undefined, evict: (path: str
 
   while (lru.size > MAX_FILE_CONTENT_ENTRIES || total > MAX_FILE_CONTENT_BYTES) {
     const path = lru.keys().next().value
+
     if (!path) return
 
     if (set.has(path)) {
       touch(path)
+
       if (lru.size <= set.size) return
       continue
     }

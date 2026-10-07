@@ -550,7 +550,10 @@ function groupMessages(rows: TimelineRow.TimelineRow[], detail: TimelineDetail, 
         ? new TimelineRow.AssistantPart({
             userMessageID: row.userMessageID,
             previousAssistantPart: Predicate.isTagged(previous, "AssistantPart"),
-            spacing: Predicate.isTagged(previous, "AssistantPart") ? "tool" : undefined,
+            spacing:
+              Predicate.isTagged(previous, "AssistantPart") || Predicate.isTagged(previous, "Error")
+                ? "tool"
+                : undefined,
             group: {
               type: "context",
               key: `message:${row.messageID}`,

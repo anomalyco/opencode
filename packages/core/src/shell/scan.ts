@@ -508,8 +508,11 @@ function scanBash(
     const inCasePattern = state.structures.at(-1)?.phase === "pattern"
     // Elsewhere a parenthesized group inside a word is a Zsh glob qualifier, which can run code.
     const array =
+      (char === "=" || char === "(") &&
       state.assignmentWord &&
-      /[^=]=$/.test(state.word) &&
+      state.word.length > 1 &&
+      state.word.endsWith("=") &&
+      !state.word.endsWith("==") &&
       (state.commandWordIndex < 0 || BASH_ASSIGNMENT_DECLARATIONS.has(state.rawWords[state.commandWordIndex]))
     if (char === "=" && (!state.wordStarted || array) && input[index + 1] === "(") {
       const end = scanBashNested(input, index + 2, depth, context, state.nestedCommands, ")")
@@ -1724,41 +1727,65 @@ function bashHeredoc(
 }
 
 export function scanPowerShell(input: string): Result {
-  return scanPowerShellNested(input, 0, { remaining: MAX_INPUT_LENGTH * MAX_SUBSTITUTION_DEPTH })
-}
-
-function scanPowerShellNested(input: string, depth: number, budget: { remaining: number }, hash = false): Result {
-  budget.remaining -= input.length
-  if (input.length > MAX_INPUT_LENGTH || depth >= MAX_SUBSTITUTION_DEPTH || budget.remaining < 0)
-    return { kind: "opaque", reason: "invalid-structure" }
+  if (input.length > MAX_INPUT_LENGTH) return { kind: "opaque", reason: "invalid-structure" }
   // PowerShell's Unicode quotes, dashes, and whitespace differ from JavaScript's token rules.
   if (/[\0\u0085\u2013-\u2015\u2018-\u201e\ufeff]/.test(input)) return { kind: "opaque", reason: "invalid-structure" }
+  const result = scanPowerShellList(input, 0, 0, { remaining: MAX_INPUT_LENGTH * MAX_SUBSTITUTION_DEPTH })
+  if (result.kind === "opaque") return result
+  return { kind: "scanned", commands: result.commands }
+}
+
+type PowerShellClause = "member" | "block" | "if" | "try" | "clause" | "switch" | "paren" | "do" | undefined
+
+function scanPowerShellList(
+  input: string,
+  start: number,
+  depth: number,
+  budget: { remaining: number },
+  close?: ")" | "}" | "]",
+  hash: boolean | "clause" | "switch" = false,
+  skipped?: ReadonlySet<number>,
+): BashResult {
+  if (depth >= MAX_SUBSTITUTION_DEPTH || budget.remaining < 0) return { kind: "opaque", reason: "invalid-structure" }
   const commands: Command[] = []
   const nestedCommands: Command[] = []
   const words: string[] = []
   const rawWords: string[] = []
   const wordEnds: number[] = []
-  let segment = 0
+  const initialExpression = hash === true || hash === "clause"
+  const initialClause: PowerShellClause = hash === "clause" || hash === "switch" ? "member" : undefined
+  let segment = start
   let word = ""
   let started = false
-  let wordStart = 0
-  let quote: "single" | "double" | undefined
+  let wordStart = start
+  let quote: "'" | '"' | undefined
   let standalone = false
-  let expression = hash
-  let compound = false
+  let expression = initialExpression
+  let clause: PowerShellClause = initialClause
+  let after: "do" | "if" | "try" | undefined
+  let indexable: false | "variable" | "closed" | "member" = false
   let stopParsing = false
-  let commandEnd = 0
+  let commandEnd = start
   let statementHead = true
   let invalid = false
   let redirectTarget = false
-  let comment = false
   let dangling = false
   let invocation = false
 
   const finishWord = (end: number) => {
     if (!started) return
     // Generic tokens can spell stop-parsing with escapes or embedded quotes; literal strings cannot.
-    if (word === "--%" && words.length > 0 && !expression && !/['"]/.test(input[wordStart])) stopParsing = true
+    if (
+      word === "--%" &&
+      words.length > 0 &&
+      !expression &&
+      !clause &&
+      !redirectTarget &&
+      !/['"]/.test(input[wordStart]) &&
+      !rawWords.at(-1)?.endsWith(",") &&
+      !POWERSHELL_PARAMETER_COLON_RE.test(rawWords.at(-1) ?? "")
+    )
+      stopParsing = true
     if (!redirectTarget) {
       if (!words.length && !invocation && !expression) segment = wordStart
       words.push(word)
@@ -1773,17 +1800,20 @@ function scanPowerShellNested(input: string, depth: number, budget: { remaining:
   }
   const finishCommand = (end: number, required = false) => {
     finishWord(end)
-    const start = segment + input.slice(segment, commandEnd).search(/\S|$/)
-    const resource = input.slice(start, commandEnd).trimEnd()
-    if (words.length && !expression)
+    if (words.length && !expression && !clause)
       commands.push({
-        resource,
+        resource: input.slice(segment, commandEnd).trimEnd(),
         words: [...words],
         rawWords: [...rawWords],
-        wordEnds: wordEnds.map((end) => end - start),
+        wordEnds: wordEnds.map((value) => value - segment),
         ...(statementHead && !invocation ? { statementHead: true as const } : {}),
       })
-    else if ((!expression && invocation) || (required && !words.length && !nestedCommands.length)) invalid = true
+    else if (
+      (!expression && !clause && invocation) ||
+      (required && !words.length && !nestedCommands.length) ||
+      (clause !== undefined && clause !== "member")
+    )
+      invalid = true
     if (redirectTarget) invalid = true
     commands.push(...nestedCommands.splice(0))
     words.length = 0
@@ -1791,16 +1821,23 @@ function scanPowerShellNested(input: string, depth: number, budget: { remaining:
     wordEnds.length = 0
     redirectTarget = false
     invocation = false
-    expression = hash
-    compound = false
+    expression = initialExpression
+    clause = initialClause
+    after = undefined
+    indexable = false
     stopParsing = false
   }
 
-  for (let index = 0; index < input.length; index++) {
+  let index = start
+  for (; index < input.length; index++) {
+    if (--budget.remaining < 0) return { kind: "opaque", reason: "invalid-structure" }
+    if (skipped?.has(index)) continue
     const char = input[index]
+    const inExpression = expression && !redirectTarget
+    const atBoundary = !started || (!inExpression && word.endsWith(","))
     if (!started) wordStart = index
     if (stopParsing) {
-      const stop = powerShellStopParsing(input, index)
+      const stop = powerShellStopParsing(input, index, skipped)
       const text = input.slice(index, stop).trim()
       if (text) {
         wordStart = index + input.slice(index, stop).search(/\S/)
@@ -1812,212 +1849,295 @@ function scanPowerShellNested(input: string, depth: number, budget: { remaining:
       index = stop - 1
       continue
     }
-    if (quote === "single") {
-      started = true
-      if (char === "'" && input[index + 1] === "'") {
-        word += "'"
-        index++
-      } else if (char === "'") {
+    if (quote) {
+      let nextQuote = index + 1
+      while (skipped?.has(nextQuote)) nextQuote++
+      if (char === quote && input[nextQuote] === quote) {
+        word += quote
+        index = nextQuote
+      } else if (char === quote) {
         quote = undefined
-        if (standalone) finishWord(index + 1)
-      } else word += char
-      continue
-    }
-    if (quote === "double") {
-      if (char === '"' && input[index + 1] === '"') {
-        word += '"'
-        index++
-      } else if (char === '"') {
-        quote = undefined
-        if (standalone) finishWord(index + 1)
-      } else if (char === "`") {
-        const escape = powerShellEscape(input, index)
+        if (standalone) {
+          finishWord(index + 1)
+          indexable = "closed"
+        }
+      } else if (quote === '"' && char === "`") {
+        const escape = powerShellEscape(input, index, false, skipped)
         if (!escape) return { kind: "opaque", reason: "unterminated-escape" }
         word += escape.value
         index = escape.end
-      } else if (char === "$" && input[index + 1] === "(") {
-        const block = powerShellBlock(input, index + 1, depth)
-        if (!block) return { kind: "opaque", reason: "invalid-structure" }
-        const result = scanPowerShellNested(block.source, depth + 1, budget)
+      } else if (quote === '"' && char === "$" && input[index + 1] === "{") {
+        const end = powerShellBracedVariable(input, index, skipped)
+        if (end === undefined) return { kind: "opaque", reason: "invalid-structure" }
+        word += input.slice(index, end + 1)
+        index = end
+      } else if (quote === '"' && char === "$" && input[index + 1] === "(") {
+        const sub = powerShellSubExpression(input, index + 2, false, budget, skipped)
+        if (!sub) return { kind: "opaque", reason: "invalid-structure" }
+        const result = scanPowerShellList(input, index + 2, depth + 1, budget, ")", false, sub.skipped)
         if (result.kind === "opaque") return result
         nestedCommands.push(...result.commands)
-        word += input.slice(index, block.end + 1)
-        index = block.end
+        const end = sub.rawEnd !== undefined && sub.rawEnd > result.end ? sub.rawEnd : result.end
+        word += input.slice(index, end + 1)
+        index = end
       } else word += char
       continue
     }
     if (char === "'" || char === '"') {
       if (!started && words.length === 0 && !invocation) expression = true
-      quote = char === "'" ? "single" : "double"
-      standalone = !started
+      quote = char
+      standalone = atBoundary || (expression && !redirectTarget) || (indexable === "member" && /[.:]$/.test(word))
+      if (!standalone) indexable = false
       started = true
       continue
     }
     if (char === "`") {
-      const escape = powerShellEscape(input, index)
+      const escape = powerShellEscape(input, index, atBoundary || inExpression, skipped)
       if (!escape) return { kind: "opaque", reason: "unterminated-escape" }
+      const rawSpace = /\s/.test(input[index + 1] ?? "")
+      if ((inExpression || atBoundary) && started && rawSpace) finishWord(index)
       // At a token boundary escaped whitespace is trivia, not a new argument.
-      if (started || /\S/.test(escape.value)) {
+      else if (!atBoundary || !rawSpace) {
         started = true
+        indexable = false
         word += escape.value
       }
       index = escape.end
       continue
     }
-    if (!started && words.length > 0 && !expression && /^--%(?=$|[\s;|&(){}])/.test(input.slice(index))) {
+    if (
+      !started &&
+      words.length > 0 &&
+      !expression &&
+      !clause &&
+      !redirectTarget &&
+      testAt(POWERSHELL_STOP_PARSING_RE, input, index)
+    ) {
       word = "--%"
       started = true
       finishWord(index + 3)
-      stopParsing = true
       index += 2
       continue
     }
-    if (char === "<" && input[index + 1] === "#" && !started) {
-      const end = powerShellComment(input, index)
-      if (end === undefined) return { kind: "opaque", reason: "invalid-structure" }
-      if (!words.length && !invocation) segment = end + 1
-      index = end
+    if (char === "<" && input[index + 1] === "#" && (atBoundary || inExpression || indexable === "member")) {
+      const memberOperator = indexable === "member" && /[.:]$/.test(started ? word : (words.at(-1) ?? ""))
+      if (started) finishWord(index)
+      const end = input.indexOf("#>", index + 2)
+      if (end < 0) return { kind: "opaque", reason: "invalid-structure" }
+      if (!memberOperator) indexable = false
+      index = end + 1
       continue
     }
-    if (char === "#" && (!started || expression)) {
-      if (words.length || started || invocation) finishCommand(index)
+    if (
+      char === "#" &&
+      (atBoundary ||
+        indexable === "member" ||
+        (inExpression && !(close === "]" && /^[\p{L}\p{Nl}_][\p{L}\p{Nl}\d_.#+`\\]*$/u.test(word))))
+    ) {
+      const prev = started ? word : (words.at(-1) ?? "")
+      const memberOperator = indexable === "member" && /[.:]$/.test(prev)
+      if ((clause && clause !== "member") || prev.endsWith(",") || memberOperator) finishWord(index)
+      else if (words.length || started || invocation) finishCommand(index)
       statementHead = !dangling
-      comment = true
       const endings = [input.indexOf("\n", index), input.indexOf("\r", index)].filter((ending) => ending >= 0)
       const newline = endings.length > 0 ? Math.min(...endings) : -1
-      if (newline === -1) break
-      comment = false
+      if (newline === -1) {
+        index = input.length
+        break
+      }
       index = input[newline] === "\r" && input[newline + 1] === "\n" ? newline + 1 : newline
-      segment = index + 1
       continue
     }
+    if (inExpression && started && (char === ">" || (char === "*" && input[index + 1] === ">"))) finishWord(index)
     const redirect =
-      !started && (char === ">" || char === "*" || /\d/.test(char)) ? powerShellRedirect(input, index) : undefined
+      !started &&
+      (char === ">" ||
+        char === "*" ||
+        (/\d/.test(char) && (words.length > 0 || testAt(POWERSHELL_MERGE_REDIRECT_RE, input, index))))
+        ? powerShellRedirect(input, index)
+        : undefined
     if (redirect === false) return { kind: "opaque", reason: "invalid-redirect" }
     if (redirect) {
-      if (redirectTarget) return { kind: "opaque", reason: "invalid-redirect" }
-      if (words.length === 0) return { kind: "opaque", reason: "invalid-redirect" }
+      if (redirectTarget || words.length === 0 || (clause && clause !== "member"))
+        return { kind: "opaque", reason: "invalid-redirect" }
       redirectTarget = !redirect.includes("&")
+      indexable = false
       index += redirect.length - 1
       commandEnd = index + 1
       continue
     }
-    if (!started && !words.length && !invocation && !expression && /[A-Za-z]/.test(char)) {
-      const keyword = /^[A-Za-z]+(?=$|[\s({])/.exec(input.slice(index))?.[0]?.toLowerCase()
+    if (!started && !words.length && !invocation && !expression && !clause && char === ":") {
+      const label = matchAt(POWERSHELL_LABEL_RE, input, index)
+      if (label) {
+        index += label[0].length - 1
+        continue
+      }
+    }
+    if (
+      !started &&
+      !invocation &&
+      !clause &&
+      (!words.length ? !expression : words.every((item) => item.startsWith("["))) &&
+      /[A-Za-z]/.test(char)
+    ) {
+      const keyword = matchAt(POWERSHELL_KEYWORD_RE, input, index)?.[0]?.toLowerCase()
       if (
         keyword &&
-        /^(?:if|elseif|else|for|while|do|until|switch|function|filter|try|catch|finally|begin|process|end|clean|param|trap|class|enum|data|dynamicparam|using)$/.test(
-          keyword,
-        )
+        (words.length > 0
+          ? (keyword === "param" && testAt(POWERSHELL_PARAM_RE, input, index)) ||
+            keyword === "class" ||
+            keyword === "enum"
+          : (keyword === "param" && testAt(POWERSHELL_PARAM_RE, input, index)) ||
+            (keyword === "foreach" && testAt(POWERSHELL_FOREACH_RE, input, index)) ||
+            (keyword === "until" && after === "do") ||
+            ((keyword === "else" || keyword === "elseif") && after === "if") ||
+            ((keyword === "catch" || keyword === "finally") && after === "try") ||
+            /^(?:if|for|while|do|switch|function|filter|workflow|parallel|sequence|configuration|try|begin|process|end|clean|trap|class|enum|data|dynamicparam|using|break|continue)$/.test(
+              keyword,
+            ))
       ) {
-        expression = true
-        compound = true
+        expression = /^(?:class|enum|break|continue)$/.test(keyword)
+        clause =
+          keyword === "using" || keyword === "break" || keyword === "continue"
+            ? "member"
+            : keyword === "param" || keyword === "until" || (keyword === "while" && after === "do")
+              ? "paren"
+              : keyword === "do"
+                ? "do"
+                : keyword === "if" || keyword === "elseif"
+                  ? "if"
+                  : keyword === "try" || keyword === "catch"
+                    ? "try"
+                    : keyword === "switch"
+                      ? "switch"
+                      : keyword === "class" || keyword === "enum"
+                        ? "clause"
+                        : "block"
+        after = undefined
         index += keyword.length - 1
         continue
       }
-      if (keyword === "foreach" && /^foreach\s*\(/i.test(input.slice(index))) {
-        expression = true
-        compound = true
+      if (!words.length && keyword && /^(?:return|throw|exit)$/.test(keyword)) {
+        after = undefined
         index += keyword.length - 1
-        continue
-      }
-      if (keyword && /^(?:return|throw|exit|break|continue)$/.test(keyword)) {
-        index += keyword.length - 1
-        segment = index + 1
         continue
       }
     }
-    if (expression && !compound && (char === "=" || (/[-+*/%]/.test(char) && input[index + 1] === "="))) {
-      finishWord(index)
+    const assign = inExpression && !clause && (char === "=" || (/[-+*/%]/.test(char) && input[index + 1] === "="))
+    if (assign || (inExpression && close === ")" && !started && testAt(POWERSHELL_IN_RE, input, index))) {
+      if (assign) finishWord(index)
       words.length = 0
       rawWords.length = 0
       wordEnds.length = 0
       expression = false
-      if (char !== "=") index++
-      segment = index + 1
+      indexable = false
+      if (!assign || char !== "=") index++
       continue
     }
-    if (expression && !started && /^in\b/i.test(input.slice(index))) {
-      words.length = 0
-      rawWords.length = 0
-      wordEnds.length = 0
-      expression = false
-      index++
-      segment = index + 1
-      continue
-    }
-    if (char === "@" && /['"]/.test(input[index + 1] ?? "")) {
-      const literal = powerShellHereString(input, index)
-      if (!literal) return { kind: "opaque", reason: "unterminated-quote" }
+    if (atBoundary && char === "@" && !testAt(POWERSHELL_AT_OPENER_RE, input, index + 1))
+      return { kind: "opaque", reason: "invalid-structure" }
+    if (atBoundary && char === "@" && (input[index + 1] === "'" || input[index + 1] === '"')) {
+      if (started) finishWord(index)
+      wordStart = index
+      const literal = powerShellHereString(input, index, depth, budget, skipped)
+      if (literal.kind === "opaque") return literal
       if (!words.length && !invocation) expression = true
-      if (input[index + 1] === '"') {
-        const result = powerShellExpansions(literal.source, depth + 1, budget)
-        if (result.kind === "opaque") return result
-        nestedCommands.push(...result.commands)
-      }
+      nestedCommands.push(...literal.commands)
       word = literal.source
       started = true
       index = literal.end
       finishWord(index + 1)
+      indexable = "closed"
       continue
     }
     if (char === "$" && input[index + 1] === "{") {
-      const end = input.indexOf("}", index + 2)
-      if (end < 0) return { kind: "opaque", reason: "invalid-structure" }
-      if (!started && !words.length && !invocation) expression = true
+      const end = powerShellBracedVariable(input, index, skipped)
+      if (end === undefined) return { kind: "opaque", reason: "invalid-structure" }
+      if (!started && !words.length && !invocation && hash !== "switch") expression = true
+      indexable = atBoundary || (indexable === "member" && /[.:]$/.test(word)) ? "closed" : false
       word += input.slice(index, end + 1)
       started = true
       index = end
+      if (expression && !redirectTarget && input[index + 1] !== "[") finishWord(index + 1)
       continue
     }
     const opener =
-      (char === "$" || char === "@") && input[index + 1] === "("
+      (char === "$" || (atBoundary && char === "@")) && input[index + 1] === "("
         ? index + 1
-        : char === "@" && input[index + 1] === "{"
+        : atBoundary && char === "@" && input[index + 1] === "{"
           ? index + 1
-          : char === "(" || char === "{" || (char === "[" && (expression || !started))
+          : char === "(" ||
+              char === "{" ||
+              (char === "[" &&
+                (inExpression ||
+                  Boolean(indexable) ||
+                  (!started && !invocation && (!words.length || clause === "block" || clause === "try"))))
             ? index
             : undefined
     if (opener !== undefined) {
-      if (started && (char === "{" || char === "(")) {
+      const openChar = input[opener]
+      const standaloneBlock = atBoundary || inExpression || char === "(" || openChar === "{"
+      const blockClose = openChar === "(" ? ")" : openChar === "[" ? "]" : "}"
+      const blockHash =
+        openChar === "["
+          ? true
+          : char === "@" && openChar === "{"
+            ? true
+            : clause === "switch" && openChar === "{"
+              ? "switch"
+              : clause === "clause" && openChar === "{"
+                ? "clause"
+                : close === "]" && char === "(" && started
+                  ? "clause"
+                  : false
+      if (started && (char === "{" || char === "(" || (char === "@" && atBoundary))) {
         finishWord(index)
+        if (stopParsing) {
+          index--
+          continue
+        }
         wordStart = index
       }
       if (!started && !words.length && !invocation) expression = true
-      const block = powerShellBlock(input, opener, depth)
-      if (!block) return { kind: "opaque", reason: "invalid-structure" }
-      const result = scanPowerShellNested(
-        block.source,
-        depth + 1,
-        budget,
-        input[opener] === "[" || (char === "@" && input[opener] === "{"),
-      )
+      const result = scanPowerShellList(input, opener + 1, depth + 1, budget, blockClose, blockHash, skipped)
       if (result.kind === "opaque") return result
       nestedCommands.push(...result.commands)
       started = true
-      word += input.slice(index, block.end + 1)
-      index = block.end
-      if (input[opener] === "{" || char === "(") finishWord(index + 1)
-      if (compound && input[opener] === "{") {
+      word += input.slice(index, result.end + 1)
+      index = result.end
+      if (openChar === "[") {
+        indexable = "closed"
+        if (input[index + 1] !== "[") finishWord(index + 1)
+      } else if (standaloneBlock) {
+        finishWord(index + 1)
+        indexable = "closed"
+      }
+      if ((clause === "paren" && char === "(") || (clause && clause !== "paren" && char === "{")) {
+        const completed = clause === "do" || clause === "if" || clause === "try" ? clause : undefined
+        clause = "member"
         finishCommand(index + 1)
-        segment = index + 1
+        after = completed
       }
       continue
     }
-    if (char === "}" || char === ")") return { kind: "opaque", reason: "invalid-structure" }
+    if (char === close) break
+    if (char === "}" || char === ")" || (char === "]" && inExpression))
+      return { kind: "opaque", reason: "invalid-structure" }
     if (
       !started &&
       words.length === 0 &&
       ((char === "&" && input[index + 1] !== "&") ||
-        (char === "." && (/\s/.test(input[index + 1] ?? "") || !input[index + 1])))
+        (char === "." && (!input[index + 1] || /[\s"'$(),;{|}&]/.test(input[index + 1]))))
     ) {
       if (invocation) return { kind: "opaque", reason: "invalid-structure" }
+      segment = index
       invocation = true
+      after = undefined
       continue
     }
-    if (!started && !words.length && !invocation && powerShellExpression(input.slice(index))) expression = true
     if (/\s/.test(char) && char !== "\n" && char !== "\r") {
       finishWord(index)
+      indexable = false
       continue
     }
     const next = input[index + 1]
@@ -2031,184 +2151,94 @@ function scanPowerShellNested(input: string, depth: number, budget: { remaining:
             : undefined
     if (separator) {
       if (
-        (separator === "\n" || separator === "\r" || separator === "\r\n") &&
-        !started &&
-        !words.length &&
-        !invocation
-      ) {
-        index += separator.length - 1
-        segment = index + 1
-        continue
+        close === "]" &&
+        (separator === ";" || separator === "|" || separator === "||" || separator === "&&" || separator === "&")
+      )
+        return { kind: "opaque", reason: "invalid-structure" }
+      if (separator === "\n" || separator === "\r" || separator === "\r\n") {
+        const prev = started ? word : (words.at(-1) ?? "")
+        const memberOperator = indexable === "member" && /[.:]$/.test(prev)
+        if ((clause && clause !== "member") || prev.endsWith(",") || memberOperator) {
+          finishWord(index)
+          index += separator.length - 1
+          if (!memberOperator) indexable = false
+          continue
+        }
+        if (!started && !words.length && !invocation) {
+          index += separator.length - 1
+          indexable = false
+          continue
+        }
       }
       finishCommand(index, dangling || ![";", "\n", "\r", "\r\n"].includes(separator))
       dangling = ![";", "&", "\n", "\r", "\r\n"].includes(separator)
       statementHead = !dangling
       index += separator.length - 1
-      segment = index + 1
       continue
     }
+    if (!started && !words.length && !invocation && hash !== "switch" && testAt(POWERSHELL_EXPRESSION_RE, input, index))
+      expression = true
+    if ((atBoundary || (indexable === "member" && /[.:]$/.test(word))) && char === "$")
+      indexable = testAt(POWERSHELL_INDEXABLE_VAR_RE, input, index + 1) ? "variable" : false
+    else if (indexable === "closed")
+      indexable =
+        (char === "." && input[index + 1] !== "." && !/\s/.test(input[index + 1] ?? "")) ||
+        (!started && char === ":" && input[index + 1] === ":" && !/\s/.test(input[index + 2] ?? "")) ||
+        (!started &&
+          char === "?" &&
+          input[index + 1] === "." &&
+          input[index + 2] !== "." &&
+          !/\s/.test(input[index + 2] ?? ""))
+          ? "member"
+          : !started && char === "?" && input[index + 1] === "["
+            ? "closed"
+            : false
+    else if (indexable === "variable")
+      indexable =
+        (char === "." && input[index + 1] !== "." && !/\s/.test(input[index + 1] ?? "")) ||
+        (char === ":" && input[index + 1] === ":" && !/\s/.test(input[index + 2] ?? ""))
+          ? "member"
+          : (char === "." && input[index + 1] === ".") || !/[\p{L}\p{Nl}\d_:?]/u.test(char)
+            ? false
+            : "variable"
+    else if (indexable === "member")
+      indexable =
+        char === "." && input[index + 1] === "."
+          ? false
+          : (char === "." && !/\s/.test(input[index + 1] ?? "")) ||
+              (char === ":" && (input[index + 1] === ":" || input[index - 1] === ":")) ||
+              (char === "?" && input[index + 1] === "." && input[index + 2] !== ".") ||
+              /[\p{L}\p{Nl}\d_]/u.test(char)
+            ? "member"
+            : false
+    after = undefined
     started = true
     dangling = false
     word += char
   }
 
+  if (close !== undefined && input[index] !== close) return { kind: "opaque", reason: "invalid-structure" }
   if (quote) return { kind: "opaque", reason: "unterminated-quote" }
-  if (!comment) finishCommand(input.length)
+  finishCommand(index)
   if (redirectTarget || invalid || dangling) return { kind: "opaque", reason: "invalid-structure" }
   if (commands.some((command) => !command.words[0])) return { kind: "opaque", reason: "dynamic-command-name" }
-  return { kind: "scanned", commands }
+  return { kind: "scanned", commands, end: index }
 }
 
-function powerShellBlock(input: string, start: number, depth: number): { source: string; end: number } | undefined {
-  if (depth >= MAX_SUBSTITUTION_DEPTH) return
-  let quote: "single" | "double" | undefined
-  let standalone = false
-  let started = false
-  let head = true
-  let expression = false
-  let token = ""
-  const close = input[start] === "(" ? ")" : input[start] === "[" ? "]" : "}"
-  for (let index = start + 1; index < input.length; index++) {
-    const char = input[index]
-    if (quote === "single") {
-      if (char === "'" && input[index + 1] === "'") {
-        token += "'"
-        index++
-      } else if (char === "'") {
-        quote = undefined
-        started = !standalone
-        if (standalone) token = ""
-      } else token += char
-      continue
-    }
-    if (quote === "double") {
-      if (char === "`") {
-        const escape = powerShellEscape(input, index)
-        if (!escape) return
-        token += escape.value
-        index = escape.end
-      } else if (char === '"' && input[index + 1] === '"') {
-        token += '"'
-        index++
-      } else if (char === '"') {
-        quote = undefined
-        started = !standalone
-        if (standalone) token = ""
-      } else if (char === "$" && input[index + 1] === "(") {
-        const nested = powerShellBlock(input, index + 1, depth + 1)
-        if (!nested) return
-        index = nested.end
-      } else token += char
-      continue
-    }
-    if (char === "`") {
-      const escape = powerShellEscape(input, index)
-      if (!escape) return
-      if (started || /\S/.test(escape.value)) {
-        started = true
-        token += escape.value
-      }
-      index = escape.end
-      continue
-    }
-    if (char === "<" && input[index + 1] === "#" && !started) {
-      const end = powerShellComment(input, index)
-      if (end === undefined) return
-      index = end
-      continue
-    }
-    if (char === "#" && (!started || expression)) {
-      const endings = [input.indexOf("\n", index), input.indexOf("\r", index)].filter((ending) => ending >= 0)
-      const newline = endings.length > 0 ? Math.min(...endings) : -1
-      if (newline < 0) return
-      index = newline
-      started = false
-      head = true
-      expression = false
-      token = ""
-      continue
-    }
-    if (char === "@" && /['"]/.test(input[index + 1] ?? "")) {
-      const literal = powerShellHereString(input, index)
-      if (!literal) return
-      index = literal.end
-      started = false
-      head = false
-      continue
-    }
-    if (
-      head &&
-      !started &&
-      ((char === "&" && input[index + 1] !== "&") || (char === "." && /\s/.test(input[index + 1] ?? "")))
-    ) {
-      head = false
-      continue
-    }
-    if (expression && (char === "=" || (!started && /^in\b/i.test(input.slice(index))))) {
-      if (char !== "=") index++
-      expression = false
-      head = true
-      started = false
-      token = ""
-      continue
-    }
-    if (char === "'" || char === '"') {
-      quote = char === "'" ? "single" : "double"
-      standalone = !started
-      if (head && !started) expression = true
-      started = true
-      continue
-    }
-    const redirect =
-      !started && (char === ">" || char === "*" || /\d/.test(char)) ? powerShellRedirect(input, index) : undefined
-    if (redirect === false) return
-    if (redirect) {
-      index += redirect.length - 1
-      token = ""
-      continue
-    }
-    if (char === "$" && input[index + 1] === "{") {
-      const end = input.indexOf("}", index + 2)
-      if (end < 0) return
-      if (head && !started) expression = true
-      index = end
-      started = true
-      continue
-    }
-    if (!started && !head && !expression && /^--%(?=$|[\s;|&(){}])/.test(input.slice(index))) {
-      index = powerShellStopParsing(input, index + 3) - 1
-      continue
-    }
-    if (char === close) return { source: input.slice(start + 1, index), end: index }
-    if (char === "(" || char === "{" || (char === "[" && (!started || expression))) {
-      if (head && !started) expression = true
-      const nested = powerShellBlock(input, index, depth + 1)
-      if (!nested) return
-      index = nested.end
-      started = false
-      head = false
-      token = ""
-      continue
-    }
-    if (/[\s;&|]/.test(char)) {
-      if (token === "--%" && !expression) {
-        index = powerShellStopParsing(input, index) - 1
-        token = ""
-        continue
-      }
-      if (/[;&|\r\n]/.test(char)) {
-        head = true
-        expression = false
-      } else if (started) head = false
-      started = false
-      token = ""
-      continue
-    }
-    if (head && !started && powerShellExpression(input.slice(index))) expression = true
-    started = true
-    token += char
-  }
-}
+const POWERSHELL_STOP_PARSING_RE = /--%(?=$|[\s;|&(){}])/y
+const POWERSHELL_PARAMETER_COLON_RE = /^-[\p{L}\p{Nl}_?][\p{L}\p{Nl}\d_?-]*:$/u
+const POWERSHELL_MERGE_REDIRECT_RE = /\d>&/y
+const POWERSHELL_LABEL_RE = /:[A-Za-z_]\w*(?=\s*(?:while|for|foreach|do|switch)(?=$|[\s&(),;{|}]))/iy
+const POWERSHELL_KEYWORD_RE = /[A-Za-z]+(?=$|[\s&(),;{|}])/y
+const POWERSHELL_FOREACH_RE = /foreach\s*\(/isy
+const POWERSHELL_PARAM_RE = /param\s*\(/isy
+const POWERSHELL_IN_RE = /in(?=$|[\s&(),;{|}])/iy
+const POWERSHELL_AT_OPENER_RE = /[({'"\p{L}\p{Nl}\d_?]/uy
+const POWERSHELL_INDEXABLE_VAR_RE = /(?::[\p{L}\p{Nl}\d_?]+|[\p{L}\p{Nl}\d_][\p{L}\p{Nl}\d_?]*)/uy
+const POWERSHELL_HERE_HEADER_RE = /@['"][^\S\r\n]*(?:\r\n|\r|\n)/y
+const POWERSHELL_UNICODE_ESCAPE_RE = /u\{([0-9a-f]{1,6})\}/iy
+const POWERSHELL_EXPRESSION_RE =
+  /(?:!*(?:\+\+|--|[+-])?\$(?:\{|(?:\?|\$|\^)(?=$|[\s;|&(){},#>])|:[\p{L}\p{Nl}\d_?]+|[\p{L}\p{Nl}\d_][\p{L}\p{Nl}\d_?]*(?::[\p{L}\p{Nl}\d_?]+)?)|!(?![\p{L}\p{Nl}_.\d])|\+(?![=\p{L}\p{Nl}_.\d])|--(?!=)|-(?![=\p{L}\p{Nl}\d_?.])|,(?!\s*$)|!*[+-]?(?:0[xX][\da-fA-F]+|0[bB][01]+|(?:\d+(?:\.(?!\.)\d*|(?!\.(?!\.)))|\.\d+)(?:[eE][+-]?\d+)?)(?:[dDlLnN]|[uU][sSyYlL]?|[sSyY])?(?:[kKmMgGtTpP][bB])?(?=$|[\s!#%&()*+,\-/.;<=>\]|{}])|-(?:not|bnot|join|[ic]?split)(?![\p{L}\p{Nl}]))/iuy
 
 const POWERSHELL_ESCAPES: Record<string, string> = {
   "0": "\0",
@@ -2222,75 +2252,145 @@ const POWERSHELL_ESCAPES: Record<string, string> = {
   v: "\v",
 }
 
-function powerShellEscape(input: string, start: number) {
-  const char = input[start + 1]
+function matchAt(regex: RegExp, input: string, index: number) {
+  regex.lastIndex = index
+  return regex.exec(input)
+}
+
+function testAt(regex: RegExp, input: string, index: number) {
+  regex.lastIndex = index
+  return regex.test(input)
+}
+
+function powerShellEscape(input: string, start: number, lineContinuation = false, skipped?: ReadonlySet<number>) {
+  let next = start + 1
+  while (skipped?.has(next)) next++
+  const char = input[next]
   if (char === undefined) return
   if (char === "\r" || char === "\n")
     return {
-      value: char === "\r" && input[start + 2] === "\n" ? "\r\n" : char,
-      end: start + (char === "\r" && input[start + 2] === "\n" ? 2 : 1),
+      value: lineContinuation && char === "\r" && input[next + 1] === "\n" ? "\r\n" : char,
+      end: next + (lineContinuation && char === "\r" && input[next + 1] === "\n" ? 1 : 0),
     }
-  if (char === "u" && input[start + 2] === "{") {
-    const code = /^u\{([0-9a-f]{1,6})\}/i.exec(input.slice(start + 1))
+  if (char === "u" && input[next + 1] === "{") {
+    const code = matchAt(POWERSHELL_UNICODE_ESCAPE_RE, input, next)
     if (!code || Number.parseInt(code[1], 16) > 0x10ffff) return
-    return { value: String.fromCodePoint(Number.parseInt(code[1], 16)), end: start + code[0].length }
+    return { value: String.fromCodePoint(Number.parseInt(code[1], 16)), end: next + code[0].length - 1 }
   }
-  return { value: POWERSHELL_ESCAPES[char] ?? char, end: start + 1 }
+  return { value: POWERSHELL_ESCAPES[char] ?? char, end: next }
 }
 
-function powerShellExpression(input: string) {
-  return /^(?:[$!,+]|[+-]?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?(?:[dDlLnNuU]|[kKmMgGtTpP][bB])?(?![\w'"`])|0[xX][\da-fA-F]+\b|0[bB][01]+\b|\.[0-9]|-(?:not|bnot|join|split)\b)/i.test(
-    input,
-  )
+function powerShellBracedVariable(input: string, start: number, skipped?: ReadonlySet<number>) {
+  for (let index = start + 2; index < input.length; index++) {
+    if (skipped?.has(index)) continue
+    if (input[index] === "`") {
+      const escape = powerShellEscape(input, index, false, skipped)
+      if (!escape) return
+      index = escape.end
+      continue
+    }
+    if (input[index] === "}") return index > start + 2 ? index : undefined
+  }
 }
 
-function powerShellStopParsing(input: string, start: number) {
+function powerShellSubExpression(
+  input: string,
+  start: number,
+  hereString: boolean,
+  budget: { remaining: number },
+  skipped?: ReadonlySet<number>,
+) {
+  const nextSkipped = new Set(skipped)
+  let depth = 1
+  let rawEnd: number | undefined
+  for (let index = start; index < input.length; index++) {
+    if (--budget.remaining < 0) return
+    if (nextSkipped.has(index)) continue
+    const char = input[index]
+    if (char === "(") depth++
+    else if (char === ")") {
+      if (--depth === 0 && rawEnd === undefined) rawEnd = index
+    } else if (!hereString && (char === '"' || char === "`")) {
+      let next = index + 1
+      while (nextSkipped.has(next)) next++
+      if (input[next] === '"') {
+        nextSkipped.add(index)
+        index = next
+      }
+    }
+  }
+  return { skipped: nextSkipped, rawEnd }
+}
+
+function powerShellStopParsing(input: string, start: number, skipped?: ReadonlySet<number>) {
   let quoted = false
   for (let index = start; index < input.length; index++) {
+    if (skipped?.has(index)) continue
     if (input[index] === '"') quoted = !quoted
-    if (input[index] === "\r" || input[index] === "\n" || (input[index] === "|" && !quoted)) return index
+    if (
+      input[index] === "\r" ||
+      input[index] === "\n" ||
+      ((input[index] === "|" || (input[index] === "&" && input[index + 1] === "&")) && !quoted)
+    )
+      return index
   }
   return input.length
 }
 
-function powerShellComment(input: string, start: number) {
-  const end = input.indexOf("#>", start + 2)
-  return end < 0 ? undefined : end + 1
-}
-
-function powerShellHereString(input: string, start: number) {
-  const header = /^@['"][ \t]*(?:\r\n|\r|\n)/.exec(input.slice(start))
-  if (!header) return
+function powerShellHereString(
+  input: string,
+  start: number,
+  depth: number,
+  budget: { remaining: number },
+  skipped?: ReadonlySet<number>,
+): (Result & { source: string; end: number }) | { kind: "opaque"; reason: OpaqueReason } {
+  const header = matchAt(POWERSHELL_HERE_HEADER_RE, input, start)
+  if (!header) return { kind: "opaque", reason: "unterminated-quote" }
+  const quote = input[start + 1]
   const body = start + header[0].length
-  for (let index = body; index < input.length; index++) {
-    if (index !== body && input[index - 1] !== "\r" && input[index - 1] !== "\n") continue
-    if (input[index] !== input[start + 1] || input[index + 1] !== "@") continue
-    const end =
-      index > body && input[index - 1] === "\n" && input[index - 2] === "\r"
-        ? index - 2
-        : index > body
-          ? index - 1
-          : index
-    return { source: input.slice(body, end), end: index + 1 }
-  }
-}
-
-function powerShellExpansions(input: string, depth: number, budget: { remaining: number }): Result {
   const commands: Command[] = []
-  for (let index = 0; index < input.length; index++) {
-    if (input[index] === "`") {
-      index++
-      continue
+  let lineStart = true
+  for (let index = body; index < input.length; index++) {
+    if (--budget.remaining < 0) return { kind: "opaque", reason: "invalid-structure" }
+    if (skipped?.has(index)) continue
+    if (lineStart && input[index] === quote && input[index + 1] === "@") {
+      const end =
+        index > body && input[index - 1] === "\n" && input[index - 2] === "\r"
+          ? index - 2
+          : index > body
+            ? index - 1
+            : index
+      return { kind: "scanned", commands, source: input.slice(body, end), end: index + 1 }
     }
-    if (!input.startsWith("$(", index)) continue
-    const block = powerShellBlock(input, index + 1, depth)
-    if (!block) return { kind: "opaque", reason: "invalid-structure" }
-    const result = scanPowerShellNested(block.source, depth + 1, budget)
-    if (result.kind === "opaque") return result
-    commands.push(...result.commands)
-    index = block.end
+    if (quote === '"') {
+      if (input[index] === "`") {
+        const escape = powerShellEscape(input, index, false, skipped)
+        if (!escape) return { kind: "opaque", reason: "unterminated-escape" }
+        index = escape.end
+        lineStart = false
+        continue
+      }
+      if (input[index] === "$" && input[index + 1] === "{") {
+        const end = powerShellBracedVariable(input, index, skipped)
+        if (end === undefined) return { kind: "opaque", reason: "invalid-structure" }
+        index = end
+        lineStart = false
+        continue
+      }
+      if (input[index] === "$" && input[index + 1] === "(") {
+        const sub = powerShellSubExpression(input, index + 2, true, budget, skipped)
+        if (!sub) return { kind: "opaque", reason: "invalid-structure" }
+        const result = scanPowerShellList(input, index + 2, depth + 1, budget, ")", false, sub.skipped)
+        if (result.kind === "opaque") return result
+        commands.push(...result.commands)
+        index = sub.rawEnd !== undefined && sub.rawEnd > result.end ? sub.rawEnd : result.end
+        lineStart = false
+        continue
+      }
+    }
+    lineStart = input[index] === "\r" || input[index] === "\n"
   }
-  return { kind: "scanned", commands }
+  return { kind: "opaque", reason: "unterminated-quote" }
 }
 
 function powerShellRedirect(input: string, index: number) {

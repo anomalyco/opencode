@@ -240,10 +240,12 @@
   color: var(--v2-icon-icon-muted);
 }
 
-[data-component="button-v2"][data-variant="ghost-muted"]:is(:hover, [data-state="hover"]):not(:disabled):not(
-    [data-expanded]
-  ) {
-  background-color: var(--v2-overlay-simple-overlay-hover);
+@media (hover: hover) {
+  [data-component="button-v2"][data-variant="ghost-muted"]:is(:hover, [data-state="hover"]):not(:disabled):not(
+      [data-expanded]
+    ) {
+    background-color: var(--v2-overlay-simple-overlay-hover);
+  }
 }
 
 [data-component="button-v2"][data-variant="ghost-muted"]:is(:active, [data-state="pressed"]):not(:disabled) {

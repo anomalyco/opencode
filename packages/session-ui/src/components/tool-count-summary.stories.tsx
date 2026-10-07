@@ -10,12 +10,15 @@ const text = {
 
 function ContextProgress() {
   const [state, setState] = createStore({ reads: 2, searches: 1, lists: 0, active: true })
+
   const items = (): CountItem[] => [
     { key: "ui.messagePart.context.read", count: state.reads },
     { key: "ui.messagePart.context.search", count: state.searches },
     { key: "ui.messagePart.context.list", count: state.lists },
   ]
+
   const reset = () => setState({ reads: 2, searches: 1, lists: 0, active: true })
+
   return (
     <div class="flex max-w-[620px] flex-col gap-5 rounded-lg border border-border-weak-base bg-background-base p-5">
       <span class="flex min-w-0 items-center gap-2 text-14-medium text-text-strong">

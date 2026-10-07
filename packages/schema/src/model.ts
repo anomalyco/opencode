@@ -80,6 +80,10 @@ export const Compatibility = Schema.Struct({
   requireFinishReason: Schema.Boolean.pipe(optional),
   requireAssistantAfterTool: Schema.Boolean.pipe(optional),
   supportsPromptCacheKey: Schema.Boolean.pipe(optional),
+  /** Supports Anthropic's thinking-prefix mismatch controls. Overrides model-ID detection. */
+  supportsThinkingBlockBinding: Schema.Boolean.pipe(optional),
+  /** Supports per-message effort updates. Overrides model-ID detection. */
+  supportsEffortUpdates: Schema.Boolean.pipe(optional),
 }).annotate({ identifier: "Model.Compatibility" })
 
 export interface Capabilities extends Schema.Schema.Type<typeof Capabilities> {}

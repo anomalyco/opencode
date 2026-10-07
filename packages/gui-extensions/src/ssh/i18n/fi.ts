@@ -35,8 +35,5 @@ export default {
   "form.name": "Palvelimen nimi (valinnainen)",
   "form.namePlaceholder": "Localhost",
   "form.add": "Lisää palvelin",
-  "server.default": "Oletus",
-  "menu.default": "Aseta oletukseksi",
-  "menu.defaultRemove": "Poista oletuspalvelin",
   "menu.delete": "Poista",
 }

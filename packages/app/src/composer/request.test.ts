@@ -122,6 +122,7 @@ describe("buildPromptRequest", () => {
       },
       comment: "Match @src/button.css",
     }
+
     const result = buildPromptRequest({
       prompt: [{ type: "text", content: "tidy up", start: 0, end: 7 }],
       context: [{ ...note, key: "note:example:c=1", commentID: "1" }],
@@ -143,6 +144,7 @@ describe("buildPromptRequest", () => {
       id: "skill-review",
       name: "review",
     }
+
     const result = buildPromptRequest({
       prompt: [
         {

@@ -198,7 +198,7 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
   credential?: Credential.Value,
   dependencies?: Dependencies,
 ) {
-  const resolved = prepareRuntimeModel(model, credential)
+  const resolved = prepareRuntimeModel(model)
   const configuration = credential?.type === "key" ? credential.configuration : undefined
   const configured = { ...resolved.settings, ...credential?.metadata, ...configuration }
   if (Provider.isAISDK(resolved.package)) {
@@ -256,15 +256,9 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
   })
 })
 
-function prepareRuntimeModel(model: RuntimeInfo, credential: Credential.Value | undefined) {
-  if (model.settings?.apiKey !== "" && (credential?.type !== "key" || credential.metadata === undefined)) return model
-  return {
-    ...model,
-    ...(model.settings?.apiKey === "" ? { settings: Struct.omit(model.settings, ["apiKey"]) } : {}),
-    ...(credential?.type === "key" && credential.metadata !== undefined
-      ? { body: Provider.mergeOverlay(model.body, credential.metadata) }
-      : {}),
-  }
+function prepareRuntimeModel(model: RuntimeInfo) {
+  if (model.settings?.apiKey !== "") return model
+  return { ...model, settings: Struct.omit(model.settings, ["apiKey"]) }
 }
 
 function validateProviderVariables(
@@ -306,7 +300,7 @@ function unresolvedProviderVariables(model: RuntimeInfo, baseURL: string) {
 }
 
 const nativeCredentialSettings = (specifier: string, credential: Credential.Value | undefined) => {
-  if (!credential) return {}
+  if (!credential || credential.type === "external") return {}
   if (credential.type === "key") return { apiKey: credential.key }
   if (specifier === "@opencode/ai/providers/anthropic" || specifier === "@opencode/ai/providers/anthropic-compatible")
     return { authToken: credential.access }
@@ -459,6 +453,7 @@ function usesAPIKeyAuth(packageName: string | undefined) {
     name === "@opencode/ai/providers/groq" ||
     name === "@opencode/ai/providers/mistral" ||
     name === "@opencode/ai/providers/togetherai" ||
+    name === "@opencode/ai/providers/vercel-ai-gateway" ||
     name === "@opencode/ai/providers/xai" ||
     name === "@opencode/ai/providers/openrouter" ||
     name === "@opencode/ai/providers/azure" ||

@@ -1112,14 +1112,14 @@ describe("ModelsDevPlugin", () => {
 
       const gateway = yield* modelState.get(Provider.ID.make("vercel"), Model.ID.make("alibaba/qwen-toggle"))
       expect(gateway?.variants).toEqual([
-        { id: Model.VariantID.make("none"), settings: { enableThinking: false } },
+        { id: Model.VariantID.make("none"), settings: { thinking: { type: "disabled" } } },
         {
           id: Model.VariantID.make("high"),
-          settings: { enableThinking: true, thinkingBudget: 8000 },
+          settings: { thinking: { type: "enabled", budgetTokens: 8000 } },
         },
         {
           id: Model.VariantID.make("max"),
-          settings: { enableThinking: true, thinkingBudget: 16000 },
+          settings: { thinking: { type: "enabled", budgetTokens: 16000 } },
         },
       ])
 
@@ -1127,15 +1127,15 @@ describe("ModelsDevPlugin", () => {
       expect(gatewayNova?.variants).toEqual([
         {
           id: Model.VariantID.make("none"),
-          settings: { additionalModelRequestFields: { reasoningConfig: { type: "disabled" } } },
+          settings: { thinking: { type: "disabled" } },
         },
         {
           id: Model.VariantID.make("low"),
-          settings: { reasoningConfig: { type: "enabled", maxReasoningEffort: "low" } },
+          settings: { reasoningEffort: "low" },
         },
         {
           id: Model.VariantID.make("high"),
-          settings: { reasoningConfig: { type: "enabled", maxReasoningEffort: "high" } },
+          settings: { reasoningEffort: "high" },
         },
       ])
 
@@ -1146,7 +1146,7 @@ describe("ModelsDevPlugin", () => {
       expect(gatewayFallback?.variants).toEqual([
         {
           id: Model.VariantID.make("none"),
-          settings: { reasoning: { enabled: false } },
+          settings: { thinking: { type: "disabled" } },
         },
         {
           id: Model.VariantID.make("low"),

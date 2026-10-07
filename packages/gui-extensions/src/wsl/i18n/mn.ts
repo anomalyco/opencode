@@ -53,8 +53,5 @@ export default {
     "{{distro}} эрүүл мэндийн үзлэгт хамрагдах хажуугийн машины хугацаа {{timeout}}мс дараа дууссан",
   "error.commandTimeout": "{{command}} {{args}} хугацаа {{timeout}}мс дараа дууссан",
   "error.failedPort": "Портыг авч чадсангүй",
-  "server.default": "Өгөгдмөл",
-  "menu.default": "Өгөгдмөл болгож тохируулах",
-  "menu.defaultRemove": "Өгөгдмөлийг арилгах",
   "menu.remove": "Арилгах",
 }

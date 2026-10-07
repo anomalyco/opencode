@@ -39,7 +39,8 @@ export const FileSystemGroup = HttpApiGroup.make("server.fs")
         OpenApi.annotations({
           identifier: "fs.read",
           summary: "Read file",
-          description: "Serve one file relative to the requested location.",
+          description:
+            "Stream one file relative to the requested location with ETag, Last-Modified, and single-range HTTP Range support (206 Partial Content, 416 Range Not Satisfiable, and 304 Not Modified; multi-range and malformed Range headers fall back to 200).",
         }),
       ),
   )

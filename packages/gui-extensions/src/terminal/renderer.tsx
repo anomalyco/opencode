@@ -149,7 +149,8 @@ const setup: Setup<typeof Terminal> = (ctx) => {
         return ctx.t("tab.title")
       },
       order: 30,
-      kind: "tab",
+      kind: "menu",
+      icon: "terminal",
     },
     list: () => [tab],
     render: (props) => (

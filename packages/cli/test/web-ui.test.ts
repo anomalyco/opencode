@@ -7,6 +7,7 @@ import { createServer } from "node:http"
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
+import { brotliCompressSync } from "node:zlib"
 import { WebUi } from "../src/services/web-ui"
 import { it } from "../../core/test/lib/effect"
 
@@ -88,6 +89,50 @@ describe("web UI", () => {
       yield* Effect.promise(() => authorized.arrayBuffer())
     }).pipe(Effect.provide(NodeFileSystem.layer)),
   )
+
+  test("sends embedded brotli bytes as they are to browsers that accept them", async () => {
+    const script = "console.log('compressed')".repeat(50)
+    const html = "<html><body>compressed</body></html>"
+    const brotli = { "_assets/app.js": brotliCompressSync(script), "index.html": brotliCompressSync(html) }
+
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const transform = yield* WebUi.handler({ assets: { "_assets/app.js": script, "index.html": html }, brotli })
+          const http = yield* NodeHttpServer.make(createServer, { host: "127.0.0.1", port: 0 })
+          yield* http.serve(transform(Effect.succeed(HttpServerResponse.empty({ status: 404 }))))
+          const origin = HttpServer.formatAddress(http.address)
+          const get = (pathname: string, encoding: string) =>
+            Effect.promise(async () => {
+              const response = await fetch(`${origin}${pathname}`, {
+                headers: { "accept-encoding": encoding },
+                decompress: false,
+              })
+              return { headers: response.headers, body: new Uint8Array(await response.arrayBuffer()) }
+            })
+
+          const encoded = yield* get("/_assets/app.js", "gzip, deflate, br")
+          expect(encoded.headers.get("content-encoding")).toBe("br")
+          expect(encoded.headers.get("vary")).toBe("accept-encoding")
+          expect(encoded.headers.get("content-type")).toContain("javascript")
+          expect(encoded.body).toEqual(new Uint8Array(brotli["_assets/app.js"]))
+
+          yield* Effect.forEach(["gzip", "br;q=0"], (encoding) =>
+            Effect.gen(function* () {
+              const plain = yield* get("/_assets/app.js", encoding)
+              expect(plain.headers.get("content-encoding")).toBeNull()
+              expect(plain.headers.get("vary")).toBe("accept-encoding")
+              expect(new TextDecoder().decode(plain.body)).toBe(script)
+            }),
+          )
+
+          const page = yield* get("/", "br")
+          expect(page.headers.get("content-encoding")).toBeNull()
+          expect(new TextDecoder().decode(page.body)).toBe(html)
+        }),
+      ).pipe(Effect.provide(NodeFileSystem.layer)),
+    )
+  })
 
   test("falls back from API routes to assets and the SPA index", async () => {
     const index = path.join(root, "index.html")

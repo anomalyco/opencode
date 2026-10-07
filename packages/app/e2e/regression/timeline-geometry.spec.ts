@@ -23,6 +23,7 @@ import {
 } from "../utils/visual-stability"
 
 const expanded = { editToolPartsExpanded: true, shellToolPartsExpanded: true, showReasoningSummaries: true }
+
 const contextTools = [
   { id: "ctx_0100_read", tool: "read", input: { path: "src/recent-a.ts", offset: 0, limit: 120 } },
   { id: "ctx_0101_glob", tool: "glob", input: { path: "C:/OpenCode/TimelineStability", pattern: "**/*.ts" } },
@@ -33,7 +34,9 @@ const contextTools = [
   },
   { id: "ctx_0103_list", tool: "list", input: { path: "src" } },
 ]
+
 const contextSelector = `[data-timeline-part-ids="${contextTools.map((tool) => tool.id).join(",")}"]`
+
 const output = (tool: string) => `Completed ${tool}.\n${"detail line\n".repeat(8)}`
 
 function contextTurn(status: "running" | "completed") {
@@ -69,9 +72,11 @@ test("remeasures a recent explored context group before the next paint", async (
         const contextRow = context?.closest<HTMLElement>('[data-timeline-row="AssistantPart"]')
         const virtualRow = context?.closest<HTMLElement>("[data-timeline-key]")
         const textRow = text?.closest<HTMLElement>('[data-timeline-row="AssistantPart"]')
+
         if (!scroller || !trigger || !contextRow || !virtualRow || !textRow) throw new Error("missing regression nodes")
         scroller.scrollTop = scroller.scrollHeight
         const samples: { frame: number; overlap: number; expanded: string | null; measured: boolean }[] = []
+
         const capture = (frame: number) => {
           const content = context!.querySelector<HTMLElement>('[data-slot="collapsible-content"]')
           const allocated = virtualRow.getBoundingClientRect().height
@@ -89,16 +94,20 @@ test("remeasures a recent explored context group before the next paint", async (
               Math.abs(allocated - inner) <= 1,
           })
         }
+
         capture(-1)
         trigger.click()
         capture(0)
+
         const tick = (frame: number) =>
           setTimeout(() => {
             capture(frame)
             const last = samples.at(-1)!
+
             if (last.expanded === "true" && last.measured) return resolve(samples)
             requestAnimationFrame(() => tick(frame + 1))
           }, 0)
+
         requestAnimationFrame(() => tick(1))
       }),
     { contextSelector, following },
@@ -116,25 +125,31 @@ test("keeps a grouped tool summary stable as its calls complete", async ({ page 
     messages: contextTurn("running"),
     cpuRate: 4,
   })
+
   const context = page.locator(contextSelector)
   const label = "Used 4 Read, Glob, Grep, List"
   const trigger = context.locator(':scope > [data-component="collapsible"] > [data-slot="collapsible-trigger"]')
   await expect(trigger).toHaveAccessibleName(label)
   // Open the group so each call shows whether it is still running.
   await trigger.click()
+
   const status = (tool: string) =>
     context.locator(
       `[data-slot="context-tool-group-item"] [data-component="text-shimmer"][aria-label="${tool[0]!.toUpperCase()}${tool.slice(1)}"]`,
     )
+
   for (const tool of contextTools) await expect(status(tool.tool)).toHaveAttribute("data-active", "true")
   const following = `[data-timeline-part-id="${renderedPartID("prt_after_context")}"]`
   await waitForVisualSettle(page, [contextSelector, following])
+
   const regions = defineVisualRegions({
     status: { selector: `${contextSelector} [data-component="context-tool-group-trigger"]` },
     context: { selector: contextSelector, closest: '[data-timeline-row="AssistantPart"]' },
     following: { selector: following, closest: '[data-timeline-row="AssistantPart"]' },
   })
+
   await startVisualProbe(page, regions)
+
   // Each completion lands in its own settled frame so the probe sees every intermediate state.
   for (const tool of contextTools) {
     await timeline.send(
@@ -147,10 +162,12 @@ test("keeps a grouped tool summary stable as its calls complete", async ({ page 
   for (const tool of contextTools) await expect(status(tool.tool)).toHaveAttribute("data-active", "false")
   await expect(trigger).toHaveAccessibleName(label)
   const trace = await stopVisualProbe<keyof typeof regions>(page)
+
   const labels = trace.samples
     .map((sample) => sample.regions.status?.label)
     .filter((value): value is string => !!value)
     .filter((value, index, all) => value !== all[index - 1])
+
   const issues = analyzeVisualObservations(
     trace.samples,
     visualPlan(regions, [
@@ -207,15 +224,19 @@ test("keeps a file diff anchored while it expands and collapses", async ({ page 
   const diff = wrapper.locator('[data-component="apply-patch-file-diff"]')
   const row = page.locator("[data-timeline-key]", { has: wrapper })
   const trigger = wrapper.getByRole("button")
+
   const bottom = () =>
     scroller.evaluate((element) => Math.abs(element.scrollHeight - element.clientHeight - element.scrollTop))
+
   const measured = () =>
     row.evaluate((element) => {
       const content = element.querySelector<HTMLElement>("[data-index]")
+
       return content
         ? Math.abs(element.getBoundingClientRect().height - content.getBoundingClientRect().height)
         : Number.POSITIVE_INFINITY
     })
+
   await expect(trigger).toHaveAttribute("aria-expanded", "false")
   await expect.poll(measured).toBeLessThanOrEqual(1)
 
@@ -250,6 +271,7 @@ test("keeps a file diff anchored while it expands and collapses", async ({ page 
       row.evaluate((element, collapsed) => {
         const content = element.querySelector<HTMLElement>("[data-index]")
         const allocated = element.getBoundingClientRect().height
+
         return {
           grew: allocated > collapsed + 1,
           measured: content ? Math.abs(allocated - content.getBoundingClientRect().height) <= 1 : false,
@@ -289,6 +311,7 @@ for (const outline of [
   test(`keeps the ${outline.name} inside a fractionally short virtual row`, async ({ page }) => {
     const partID = outline.kind === "shell" ? "prt_shell_outline" : "prt_patch_outline"
     const secondUserID = "msg_outline_second_user"
+
     const tool =
       outline.kind === "shell"
         ? shell(partID, "completed", "shell output")
@@ -312,6 +335,7 @@ for (const outline of [
               },
             },
           )
+
     // A second turn adds the fixed turn gap, which must not get the paint-rounding margin.
     await setupTimeline(page, {
       messages: [
@@ -340,27 +364,33 @@ for (const outline of [
       deviceScaleFactor: outline.deviceScaleFactor,
     })
     await expect(page.locator('[data-timeline-row="TurnGap"]')).toBeVisible()
+
     const rows = await page.locator("[data-timeline-key]").evaluateAll((elements) =>
       elements.map((element) => ({
         tag: element.querySelector<HTMLElement>("[data-timeline-row]")?.dataset.timelineRow,
         clipMargin: getComputedStyle(element).overflowClipMargin,
       })),
     )
+
     expect(rows.filter((row) => row.tag !== "TurnGap").every((row) => row.clipMargin === "0.5px")).toBe(true)
     expect(rows.filter((row) => row.tag === "TurnGap")).toEqual([{ tag: "TurnGap", clipMargin: "0px" }])
 
     const part = page.locator(`[data-timeline-part-id="${partID}"]`)
     const row = page.locator("[data-timeline-key]", { has: part })
+
     if (outline.kind === "patch") {
       const card = part.locator('[data-component="accordion"][data-scope="apply-patch"]')
       await expect(card.getByRole("button")).toHaveAttribute("aria-expanded", "false")
+
       const geometry = await row.evaluate((element) => {
         const card = element.querySelector<HTMLElement>('[data-component="accordion"][data-scope="apply-patch"]')
+
         if (!card) throw new Error("Patch card is unavailable")
         const cardRect = card.getBoundingClientRect()
         element.style.height = `${cardRect.bottom - element.getBoundingClientRect().top - 0.49}px`
         const clipMargin = getComputedStyle(element).overflowClipMargin
         const bottom = element.getBoundingClientRect().bottom
+
         return {
           overflow: card.getBoundingClientRect().bottom - bottom,
           paintOverflow: card.getBoundingClientRect().bottom - bottom - Number.parseFloat(clipMargin),
@@ -368,6 +398,7 @@ for (const outline of [
           cardHeight: cardRect.height,
         }
       })
+
       expect(geometry.overflow).toBeCloseTo(0.49, 1)
       expect(geometry.paintOverflow).toBeLessThanOrEqual(0)
       const edges = await captureCardEdges(page, card)
@@ -376,14 +407,17 @@ for (const outline of [
       expect(edges.luminance.top).toBeLessThan(245)
       expect(edges.luminance.bottom).toBeLessThan(245)
       expect(Math.abs(edges.luminance.bottom - edges.luminance.top)).toBeLessThan(10)
+
       return
     }
 
     const bash = part.locator('[data-component="bash-output"]')
     await expect(bash).toBeVisible()
     await waitForVisualSettle(page, [`[data-timeline-part-id="${partID}"] [data-component="bash-output"]`])
+
     const geometry = await row.evaluate((element) => {
       const output = element.querySelector<HTMLElement>('[data-component="bash-output"]')
+
       if (!output) throw new Error("Shell output is unavailable")
       const outputRect = output.getBoundingClientRect()
       // Match a rounded-down measurement at a fractional device-pixel phase.
@@ -392,6 +426,7 @@ for (const outline of [
       output.style.setProperty("--v2-border-border-base", "rgb(255, 0, 255)")
       output.style.setProperty("background", "rgb(0, 0, 0)", "important")
       const style = getComputedStyle(output)
+
       return {
         outputWidth: outputRect.width,
         outputHeight: outputRect.height,
@@ -399,6 +434,7 @@ for (const outline of [
         boxShadow: style.boxShadow,
       }
     })
+
     await expect
       .poll(() =>
         row.evaluate(
@@ -437,6 +473,7 @@ for (const failed of [false, true]) {
     await page.route(`**/api/session/${sessionID}/prompt`, async (route) => {
       if (route.request().method() !== "POST") return route.fallback()
       await release.promise
+
       return route.fallback()
     })
 
@@ -445,39 +482,49 @@ for (const failed of [false, true]) {
     await expect(editor).toBeEditable()
     await editor.fill(text)
     await expect(page.locator('[data-action="composer-submit"]')).toBeEnabled()
+
     const bottom = () =>
       page.locator("[data-timeline-virtual-content]").evaluate((element) => {
         const root = element.parentElement!
+
         return root.scrollHeight - root.clientHeight - root.scrollTop
       })
+
     await expect.poll(bottom).toBe(0)
 
     // Records the prompt row in every frame from submission until Working has shown.
     const observation = await page.evaluateHandle((text) => {
       const frames: { prompt?: number; working: boolean }[] = []
       let frame = 0
+
       const sample = () => {
         const prompt = [...document.querySelectorAll<HTMLElement>('[data-timeline-row="UserMessage"]')].find((row) =>
           row.textContent?.includes(text),
         )
+
         frames.push({
           ...(prompt ? { prompt: prompt.getBoundingClientRect().y } : {}),
           working: !!document.querySelector('[data-component="session-working"]'),
         })
         frame = requestAnimationFrame(sample)
       }
+
       frame = requestAnimationFrame(sample)
+
       return {
         stop: () => {
           cancelAnimationFrame(frame)
+
           return frames
         },
       }
     }, text)
+
     const requested = page.waitForRequest(
       (request) =>
         request.method() === "POST" && new URL(request.url()).pathname === `/api/session/${sessionID}/prompt`,
     )
+
     try {
       await editor.press("Enter")
       expect((await requested).postDataJSON()).toMatchObject({ text })
@@ -501,10 +548,13 @@ for (const failed of [false, true]) {
 
 async function captureCardEdges(page: Page, card: Locator) {
   const box = await card.boundingBox()
+
   if (!box) throw new Error("Tool card bounds are unavailable")
   const viewport = page.viewportSize()
+
   if (!viewport) throw new Error("Viewport bounds are unavailable")
   const screenshot = await page.screenshot()
+
   return page.evaluate(
     async ({ source, box, viewport }) => {
       const image = new Image()
@@ -514,15 +564,19 @@ async function captureCardEdges(page: Page, card: Locator) {
       canvas.width = image.naturalWidth
       canvas.height = image.naturalHeight
       const context = canvas.getContext("2d")
+
       if (!context) throw new Error("2D canvas is unavailable")
       context.drawImage(image, 0, 0)
       const scale = { x: image.naturalWidth / viewport.width, y: image.naturalHeight / viewport.height }
+
       const rows = (candidates: number[]) => {
         const left = Math.floor((box.x + 8) * scale.x)
         const width = Math.floor((box.width - 16) * scale.x)
+
         return candidates.map((row) => {
           const pixels = context.getImageData(left, row, width, 1).data
           const indexes = Array.from({ length: width }, (_, index) => index * 4)
+
           return {
             luminance:
               indexes
@@ -534,16 +588,20 @@ async function captureCardEdges(page: Page, card: Locator) {
           }
         })
       }
+
       const pixels = context.getImageData(0, 0, image.naturalWidth, image.naturalHeight).data
       const columns = new Uint32Array(image.naturalWidth)
+
       for (let index = 0; index < pixels.length; index += 4) {
         if (pixels[index]! <= 200 || pixels[index + 1]! >= 180 || pixels[index + 2]! <= 200) continue
         columns[(index / 4) % image.naturalWidth] = columns[(index / 4) % image.naturalWidth]! + 1
       }
+
       const top = box.y * scale.y
       const bottom = (box.y + box.height) * scale.y
       const topRows = rows([Math.floor(top) - 1, Math.floor(top), Math.ceil(top)])
       const bottomRows = rows([Math.floor(bottom) - 2, Math.floor(bottom) - 1, Math.ceil(bottom) - 1])
+
       return {
         box,
         luminance: {

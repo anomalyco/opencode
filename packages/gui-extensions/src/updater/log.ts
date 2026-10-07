@@ -14,6 +14,7 @@ export function logContext(
       ...(entry.cause === undefined ? {} : { cause: entry.cause }),
     })
   })
+
   return Effect.runSync(
     Effect.context<never>().pipe(
       Effect.provide(

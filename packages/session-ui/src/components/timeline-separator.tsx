@@ -20,6 +20,7 @@ export function TimelineSeparator(props: {
       {props.label}
     </bdi>
   )
+
   return (
     <div class="flex h-8 w-full items-center gap-3 text-v2-text-text-faint">
       <span class="h-px min-w-0 flex-1 bg-v2-border-border-strong" />

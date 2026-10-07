@@ -28,9 +28,25 @@ OpenCode uses the provider credentials it already has. Sign in from a terminal b
 opencode auth login
 ```
 
-OpenCode offers one auth method, `opencode-login`. The `authenticate` request accepts only that method and doesn't
-collect credentials. If a prompt fails because a provider needs authentication, OpenCode returns ACP's `auth_required`
-error.
+OpenCode offers one auth method, `opencode-login`. By default it's an agent auth method. The `authenticate` request
+accepts only that method and doesn't collect credentials. If a prompt fails because a provider needs authentication,
+OpenCode returns ACP's `auth_required` error.
+
+If the client sets `clientCapabilities.auth.terminal` to `true`, the auth method is a terminal auth method:
+
+```json
+{
+  "id": "opencode-login",
+  "name": "Login with opencode",
+  "description": "Run `opencode auth login` in the terminal",
+  "type": "terminal",
+  "args": ["--login"]
+}
+```
+
+The client must not send this method to `authenticate`. Instead, it adds `--login` to the command that starts OpenCode,
+for example `opencode acp --login`, and runs it in a terminal. OpenCode runs the `opencode auth login` flow and exits.
+Exit status 0 means the login succeeded. The client then reconnects and sends `initialize` again.
 
 If the client sets `clientCapabilities._meta["terminal-auth"]` to `true`, the auth method includes the login command:
 
@@ -42,9 +58,6 @@ If the client sets `clientCapabilities._meta["terminal-auth"]` to `true`, the au
   "_meta": { "terminal-auth": { "command": "opencode", "args": ["auth", "login"], "label": "OpenCode Login" } }
 }
 ```
-
-OpenCode doesn't support ACP's standard terminal auth yet. That is the `clientCapabilities.auth.terminal` capability
-with a `type: "terminal"` auth method.
 
 ## Troubleshooting
 
@@ -97,6 +110,7 @@ OpenCode reads these client capabilities:
 
 | Capability                             | Effect                                                         |
 | -------------------------------------- | -------------------------------------------------------------- |
+| `auth.terminal` set to `true`          | The auth method is a [terminal auth method](#authentication).  |
 | `elicitation.form`                     | OpenCode asks [questions](#questions) as forms.                |
 | `session.compaction`                   | OpenCode reports [compaction](#compaction) with ACP's updates. |
 | `_meta["terminal-auth"]` set to `true` | The auth method includes the [login command](#authentication). |
@@ -106,14 +120,15 @@ OpenCode reads these client capabilities:
 The client sets the working directory when it creates a session. OpenCode uses that directory's configuration,
 including its models, agents, commands, skills, instructions, plugins, and MCP servers.
 
+- `cwd` must be an absolute path. OpenCode rejects a relative `cwd` with an invalid params error.
 - `session/load` replays the saved messages. `session/resume` and `session/fork` don't replay them.
-- To load or resume a session, the client must pass the session's own directory as `cwd`. OpenCode rejects a different
-  `cwd` with an invalid params error.
-- A fork keeps the source session's directory.
+- To load, resume, or fork a session, the client must pass that session's directory as `cwd`. OpenCode rejects a
+  different `cwd` with an invalid params error.
 - `session/list` returns up to 100 sessions per page. It accepts a `cwd` filter and a `cursor`.
 - `session/close` interrupts active work and detaches the session from the ACP process. OpenCode keeps the saved
   session.
-- `session/delete` removes the session. Deleting a session that doesn't exist succeeds.
+- `session/delete` ends an active prompt like `session/cancel`, then removes the session. Deleting a session that
+  doesn't exist succeeds.
 - A session runs one prompt at a time. OpenCode returns an error for a second `session/prompt` while the first is
   active.
 

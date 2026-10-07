@@ -85,7 +85,7 @@ const router: Router = { routing: () => false, path: () => "/" }
 
 const keybinds: Keybinds = { keybind: () => [], keys: (bind) => bind.split("+"), matches: () => false }
 
-const servers: Servers = { list: () => [] }
+const servers: Servers = { list: () => [], get: () => undefined }
 
 const workspaces: Workspaces = { on: () => () => undefined }
 
@@ -188,8 +188,8 @@ export function mountExtensionHost() {
     disable: () => setDisabled(new Set(["fixture"])),
     enable: () => setDisabled(new Set<string>()),
     status: () => hosts[0]?.state.status.fixture,
-    /** Contributions the host holds for a point; readable after the host unmounts. */
-    entries: (point: string) => hosts[0]?.state.entries[point]?.length ?? 0,
+    /** Contributions the host holds for a registry; readable after the host unmounts. */
+    entries: (registry: string) => hosts[0]?.state.entries[registry]?.length ?? 0,
   }
 }
 
@@ -309,7 +309,7 @@ export function mountExtensions(input: {
     ready: () => hosts[0]?.ready() ?? false,
     status: (id: string) => hosts[0]?.state.status[id],
     failure: (id: string) => hosts[0]?.state.failures[id],
-    entries: (point: string) => hosts[0]?.state.entries[point]?.length ?? 0,
+    entries: (registry: string) => hosts[0]?.state.entries[registry]?.length ?? 0,
   }
 }
 
@@ -348,6 +348,7 @@ function standIn(overrides: Partial<Interface>): Interface {
     keybind: () => [],
     matches: () => false,
     servers: () => ["local"],
+    server: () => undefined,
     ...overrides,
   }
 }

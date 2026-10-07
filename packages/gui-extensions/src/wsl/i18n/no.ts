@@ -52,8 +52,5 @@ export default {
   "error.healthTimeout": "Tidsavbrudd for tilstandskontrollen av sidecar for {{distro}} etter {{timeout}} ms",
   "error.commandTimeout": "Tidsavbrudd for {{command}} {{args}} etter {{timeout}} ms",
   "error.failedPort": "Kunne ikke hente port",
-  "server.default": "Standard",
-  "menu.default": "Sett som standard",
-  "menu.defaultRemove": "Fjern standard",
   "menu.remove": "Fjern",
 }

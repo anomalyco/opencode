@@ -18,15 +18,18 @@ for (const open of [true, false]) {
     await shell.click()
     await first.click()
     await second.click()
+
     if (!open) {
       await shell.click()
       await first.click()
     }
+
     await expect(shell).toHaveAttribute("aria-expanded", String(open))
     await expect(first).toHaveAttribute("aria-expanded", String(open))
     await expect(second).toHaveAttribute("aria-expanded", "true")
     await expect(diff).toBeVisible()
     const original = await patch.elementHandle()
+
     for (const count of [3, 4]) {
       await root.getByRole("button", { name: "Append tool call", exact: true }).click()
       await expect(group.locator('[data-component="context-tool-group-trigger"]')).toHaveAttribute(

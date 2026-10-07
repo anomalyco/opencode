@@ -26,6 +26,7 @@ describe("attachment size limit", () => {
     const directory = await mkdtemp(join(tmpdir(), "opencode-attachment-"))
     const file = join(directory, "example.txt")
     const oversized = join(directory, "oversized.txt")
+
     try {
       await writeFile(file, "lorem ipsum")
       expect(new TextDecoder().decode(await run(readAttachment(file)))).toBe("lorem ipsum")
@@ -70,12 +71,15 @@ describe("picked file authorizations", () => {
 
   test("charges actual reads against the selection budget", async () => {
     const size = MAX_ATTACHMENT_BYTES / 2 + 1
+
     const authorizations = createPickedFileAuthorizations((_path, maxBytes) =>
       Effect.sync(() => {
         if (maxBytes < size) throw new Error("budget exceeded")
+
         return new ArrayBuffer(size)
       }),
     )
+
     const token = authorizations.add(1, ["a.txt", "b.txt"])
 
     await run(authorizations.read(1, token, "a.txt"))

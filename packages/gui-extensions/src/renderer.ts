@@ -23,6 +23,8 @@ import ssh from "./ssh"
 import sshRenderer from "./ssh/renderer"
 import wsl from "./wsl"
 import wslRenderer from "./wsl/renderer"
+import microsoftOffice from "./microsoft-office"
+import microsoftOfficeRenderer from "./microsoft-office/renderer"
 
 // The window renders once every built-in is active, so the small renderer entries load with the app, like the
 // features they replaced. Heavy UI stays behind `lazy()` inside them.
@@ -46,4 +48,5 @@ export const builtins = Extension.compose(
   { ...updater, renderer: eager(updaterRenderer) },
   { ...ssh, renderer: eager(sshRenderer) },
   { ...wsl, renderer: eager(wslRenderer) },
+  { ...microsoftOffice, renderer: eager(microsoftOfficeRenderer) },
 )

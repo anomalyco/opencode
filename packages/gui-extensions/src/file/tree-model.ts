@@ -24,11 +24,13 @@ export function buildFileTreeV2Model(paths: readonly string[]): FileTreeV2Model 
 
   paths.forEach((value) => {
     const file = normalizeFileTreeV2Path(value)
+
     if (!file) return
 
     const parts = file.split("/")
     parts.forEach((name, index) => {
       const path = parts.slice(0, index + 1).join("/")
+
       if (nodes.has(path)) return
       nodes.set(path, {
         name,
@@ -46,12 +48,14 @@ export function buildFileTreeV2Model(paths: readonly string[]): FileTreeV2Model 
     const index = node.path.lastIndexOf("/")
     const parent = index === -1 ? "" : node.path.slice(0, index)
     const list = children.get(parent)
+
     if (list) list.push(node)
     else children.set(parent, [node])
   })
   children.forEach((nodes) =>
     nodes.sort((a, b) => {
       if (a.type !== b.type) return a.type === "directory" ? -1 : 1
+
       return a.name.localeCompare(b.name)
     }),
   )
@@ -66,8 +70,10 @@ export function flattenFileTreeV2(model: FileTreeV2Model, expanded: (path: strin
   while (stack.length > 0) {
     const row = stack.pop()!
     rows.push(row)
+
     if (row.node.type !== "directory" || !expanded(row.node.path)) continue
     const children = model.children.get(row.node.path) ?? []
+
     for (let index = children.length - 1; index >= 0; index--) {
       stack.push({ node: children[index]!, level: row.level + 1 })
     }
@@ -81,6 +87,7 @@ export function flattenLiveFileTreeV2(
   expanded: (path: string) => boolean,
 ) {
   const rows: FileTreeV2Row[] = []
+
   const stack = children("")
     .toReversed()
     .map((node) => ({ node: toLiveNode(node), level: 0 }))
@@ -88,8 +95,10 @@ export function flattenLiveFileTreeV2(
   while (stack.length > 0) {
     const row = stack.pop()!
     rows.push(row)
+
     if (row.node.type !== "directory" || !expanded(row.node.path)) continue
     const nested = children(row.node.originalPath)
+
     for (let index = nested.length - 1; index >= 0; index--) {
       stack.push({ node: toLiveNode(nested[index]!), level: row.level + 1 })
     }

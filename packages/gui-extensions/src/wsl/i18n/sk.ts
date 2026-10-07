@@ -52,8 +52,5 @@ export default {
   "error.healthTimeout": "Kontrola stavu sidecar pre {{distro}} vypršala po {{timeout}} ms",
   "error.commandTimeout": "{{command}} {{args}} vypršalo po {{timeout}} ms",
   "error.failedPort": "Nepodarilo sa získať port",
-  "server.default": "Predvolený",
-  "menu.default": "Nastaviť ako predvolený",
-  "menu.defaultRemove": "Odstrániť predvolený",
   "menu.remove": "Odstrániť",
 }

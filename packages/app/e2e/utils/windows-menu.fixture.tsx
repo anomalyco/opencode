@@ -4,7 +4,6 @@ import { render } from "solid-js/web"
 import type { Bridge } from "@opencode/gui-extensions/sdk/bridge"
 import { AppBaseProviders, AppInterface } from "../../src/app"
 import { PlatformProvider, type Platform } from "../../src/runtime/platform/platform"
-import { ServerConnection } from "../../src/runtime/server/registry"
 
 // The app on a Windows desktop platform, so the titlebar shows the app menu. Menu actions are listed in an output.
 export function mount(input: { server: string }) {
@@ -59,7 +58,6 @@ export function mount(input: { server: string }) {
           <output aria-label="Desktop menu actions">{store.actions.join(",")}</output>
           <AppInterface
             servers={[{ type: "sidecar", variant: "base", displayName: "Local Server", http: { url: input.server } }]}
-            defaultServer={ServerConnection.Key.make("sidecar")}
             router={(props) => <MemoryRouter {...props} history={history} />}
           />
         </AppBaseProviders>

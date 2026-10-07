@@ -5,6 +5,7 @@ import { assistantMessage, partUpdated, setupTimeline, toolPart, userMessage } f
 test("keeps shell and question failures in their Used group", async ({ page }) => {
   const shellID = "prt_transition_error_shell"
   const questionID = "prt_transition_error_question"
+
   const timeline = await setupTimeline(page, {
     settings: { timelineDetail: timelinePresets[2].value },
     messages: [
@@ -18,6 +19,7 @@ test("keeps shell and question failures in their Used group", async ({ page }) =
       ),
     ],
   })
+
   const group = page.locator('[data-component="collapsed-tool-group"]')
   const used = group.locator(':scope > [data-component="collapsible"] > [data-slot="collapsible-trigger"]')
   await used.click()

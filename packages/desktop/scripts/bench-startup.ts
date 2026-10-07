@@ -59,28 +59,43 @@ const args = parseArgs({
   },
   allowPositionals: true,
 })
+
 const packageDir = resolve(import.meta.dirname, "..")
+
 const builds = [
   { label: args.values.compare ? "A" : "", exe: resolve(args.values.exe ?? defaultExe()) },
   ...(args.values.compare ? [{ label: "B", exe: resolve(args.values.compare) }] : []),
 ]
+
 const runs = Number(args.values.runs)
+
 const warmup = Number(args.values.warmup)
+
 const service = args.values.service === "cold" ? "cold" : "warm"
+
 const settleMs = Number(args.values["settle-ms"])
+
 const outDir = resolve(args.values.out ?? join(packageDir, "dist", "bench-startup"))
+
 const home = resolve(args.values.home ?? join(tmpdir(), "opencode-bench-startup"))
+
 for (const build of builds) {
   if (!existsSync(build.exe))
     throw new Error(`Packaged executable not found: ${build.exe}. Run 'bun run build && bun run package:win' (or pass --exe).`)
 }
+
 if (!Number.isSafeInteger(runs) || runs < 1) throw new Error("--runs must be a positive integer")
+
 if (!Number.isSafeInteger(warmup) || warmup < 0) throw new Error("--warmup must be a non-negative integer")
+
 mkdirSync(outDir, { recursive: true })
 
 const appId = appIdFor(builds[0].exe)
+
 if (builds.some((build) => appIdFor(build.exe) !== appId)) throw new Error("Compared builds must be the same channel")
+
 const userData = join(home, "AppData", "Roaming", appId)
+
 const paths = {
   home,
   appData: join(home, "AppData", "Roaming"),
@@ -91,7 +106,9 @@ const paths = {
   registration: join(home, ".local", "state", "opencode", "service.json"),
   logs: join(userData, "logs"),
 }
+
 prepareHome()
+
 // The desktop deletes XDG_STATE_HOME on Windows, so isolation goes through the home directory.
 // OPENCODE_* and OTEL_* from the developer's shell would otherwise leak into the measured app and
 // its service (an OTLP endpoint alone adds a network round trip to every CLI exit).
@@ -111,13 +128,20 @@ const env = {
   // Beta and prod builds check for updates on start; a closed proxy port fails that fast and offline.
   ...(args.values.offline || appId !== "ai.opencode.desktop.dev" ? { HTTPS_PROXY: "http://127.0.0.1:9" } : {}),
 }
+
 const cdpPort = await freePort()
+
 // A private service port keeps a cold launch's own service away from the developer's service.
 const servicePort = await freePort()
+
 writeFileSync(join(paths.config, "service.json"), JSON.stringify({ port: servicePort }))
+
 const inspectPort = await freePort()
+
 let appPid: number | undefined
+
 let serviceProcess: ReturnType<typeof spawn> | undefined
+
 // Renderer readiness, read over CDP: paint timing plus the DOM states the user actually waits for.
 const probe = `(() => ({
   origin: performance.timeOrigin,
@@ -131,9 +155,11 @@ const probe = `(() => ({
   home: !!document.querySelector('#root [data-action="home-new-session"], #root [data-action="home-add-project-row"]'),
   url: location.pathname + location.search,
 }))()`
+
 // Main-process bootstrap timing, read after the run: when the process was created, when Node
 // started inside it, and when Node's own bootstrap finished and handed control to the entry module.
 const mainTiming = `JSON.stringify({ created: process.getCreationTime(), origin: performance.timeOrigin, ...performance.nodeTiming.toJSON(), cpu: process.cpuUsage(), rss: process.memoryUsage().rss })`
+
 // Renderer navigation and resource timing plus any marks the app emitted, read once the run is settled.
 const rendererTimeline = `(() => {
   const nav = performance.getEntriesByType('navigation')[0]
@@ -149,12 +175,15 @@ const rendererTimeline = `(() => {
 })()`
 
 for (const build of builds) console.log(`bench${build.label ? ` ${build.label}` : ""}: ${build.exe}`)
+
 console.log(`home:  ${home}`)
+
 console.log(`service: ${service}, runs: ${runs} (+${warmup} warm-up), cdp ${cdpPort}, inspect ${inspectPort}${args.values.fresh ? ", fresh profile per launch" : ""}`)
 
 if (service === "warm") await warmService()
 
 const samples: Sample[] = []
+
 // A launch that never produces a renderer would otherwise leave an instance behind that every later
 // launch hands off to through the single-instance lock.
 process.on("uncaughtException", async (error) => {
@@ -163,27 +192,34 @@ process.on("uncaughtException", async (error) => {
   await stopService()
   process.exit(1)
 })
+
 for (let run = 1 - warmup; run <= runs; run++) {
   for (const build of builds) {
     const sample = await launch(build, run)
+
     if (run < 1) {
       console.log(`warm-up${build.label ? ` ${build.label}` : ""}: shell ${sample.msSinceSpawn.shellVisible} ms`)
       continue
     }
+
     samples.push(sample)
     console.log(JSON.stringify(sample))
   }
 }
+
 await killApp()
+
 if (service === "warm") await stopService()
 
 const summaries = Object.fromEntries(
   builds.map((build) => {
     const own = samples.filter((s) => s.build === build.label)
     const timed = own.filter((s) => !s.profiled && !s.traced)
+
     return [build.label || "A", summarize(timed.length ? timed : own)]
   }),
 )
+
 // Durations between consecutive checkpoints, so "where did the time go" needs no subtraction.
 const phaseOrder = [
   ["electron native init", "processCreated", "nodeStart"],
@@ -204,50 +240,73 @@ const phaseOrder = [
   ["first paint → shell", "firstPaint", "shellVisible"],
   ["shell → idle", "shellVisible", "rendererIdle"],
 ] as const
+
 const phases = Object.fromEntries(
   builds.map((build) => {
     const own = samples.filter((s) => s.build === build.label && !s.profiled && !s.traced)
     const out: Record<string, number> = {}
+
     for (const [name, from, to] of phaseOrder) {
       const deltas = own
         .map((s) => (s.msSinceSpawn[to] ?? NaN) - (s.msSinceSpawn[from] ?? NaN))
         .filter(Number.isFinite)
         .sort((a, b) => a - b)
+
       if (deltas.length) out[name] = deltas[Math.floor(deltas.length / 2)]
     }
+
     return [build.label || "A", out]
   }),
 )
+
 const report = { builds, service, runs, warmup, fresh: args.values.fresh, home, summaries, phases, samples }
+
 const reportPath = join(outDir, `startup-${Date.now()}.json`)
+
 writeFileSync(reportPath, JSON.stringify(report, null, 2))
+
 const labels = Object.keys(summaries)
+
 const header = `${"".padEnd(32)}${labels.map((label) => (labels.length > 1 ? label : "").padStart(6).padEnd(22)).join("")}`
+
 console.log(`\n${service} service${args.values.fresh ? ", fresh profile" : ""} — median (min…max) ms since spawn over ${runs} runs`)
+
 console.log(header)
+
 for (const key of [...new Set(labels.flatMap((label) => Object.keys(summaries[label])))]) {
   const cells = labels.map((label) => {
     const v = summaries[label][key]
+
     return v ? `${String(v.median).padStart(6)}  (${v.min}…${v.max})`.padEnd(22) : "".padEnd(22)
   })
+
   console.log(`${key.padEnd(32)}${cells.join("")}`)
 }
+
 console.log(`\nphases — median ms`)
+
 console.log(header)
+
 for (const [name] of phaseOrder) {
   const cells = labels.map((label) => String(phases[label][name] ?? "").padStart(6).padEnd(22))
   console.log(`${name.padEnd(32)}${cells.join("")}`)
 }
+
 const idle = (label: string) => samples.filter((s) => s.build === label && !s.profiled && !s.traced).at(-1)
+
 console.log(`\nmemory once idle (last run) — working set MB per process, main CPU ms`)
+
 for (const label of labels) {
   const s = idle(label === "A" && labels.length === 1 ? "" : label)
+
   if (!s) continue
   const total = s.processes.reduce((n, p) => n + p.rssMB, 0)
   console.log(`${(labels.length > 1 ? label : "").padEnd(4)}total ${total} MB · main cpu ${s.mainCpuMs ?? "?"} ms · renderer heap ${s.renderer.jsHeapMB} MB, ${s.renderer.domNodes} nodes, layout ${s.renderer.layoutMs} ms/${s.renderer.layouts}×, style ${s.renderer.styleMs} ms/${s.renderer.styleRecalcs}×`)
   console.log(`    ${s.processes.map((p) => `${p.name} ${p.rssMB}`).join(" · ")}`)
 }
+
 console.log(`\nreport: ${reportPath}`)
+
 process.exit(0)
 
 // ---------------------------------------------------------------------------------------------
@@ -264,6 +323,7 @@ type Probe = {
   home: boolean
   url: string
 }
+
 type Sample = {
   build: string
   run: number
@@ -288,11 +348,14 @@ type Sample = {
 
 async function launch(build: { label: string; exe: string }, run: number): Promise<Sample> {
   await killApp()
+
   if (service === "cold") await stopService()
+
   if (args.values.fresh) rmSync(userData, { recursive: true, force: true })
   const profile = args.values["profile-main"] && run === 1
   const trace = args.values.trace && run === runs
   const tracePath = join(outDir, `startup-trace-${Date.now()}.json`)
+
   const launchArgs = [
     ...(process.env.BENCH_EXTRA_ARGS?.split(" ").filter(Boolean) ?? []),
     `--remote-debugging-port=${cdpPort}`,
@@ -306,6 +369,7 @@ async function launch(build: { label: string; exe: string }, run: number): Promi
         ]
       : []),
   ]
+
   const raiser = await windowRaiser()
   const spawnAt = Date.now()
   const child = spawn(build.exe, launchArgs, { env, detached: true, stdio: "ignore" })
@@ -314,21 +378,25 @@ async function launch(build: { label: string; exe: string }, run: number): Promi
   raiser.raise(child.pid!)
 
   let mainProfile: Promise<unknown> | undefined
+
   if (profile) mainProfile = profileMain(spawnAt)
 
   const page = await waitFor(
     () => targets(cdpPort).then((list) => list.find((t) => t.type === "page" && t.url.startsWith("oc://"))),
     60_000,
   )
+
   const cdp = await connect(page.webSocketDebuggerUrl)
   await cdp.send("Runtime.enable")
   await cdp.send("Performance.enable")
   const rendererProfile = args.values["profile-renderer"] && run === 1
+
   if (rendererProfile) {
     await cdp.send("Profiler.enable")
     await cdp.send("Profiler.setSamplingInterval", { interval: 100 })
     await cdp.send("Profiler.start")
   }
+
   // Poll DOM readiness and the renderer's cumulative main-thread task time together. The run ends
   // when the shell is up and the main thread has spent under 10 % of any 500 ms window in tasks for `settleMs`.
   const seen: Record<string, number> = {}
@@ -339,38 +407,53 @@ async function launch(build: { label: string; exe: string }, run: number): Promi
   let scriptMs = 0
   const window: { at: number; task: number }[] = []
   const deadline = Date.now() + 60_000
+
   while (Date.now() < deadline) {
     const result = await cdp.send("Runtime.evaluate", { expression: probe, returnByValue: true })
     last = result.result?.result?.value as Probe | undefined
     const t = Date.now() - spawnAt
+
     if (last?.prepaint) prepaintSeen = true
+
     // Chromium marks a window it considers occluded hidden and the renderer stops painting.
     if (last?.visible && !seen.documentVisible) seen.documentVisible = t
+
     if (last?.shell && !seen.shellVisible) seen.shellVisible = t
+
     if (last?.editor && !seen.composerEditable) seen.composerEditable = t
+
     if (last?.rows && !seen.timelineRows) seen.timelineRows = t
+
     if (last?.home && !seen.homeReady) seen.homeReady = t
     const metrics = (await cdp.send("Performance.getMetrics")).result?.metrics as { name: string; value: number }[]
     const task = (metrics.find((m) => m.name === "TaskDuration")?.value ?? 0) * 1000
     scriptMs = (metrics.find((m) => m.name === "ScriptDuration")?.value ?? 0) * 1000
+
     if (process.env.BENCH_DEBUG && task - taskMs > 5) console.log(`busy +${Date.now() - spawnAt} ${Math.round(task - taskMs)} ms`)
     taskMs = task
     window.push({ at: Date.now(), task })
+
     while (window.length > 1 && window[1].at <= Date.now() - 500) window.shift()
+
     if (task - window[0].task > 50) quietSince = undefined
     else quietSince ??= window[0].at
+
     if (seen.shellVisible && quietSince && Date.now() - quietSince >= settleMs) break
     await sleep(50)
   }
+
   const rendererIdleMs = quietSince ? quietSince - spawnAt : undefined
   const rendererProfilePath = rendererProfile ? join(outDir, `renderer-${Date.now()}.cpuprofile`) : undefined
+
   if (rendererProfilePath) {
     const stopped = await cdp.send("Profiler.stop")
     writeFileSync(rendererProfilePath, JSON.stringify(stopped.result.profile))
     console.log("renderer profile:", rendererProfilePath)
   }
+
   const finalMetrics = (await cdp.send("Performance.getMetrics")).result?.metrics as { name: string; value: number }[]
   const metric = (name: string) => finalMetrics.find((m) => m.name === name)?.value ?? 0
+
   const renderer = {
     taskMs: Math.round(metric("TaskDuration") * 1000),
     scriptMs: Math.round(metric("ScriptDuration") * 1000),
@@ -381,16 +464,19 @@ async function launch(build: { label: string; exe: string }, run: number): Promi
     domNodes: metric("Nodes"),
     jsHeapMB: Math.round(metric("JSHeapUsedSize") / 1048576),
   }
+
   const timelineResult = await cdp.send("Runtime.evaluate", { expression: rendererTimeline, returnByValue: true })
   cdp.close()
   const processes = appPid ? await processTree(appPid) : []
   const screenChanges = await raiser.screen()
   const boot = profile ? undefined : await mainBootTiming()
   await sleep(300)
+
   // Chromium writes the startup trace when --trace-startup-duration elapses; keep the app alive until then.
   if (trace) await waitFor(async () => (existsSync(tracePath) && statSync(tracePath).size > 0 ? true : undefined), 20_000)
   const main = mainLog()
   const origin = last?.origin ? Math.round(last.origin - spawnAt) : undefined
+
   const sample: Sample = {
     build: build.label,
     run,
@@ -441,24 +527,29 @@ async function launch(build: { label: string; exe: string }, run: number): Promi
     mainCpuMs: boot && Math.round((boot.cpu.user + boot.cpu.system) / 1000),
     timeline: main.timeline.map(([at, file, message]) => [at - spawnAt, file, message]),
   }
+
   if (mainProfile) {
     const profilePath = join(outDir, `main-${Date.now()}.cpuprofile`)
     writeFileSync(profilePath, JSON.stringify(await mainProfile))
     sample.mainProfile = profilePath
     console.log("main profile:", profilePath)
   }
+
   return sample
 }
 
 // Read after the run, so the inspector attach cannot influence what was measured.
 async function mainBootTiming() {
   const target = (await targets(inspectPort)).find((t) => t.type === "node")
+
   if (!target) return undefined
   const cdp = await connect(target.webSocketDebuggerUrl)
   const result = await cdp.send("Runtime.evaluate", { expression: mainTiming, returnByValue: true })
   cdp.close()
   const value = result.result?.result?.value
+
   if (typeof value !== "string") return undefined
+
   return JSON.parse(value) as {
     created: number
     origin: number
@@ -471,20 +562,26 @@ async function mainBootTiming() {
 
 function defaultExe() {
   const unpacked = join(packageDir, "dist", process.platform === "win32" ? "win-unpacked" : process.platform === "darwin" ? "mac" : "linux-unpacked")
+
   if (!existsSync(unpacked)) return join(unpacked, "OpenCode Dev.exe")
   const candidate = readdirSync(unpacked).find((f) => (process.platform === "win32" ? f.endsWith(".exe") : f.endsWith(".app") || !f.includes(".")))
+
   return join(unpacked, candidate ?? "OpenCode Dev.exe")
 }
 
 function appIdFor(executable: string) {
   const name = basename(executable, ".exe")
+
   if (/beta/i.test(name)) return "ai.opencode.desktop.beta"
+
   if (/dev/i.test(name)) return "ai.opencode.desktop.dev"
+
   return "ai.opencode.desktop"
 }
 
 function prepareHome() {
   for (const dir of [paths.appData, paths.temp, dirname(paths.db), paths.config, dirname(paths.registration), join(home, ".cache")]) mkdirSync(dir, { recursive: true })
+
   if (args.values.seed && !existsSync(userData)) {
     // Seed only the app's own state (tabs, drafts, settings, window placement); Chromium profile
     // data, caches, logs and the staged CLI are recreated by the app.
@@ -495,8 +592,10 @@ function prepareHome() {
       filter: (source) => source === seed || keep.test(relative(seed, source).split(/[\\/]/)[0] ?? ""),
     })
   }
+
   mkdirSync(paths.logs, { recursive: true })
   const at = args.values["window-at"]?.split(",").map(Number)
+
   if (at?.length === 2 && existsSync(userData)) {
     for (const file of readdirSync(userData).filter((name) => /^window-state-.*\.json$/.test(name))) {
       const state = JSON.parse(readFileSync(join(userData, file), "utf8"))
@@ -511,6 +610,7 @@ function displayAt(x: number, y: number) {
   const out = execFileSync("pwsh", ["-NoProfile", "-NonInteractive", "-Command", "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Screen]::AllScreens | ForEach-Object { \"$($_.Bounds.X),$($_.Bounds.Y),$($_.Bounds.Width),$($_.Bounds.Height)\" }"], { encoding: "utf8" })
   const displays = out.trim().split(/\r?\n/).map((line) => line.split(",").map(Number))
   const hit = displays.find(([dx, dy, dw, dh]) => x >= dx && y >= dy && x < dx + dw && y < dy + dh)
+
   return hit ? { x: hit[0], y: hit[1], width: hit[2], height: hit[3] } : undefined
 }
 
@@ -532,11 +632,14 @@ async function targets(port: number) {
 
 async function waitFor<T>(fn: () => Promise<T | undefined>, timeout: number) {
   const deadline = Date.now() + timeout
+
   while (Date.now() < deadline) {
     const value = await fn()
+
     if (value) return value
     await sleep(25)
   }
+
   throw new Error("Timed out waiting for the renderer debug target")
 }
 
@@ -548,12 +651,15 @@ async function connect(url: string) {
   const events: any[] = []
   ws.onmessage = (ev) => {
     const msg = JSON.parse(String(ev.data))
+
     if (msg.method) events.push(msg)
+
     if (msg.id && pending.has(msg.id)) {
       pending.get(msg.id)!(msg)
       pending.delete(msg.id)
     }
   }
+
   return {
     events,
     send: (method: string, params: Record<string, unknown> = {}) =>
@@ -577,12 +683,14 @@ async function profileMain(spawnAt: number) {
   await cdp.send("Profiler.start")
   await cdp.send("Runtime.runIfWaitingForDebugger")
   const until = Date.now() + 3000
+
   while (!cdp.events.some((e) => e.method === "Debugger.paused") && Date.now() < until) await sleep(10)
   await cdp.send("Debugger.resume")
   console.log(`debugger released at +${Date.now() - spawnAt} ms`)
   await sleep(8000)
   const result = await cdp.send("Profiler.stop")
   cdp.close()
+
   return result.result.profile
 }
 
@@ -595,24 +703,31 @@ function mainLog() {
   let windowShownAt: number | undefined
   // Epoch marks the entry module recorded before any logger existed, reported with "app starting".
   const marks: Record<string, number> = {}
+
   for (const name of dir ? readdirSync(dir).filter((f) => f.endsWith(".log")) : []) {
     const text = readFileSync(join(dir!, name), "utf8")
+
     // electron-log wraps long objects onto continuation lines; read them as part of the entry.
     for (const entry of text.split(/\r?\n(?=\[\d{4}-)/)) {
       const line = entry.split(/\r?\n/)[0]
       const m = line.match(/^\[(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d{3})\]\s+\[\w+\]\s+(?:\([\w-]+\)\s+)?(.*)$/)
+
       if (!m) continue
       const message = m[2].replace(/\s*\{.*$/, "").trim()
       // A window shown before the logger existed reports when it was shown; the line itself is later.
       const shown = /main window visible/.test(message) ? entry.match(/shownAt: (\d+)/)?.[1] : undefined
+
       if (shown) windowShownAt = Number(shown)
+
       if (/app starting|layers ready/.test(message))
         for (const [, key, value] of entry.matchAll(/\b(\w+): (\d{10,})/g)) marks[key] = Number(value)
       timeline.push([new Date(m[1].replace(" ", "T")).getTime(), name.replace(/\.log$/, ""), message])
     }
   }
+
   timeline.sort((a, b) => a[0] - b[0])
   const at = (pattern: RegExp) => timeline.find(([, , message]) => pattern.test(message))?.[0]
+
   return {
     timeline,
     appStarting: at(/app starting/),
@@ -676,6 +791,7 @@ async function windowRaiser(): Promise<{ raise: (pid: number) => void; screen: (
       buffer += chunk.toString()
       const parts = buffer.split(/\r?\n/)
       buffer = parts.pop() ?? ""
+
       for (const line of parts) {
         if (line === "ready") resolve()
         else lines.push(line)
@@ -685,6 +801,7 @@ async function windowRaiser(): Promise<{ raise: (pid: number) => void; screen: (
     helper.on("exit", () => resolve())
   })
   const exited = new Promise<void>((resolve) => helper.on("exit", () => resolve()))
+
   return {
     raise: (pid) => helper.stdin!.write(`${pid}\n`),
     // Resolves with the times (ms since the pid was sent, ~spawn) at which the sampled screen
@@ -692,9 +809,11 @@ async function windowRaiser(): Promise<{ raise: (pid: number) => void; screen: (
     // was on screen.
     screen: async () => {
       await exited
+
       const samples = lines
         .filter((line) => line.startsWith("screen "))
         .map((line) => line.split(" ").slice(1).map(Number) as [number, number])
+
       if (process.env.BENCH_DEBUG) console.log(lines.filter((line) => line.startsWith("raised")).join(" "), `${samples.length} screen samples`)
       const first = samples[0]?.[1]
       const last = samples.at(-1)?.[1]
@@ -702,10 +821,12 @@ async function windowRaiser(): Promise<{ raise: (pid: number) => void; screen: (
       const changed = samples.filter(([, sum]) => differs(sum, first)).map(([t]) => t)
       // The last sample that still differed from the final content, i.e. when the window stopped changing.
       const settledIndex = samples.findLastIndex(([, sum]) => last !== undefined && differs(sum, last))
+
       return { changed, settled: settledIndex >= 0 ? samples[settledIndex + 1]?.[0] : samples[0]?.[0] }
     },
   }
 }
+
 async function processTree(root: number) {
   const script =
     process.platform === "win32"
@@ -718,18 +839,21 @@ async function processTree(root: number) {
           ],
         ]
       : ["sh", ["-c", `ps -eo pid=,ppid=,rss=,comm= | awk -v r=${root} 'BEGIN{ids[r]=1} {p[$1]=$2; rss[$1]=$3; c[$1]=$4} END{for(k=0;k<8;k++) for(i in p) if(p[i] in ids) ids[i]=1; for(i in ids) if(i in rss) print i "|" c[i] "|" rss[i]*1024 "|"}'`]]
+
   const out = await new Promise<string>((done) => {
     const child = spawn(script[0] as string, script[1] as string[], { stdio: ["ignore", "pipe", "ignore"] })
     let text = ""
     child.stdout?.on("data", (chunk) => (text += chunk))
     child.on("close", () => done(text))
   })
+
   return out
     .trim()
     .split(/\r?\n/)
     .filter(Boolean)
     .map((line) => {
       const [pid, name, rss, type] = line.split("|")
+
       return { pid: Number(pid), name: `${name}${type ? ` ${type.replace("--type=", "")}` : ""}`, rssMB: Math.round(Number(rss) / 1048576) }
     })
 }
@@ -740,13 +864,17 @@ function summarize(list: Sample[]) {
     rendererTaskMs: s.rendererCpu.taskMs,
     rendererScriptMs: s.rendererCpu.scriptMs,
   })
+
   const keys = [...new Set(list.flatMap((s) => Object.keys(values(s))))]
   const out: Record<string, { median: number; min: number; max: number }> = {}
+
   for (const key of keys) {
     const sorted = list.map((s) => values(s)[key]).filter((v): v is number => Number.isFinite(v)).sort((a, b) => a - b)
+
     if (!sorted.length) continue
     out[key] = { median: sorted[Math.floor(sorted.length / 2)], min: sorted[0], max: sorted[sorted.length - 1] }
   }
+
   return out
 }
 
@@ -754,50 +882,64 @@ function summarize(list: Sample[]) {
 // whose version differs from its bundled CLI, which would turn a warm run into a cold one.
 function bundledCli(exe: string) {
   const resources = process.platform === "darwin" ? join(dirname(exe), "..", "Resources") : join(dirname(exe), "resources")
+
   return join(resources, process.platform === "win32" ? "opencode-cli.exe" : "opencode-cli")
 }
 
 async function warmService() {
   await stopService()
   const clis = builds.map((build) => bundledCli(build.exe))
+
   const identity = (cli: string) => {
     const version = join(dirname(cli), "opencode-cli.version")
+
     return existsSync(version) ? readFileSync(version, "utf8").trim() : String(statSync(cli).size)
   }
+
   if (new Set(clis.map(identity)).size > 1)
     throw new Error("The compared builds bundle different CLIs; the desktop would restart the service on the mismatch")
   serviceProcess = spawn(clis[0], ["serve", "--service"], { env, detached: true, stdio: "ignore" })
   serviceProcess.unref()
   const deadline = Date.now() + 60_000
+
   while (Date.now() < deadline) {
     if (existsSync(paths.registration)) {
       const registration = JSON.parse(readFileSync(paths.registration, "utf8")) as { url?: string }
+
       if (registration.url && (await fetch(`${registration.url}/api/info`).then((r) => r.status < 500).catch(() => false))) {
         console.log(`service warm at ${registration.url}`)
+
         return
       }
     }
+
     await sleep(200)
   }
+
   throw new Error("The bench service did not become ready")
 }
 
 async function stopService() {
   if (existsSync(paths.registration)) {
     const registration = JSON.parse(readFileSync(paths.registration, "utf8")) as { pid?: number }
+
     if (registration.pid) {
       try {
         process.kill(registration.pid)
       } catch {}
     }
+
     rmSync(paths.registration, { force: true })
   }
+
   if (serviceProcess?.pid) {
     try {
       process.kill(serviceProcess.pid)
     } catch {}
+
     serviceProcess = undefined
   }
+
   await sleep(500)
 }
 
@@ -806,28 +948,36 @@ async function stopService() {
 // ends (Node and Chromium flush their caches on a normal exit); force-kill the tree if it lingers.
 async function killApp() {
   const pid = appPid
+
   if (!pid) return
   appPid = undefined
+
   const running = () =>
     new Promise<boolean>((done) => {
       const check =
         process.platform === "win32"
           ? spawn("tasklist", ["/FI", `PID eq ${pid}`, "/NH"], { stdio: ["ignore", "pipe", "ignore"] })
           : spawn("kill", ["-0", String(pid)], { stdio: "ignore" })
+
       let out = ""
       check.stdout?.on("data", (chunk) => (out += chunk))
       check.on("close", (code) => done(process.platform === "win32" ? out.includes(String(pid)) : code === 0))
     })
+
   if (!(await running())) return
+
   if (process.platform === "win32") spawn("taskkill", ["/PID", String(pid)], { stdio: "ignore" })
   else process.kill(pid, "SIGTERM")
   const deadline = Date.now() + 5000
+
   while (Date.now() < deadline && (await running())) await sleep(100)
+
   if (await running()) {
     if (process.platform === "win32") spawn("taskkill", ["/PID", String(pid), "/F", "/T"], { stdio: "ignore" })
     else process.kill(pid, "SIGKILL")
     await sleep(1000)
   }
+
   await sleep(500)
 }
 

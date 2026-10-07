@@ -18,6 +18,7 @@ export default defineConfig({
         if (!process.env.PATCH_REVISION) return
         const root = fileURLToPath(new URL("../../../../..", import.meta.url))
         const file = path.relative(root, id).replaceAll("\\", "/")
+
         if (
           ![
             "packages/session-ui/src/components/apply-patch-file.ts",
@@ -25,10 +26,12 @@ export default defineConfig({
           ].includes(file)
         )
           return
+
         return execFileSync("git", ["show", `${process.env.PATCH_REVISION}:${file}`], { cwd: root, encoding: "utf8" })
       },
       transform(code, id) {
         if (process.env.PATCH_COUNTERS !== "1") return
+
         const functions = id.replaceAll("\\", "/").endsWith("/apply-patch-file.ts")
           ? ["patchFileGroups"]
           : id.replaceAll("\\", "/").endsWith("/session-diff.ts")
@@ -36,11 +39,14 @@ export default defineConfig({
             : id.replaceAll("\\", "/").endsWith("/diff/line.js")
               ? ["diffLines"]
               : []
+
         for (const name of functions) {
           const pattern = new RegExp(`(export function ${name}\\([^)]*\\)[^{]*\\{)`)
+
           if (!pattern.test(code)) throw new Error(`Missing instrumented function ${name} in ${id}`)
           code = code.replace(pattern, `$1 performance.mark("patch-counter:${name}");`)
         }
+
         return functions.length ? { code, map: null } : undefined
       },
     },

@@ -21,6 +21,7 @@ export function SessionComposerRegion(props: {
 }) {
   const language = useLanguage()
   const controller = props.controller
+
   return (
     <div
       ref={controller.setDockRef}

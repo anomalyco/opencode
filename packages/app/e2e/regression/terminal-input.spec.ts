@@ -106,6 +106,37 @@ for (const mount of ["cached", "explicit"] as const) {
   })
 }
 
+test("reconnects the same terminal after a transient connection failure", async ({ page }) => {
+  const { pty } = await openSession(page, workspace)
+  let tickets = 0
+  await page.route(/\/api\/pty\/[^/]+\/connect-token/, (route) => {
+    if (route.request().method() === "OPTIONS") return route.fallback()
+    tickets += 1
+
+    if (tickets !== 2) return route.fallback()
+
+    return route.fulfill({
+      status: 503,
+      headers: { "access-control-allow-origin": "*" },
+      body: "Service Unavailable",
+    })
+  })
+  await page.keyboard.press("Control+Backquote")
+  const terminal = page.locator('[data-component="terminal"]')
+  await expect(terminal.locator("textarea")).toHaveCount(1)
+  await expect.poll(() => pty.sockets.length).toBe(1)
+  const id = pty.sockets[0]!.id
+  await terminal.evaluate((element) => element.setAttribute("data-connection-probe", "original"))
+
+  await pty.sockets[0]!.close(1011, "Temporary disconnection")
+  await expect.poll(() => tickets).toBe(3)
+  await expect.poll(() => pty.sockets.length).toBe(2)
+  expect(pty.sockets[1]!.id).toBe(id)
+  expect(pty.rejected).toEqual([])
+  await expect(terminal).toHaveAttribute("data-connection-probe", "original")
+  expect(pty.created.map((item) => item.id)).toEqual([id])
+})
+
 test("focuses a terminal created from the new-terminal button", async ({ page }) => {
   const { editor } = await openSession(page, workspace)
   const terminal = page.locator('[data-component="terminal"]')
