@@ -6,7 +6,9 @@ export const MODEL_AUTHOR_RULES = [
   { match: "gpt", author: "openai" },
   { match: "grok", author: "xai" },
   { match: "hy3", author: "tencent" },
+  { match: "hy4", author: "tencent" },
   { match: "kimi", author: "moonshot" },
+  { match: "longcat", author: "meituan" },
   { match: "mimo", author: "xiaomi" },
   { match: "minimax", author: "minimax" },
   { match: "muse-spark", author: "meta" },
@@ -14,7 +16,7 @@ export const MODEL_AUTHOR_RULES = [
   { match: "qwen", author: "qwen" },
 ] as const
 export const EXCLUDED_MODELS = new Set(["alpha-gpt-next"])
-export const STEALTH_MODELS = new Set(["omen-alpha", "space-bunny", "union-alpha"])
+export const STEALTH_MODELS = new Set(["exo", "omen-alpha", "space-bunny", "union-alpha"])
 export const FREE_MODELS = new Set(["gpt-5-nano", "grok-code", "big-pickle"])
 export const MODEL_NAME_MAX_LENGTH = 256
 export const MODEL_NAME_ALIASES: Record<string, string> = {

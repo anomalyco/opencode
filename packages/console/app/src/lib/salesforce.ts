@@ -44,6 +44,7 @@ export interface SalesforceLeadInput {
   company?: string
   email: string
   phone?: string
+  inferenceSpend?: string
   message: string
 }
 
@@ -63,7 +64,10 @@ export async function createLead(input: SalesforceLeadInput): Promise<boolean> {
       Email: input.email,
       Phone: input.phone ?? null,
       Title: input.role,
-      Description: input.message,
+      Description: input.inferenceSpend
+        ? `Current monthly inference spend: ${input.inferenceSpend}\n\n${input.message}`
+        : input.message,
+      Current_Monthly_Inference_Spend__c: input.inferenceSpend,
       LeadSource: "Website",
     }),
   }).catch((err) => {
