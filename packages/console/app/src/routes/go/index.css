@@ -367,40 +367,6 @@ body {
     }
   }
 
-  [data-component="desktop-app-banner"] {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 40px;
-    font-size: 16px;
-
-    [data-slot="badge"] {
-      background: var(--color-background-strong);
-      color: var(--color-text-inverted);
-      font-weight: 500;
-      padding: 4px 8px;
-      line-height: 1.1;
-      flex-shrink: 0;
-    }
-
-    [data-slot="content"] {
-      display: flex;
-      align-items: center;
-      gap: 1ch;
-    }
-
-    [data-slot="text"] {
-      color: var(--color-text);
-      line-height: 1.5;
-    }
-
-    @media (max-width: 40rem) {
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 8px;
-    }
-  }
-
   [data-slot="hero-copy"] {
     display: flex;
     flex-direction: column;

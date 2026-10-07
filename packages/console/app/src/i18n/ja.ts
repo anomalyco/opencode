@@ -3,7 +3,6 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
-  "go.promo.spaceBunny": "新しい匿名モデル Space Bunny Free が期間限定で利用可能です",
   "go.referral.ended.label": "警告",
   "go.referral.ended":
     "紹介プログラムは終了しました。紹介リンクを使っても、あなたや共有した人にクレジットは付与されません。",

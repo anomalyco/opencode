@@ -32,7 +32,7 @@ const checkLoggedIn = query(async () => {
 }, "checkLoggedIn.get")
 
 const models = [
-  { name: "Space Bunny Free", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
+  { name: "Space Bunny", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "LongCat 2.5 Preview Free", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Grok 4.7", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
   { name: "Grok 4.6", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
@@ -103,12 +103,6 @@ export default function Home() {
                 <p>{i18n.t("go.referral.ended")}</p>
               </aside>
             </Show>
-            <div data-component="desktop-app-banner">
-              <span data-slot="badge">{i18n.t("home.banner.badge")}</span>
-              <div data-slot="content">
-                <span data-slot="text">{i18n.t("go.promo.spaceBunny")}</span>
-              </div>
-            </div>
             <div data-slot="hero-copy">
               <div data-slot="headline">
                 <h1>{i18n.t("go.hero.title")}</h1>
