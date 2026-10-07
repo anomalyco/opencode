@@ -817,7 +817,7 @@ export const dict = {
   "enterprise.form.email.placeholder": "jeff@amazon.com",
   "enterprise.form.phone.label": "Phone number",
   "enterprise.form.phone.placeholder": "+1 234 567 8900",
-  "enterprise.form.inferenceSpend.label": "What is your current monthly inference spend (USD)?",
+  "enterprise.form.inferenceSpend.label": "What is your company's current monthly inference spend (USD)?",
   "enterprise.form.inferenceSpend.placeholder": "Select a range (optional)",
   "enterprise.form.inferenceSpend.none": "Not spending yet",
   "enterprise.form.inferenceSpend.under1k": "Under $1K",
