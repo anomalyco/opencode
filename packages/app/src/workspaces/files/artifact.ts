@@ -1,22 +1,22 @@
 import { artifactKind, artifactMime, type ArtifactKind } from "@opencode/util/artifact"
+import { bytesToBase64 } from "@opencode/util/base64"
 import type { FileContent } from "@/runtime/server/types"
 
 /** Kinds whose bytes are kept as base64 so media elements can play them without a text round trip. */
-const binaryKinds = new Set<ArtifactKind>(["image", "audio", "video", "pdf", "font"])
+const binaryKinds = new Set<ArtifactKind>([
+  "image",
+  "audio",
+  "video",
+  "pdf",
+  "font",
+  "document",
+  "spreadsheet",
+  "presentation",
+])
 
 /** Text files never contain NUL; a NUL in the first 8 KiB marks an unknown binary. */
 function isBinaryBytes(bytes: Uint8Array) {
   return bytes.subarray(0, 8192).includes(0)
-}
-
-export function bytesToBase64(bytes: Uint8Array) {
-  const parts: string[] = []
-
-  for (let index = 0; index < bytes.length; index += 0x8000) {
-    parts.push(String.fromCharCode(...bytes.subarray(index, index + 0x8000)))
-  }
-
-  return btoa(parts.join(""))
 }
 
 /** Media above this stays a placeholder: base64 encoding on the main thread and the LRU budget both suffer. */

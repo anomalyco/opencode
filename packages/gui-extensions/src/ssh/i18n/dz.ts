@@ -38,8 +38,5 @@ export default {
   "form.name": "སར་བར་གྱི་མིང་ (གདམ་ཁ་ཅན།)",
   "form.namePlaceholder": "Localhost།",
   "form.add": "སར་བར་ཁ་སྐོང་འབད།",
-  "server.default": "འཐུས་ཤོར",
-  "menu.default": "སྔོན་སྒྲིག་སྦེ་གཞི་སྒྲིག་འབད།",
-  "menu.defaultRemove": "སྔོན་སྒྲིག་རྩ་བསྐྲད་གཏང་།",
   "menu.delete": "བཏོན༌གཏང༌བ",
 }

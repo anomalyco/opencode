@@ -16,8 +16,6 @@ export type ElectronAPI = {
   awaitInitialization(): Promise<ServerReadyData>
   reconnectService(): Promise<ServerReadyData>
   consumeInitialDeepLinks(): Promise<string[]>
-  getDefaultServerUrl(): Promise<string | null>
-  setDefaultServerUrl(url: string | null): Promise<void>
   isFirstLaunchOnboardingPending(): Promise<boolean>
   finishFirstLaunchOnboarding(createDefaultProject: boolean): Promise<string | null>
   checkAppExists(appName: string): Promise<boolean>

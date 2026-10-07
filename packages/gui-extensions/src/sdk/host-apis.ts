@@ -992,6 +992,20 @@ export interface Keybinds {
 export interface Servers {
   /** Ids of the servers the app lists (`ServerRef.id`). Reactive. */
   list(): readonly string[]
+  /**
+   * A listed server's ref, already authenticated for this window: the desktop's own server included, whose credentials
+   * stay in the main process. The same ref for the same id; read its `client` each time you call it. Reactive.
+   *
+   * @param id - The server's id, as `list()` returns it.
+   * @returns Undefined while the app does not list the server, and before the app interface mounts.
+   *
+   * @example
+   * ```ts
+   * const builtin = () => ctx.servers.list().map((id) => ctx.servers.get(id)).find((server) => server?.builtin)
+   * const info = () => builtin()?.client.server.info()
+   * ```
+   */
+  get(id: string): ServerRef | undefined
 }
 
 /** Workspace lifecycle events. */

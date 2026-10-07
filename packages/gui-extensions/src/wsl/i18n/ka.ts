@@ -51,8 +51,5 @@ export default {
   "error.healthTimeout": "Sidecar for {{distro}} ჯანმრთელობის შემოწმების დრო ამოიწურა {{timeout}}ms",
   "error.commandTimeout": "{{command}} {{args}} დრო ამოიწურა {{timeout}}ms",
   "error.failedPort": "პორტის მიღება ვერ მოხერხდა",
-  "server.default": "ნაგულისხმევი",
-  "menu.default": "დაყენება ნაგულისხმევად",
-  "menu.defaultRemove": "ნაგულისხმევის ამოღება",
   "menu.remove": "წაშლა",
 }

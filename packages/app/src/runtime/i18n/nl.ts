@@ -23,7 +23,6 @@ export const dict = {
   "server.connect.address.invalid": "Voer een geldig HTTP- of HTTPS-serveradres in.",
   "server.connect.failed":
     "Kan geen verbinding maken. Controleer het serveradres en het wachtwoord en probeer het opnieuw.",
-  "server.connect.pair.description": "Voer deze opdracht uit op uw computer om uw verbindingsgegevens op te halen.",
   "server.connect.scan": "Scan de QR-code",
   "server.connect.scan.description": "Richt uw camera op de QR-code weergegeven door opencode pair.",
   "server.connect.scan.invalid": "Dit is geen OpenCode-koppelingscode. Scan de code weergegeven door opencode pair.",
@@ -31,8 +30,6 @@ export const dict = {
   "server.connect.camera.starting": "Camera openen…",
   "server.connect.mixedContent":
     "Kan geen verbinding maken met deze HTTP-server vanaf een HTTPS-pagina. Gebruik in plaats daarvan een HTTPS-serveradres.",
-  "server.connect.camera.insecure":
-    "Voor het scannen van QR moet deze pagina worden geopend via HTTPS of op localhost.",
   "server.connect.camera.unavailable":
     "Er is geen camera beschikbaar voor deze browser. Voer uw verbindingsgegevens handmatig in.",
   "server.connect.camera.error":
@@ -501,9 +498,6 @@ export const dict = {
   "dialog.server.add.passwordPlaceholder": "wachtwoord",
   "dialog.server.edit.title": "Server bewerken",
   "dialog.server.menu.edit": "Bewerken",
-  "dialog.server.menu.default": "Als standaard instellen",
-  "dialog.server.menu.defaultRemove": "Standaard verwijderen",
-  "dialog.server.status.default": "Standaard",
   "dialog.project.edit.title": "Project bewerken",
   "dialog.project.edit.icon": "Pictogram",
   "dialog.project.edit.icon.alt": "Projectpictogram",

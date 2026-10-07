@@ -710,7 +710,7 @@ describe("ModelResolver", () => {
 
   it.effect("prefers stored credentials over configured auth", () =>
     Effect.gen(function* () {
-      const credential = Credential.Key.make({ type: "key", key: "stored-secret", metadata: { tenant: "work" } })
+      const credential = Credential.Key.make({ type: "key", key: "stored-secret" })
       const resolved = yield* ModelResolver.fromCatalogModel(
         model(Provider.aisdk("@ai-sdk/openai"), {
           settings: { apiKey: "configured-secret", baseURL: "https://openai.example/v1" },
@@ -728,7 +728,25 @@ describe("ModelResolver", () => {
       })
 
       expect(headers.authorization).toBe("Bearer stored-secret")
-      expect(resolved.route.defaults.http?.body).toEqual({ tenant: "work" })
+    }),
+  )
+
+  it.effect("does not project API key metadata into the request body", () =>
+    Effect.gen(function* () {
+      // V1 auth.json stored connect-form answers as API key metadata, and the legacy import preserves them there.
+      const resolved = yield* ModelResolver.fromCatalogModel(
+        model(Provider.aisdk("@ai-sdk/azure"), {
+          providerID: Provider.ID.azure,
+          modelID: "responses-deployment",
+          settings: { apiVersion: "2025-01-01-preview" },
+          headers: {},
+          body: {},
+        }),
+        Credential.Key.make({ type: "key", key: "secret", metadata: { resourceName: "migrated-resource" } }),
+      )
+
+      expect(resolved.route.endpoint.baseURL).toBe("https://migrated-resource.openai.azure.com/openai/v1")
+      expect(resolved.route.defaults.http?.body).toEqual({})
     }),
   )
 

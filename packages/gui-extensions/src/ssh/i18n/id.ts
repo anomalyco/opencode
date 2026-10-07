@@ -37,8 +37,5 @@ export default {
   "form.name": "Nama server (opsional)",
   "form.namePlaceholder": "Localhost",
   "form.add": "Tambah server",
-  "server.default": "Bawaan",
-  "menu.default": "Tetapkan sebagai bawaan",
-  "menu.defaultRemove": "Hapus bawaan",
   "menu.delete": "Hapus",
 }

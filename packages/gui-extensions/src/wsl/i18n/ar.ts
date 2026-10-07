@@ -50,8 +50,5 @@ export default {
   "error.healthTimeout": "انتهت مهلة فحص سلامة العملية المصاحبة للتوزيعة {{distro}} بعد {{timeout}}ms",
   "error.commandTimeout": "انتهت مهلة {{command}} {{args}} بعد {{timeout}}ms",
   "error.failedPort": "فشل الحصول على المنفذ",
-  "server.default": "افتراضي",
-  "menu.default": "تعيين كافتراضي",
-  "menu.defaultRemove": "إزالة الافتراضي",
   "menu.remove": "إزالة",
 }

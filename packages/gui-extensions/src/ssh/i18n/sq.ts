@@ -38,8 +38,5 @@ export default {
   "form.name": "Emri i serverit (opsionale)",
   "form.namePlaceholder": "Localhost",
   "form.add": "Shto server",
-  "server.default": "E paracaktuar",
-  "menu.default": "Cakto si parazgjedhje",
-  "menu.defaultRemove": "Hiq parazgjedhjen",
   "menu.delete": "Fshi",
 }

@@ -36,8 +36,5 @@ export default {
   "form.name": "Ambætaranavn (valfrítt)",
   "form.namePlaceholder": "Localhost",
   "form.add": "Legg ambætara til",
-  "server.default": "Forsett",
-  "menu.default": "Set sum forsett",
-  "menu.defaultRemove": "Strika forsett",
   "menu.delete": "Strika",
 }

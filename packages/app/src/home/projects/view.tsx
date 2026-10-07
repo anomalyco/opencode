@@ -33,6 +33,11 @@ const HOME_PROJECT_NAV_LABEL = "min-w-0 flex-1 overflow-hidden text-ellipsis whi
 
 const serverContextMenuID = (server: ServerConnection.Any) => `server:${ServerConnection.key(server)}`
 
+// Extension servers ask for sign-in themselves; an HTTP server that rejects its saved credentials needs a new
+// pairing link or password.
+const signInRequired = (server: ServerConnection.Any, health: ServerHealth | undefined) =>
+  (server.type === "extension" && server.authenticationRequired) || (server.type === "http" && !!health?.unauthorized)
+
 const projectContextMenuID = (server: ServerConnection.Any, directory: string) =>
   `project:${ServerConnection.key(server)}:${directory}`
 
@@ -47,8 +52,6 @@ export type HomeProjectsViewProps = {
   serverHealth: (server: ServerConnection.Any) => ServerHealth | undefined
   projectsForServer: (server: ServerConnection.Any) => LocalProject[]
   collapsed: (server: ServerConnection.Any) => boolean
-  canDefaultServer: boolean
-  defaultServerKey: ServerConnection.Key | null | undefined
   canRevealProject: (server: ServerConnection.Any) => boolean
   unseenCount: (server: ServerConnection.Any, project: LocalProject) => number
   onWheel: (event: WheelEvent) => void
@@ -57,7 +60,6 @@ export type HomeProjectsViewProps = {
   onAuthenticateServer?: (server: ServerConnection.Any) => void
   onToggleCollapsed: (server: ServerConnection.Any) => void
   onEditServer: (server: ServerConnection.Http) => void
-  onSetDefaultServer: (server: ServerConnection.Any | undefined) => void
   canRemoveServer: (server: ServerConnection.Any) => boolean
   onRemoveServer: (server: ServerConnection.Any) => void
   canHideServer: (server: ServerConnection.Any) => boolean
@@ -158,7 +160,7 @@ export function HomeProjectsView(props: HomeProjectsViewProps) {
 }
 
 function HomeProjectsPanel(props: HomeProjectsViewProps) {
-  const [contextMenu, setContextMenu] = createStore({ open: undefined as string | undefined })
+  const [contextMenu, setContextMenu] = createStore<{ open: string | undefined }>({ open: undefined })
 
   const contextMenuProps = {
     contextMenuOpen: (id: string) => contextMenu.open === id,
@@ -216,7 +218,9 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
           when={
             props.servers.length > 1 ||
             props.servers.some(
-              (server) => server.type === "extension" && (server.authenticationRequired || server.connecting),
+              (server) =>
+                signInRequired(server, props.serverHealth(server)) ||
+                (server.type === "extension" && server.connecting),
             )
           }
           fallback={
@@ -253,7 +257,7 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
                 const healthy = () => !!props.serverHealth(item)?.healthy
                 const hasProjects = () => projects().length > 0
                 const collapsed = () => props.collapsed(item)
-                const authentication = () => item.type === "extension" && item.authenticationRequired
+                const authentication = () => signInRequired(item, props.serverHealth(item))
                 const connecting = () => item.type === "extension" && item.connecting
 
                 return (
@@ -340,12 +344,9 @@ function HomeServerRow(props: {
   language: HomeProjectsViewProps["language"]
   projectsForServer: HomeProjectsViewProps["projectsForServer"]
   contextMenuOpen: HomeProjectsContextMenuProps["contextMenuOpen"]
-  canDefaultServer: HomeProjectsViewProps["canDefaultServer"]
-  defaultServerKey: HomeProjectsViewProps["defaultServerKey"]
   onFocusServer: HomeProjectsViewProps["onFocusServer"]
   onToggleCollapsed: HomeProjectsViewProps["onToggleCollapsed"]
   onEditServer: HomeProjectsViewProps["onEditServer"]
-  onSetDefaultServer: HomeProjectsViewProps["onSetDefaultServer"]
   canRemoveServer: HomeProjectsViewProps["canRemoveServer"]
   onRemoveServer: HomeProjectsViewProps["onRemoveServer"]
   canHideServer: HomeProjectsViewProps["canHideServer"]
@@ -358,7 +359,7 @@ function HomeServerRow(props: {
   health: ServerHealth | undefined
 }) {
   const healthy = () => !!props.health?.healthy
-  const authentication = () => props.server.type === "extension" && props.server.authenticationRequired
+  const authentication = () => signInRequired(props.server, props.health)
   const incompatible = () => !!props.health?.incompatible
   const canToggle = () => healthy() && props.projectsForServer(props.server).length > 0
   const contextMenuID = () => serverContextMenuID(props.server)
@@ -463,13 +464,9 @@ function HomeServerRow(props: {
           <ServerRowMenuView
             server={props.server}
             labels={serverMenuLabels(props.language)}
-            canDefault={props.canDefaultServer}
-            isDefault={props.defaultServerKey === ServerConnection.key(props.server)}
             canRemove={props.canRemoveServer(props.server)}
             canHide={props.canHideServer(props.server)}
             onEdit={props.onEditServer}
-            onSetDefault={() => props.onSetDefaultServer(props.server)}
-            onRemoveDefault={() => props.onSetDefaultServer(undefined)}
             onRemove={() => props.onRemoveServer(props.server)}
             onHide={() => props.onHideServer(props.server)}
             open={props.contextMenuOpen(contextMenuID())}

@@ -73,7 +73,7 @@ export function createCommandPaletteFileOpener(onOpenFile?: (path: string) => vo
 }
 
 /** The highlighted option's preview cleanup, and whether the palette committed a choice. */
-type PaletteHighlight = { cleanup: (() => void) | void; committed: boolean }
+export type PaletteHighlight = { cleanup: (() => void) | void; committed: boolean }
 
 export function createCommandPaletteModel(props: { filesOnly?: () => boolean; onOpenFile?: (path: string) => void }) {
   const command = useCommand()
@@ -148,6 +148,7 @@ export function createCommandPaletteModel(props: { filesOnly?: () => boolean; on
     get: (sessionID, signal) => serverSDK.api.session.get({ sessionID }, { signal }),
     untitled: () => language.t("command.session.new"),
     category: () => language.t("command.category.session"),
+    recentCategory: () => language.t("palette.group.recentSessions"),
   })
 
   const highlight = (item: CommandPaletteEntry | undefined) => {
@@ -232,6 +233,7 @@ export function createServerSessionEntries(props: {
   get: (sessionID: string, signal: AbortSignal) => Promise<SessionInfo>
   untitled: () => string
   category: () => string
+  recentCategory: () => string
 }) {
   let abort: AbortController | undefined
 
@@ -240,17 +242,13 @@ export function createServerSessionEntries(props: {
   return async (text: string): Promise<CommandPaletteEntry[]> => {
     const search = text.trim()
 
-    if (!search) {
-      abort?.abort()
-
-      return []
-    }
-
     abort?.abort()
     const current = new AbortController()
     abort = current
+
+    // Typed searches wait for a pause; an empty query lists recent sessions right away.
     await new Promise<void>((resolve) => {
-      const timer = setTimeout(resolve, 100)
+      const timer = setTimeout(resolve, search ? 100 : 0)
       current.signal.addEventListener(
         "abort",
         () => {
@@ -264,8 +262,9 @@ export function createServerSessionEntries(props: {
     if (current.signal.aborted) return []
     const opened = props.opened()
     const stored = props.stored().map((project) => ({ ...project, expanded: false }))
+    const category = search ? props.category() : props.recentCategory()
 
-    return Promise.all([
+    const entries = await Promise.all([
       props.load(search, current.signal).then(
         (result) => result.data,
         () => [],
@@ -289,7 +288,7 @@ export function createServerSessionEntries(props: {
               type: "session" as const,
               title: session.title || props.untitled(),
               description: project ? displayName(project) : getFilename(session.location.directory),
-              category: props.category(),
+              category,
               directory: session.location.directory,
               sessionID: session.id,
               server: props.server,
@@ -300,5 +299,7 @@ export function createServerSessionEntries(props: {
         },
       ),
     )
+
+    return search ? entries : entries.slice(0, ENTRY_LIMIT)
   }
 }

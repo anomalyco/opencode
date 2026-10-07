@@ -1,3 +1,5 @@
+import { destinationOrigin } from "./policy"
+
 /** Where text that is not an address goes. Shared with the system browser's default so results look familiar. */
 const SEARCH = "https://www.google.com/search?q="
 
@@ -8,25 +10,31 @@ const SEARCH = "https://www.google.com/search?q="
 export function resolveAddress(input: string) {
   const value = input.trim()
 
-  if (!value) return "about:blank"
+  if (!value || value.toLowerCase() === "about:blank") return "about:blank"
 
   return searches(value) ? `${SEARCH}${encodeURIComponent(value)}` : value
 }
 
-/** Whether the address field would search for the text rather than open it. */
+/**
+ * Whether the address field would search for the text rather than open it. A typed scheme means an address, which
+ * main opens or explains why not; it searches only when the text is no URL at all, such as a bare `https://`. Text
+ * without one is an address when it names a host main opens as a web page.
+ */
 export function searches(input: string) {
   const value = input.trim()
 
-  if (/^[a-z][a-z\d+.-]*:\/\//i.test(value) || /^about:/i.test(value)) return false
+  if (!value || /^about:\S*$/i.test(value)) return false
 
-  if (!value || /\s/.test(value)) return !!value
+  if (/^[a-z][a-z\d+.-]*:\/\//i.test(value)) return !URL.canParse(value)
+
+  if (/\s/.test(value)) return true
   const host = value.split(/[/?#]/, 1)[0] ?? ""
 
-  return !(
-    /^(?:localhost|\[[\da-f:.]+\])(?::\d+)?$/i.test(host) ||
-    /:\d+$/.test(host) ||
-    /^[^.]+(?:\.[^.]+)+$/.test(host)
-  )
+  const named =
+    /^(?:localhost|\[[\da-f:.]+\])(?::\d+)?$/i.test(host) || /:\d+$/.test(host) || /^[^.]+(?:\.[^.]+)+$/.test(host)
+
+  // Main adds the scheme the same way, so the text opens only if the whole URL it becomes does.
+  return !named || !destinationOrigin(`https://${value}`)
 }
 
 /**
