@@ -64,13 +64,13 @@ type AzureRequest = {
 type Route = (request: AzureRequest) => Response | Promise<Response>
 
 // Answers like Azure: the resource's own deployment list, Resource Graph, and the management API.
-const fakeAzure = (routes: { resource?: Route; management?: Route }) =>
+const fakeAzure = (routes: { resource?: Route; management?: Route; resources?: () => unknown[] }) =>
   Effect.acquireRelease(
     Effect.sync(() => {
       const requests: AzureRequest[] = []
       const server = Bun.serve({
         port: 0,
-        fetch: (raw) => {
+        fetch: async (raw) => {
           const url = new URL(raw.url)
           const request = {
             method: raw.method,
@@ -81,8 +81,12 @@ const fakeAzure = (routes: { resource?: Route; management?: Route }) =>
           }
           requests.push(request)
           if (request.path.startsWith("/openai/deployments")) return routes.resource?.(request) ?? notFound()
-          if (request.path.startsWith("/providers/Microsoft.ResourceGraph/"))
+          if (request.path.startsWith("/providers/Microsoft.ResourceGraph/")) {
+            // The connect form lists every resource; discovery looks up one resource's ID.
+            if ((await raw.text()).includes("project resourceName"))
+              return routes.resources ? Response.json({ data: routes.resources() }) : unauthorized()
             return Response.json({ data: [{ id: resourceID }] })
+          }
           return routes.management?.(request) ?? notFound()
         },
       })
@@ -121,7 +125,14 @@ const fakeAzureCli = Effect.fn(function* (respond: (args: readonly string[]) => 
   const executable = `${directory}/${windows ? "az.cmd" : "az"}`
   yield* Effect.promise(() => Bun.write(executable, windows ? "@exit /b 0\r\n" : "#!/bin/sh\nexit 0\n"))
   yield* Effect.promise(() => chmod(executable, 0o755))
-  yield* setEnv({ PATH: `${directory}${windows ? ";" : ":"}${process.env.PATH}` })
+  // The CLI writes its profile with a byte order mark.
+  yield* Effect.promise(() =>
+    Bun.write(`${directory}/azure/azureProfile.json`, `\uFEFF${JSON.stringify({ subscriptions: [{ id: "sub" }] })}`),
+  )
+  yield* setEnv({
+    PATH: `${directory}${windows ? ";" : ":"}${process.env.PATH}`,
+    AZURE_CONFIG_DIR: `${directory}/azure`,
+  })
   const commands: string[][] = []
   const fake = AppProcess.Service.of({
     ...processes,
@@ -146,13 +157,10 @@ const fakeAzureCli = Effect.fn(function* (respond: (args: readonly string[]) => 
   }
 })
 
-const cliCredential = (options: { access?: string; expires?: number } = {}) =>
-  Credential.OAuth.make({
-    type: "oauth",
+const cliCredential = () =>
+  Credential.External.make({
+    type: "external",
     methodID: Integration.MethodID.make("azure-cli"),
-    access: options.access ?? "stored-token",
-    refresh: "azure-cli",
-    expires: options.expires ?? Date.now() + hour,
     metadata: { resourceName: "test-resource" },
   })
 
@@ -231,18 +239,84 @@ describe("AzurePlugin connecting", () => {
       yield* setEnv({ PATH: "/nonexistent" })
       yield* addPlugin()
       const integrations = yield* Integration.Service
-      expect(required(yield* integrations.get(azureID)).methods.some((method) => method.type === "oauth")).toBe(false)
+      expect(required(yield* integrations.get(azureID)).methods.some((method) => method.type === "external")).toBe(
+        false,
+      )
+    }),
+  )
+
+  it.live("offers the resources the Azure CLI can reach and accepts a typed resource name", () =>
+    Effect.gen(function* () {
+      yield* setEnv(noResourceEnv)
+      const cli = yield* fakeAzureCli()
+      const azure = yield* fakeAzure({
+        resources: () => [
+          { resourceName: "alpha", resourceGroup: "models", location: "eastus" },
+          { resourceName: "not a hostname", resourceGroup: "models", location: "eastus" },
+          { id: 42 },
+        ],
+      })
+      yield* addPlugin(azure.endpoints).pipe(cli.provide)
+      const integrations = yield* Integration.Service
+      const field = Effect.gen(function* () {
+        const method = required(yield* integrations.get(azureID)).methods.find((method) => method.type === "external")
+        const field = method?.type === "external" ? method.form?.[0] : undefined
+        return field?.type === "string" ? field : undefined
+      })
+
+      const listed = required(yield* eventually(field, (field) => (field?.options?.length ?? 0) > 0))
+      expect(listed).toMatchObject({
+        key: "resourceName",
+        custom: true,
+        options: [{ value: "alpha", label: "alpha", description: "models · eastus" }],
+      })
+
+      const external = (resourceName: string) =>
+        integrations.connection.external({
+          integrationID: azureID,
+          methodID: Integration.MethodID.make("azure-cli"),
+          answer: { resourceName },
+        })
+      expect(yield* external("not a hostname").pipe(Effect.flip)).toBeInstanceOf(Integration.AuthorizationError)
+      yield* external("typed-resource")
+      const credentials = yield* Credential.Service
+      expect((yield* credentials.list(azureID)).map((item) => item.value)).toEqual([
+        Credential.External.make({
+          type: "external",
+          methodID: Integration.MethodID.make("azure-cli"),
+          metadata: { resourceName: "typed-resource" },
+        }),
+      ])
+    }),
+  )
+
+  it.live("asks for the resource name as text when the Azure CLI lists no resources", () =>
+    Effect.gen(function* () {
+      yield* setEnv(noResourceEnv)
+      const cli = yield* fakeAzureCli()
+      const azure = yield* fakeAzure({ resources: () => [] })
+      yield* addPlugin(azure.endpoints).pipe(cli.provide)
+      const integrations = yield* Integration.Service
+      const field = Effect.gen(function* () {
+        const method = required(yield* integrations.get(azureID)).methods.find((method) => method.type === "external")
+        const field = method?.type === "external" ? method.form?.[0] : undefined
+        return field?.type === "string" ? field : undefined
+      })
+
+      const listed = required(yield* eventually(field, (field) => field?.description?.startsWith("No ") === true))
+      expect(listed.options).toBeUndefined()
+      expect(listed.custom).toBeUndefined()
     }),
   )
 })
 
 describe("AzurePlugin startup", () => {
-  it.live("starts without calling Azure, even with an expired token, then lists deployments", () =>
+  it.live("starts without calling Azure, then lists deployments", () =>
     Effect.gen(function* () {
       const cli = yield* fakeAzureCli()
       const azure = yield* fakeAzure({ management: () => managementPage([managed("gpt-5-mini", "gpt-5-mini")]) })
       yield* seedCatalog
-      yield* connect(cliCredential({ access: "expired-token", expires: Date.now() - hour }))
+      yield* connect(cliCredential())
       yield* addPlugin(azure.endpoints).pipe(cli.provide)
 
       expect(cli.commands).toEqual([])
@@ -329,7 +403,7 @@ describe("AzurePlugin discovery", () => {
       const cli = yield* fakeAzureCli()
       const azure = yield* fakeAzure({
         resource: (request) =>
-          request.authorization === "Bearer stored-token"
+          request.authorization === "Bearer https://cognitiveservices.azure.com/.default-token"
             ? resourceList(listed("gpt-5-mini", "gpt-5-mini"))
             : unauthorized(),
       })

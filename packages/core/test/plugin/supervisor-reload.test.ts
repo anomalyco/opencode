@@ -13,6 +13,7 @@ import { Bus } from "@opencode/core/bus"
 import { Command } from "@opencode/core/command"
 import { Database } from "@opencode/core/database/database"
 import { Watcher } from "@opencode/core/filesystem/watcher"
+import { ManagedPolicy } from "@opencode/core/managed-policy"
 import { Instance } from "@opencode/core/instance"
 import { LocationServiceMap } from "@opencode/core/location-services"
 import { Location } from "@opencode/core/location"
@@ -59,11 +60,13 @@ const instances = Layer.effect(
   LocationServiceMap.Service,
   Effect.gen(function* () {
     const watcher = yield* Watcher.Test
+    const managed = yield* ManagedPolicy.Service
     const map = yield* LayerMap.make((ref: Location.Ref) => Instance.layer(ref, { replacements: bindings }), {
       idleTimeToLive: Duration.infinity,
     })
     const bindings: LayerNode.Replacements = [
       Global.node.replace(tempGlobalLayer),
+      ManagedPolicy.node.replace(Layer.succeed(ManagedPolicy.Service, managed)),
       offlineModels,
       Npm.node.replace(npmLayer),
       Watcher.node.replace(Layer.succeed(Watcher.Service, watcher)),
@@ -76,14 +79,13 @@ const instances = Layer.effect(
     ]
     return map
   }),
-).pipe(Layer.provide(Watcher.testLayer))
+).pipe(Layer.provide(Watcher.testLayer), Layer.provide(ManagedPolicy.layer))
 
 const it = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node]), [
-    Global.node.replace(tempGlobalLayer),
-    offlineModels,
-    LocationServiceMap.node.replace(instances),
-  ]).pipe(Layer.provideMerge(Watcher.testLayer)),
+  AppNodeBuilder.build(
+    LayerNode.group([ManagedPolicy.node, Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node]),
+    [Global.node.replace(tempGlobalLayer), offlineModels, LocationServiceMap.node.replace(instances)],
+  ).pipe(Layer.provideMerge(Watcher.testLayer)),
 )
 
 const greeter = (command: string) => `export default {
@@ -337,3 +339,57 @@ describe("PluginSupervisor reload", () => {
     }),
   )
 })
+
+it.live("applies organization integration changes to running external plugins", () =>
+  Effect.gen(function* () {
+    const directory = yield* tmpdirScoped()
+    const root = path.join(directory.path, "external/policy-fixture")
+    const entered = path.join(directory.path, "entered")
+    const configuration = path.join(directory.path, ".opencode/opencode.json")
+    yield* Effect.promise(async () => {
+      await Bun.write(
+        path.join(root, "index.ts"),
+        `await Bun.write(${JSON.stringify(entered)}, "loaded"); ${greeter("policy-greet")}`,
+      )
+      await Bun.write(
+        configuration,
+        JSON.stringify({
+          plugins: [root],
+          experimental: { policies: [{ action: "integration.use", resource: "plugin:*", effect: "deny" }] },
+        }),
+      )
+    })
+    const locations = yield* LocationServiceMap.Service
+    yield* Effect.gen(function* () {
+      const plugins = yield* Plugin.Service
+      const commands = yield* Command.Service
+      const managed = yield* ManagedPolicy.Service
+      const bus = yield* Bus.Service
+      yield* plugins.awaitActivation
+      expect(yield* commands.get("policy-greet")).toBeUndefined()
+      expect(yield* Effect.promise(() => Bun.file(entered).exists())).toBe(false)
+      yield* Effect.promise(() => Bun.write(configuration, JSON.stringify({ plugins: [root] })))
+      yield* bus.publish(Event.Updated, {})
+      yield* commands.get("policy-greet").pipe(
+        Effect.flatMap((command) => (command ? Effect.void : Effect.fail("pending"))),
+        Effect.retry({ times: 200, schedule: Schedule.spaced("10 millis") }),
+      )
+      expect(yield* Effect.promise(() => Bun.file(entered).exists())).toBe(true)
+      yield* managed.set({ statements: [{ action: "integration.use", resource: `plugin:${root}`, effect: "deny" }] })
+      yield* commands.get("policy-greet").pipe(
+        Effect.flatMap((command) => (command ? Effect.fail("pending") : Effect.void)),
+        Effect.retry({ times: 200, schedule: Schedule.spaced("10 millis") }),
+      )
+      yield* plugins.awaitActivation
+      expect((yield* plugins.list()).some((plugin) => plugin.id === "greeter")).toBe(false)
+      yield* managed.set({ statements: [] })
+      yield* commands.get("policy-greet").pipe(
+        Effect.flatMap((command) => (command ? Effect.void : Effect.fail("pending"))),
+        Effect.retry({ times: 200, schedule: Schedule.spaced("10 millis") }),
+      )
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
+    )
+  }),
+)

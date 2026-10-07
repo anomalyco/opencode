@@ -1011,9 +1011,9 @@ function StringChoiceField(props: {
               </text>
               <Show when={row.description}>
                 {(description) => (
-                  <text paddingLeft={3} fg={theme.text.muted}>
-                    {description()}
-                  </text>
+                  <box paddingLeft={3}>
+                    <text fg={theme.text.muted}>{description()}</text>
+                  </box>
                 )}
               </Show>
             </box>
