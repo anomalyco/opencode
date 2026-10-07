@@ -192,21 +192,28 @@ test("TUI plugins importing @opencode/plugin/tui and solid-js alongside effect r
         'import { Effect, Schema } from "effect"; import { some } from "effect/Option"; export const helper = { Effect, Schema, some }',
       "node_modules/zod/package.json": '{"name":"zod","type":"module","exports":{".":"./index.js"}}',
       "node_modules/zod/index.js": "export const fromPluginZod = true",
-      "helper.ts": 'import { fromPluginZod } from "zod"; export { fromPluginZod }',
-      "tui.ts": `import { createSignal } from "solid-js"
-import { Plugin } from "@opencode/plugin/tui"
-import { Plugin as HostEffectPlugin } from "@opencode/plugin/effect"
-import { Effect, Schema } from "effect"
-import { some } from "effect/Option"
-import pkg from "effect/package.json" with { type: "json" }
-import { helper } from "effect-helper"
-const { fromPluginZod } = await import("./helper.ts")
-const dynOption = await import("effect/Option")
-const dynEffectPlugin = await import("@opencode/plugin/effect")
-export const plugin = { createSignal, Plugin, HostEffectPlugin, Effect, Schema, some, dynSome: dynOption.some, dynEffectPlugin: dynEffectPlugin.Plugin, pkgName: pkg.name, fromPluginZod }
-export { helper }`,
-      "bad-tui.ts":
-        'import { Plugin } from "@opencode/plugin/tui"; import { removed } from "effect/RemovedSubpath"; export default { Plugin, removed }',
+      "helper.ts": ['import { fromPluginZod }', 'from "zod"; export { fromPluginZod }'].join(" "),
+      "tui.ts": [
+        "import { createSignal }",
+        'from "solid-js"',
+        "import { Plugin }",
+        'from "@opencode/plugin/tui"',
+        'import { Plugin as HostEffectPlugin } from "@opencode/plugin/effect"',
+        'import { Effect, Schema } from "effect"',
+        'import { some } from "effect/Option"',
+        "import pkg",
+        'from "effect/package.json" with { type: "json" }',
+        'import { helper } from "effect-helper"',
+        'const { fromPluginZod } = await import("./helper.ts")',
+        'const dynOption = await import("effect/Option")',
+        'const dynEffectPlugin = await import("@opencode/plugin/effect")',
+        "export const plugin = { createSignal, Plugin, HostEffectPlugin, Effect, Schema, some, dynSome: dynOption.some, dynEffectPlugin: dynEffectPlugin.Plugin, pkgName: pkg.name, fromPluginZod }",
+        "export { helper }",
+      ].join("\n"),
+      "bad-tui.ts": [
+        "import { Plugin }",
+        'from "@opencode/plugin/tui"; import { removed } from "effect/RemovedSubpath"; export default { Plugin, removed }',
+      ].join(" "),
     }).map(([file, text]) => Bun.write(new URL(file, sources.url), text)),
   )
   const loaded = (await sources.read(entry.href)).module as {
