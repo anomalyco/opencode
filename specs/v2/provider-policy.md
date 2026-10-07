@@ -12,7 +12,7 @@ Two consumers exist:
 action:   provider.use
 resource: provider ID, such as openai or company-ai
 
-action:   permission
+action:   tool.use
 resource: <permission action>:<resource>, such as shell:sudo * or edit:*.env
 ```
 
@@ -37,7 +37,7 @@ A provider can be correctly configured and have valid credentials while policy s
 - Policies do not configure endpoints, credentials, models, or provider options.
 - Policies do not make unusable resources usable.
 - Policies do not currently provide conditions, principals, approval prompts, or enforced configuration values.
-- A `permission` statement never grants access; permissions and saved approvals still decide `allow` versus `ask`.
+- A `tool.use` statement never grants access; permissions and saved approvals still decide `allow` versus `ask`.
 
 ## Statement Shape
 
@@ -58,12 +58,12 @@ A provider can be correctly configured and have valid credentials while policy s
 ```ts
 interface PolicyInfo {
   effect: "allow" | "deny"
-  action: "provider.use" | "permission"
+  action: "provider.use" | "tool.use" | "integration.use"
   resource: string
 }
 ```
 
-`ConfigPolicy` owns the statement schema; `action` is a closed set and a statement with any other value is dropped during normalization with a diagnostic. The policy plugin interprets `provider.use` after all other catalog transforms have run and `permission` after every other permission evaluation hook.
+`ConfigPolicy` owns the statement schema; `action` is a closed set and a statement with any other value is dropped during normalization with a diagnostic. The policy plugin interprets `provider.use` after all other catalog transforms have run and `tool.use` after every other permission evaluation hook.
 
 ## Matching
 
@@ -75,8 +75,8 @@ Examples:
 | -------------- | ------------------ | --------------------------------------------------------------- |
 | `provider.use` | `openai`           | Only use of provider ID `openai`                                |
 | `provider.use` | `company-*`        | Use of provider IDs such as `company-us` and `company-eu`       |
-| `permission`   | `shell:git push *` | The `shell` permission for `git push` with or without arguments |
-| `permission`   | `*`                | Every permission check on every resource                        |
+| `tool.use`     | `shell:git push *` | The `shell` permission for `git push` with or without arguments |
+| `tool.use`     | `*`                | Every permission check on every resource                        |
 
 No pattern-specific precedence exists. A specific resource does not automatically beat a wildcard resource. Written/evaluation order controls the result.
 
@@ -214,7 +214,7 @@ The OpenCode Console compiles a workspace's Providers and Tools policies into st
     "policies": [
       { "action": "provider.use", "resource": "*", "effect": "deny" },
       { "action": "provider.use", "resource": "opencode", "effect": "allow" },
-      { "action": "permission", "resource": "shell:sudo *", "effect": "deny" },
+      { "action": "tool.use", "resource": "shell:sudo *", "effect": "deny" },
     ],
   },
 }
@@ -233,7 +233,7 @@ A config fetch or credential refresh that fails for the connection already in pl
 
 ### Messages
 
-When the deciding `permission` statement is organization-managed, the denial reads `Blocked by <organization>'s policy`, or `Blocked by your organization's policy` when the connection has no organization name. Authored statements produce `Blocked by configuration policy`.
+When the deciding `tool.use` statement is organization-managed, the denial reads `Blocked by <organization>'s policy`, or `Blocked by your organization's policy` when the connection has no organization name. Authored statements produce `Blocked by configuration policy`.
 
 ### Protection
 
@@ -243,13 +243,17 @@ Plugin `remove` operations in config ignore `opencode.config.policy` and `openco
 
 Provider policy is not a full sandbox for executable plugins. A denied provider must not be usable through the normal provider/model path, but arbitrary plugin code requires separate governance if that becomes a compliance requirement.
 
-## Permission Policy
+## Tool Policy
 
-`permission` statements run in the `permission.evaluate` hook after agent and session rules, saved approvals, and every other plugin's hook. For each resource the tool checks, the string `<action>:<resource>` is matched against the statement resource; if the last matching statement for any resource is `deny`, the evaluation becomes `deny` with the message above.
+`tool.use` is the only tool-policy action. An allow statement never overrides an agent/session denial or grants a saved approval.
+
+Console-managed config ignores unknown fields and skips statements whose action is unsupported, preserving the order of every supported statement. A future action cannot invalidate the providers or supported policies in the response. Supported actions still require a valid resource and effect; malformed supported statements remain configuration errors. Skipped actions are not enforced by that client. Authored config drops unsupported statements with a diagnostic.
+
+`tool.use` statements run in the `permission.evaluate` hook after agent and session rules, saved approvals, and every other plugin's hook. For each resource the tool checks, the string `<action>:<resource>` is matched against the statement resource; if the last matching statement for any resource is `deny`, the evaluation becomes `deny` with the message above.
 
 ```text
-permission / shell:sudo ls        -> deny   (statement shell:sudo *)
-permission / shell:git status     -> unchanged: the agent's rules decide allow or ask
+tool.use / shell:sudo ls        -> deny   (statement shell:sudo *)
+tool.use / shell:git status     -> unchanged: the agent's rules decide allow or ask
 ```
 
 - A configured `deny` from agent or session rules already denies before the hook runs.

@@ -10,6 +10,25 @@ import { AbsolutePath } from "../src/schema.js"
 import { WebSearch } from "../src/websearch.js"
 
 describe("Config.Entry", () => {
+  test("round-trips tool.use and rejects unsupported action spellings", () => {
+    const input = {
+      experimental: {
+        policies: [
+          { action: "tool.use", resource: "shell:*", effect: "deny" },
+          { action: "tool.use", resource: "shell:git *", effect: "allow" },
+        ],
+      },
+    } as const
+    const decoded = Schema.decodeUnknownSync(Config.Info)(input)
+    expect(Schema.encodeSync(Config.Info)(decoded)).toEqual(input)
+    for (const action of ["permission", "tool.execute"])
+      expect(() =>
+        Schema.decodeUnknownSync(Config.Info)({
+          experimental: { policies: [{ action, resource: "*", effect: "deny" }] },
+        }),
+      ).toThrow()
+  })
+
   test("accepts directory-only worktree config and omits it when absent", () => {
     const decode = Schema.decodeUnknownSync(Config.Info)
     const input = { worktree: { directory: "../worktrees" } }

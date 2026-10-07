@@ -44,7 +44,7 @@ export const Plugin = define({
           .map((resource) =>
             current.findLast(
               (policy) =>
-                policy.action === "permission" && Wildcard.match(`${event.action}:${resource}`, policy.resource),
+                policy.action === "tool.use" && Wildcard.match(`${event.action}:${resource}`, policy.resource),
             ),
           )
           .find((policy) => policy?.effect === "deny")
