@@ -321,9 +321,6 @@ export const dict = {
   "dialog.server.edit.title": "編輯伺服器",
 
   "dialog.server.menu.edit": "編輯",
-  "dialog.server.menu.default": "設為預設",
-  "dialog.server.menu.defaultRemove": "取消預設",
-  "dialog.server.status.default": "預設",
 
   "dialog.project.edit.title": "編輯專案",
   "dialog.project.edit.icon": "圖示",

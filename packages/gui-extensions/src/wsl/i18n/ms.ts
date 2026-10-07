@@ -52,8 +52,5 @@ export default {
   "error.healthTimeout": "Semakan kesihatan Sidecar untuk {{distro}} tamat masa selepas {{timeout}}ms",
   "error.commandTimeout": "{{command}} {{args}} tamat masa selepas {{timeout}}ms",
   "error.failedPort": "Gagal mendapatkan port",
-  "server.default": "Lalai",
-  "menu.default": "Tetapkan sebagai lalai",
-  "menu.defaultRemove": "Buang lalai",
   "menu.remove": "Alih keluar",
 }

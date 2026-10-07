@@ -20,8 +20,6 @@ export const api: ElectronAPI = {
   awaitInitialization: () => invoke("AppAwaitInitialization"),
   reconnectService: () => invoke("AppReconnectService"),
   consumeInitialDeepLinks: () => invoke("AppConsumeInitialDeepLinks").then(mutable),
-  getDefaultServerUrl: () => invoke("AppGetDefaultServerUrl"),
-  setDefaultServerUrl: (url) => invoke("AppSetDefaultServerUrl", { url }),
   isFirstLaunchOnboardingPending: () => invoke("AppIsFirstLaunchOnboardingPending"),
   finishFirstLaunchOnboarding: (createDefaultProject) =>
     invoke("AppFinishFirstLaunchOnboarding", { createDefaultProject }),

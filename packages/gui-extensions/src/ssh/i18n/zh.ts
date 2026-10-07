@@ -31,8 +31,5 @@ export default {
   "form.name": "服务器名称（可选）",
   "form.namePlaceholder": "Localhost",
   "form.add": "添加服务器",
-  "server.default": "默认",
-  "menu.default": "设为默认",
-  "menu.defaultRemove": "取消默认",
   "menu.delete": "删除",
 }

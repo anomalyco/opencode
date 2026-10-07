@@ -1,7 +1,6 @@
 import { app } from "electron"
 import { Predicate } from "effect"
 import { windowBootstrapArgument, type WindowBootstrap } from "../../shared/window-bootstrap"
-import { getDefaultServerUrl } from "../service/server-settings"
 import { FIRST_LAUNCH_ONBOARDING_COMPLETE_KEY } from "../storage/keys"
 import { getStore } from "../storage/store"
 
@@ -14,7 +13,6 @@ export function windowBootstrap(id: string): WindowBootstrap {
   return {
     id,
     firstLaunchPending: Predicate.isBoolean(complete) ? !complete : undefined,
-    defaultServerUrl: getDefaultServerUrl(),
     packaged: app.isPackaged,
   }
 }

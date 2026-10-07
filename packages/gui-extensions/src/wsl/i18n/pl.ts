@@ -53,8 +53,5 @@ export default {
     "Przekroczono limit czasu {{distro}}ms podczas sprawdzania kondycji procesu sidecar dla dystrybucji {{timeout}}",
   "error.commandTimeout": "Polecenie {{command}} {{args}} przekroczyło limit czasu {{timeout}}ms",
   "error.failedPort": "Nie udało się uzyskać portu",
-  "server.default": "Domyślny",
-  "menu.default": "Ustaw jako domyślny",
-  "menu.defaultRemove": "Usuń domyślny",
   "menu.remove": "Usuń",
 }

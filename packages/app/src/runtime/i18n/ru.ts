@@ -311,9 +311,6 @@ export const dict = {
   "dialog.server.edit.title": "Редактировать сервер",
 
   "dialog.server.menu.edit": "Редактировать",
-  "dialog.server.menu.default": "Сделать по умолчанию",
-  "dialog.server.menu.defaultRemove": "Отменить выбор по умолчанию",
-  "dialog.server.status.default": "По умолч.",
 
   "dialog.project.edit.title": "Редактировать проект",
   "dialog.project.edit.icon": "Значок",

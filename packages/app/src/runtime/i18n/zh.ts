@@ -336,9 +336,6 @@ export const dict = {
   "dialog.server.add.password": "密码（可选）",
   "dialog.server.edit.title": "编辑服务器",
   "dialog.server.menu.edit": "编辑",
-  "dialog.server.menu.default": "设为默认",
-  "dialog.server.menu.defaultRemove": "取消默认",
-  "dialog.server.status.default": "默认",
 
   "dialog.project.edit.title": "编辑项目",
   "dialog.project.edit.icon": "图标",

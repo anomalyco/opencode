@@ -1,7 +1,6 @@
-import { createMemo, createResource } from "solid-js"
+import { createMemo } from "solid-js"
 import { useGlobal } from "@/runtime/server/runtime"
 import { useLanguage } from "@/runtime/i18n/language"
-import { usePlatform } from "@/runtime/platform/platform"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { useTabs } from "@/shell/tabs/tabs"
 import { type ServerHealth } from "@/runtime/server/health"
@@ -16,43 +15,9 @@ function showRequestError(language: ReturnType<typeof useLanguage>, err: unknown
   })
 }
 
-function useDefaultServer() {
-  const language = useLanguage()
-  const platform = usePlatform()
-
-  const [defaultKey, defaultKeyActions] = createResource(
-    async () => {
-      try {
-        return (await platform.getDefaultServer?.()) ?? null
-      } catch (err) {
-        showRequestError(language, err)
-
-        return null
-      }
-    },
-    { initialValue: null },
-  )
-
-  const set = async (key: ServerConnection.Key | null) => {
-    try {
-      await platform.setDefaultServer?.(key)
-      defaultKeyActions.mutate(key)
-    } catch (err) {
-      showRequestError(language, err)
-    }
-  }
-
-  return {
-    key: () => defaultKey.latest,
-    available: createMemo(() => !!platform.getDefaultServer && !!platform.setDefaultServer),
-    set,
-  }
-}
-
 export function sortServerConnections(input: {
   servers: ServerConnection.Any[]
   health: Record<string, ServerHealth | undefined>
-  defaultKey: ServerConnection.Key | null
 }) {
   const order = new Map(input.servers.map((item, index) => [item, index] as const))
 
@@ -65,10 +30,6 @@ export function sortServerConnections(input: {
   }
 
   return input.servers.slice().sort((a, b) => {
-    const preferred =
-      Number(ServerConnection.key(b) === input.defaultKey) - Number(ServerConnection.key(a) === input.defaultKey)
-
-    if (preferred !== 0) return preferred
     const health = rank(input.health[ServerConnection.key(a)]) - rank(input.health[ServerConnection.key(b)])
 
     if (health !== 0) return health
@@ -81,24 +42,19 @@ export function useServerActionsController() {
   const server = useServers()
   const extensions = useExtensionServers()
   const tabs = useTabs()
-  const platform = usePlatform()
   const language = useLanguage()
-  const defaults = useDefaultServer()
 
   const remove = async (key: ServerConnection.Key) => {
     try {
       await extensions.entry(key)?.entry.remove?.()
       tabs.removeServer(key)
       server.remove(key)
-
-      if ((await platform.getDefaultServer?.()) === key) await defaults.set(null)
     } catch (err) {
       showRequestError(language, err)
     }
   }
 
   return {
-    defaults,
     connection: {
       canRemove: server.canRemove,
       remove,
@@ -126,7 +82,6 @@ export function useServerCollectionController() {
     sortServerConnections({
       servers: items(),
       health: global.servers.health,
-      defaultKey: actions.defaults.key(),
     }),
   )
 

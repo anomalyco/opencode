@@ -101,7 +101,6 @@ if (root instanceof HTMLElement && root.dataset.opencodeMounted === undefined) {
         <PlatformProvider value={web.platform}>
           <AppBaseProviders locale={locale}>
             <AppInterface
-              defaultServer={web.defaultServerUrl ? ServerConnection.Key.make(web.defaultServerUrl) : undefined}
               canonicalLocalServer={server ? ServerConnection.key(server) : undefined}
               servers={server ? [server] : []}
             >

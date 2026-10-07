@@ -446,9 +446,6 @@ export const dict = {
   "dialog.server.edit.title": "Rediger server",
 
   "dialog.server.menu.edit": "Rediger",
-  "dialog.server.menu.default": "Sæt som standard",
-  "dialog.server.menu.defaultRemove": "Fjern som standard",
-  "dialog.server.status.default": "Standard",
 
   "dialog.project.edit.title": "Rediger projekt",
   "dialog.project.edit.icon": "Ikon",

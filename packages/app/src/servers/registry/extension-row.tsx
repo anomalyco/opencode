@@ -23,11 +23,6 @@ export function ExtensionServerRow(props: { server: ServerConnection.Key; contro
         authenticationRequired={indicator.auth}
       />
     ),
-    default: {
-      available: () => props.controller.defaults.available(),
-      current: () => props.controller.defaults.key() === props.server,
-      set: (value) => void props.controller.defaults.set(value ? props.server : null),
-    },
     remove: () => props.controller.connection.remove(props.server),
     Items: () => <ServerRowItems server={props.server} />,
   }

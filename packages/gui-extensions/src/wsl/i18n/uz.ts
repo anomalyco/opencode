@@ -52,8 +52,5 @@ export default {
   "error.healthTimeout": "{{distro}} sog'lig'ini tekshirish uchun yon mashina {{timeout}}ms dan keyin tugadi",
   "error.commandTimeout": "{{command}} {{args}} {{timeout}}ms dan keyin vaqt tugadi",
   "error.failedPort": "Port olinmadi",
-  "server.default": "Standart",
-  "menu.default": "Standart sifatida o'rnating",
-  "menu.defaultRemove": "Standartni olib tashlang",
   "menu.remove": "O'chirish",
 }

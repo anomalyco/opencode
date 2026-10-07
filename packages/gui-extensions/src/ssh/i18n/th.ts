@@ -33,8 +33,5 @@ export default {
   "form.name": "ชื่อเซิร์ฟเวอร์ (ไม่บังคับ)",
   "form.namePlaceholder": "Localhost",
   "form.add": "เพิ่มเซิร์ฟเวอร์",
-  "server.default": "ค่าเริ่มต้น",
-  "menu.default": "ตั้งเป็นค่าเริ่มต้น",
-  "menu.defaultRemove": "เอาค่าเริ่มต้นออก",
   "menu.delete": "ลบ",
 }

@@ -50,8 +50,5 @@ export default {
   "error.healthTimeout": "Sidecar for {{distro}} health check timed out after {{timeout}}ms",
   "error.commandTimeout": "{{command}} {{args}} timed out after {{timeout}}ms",
   "error.failedPort": "Failed to get port",
-  "server.default": "Default",
-  "menu.default": "Set as default",
-  "menu.defaultRemove": "Remove default",
   "menu.remove": "Remove",
 }

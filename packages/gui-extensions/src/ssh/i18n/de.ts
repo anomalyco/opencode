@@ -39,8 +39,5 @@ export default {
   "form.name": "Servername (optional)",
   "form.namePlaceholder": "Localhost",
   "form.add": "Server hinzufügen",
-  "server.default": "Standard",
-  "menu.default": "Als Standard festlegen",
-  "menu.defaultRemove": "Standard entfernen",
   "menu.delete": "Löschen",
 }

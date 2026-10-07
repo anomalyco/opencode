@@ -246,8 +246,6 @@ function AuthenticationHome() {
         serverHealth={() => ({ healthy: ssh.servers[0]?.stage === "ready" })}
         projectsForServer={() => projects}
         collapsed={() => false}
-        canDefaultServer={false}
-        defaultServerKey={null}
         canRevealProject={() => false}
         unseenCount={() => 0}
         onWheel={() => {}}
@@ -262,7 +260,6 @@ function AuthenticationHome() {
         }}
         onToggleCollapsed={() => {}}
         onEditServer={() => {}}
-        onSetDefaultServer={() => {}}
         canRemoveServer={() => false}
         onRemoveServer={() => {}}
         canHideServer={() => false}

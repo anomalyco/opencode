@@ -51,8 +51,5 @@ export default {
   "error.healthTimeout": "Sidecar kiểm tra tình trạng của {{distro}} đã hết thời gian chờ sau {{timeout}}ms",
   "error.commandTimeout": "{{command}} {{args}} đã hết thời gian chờ sau {{timeout}}ms",
   "error.failedPort": "Không lấy được cổng",
-  "server.default": "Mặc định",
-  "menu.default": "Đặt làm mặc định",
-  "menu.defaultRemove": "Xóa mặc định",
   "menu.remove": "Xóa",
 }
