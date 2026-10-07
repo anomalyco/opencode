@@ -70,6 +70,10 @@ export const Info = Schema.Struct({
   scroll_speed: Schema.optional(ScrollSpeed).annotate({ description: "TUI scroll speed" }),
   scroll_acceleration: Schema.optional(ScrollAcceleration),
   diff_style: Schema.optional(DiffStyle),
+  footer_variant: Schema.optional(Schema.Boolean).annotate({
+    description:
+      "Show the model variant a turn ran with, such as its reasoning effort ('high'), after the model in assistant message footers; turns without a variant are unchanged (default: false)",
+  }),
   cursor: Schema.optional(Cursor),
   mouse: Schema.optional(Schema.Boolean).annotate({ description: "Enable or disable mouse capture (default: true)" }),
 })
