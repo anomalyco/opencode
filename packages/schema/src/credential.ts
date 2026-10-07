@@ -51,7 +51,7 @@ export interface External extends Schema.Schema.Type<typeof External> {}
 export const External = Schema.Struct({
   type: Schema.Literal("external"),
   methodID: IntegrationMethodID,
-  metadata: Schema.Record(Schema.String, Schema.Unknown),
+  metadata: optional(Schema.Record(Schema.String, Schema.Unknown)),
 }).annotate({ identifier: "Credential.External" })
 
 export const Value = Schema.Union([OAuth, Key, External])
