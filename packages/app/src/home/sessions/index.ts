@@ -1,3 +1,4 @@
+import type { ServerConnectionStatus } from "@/runtime/server/client"
 import type { SessionInfo, SessionsResponse } from "@opencode/client/promise"
 import { pathKey } from "@/workspaces/path-key"
 import { SESSION_RECENT_LIMIT, SESSION_RECENT_WINDOW } from "@/runtime/server/global-sync/types"
@@ -76,4 +77,29 @@ export function retainHomeSessions(sessions: SessionInfo[], limit: number, now: 
 
     return [...sorted.slice(0, limit), ...recent]
   })
+}
+
+type ReconnectState<K> = { key?: K; connected: boolean; lost: boolean }
+
+/**
+ * Reports when a server's event stream comes back after it was lost. Events published while a client was
+ * disconnected never reach it, so the session index must be refetched then, not only on the first connection.
+ */
+export function createReconnectTracker<K>() {
+  const state: ReconnectState<K> = { connected: false, lost: false }
+
+  return (key: K, status: ServerConnectionStatus | undefined) => {
+    if (state.key !== key) Object.assign(state, { key, connected: false, lost: false })
+
+    if (status !== "connected") {
+      if (state.connected) state.lost = true
+
+      return false
+    }
+
+    const reconnected = state.lost
+    Object.assign(state, { connected: true, lost: false })
+
+    return reconnected
+  }
 }

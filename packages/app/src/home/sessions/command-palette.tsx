@@ -31,7 +31,7 @@ export function HomeCommandPalette(props: {
 
   const sessions = createServerSessionEntries({
     server: ServerConnection.key(props.server),
-    opened: server.projects.list,
+    opened: server.projects.opened,
     stored: () => server.sync.data.project,
     load: (search, signal) => server.sdk.api.session.list({ parentID: null, search, limit: 50 }, { signal }),
     get: (sessionID, signal) => server.sdk.api.session.get({ sessionID }, { signal }),

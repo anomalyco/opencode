@@ -21,6 +21,8 @@ test("creates a session in a new project and selects its model", async ({ page }
       time: { created: 1_700_000_000_000, updated: 1_700_000_000_000 },
       sandboxes: [],
     },
+    // The server has not opened this project yet, so Home starts from the empty state.
+    projects: [],
     provider: () => ({
       all: [
         {
