@@ -372,6 +372,7 @@ describe("ModelResolver", () => {
         },
         resolve: () => Effect.die("unused"),
         key: () => Effect.die("unused"),
+        external: () => Effect.die("unused"),
         activate: () => Effect.die("unused"),
         update: () => Effect.die("unused"),
         remove: () => Effect.die("unused"),

@@ -28,6 +28,13 @@ export interface IntegrationKeyMethod {
   readonly form?: Form.Fields
 }
 
+export interface IntegrationExternalMethod {
+  readonly id: string
+  readonly type: "external"
+  readonly label: string
+  readonly form?: Form.Fields
+}
+
 export interface IntegrationEnvMethod {
   readonly type: "env"
   readonly names: ReadonlyArray<string>
@@ -37,6 +44,7 @@ export type IntegrationMethod =
   | IntegrationOAuthMethod
   | IntegrationCommandMethod
   | IntegrationKeyMethod
+  | IntegrationExternalMethod
   | IntegrationEnvMethod
 
 export type IntegrationOAuthAuthorization = {
@@ -69,6 +77,10 @@ export type IntegrationMethodRegistration =
   | {
       readonly integrationID: string
       readonly method: IntegrationKeyMethod
+    }
+  | {
+      readonly integrationID: string
+      readonly method: IntegrationExternalMethod
     }
   | {
       readonly integrationID: string

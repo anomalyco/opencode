@@ -330,6 +330,7 @@ function resourceMcpLayer(
             active: unusedIntegration,
             resolve: unusedIntegration,
             key: unusedIntegration,
+            external: unusedIntegration,
             activate: unusedIntegration,
             update: unusedIntegration,
             remove: unusedIntegration,
