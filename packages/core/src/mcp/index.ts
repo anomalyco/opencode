@@ -1,6 +1,10 @@
 export * as Mcp from "./index.js"
 
 import { Mcp } from "@opencode/schema/mcp"
+import { ConfigPolicy } from "@opencode/schema/config/policy"
+import { Event } from "@opencode/schema/config"
+import { Config } from "../config.js"
+import { ManagedPolicy } from "../managed-policy.js"
 import { McpEvent } from "@opencode/schema/mcp-event"
 import { ephemeral } from "@opencode/schema/event"
 import type { Session } from "@opencode/schema/session"
@@ -79,6 +83,7 @@ type ServerEntry = {
   readonly config: Mcp.ServerConfig
   status: Status
   readonly startup: Latch.Latch
+  blocked?: boolean
   scope?: Scope.Closeable
   client?: McpClient.Connection
   tools?: ReadonlyArray<Tool>
@@ -154,6 +159,12 @@ export const layer = (options?: Options) =>
   Layer.effect(
     Service,
     Effect.gen(function* () {
+      const config = yield* Config.Service
+      const managed = yield* ManagedPolicy.Service
+      const policies = () =>
+        config.entries().pipe(Effect.map((entries) => ManagedPolicy.statements(entries, managed.current())))
+      const allowed = (name: string, current: readonly ConfigPolicy.Info[]) =>
+        ManagedPolicy.decision(current, "integration.use", `mcp:${name}`) !== "deny"
       const location = yield* Location.Service
       const environment = yield* Environment.Service
       const bus = yield* Bus.Service
@@ -426,6 +437,12 @@ export const layer = (options?: Options) =>
 
       const startServer = (name: ServerName, entry: ServerEntry) =>
         Effect.gen(function* () {
+          entry.blocked = !allowed(name, yield* policies())
+          if (entry.blocked) {
+            entry.status = { status: "disabled" }
+            yield* bus.publish(McpEvent.StatusChanged, { server: name })
+            return
+          }
           // Announce the handshake so connect() and credential reconnects don't show a stale
           // disabled/failed status for the duration of the connection attempt.
           entry.status = { status: "pending" }
@@ -564,7 +581,18 @@ export const layer = (options?: Options) =>
         for (const name of names) {
           const previous = applied?.get(name)
           const updated = servers.get(name)
-          if (isDeepStrictEqual(previous, updated)) continue
+          if (isDeepStrictEqual(previous, updated)) {
+            const entry = entries.get(name)
+            if (!entry || !updated) continue
+            const blocked = !allowed(name, yield* policies())
+            if (blocked === Boolean(entry.blocked)) continue
+            entry.blocked = blocked
+            yield* Effect.gen(function* () {
+              yield* stopServer(name, entry)
+              if (!entry.config.disabled) return yield* startServer(name, entry)
+            }).pipe(locks.withLock(name))
+            continue
+          }
           if (!updated) {
             yield* removeServer(name).pipe(locks.withLock(name))
             continue
@@ -624,13 +652,22 @@ export const layer = (options?: Options) =>
         notify: () => State.reconcile(root, fork, () => reconcileLock.withPermit(reconcile())),
       })
 
+      fork(Stream.merge(bus.subscribe(Event.Updated), managed.changes()).pipe(Stream.runForEach(() => state.reload())))
+
       return Service.of({
         transform: state.transform,
         reload: state.reload,
         servers: Effect.fn("MCP.servers")(function* () {
+          const current = yield* policies()
           return Array.from(entries)
             .toSorted(([a], [b]) => a.localeCompare(b))
-            .map(([name, entry]): ServerInfo => ({ name, status: entry.status, integrationID: entry.integrationID }))
+            .map(
+              ([name, entry]): ServerInfo => ({
+                name,
+                status: allowed(name, current) ? entry.status : { status: "disabled" },
+                integrationID: entry.integrationID,
+              }),
+            )
         }),
         add: Effect.fn("MCP.add")(function* (server, config) {
           const name = ServerName.make(server)
@@ -662,18 +699,20 @@ export const layer = (options?: Options) =>
         }),
         // Reads report what is connected now; servers still starting contribute once they publish a change.
         tools: Effect.fn("MCP.tools")(function* () {
-          return Array.from(entries.values())
-            .flatMap((entry) => entry.tools ?? [])
+          const current = yield* policies()
+          return Array.from(entries)
+            .flatMap(([name, entry]) => (allowed(name, current) ? (entry.tools ?? []) : []))
             .toSorted((a, b) => a.server.localeCompare(b.server) || a.name.localeCompare(b.name))
         }),
         callTool: Effect.fn("MCP.callTool")(function* (input) {
           const target = yield* requireServer(input.server)
           yield* target.entry.startup.await
-          if (!target.entry.client)
+          const blocked = !allowed(target.name, yield* policies())
+          if (blocked || !target.entry.client)
             return yield* new ToolCallError({
               server: target.name,
               tool: input.name,
-              message: unavailable(target.name, target.entry.status),
+              message: unavailable(target.name, blocked ? { status: "disabled" } : target.entry.status),
             })
           const result = yield* recovering(target.name, target.entry, target.entry.client, (connection) =>
             connection.callTool({ name: input.name, args: input.args, sessionID: input.sessionID }),
@@ -690,8 +729,10 @@ export const layer = (options?: Options) =>
           return { ...result, server: target.name, tool: input.name }
         }),
         instructions: Effect.fn("MCP.instructions")(function* () {
+          const current = yield* policies()
           return Array.from(entries)
             .flatMap(([server, entry]) => {
+              if (!allowed(server, current)) return []
               const instructions = entry.client?.instructions
               if (!instructions) return []
               return [{ server, instructions }]
@@ -699,14 +740,15 @@ export const layer = (options?: Options) =>
             .toSorted((a, b) => a.server.localeCompare(b.server))
         }),
         prompts: Effect.fn("MCP.prompts")(function* () {
-          return Array.from(entries.values())
-            .flatMap((entry) => entry.prompts ?? [])
+          const current = yield* policies()
+          return Array.from(entries)
+            .flatMap(([name, entry]) => (allowed(name, current) ? (entry.prompts ?? []) : []))
             .toSorted((a, b) => a.server.localeCompare(b.server) || a.name.localeCompare(b.name))
         }),
         prompt: Effect.fn("MCP.prompt")(function* (input) {
           const target = yield* requireServer(input.server)
           yield* target.entry.startup.await
-          if (!target.entry.client) return undefined
+          if (!allowed(target.name, yield* policies()) || !target.entry.client) return undefined
           const result = yield* recovering(target.name, target.entry, target.entry.client, (connection) =>
             connection.prompt({ name: input.name, args: input.args }),
           ).pipe(Effect.orElseSucceed(() => undefined))
@@ -714,11 +756,12 @@ export const layer = (options?: Options) =>
           return { ...result, server: target.name, name: input.name }
         }),
         resourceCatalog: Effect.fn("MCP.resourceCatalog")(function* () {
+          const current = yield* policies()
           const empty = ResourceCatalog.make({ resources: [], templates: [] })
           const catalogs = yield* Effect.forEach(
             Array.from(entries),
             ([name, entry]) =>
-              entry.client
+              entry.client && allowed(name, current)
                 ? loadCatalog(name, entry, entry.client).pipe(Effect.orElseSucceed(() => empty))
                 : Effect.succeed(empty),
             { concurrency: "unbounded" },
@@ -728,13 +771,14 @@ export const layer = (options?: Options) =>
         resources: Effect.fn("MCP.resources")(function* (input) {
           const target = yield* requireServer(input.server)
           yield* target.entry.startup.await
-          if (!target.entry.client) return ResourceCatalog.make({ resources: [], templates: [] })
+          if (!allowed(target.name, yield* policies()) || !target.entry.client)
+            return ResourceCatalog.make({ resources: [], templates: [] })
           return mergeCatalogs([yield* loadCatalog(target.name, target.entry, target.entry.client)])
         }),
         readResource: Effect.fn("MCP.readResource")(function* (input) {
           const target = yield* requireServer(input.server)
           yield* target.entry.startup.await
-          if (!target.entry.client) return undefined
+          if (!allowed(target.name, yield* policies()) || !target.entry.client) return undefined
           const result = yield* recovering(target.name, target.entry, target.entry.client, (connection) =>
             connection.readResource({ uri: input.uri }),
           )
@@ -775,7 +819,16 @@ export function configured(options?: Options) {
   return makeLocationNode({
     service: Service,
     layer: layer(options),
-    deps: [Location.node, Environment.node, Bus.node, Form.node, Integration.node, Credential.node],
+    deps: [
+      Config.node,
+      ManagedPolicy.node,
+      Location.node,
+      Environment.node,
+      Bus.node,
+      Form.node,
+      Integration.node,
+      Credential.node,
+    ],
   })
 }
 

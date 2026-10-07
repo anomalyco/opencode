@@ -3,6 +3,8 @@ import path from "node:path"
 import { Deferred, Effect, Exit, Fiber, Layer, Schedule, Scope, Stream } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Watcher } from "@opencode/core/filesystem/watcher"
+import { Config } from "@opencode/core/config"
+import { ManagedPolicy } from "@opencode/core/managed-policy"
 import { PluginModule } from "@opencode/core/plugin/module"
 import { Global } from "@opencode/util/global"
 import { Npm } from "@opencode/util/npm"
@@ -11,7 +13,9 @@ import { tmpdirScoped } from "../fixture/tmpdir"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(
-  Layer.merge(
+  Layer.mergeAll(
+    Config.testLayer(),
+    ManagedPolicy.layer,
     AppNodeBuilder.build(Npm.node, [Global.node.replace(tempGlobalLayer)]),
     Watcher.layer().pipe(Layer.provide(Watcher.nativeLayer)),
   ),
@@ -90,3 +94,47 @@ it.live("interrupts pending watcher setup when the loader scope closes during mo
     yield* Effect.promise(() => Bun.sleep(50))
   }),
 )
+
+it.live("blocks a local plugin before module initialization and honors replacement policies", () =>
+  Effect.gen(function* () {
+    const directory = yield* tmpdirScoped()
+    const entered = path.join(directory.path, "entered")
+    yield* Effect.promise(() =>
+      Bun.write(
+        path.join(directory.path, "index.ts"),
+        `
+      await Bun.write(${JSON.stringify(entered)}, "loaded")
+      export default { id: "policy-fixture", async setup() {} }
+    `,
+      ),
+    )
+    const managed = yield* ManagedPolicy.Service
+    const modules = yield* PluginModule.make()
+    const operation = { type: "add" as const, target: directory.path, options: {} }
+    yield* managed.set({
+      statements: [{ action: "integration.use", resource: `plugin:${directory.path}`, effect: "deny" }],
+    })
+    expect(yield* modules.load(operation)).toEqual({ blocked: true })
+    expect(yield* Effect.promise(() => Bun.file(entered).exists())).toBe(false)
+    yield* managed.set({ statements: [] })
+    expect(yield* modules.load(operation)).toMatchObject({ id: "policy-fixture" })
+    expect(yield* Effect.promise(() => Bun.file(entered).exists())).toBe(true)
+  }),
+)
+
+for (const target of ["policy-fixture@1.2.3", "@scope/policy-fixture@1.2.3"]) {
+  it.live(`blocks versioned package ${target} before npm resolution or installation`, () =>
+    Effect.gen(function* () {
+      const managed = yield* ManagedPolicy.Service
+      const modules = yield* PluginModule.make()
+      yield* managed.set({
+        statements: [
+          { action: "integration.use", resource: `plugin:${target.slice(0, target.lastIndexOf("@"))}`, effect: "deny" },
+        ],
+      })
+      const operation = { type: "add" as const, target, options: {} }
+      expect(yield* modules.load(operation, { install: false })).toEqual({ blocked: true })
+      expect(yield* modules.load(operation, { install: true })).toEqual({ blocked: true })
+    }),
+  )
+}

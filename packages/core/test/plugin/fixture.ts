@@ -74,6 +74,7 @@ export const PluginTestLayer = AppNodeBuilder.build(
     Location.node,
     Npm.node,
     Credential.node,
+    Config.node,
     Bus.node,
     Form.node,
     Generate.node,

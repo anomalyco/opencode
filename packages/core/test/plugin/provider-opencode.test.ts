@@ -764,6 +764,7 @@ describe("OpencodePlugin", () => {
                   { action: "provider.use", resource: "*", effect: "deny" },
                   { action: "provider.use", resource: "opencode", effect: "allow" },
                   { action: "permission", resource: "shell:sudo *", effect: "deny", audience: "ignored" },
+                  { action: "integration.use", resource: "mcp:restricted", effect: "deny" },
                 ],
                 unknown: true,
               },
@@ -794,6 +795,7 @@ describe("OpencodePlugin", () => {
               { action: "provider.use", resource: "*", effect: "deny" },
               { action: "provider.use", resource: "opencode", effect: "allow" },
               { action: "permission", resource: "shell:sudo *", effect: "deny" },
+              { action: "integration.use", resource: "mcp:restricted", effect: "deny" },
             ],
             organization: "Acme",
           })

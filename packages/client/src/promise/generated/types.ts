@@ -2200,7 +2200,11 @@ export type ConfigEntry =
         experimental?: {
           portable_shell_scanner?: boolean
           subagent_depth?: number
-          policies?: Array<{ action: "provider.use" | "permission"; resource: string; effect: "allow" | "deny" }>
+          policies?: Array<{
+            action: "provider.use" | "integration.use" | "permission"
+            resource: string
+            effect: "allow" | "deny"
+          }>
         }
       }
     }

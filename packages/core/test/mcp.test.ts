@@ -12,6 +12,8 @@ import {
 import { Document, Event, Info } from "@opencode/schema/config"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
 import { McpEvent } from "@opencode/schema/mcp-event"
+import { ConfigPolicy } from "@opencode/schema/config/policy"
+import { ManagedPolicy } from "@opencode/core/managed-policy"
 import { Config } from "@opencode/core/config"
 import { ConfigMcpPlugin } from "@opencode/core/config/plugin/mcp"
 import { Credential } from "@opencode/core/credential"
@@ -269,6 +271,8 @@ function resourceMcpLayer(
   onFormCreated?: (form: Form.Info) => Effect.Effect<void>,
   options?: Mcp.Options,
   overrides?: {
+    managed?: ManagedPolicy.Interface
+    policies?: readonly ConfigPolicy.Info[]
     entries?: Config.Interface["entries"]
     subscribe?: Bus.Interface["subscribe"]
     environment?: Layer.Layer<Environment.Service>
@@ -287,6 +291,7 @@ function resourceMcpLayer(
     Layer.provideMerge(Form.layer),
     Layer.provide(
       Layer.mergeAll(
+        overrides?.managed ? Layer.succeed(ManagedPolicy.Service, overrides.managed) : ManagedPolicy.layer,
         overrides?.entries
           ? Layer.succeed(
               Config.Service,
@@ -299,6 +304,7 @@ function resourceMcpLayer(
               new Document({
                 type: "document",
                 info: new Info({
+                  experimental: { policies: overrides?.policies ?? [] },
                   mcp: new ConfigMCP.Info({
                     servers: {
                       resources:
@@ -1990,7 +1996,16 @@ testEffect(Layer.empty).live("keeps MCP config snapshots stable during an in-fli
 
 const shutdownIt = testEffect(
   AppNodeBuilder.build(
-    LayerNode.group([Bus.node, Integration.node, Credential.node, Form.node, Environment.node, Location.node]),
+    LayerNode.group([
+      Config.node,
+      ManagedPolicy.node,
+      Bus.node,
+      Integration.node,
+      Credential.node,
+      Form.node,
+      Environment.node,
+      Location.node,
+    ]),
     [
       Location.node.replace(
         Layer.succeed(
@@ -2559,3 +2574,89 @@ it.effect("does not call MCP when permission is blocked", () =>
     expect(calls).toBe(0)
   }),
 )
+
+for (const modern of [false, true]) {
+  testEffect(Layer.empty).live(`integration policy denies MCP startup (${modern ? "modern" : "legacy"})`, () =>
+    Effect.gen(function* () {
+      const server = yield* resourceServer({ modern })
+      yield* Effect.gen(function* () {
+        const service = yield* Mcp.Service
+        expect(yield* settled(service)).toEqual({ status: "disabled" })
+        yield* service.connect("resources")
+        expect(yield* service.tools()).toEqual([])
+        expect(yield* service.instructions()).toEqual([])
+        expect(yield* service.prompts()).toEqual([])
+        expect(yield* service.resourceCatalog()).toEqual({ resources: [], templates: [] })
+        expect(yield* service.resources({ server: "resources" })).toEqual({ resources: [], templates: [] })
+        expect(yield* service.prompt({ server: "resources", name: "greet" })).toBeUndefined()
+        expect(yield* service.readResource({ server: "resources", uri: "docs://readme" })).toBeUndefined()
+        expect(Exit.isFailure(yield* service.callTool({ server: "resources", name: "echo" }).pipe(Effect.exit))).toBe(
+          true,
+        )
+        expect(server.state.initializations).toBe(0)
+      }).pipe(
+        Effect.provide(
+          resourceMcpLayer(server.url, undefined, undefined, {
+            policies: [{ action: "integration.use", resource: "mcp:*", effect: "deny" }],
+          }),
+        ),
+      )
+    }),
+  )
+}
+
+for (const source of ["config", "organization"] as const) {
+  testEffect(Layer.mergeAll(Config.testLayer(), ManagedPolicy.layer)).live(
+    `revokes and restores a connected MCP through ${source} policy`,
+    () =>
+      Effect.gen(function* () {
+        const server = yield* resourceServer()
+        const managed = yield* ManagedPolicy.Service
+        const config = yield* Config.Service
+        const test = yield* Config.Test
+        const document = (effect: ConfigPolicy.Effect) =>
+          new Document({
+            type: "document",
+            info: new Info({
+              mcp: new ConfigMCP.Info({
+                servers: { resources: new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false }) },
+              }),
+              experimental: { policies: [{ action: "integration.use", resource: "mcp:*", effect }] },
+            }),
+          })
+        yield* test.setEntries([document("allow")])
+        yield* Effect.gen(function* () {
+          const service = yield* Mcp.Service
+          expect(yield* settled(service)).toEqual({ status: "connected" })
+          expect((yield* service.tools()).length).toBeGreaterThan(0)
+          if (source === "config") yield* test.setEntries([document("deny")])
+          if (source === "organization")
+            yield* managed.set({ statements: [{ action: "integration.use", resource: "mcp:*", effect: "deny" }] })
+          // Reads and direct invocations deny immediately, before lifecycle reconciliation runs.
+          expect((yield* service.servers())[0]?.status).toEqual({ status: "disabled" })
+          expect(yield* service.tools()).toEqual([])
+          expect(yield* service.instructions()).toEqual([])
+          expect(yield* service.prompts()).toEqual([])
+          expect(yield* service.resourceCatalog()).toEqual({ resources: [], templates: [] })
+          expect(yield* service.resources({ server: "resources" })).toEqual({ resources: [], templates: [] })
+          expect(yield* service.prompt({ server: "resources", name: "greet" })).toBeUndefined()
+          expect(yield* service.readResource({ server: "resources", uri: "docs://readme" })).toBeUndefined()
+          expect(Exit.isFailure(yield* service.callTool({ server: "resources", name: "echo" }).pipe(Effect.exit))).toBe(
+            true,
+          )
+          expect(server.state.toolCalls).toEqual([])
+          expect(server.state.resourceReads).toEqual([])
+          yield* service.reload()
+          if (source === "config") yield* test.setEntries([document("allow")])
+          if (source === "organization") yield* managed.set({ statements: [] })
+          yield* service.reload()
+          yield* Effect.promise(server.restart)
+          yield* service.connect("resources")
+          expect(yield* settled(service)).toEqual({ status: "connected" })
+          expect((yield* service.tools()).length).toBeGreaterThan(0)
+        }).pipe(
+          Effect.provide(resourceMcpLayer(server.url, undefined, undefined, { entries: config.entries, managed })),
+        )
+      }),
+  )
+}
