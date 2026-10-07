@@ -206,15 +206,23 @@ describe("lsp.spawn", () => {
   )
 
   it.instance(
-    "spawns a builtin LSP for an extensionless file matched by its name",
+    "matches an extensionless file by name, not by the path",
     () =>
       LSP.Service.use((lsp) =>
         Effect.gen(function* () {
           const dir = (yield* TestInstance).directory
+          const nested = path.join(dir, "sub", "Dockerfile")
+          const similar = path.join(dir, "Dockerfile.dev")
           const dockerfile = spyOn(LSPServer.DockerfileLS, "spawn").mockResolvedValue(undefined)
 
           try {
-            yield* lsp.touchFile(path.join(dir, "Dockerfile"), "document")
+            expect(yield* lsp.hasClients(similar)).toBe(false)
+            expect(yield* lsp.hasClients(nested)).toBe(true)
+
+            yield* lsp.touchFile(nested, "document")
+            expect(dockerfile).toHaveBeenCalledTimes(1)
+
+            yield* lsp.touchFile(similar, "document")
             expect(dockerfile).toHaveBeenCalledTimes(1)
           } finally {
             dockerfile.mockRestore()
