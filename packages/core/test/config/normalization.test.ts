@@ -49,6 +49,54 @@ function withoutEmptyCompatibilityContainers(input: Record<string, unknown>) {
 }
 
 describe("ConfigNormalize", () => {
+  for (const scenario of [
+    { name: "context-only", limit: { context: 1_000_000 } },
+    { name: "output-only", limit: { output: 16_000 } },
+    { name: "input-only", limit: { input: 80_000 } },
+    { name: "empty", limit: {} },
+    { name: "context and output", limit: { context: 100_000, output: 16_000 } },
+    { name: "complete", limit: { context: 100_000, input: 80_000, output: 16_000 } },
+  ]) {
+    test(`preserves legacy providers with ${scenario.name} model limits`, () => {
+      const result = normalized({
+        provider: {
+          custom: {
+            name: "Custom provider",
+            npm: "@ai-sdk/openai-compatible",
+            options: { baseURL: "https://example.test/v1" },
+            models: { chat: { name: "Custom chat", limit: scenario.limit } },
+          },
+        },
+      })
+
+      expect(result.diagnostics).toEqual([])
+      expect(result.encoded.providers).toStrictEqual({
+        custom: {
+          name: "Custom provider",
+          package: "aisdk:@ai-sdk/openai-compatible",
+          settings: { baseURL: "https://example.test/v1" },
+          models: { chat: { name: "Custom chat", limit: scenario.limit } },
+        },
+      })
+    })
+  }
+
+  for (const limit of [{ context: "100000" }, { output: null }, { input: NaN }, { context: Infinity }]) {
+    test(`rejects malformed legacy model limits ${String(Object.values(limit)[0])}`, () => {
+      const result = normalized({
+        provider: {
+          invalid: { models: { chat: { limit } } },
+          valid: { name: "Retained" },
+        },
+      })
+
+      expect(result.encoded.providers).toEqual({ valid: { name: "Retained" } })
+      expect(result.diagnostics).toEqual([
+        { kind: "invalid", path: ["provider", "invalid"], message: "skipped malformed recognized value" },
+      ])
+    })
+  }
+
   test("rejects every non-object root with one root diagnostic", () => {
     for (const input of [null, [], "config", true, 1]) {
       expect(ConfigNormalize.normalize(input)).toEqual({

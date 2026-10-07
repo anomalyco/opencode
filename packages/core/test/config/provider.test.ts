@@ -48,7 +48,10 @@ describe("ConfigProviderPlugin.Plugin", () => {
                 settings: { compaction: { type: "native" } },
                 models: {
                   native: {},
-                  local: { settings: { compaction: { type: "summary" } }, package: "@opencode/ai/providers/openai/chat" },
+                  local: {
+                    settings: { compaction: { type: "summary" } },
+                    package: "@opencode/ai/providers/openai/chat",
+                  },
                   unsupported: { package: "@opencode/ai/providers/openai/chat" },
                 },
               },
@@ -428,6 +431,17 @@ describe("ConfigProviderPlugin.Plugin", () => {
       legacy: { models: { chat: { cost: { input: 0, output: 0 } } } },
       native: { models: { chat: { cost: { input: 0, output: 0 } } } },
     },
+    ...[
+      { name: "context-only limits", limit: { context: 120_000 } },
+      { name: "output-only limits", limit: { output: 24_000 } },
+      { name: "input-only limits", limit: { input: 90_000 } },
+      { name: "empty limits", limit: {} },
+      { name: "complete limits", limit: { context: 120_000, input: 90_000, output: 24_000 } },
+    ].map((scenario) => ({
+      name: scenario.name,
+      legacy: { models: { chat: { limit: scenario.limit } } },
+      native: { models: { chat: { limit: scenario.limit } } },
+    })),
   ]) {
     it.effect(`matches native configuration for migrated ${scenario.name}`, () =>
       Effect.gen(function* () {
@@ -453,36 +467,50 @@ describe("ConfigProviderPlugin.Plugin", () => {
     )
   }
 
-  it.effect("preserves existing catalog metadata when migrated fields are omitted", () =>
-    Effect.gen(function* () {
-      const providers = yield* Provider.Service
-      const models = yield* Model.Service
-      const providerID = Provider.ID.make("custom")
-      const modelID = Model.ID.make("chat")
-      yield* providers.transform((editor) => {
-        editor.models.update(providerID, modelID, (model) => {
-          model.package = "aisdk:@ai-sdk/anthropic"
-          model.settings = { baseURL: "https://catalog.example/v1" }
-          model.capabilities = { tools: false, input: ["audio"], output: ["audio"] }
-          model.limit = { context: 100000, input: 80000, output: 16000 }
-          model.cost = [
-            {
-              input: Money.USDPerMillionTokens.make(1),
-              output: Money.USDPerMillionTokens.make(2),
-              cache: { read: Money.USDPerMillionTokens.zero, write: Money.USDPerMillionTokens.zero },
-            },
-          ]
-          model.variants = [{ id: Model.VariantID.make("high"), settings: { effort: "high" } }]
+  for (const scenario of [
+    { name: "omitted", limit: undefined },
+    { name: "empty", limit: {} },
+    { name: "context-only", limit: { context: 120_000 } },
+    { name: "output-only", limit: { output: 24_000 } },
+    { name: "input-only", limit: { input: 90_000 } },
+    { name: "complete", limit: { context: 120_000, input: 90_000, output: 24_000 } },
+  ]) {
+    it.effect(`preserves catalog metadata with migrated ${scenario.name} limits`, () =>
+      Effect.gen(function* () {
+        const providers = yield* Provider.Service
+        const models = yield* Model.Service
+        const providerID = Provider.ID.make("custom")
+        const modelID = Model.ID.make("chat")
+        yield* providers.transform((editor) => {
+          editor.models.update(providerID, modelID, (model) => {
+            model.package = "aisdk:@ai-sdk/anthropic"
+            model.settings = { baseURL: "https://catalog.example/v1" }
+            model.capabilities = { tools: false, input: ["audio"], output: ["audio"] }
+            model.limit = { context: 100000, input: 80000, output: 16000 }
+            model.cost = [
+              {
+                input: Money.USDPerMillionTokens.make(1),
+                output: Money.USDPerMillionTokens.make(2),
+                cache: { read: Money.USDPerMillionTokens.zero, write: Money.USDPerMillionTokens.zero },
+              },
+            ]
+            model.variants = [{ id: Model.VariantID.make("high"), settings: { effort: "high" } }]
+          })
         })
-      })
-      const before = required(yield* models.get(providerID, modelID))
-      const result = ConfigNormalize.normalize({ provider: { custom: { models: { chat: {} } } } })
-      if (result.type !== "normalized") throw new Error("Expected normalized config")
-      expect(result.diagnostics).toEqual([])
-      yield* addPlugin([new Document({ type: "document", info: decode(result.encoded) })])
-      expect(yield* models.get(providerID, modelID)).toEqual(before)
-    }),
-  )
+        const before = required(yield* models.get(providerID, modelID))
+        const result = ConfigNormalize.normalize({
+          provider: { custom: { models: { chat: { limit: scenario.limit } } } },
+        })
+        if (result.type !== "normalized") throw new Error("Expected normalized config")
+        expect(result.diagnostics).toEqual([])
+        yield* addPlugin([new Document({ type: "document", info: decode(result.encoded) })])
+        expect(yield* models.get(providerID, modelID)).toEqual({
+          ...before,
+          limit: { ...before.limit, ...scenario.limit },
+        })
+      }),
+    )
+  }
 
   it.effect("generates variants after rewriting a configured model package", () =>
     Effect.gen(function* () {

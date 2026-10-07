@@ -234,9 +234,9 @@ function migrateModel(info: typeof ConfigProviderV1.Model.Type) {
     cost: costs,
     disabled: info.status === "deprecated" ? true : undefined,
     limit: info.limit && {
-      context: int(info.limit.context),
+      context: info.limit.context === undefined ? undefined : int(info.limit.context),
       input: info.limit.input === undefined ? undefined : int(info.limit.input),
-      output: int(info.limit.output),
+      output: info.limit.output === undefined ? undefined : int(info.limit.output),
     },
   }
 }
