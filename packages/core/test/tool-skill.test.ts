@@ -8,6 +8,8 @@ import { Permission } from "@opencode/core/permission"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { Skill } from "@opencode/core/skill"
+import { Config } from "@opencode/core/config"
+import { ManagedPolicy } from "@opencode/core/managed-policy"
 import { SkillTool } from "@opencode/core/tool/plugin/skill"
 import { Tool } from "@opencode/core/tool"
 import { tmpdir } from "./fixture/tmpdir"
@@ -28,6 +30,41 @@ const skillToolNode = makeLocationNode({
 const sessionID = Session.ID.make("ses_skill_tool_test")
 
 describe("SkillTool", () => {
+  it.effect("refuses a policy-blocked skill before authorization or content preparation", () =>
+    Effect.gen(function* () {
+      const skills = yield* Skill.Service
+      const managed = yield* ManagedPolicy.Service
+      const tools = yield* Tool.Service
+      // This path does not exist; an attempted content scan would fail the test.
+      yield* skills.transform((editor) =>
+        editor.add(
+          Skill.Info.make({
+            id: Skill.ID.make("private"),
+            name: Skill.Name.make("Private"),
+            path: AbsolutePath.make("/unavailable/private/SKILL.md"),
+            content: "Private instructions",
+          }),
+        ),
+      )
+      yield* managed.set({ statements: [{ action: "integration.use", resource: "skill:private", effect: "deny" }] })
+      expect(
+        yield* executeTool(tools, {
+          sessionID,
+          ...toolIdentity,
+          call: { type: "tool-call", id: "call-policy-denied-skill", name: "skill", input: { id: "private" } },
+        }),
+      ).toEqual({ status: "error", error: { type: "tool.execution", message: "Unable to load skill private" } })
+    }).pipe(
+      Effect.provide(
+        AppNodeBuilder.build(LayerNode.group([Tool.node, skillToolNode, Skill.node, ManagedPolicy.node]), [
+          Config.node.replace(Config.testLayer()),
+          Permission.node.replace(permissionLayer({ assert: () => Effect.die("Blocked skill reached authorization") })),
+          Image.node.replace(imagePassthrough),
+        ]),
+      ),
+    ),
+  )
+
   it.live("lists available skills, authorizes the selected ID, and loads model-facing content", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),

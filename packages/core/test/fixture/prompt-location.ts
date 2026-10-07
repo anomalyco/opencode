@@ -1,5 +1,6 @@
 import type { FileSystem } from "@opencode/core/filesystem"
 import { Bus } from "@opencode/core/bus"
+import { Config } from "@opencode/core/config"
 import { Image } from "@opencode/core/image"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import type { LocationServices } from "@opencode/core/location-services"
@@ -22,6 +23,7 @@ export const promptLocationNode = makeGlobalNode({
         (_ref: Location.Ref) =>
           LayerNode.compile(LayerNode.group([PluginHooks.node, Image.node, Skill.node, Plugin.node]), {
             replacements: [
+              Config.node.replace(Config.testLayer()),
               Bus.node.replace(Layer.succeed(Bus.Service, bus)),
               Plugin.node.replace(Layer.mock(Plugin.Service, { awaitActivation: Effect.void })),
             ],

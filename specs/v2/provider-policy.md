@@ -6,7 +6,7 @@ Status: **Implemented.**
 
 Policies control whether an operation on a named resource is allowed. Statements are authored in configuration files or delivered by the connected OpenCode Console, and applied by a terminal plugin.
 
-Two consumers exist:
+The supported actions are:
 
 ```text
 action:   provider.use
@@ -14,6 +14,10 @@ resource: provider ID, such as openai or company-ai
 
 action:   tool.use
 resource: <permission action>:<resource>, such as shell:sudo * or edit:*.env
+
+action:   integration.use
+resource: mcp:<server ID>, plugin:<unversioned package or absolute local path>,
+          hosted:<integration ID>, or skill:<skill ID>
 ```
 
 Provider configuration and provider policy remain separate:
@@ -259,6 +263,25 @@ tool.use / shell:git status     -> unchanged: the agent's rules decide allow or 
 - A configured `deny` from agent or session rules already denies before the hook runs.
 - A statement `deny` overrides `allow` and `ask`, including saved "Allow always" approvals.
 - A statement `allow` never grants; it only cancels an earlier, broader statement `deny`.
+
+## Skill Integration Policy
+
+Skills use their OpenCode IDs, including a namespace when present. Denied skills are absent from the client catalog and model guidance, and cannot be loaded by the skill tool, a prompt mention, or standalone activation.
+
+```jsonc
+{
+  "experimental": {
+    "policies": [
+      { "action": "integration.use", "resource": "skill:*", "effect": "deny" },
+      { "action": "integration.use", "resource": "skill:team:review", "effect": "allow" },
+    ],
+  },
+}
+```
+
+Reads evaluate the current authored and organization statements, and policy changes publish a skill-catalog update. Removing a restriction restores the registered skill without reinstallation. A global integrations allow list also excludes skills unless it explicitly allows their IDs. Skill policy does not remove content already stored in session history or sandbox plugin filesystem access.
+
+Plugin hooks are governed by the existing plugin integration resource: blocking an external plugin prevents its import or unloads its active generation, including its hooks. There is no separate hook resource; required built-in policy and Console authentication plugins remain protected.
 
 ## Interaction With Provider Configuration
 

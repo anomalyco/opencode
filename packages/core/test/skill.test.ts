@@ -1,14 +1,25 @@
 import { describe, expect } from "bun:test"
-import { Deferred, Effect, Fiber, Stream } from "effect"
+import { Deferred, Effect, Fiber, Layer, Stream } from "effect"
 import { Agent } from "@opencode/core/agent"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Bus } from "@opencode/core/bus"
+import { Config } from "@opencode/core/config"
+import { ManagedPolicy } from "@opencode/core/managed-policy"
+import { Document } from "@opencode/schema/config"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Skill } from "@opencode/core/skill"
+import { SkillInstructions } from "@opencode/core/skill/instructions"
 import { testEffect } from "./lib/effect"
+import { readInitial } from "./lib/instructions"
 
-const it = testEffect(AppNodeBuilder.build(LayerNode.group([Skill.node, Agent.node, Bus.node])))
+const configLayer = Config.testLayer()
+const it = testEffect(
+  AppNodeBuilder.build(
+    LayerNode.group([Skill.node, SkillInstructions.node, Agent.node, Bus.node, ManagedPolicy.node]),
+    [Config.node.replace(configLayer)],
+  ).pipe(Layer.provideMerge(configLayer)),
+)
 
 const info = (id: string, description: string) =>
   Skill.Info.make({
@@ -20,6 +31,85 @@ const info = (id: string, description: string) =>
   })
 
 describe("Skill", () => {
+  it.effect("hides and refuses denied skills while organization policy overrides local allows", () =>
+    Effect.gen(function* () {
+      const skills = yield* Skill.Service
+      const managed = yield* ManagedPolicy.Service
+      const config = yield* Config.Test
+      yield* skills.transform((editor) => {
+        editor.add(info("team:review", "Review"))
+        editor.add(info("deploy", "Deploy"))
+      })
+      yield* config.setEntries([
+        new Document({
+          type: "document",
+          info: {
+            experimental: { policies: [{ action: "integration.use", resource: "skill:*", effect: "allow" }] },
+          },
+        }),
+      ])
+      yield* managed.set({
+        statements: [
+          { action: "integration.use", resource: "*", effect: "deny" },
+          { action: "integration.use", resource: "skill:team:review", effect: "allow" },
+        ],
+      })
+      expect(yield* skills.list()).toEqual([info("team:review", "Review")])
+      expect(yield* skills.get(Skill.ID.make("deploy"))).toBeUndefined()
+      expect(yield* skills.get(Skill.ID.make("team:review"))).toEqual(info("team:review", "Review"))
+      const instructions = yield* SkillInstructions.Service
+      const guidance = yield* instructions.load([]).pipe(Effect.flatMap(readInitial))
+      expect(guidance.text).toContain("<id>team:review</id>")
+      expect(guidance.text).not.toContain("deploy")
+
+      yield* managed.set({ statements: [{ action: "integration.use", resource: "skill:team:review", effect: "deny" }] })
+      expect(yield* skills.get(Skill.ID.make("team:review"))).toBeUndefined()
+      expect(yield* skills.list()).toEqual([info("deploy", "Deploy")])
+      yield* managed.set({ statements: [] })
+      expect(yield* skills.list()).toHaveLength(2)
+    }),
+  )
+
+  it.effect("applies configuration precedence to skills without changing their registered values", () =>
+    Effect.gen(function* () {
+      const skills = yield* Skill.Service
+      const config = yield* Config.Test
+      yield* skills.transform((editor) => editor.add(info("review", "Review")))
+      yield* config.setEntries([
+        new Document({
+          type: "document",
+          info: { experimental: { policies: [{ action: "integration.use", resource: "skill:*", effect: "deny" }] } },
+        }),
+        new Document({
+          type: "document",
+          info: {
+            experimental: { policies: [{ action: "integration.use", resource: "skill:review", effect: "allow" }] },
+          },
+        }),
+      ])
+      expect(yield* skills.list()).toEqual([])
+      expect(yield* skills.get(Skill.ID.make("review"))).toBeUndefined()
+      yield* config.setEntries([])
+      expect(yield* skills.get(Skill.ID.make("review"))).toEqual(info("review", "Review"))
+    }),
+  )
+
+  it.live("publishes catalog updates when managed policy changes", () =>
+    Effect.gen(function* () {
+      const skills = yield* Skill.Service
+      const managed = yield* ManagedPolicy.Service
+      const bus = yield* Bus.Service
+      yield* skills.transform((editor) => editor.add(info("review", "Review")))
+      const updated = yield* Deferred.make<Skill.Info[]>()
+      yield* bus.subscribe(Skill.Event.Updated).pipe(
+        Stream.runForEach(() => skills.list().pipe(Effect.flatMap((values) => Deferred.succeed(updated, values)))),
+        Effect.forkScoped({ startImmediately: true }),
+      )
+      yield* managed.set({ statements: [{ action: "integration.use", resource: "skill:review", effect: "deny" }] })
+      expect(yield* Deferred.await(updated).pipe(Effect.timeout("1 second"))).toEqual([])
+    }),
+  )
+
   it.effect("reads the current editor entry by ID", () =>
     Effect.gen(function* () {
       const skill = yield* Skill.Service
