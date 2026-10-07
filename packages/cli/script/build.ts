@@ -48,6 +48,8 @@ const allTargets: {
   { os: "win32", arch: "arm64" },
   { os: "win32", arch: "x64" },
   { os: "win32", arch: "x64", avx2: false },
+  { os: "freebsd", arch: "arm64" },
+  { os: "freebsd", arch: "x64" },
 ]
 
 const targets =
@@ -115,8 +117,27 @@ export default { path: file, version: ${JSON.stringify(opencodePty.version)}, sh
   const parcelWatcherPlugin: BunPlugin = {
     name: "parcel-watcher-binding",
     setup(build) {
-      build.onLoad({ filter: /filesystem[/\\]watcher-binding\.ts$/ }, () => ({
-        contents: `export default () => require(${JSON.stringify(parcelWatcherPackage)})`,
+      build.onLoad({ filter: /filesystem[/\\]watcher-binding\.ts$/ }, () =>
+        item.os === "freebsd"
+          ? { contents: `export default () => { throw new Error("parcel watcher is unavailable on FreeBSD") }`, loader: "js" }
+          : { contents: `export default () => require(${JSON.stringify(parcelWatcherPackage)})`, loader: "js" },
+      )
+    },
+  }
+  // @ff-labs/fff-bun publishes no FreeBSD build (its package.json "os" field
+  // excludes it), so bun never installs it there and the static import in
+  // fff.bun.ts would fail to resolve.  Replace the module with an unavailable
+  // backend only for the freebsd target; other platforms import it normally.
+  const fffPlugin: BunPlugin = {
+    name: "fff-binding",
+    setup(build) {
+      if (item.os !== "freebsd") return
+      build.onResolve({ filter: /^@ff-labs\/fff-bun$/ }, (args) => ({ path: args.path, namespace: "fff-stub" }))
+      build.onLoad({ filter: /.*/, namespace: "fff-stub" }, () => ({
+        contents: `export const FileFinder = {
+  isAvailable: () => false,
+  create: () => ({ ok: false, error: "fff is unavailable on this platform" }),
+}`,
         loader: "js",
       }))
     },
@@ -128,11 +149,11 @@ export default { path: file, version: ${JSON.stringify(opencodePty.version)}, sh
   const result = await Bun.build({
     entrypoints: ["./src/index.ts"],
     tsconfig: "./tsconfig.json",
-    plugins: [appAssetsPlugin, solidPlugin, parcelWatcherPlugin, opencodePtyPlugin, simulationGraphPlugin],
+    plugins: [appAssetsPlugin, solidPlugin, parcelWatcherPlugin, fffPlugin, opencodePtyPlugin, simulationGraphPlugin],
     external: ["node-gyp"],
     format: "esm",
     minify: true,
-    bytecode: true,
+    bytecode: item.os !== "freebsd",
     sourcemap: Script.channel === "dev" || Script.channel === "local" ? "inline" : "none",
     splitting: true,
     compile: {
