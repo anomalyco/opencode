@@ -43,6 +43,12 @@
 
 ---
 
+### About this fork
+
+This repository contains additional desktop and web UI work: voice input, Ollama model management, a project/session sidebar, reasoning disclosure and timing, and shared icon and layout updates. See [the fork overview](FORK.md) and [voice setup guide](VOICE_INPUT.md) for details and compatibility limits.
+
+The installation commands and release links below refer to upstream OpenCode. To run this fork’s changes, use the source development instructions in the voice setup guide.
+
 ### Installation
 
 ```bash
