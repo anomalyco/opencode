@@ -1,10 +1,11 @@
 import { useCommand } from "@/shell/commands/command"
+import { useLayout } from "@/shell/state/layout"
 import { useLanguage } from "@/runtime/i18n/language"
 import { serverName } from "@/runtime/server/registry"
 import { displayName } from "@opencode/ui/project-avatar"
 import { sessionLabel } from "@/session/title"
 import { makeEventListener } from "@solid-primitives/event-listener"
-import { createMemo, onCleanup } from "solid-js"
+import { createMemo, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { HomeController } from "../model"
 import { homeSessionSearchKey, type HomeSessionRecord, type HomeSessionsController } from "./controller"
@@ -15,6 +16,7 @@ type HomeSessionSearchSource = Pick<HomeSessionsController, "data" | "session">
 export function createHomeSessionSearchController(home: HomeController, sessions: HomeSessionSearchSource) {
   const command = useCommand()
   const language = useLanguage()
+  const layout = useLayout()
 
   const [state, setState] = createStore({
     value: "",
@@ -78,6 +80,9 @@ export function createHomeSessionSearchController(home: HomeController, sessions
     }),
   )
   onCleanup(() => lookup++)
+  onMount(() => {
+    if (layout.home.searchFocus.take()) focus()
+  })
 
   command.register("home.search", () => [
     {
