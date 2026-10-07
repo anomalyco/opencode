@@ -290,6 +290,25 @@ describe("AzurePlugin connecting", () => {
     }),
   )
 
+  it.live("asks for the resource name as text when the Azure CLI lists no resources", () =>
+    Effect.gen(function* () {
+      yield* setEnv(noResourceEnv)
+      const cli = yield* fakeAzureCli()
+      const azure = yield* fakeAzure({ resources: () => [] })
+      yield* addPlugin(azure.endpoints).pipe(cli.provide)
+      const integrations = yield* Integration.Service
+      const field = Effect.gen(function* () {
+        const method = required(yield* integrations.get(azureID)).methods.find((method) => method.type === "external")
+        const field = method?.type === "external" ? method.form?.[0] : undefined
+        return field?.type === "string" ? field : undefined
+      })
+
+      const listed = required(yield* eventually(field, (field) => field?.description?.startsWith("No ") === true))
+      expect(listed.options).toBeUndefined()
+      expect(listed.custom).toBeUndefined()
+    }),
+  )
+
   it.effect("moves Azure CLI connections saved as OAuth credentials to external credentials", () =>
     Effect.gen(function* () {
       yield* setEnv({ PATH: "/nonexistent" })

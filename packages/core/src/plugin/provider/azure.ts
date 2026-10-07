@@ -169,18 +169,19 @@ export function make(
                     type: "string",
                     key: "resourceName",
                     title: "Azure resource",
-                    description: iife(() => {
-                      // Resources are listed once at startup, so one created later is typed in.
-                      if (!listing.resources) return "Enter the resource name. Requests use your `az login` session."
-                      if (listing.resources.length === 0)
-                        return "No Azure OpenAI or AI Services resources found through the Azure CLI. Enter the resource name."
-                      return `Found ${listing.resources.length} resource${listing.resources.length === 1 ? "" : "s"} through the Azure CLI. Not listed? Type the resource name.`
-                    }),
                     placeholder: "e.g. my-models",
                     required: true,
                     pattern: resourcePattern.source,
-                    custom: true,
-                    options: listing.resources ?? [],
+                    // Resources are listed once at startup, so one created later is typed in. Without a list the field
+                    // is a plain text input.
+                    ...iife(() => {
+                      if (!listing.resources) return { description: "Requests use your `az login` session." }
+                      if (listing.resources.length === 0)
+                        return {
+                          description: "No Azure OpenAI or AI Services resources found for your `az login` account.",
+                        }
+                      return { custom: true, options: listing.resources }
+                    }),
                   },
                 ]),
           },
