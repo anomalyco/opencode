@@ -300,7 +300,10 @@ function unresolvedProviderVariables(model: RuntimeInfo, baseURL: string) {
 }
 
 const nativeCredentialSettings = (specifier: string, credential: Credential.Value | undefined) => {
-  if (!credential || credential.type === "external") return {}
+  if (!credential) return {}
+  // The saved profile reaches the package through metadata; SigV4 keeps an ambient bearer token from taking over.
+  if (credential.type === "external")
+    return specifier.startsWith("@opencode/ai/providers/amazon-bedrock") ? { auth: "sigv4" } : {}
   if (credential.type === "key") return { apiKey: credential.key }
   if (specifier === "@opencode/ai/providers/anthropic" || specifier === "@opencode/ai/providers/anthropic-compatible")
     return { authToken: credential.access }
