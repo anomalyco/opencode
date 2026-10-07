@@ -472,8 +472,24 @@ export default function Page() {
     () => panelRow,
     ({ width }) => setPanelRowWidth(width),
   )
+  const info = createMemo(() => (params.id ? sync().session.get(params.id) : undefined))
+  const isChildSession = createMemo(() => !!info()?.parentID)
+  const canReview = createMemo(() => !!sync().project)
+  const reviewTab = createMemo(() => isDesktop())
+  const tabState = createSessionTabs({
+    tabs,
+    pathFromTab: file.pathFromTab,
+    normalizeTab,
+    review: reviewTab,
+    hasReview: canReview,
+  })
+  const activeTab = tabState.activeTab
+  const activeFileTab = tabState.activeFileTab
   const splitReview = createMemo(
-    () => (newSessionDesign() ? desktopV2ReviewOpen() : desktopReviewOpen()) && layout.review.diffStyle() === "split",
+    () =>
+      (newSessionDesign() ? desktopV2ReviewOpen() : desktopReviewOpen()) &&
+      activeTab() === "review" &&
+      layout.review.diffStyle() === "split",
   )
   // The observer reports the content-box width, which already excludes the row
   // padding; only the flex gap between the panels remains to subtract.
@@ -531,19 +547,6 @@ export default function Page() {
     if (!view().reviewPanel.opened()) view().reviewPanel.open()
   }
 
-  const info = createMemo(() => (params.id ? sync().session.get(params.id) : undefined))
-  const isChildSession = createMemo(() => !!info()?.parentID)
-  const canReview = createMemo(() => !!sync().project)
-  const reviewTab = createMemo(() => isDesktop())
-  const tabState = createSessionTabs({
-    tabs,
-    pathFromTab: file.pathFromTab,
-    normalizeTab,
-    review: reviewTab,
-    hasReview: canReview,
-  })
-  const activeTab = tabState.activeTab
-  const activeFileTab = tabState.activeFileTab
   const revertMessageID = createMemo(() => info()?.revert?.messageID)
   const timeline = createTimelineModel({ sessionID: () => params.id, revertMessageID })
   const historyLoading = timeline.history.loading
@@ -2282,12 +2285,13 @@ export default function Page() {
             </SessionPanelFrame>
           )}
 
-          <Show when={desktopSessionResizeOpen()}>
+          <Show when={desktopSessionResizeOpen() && sessionPanelMax() > SESSION_PANEL_WIDTH_MIN}>
             <div onPointerDown={() => size.start()}>
               <ResizeHandle
                 classList={{
                   "-end-1": settings.general.newLayoutDesigns(),
                 }}
+                data-testid="session-panel-resize"
                 direction="horizontal"
                 size={sessionPanelResizedWidth()}
                 min={SESSION_PANEL_WIDTH_MIN}
