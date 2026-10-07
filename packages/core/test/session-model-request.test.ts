@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Message, ToolResultPart, Media } from "@opencode/ai"
-import { boundImages, unsupportedParts } from "@opencode/core/session/model-request"
+import { Tool } from "@opencode/schema/tool"
+import { boundImages, omitIncompletePdfs, unsupportedParts } from "@opencode/core/session/model-request"
 
 const capabilities = (input: string[]) => ({ tools: true, input, output: ["text"] })
 
@@ -129,6 +130,108 @@ describe("SessionModelRequest.unsupportedParts", () => {
         { type: "file", mime: "application/pdf" },
       ],
     })
+  })
+})
+
+describe("SessionModelRequest.omitIncompletePdfs", () => {
+  test("replaces an incomplete user PDF with an actionable note", () => {
+    const pdf = Media.base64(Buffer.from("%PDF-1.7\ninterrupted download").toString("base64"), "application/pdf")
+    const original = Message.user([Message.text("Describe this"), { type: "media", media: pdf, filename: "guide.pdf" }])
+    const result = omitIncompletePdfs([original])
+
+    expect(result[0]?.content).toEqual([
+      Message.text("Describe this"),
+      Message.text(
+        'ERROR: Cannot read "guide.pdf" (the PDF is missing its end-of-file marker and may be incomplete). Download or regenerate the file before reading it again. Inform the user.',
+      ),
+    ])
+    expect(original.content[1]).toMatchObject({ type: "media", media: pdf })
+  })
+
+  test("replaces only the incomplete PDF in a stored tool result on every request", () => {
+    const pdf = Buffer.from("%PDF-1.7\ninterrupted download").toString("base64")
+    const image = Tool.FileContent.make({
+      type: "file",
+      uri: "data:image/png;base64,aGVsbG8=",
+      mime: "image/png",
+      name: "logo.png",
+    })
+    const original = Message.tool(
+      ToolResultPart.make({
+        id: "call_1",
+        name: "read",
+        result: {
+          type: "content",
+          value: [
+            { type: "text", text: "PDF read successfully" },
+            { type: "file", uri: `data:application/pdf;base64,${pdf}`, mime: "application/pdf", name: "guide.pdf" },
+            image,
+          ],
+        },
+      }),
+    )
+    const next = Message.user("continue")
+    const history = [original, next]
+    const result = omitIncompletePdfs(history)
+
+    expect(result[0]?.content[0]).toMatchObject({
+      type: "tool-result",
+      id: "call_1",
+      name: "read",
+      result: {
+        type: "content",
+        value: [
+          { type: "text", text: "PDF read successfully" },
+          { type: "text", text: expect.stringContaining('Cannot read "guide.pdf"') },
+          image,
+        ],
+      },
+    })
+    expect(result[1]).toBe(next)
+    expect(original.content[0]).toMatchObject({ result: { value: [{ type: "text" }, { type: "file" }, image] } })
+    expect(omitIncompletePdfs(history)).toEqual(result)
+    expect(omitIncompletePdfs(result)).toEqual(result)
+  })
+
+  test("checks byte-backed PDFs and does not accept an old end marker far from the tail", () => {
+    const pdf = Media.bytes(Buffer.from(`%PDF-1.7\n%%EOF\n${"x".repeat(4096)}`), "application/pdf")
+    const result = omitIncompletePdfs([Message.user({ type: "media", media: pdf })])
+
+    expect(result[0]?.content).toEqual([Message.text(expect.stringContaining("Cannot read PDF"))])
+  })
+
+  test("preserves PDFs with an end marker, remote PDFs, other media, and text", () => {
+    const pdf = Buffer.from(`%PDF-1.7\n${"x".repeat(4097)}\n%%EOF\r\n`)
+    const messages = [
+      Message.user({ type: "media", media: Media.bytes(pdf, "application/pdf") }),
+      Message.user({ type: "media", media: Media.base64(pdf.toString("base64"), "application/pdf") }),
+      Message.user({
+        type: "media",
+        media: Media.base64(pdf.toString("base64").replace(/=+$/, ""), "application/pdf"),
+      }),
+      Message.user({
+        type: "media",
+        media: Media.url("https://example.test/guide.pdf", { mediaType: "application/pdf" }),
+      }),
+      Message.user({ type: "media", media: Media.ref("test", "file_1", "application/pdf") }),
+      Message.user({ type: "media", media: Media.base64("aGVsbG8=", "image/png") }),
+      Message.user("plain text"),
+      Message.tool(
+        ToolResultPart.make({
+          id: "call_1",
+          name: "read",
+          result: {
+            type: "content",
+            value: [
+              { type: "file", uri: `data:application/pdf;base64,${pdf.toString("base64")}`, mime: "application/pdf" },
+              { type: "file", uri: "https://example.test/guide.pdf", mime: "application/pdf" },
+            ],
+          },
+        }),
+      ),
+    ]
+
+    omitIncompletePdfs(messages).forEach((message, index) => expect(message).toBe(messages[index]))
   })
 })
 
