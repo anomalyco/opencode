@@ -1,4 +1,4 @@
-import { createEffect, createMemo, For, Show, type Accessor, type JSX } from "solid-js"
+import { children, createEffect, createMemo, For, Show, type Accessor, type JSX } from "solid-js"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -23,6 +23,7 @@ import type {
 } from "./types"
 import type { PromptInputV2Interaction, PromptInputV2SelectControl } from "./interaction"
 import "./attachments.css"
+import "./layout.css"
 
 export type {
   PromptInputV2Attachment,
@@ -41,6 +42,10 @@ export type PromptInputV2Props = {
   borderUnderlay?: boolean
   class?: string
   modelControl?: JSX.Element
+  voiceControl?: JSX.Element
+  voiceActive?: boolean
+  voiceCanSubmit?: boolean
+  onVoiceSubmit?: () => void
   variantControlVisible?: boolean
   attachKeybind?: string[]
   attachShortcut?: string
@@ -50,6 +55,7 @@ export function PromptInputV2(props: PromptInputV2Props) {
   const i18n = useI18n()
   const state = props.controller.state
   const view = props.controller.view
+  const voiceControl = children(() => props.voiceControl)
   let editor: HTMLDivElement | undefined
   let localInput = false
   const updateCursor = () => {
@@ -117,7 +123,7 @@ export function PromptInputV2(props: PromptInputV2Props) {
         }}
         onSubmit={(event) => {
           event.preventDefault()
-          if (!props.disabled) props.controller.submit()
+          if (!props.disabled && !props.voiceActive) props.controller.submit()
         }}
         onDragEnter={props.controller.onDragEnter}
         onDragOver={props.controller.onDragOver}
@@ -154,7 +160,7 @@ export function PromptInputV2(props: PromptInputV2Props) {
             role="textbox"
             aria-multiline="true"
             aria-label={i18n.t("ui.promptInput.label")}
-            contenteditable={!props.disabled && !props.readOnly}
+            contenteditable={!props.disabled && !props.readOnly && !props.voiceActive}
             autocapitalize={state.mode === "normal" ? "sentences" : "off"}
             autocorrect={state.mode === "normal" ? "on" : "off"}
             spellcheck={state.mode === "normal"}
@@ -170,6 +176,10 @@ export function PromptInputV2(props: PromptInputV2Props) {
               props.controller.onInput(prompt.map((part) => part.content).join(""), [...prompt, ...images], cursor)
             }}
             onKeyDown={(event) => {
+              if (props.voiceActive) {
+                event.preventDefault()
+                return
+              }
               if (props.controller.onKeyDown(event)) return
               if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
                 event.preventDefault()
@@ -195,72 +205,89 @@ export function PromptInputV2(props: PromptInputV2Props) {
           </Show>
         </div>
 
-        <div class="flex h-11 items-center px-2">
-          <div
-            class="flex min-w-0 flex-1 items-center gap-1"
-            aria-hidden={state.mode === "shell"}
-            inert={state.mode === "shell" ? true : undefined}
-            style={buttons()}
-          >
-            <PromptInputV2AddMenu
-              disabled={state.mode === "shell"}
-              title={i18n.t("ui.promptInput.add")}
-              keybind={props.attachKeybind ?? ["Mod", "U"]}
-              attachLabel={i18n.t("ui.promptInput.attachments")}
-              attachShortcut={props.attachShortcut ?? "Mod+U"}
-              commandsLabel={i18n.t("ui.promptInput.commands")}
-              contextLabel={i18n.t("ui.promptInput.context")}
-              shellLabel={i18n.t("ui.promptInput.shell")}
-              onAttach={props.controller.attach}
-              onCommands={props.controller.openCommands}
-              onContext={props.controller.openContext}
-              onShell={props.controller.openShell}
-            />
-            <Show when={view.agent} keyed>
-              {(control) => (
-                <PromptInputV2ConfiguredSelect
-                  title={i18n.t("ui.promptInput.chooseAgent")}
-                  keybind={["Mod", "."]}
-                  control={control}
-                />
-              )}
-            </Show>
-            <Show
-              when={props.modelControl}
-              fallback={
-                <Show when={view.model} keyed>
-                  {(control) => (
-                    <PromptInputV2ConfiguredSelect
-                      title={i18n.t("ui.promptInput.chooseModel")}
-                      keybind={["Mod", "M"]}
-                      control={control}
-                      model
-                    />
-                  )}
-                </Show>
-              }
+        <div data-slot="prompt-footer" data-voice-active={props.voiceActive || undefined}>
+          <Show when={!props.voiceActive}>
+            <div
+              data-slot="prompt-add"
+              aria-hidden={state.mode === "shell"}
+              inert={state.mode === "shell" ? true : undefined}
+              style={buttons()}
             >
-              {props.modelControl}
-            </Show>
-            <Show when={(props.variantControlVisible ?? true) && view.variant} keyed>
-              {(control) => (
-                <Show when={control.options().length > 1}>
+              <PromptInputV2AddMenu
+                disabled={state.mode === "shell"}
+                title={i18n.t("ui.promptInput.add")}
+                keybind={props.attachKeybind ?? ["Mod", "U"]}
+                attachLabel={i18n.t("ui.promptInput.attachments")}
+                attachShortcut={props.attachShortcut ?? "Mod+U"}
+                commandsLabel={i18n.t("ui.promptInput.commands")}
+                contextLabel={i18n.t("ui.promptInput.context")}
+                shellLabel={i18n.t("ui.promptInput.shell")}
+                onAttach={props.controller.attach}
+                onCommands={props.controller.openCommands}
+                onContext={props.controller.openContext}
+                onShell={props.controller.openShell}
+              />
+            </div>
+            <div
+              data-slot="prompt-settings"
+              aria-hidden={state.mode === "shell"}
+              inert={state.mode === "shell" ? true : undefined}
+              style={buttons()}
+            >
+              <Show when={view.agent} keyed>
+                {(control) => (
                   <PromptInputV2ConfiguredSelect
-                    title={i18n.t("ui.promptInput.chooseVariant")}
-                    keybind={["Shift", "Mod", "D"]}
+                    title={i18n.t("ui.promptInput.chooseAgent")}
+                    keybind={["Mod", "."]}
                     control={control}
                   />
+                )}
+              </Show>
+              <div data-slot="prompt-model-control">
+                <Show
+                  when={props.modelControl}
+                  fallback={
+                    <Show when={view.model} keyed>
+                      {(control) => (
+                        <PromptInputV2ConfiguredSelect
+                          title={i18n.t("ui.promptInput.chooseModel")}
+                          keybind={["Mod", "M"]}
+                          control={control}
+                          model
+                        />
+                      )}
+                    </Show>
+                  }
+                >
+                  {props.modelControl}
                 </Show>
-              )}
-            </Show>
-          </div>
+              </div>
+              <Show when={(props.variantControlVisible ?? true) && view.variant} keyed>
+                {(control) => (
+                  <Show when={control.options().length > 1}>
+                    <PromptInputV2ConfiguredSelect
+                      title={i18n.t("ui.promptInput.chooseVariant")}
+                      keybind={["Shift", "Mod", "D"]}
+                      control={control}
+                    />
+                  </Show>
+                )}
+              </Show>
+            </div>
+          </Show>
+          <Show when={voiceControl()}>
+            <div data-slot="prompt-voice">{voiceControl()}</div>
+          </Show>
           <PromptInputV2SubmitButton
             mode={state.mode}
-            stopping={view.submit.stopping()}
-            disabled={!props.controller.canSubmit()}
+            stopping={!props.voiceActive && view.submit.stopping()}
+            disabled={props.voiceActive ? !props.voiceCanSubmit : !props.controller.canSubmit()}
             sendLabel={i18n.t("ui.promptInput.send")}
             stopLabel={i18n.t("ui.promptInput.stop")}
-            onSubmit={props.controller.submit}
+            onSubmit={() => {
+              if (props.voiceActive) props.onVoiceSubmit?.()
+              else props.controller.submit()
+            }}
             onStop={props.controller.stop}
           />
         </div>
@@ -573,7 +600,7 @@ export function PromptInputV2Select(props: {
           as={ButtonV2}
           variant="ghost-muted"
           size="normal"
-          class={`max-w-[220px] justify-start ![font-weight:440] ${props.class ?? ""}`}
+          class={`min-w-0 max-w-[220px] justify-start ![font-weight:440] ${props.class ?? ""}`}
           aria-label={props.title}
         >
           {props.currentIcon}

@@ -20,6 +20,7 @@ import { DialogConnectProvider } from "./dialog-connect-provider"
 import { decode64 } from "@/utils/base64"
 import { SettingsListV2 } from "./settings-v2/parts/list"
 import { SettingsRowV2 } from "./settings-v2/parts/row"
+import { OllamaModelsProvider, useOllamaModels } from "./settings-v2/ollama"
 import "./settings-v2/settings-v2.css"
 
 type ModelItem = ReturnType<ReturnType<typeof useLocal>["model"]["list"]>[number]
@@ -116,10 +117,17 @@ export const DialogManageModels: Component = () => {
   )
 }
 
-export const DialogManageModelsV2: Component = () => {
+export const DialogManageModelsV2: Component = () => (
+  <OllamaModelsProvider tab="chat">
+    <ManageModelsV2 />
+  </OllamaModelsProvider>
+)
+
+const ManageModelsV2: Component = () => {
   const local = useLocal()
   const language = useLanguage()
   const dialog = useDialog()
+  const manager = useOllamaModels()
   const directory = () => decode64(local.slug())
 
   const handleConnectProvider = () => {
@@ -238,17 +246,33 @@ export const DialogManageModelsV2: Component = () => {
                       <SettingsListV2>
                         <For each={group.items}>
                           {(item) => (
-                            <SettingsRowV2 title={item.name} description="">
-                              <div>
-                                <SwitchV2
-                                  checked={local.model.visible({ modelID: item.id, providerID: item.provider.id })}
-                                  onChange={(checked) => setModelVisibility(item, checked)}
-                                  hideLabel
-                                >
-                                  {item.name}
-                                </SwitchV2>
-                              </div>
-                            </SettingsRowV2>
+                            <div data-component="ollama-model-row" data-model={item.id}>
+                              <SettingsRowV2 title={item.name} description="">
+                                <div class="voice-settings-actions">
+                                  <Show
+                                    when={manager.connections().some((provider) => provider.id === item.provider.id)}
+                                  >
+                                    <ButtonV2
+                                      size="small"
+                                      variant={manager.modelOpen(item.provider.id, item.id) ? "neutral" : "ghost-muted"}
+                                      aria-expanded={manager.modelOpen(item.provider.id, item.id)}
+                                      disabled={manager.state.busy}
+                                      onClick={() => manager.toggleModel(item.provider.id, item.id)}
+                                    >
+                                      {language.t("models.manage.edit")}
+                                    </ButtonV2>
+                                  </Show>
+                                  <SwitchV2
+                                    checked={local.model.visible({ modelID: item.id, providerID: item.provider.id })}
+                                    onChange={(checked) => setModelVisibility(item, checked)}
+                                    hideLabel
+                                  >
+                                    {item.name}
+                                  </SwitchV2>
+                                </div>
+                              </SettingsRowV2>
+                              <manager.Editor providerID={item.provider.id} modelID={item.id} />
+                            </div>
                           )}
                         </For>
                       </SettingsListV2>

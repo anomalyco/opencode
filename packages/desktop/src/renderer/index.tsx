@@ -226,6 +226,9 @@ const createPlatform = (windowState: DesktopWindowState): Platform => {
     },
 
     storage,
+    voice: window.api.voice,
+    microphone: window.api.microphone,
+    ollama: window.api.ollama,
     draftStore: createDraftStore({
       get: window.api.draftGet,
       set: window.api.draftSet,

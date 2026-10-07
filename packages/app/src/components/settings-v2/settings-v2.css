@@ -9,6 +9,10 @@
   background: var(--v2-background-bg-base);
 }
 
+[data-component="dialog-v2"][data-variant="settings"][data-size="x-large"] [data-slot="dialog-container"] {
+  height: min(calc(100vh - 92px), 660px);
+}
+
 [data-component="dialog-v2"][data-variant="settings"] [data-slot="dialog-body"] {
   padding: 0;
   overflow: hidden;
@@ -726,4 +730,231 @@
   font-weight: 440;
   line-height: 1;
   color: var(--v2-state-fg-danger);
+}
+
+.voice-settings-heading,
+.voice-settings-actions,
+.voice-settings-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.voice-settings-heading {
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+.voice-settings-actions {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+.voice-settings-hint {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--v2-text-text-muted);
+  overflow-wrap: anywhere;
+}
+.voice-settings-local {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+}
+.voice-settings-local > .voice-settings-hint {
+  width: 100%;
+}
+.voice-settings-status {
+  font-size: 13px;
+  color: var(--v2-text-text-muted);
+}
+.voice-settings-form,
+.voice-settings-test {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px;
+  border-radius: 8px;
+  background: var(--v2-background-bg-layer-01);
+}
+.voice-settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
+}
+.voice-settings-models {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.voice-settings-models [data-slot="settings-v2-row-control"] {
+  max-width: 55%;
+}
+.voice-settings-result {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--v2-text-text-base);
+}
+@media (max-width: 640px) {
+  .voice-settings-models [data-component="settings-v2-row"] {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .voice-settings-models [data-slot="settings-v2-row-control"] {
+    max-width: 100%;
+  }
+}
+
+.ollama-manager-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-block: 4px 16px;
+}
+
+.ollama-connection-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  min-width: 0;
+}
+
+.ollama-connection-bar > .voice-settings-hint,
+.ollama-download-suggestion > .voice-settings-hint {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.ollama-connection-bar > .voice-settings-hint {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+
+/* Match the existing accordion's 180ms height transition. */
+.ollama-inline-collapse[data-component="collapsible"] {
+  display: contents;
+}
+
+.ollama-inline-collapse > [data-slot="collapsible-content"] {
+  overflow: hidden;
+  padding-inline: 3px;
+  margin-inline: -3px;
+}
+
+.ollama-inline-collapse > [data-slot="collapsible-content"][data-expanded] {
+  animation: ollama-expand 180ms ease-out;
+}
+
+.ollama-inline-collapse > [data-slot="collapsible-content"][data-closed] {
+  animation: ollama-collapse 180ms ease-out;
+}
+
+@keyframes ollama-expand {
+  from {
+    height: 0;
+  }
+  to {
+    height: var(--kb-collapsible-content-height);
+  }
+}
+
+@keyframes ollama-collapse {
+  from {
+    height: var(--kb-collapsible-content-height);
+  }
+  to {
+    height: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ollama-inline-collapse > [data-slot="collapsible-content"] {
+    animation: none;
+  }
+}
+
+[data-component="ollama-model-row"] {
+  border-bottom: 0.5px solid var(--v2-border-border-base);
+}
+
+[data-component="ollama-model-row"]:last-child {
+  border-bottom: none;
+}
+
+[data-component="ollama-model-row"] > [data-component="settings-v2-row"] {
+  border-bottom: none;
+}
+
+[data-component="ollama-model-row"] .voice-settings-form {
+  margin: 0;
+  padding-block: 0 20px;
+}
+
+.ollama-download {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: end;
+}
+
+.ollama-download [data-component="text-input-v2"] {
+  width: 100%;
+  min-width: 0;
+}
+
+.ollama-download > .voice-settings-field {
+  min-width: 0;
+}
+
+.ollama-download-suggestion {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.ollama-download-suggestion > .voice-settings-hint {
+  padding-inline: 8px;
+}
+
+.ollama-model-editor {
+  margin: 0;
+  padding-top: 20px;
+}
+
+.ollama-delete-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ollama-manager-panel progress {
+  width: 100%;
+  accent-color: var(--v2-text-text-accent);
+}
+
+@media (max-width: 640px) {
+  .ollama-download {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ollama-connection-bar .voice-settings-actions {
+    justify-content: flex-start;
+  }
+}
+
+[data-component="ollama-model-row"] [data-slot="settings-v2-row-copy"] {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.settings-v2-models-group-header--managed {
+  height: auto;
+  min-height: 28px;
+  gap: 12px;
+  flex-wrap: wrap;
 }

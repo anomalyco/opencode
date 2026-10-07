@@ -1,5 +1,6 @@
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { Tag } from "@opencode-ai/ui/v2/badge-v2"
+import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { showToast } from "@/utils/toast"
@@ -11,6 +12,7 @@ import { useServerSync } from "@/context/server-sync"
 import { DialogConnectProvider, useProviderConnectController } from "../dialog-connect-provider"
 import { DialogCustomProvider } from "../dialog-custom-provider"
 import { SettingsListV2 } from "./parts/list"
+import { createVoiceProviderSettings } from "./voice"
 import "./settings-v2.css"
 
 type ProviderSource = "env" | "api" | "config" | "custom"
@@ -40,6 +42,7 @@ export const SettingsProvidersV2: Component<{
   const serverSync = useServerSync()
   const providers = useProviders(props.directory)
   const providerConnect = useProviderConnectController({ onBack: props.onBack })
+  const voice = createVoiceProviderSettings()
 
   const connect = (provider?: string) => {
     providerConnect.select(provider)
@@ -51,6 +54,24 @@ export const SettingsProvidersV2: Component<{
       .connected()
       .filter((p) => p.id !== "opencode" || Object.values(p.models).find((m) => m.cost?.input))
   })
+
+  const sharedVoice = (item: ProviderItem) => {
+    const config = serverSync().data.config.provider?.[item.id]
+    const address = config?.options?.baseURL ?? config?.api
+    if (typeof address !== "string") return
+    return voice
+      .providers()
+      .find(
+        (provider) =>
+          provider.id === item.id &&
+          provider.protocol === "ollama" &&
+          provider.baseURL.replace(/\/+$/, "").replace(/\/v1$/, "") ===
+            address.replace(/\/+$/, "").replace(/\/v1$/, ""),
+      )
+  }
+  const standaloneVoice = createMemo(() =>
+    voice.providers().filter((provider) => !connected().some((item) => sharedVoice(item)?.id === provider.id)),
+  )
 
   const popular = createMemo(() => {
     const connectedIDs = new Set(connected().map((p) => p.id))
@@ -100,7 +121,7 @@ export const SettingsProvidersV2: Component<{
     const next = before.includes(providerID) ? before : [...before, providerID]
     serverSync().set("config", "disabled_providers", next)
 
-    await serverSync()
+    return serverSync()
       .updateConfig({ disabled_providers: next })
       .then(() => {
         showToast({
@@ -109,11 +130,13 @@ export const SettingsProvidersV2: Component<{
           title: language.t("provider.disconnect.toast.disconnected.title", { provider: name }),
           description: language.t("provider.disconnect.toast.disconnected.description", { provider: name }),
         })
+        return true
       })
       .catch((err: unknown) => {
         serverSync().set("config", "disabled_providers", before)
         const message = err instanceof Error ? err.message : String(err)
         showToast({ title: language.t("common.requestFailed"), description: message })
+        return false
       })
   }
 
@@ -122,10 +145,9 @@ export const SettingsProvidersV2: Component<{
       await serverSdk()
         .client.auth.remove({ providerID })
         .catch(() => undefined)
-      await disableProvider(providerID, name)
-      return
+      return disableProvider(providerID, name)
     }
-    await serverSdk()
+    return serverSdk()
       .client.auth.remove({ providerID })
       .then(async () => {
         await serverSdk().client.global.dispose()
@@ -135,10 +157,12 @@ export const SettingsProvidersV2: Component<{
           title: language.t("provider.disconnect.toast.disconnected.title", { provider: name }),
           description: language.t("provider.disconnect.toast.disconnected.description", { provider: name }),
         })
+        return true
       })
       .catch((err: unknown) => {
         const message = err instanceof Error ? err.message : String(err)
         showToast({ title: language.t("common.requestFailed"), description: message })
+        return false
       })
   }
 
@@ -150,17 +174,34 @@ export const SettingsProvidersV2: Component<{
 
       <div class="settings-v2-tab-body settings-v2-providers">
         <div class="settings-v2-section" data-component="connected-providers-section">
-          <h3 class="settings-v2-section-title">{language.t("settings.providers.section.connected")}</h3>
+          <div class="voice-settings-heading">
+            <h3 class="settings-v2-section-title">{language.t("settings.providers.section.connected")}</h3>
+            <MenuV2>
+              <MenuV2.Trigger as={ButtonV2} size="small" variant="neutral" icon="plus">
+                {language.t("voice.providers.add")}
+              </MenuV2.Trigger>
+              <MenuV2.Portal>
+                <MenuV2.Content>
+                  <MenuV2.Item onSelect={() => connect()}>{language.t("voice.models.chat")}</MenuV2.Item>
+                  <MenuV2.Item onSelect={() => voice.edit()}>{language.t("voice.providers.endpoint")}</MenuV2.Item>
+                </MenuV2.Content>
+              </MenuV2.Portal>
+            </MenuV2>
+          </div>
           <SettingsListV2>
             <Show
-              when={connected().length > 0}
+              when={connected().length > 0 || standaloneVoice().length > 0}
               fallback={
                 <div class="settings-v2-provider-empty">{language.t("settings.providers.connected.empty")}</div>
               }
             >
               <For each={connected()}>
                 {(item) => (
-                  <div class="settings-v2-provider-row group">
+                  <div
+                    class="settings-v2-provider-row group"
+                    data-component="settings-provider-row"
+                    data-provider={item.id}
+                  >
                     <div class="settings-v2-provider-lead">
                       <ProviderIcon
                         id={item.id}
@@ -173,23 +214,60 @@ export const SettingsProvidersV2: Component<{
                         <Tag>{type(item)}</Tag>
                       </div>
                     </div>
-                    <Show
-                      when={canDisconnect(item)}
-                      fallback={
-                        <span class="settings-v2-provider-env-hint">
-                          {language.t("settings.providers.connected.environmentDescription")}
-                        </span>
-                      }
-                    >
-                      <ButtonV2 size="normal" variant="ghost-muted" onClick={() => void disconnect(item.id, item.name)}>
-                        {language.t("common.disconnect")}
-                      </ButtonV2>
-                    </Show>
+                    <div class="voice-settings-actions">
+                      <Show when={sharedVoice(item)}>
+                        {(provider) => <voice.Actions provider={provider()} shared />}
+                      </Show>
+                      <Show
+                        when={canDisconnect(item)}
+                        fallback={
+                          <span class="settings-v2-provider-env-hint">
+                            {language.t("settings.providers.connected.environmentDescription")}
+                          </span>
+                        }
+                      >
+                        <ButtonV2
+                          size="normal"
+                          variant="ghost-muted"
+                          onClick={async () => {
+                            const shared = sharedVoice(item)
+                            if (!(await disconnect(item.id, item.name))) return
+                            if (shared) await voice.remove(shared.id)
+                          }}
+                        >
+                          {language.t("common.disconnect")}
+                        </ButtonV2>
+                      </Show>
+                    </div>
+                  </div>
+                )}
+              </For>
+              <For each={standaloneVoice()}>
+                {(provider) => (
+                  <div
+                    class="settings-v2-provider-row"
+                    data-component="settings-provider-row"
+                    data-provider={provider.id}
+                  >
+                    <div class="settings-v2-provider-lead">
+                      <ProviderIcon
+                        id="synthetic"
+                        width={PROVIDER_ICON_SIZE}
+                        height={PROVIDER_ICON_SIZE}
+                        class="settings-v2-provider-icon shrink-0"
+                      />
+                      <div class="settings-v2-provider-copy">
+                        <span class="settings-v2-provider-name">{provider.name}</span>
+                        <p class="settings-v2-provider-description">{provider.baseURL}</p>
+                      </div>
+                    </div>
+                    <voice.Actions provider={provider} />
                   </div>
                 )}
               </For>
             </Show>
           </SettingsListV2>
+          <voice.Form />
         </div>
 
         <div class="settings-v2-section">

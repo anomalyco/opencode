@@ -29,6 +29,9 @@ export type FatalRendererErrorLog = {
 }
 
 type PlatformBase = {
+  ollama?: import("../ollama/types").OllamaPlatform
+  voice?: import("../voice/types").VoicePlatform
+  microphone?: import("../voice/types").MicrophonePlatform
   /** App version */
   version?: string
 

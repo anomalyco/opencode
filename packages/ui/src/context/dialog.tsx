@@ -66,13 +66,14 @@ function init() {
     if (stack().length === 0) return
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return
+      if (event.key !== "Escape" || event.defaultPrevented) return
       close()
       event.preventDefault()
       event.stopPropagation()
     }
 
-    makeEventListener(window, "keydown", onKeyDown, { capture: true })
+    // Nested menus handle Escape before the enclosing dialog.
+    makeEventListener(window, "keydown", onKeyDown)
   })
 
   const mount = (element: DialogElement, owner: Owner, onClose: (() => void) | undefined, layer: number) => {

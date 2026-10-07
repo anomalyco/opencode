@@ -13,6 +13,7 @@ import { ExternalLink } from "../external-link"
 import { SettingsListV2 } from "./parts/list"
 import { SettingsRowV2 } from "./parts/row"
 import { LayoutRetirementNotice, LayoutTransitionToggle } from "./interface-transition"
+import { VoiceLanguageSetting } from "./voice"
 import {
   createAppearanceSettingsController,
   createPermissionScopeController,
@@ -551,6 +552,13 @@ export const SettingsGeneralV2: Component<{
         </Show>
 
         <GeneralSection />
+
+        <div class="settings-v2-section">
+          <h3 class="settings-v2-section-title">{language.t("voice.models.voice")}</h3>
+          <SettingsListV2>
+            <VoiceLanguageSetting />
+          </SettingsListV2>
+        </div>
 
         <AppearanceSection controller={appearance} />
 

@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process"
 import { stat } from "node:fs/promises"
 import { basename, join } from "node:path"
-import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from "electron"
+import { app, BrowserWindow, clipboard, dialog, ipcMain, shell, safeStorage, systemPreferences } from "electron"
 import type { IpcMainEvent, IpcMainInvokeEvent } from "electron"
 import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
 import { parseDesktopNativeBundle, type DesktopNativeBundle } from "@opencode-ai/app/i18n/desktop-native"
@@ -24,6 +24,10 @@ import type { UpdaterController } from "./updater-controller"
 import { createUpdaterSubscriptions } from "./updater-subscriptions"
 import { createDesktopDraftStore } from "./draft-store"
 import { nativeT } from "./native-translations"
+import { createVoiceService } from "./voice-service"
+import { supportsManagedVoice } from "@opencode-ai/app/voice/types"
+import { createOllamaService } from "./ollama-service"
+import { microphoneSettingsURL } from "./media-permissions"
 
 const pickerFilters = (ext?: string[]) => {
   if (!ext || ext.length === 0) return undefined
@@ -55,6 +59,97 @@ type Deps = {
 }
 
 export function registerIpcHandlers(deps: Deps) {
+  const voice = createVoiceService({
+    root: join(app.getPath("userData"), "voice"),
+    workerPath: app.isPackaged
+      ? join(process.resourcesPath, "voice", "worker.py")
+      : join(app.getAppPath(), "resources", "voice", "worker.py"),
+    supported: supportsManagedVoice(process),
+    store: getStore("voice"),
+    encrypt: (key) => {
+      if (
+        !safeStorage.isEncryptionAvailable() ||
+        (process.platform === "linux" && safeStorage.getSelectedStorageBackend() === "basic_text")
+      )
+        throw new Error("storage")
+      return safeStorage.encryptString(key).toString("base64")
+    },
+    decrypt: (key) => safeStorage.decryptString(Buffer.from(key, "base64")),
+    emit: (state) =>
+      BrowserWindow.getAllWindows().forEach((win) => {
+        if (!win.isDestroyed()) win.webContents.send("voice-state", state)
+      }),
+  })
+  app.once("will-quit", voice.close)
+  const sender = (event: IpcMainInvokeEvent) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win || win.isDestroyed() || event.senderFrame !== event.sender.mainFrame)
+      throw new Error("Invalid voice sender")
+    return String(event.sender.id)
+  }
+  const ollama = createOllamaService((owner, progress) => {
+    const win = BrowserWindow.getAllWindows().find((item) => String(item.webContents.id) === owner)
+    if (win && !win.isDestroyed()) win.webContents.send("ollama-progress", progress)
+  }, voice.ollamaConnection)
+  app.once("will-quit", ollama.close)
+  app.on("browser-window-created", (_event, win) => {
+    const owner = String(win.webContents.id)
+    win.once("closed", () => ollama.cancel(owner))
+  })
+  ipcMain.handle("ollama-list", (event, connection) => {
+    sender(event)
+    return ollama.list(connection)
+  })
+  ipcMain.handle("ollama-show", (event, connection, model) => {
+    sender(event)
+    return ollama.show(connection, model)
+  })
+  ipcMain.handle("ollama-mutate", (event, connection, mutation, id) =>
+    ollama.mutate(connection, mutation, id, sender(event)),
+  )
+  ipcMain.handle("ollama-cancel", (event, id) => ollama.cancel(sender(event), id))
+  ipcMain.handle("microphone-status", (event) => {
+    sender(event)
+    if (process.platform !== "darwin" && process.platform !== "win32") return "unknown"
+    return systemPreferences.getMediaAccessStatus("microphone")
+  })
+  ipcMain.handle("microphone-settings", (event, target: unknown) => {
+    sender(event)
+    const url = microphoneSettingsURL(process.platform, target)
+    if (!url) return false
+    return shell.openExternal(url).then(
+      () => true,
+      () => false,
+    )
+  })
+  ipcMain.handle("voice-read", (event) => {
+    sender(event)
+    return voice.read()
+  })
+  ipcMain.handle("voice-save", (event, provider, apiKey) => {
+    sender(event)
+    return voice.save(provider, apiKey)
+  })
+  ipcMain.handle("voice-remove", (event, id) => {
+    sender(event)
+    return voice.remove(id)
+  })
+  ipcMain.handle("voice-configure", (event, selected, language) => {
+    sender(event)
+    return voice.configure(selected, language)
+  })
+  ipcMain.handle("voice-test", (event, id) => {
+    sender(event)
+    return voice.test(id)
+  })
+  ipcMain.handle("voice-install", (event) => voice.install(sender(event)))
+  ipcMain.handle("voice-delete-model", (event) => {
+    sender(event)
+    return voice.deleteModel()
+  })
+  ipcMain.handle("voice-transcribe", (event, request) => voice.transcribe(request, sender(event)))
+  ipcMain.handle("voice-cancel", (event, id) => voice.cancel(sender(event), id))
+
   const drafts = createDesktopDraftStore(join(app.getPath("userData"), "drafts.sqlite"))
   const updaterSubscriptions = createUpdaterSubscriptions()
   app.once("will-quit", updaterSubscriptions.clear)

@@ -11,6 +11,38 @@ const updaterHandler = (_: unknown, state: UpdaterState) => {
 }
 
 const api: ElectronAPI = {
+  ollama: {
+    list: (connection) => ipcRenderer.invoke("ollama-list", connection),
+    show: (connection, model) => ipcRenderer.invoke("ollama-show", connection, model),
+    mutate: (connection, mutation, id) => ipcRenderer.invoke("ollama-mutate", connection, mutation, id),
+    cancel: (id) => ipcRenderer.invoke("ollama-cancel", id),
+    subscribe: (callback) => {
+      const handler = (_: unknown, progress: import("@opencode-ai/app/ollama/types").OllamaProgress) =>
+        callback(progress)
+      ipcRenderer.on("ollama-progress", handler)
+      return () => ipcRenderer.removeListener("ollama-progress", handler)
+    },
+  },
+  microphone: {
+    status: () => ipcRenderer.invoke("microphone-status"),
+    openSettings: (target) => ipcRenderer.invoke("microphone-settings", target),
+  },
+  voice: {
+    read: () => ipcRenderer.invoke("voice-read"),
+    save: (provider, apiKey) => ipcRenderer.invoke("voice-save", provider, apiKey),
+    remove: (id) => ipcRenderer.invoke("voice-remove", id),
+    configure: (selection, language) => ipcRenderer.invoke("voice-configure", selection, language),
+    test: (id) => ipcRenderer.invoke("voice-test", id),
+    install: () => ipcRenderer.invoke("voice-install"),
+    deleteModel: () => ipcRenderer.invoke("voice-delete-model"),
+    transcribe: (input) => ipcRenderer.invoke("voice-transcribe", input),
+    cancel: (id) => ipcRenderer.invoke("voice-cancel", id),
+    subscribe: (callback) => {
+      const handler = (_: unknown, state: import("@opencode-ai/app/voice/types").VoiceSnapshot) => callback(state)
+      ipcRenderer.on("voice-state", handler)
+      return () => ipcRenderer.removeListener("voice-state", handler)
+    },
+  },
   killSidecar: () => ipcRenderer.invoke("kill-sidecar"),
   installCli: () => ipcRenderer.invoke("install-cli"),
   awaitInitialization: () => ipcRenderer.invoke("await-initialization"),

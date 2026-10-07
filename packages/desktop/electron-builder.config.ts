@@ -1,3 +1,4 @@
+import { voiceEnglish } from "../app/src/i18n/voice"
 import { execFile } from "node:child_process"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
@@ -57,6 +58,7 @@ const getBase = (appId: string): Configuration => ({
   },
   files: ["out/**/*", "resources/**/*", "!resources/opencode-cli*"],
   extraResources: [
+    { from: "resources/voice/", to: "voice/", filter: ["worker.py"] },
     ...(channel === "dev"
       ? [
           {
@@ -75,6 +77,7 @@ const getBase = (appId: string): Configuration => ({
   mac: {
     category: "public.app-category.developer-tools",
     icon: `resources/icons/icon.icns`,
+    extendInfo: { NSMicrophoneUsageDescription: voiceEnglish["voice.permission"] },
     hardenedRuntime: true,
     gatekeeperAssess: false,
     entitlements: "resources/entitlements.plist",

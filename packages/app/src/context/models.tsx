@@ -5,6 +5,7 @@ import { filter, firstBy, flat, groupBy, mapValues, pipe, uniqueBy, values } fro
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useProviders } from "@/hooks/use-providers"
 import { Persist, persisted } from "@/utils/persist"
+import { isOllamaRuntimeTag } from "@/ollama/types"
 
 export type ModelKey = { providerID: string; modelID: string }
 
@@ -39,10 +40,12 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
 
     const available = createMemo(() =>
       providers.connected().flatMap((p) =>
-        Object.values(p.models).map((m) => ({
-          ...m,
-          provider: p,
-        })),
+        Object.values(p.models)
+          .filter((m) => !isOllamaRuntimeTag(m.id))
+          .map((m) => ({
+            ...m,
+            provider: p,
+          })),
       ),
     )
 

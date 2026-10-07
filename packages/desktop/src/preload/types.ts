@@ -43,6 +43,9 @@ export type FatalRendererError = {
 }
 
 export type ElectronAPI = {
+  ollama: import("@opencode-ai/app/ollama/types").OllamaPlatform
+  voice: import("@opencode-ai/app/voice/types").VoicePlatform
+  microphone: import("@opencode-ai/app/voice/types").MicrophonePlatform
   killSidecar: () => Promise<void>
   installCli: () => Promise<string>
   awaitInitialization: () => Promise<ServerReadyData>

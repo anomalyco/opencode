@@ -33,6 +33,10 @@ import {
   type PromptInputV2Interaction,
 } from "@opencode-ai/session-ui/v2/prompt-input/interaction"
 
+import { createVoiceRecorder } from "./voice-input/recorder"
+import { VoiceInput } from "./voice-input/input"
+import { createVoiceTranscriber } from "./voice-input/transcribe"
+
 export type PromptInputV2ComposerProps = {
   class?: string
   controller: PromptInputV2ComposerController
@@ -48,11 +52,32 @@ export function PromptInputV2Composer(props: PromptInputV2ComposerProps) {
   const dialog = useDialog()
   const command = useCommand()
   const language = useLanguage()
+  const voice = createVoiceRecorder({
+    transcribe: createVoiceTranscriber((text) => {
+      const existing = props.controller.value()
+      const addition = `${existing && !/\s$/.test(existing) ? "\n" : ""}${text}`
+      const value = existing + addition
+      props.controller.onInput(
+        value,
+        [...props.controller.parts(), { type: "text", content: addition, start: existing.length, end: value.length }],
+        value.length,
+      )
+      props.controller.submit()
+    }),
+  })
 
   return (
     <div class="flex flex-col gap-3">
       <PromptInputV2
         controller={props.controller}
+        voiceActive={voice.active()}
+        voiceCanSubmit={voice.state.status === "recording" || voice.state.status === "ready"}
+        onVoiceSubmit={voice.process}
+        voiceControl={
+          <Show when={props.controller.state.mode === "normal"}>
+            <VoiceInput recorder={voice} />
+          </Show>
+        }
         borderUnderlay={props.borderUnderlay}
         class={props.class}
         variantControlVisible={!props.controller.model.loading}

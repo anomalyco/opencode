@@ -1,0 +1,77 @@
+[data-component="prompt-input-v2"] {
+  container: prompt-composer / inline-size;
+
+  [data-slot="prompt-footer"] {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 4px;
+    min-height: 44px;
+    padding: 0 8px;
+  }
+
+  [data-slot="prompt-add"],
+  [data-slot="prompt-voice"] {
+    display: flex;
+    align-items: center;
+  }
+
+  [data-slot="prompt-settings"] {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+
+    > button {
+      flex: 0 0 auto;
+      max-width: 100px;
+    }
+  }
+
+  [data-slot="prompt-model-control"] {
+    display: flex;
+    flex: 0 1 220px;
+    min-width: 0;
+
+    > button {
+      min-width: 0;
+      max-width: 100%;
+    }
+  }
+
+  [data-slot="prompt-footer"][data-voice-active] {
+    grid-template-columns: minmax(0, 1fr) auto;
+
+    [data-slot="prompt-voice"] {
+      min-width: 0;
+
+      > * {
+        min-width: 0;
+        flex: 1;
+      }
+    }
+  }
+}
+
+@container prompt-composer (max-width: 440px) {
+  [data-slot="prompt-footer"]:not([data-voice-active]) {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    padding-block: 4px;
+
+    [data-slot="prompt-settings"] {
+      grid-row: 1;
+      grid-column: 1 / -1;
+      min-height: 32px;
+    }
+
+    [data-slot="prompt-add"] {
+      grid-row: 2;
+      justify-self: start;
+    }
+
+    [data-slot="prompt-voice"],
+    > button {
+      grid-row: 2;
+    }
+  }
+}

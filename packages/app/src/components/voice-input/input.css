@@ -1,0 +1,74 @@
+[data-component="voice-input"] {
+  color: var(--text-base);
+  flex-shrink: 0;
+}
+[data-component="voice-input"]:not([data-state="idle"]) {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+}
+.voice-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 32px;
+}
+.voice-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.voice-button:hover {
+  background: var(--surface-raised-base-hover);
+}
+.voice-button:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+.voice-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.voice-stop {
+  background: var(--text-base);
+  color: var(--background-base);
+}
+.voice-stop:hover {
+  background: var(--text-base);
+  opacity: 0.85;
+}
+.voice-waveform {
+  flex: 1;
+  min-width: 24px;
+  height: 28px;
+  overflow: hidden;
+}
+.voice-waveform canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  color: inherit;
+}
+.voice-time {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.voice-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

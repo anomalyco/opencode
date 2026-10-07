@@ -4,7 +4,7 @@ import type { DesktopTheme } from "@opencode-ai/ui/theme/types"
 import oc2ThemeJson from "../../../ui/src/theme/themes/oc-2.json"
 import { randomUUID } from "node:crypto"
 import { rmSync } from "node:fs"
-import { app, BrowserWindow, dialog, net, nativeImage, nativeTheme, protocol, shell } from "electron"
+import { app, BrowserWindow, dialog, net, nativeImage, nativeTheme, protocol, shell, systemPreferences } from "electron"
 import { dirname, isAbsolute, join, relative, resolve } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import type { TitlebarTheme } from "../preload/types"
@@ -16,6 +16,8 @@ import { nativeT } from "./native-translations"
 import { createWindowRegistry } from "./window-registry"
 import { safeWindowURL } from "./window-state"
 import { resolveExternalURL, resolveLocalFilePath } from "./external-url"
+
+import { isAudioCapture } from "./media-permissions"
 
 const root = dirname(fileURLToPath(import.meta.url))
 const rendererRoot = join(root, "../renderer")
@@ -482,6 +484,15 @@ function allowRendererPermissions(win: BrowserWindow) {
   const webContentsId = win.webContents.id
 
   win.webContents.session.setPermissionRequestHandler((webContents, permission, callback, details) => {
+    if (permission === "media") {
+      const audio = "mediaTypes" in details && isAudioCapture(details.mediaTypes)
+      const trusted =
+        details.isMainFrame && isTrustedRendererUrl(details.requestingUrl) && webContents.id === webContentsId
+      if (!audio || !trusted) return callback(false)
+      if (process.platform !== "darwin") return callback(true)
+      void systemPreferences.askForMediaAccess("microphone").then(callback, () => callback(false))
+      return
+    }
     callback(
       rendererPermissions.has(permission) &&
         isTrustedRendererUrl(details.requestingUrl) &&
@@ -489,6 +500,15 @@ function allowRendererPermissions(win: BrowserWindow) {
     )
   })
   win.webContents.session.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
+    if (permission === "media") {
+      return (
+        !!webContents &&
+        webContents.id === webContentsId &&
+        details.isMainFrame &&
+        isAudioCapture(details.mediaType ? [details.mediaType] : undefined) &&
+        isTrustedRendererUrl(details.requestingUrl)
+      )
+    }
     if (!rendererPermissions.has(permission)) return false
     if (webContents && webContents.id !== webContentsId) return false
     return isTrustedRendererUrl(details.requestingUrl) || isTrustedRendererUrl(requestingOrigin)

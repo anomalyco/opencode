@@ -83,6 +83,10 @@ import { showToast } from "@/utils/toast"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
 import type { ReferenceInfo } from "@opencode-ai/sdk/v2/client"
 
+import { createVoiceRecorder } from "./voice-input/recorder"
+import { VoiceInput } from "./voice-input/input"
+import { createVoiceTranscriber } from "./voice-input/transcribe"
+
 export { createPromptInputHistory }
 export type { PromptInputControls, PromptInputHistory, PromptInputProps, PromptInputState, PromptInputSubmission }
 
@@ -116,6 +120,18 @@ const EXAMPLES = [
 
 export const PromptInput: Component<PromptInputProps> = (props) => {
   const sdk = useSDK()
+  const voice = createVoiceRecorder({
+    transcribe: createVoiceTranscriber((text) => {
+      const parts = prompt.current()
+      const existing = parts.map((part) => ("content" in part ? part.content : "")).join("")
+      const addition = `${existing && !/\s$/.test(existing) ? "\n" : ""}${text}`
+      prompt.set(
+        [...parts, { type: "text", content: addition, start: existing.length, end: existing.length + addition.length }],
+        existing.length + addition.length,
+      )
+      void handleSubmit(new Event("submit"))
+    }),
+  })
 
   const sync = useSync()
   const files = useFile()
@@ -1230,6 +1246,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     })
 
   const handleKeyDown = (event: KeyboardEvent) => {
+    if (voice.active()) {
+      event.preventDefault()
+      return
+    }
     if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "u") {
       event.preventDefault()
       if (store.mode !== "normal") return
@@ -1461,7 +1481,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       />
       <DockShellForm
         data-dock-border-underlay="legacy"
-        onSubmit={handleSubmit}
+        onSubmit={(event) => {
+          if (voice.active()) {
+            event.preventDefault()
+            voice.process()
+            return
+          }
+          void handleSubmit(event)
+        }}
         classList={{
           "group/prompt-input": true,
           "border-icon-info-active border-dashed": store.draggingType !== null,
@@ -1501,7 +1528,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           onMouseDown={(e) => {
             const target = e.target
             if (!(target instanceof HTMLElement)) return
-            if (target.closest('[data-action="prompt-attach"], [data-action="prompt-submit"]')) {
+            if (
+              target.closest(
+                '[data-action="prompt-attach"], [data-action="prompt-submit"], [data-component="voice-input"]',
+              )
+            ) {
               return
             }
             editorRef?.focus()
@@ -1518,7 +1549,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               role="textbox"
               aria-multiline="true"
               aria-label={placeholder()}
-              contenteditable="true"
+              contenteditable={!voice.active()}
               autocapitalize={store.mode === "normal" ? "sentences" : "off"}
               autocorrect={store.mode === "normal" ? "on" : "off"}
               spellcheck={store.mode === "normal"}
@@ -1560,7 +1591,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             }}
           />
 
-          <div class="pointer-events-none absolute bottom-2 right-2 flex items-center gap-2">
+          <div
+            class="pointer-events-none absolute bottom-2 right-2 flex items-center gap-2"
+            classList={{ "left-2": voice.active() }}
+          >
             <input
               ref={fileInputRef}
               type="file"
@@ -1574,23 +1608,38 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               }}
             />
 
-            <div class="flex items-center gap-1 pointer-events-auto">
-              <Tooltip placement="top" inactive={!working() && blank()} value={tip()}>
+            <div class="flex items-center gap-1 pointer-events-auto" classList={{ "flex-1 min-w-0": voice.active() }}>
+              <Show when={store.mode === "normal"}>
+                <VoiceInput recorder={voice} />
+              </Show>
+              <Tooltip
+                placement="top"
+                inactive={!voice.active() && !working() && blank()}
+                value={voice.active() ? language.t("prompt.action.send") : tip()}
+              >
                 <IconButton
                   data-action="prompt-submit"
                   type="submit"
-                  disabled={!working() && blank()}
+                  disabled={
+                    voice.active()
+                      ? voice.state.status !== "recording" && voice.state.status !== "ready"
+                      : !working() && blank()
+                  }
                   tabIndex={store.mode === "normal" ? undefined : -1}
-                  icon={stopping() ? "stop" : store.mode === "shell" ? "arrow-undo-down" : "arrow-up"}
+                  icon={
+                    !voice.active() && stopping() ? "stop" : store.mode === "shell" ? "arrow-undo-down" : "arrow-up"
+                  }
                   variant="primary"
                   class="size-8"
-                  aria-label={stopping() ? language.t("prompt.action.stop") : language.t("prompt.action.send")}
+                  aria-label={
+                    !voice.active() && stopping() ? language.t("prompt.action.stop") : language.t("prompt.action.send")
+                  }
                 />
               </Tooltip>
             </div>
           </div>
 
-          <div class="pointer-events-none absolute bottom-2 left-2">
+          <div class="pointer-events-none absolute bottom-2 left-2" classList={{ hidden: voice.active() }}>
             <div
               aria-hidden={store.mode !== "normal"}
               class="pointer-events-auto"
