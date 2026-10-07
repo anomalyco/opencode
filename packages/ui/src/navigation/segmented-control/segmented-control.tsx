@@ -107,10 +107,8 @@ export function SegmentedControl(props: SegmentedControlProps) {
   const [ready, setReady] = createSignal(false)
 
   const selected = createMemo(() => (isControlled() ? (local.value ?? null) : internal()))
-  const reducedMotion = () =>
-    typeof window !== "undefined" &&
-    typeof window.matchMedia === "function" &&
-    window.matchMedia("(prefers-reduced-motion: reduce)")?.matches === true
+
+  const reducedMotion = () => globalThis.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches === true
 
   const x = useMotionValue(0)
   const width = useMotionValue(0)
