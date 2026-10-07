@@ -73,6 +73,47 @@ it.live("returns LocationNotFoundError for a missing folder and recovers once it
   }),
 )
 
+if (process.platform !== "win32")
+  it.live("reports denied Location boot, recovers, and does not recheck cached access", () =>
+    Effect.gen(function* () {
+      const config = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-directory-denied-")))
+      const parent = path.join(config.path, "protected")
+      const directory = path.join(parent, "project")
+      yield* Effect.promise(() => fs.mkdir(directory, { recursive: true }))
+      yield* Effect.acquireRelease(
+        Effect.promise(() => fs.chmod(parent, 0o000)),
+        () => Effect.promise(() => fs.chmod(parent, 0o700)),
+      )
+      const handler = yield* ServerFetch.make({ ...options, config: { directory: config.path } })
+      const request = (endpoint = "/api/model") =>
+        handler(
+          new Request(`http://opencode.local${endpoint}`, {
+            headers: { "x-opencode-directory": encodeURIComponent(directory) },
+          }),
+        )
+      yield* Effect.forEach(["/api/model", "/api/location"], (endpoint) =>
+        Effect.gen(function* () {
+          const denied = yield* Effect.promise(() => request(endpoint))
+          expect(denied.status).toBe(403)
+          expect(yield* Effect.promise(() => denied.json())).toEqual({
+            _tag: "LocationPermissionDeniedError",
+            location: { directory },
+            message: `Location access denied: ${directory}`,
+          })
+        }),
+      )
+      yield* Effect.promise(() => fs.chmod(parent, 0o700))
+      expect((yield* Effect.promise(() => request())).status).toBe(200)
+      const readable = yield* Effect.promise(() => request("/api/location"))
+      expect(readable.status).toBe(200)
+      const cached = yield* Effect.promise(() => readable.json())
+      yield* Effect.promise(() => fs.chmod(parent, 0o000))
+      const deniedAfterBoot = yield* Effect.promise(() => request("/api/location"))
+      expect(deniedAfterBoot.status).toBe(200)
+      expect(yield* Effect.promise(() => deniedAfterBoot.json())).toEqual(cached)
+    }),
+  )
+
 type Handler = (request: Request) => Promise<Response>
 
 function occupy(port: number, cancel = false) {

@@ -1,4 +1,4 @@
-import { LocationNotFoundError, InvalidRequestError, SessionNotFoundError } from "./errors.js"
+import { LocationNotFoundError, LocationPermissionDeniedError, InvalidRequestError, SessionNotFoundError } from "./errors.js"
 import { makeDefaultApi } from "./api.js"
 import type { Api } from "./api.js"
 import type { Context } from "effect"
@@ -7,12 +7,12 @@ import type { EventGroup } from "./groups/event.js"
 
 class LocationMiddleware extends HttpApiMiddleware.Service<LocationMiddleware>()(
   "@opencode/client/LocationMiddleware",
-  { error: [LocationNotFoundError] },
+  { error: [LocationNotFoundError, LocationPermissionDeniedError] },
 ) {}
 
 class SessionLocationMiddleware extends HttpApiMiddleware.Service<SessionLocationMiddleware>()(
   "@opencode/client/SessionLocationMiddleware",
-  { error: [InvalidRequestError, SessionNotFoundError, LocationNotFoundError] },
+  { error: [InvalidRequestError, SessionNotFoundError, LocationNotFoundError, LocationPermissionDeniedError] },
 ) {}
 
 type ClientApiShape = Api<

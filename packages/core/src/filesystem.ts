@@ -50,6 +50,8 @@ export class DirectoryAccessDeniedError extends Schema.TaggedError<DirectoryAcce
   }
 }
 
+export type DirectoryError = DirectoryNotFoundError | DirectoryAccessDeniedError
+
 export const Content = Schema.Struct({
   uri: Schema.String,
   name: Schema.String.pipe(Schema.optional),

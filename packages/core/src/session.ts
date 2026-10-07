@@ -148,7 +148,7 @@ export interface Interface {
     readonly context?: number
   }) => Effect.Effect<
     readonly FileDiff.Info[],
-    NotFoundError | MessageNotFoundError | TurnRangeError | Snapshot.Error | FileSystem.DirectoryNotFoundError
+    NotFoundError | MessageNotFoundError | TurnRangeError | Snapshot.Error | FileSystem.DirectoryError
   >
   /**
    * Durable admitted session work not yet visible in projected history,
@@ -201,7 +201,7 @@ export interface Interface {
     delivery?: SessionInbox.Delivery
   }) => Effect.Effect<
     void,
-    NotFoundError | Command.NotFoundError | Command.ExecutionError | FileSystem.DirectoryNotFoundError
+    NotFoundError | Command.NotFoundError | Command.ExecutionError | FileSystem.DirectoryError
   >
   readonly shell: (
     input: Parameters<Session.Handle["shell"]>[0] & { sessionID: SessionSchema.ID },
@@ -227,11 +227,11 @@ export interface Interface {
       files?: boolean
     }) => Effect.Effect<
       SessionSchema.Revert,
-      NotFoundError | MessageNotFoundError | BusyError | Snapshot.Error | FileSystem.DirectoryNotFoundError
+      NotFoundError | MessageNotFoundError | BusyError | Snapshot.Error | FileSystem.DirectoryError
     >
     readonly clear: (
       sessionID: SessionSchema.ID,
-    ) => Effect.Effect<void, NotFoundError | BusyError | Snapshot.Error | FileSystem.DirectoryNotFoundError>
+    ) => Effect.Effect<void, NotFoundError | BusyError | Snapshot.Error | FileSystem.DirectoryError>
     readonly commit: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError | BusyError>
   }
 }

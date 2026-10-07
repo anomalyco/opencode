@@ -1,4 +1,5 @@
-import { Context, Effect, Layer } from "effect"
+import { Cause, Context, Effect, Layer, PlatformError } from "effect"
+import { FSUtil } from "@opencode/util/fs-util"
 import { Agent } from "./agent.js"
 import { AISDK } from "./aisdk.js"
 import { Model } from "./model.js"
@@ -114,7 +115,7 @@ const nodes = [
 export const graph = LayerNode.group(nodes)
 
 export type Services = LayerNode.Output<typeof graph>
-export type Error = FileSystem.DirectoryNotFoundError
+export type Error = FileSystem.DirectoryError
 
 export interface Options {
   // Plugins this instance is born with; empty and absent are equivalent.
@@ -157,14 +158,19 @@ export function layer(ref: Location.Ref, options: Options = {}): Layer.Layer<Ser
   ]
 
   return LayerNode.compile(graph, { replacements, shared: Node.tags.values.global }).pipe(
-    // A missing directory is expected; other instance boot failures remain defects.
+    // Config discovery can also defect on a denied directory before FileSystem initializes.
     Layer.catchCause(
       (cause): Layer.Layer<Services, Error> =>
         Layer.unwrap(
-          Effect.failCause(cause).pipe(
-            Effect.catch(
-              (error): Effect.Effect<never, Error> =>
-                error instanceof FileSystem.DirectoryNotFoundError ? Effect.fail(error) : Effect.die(error),
+          Effect.failCause(
+            Cause.fromReasons<Error>(
+              cause.reasons.map((reason) => {
+                if (Cause.isInterruptReason(reason)) return reason
+                const value = Cause.isFailReason(reason) ? reason.error : reason.defect
+                const error = directoryError(value, ref)
+                if (error) return Cause.makeFailReason(error)
+                return Cause.isDieReason(reason) ? reason : Cause.makeDieReason(value)
+              }),
             ),
           ),
         ),
@@ -178,4 +184,21 @@ export function layer(ref: Location.Ref, options: Options = {}): Layer.Layer<Ser
       }),
     ),
   )
+}
+
+function directoryError(cause: unknown, ref: Location.Ref): Error | undefined {
+  if (cause instanceof FileSystem.DirectoryNotFoundError || cause instanceof FileSystem.DirectoryAccessDeniedError)
+    return cause
+  // Workspace directories are not host paths, so only already-typed failures apply.
+  if (ref.workspaceID || !(cause instanceof PlatformError.PlatformError) || cause.reason._tag === "BadArgument") return
+  const target = cause.reason.pathOrDescriptor
+  if (typeof target !== "string" || !FSUtil.contains(target, ref.directory)) return
+  if (
+    cause.reason._tag === "PermissionDenied" ||
+    (cause.reason._tag === "Unknown" &&
+      cause.reason.cause instanceof Error &&
+      "code" in cause.reason.cause &&
+      cause.reason.cause.code === "EPERM")
+  )
+    return new FileSystem.DirectoryAccessDeniedError({ directory: ref.directory, cause })
 }
