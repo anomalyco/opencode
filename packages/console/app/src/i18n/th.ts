@@ -3,7 +3,8 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
-  "go.promo.spaceBunny": "Space Bunny Free โมเดลนิรนามใหม่ เปิดให้ใช้งานในช่วงเวลาจำกัด",
+  "go.referral.ended.label": "คำเตือน",
+  "go.referral.ended": "โปรแกรมแนะนำเพื่อนสิ้นสุดแล้ว ลิงก์แนะนำจะไม่ให้เครดิตแก่คุณหรือผู้ที่แชร์ลิงก์อีกต่อไป",
   "go.graph.bonus": "ใช้งาน {{count}} เท่า",
   "nav.github": "GitHub",
   "nav.docs": "เอกสาร",
@@ -262,6 +263,7 @@ export const dict = {
   "go.meta.description":
     "Go มีราคา $10/เดือน พร้อมขีดจำกัดการใช้งานที่เอื้อเฟื้อและการเข้าถึงโมเดลเขียนโค้ดชั้นนำอย่างเชื่อถือได้",
   "go.hero.title": "โมเดลเขียนโค้ดราคาประหยัดสำหรับทุกคน",
+  "go.hero.tagline": "ใช้กับเอเจนต์ใดก็ได้ เติมเครดิตหากจำเป็น ยกเลิกได้ตลอดเวลา",
   "go.hero.body":
     "Go นำการเขียนโค้ดแบบเอเจนต์มาสู่นักเขียนโปรแกรมทั่วโลก เสนอขีดจำกัดที่กว้างขวางและการเข้าถึงโมเดลโอเพนซอร์สที่มีความสามารถสูงสุดได้อย่างน่าเชื่อถือ เพื่อให้คุณสามารถสร้างสรรค์ด้วยเอเจนต์ที่ทรงพลังโดยไม่ต้องกังวลเรื่องค่าใช้จ่ายหรือความพร้อมใช้งาน",
 
@@ -269,7 +271,7 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "สมัครสมาชิก Go",
   "go.cta.price": "$10/เดือน",
-  "go.plans.month": "/เดือน",
+  "go.plans.month": "ต่อเดือน",
   "go.plans.plus.cta": "สมัคร Go Plus",
   "go.plans.plus.description": "Go Plus ราคา $40/เดือน พร้อมขีดจำกัดการใช้งานที่สูงขึ้น",
   "go.plans.go.feature1": "โมเดลคัดสรรในราคาคุ้มค่า",
@@ -811,6 +813,14 @@ export const dict = {
   "enterprise.form.email.placeholder": "jeff@amazon.com",
   "enterprise.form.phone.label": "หมายเลขโทรศัพท์",
   "enterprise.form.phone.placeholder": "+1 234 567 8900",
+  "enterprise.form.inferenceSpend.label": "ค่าใช้จ่ายด้าน AI inference รายเดือนในปัจจุบันของบริษัทคุณคือเท่าไร (USD)?",
+  "enterprise.form.inferenceSpend.placeholder": "เลือกช่วง (ไม่บังคับ)",
+  "enterprise.form.inferenceSpend.none": "ยังไม่มีค่าใช้จ่าย",
+  "enterprise.form.inferenceSpend.under1k": "ต่ำกว่า $1K",
+  "enterprise.form.inferenceSpend.1kTo10k": "$1K–$10K",
+  "enterprise.form.inferenceSpend.10kTo50k": "$10K–$50K",
+  "enterprise.form.inferenceSpend.50kTo100k": "$50K–$100K",
+  "enterprise.form.inferenceSpend.over100k": "$100K ขึ้นไป",
   "enterprise.form.message.label": "คุณกำลังพยายามแก้ปัญหาอะไร?",
   "enterprise.form.message.placeholder": "เราต้องการความช่วยเหลือเรื่อง...",
   "enterprise.form.send": "ส่ง",
@@ -819,6 +829,7 @@ export const dict = {
   "enterprise.form.success.submitted": "ส่งแบบฟอร์มสำเร็จแล้ว",
   "enterprise.form.error.allFieldsRequired": "จำเป็นต้องกรอกทุกช่อง",
   "enterprise.form.error.invalidEmailFormat": "รูปแบบอีเมลไม่ถูกต้อง",
+  "enterprise.form.error.invalidInferenceSpend": "เลือกช่วงค่าใช้จ่ายด้าน inference ที่ถูกต้อง",
   "enterprise.form.error.internalServer": "เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์",
   "enterprise.faq.title": "คำถามที่พบบ่อย",
   "enterprise.faq.q1": "OpenCode Enterprise คืออะไร?",

@@ -3,7 +3,9 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
-  "go.promo.spaceBunny": "Yeni anonim model Space Bunny Free sınırlı bir süre için kullanılabilir",
+  "go.referral.ended.label": "Uyarı",
+  "go.referral.ended":
+    "Tavsiye programı sona erdi. Tavsiye bağlantıları artık size veya bağlantıyı paylaşan kişiye kredi kazandırmıyor.",
   "go.graph.bonus": "{{count}}× kullanım",
   "nav.github": "GitHub",
   "nav.docs": "Dokümantasyon",
@@ -265,6 +267,7 @@ export const dict = {
   "go.meta.description":
     "Go ayda 10$'dır; cömert kullanım limitleri ve önde gelen kodlama modellerine güvenilir erişim sunar.",
   "go.hero.title": "Herkes için düşük maliyetli kodlama modelleri",
+  "go.hero.tagline": "Herhangi bir ajanla kullanın. Gerekirse kredi yükleyin. İstediğiniz zaman iptal edin.",
   "go.hero.body":
     "Go, dünya çapındaki programcılara ajan tabanlı kodlama getiriyor. En yetenekli açık kaynaklı modellere cömert limitler ve güvenilir erişim sunarak, maliyet veya erişilebilirlik konusunda endişelenmeden güçlü ajanlarla geliştirme yapmanızı sağlar.",
 
@@ -272,7 +275,7 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "Go'ya abone ol",
   "go.cta.price": "Ayda 10$",
-  "go.plans.month": "/ay",
+  "go.plans.month": "aylık",
   "go.plans.plus.cta": "Go Plus'a abone ol",
   "go.plans.plus.description": "Go Plus ayda 40$'dır ve daha yüksek limitler sunar.",
   "go.plans.go.feature1": "Seçilmiş, uygun fiyatlı modeller",
@@ -820,6 +823,14 @@ export const dict = {
   "enterprise.form.email.placeholder": "jeff@amazon.com",
   "enterprise.form.phone.label": "Telefon numarası",
   "enterprise.form.phone.placeholder": "+1 234 567 8900",
+  "enterprise.form.inferenceSpend.label": "Şirketinizin mevcut aylık çıkarım (inference) harcaması nedir (USD)?",
+  "enterprise.form.inferenceSpend.placeholder": "Bir aralık seçin (isteğe bağlı)",
+  "enterprise.form.inferenceSpend.none": "Henüz harcama yok",
+  "enterprise.form.inferenceSpend.under1k": "$1K altı",
+  "enterprise.form.inferenceSpend.1kTo10k": "$1K–$10K",
+  "enterprise.form.inferenceSpend.10kTo50k": "$10K–$50K",
+  "enterprise.form.inferenceSpend.50kTo100k": "$50K–$100K",
+  "enterprise.form.inferenceSpend.over100k": "$100K veya daha fazla",
   "enterprise.form.message.label": "Hangi problemi çözmeye çalışıyorsunuz?",
   "enterprise.form.message.placeholder": "Şu konuda yardıma ihtiyacımız var...",
   "enterprise.form.send": "Gönder",
@@ -828,6 +839,7 @@ export const dict = {
   "enterprise.form.success.submitted": "Form başarıyla gönderildi.",
   "enterprise.form.error.allFieldsRequired": "Tüm alanlar gereklidir.",
   "enterprise.form.error.invalidEmailFormat": "Geçersiz e-posta formatı.",
+  "enterprise.form.error.invalidInferenceSpend": "Geçerli bir çıkarım harcaması aralığı seçin.",
   "enterprise.form.error.internalServer": "İç sunucu hatası.",
   "enterprise.faq.title": "SSS",
   "enterprise.faq.q1": "OpenCode Enterprise nedir?",

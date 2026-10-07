@@ -3,7 +3,8 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
-  "go.promo.spaceBunny": "يتوفر Space Bunny Free، وهو نموذج مجهول جديد، لفترة محدودة",
+  "go.referral.ended.label": "تحذير",
+  "go.referral.ended": "انتهى برنامج الإحالة. لم تعد روابط الإحالة تمنح رصيدًا لك أو للشخص الذي شاركها.",
   "go.graph.bonus": "استخدام مضاعف {{count}} مرات",
   "nav.github": "GitHub",
   "nav.docs": "الوثائق",
@@ -260,6 +261,7 @@ export const dict = {
   "go.title": "OpenCode Go | نماذج برمجة منخفضة التكلفة للجميع",
   "go.meta.description": "يبلغ سعر Go ‏$10/شهر، مع حدود استخدام سخية ووصول موثوق إلى نماذج البرمجة الرائدة.",
   "go.hero.title": "نماذج برمجة منخفضة التكلفة للجميع",
+  "go.hero.tagline": "استخدمه مع أي وكيل. قم بزيادة الرصيد إذا لزم الأمر. الإلغاء في أي وقت.",
   "go.hero.body":
     "يجلب Go البرمجة الوكيلة للمبرمجين حول العالم. يوفر حدودًا سخية ووصولًا موثوقًا إلى أقوى النماذج مفتوحة المصدر، حتى تتمكن من البناء باستخدام وكلاء أقوياء دون القلق بشأن التكلفة أو التوفر.",
 
@@ -267,7 +269,7 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "اشترك في Go",
   "go.cta.price": "$10/شهر",
-  "go.plans.month": "/شهر",
+  "go.plans.month": "شهريًا",
   "go.plans.plus.cta": "الاشتراك في Go Plus",
   "go.plans.plus.description": "تبلغ تكلفة Go Plus ‏$40/شهر مع حدود استخدام أعلى.",
   "go.plans.go.feature1": "نماذج مختارة بأسعار معقولة",
@@ -805,6 +807,15 @@ export const dict = {
   "enterprise.form.email.placeholder": "jeff@amazon.com",
   "enterprise.form.phone.label": "رقم الهاتف",
   "enterprise.form.phone.placeholder": "+1 234 567 8900",
+  "enterprise.form.inferenceSpend.label":
+    "ما هو الإنفاق الشهري الحالي لشركتك على استدلال الذكاء الاصطناعي (بالدولار الأمريكي)؟",
+  "enterprise.form.inferenceSpend.placeholder": "اختر نطاقًا (اختياري)",
+  "enterprise.form.inferenceSpend.none": "لا يوجد إنفاق بعد",
+  "enterprise.form.inferenceSpend.under1k": "أقل من $1K",
+  "enterprise.form.inferenceSpend.1kTo10k": "$1K–$10K",
+  "enterprise.form.inferenceSpend.10kTo50k": "$10K–$50K",
+  "enterprise.form.inferenceSpend.50kTo100k": "$50K–$100K",
+  "enterprise.form.inferenceSpend.over100k": "$100K أو أكثر",
   "enterprise.form.message.label": "ما المشكلة التي تحاول حلها؟",
   "enterprise.form.message.placeholder": "نحتاج مساعدة في...",
   "enterprise.form.send": "إرسال",
@@ -813,6 +824,7 @@ export const dict = {
   "enterprise.form.success.submitted": "تم إرسال النموذج بنجاح.",
   "enterprise.form.error.allFieldsRequired": "جميع الحقول مطلوبة.",
   "enterprise.form.error.invalidEmailFormat": "تنسيق البريد الإلكتروني غير صالح.",
+  "enterprise.form.error.invalidInferenceSpend": "اختر نطاقًا صالحًا للإنفاق على الاستدلال.",
   "enterprise.form.error.internalServer": "خطأ داخلي في الخادم.",
   "enterprise.faq.title": "الأسئلة الشائعة",
   "enterprise.faq.q1": "ما هو OpenCode Enterprise؟",

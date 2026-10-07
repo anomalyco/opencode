@@ -3,7 +3,9 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
-  "go.promo.spaceBunny": "새로운 익명 모델 Space Bunny Free를 한정된 기간 동안 사용할 수 있습니다",
+  "go.referral.ended.label": "경고",
+  "go.referral.ended":
+    "추천 프로그램이 종료되었습니다. 추천 링크로는 더 이상 본인이나 링크를 공유한 사람에게 크레딧이 지급되지 않습니다.",
   "go.graph.bonus": "사용량 {{count}}배",
   "nav.github": "GitHub",
   "nav.docs": "문서",
@@ -258,6 +260,7 @@ export const dict = {
   "go.title": "OpenCode Go | 모두를 위한 저비용 코딩 모델",
   "go.meta.description": "Go는 월 $10이며, 넉넉한 사용 한도와 주요 코딩 모델에 대한 안정적인 액세스를 제공합니다.",
   "go.hero.title": "모두를 위한 저비용 코딩 모델",
+  "go.hero.tagline": "어떤 에이전트와도 사용할 수 있습니다. 필요하면 크레딧을 충전하세요. 언제든지 취소할 수 있습니다.",
   "go.hero.body":
     "Go는 전 세계 프로그래머들에게 에이전트 코딩을 제공합니다. 가장 유능한 오픈 소스 모델에 대한 넉넉한 한도와 안정적인 액세스를 제공하므로, 비용이나 가용성 걱정 없이 강력한 에이전트로 빌드할 수 있습니다.",
 
@@ -805,6 +808,14 @@ export const dict = {
   "enterprise.form.email.placeholder": "name@company.com",
   "enterprise.form.phone.label": "전화번호",
   "enterprise.form.phone.placeholder": "+1 234 567 8900",
+  "enterprise.form.inferenceSpend.label": "귀사의 현재 월간 AI 추론 비용(USD)은 얼마인가요?",
+  "enterprise.form.inferenceSpend.placeholder": "범위 선택 (선택 사항)",
+  "enterprise.form.inferenceSpend.none": "아직 지출 없음",
+  "enterprise.form.inferenceSpend.under1k": "$1K 미만",
+  "enterprise.form.inferenceSpend.1kTo10k": "$1K–$10K",
+  "enterprise.form.inferenceSpend.10kTo50k": "$10K–$50K",
+  "enterprise.form.inferenceSpend.50kTo100k": "$50K–$100K",
+  "enterprise.form.inferenceSpend.over100k": "$100K 이상",
   "enterprise.form.message.label": "어떤 문제를 해결하고 싶으신가요?",
   "enterprise.form.message.placeholder": "도움이 필요한 부분은...",
   "enterprise.form.send": "전송",
@@ -813,6 +824,7 @@ export const dict = {
   "enterprise.form.success.submitted": "양식이 성공적으로 제출되었습니다.",
   "enterprise.form.error.allFieldsRequired": "모든 필드는 필수 항목입니다.",
   "enterprise.form.error.invalidEmailFormat": "유효하지 않은 이메일 형식입니다.",
+  "enterprise.form.error.invalidInferenceSpend": "유효한 추론 비용 범위를 선택하세요.",
   "enterprise.form.error.internalServer": "내부 서버 오류입니다.",
   "enterprise.faq.title": "FAQ",
   "enterprise.faq.q1": "OpenCode 엔터프라이즈란 무엇인가요?",

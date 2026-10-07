@@ -3,7 +3,9 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
-  "go.promo.spaceBunny": "Space Bunny Free, un nouveau modèle anonyme, est disponible pour une durée limitée",
+  "go.referral.ended.label": "Avertissement",
+  "go.referral.ended":
+    "Le programme de parrainage est terminé. Les liens de parrainage ne donnent plus de crédit, ni à vous ni à la personne qui les a partagés.",
   "go.graph.bonus": "{{count}}× d’utilisation",
   "app.meta.description": "OpenCode - L'agent de code open source.",
   "nav.github": "GitHub",
@@ -267,6 +269,7 @@ export const dict = {
   "go.meta.description":
     "Go coûte 10 $/mois, avec des limites d'utilisation généreuses et un accès fiable aux principaux modèles de codage.",
   "go.hero.title": "Modèles de code à faible coût pour tous",
+  "go.hero.tagline": "Utilisable avec n'importe quel agent. Rechargez du crédit si besoin. Résiliez à tout moment.",
   "go.hero.body":
     "Go apporte le codage agentique aux programmeurs du monde entier. Offrant des limites généreuses et un accès fiable aux modèles open source les plus capables, pour que vous puissiez construire avec des agents puissants sans vous soucier du coût ou de la disponibilité.",
 
@@ -274,7 +277,7 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "S'abonner à Go",
   "go.cta.price": "10 $/mois",
-  "go.plans.month": "/mois",
+  "go.plans.month": "par mois",
   "go.plans.plus.cta": "S'abonner à Go Plus",
   "go.plans.plus.description": "Go Plus coûte 40 $/mois et offre des limites plus élevées.",
   "go.plans.go.feature1": "Modèles sélectionnés et abordables",
@@ -828,6 +831,15 @@ export const dict = {
   "enterprise.form.email.placeholder": "jeff@amazon.com",
   "enterprise.form.phone.label": "Téléphone",
   "enterprise.form.phone.placeholder": "+1 234 567 8900",
+  "enterprise.form.inferenceSpend.label":
+    "Quelles sont les dépenses mensuelles actuelles de votre entreprise en inférence (USD) ?",
+  "enterprise.form.inferenceSpend.placeholder": "Sélectionnez une tranche (facultatif)",
+  "enterprise.form.inferenceSpend.none": "Aucune dépense pour l'instant",
+  "enterprise.form.inferenceSpend.under1k": "Moins de $1K",
+  "enterprise.form.inferenceSpend.1kTo10k": "$1K–$10K",
+  "enterprise.form.inferenceSpend.10kTo50k": "$10K–$50K",
+  "enterprise.form.inferenceSpend.50kTo100k": "$50K–$100K",
+  "enterprise.form.inferenceSpend.over100k": "$100K ou plus",
   "enterprise.form.message.label": "Quel problème essayez-vous de résoudre ?",
   "enterprise.form.message.placeholder": "Nous avons besoin d'aide pour...",
   "enterprise.form.send": "Envoyer",
@@ -836,6 +848,7 @@ export const dict = {
   "enterprise.form.success.submitted": "Formulaire soumis avec succès.",
   "enterprise.form.error.allFieldsRequired": "Tous les champs sont requis.",
   "enterprise.form.error.invalidEmailFormat": "Format d'e-mail invalide.",
+  "enterprise.form.error.invalidInferenceSpend": "Sélectionnez une tranche de dépenses d'inférence valide.",
   "enterprise.form.error.internalServer": "Erreur interne du serveur.",
   "enterprise.faq.title": "FAQ",
   "enterprise.faq.q1": "Qu'est-ce que OpenCode Enterprise ?",

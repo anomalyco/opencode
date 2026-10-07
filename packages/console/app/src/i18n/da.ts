@@ -3,7 +3,9 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
-  "go.promo.spaceBunny": "Space Bunny Free, en ny anonym model, er tilgængelig i en begrænset periode",
+  "go.referral.ended.label": "Advarsel",
+  "go.referral.ended":
+    "Henvisningsprogrammet er afsluttet. Henvisningslinks giver ikke længere kredit til dig eller den, der delte dem.",
   "go.graph.bonus": "{{count}}× forbrug",
   "nav.github": "GitHub",
   "nav.docs": "Dokumentation",
@@ -263,6 +265,7 @@ export const dict = {
   "go.meta.description":
     "Go koster $10/måned, med generøse brugsgrænser og pålidelig adgang til førende kodningsmodeller.",
   "go.hero.title": "Kodningsmodeller til lav pris for alle",
+  "go.hero.tagline": "Brug med enhver agent. Tank op med kredit efter behov. Afmeld når som helst.",
   "go.hero.body":
     "Go bringer agentisk kodning til programmører over hele verden. Med generøse grænser og pålidelig adgang til de mest kapable open source-modeller, så du kan bygge med kraftfulde agenter uden at bekymre dig om omkostninger eller tilgængelighed.",
 
@@ -270,7 +273,7 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "Abonner på Go",
   "go.cta.price": "$10/måned",
-  "go.plans.month": "/måned",
+  "go.plans.month": "om måneden",
   "go.plans.plus.cta": "Abonnér på Go Plus",
   "go.plans.plus.description": "Go Plus koster $40/måned og giver højere brugsgrænser.",
   "go.plans.go.feature1": "Udvalgte, prisvenlige modeller",
@@ -813,6 +816,14 @@ export const dict = {
   "enterprise.form.email.placeholder": "jeff@amazon.com",
   "enterprise.form.phone.label": "Telefonnummer",
   "enterprise.form.phone.placeholder": "+1 234 567 8900",
+  "enterprise.form.inferenceSpend.label": "Hvad er jeres virksomheds nuværende månedlige forbrug på inferens (USD)?",
+  "enterprise.form.inferenceSpend.placeholder": "Vælg et interval (valgfrit)",
+  "enterprise.form.inferenceSpend.none": "Intet forbrug endnu",
+  "enterprise.form.inferenceSpend.under1k": "Under $1K",
+  "enterprise.form.inferenceSpend.1kTo10k": "$1K–$10K",
+  "enterprise.form.inferenceSpend.10kTo50k": "$10K–$50K",
+  "enterprise.form.inferenceSpend.50kTo100k": "$50K–$100K",
+  "enterprise.form.inferenceSpend.over100k": "$100K eller mere",
   "enterprise.form.message.label": "Hvilket problem prøver du at løse?",
   "enterprise.form.message.placeholder": "Vi har brug for hjælp med...",
   "enterprise.form.send": "Send",
@@ -821,6 +832,7 @@ export const dict = {
   "enterprise.form.success.submitted": "Formular indsendt med succes.",
   "enterprise.form.error.allFieldsRequired": "Alle felter er påkrævet.",
   "enterprise.form.error.invalidEmailFormat": "Ugyldigt e-mailformat.",
+  "enterprise.form.error.invalidInferenceSpend": "Vælg et gyldigt interval for inferensforbrug.",
   "enterprise.form.error.internalServer": "Intern serverfejl.",
   "enterprise.faq.title": "FAQ",
   "enterprise.faq.q1": "Hvad er OpenCode Enterprise?",

@@ -10,6 +10,7 @@ export const goModels = [
   { id: "kimi-k2.7-code", name: "Kimi K2.7 Code", requests: 1350, allowance: 60, featured: true },
   { id: "hy4-preview", name: "Hy4 preview", requests: 1350, allowance: 30 },
   { id: "gpt-5.6-luna", name: "GPT 5.6 Luna", requests: 2050, allowance: 15 },
+  { id: "space-bunny", name: "Space Bunny", requests: 3130, allowance: 30, featured: true, fresh: true },
   { id: "minimax-m3", name: "MiniMax M3", requests: 3200, allowance: 60, featured: true },
   { id: "mimo-v2.6-pro", name: "MiMo-V2.6-Pro", requests: 3250, allowance: 15, fresh: true },
   { id: "mimo-v2.5-pro", name: "MiMo-V2.5-Pro", requests: 3250, allowance: 15 },
@@ -55,15 +56,6 @@ export const goModels = [
     regions: true,
   },
   {
-    id: "space-bunny-free",
-    name: "Space Bunny Free",
-    requests: Infinity,
-    allowance: Infinity,
-    featured: true,
-    fresh: true,
-    limitedTime: true,
-  },
-  {
     id: "longcat-2.5-preview-free",
     name: "LongCat 2.5 Preview Free",
     requests: Infinity,
@@ -86,6 +78,7 @@ const plusLimits: Record<string, [number, number]> = {
   "kimi-k2.7-code": [4050, 180],
   "hy4-preview": [5400, 120],
   "gpt-5.6-luna": [8200, 60],
+  "space-bunny": [12500, 120],
   "minimax-m3": [9600, 180],
   "mimo-v2.6-pro": [13000, 60],
   "mimo-v2.5-pro": [13000, 60],
@@ -103,7 +96,6 @@ const plusLimits: Record<string, [number, number]> = {
   "mimo-v2.5": [60200, 120],
   "muse-spark-1.3-contributor": [90600, 120],
   "muse-spark-1.2-contributor": [90600, 120],
-  "space-bunny-free": [Infinity, Infinity],
   "longcat-2.5-preview-free": [Infinity, Infinity],
 }
 
