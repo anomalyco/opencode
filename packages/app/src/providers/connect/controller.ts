@@ -532,11 +532,13 @@ export function createProviderConnectionController(options: {
     authorization: () => store.authorization,
     browserFailed: () => store.browserFailed,
     // True while nothing useful can be shown yet: the integration is loading, a method is
-    // about to be picked automatically, or the authorization request is in flight.
+    // about to be picked automatically, the authorization request is in flight, or an external
+    // method, which has no view of its own, is refreshing the catalogs after saving.
     busy: () =>
       integration.loading ||
       (store.methodIndex === undefined && !store.auto && autoIndex() !== undefined) ||
-      store.state === "pending",
+      store.state === "pending" ||
+      (store.state === "refreshing" && currentMethod()?.type === "external"),
     auth: {
       state: () => store.state,
       error: () => store.error,
