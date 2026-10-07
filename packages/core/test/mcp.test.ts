@@ -269,6 +269,8 @@ function resourceMcpLayer(
   onFormCreated?: (form: Form.Info) => Effect.Effect<void>,
   options?: Mcp.Options,
   overrides?: {
+    configure?: boolean
+    publish?: Bus.Interface["publish"]
     entries?: Config.Interface["entries"]
     subscribe?: Bus.Interface["subscribe"]
     environment?: Layer.Layer<Environment.Service>
@@ -279,6 +281,7 @@ function resourceMcpLayer(
   const unusedIntegration = () => Effect.die("unused integration service")
   return Layer.effectDiscard(
     Effect.gen(function* () {
+      if (overrides?.configure === false) return
       const bus = yield* Bus.Service
       yield* ConfigMcpPlugin.register(bus.subscribe())
     }),
@@ -314,6 +317,7 @@ function resourceMcpLayer(
         Layer.mock(Bus.Service, {
           subscribe: overrides?.subscribe ?? (() => Stream.never),
           publish: (definition, data) => {
+            if (overrides?.publish) return overrides.publish(definition, data)
             const event = {
               id: ID.create(),
               type: definition.type,
@@ -2061,6 +2065,64 @@ shutdownIt.effect("discards in-flight and queued MCP notifications after its lay
     expect((yield* service.servers()).map((server) => server.name)).toEqual([Mcp.ServerName.make("fixture")])
   }),
 )
+
+for (const action of ["connect", "disconnect"] as const) {
+  test(`preserves ${action} while initial MCP reconciliation is still running`, async () => {
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const entered = yield* Deferred.make<void>()
+          const release = yield* Deferred.make<void>()
+          const dir = yield* tmpdirScoped()
+          const pids = path.join(dir.path, "mcp-pids")
+          yield* Effect.gen(function* () {
+            const service = yield* Mcp.Service
+            yield* Effect.addFinalizer(() => Deferred.succeed(release, undefined))
+            const configuring = yield* service
+              .transform((editor) => {
+                editor.set("gate", { type: "local", command: ["unused"], disabled: true })
+                editor.set("resources", {
+                  type: "local",
+                  command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-output-schema.ts"), pids],
+                })
+              })
+              .pipe(Effect.forkScoped({ startImmediately: true }))
+            yield* Deferred.await(entered)
+            yield* service[action]("resources")
+            yield* Deferred.succeed(release, undefined)
+            yield* Fiber.join(configuring)
+            // Join the initial startup task under the same lifecycle lock.
+            yield* service.disconnect("resources")
+            const started = yield* Effect.promise(async () =>
+              (await Bun.file(pids).exists()) ? (await Bun.file(pids).text()).trim().split("\n") : [],
+            )
+            expect(started).toHaveLength(action === "connect" ? 1 : 0)
+            for (const pid of started) expect(() => process.kill(Number(pid), 0)).toThrow()
+            expect((yield* service.servers()).find((server) => server.name === "resources")?.status.status).toBe(
+              "disabled",
+            )
+          }).pipe(
+            Effect.provide(
+              resourceMcpLayer("https://unused.example", undefined, undefined, {
+                configure: false,
+                publish: (definition, data) => {
+                  const event = { id: ID.create(), type: definition.type, data } as Payload<typeof definition>
+                  if (definition.type !== McpEvent.StatusChanged.type) return Effect.succeed(event)
+                  if (Schema.decodeUnknownSync(McpEvent.StatusChanged.data)(data).server !== "gate")
+                    return Effect.succeed(event)
+                  return Deferred.succeed(entered, undefined).pipe(
+                    Effect.andThen(Deferred.await(release)),
+                    Effect.as(event),
+                  )
+                },
+              }),
+            ),
+          )
+        }),
+      ),
+    )
+  })
+}
 
 test("serializes concurrent MCP lifecycle operations", async () => {
   await Effect.runPromise(
