@@ -705,7 +705,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     .add(
       HttpApiEndpoint.post("session.generate", "/api/session/:sessionID/generate", {
         params: { sessionID: Session.ID },
-        payload: Schema.Struct({ prompt: Schema.String }),
+        payload: Schema.Struct({ prompt: Schema.String, model: Model.Ref.pipe(Schema.optional) }),
         success: Schema.Struct({
           data: Schema.Struct({ text: Schema.String }),
         }).annotate({ identifier: "SessionGenerateResponse" }),
@@ -716,7 +716,8 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           OpenApi.annotations({
             identifier: "session.generate",
             summary: "Generate text from session context",
-            description: "Generate transient text from the current session context without mutating session history.",
+            description:
+              "Generate transient text from the current session context without mutating session history. An optional model overrides the session model for this request only; omitting it preserves the session model and its prompt-cache reuse opportunity.",
           }),
         ),
     )

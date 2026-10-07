@@ -6,6 +6,7 @@ import { Effect } from "effect"
 import { Database } from "../database/database.js"
 import { Instance } from "../instance/service.js"
 import { Plugin } from "../plugin/service.js"
+import type { Model } from "../model.js"
 import type { Instructions } from "../instructions/index.js"
 import { SessionContext } from "./context.js"
 import type { AgentNotFoundError } from "./error.js"
@@ -26,6 +27,7 @@ export type Error =
 export const generate = Effect.fn("SessionGenerate.generate")(function* (input: {
   session: SessionSchema.Info
   prompt: string
+  model?: Model.Ref
 }) {
   const instances = yield* Instance.Service
   const database = yield* Database.Service
@@ -35,7 +37,9 @@ export const generate = Effect.fn("SessionGenerate.generate")(function* (input: 
     yield* Plugin.awaitActivation
     const context = yield* SessionContext.Service
     const selection = yield* context.select(input.session.id)
-    const model = yield* context.resolveModel(selection.session)
+    const model = yield* context.resolveModel(
+      input.model === undefined ? selection.session : { ...selection.session, model: input.model },
+    )
     const history = yield* SessionHistory.preview(
       database.db,
       selection.session.id,

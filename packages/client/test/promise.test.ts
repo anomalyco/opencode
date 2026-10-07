@@ -959,7 +959,11 @@ test("session methods use the public HTTP contract", async () => {
     text: "Hello",
     resume: false,
   })
-  const generated = await client.session.generate({ sessionID: "ses_test", prompt: "Summarize this session" })
+  const generated = await client.session.generate({
+    sessionID: "ses_test",
+    prompt: "Summarize this session",
+    model: { providerID: "openai", id: "gpt-5-mini", variant: "low" },
+  })
   const synthetic = await client.session.synthetic({
     sessionID: "ses_test",
     text: "Completed",
@@ -971,7 +975,7 @@ test("session methods use the public HTTP contract", async () => {
   const context = await client.session.context({ sessionID: "ses_test" })
   const log = []
   for await (const item of client.session.log({ sessionID: "ses_test", after: 0 })) log.push(item)
-  const interrupted = await client.session.interrupt({ sessionID: "ses_test", continue: true })
+  const interrupted = await client.session.interrupt({ sessionID: "ses_test", resume: true })
   const message = await client.session.message.get({ sessionID: "ses_test", messageID: "msg_model" })
 
   expect(page.cursor.next).toBe("next")
@@ -980,6 +984,10 @@ test("session methods use the public HTTP contract", async () => {
   expect(created.id).toBe("ses_test")
   expect(admitted.id).toBe("msg_test")
   expect(generated.text).toBe("A transient answer")
+  expect(JSON.parse(String(requests.find((request) => request.url.endsWith("/generate"))?.init?.body))).toEqual({
+    prompt: "Summarize this session",
+    model: { providerID: "openai", id: "gpt-5-mini", variant: "low" },
+  })
   expect(interrupted).toEqual({ interrupted: true })
   expect(synthetic).toMatchObject({ type: "synthetic", data: { text: "Completed" }, delivery: "queue" })
   expect(context).toEqual([])
@@ -999,7 +1007,7 @@ test("session methods use the public HTTP contract", async () => {
     ["POST", "http://localhost:3000/api/experimental/session/ses_test/wait"],
     ["GET", "http://localhost:3000/api/session/ses_test/context"],
     ["GET", "http://localhost:3000/api/experimental/session/ses_test/log?after=0"],
-    ["POST", "http://localhost:3000/api/session/ses_test/interrupt?continue=true"],
+    ["POST", "http://localhost:3000/api/session/ses_test/interrupt?resume=true"],
     ["GET", "http://localhost:3000/api/session/ses_test/message/msg_model"],
   ])
   const viewBody = requests.find((request) => request.url.endsWith("/api/session/ses_test/view"))?.init?.body

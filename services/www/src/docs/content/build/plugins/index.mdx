@@ -766,6 +766,18 @@ const command = await ctx.session.command({ sessionID, command: "review", argume
 const synthetic = await ctx.session.synthetic({ sessionID, text: "Deployment completed" })
 ```
 
+`session.generate` uses the session's model by default, retaining the opportunity to reuse its prompt cache.
+Supply `model` to override it for one request without changing the session; switching models generally cannot reuse
+the existing model's cache.
+
+```ts
+const generated = await ctx.session.generate({
+  sessionID,
+  prompt: "Summarize this project",
+  model: { providerID: "openai", id: "gpt-5-mini" },
+})
+```
+
 Rename, interrupt, or wait for a session.
 
 ```ts

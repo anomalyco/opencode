@@ -51,6 +51,14 @@ it.live(
           limit: { context: 200_000, output: 8_192 },
         },
       )
+      const alternate = SessionRunnerModel.resolved(
+        LanguageModel.make({ id: "cheap-model", provider: "other", route: OpenAIChat.route }),
+        {
+          capabilities: { tools: true, input: ["text"], output: ["text"] },
+          cost: [],
+          limit: { context: 200_000, output: 8_192 },
+        },
+      )
       // Host and private instances must reuse the same global layer identities.
       const replacements: LayerNode.Replacements = [
         Global.node.replace(tempGlobalLayer),
@@ -61,7 +69,9 @@ it.live(
         Watcher.node.replace(Watcher.configured({ enabled: false })),
         llmClient.replace(Layer.succeed(LLMClient.Service, llm)),
         SessionRunnerModel.node.replace(
-          Layer.succeed(SessionRunnerModel.Service, { resolve: () => Effect.succeed(model) }),
+          Layer.succeed(SessionRunnerModel.Service, {
+            resolve: (session) => Effect.succeed(session.model?.id === alternate.ref.id ? alternate : model),
+          }),
         ),
         Instance.node.replace(
           makeGlobalNode({
@@ -234,6 +244,17 @@ it.live(
           tools: [config.tool],
         })),
       )
+
+      const selected = yield* sessions.get(first.id)
+      yield* llm.push(TestLLM.text("A cheaper answer", "cheap-generation"))
+      const generated = yield* request(`/api/session/${first.id}/generate`, {
+        prompt: "Summarize cheaply",
+        model: alternate.ref,
+      })
+      expect(generated.status).toBe(200)
+      expect(yield* Effect.promise(() => generated.json())).toEqual({ data: { text: "A cheaper answer" } })
+      expect((yield* llm.requests()).at(-1)?.model).toBe(alternate.model)
+      expect((yield* sessions.get(first.id)).model).toEqual(selected.model)
 
       // Seed through Core, then use HTTP to reach those exact private instances.
       const pending = yield* Effect.forEach(configs, (config) =>
