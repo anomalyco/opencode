@@ -1,16 +1,14 @@
 export * as SessionProjector from "./projector.js"
 
 import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, lte, or, sql } from "drizzle-orm"
-import { DateTime, Effect, Layer, Schema, Stream } from "effect"
+import { DateTime, Effect, Layer, Stream } from "effect"
 import path from "path"
 import { Database } from "../database/database.js"
 import { Bus } from "../bus.js"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
-import { Agent } from "@opencode/schema/agent"
-import { Model } from "@opencode/schema/model"
 import { SessionEvent } from "./event.js"
 import { SessionMessage } from "./message.js"
-import { SessionMessageUpdater } from "./message-updater.js"
+import { TranscriptProjection } from "./projection/transcript.js"
 import { SessionInbox } from "./inbox.js"
 import { Workspace } from "@opencode/schema/workspace"
 import { InstructionState } from "./instruction-state.js"
@@ -26,14 +24,6 @@ import type { SessionSchema } from "./schema.js"
 import { ProjectTable } from "../project/sql.js"
 
 type DatabaseService = Database.Interface["db"]
-type MessageEvent = Exclude<
-  SessionEvent.DurableEvent,
-  typeof SessionEvent.Forked.Type | typeof SessionEvent.Deleted.Type
->
-
-const decodeMessage = Schema.decodeUnknownSync(SessionMessage.Info)
-const encodeMessage = Schema.encodeSync(SessionMessage.Info)
-
 export class SessionAlreadyProjected extends Error {}
 
 type Usage = {
@@ -225,181 +215,6 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
     yield* InstructionState.initialize(db, event.data.sessionID, event.durable.seq, event.data.instructions)
 })
 
-function run(db: DatabaseService, event: MessageEvent) {
-  return Effect.gen(function* () {
-    const decodeRow = (row: typeof SessionMessageTable.$inferSelect) =>
-      decodeMessage({ ...row.data, id: row.id, type: row.type })
-    const updateMessage = (message: SessionMessage.Info) => {
-      const encoded = encodeMessage(message)
-      const { id, type, ...data } = encoded
-      return db
-        .update(SessionMessageTable)
-        .set({ type, time_created: DateTime.toEpochMillis(message.time.created), data })
-        .where(
-          and(
-            eq(SessionMessageTable.id, SessionMessage.ID.make(id)),
-            eq(SessionMessageTable.session_id, event.data.sessionID),
-          ),
-        )
-        .run()
-        .pipe(Effect.orDie)
-    }
-    const appendMessage = (message: SessionMessage.Info) => insertMessage(db, event, message)
-    const adapter: SessionMessageUpdater.Adapter = {
-      getAgent() {
-        return db
-          .select({ agent: SessionTable.agent })
-          .from(SessionTable)
-          .where(eq(SessionTable.id, event.data.sessionID))
-          .get()
-          .pipe(
-            Effect.orDie,
-            Effect.map((row) => (row?.agent ? Agent.ID.make(row.agent) : undefined)),
-          )
-      },
-      getModel() {
-        return db
-          .select({ model: SessionTable.model })
-          .from(SessionTable)
-          .where(eq(SessionTable.id, event.data.sessionID))
-          .get()
-          .pipe(
-            Effect.orDie,
-            Effect.map((row) => (row?.model ? Schema.decodeUnknownSync(Model.Ref)(row.model) : undefined)),
-          )
-      },
-      getLocation() {
-        return db
-          .select({
-            directory: SessionTable.directory,
-            workspaceID: SessionTable.workspace_id,
-            projectID: SessionTable.project_id,
-            subpath: SessionTable.path,
-          })
-          .from(SessionTable)
-          .where(eq(SessionTable.id, event.data.sessionID))
-          .get()
-          .pipe(
-            Effect.orDie,
-            Effect.map((row) =>
-              row
-                ? {
-                    location: {
-                      directory: AbsolutePath.make(row.directory),
-                      workspaceID: row.workspaceID ? Workspace.ID.make(row.workspaceID) : undefined,
-                    },
-                    projectID: row.projectID,
-                    subpath: row.subpath === null ? undefined : RelativePath.make(row.subpath),
-                  }
-                : undefined,
-            ),
-          )
-      },
-      getCurrentAssistant() {
-        return Effect.gen(function* () {
-          // A newer step supersedes stale incomplete rows; never resume an older assistant projection.
-          const row = yield* db
-            .select()
-            .from(SessionMessageTable)
-            .where(
-              and(eq(SessionMessageTable.session_id, event.data.sessionID), eq(SessionMessageTable.type, "assistant")),
-            )
-            .orderBy(desc(SessionMessageTable.seq))
-            .limit(1)
-            .get()
-            .pipe(Effect.orDie)
-          if (!row) return
-          const message = decodeRow(row)
-          return message.type === "assistant" && !message.time.completed ? message : undefined
-        })
-      },
-      getAssistant(messageID) {
-        return Effect.gen(function* () {
-          const row = yield* db
-            .select()
-            .from(SessionMessageTable)
-            .where(
-              and(
-                eq(SessionMessageTable.id, messageID),
-                eq(SessionMessageTable.session_id, event.data.sessionID),
-                eq(SessionMessageTable.type, "assistant"),
-              ),
-            )
-            .get()
-            .pipe(Effect.orDie)
-          if (!row) return
-          const message = decodeRow(row)
-          return message.type === "assistant" ? message : undefined
-        })
-      },
-      getShell(shellID) {
-        return Effect.gen(function* () {
-          const row = yield* db
-            .select()
-            .from(SessionMessageTable)
-            .where(
-              and(
-                eq(SessionMessageTable.session_id, event.data.sessionID),
-                eq(SessionMessageTable.type, "shell"),
-                sql`json_extract(${SessionMessageTable.data}, '$.shellID') = ${shellID}`,
-              ),
-            )
-            .orderBy(desc(SessionMessageTable.seq))
-            .limit(1)
-            .get()
-            .pipe(Effect.orDie)
-          if (!row) return
-          const message = decodeRow(row)
-          return message.type === "shell" ? message : undefined
-        })
-      },
-      getCompaction() {
-        return Effect.gen(function* () {
-          const row = yield* db
-            .select()
-            .from(SessionMessageTable)
-            .where(
-              and(
-                eq(SessionMessageTable.session_id, event.data.sessionID),
-                eq(SessionMessageTable.type, "compaction"),
-                sql`json_extract(${SessionMessageTable.data}, '$.status') = 'running'`,
-              ),
-            )
-            .orderBy(desc(SessionMessageTable.seq))
-            .limit(1)
-            .get()
-            .pipe(Effect.orDie)
-          if (!row) return
-          const message = decodeRow(row)
-          return message.type === "compaction" ? message : undefined
-        })
-      },
-      updateAssistant: updateMessage,
-      updateShell: updateMessage,
-      updateCompaction: updateMessage,
-      appendMessage,
-    }
-    yield* SessionMessageUpdater.update(adapter, event)
-  })
-}
-
-function insertMessage(db: DatabaseService, event: SessionEvent.DurableEvent, message: SessionMessage.Info) {
-  const encoded = encodeMessage(message)
-  const { id, type, ...data } = encoded
-  return db
-    .insert(SessionMessageTable)
-    .values({
-      id: SessionMessage.ID.make(id),
-      session_id: event.data.sessionID,
-      type,
-      seq: event.durable.seq,
-      time_created: DateTime.toEpochMillis(message.time.created),
-      data,
-    })
-    .run()
-    .pipe(Effect.orDie)
-}
-
 function projectIdle(
   db: DatabaseService,
   event:
@@ -408,7 +223,7 @@ function projectIdle(
     | typeof SessionEvent.Execution.Interrupted.Type,
 ) {
   return Effect.gen(function* () {
-    yield* run(db, event)
+    yield* TranscriptProjection.project(db, event)
     if (event.type === SessionEvent.Execution.Interrupted.type && event.data.reason === "shutdown") return
     const time = event.created
     const outcome =
@@ -465,7 +280,7 @@ const layer = Layer.effectDiscard(
     )
     yield* bus.project(SessionEvent.Moved, (event) =>
       Effect.gen(function* () {
-        yield* run(db, event)
+        yield* TranscriptProjection.project(db, event)
         yield* db
           .update(SessionTable)
           .set({
@@ -545,7 +360,7 @@ const layer = Layer.effectDiscard(
     )
     yield* bus.project(SessionEvent.AgentSelected, (event) =>
       Effect.gen(function* () {
-        yield* run(db, event)
+        yield* TranscriptProjection.project(db, event)
         yield* db
           .update(SessionTable)
           .set({ agent: event.data.agent, time_updated: event.created })
@@ -556,7 +371,7 @@ const layer = Layer.effectDiscard(
     )
     yield* bus.project(SessionEvent.ModelSelected, (event) =>
       Effect.gen(function* () {
-        yield* run(db, event)
+        yield* TranscriptProjection.project(db, event)
         yield* db
           .update(SessionTable)
           .set({ model: event.data.model, time_updated: event.created })
@@ -603,7 +418,7 @@ const layer = Layer.effectDiscard(
         .run()
         .pipe(Effect.orDie)
     })
-    yield* bus.project(SessionEvent.MessageContentUpdated, (event) => run(db, event))
+    yield* bus.project(SessionEvent.MessageContentUpdated, (event) => TranscriptProjection.project(db, event))
     yield* bus.project(SessionEvent.UsageRecorded, (event) => applyUsage(db, event.data.sessionID, event.data))
     yield* bus.project(SessionEvent.Forked, (event) => projectFork(db, event))
     yield* bus.project(SessionEvent.InboxDelivered, (event) =>
@@ -613,7 +428,7 @@ const layer = Layer.effectDiscard(
           sessionID: event.data.sessionID,
         })
         if (input.type === "compaction" || input.type === "move") return
-        yield* insertMessage(
+        yield* TranscriptProjection.appendAtEventSequence(
           db,
           event,
           input.type === "user"
@@ -673,47 +488,47 @@ const layer = Layer.effectDiscard(
     yield* bus.project(SessionEvent.Execution.Interrupted, (event) => projectIdle(db, event))
     yield* bus.project(SessionEvent.InstructionsUpdated, (event) =>
       Effect.gen(function* () {
-        yield* run(db, event)
+        yield* TranscriptProjection.project(db, event)
         yield* InstructionState.apply(db, event.data.sessionID, event.durable.seq, event.data.delta)
       }),
     )
-    yield* bus.project(SessionEvent.Synthetic, (event) => run(db, event))
-    yield* bus.project(SessionEvent.Skill.Activated, (event) => run(db, event))
-    yield* bus.project(SessionEvent.Shell.Started, (event) => run(db, event))
-    yield* bus.project(SessionEvent.Shell.Ended, (event) => run(db, event))
-    yield* bus.project(SessionEvent.Step.Started, (event) => run(db, event))
-    yield* bus.project(SessionEvent.Step.Streamed, (event) => run(db, event))
+    yield* bus.project(SessionEvent.Synthetic, (event) => TranscriptProjection.project(db, event))
+    yield* bus.project(SessionEvent.Skill.Activated, (event) => TranscriptProjection.project(db, event))
+    yield* bus.project(SessionEvent.Shell.Started, (event) => TranscriptProjection.project(db, event))
+    yield* bus.project(SessionEvent.Shell.Ended, (event) => TranscriptProjection.project(db, event))
+    yield* bus.project(SessionEvent.Step.Started, (event) => TranscriptProjection.project(db, event))
+    yield* bus.project(SessionEvent.Step.Streamed, (event) => TranscriptProjection.project(db, event))
     yield* bus.project(SessionEvent.Step.Ended, (event) =>
       Effect.gen(function* () {
-        yield* run(db, event)
+        yield* TranscriptProjection.project(db, event)
         yield* applyUsage(db, event.data.sessionID, event.data)
       }),
     )
     yield* bus.project(SessionEvent.Step.Failed, (event) =>
       Effect.gen(function* () {
-        yield* run(db, event)
+        yield* TranscriptProjection.project(db, event)
         if (event.data.cost !== undefined && event.data.tokens !== undefined)
           yield* applyUsage(db, event.data.sessionID, { cost: event.data.cost, tokens: event.data.tokens })
       }),
     )
-    yield* bus.project(SessionEvent.Text.Started, (event) => run(db, event))
-    yield* bus.project(SessionEvent.Text.Ended, (event) => run(db, event))
-    yield* bus.project(SessionEvent.Tool.Input.Started, (event) => run(db, event))
-    yield* bus.project(SessionEvent.Tool.Input.Ended, (event) => run(db, event))
-    yield* bus.project(SessionEvent.Tool.Called, (event) => run(db, event))
-    yield* bus.project(SessionEvent.Tool.Success, (event) => run(db, event))
-    yield* bus.project(SessionEvent.Tool.Failed, (event) => run(db, event))
-    yield* bus.project(SessionEvent.Reasoning.Started, (event) => run(db, event))
-    yield* bus.project(SessionEvent.Reasoning.Ended, (event) => run(db, event))
-    yield* bus.project(SessionEvent.RetryScheduled, (event) => run(db, event))
-    yield* bus.project(SessionEvent.Compaction.Started, (event) => run(db, event))
+    yield* bus.project(SessionEvent.Text.Started, (event) => TranscriptProjection.project(db, event))
+    yield* bus.project(SessionEvent.Text.Ended, (event) => TranscriptProjection.project(db, event))
+    yield* bus.project(SessionEvent.Tool.Input.Started, (event) => TranscriptProjection.project(db, event))
+    yield* bus.project(SessionEvent.Tool.Input.Ended, (event) => TranscriptProjection.project(db, event))
+    yield* bus.project(SessionEvent.Tool.Called, (event) => TranscriptProjection.project(db, event))
+    yield* bus.project(SessionEvent.Tool.Success, (event) => TranscriptProjection.project(db, event))
+    yield* bus.project(SessionEvent.Tool.Failed, (event) => TranscriptProjection.project(db, event))
+    yield* bus.project(SessionEvent.Reasoning.Started, (event) => TranscriptProjection.project(db, event))
+    yield* bus.project(SessionEvent.Reasoning.Ended, (event) => TranscriptProjection.project(db, event))
+    yield* bus.project(SessionEvent.RetryScheduled, (event) => TranscriptProjection.project(db, event))
+    yield* bus.project(SessionEvent.Compaction.Started, (event) => TranscriptProjection.project(db, event))
     yield* bus.project(SessionEvent.Compaction.Ended, (event) =>
       Effect.gen(function* () {
-        yield* run(db, event)
+        yield* TranscriptProjection.project(db, event)
         yield* InstructionState.advanceEpoch(db, event.data.sessionID, event.durable.seq)
       }),
     )
-    yield* bus.project(SessionEvent.Compaction.Failed, (event) => run(db, event))
+    yield* bus.project(SessionEvent.Compaction.Failed, (event) => TranscriptProjection.project(db, event))
     yield* bus.project(SessionEvent.RevertEvent.Staged, (event) =>
       Effect.gen(function* () {
         const revert = event.data.revert
