@@ -364,19 +364,6 @@ export function make(
           ? (loaded.resource ?? resolveResourceName(provider.settings))
           : resolveResourceName(provider.settings, loaded.resource)
 
-      // Azure CLI connections used to be OAuth credentials holding a copy of the CLI's token; they now reference the
-      // CLI as an external credential source.
-      yield* Effect.forEach(
-        (yield* credentials.list(Integration.ID.make("azure"))).filter(
-          (item) => item.value.type === "oauth" && item.value.methodID === methodID,
-        ),
-        (item) =>
-          credentials.update(item.id, {
-            value: Credential.External.make({ type: "external", methodID, metadata: item.value.metadata }),
-          }),
-        { discard: true },
-      )
-
       Object.assign(loaded, yield* load())
 
       // Lists the resources the Azure CLI account can reach in the background, so the connect form can offer them

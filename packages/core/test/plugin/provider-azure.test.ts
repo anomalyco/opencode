@@ -308,29 +308,6 @@ describe("AzurePlugin connecting", () => {
       expect(listed.custom).toBeUndefined()
     }),
   )
-
-  it.effect("moves Azure CLI connections saved as OAuth credentials to external credentials", () =>
-    Effect.gen(function* () {
-      yield* setEnv({ PATH: "/nonexistent" })
-      yield* seedProvider()
-      const legacy = yield* connect(
-        Credential.OAuth.make({
-          type: "oauth",
-          methodID: Integration.MethodID.make("azure-cli"),
-          access: "stored-token",
-          refresh: "azure-cli",
-          expires: Date.now() + hour,
-          metadata: { resourceName: "test-resource" },
-        }),
-      )
-      yield* addPlugin()
-
-      const credentials = yield* Credential.Service
-      expect(required(yield* credentials.get(legacy.id)).value).toEqual(cliCredential())
-      const providers = yield* Provider.Service
-      expect(required(yield* providers.get(Provider.ID.azure)).settings?.resourceName).toBe("test-resource")
-    }),
-  )
 })
 
 describe("AzurePlugin startup", () => {
