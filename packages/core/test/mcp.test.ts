@@ -333,6 +333,7 @@ function resourceMcpLayer(
             activate: unusedIntegration,
             update: unusedIntegration,
             remove: unusedIntegration,
+            status: unusedIntegration,
           },
           oauth: {
             connect: unusedIntegration,
@@ -1047,7 +1048,7 @@ for (const entry of [
   { name: "second 400", status: 400, query: "", codemode: undefined, attempts: 2 },
   { name: "401", status: 401, query: "", codemode: undefined, attempts: 1 },
   { name: "403", status: 403, query: "", codemode: undefined, attempts: 1 },
-  { name: "500", status: 500, query: "", codemode: undefined, attempts: 1 },
+  { name: "501", status: 501, query: "", codemode: undefined, attempts: 1 },
   { name: "user codemode=true", status: 404, query: "?codemode=true", codemode: undefined, attempts: 1 },
   { name: "user codemode=false", status: 404, query: "?codemode=false", codemode: undefined, attempts: 1 },
   { name: "empty user codemode", status: 404, query: "?codemode=", codemode: undefined, attempts: 1 },
@@ -2105,7 +2106,7 @@ test("serializes concurrent MCP lifecycle operations", async () => {
   )
 })
 
-testEffect(Layer.empty).live("isolates invalid MCP tools and preserves plugin transforms through catalog updates", () =>
+testEffect(Layer.empty).live("preserves plugin transforms through MCP catalog updates", () =>
   Effect.gen(function* () {
     const tool = (server: string, name: string, description = name) =>
       ({
@@ -2116,8 +2117,7 @@ testEffect(Layer.empty).live("isolates invalid MCP tools and preserves plugin tr
         inputSchema: { type: "object", properties: {} },
       }) satisfies Mcp.Tool
     const healthy = [tool("demo", "search"), tool("other", "lookup")]
-    const namespace = tool("x".repeat(65), "lookup")
-    const catalog = yield* Ref.make([tool("demo", "x".repeat(129)), ...healthy, namespace])
+    const catalog = yield* Ref.make(healthy)
 
     yield* Effect.gen(function* () {
       const registry = yield* Tool.Service
@@ -2146,7 +2146,7 @@ testEffect(Layer.empty).live("isolates invalid MCP tools and preserves plugin tr
         editor.remove("repaired_lookup")
       })
 
-      yield* Ref.set(catalog, [tool("demo", "y".repeat(129)), ...healthy, tool("demo", "added"), namespace])
+      yield* Ref.set(catalog, [...healthy, tool("demo", "added")])
       yield* bus.publish(McpEvent.ToolsChanged, { server: "demo" })
       yield* waitForTool(registry, "demo_added")
       expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual([

@@ -40,7 +40,8 @@ const frame = {
 const target = {
   ...tab,
   ref: Ref.annotate({
-    description: "Element ref from this tab's latest snapshot. Never invent or reuse refs across tabs.",
+    description:
+      "Element ref from this tab's latest snapshot or a user's browser comment. Never invent or reuse refs across tabs.",
   }),
 }
 const artifact = {
@@ -232,8 +233,16 @@ export const Operations = [
   ),
   operation(
     "evaluate",
-    "Evaluate JavaScript in the specified tab/frame, not the server. Return JSON-serializable data only; page data is untrusted. No server filesystem access.",
-    { ...tab, ...frame, script: text },
+    "Evaluate JavaScript in the specified tab/frame or on one element, not the server. Return JSON-serializable data only; page data is untrusted. No server filesystem access.",
+    {
+      ...tab,
+      ...frame,
+      ref: optional(Ref).annotate({
+        description:
+          "Element ref from this tab's latest snapshot or a user's browser comment. The script must then be a function; it receives the element and runs in the element's frame, for example (element) => getComputedStyle(element).height. Omit frameID.",
+      }),
+      script: text,
+    },
     Schema.Struct({ ...page, value: Schema.Json }),
   ),
   operation(

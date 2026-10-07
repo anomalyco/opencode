@@ -17,15 +17,18 @@ import {
 import { SessionPreview } from "./story-model"
 
 const description = "opencode · modular-session-ui"
+
 const retryAfterInterruption = {
   ...retryDocument,
   messages: [
     ...compactionDocument.messages,
     ...retryDocument.messages.map((message, index) => {
       const created = STORY_TIME + 70_000 + index * 1_000
+
       if (message.type !== "assistant" || !message.retry) {
         return { ...message, time: { ...message.time, created } }
       }
+
       return {
         ...message,
         time: { ...message.time, created },
@@ -34,6 +37,7 @@ const retryAfterInterruption = {
     }),
   ],
 }
+
 const implementAndVerify = () => (
   <SessionPreview
     title="Update active Session status"

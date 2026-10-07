@@ -4,6 +4,8 @@ export type WindowBootstrap = {
   id: string
   firstLaunchPending?: boolean
   defaultServerUrl?: string | null
+  /** The app runs packaged (`app.isPackaged`), as extensions' `Build.packaged` reports in both processes. */
+  packaged?: boolean
 }
 
 const prefix = "--opencode-window="
@@ -14,6 +16,8 @@ export function windowBootstrapArgument(bootstrap: WindowBootstrap) {
 
 export function windowBootstrapFromArguments(args: readonly string[]): WindowBootstrap {
   const value = args.find((arg) => arg.startsWith(prefix))?.slice(prefix.length)
+
   if (!value) throw new Error("Window bootstrap argument not found")
+
   return JSON.parse(decodeURIComponent(value))
 }

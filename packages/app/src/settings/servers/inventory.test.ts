@@ -1,19 +1,23 @@
 import { describe, expect, test } from "bun:test"
 import { ServerConnection } from "@/runtime/server/registry"
-import type { SshItem } from "@/servers/ssh/types"
+import type { ExtensionServer } from "@/runtime/extension/servers"
 import { settingsProjects, settingsServers } from "./inventory"
 
-const ssh: SshItem = {
-  config: { id: "build", target: "dev@example.com", name: "Build server" },
-  saved: true,
-  stage: "disconnected",
-  detail: "",
+const ssh: ExtensionServer = {
+  key: "ssh:build",
+  extension: "ssh",
+  entry: { id: "build", name: "Build server", state: "stopped" },
 }
-const connection: ServerConnection.Ssh = {
-  type: "ssh",
-  id: ssh.config.id,
-  host: ssh.config.target,
-  displayName: ssh.config.name,
+
+const connection: ServerConnection.Extension = {
+  type: "extension",
+  key: "ssh:build",
+  extension: "ssh",
+  state: "stopped",
+  connecting: false,
+  authenticationRequired: false,
+  managed: true,
+  displayName: "Build server",
   http: { url: "http://127.0.0.1:4000", password: "secret" },
 }
 
@@ -28,7 +32,9 @@ test("settings project inventory reads metadata without acquiring directory stor
     sandboxes: [],
     worktrees: [],
   }))
+
   const tracked = { ...projects[0], expanded: true, icon: { override: "local-icon" } }
+
   const inventory = settingsProjects({
     projects: { list: () => [tracked], closed: () => [projects[1].worktree] },
     sync: { data: { project: projects } },
@@ -42,31 +48,26 @@ test("settings project inventory reads metadata without acquiring directory stor
 })
 
 describe("settings server inventory", () => {
-  test("includes saved SSH servers before they connect", () => {
-    expect(settingsServers([], [], [ssh])).toEqual([
+  test("includes contributed servers before they connect", () => {
+    expect(settingsServers([], [ssh])).toEqual([
       {
         key: ServerConnection.Key.make("ssh:build"),
         name: "Build server",
-        ssh,
+        source: ssh,
       },
     ])
   })
 
-  test("joins ready SSH state to its live connection", () => {
-    const ready = { ...ssh, stage: "ready" as const }
-    expect(settingsServers([connection], [], [ready])).toEqual([
+  test("joins a ready contributed server to its live connection and withholds it while disconnected", () => {
+    const ready = { ...ssh, entry: { ...ssh.entry, state: "ready" as const } }
+    expect(settingsServers([connection], [ready])).toEqual([
       {
         key: ServerConnection.Key.make("ssh:build"),
         name: "Build server",
         connection,
-        ssh: ready,
-        wsl: undefined,
+        source: ready,
       },
     ])
-  })
-
-  test("omits unsaved SSH state and withholds stale connections while disconnected", () => {
-    expect(settingsServers([], [], [{ ...ssh, saved: false }])).toEqual([])
-    expect(settingsServers([connection], [], [ssh])[0].connection).toBeUndefined()
+    expect(settingsServers([connection], [ssh])[0].connection).toBeUndefined()
   })
 })

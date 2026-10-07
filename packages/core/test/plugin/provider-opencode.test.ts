@@ -6,6 +6,7 @@ import { Money } from "@opencode/schema/money"
 import { Effect, Layer, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { Agent } from "@opencode/core/agent"
 import { App } from "@opencode/core/app"
 import { Config } from "@opencode/core/config"
 import { ConfigPolicyPlugin } from "@opencode/core/config/plugin/policy"
@@ -16,9 +17,11 @@ import { Mcp } from "@opencode/core/mcp/index"
 import { Model } from "@opencode/core/model"
 import { ModelResolver } from "@opencode/core/model-resolver"
 import { Plugin } from "@opencode/core/plugin"
+import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { OpencodePlugin } from "@opencode/core/plugin/provider/opencode"
 import { Provider } from "@opencode/core/provider"
+import { Session } from "@opencode/core/session"
 import { WebSearch } from "@opencode/core/websearch"
 import { withEnv } from "../fixture/env"
 import { emptyMcp } from "../fixture/mcp"
@@ -895,6 +898,290 @@ describe("OpencodePlugin", () => {
             (current) => current.organization === undefined,
           )
           expect(managed.current()).toEqual({ statements: [], organization: undefined })
+        }),
+      ({ server }) => Effect.promise(() => server.stop(true)),
+    ),
+  )
+
+  it.effect("reports Console SSO sign-in, keeps the last config, and clears once Console accepts again", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const state = { sso: false }
+        const server = Bun.serve({
+          port: 0,
+          fetch: () => {
+            if (state.sso)
+              return Response.json(
+                { _tag: "SsoRequired", orgId: "org_acme", connectionId: "ssoconn/1" },
+                { status: 403 },
+              )
+            return Response.json({
+              providers: {},
+              experimental: { policies: [{ action: "permission", resource: "shell:sudo *", effect: "deny" }] },
+            })
+          },
+        })
+        return { server, state }
+      }),
+      ({ server, state }) =>
+        Effect.gen(function* () {
+          const credentials = yield* Credential.Service
+          const integrations = yield* Integration.Service
+          const managed = yield* ManagedPolicy.Service
+          const status = () =>
+            integrations
+              .get(Integration.ID.make("opencode"))
+              .pipe(Effect.map((integration) => integration?.connections[0]?.status))
+          const sudo: ConfigPolicy.Info = { action: "permission", resource: "shell:sudo *", effect: "deny" }
+          yield* credentials.create({
+            integrationID: Integration.ID.make("opencode"),
+            value: Credential.Key.make({
+              type: "key",
+              key: "secret",
+              metadata: { server: `${server.url.origin}/console`, orgID: "org_acme", orgName: "Acme" },
+            }),
+          })
+          yield* addPlugin()
+          yield* drain
+          expect(yield* status()).toBeUndefined()
+
+          state.sso = true
+          yield* TestClock.adjust("1 minute")
+          yield* drain
+          const url = `${server.url.origin}/console/auth/sso/ssoconn%2F1/start?redirectTo=%2Fconsole%2F`
+          expect(yield* status()).toEqual({ status: "needs_auth", message: "Sign in with SSO again to use Acme", url })
+          expect(managed.current()).toEqual({ statements: [sudo], organization: "Acme" })
+
+          state.sso = false
+          yield* TestClock.adjust("1 minute")
+          yield* drain
+          expect(yield* status()).toBeUndefined()
+          expect(managed.current()).toEqual({ statements: [sudo], organization: "Acme" })
+        }),
+      ({ server }) => Effect.promise(() => server.stop(true)),
+    ),
+  )
+
+  it.live("explains rejected Console inference with the sign-in the connection needs", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const state = { sso: false }
+        const server = Bun.serve({
+          port: 0,
+          fetch: () => {
+            if (state.sso)
+              return Response.json(
+                { _tag: "SsoRequired", orgId: "org_acme", connectionId: "ssoconn_1" },
+                { status: 403 },
+              )
+            return Response.json({ providers: { remote: { canonical: "openai" } } })
+          },
+        })
+        return { server, state }
+      }),
+      ({ server, state }) =>
+        Effect.gen(function* () {
+          const credentials = yield* Credential.Service
+          const hooks = yield* PluginHooks.Service
+          yield* credentials.create({
+            integrationID: Integration.ID.make("opencode"),
+            value: Credential.Key.make({
+              type: "key",
+              key: "secret",
+              metadata: { server: server.url.origin, orgID: "org_acme", orgName: "Acme" },
+            }),
+          })
+          yield* addPlugin()
+          const rejected = (providerID: Provider.ID) =>
+            hooks
+              .trigger("session", "http.response", {
+                sessionID: Session.ID.make("ses_console"),
+                agent: Agent.ID.make("build"),
+                model: Model.Ref.make({ providerID, id: Model.ID.make("model") }),
+                kind: "primary",
+                request: new Request("https://inference.example/v1/responses"),
+                response: Response.json({ error: { message: "Workspace access denied" } }, { status: 403 }),
+              })
+              .pipe(
+                Effect.flatMap((event) =>
+                  Effect.promise(async () => ({ status: event.response.status, body: await event.response.json() })),
+                ),
+              )
+          const denied = { status: 403, body: { error: { message: "Workspace access denied" } } }
+
+          expect(yield* rejected(Provider.ID.make("remote"))).toEqual(denied)
+
+          state.sso = true
+          const explained = {
+            status: 403,
+            body: {
+              error: {
+                type: "authentication_error",
+                message: "Sign in with SSO again to use Acme.",
+              },
+            },
+          }
+          expect(yield* rejected(Provider.ID.make("remote"))).toEqual(explained)
+          expect(yield* rejected(Provider.ID.opencode)).toEqual(explained)
+          expect(yield* rejected(Provider.ID.anthropic)).toEqual(denied)
+        }),
+      ({ server }) => Effect.promise(() => server.stop(true)),
+    ),
+  )
+
+  it.effect("ignores 403 responses that are not a Console SSO error", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const state: { body: Response | undefined } = { body: undefined }
+        const server = Bun.serve({
+          port: 0,
+          fetch: () =>
+            state.body ??
+            Response.json({
+              providers: {},
+              experimental: { policies: [{ action: "permission", resource: "shell:sudo *", effect: "deny" }] },
+            }),
+        })
+        return { server, state }
+      }),
+      ({ server, state }) =>
+        Effect.gen(function* () {
+          const credentials = yield* Credential.Service
+          const integrations = yield* Integration.Service
+          const managed = yield* ManagedPolicy.Service
+          const sudo: ConfigPolicy.Info = { action: "permission", resource: "shell:sudo *", effect: "deny" }
+          yield* credentials.create({
+            integrationID: Integration.ID.make("opencode"),
+            value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: server.url.origin } }),
+          })
+          yield* addPlugin()
+          yield* drain
+
+          for (const body of [
+            () => new Response("<html>Forbidden</html>", { status: 403, headers: { "content-type": "text/html" } }),
+            () => Response.json({ _tag: "Forbidden", orgId: "org", connectionId: "ssoconn" }, { status: 403 }),
+          ]) {
+            state.body = body()
+            yield* TestClock.adjust("1 minute")
+            yield* drain
+            expect((yield* integrations.get(Integration.ID.make("opencode")))?.connections[0]?.status).toBeUndefined()
+            expect(managed.current().statements).toEqual([sudo])
+          }
+        }),
+      ({ server }) => Effect.promise(() => server.stop(true)),
+    ),
+  )
+
+  it.effect("releases unread Console config responses when the fetch completes", () =>
+    Effect.gen(function* () {
+      const credentials = yield* Credential.Service
+      const signals: AbortSignal[] = []
+      const state = { status: 404 }
+      const http = HttpClient.make((request, _url, signal) => {
+        signals.push(signal)
+        return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("unavailable", state)))
+      })
+      yield* credentials.create({
+        integrationID: Integration.ID.make("opencode"),
+        value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: "https://console.test" } }),
+      })
+      yield* addPlugin().pipe(Effect.provideService(HttpClient.HttpClient, http))
+      yield* drain
+      state.status = 503
+      yield* TestClock.adjust("1 minute")
+      yield* drain
+
+      // An unreleased response is only aborted when garbage collected, which fails outside a request on workerd.
+      expect(signals.map((signal) => signal.aborted)).toEqual([true, true])
+    }),
+  )
+
+  it.effect("reports a rejected Console refresh token as signed out without removing the credential", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() =>
+        Bun.serve({
+          port: 0,
+          fetch: (request) => {
+            if (new URL(request.url).pathname === "/auth/device/token")
+              return Response.json(
+                { error: "invalid_grant", error_description: "refresh token revoked" },
+                { status: 400 },
+              )
+            return Response.json({ providers: {} })
+          },
+        }),
+      ),
+      (server) =>
+        Effect.gen(function* () {
+          const credentials = yield* Credential.Service
+          const integrations = yield* Integration.Service
+          const credential = yield* credentials.create({
+            integrationID: Integration.ID.make("opencode"),
+            value: Credential.OAuth.make({
+              type: "oauth",
+              methodID: Integration.MethodID.make("device"),
+              access: "expired",
+              refresh: "revoked",
+              expires: 0,
+              metadata: { server: server.url.origin, orgID: "org_acme", orgName: "Acme" },
+            }),
+          })
+          yield* addPlugin()
+          yield* drain
+
+          expect((yield* integrations.get(Integration.ID.make("opencode")))?.connections[0]?.status).toEqual({
+            status: "needs_auth",
+            message: "Reconnect OpenCode Console to continue",
+          })
+          expect((yield* credentials.get(credential.id))?.value).toMatchObject({ refresh: "revoked" })
+        }),
+      (server) => Effect.promise(() => server.stop(true)),
+    ),
+  )
+
+  it.effect("reports a Console session rejected before its token expires as signed out", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const state = { revoked: true, refreshes: 0 }
+        const server = Bun.serve({
+          port: 0,
+          fetch: (request) => {
+            if (new URL(request.url).pathname === "/auth/device/token") state.refreshes++
+            if (state.revoked)
+              return Response.json({ _tag: "Unauthorized", message: "Invalid or expired session" }, { status: 401 })
+            return Response.json({ providers: {} })
+          },
+        })
+        return { server, state }
+      }),
+      ({ server, state }) =>
+        Effect.gen(function* () {
+          const credentials = yield* Credential.Service
+          const integrations = yield* Integration.Service
+          const credential = yield* credentials.create({
+            integrationID: Integration.ID.make("opencode"),
+            value: Credential.OAuth.make({
+              type: "oauth",
+              methodID: Integration.MethodID.make("device"),
+              access: "revoked",
+              refresh: "refresh",
+              expires: Number.MAX_SAFE_INTEGER,
+              metadata: { server: server.url.origin, orgID: "org_acme", orgName: "Acme" },
+            }),
+          })
+          const status = () =>
+            integrations.get(Integration.ID.make("opencode")).pipe(Effect.map((item) => item?.connections[0]?.status))
+          yield* addPlugin()
+          yield* drain
+
+          expect(yield* status()).toEqual({ status: "needs_auth", message: "Reconnect OpenCode Console to continue" })
+          expect((yield* credentials.get(credential.id))?.value).toMatchObject({ access: "revoked" })
+
+          state.revoked = false
+          yield* TestClock.adjust("1 minute")
+          yield* drain
+          expect(yield* status()).toBeUndefined()
+          expect(state.refreshes).toBe(0)
         }),
       ({ server }) => Effect.promise(() => server.stop(true)),
     ),

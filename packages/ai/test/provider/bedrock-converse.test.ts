@@ -21,7 +21,6 @@ import {
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import { AmazonBedrock } from "../../src/providers.js"
-import * as BedrockConverse from "../../src/protocols/bedrock-converse.js"
 import { it } from "../lib/effect.js"
 import { withProcessEnv } from "../lib/env.js"
 import { dynamicResponse, fixedResponse } from "../lib/http.js"
@@ -501,25 +500,23 @@ describe("Bedrock Converse route", () => {
         LLM.request({ model, messages: [Message.assistant([call])], cache: "none" }),
       )
 
-      expect(prepared.body.messages).toEqual([
-        {
-          role: "assistant",
-          content: [
-            {
-              toolUse: {
-                toolUseId: "tool_1",
-                name: "edit",
-                input: {
-                  path: "file.ts",
-                  edits: [{ oldText: "a", newText: "b" }, null, true, 7, "text", ["kept", { nested: { value: "ok" } }]],
-                  nested: { empty: {}, onlyEmpty: {} },
-                  " ": "preserve whitespace key",
-                },
+      expect(prepared.body.messages[0]).toEqual({
+        role: "assistant",
+        content: [
+          {
+            toolUse: {
+              toolUseId: "tool_1",
+              name: "edit",
+              input: {
+                path: "file.ts",
+                edits: [{ oldText: "a", newText: "b" }, null, true, 7, "text", ["kept", { nested: { value: "ok" } }]],
+                nested: { empty: {}, onlyEmpty: {} },
+                " ": "preserve whitespace key",
               },
             },
-          ],
-        },
-      ])
+          },
+        ],
+      })
       expect(input).toEqual(original)
       expect(call.input).toBe(input)
     }),
@@ -540,15 +537,13 @@ describe("Bedrock Converse route", () => {
         }),
       )
 
-      expect(prepared.body.messages).toEqual([
-        {
-          role: "assistant",
-          content: [
-            { toolUse: { toolUseId: "tool_empty_key", name: "first", input: {} } },
-            { toolUse: { toolUseId: "tool_empty_object", name: "second", input: {} } },
-          ],
-        },
-      ])
+      expect(prepared.body.messages[0]).toEqual({
+        role: "assistant",
+        content: [
+          { toolUse: { toolUseId: "tool_empty_key", name: "first", input: {} } },
+          { toolUse: { toolUseId: "tool_empty_object", name: "second", input: {} } },
+        ],
+      })
     }),
   )
 
@@ -647,6 +642,177 @@ describe("Bedrock Converse route", () => {
               },
             ],
           },
+        ],
+      })
+    }),
+  )
+
+  it.effect("hoists tool-result images beside the result for Bedrock GPT models", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: AmazonBedrock.configure({ baseURL: "https://bedrock-runtime.test", apiKey: "test-bearer" }).model(
+            "global.openai.gpt-6-sol",
+          ),
+          messages: [
+            Message.user("What is in this image?"),
+            Message.assistant([ToolCallPart.make({ id: "tool_1", name: "read", input: {} })]),
+            Message.tool({
+              id: "tool_1",
+              name: "read",
+              result: {
+                type: "content",
+                value: [
+                  { type: "text", text: "Image loaded." },
+                  { type: "file", uri: "data:image/png;base64,AAAA", mime: "image/png" },
+                  { type: "file", uri: "data:application/pdf;base64,QkI=", mime: "application/pdf", name: "note.pdf" },
+                ],
+              },
+            }),
+          ],
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.messages[2]).toEqual({
+        role: "user",
+        content: [
+          {
+            toolResult: {
+              toolUseId: "tool_1",
+              content: [
+                { text: "Image loaded." },
+                { text: 'Attached file "note.pdf" has document label "note".' },
+                { document: { format: "pdf", name: "note", source: { bytes: "QkI=" } } },
+              ],
+              status: "success",
+            },
+          },
+          { image: { format: "png", source: { bytes: "AAAA" } } },
+        ],
+      })
+    }),
+  )
+
+  it.effect("hoists tool-result images for other Bedrock model families", () =>
+    Effect.gen(function* () {
+      for (const id of [
+        "qwen.qwen3-vl-235b-a22b",
+        "global.xai.grok-4.7",
+        "global.moonshotai.kimi-k3",
+        "us.meta.llama4-scout-17b-instruct-v1:0",
+      ]) {
+        const prepared = yield* compileRequest(
+          LLM.request({
+            model: AmazonBedrock.configure({ baseURL: "https://bedrock-runtime.test", apiKey: "test-bearer" }).model(
+              id,
+            ),
+            messages: [
+              Message.assistant([ToolCallPart.make({ id: "tool_1", name: "read", input: {} })]),
+              Message.tool({
+                id: "tool_1",
+                name: "read",
+                result: {
+                  type: "content",
+                  value: [{ type: "file", uri: "data:image/png;base64,AAAA", mime: "image/png" }],
+                },
+              }),
+            ],
+            cache: "none",
+          }),
+        )
+        expect(prepared.body.messages[1]).toEqual({
+          role: "user",
+          content: [
+            { toolResult: { toolUseId: "tool_1", content: [{ text: "See attached image." }], status: "success" } },
+            { image: { format: "png", source: { bytes: "AAAA" } } },
+          ],
+        })
+      }
+    }),
+  )
+  ;["global.anthropic.claude-sonnet-4-5-20250929-v1:0", "us.amazon.nova-pro-v1:0"].forEach((id) => {
+    it.effect(`keeps ${id} tool images inside the result`, () =>
+      Effect.gen(function* () {
+        const prepared = yield* compileRequest(
+          LLM.request({
+            model: AmazonBedrock.configure({ baseURL: "https://bedrock-runtime.test", apiKey: "test-bearer" }).model(
+              id,
+            ),
+            messages: [
+              Message.assistant([ToolCallPart.make({ id: "tool_1", name: "read", input: {} })]),
+              Message.tool({
+                id: "tool_1",
+                name: "read",
+                result: {
+                  type: "content",
+                  value: [{ type: "file", uri: "data:image/png;base64,AAAA", mime: "image/png" }],
+                },
+              }),
+            ],
+            cache: "none",
+          }),
+        )
+
+        expect(prepared.body.messages[1]).toEqual({
+          role: "user",
+          content: [
+            {
+              toolResult: {
+                toolUseId: "tool_1",
+                content: [{ image: { format: "png", source: { bytes: "AAAA" } } }],
+                status: "success",
+              },
+            },
+          ],
+        })
+      }),
+    )
+  })
+
+  it.effect("keeps parallel tool results before hoisted images and gives image-only results text", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: AmazonBedrock.configure({ baseURL: "https://bedrock-runtime.test", apiKey: "test-bearer" }).model(
+            "global.openai.gpt-6-sol",
+          ),
+          messages: [
+            Message.assistant([
+              ToolCallPart.make({ id: "tool_1", name: "first", input: {} }),
+              ToolCallPart.make({ id: "tool_2", name: "second", input: {} }),
+            ]),
+            Message.tool({
+              id: "tool_1",
+              name: "first",
+              result: {
+                type: "content",
+                value: [{ type: "file", uri: "data:image/png;base64,AAAA", mime: "image/png" }],
+              },
+            }),
+            Message.tool({
+              id: "tool_2",
+              name: "second",
+              result: {
+                type: "content",
+                value: [
+                  { type: "text", text: "Second image." },
+                  { type: "file", uri: "data:image/jpeg;base64,BBBB", mime: "image/jpeg" },
+                ],
+              },
+            }),
+          ],
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.messages[1]).toEqual({
+        role: "user",
+        content: [
+          { toolResult: { toolUseId: "tool_1", content: [{ text: "See attached image." }], status: "success" } },
+          { toolResult: { toolUseId: "tool_2", content: [{ text: "Second image." }], status: "success" } },
+          { image: { format: "png", source: { bytes: "AAAA" } } },
+          { image: { format: "jpeg", source: { bytes: "BBBB" } } },
         ],
       })
     }),
@@ -1099,6 +1265,12 @@ describe("Bedrock Converse route", () => {
             { toolUse: { toolUseId: "call_1", name: "lookup", input: {} } },
           ],
         },
+        {
+          role: "user",
+          content: [
+            { toolResult: { toolUseId: "call_1", content: [{ text: "Tool result missing" }], status: "error" } },
+          ],
+        },
       ])
     }),
   )
@@ -1301,11 +1473,11 @@ describe("Bedrock Converse route", () => {
           ),
         ),
       )
-      expect(response.events.filter((event) => event.type === "reasoning-delta" && event.text === "").at(-1)).toEqual({
-        type: "reasoning-delta",
+      expect(response.events.filter((event) => event.type === "reasoning-delta")).toEqual([])
+      expect(response.events.find((event) => event.type === "reasoning-start")).toEqual({
+        type: "reasoning-start",
         id: "reasoning-0",
-        text: "",
-        providerMetadata: { bedrock: { redactedData } },
+        providerMetadata: undefined,
       })
       expect(response.events.find((event) => event.type === "reasoning-end")).toEqual({
         type: "reasoning-end",
@@ -1383,6 +1555,13 @@ describe("Bedrock Converse route", () => {
         ),
       )
 
+      expect(response.events.filter((event) => event.type === "reasoning-delta")).toEqual([])
+      expect(response.events.find((event) => event.type === "reasoning-end")).toEqual({
+        type: "reasoning-end",
+        id: "reasoning-0",
+        providerMetadata: { bedrock: { redactedData: "AQID" } },
+        text: undefined,
+      })
       expect(response.message.content).toEqual([
         { type: "reasoning", text: "", providerMetadata: { bedrock: { redactedData: "AQID" } } },
       ])

@@ -153,6 +153,55 @@ test("retains nested expansion state and registers exact headers and parts", asy
   expect(anchors.list()).toEqual([])
 })
 
+test("expanded instructions stay adjacent to their summary and each other", async () => {
+  const anchors = createTimelineAnchors()
+  const [expanded, setExpanded] = createStore<Record<string, boolean>>({})
+  const messages: SessionMessageInfo[] = ["AGENTS.md", "packages/tui/AGENTS.md"].map((path) => ({
+    type: "synthetic",
+    id: path,
+    text: "Instructions",
+    description: `Loaded ${path}`,
+    metadata: { instruction: { paths: [path] } },
+    time: { created: 1 },
+  }))
+  const row: SessionGroup = {
+    type: "group",
+    kind: "instructions",
+    size: messages.length,
+    completed: true,
+    children: messages.map((message) => ({
+      type: "entry",
+      size: 1,
+      entry: { type: "message", messageID: message.id },
+    })),
+  }
+  const app = await mount({
+    row,
+    anchors,
+    config: createTuiResolvedConfig({ animations: false }),
+    expanded: (id) => expanded[id],
+    setExpanded: (id, value) => setExpanded(id, value),
+    message: (id) => messages.find((message) => message.id === id),
+    entry: (entry) => <text>{entry.type === "message" ? `Loaded ${entry.messageID}` : ""}</text>,
+  })
+  try {
+    app.renderer.start()
+    await app.waitForFrame((frame) => frame.includes("Instructions: 2 files"))
+    expect(app.captureCharFrame()).not.toContain("Loaded AGENTS.md")
+    await app.mockMouse.click(4, anchors.get({ type: "group", groupID: groupID(row, 0)! })?.node.y ?? -1)
+    await app.renderOnce()
+    expect(
+      app
+        .captureCharFrame()
+        .split("\n")
+        .map((line) => line.trim())
+        .join("\n"),
+    ).toContain("◈ Instructions: 2 files\nLoaded AGENTS.md\nLoaded packages/tui/AGENTS.md")
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("a low activity group with nothing finished stays collapsed behind a status", async () => {
   const config = createTuiResolvedConfig({ animations: false })
   const shell = (id: string) => ({
@@ -195,6 +244,57 @@ test("a low activity group with nothing finished stays collapsed behind a status
     await app.waitForFrame((frame) => frame.includes("Running command…"))
     expect(app.captureCharFrame()).not.toContain("Shell one")
     expect(app.captureCharFrame()).not.toContain("Shell two")
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("failed low activity uses a disclosure icon and keeps details expandable", async () => {
+  const config = createTuiResolvedConfig({ animations: false })
+  const anchors = createTimelineAnchors()
+  const [expanded, setExpanded] = createStore<Record<string, boolean>>({})
+  const message: SessionMessageAssistant = {
+    id: "a",
+    type: "assistant",
+    agent: "build",
+    model: { providerID: "fixture", id: "fixture" },
+    time: { created: 0, completed: 2 },
+    content: [
+      {
+        type: "tool",
+        id: "failed-shell",
+        name: "shell",
+        time: { created: 0, completed: 2 },
+        state: { status: "error", input: {}, error: { type: "Fixture", message: "command failed" } },
+      },
+    ],
+  }
+  const row: SessionGroup = {
+    type: "group",
+    kind: "activity",
+    size: 1,
+    completed: true,
+    pending: [],
+    children: [{ type: "entry", size: 1, entry: { type: "part", ref: { messageID: "a", partID: "failed-shell" } } }],
+  }
+  const app = await mount({
+    row,
+    anchors,
+    config,
+    expanded: (id) => expanded[id],
+    setExpanded: (id, value) => setExpanded(id, value),
+    message: () => message,
+    entry: () => <text>command failed</text>,
+  })
+  try {
+    app.renderer.start()
+    await app.waitForFrame((frame) => frame.includes("1 command"))
+    expect(app.captureCharFrame()).toContain("+ 1 command")
+    expect(app.captureCharFrame()).not.toContain("command failed")
+    await app.mockMouse.click(4, anchors.get({ type: "group", groupID: groupID(row, 0)! })?.node.y ?? -1)
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("− 1 command")
+    expect(app.captureCharFrame()).toContain("command failed")
   } finally {
     app.renderer.destroy()
   }

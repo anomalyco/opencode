@@ -21,7 +21,9 @@ export function RecentlyClosedTabsMenu(props: {
 }) {
   const language = useLanguage()
   const tabs = useTabs()
-  const recent = createMemo(() => listClosedTabs(tabs.closed, tabs.store).filter((entry) => entry.info?.prompted === true))
+  const recent = createMemo(() =>
+    listClosedTabs(tabs.closed, tabs.store).filter((entry) => entry.info?.prompted === true),
+  )
 
   return (
     <Menu.Context modal={false}>
@@ -67,7 +69,10 @@ export function RecentlyClosedTabsMenu(props: {
             <Menu.GroupLabel>{language.t("home.recentlyClosed")}</Menu.GroupLabel>
             <For each={recent()}>
               {(entry) => (
-                <RecentlyClosedTabItem entry={entry} onSelect={() => tabs.reopenClosedTab(entry.tab, { append: true })} />
+                <RecentlyClosedTabItem
+                  entry={entry}
+                  onSelect={() => tabs.reopenClosedTab(entry.tab, { append: true })}
+                />
               )}
             </For>
           </Menu.Group>
@@ -82,19 +87,25 @@ function RecentlyClosedTabItem(props: { entry: ClosedTab; onSelect: () => void }
   const language = useLanguage()
   const [state, setState] = createStore({ truncated: false })
   const placement = language.direction() === "rtl" ? "left-start" : "right-start"
+
   const serverCtx = useServerCtx(() =>
     global.servers.list().find((item) => ServerConnection.key(item) === props.entry.tab.server),
   )
+
   const session = createMemo(() => serverCtx()?.data.session.get(props.entry.tab.sessionId))
   const directory = () => props.entry.info?.directory ?? session()?.location.directory ?? ""
+
   const project = createMemo(() => {
     const value = session()
+
     if (value) return serverCtx()?.projects.forSession(value)
+
     if (!directory()) return
+
     return serverCtx()?.projects.resolve({ worktree: directory(), expanded: false })
   })
-  const title = () =>
-    sessionTabTitle(session()?.title ?? props.entry.info?.title, language.t("session.tab.session"))
+
+  const title = () => sessionTabTitle(session()?.title ?? props.entry.info?.title, language.t("session.tab.session"))
 
   return (
     <Menu.Item class="max-w-56" onSelect={props.onSelect}>

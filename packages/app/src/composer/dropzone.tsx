@@ -11,12 +11,17 @@ export function ComposerDropzone(props: {
 }) {
   const language = useLanguage()
   const [elements, setElements] = createStore<{ dropzone?: HTMLDivElement }>({})
+
   const label = createMemo(() => {
     if (!props.input?.image && !props.input?.pdf) return language.t("ui.promptInput.dropFiles")
+
     if (!props.input.pdf) return language.t("ui.promptInput.dropFiles.image")
+
     if (!props.input.image) return language.t("ui.promptInput.dropFiles.pdf")
+
     return language.t("ui.promptInput.dropFiles.imagePdf")
   })
+
   const presence = createAnimatedPresence(
     () => (props.active ? label() : undefined),
     () => elements.dropzone ?? null,

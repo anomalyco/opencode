@@ -17,6 +17,7 @@ import {
 } from "@modelcontextprotocol/client"
 import { OAuthMetadataSchema, OpenIdProviderDiscoveryMetadataSchema } from "@modelcontextprotocol/core"
 import { Cause, Deferred, Effect } from "effect"
+import type { ServerResponse } from "node:http"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
 import { Credential } from "../credential.js"
 import { OauthCallbackPage } from "../oauth/page.js"
@@ -348,7 +349,7 @@ export const authorize = (input: {
       const client = clientFromCredential(previous)
       if (client) yield* Effect.promise(() => store.saveClientInformation(client))
     }
-    const code = yield* Deferred.make<{ code: string; iss: string | undefined }, Error>()
+    const code = yield* Deferred.make<{ code: string; iss: string | undefined; response: ServerResponse }, Error>()
     const redirect = oauth?.redirect_uri ? new URL(oauth.redirect_uri) : undefined
     const redirectPath = redirect?.pathname ?? "/callback"
     const state = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url")
@@ -363,7 +364,7 @@ export const authorize = (input: {
       }
       const fail = (reason: string, failure: string) => {
         runFork(Effect.logWarning("mcp oauth callback rejected", { ...fields, reason: failure }))
-        Effect.runFork(Deferred.fail(code, new Error(reason)))
+        Effect.runSync(Deferred.fail(code, new Error(reason)))
         response
           .writeHead(400, { "Content-Type": "text/html" })
           .end(OauthCallbackPage.error(reason, { provider: input.name }))
@@ -373,8 +374,11 @@ export const authorize = (input: {
       if (url.searchParams.get("state") !== state) return fail("OAuth state mismatch", "state_mismatch")
       const value = url.searchParams.get("code")
       if (!value) return fail("Missing authorization code", "missing_code")
-      Effect.runFork(Deferred.succeed(code, { code: value, iss: url.searchParams.get("iss") ?? undefined }))
-      response.writeHead(200, { "Content-Type": "text/html" }).end(OauthCallbackPage.success({ provider: input.name }))
+      // The page waits for the token exchange so the browser never reports success for a rejected code.
+      if (
+        !Effect.runSync(Deferred.succeed(code, { code: value, iss: url.searchParams.get("iss") ?? undefined, response }))
+      )
+        response.writeHead(409).end("OAuth callback already received")
     })
 
     // callback_port, else the port pinned by redirect_uri, else ephemeral; a mismatch strands the browser.
@@ -470,30 +474,52 @@ export const authorize = (input: {
     if (!authorizationUrl)
       return yield* Effect.fail(new Error(`MCP server "${input.name}" did not provide an authorization URL`))
 
+    const completed = yield* Deferred.make<Credential.OAuth, Error>()
+    yield* Deferred.await(code).pipe(
+      Effect.flatMap((value) => {
+        const respond = (error?: string) =>
+          Effect.sync(() =>
+            value.response
+              .writeHead(error ? 400 : 200, { "Content-Type": "text/html" })
+              .end(
+                error
+                  ? OauthCallbackPage.error(error, { provider: input.name })
+                  : OauthCallbackPage.success({ provider: input.name }),
+              ),
+          )
+        return Effect.tryPromise({
+          try: () =>
+            auth(oauthProvider, {
+              serverUrl: input.config.url,
+              authorizationCode: value.code,
+              iss: value.iss,
+              scope: oauth?.scope ?? challenge.scope,
+              fetchFn,
+            }),
+          catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+        }).pipe(
+          Effect.flatMap(() => finalize),
+          Effect.tap(() => respond()),
+          Effect.tapError((error) => respond(error.message)),
+          Effect.onInterrupt(() => Effect.sync(() => value.response.destroy())),
+        )
+      }),
+      Effect.onErrorIf(
+        (cause) => !Cause.hasInterruptsOnly(cause),
+        (cause) =>
+          Effect.logWarning("mcp oauth authorization failed", { errors: ErrorSummary.from(Cause.squash(cause)) }),
+      ),
+      Effect.annotateLogs(fields),
+      Effect.exit,
+      Effect.flatMap((exit) => Deferred.done(completed, exit)),
+      Effect.forkScoped({ startImmediately: true }),
+    )
+
     return {
       url: authorizationUrl.toString(),
       instructions: `Authorize ${input.name} in your browser. This window will close automatically.`,
       mode: "auto" as const,
-      callback: Deferred.await(code).pipe(
-        Effect.flatMap((value) =>
-          Effect.tryPromise({
-            try: () =>
-              auth(oauthProvider, {
-                serverUrl: input.config.url,
-                authorizationCode: value.code,
-                iss: value.iss,
-                scope: oauth?.scope ?? challenge.scope,
-                fetchFn,
-              }),
-            catch: (error) => (error instanceof Error ? error : new Error(String(error))),
-          }),
-        ),
-        Effect.flatMap(() => finalize),
-        Effect.onError((cause) =>
-          Effect.logWarning("mcp oauth authorization failed", { errors: ErrorSummary.from(Cause.squash(cause)) }),
-        ),
-        Effect.annotateLogs(fields),
-      ),
+      callback: Deferred.await(completed),
     }
   }).pipe(
     Effect.onError((cause) =>

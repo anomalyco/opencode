@@ -5,43 +5,51 @@ const ServerReadyData = Schema.Struct({
   url: Schema.String,
 })
 
-export const PairingInfo = Schema.Struct({
-  urls: Schema.Array(Schema.String),
-})
-
 export const AppAwaitInitialization = Rpc.make("AppAwaitInitialization", { success: ServerReadyData })
+
 export const AppReconnectService = Rpc.make("AppReconnectService", { success: ServerReadyData })
+
 export const AppConsumeInitialDeepLinks = Rpc.make("AppConsumeInitialDeepLinks", {
   success: Schema.Array(Schema.String),
 })
+
 export const AppGetDefaultServerUrl = Rpc.make("AppGetDefaultServerUrl", {
   success: Schema.NullOr(Schema.String),
 })
+
 export const AppSetDefaultServerUrl = Rpc.make("AppSetDefaultServerUrl", {
   payload: { url: Schema.NullOr(Schema.String) },
 })
+
 export const AppIsFirstLaunchOnboardingPending = Rpc.make("AppIsFirstLaunchOnboardingPending", {
   success: Schema.Boolean,
 })
+
 export const AppFinishFirstLaunchOnboarding = Rpc.make("AppFinishFirstLaunchOnboarding", {
   payload: { createDefaultProject: Schema.Boolean },
   success: Schema.NullOr(Schema.String),
 })
+
 export const AppCheckAppExists = Rpc.make("AppCheckAppExists", {
   payload: { appName: Schema.String },
   success: Schema.Boolean,
 })
+
 export const AppResolveAppPath = Rpc.make("AppResolveAppPath", {
   payload: { appName: Schema.String },
   success: Schema.NullOr(Schema.String),
 })
+
 export const AppSetBackgroundColor = Rpc.make("AppSetBackgroundColor", {
   payload: { color: Schema.String },
 })
+
 export const AppExportDebugLogs = Rpc.make("AppExportDebugLogs", { success: Schema.String })
+
 export const AppSetForceFocus = Rpc.make("AppSetForceFocus", {
   payload: { enabled: Schema.Boolean },
 })
+
 export const AppRecordFatalRendererError = Rpc.make("AppRecordFatalRendererError", {
   payload: {
     error: Schema.Struct({
@@ -53,17 +61,13 @@ export const AppRecordFatalRendererError = Rpc.make("AppRecordFatalRendererError
     }),
   },
 })
+
 export const AppSetNativeTranslations = Rpc.make("AppSetNativeTranslations", {
   payload: { value: Schema.Unknown },
 })
+
 export const AppRelaunch = Rpc.make("AppRelaunch")
-export const AppPairInfo = Rpc.make("AppPairInfo", { success: PairingInfo, error: Schema.String })
-export const AppPairCode = Rpc.make("AppPairCode", { success: Schema.String, error: Schema.String })
-export const AppGetKeepScreenActive = Rpc.make("AppGetKeepScreenActive", { success: Schema.Boolean })
-export const AppSetKeepScreenActive = Rpc.make("AppSetKeepScreenActive", {
-  payload: { enabled: Schema.Boolean },
-  error: Schema.String,
-})
+
 export const AppRpcs = RpcGroup.make(
   AppAwaitInitialization,
   AppReconnectService,
@@ -80,8 +84,4 @@ export const AppRpcs = RpcGroup.make(
   AppRecordFatalRendererError,
   AppSetNativeTranslations,
   AppRelaunch,
-  AppPairInfo,
-  AppPairCode,
-  AppGetKeepScreenActive,
-  AppSetKeepScreenActive,
 )

@@ -96,7 +96,15 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
         ),
       },
     }),
-    Spec.make("acp", { description: "Start an Agent Client Protocol server" }),
+    Spec.make("acp", {
+      description: "Start an Agent Client Protocol server",
+      params: {
+        login: Flag.boolean("login").pipe(
+          Flag.withDescription("Run auth login instead of starting the server"),
+          Flag.withDefault(false),
+        ),
+      },
+    }),
     Spec.make("api", {
       description: "Make a request to the running server",
       params: {
@@ -179,6 +187,26 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
             ),
             credential: Argument.string("credential").pipe(
               Argument.withDescription("Credential ID or label (opens an account picker when omitted)"),
+              Argument.optional,
+            ),
+          },
+        }),
+        Spec.make("export", {
+          description: "print stored credentials, including secrets, as JSON",
+          params: {
+            ...ServerParams,
+            target: Argument.string("target").pipe(
+              Argument.withDescription("Integration ID or name (exports every integration when omitted)"),
+              Argument.optional,
+            ),
+          },
+        }),
+        Spec.make("import", {
+          description: "import credentials exported by auth export",
+          params: {
+            ...ServerParams,
+            file: Argument.string("file").pipe(
+              Argument.withDescription("JSON file to import (reads stdin when omitted)"),
               Argument.optional,
             ),
           },

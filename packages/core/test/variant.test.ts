@@ -126,6 +126,71 @@ test("spells Cloudflare AI Gateway variants for their upstream routes", () => {
   ])
 })
 
+test("spells Vercel AI Gateway variants for their selected routes", () => {
+  const pkg = "@opencode/ai/providers/vercel-ai-gateway"
+  expect(resolve(model(pkg, "openai/gpt-5.4"), [{ type: "effort", values: ["low", "xhigh"] }])).toEqual([
+    {
+      id: "low",
+      settings: { reasoningEffort: "low", reasoningSummary: "auto", include: ["reasoning.encrypted_content"] },
+    },
+    {
+      id: "xhigh",
+      settings: { reasoningEffort: "xhigh", reasoningSummary: "auto", include: ["reasoning.encrypted_content"] },
+    },
+  ])
+  expect(resolve(model(pkg, "spacexai/grok-4.7"), [{ type: "effort" }]).map((item) => item.id)).toEqual([
+    "low",
+    "medium",
+    "high",
+  ])
+  expect(
+    resolve(model(pkg, "anthropic/claude-sonnet-4.6"), [{ type: "effort", values: ["none", "low", "high"] }]),
+  ).toEqual([
+    { id: "none", settings: { thinking: { type: "disabled" } } },
+    { id: "low", settings: { effort: "low", thinking: { type: "adaptive", display: "summarized" } } },
+    { id: "high", settings: { effort: "high", thinking: { type: "adaptive", display: "summarized" } } },
+  ])
+  expect(resolve(model(pkg, "meta/muse-spark-1.3"), [{ type: "effort", values: ["low", "high"] }])).toEqual([
+    { id: "low", settings: { reasoningEffort: "low" } },
+    { id: "high", settings: { reasoningEffort: "high" } },
+  ])
+  expect(
+    resolve(model(pkg, "alibaba/qwen-3-32b", 38_912), [
+      { type: "toggle" },
+      { type: "budget_tokens", min: 1, max: 38_912 },
+    ]),
+  ).toEqual([
+    { id: "none", settings: { thinking: { type: "disabled" } } },
+    { id: "high", settings: { thinking: { type: "enabled", budgetTokens: 19_456 } } },
+    { id: "max", settings: { thinking: { type: "enabled", budgetTokens: 38_911 } } },
+  ])
+})
+
+test("spells xAI Responses variants with catalog effort levels", () => {
+  const supports: Variant.Support[] = [{ type: "effort", values: ["low", "medium", "high", "xhigh"] }]
+  expect(resolve(model("@opencode/ai/providers/xai", "grok-4.6"), supports)).toEqual(
+    ["low", "medium", "high", "xhigh"].map((effort) => ({
+      id: effort,
+      settings: { reasoningEffort: effort, reasoningSummary: "auto", include: ["reasoning.encrypted_content"] },
+    })),
+  )
+  expect(
+    resolve(model("@opencode/ai/providers/xai", "grok-4.3"), [{ type: "effort", values: ["none", "low"] }]),
+  ).toEqual([
+    {
+      id: "none",
+      settings: { reasoningEffort: "none", reasoningSummary: "auto", include: ["reasoning.encrypted_content"] },
+    },
+    {
+      id: "low",
+      settings: { reasoningEffort: "low", reasoningSummary: "auto", include: ["reasoning.encrypted_content"] },
+    },
+  ])
+  expect(resolve(model("@opencode/ai/providers/xai", "grok-4.6"), [{ type: "effort" }]).map((item) => item.id)).toEqual(
+    ["low", "medium", "high"],
+  )
+})
+
 test("spells Chat Completions variants for direct providers", () => {
   expect(
     resolve(model("@opencode/ai/providers/deepseek", "deepseek-v4-flash"), [
@@ -244,7 +309,70 @@ test("caps Alibaba thinking budget variants at 64k", () => {
   ])
 })
 
+test("spells Workers AI thinking controls through the chat template", () => {
+  const pkg = "@opencode/ai/providers/cloudflare-workers-ai"
+  const off = { body: { chat_template_kwargs: { enable_thinking: false, thinking: false } } }
+  const on = { body: { chat_template_kwargs: { enable_thinking: true, thinking: true } } }
+  expect(
+    resolve(model(pkg, "@cf/deepseek-ai/deepseek-v4-flash-0731"), [
+      { type: "effort", values: ["none", "low", "high", "max"] },
+    ]),
+  ).toEqual([
+    { id: "none", ...off },
+    { id: "low", settings: { reasoningEffort: "low" } },
+    { id: "high", settings: { reasoningEffort: "high" } },
+    { id: "max", settings: { reasoningEffort: "max" } },
+  ])
+  expect(resolve(model(pkg, "@cf/zai-org/glm-4.7-flash"), [{ type: "toggle" }])).toEqual([
+    { id: "none", ...off },
+    { id: "thinking", ...on },
+  ])
+  expect(
+    resolve(model(pkg, "@cf/qwen/qwen3.8-27b"), [
+      { type: "toggle" },
+      { type: "effort", values: ["low", "medium", "xhigh"] },
+    ]),
+  ).toEqual([
+    { id: "none", ...off },
+    { id: "low", settings: { reasoningEffort: "low" } },
+    { id: "medium", settings: { reasoningEffort: "medium" } },
+    { id: "xhigh", settings: { reasoningEffort: "xhigh" } },
+  ])
+})
+
+test("spells Cohere native thinking and compatibility effort variants", () => {
+  expect(
+    resolve(model("@opencode/ai/providers/cohere", "command-a-reasoning-08-2025", 32_000), [
+      { type: "toggle" },
+      { type: "budget_tokens", min: 1 },
+    ]),
+  ).toEqual([
+    { id: "none", settings: { thinking: { type: "disabled" } } },
+    { id: "high", settings: { thinking: { type: "enabled", tokenBudget: 16_000 } } },
+    { id: "max", settings: { thinking: { type: "enabled", tokenBudget: 31_999 } } },
+  ])
+  expect(
+    resolve(model("@opencode/ai/providers/cohere/chat", "north-mini-code-1-0"), [
+      { type: "effort", values: ["none", "high"] },
+    ]),
+  ).toEqual([
+    { id: "none", settings: { reasoningEffort: "none" } },
+    { id: "high", settings: { reasoningEffort: "high" } },
+  ])
+})
+
 test("spells Chat Completions variants for hosting providers", () => {
+  expect(
+    resolve(model("@opencode/ai/providers/digitalocean", "openai-gpt-5-nano", undefined, "digitalocean"), [
+      { type: "effort", values: ["minimal", "low", "medium", "high"] },
+    ]),
+  ).toEqual([
+    { id: "minimal", settings: { reasoningEffort: "minimal" } },
+    { id: "low", settings: { reasoningEffort: "low" } },
+    { id: "medium", settings: { reasoningEffort: "medium" } },
+    { id: "high", settings: { reasoningEffort: "high" } },
+  ])
+
   expect(
     resolve(model("@opencode/ai/providers/openai-compatible", "deepseek-ai/deepseek-v4-pro", undefined, "nvidia"), [
       { type: "effort", values: ["none", "high", "max"] },
@@ -323,4 +451,48 @@ test("spells Chat Completions variants for hosting providers", () => {
     { id: "high", settings: { reasoningEffort: "high" } },
     { id: "xhigh", settings: { reasoningEffort: "xhigh" } },
   ])
+})
+
+test("spells GitLab Duo variants for gitlab-ai-provider routes", () => {
+  const pkg = Provider.aisdk("gitlab-ai-provider")
+  const gitlab = (id: string, output?: number) => model(pkg, id, output, "gitlab")
+
+  expect(
+    resolve(gitlab("duo-chat-opus-5-5"), [{ type: "effort", values: ["low", "medium", "high", "xhigh", "max"] }]),
+  ).toEqual(
+    ["low", "medium", "high", "xhigh", "max"].map((effort) => ({
+      id: effort,
+      settings: { thinking: { type: "adaptive", effort } },
+    })),
+  )
+
+  expect(
+    resolve(gitlab("duo-chat-sonnet-5"), [{ type: "toggle" }, { type: "effort", values: ["low", "max"] }]),
+  ).toEqual([
+    { id: "none", settings: { thinking: { type: "disabled" } } },
+    { id: "low", settings: { thinking: { type: "adaptive", effort: "low" } } },
+    { id: "max", settings: { thinking: { type: "adaptive", effort: "max" } } },
+  ])
+
+  expect(resolve(gitlab("duo-chat-fable-5-1"), [{ type: "toggle" }, { type: "effort", values: ["high"] }])).toEqual([
+    { id: "high", settings: { thinking: { type: "adaptive", effort: "high" } } },
+  ])
+
+  expect(resolve(gitlab("duo-chat-opus-4-5", 64_000), [{ type: "effort" }])).toEqual([
+    { id: "high", settings: { thinking: { type: "enabled", budgetTokens: 16_000 } } },
+    { id: "max", settings: { thinking: { type: "enabled", budgetTokens: 31_999 } } },
+  ])
+
+  expect(resolve(gitlab("duo-chat-gpt-6-sol"), [{ type: "effort", values: ["none", "low", "max"] }])).toEqual([
+    { id: "none", settings: { reasoningEffort: "none" } },
+    { id: "low", settings: { reasoningEffort: "low" } },
+    { id: "max", settings: { reasoningEffort: "max" } },
+  ])
+
+  expect(resolve(gitlab("duo-chat-gpt-5-3-codex"), [{ type: "effort", values: ["low"] }])).toEqual([
+    { id: "low", settings: { reasoningEffort: "low" } },
+  ])
+
+  expect(resolve(gitlab("duo-chat-gpt-5-4"), [])).toEqual([])
+  expect(resolve(gitlab("duo-workflow-opus-5-5"), [{ type: "effort" }])).toEqual([])
 })

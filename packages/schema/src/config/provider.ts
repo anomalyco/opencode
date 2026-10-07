@@ -9,7 +9,8 @@ import { optional } from "../schema.js"
 export const Settings = Schema.StructWithRest(
   Schema.Struct({
     timeout: Schema.Union([Schema.Finite, Schema.Literal(false)]).pipe(optional),
-    chunkTimeout: Schema.Finite.pipe(optional),
+    headerTimeout: Schema.Union([Schema.Finite, Schema.Literal(false)]).pipe(optional),
+    chunkTimeout: Schema.Union([Schema.Finite, Schema.Literal(false)]).pipe(optional),
     compaction: Provider.Compaction.pipe(optional),
     transport: Provider.Transport.pipe(optional),
   }),
@@ -72,7 +73,14 @@ class Model extends Schema.Class<Model>("Config.Model")({
   compatibility: Compatibility.pipe(optional),
   package: Schema.String.pipe(optional),
   ...ModelOverlays,
-  capabilities: Capabilities.pipe(optional),
+  // Partial: unset fields fall back to the base model's capabilities, then the defaults.
+  capabilities: Capabilities.mapFields((fields) => ({
+    tools: optional(fields.tools),
+    input: optional(fields.input),
+    output: optional(fields.output),
+  }))
+    .annotate({ identifier: "Config.Model.Capabilities" })
+    .pipe(optional),
   variants: Schema.Struct({
     id: VariantID,
     ...ModelOverlays,

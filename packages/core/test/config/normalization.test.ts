@@ -149,6 +149,21 @@ describe("ConfigNormalize", () => {
     expect(() => Schema.decodeUnknownSync(Info)(result.encoded)).not.toThrow()
   })
 
+  test("renames legacy provider IDs in the top-level model", () => {
+    expect(normalized({ model: "google-vertex-anthropic/claude#high" }).encoded.model).toEqual({
+      providerID: "google-vertex",
+      model: "claude",
+      variant: "high",
+    })
+    expect(
+      normalized({ model: { providerID: "azure-cognitive-services", model: "deployment" } }).encoded.model,
+    ).toEqual({ providerID: "azure", model: "deployment" })
+    expect(normalized({ model: "anthropic/claude" }).encoded.model).toEqual({
+      providerID: "anthropic",
+      model: "claude",
+    })
+  })
+
   test("migrates the legacy small model to the title agent", () => {
     const result = normalized({ small_model: "anthropic/claude-haiku-4-5" })
     expect(result.encoded.agents).toEqual({
@@ -201,6 +216,18 @@ describe("ConfigNormalize", () => {
       ["commands", "invalid"],
       ["providers", "invalid"],
     ])
+  })
+
+  test("accepts partial model capabilities without reporting a diagnostic", () => {
+    const result = normalized({
+      providers: {
+        demo: { name: "Demo", models: { demo: { name: "Demo", capabilities: { input: ["text"], output: ["text"] } } } },
+      },
+    })
+    expect(result.diagnostics).toEqual([])
+    expect(result.encoded.providers).toEqual({
+      demo: { name: "Demo", models: { demo: { name: "Demo", capabilities: { input: ["text"], output: ["text"] } } } },
+    })
   })
 
   test("uses a valid retired provider alias when the canonical legacy entry is malformed", () => {
@@ -479,6 +506,53 @@ describe("ConfigNormalize", () => {
       ["agent", "invalid", "model"],
       ["agent", "invalid", "variant"],
     ])
+  })
+
+  test("migrates the legacy thinking block-binding opt-out into model compatibility", () => {
+    const result = normalized({
+      provider: {
+        gateway: {
+          models: {
+            anthropic: { options: { thinking: { type: "adaptive", blockBinding: false }, effort: "high" } },
+            bedrock: { options: { reasoningConfig: { blockBinding: false } } },
+            both: {
+              options: {
+                thinking: { type: "adaptive", blockBinding: false },
+                reasoningConfig: { type: "adaptive", blockBinding: false },
+              },
+            },
+            untouched: { options: { thinking: { type: "adaptive" } } },
+          },
+        },
+      },
+    })
+    expect(result.encoded.providers).toMatchObject({
+      gateway: {
+        models: {
+          anthropic: {
+            compatibility: { supportsThinkingBlockBinding: false },
+            settings: { thinking: { type: "adaptive" }, effort: "high" },
+          },
+          bedrock: { compatibility: { supportsThinkingBlockBinding: false }, settings: {} },
+          both: {
+            compatibility: { supportsThinkingBlockBinding: false },
+            settings: { thinking: { type: "adaptive" }, reasoningConfig: { type: "adaptive" } },
+          },
+          untouched: { settings: { thinking: { type: "adaptive" } } },
+        },
+      },
+    })
+    expect(result.encoded.providers).not.toHaveProperty(["gateway", "models", "bedrock", "settings", "reasoningConfig"])
+    expect(result.encoded.providers).not.toHaveProperty(["gateway", "models", "both", "settings", "thinking", "blockBinding"])
+    expect(result.encoded.providers).not.toHaveProperty([
+      "gateway",
+      "models",
+      "both",
+      "settings",
+      "reasoningConfig",
+      "blockBinding",
+    ])
+    expect(result.encoded.providers).not.toHaveProperty(["gateway", "models", "untouched", "compatibility"])
   })
 
   test("invalid legacy provider overlays skip only that provider", () => {

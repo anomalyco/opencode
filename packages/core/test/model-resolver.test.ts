@@ -9,6 +9,7 @@ import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
 import { Compatibility, ID, Info, Model, VariantID } from "@opencode/core/model"
 import { Provider } from "@opencode/core/provider"
+import { Variant } from "@opencode/core/variant"
 import { ModelResolver } from "@opencode/core/model-resolver"
 import { AISDK } from "@opencode/core/aisdk"
 import { Npm } from "@opencode/util/npm"
@@ -374,6 +375,7 @@ describe("ModelResolver", () => {
         activate: () => Effect.die("unused"),
         update: () => Effect.die("unused"),
         remove: () => Effect.die("unused"),
+        status: () => Effect.die("unused"),
       },
       oauth: {
         connect: () => Effect.die("unused"),
@@ -580,6 +582,29 @@ describe("ModelResolver", () => {
     }),
   )
 
+  it.effect("sends xAI Responses effort variants with reasoning summaries", () =>
+    Effect.gen(function* () {
+      const base = model("@opencode/ai/providers/xai", { providerID: Provider.ID.make("xai"), modelID: "grok-4.6" })
+      const catalog = Info.make({
+        ...base,
+        variants: Variant.resolve(base, [{ type: "effort", values: ["low", "high"] }]),
+      })
+      const resolved = yield* ModelResolver.resolveModel(
+        catalog,
+        VariantID.make("high"),
+        Credential.Key.make({ type: "key", key: "secret" }),
+      )
+      const prepared = yield* compileRequest(LLM.request({ model: resolved, prompt: "Hello" }))
+
+      expect(resolved.route.id).toBe("xai-responses")
+      expect(prepared.body).toMatchObject({
+        reasoning: { effort: "high", summary: "auto" },
+        include: ["reasoning.encrypted_content"],
+      })
+      expect(prepared.body).not.toHaveProperty("reasoning_effort")
+    }),
+  )
+
   it.effect("overlays selected OpenAI-compatible variant bodies", () =>
     Effect.gen(function* () {
       const catalog = model(Provider.aisdk("@ai-sdk/openai-compatible"), {
@@ -685,7 +710,7 @@ describe("ModelResolver", () => {
 
   it.effect("prefers stored credentials over configured auth", () =>
     Effect.gen(function* () {
-      const credential = Credential.Key.make({ type: "key", key: "stored-secret", metadata: { tenant: "work" } })
+      const credential = Credential.Key.make({ type: "key", key: "stored-secret" })
       const resolved = yield* ModelResolver.fromCatalogModel(
         model(Provider.aisdk("@ai-sdk/openai"), {
           settings: { apiKey: "configured-secret", baseURL: "https://openai.example/v1" },
@@ -703,7 +728,25 @@ describe("ModelResolver", () => {
       })
 
       expect(headers.authorization).toBe("Bearer stored-secret")
-      expect(resolved.route.defaults.http?.body).toEqual({ tenant: "work" })
+    }),
+  )
+
+  it.effect("does not project API key metadata into the request body", () =>
+    Effect.gen(function* () {
+      // V1 auth.json stored connect-form answers as API key metadata, and the legacy import preserves them there.
+      const resolved = yield* ModelResolver.fromCatalogModel(
+        model(Provider.aisdk("@ai-sdk/azure"), {
+          providerID: Provider.ID.azure,
+          modelID: "responses-deployment",
+          settings: { apiVersion: "2025-01-01-preview" },
+          headers: {},
+          body: {},
+        }),
+        Credential.Key.make({ type: "key", key: "secret", metadata: { resourceName: "migrated-resource" } }),
+      )
+
+      expect(resolved.route.endpoint.baseURL).toBe("https://migrated-resource.openai.azure.com/openai/v1")
+      expect(resolved.route.defaults.http?.body).toEqual({})
     }),
   )
 
@@ -1067,6 +1110,7 @@ describe("ModelResolver", () => {
         ["@ai-sdk/openai-compatible", "@opencode/ai/providers/openai-compatible", "api-model"],
         ["@openrouter/ai-sdk-provider", "@opencode/ai/providers/openrouter", "api-model"],
         ["@ai-sdk/togetherai", "@opencode/ai/providers/togetherai", "api-model"],
+        ["@ai-sdk/gateway", "@opencode/ai/providers/vercel-ai-gateway", "openai/gpt-5.4"],
         ["@ai-sdk/xai", "@opencode/ai/providers/xai", "api-model"],
         ["ai-gateway-provider", "@opencode/ai/providers/cloudflare-ai-gateway", "xai/grok-4.6"],
       ] as const
@@ -1282,7 +1326,7 @@ describe("ModelResolver", () => {
         reasoningEffort: "high",
       })
       expect(String(mistral.provider)).toBe("test-provider")
-      expect(xai.route.id).toBe("openai-responses")
+      expect(xai.route.id).toBe("xai-responses")
       expect(xai.route.defaults.providerOptions).toEqual({
         reasoningEffort: "high",
         store: false,
@@ -1305,8 +1349,8 @@ describe("ModelResolver", () => {
         }),
       )
       const resolved = yield* ModelResolver.fromCatalogModel(
-        model(Provider.aisdk("@ai-sdk/cohere"), {
-          modelID: "cohere-api-model",
+        model(Provider.aisdk("@ai-sdk/perplexity"), {
+          modelID: "perplexity-api-model",
           settings: { project: "test" },
           headers: { "x-aisdk": "header" },
           body: { custom: true },
@@ -1321,9 +1365,9 @@ describe("ModelResolver", () => {
             Effect.sync(() => {
               expect(runtime).toMatchObject({
                 id: "test-model",
-                modelID: "cohere-api-model",
+                modelID: "perplexity-api-model",
                 providerID: "test-provider",
-                package: Provider.aisdk("@ai-sdk/cohere"),
+                package: Provider.aisdk("@ai-sdk/perplexity"),
                 settings: { project: "test", apiKey: "fallback-secret", accountId: "account" },
                 headers: { "x-aisdk": "header" },
                 body: { custom: true },
@@ -1337,7 +1381,7 @@ describe("ModelResolver", () => {
         },
       )
 
-      expect(resolved).toMatchObject({ id: "cohere-api-model", provider: "test-provider" })
+      expect(resolved).toMatchObject({ id: "perplexity-api-model", provider: "test-provider" })
     }),
   )
 
@@ -1345,7 +1389,7 @@ describe("ModelResolver", () => {
     withEnv({ REQUIRED_HOST: undefined }, () =>
       Effect.gen(function* () {
         const failure = yield* ModelResolver.fromCatalogModel(
-          model(Provider.aisdk("@ai-sdk/cohere"), {
+          model(Provider.aisdk("@ai-sdk/perplexity"), {
             settings: { baseURL: "https://${REQUIRED_HOST}/v1" },
           }),
           undefined,
@@ -1364,7 +1408,7 @@ describe("ModelResolver", () => {
     withEnv({ PROVIDER_HOST: "${MISSING_HOST}", MISSING_HOST: undefined }, () =>
       Effect.gen(function* () {
         const failure = yield* ModelResolver.fromCatalogModel(
-          model(Provider.aisdk("@ai-sdk/cohere"), {
+          model(Provider.aisdk("@ai-sdk/perplexity"), {
             settings: { baseURL: "https://${PROVIDER_HOST}/v1" },
           }),
           undefined,
@@ -1401,8 +1445,8 @@ describe("ModelResolver", () => {
   it.effect("rejects AISDK packages without an available loader", () =>
     Effect.gen(function* () {
       const failure = yield* ModelResolver.fromCatalogModel(
-        model(Provider.aisdk("@ai-sdk/cohere"), {
-          settings: { baseURL: "https://cohere.example/v1" },
+        model(Provider.aisdk("@ai-sdk/perplexity"), {
+          settings: { baseURL: "https://perplexity.example/v1" },
         }),
       ).pipe(Effect.flip)
 
@@ -1410,9 +1454,9 @@ describe("ModelResolver", () => {
         _tag: "SessionRunnerModel.UnsupportedPackageError",
         providerID: "test-provider",
         modelID: "test-model",
-        package: "aisdk:@ai-sdk/cohere",
+        package: "aisdk:@ai-sdk/perplexity",
       })
-      expect(failure.message).toBe("Unsupported package for test-provider/test-model: aisdk:@ai-sdk/cohere")
+      expect(failure.message).toBe("Unsupported package for test-provider/test-model: aisdk:@ai-sdk/perplexity")
     }),
   )
 
@@ -1476,18 +1520,18 @@ describe("ModelResolver", () => {
         detail: "Provider package @opencode/ai/providers/custom is broken",
       })
 
-      const init = yield* ModelResolver.fromCatalogModel(model(Provider.aisdk("@ai-sdk/cohere")), undefined, {
+      const init = yield* ModelResolver.fromCatalogModel(model(Provider.aisdk("@ai-sdk/perplexity")), undefined, {
         loadAISDK: (runtime) =>
           Effect.fail(
-            new AISDK.InitError({ providerID: runtime.providerID, cause: new Error("Cohere plugin failed") }),
+            new AISDK.InitError({ providerID: runtime.providerID, cause: new Error("Perplexity plugin failed") }),
           ),
       }).pipe(Effect.flip)
       expect(init).toMatchObject({
         _tag: "SessionRunnerModel.ModelInitializationError",
         phase: "init",
-        detail: "Cohere plugin failed",
+        detail: "Perplexity plugin failed",
       })
-      expect(init.message).toBe("Cannot initialize test-provider/test-model: Cohere plugin failed")
+      expect(init.message).toBe("Cannot initialize test-provider/test-model: Perplexity plugin failed")
     }),
   )
 
@@ -1499,8 +1543,8 @@ describe("ModelResolver", () => {
         }),
       )
       yield* ModelResolver.fromCatalogModel(
-        model(Provider.aisdk("@ai-sdk/cohere"), {
-          settings: { apiKey: "", baseURL: "https://cohere.example/v1" },
+        model(Provider.aisdk("@ai-sdk/perplexity"), {
+          settings: { apiKey: "", baseURL: "https://perplexity.example/v1" },
         }),
         undefined,
         {
