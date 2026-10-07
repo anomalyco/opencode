@@ -11,10 +11,16 @@ type Api =
   | { readonly type: "aisdk"; readonly package: string; readonly url?: string; readonly settings?: Record<string, unknown> }
   | { readonly type: "native"; readonly url?: string; readonly settings: Record<string, unknown> }
 
-const makeModel = (providerID: string, id: string, released: number, api: Api = {
-  type: "aisdk",
-  package: "@ai-sdk/openai",
-}) =>
+const makeModel = (
+  providerID: string,
+  id: string,
+  released: number,
+  api: Api = {
+    type: "aisdk",
+    package: "@ai-sdk/openai",
+  },
+  cost: ModelV2.Info["cost"] = [],
+) =>
   ModelV2.Info.make({
     id: ModelV2.ID.make(id as ModelV2.ID),
     providerID: ProviderV2.ID.make(providerID as ProviderV2.ID),
@@ -24,7 +30,7 @@ const makeModel = (providerID: string, id: string, released: number, api: Api = 
     request: { headers: {}, body: { apiKey: "secret" } },
     variants: [],
     time: { released },
-    cost: [],
+    cost,
     status: "active",
     enabled: true,
     limit: { context: 100, output: 20 },
@@ -52,6 +58,8 @@ const anthropic = (id: string, released: number) =>
   makeModel("beta", id, released, { type: "aisdk", package: "@ai-sdk/anthropic" })
 const unsupported = (id: string, released: number) =>
   makeModel("gamma", id, released, { type: "aisdk", package: "test-provider" })
+const free = (id: string, released: number) =>
+  makeModel("alpha", id, released, undefined, [{ input: 0, output: 0, cache: { read: 0, write: 0 } }])
 
 describe("ModelFallback", () => {
   describe("order", () => {
@@ -63,6 +71,16 @@ describe("ModelFallback", () => {
         openai("gpt-4o", 100),
       ])
       expect(ordered.map((m) => m.name)).toEqual(["gpt-4o", "claude-opus", "gpt-4o-mini"])
+    })
+
+    test("sorts free models ahead of paid ones, release-descending within each group", () => {
+      const ordered = ModelFallback.order([
+        openai("gpt-4o", 100),
+        free("free-new", 80),
+        openai("gpt-4o-mini", 50),
+        free("free-old", 60),
+      ])
+      expect(ordered.map((m) => m.name)).toEqual(["free-new", "free-old", "gpt-4o", "gpt-4o-mini"])
     })
   })
 
@@ -79,6 +97,15 @@ describe("ModelFallback", () => {
       const chain = ModelFallback.chainFrom(makeSession(), available)
       expect(chain.primary?.name).toBe("gpt-4o")
       expect(chain.alternatives.map((m) => m.name)).toEqual(["claude-opus", "gpt-4o-mini"])
+    })
+
+    test("prefers the newest free model as primary when none is selected", () => {
+      const chain = ModelFallback.chainFrom(
+        makeSession(),
+        [openai("gpt-4o", 100), free("free-model", 60), anthropic("claude-opus", 90)],
+      )
+      expect(chain.primary?.name).toBe("free-model")
+      expect(chain.alternatives.map((m) => m.name)).toEqual(["gpt-4o", "claude-opus"])
     })
 
     test("returns undefined primary and all alternatives when the session model is unavailable", () => {

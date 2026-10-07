@@ -257,6 +257,50 @@ describe("CatalogV2", () => {
     }),
   )
 
+  it.effect("prefers the newest functionally capable free model when no default is configured", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const providerID = ProviderV2.ID.make("test")
+      yield* catalog.transform((catalog) => {
+        catalog.provider.update(providerID, () => {})
+        catalog.model.update(providerID, ModelV2.ID.make("paid"), (model) => {
+          model.time.released = 3000
+          model.cost = [{ input: 1, output: 2, cache: { read: 0.5, write: 1 } }]
+          model.capabilities = { tools: true, input: ["text"], output: ["text"] }
+        })
+        catalog.model.update(providerID, ModelV2.ID.make("free"), (model) => {
+          model.time.released = 2000
+          model.cost = [{ input: 0, output: 0, cache: { read: 0, write: 0 } }]
+          model.capabilities = { tools: true, input: ["text"], output: ["text"] }
+        })
+      })
+
+      expect((yield* catalog.model.default())?.id).toBe(ModelV2.ID.make("free"))
+    }),
+  )
+
+  it.effect("keeps the newest paid model when free models lack agentic capabilities", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const providerID = ProviderV2.ID.make("test")
+      yield* catalog.transform((catalog) => {
+        catalog.provider.update(providerID, () => {})
+        catalog.model.update(providerID, ModelV2.ID.make("paid"), (model) => {
+          model.time.released = 3000
+          model.cost = [{ input: 1, output: 2, cache: { read: 0, write: 0 } }]
+          model.capabilities = { tools: true, input: ["text"], output: ["text"] }
+        })
+        catalog.model.update(providerID, ModelV2.ID.make("free"), (model) => {
+          model.time.released = 2000
+          model.cost = [{ input: 0, output: 0, cache: { read: 0, write: 0 } }]
+          model.capabilities = { tools: false, input: ["text"], output: ["text"] }
+        })
+      })
+
+      expect((yield* catalog.model.default())?.id).toBe(ModelV2.ID.make("paid"))
+    }),
+  )
+
   it.effect("uses a transform-provided default model until that transform is replaced", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service

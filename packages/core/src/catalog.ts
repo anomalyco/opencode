@@ -3,6 +3,7 @@ export * as Catalog from "./catalog"
 import { makeLocationNode } from "./effect/app-node"
 import { Array, Context, Effect, Layer, Option, Order, pipe, Schema } from "effect"
 import { Catalog } from "@opencode-ai/schema/catalog"
+import { ModelCost } from "./model-cost"
 import { ModelV2 } from "./model"
 import { ProviderV2 } from "./provider"
 import { EventV2 } from "./event"
@@ -222,13 +223,22 @@ const layer = Layer.effect(
             }
           }
 
-          return Option.getOrUndefined(
-            pipe(
-              yield* result.model.available(),
-              Array.sortWith((item) => item.time.released, Order.flip(Order.Number)),
-              Array.head,
-            ),
+          // FREE-FIRST: with no configured default, prefer the newest free
+          // model that can still drive an agent session (tools + text
+          // input/output) over any priced one; unknown pricing counts as paid
+          // (ModelCost.isFree), so an unbilled model is never preferred here.
+          const ordered = pipe(
+            yield* result.model.available(),
+            Array.sortWith((item) => item.time.released, Order.flip(Order.Number)),
           )
+          const free = ordered.find(
+            (model) =>
+              ModelCost.isFree(model) &&
+              model.capabilities.tools &&
+              model.capabilities.input.some((item) => item.startsWith("text")) &&
+              model.capabilities.output.some((item) => item.startsWith("text")),
+          )
+          return free ?? Option.getOrUndefined(Array.head(ordered))
         }),
 
         small: Effect.fn("CatalogV2.model.small")(function* (providerID) {

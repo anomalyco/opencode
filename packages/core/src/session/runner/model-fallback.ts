@@ -1,5 +1,6 @@
 import { Effect, Option } from "effect"
 import { Catalog } from "../../catalog"
+import { ModelCost } from "../../model-cost"
 import { ModelV2 } from "../../model"
 import { SessionSchema } from "../schema"
 import { SessionRunnerModel } from "./model"
@@ -11,21 +12,27 @@ import { SessionRunnerModel } from "./model"
  * `primary` mirrors the model {@link SessionRunnerModel.resolve} selects (the
  * Session choice, or the catalog default / first supported model when none is
  * chosen). `alternatives` lists every *other* supported model the Location
- * exposes, in a stable release-descending order, so the runner can step down to a
- * different provider/model when a turn fails with a retryable provider error
- * (429 / QuotaExceeded / persistent 5xx) after {@link ProviderRetry.policy} is
- * exhausted — instead of surfacing a `RunError` to the session. The runner
- * cycles through this chain via {@link withFallback}; each model keeps its own
- * full retry budget.
+ * exposes, in a stable free-first then release-descending order (FREE-FIRST:
+ * recovery lands on zero-cost models before priced ones), so the runner can
+ * step down to a different provider/model when a turn fails with a retryable
+ * provider error (429 / QuotaExceeded / persistent 5xx) after
+ * {@link ProviderRetry.policy} is exhausted — instead of surfacing a `RunError`
+ * to the session. The runner cycles through this chain via {@link withFallback};
+ * each model keeps its own full retry budget.
  */
 export interface FallbackChain {
   readonly primary: ModelV2.Info | undefined
   readonly alternatives: ReadonlyArray<ModelV2.Info>
 }
 
-/** Supported models release-descending (stable, immutable). */
+/** Supported models free-first, then release-descending within each cost group (stable, immutable). */
 export const order = (available: ReadonlyArray<ModelV2.Info>): ModelV2.Info[] =>
-  [...available].filter(SessionRunnerModel.supported).sort((a, b) => b.time.released - a.time.released)
+  [...available]
+    .filter(SessionRunnerModel.supported)
+    .sort(
+      (a, b) =>
+        Number(ModelCost.isFree(b)) - Number(ModelCost.isFree(a)) || b.time.released - a.time.released,
+    )
 
 /** Builds the fallback chain from a Session's catalog snapshot. */
 export const chainFrom = (
