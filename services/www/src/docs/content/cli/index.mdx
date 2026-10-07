@@ -58,13 +58,21 @@ opencode --server http://localhost:4096
 To make private servers the default for CLI commands instead of starting the shared service, disable it:
 
 ```bash
-opencode service set disabled true
+opencode service disable
 opencode
 ```
 
-This stops the running background service. `--server` still connects to an explicitly selected server; `opencode service start`
-can still start the shared service explicitly. To return to automatic service use, run `opencode service unset disabled`.
-Pairing requires the shared service and is unavailable while it is disabled.
+This stops the running background service. While it is disabled:
+
+- `--server` still connects to an explicitly selected server.
+- `opencode service start` still starts the shared service explicitly.
+- Pairing is unavailable, because it requires the shared service.
+
+To return to automatic service use, enable it again:
+
+```bash
+opencode service enable
+```
 
 See [Troubleshooting](/troubleshooting) for shared service diagnostics and the [API reference](/api) for server endpoints.
 

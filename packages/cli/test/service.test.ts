@@ -25,19 +25,18 @@ test("managed service ports are stable per installation channel", () => {
   expect(ServiceConfig.defaultPort("preview-a")).not.toBe(ServiceConfig.defaultPort("preview-b"))
 })
 
-test("service disabled accepts only booleans without changing configuration on invalid input", async () => {
+test("service disable and enable toggle the disabled flag", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-disabled-config-"))
   const layer = Global.layerWith({ config: path.join(root, "config"), state: path.join(root, "state") })
   const run = <A, E>(effect: Effect.Effect<A, E, Global.Service | FileSystem.FileSystem>) =>
     Effect.runPromise(effect.pipe(Effect.provide(layer), Effect.provide(NodeFileSystem.layer)))
   try {
-    expect(await run(ServiceConfig.get("disabled"))).toBe("false")
-    await expect(run(ServiceConfig.set("disabled", "yes"))).rejects.toThrow("Disabled must be true or false")
-    expect(await run(ServiceConfig.read())).toEqual({})
-    await run(ServiceConfig.set("disabled", "true"))
-    expect(await run(ServiceConfig.read())).toEqual({ disabled: true })
-    await run(ServiceConfig.unset("disabled"))
-    expect(await run(ServiceConfig.read())).toEqual({})
+    await run(ServiceConfig.set("hostname", "127.0.0.2"))
+    await run(ServiceConfig.disable())
+    expect(await run(ServiceConfig.read())).toEqual({ hostname: "127.0.0.2", disabled: true })
+    await expect(run(ServiceConfig.set("disabled", "true"))).rejects.toThrow("Unknown service config key: disabled")
+    await run(ServiceConfig.enable())
+    expect(await run(ServiceConfig.read())).toEqual({ hostname: "127.0.0.2" })
   } finally {
     await fs.rm(root, { recursive: true, force: true })
   }

@@ -483,6 +483,8 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
         Spec.make("restart", { description: "Restart the background server" }),
         Spec.make("status", { description: "Show background server status" }),
         Spec.make("stop", { description: "Stop the background server" }),
+        Spec.make("disable", { description: "Stop the background server and use private servers by default" }),
+        Spec.make("enable", { description: "Use the background server by default" }),
         Spec.make("get", {
           description: "Get service configuration",
           params: {

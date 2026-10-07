@@ -21,7 +21,7 @@ export const Info = Schema.Struct({
 })
 export type Info = typeof Info.Type
 
-const keys = ["disabled", "hostname", "port", "password", "cors", "env"] as const
+const keys = ["hostname", "port", "password", "cors", "env"] as const
 type Key = (typeof keys)[number]
 
 const decodeInfo = Schema.decodeUnknownEffect(Schema.fromJsonString(Info))
@@ -79,15 +79,7 @@ export const migrateConfig = Effect.fnUntraced(function* (legacy: string, file: 
 })
 
 function configKey(key: string): Key {
-  if (
-    key === "disabled" ||
-    key === "hostname" ||
-    key === "port" ||
-    key === "password" ||
-    key === "cors" ||
-    key === "env"
-  )
-    return key
+  if (key === "hostname" || key === "port" || key === "password" || key === "cors" || key === "env") return key
   throw new Error(`Unknown service config key: ${key}`)
 }
 
@@ -152,6 +144,16 @@ export const password = Effect.fn("cli.service-config.password")(function* (valu
   return next
 })
 
+export const disable = Effect.fn("cli.service-config.disable")(function* () {
+  yield* Service.stop(yield* options())
+  yield* write({ ...(yield* read()), disabled: true })
+})
+
+export const enable = Effect.fn("cli.service-config.enable")(function* () {
+  const { disabled: _disabled, ...next } = yield* read()
+  yield* write(next)
+})
+
 export const get = Effect.fn("cli.service-config.get")(function* (key?: string, name?: string) {
   if (key === undefined) {
     const { password: _password, ...safe } = yield* read()
@@ -160,9 +162,6 @@ export const get = Effect.fn("cli.service-config.get")(function* (key?: string, 
   const selected = configKey(key)
   if (selected !== "env" && name !== undefined) throw new Error(`Usage: opencode service get ${selected}`)
   switch (selected) {
-    case "disabled": {
-      return String((yield* read()).disabled ?? false)
-    }
     case "hostname": {
       return (yield* read()).hostname ?? ""
     }
@@ -189,12 +188,6 @@ export const set = Effect.fn("cli.service-config.set")(function* (key: string, v
   if (selected !== "env" && nestedValue !== undefined)
     throw new Error(`Usage: opencode service set ${selected} <value>`)
   switch (selected) {
-    case "disabled": {
-      if (value !== "true" && value !== "false") throw new Error("Disabled must be true or false")
-      if (value === "true") yield* Service.stop(yield* options())
-      yield* write({ ...(yield* read()), disabled: value === "true" })
-      return
-    }
     case "hostname": {
       yield* Service.stop(yield* options())
       yield* write({ ...(yield* read()), hostname: value })
@@ -239,11 +232,6 @@ export const unset = Effect.fn("cli.service-config.unset")(function* (key: strin
   const selected = configKey(key)
   if (selected !== "env" && name !== undefined) throw new Error(`Usage: opencode service unset ${selected}`)
   switch (selected) {
-    case "disabled": {
-      const { disabled: _disabled, ...next } = yield* read()
-      yield* write(next)
-      return
-    }
     case "hostname": {
       yield* Service.stop(yield* options())
       const { hostname: _hostname, ...next } = yield* read()
