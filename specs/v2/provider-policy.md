@@ -296,7 +296,7 @@ Flow:
 3. Run the terminal config policy transform over the reversed authored statements followed by the organization-managed statements.
 4. Remove providers denied by the final matching `provider.use` statement.
 
-Config reload refreshes the plugin's policy snapshot and rebuilds the catalog. A changed Console snapshot rebuilds the catalog through the Console plugin's own reload, which re-runs the terminal transform.
+Config reload refreshes the plugin's policy snapshot and rebuilds the catalog. A changed Console snapshot notifies the policy plugin to rebuild its catalogs and re-run the terminal transforms.
 
 ## Legacy Migration
 
@@ -342,3 +342,11 @@ Equivalent v2 policy:
   },
 }
 ```
+
+## MCP Integration Policy
+
+The protected terminal config policy plugin applies `integration.use` statements to `mcp:<server-name>` using `ctx.mcp.transform`. It removes denied servers after configured and plugin-provided catalog entries are assembled. The MCP domain owns connections and resource cleanup; it does not interpret policy statements.
+
+Plugin activation batches catalog registrations, so denied servers never open an initial connection. Config and managed policy updates reload the catalog. Removing an existing server closes its connection and removes its tools, instructions, prompts, resources, and resource templates. Explicit connect and direct tool, prompt, and resource calls reject removed servers through the ordinary not-found path. Allowing the server again restores its catalog entry and reconnects it.
+
+Policies are evaluated after authored statements and then organization statements, with the final matching statement deciding access. API-added server overrides are inputs to the same catalog, so they also pass through the policy transform. Catalog removal does not sandbox arbitrary executable plugins; plugin import governance remains a separate `plugin:*` integration policy check.

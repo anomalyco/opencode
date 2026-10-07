@@ -1,9 +1,10 @@
 export * as ConfigPolicyPlugin from "./policy.js"
 
 import { define } from "@opencode/plugin/effect/plugin"
-import { Effect } from "effect"
+import { Effect, Stream } from "effect"
 import { Config } from "../../config.js"
 import { ManagedPolicy } from "../../managed-policy.js"
+import { State } from "../../state.js"
 import { Wildcard } from "../../util/wildcard.js"
 import { ConfigEntryObserver } from "./entry-observer.js"
 
@@ -12,7 +13,12 @@ export const Plugin = define({
   effect: Effect.fn(function* (ctx) {
     const config = yield* Config.Service
     const managed = yield* ManagedPolicy.Service
-    const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.provider.reload())
+    const reload = State.batch(Effect.all([ctx.provider.reload(), ctx.mcp.reload()], { discard: true }))
+    const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, reload)
+    yield* managed.changes().pipe(
+      Stream.runForEach(() => reload),
+      Effect.forkScoped({ startImmediately: true }),
+    )
     // Authored documents reverse so user-global policy outranks repository policy; organization statements
     // from the connected Console follow every authored one and have the final say.
     const policies = () => ManagedPolicy.statements(loaded.entries, managed.current())
@@ -23,6 +29,12 @@ export const Plugin = define({
           (policy) => policy.action === "provider.use" && Wildcard.match(record.provider.id, policy.resource),
         )
         if (policy?.effect === "deny") providers.remove(record.provider.id)
+      }
+    })
+    yield* ctx.mcp.transform((servers) => {
+      const current = policies()
+      for (const [name] of servers.list()) {
+        if (ManagedPolicy.decision(current, "integration.use", `mcp:${name}`) === "deny") servers.remove(name)
       }
     })
     yield* ctx.permission.hook("evaluate", (event) =>
