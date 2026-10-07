@@ -210,9 +210,11 @@ it.live(
 
       for (const config of configs) {
         yield* llm.push(TestLLM.tool(`call_${config.tool}`, config.tool, {}), TestLLM.text(config.id, config.tool))
-        yield* sessions.resume(config.id)
+        const response = yield* request(`/api/session/${config.id}/resume`, {})
+        expect(response.status).toBe(204)
       }
       expect(executed).toEqual([first.id, second.id])
+      expect((yield* request(`/api/session/${Session.ID.create()}/resume`, {})).status).toBe(404)
 
       for (const config of configs) {
         yield* llm.push(TestLLM.text(`generated ${config.id}`, config.tool))

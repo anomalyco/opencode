@@ -42,6 +42,17 @@ const info = yield* opencode.server.info()
 const sessions = yield* opencode.sessions.list()
 ```
 
+## Resume admitted work
+
+To run a previously admitted prompt without adding a new message, use `sessions.resume`:
+
+```ts
+yield* opencode.sessions.prompt({ sessionID: session.id, text: "Review the current changes", resume: false })
+yield* opencode.sessions.resume({ sessionID: session.id })
+```
+
+It starts execution when idle or joins an active execution, and resolves when that execution settles.
+
 ## Stream events
 
 Streaming endpoints return Effect `Stream` values. Fork consumers in the host Scope when they should run in the

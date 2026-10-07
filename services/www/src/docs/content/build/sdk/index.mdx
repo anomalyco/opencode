@@ -42,6 +42,18 @@ options, and `AsyncIterable` streams as `@opencode/client`. It exposes the
 full generated client and adds the convenience aliases `sessions` and `events`
 for the session and event groups.
 
+## Resume admitted work
+
+Admit a prompt without starting execution, then resume that session without sending another message:
+
+```ts
+await opencode.sessions.prompt({ sessionID: session.id, text: "Review the current changes", resume: false })
+await opencode.sessions.resume({ sessionID: session.id })
+```
+
+`resume` starts execution when idle or joins an active execution. It resolves when that execution settles; unlike
+`sessions.wait`, it can start work.
+
 ## Worktrees
 
 Worktree operations require a `projectID`. Create and refresh load configuration and plugins from the project's saved
