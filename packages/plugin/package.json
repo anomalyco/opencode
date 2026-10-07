@@ -33,7 +33,8 @@
     "@opencode/protocol": "workspace:*",
     "@opencode/schema": "workspace:*",
     "@opencode/util": "workspace:*",
-    "effect": "catalog:"
+    "effect": "catalog:",
+    "resolve.exports": "2.0.3"
   },
   "peerDependencies": {
     "@opencode/theme": "workspace:*",

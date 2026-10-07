@@ -111,6 +111,63 @@ const failed = (plugins: Plugin.Interface) =>
   )
 
 describe("PluginSupervisor reload", () => {
+  it.live("loads and reloads configured package main entrypoints without a root shim", () =>
+    Effect.gen(function* () {
+      const directory = yield* tmpdirScoped()
+      const root = path.join(directory.path, "external/greeter")
+      const manifest = path.join(root, "package.json")
+      yield* Effect.promise(async () => {
+        await Bun.write(manifest, JSON.stringify({ main: "dist/first.js" }))
+        await Bun.write(path.join(root, "dist/first.js"), greeter("greet-first"))
+        await Bun.write(path.join(root, "dist/next.js"), greeter("greet-next"))
+        await Bun.write(path.join(directory.path, ".opencode/opencode.json"), JSON.stringify({ plugins: [root] }))
+      })
+      const watcher = yield* Watcher.Test
+      const locations = yield* LocationServiceMap.Service
+      yield* Effect.gen(function* () {
+        const plugins = yield* Plugin.Service
+        const commands = yield* Command.Service
+        yield* plugins.awaitActivation
+        expect(yield* commands.get("greet-first")).toBeDefined()
+        yield* Effect.promise(async () => {
+          await Bun.write(manifest, JSON.stringify({ main: "dist/next.js" }))
+          await fs.utimes(manifest, new Date(), new Date(Date.now() + 1000))
+        })
+        yield* watcher.emit({ path: manifest, type: "update" })
+        yield* commands.get("greet-next").pipe(
+          Effect.flatMap((command) => (command ? Effect.void : Effect.fail("activation pending"))),
+          Effect.retry({ times: 80, schedule: Schedule.spaced("25 millis") }),
+        )
+        expect(yield* commands.get("greet-first")).toBeUndefined()
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
+      )
+    }),
+  )
+
+  it.live("retains real-path containment for manifest-backed plugin directories", () =>
+    Effect.gen(function* () {
+      const directory = yield* tmpdirScoped()
+      const root = path.join(directory.path, "external/greeter")
+      yield* Effect.promise(async () => {
+        await Bun.write(path.join(root, "package.json"), JSON.stringify({ main: "../outside.js" }))
+        await Bun.write(path.join(root, "../outside.js"), greeter("escaped"))
+        await Bun.write(path.join(directory.path, ".opencode/opencode.json"), JSON.stringify({ plugins: [root] }))
+      })
+      const locations = yield* LocationServiceMap.Service
+      yield* Effect.gen(function* () {
+        const plugins = yield* Plugin.Service
+        const commands = yield* Command.Service
+        yield* plugins.awaitActivation
+        expect(yield* commands.get("escaped")).toBeUndefined()
+        expect((yield* plugins.list()).some((plugin) => plugin.id === "greeter")).toBe(false)
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
+      )
+    }),
+  )
   ;(
     [
       { name: "on a helper-only save", helper: "nested/helper.ts", touchEntry: false },
