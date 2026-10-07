@@ -1,10 +1,15 @@
 import type { HomeProjectsController } from "./home-projects-controller"
-import { HomeProjectsView } from "./home-projects-view"
+import { HomeProjectsView, type HomeProjectsViewProps } from "./home-projects-view"
 import type { HomeScrollController } from "./home-scroll-controller"
 
-export function HomeProjects(props: { projects: HomeProjectsController; scroll: HomeScrollController }) {
+export function HomeProjects(props: {
+  projects: HomeProjectsController
+  scroll?: HomeScrollController
+  tree?: HomeProjectsViewProps["tree"]
+}) {
   return (
     <HomeProjectsView
+      tree={props.tree}
       language={props.projects.copy.language}
       servers={props.projects.server.list}
       projects={props.projects.project.list}
@@ -18,7 +23,7 @@ export function HomeProjects(props: { projects: HomeProjectsController; scroll: 
       defaultServerKey={props.projects.server.defaultKey}
       canRevealProject={props.projects.project.canReveal}
       unseenCount={props.projects.project.unseenCount}
-      onWheel={props.scroll.viewport.containWheel}
+      onWheel={(event) => (props.scroll ? props.scroll.viewport.containWheel(event) : event.stopPropagation())}
       onChooseProject={props.projects.project.choose}
       onFocusServer={props.projects.server.focus}
       onToggleCollapsed={props.projects.server.toggleCollapsed}

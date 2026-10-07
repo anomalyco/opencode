@@ -14,6 +14,16 @@
   background-color: var(--v2-overlay-simple-overlay-hover);
 }
 
+[data-slot="titlebar-v2"]
+  [data-component="icon-button-v2"][data-action="project-sidebar-toggle"][aria-expanded="true"]:not(:disabled) {
+  background-color: color-mix(in srgb, var(--v2-icon-icon-base) 16%, transparent);
+  color: var(--v2-icon-icon-base);
+}
+
+[data-slot="titlebar-v2"] [data-action="project-sidebar-toggle"][aria-expanded="true"] [data-component="icon"] {
+  color: inherit;
+}
+
 [data-slot="titlebar-tab-item"]
   [data-component="icon-button-v2"]:is(:focus-visible, [data-state="focus"]):not(:disabled) {
   opacity: 1;

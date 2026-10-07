@@ -28,6 +28,11 @@ const projectContextMenuID = (server: ServerConnection.Any, directory: string) =
   `project:${ServerConnection.key(server)}:${directory}`
 
 export type HomeProjectsViewProps = {
+  tree?: {
+    expanded: (server: ServerConnection.Any, project: LocalProject) => boolean
+    toggle: (server: ServerConnection.Any, project: LocalProject) => void
+    content: (server: ServerConnection.Any, project: LocalProject) => JSX.Element
+  }
   language: ReturnType<typeof useLanguage>
   servers: Accessor<ServerConnection.Any[]>
   projects: Accessor<LocalProject[]>
@@ -68,17 +73,18 @@ export function HomeProjectsView(props: HomeProjectsViewProps) {
   }
   return (
     <aside
-      class={`
-        mt-6 flex min-h-0 min-w-0 flex-col gap-4 overflow-hidden
-        lg:sticky lg:top-14 lg:mt-14 lg:h-[calc(100cqh-56px)] lg:self-start lg:pt-[52px]
-      `}
+      class={
+        props.tree
+          ? "flex h-full min-h-0 min-w-0 flex-col gap-3 overflow-hidden px-2 pt-4 pb-2 text-[13px]"
+          : "mt-6 flex min-h-0 min-w-0 flex-col gap-4 overflow-hidden lg:sticky lg:top-14 lg:mt-14 lg:h-[calc(100cqh-56px)] lg:self-start lg:pt-[52px]"
+      }
       aria-label={props.language.t("home.projects")}
       onWheel={(event) => {
         if (event.target === event.currentTarget) return
         props.onWheel(event)
       }}
     >
-      <div class="flex h-7 min-w-0 shrink-0 items-center justify-between pl-1.5 pr-3">
+      <div class="flex h-7 min-w-0 shrink-0 items-center justify-between px-1.5">
         <div class="text-v2-text-text-muted [font-weight:530]">{props.language.t("home.projects")}</div>
         <Show
           when={props.servers().length === 1 && !(props.projects().length === 0 && props.recentlyClosed().length > 0)}
@@ -97,11 +103,15 @@ export function HomeProjectsView(props: HomeProjectsViewProps) {
           </TooltipV2>
         </Show>
       </div>
-      <ScrollView data-slot="home-projects-scroll" class="min-h-0 min-w-0 shrink">
+      <ScrollView
+        data-slot="home-projects-scroll"
+        class="min-h-0 min-w-0 shrink"
+        classList={{ "flex-1": !!props.tree }}
+      >
         <Show
           when={props.servers().length > 1}
           fallback={
-            <div class="pr-3">
+            <div classList={{ "pr-3": !props.tree }}>
               <Show
                 when={props.projects().length > 0}
                 fallback={<HomeProjectEmpty {...props} server={props.servers()[0]} items={props.recentlyClosed()} />}
@@ -116,7 +126,7 @@ export function HomeProjectsView(props: HomeProjectsViewProps) {
             </div>
           }
         >
-          <div class="flex min-w-0 flex-col gap-4 pr-3">
+          <div class="flex min-w-0 flex-col gap-4" classList={{ "pr-3": !props.tree }}>
             <For each={props.servers()}>
               {(item) => {
                 const projects = () => props.projectsForServer(item)
@@ -145,7 +155,7 @@ export function HomeProjectsView(props: HomeProjectsViewProps) {
         </Show>
       </ScrollView>
       <HomeUtilityNav
-        class="mb-8 mt-4 hidden shrink-0 lg:flex"
+        class={props.tree ? "mt-auto flex shrink-0 pt-2 [&>button]:!h-8" : "mb-8 mt-4 hidden shrink-0 lg:flex"}
         onOpenSettings={props.onOpenSettings}
         onOpenHelp={props.onOpenHelp}
         language={props.language}
@@ -161,10 +171,11 @@ export function HomeUtilityNav(props: {
   language: ReturnType<typeof useLanguage>
 }) {
   return (
-    <div class={`${props.class ?? ""} min-w-0 flex-col gap-1 pr-3`}>
+    <div class={`${props.class ?? ""} min-w-0 flex-col gap-1`}>
       <HomeProjectNavButton
         type="button"
         class="text-v2-text-text-faint [&>[data-slot=icon-svg]]:text-v2-icon-icon-muted"
+        data-action="project-sidebar-settings"
         onClick={props.onOpenSettings}
       >
         <IconV2 name="settings-gear" size="small" />
@@ -173,6 +184,7 @@ export function HomeUtilityNav(props: {
       <HomeProjectNavButton
         type="button"
         class="text-v2-text-text-faint [&>[data-slot=icon-svg]]:text-v2-icon-icon-muted"
+        data-action="project-sidebar-help"
         onClick={props.onOpenHelp}
       >
         <IconV2 name="help" size="small" />
@@ -368,18 +380,22 @@ function HomeProjectSlot(
   )
 
   return (
-    <HomeProjectRow
-      {...props}
-      project={project()}
-      server={props.server}
-      index={props.index}
-      serverSelected={props.selection().server === ServerConnection.key(props.server)}
-      selected={
-        props.selection().server === ServerConnection.key(props.server) &&
-        props.selection().directory === props.worktree
-      }
-      unseen={props.unseenCount(props.server, project())}
-    />
+    <div data-component="project-sidebar-group" data-project={props.worktree}>
+      <HomeProjectRow
+        {...props}
+        project={project()}
+        server={props.server}
+        index={props.index}
+        serverSelected={props.selection().server === ServerConnection.key(props.server)}
+        selected={
+          !props.tree &&
+          props.selection().server === ServerConnection.key(props.server) &&
+          props.selection().directory === props.worktree
+        }
+        unseen={props.unseenCount(props.server, project())}
+      />
+      <Show when={props.tree?.expanded(props.server, project())}>{props.tree?.content(props.server, project())}</Show>
+    </div>
   )
 }
 
@@ -474,7 +490,7 @@ function HomeProjectRow(
     <div
       ref={sortable.ref}
       class="group/project relative flex h-7 min-w-0 items-center rounded-[6px]"
-      classList={{ "z-10": sortable.isDragSource() }}
+      classList={{ "z-10": sortable.isDragSource(), "!h-8": !!props.tree }}
       onContextMenu={(event) => {
         event.preventDefault()
         props.onSetContextMenuOpen(contextMenuID(), true)
@@ -485,10 +501,12 @@ function HomeProjectRow(
         data-component="home-project-row"
         class="pr-16 disabled:opacity-60"
         classList={{
+          "!h-8": !!props.tree,
           "bg-v2-background-bg-layer-01 text-v2-text-text-base": sortable.isDragSource(),
         }}
         data-selected={props.selected ? "" : undefined}
         aria-current={props.selected ? "page" : undefined}
+        aria-expanded={props.tree?.expanded(props.server, props.project)}
         disabled={serverUnreachable()}
         onPointerDown={(event) => {
           // Same-server mouse selection happens on pointerdown (like tabs),
@@ -498,6 +516,7 @@ function HomeProjectRow(
           // does not focus that server and load its session index. Touch is
           // excluded so flick-scrolling the list cannot select rows.
           pointerDownSelected = undefined
+          if (props.tree) return
           if (event.button !== 0 || event.pointerType === "touch") return
           if (!props.serverSelected) return
           pointerDownSelected = props.selected
@@ -507,6 +526,10 @@ function HomeProjectRow(
           // The drag sensor calls preventDefault on post-drag clicks; never
           // toggle selection as part of a reorder.
           if (event.defaultPrevented) return
+          if (props.tree) {
+            props.tree.toggle(props.server, props.project)
+            return
+          }
           // Keyboard activation and touch taps keep the original toggle.
           if (event.detail === 0 || pointerDownSelected === undefined) {
             props.onSelectProject(props.server, props.project.worktree)
@@ -518,7 +541,11 @@ function HomeProjectRow(
           pointerDownSelected = undefined
         }}
       >
-        <HomeProjectAvatar project={props.project} />
+        <Show when={props.tree} fallback={<HomeProjectAvatar project={props.project} />}>
+          <span data-slot="project-folder-icon" class="flex size-4 shrink-0 items-center justify-center">
+            <IconV2 name={props.tree?.expanded(props.server, props.project) ? "folderOpen" : "folder"} size="small" />
+          </span>
+        </Show>
         <span class={HOME_PROJECT_NAV_LABEL}>{displayName(props.project)}</span>
       </HomeProjectNavButton>
       <div

@@ -312,16 +312,16 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
 
               tabs.newDraft({ server: fallback.server, directory: fallback.project.worktree }, "")
             }
-            const toggleHome = () => tabs.toggleHome({ home: layout.route().type === "home", current: currentTab() })
+            const toggleSidebar = () => layout.sidebar.toggle()
 
-            command.register("titlebar-home", () => [
+            command.register("titlebar-sidebar", () => [
               {
-                id: "home.toggle",
-                title: language.t("home.title"),
+                id: "sidebar.toggle",
+                title: language.t("command.sidebar.toggle"),
                 category: language.t("command.category.view"),
                 keybind: "mod+b",
                 hidden: true,
-                onSelect: toggleHome,
+                onSelect: toggleSidebar,
               },
             ])
 
@@ -377,8 +377,8 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
                   placement="bottom"
                   value={
                     <>
-                      {language.t("home.title")}
-                      <KeybindV2 keys={command.keybindParts("home.toggle")} variant="neutral" />
+                      {language.t("command.sidebar.toggle")}
+                      <KeybindV2 keys={command.keybindParts("sidebar.toggle")} variant="neutral" />
                     </>
                   }
                   class="shrink-0"
@@ -388,11 +388,14 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
                     variant="ghost-muted"
                     size="large"
                     class="!w-9 shrink-0"
-                    icon={<IconV2 name="grid-plus" />}
-                    state={layout.route().type === "home" ? "pressed" : undefined}
-                    onClick={toggleHome}
-                    aria-label={language.t("home.title")}
-                    aria-pressed={layout.route().type === "home"}
+                    icon={<Icon name={layout.sidebar.opened() ? "sidebar-active" : "sidebar"} size="small" />}
+                    state={layout.sidebar.opened() ? "pressed" : undefined}
+                    onClick={toggleSidebar}
+                    aria-label={language.t("command.sidebar.toggle")}
+                    aria-pressed={layout.sidebar.opened()}
+                    aria-expanded={layout.sidebar.opened()}
+                    aria-controls="project-sidebar"
+                    data-action="project-sidebar-toggle"
                   />
                 </TooltipV2>
 
