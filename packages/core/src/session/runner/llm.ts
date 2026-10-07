@@ -8,7 +8,7 @@ import {
   isContextOverflowFailure,
   type ProviderErrorEvent,
 } from "@opencode-ai/llm"
-import { Cause, DateTime, Effect, FiberSet, Layer, Option, Semaphore, Stream } from "effect"
+import { Cause, DateTime, Effect, FiberSet, Layer, Option, Ref, Semaphore, Stream } from "effect"
 import { AgentV2 } from "../../agent"
 import { Config } from "../../config"
 import { Database } from "../../database/database"
@@ -178,8 +178,9 @@ const layer = Layer.effect(
       sessionID: SessionSchema.ID,
       promotion: SessionInput.Delivery | undefined,
       step: number,
-      recoverOverflow?: typeof compaction.compactAfterOverflow,
-      preferred?: ModelV2.Info,
+      recoverOverflow: typeof compaction.compactAfterOverflow | undefined,
+      preferred: ModelV2.Info | undefined,
+      totalOutputTokens: Ref.Ref<number>,
     ) {
       const session = yield* getSession(sessionID)
       if (session.location.directory !== location.directory || session.location.workspaceID !== location.workspaceID)
@@ -226,8 +227,18 @@ const layer = Layer.effect(
         tools: toolMaterialization?.definitions ?? [],
         toolChoice: isLastStep ? "none" : undefined,
       })
-      if (yield* compaction.compactIfNeeded({ sessionID: session.id, entries, model, request }))
+      // Recovery budget: once a drain's cumulative turn output passes maxTokens,
+      // force a compaction checkpoint even without context-window pressure. Any
+      // completed checkpoint (forced or pressure-driven) restarts the budget.
+      const forceCompaction =
+        (yield* Ref.get(totalOutputTokens)) >= ProviderRetry.DEFAULT_RECOVERY_LIMITS.maxTokens
+      const compacted = forceCompaction
+        ? yield* compaction.compactAfterOverflow({ sessionID: session.id, entries, model, request })
+        : yield* compaction.compactIfNeeded({ sessionID: session.id, entries, model, request })
+      if (compacted) {
+        yield* Ref.set(totalOutputTokens, 0)
         return yield* Effect.die(continueAfterCompaction(currentStep))
+      }
       const startSnapshot = yield* snapshots.capture()
       const publisher = createLLMEventPublisher(events, {
         sessionID: session.id,
@@ -356,6 +367,8 @@ const layer = Layer.effect(
           if (stream._tag === "Failure") return yield* Effect.failCause(stream.cause)
           if (settled._tag === "Failure" && Cause.hasInterrupts(settled.cause))
             return yield* Effect.failCause(settled.cause)
+          const turnOutput = stepSettlement?.tokens.output ?? 0
+          if (turnOutput > 0) yield* Ref.update(totalOutputTokens, (total) => total + turnOutput)
           return {
             needsContinuation: !publisher.hasProviderError() && needsContinuation,
             step: currentStep,
@@ -369,6 +382,7 @@ const layer = Layer.effect(
       sessionID: SessionSchema.ID,
       promotion: SessionInput.Delivery | undefined,
       step: number,
+      outputTokens: Ref.Ref<number>,
     ) => Effect.Effect<
       {
         readonly needsContinuation: boolean
@@ -379,27 +393,34 @@ const layer = Layer.effect(
       RunError
     >
 
-    const runAfterOverflowCompaction: RunTurn = Effect.fnUntraced(function* (sessionID, promotion, step) {
-      return yield* runTurnAttempt(sessionID, promotion, step).pipe(
+    const runAfterOverflowCompaction: RunTurn = Effect.fnUntraced(function* (sessionID, promotion, step, outputTokens) {
+      return yield* runTurnAttempt(sessionID, promotion, step, undefined, undefined, outputTokens).pipe(
         Effect.catchDefect(
           Effect.fnUntraced(function* (defect) {
             if (!(defect instanceof TurnTransitionError)) return yield* Effect.die(defect)
             if (defect.transition._tag === "ContinueAfterOverflowCompaction")
               return yield* Effect.die("Post-compaction provider attempt cannot recover another overflow")
             yield* Effect.yieldNow
-            return yield* runAfterOverflowCompaction(sessionID, undefined, defect.transition.step)
+            return yield* runAfterOverflowCompaction(sessionID, undefined, defect.transition.step, outputTokens)
           }),
         ),
       )
     })
 
-    const runTurn: RunTurn = Effect.fnUntraced(function* (sessionID, promotion, step) {
+    const runTurn: RunTurn = Effect.fnUntraced(function* (sessionID, promotion, step, outputTokens) {
       const session = yield* getSession(sessionID)
       const chain = yield* ModelFallback.chainFor(session)
       return yield* ModelFallback.withFallback(
         chain,
         (preferred) =>
-          runTurnAttempt(sessionID, promotion, step, compaction.compactAfterOverflow, preferred).pipe(
+          runTurnAttempt(
+            sessionID,
+            promotion,
+            step,
+            compaction.compactAfterOverflow,
+            preferred,
+            outputTokens,
+          ).pipe(
             // Phase 11 — Self-Healing: retry transient provider-turn failures (rate
             // limits, 5xx, transport). Overflow and interrupt paths reach the runner
             // as defects, so Effect.retry leaves them for catchDefect / compaction.
@@ -428,8 +449,8 @@ const layer = Layer.effect(
             if (!(defect instanceof TurnTransitionError)) return yield* Effect.die(defect)
             yield* Effect.yieldNow
             if (defect.transition._tag === "ContinueAfterOverflowCompaction")
-              return yield* runAfterOverflowCompaction(sessionID, undefined, defect.transition.step)
-            return yield* runTurn(sessionID, undefined, defect.transition.step)
+              return yield* runAfterOverflowCompaction(sessionID, undefined, defect.transition.step, outputTokens)
+            return yield* runTurn(sessionID, undefined, defect.transition.step, outputTokens)
           }),
         ),
       )
@@ -447,6 +468,7 @@ const layer = Layer.effect(
       let promotion: SessionInput.Delivery | undefined = hasSteer ? "steer" : hasQueue ? "queue" : undefined
       let shouldRun = input.force || hasSteer || hasQueue
       let toolFailures = 0
+      const outputTokens = yield* Ref.make(0)
       while (shouldRun) {
         const elapsed = DateTime.toEpochMillis(yield* DateTime.now) - startedAt
         if (elapsed > ProviderRetry.DEFAULT_RECOVERY_LIMITS.maxExecutionTime)
@@ -454,7 +476,7 @@ const layer = Layer.effect(
         let needsContinuation = true
         let step = 1
         while (needsContinuation) {
-          const result = yield* runTurn(input.sessionID, promotion, step)
+          const result = yield* runTurn(input.sessionID, promotion, step, outputTokens)
           const observed = ToolBudget.observe(
             toolFailures,
             { succeeded: result.toolSucceeded, trailingFailures: result.trailingToolFailures },

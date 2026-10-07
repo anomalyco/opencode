@@ -16,10 +16,11 @@ export const RETRY_MAX_DELAY_NO_HEADERS = 30_000
 export const RETRY_MAX_DELAY = 30_000
 
 /**
- * Recovery policy limits shared by the provider-retry slice of Phase 11.
- * Only `maxRetries` is wired into the turn loop today; the token/time/tool
- * limits integrate with the existing compaction and interrupt layers and are
- * reserved as named policy caps so callers can reason about them.
+ * Recovery policy limits shared by the Phase 11/12 recovery slices. All four
+ * are wired: `maxRetries` drives the provider-turn retry schedule, while the
+ * run loop enforces `maxExecutionTime` (drain watchdog), `maxToolFailures`
+ * (consecutive tool-failure budget), and `maxTokens` (cumulative turn output
+ * forcing a compaction checkpoint).
  */
 export interface RecoveryLimits {
   /** Maximum provider-turn retries (see {@link RETRY_MAX_RETRIES}). */
