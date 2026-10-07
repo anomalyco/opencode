@@ -1,0 +1,72 @@
+{
+  "$schema": "https://opencode.ai/desktop-theme.json",
+  "name": "Mermaid",
+  "id": "mermaid",
+  "light": {
+    "palette": {
+      "neutral": "#edfffc",
+      "ink": "#244546",
+      "primary": "#62cbbd",
+      "accent": "#9ae5d9",
+      "interactive": "#55bdae",
+      "success": "#6bc5aa",
+      "warning": "#c3a24a",
+      "error": "#d56678",
+      "info": "#6bc8c1",
+      "diffAdd": "#c4eee3",
+      "diffDelete": "#f3cbd2"
+    },
+    "overrides": {
+      "background-base": "#edfffc",
+      "syntax-comment": "#739c98",
+      "syntax-keyword": "#469f94",
+      "syntax-string": "#559d87",
+      "syntax-primitive": "#4d9fa3",
+      "syntax-property": "#548f89",
+      "syntax-type": "#55b2a5",
+      "syntax-constant": "#c4566a"
+    },
+    "v2Overrides": {
+      "v2-background-bg-base": "#edfffc",
+      "v2-background-bg-canvas": "#edfffc",
+      "v2-background-bg-deep": "#9ae5d9",
+      "v2-background-bg-layer-02": "#d5f5ef",
+      "v2-background-bg-layer-03": "#bcebe2",
+      "v2-text-text-tab": "#285b58",
+      "v2-text-text-tab-active": "#2d6661",
+      "v2-text-text-wordmark": "#79bdb2"
+    }
+  },
+  "dark": {
+    "palette": {
+      "neutral": "#0d201f",
+      "ink": "#e9fffb",
+      "primary": "#79d7c9",
+      "accent": "#a0eadf",
+      "interactive": "#70cbbb",
+      "success": "#82d5b9",
+      "warning": "#dfc271",
+      "error": "#e47f91",
+      "info": "#7bd3cd",
+      "diffAdd": "#58b99b",
+      "diffDelete": "#d46e80"
+    },
+    "overrides": {
+      "syntax-comment": "#6f9691",
+      "syntax-keyword": "#79d7c9",
+      "syntax-string": "#82d5b9",
+      "syntax-primitive": "#7bd3cd",
+      "syntax-property": "#93dfd3",
+      "syntax-type": "#aaeade",
+      "syntax-constant": "#e47f91"
+    },
+    "v2Overrides": {
+      "v2-background-bg-canvas": "#0d201f",
+      "v2-background-bg-deep": "#286d67",
+      "v2-background-bg-layer-02": "#315f5b",
+      "v2-background-bg-layer-03": "#3d726c",
+      "v2-text-text-tab": "#dcfff8",
+      "v2-text-text-wordmark": "#86cfc3"
+    }
+  }
+}

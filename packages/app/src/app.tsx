@@ -18,6 +18,7 @@ import { TabsProvider } from "@/shell/tabs/tabs"
 import { ErrorPage } from "@/shell/errors/error"
 import { AppRoutes, File, preloadRoute } from "@/shell/routes/routes"
 import { ExtensionRoot } from "@/runtime/extension/root"
+import { DevThemeSwitcher } from "@/dev/theme-switcher"
 
 export { preloadRoute }
 
@@ -62,6 +63,7 @@ export function AppBaseProviders(
       >
         <LanguageProvider locale={props.locale} onNativeTranslations={props.onNativeTranslations}>
           <UiI18nBridge>
+            {import.meta.env.DEV && <DevThemeSwitcher />}
             <ErrorBoundary
               fallback={(error) => {
                 void import("@sentry/solid").then(({ captureException }) => captureException(error))

@@ -1,0 +1,69 @@
+{
+  "$schema": "https://opencode.ai/desktop-theme.json",
+  "name": "Evelyn",
+  "id": "forest",
+  "light": {
+    "palette": {
+      "neutral": "#f7fbf7",
+      "ink": "#25382d",
+      "primary": "#164d35",
+      "accent": "#668d70",
+      "interactive": "#1f6545",
+      "success": "#3f8058",
+      "warning": "#b68b3a",
+      "error": "#bd5c59",
+      "info": "#527d63",
+      "diffAdd": "#cce5d3",
+      "diffDelete": "#f0cecc"
+    },
+    "overrides": {
+      "background-base": "#f7fbf7",
+      "syntax-comment": "#829287",
+      "syntax-keyword": "#164d35",
+      "syntax-string": "#3f7652",
+      "syntax-primitive": "#35694d",
+      "syntax-property": "#987026",
+      "syntax-type": "#547a5d",
+      "syntax-constant": "#a94f4c"
+    },
+    "v2Overrides": {
+      "v2-background-bg-base": "#f7fbf7",
+      "v2-background-bg-canvas": "#f7fbf7",
+      "v2-background-bg-deep": "#103b29",
+      "v2-background-bg-layer-01": "#edf5ef",
+      "v2-background-bg-layer-02": "#d5e8da",
+      "v2-background-bg-layer-03": "#bcd5c3",
+      "v2-text-text-wordmark": "#6f9b7d",
+      "v2-text-text-tab": "#d9eadf",
+      "v2-text-text-tab-active": "#193c29"
+    }
+  },
+  "dark": {
+    "palette": {
+      "neutral": "#111b15",
+      "ink": "#edf7ef",
+      "primary": "#69b486",
+      "accent": "#93b99b",
+      "interactive": "#62ad80",
+      "success": "#72bd8b",
+      "warning": "#dfbd70",
+      "error": "#e3837f",
+      "info": "#7eac8d",
+      "diffAdd": "#62a778",
+      "diffDelete": "#d3716d"
+    },
+    "overrides": {
+      "syntax-comment": "#718477",
+      "syntax-keyword": "#78bd91",
+      "syntax-string": "#91cda3",
+      "syntax-primitive": "#8db99c",
+      "syntax-property": "#dfbd70",
+      "syntax-type": "#a7c49d",
+      "syntax-constant": "#e3837f"
+    },
+    "v2Overrides": {
+      "v2-background-bg-deep": "#082719",
+      "v2-text-text-tab": "#c8dfd0"
+    }
+  }
+}

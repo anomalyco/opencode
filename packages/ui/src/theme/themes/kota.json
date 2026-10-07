@@ -1,0 +1,51 @@
+{
+  "$schema": "https://opencode.ai/desktop-theme.json",
+  "name": "Seafoam",
+  "id": "kota",
+  "light": {
+    "palette": {
+      "neutral": "#effcff",
+      "ink": "#18343b",
+      "primary": "#00bcd4",
+      "accent": "#00d9f5",
+      "success": "#2a9d72",
+      "warning": "#c88a2c",
+      "error": "#d94f4f",
+      "info": "#008eae",
+      "diffAdd": "#afe5d2",
+      "diffDelete": "#f5b3b3"
+    },
+    "overrides": {
+      "syntax-comment": "#75939a",
+      "syntax-keyword": "#008eae",
+      "syntax-string": "#218866",
+      "syntax-primitive": "#007b98",
+      "syntax-property": "#a86d20",
+      "syntax-type": "#218866",
+      "syntax-constant": "#d94f4f"
+    }
+  },
+  "dark": {
+    "palette": {
+      "neutral": "#10191c",
+      "ink": "#e8fbff",
+      "primary": "#00e5ff",
+      "accent": "#72f4ff",
+      "success": "#61ffca",
+      "warning": "#ffca85",
+      "error": "#ff6767",
+      "info": "#82eaff",
+      "diffAdd": "#61ffca",
+      "diffDelete": "#ff6767"
+    },
+    "overrides": {
+      "syntax-comment": "#668188",
+      "syntax-keyword": "#36d7ef",
+      "syntax-string": "#61ffca",
+      "syntax-primitive": "#82eaff",
+      "syntax-property": "#ffca85",
+      "syntax-type": "#61ffca",
+      "syntax-constant": "#ff6767"
+    }
+  }
+}

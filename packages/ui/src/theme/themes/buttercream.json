@@ -1,0 +1,51 @@
+{
+  "$schema": "https://opencode.ai/desktop-theme.json",
+  "name": "Buttercream",
+  "id": "buttercream",
+  "light": {
+    "palette": {
+      "neutral": "#fffefa",
+      "ink": "#403b2f",
+      "primary": "#f2cf66",
+      "accent": "#ffe89a",
+      "success": "#72a986",
+      "warning": "#d5a928",
+      "error": "#d86f6f",
+      "info": "#b89734",
+      "diffAdd": "#d8ecdf",
+      "diffDelete": "#f5d2d2"
+    },
+    "overrides": {
+      "syntax-comment": "#9a9380",
+      "syntax-keyword": "#b88a08",
+      "syntax-string": "#568568",
+      "syntax-primitive": "#c29412",
+      "syntax-property": "#9f7500",
+      "syntax-type": "#9a7a20",
+      "syntax-constant": "#c85f5f"
+    }
+  },
+  "dark": {
+    "palette": {
+      "neutral": "#1d1b16",
+      "ink": "#fffdf5",
+      "primary": "#ffe38a",
+      "accent": "#fff0b8",
+      "success": "#8fd0a5",
+      "warning": "#ffe38a",
+      "error": "#f18c8c",
+      "info": "#f4d675",
+      "diffAdd": "#72bd8c",
+      "diffDelete": "#f18c8c"
+    },
+    "overrides": {
+      "syntax-comment": "#8f8978",
+      "syntax-keyword": "#ffe38a",
+      "syntax-string": "#8fd0a5",
+      "syntax-primitive": "#fff0b8",
+      "syntax-property": "#f4cd55",
+      "syntax-type": "#f8dc7a",
+      "syntax-constant": "#f18c8c"
+    }
+  }
+}

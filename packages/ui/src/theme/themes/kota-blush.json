@@ -1,0 +1,75 @@
+{
+  "$schema": "https://opencode.ai/desktop-theme.json",
+  "name": "Sunshine Citron",
+  "id": "kota-blush",
+  "light": {
+    "palette": {
+      "neutral": "#fff8fb",
+      "ink": "#50333f",
+      "primary": "#e58daa",
+      "accent": "#f4b6a5",
+      "interactive": "#d9789b",
+      "success": "#72ad83",
+      "warning": "#e8a06f",
+      "error": "#cf687f",
+      "info": "#df8eaa",
+      "diffAdd": "#d0ead7",
+      "diffDelete": "#f5ced5"
+    },
+    "overrides": {
+      "background-base": "#fff8fb",
+      "syntax-comment": "#a58290",
+      "syntax-keyword": "#c9577d",
+      "syntax-string": "#568a68",
+      "syntax-primitive": "#d87978",
+      "syntax-property": "#c16e69",
+      "syntax-type": "#d57498",
+      "syntax-constant": "#c85a71"
+    },
+    "v2Overrides": {
+      "v2-background-bg-base": "#fff8fb",
+      "v2-background-bg-canvas": "#fff8fb",
+      "v2-background-bg-deep": "#f4bfd1",
+      "v2-background-bg-layer-01": "#fcecf2",
+      "v2-background-bg-layer-02": "#fde2eb",
+      "v2-background-bg-layer-03": "#e9a9bf",
+      "v2-text-text-tab": "#6b354c",
+      "v2-text-text-tab-active": "#74364f",
+      "v2-text-text-wordmark": "#dda0b4"
+    }
+  },
+  "dark": {
+    "palette": {
+      "neutral": "#26171f",
+      "ink": "#fff3ed",
+      "primary": "#ef8ead",
+      "accent": "#efa895",
+      "interactive": "#df789e",
+      "success": "#8dcea1",
+      "warning": "#e8a477",
+      "error": "#eb7d8e",
+      "info": "#e99ab3",
+      "diffAdd": "#72bd8a",
+      "diffDelete": "#e87889"
+    },
+    "overrides": {
+      "syntax-comment": "#9d7b80",
+      "syntax-keyword": "#ef8ead",
+      "syntax-string": "#8dcea1",
+      "syntax-primitive": "#e6928c",
+      "syntax-property": "#e8a477",
+      "syntax-type": "#f3abc0",
+      "syntax-constant": "#eb7d8e"
+    },
+    "v2Overrides": {
+      "v2-background-bg-canvas": "#26171b",
+      "v2-background-bg-deep": "#7d3f59",
+      "v2-background-bg-layer-01": "#352029",
+      "v2-background-bg-layer-02": "#66384c",
+      "v2-background-bg-layer-03": "#8d526b",
+      "v2-text-text-tab": "#ffeaf2",
+      "v2-text-text-tab-active": "#fff3ed",
+      "v2-text-text-wordmark": "#df91ac"
+    }
+  }
+}

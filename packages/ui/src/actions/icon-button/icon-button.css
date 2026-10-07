@@ -1,5 +1,23 @@
 @import "../submit.css";
 
+html[data-theme="sweetheart"] [data-action="composer-submit"]:has(use[href="#opencode-v2-icon-arrow-up"]) {
+  position: relative;
+}
+
+html[data-theme="sweetheart"]
+  [data-action="composer-submit"]:has(use[href="#opencode-v2-icon-arrow-up"])
+  [data-slot="icon-svg"] {
+  opacity: 0;
+}
+
+html[data-theme="sweetheart"] [data-action="composer-submit"]:has(use[href="#opencode-v2-icon-arrow-up"])::after {
+  content: "";
+  position: absolute;
+  inset: 5px;
+  background: center / contain no-repeat
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M3 3.5h14l-7 7-7-7Z' fill='%2387574d' stroke='%23fff1f6' stroke-width='1.4' stroke-linejoin='round'/%3E%3Cpath d='M10 10.5v5M6.5 16h7' fill='none' stroke='%23fff1f6' stroke-width='1.4' stroke-linecap='round'/%3E%3Cellipse cx='7.7' cy='6.5' rx='1.25' ry='.75' fill='%233e2927' transform='rotate(-20 7.7 6.5)'/%3E%3Cellipse cx='11.3' cy='6.2' rx='1.25' ry='.75' fill='%233e2927' transform='rotate(18 11.3 6.2)'/%3E%3C/svg%3E");
+}
+
 * {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;

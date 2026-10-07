@@ -104,6 +104,87 @@
   -webkit-user-drag: none;
 }
 
+html[data-theme="sweetheart"]
+  [data-slot="project-avatar-slot"]
+  [data-slot="project-avatar-surface"]:not([data-has-image]) {
+  font-size: 0 !important;
+  text-shadow: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+html[data-theme="sweetheart"]
+  [data-slot="project-avatar-slot"]
+  [data-slot="project-avatar-surface"]:not([data-has-image])::after {
+  content: "💋";
+  display: flex;
+  position: absolute;
+  inset: 0;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
+  line-height: 1;
+  color: initial;
+  -webkit-text-fill-color: initial;
+  transform: scale(1.15) translateY(-0.5px);
+  filter: drop-shadow(0 1px 2px rgba(220, 120, 153, 0.4));
+}
+
+html[data-theme="elle"] [data-slot="project-avatar-slot"] [data-slot="project-avatar-surface"]:not([data-has-image]) {
+  font-size: 0 !important;
+  text-shadow: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+html[data-theme="elle"]
+  [data-slot="project-avatar-slot"]
+  [data-slot="project-avatar-surface"][data-decoration]:not([data-has-image])::after {
+  content: attr(data-decoration);
+  display: flex;
+  position: absolute;
+  inset: 0;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
+  font-weight: 400;
+  line-height: 1;
+  color: initial;
+  -webkit-text-fill-color: initial;
+  transform: translateY(-0.5px);
+  filter: drop-shadow(0 1px 1px rgba(159, 40, 95, 0.2));
+}
+
+html[data-theme="kota-blush"]
+  [data-slot="project-avatar-slot"]
+  [data-slot="project-avatar-surface"]:not([data-has-image]) {
+  font-size: 0 !important;
+  text-shadow: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+html[data-theme="kota-blush"]
+  [data-slot="project-avatar-slot"]
+  [data-slot="project-avatar-surface"][data-citrus-decoration]:not([data-has-image])::after {
+  content: attr(data-citrus-decoration);
+  display: flex;
+  position: absolute;
+  inset: 0;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
+  font-weight: 400;
+  line-height: 1;
+  color: initial;
+  -webkit-text-fill-color: initial;
+  transform: translateY(-0.5px);
+  filter: drop-shadow(0 1px 1px rgba(200, 90, 113, 0.18));
+}
+
 [data-component="project-avatar-v2"][data-unread] [data-slot="project-avatar-surface"] {
   -webkit-mask-image: radial-gradient(circle 4.5px at 100% 0, transparent 4px, black 5px);
   mask-image: radial-gradient(circle 4.5px at 100% 0, transparent 4px, black 5px);

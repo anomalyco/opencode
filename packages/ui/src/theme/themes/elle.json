@@ -1,0 +1,62 @@
+{
+  "$schema": "https://opencode.ai/desktop-theme.json",
+  "name": "Elle",
+  "id": "elle",
+  "light": {
+    "palette": {
+      "neutral": "#fdf0ff",
+      "ink": "#422342",
+      "primary": "#d9368b",
+      "accent": "#f06eae",
+      "success": "#65ad82",
+      "warning": "#d9a238",
+      "error": "#dc527d",
+      "info": "#c52f79",
+      "diffAdd": "#cce9d7",
+      "diffDelete": "#f8c5d5"
+    },
+    "overrides": {
+      "syntax-comment": "#9f7b9f",
+      "syntax-keyword": "#cf2f82",
+      "syntax-string": "#4d966c",
+      "syntax-primitive": "#df4a94",
+      "syntax-property": "#bd2d73",
+      "syntax-type": "#d9368b",
+      "syntax-constant": "#dc527d"
+    },
+    "v2Overrides": {
+      "v2-background-bg-canvas": "#fdf0ff",
+      "v2-background-bg-deep": "#f06eae",
+      "v2-text-text-tab": "#5b1f43",
+      "v2-text-text-tab-active": "#6b2450"
+    }
+  },
+  "dark": {
+    "palette": {
+      "neutral": "#1d1021",
+      "ink": "#fff0ff",
+      "primary": "#f05ca5",
+      "accent": "#ff8bc4",
+      "success": "#82d4a0",
+      "warning": "#f4c869",
+      "error": "#f0799c",
+      "info": "#e34b96",
+      "diffAdd": "#69bd88",
+      "diffDelete": "#f0799c"
+    },
+    "overrides": {
+      "syntax-comment": "#96749f",
+      "syntax-keyword": "#f05ca5",
+      "syntax-string": "#82d4a0",
+      "syntax-primitive": "#ff8bc4",
+      "syntax-property": "#e34b96",
+      "syntax-type": "#ffadd3",
+      "syntax-constant": "#f0799c"
+    },
+    "v2Overrides": {
+      "v2-background-bg-canvas": "#1d1021",
+      "v2-background-bg-deep": "#9f326a",
+      "v2-text-text-tab": "#ffe5f2"
+    }
+  }
+}

@@ -3,6 +3,19 @@
 @import "@opencode/ui/styles/tokens";
 @import "tw-animate-css";
 
+[data-component="new-session"] {
+  background-color: var(--v2-background-bg-canvas, var(--v2-background-bg-base));
+}
+
+[data-component="new-session-wordmark"] {
+  color: var(--v2-text-text-wordmark, var(--v2-background-bg-inverse));
+  --icon-base: var(--v2-text-text-wordmark, var(--v2-background-bg-inverse));
+}
+
+html[data-theme="sweetheart"] [data-component="composer"] {
+  background-color: var(--v2-background-bg-input, var(--v2-background-bg-base));
+}
+
 @font-face {
   font-family: "JetBrainsMono Nerd Font Mono";
   src: url("/assets/JetBrainsMonoNerdFontMono-Regular.woff2") format("woff2");

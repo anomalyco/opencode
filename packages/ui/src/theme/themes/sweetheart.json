@@ -1,0 +1,79 @@
+{
+  "$schema": "https://opencode.ai/desktop-theme.json",
+  "name": "Me Espresso",
+  "id": "sweetheart",
+  "light": {
+    "palette": {
+      "neutral": "#ffffff",
+      "ink": "#382d33",
+      "primary": "#dc7899",
+      "accent": "#9abfdd",
+      "interactive": "#75a9cf",
+      "success": "#7eae8b",
+      "warning": "#d9ad55",
+      "error": "#cc5e67",
+      "info": "#91b8d8",
+      "diffAdd": "#d5ead9",
+      "diffDelete": "#f3d0d3"
+    },
+    "overrides": {
+      "background-base": "#ffffff",
+      "syntax-comment": "#917f86",
+      "syntax-keyword": "#bd587e",
+      "syntax-string": "#588864",
+      "syntax-primitive": "#4d87b3",
+      "syntax-property": "#8e658e",
+      "syntax-type": "#6b62a6",
+      "syntax-constant": "#bd515d"
+    },
+    "v2Overrides": {
+      "v2-background-bg-base": "#ffffff",
+      "v2-background-bg-canvas": "#ffffff",
+      "v2-background-bg-input": "#fcebf2",
+      "v2-background-bg-deep": "#b8d4e9",
+      "v2-background-bg-tab-active": "#ebf5fc",
+      "v2-background-bg-layer-01": "#fff0f5",
+      "v2-background-bg-layer-02": "#cde2f2",
+      "v2-background-bg-layer-03": "#a1c4df",
+      "v2-text-text-tab": "#4a6880",
+      "v2-text-text-tab-active": "#0f2838",
+      "v2-text-text-wordmark": "#d49aad"
+    }
+  },
+  "dark": {
+    "palette": {
+      "neutral": "#21191a",
+      "ink": "#fff5f1",
+      "primary": "#e991ae",
+      "accent": "#a9cbe5",
+      "interactive": "#8dbddd",
+      "success": "#91c39e",
+      "warning": "#e5c276",
+      "error": "#e67b83",
+      "info": "#9fc8e4",
+      "diffAdd": "#70b17f",
+      "diffDelete": "#d97179"
+    },
+    "overrides": {
+      "syntax-comment": "#927e7b",
+      "syntax-keyword": "#e991ae",
+      "syntax-string": "#91c39e",
+      "syntax-primitive": "#9fc8e4",
+      "syntax-property": "#e5c276",
+      "syntax-type": "#b8a8dc",
+      "syntax-constant": "#e67b83"
+    },
+    "v2Overrides": {
+      "v2-background-bg-canvas": "#21191a",
+      "v2-background-bg-input": "#2e1e23",
+      "v2-background-bg-deep": "#3d6079",
+      "v2-background-bg-tab-active": "#21191a",
+      "v2-background-bg-layer-01": "#302225",
+      "v2-background-bg-layer-02": "#4f7593",
+      "v2-background-bg-layer-03": "#668fae",
+      "v2-text-text-tab": "#98b9d2",
+      "v2-text-text-tab-active": "#fff5f1",
+      "v2-text-text-wordmark": "#d99db1"
+    }
+  }
+}

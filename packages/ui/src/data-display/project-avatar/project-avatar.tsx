@@ -76,11 +76,22 @@ export interface ProjectAvatarProps extends ComponentProps<"div"> {
   src?: string
   variant?: ProjectAvatarStyle
   unread?: boolean
+  decoration?: string
+  citrusDecoration?: string
 }
 
 export function ProjectAvatar(props: ProjectAvatarProps) {
-  const [split, rest] = splitProps(props, ["fallback", "src", "variant", "unread", "class", "classList", "style"])
-
+  const [split, rest] = splitProps(props, [
+    "fallback",
+    "src",
+    "variant",
+    "unread",
+    "decoration",
+    "citrusDecoration",
+    "class",
+    "classList",
+    "style",
+  ])
   return (
     <div
       {...rest}
@@ -96,6 +107,8 @@ export function ProjectAvatar(props: ProjectAvatarProps) {
         data-slot="project-avatar-surface"
         data-variant={split.variant ?? "gray"}
         data-has-image={split.src ? "" : undefined}
+        data-decoration={split.decoration}
+        data-citrus-decoration={split.citrusDecoration}
       >
         <Show when={split.src} fallback={first(split.fallback)}>
           {(value) => <img src={value()} draggable={false} data-slot="project-avatar-image" />}
