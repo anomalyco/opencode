@@ -11,6 +11,7 @@ import {
   MockBadRequest,
   MockInternal,
   MockNotFound,
+  MockPtyNotFound,
   MockShellNotFound,
   MockUnauthorized,
   MockUnsupported,
@@ -705,7 +706,9 @@ function mockHandlers(
           const directory = requestDirectory(config, request)
           const found = state.pty.find(id, directory)
 
-          return found ? Effect.succeed(found) : Effect.fail(new MockNotFound({ message: "PTY not found" }))
+          return found
+            ? Effect.succeed(found)
+            : Effect.fail(new MockPtyNotFound({ ptyID: id, message: `PTY not found: ${id}` }))
         }),
       ),
     )
