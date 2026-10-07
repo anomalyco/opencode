@@ -2,6 +2,8 @@
  * Application-wide constants and configuration
  */
 export const config = {
+  consoleMarketingEnabled: import.meta.env.VITE_CONSOLE_MARKETING_ENABLED === "true",
+
   // Base URL
   baseUrl: "https://opencode.ai",
 
