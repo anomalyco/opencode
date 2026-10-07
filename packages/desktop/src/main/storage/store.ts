@@ -8,7 +8,7 @@ const cache = new Map<string, SettingsStore>()
 
 export type SettingsStore = ReturnType<typeof createSettingsStore>
 
-// Main-process settings only (onboarding, window list, appearance, extension storage).
+// Main-process settings only (onboarding, default server, window list, appearance, extension storage).
 // These are read synchronously before the storage layer exists and written on user action, so a
 // synchronous whole-file write is acceptable here. Renderer state goes through DesktopStorage.
 //

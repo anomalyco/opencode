@@ -7,14 +7,6 @@ import { type ServerHealth } from "@/runtime/server/health"
 import { showToast } from "@/shell/notifications/toast"
 import { useExtensionServers } from "@/runtime/extension/servers"
 
-function showRequestError(language: ReturnType<typeof useLanguage>, err: unknown) {
-  showToast({
-    variant: "error",
-    title: language.t("common.requestFailed"),
-    description: err instanceof Error ? err.message : String(err),
-  })
-}
-
 export function sortServerConnections(input: {
   servers: ServerConnection.Any[]
   health: Record<string, ServerHealth | undefined>
@@ -50,7 +42,11 @@ export function useServerActionsController() {
       tabs.removeServer(key)
       server.remove(key)
     } catch (err) {
-      showRequestError(language, err)
+      showToast({
+        variant: "error",
+        title: language.t("common.requestFailed"),
+        description: err instanceof Error ? err.message : String(err),
+      })
     }
   }
 

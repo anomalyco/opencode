@@ -16,7 +16,7 @@ import pkg from "../package.json"
 import { ServerConnection } from "@/runtime/server/registry"
 
 const getLocale = () => {
-  if (typeof navigator !== "object") return "en" as const
+  if (typeof navigator === "undefined") return "en" as const
   const languages = navigator.languages?.length ? navigator.languages : [navigator.language]
 
   for (const language of languages) {

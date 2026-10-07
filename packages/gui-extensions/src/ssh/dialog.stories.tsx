@@ -18,6 +18,8 @@ import {
   type SshState,
 } from "../../../storybook/.storybook/mocks/gui-extensions/ssh"
 
+type FixtureState = { item?: SshItem; before?: SshItem; step: number; timer?: ReturnType<typeof setTimeout> }
+
 function Fixture(props: {
   session?: boolean
   settings?: boolean
@@ -27,7 +29,7 @@ function Fixture(props: {
   initial?: "connecting" | "password" | "confirmation" | "failure" | "required"
   responseDelay?: number
 }) {
-  const state: { item?: SshItem; before?: SshItem; step: number; timer?: ReturnType<typeof setTimeout> } = {
+  const state: FixtureState = {
     step: 0,
     item:
       props.initial === "required"
