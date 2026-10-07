@@ -37,3 +37,18 @@ export class SessionTimeoutError extends Schema.TaggedErrorClass<SessionTimeoutE
     return `Session exceeded the max execution time (${this.elapsed}ms)`
   }
 }
+
+/**
+ * Raised when a single Session drain records {@link RecoveryLimits.maxToolFailures}
+ * consecutive tool failures without an intervening success. A model stuck
+ * retrying a failing tool surfaces this error instead of looping turns forever.
+ */
+export class SessionToolBudgetError extends Schema.TaggedErrorClass<SessionToolBudgetError>()("Session.ToolBudget", {
+  sessionID: SessionSchema.ID,
+  failures: Schema.Number,
+  limit: Schema.Number,
+}) {
+  override get message() {
+    return `Session exceeded the max consecutive tool failures (${this.failures}/${this.limit})`
+  }
+}

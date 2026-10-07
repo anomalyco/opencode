@@ -27,7 +27,7 @@ import { ToolOutputStore } from "../../tool-output-store"
 import { SessionContextEpoch } from "../context-epoch"
 import { SessionCompaction } from "../compaction"
 import { SessionEvent } from "../event"
-import { SessionTimeoutError } from "../error"
+import { SessionTimeoutError, SessionToolBudgetError } from "../error"
 import { SessionHistory } from "../history"
 import { SessionInput } from "../input"
 import { SessionSchema } from "../schema"
@@ -35,6 +35,7 @@ import { SessionStore } from "../store"
 import { type RunError, Service } from "./index"
 import { SessionRunnerModel } from "./model"
 import { ModelFallback } from "./model-fallback"
+import { ToolBudget } from "./tool-budget"
 import { createLLMEventPublisher } from "./publish-llm-event"
 import { toLLMMessages } from "./to-llm-message"
 import { MAX_STEPS_PROMPT } from "./max-steps"
@@ -355,7 +356,12 @@ const layer = Layer.effect(
           if (stream._tag === "Failure") return yield* Effect.failCause(stream.cause)
           if (settled._tag === "Failure" && Cause.hasInterrupts(settled.cause))
             return yield* Effect.failCause(settled.cause)
-          return { needsContinuation: !publisher.hasProviderError() && needsContinuation, step: currentStep }
+          return {
+            needsContinuation: !publisher.hasProviderError() && needsContinuation,
+            step: currentStep,
+            toolSucceeded: publisher.toolOutcomes().succeeded,
+            trailingToolFailures: publisher.toolOutcomes().trailingFailures,
+          }
         }),
       )
     }, Effect.scoped)
@@ -363,7 +369,15 @@ const layer = Layer.effect(
       sessionID: SessionSchema.ID,
       promotion: SessionInput.Delivery | undefined,
       step: number,
-    ) => Effect.Effect<{ readonly needsContinuation: boolean; readonly step: number }, RunError>
+    ) => Effect.Effect<
+      {
+        readonly needsContinuation: boolean
+        readonly step: number
+        readonly toolSucceeded: boolean
+        readonly trailingToolFailures: number
+      },
+      RunError
+    >
 
     const runAfterOverflowCompaction: RunTurn = Effect.fnUntraced(function* (sessionID, promotion, step) {
       return yield* runTurnAttempt(sessionID, promotion, step).pipe(
@@ -432,6 +446,7 @@ const layer = Layer.effect(
       yield* failInterruptedTools(input.sessionID)
       let promotion: SessionInput.Delivery | undefined = hasSteer ? "steer" : hasQueue ? "queue" : undefined
       let shouldRun = input.force || hasSteer || hasQueue
+      let toolFailures = 0
       while (shouldRun) {
         const elapsed = DateTime.toEpochMillis(yield* DateTime.now) - startedAt
         if (elapsed > ProviderRetry.DEFAULT_RECOVERY_LIMITS.maxExecutionTime)
@@ -440,6 +455,18 @@ const layer = Layer.effect(
         let step = 1
         while (needsContinuation) {
           const result = yield* runTurn(input.sessionID, promotion, step)
+          const observed = ToolBudget.observe(
+            toolFailures,
+            { succeeded: result.toolSucceeded, trailingFailures: result.trailingToolFailures },
+            ProviderRetry.DEFAULT_RECOVERY_LIMITS.maxToolFailures,
+          )
+          toolFailures = observed.streak
+          if (observed.exceeded)
+            yield* new SessionToolBudgetError({
+              sessionID: input.sessionID,
+              failures: toolFailures,
+              limit: ProviderRetry.DEFAULT_RECOVERY_LIMITS.maxToolFailures,
+            })
           needsContinuation = result.needsContinuation
           step = result.step + 1
           promotion = "steer"

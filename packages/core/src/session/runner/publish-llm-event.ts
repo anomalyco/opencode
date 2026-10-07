@@ -69,6 +69,8 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
   let assistantActive = false
   let assistantFailed = false
   let providerFailed = false
+  let toolSucceeded = false
+  let trailingToolFailures = 0
   let stepSettlement: { readonly finish: string; readonly tokens: ReturnType<typeof tokens> } | undefined
 
   const startAssistant = Effect.fnUntraced(function* () {
@@ -217,6 +219,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     for (const [callID, tool] of tools) {
       if (tool.settled || (hostedOnly && !tool.providerExecuted)) continue
       tool.settled = true
+      trailingToolFailures += 1
       yield* events.publish(SessionEvent.Tool.Failed, {
         sessionID: input.sessionID,
         timestamp: yield* timestamp,
@@ -350,6 +353,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
           ...(event.providerMetadata === undefined ? {} : { metadata: event.providerMetadata }),
         }
         if ("error" in result) {
+          trailingToolFailures += 1
           yield* events.publish(SessionEvent.Tool.Failed, {
             sessionID: input.sessionID,
             timestamp: yield* timestamp,
@@ -371,6 +375,8 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
           ...(provider.executed ? { result: event.result } : {}),
           provider,
         })
+        toolSucceeded = true
+        trailingToolFailures = 0
         return
       }
       case "tool-error": {
@@ -380,6 +386,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
           return yield* Effect.die(`Tool error name changed for ${event.id}: ${tool.name} -> ${event.name}`)
         if (tool.settled) return yield* Effect.die(`Duplicate tool error: ${event.id}`)
         tool.settled = true
+        trailingToolFailures += 1
         yield* events.publish(SessionEvent.Tool.Failed, {
           sessionID: input.sessionID,
           timestamp: yield* timestamp,
@@ -416,6 +423,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     hasActiveAssistant: () => assistantActive,
     hasAssistantStarted: () => assistantMessageID !== undefined,
     hasProviderError: () => providerFailed,
+    toolOutcomes: () => ({ succeeded: toolSucceeded, trailingFailures: trailingToolFailures }),
     stepSettlement: () => stepSettlement,
     startAssistant,
     assistantMessageID: assistantMessageIDForTool,
