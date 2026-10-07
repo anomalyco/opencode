@@ -159,8 +159,6 @@ export const layer = Layer.effectDiscard(
         revision: "internal",
         source: { type: "builtin" as const },
       }))
-      // Load the Console connection and its organization policies before importing external modules.
-      if (current === 1) yield* registry.activate(pre.filter((plugin) => PluginInternal.guarded.has(plugin.id)))
       const operations = yield* sources.operations()
       // Activate everything available locally before waiting on missing package installs.
       const immediate = yield* resolve(modules, pre, post, operations, false, running)
