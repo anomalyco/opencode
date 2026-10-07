@@ -3,7 +3,8 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
-  "go.promo.spaceBunny": "全新匿名模型 Space Bunny Free 限时上线",
+  "go.referral.ended.label": "警告",
+  "go.referral.ended": "推荐计划已结束。推荐链接不再为你或分享链接的人提供额度。",
   "go.graph.bonus": "{{count}} 倍用量",
   "nav.github": "GitHub",
   "nav.docs": "文档",
@@ -252,6 +253,7 @@ export const dict = {
   "go.title": "OpenCode Go | 人人可用的低成本编程模型",
   "go.meta.description": "Go 每月 $10，提供充裕的使用限额，并可可靠访问领先的编程模型。",
   "go.hero.title": "人人可用的低成本编程模型",
+  "go.hero.tagline": "可配合任何代理使用。如有需要可充值。随时取消。",
   "go.hero.body":
     "Go 将代理编程带给全世界的程序员。提供充裕的限额和对最强大的开源模型的可靠访问，让您可以利用强大的代理进行构建，而无需担心成本或可用性。",
 
@@ -259,6 +261,18 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "订阅 Go",
   "go.cta.price": "$10/月",
+  "go.plans.month": "每月",
+  "go.plans.plus.cta": "订阅 Go Plus",
+  "go.plans.plus.description": "Go Plus 每月 $40，提供更高的使用额度。",
+  "go.plans.go.feature1": "精选实惠的模型",
+  "go.plans.go.feature2": "专为智能体编程测试",
+  "go.plans.go.feature3": "充足额度与稳定访问",
+  "go.plans.plus.feature1": "包含 Go 的全部权益",
+  "go.plans.plus.feature2": "更高额度，支持更长时间的专注编码",
+  "go.plans.plus.feature3": "适合更大型、更复杂的项目",
+  "go.plans.limits": "使用额度",
+  "go.plans.description": "各模型每 5 小时的预计请求次数和每月使用额度",
+  "go.plans.legend": "套餐",
   "go.pricing.body": "可配合任何代理使用。每月 $10。如有需要可充值。随时取消。",
   "go.graph.free": "免费",
   "go.graph.freePill": "Big Pickle 和免费模型",
@@ -361,7 +375,7 @@ export const dict = {
 
   "go.faq.q9": "免费模型和 Go 之间的区别是什么？",
   "go.faq.a9":
-    "免费模型包含 Big Pickle 加上当时可用的促销模型，每天有 200 次请求的配额。Go 提供精选模型阵容，并在滚动窗口（5 小时、每周和每月）内执行更高的请求配额，大致相当于每 5 小时 $12、每周 $30 和每月 $60 的基础额度；具体额度可能因模型而异（实际请求计数因模型和使用情况而异）。",
+    "免费模型包含 Big Pickle 加上当时可用的促销模型，每天有 200 次请求的配额。Go 提供精选模型阵容，并在滚动窗口内执行更高的请求配额：每 5 小时为月额度的 20%，每周为 50%，每月为 100%。具体额度可能因模型而异（实际请求次数因模型和使用情况而异）。",
   "go.faq.q10": "我可以退款吗？",
   "go.faq.a10":
     "如果扣款发生在过去 14 天内，并且您在该计费周期内尚未使用任何 Go 额度，您可能符合退款条件。请{{contact}}申请退款。",
@@ -622,7 +636,6 @@ export const dict = {
   "workspace.payments.type.subscription": "订阅",
   "workspace.payments.view": "查看",
 
-  "workspace.black.loading": "加载中...",
   "workspace.black.time.day": "天",
   "workspace.black.time.days": "天",
   "workspace.black.time.hour": "小时",
@@ -632,7 +645,8 @@ export const dict = {
   "workspace.black.time.fewSeconds": "几秒钟",
   "workspace.black.subscription.title": "订阅",
   "workspace.black.subscription.message": "您已订阅 OpenCode Black，价格为每月 ${{plan}}。",
-  "workspace.black.subscription.manage": "管理订阅",
+  "workspace.black.subscription.ending":
+    "OpenCode Black 将在当前计费周期结束时终止，不会续订。我们会将你迁移到新的控制台。",
   "workspace.black.subscription.rollingUsage": "5 小时用量",
   "workspace.black.subscription.weeklyUsage": "每周用量",
   "workspace.black.subscription.resetsIn": "重置于",
@@ -772,6 +786,14 @@ export const dict = {
   "enterprise.form.email.placeholder": "jeff@amazon.com",
   "enterprise.form.phone.label": "电话号码",
   "enterprise.form.phone.placeholder": "+1 234 567 8900",
+  "enterprise.form.inferenceSpend.label": "贵公司目前每月的 AI 推理支出是多少（美元）？",
+  "enterprise.form.inferenceSpend.placeholder": "选择范围（可选）",
+  "enterprise.form.inferenceSpend.none": "尚无支出",
+  "enterprise.form.inferenceSpend.under1k": "低于 $1K",
+  "enterprise.form.inferenceSpend.1kTo10k": "$1K–$10K",
+  "enterprise.form.inferenceSpend.10kTo50k": "$10K–$50K",
+  "enterprise.form.inferenceSpend.50kTo100k": "$50K–$100K",
+  "enterprise.form.inferenceSpend.over100k": "$100K 及以上",
   "enterprise.form.message.label": "您想解决什么问题？",
   "enterprise.form.message.placeholder": "我们需要帮助...",
   "enterprise.form.send": "发送",
@@ -780,6 +802,7 @@ export const dict = {
   "enterprise.form.success.submitted": "表单提交成功。",
   "enterprise.form.error.allFieldsRequired": "所有字段均为必填项。",
   "enterprise.form.error.invalidEmailFormat": "邮箱格式无效。",
+  "enterprise.form.error.invalidInferenceSpend": "请选择有效的推理支出范围。",
   "enterprise.form.error.internalServer": "内部服务器错误。",
   "enterprise.faq.title": "常见问题",
   "enterprise.faq.q1": "什么是 OpenCode 企业版？",

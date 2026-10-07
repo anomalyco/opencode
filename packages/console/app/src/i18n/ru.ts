@@ -3,7 +3,9 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
-  "go.promo.spaceBunny": "Space Bunny Free — новая анонимная модель, доступная в течение ограниченного времени",
+  "go.referral.ended.label": "Предупреждение",
+  "go.referral.ended":
+    "Реферальная программа завершена. Реферальные ссылки больше не начисляют кредиты ни вам, ни тому, кто ими поделился.",
   "go.graph.bonus": "Лимит ×{{count}}",
   "nav.github": "GitHub",
   "nav.docs": "Документация",
@@ -267,6 +269,7 @@ export const dict = {
   "go.meta.description":
     "Go стоит $10/месяц и предлагает щедрые лимиты использования и надежный доступ к ведущим моделям для кодинга.",
   "go.hero.title": "Недорогие модели для кодинга для всех",
+  "go.hero.tagline": "Работает с любым агентом. Пополняйте баланс при необходимости. Отменить можно в любой момент.",
   "go.hero.body":
     "Go открывает доступ к агентам-программистам разработчикам по всему миру. Предлагая щедрые лимиты и надежный доступ к наиболее способным моделям с открытым исходным кодом, вы можете создавать проекты с мощными агентами, не беспокоясь о затратах или доступности.",
 
@@ -274,6 +277,18 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "Подписаться на Go",
   "go.cta.price": "$10/месяц",
+  "go.plans.month": "в месяц",
+  "go.plans.plus.cta": "Подписаться на Go Plus",
+  "go.plans.plus.description": "Go Plus стоит $40/месяц и предлагает более высокие лимиты.",
+  "go.plans.go.feature1": "Отобранные доступные модели",
+  "go.plans.go.feature2": "Проверены для агентного программирования",
+  "go.plans.go.feature3": "Щедрые лимиты и надёжный доступ",
+  "go.plans.plus.feature1": "Все возможности Go",
+  "go.plans.plus.feature2": "Повышенные лимиты для длительной сосредоточенной работы над кодом",
+  "go.plans.plus.feature3": "Для крупных и сложных проектов",
+  "go.plans.limits": "Лимиты",
+  "go.plans.description": "Примерное число запросов за 5 часов и месячные лимиты по моделям",
+  "go.plans.legend": "Тарифы",
   "go.pricing.body":
     "Используйте с любым агентом. $10/месяц. Пополняйте баланс при необходимости. Отменить можно в любое время.",
   "go.graph.free": "Бесплатно",
@@ -388,7 +403,7 @@ export const dict = {
 
   "go.faq.q9": "В чем разница между бесплатными моделями и Go?",
   "go.faq.a9":
-    "Бесплатные модели включают Big Pickle и доступные на данный момент промо-модели с квотой 200 запросов/день. Go предлагает набор отобранных моделей с более высокими квотами запросов, применяемыми в скользящих окнах (5 часов, неделя и месяц), что примерно эквивалентно базовым лимитам $12 за 5 часов, $30 в неделю и $60 в месяц; лимиты для отдельных моделей могут отличаться (фактическое количество запросов зависит от модели и использования).",
+    "Бесплатные модели включают Big Pickle и доступные на данный момент промо-модели с квотой 200 запросов/день. Go предлагает набор отобранных моделей с более высокими квотами запросов в скользящих окнах: 20% месячного лимита за 5 часов, 50% за неделю и 100% за месяц. Лимиты для отдельных моделей могут отличаться (фактическое количество запросов зависит от модели и использования).",
   "go.faq.q10": "Могу ли я получить возврат средств?",
   "go.faq.a10":
     "Вы можете претендовать на возврат, если списание произошло в течение последних 14 дней и вы не использовали лимит Go в этом расчетном периоде. {{contact}}, чтобы запросить возврат.",
@@ -657,7 +672,6 @@ export const dict = {
   "workspace.payments.type.subscription": "подписка",
   "workspace.payments.view": "Просмотр",
 
-  "workspace.black.loading": "Загрузка...",
   "workspace.black.time.day": "день",
   "workspace.black.time.days": "дней",
   "workspace.black.time.hour": "час",
@@ -667,7 +681,8 @@ export const dict = {
   "workspace.black.time.fewSeconds": "несколько секунд",
   "workspace.black.subscription.title": "Подписка",
   "workspace.black.subscription.message": "Вы подписаны на OpenCode Black за ${{plan}} в месяц.",
-  "workspace.black.subscription.manage": "Управление подпиской",
+  "workspace.black.subscription.ending":
+    "OpenCode Black завершится в конце текущего расчётного периода и не будет продлён. Мы перенесём вас в новую консоль.",
   "workspace.black.subscription.rollingUsage": "5-часовое использование",
   "workspace.black.subscription.weeklyUsage": "Недельное использование",
   "workspace.black.subscription.resetsIn": "Сброс через",
@@ -813,6 +828,14 @@ export const dict = {
   "enterprise.form.email.placeholder": "jeff@amazon.com",
   "enterprise.form.phone.label": "Номер телефона",
   "enterprise.form.phone.placeholder": "+1 234 567 8900",
+  "enterprise.form.inferenceSpend.label": "Каковы текущие ежемесячные расходы вашей компании на инференс (USD)?",
+  "enterprise.form.inferenceSpend.placeholder": "Выберите диапазон (необязательно)",
+  "enterprise.form.inferenceSpend.none": "Расходов пока нет",
+  "enterprise.form.inferenceSpend.under1k": "Менее $1K",
+  "enterprise.form.inferenceSpend.1kTo10k": "$1K–$10K",
+  "enterprise.form.inferenceSpend.10kTo50k": "$10K–$50K",
+  "enterprise.form.inferenceSpend.50kTo100k": "$50K–$100K",
+  "enterprise.form.inferenceSpend.over100k": "$100K или больше",
   "enterprise.form.message.label": "Какую проблему вы пытаетесь решить?",
   "enterprise.form.message.placeholder": "Нам нужна помощь с...",
   "enterprise.form.send": "Отправить",
@@ -821,6 +844,7 @@ export const dict = {
   "enterprise.form.success.submitted": "Форма успешно отправлена.",
   "enterprise.form.error.allFieldsRequired": "Все поля обязательны.",
   "enterprise.form.error.invalidEmailFormat": "Неверный формат email.",
+  "enterprise.form.error.invalidInferenceSpend": "Выберите допустимый диапазон расходов на инференс.",
   "enterprise.form.error.internalServer": "Внутренняя ошибка сервера.",
   "enterprise.faq.title": "FAQ",
   "enterprise.faq.q1": "Что такое OpenCode Enterprise?",

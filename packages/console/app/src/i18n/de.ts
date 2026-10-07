@@ -3,7 +3,9 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
-  "go.promo.spaceBunny": "Space Bunny Free, ein neues anonymes Modell, ist für begrenzte Zeit verfügbar",
+  "go.referral.ended.label": "Warnung",
+  "go.referral.ended":
+    "Das Empfehlungsprogramm wurde beendet. Empfehlungslinks bringen weder dir noch der Person, die sie geteilt hat, Guthaben.",
   "go.graph.bonus": "{{count}}× Nutzung",
   "nav.github": "GitHub",
   "nav.docs": "Dokumentation",
@@ -265,6 +267,7 @@ export const dict = {
   "go.meta.description":
     "Go kostet $10/Monat, mit großzügigen Nutzungslimits und zuverlässigem Zugang zu führenden Coding-Modellen.",
   "go.hero.title": "Kostengünstige Coding-Modelle für alle",
+  "go.hero.tagline": "Mit jedem Agenten nutzbar. Guthaben bei Bedarf aufladen. Jederzeit kündbar.",
   "go.hero.body":
     "Go bringt Agentic Coding zu Programmierern auf der ganzen Welt. Mit großzügigen Limits und zuverlässigem Zugang zu den leistungsfähigsten Open-Source-Modellen, damit du mit leistungsstarken Agenten entwickeln kannst, ohne dir Gedanken über Kosten oder Verfügbarkeit zu machen.",
 
@@ -272,6 +275,18 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "Go abonnieren",
   "go.cta.price": "$10/Monat",
+  "go.plans.month": "pro Monat",
+  "go.plans.plus.cta": "Go Plus abonnieren",
+  "go.plans.plus.description": "Go Plus kostet $40/Monat und bietet höhere Nutzungslimits.",
+  "go.plans.go.feature1": "Ausgewählte, erschwingliche Modelle",
+  "go.plans.go.feature2": "Für agentisches Programmieren getestet",
+  "go.plans.go.feature3": "Großzügige Limits und zuverlässiger Zugriff",
+  "go.plans.plus.feature1": "Alle Vorteile von Go",
+  "go.plans.plus.feature2": "Höhere Limits für längere, konzentrierte Coding-Sessions",
+  "go.plans.plus.feature3": "Für größere, anspruchsvolle Projekte",
+  "go.plans.limits": "Limits",
+  "go.plans.description": "Geschätzte Anfragen pro 5 Stunden und monatliche Nutzungslimits je Modell",
+  "go.plans.legend": "Tarife",
   "go.pricing.body": "Mit jedem Agenten nutzbar. $10/Monat. Guthaben bei Bedarf aufladen. Jederzeit kündbar.",
   "go.graph.free": "Kostenlos",
   "go.graph.freePill": "Big Pickle und kostenlose Modelle",
@@ -383,7 +398,7 @@ export const dict = {
 
   "go.faq.q9": "Was ist der Unterschied zwischen kostenlosen Modellen und Go?",
   "go.faq.a9":
-    "Kostenlose Modelle beinhalten Big Pickle sowie Werbemodelle, die zum jeweiligen Zeitpunkt verfügbar sind, mit einem Kontingent von 200 Anfragen/Tag. Go bietet eine kuratierte Modellauswahl mit höheren Anfragekontingenten, die über rollierende Zeitfenster (5 Stunden, wöchentlich und monatlich) durchgesetzt werden, grob äquivalent zu Basiskontingenten von $12 pro 5 Stunden, $30 pro Woche und $60 pro Monat; modellspezifische Kontingente können abweichen (tatsächliche Anfragezahlen variieren je nach Modell und Nutzung).",
+    "Kostenlose Modelle beinhalten Big Pickle sowie Werbemodelle, die zum jeweiligen Zeitpunkt verfügbar sind, mit einem Kontingent von 200 Anfragen/Tag. Go bietet eine kuratierte Modellauswahl mit höheren Anfragekontingenten in rollierenden Zeitfenstern: 20 % des monatlichen Kontingents pro 5 Stunden, 50 % pro Woche und 100 % pro Monat. Modellspezifische Kontingente können abweichen (tatsächliche Anfragezahlen variieren je nach Modell und Nutzung).",
   "go.faq.q10": "Kann ich eine Rückerstattung erhalten?",
   "go.faq.a10":
     "Du hast möglicherweise Anspruch auf eine Rückerstattung, wenn die Zahlung innerhalb der letzten 14 Tage erfolgt ist und du dein Go-Kontingent in diesem Abrechnungszeitraum nicht genutzt hast. {{contact}}, um eine Rückerstattung anzufordern.",
@@ -650,7 +665,6 @@ export const dict = {
   "workspace.payments.type.subscription": "Abonnement",
   "workspace.payments.view": "Ansehen",
 
-  "workspace.black.loading": "Lade...",
   "workspace.black.time.day": "Tag",
   "workspace.black.time.days": "Tage",
   "workspace.black.time.hour": "Stunde",
@@ -660,7 +674,8 @@ export const dict = {
   "workspace.black.time.fewSeconds": "einige Sekunden",
   "workspace.black.subscription.title": "Abonnement",
   "workspace.black.subscription.message": "Du hast OpenCode Black für ${{plan}} pro Monat abonniert.",
-  "workspace.black.subscription.manage": "Abo verwalten",
+  "workspace.black.subscription.ending":
+    "OpenCode Black endet mit deinem aktuellen Abrechnungszeitraum und wird nicht verlängert. Wir ziehen dich in die neue Konsole um.",
   "workspace.black.subscription.rollingUsage": "5-Stunden-Nutzung",
   "workspace.black.subscription.weeklyUsage": "Wöchentliche Nutzung",
   "workspace.black.subscription.resetsIn": "Setzt zurück in",
@@ -807,6 +822,15 @@ export const dict = {
   "enterprise.form.email.placeholder": "jeff@amazon.com",
   "enterprise.form.phone.label": "Telefonnummer",
   "enterprise.form.phone.placeholder": "+1 234 567 8900",
+  "enterprise.form.inferenceSpend.label":
+    "Wie hoch sind die aktuellen monatlichen Inferenzausgaben Ihres Unternehmens (USD)?",
+  "enterprise.form.inferenceSpend.placeholder": "Bereich auswählen (optional)",
+  "enterprise.form.inferenceSpend.none": "Noch keine Ausgaben",
+  "enterprise.form.inferenceSpend.under1k": "Unter $1K",
+  "enterprise.form.inferenceSpend.1kTo10k": "$1K–$10K",
+  "enterprise.form.inferenceSpend.10kTo50k": "$10K–$50K",
+  "enterprise.form.inferenceSpend.50kTo100k": "$50K–$100K",
+  "enterprise.form.inferenceSpend.over100k": "$100K oder mehr",
   "enterprise.form.message.label": "Welches Problem versuchen Sie zu lösen?",
   "enterprise.form.message.placeholder": "Wir brauchen Hilfe bei...",
   "enterprise.form.send": "Senden",
@@ -815,6 +839,7 @@ export const dict = {
   "enterprise.form.success.submitted": "Formular erfolgreich gesendet.",
   "enterprise.form.error.allFieldsRequired": "Alle Felder sind erforderlich.",
   "enterprise.form.error.invalidEmailFormat": "Ungültiges E-Mail-Format.",
+  "enterprise.form.error.invalidInferenceSpend": "Wählen Sie einen gültigen Bereich für die Inferenzausgaben.",
   "enterprise.form.error.internalServer": "Interner Serverfehler.",
   "enterprise.faq.title": "FAQ",
   "enterprise.faq.q1": "Was ist OpenCode Enterprise?",
