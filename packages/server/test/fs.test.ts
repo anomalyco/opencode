@@ -122,6 +122,7 @@ it.live(
       expect(full.headers.get("content-length")).toBe("10")
       expect(full.headers.get("content-type")).toBe("video/mp4")
       expect(full.headers.get("content-encoding")).toBeNull()
+      expect(full.headers.get("cache-control")).toBe("no-cache, no-transform")
       const etag = full.headers.get("etag")
       const lastModified = full.headers.get("last-modified")
       expect(etag).toMatch(/^W\/"[0-9a-f]+-[0-9a-f]+"$/)
@@ -157,6 +158,7 @@ it.live(
             expect(partial.headers.get("content-range")).toBe(expectedContentRange)
             expect(partial.headers.get("content-length")).toBe(String(expectedBody.length))
             expect(partial.headers.get("content-type")).toBe("video/mp4")
+            expect(partial.headers.get("cache-control")).toBe("no-cache, no-transform")
             expect(partial.headers.get("etag")).toBe(etag)
             expect(partial.headers.get("last-modified")).toBe(lastModified)
             expect(yield* Effect.promise(() => partial.text())).toBe(expectedBody)
@@ -211,6 +213,7 @@ it.live(
             expect(notModified.status).toBe(304)
             expect(notModified.headers.get("etag")).toBe(etag)
             expect(notModified.headers.get("last-modified")).toBe(lastModified)
+            expect(notModified.headers.get("cache-control")).toBe("no-cache, no-transform")
             expect(yield* Effect.promise(() => notModified.text())).toBe("")
           }),
       )

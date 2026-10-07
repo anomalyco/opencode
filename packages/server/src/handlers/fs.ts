@@ -65,9 +65,9 @@ function serveFile(request: HttpServerRequest.HttpServerRequest, file: FileSyste
     onSome: (mtime) => mtime.getTime().toString(16),
   })}"`
   const lastModified = Option.getOrUndefined(Option.map(file.mtime, (mtime) => mtime.toUTCString()))
-  // no-transform keeps compression from changing Content-Length.
+  // Clients must revalidate after agent edits; no-transform keeps compression from changing Content-Length.
   const validators = {
-    "cache-control": "no-transform",
+    "cache-control": "no-cache, no-transform",
     etag,
     ...(lastModified === undefined ? {} : { "last-modified": lastModified }),
   }
