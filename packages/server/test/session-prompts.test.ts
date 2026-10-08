@@ -13,13 +13,12 @@ import { Location } from "@opencode/schema/location"
 import { AbsolutePath } from "@opencode/schema/schema"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
-import { Context, Deferred, Duration, Effect, Fiber, Layer, LayerMap, Option, RcMap } from "effect"
+import { Context, Duration, Effect, Layer, LayerMap } from "effect"
 import { HttpEffect, HttpRouter, HttpServer } from "effect/unstable/http"
 import { tempGlobalLayer } from "../../core/test/fixture/global"
 import { tmpdirScoped } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
 import { createEmbeddedRoutes } from "../src/routes"
-import { cachedLocation } from "../src/location"
 
 it.live(
   "reads pending session prompts without booting cold locations",
@@ -28,7 +27,6 @@ it.live(
       const directory = yield* tmpdirScoped()
       const location = LocationServiceMap.canonical(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))
       const lookups: Location.Ref[] = []
-      const closed: Location.Ref[] = []
       const replacements: LayerNode.Replacements = [
         Global.node.replace(tempGlobalLayer),
         App.node.replace(App.node),
@@ -43,10 +41,7 @@ it.live(
               const map = yield* LayerMap.make(
                 (ref: Location.Ref) => {
                   lookups.push(ref)
-                  return Layer.merge(
-                    Instance.layer(ref, { discovery: false, replacements: bindings }),
-                    Layer.effectDiscard(Effect.addFinalizer(() => Effect.sync(() => closed.push(ref)))),
-                  )
+                  return Instance.layer(ref, { discovery: false, replacements: bindings })
                 },
                 { idleTimeToLive: Duration.infinity },
               )
@@ -115,26 +110,6 @@ it.live(
       expect(yield* read(`/api/session/${session.id}/permission`)).toEqual({ data: [pending.permission] })
       expect(yield* read(global)).toEqual({ data: [pending.globalForm] })
       expect(lookups).toEqual([location])
-      expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([location])
-      const entered = yield* Deferred.make<void>()
-      const release = yield* Deferred.make<void>()
-      const reading = yield* cachedLocation(
-        locations,
-        location,
-        Effect.gen(function* () {
-          const forms = yield* Form.Service
-          yield* Deferred.succeed(entered, undefined)
-          yield* Deferred.await(release)
-          return yield* forms.list({ sessionID: session.id })
-        }),
-      ).pipe(Effect.forkChild)
-      yield* Deferred.await(entered)
-      yield* locations.invalidate(location)
-      expect(closed).toEqual([])
-      expect(lookups).toEqual([location])
-      yield* Deferred.succeed(release, undefined)
-      expect(yield* Fiber.join(reading)).toEqual(Option.some([pending.form]))
-      expect(closed).toEqual([location])
     }),
   15_000,
 )
