@@ -55,9 +55,13 @@ export const directoryColumn = customType<{
   toDriver(input) {
     if (!input) return input
     const value = absolute(input)
-    const root = process.platform === "win32" ? nodePath.win32.parse(value).root.replaceAll("\\", "/") : nodePath.posix.parse(value).root
-    if (value === root) return value
-    return value.replace(/\/+$/, "")
+    const root = isWindowsStoragePath(value)
+      ? nodePath.win32.parse(value).root.replaceAll("\\", "/")
+      : nodePath.posix.parse(value).root
+    const trimmed = value.replace(/\/+$/, "")
+    // Preserve filesystem roots, including Windows drives and UNC shares.
+    if (trimmed === root.replace(/\/+$/, "")) return root.startsWith("//") ? root.replace(/\/*$/, "/") : root
+    return trimmed
   },
   fromDriver(input) {
     return input ? toPlatform(absolute(input)) : input
