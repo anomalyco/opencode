@@ -1,11 +1,20 @@
 // This method is called when your extension is deactivated
 export function deactivate() {}
 
+import { execFile } from "node:child_process"
 import * as vscode from "vscode"
+import { promisify } from "node:util"
 
 const TERMINAL_NAME = "opencode"
+const execFileAsync = promisify(execFile)
+
+export function getOpenCodeLaunchCommand(majorVersion: number, port: number) {
+  return majorVersion >= 2 ? "opencode" : `opencode --port ${port}`
+}
 
 export function activate(context: vscode.ExtensionContext) {
+  const terminalPorts = new WeakMap<vscode.Terminal, number>()
+
   const openNewTerminalDisposable = vscode.commands.registerCommand("opencode.openNewTerminal", async () => {
     await openTerminal()
   })
@@ -31,11 +40,9 @@ export function activate(context: vscode.ExtensionContext) {
     if (!terminal) {
       return
     }
-
     if (terminal.name === TERMINAL_NAME) {
-      // @ts-ignore
-      const port = terminal.creationOptions.env?.["_EXTENSION_OPENCODE_PORT"]
-      port ? await appendPrompt(parseInt(port), fileRef) : terminal.sendText(fileRef, false)
+      const port = terminalPorts.get(terminal)
+      port ? await appendPrompt(port, fileRef) : terminal.sendText(fileRef, false)
       terminal.show()
     }
   })
@@ -43,9 +50,30 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(openNewTerminalDisposable, openTerminalDisposable, addFilepathDisposable)
 
   async function openTerminal() {
-    // Create a new terminal in split screen
-    const port = Math.floor(Math.random() * (65535 - 16384 + 1)) + 16384
-    const terminal = vscode.window.createTerminal({
+    let majorVersion: number
+    try {
+      const { stdout } = await execFileAsync("opencode", ["--version"], { timeout: 5000 })
+      const version = stdout.match(/\bv?(\d+)\.\d+\.\d+\b/)
+      if (!version) {
+        throw new Error(`Could not parse OpenCode version from: ${stdout.trim()}`)
+      }
+      majorVersion = Number(version[1])
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      await vscode.window.showErrorMessage(`Unable to detect the OpenCode CLI version: ${message}`)
+      return
+    }
+
+    if (majorVersion >= 2) {
+      openModernTerminal()
+      return
+    }
+
+    await openLegacyTerminal()
+  }
+
+  function createTerminal() {
+    return vscode.window.createTerminal({
       name: TERMINAL_NAME,
       iconPath: {
         light: vscode.Uri.file(context.asAbsolutePath("images/button-dark.svg")),
@@ -56,13 +84,25 @@ export function activate(context: vscode.ExtensionContext) {
         preserveFocus: false,
       },
       env: {
-        _EXTENSION_OPENCODE_PORT: port.toString(),
         OPENCODE_CALLER: "vscode",
       },
     })
+  }
+
+  function openModernTerminal() {
+    const terminal = createTerminal()
+    terminal.show()
+    terminal.sendText(getOpenCodeLaunchCommand(2, 0))
+  }
+
+  async function openLegacyTerminal() {
+    // Create a new terminal in split screen
+    const port = Math.floor(Math.random() * (65535 - 16384 + 1)) + 16384
+    const terminal = createTerminal()
+    terminalPorts.set(terminal, port)
 
     terminal.show()
-    terminal.sendText(`opencode --port ${port}`)
+    terminal.sendText(getOpenCodeLaunchCommand(1, port))
 
     const fileRef = getActiveFile()
     if (!fileRef) {

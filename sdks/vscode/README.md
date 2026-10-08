@@ -10,7 +10,7 @@ This extension requires the [opencode CLI](https://opencode.ai) to be installed 
 
 - **Quick Launch**: Use `Cmd+Esc` (Mac) or `Ctrl+Esc` (Windows/Linux) to open opencode in a split terminal view, or focus an existing terminal session if one is already running.
 - **New Session**: Use `Cmd+Shift+Esc` (Mac) or `Ctrl+Shift+Esc` (Windows/Linux) to start a new opencode terminal session, even if one is already open. You can also click the opencode button in the UI.
-- **Context Awareness**: Automatically share your current selection or tab with opencode.
+- **Context Awareness**: With OpenCode CLI v1, the current selection or tab is shared when you open a session. With CLI v2, use the file reference shortcut to insert the current file or selection into the terminal session.
 - **File Reference Shortcuts**: Use `Cmd+Option+K` (Mac) or `Alt+Ctrl+K` (Linux/Windows) to insert file references. For example, `@File#L37-42`.
 
 ## Support
