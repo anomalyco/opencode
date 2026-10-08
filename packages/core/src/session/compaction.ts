@@ -208,7 +208,13 @@ export const layer = Layer.effect(
 
       // Only the user compacts when automatic compaction is off, overflow included.
       if (trigger.reason !== "manual" && !settings.auto) return { status: "skipped" }
-      if (trigger.reason === "auto" && !due(context, calculateCeiling(context.model.limit, settings.buffer)))
+      if (
+        trigger.reason === "auto" &&
+        !due(
+          context,
+          calculateCeiling(context.model.limit, settings.buffer, context.model.model.defaults?.generation?.maxTokens),
+        )
+      )
         return { status: "skipped" }
       const native = context.model.compaction?.type === "native"
       const agent = native ? undefined : yield* agents.get(Agent.ID.make("compaction"))
@@ -218,11 +224,15 @@ export const layer = Layer.effect(
             .resolve({ ...context.session, model: agent.model }, catalog.available)
             .pipe(Effect.orElseSucceed(() => undefined)))) ??
         context.model
-      const ceiling = calculateCeiling(model.limit, settings.buffer)
+      const ceiling = calculateCeiling(model.limit, settings.buffer, model.model.defaults?.generation?.maxTokens)
       // An unknown window never triggers auto compaction, but the compaction request still needs a size to aim for.
       const cap = Number.isFinite(ceiling)
         ? ceiling
-        : calculateCeiling({ ...model.limit, context: UNKNOWN_WINDOW }, settings.buffer)
+        : calculateCeiling(
+            { ...model.limit, context: UNKNOWN_WINDOW },
+            settings.buffer,
+            model.model.defaults?.generation?.maxTokens,
+          )
       // The provider just rejected this context, so the estimate ran low; the first attempt already aims below it.
       const budget =
         trigger.reason === "overflow" ? Math.min(cap, Math.floor(estimateContext(context) * SHRINK_STEPS[0])) : cap
@@ -898,17 +908,25 @@ export const estimatePrompt = (context: SessionContext.Loaded) => {
 }
 
 /**
- * The largest request the model takes while leaving room for its reply: 10% of the window, or `RESERVE_MIN` when that
- * is more. The summary request is capped at the same size, so its output limit is whatever the reserve leaves. A window
- * too small to give up `RESERVE_MIN` keeps 10%.
+ * Respect the independent input ceiling and leave room in the total context for the normal reply,
+ * as well as the existing estimation headroom. A small window keeps the existing 10% reserve.
  */
-const calculateCeiling = (limit: SessionContext.Loaded["model"]["limit"], buffer: number | undefined) => {
+const calculateCeiling = (
+  limit: SessionContext.Loaded["model"]["limit"],
+  buffer: number | undefined,
+  outputTokenBudget?: number,
+) => {
   // Unknown limits are reported as 0. An unknown input limit falls back to the context window; with no window at
   // all, only a provider rejection can limit the request.
-  const window = limit.input || limit.context
-  if (window <= 0) return Number.POSITIVE_INFINITY
-  if (buffer !== undefined) return window - buffer
-  return window - Math.max(Math.floor(window * 0.1), window >= 2 * RESERVE_MIN ? RESERVE_MIN : 0)
+  const window = Math.min(
+    ...[limit.input, limit.context].filter((value): value is number => value !== undefined && value > 0),
+  )
+  if (!Number.isFinite(window)) return Number.POSITIVE_INFINITY
+  const headroom = buffer ?? Math.max(Math.floor(window * 0.1), window >= 2 * RESERVE_MIN ? RESERVE_MIN : 0)
+  const reply = SessionModelRequest.outputLimit(limit, "primary", undefined, outputTokenBudget)
+  // The output fitter permits smaller replies for tiny windows; do not make their prompt ceiling negative.
+  const context = limit.context > reply ? limit.context - reply : Number.POSITIVE_INFINITY
+  return Math.min(window - headroom, context)
 }
 
 /**

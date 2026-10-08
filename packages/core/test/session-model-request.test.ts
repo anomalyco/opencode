@@ -1,8 +1,21 @@
 import { describe, expect, test } from "bun:test"
 import { Message, ToolResultPart, Media } from "@opencode/ai"
-import { boundImages, unsupportedParts } from "@opencode/core/session/model-request"
+import { boundImages, outputLimit, unsupportedParts } from "@opencode/core/session/model-request"
 
 const capabilities = (input: string[]) => ({ tools: true, input, output: ["text"] })
+
+describe("SessionModelRequest.outputLimit", () => {
+  test("uses chosen defaults while keeping unknown supplier maxima unknown", () => {
+    const limit = { context: 262144, output: 0 }
+    expect(outputLimit(limit, "primary")).toBe(32000)
+    for (const budget of [8192, 65536, 131072]) {
+      expect(outputLimit(limit, "primary", undefined, budget)).toBe(budget)
+      expect(outputLimit(limit, "compaction", undefined, budget)).toBe(Math.min(budget, 32000))
+    }
+    expect(outputLimit({ ...limit, output: 128000 }, "primary", undefined, 131072)).toBe(128000)
+    expect(outputLimit(limit, "primary", { measured: 200000, estimated: 0 }, 131072)).toBe(62144)
+  })
+})
 
 describe("SessionModelRequest.unsupportedParts", () => {
   test("replaces unsupported user media with a visible error", () => {

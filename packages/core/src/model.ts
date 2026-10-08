@@ -1,7 +1,7 @@
 import { Model } from "@opencode/schema/model"
 import { Provider } from "./provider.js"
 import type { DeepMutable } from "./schema.js"
-import { Context, Effect, Layer, Stream } from "effect"
+import { Context, Effect, Layer, Scope, Stream } from "effect"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Bus } from "./bus.js"
 import { State } from "./state.js"
@@ -30,9 +30,18 @@ export type Capabilities = Model.Capabilities
 
 /** Merges partial config capabilities onto a base model's capabilities, defaulting unset fields. */
 export const mergeCapabilities = (config: Partial<Capabilities>, base: Capabilities | undefined) => {
-  const fallback = base ?? Capabilities.default()
+  const fallback: Capabilities = base ?? Capabilities.default()
   return {
     tools: config.tools ?? fallback.tools,
+    ...((config.parallelTools ?? fallback.parallelTools) === undefined
+      ? {}
+      : { parallelTools: config.parallelTools ?? fallback.parallelTools }),
+    ...((config.reasoning ?? fallback.reasoning) === undefined
+      ? {}
+      : { reasoning: config.reasoning ?? fallback.reasoning }),
+    ...((config.endpoints ?? fallback.endpoints) === undefined
+      ? {}
+      : { endpoints: [...(config.endpoints ?? fallback.endpoints ?? [])] }),
     input: [...(config.input ?? fallback.input)],
     output: [...(config.output ?? fallback.output)],
   }
@@ -59,6 +68,8 @@ export interface Editor {
   readonly get: (providerID: Provider.ID, modelID: ID) => MutableInfo | undefined
   readonly update: (providerID: Provider.ID, modelID: ID, update: (model: MutableInfo) => void) => void
   readonly remove: (providerID: Provider.ID, modelID: ID) => void
+  /** Final catalog eligibility; later metadata edits cannot bypass a registered filter. */
+  readonly filter: (predicate: (model: Info) => boolean) => void
   readonly default: {
     readonly get: () => { providerID: Provider.ID; modelID: ID } | undefined
     readonly set: (providerID: Provider.ID, modelID: ID) => void
@@ -71,6 +82,10 @@ export interface Editor {
 }
 
 export interface Interface extends State.Transformable<Editor> {
+  /** Await scoped readiness work before public reads; internal notifications do not invoke it. */
+  readonly beforeRead: (
+    effect: Effect.Effect<void>,
+  ) => Effect.Effect<{ readonly dispose: Effect.Effect<void> }, never, Scope.Scope>
   readonly get: (providerID: Provider.ID, modelID: ID) => Effect.Effect<Info | undefined>
   readonly all: () => Effect.Effect<readonly Info[]>
   readonly available: () => Effect.Effect<readonly Info[]>
@@ -83,6 +98,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Mo
 type Data = {
   models: Map<Provider.ID, ReadonlyMap<ID, Info>>
   defaultModel?: { providerID: Provider.ID; modelID: ID }
+  filters: ((model: Info) => boolean)[]
 }
 
 const layer = Layer.effect(
@@ -96,6 +112,7 @@ const layer = Layer.effect(
       name: "model",
       initial: () => ({
         models: new Map((input?.available ?? []).map((record) => [record.provider.id, record.models])),
+        filters: [],
       }),
       editor: (data) => {
         // Definitions are shared across Locations; a provider's map and a model are copied before their first edit.
@@ -150,6 +167,9 @@ const layer = Layer.effect(
           remove: (providerID, modelID) => {
             writable(providerID)?.delete(modelID)
           },
+          filter: (predicate) => {
+            data.filters.push(predicate)
+          },
           default: {
             get: () => data.defaultModel,
             set: (providerID, modelID) => {
@@ -194,23 +214,25 @@ const layer = Layer.effect(
             return [
               providerID,
               new Map(
-                Array.from(models, ([id, model]) => {
-                  const reusable = merged.get(model)
-                  if (reusable && reusable.provider === provider) return [id, reusable.model]
-                  const value = {
-                    ...model,
-                    ...(provider?.canonical === undefined ? {} : { canonical: provider.canonical }),
-                    package: model.package ?? provider?.package,
-                    settings: Provider.mergeOverlay(
-                      Provider.modelSettings(provider?.settings),
-                      Provider.modelSettings(model.settings),
-                    ),
-                    headers: Provider.mergeHeaders(provider?.headers, model.headers),
-                    body: Provider.mergeOverlay(provider?.body, model.body),
-                  } satisfies Info
-                  merged.set(model, { provider, model: value })
-                  return [id, value]
-                }),
+                Array.from(models)
+                  .filter(([, model]) => data.filters.every((predicate) => predicate(model)))
+                  .map(([id, model]) => {
+                    const reusable = merged.get(model)
+                    if (reusable && reusable.provider === provider) return [id, reusable.model]
+                    const value = {
+                      ...model,
+                      ...(provider?.canonical === undefined ? {} : { canonical: provider.canonical }),
+                      package: model.package ?? provider?.package,
+                      settings: Provider.mergeOverlay(
+                        Provider.modelSettings(provider?.settings),
+                        Provider.modelSettings(model.settings),
+                      ),
+                      headers: Provider.mergeHeaders(provider?.headers, model.headers),
+                      body: Provider.mergeOverlay(provider?.body, model.body),
+                    } satisfies Info
+                    merged.set(model, { provider, model: value })
+                    return [id, value]
+                  }),
               ),
             ]
           }),
@@ -249,22 +271,34 @@ const layer = Layer.effect(
       Stream.runForEach(() => notify),
       Effect.forkScoped({ startImmediately: true }),
     )
+    const readiness = new Set<Effect.Effect<void>>()
+    const publicRead = () =>
+      Effect.forEach(readiness, (effect) => effect, { discard: true }).pipe(Effect.andThen(read()))
     return Service.of({
+      beforeRead: (effect) =>
+        Effect.gen(function* () {
+          readiness.add(effect)
+          const dispose = Effect.sync(() => {
+            readiness.delete(effect)
+          })
+          yield* Effect.addFinalizer(() => dispose)
+          return { dispose }
+        }),
       transform: (update) => prepare.pipe(Effect.andThen(state.transform(update))),
       reload,
       get: Effect.fn("Model.get")((providerID, modelID) =>
-        read().pipe(Effect.map((value) => value.byProvider.get(providerID)?.get(modelID))),
+        publicRead().pipe(Effect.map((value) => value.byProvider.get(providerID)?.get(modelID))),
       ),
-      all: Effect.fn("Model.all")(() => read().pipe(Effect.map((value) => value.all))),
-      available: Effect.fn("Model.available")(() => read().pipe(Effect.map((value) => value.available))),
+      all: Effect.fn("Model.all")(() => publicRead().pipe(Effect.map((value) => value.all))),
+      available: Effect.fn("Model.available")(() => publicRead().pipe(Effect.map((value) => value.available))),
       default: Effect.fn("Model.default")(function* () {
-        const value = yield* read()
+        const value = yield* publicRead()
         const requested = value.data.defaultModel
         const model = requested && value.byProvider.get(requested.providerID)?.get(requested.modelID)
         return model?.enabled ? model : value.available.find(supportsText)
       }),
       small: Effect.fn("Model.small")(function* (providerID) {
-        const value = yield* read()
+        const value = yield* publicRead()
         const models = value.available.filter(
           (model) =>
             model.providerID === providerID &&

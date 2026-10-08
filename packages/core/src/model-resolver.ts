@@ -1,9 +1,15 @@
 export * as ModelResolver from "./model-resolver.js"
 
 import { makeLocationNode } from "@opencode/util/effect/app-node"
-import { HttpOptions, LanguageModel, mergeHttpOptions, ProviderConfigurationError } from "@opencode/ai"
+import {
+  GenerationOptions,
+  HttpOptions,
+  LanguageModel,
+  mergeHttpOptions,
+  ProviderConfigurationError,
+} from "@opencode/ai"
 import { Auth } from "@opencode/ai/route"
-import { Context, Effect, Layer, Schema, Struct } from "effect"
+import { Context, Effect, Layer, Option, Schema, Struct } from "effect"
 import { AISDK } from "./aisdk.js"
 import { Credential } from "./credential.js"
 import { Integration } from "./integration.js"
@@ -190,6 +196,42 @@ export const fromCatalogModel = (
       return Effect.fail(
         new UnsupportedCompactionError({ providerID: model.providerID, modelID: model.id, route: resolved.route.id }),
       )
+    }),
+    Effect.map((resolved) => {
+      const body = Option.getOrUndefined(
+        Schema.decodeUnknownOption(
+          Schema.Struct({
+            reasoning_effort: Schema.String.pipe(Schema.optional),
+            reasoning: Schema.Struct({ effort: Schema.String.pipe(Schema.optional) }).pipe(Schema.optional),
+            thinking: Schema.Struct({ type: Schema.String.pipe(Schema.optional) }).pipe(Schema.optional),
+          }),
+        )(model.body),
+      )
+      const effort =
+        body?.thinking?.type === "disabled"
+          ? undefined
+          : (body?.reasoning_effort ??
+            body?.reasoning?.effort ??
+            Option.getOrUndefined(
+              Schema.decodeUnknownOption(Schema.String)(
+                model.settings?.reasoningEffort ??
+                  resolved.defaults?.providerOptions?.reasoningEffort ??
+                  resolved.route.defaults.providerOptions?.reasoningEffort,
+              ),
+            ))
+      const budget =
+        model.settings?.outputTokenBudget ??
+        (effort === undefined ? undefined : model.requestDefaults?.outputTokenBudgetByReasoningEffort?.[effort]) ??
+        model.requestDefaults?.outputTokenBudget ??
+        resolved.defaults?.generation?.maxTokens
+      return budget === undefined
+        ? resolved
+        : LanguageModel.update(resolved, {
+            defaults: {
+              ...resolved.defaults,
+              generation: GenerationOptions.make({ ...resolved.defaults?.generation, maxTokens: budget }),
+            },
+          })
     }),
   )
 

@@ -2,9 +2,9 @@ export * as ConfigProvider from "./provider.js"
 
 import { Schema } from "effect"
 import { Money } from "../money.js"
-import { Capabilities, Compatibility, Family, ID, VariantID } from "../model.js"
+import { Capabilities, Compatibility, Family, ID, RequestDefaults, VariantID } from "../model.js"
 import { Provider } from "../provider.js"
-import { optional } from "../schema.js"
+import { optional, PositiveInt } from "../schema.js"
 
 export const Settings = Schema.StructWithRest(
   Schema.Struct({
@@ -13,6 +13,8 @@ export const Settings = Schema.StructWithRest(
     chunkTimeout: Schema.Union([Schema.Finite, Schema.Literal(false)]).pipe(optional),
     compaction: Provider.Compaction.pipe(optional),
     transport: Provider.Transport.pipe(optional),
+    modelDiscovery: Schema.Boolean.pipe(optional),
+    outputTokenBudget: PositiveInt.pipe(optional),
   }),
   [Schema.Record(Schema.String, Schema.UndefinedOr(Schema.Json))],
 ).annotate({ identifier: "Config.Provider.Settings" })
@@ -21,6 +23,7 @@ export type Settings = typeof Settings.Type
 export const ModelSettings = Schema.StructWithRest(
   Schema.Struct({
     compaction: Provider.Compaction.pipe(optional),
+    outputTokenBudget: PositiveInt.pipe(optional),
   }),
   [Schema.Record(Schema.String, Schema.UndefinedOr(Schema.Json))],
 ).annotate({ identifier: "Config.Model.Settings" })
@@ -73,9 +76,13 @@ class Model extends Schema.Class<Model>("Config.Model")({
   compatibility: Compatibility.pipe(optional),
   package: Schema.String.pipe(optional),
   ...ModelOverlays,
+  requestDefaults: RequestDefaults.pipe(optional),
   // Partial: unset fields fall back to the base model's capabilities, then the defaults.
   capabilities: Capabilities.mapFields((fields) => ({
     tools: optional(fields.tools),
+    parallelTools: fields.parallelTools,
+    reasoning: fields.reasoning,
+    endpoints: fields.endpoints,
     input: optional(fields.input),
     output: optional(fields.output),
   }))

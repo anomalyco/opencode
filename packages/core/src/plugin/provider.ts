@@ -14,6 +14,7 @@ import { KiloPlugin } from "./provider/kilo.js"
 import { LLMGatewayPlugin } from "./provider/llmgateway.js"
 import { LMStudioPlugin } from "./provider/lmstudio.js"
 import { ModalPlugin } from "./provider/modal.js"
+import { ModelDiscoveryPlugin } from "./provider/model-discovery.js"
 import { NvidiaPlugin } from "./provider/nvidia.js"
 import { OllamaPlugin } from "./provider/ollama.js"
 import { OpenAIPlugin } from "./provider/openai.js"
@@ -46,6 +47,7 @@ export const ProviderPlugins: PluginInternal.InternalPlugin[] = [
   LLMGatewayPlugin,
   LMStudioPlugin,
   ModalPlugin,
+  ModelDiscoveryPlugin,
   NvidiaPlugin,
   OllamaPlugin,
   OpencodePlugin,
