@@ -1,7 +1,11 @@
 import { describe, expect } from "bun:test"
+import path from "path"
+import { unlink } from "fs/promises"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { Global } from "@opencode-ai/core/global"
 import { Effect } from "effect"
 import { Auth } from "../../src/auth"
+import { Filesystem } from "@/util/filesystem"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(LayerNode.compile(Auth.node))
@@ -73,3 +77,42 @@ describe("Auth", () => {
     }),
   )
 })
+
+  // A mutation must not drop credentials the running build cannot decode.
+  // `all()` filters those out for reads, and the old `set`/`remove` wrote back
+  // the filtered map, so a single `set` permanently deleted every entry whose
+  // JSON shape this build did not recognize (see #42387).
+  it.instance("set preserves entries the current build cannot decode", () =>
+    Effect.gen(function* () {
+      const auth = yield* Auth.Service
+      const file = path.join(Global.Path.data, "auth.json")
+      const original = yield* Effect.promise(() => Filesystem.readText(file).catch(() => undefined))
+      yield* Effect.promise(() =>
+        Filesystem.write(
+          file,
+          JSON.stringify({
+            anthropic: { type: "api", key: "keep-me" },
+            "future-provider": { type: "something-new", secret: "opaque", version: 99 },
+          }),
+        ),
+      )
+      yield* Effect.addFinalizer(() =>
+        Effect.promise(async () => {
+          if (original !== undefined) await Filesystem.write(file, original)
+          else await unlink(file).catch(() => undefined)
+        }),
+      )
+
+      yield* auth.set("openai", { type: "api", key: "new-key" })
+
+      const onDisk = JSON.parse(yield* Effect.promise(() => Filesystem.readText(file)))
+      expect(onDisk["anthropic"]).toEqual({ type: "api", key: "keep-me" })
+      expect(onDisk["future-provider"]).toEqual({ type: "something-new", secret: "opaque", version: 99 })
+      expect(onDisk["openai"]).toEqual({ type: "api", key: "new-key" })
+
+      // and reads still ignore the undecodable entry
+      const all = yield* auth.all()
+      expect(all["anthropic"]).toBeDefined()
+      expect(all["future-provider"]).toBeUndefined()
+    }),
+  )
