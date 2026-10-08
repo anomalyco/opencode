@@ -53,6 +53,62 @@ const seedSessions = (rows: { id: string; updated: number }[]) =>
   })
 
 describe("SessionStore", () => {
+  it.effect("maps directory parameters through the Drizzle column encoder", () =>
+    Effect.gen(function* () {
+      yield* seedSessions([])
+      const database = yield* Database.Service
+      const mapped = yield* database.db.get<{ directory: string }>(
+        sql`SELECT ${sql.param(AbsolutePath.make("/project///"), SessionTable.directory)} AS directory`,
+      )
+      expect(mapped?.directory).toBe("/project")
+
+      if (process.platform === "win32") {
+        const drive = yield* database.db.get<{ directory: string }>(
+          sql`SELECT ${sql.param("C:\\project\\", SessionTable.directory)} AS directory`,
+        )
+        expect(drive?.directory).toBe("C:/project")
+        const unc = yield* database.db.get<{ directory: string }>(
+          sql`SELECT ${sql.param("\\\\server\\share\\folder\\", SessionTable.directory)} AS directory`,
+        )
+        expect(unc?.directory).toBe("//server/share/folder")
+      }
+    }),
+  )
+
+  it.effect("lists legacy Windows drive and UNC directories without matching descendants", () =>
+    Effect.gen(function* () {
+      const bus = yield* seedSessions([])
+      const database = yield* Database.Service
+      const store = yield* SessionStore.Service
+      const cases = [
+        { id: "ses_legacy_drive", stored: "C:/project///", directory: "C:/project", child: "C:/project/child" },
+        {
+          id: "ses_legacy_unc",
+          stored: "//server/share/project///",
+          directory: "//server/share/project",
+          child: "//server/share/project/child",
+        },
+      ]
+      yield* Effect.forEach(cases, (entry) =>
+        Effect.gen(function* () {
+          yield* bus.publish(SessionEvent.Created, {
+            sessionID: Session.ID.make(entry.id),
+            projectID: Project.ID.global,
+            location: { directory: AbsolutePath.make(entry.directory) },
+            slug: "store-test",
+            version: "test",
+          })
+          // This test represents a pre-fix stored row; new-write assertions live separately.
+          yield* database.db.run(sql`UPDATE ${SessionTable} SET directory = ${entry.stored} WHERE id = ${entry.id}`)
+          const found = yield* store.list({ directory: AbsolutePath.make(entry.directory + "/") })
+          expect(found.map((item) => String(item.id))).toContain(entry.id)
+          const child = yield* store.list({ directory: AbsolutePath.make(entry.child) })
+          expect(child.map((item) => String(item.id))).not.toContain(entry.id)
+        }),
+      )
+    }),
+  )
+
   it.effect("normalizes trailing separators for session writes and lookups", () =>
     Effect.gen(function* () {
       const bus = yield* seedSessions([{ id: "ses_directory", updated: 1 }])
