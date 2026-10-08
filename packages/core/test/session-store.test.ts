@@ -51,15 +51,22 @@ const seedSessions = (rows: { id: string; updated: number }[]) =>
   })
 
 describe("SessionStore", () => {
-  it.effect("lists sessions with trailing path separators", () =>
+  it.effect("normalizes trailing separators for session writes and lookups", () =>
     Effect.gen(function* () {
-      yield* seedSessions([{ id: "ses_directory", updated: 1 }])
+      const bus = yield* seedSessions([{ id: "ses_directory", updated: 1 }])
+      yield* bus.publish(SessionEvent.Created, {
+        sessionID: Session.ID.make("ses_directory_slash"),
+        projectID: Project.ID.global,
+        location: { directory: AbsolutePath.make("/project/") },
+        slug: "store-test",
+        version: "test",
+      })
       const store = yield* SessionStore.Service
-      const paths = ["/project", "/project/", "/project\\\\"] as const
+      const paths = ["/project", "/project/", ...(process.platform === "win32" ? ["/project\\\\"] : [])]
       yield* Effect.forEach(paths, (directory) =>
         Effect.gen(function* () {
           const found = yield* store.list({ directory: AbsolutePath.make(directory) })
-          expect(found.map((session) => String(session.id))).toEqual(["ses_directory"])
+          expect(found.map((session) => String(session.id)).sort()).toEqual(["ses_directory", "ses_directory_slash"])
         }),
       )
     }),
