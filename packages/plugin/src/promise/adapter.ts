@@ -314,7 +314,10 @@ export function fromPromise(plugin: Plugin) {
                       editor.add({
                         ...definition,
                         execute: (input) =>
-                          Effect.tryPromise({ try: () => definition.execute(input), catch: (cause) => cause }),
+                          Effect.tryPromise({
+                            try: (signal) => definition.execute(input, { signal }),
+                            catch: (cause) => cause,
+                          }),
                       }),
                   }),
                 ),

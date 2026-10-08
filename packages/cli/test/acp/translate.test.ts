@@ -633,6 +633,19 @@ test("projects a plugin's structured ACP plan in live updates and saved-message 
   })
 })
 
+test("a child plan cannot replace the root plan without child-update capabilities", () => {
+  const result = translate({
+    name: "child plan",
+    events: live(
+      childCreated("ses_child", root, "Explore"),
+      toolStarted("ses_child", "tool_plan", "clear_goal"),
+      toolSucceeded("ses_child", "tool_plan", { acp: { plan: { entries: [] } } }, "cleared"),
+    ),
+    expected: {},
+  })
+  expect(result.updates.some((update) => update.sessionUpdate === "plan")).toBe(false)
+})
+
 describe("acp turn translation", () => {
   test.each(rows)("$name", (row) => {
     expect(translate(row)).toMatchObject(row.expected)

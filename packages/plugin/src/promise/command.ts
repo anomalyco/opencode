@@ -13,7 +13,7 @@ export interface CommandInvocation {
 export interface CommandDefinition {
   readonly name: string
   readonly description?: string
-  readonly execute: (input: CommandInvocation) => Promise<void>
+  readonly execute: (input: CommandInvocation, options: { readonly signal: AbortSignal }) => Promise<void>
 }
 
 export interface CommandEditor {

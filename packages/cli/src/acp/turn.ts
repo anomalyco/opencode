@@ -53,6 +53,7 @@ type Turn = {
   readonly state: Ref.Ref<ACPTranslate.TurnState>
   readonly subscription: Subscription
   readonly cancelled: Deferred.Deferred<void>
+  readonly commandFinished: Deferred.Deferred<void>
   readonly background: boolean
 }
 
@@ -86,7 +87,14 @@ export const make = Effect.fnUntraced(function* (input: {
       Effect.forever,
       Effect.forkIn(subscriptionScope),
     )
-    return { ctx, state, subscription, cancelled: yield* Deferred.make<void>(), background: false } satisfies Turn
+    return {
+      ctx,
+      state,
+      subscription,
+      cancelled: yield* Deferred.make<void>(),
+      commandFinished: yield* Deferred.make<void>(),
+      background: false,
+    } satisfies Turn
   })
 
   const take = (subscription: Subscription) =>
@@ -146,9 +154,7 @@ export const make = Effect.fnUntraced(function* (input: {
           return yield* input.connection.extNotification(ACPChild.UpdateMethod, { ...output.update, update })
         }).pipe(
           Effect.catchCause((cause) =>
-            Cause.hasInterruptsOnly(cause)
-              ? Effect.void
-              : Effect.logWarning("ACP child session update failed", cause),
+            Cause.hasInterruptsOnly(cause) ? Effect.void : Effect.logWarning("ACP child session update failed", cause),
           ),
         )
       case "PermissionAsk": {
@@ -212,7 +218,12 @@ export const make = Effect.fnUntraced(function* (input: {
       if (folded.terminal) {
         // A registered executor can own several execution cycles. Its return,
         // rather than the first terminal event, ends command-owned streaming.
-        if (turn.ctx.command && !(yield* Deferred.isDone(turn.cancelled))) continue
+        if (
+          turn.ctx.command &&
+          !(yield* Deferred.isDone(turn.commandFinished)) &&
+          !(yield* Deferred.isDone(turn.cancelled))
+        )
+          continue
         yield* asksSettled(turn.subscription)
         return folded.terminal
       }
@@ -273,7 +284,8 @@ export const make = Effect.fnUntraced(function* (input: {
           Cause.hasInterruptsOnly(cause) ? Effect.void : Effect.logWarning("ACP server interrupt failed", cause),
         ),
       )
-    if (!(yield* Ref.get(turn.state)).started) return
+    const state = yield* Ref.get(turn.state)
+    if (!state.started || (turn.ctx.command && !state.executing)) return
     if (Option.exists(yield* Fiber.await(events).pipe(Effect.timeoutOption(drainTimeout)), Exit.isSuccess)) return
     yield* Fiber.interrupt(events)
     const abandoned = ACPTranslate.abandon(yield* Ref.get(turn.state), turn.ctx)
@@ -290,7 +302,13 @@ export const make = Effect.fnUntraced(function* (input: {
       const events = yield* consume(turn).pipe(Effect.forkScoped)
       return yield* Effect.gen(function* () {
         yield* submit(attached, prompt)
-        if (prompt.command) return (yield* Ref.get(turn.state)).terminal ?? "succeeded"
+        if (prompt.command) {
+          yield* Deferred.succeed(turn.commandFinished, undefined)
+          const state = yield* Ref.get(turn.state)
+          if (state.executing) return yield* Fiber.join(events)
+          yield* asksSettled(turn.subscription)
+          return state.terminal ?? "succeeded"
+        }
         return yield* Fiber.join(events)
       }).pipe(Effect.onInterrupt(() => windDown(turn, events)))
     }).pipe(Effect.scoped)

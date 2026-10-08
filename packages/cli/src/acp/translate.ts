@@ -48,6 +48,7 @@ type RetryStatus = {
 
 export type TurnState = {
   readonly started: boolean
+  readonly executing?: boolean
   readonly terminal?: Terminal
   readonly tools: ReadonlyMap<string, Tool>
   readonly retries: ReadonlyMap<string, RetryStatus>
@@ -80,6 +81,7 @@ export type Output =
 export type Folded = {
   readonly state: TurnState
   readonly outputs: ReadonlyArray<Output>
+  readonly executing?: boolean
   readonly terminal?: Terminal
 }
 
@@ -219,7 +221,7 @@ function childCreated(state: TurnState, event: CreatedEvent, ctx: TurnContext): 
 function rootEvent(state: TurnState, event: OpenCodeEvent, ctx: TurnContext): Folded {
   switch (event.type) {
     case "session.execution.started":
-      return { state: { ...state, executionError: undefined }, outputs: [] }
+      return { state: { ...state, executing: true, executionError: undefined }, outputs: [] }
     case "session.step.started":
       return sessionEvent({ ...state, stepError: undefined }, event, ctx, undefined)
     case "session.step.ended":
@@ -229,12 +231,12 @@ function rootEvent(state: TurnState, event: OpenCodeEvent, ctx: TurnContext): Fo
       return { state: { ...recorded, stepError: event.data.error }, outputs: [] }
     }
     case "session.execution.succeeded":
-      return { state: { ...state, terminal: "succeeded" }, outputs: [], terminal: "succeeded" }
+      return { state: { ...state, executing: false, terminal: "succeeded" }, outputs: [], terminal: "succeeded" }
     case "session.execution.interrupted":
-      return { state: { ...state, terminal: "interrupted" }, outputs: [], terminal: "interrupted" }
+      return { state: { ...state, executing: false, terminal: "interrupted" }, outputs: [], terminal: "interrupted" }
     case "session.execution.failed":
       return {
-        state: { ...state, terminal: "failed", executionError: event.data.error },
+        state: { ...state, executing: false, terminal: "failed", executionError: event.data.error },
         outputs: [],
         terminal: "failed",
       }
@@ -396,7 +398,7 @@ function sessionEvent(
             ...output,
             diff: { toolName: tool.name, input: tool.input, metadata: event.data.metadata },
           })),
-          ...(plan ? send(plan) : []),
+          ...(plan && (!child || ctx.childUpdates) ? send(plan) : []),
         ],
       }
     }
