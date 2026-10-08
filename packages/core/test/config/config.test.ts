@@ -416,6 +416,97 @@ describe("Config", () => {
     ),
   )
 
+  for (const source of ["global", "project", "directory", "explicit"] as const) {
+    it.live(`reloads a symlinked ${source} config when its target changes`, () =>
+      Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+        Effect.flatMap((tmp) =>
+          Effect.gen(function* () {
+            const global = path.join(tmp.path, "global")
+            const project = path.join(tmp.path, "project")
+            const target = path.join(tmp.path, "dotfiles", "config.json")
+            const directory =
+              source === "global" ? global : source === "directory" ? path.join(project, ".opencode") : project
+            const file = path.join(directory, "opencode.json")
+            yield* Effect.promise(async () => {
+              await fs.mkdir(global, { recursive: true })
+              await fs.mkdir(project, { recursive: true })
+              await fs.mkdir(directory, { recursive: true })
+              await fs.mkdir(path.dirname(target), { recursive: true })
+              await fs.writeFile(target, JSON.stringify({ shell: "one" }))
+              await fs.symlink(path.relative(path.dirname(file), target), file)
+            })
+            return yield* Effect.gen(function* () {
+              const config = yield* Config.Service
+              const bus = yield* Bus.Service
+              expect(Config.latest(yield* config.entries(), "shell")).toBe("one")
+              // Let readiness rescans settle so they cannot mask a missed target update.
+              yield* Effect.sleep("300 millis")
+
+              for (const shell of ["two", "three"]) {
+                const changed = yield* bus
+                  .subscribe(Event.Updated)
+                  .pipe(Stream.take(1), Stream.runDrain, Effect.forkScoped({ startImmediately: true }))
+                yield* Effect.promise(async () => {
+                  if (shell === "two") return fs.writeFile(target, JSON.stringify({ shell }))
+                  await fs.writeFile(`${target}.tmp`, JSON.stringify({ shell }))
+                  await fs.rename(`${target}.tmp`, target)
+                })
+                yield* Fiber.join(changed).pipe(Effect.timeout("3 seconds"))
+                expect(Config.latest(yield* config.entries(), "shell")).toBe(shell)
+              }
+
+              // A dangling link still needs its target watch for recreation.
+              for (const shell of [undefined, "four"]) {
+                const changed = yield* bus
+                  .subscribe(Event.Updated)
+                  .pipe(Stream.take(1), Stream.runDrain, Effect.forkScoped({ startImmediately: true }))
+                yield* Effect.promise(() =>
+                  shell === undefined ? fs.rm(target) : fs.writeFile(target, JSON.stringify({ shell })),
+                )
+                yield* Fiber.join(changed).pipe(Effect.timeout("3 seconds"))
+                expect(Config.latest(yield* config.entries(), "shell")).toBe(shell)
+              }
+
+              // Retargeting must move the additional watch to the new file.
+              const replacement = path.join(tmp.path, "replacement.json")
+              for (const shell of ["five", "six"]) {
+                const changed = yield* bus
+                  .subscribe(Event.Updated)
+                  .pipe(Stream.take(1), Stream.runDrain, Effect.forkScoped({ startImmediately: true }))
+                yield* Effect.promise(async () => {
+                  await fs.writeFile(replacement, JSON.stringify({ shell }))
+                  if (shell !== "five") return
+                  await fs.symlink(replacement, `${file}.tmp`)
+                  await fs.rename(`${file}.tmp`, file)
+                })
+                yield* Fiber.join(changed).pipe(Effect.timeout("3 seconds"))
+                expect(Config.latest(yield* config.entries(), "shell")).toBe(shell)
+              }
+              expect((yield* config.entries()).some((entry) => entry.type === "document" && entry.path === file)).toBe(
+                true,
+              )
+            }).pipe(
+              Effect.provide(
+                AppNodeBuilder.build(LayerNode.group([Config.node, Bus.node]), [
+                  Config.node.replace(Config.configured(source === "explicit" ? { project: false, file } : undefined)),
+                  Location.node.replace(
+                    Layer.succeed(
+                      Location.Service,
+                      Location.Service.of(location({ directory: AbsolutePath.make(project) })),
+                    ),
+                  ),
+                  Global.node.replace(Global.layerWith({ config: global, home: path.join(global, "home") })),
+                  Credential.node.replace(emptyCredentialNode),
+                  WellKnown.node.replace(emptyWellknownNode),
+                ]),
+              ),
+            )
+          }),
+        ),
+      ),
+    )
+  }
+
   it.effect("backs Config.Service and Config.Test with one shared test implementation", () =>
     Effect.gen(function* () {
       const config = yield* Config.Service
