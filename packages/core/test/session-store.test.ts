@@ -198,6 +198,45 @@ describe("SessionStore", () => {
     }),
   )
 
+  it.effect("matches legacy filesystem roots without treating descendants as roots", () =>
+    Effect.gen(function* () {
+      const bus = yield* seedSessions([])
+      const database = yield* Database.Service
+      const store = yield* SessionStore.Service
+      const cases = [
+        { id: "ses_legacy_posix_root", stored: "////", query: "/", child: "/child" },
+        { id: "ses_legacy_drive_root", stored: "C:////", query: "C:/", child: "C:/child" },
+        {
+          id: "ses_legacy_unc_root",
+          stored: "//server/share////",
+          query: "//server/share/",
+          child: "//server/share/child",
+        },
+      ]
+      yield* Effect.forEach(cases, (entry) =>
+        Effect.gen(function* () {
+          yield* bus.publish(SessionEvent.Created, {
+            sessionID: Session.ID.make(entry.id),
+            projectID: Project.ID.global,
+            location: { directory: AbsolutePath.make(entry.query) },
+            slug: "store-test",
+            version: "test",
+          })
+          // Simulate a legacy row separately from the new-write root coverage.
+          yield* database.db.run(sql`UPDATE ${SessionTable} SET directory = ${entry.stored} WHERE id = ${entry.id}`)
+          const raw = yield* database.db.get<{ directory: string }>(
+            sql`SELECT directory FROM ${SessionTable} WHERE id = ${entry.id}`,
+          )
+          expect(raw?.directory).toBe(entry.stored)
+          const found = yield* store.list({ directory: AbsolutePath.make(entry.query) })
+          expect(found.map((session) => String(session.id))).toContain(entry.id)
+          const child = yield* store.list({ directory: AbsolutePath.make(entry.child) })
+          expect(child.map((session) => String(session.id))).not.toContain(entry.id)
+        }),
+      )
+    }),
+  )
+
   it.effect("keeps POSIX trailing backslashes distinct from path separators", () =>
     Effect.gen(function* () {
       if (process.platform === "win32") return
