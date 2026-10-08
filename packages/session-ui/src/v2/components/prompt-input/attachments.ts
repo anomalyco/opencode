@@ -189,6 +189,11 @@ export function createPromptInputV2Attachments(
     const files = event.dataTransfer?.files
     if (files) await addAttachments(Array.from(files))
   }
+  const report = <T>(operation: Promise<T>) =>
+    operation.catch((error) => {
+      input.onError(error)
+      return undefined
+    })
 
   onMount(() => {
     makeEventListener(document, "dragover", (event) => {
@@ -200,13 +205,13 @@ export function createPromptInputV2Attachments(
     makeEventListener(document, "dragleave", (event) => {
       if (!input.isDialogActive() && !event.relatedTarget) input.setDraggingType(null)
     })
-    makeEventListener(document, "drop", handleDrop)
+    makeEventListener(document, "drop", (event) => void report(handleDrop(event)))
   })
 
   return {
-    addAttachments,
-    handlePaste,
-    handleDrop,
+    addAttachments: (...args: Parameters<typeof addAttachments>) => report(addAttachments(...args)),
+    handlePaste: (event: ClipboardEvent) => report(handlePaste(event)),
+    handleDrop: (event: DragEvent) => report(handleDrop(event)),
     pick(fallback: () => void) {
       if (!input.picker) {
         fallback()
