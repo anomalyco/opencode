@@ -59,6 +59,10 @@ export const root = Effect.fn("Project.root")(function* (
 
 const ACTIVATE_INTERVAL = 60_000
 
+// Control characters cannot belong to a project id: the id is also a path segment (the shell output
+// directory), so a value carrying them is corrupt, not merely unusual.
+const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/
+
 export interface Interface {
   readonly list: () => Effect.Effect<ReadonlyArray<Info>>
   readonly update: (input: UpdateInput) => Effect.Effect<Info, NotFoundError>
@@ -254,10 +258,12 @@ const layer = Layer.effect(
       if (row) yield* bus.publish(ProjectSchema.Event.Updated, fromRow(row))
     })
 
+    // The cache is a convenience, never an authority: a corrupt file (e.g. one written as NUL bytes)
+    // has to leave resolution alone rather than become the id, which would fail every later start.
     const cached = Effect.fnUntraced(function* (dir: string) {
       return yield* fs.readFileString(path.join(dir, "opencode")).pipe(
         Effect.map((value) => value.trim()),
-        Effect.map((value) => (value ? ID.make(value) : undefined)),
+        Effect.map((value) => (value && !CONTROL_CHARACTERS.test(value) ? ID.make(value) : undefined)),
         Effect.orElseSucceed(() => undefined),
       )
     })
