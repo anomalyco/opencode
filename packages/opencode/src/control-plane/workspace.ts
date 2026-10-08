@@ -277,17 +277,15 @@ const layer = Layer.effect(
           Effect.catch((error) =>
             Effect.logWarning("workspace target request failed", {
               workspaceID: workspace.id,
-              error: errorData(error),
+              error: workspaceError(error),
             }).pipe(Effect.as(undefined)),
           ),
         )
         if (!response) return input.fallback
         if (response.status < 200 || response.status >= 300) {
-          const body = yield* response.text.pipe(Effect.catch(() => Effect.succeed("")))
           yield* Effect.logWarning("workspace target request failed", {
             workspaceID: workspace.id,
             status: response.status,
-            body,
           })
           return input.fallback
         }
@@ -298,7 +296,7 @@ const layer = Layer.effect(
           Effect.catch((error) =>
             Effect.logWarning("workspace target response decode failed", {
               workspaceID: workspace.id,
-              error: errorData(error),
+              error: workspaceError(error),
             }).pipe(Effect.as(input.fallback)),
           ),
         )
@@ -364,23 +362,25 @@ const layer = Layer.effect(
     })
 
     const syncWorkspaceLoop = Effect.fn("Workspace.syncWorkspaceLoop")(function* (space: Info) {
-      const target = yield* WorkspaceAdapterRuntime.target(space)
-
-      if (target.type === "local") return
-
       let attempt = 0
 
       while (true) {
         setStatus(space.id, "connecting")
 
-        const stream = yield* connectSSE(target.url, target.headers).pipe(
-          Effect.tap(() => syncHistory(space, target.url, target.headers)),
+        // Adapters may renew expiring transport credentials between connections.
+        const stream = yield* Effect.gen(function* () {
+          const target = yield* WorkspaceAdapterRuntime.target(space)
+          if (target.type === "local") return null
+          const stream = yield* connectSSE(target.url, target.headers)
+          yield* syncHistory(space, target.url, target.headers)
+          return stream
+        }).pipe(
           Effect.catch((err) =>
             Effect.gen(function* () {
               setStatus(space.id, "error")
               yield* Effect.logWarning("failed to connect to global sync", {
                 workspace: space.name,
-                error: errorData(err),
+                error: workspaceError(err),
               })
               return null
             }),
@@ -426,6 +426,13 @@ const layer = Layer.effect(
                 })
               }
             }),
+          ).pipe(
+            Effect.catch((error) =>
+              Effect.logWarning("workspace event stream ended", {
+                workspaceID: space.id,
+                error: workspaceError(error),
+              }),
+            ),
           )
 
           setStatus(space.id, "disconnected")
@@ -447,7 +454,7 @@ const layer = Layer.effect(
             setStatus(space.id, "error")
             yield* Effect.logWarning("workspace target failed", {
               workspaceID: space.id,
-              error: errorData(error),
+              error: workspaceError(error),
             })
             return null
           }),
@@ -476,7 +483,7 @@ const layer = Layer.effect(
               setStatus(space.id, "error")
               yield* Effect.logWarning("workspace listener failed", {
                 workspaceID: space.id,
-                error: errorData(error),
+                error: workspaceError(error),
               })
             }),
           ),
@@ -576,7 +583,7 @@ const layer = Layer.effect(
                   Effect.logWarning("session warp final source sync failed", {
                     workspaceID: previous.id,
                     sessionID: input.sessionID,
-                    error: errorData(error),
+                    error: workspaceError(error),
                   }),
                 ),
               )
@@ -945,6 +952,13 @@ function route(url: string | URL, path: string) {
   next.search = ""
   next.hash = ""
   return next
+}
+
+function workspaceError(error: unknown) {
+  if (error instanceof SyncHttpError) return { name: error._tag, status: error.status }
+  if (HttpClientError.isHttpClientError(error))
+    return { name: error._tag, reason: error.reason._tag, status: error.response?.status }
+  return errorData(error)
 }
 
 export const node = LayerNode.make({

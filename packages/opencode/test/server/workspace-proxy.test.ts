@@ -1,7 +1,7 @@
 import { NodeHttpServer, NodeServices } from "@effect/platform-node"
 import Http from "node:http"
 import { describe, expect } from "bun:test"
-import { Context, Effect, Layer, Queue } from "effect"
+import { Context, Effect, Layer, Logger, Queue } from "effect"
 import { FetchHttpClient, HttpClient, HttpServer, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import * as Socket from "effect/unstable/socket/Socket"
 import { HttpApiProxy } from "../../src/server/routes/instance/httpapi/middleware/proxy"
@@ -112,6 +112,35 @@ describe("HttpApi workspace proxy", () => {
     }),
   )
 
+  it.live("upstream errors do not log target credentials or response bodies", () =>
+    Effect.gen(function* () {
+      const messages: unknown[] = []
+      const url = yield* listenServer(() =>
+        Effect.succeed(HttpServerResponse.text("private-preview-token", { status: 503 })),
+      )
+      const request = HttpServerRequest.fromWeb(new Request("http://localhost/session/abc"))
+      const client = yield* HttpClient.HttpClient
+      const response = yield* HttpApiProxy.http(
+        client,
+        `${url}/private-preview-token?auth=private-preview-token`,
+        undefined,
+        request,
+      ).pipe(
+        Effect.provide(
+          Logger.layer([
+            Logger.make((options) => {
+              messages.push(options.message)
+            }),
+          ]),
+        ),
+      )
+      expect(response.status).toBe(503)
+      expect(yield* HttpServerResponse.toClientResponse(response).text).toBe("private-preview-token")
+      expect(JSON.stringify(messages)).not.toContain("private-preview-token")
+      expect(JSON.stringify(messages)).toContain("/session/abc")
+    }),
+  )
+
   it.live("proxies bodyless Web mutation requests as an empty body", () =>
     Effect.gen(function* () {
       const url = yield* listenServer(
@@ -144,16 +173,27 @@ describe("HttpApi workspace proxy", () => {
             "x-opencode-directory": "/secret/path",
             "x-opencode-workspace": "ws_123",
             "x-custom": "preserved",
+            authorization: "Basic local-server-password",
+            cookie: "local-session=private",
           },
         }),
       )
       const httpClient = yield* HttpClient.HttpClient
-      yield* HttpApiProxy.http(httpClient, `${url}/test`, { "x-injected": "extra" }, request)
+      yield* HttpApiProxy.http(
+        httpClient,
+        `${url}/test`,
+        { "x-injected": "extra", Authorization: "Bearer remote-token" },
+        request,
+      )
 
       expect(forwarded["x-opencode-directory"]).toBeUndefined()
       expect(forwarded["x-opencode-workspace"]).toBeUndefined()
       expect(forwarded["x-custom"]).toBe("preserved")
       expect(forwarded["x-injected"]).toBe("extra")
+      expect(forwarded["authorization"]).toBe("Bearer remote-token")
+      expect(forwarded["cookie"]).toBeUndefined()
+      yield* HttpApiProxy.http(httpClient, `${url}/test`, undefined, request)
+      expect(forwarded["authorization"]).toBeUndefined()
     }),
   )
 

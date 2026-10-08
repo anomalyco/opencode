@@ -1278,6 +1278,54 @@ describe("workspace sync state", () => {
     })
   })
 
+  it.live("remote reconnect resolves a renewed adapter target", () => {
+    const paths: string[] = []
+    return Effect.gen(function* () {
+      yield* HttpServer.serveEffect()(
+        HttpServerRequest.HttpServerRequest.use((request) =>
+          Effect.gen(function* () {
+            const pathname = new URL(request.url, "http://localhost").pathname
+            paths.push(pathname)
+            if (pathname.endsWith("/global/event"))
+              return HttpServerResponse.fromWeb(eventStreamResponse([], pathname.startsWith("/renewed/")))
+            yield* request.text
+            return yield* HttpServerResponse.json([])
+          }),
+        ),
+      )
+      const url = yield* serverUrl()
+      yield* provideTmpdirInstance(
+        () =>
+          Effect.gen(function* () {
+            const instance = yield* requireInstance
+            const workspace = yield* Workspace.Service
+            const type = unique("renewed-target")
+            const info = workspaceInfo(instance.project.id, type)
+            const recorded = recordedAdapter({
+              target() {
+                return {
+                  type: "remote",
+                  url: `${url}/${paths.includes("/original/global/event") ? "renewed" : "original"}/`,
+                }
+              },
+            })
+            registerAdapter(instance.project.id, type, recorded.adapter)
+            yield* insertWorkspace(info)
+            yield* workspace.startWorkspaceSyncing(instance.project.id)
+            yield* eventuallyEffect(
+              Effect.sync(() => expect(paths).toContain("/renewed/global/event")),
+              5000,
+            )
+            expect(paths).toContain("/renewed/sync/history")
+            expect(recorded.calls.target.length).toBeGreaterThanOrEqual(3)
+            expect(yield* workspace.isSyncing(info.id)).toBe(true)
+            yield* workspace.remove(info.id)
+          }),
+        { git: true },
+      )
+    })
+  })
+
   it.live("remote connection HTTP failures set error and clear syncing", () =>
     Effect.gen(function* () {
       yield* HttpServer.serveEffect()(

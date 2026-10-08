@@ -87,9 +87,13 @@ export function http(
   request: HttpServerRequest.HttpServerRequest,
 ): Effect.Effect<HttpServerResponse.HttpServerResponse> {
   return Effect.gen(function* () {
+    // Remote credentials come from the adapter, never from local server auth.
+    const outgoing = new Headers(request.headers as HeadersInit)
+    outgoing.delete("authorization")
+    outgoing.delete("cookie")
     const response = yield* client.execute(
       HttpClientRequest.make(request.method as never)(url, {
-        headers: ProxyUtil.headers(request.headers as HeadersInit, extra),
+        headers: ProxyUtil.headers(outgoing, extra),
         body: requestBody(request),
       }),
     )
@@ -98,19 +102,16 @@ export function http(
     headers.delete("content-length")
 
     // An upstream 5xx from a remote workspace sandbox arrives here as an opaque
-    // status — its real cause (and log line) live only inside the sandbox. Buffer
-    // the small error body, log it locally so it shows up in the host's log, and
-    // forward it unchanged (preserving content-type so the client can still parse
-    // the structured error, e.g. its `ref`).
+    // status — its real cause lives inside the sandbox. Forward the error body
+    // unchanged, but keep credential-bearing target URLs and bodies out of logs.
     if (response.status >= 500) {
       const body = yield* response.text.pipe(Effect.catch(() => Effect.succeed("")))
       const contentType = response.headers["content-type"] ?? "application/json"
       headers.delete("content-type")
       yield* Effect.logError("workspace proxy upstream error", {
-        url: url.toString(),
+        path: new URL(request.url, "http://localhost").pathname,
         method: request.method,
         status: response.status,
-        body: body.slice(0, 2000),
       })
       return HttpServerResponse.text(body, {
         status: response.status,

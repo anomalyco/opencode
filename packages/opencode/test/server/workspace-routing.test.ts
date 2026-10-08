@@ -87,6 +87,13 @@ describe("workspaceProxyURL", () => {
     expect(result.searchParams.get("keep")).toBe("yes")
   })
 
+  test("strips local server authentication while preserving remote PTY tickets", () => {
+    const url = new URL("http://localhost/pty/pty_123/connect?auth_token=local-secret&ticket=remote-ticket")
+    const result = workspaceProxyURL("https://remote.example", url)
+    expect(result.searchParams.get("auth_token")).toBeNull()
+    expect(result.searchParams.get("ticket")).toBe("remote-ticket")
+  })
+
   test("preserves hash from request", () => {
     const url = new URL("http://localhost/page#section")
     const result = workspaceProxyURL("http://remote:8080", url)

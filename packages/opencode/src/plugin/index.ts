@@ -82,6 +82,11 @@ function internalPlugins(flags: RuntimeFlags.Info): PluginInstance[] {
     SnowflakeCortexAuthPlugin,
     XaiAuthPlugin,
     CerebrasPlugin,
+    async (input) => {
+      if (!flags.experimentalWorkspaces || !process.env.MAINBRELLA_API_KEY) return {}
+      const { MainbrellaPlugin } = await import("./mainbrella/mainbrella")
+      return MainbrellaPlugin(input)
+    },
   ]
 }
 
