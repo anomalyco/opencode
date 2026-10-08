@@ -1659,10 +1659,23 @@ export function schema(model: Provider.Model, schema: JSONSchema7): JSONSchema7 
           if (result.type === "integer" || result.type === "number") {
             result.type = "string"
           }
+        } else if (key === "const" && value !== null && typeof value !== "object") {
+          // Gemini has no `const`; @ai-sdk/google rewrites it into a non-string
+          // `enum` which Gemini rejects. Fold primitive literals into a string enum.
+          result.enum = [String(value)]
+          result.type = "string"
         } else if (typeof value === "object" && value !== null) {
           result[key] = sanitizeGemini(value)
         } else {
           result[key] = value
+        }
+      }
+
+      // Gemini only accepts string enums; coerce any non-string enum body to a
+      // string type regardless of key order.
+      if (Array.isArray(result.enum) && result.enum.length > 0 && result.type !== "string") {
+        if (result.type === undefined || ["integer", "number", "boolean"].includes(result.type)) {
+          result.type = "string"
         }
       }
 

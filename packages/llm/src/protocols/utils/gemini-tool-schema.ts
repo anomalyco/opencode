@@ -36,7 +36,18 @@ const sanitizeNode = (schema: unknown): unknown => {
     ]),
   )
 
-  if (Array.isArray(result.enum) && (result.type === "integer" || result.type === "number")) result.type = "string"
+  // Gemini enums only accept string values, and `const` has no dialect equivalent,
+  // so fold literals (booleans, numbers) into a string `enum` before projection.
+  if ("const" in schema && schema.const !== null && typeof schema.const !== "object") {
+    result.enum = [schema.const].map(String)
+    delete result.const
+  }
+
+  if (Array.isArray(result.enum) && result.enum.length > 0 && result.type !== "string") {
+    if (result.type === undefined || ["integer", "number", "boolean", "null"].includes(result.type as string)) {
+      result.type = "string"
+    }
+  }
 
   const properties = result.properties
   if (result.type === "object" && isRecord(properties) && Array.isArray(result.required)) {
@@ -71,7 +82,13 @@ const projectNode = (schema: unknown): Record<string, unknown> | undefined => {
       ["format", schema.format],
       ["type", Array.isArray(schema.type) ? schema.type.filter((type) => type !== "null")[0] : schema.type],
       ["nullable", Array.isArray(schema.type) && schema.type.includes("null") ? true : undefined],
-      ["enum", schema.const !== undefined ? [schema.const] : schema.enum],
+      [
+        "enum",
+        (() => {
+          const values = schema.const !== undefined ? [schema.const] : schema.enum
+          return Array.isArray(values) ? values.map(String) : undefined
+        })(),
+      ],
       [
         "properties",
         isRecord(schema.properties)

@@ -1761,6 +1761,70 @@ describe("ProviderTransform.schema - gemini combiner nodes", () => {
   })
 })
 
+describe("ProviderTransform.schema - gemini non-string enum coercion", () => {
+  const geminiModel = {
+    providerID: "google",
+    api: {
+      id: "gemini-3-pro",
+    },
+  } as any
+
+  test("folds primitive consts into string enums with a string type", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        dry: { type: "boolean", const: true },
+        strict: { const: false },
+        level: { type: "integer", const: 1 },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    expect(result.properties.dry).toMatchObject({ type: "string", enum: ["true"] })
+    expect(result.properties.dry.const).toBeUndefined()
+    expect(result.properties.strict).toMatchObject({ type: "string", enum: ["false"] })
+    expect(result.properties.level).toMatchObject({ type: "string", enum: ["1"] })
+  })
+
+  test("stringifies boolean enums and coerces their type", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        status: { type: "boolean", enum: [true, false] },
+        untyped: { enum: ["a", 2] },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    expect(result.properties.status).toMatchObject({ type: "string", enum: ["true", "false"] })
+    expect(result.properties.untyped).toMatchObject({ type: "string", enum: ["a", "2"] })
+  })
+
+  test("coerces consts nested inside array items", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        nested: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: { enabled: { const: false } },
+          },
+        },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    expect(result.properties.nested.items.properties.enabled).toMatchObject({
+      type: "string",
+      enum: ["false"],
+    })
+  })
+})
+
 describe("ProviderTransform.schema - gemini non-object properties removal", () => {
   const geminiModel = {
     providerID: "google",

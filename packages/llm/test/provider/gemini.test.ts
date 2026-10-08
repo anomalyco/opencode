@@ -279,6 +279,67 @@ describe("Gemini route", () => {
     }),
   )
 
+  it.effect("folds boolean/number consts and non-string enums into string enums", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare(
+        LLM.request({
+          id: "req_mcp_bool_const",
+          model,
+          prompt: "Use the tool.",
+          tools: [
+            {
+              name: "lookup",
+              description: "Lookup data",
+              inputSchema: {
+                type: "object",
+                properties: {
+                  dry: { type: "boolean", const: true },
+                  strict: { const: false },
+                  level: { type: "integer", const: 1 },
+                  status: { type: "boolean", enum: [true, false] },
+                  nested: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: { enabled: { const: false } },
+                    },
+                  },
+                },
+              },
+            },
+          ],
+        }),
+      )
+
+      expect(prepared.body).toMatchObject({
+        tools: [
+          {
+            functionDeclarations: [
+              {
+                parameters: {
+                  type: "object",
+                  properties: {
+                    dry: { type: "string", enum: ["true"] },
+                    strict: { type: "string", enum: ["false"] },
+                    level: { type: "string", enum: ["1"] },
+                    status: { type: "string", enum: ["true", "false"] },
+                    nested: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: { enabled: { type: "string", enum: ["false"] } },
+                      },
+                    },
+                  },
+                },
+              },
+            ],
+          },
+        ],
+      })
+    }),
+  )
+
   it.effect("parses text, reasoning, and usage stream fixtures", () =>
     Effect.gen(function* () {
       const body = sseEvents(
