@@ -75,6 +75,39 @@ describe("SessionStore", () => {
     }),
   )
 
+  it.effect("persists new Windows drive and UNC directories without trailing separators", () =>
+    Effect.gen(function* () {
+      if (process.platform !== "win32") return
+      const bus = yield* seedSessions([])
+      const database = yield* Database.Service
+      const store = yield* SessionStore.Service
+      const cases = [
+        { id: "ses_new_drive", written: "C:\\project\\", stored: "C:/project" },
+        { id: "ses_new_unc", written: "\\\\server\\share\\project\\", stored: "//server/share/project" },
+      ]
+      yield* Effect.forEach(cases, (entry) =>
+        Effect.gen(function* () {
+          yield* bus.publish(SessionEvent.Created, {
+            sessionID: Session.ID.make(entry.id),
+            projectID: Project.ID.global,
+            location: { directory: AbsolutePath.make(entry.written) },
+            slug: "store-test",
+            version: "test",
+          })
+          // Inspect the driver value so fromDriver cannot hide an incorrect write.
+          const row = yield* database.db.get<{ directory: string }>(
+            sql`SELECT directory FROM ${SessionTable} WHERE id = ${entry.id}`,
+          )
+          expect(row?.directory).toBe(entry.stored)
+          const windows = yield* store.list({ directory: AbsolutePath.make(entry.written) })
+          expect(windows.map((session) => String(session.id))).toContain(entry.id)
+          const slashes = yield* store.list({ directory: AbsolutePath.make(entry.stored + "/") })
+          expect(slashes.map((session) => String(session.id))).toContain(entry.id)
+        }),
+      )
+    }),
+  )
+
   it.effect("lists legacy Windows drive and UNC directories without matching descendants", () =>
     Effect.gen(function* () {
       const bus = yield* seedSessions([])
@@ -248,6 +281,11 @@ describe("SessionStore", () => {
         slug: "store-test",
         version: "test",
       })
+      const database = yield* Database.Service
+      const raw = yield* database.db.get<{ directory: string }>(
+        sql`SELECT directory FROM ${SessionTable} WHERE id = 'ses_literal_backslash'`,
+      )
+      expect(raw?.directory).toBe("/project\\")
       const store = yield* SessionStore.Service
       const escaped = yield* store.list({ directory: AbsolutePath.make("/project\\/") })
       expect(escaped.map((item) => String(item.id))).toEqual(["ses_literal_backslash"])
