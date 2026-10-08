@@ -369,11 +369,11 @@ You can customize TUI behavior through `tui.json` (or `tui.jsonc`).
     "enabled": false
   },
   "diff_style": "auto",
-  "turn_timing": {
-    "time": false,
-    "duration": false
+  "model_label": "name",
+  "footer": {
+    "time": "user,tool",
+    "duration": "important"
   },
-  "timestamps": "user,tool",
   "cursor": {
     "style": "block",
     "blinking": true
@@ -404,39 +404,66 @@ This is separate from `opencode.json`, which configures server/runtime behavior.
 - `scroll_acceleration.enabled` - Enable macOS-style scroll acceleration for smooth, natural scrolling. When enabled, scroll speed increases with rapid scrolling gestures and stays precise for slower movements. **This setting takes precedence over `scroll_speed` and overrides it when enabled.**
 - `scroll_speed` - Controls how fast the TUI scrolls when using scroll commands (minimum: `0.001`, supports decimal values). Defaults to `3`. **Note: This is ignored if `scroll_acceleration.enabled` is set to `true`.**
 - `diff_style` - Controls diff rendering. `"auto"` adapts to terminal width, `"stacked"` always shows a single-column layout.
-- `turn_timing` - Adds timing to the footer of every assistant turn, including the intermediate tool-call turns. `time` shows when the turn finished: the time of day if today, the date and time otherwise. `duration` shows how long the turn took; the final turn keeps the total since your prompt, labelled `total`. Both default to `false`. Toggle them at runtime with `/turn-times` and `/turn-durations`; the toggled value persists and takes precedence over `tui.json`.
-- `timestamps` - Chooses which transcript entries show a timestamp. See [Timestamps](#timestamps).
-- `footer_variant` - Shows the model variant each assistant turn ran with, such as its reasoning effort (`high`, `max`), after the model in the turn's footer: `▣  Build · Claude Opus 4.5 · high · 45.5s` (default: `false`). The variant is the one stored on the message, so a past turn keeps the effort it used after you switch. Turns that ran without a variant are unchanged. The prompt below the input already shows the currently selected variant.
+- `footer` - Chooses which details message footers and other transcript entries show: agent, model, variant, time, duration, total and message ID. See [Footer](#footer).
+- `model_label` - How message footers and the prompt name a model: `"name"` (default) shows its display name, such as `Claude Sonnet 4.5`; `"id"` shows `providerID/modelID`, such as `anthropic/claude-sonnet-4-5`.
+- `turn_timing`, `footer_variant`, `timestamps` - Older settings that `footer` replaces; they keep working. See [Older footer settings](#older-footer-settings).
 - `cursor` - Controls the terminal cursor in TUI input fields. `style` defaults to `"block"`, can be `"underline"`, `"line"`, or `"default"`; `blinking` defaults to `true`. When `style` is `"default"`, the terminal default cursor is restored, so `blinking` has no effect.
 - `mouse` - Enable or disable mouse capture in the TUI (default: `true`). When disabled, the terminal's native mouse selection/scrolling behavior is preserved.
 - `attention` - Configures TUI desktop notifications and sounds. Disabled by default.
 
 Use `OPENCODE_TUI_CONFIG` to load a custom TUI config path.
 
-### Timestamps
+### Footer
 
-`timestamps` chooses which entries in the session transcript show a timestamp. A time from today shows the time of day; an older one shows the date, then the time.
+`footer` chooses which details the session transcript shows, one key per detail. Every key takes the same value:
 
-It accepts:
+- `"all"` or `true` - everywhere the detail applies.
+- `"none"` or `false` - nowhere.
+- `"important"` - only on landmarks, the entries <kbd>ctrl+shift+up</kbd> and <kbd>ctrl+shift+down</kbd> stop on: your prompts, the final response of each turn, and question, todo and subagent tool calls. An assistant footer counts when its message holds one of those.
+- A list of entry types, as a comma-separated string such as `"user,tool"` or an array such as `["user", "tool"]`. It may include `"important"`: `"user,important"`.
 
-- `"all"` - every type below.
-- `"none"` - no timestamps.
-- A comma-separated list, such as `"user,tool"`.
-- An array, such as `["user", "tool"]`.
+| Key          | Shows                                                                                    | Applies to                                                                  | Default            |
+| ------------ | ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- | ------------------ |
+| `agent`      | The agent that ran the turn                                                              | `assistant`                                                                 | `"all"`            |
+| `model`      | The model the turn ran on, named per `model_label`                                       | `assistant`                                                                 | `"all"`            |
+| `variant`    | The variant the turn ran with, such as its reasoning effort (`high`), after the model    | `assistant`                                                                 | `"none"`           |
+| `time`       | When the entry happened                                                                  | `user`, `assistant`, `text`, `reasoning`, `tool`, `error`, `compaction`     | see below          |
+| `duration`   | How long the entry took                                                                  | `assistant`, `reasoning`, `tool`                                            | `"reasoning"`      |
+| `total`      | Time from your prompt to the end of the turn                                             | `assistant`, final message of a turn only                                   | `"all"`            |
+| `message_id` | The message ID (`msg_...`), which you can select with the mouse to copy                  | `user`, `assistant`, `tool`                                                 | `"none"`           |
 
-| Type         | Shows                                               |
-| ------------ | --------------------------------------------------- |
-| `user`       | When a prompt was sent, below the prompt            |
-| `assistant`  | When an assistant turn finished, in the turn footer |
-| `text`       | When an assistant text block finished, below it     |
-| `reasoning`  | When a thinking block finished, before its duration |
-| `tool`       | When a tool call finished and how long it ran       |
-| `error`      | When an assistant turn failed, in its error box     |
-| `compaction` | When compaction started, in the compaction divider  |
+| Type         | Where                                                         |
+| ------------ | ------------------------------------------------------------- |
+| `user`       | Below the prompt                                              |
+| `assistant`  | In the turn footer                                            |
+| `text`       | Below an assistant text block, when it finished               |
+| `reasoning`  | In the thinking block header                                  |
+| `tool`       | Every tool call, plugin and MCP tools included                |
+| `error`      | In the error box of a failed turn                             |
+| `compaction` | In the compaction divider, when compaction started            |
 
-Unset (the default), the transcript looks as it always has: only prompts and assistant footers can show times, through `/timestamps`, `/turn-times` and `turn_timing.time`, and those toggles persist.
+A type a key does not apply to has no effect, so `"all"` and `"important"` select only the entries listed under _Applies to_. A turn's last message always has a footer; `time`, `duration` and `message_id` also give its earlier messages, such as tool-call steps, a footer once they finish. A time from today shows the time of day; an older one shows the date, then the time. On a tool call, `time`, `duration` and `message_id` follow the call on one line, `· 9:16 PM · 1.5s · msg_...`; a call drawn as a block, or one whose arguments span lines, puts them on its own last line so a long command or prompt cannot push them out of sight. `message_id` there is the ID of the message the call belongs to.
 
-Set, it decides every type each time the TUI starts, and it overrides `turn_timing.time`. `/timestamps` and `/turn-times` still flip prompt and turn times, until the TUI exits. `turn_timing.duration` and `/turn-durations` are not affected.
+```json title="tui.json"
+{
+  "footer": {
+    "variant": "all",
+    "time": "important",
+    "duration": "assistant,tool",
+    "message_id": ["user", "assistant"]
+  }
+}
+```
+
+The `/timestamps`, `/turn-times` and `/turn-durations` commands flip prompt times, turn times and turn durations. For a key set in `footer`, the change lasts until the TUI exits and tui.json decides again on the next start. For a key left unset, the change is remembered.
+
+### Older footer settings
+
+These keep working when the matching `footer` key is unset, and `footer` wins when both are set:
+
+- `turn_timing.time: true` is `footer.time: "assistant"`, and `turn_timing.duration: true` adds `assistant` to `footer.duration`. With these, the `/turn-times` and `/turn-durations` toggles are remembered and take precedence.
+- `footer_variant: true` is `footer.variant: "all"`.
+- `timestamps` takes the type list `footer.time` takes, without `"important"`, and overrides `turn_timing.time`. Its `tool` type also adds tool call durations, as `footer.duration: "tool"` does.
 
 ### Attention
 

@@ -53,6 +53,19 @@ export function navigationTargets(
   return targets
 }
 
+// Whether a transcript entry is a landmark of `navigationTargets(..., "landmark")`: a part by its
+// own ID, a message-level entry (prompt, footer, error box, compaction divider) when the message
+// or any of its parts is one.
+export function isLandmark(
+  targets: ReadonlySet<string>,
+  parts: readonly Part[],
+  messageID: string,
+  partID?: string,
+) {
+  if (partID) return targets.has(partID)
+  return targets.has(messageID) || parts.some((part) => targets.has(part.id))
+}
+
 // Picks the block to bring to `anchor`, the row a navigated-to block lands on.
 // "next" is the nearest block below the anchor, "prev" the nearest above it, so
 // a block already at the anchor counts as current. A renderer can draw one part

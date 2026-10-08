@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { Message, Part } from "@opencode-ai/sdk/v2"
-import { navigationTargets, pickNavigationTarget } from "../../../src/routes/session/navigation"
+import { isLandmark, navigationTargets, pickNavigationTarget } from "../../../src/routes/session/navigation"
 
 const sessionID = "ses_test"
 
@@ -103,6 +103,24 @@ describe("session navigation targets", () => {
     const streaming = [user("u1"), assistant("a1")]
     const targets = navigationTargets(streaming, (id) => (id === "u1" ? parts.u1 : parts.a1), "landmark")
     expect(new Set(targets)).toEqual(new Set(["u1", "a1-todo", "a1-text"]))
+  })
+})
+
+describe("landmark entries", () => {
+  const targets = navigationTargets(messages, lookup, "landmark")
+
+  test("a part is a landmark by its own ID", () => {
+    expect(isLandmark(targets, parts.a2, "a2", "a2-text")).toBe(true)
+    expect(isLandmark(targets, parts.a2, "a2", "a2-blank")).toBe(false)
+    expect(isLandmark(targets, parts.a3, "a3", "a3-reasoning")).toBe(false)
+  })
+
+  test("a message-level entry is a landmark when the message or one of its parts is", () => {
+    expect(isLandmark(targets, parts.u1, "u1")).toBe(true)
+    expect(isLandmark(targets, parts.a1, "a1")).toBe(true)
+    expect(isLandmark(targets, parts.a3, "a3")).toBe(true)
+    expect(isLandmark(targets, parts.u3, "u3")).toBe(false)
+    expect(isLandmark(targets, [reasoning("a4-reasoning", "a4", "x")], "a4")).toBe(false)
   })
 })
 

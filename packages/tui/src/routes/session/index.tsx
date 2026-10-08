@@ -74,7 +74,7 @@ import { TuiConfig, useTuiConfig } from "../../config"
 import { useClipboard } from "../../context/clipboard"
 import { nextThinkingMode, reasoningSummary, useThinkingMode, type ThinkingMode } from "../../context/thinking"
 import { getScrollAcceleration } from "../../util/scroll"
-import { navigationTargets, pickNavigationTarget, type NavigationScope } from "./navigation"
+import { isLandmark, navigationTargets, pickNavigationTarget, type NavigationScope } from "./navigation"
 import { collapseToolOutput } from "../../util/collapse-tool-output"
 import { usePluginRuntime } from "../../plugin/runtime"
 import { DialogRetryAction } from "../../component/dialog-retry-action"
@@ -166,10 +166,7 @@ const context = createContext<{
   conceal: () => boolean
   thinkingMode: () => ThinkingMode
   showThinking: () => boolean
-  showTimestamps: () => boolean
-  showTurnTime: () => boolean
-  showTurnDuration: () => boolean
-  showPartTimestamp: (type: "text" | "reasoning" | "tool" | "error" | "compaction") => boolean
+  footer: (element: TuiConfig.FooterElement, type: TuiConfig.TimestampType, id: string, partID?: string) => boolean
   showDetails: () => boolean
   showGenericToolOutput: () => boolean
   diffWrapMode: () => "word" | "none"
@@ -283,19 +280,44 @@ export function Session() {
     if (sidebar() === "auto" && wide()) return true
     return false
   })
-  // A tui.json `timestamps` list decides on every start and a toggle lasts until exit: kv.json usually
-  // already holds a "timestamps" value, persisted alongside any other kv write, which would mask the config.
-  // Without the list, the toggles persist in kv and turn_timing.time supplies the turn-time default.
-  const timestampTypes = TuiConfig.timestampTypes(tuiConfig.timestamps)
-  const [userTimestamps, setUserTimestamps] = createSignal(timestampTypes?.has("user"))
-  const [turnTimes, setTurnTimes] = createSignal(timestampTypes?.has("assistant"))
-  const showTimestamps = createMemo(() => userTimestamps() ?? kv.get("timestamps", "hide") === "show")
-  const showTurnTime = createMemo(
-    () => turnTimes() ?? kv.get("turn_timing_time", tuiConfig.turn_timing?.time ?? false) === true,
+  // An element set in tui.json (`footer`, or the legacy `timestamps` list for time) decides on every
+  // start and its toggle lasts until exit: kv.json usually already holds a "timestamps" value, persisted
+  // alongside any other kv write, which would mask the config. Unset, the toggles persist in kv.
+  const footerSelections = createMemo(() =>
+    TuiConfig.footerSelections(tuiConfig, {
+      timestamps: kv.get("timestamps", "hide") === "show",
+      turnTime: kv.get("turn_timing_time"),
+      turnDuration: kv.get("turn_timing_duration"),
+    }),
   )
-  const showTurnDuration = createMemo(
-    () => kv.get("turn_timing_duration", tuiConfig.turn_timing?.duration ?? false) === true,
+  const [footerOverrides, setFooterOverrides] = createSignal<Record<string, boolean>>({})
+  const footerToggled = (element: TuiConfig.FooterElement, type: TuiConfig.TimestampType) =>
+    footerOverrides()[`${element}.${type}`] ?? TuiConfig.footerSelects(footerSelections()[element], type)
+  const toggleFooter = (
+    element: TuiConfig.FooterElement,
+    type: TuiConfig.TimestampType,
+    persist: (show: boolean) => void,
+  ) => {
+    const show = !footerToggled(element, type)
+    if (!TuiConfig.footerConfigured(tuiConfig, element)) return persist(show)
+    // Toggling back to what tui.json selects restores it exactly, 'important' included.
+    const configured = TuiConfig.footerSelects(footerSelections()[element], type)
+    setFooterOverrides((overrides) => {
+      const next = { ...overrides, [`${element}.${type}`]: show }
+      if (show === configured) delete next[`${element}.${type}`]
+      return next
+    })
+  }
+  const landmarks = createMemo(() =>
+    Object.values(footerSelections()).some((selection) => selection.important)
+      ? navigationTargets(messages(), (messageID) => sync.data.part[messageID] ?? [], "landmark")
+      : undefined,
   )
+  const footer = (element: TuiConfig.FooterElement, type: TuiConfig.TimestampType, id: string, partID?: string) =>
+    footerOverrides()[`${element}.${type}`] ??
+    TuiConfig.footerShows(footerSelections()[element], type, () =>
+      isLandmark(landmarks() ?? new Set(), sync.data.part[id] ?? [], id, partID),
+    )
   const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() ? 42 : 0) - 4)
   const providers = createMemo(() => Model.index(sync.data.provider))
 
@@ -683,7 +705,7 @@ export function Session() {
       },
     },
     {
-      title: showTimestamps() ? "Hide timestamps" : "Show timestamps",
+      title: footerToggled("time", "user") ? "Hide timestamps" : "Show timestamps",
       value: "session.toggle.timestamps",
       category: "Session",
       slash: {
@@ -691,33 +713,31 @@ export function Session() {
         aliases: ["toggle-timestamps"],
       },
       run: () => {
-        if (timestampTypes) setUserTimestamps(!showTimestamps())
-        else kv.set("timestamps", showTimestamps() ? "hide" : "show")
+        toggleFooter("time", "user", (show) => kv.set("timestamps", show ? "show" : "hide"))
         dialog.clear()
       },
     },
     {
-      title: showTurnTime() ? "Hide turn times" : "Show turn times",
+      title: footerToggled("time", "assistant") ? "Hide turn times" : "Show turn times",
       value: "session.toggle.turn_time",
       category: "Session",
       slash: {
         name: "turn-times",
       },
       run: () => {
-        if (timestampTypes) setTurnTimes(!showTurnTime())
-        else kv.set("turn_timing_time", !showTurnTime())
+        toggleFooter("time", "assistant", (show) => kv.set("turn_timing_time", show))
         dialog.clear()
       },
     },
     {
-      title: showTurnDuration() ? "Hide turn durations" : "Show turn durations",
+      title: footerToggled("duration", "assistant") ? "Hide turn durations" : "Show turn durations",
       value: "session.toggle.turn_duration",
       category: "Session",
       slash: {
         name: "turn-durations",
       },
       run: () => {
-        kv.set("turn_timing_duration", !showTurnDuration())
+        toggleFooter("duration", "assistant", (show) => kv.set("turn_timing_duration", show))
         dialog.clear()
       },
     },
@@ -1210,10 +1230,7 @@ export function Session() {
           conceal,
           thinkingMode,
           showThinking,
-          showTimestamps,
-          showTurnTime,
-          showTurnDuration,
-          showPartTimestamp: (type) => timestampTypes?.has(type) ?? false,
+          footer,
           showDetails,
           showGenericToolOutput,
           diffWrapMode,
@@ -1435,7 +1452,9 @@ function UserMessage(props: {
   const queued = createMemo(() => props.pending !== undefined && props.index > props.pending)
   const color = createMemo(() => local.agent.color(props.message.agent))
   const queuedFg = createMemo(() => selectedForeground(theme, color()))
-  const metadataVisible = createMemo(() => queued() || ctx.showTimestamps())
+  const time = createMemo(() => ctx.footer("time", "user", props.message.id))
+  const messageID = createMemo(() => ctx.footer("message_id", "user", props.message.id))
+  const metadataVisible = createMemo(() => queued() || time() || messageID())
 
   const compaction = createMemo(() => props.parts.find((x) => x.type === "compaction"))
 
@@ -1482,20 +1501,26 @@ function UserMessage(props: {
                 </For>
               </box>
             </Show>
-            <Show
-              when={queued()}
-              fallback={
-                <Show when={ctx.showTimestamps()}>
-                  <text fg={theme.textMuted}>
-                    <span style={{ fg: theme.textMuted }}>
-                      {Locale.todayTimeOrDateTime(props.message.time.created)}
-                    </span>
-                  </text>
-                </Show>
-              }
-            >
+            <Show when={metadataVisible()}>
               <text fg={theme.textMuted}>
-                <span style={{ bg: color(), fg: queuedFg(), bold: true }}> QUEUED </span>
+                <Show
+                  when={queued()}
+                  fallback={
+                    <Show when={time()}>
+                      <span style={{ fg: theme.textMuted }}>
+                        {Locale.todayTimeOrDateTime(props.message.time.created)}
+                      </span>
+                    </Show>
+                  }
+                >
+                  <span style={{ bg: color(), fg: queuedFg(), bold: true }}> QUEUED </span>
+                </Show>
+                <Show when={messageID()}>
+                  <span style={{ fg: theme.textMuted }}>
+                    {queued() || time() ? " · " : ""}
+                    {props.message.id}
+                  </span>
+                </Show>
               </text>
             </Show>
           </box>
@@ -1506,7 +1531,7 @@ function UserMessage(props: {
           marginTop={1}
           border={["top"]}
           title={
-            ctx.showPartTimestamp("compaction")
+            ctx.footer("time", "compaction", props.message.id)
               ? ` Compaction · ${Locale.todayTimeOrDateFirst(props.message.time.created)} `
               : " Compaction "
           }
@@ -1540,11 +1565,32 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
     return props.message.time.completed - user.time.created
   })
 
+  const shows = (element: TuiConfig.FooterElement) => ctx.footer(element, "assistant", props.message.id)
+  // Time, duration and the message ID also give a turn's earlier messages a footer once they finish.
   const completed = createMemo(() =>
-    (ctx.showTurnTime() || ctx.showTurnDuration()) && props.message.time.completed
+    (shows("time") || shows("duration") || shows("message_id")) && props.message.time.completed
       ? props.message.time.completed
       : undefined,
   )
+  const details = createMemo(() => {
+    const aborted = props.message.error?.name === "MessageAbortedError"
+    const end = props.message.time.completed
+    return [
+      shows("agent") && { text: Locale.titlecase(props.message.mode), fg: theme.text },
+      shows("model") && { text: model(), fg: theme.textMuted },
+      shows("variant") && props.message.variant && { text: props.message.variant, fg: theme.textMuted },
+      shows("time") && end && { text: Locale.todayTimeOrDateFirst(end), fg: theme.textMuted },
+      shows("duration") &&
+        end && { text: Locale.duration(Math.max(0, end - props.message.time.created)), fg: theme.textMuted },
+      shows("total") &&
+        duration() && {
+          text: `${Locale.duration(duration())}${shows("duration") ? " total" : ""}`,
+          fg: theme.textMuted,
+        },
+      aborted && { text: "interrupted", fg: theme.textMuted },
+      shows("message_id") && { text: props.message.id, fg: theme.textMuted },
+    ].flatMap((detail) => (detail ? [detail] : []))
+  })
 
   const childShortcut = useCommandShortcut("session.child.first")
   const backgroundShortcut = useCommandShortcut("session.background")
@@ -1603,7 +1649,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
           borderColor={theme.error}
         >
           <text fg={theme.textMuted}>{errorMessage(props.message.error)}</text>
-          <Show when={ctx.showPartTimestamp("error")}>
+          <Show when={ctx.footer("time", "error", props.message.id)}>
             <text fg={theme.textMuted}>
               {Locale.todayTimeOrDateFirst(props.message.time.completed ?? props.message.time.created)}
             </text>
@@ -1624,32 +1670,16 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
               >
                 ▣{" "}
               </span>{" "}
-              <span style={{ fg: theme.text }}>{Locale.titlecase(props.message.mode)}</span>
-              <span style={{ fg: theme.textMuted }}> · {model()}</span>
-              <Show when={ctx.tui.footer_variant && props.message.variant}>
-                {(variant) => <span style={{ fg: theme.textMuted }}> · {variant()}</span>}
-              </Show>
-              <Show when={ctx.showTurnTime() && completed()}>
-                {(time) => <span style={{ fg: theme.textMuted }}> · {Locale.todayTimeOrDateFirst(time())}</span>}
-              </Show>
-              <Show when={ctx.showTurnDuration() && completed()}>
-                {(time) => (
-                  <span style={{ fg: theme.textMuted }}>
-                    {" "}
-                    · {Locale.duration(Math.max(0, time() - props.message.time.created))}
-                  </span>
+              <For each={details()}>
+                {(detail, index) => (
+                  <>
+                    <Show when={index() > 0}>
+                      <span style={{ fg: theme.textMuted }}> · </span>
+                    </Show>
+                    <span style={{ fg: detail.fg }}>{detail.text}</span>
+                  </>
                 )}
-              </Show>
-              <Show when={duration()}>
-                <span style={{ fg: theme.textMuted }}>
-                  {" "}
-                  · {Locale.duration(duration())}
-                  {ctx.showTurnDuration() ? " total" : ""}
-                </span>
-              </Show>
-              <Show when={props.message.error?.name === "MessageAbortedError"}>
-                <span style={{ fg: theme.textMuted }}> · interrupted</span>
-              </Show>
+              </For>
             </text>
           </box>
         </Match>
@@ -1711,11 +1741,15 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
             done={isDone()}
             title={summary().title}
             time={
-              ctx.showPartTimestamp("reasoning") && props.part.time.end !== undefined
+              ctx.footer("time", "reasoning", props.message.id, props.part.id) && props.part.time.end !== undefined
                 ? Locale.todayTimeOrDateFirst(props.part.time.end)
                 : undefined
             }
-            duration={isDone() ? Locale.duration(duration()) : undefined}
+            duration={
+              isDone() && ctx.footer("duration", "reasoning", props.message.id, props.part.id)
+                ? Locale.duration(duration())
+                : undefined
+            }
             encrypted={opaque()}
           />
         </box>
@@ -1796,7 +1830,7 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
           fg={theme.markdownText}
           bg={theme.background}
         />
-        <Show when={ctx.showPartTimestamp("text") && props.part.time?.end}>
+        <Show when={ctx.footer("time", "text", props.message.id, props.part.id) && props.part.time?.end}>
           {(end) => <text fg={theme.textMuted}>{Locale.todayTimeOrDateFirst(end())}</text>}
         </Show>
       </box>
@@ -1912,7 +1946,13 @@ function GenericTool(props: ToolProps) {
     <Show
       when={props.output && ctx.showGenericToolOutput()}
       fallback={
-        <InlineTool icon="⚙" pending="Writing command…" complete={true} part={props.part}>
+        <InlineTool
+          icon="⚙"
+          pending="Writing command…"
+          complete={true}
+          part={props.part}
+          footerBelow={input(props.input).includes("\n")}
+        >
           {props.tool} {input(props.input)}
         </InlineTool>
       }
@@ -1942,6 +1982,7 @@ function InlineTool(props: {
   failure?: string
   spinner?: boolean
   separate?: boolean
+  footerBelow?: boolean
   children: JSX.Element
   part: ToolPart
   onClick?: () => void
@@ -1971,7 +2012,7 @@ function InlineTool(props: {
 
   const failed = createMemo(() => Boolean(error() && !denied()))
   const timestamp = createMemo(() =>
-    ctx.showPartTimestamp("tool") ? formatToolTimestamp(props.part.state) : undefined,
+    formatToolTimestamp(props.part.state, toolFooter(ctx, props.part)),
   )
   const clickable = createMemo(() => Boolean(props.onClick || failed()))
   const fg = createMemo(() => {
@@ -1999,6 +2040,7 @@ function InlineTool(props: {
       failure={props.failure}
       spinner={props.spinner}
       separate={props.separate}
+      footerBelow={props.footerBelow}
       timestamp={timestamp()}
       timestampColor={theme.textMuted}
       onMouseOver={() => clickable() && setHover(true)}
@@ -2032,6 +2074,7 @@ export function InlineToolRow(props: {
   failure?: string
   spinner?: boolean
   separate?: boolean
+  footerBelow?: boolean
   timestamp?: string
   timestampColor?: RGBA
   children: JSX.Element
@@ -2087,11 +2130,16 @@ export function InlineToolRow(props: {
                 attributes={props.denied ? TextAttributes.STRIKETHROUGH : undefined}
               >
                 {props.failed && !props.complete ? (props.failure ?? props.children) : props.children}
-                <Show when={props.timestamp}>
+                <Show when={!props.footerBelow && props.timestamp}>
                   <span style={{ fg: props.timestampColor }}> · {props.timestamp}</span>
                 </Show>
               </text>
             </box>
+            <Show when={props.footerBelow && props.timestamp}>
+              <box paddingLeft={INLINE_TOOL_ICON_WIDTH}>
+                <text fg={props.timestampColor}>{props.timestamp}</text>
+              </box>
+            </Show>
           </Show>
         </Match>
       </Switch>
@@ -2117,7 +2165,7 @@ function BlockTool(props: {
   const [hover, setHover] = createSignal(false)
   const error = createMemo(() => (props.part?.state.status === "error" ? props.part.state.error : undefined))
   const timestamp = createMemo(() =>
-    props.part && ctx.showPartTimestamp("tool") ? formatToolTimestamp(props.part.state) : undefined,
+    props.part ? formatToolTimestamp(props.part.state, toolFooter(ctx, props.part)) : undefined,
   )
   return (
     <box
@@ -2146,7 +2194,6 @@ function BlockTool(props: {
             fallback={
               <text paddingLeft={3} fg={theme.textMuted}>
                 {title()}
-                {timestamp() ? ` · ${timestamp()}` : ""}
               </text>
             }
           >
@@ -2158,8 +2205,10 @@ function BlockTool(props: {
       <Show when={error()}>
         <text fg={theme.error}>{error()}</text>
       </Show>
-      <Show when={!props.title && timestamp()}>
-        <text fg={theme.textMuted}>{timestamp()}</text>
+      <Show when={timestamp()}>
+        <text paddingLeft={props.title ? 3 : 0} fg={theme.textMuted}>
+          {timestamp()}
+        </text>
       </Show>
     </box>
   )
@@ -2432,9 +2481,27 @@ function Task(props: ToolProps) {
   )
 }
 
-export function formatToolTimestamp(state: ToolPart["state"]) {
+// The footer elements every tool call takes, whichever renderer draws it.
+function toolFooter(ctx: ReturnType<typeof use>, part: ToolPart) {
+  const shows = (element: TuiConfig.FooterElement) => ctx.footer(element, "tool", part.messageID, part.id)
+  return {
+    time: shows("time"),
+    duration: shows("duration"),
+    messageID: shows("message_id") ? part.messageID : undefined,
+  }
+}
+
+export function formatToolTimestamp(
+  state: ToolPart["state"],
+  show: { time: boolean; duration: boolean; messageID?: string } = { time: true, duration: true },
+) {
   if (state.status !== "completed" && state.status !== "error") return
-  return `${Locale.todayTimeOrDateFirst(state.time.end)} · ${Locale.duration(Math.max(0, state.time.end - state.time.start))}`
+  const details = [
+    show.time && Locale.todayTimeOrDateFirst(state.time.end),
+    show.duration && Locale.duration(Math.max(0, state.time.end - state.time.start)),
+    show.messageID,
+  ].flatMap((detail) => (detail ? [detail] : []))
+  return details.length ? details.join(" · ") : undefined
 }
 
 export function formatSubagentToolcalls(count: number) {

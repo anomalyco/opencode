@@ -254,6 +254,20 @@ describe("TUI inline tool wrapping", () => {
     expect(frame).toContain("→ Read src/index.ts · 1:07 PM · 1.2s")
   })
 
+  test("puts the tool footer on its own line when the row spans lines", async () => {
+    const frame = await renderFrame(
+      () => (
+        <InlineToolRow icon="⚙" complete={true} pending="" footerBelow={true} timestamp="1:07 PM · 1.2s">
+          {"vtps [prompt=first line\nsecond line]"}
+        </InlineToolRow>
+      ),
+      { width: 72, height: 4 },
+    )
+    const lines = frame.split("\n").map((line) => line.trim())
+    expect(lines).toContain("second line]")
+    expect(lines).toContain("1:07 PM · 1.2s")
+  })
+
   test("formats a finished tool call's end time and duration", () => {
     const end = new Date()
     end.setHours(13, 7, 0, 0)
@@ -275,6 +289,10 @@ describe("TUI inline tool wrapping", () => {
     expect(formatToolTimestamp({ status: "error", input, error: "boom", time: { start, end: end.getTime() } })).toBe(
       `${time} · 1.2s`,
     )
+    const completed = { status: "completed" as const, input, output: "", title: "", metadata: {}, time: { start, end: end.getTime() } }
+    expect(formatToolTimestamp(completed, { time: false, duration: true, messageID: "msg_1" })).toBe("1.2s · msg_1")
+    expect(formatToolTimestamp(completed, { time: false, duration: false, messageID: "msg_1" })).toBe("msg_1")
+    expect(formatToolTimestamp(completed, { time: false, duration: false })).toBeUndefined()
   })
 
   test("filters malformed nested tool wire data", () => {
