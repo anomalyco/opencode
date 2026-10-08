@@ -131,6 +131,7 @@
         "@opencode/util": "workspace:*",
         "@opentui/core": "catalog:",
         "@opentui/solid": "catalog:",
+        "@opentunnel/client": "0.2.0",
         "@parcel/watcher": "2.5.1",
         "@silvia-odwyer/photon-node": "0.3.4",
         "diff": "catalog:",
@@ -2326,6 +2327,10 @@
     "@opentui/keymap": ["@opentui/keymap@0.5.16", "", { "dependencies": { "@opentui/core": "0.5.16" }, "peerDependencies": { "@opentui/react": "0.5.16", "@opentui/solid": "0.5.16", "react": ">=19.2.0", "solid-js": "1.9.12" }, "optionalPeers": ["@opentui/react", "@opentui/solid", "react", "solid-js"] }, "sha512-W78sDuTHMjHa8NwYmoGx5Xy0ztcGsuzrUa/1d24jADj9JCYEJQjABnrWZBRSExsNjiFYV3SxeCKwAPhJli0M3g=="],
 
     "@opentui/solid": ["@opentui/solid@0.5.16", "", { "dependencies": { "@babel/core": "7.29.7", "@babel/preset-typescript": "7.27.1", "@opentui/core": "0.5.16", "babel-plugin-module-resolver": "5.0.2", "babel-preset-solid": "1.9.12", "entities": "7.0.1", "s-js": "^0.4.9" }, "peerDependencies": { "solid-js": "1.9.12" } }, "sha512-gCULWG+HORd5IVydiCchlmULgY1PQccODJvJKDNYJHDmhwyg9/sNSFUxoYajEXLZ40pUIL8ENAK+6p34Z9m/JQ=="],
+
+    "@opentunnel/client": ["@opentunnel/client@0.2.0", "", { "dependencies": { "@opentunnel/protocol": "0.2.0", "effect": "4.0.0-rc.112" } }, "sha512-UHbLK+y2aPdcTuu4FaCz3Ezcm52Z4TxGp5Hdy9aLYLsz9GUlPpPFaYXjdq8pFyfQlA9qAyI/z5zx5FlZx3aSbw=="],
+
+    "@opentunnel/protocol": ["@opentunnel/protocol@0.2.0", "", { "dependencies": { "effect": "4.0.0-rc.112" } }, "sha512-XQAm3InG70HysML+NiSPxCCfoP+ZzWuxXcCFFFh/qxrvMxuJyOrxsPT49vTo2rDCgrYYdbiFqpz8oXIJh0BYXw=="],
 
     "@oslojs/asn1": ["@oslojs/asn1@1.0.0", "", { "dependencies": { "@oslojs/binary": "1.0.0" } }, "sha512-zw/wn0sj0j0QKbIXfIlnEcTviaCzYOY3V5rAyjR6YtOByFtJiT574+8p9Wlach0lZH9fddD4yb9laEAIl4vXQA=="],
 
