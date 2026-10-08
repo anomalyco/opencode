@@ -46,20 +46,28 @@
 ### Installation
 
 ```bash
-# YOLO
+# Install script
 curl -fsSL https://opencode.ai/install | bash
 
 # Package managers
 npm i -g opencode-ai@latest        # or bun/pnpm/yarn
-scoop install opencode             # Windows
-choco install opencode             # Windows
 brew install anomalyco/tap/opencode # macOS and Linux (recommended, always up to date)
 brew install opencode              # macOS and Linux (official brew formula, updated less)
+
+# System packages (from releases)
+sudo dpkg -i opencode_*_amd64.deb  # Debian/Ubuntu (also available: arm64)
+sudo rpm -i opencode-*-1.x86_64.rpm # Fedora/RHEL (also available: aarch64)
+
+# Other
 sudo pacman -S opencode            # Arch Linux (Stable)
 paru -S opencode-bin               # Arch Linux (Latest from AUR)
+scoop install opencode             # Windows
+choco install opencode             # Windows
 mise use -g opencode               # Any OS
 nix run nixpkgs#opencode           # or github:anomalyco/opencode for latest dev branch
 ```
+
+System packages (`.deb`, `.rpm`) are available for both amd64 and arm64 architectures from [opencode.ai](https://opencode.ai) or the [releases page](https://github.com/anomalyco/opencode/releases).
 
 > [!TIP]
 > Remove versions older than 0.1.x before installing.
