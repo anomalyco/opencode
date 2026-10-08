@@ -1,5 +1,10 @@
 import { describe, expect } from "bun:test"
-import { OpenAIChat } from "@opencode/ai/protocols"
+import { AnthropicMessages, OpenAIChat, OpenAIResponses } from "@opencode/ai/protocols"
+import { Message } from "@opencode/ai"
+import { compileRequest } from "@opencode/ai/route/client"
+import { Config } from "@opencode/core/config"
+import { Document, Info } from "@opencode/schema/config"
+import { SessionMessage } from "@opencode/schema/session-message"
 import { Agent } from "@opencode/schema/agent"
 import { Money } from "@opencode/schema/money"
 import { Session } from "@opencode/schema/session"
@@ -11,7 +16,7 @@ import { AbsolutePath } from "@opencode/core/schema"
 import { SessionModelRequest } from "@opencode/core/session/model-request"
 import { SessionModelTransport } from "@opencode/core/session/model-transport"
 import { SessionRunnerModel } from "@opencode/core/session/runner/model"
-import { DateTime, Effect, Stream } from "effect"
+import { DateTime, Effect, Schema, Stream } from "effect"
 import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { testEffect } from "./lib/effect"
 import { PluginTestLayer } from "./plugin/fixture"
@@ -37,6 +42,101 @@ const transport = SessionModelTransport.Service.of({
   bind: () => ({ execute: () => Effect.die("unused WebSocket execution") }),
   close: () => Effect.void,
   closeAll: Effect.void,
+})
+
+describe("SessionModelRequest cache rules", () => {
+  it.effect("resolves the actual agent, model, provider, and subagent context in every request flow", () =>
+    Effect.gen(function* () {
+      const config = yield* Config.Test
+      yield* config.setEntries([
+        new Document({
+          type: "document",
+          info: Schema.decodeUnknownSync(Info)({
+            cache: {
+              company: [
+                { options: { cache_control: { type: "ephemeral", ttl: "1h" } } },
+                { when: { subagent: true }, options: { cache_control: { type: "ephemeral", ttl: "5m" } } },
+                {
+                  when: { agent: "research", subagent: true },
+                  options: { cache_control: { type: "ephemeral", ttl: "1h" } },
+                },
+              ],
+              openai: [{ when: { model: "gpt-5.4" }, options: { prompt_cache_retention: "24h" } }],
+            },
+          }),
+        }),
+      ])
+      const requests = yield* SessionModelRequest.Service.pipe(Effect.provide(SessionModelRequest.layer))
+      const anthropic = SessionRunnerModel.resolved(
+        AnthropicMessages.route.with({ provider: "company" }).model({ id: "claude-sonnet-4-5" }),
+        { capabilities: model.capabilities, cost: [], limit: model.limit },
+      )
+      const openai = SessionRunnerModel.resolved(OpenAIResponses.route.model({ id: "gpt-5.4", provider: "openai" }), {
+        capabilities: model.capabilities,
+        cost: [],
+        limit: model.limit,
+      })
+      const child = { ...session, parentID: Session.ID.make("ses_parent") }
+      const fork = {
+        ...session,
+        fork: {
+          sessionID: Session.ID.make("ses_parent"),
+          boundary: { type: "through" as const, messageID: SessionMessage.ID.create() },
+        },
+      }
+      for (const kind of KINDS) {
+        for (const scenario of [
+          { session, agent: "build", ttl: "1h" },
+          { session: child, agent: "build", ttl: undefined },
+          { session: { ...child, parentID: Session.ID.make("ses_child") }, agent: "build", ttl: undefined },
+          { session: child, agent: "research", ttl: "1h" },
+          { session: fork, agent: "build", ttl: "1h" },
+        ]) {
+          const prepared = yield* requests[kind]({
+            session: scenario.session,
+            agent: Agent.ID.make(scenario.agent),
+            model: anthropic,
+            system: [],
+            messages: [Message.user("Question")],
+          })
+          const compiled = yield* compileRequest(prepared.request)
+          expect(compiled.body).toMatchObject({
+            messages: [
+              {
+                content: [
+                  {
+                    cache_control: {
+                      type: "ephemeral",
+                      ...(scenario.ttl ? { ttl: scenario.ttl } : {}),
+                    },
+                  },
+                ],
+              },
+            ],
+          })
+          if (!scenario.ttl) expect(JSON.stringify(compiled.body)).not.toContain('"1h"')
+        }
+        const prepared = yield* requests[kind]({
+          session: child,
+          agent: Agent.ID.make("research"),
+          model: openai,
+          system: [],
+          messages: [Message.user("Question")],
+        })
+        expect((yield* compileRequest(prepared.request)).body).toMatchObject({ prompt_cache_retention: "24h" })
+      }
+      // A resumed session uses the current configuration, not the first request's selection.
+      yield* config.setEntries([])
+      const reloaded = yield* requests.primary({
+        session: child,
+        agent: Agent.ID.make("research"),
+        model: openai,
+        system: [],
+        messages: [Message.user("Continue")],
+      })
+      expect((yield* compileRequest(reloaded.request)).body).not.toHaveProperty("prompt_cache_retention")
+    }).pipe(Effect.provideService(SessionModelTransport.Service, transport)),
+  )
 })
 
 describe("SessionModelRequest HTTP hooks", () => {

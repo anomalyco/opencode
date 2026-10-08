@@ -16,6 +16,7 @@ import { Endpoint } from "../../route/endpoint.js"
 import { RequestExecutor } from "../../route/executor.js"
 import { HttpTransport } from "../../route/transport/index.js"
 import { OpenResponses } from "../open-responses.js"
+import { OpenResponsesOptions } from "./open-responses-options.js"
 import { JsonObject, optionalNull, ProviderShared } from "../shared.js"
 import { Media } from "../../media.js"
 
@@ -101,6 +102,7 @@ export const make = (
           parallel_tool_calls: generation.parallel_tool_calls,
           tools,
           prompt_cache_key: generation.prompt_cache_key,
+          prompt_cache_retention: OpenResponsesOptions.resolve(request).promptCacheRetention,
         },
         request.http?.body,
       ),

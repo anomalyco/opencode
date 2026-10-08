@@ -65,6 +65,12 @@ export function normalize(input: unknown): Result {
 
   const diagnostics: Diagnostic[] = []
   const encoded: Record<string, unknown> = {}
+  // Cache conditions must not be partially salvaged: dropping a misspelled condition could broaden a rule.
+  if (own(input, "cache")) {
+    const value = decodeEncoded(Info.fields.cache, input.cache, ["cache"], diagnostics)
+    if (value === undefined) return { type: "rejected", diagnostics }
+    encoded.cache = value
+  }
   unsupportedTopLevel.forEach((key) => unsupportedIfPresent(input, key, [key], diagnostics))
 
   const legacySnapshots = own(input, "snapshot")

@@ -24,6 +24,9 @@ import type { Agent } from "@opencode/schema/agent"
 import type { Model } from "@opencode/schema/model"
 import type { Content } from "@opencode/schema/tool"
 import { Cause, Context, Effect, Layer, Result, Stream } from "effect"
+import { PromptCache } from "@opencode/ai/prompt-cache"
+import { Config } from "../config.js"
+import { ConfigCache } from "../config/cache.js"
 import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { App } from "../app.js"
@@ -233,6 +236,7 @@ export const layer = Layer.effect(
     const hooks = yield* PluginHooks.Service
     const transport = yield* SessionModelTransport.Service
     const app = yield* App.Metadata
+    const config = yield* Config.Service
     const prepare = Effect.fn("SessionModelRequest.prepare")(function* <
       S extends SessionRequest & { tools?: Definitions },
     >(kind: SessionRequestKind, input: Input, shape: (draft: SessionRequest, tools: Definitions) => Effect.Effect<S>) {
@@ -276,7 +280,7 @@ export const layer = Layer.effect(
       const generation = Object.fromEntries(entries.filter(([k]) => GENERATION_KEYS.has(k))) as GenerationOptionsFields
       const providerOptions = Object.fromEntries(entries.filter(([k]) => !GENERATION_KEYS.has(k)))
       const affinity = SessionAffinity.get(session)
-      const base = LLM.request({
+      const unconfigured = LLM.request({
         model: model.model,
         http: {
           headers: {
@@ -300,6 +304,22 @@ export const layer = Layer.effect(
         generation: Object.keys(generation).length === 0 ? undefined : generation,
         providerOptions: Object.keys(providerOptions).length === 0 ? undefined : providerOptions,
       })
+
+      const cache = ConfigCache.resolve(yield* config.entries(), {
+        provider: model.ref.providerID,
+        model: model.ref.id,
+        agent: input.agent,
+        // Fork ancestry is stored separately; it does not imply subagent execution.
+        subagent: session.parentID !== undefined,
+      })
+      const base = cache ? yield* PromptCache.apply(unconfigured, cache.rule.options).pipe(Effect.orDie) : unconfigured
+      if (cache)
+        yield* Effect.logDebug("prompt cache rule selected", {
+          ...scope,
+          rule: cache.index,
+          source: cache.source,
+          options: cache.rule.options,
+        })
 
       const baseURL = base.model.route.endpoint.baseURL
       const modelHook = yield* hooks.trigger("session", "model.request", {
@@ -433,5 +453,5 @@ export const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [PluginHooks.node, SessionModelTransport.node, App.node],
+  deps: [PluginHooks.node, SessionModelTransport.node, App.node, Config.node],
 })

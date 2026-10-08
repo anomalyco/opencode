@@ -32,6 +32,12 @@ export const ServiceTier = Schema.declare<ServiceTier>((value): value is Service
 export const Truncations = ["auto", "disabled"] as const
 export type Truncation = (typeof Truncations)[number]
 
+export type PromptCacheRetention = "in_memory" | "24h" | (string & {})
+export const PromptCacheRetention = Schema.declare<PromptCacheRetention>(
+  (value): value is PromptCacheRetention => typeof value === "string",
+  { title: "PromptCacheRetention" },
+)
+
 export const TextVerbositySchema = TextVerbosity
 export const ResponseIncludableSchema = Schema.declare<ResponseIncludable>(
   (value): value is ResponseIncludable => typeof value === "string",
@@ -55,6 +61,7 @@ export const Options = Schema.Struct({
   store: lenient(Schema.Boolean),
   metadata: lenient(Schema.Record(Schema.String, Schema.String)),
   safetyIdentifier: lenient(Schema.String),
+  promptCacheRetention: lenient(PromptCacheRetention),
   streamOptions: lenient(StreamOptions),
   topLogprobs: lenient(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 20 }))),
   reasoningEffort: lenient(ReasoningEffort),
