@@ -735,6 +735,68 @@ describe("V1Migration.transformSession", () => {
     expect(source[0]).toBe(good)
   })
 
+  // OpenCode <= 1.0.65 wrote neither `agent` nor the user `model` nor the assistant
+  // `parentID`, so every row of those sessions failed validation and the session's
+  // history disappeared.
+  const legacy = (id: string, time: number, data: Record<string, unknown>): V1Migration.SourceMessage => ({
+    id,
+    session_id: "ses_test",
+    time_created: time,
+    time_updated: time + 1,
+    data: JSON.stringify(data),
+  })
+
+  test("backfills the metadata on rows written before it was required", () => {
+    const prompt = legacy("msg_000000000060aaaaaaaaaaaaaa", 10, { role: "user", time: { created: 10 } })
+    const reply = legacy("msg_000000000061aaaaaaaaaaaaaa", 20, {
+      role: "assistant",
+      time: { created: 20, completed: 25 },
+      modelID: "model",
+      providerID: "provider",
+      mode: "plan",
+      path: { cwd: "/tmp/test", root: "/tmp/test" },
+      cost: 1,
+      tokens: { input: 2, output: 3, reasoning: 4, cache: { read: 5, write: 6 } },
+    })
+    const result = transform(
+      [reply, prompt],
+      [
+        part("prt_1", prompt.id, { type: "text", text: "hello" }),
+        part("prt_2", reply.id, { type: "text", text: "hi" }),
+      ],
+    )
+    expect(result.warnings).toEqual([])
+    expect(result.messages.map((row) => [row.type, row.seq])).toEqual([
+      ["user", 0],
+      ["assistant", 1],
+    ])
+    expect(result.messages[1].data.agent).toBe("plan")
+    expect(result.session).toMatchObject({
+      agent: "plan",
+      model: { id: "model", providerID: "provider", variant: "default" },
+    })
+  })
+
+  test("reports the required fields no legacy source could supply", () => {
+    const solo = legacy("msg_000000000062aaaaaaaaaaaaaa", 10, { role: "user", time: { created: 10 } })
+    expect(transform([solo], []).warnings).toEqual([
+      { reason: "invalid-message", sessionID: "ses_test", messageID: solo.id, missing: ["model"] },
+    ])
+    const orphan = legacy("msg_000000000063aaaaaaaaaaaaaa", 20, {
+      role: "assistant",
+      time: { created: 20 },
+      modelID: "model",
+      providerID: "provider",
+      mode: "build",
+      path: { cwd: "/tmp/test", root: "/tmp/test" },
+      cost: 1,
+      tokens: { input: 2, output: 3, reasoning: 4, cache: { read: 5, write: 6 } },
+    })
+    expect(transform([orphan], []).warnings).toEqual([
+      { reason: "invalid-message", sessionID: "ses_test", messageID: orphan.id, missing: ["parentID"] },
+    ])
+  })
+
   test("retains empty ordinary messages and omits failed compactions", () => {
     const empty = user("msg_000000000034aaaaaaaaaaaaaa", {}, 1)
     const assistantMessage = assistant("msg_000000000035aaaaaaaaaaaaaa", empty.id, {}, 2)
