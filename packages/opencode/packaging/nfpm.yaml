@@ -10,7 +10,7 @@ vendor: "Anomaly"
 section: "devel"
 priority: "optional"
 
-depends:
+recommends:
   - ripgrep
 
 contents:

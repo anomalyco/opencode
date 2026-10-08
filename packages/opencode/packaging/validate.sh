@@ -68,11 +68,11 @@ validate_deb() {
   dpkg-deb --contents "$pkg_path" | grep -q "fish/vendor_completions" || fail "Fish completions not found"
   pass "Fish completions present"
 
-  # Check dependency on ripgrep
-  local deps
-  deps=$(dpkg-deb --field "$pkg_path" Depends)
-  echo "$deps" | grep -q "ripgrep" || fail "Dependency on ripgrep not declared (Depends: $deps)"
-  pass "Dependency on ripgrep declared"
+  # Check ripgrep is recommended
+  local recommends
+  recommends=$(dpkg-deb --field "$pkg_path" Recommends 2>/dev/null || true)
+  echo "$recommends" | grep -q "ripgrep" || fail "ripgrep not in Recommends (got: $recommends)"
+  pass "ripgrep listed in Recommends"
 
   # Check architecture field
   local arch
@@ -97,7 +97,7 @@ validate_deb() {
   # Functional test: install and run on native arch
   if [[ "$(dpkg --print-architecture 2>/dev/null)" == "$arch" ]]; then
     echo "  Running functional test (native arch)..."
-    sudo dpkg -i "$pkg_path" 2>/dev/null || sudo apt-get install -f -y 2>/dev/null
+    sudo dpkg -i "$pkg_path" || sudo apt-get install -f -y
     local installed_version
     installed_version=$(opencode --version 2>/dev/null || echo "")
     if [[ -n "$expected_version" && "$installed_version" != "$expected_version" ]]; then
@@ -136,11 +136,23 @@ validate_rpm() {
   rpm -qlp "$pkg_path" | grep -q "fish/vendor_completions" || fail "Fish completions not found"
   pass "Fish completions present"
 
-  # Check dependency on ripgrep
-  local deps
-  deps=$(rpm -qRp "$pkg_path")
-  echo "$deps" | grep -q "ripgrep" || fail "Dependency on ripgrep not declared"
-  pass "Dependency on ripgrep declared"
+  # Check ripgrep is recommended (weak dependency)
+  local supplements
+  supplements=$(rpm -qp --supplements "$pkg_path" 2>/dev/null || true)
+  local recommends_found=false
+  if echo "$supplements" | grep -q "ripgrep"; then
+    recommends_found=true
+  fi
+  # Fallback: some rpm versions expose recommends via requires
+  if [[ "$recommends_found" != "true" ]]; then
+    local deps
+    deps=$(rpm -qRp "$pkg_path" 2>/dev/null || true)
+    if echo "$deps" | grep -q "ripgrep"; then
+      recommends_found=true
+    fi
+  fi
+  [[ "$recommends_found" == "true" ]] || fail "ripgrep not found in package recommends/requires"
+  pass "ripgrep listed as recommended dependency"
 
   # Check architecture
   local arch
@@ -225,6 +237,9 @@ validate_pkg() {
     pass "Functional test: opencode --version = $installed_version"
     # Clean up installed files
     sudo rm -f /usr/local/bin/opencode
+    sudo rm -f /usr/local/share/bash-completion/completions/opencode
+    sudo rm -f /usr/local/share/zsh/site-functions/_opencode
+    sudo rm -f /usr/local/share/fish/vendor_completions.d/opencode.fish
   else
     echo "  Skipping functional test (not macOS)"
   fi

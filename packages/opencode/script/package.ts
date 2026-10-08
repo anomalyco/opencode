@@ -214,11 +214,17 @@ async function buildMacosPackage(arch: string) {
       await $`rm ${unsignedPkg}`
 
       // Notarize
+      const apiKey = process.env.APPLE_API_KEY
+      const apiKeyId = process.env.APPLE_API_KEY_ID
+      const apiIssuer = process.env.APPLE_API_ISSUER
+      if (!apiKey || !apiKeyId || !apiIssuer) {
+        throw new Error("APPLE_API_KEY, APPLE_API_KEY_ID, and APPLE_API_ISSUER must be set for notarization")
+      }
       console.log("Submitting .pkg for notarization")
       await $`xcrun notarytool submit ${finalPkg} \
-        --key ${process.env.APPLE_API_KEY} \
-        --key-id ${process.env.APPLE_API_KEY_ID} \
-        --issuer ${process.env.APPLE_API_ISSUER} \
+        --key ${apiKey} \
+        --key-id ${apiKeyId} \
+        --issuer ${apiIssuer} \
         --wait --timeout 600`
 
       await $`xcrun stapler staple ${finalPkg}`
