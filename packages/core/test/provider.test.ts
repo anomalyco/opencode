@@ -5,7 +5,6 @@ import { Provider } from "@opencode/core/provider"
 describe("Provider", () => {
   test("loads bundled native provider entrypoints", async () => {
     const packages = [
-      "@opencode/ai/providers/anthropic-compatible",
       "@opencode/ai/providers/baseten",
       "@opencode/ai/providers/cerebras",
       "@opencode/ai/providers/cloudflare-ai-gateway",
@@ -22,8 +21,6 @@ describe("Provider", () => {
       "@opencode/ai/providers/google-vertex/messages",
       "@opencode/ai/providers/groq",
       "@opencode/ai/providers/mistral",
-      "@opencode/ai/providers/openai-compatible/responses",
-      "@opencode/ai/providers/openai-compatible-responses",
       "@opencode/ai/providers/togetherai",
       "@opencode/ai/providers/vercel-ai-gateway",
     ]
