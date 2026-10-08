@@ -51,6 +51,7 @@ describe("contrast icon-button tokens", () => {
       },
       true,
     )
+
     expect(tokens["v2-background-bg-icon-button-contrast"]).toBe("#dddddd")
     expect(tokens["v2-background-bg-contrast"]).toBe("var(--v2-grey-700)")
   })
@@ -59,6 +60,7 @@ describe("contrast icon-button tokens", () => {
 function expectIconEmphasis(tokens: ResolvedV2Theme) {
   const resolve = (value: string): HexColor =>
     value.startsWith("var(--") ? resolve(tokens[value.slice(6, -1)]) : (value as HexColor)
+
   const background = resolve(tokens["v2-background-bg-base"])
   const contrast = (role: string) => contrastRatio(resolve(tokens[`v2-icon-icon-${role}`]), background)
   expect(contrast("faint")).toBeLessThan(contrast("muted"))

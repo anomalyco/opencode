@@ -1,5 +1,6 @@
 import { useCommand, type CommandOption } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
+import { DialogSelectModel } from "@/providers/models/select-dialog"
 import { useLocal, type ModelSelection } from "@/providers/models/selection"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { getCursorPosition, setCursorPosition } from "./editor/dom"
@@ -33,23 +34,27 @@ export const useComposerCommands = (input: { model?: ModelSelection } = {}) => {
     void dialog.show(() => <DialogConnectProvider directory={workspace().directory} />)
   }
 
-  const chooseModel = async () => {
+  const chooseModel = () => {
     const owner = sessionOwnership.capture()
     const editor = document.querySelector<HTMLElement>('[data-component="composer-editor"]')
     const selection = window.getSelection()
+
     const cursor =
       editor && selection?.rangeCount && editor.contains(selection.anchorNode) ? getCursorPosition(editor) : null
+
     const restoreComposer = () => {
       // Kobalte restores focus during its teardown effect; defer past it so the
       // composer keeps focus and the caret returns to where the user left it.
       requestAnimationFrame(() => {
         const editor = document.querySelector<HTMLElement>('[data-component="composer-editor"]')
+
         if (!editor) return
         editor.focus()
+
         if (cursor !== null) setCursorPosition(editor, cursor)
       })
     }
-    const { DialogSelectModel } = await import("@/providers/models/select-dialog")
+
     owner.run(() => {
       void dialog.show(() => <DialogSelectModel model={model} />, restoreComposer)
     })

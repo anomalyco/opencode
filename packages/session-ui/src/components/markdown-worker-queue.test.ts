@@ -5,12 +5,15 @@ test("keeps only the latest queued request for each key", async () => {
   const processed: number[] = []
   const superseded: number[] = []
   let release = () => {}
+
   const blocked = new Promise<void>((resolve) => {
     release = resolve
   })
+
   const queue = createLatestWorkerQueue<{ id: number; key: string }>({
     run: async (request) => {
       processed.push(request.id)
+
       if (request.id === 1) await blocked
     },
     supersede: (request) => superseded.push(request.id),
@@ -32,6 +35,7 @@ test("keeps only the latest queued request for each key", async () => {
 
 test("serializes disposal before a later request for the same key", async () => {
   const events: string[] = []
+
   const queue = createLatestWorkerQueue<{ id: number; key: string }>({
     run: async (request) => {
       events.push(`highlight:${request.id}`)

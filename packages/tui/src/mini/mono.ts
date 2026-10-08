@@ -253,11 +253,3 @@ export function monoTruncate(value: string, width: number, mono: boolean): strin
   if (width <= 3) return ".".repeat(Math.max(0, width))
   return value.slice(0, width - 3) + "..."
 }
-
-export function monoTruncateMiddle(value: string, width: number, mono: boolean): string {
-  if (!mono || value.length <= width) return value
-  if (width <= 3) return ".".repeat(Math.max(0, width))
-  const available = width - 3
-  const left = Math.ceil(available / 2)
-  return value.slice(0, left) + "..." + value.slice(value.length - (available - left))
-}

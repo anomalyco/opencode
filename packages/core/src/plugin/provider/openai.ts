@@ -55,7 +55,7 @@ const browser = (app: App.Info) =>
     method: {
       id: browserMethodID,
       type: "oauth",
-      label: "ChatGPT Pro/Plus (browser)",
+      label: "Codex browser (legacy)",
     },
     authorize: () =>
       Effect.gen(function* () {
@@ -123,7 +123,7 @@ function listen(server: Server) {
             Effect.catchIf(addressInUse, () =>
               Effect.fail(
                 new Error(
-                  `OpenAI browser login needs local port ${callbackPort} or ${callbackFallbackPort}, but both are already in use. Stop the processes using those ports or choose ChatGPT Pro/Plus (headless), then try again.`,
+                  `OpenAI browser login needs local port ${callbackPort} or ${callbackFallbackPort}, but both are already in use. Stop the processes using those ports or choose Codex device code (legacy), then try again.`,
                 ),
               ),
             ),
@@ -174,7 +174,7 @@ const headless = (app: App.Info) =>
     method: {
       id: headlessMethodID,
       type: "oauth",
-      label: "ChatGPT Pro/Plus (headless)",
+      label: "Codex device code (legacy)",
     },
     authorize: () =>
       Effect.gen(function* () {

@@ -18,6 +18,7 @@ export function promptLength(prompt: Prompt) {
 export function appendPrompt(prompt: Prompt, following: Prompt): Prompt {
   const start = promptLength(prompt)
   const offset = start + 2
+
   return [
     ...clonePrompt(prompt),
     { type: "text", content: "\n\n", start, end: offset },

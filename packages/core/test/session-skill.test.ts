@@ -1,11 +1,14 @@
+import type { FileSystem } from "@opencode/core/filesystem"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Effect, Layer, LayerMap } from "effect"
+import { Duration, Effect, Layer, LayerMap } from "effect"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Bus } from "@opencode/core/bus"
+import { Config } from "@opencode/core/config"
+import { ManagedPolicy } from "@opencode/core/managed-policy"
 import { Image } from "@opencode/core/image"
 import { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
@@ -25,6 +28,7 @@ import { Skill } from "@opencode/core/skill"
 import { Event } from "@opencode/schema/event"
 import { testEffect } from "./lib/effect"
 import { globalProjectNode } from "./lib/project"
+import { registerIntegrationPolicy } from "./fixture/policy"
 
 const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
 const info = Skill.Info.make({
@@ -38,25 +42,51 @@ const locations = makeGlobalNode({
   service: LocationServiceMap.Service,
   layer: Layer.effect(
     LocationServiceMap.Service,
-    LayerMap.make(
-      (_ref: Location.Ref) =>
-        // These tests need skill activation and prompt preparation from the same location services.
-        // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
-        Layer.mergeAll(
-          LayerNode.compile(LayerNode.group([PluginHooks.node, Image.node])),
-          Layer.mock(Skill.Service, {
-            get: (id) => Effect.succeed(id === info.id ? info : undefined),
-            list: () => Effect.succeed([info]),
-          }),
-          Layer.mock(Plugin.Service, { awaitActivation: Effect.void }),
-        ) as unknown as Layer.Layer<LocationServices>,
-    ),
+    Effect.gen(function* () {
+      const managed = yield* ManagedPolicy.Service
+      return yield* LayerMap.make(
+        (_ref: Location.Ref) =>
+          // These tests need skill activation and prompt preparation from the same location services.
+          // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
+          Layer.mergeAll(
+            Layer.effectDiscard(
+              Effect.gen(function* () {
+                const skills = yield* Skill.Service
+                yield* skills.transform((editor) => editor.add(info))
+                yield* registerIntegrationPolicy({ skill: skills })
+              }),
+            ).pipe(
+              Layer.provideMerge(
+                LayerNode.compile(
+                  LayerNode.group([PluginHooks.node, Image.node, Skill.node, Config.node, ManagedPolicy.node]),
+                  {
+                    replacements: [
+                      Config.node.replace(Config.testLayer()),
+                      ManagedPolicy.node.replace(Layer.succeed(ManagedPolicy.Service, managed)),
+                    ],
+                  },
+                ),
+              ),
+            ),
+            Layer.mock(Plugin.Service, { awaitActivation: Effect.void }),
+          ) as unknown as Layer.Layer<LocationServices, FileSystem.DirectoryNotFoundError>,
+        { idleTimeToLive: Duration.infinity },
+      )
+    }),
   ),
-  deps: [],
+  deps: [ManagedPolicy.node],
 })
 const it = testEffect(
   AppNodeBuilder.build(
-    LayerNode.group([Database.node, Bus.node, SessionProjector.node, SessionStore.node, Session.node]),
+    LayerNode.group([
+      Database.node,
+      Bus.node,
+      SessionProjector.node,
+      SessionStore.node,
+      Session.node,
+      ManagedPolicy.node,
+      LocationServiceMap.node,
+    ]),
     [
       LocationServiceMap.node.replace(locations),
       Project.node.replace(globalProjectNode),
@@ -66,6 +96,30 @@ const it = testEffect(
 )
 
 describe("Session.skill", () => {
+  it.effect("refuses blocked skill mentions and standalone activation without writing their content", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const managed = yield* ManagedPolicy.Service
+      const session = yield* sessions.create({ location })
+      yield* managed.set({ statements: [{ action: "integration.use", resource: "skill:effect", effect: "deny" }] })
+      expect(
+        yield* sessions.skill({ sessionID: session.id, skill: info.id, resume: false }).pipe(Effect.flip),
+      ).toMatchObject({ _tag: "Session.SkillNotFoundError", skill: info.id })
+      expect(
+        yield* sessions
+          .prompt({
+            sessionID: session.id,
+            text: "@effect",
+            skills: [{ id: info.id, mention: { start: 0, end: 7, text: "@effect" } }],
+            resume: false,
+          })
+          .pipe(Effect.flip),
+      ).toMatchObject({ _tag: "Session.SkillNotFoundError", skill: info.id })
+      expect(yield* sessions.messages({ sessionID: session.id })).toEqual([])
+      expect(yield* sessions.inbox(session.id)).toEqual([])
+    }),
+  )
+
   it.effect("materializes mentioned skills on their owning prompt", () =>
     Effect.gen(function* () {
       const sessions = yield* Session.Service
@@ -143,6 +197,8 @@ describe("Session.skill", () => {
       const bus = yield* Bus.Service
       const session = yield* sessions.create({ location })
       const id = SessionMessage.ID.make("msg_caller_skill")
+      const locations = yield* LocationServiceMap.Service
+      yield* Skill.Service.use((skills) => skills.list()).pipe(Effect.provide(locations.get(session.location)))
       const events: Event.Payload[] = []
       yield* bus.listen((event) =>
         Effect.sync(() => {

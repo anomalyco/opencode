@@ -286,7 +286,11 @@ const layer = Layer.effect(
                 requestID: item.request.id,
                 reply: "reject",
               })
-              yield* Deferred.fail(item.deferred, new DeclinedError())
+              // Feedback applies to the whole batch, so parallel asks don't end the step.
+              yield* Deferred.fail(
+                item.deferred,
+                input.message ? new CorrectedError({ feedback: input.message }) : new DeclinedError(),
+              )
               pending.delete(id)
             }
             return

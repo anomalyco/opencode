@@ -21,15 +21,18 @@ export function TextStrikethrough(props: {
 
   let baseRef: HTMLSpanElement | undefined
   let containerRef: HTMLSpanElement | undefined
+
   const [state, setState] = createStore({
     textWidth: 0,
     containerWidth: 0,
   })
+
   const textWidth = () => state.textWidth
   const containerWidth = () => state.containerWidth
 
   const measure = () => {
     if (baseRef) setState("textWidth", baseRef.scrollWidth)
+
     if (containerRef) setState("containerWidth", containerRef.offsetWidth)
   }
 
@@ -39,6 +42,7 @@ export function TextStrikethrough(props: {
   // Revealed pixels from left = progress * textWidth
   const revealedPx = () => {
     const tw = textWidth()
+
     return tw > 0 ? progress() * tw : 0
   }
 
@@ -46,15 +50,19 @@ export function TextStrikethrough(props: {
   const overlayClip = () => {
     const cw = containerWidth()
     const tw = textWidth()
+
     if (cw <= 0 || tw <= 0) return `inset(0 ${(1 - progress()) * 100}% 0 0)`
     const remaining = Math.max(0, cw - revealedPx())
+
     return `inset(0 ${remaining}px 0 0)`
   }
 
   // Base clip: hide everything to the left of revealed area (complementary)
   const baseClip = () => {
     const px = revealedPx()
+
     if (px <= 0.5) return "none"
+
     return `inset(0 0 0 ${px}px)`
   }
 

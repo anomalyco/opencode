@@ -19,9 +19,11 @@ import type { SessionCompactionResult } from "@opencode/plugin/effect/session"
 import type { SessionError } from "@opencode/schema/session-error"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Context, Effect, Layer, Result, Stream } from "effect"
+import { Agent } from "../agent.js"
 import { Bus } from "../bus.js"
 import { Database } from "../database/database.js"
 import { llmClient } from "../effect/app-node-platform.js"
+import { Model } from "../model.js"
 import { State } from "../state.js"
 import { Token } from "../util/token.js"
 import type { SessionContext } from "./context.js"
@@ -30,9 +32,10 @@ import { SessionHistory } from "./history.js"
 import type { SessionMessage } from "./message.js"
 import { SessionModelRequest } from "./model-request.js"
 import { SessionProviderContext } from "./provider-context.js"
+import { SessionRunnerModel } from "./runner/model.js"
 import { SessionRunnerRetry } from "./runner/retry.js"
 import { toLLMMessages } from "./runner/to-llm-message.js"
-import { toSessionError } from "./to-session-error.js"
+import { contentFilterError, toSessionError } from "./to-session-error.js"
 import { SessionUsage } from "./usage.js"
 
 export type Settings = {
@@ -181,8 +184,11 @@ const LEGACY_HEADING = "## Additional Context"
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
+    const agents = yield* Agent.Service
     const bus = yield* Bus.Service
     const llm = yield* LLMClient.Service
+    const catalog = yield* Model.Service
+    const models = yield* SessionRunnerModel.Service
     const db = (yield* Database.Service).db
     const requests = yield* SessionModelRequest.Service
 
@@ -202,24 +208,33 @@ export const layer = Layer.effect(
 
       // Only the user compacts when automatic compaction is off, overflow included.
       if (trigger.reason !== "manual" && !settings.auto) return { status: "skipped" }
-      const ceiling = calculateCeiling(context.model.limit, settings.buffer)
-      if (trigger.reason === "auto" && !due(context, ceiling)) return { status: "skipped" }
+      if (trigger.reason === "auto" && !due(context, calculateCeiling(context.model.limit, settings.buffer)))
+        return { status: "skipped" }
+      const native = context.model.compaction?.type === "native"
+      const agent = native ? undefined : yield* agents.get(Agent.ID.make("compaction"))
+      const model =
+        (agent?.model &&
+          (yield* models
+            .resolve({ ...context.session, model: agent.model }, catalog.available)
+            .pipe(Effect.orElseSucceed(() => undefined)))) ??
+        context.model
+      const ceiling = calculateCeiling(model.limit, settings.buffer)
       // An unknown window never triggers auto compaction, but the compaction request still needs a size to aim for.
       const cap = Number.isFinite(ceiling)
         ? ceiling
-        : calculateCeiling({ ...context.model.limit, context: UNKNOWN_WINDOW }, settings.buffer)
+        : calculateCeiling({ ...model.limit, context: UNKNOWN_WINDOW }, settings.buffer)
       // The provider just rejected this context, so the estimate ran low; the first attempt already aims below it.
       const budget =
         trigger.reason === "overflow" ? Math.min(cap, Math.floor(estimateContext(context) * SHRINK_STEPS[0])) : cap
 
-      const compaction =
-        context.model.compaction?.type === "native"
-          ? compactNatively(trigger, budget, settings.keep)
-          : summarize(trigger, budget, settings.keep)
+      const selected = model === context.model ? trigger : { ...trigger, context: { ...context, model } }
+      const compaction = native
+        ? compactNatively(selected, budget, settings.keep)
+        : summarize(selected, budget, settings.keep)
       return yield* compaction.pipe(
         Effect.matchEffect({
-          onSuccess: (result) => publish(trigger, result),
-          onFailure: (failure) => publish(trigger, failure),
+          onSuccess: (result) => publish(selected, result),
+          onFailure: (failure) => publish(selected, failure),
         }),
       )
     })
@@ -540,10 +555,7 @@ export const layer = Layer.effect(
                   message: "Compaction summary reached the output token limit",
                 })
               case "content-filter":
-                return unusable({
-                  type: "provider.content-filter",
-                  message: "Compaction summary was blocked by the provider",
-                })
+                return unusable(contentFilterError("Compaction summary was blocked by the provider", event.reason))
               default:
                 return Effect.succeed(streamed)
             }
@@ -665,7 +677,7 @@ export const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Bus.node, Database.node, llmClient, SessionModelRequest.node],
+  deps: [Agent.node, Bus.node, Database.node, llmClient, Model.node, SessionModelRequest.node, SessionRunnerModel.node],
 })
 
 /** History loads from the latest completed compaction, so a previous one is always the first message. */

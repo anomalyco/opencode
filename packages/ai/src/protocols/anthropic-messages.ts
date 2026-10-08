@@ -29,6 +29,7 @@ import { JsonObject, knownString, optionalArray, optionalNull, ProviderShared } 
 import { classifyProviderFailure } from "../provider-error.js"
 import { effortUpdate, resolveEffortUpdates } from "../effort-updates.js"
 import * as Cache from "./utils/cache.js"
+import { claudeVersion, supportsThinkingBlockBinding, THINKING_BINDING_BETA } from "./utils/claude-model.js"
 import { Lifecycle } from "./utils/lifecycle.js"
 import { ToolStream } from "./utils/tool-stream.js"
 
@@ -284,7 +285,7 @@ const AnthropicThinkingEnabled = Schema.Struct({
   ...AnthropicThinkingFields,
 })
 const AnthropicThinkingAdaptive = Schema.Struct({ type: Schema.tag("adaptive"), ...AnthropicThinkingFields })
-const AnthropicThinkingDisabled = Schema.Struct({ type: Schema.tag("disabled") })
+const AnthropicThinkingDisabled = Schema.Struct({ type: Schema.Literals(["disabled", "between_tools"]) })
 const AnthropicThinking = Schema.Union([AnthropicThinkingEnabled, AnthropicThinkingAdaptive, AnthropicThinkingDisabled])
 type AnthropicThinking = typeof AnthropicThinking.Type
 
@@ -421,54 +422,74 @@ const AnthropicUsage = Schema.StructWithRest(
 )
 type AnthropicUsage = Schema.Schema.Type<typeof AnthropicUsage>
 
-const AnthropicStreamBlock = Schema.Struct({
-  type: Schema.String,
-  id: Schema.optional(Schema.String),
-  name: Schema.optional(Schema.String),
-  text: Schema.optional(Schema.String),
-  thinking: Schema.optional(Schema.String),
-  signature: Schema.optional(Schema.String),
-  // redacted_thinking blocks arrive whole in content_block_start with the
-  // encrypted payload in `data`; there is no streaming delta sequence.
-  data: Schema.optional(Schema.String),
-  input: Schema.optional(Schema.Unknown),
-  // *_tool_result blocks arrive whole as content_block_start (no streaming
-  // delta) with the structured payload in `content` and the originating
-  // server_tool_use id in `tool_use_id`.
-  tool_use_id: Schema.optional(Schema.String),
-  content: Schema.optional(Schema.Unknown),
-})
+const AnthropicStreamBlock = Schema.StructWithRest(
+  Schema.Struct({
+    type: Schema.String,
+    id: Schema.optional(Schema.String),
+    name: Schema.optional(Schema.String),
+    text: Schema.optional(Schema.String),
+    thinking: Schema.optional(Schema.String),
+    signature: Schema.optional(Schema.String),
+    // redacted_thinking blocks arrive whole in content_block_start with the
+    // encrypted payload in `data`; there is no streaming delta sequence.
+    data: Schema.optional(Schema.String),
+    input: Schema.optional(Schema.Unknown),
+    // *_tool_result blocks arrive whole as content_block_start (no streaming
+    // delta) with the structured payload in `content` and the originating
+    // server_tool_use id in `tool_use_id`.
+    tool_use_id: Schema.optional(Schema.String),
+    content: Schema.optional(Schema.Unknown),
+  }),
+  [JsonObject],
+)
 type AnthropicStreamBlock = Schema.Schema.Type<typeof AnthropicStreamBlock>
 const decodeAnthropicStreamBlock = Schema.decodeUnknownOption(AnthropicStreamBlock)
 
-const AnthropicStreamDelta = Schema.Struct({
-  content: optionalNull(Schema.String),
-  type: Schema.optional(Schema.String),
-  text: Schema.optional(Schema.String),
-  thinking: Schema.optional(Schema.String),
-  partial_json: Schema.optional(Schema.String),
-  signature: Schema.optional(Schema.String),
-  stop_reason: optionalNull(Schema.String),
-  stop_sequence: optionalNull(Schema.String),
-})
+const AnthropicStreamDelta = Schema.StructWithRest(
+  Schema.Struct({
+    content: optionalNull(Schema.String),
+    type: Schema.optional(Schema.String),
+    text: Schema.optional(Schema.String),
+    thinking: Schema.optional(Schema.String),
+    partial_json: Schema.optional(Schema.String),
+    signature: Schema.optional(Schema.String),
+    stop_reason: optionalNull(Schema.String),
+    stop_sequence: optionalNull(Schema.String),
+    stop_details: optionalNull(
+      Schema.StructWithRest(
+        Schema.Struct({ category: optionalNull(Schema.String), explanation: optionalNull(Schema.String) }),
+        [JsonObject],
+      ),
+    ),
+  }),
+  [JsonObject],
+)
 type AnthropicStreamDelta = Schema.Schema.Type<typeof AnthropicStreamDelta>
 const decodeAnthropicStreamDelta = Schema.decodeUnknownOption(AnthropicStreamDelta)
 
-const AnthropicEvent = Schema.Struct({
-  type: Schema.String,
-  index: Schema.optional(Schema.Number),
-  message: Schema.optional(Schema.Struct({ usage: Schema.optional(AnthropicUsage) })),
-  content_block: Schema.optional(Schema.Unknown),
-  delta: Schema.optional(Schema.Unknown),
-  usage: Schema.optional(AnthropicUsage),
-  // `type` and `message` are both required per Anthropic's spec, but
-  // OpenAI-compatible proxies and gateway translations occasionally drop one
-  // or the other; mark them optional so a partial payload still parses and
-  // the parser can fall back to whichever field is populated.
-  error: Schema.optional(
-    Schema.Struct({ type: Schema.optional(Schema.String), message: Schema.optional(Schema.String) }),
-  ),
-})
+const AnthropicEvent = Schema.StructWithRest(
+  Schema.Struct({
+    type: Schema.String,
+    index: Schema.optional(Schema.Number),
+    message: Schema.optional(
+      Schema.StructWithRest(Schema.Struct({ usage: Schema.optional(AnthropicUsage) }), [JsonObject]),
+    ),
+    content_block: Schema.optional(Schema.Unknown),
+    delta: Schema.optional(Schema.Unknown),
+    usage: Schema.optional(AnthropicUsage),
+    // `type` and `message` are both required per Anthropic's spec, but
+    // OpenAI-compatible proxies and gateway translations occasionally drop one
+    // or the other; mark them optional so a partial payload still parses and
+    // the parser can fall back to whichever field is populated.
+    error: Schema.optional(
+      Schema.StructWithRest(
+        Schema.Struct({ type: Schema.optional(Schema.String), message: Schema.optional(Schema.String) }),
+        [JsonObject],
+      ),
+    ),
+  }),
+  [JsonObject],
+)
 type AnthropicEvent = Schema.Schema.Type<typeof AnthropicEvent>
 
 interface ParserState {
@@ -580,10 +601,7 @@ const serverToolResultType = (name: string): AnthropicServerToolResultType | und
   return undefined
 }
 
-const lowerServerToolResult = Effect.fn("AnthropicMessages.lowerServerToolResult")(function* (
-  part: ToolResultPart,
-  providerMetadataKey: string,
-) {
+const lowerServerToolResult = Effect.fnUntraced(function* (part: ToolResultPart, providerMetadataKey: string) {
   const wireType = serverToolResultType(part.name)
   if (!wireType)
     return yield* invalid(`Anthropic Messages does not know how to round-trip server tool result for ${part.name}`)
@@ -653,10 +671,7 @@ const citationsFromMetadata = (metadata: MediaPart["metadata"]): AnthropicDocume
 
 const isHttpUrl = (value: string) => /^https?:\/\//i.test(value.trim())
 
-const lowerMedia = Effect.fn("AnthropicMessages.lowerMedia")(function* (
-  part: MediaPart,
-  breakpoints?: Cache.Breakpoints,
-) {
+const lowerMedia = Effect.fnUntraced(function* (part: MediaPart, breakpoints?: Cache.Breakpoints) {
   const mime = part.media.mediaType.toLowerCase()
   const cacheControlValue = breakpoints ? cacheControl(breakpoints, part.cache) : undefined
   const fileId = fileIdFromMetadata(part.metadata)
@@ -800,39 +815,17 @@ const requireThinkingSignature = (request: LLMRequest) => {
   return true
 }
 
-// Mid-conversation system messages became available with Opus 4.8 and version
-// 5 of the other supported Claude families. Treat later family versions as
-// compatible without assuming that every Anthropic Messages model is Claude.
+// Opus 4.8 and every Claude 5 model accept mid-conversation system messages; later versions inherit support.
 const supportsNativeSystemUpdates = (request: LLMRequest) => {
-  const match = /(?:^|[./])claude-(fable|haiku|mythos|opus|sonnet)-(\d+)(?:[.-](\d+))?/.exec(
-    String(request.model.id).toLowerCase(),
-  )
-  if (!match) return false
-  const major = Number(match[2])
-  if (match[1] !== "opus") return major >= 5
-  if (major !== 4) return major >= 5
-  return match[3] !== undefined && match[3].length <= 2 && Number(match[3]) >= 8
+  const version = claudeVersion(String(request.model.id))
+  if (version === undefined) return false
+  if (version.family === "opus" && version.major === 4) return version.minor >= 8
+  return version.major >= 5
 }
 
-const endsInServerToolUse = (message: LLMRequest["messages"][number]) => {
-  const last = message.content.at(-1)
-  return message.role === "assistant" && last?.type === "tool-call" && last.providerExecuted === true
-}
-
-const canUseNativeSystemUpdate = (request: LLMRequest, index: number) => {
-  const previous = request.messages[index - 1]
-  const next = request.messages[index + 1]
-  // Vertex currently rejects/404s for a system message after local tool results,
-  // so fold it into the user tool-result turn across continuations and history.
-  if (request.model.route.id === "google-vertex-messages" && previous?.role === "tool") return false
-  return (
-    previous !== undefined &&
-    previous.role !== "system" &&
-    (previous.role === "user" || previous.role === "tool" || endsInServerToolUse(previous)) &&
-    next?.role !== "system" &&
-    (next === undefined || next.role === "assistant")
-  )
-}
+// Native system messages must follow a user turn (tool results count) or a paused server-tool turn.
+const acceptsNativeSystemAfter = (message: AnthropicMessage | undefined) =>
+  message?.role === "user" || (message?.role === "assistant" && message.content.at(-1)?.type === "server_tool_use")
 
 const splitsLocalToolResults = (messages: LLMRequest["messages"], index: number) => {
   const pending = new Set<string>()
@@ -846,7 +839,7 @@ const splitsLocalToolResults = (messages: LLMRequest["messages"], index: number)
   return pending.size > 0
 }
 
-const lowerNativeSystemUpdate = Effect.fn("AnthropicMessages.lowerNativeSystemUpdate")(function* (
+const lowerNativeSystemUpdate = Effect.fnUntraced(function* (
   message: LLMRequest["messages"][number],
   breakpoints: Cache.Breakpoints,
 ) {
@@ -861,12 +854,34 @@ const lowerNativeSystemUpdate = Effect.fn("AnthropicMessages.lowerNativeSystemUp
   }
 })
 
-const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
-  request: LLMRequest,
+const lowerWrappedSystemUpdate = Effect.fnUntraced(function* (
+  message: LLMRequest["messages"][number],
   breakpoints: Cache.Breakpoints,
 ) {
+  const part = yield* ProviderShared.wrappedSystemUpdate("Anthropic Messages", message)
+  return { type: "text" as const, text: part.text, cache_control: cacheControl(breakpoints, part.cache) }
+})
+
+const appendToUserTurn = (messages: AnthropicMessage[], block: AnthropicUserBlock) => {
+  const last = messages.at(-1)
+  if (last?.role === "user") messages[messages.length - 1] = { role: "user", content: [...last.content, block] }
+  else messages.push({ role: "user", content: [block] })
+}
+
+const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, breakpoints: Cache.Breakpoints) {
   const messages: AnthropicMessage[] = []
   const providerMetadataKey = request.model.route.providerMetadataKey ?? String(request.model.provider)
+  // Text updates stay where they are unless a user turn follows them; then they move after the latest
+  // user turn, the nearest spot where Anthropic accepts a native system message.
+  const holdUpdates = supportsNativeSystemUpdates(request)
+  const held: Array<LLMRequest["messages"][number]> = []
+  const releaseHeld = Effect.fnUntraced(function* () {
+    const native = acceptsNativeSystemAfter(messages.findLast((message) => message.role !== "system"))
+    for (const update of held.splice(0)) {
+      if (native) messages.push(yield* lowerNativeSystemUpdate(update, breakpoints))
+      else appendToUserTurn(messages, yield* lowerWrappedSystemUpdate(update, breakpoints))
+    }
+  })
 
   for (const [index, message] of request.messages.entries()) {
     if (message.role === "system") {
@@ -878,16 +893,8 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
       }
       if (splitsLocalToolResults(request.messages, index))
         return yield* invalid("Anthropic Messages system updates cannot split a local tool call from its tool result")
-      if (supportsNativeSystemUpdates(request) && canUseNativeSystemUpdate(request, index)) {
-        messages.push(yield* lowerNativeSystemUpdate(message, breakpoints))
-        continue
-      }
-      const part = yield* ProviderShared.wrappedSystemUpdate("Anthropic Messages", message)
-      const block = { type: "text" as const, text: part.text, cache_control: cacheControl(breakpoints, part.cache) }
-      const previous = messages.at(-1)
-      if (previous?.role === "user")
-        messages[messages.length - 1] = { role: "user", content: [...previous.content, block] }
-      else messages.push({ role: "user", content: [block] })
+      if (holdUpdates) held.push(message)
+      else appendToUserTurn(messages, yield* lowerWrappedSystemUpdate(message, breakpoints))
       continue
     }
 
@@ -963,7 +970,9 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
           `Anthropic Messages assistant messages only support text, reasoning, and tool-call content for now`,
         )
       }
-      if (content.length > 0) messages.push({ role: "assistant", content })
+      if (content.length === 0) continue
+      yield* releaseHeld()
+      messages.push({ role: "assistant", content })
       continue
     }
 
@@ -984,38 +993,29 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
       messages[messages.length - 1] = { role: "user", content: [...previous.content, ...content] }
     else messages.push({ role: "user", content })
   }
+  yield* releaseHeld()
 
   return messages
 })
 
-// Accept gateway namespaces and Vertex suffixes without treating a snapshot date as a minor version.
-const claudeVersion = (id: string) => {
-  const match = /(?:^|[./])claude-(?<family>[a-z]+)-(?<major>\d+)(?:[.-](?<minor>\d{1,2}))?(?:$|[-:@])/.exec(
-    id.toLowerCase(),
-  )?.groups
-  if (!match) return undefined
-  return { family: match.family, major: Number(match.major), minor: Number(match.minor ?? 0) }
-}
+// TODO: Move per-model capability heuristics (`supportsEffortUpdates`, `supportsNativeSystemUpdates`,
+// `supportsThinkingBlockBinding`) into explicit model/provider `compatibility` metadata so the protocol
+// only reads `request.model.compatibility`.
+const isThinkingOff = Schema.is(AnthropicThinkingDisabled)
 
-const supportsThinkingBlockBinding = (model: LLMRequest["model"]) => {
-  const override = model.compatibility?.supportsThinkingBlockBinding
+// Per-turn effort started with Claude Opus 5 and every Claude 5.1 model; later versions of any family inherit it.
+const supportsEffortUpdates = (request: LLMRequest) => {
+  if (isThinkingOff(request.providerOptions?.thinking)) return false
+  const override = request.model.compatibility?.supportsEffortUpdates
   if (override !== undefined) return override
-  const version = claudeVersion(model.id)
-  return version !== undefined && (version.major > 5 || (version.major === 5 && version.minor >= 1))
-}
-
-const supportsEffortUpdates = (model: LLMRequest["model"]) => {
-  const override = model.compatibility?.supportsEffortUpdates
-  if (override !== undefined) return override
-  const version = claudeVersion(model.id)
+  const version = claudeVersion(request.model.id)
   if (version === undefined) return false
-  if (version.family === "opus") return version.major >= 5
-  if (version.family !== "fable" && version.family !== "mythos") return false
+  if (version.family === "opus" && version.major >= 5) return true
   return version.major > 5 || (version.major === 5 && version.minor >= 1)
 }
 
 const applyThinkingBindingDefault = (model: LLMRequest["model"], thinking: AnthropicThinking | undefined) => {
-  if (thinking?.type === "disabled") return thinking
+  if (isThinkingOff(thinking)) return thinking
   if (!supportsThinkingBlockBinding(model)) return thinking
   return {
     ...(thinking ?? { type: "adaptive" as const }),
@@ -1315,7 +1315,7 @@ const onContentBlockStart = (
   return [{ ...state, lifecycle: Lifecycle.stepStart(state.lifecycle, events) }, [...events, result]]
 }
 
-const onContentBlockDelta = Effect.fn("AnthropicMessages.onContentBlockDelta")(function* (
+const onContentBlockDelta = Effect.fnUntraced(function* (
   state: ParserState,
   event: AnthropicEvent & { readonly delta: AnthropicStreamDelta },
 ) {
@@ -1383,7 +1383,7 @@ const onContentBlockDelta = Effect.fn("AnthropicMessages.onContentBlockDelta")(f
   return [state, NO_EVENTS] satisfies StepResult
 })
 
-const onContentBlockStop = Effect.fn("AnthropicMessages.onContentBlockStop")(function* (
+const onContentBlockStop = Effect.fnUntraced(function* (
   state: ParserState,
   event: AnthropicEvent,
 ) {
@@ -1432,10 +1432,14 @@ const onMessageDelta = (
       stopSequence === null || stopSequence === undefined
         ? state.pendingFinish?.providerMetadata
         : providerMetadata(state.providerMetadataKey, { stopSequence })
+    const category = event.delta?.stop_details?.category
+    const explanation = event.delta?.stop_details?.explanation
     return {
       reason: {
         normalized: mapFinishReason(stopReason),
         raw: stopReason,
+        ...(category ? { category } : {}),
+        ...(explanation ? { explanation } : {}),
       },
       providerMetadata: finishMetadata,
     }
@@ -1450,7 +1454,7 @@ const onMessageDelta = (
   ]
 }
 
-const onMessageStop = Effect.fn("AnthropicMessages.onMessageStop")(function* (state: ParserState) {
+const onMessageStop = Effect.fnUntraced(function* (state: ParserState) {
   if (Object.keys(state.compactions).length)
     return yield* ProviderShared.eventError(ADAPTER, "Response ended with an incomplete compaction block")
   const result = yield* ToolStream.finishAll(ADAPTER, state.tools)
@@ -1606,7 +1610,7 @@ export const protocol = Protocol.make({
     }),
     step,
   },
-  supportsEffortUpdates: (request) => supportsEffortUpdates(request.model),
+  supportsEffortUpdates,
 })
 
 export const transport = <
@@ -1652,8 +1656,7 @@ function requiredBetaHeaders(body: Pick<AnthropicMessagesBody, "messages" | "con
     betas.push("mid-conversation-output-config-2026-07-01")
 
   const thinking = body.thinking
-  if (thinking && thinking.type !== "disabled" && thinking.block_binding)
-    betas.push("thinking-binding-controls-2026-08-01")
+  if (thinking && !isThinkingOff(thinking) && thinking.block_binding) betas.push(THINKING_BINDING_BETA)
   return betas
 }
 
