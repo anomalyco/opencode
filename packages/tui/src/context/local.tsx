@@ -1,6 +1,6 @@
 import { createStore } from "solid-js/store"
 import { createSimpleContext } from "./helper"
-import { batch, createEffect, createMemo } from "solid-js"
+import { batch, createEffect, createMemo, createSignal } from "solid-js"
 import { useSync } from "./sync"
 import { useEvent } from "./event"
 import path from "path"
@@ -48,7 +48,11 @@ export function recentModels(
     .map((item) => ({ providerID: item.providerID, modelID: item.modelID }))
 }
 
-export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
+export const {
+  use: useLocal,
+  provider: LocalProvider,
+  context: LocalContext,
+} = createSimpleContext({
   name: "Local",
   init: () => {
     const sync = useSync()
@@ -502,19 +506,33 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
     const session = createSession()
 
+    const [mcpPending, setMcpPending] = createSignal<string>()
     const mcp = {
       isEnabled(name: string) {
         const status = sync.data.mcp[name]
         return status?.status === "connected"
       },
+      // The MCP being toggled; a toggle while one is in progress is ignored.
+      pending: mcpPending,
       async toggle(name: string) {
-        const status = sync.data.mcp[name]
-        if (status?.status === "connected") {
-          // Disable: disconnect the MCP
-          await sdk.client.mcp.disconnect({ name })
-        } else {
-          // Enable/Retry: connect the MCP (handles disabled, failed, and other states)
-          await sdk.client.mcp.connect({ name })
+        if (mcpPending() !== undefined) return
+        setMcpPending(name)
+        try {
+          const status = sync.data.mcp[name]
+          if (status?.status === "connected") {
+            // Disable: disconnect the MCP
+            await sdk.client.mcp.disconnect({ name })
+          } else {
+            // Enable/Retry: connect the MCP (handles disabled, failed, and other states)
+            await sdk.client.mcp.connect({ name })
+          }
+          const next = await sdk.client.mcp.status()
+          if (next.data) sync.set("mcp", next.data)
+          else console.error("Failed to refresh MCP status: no data returned")
+        } catch (error) {
+          console.error("Failed to toggle MCP:", error)
+        } finally {
+          setMcpPending(undefined)
         }
       },
     }
