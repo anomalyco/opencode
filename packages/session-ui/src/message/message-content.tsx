@@ -259,7 +259,9 @@ export function CurrentUserMessageDisplay(props: {
   const dialog = useDialog()
   const i18n = useI18n()
   const [state, setState] = createStore({ copied: false, reverting: false, updating: false })
-  const pending = createMemo(() => !!props.actions?.pending?.steer(props.message.id))
+  const status = createMemo(() => props.actions?.pending?.status(props.message.id))
+  const pending = createMemo(() => status() !== undefined && status() !== "queued")
+  const waiting = createMemo(() => status() === "steering" || status() === "stranded")
   const attachments = createMemo(() => (props.message.files ?? []).filter(attached))
   const references = createMemo(() => props.references ?? [])
   const inlineFiles = createMemo(() => (props.message.files ?? []).filter((file) => !!file.mention))
@@ -271,7 +273,7 @@ export function CurrentUserMessageDisplay(props: {
   const metaHead = createMemo(() => {
     const agent = props.agent
 
-    return [pending() ? i18n.t("ui.message.pending") : "", agent ? agent[0]?.toUpperCase() + agent.slice(1) : "", model()]
+    return [waiting() ? i18n.t("ui.message.pending") : "", agent ? agent[0]?.toUpperCase() + agent.slice(1) : "", model()]
       .filter(Boolean)
       .join("\u00A0\u00B7\u00A0")
   })
@@ -353,7 +355,7 @@ export function CurrentUserMessageDisplay(props: {
   return (
     <div
       data-component="user-message"
-      data-pending={pending() ? "true" : undefined}
+      data-pending={waiting() ? "true" : undefined}
       data-timeline-part-id={props.text ? `${props.message.id}:text:0` : undefined}
     >
       <Show
