@@ -17,23 +17,22 @@ const decodeADCFile = Schema.decodeUnknownOption(
 function resolveProject(options: Record<string, any>) {
   // models.dev advertises GOOGLE_VERTEX_PROJECT for Vertex, while Google SDKs
   // and ADC examples commonly use the broader Google Cloud project aliases.
-  return (
+  const project =
     options.project ??
     process.env.GOOGLE_VERTEX_PROJECT ??
     process.env.GOOGLE_CLOUD_PROJECT ??
     process.env.GCP_PROJECT ??
     process.env.GCLOUD_PROJECT
-  )
+  return typeof project === "string" ? project : undefined
 }
 
 function resolveLocation(options: Record<string, any>) {
-  return String(
+  const location =
     options.location ??
-      process.env.GOOGLE_VERTEX_LOCATION ??
-      process.env.GOOGLE_CLOUD_LOCATION ??
-      process.env.VERTEX_LOCATION ??
-      "global",
-  )
+    process.env.GOOGLE_VERTEX_LOCATION ??
+    process.env.GOOGLE_CLOUD_LOCATION ??
+    process.env.VERTEX_LOCATION
+  return typeof location === "string" ? location : undefined
 }
 
 function vertexEndpoint(location: string) {
@@ -84,7 +83,7 @@ export const GoogleVertexPlugin = define({
     // Credentials work in every location; locations differ in which models they serve. `global` serves the most.
     const locations = Array.from(
       new Set([
-        resolveLocation(configured),
+        resolveLocation(configured) ?? "global",
         "global",
         "us",
         "eu",
@@ -161,7 +160,7 @@ export const GoogleVertexPlugin = define({
           continue
         const settings = settingsFor(item.provider)
         const project = resolveProject(settings)
-        const location = resolveLocation(settings)
+        const location = resolveLocation(settings) ?? "global"
         evt.update(item.provider.id, (provider) => {
           // Vertex authenticates through ADC rather than a key credential, so a
           // resolvable project is what makes the provider usable.
@@ -189,7 +188,7 @@ export const GoogleVertexPlugin = define({
           continue
         const settings = settingsFor(item.provider)
         const project = resolveProject(settings)
-        const location = resolveLocation(settings)
+        const location = resolveLocation(settings) ?? "global"
         for (const model of models.list(item.provider.id)) {
           if (typeof model.settings?.baseURL !== "string") continue
           models.update(item.provider.id, model.id, (draft) => {
