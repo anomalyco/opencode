@@ -54,7 +54,7 @@ export const ensure = Effect.fnUntraced(function* () {
   return yield* Effect.gen(function* () {
     const client = yield* OpenTunnelClient
     if ((yield* client.tunnel.get()) === undefined)
-      process.stderr.write("Creating this device's OpenTunnel tunnel; this can take a minute..." + EOL)
+      process.stderr.write("Setting up remote access; this can take a minute..." + EOL)
     return `${route()}.${(yield* client.tunnel.ensure()).hostname}`
   }).pipe(
     Effect.provide(OpenTunnelClient.layer()),
