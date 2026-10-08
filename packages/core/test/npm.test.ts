@@ -152,3 +152,25 @@ describe("Npm.install", () => {
     await expect(fs.stat(path.join(tmp.path, "node_modules", "dev-pkg"))).rejects.toThrow()
   })
 })
+
+describe("Npm.which", () => {
+  test("resolves Windows executable wrappers when present", async () => {
+    await using tmp = await tmpdir()
+    const cacheDir = path.join(tmp.path, "cache")
+    const binDir = path.join(cacheDir, "packages", "pyright", "node_modules", ".bin")
+    await fs.mkdir(binDir, { recursive: true })
+
+    await Bun.write(path.join(binDir, "pyright-langserver"), "#!/bin/sh\n")
+    await Bun.write(path.join(binDir, "pyright-langserver.cmd"), "@echo off\n")
+
+    const resolved = await Effect.gen(function* () {
+      const npm = yield* Npm.Service
+      return yield* npm.which("pyright", "pyright-langserver")
+    }).pipe(Effect.scoped, Effect.provide(npmLayer(cacheDir)), Effect.runPromise)
+
+    const expected = win ? path.join(binDir, "pyright-langserver.cmd") : path.join(binDir, "pyright-langserver")
+
+    expect(resolved).toBe(expected)
+  })
+})
+

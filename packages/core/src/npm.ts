@@ -205,9 +205,23 @@ const layer = Layer.effect(
         const files = yield* fs.readDirectory(binDir).pipe(Effect.catch(() => Effect.succeed([] as string[])))
 
         if (files.length === 0) return Option.none<string>()
+
+        const matchBin = (name: string) => {
+          if (process.platform === "win32") {
+            const clean = name.replace(/\.(cmd|exe|bat)$/i, "")
+            const ext = [".cmd", ".exe", ".bat"].find((e) => files.includes(clean + e))
+            if (ext) return clean + ext
+          }
+          return files.includes(name) ? name : undefined
+        }
+
         // Caller picked a specific bin (e.g. pyright exposes both `pyright` and
         // `pyright-langserver`); trust the hint if the package provides it.
-        if (bin) return files.includes(bin) ? Option.some(bin) : Option.none<string>()
+        if (bin) {
+          const matched = matchBin(bin)
+          return matched ? Option.some(matched) : Option.none<string>()
+        }
+
         if (files.length === 1) return Option.some(files[0])
 
         const pkgJson = yield* afs.readJson(path.join(dir, "node_modules", pkg, "package.json")).pipe(Effect.option)
@@ -217,14 +231,23 @@ const layer = Layer.effect(
           if (parsed?.bin) {
             const unscoped = pkg.startsWith("@") ? pkg.split("/")[1] : pkg
             const parsedBin = parsed.bin
-            if (typeof parsedBin === "string") return Option.some(unscoped)
-            const keys = Object.keys(parsedBin)
-            if (keys.length === 1) return Option.some(keys[0])
-            return parsedBin[unscoped] ? Option.some(unscoped) : Option.some(keys[0])
+            const candidate =
+              typeof parsedBin === "string"
+                ? unscoped
+                : (() => {
+                    const keys = Object.keys(parsedBin)
+                    if (keys.length === 1) return keys[0]
+                    return parsedBin[unscoped] ? unscoped : keys[0]
+                  })()
+            if (candidate) {
+              const matched = matchBin(candidate)
+              if (matched) return Option.some(matched)
+            }
           }
         }
 
-        return Option.some(files[0])
+        const fallback = matchBin(files[0]) ?? files[0]
+        return Option.some(fallback)
       })
 
       return Option.getOrUndefined(
