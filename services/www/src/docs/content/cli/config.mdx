@@ -251,21 +251,36 @@ Configure terminal integration:
 {
   "terminal": {
     "title": true,
-    "copy": "select",
-    "primary_selection": false
+    "copy": "both"
   }
 }
 ```
 
 <div class="docs-table-scroll" role="region" aria-label="Terminal settings" tabIndex={0}>
 
-| Setting                      | Values               | Description                                                                                                            |
-| ---------------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `terminal.title`             | boolean              | Updates the terminal window title.                                                                                     |
-| `terminal.copy`              | `manual` or `select` | Copies manually or immediately after selection. The platform default is `manual` on Windows and `select` elsewhere.    |
-| `terminal.primary_selection` | boolean              | Also copies text to the primary selection used by middle-click paste. Off by default. Paste still reads the clipboard. |
+| Setting          | Values                                | Description                                                                                                             |
+| ---------------- | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `terminal.title` | boolean                               | Updates the terminal window title.                                                                                      |
+| `terminal.copy`  | `manual`, `select`, `primary`, `both` | Chooses where a mouse selection is copied. The default is `manual` on Windows, `both` on Linux, and `select` elsewhere. |
 
 </div>
+
+`terminal.copy` decides where a finished mouse selection goes:
+
+<div class="docs-table-scroll" role="region" aria-label="Copy modes" tabIndex={0}>
+
+| `copy`    | A finished mouse selection goes to               |
+| --------- | ------------------------------------------------ |
+| `manual`  | Nowhere until you press `Ctrl+C` or right-click  |
+| `select`  | The clipboard                                    |
+| `primary` | The primary selection used by middle-click paste |
+| `both`    | The clipboard and the primary selection          |
+
+</div>
+
+In `manual` and `primary` modes, `Ctrl+C` and right-click copy a selection to the clipboard. Copy commands such as **Copy session ID** always use the clipboard, and paste reads the clipboard.
+
+Over SSH or on WSL, OpenCode sets the primary selection through the terminal. Terminals that ignore the selection type, such as Windows Terminal, put `primary` copies in the clipboard instead.
 
 ## Mini
 

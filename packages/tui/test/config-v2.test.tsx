@@ -2,7 +2,7 @@
 import { testRender } from "@opentui/solid"
 import { expect, test } from "bun:test"
 import { Schema } from "effect"
-import { resolve, ConfigProvider, Info, useConfig, type Interface } from "../src/config"
+import { copyMode, resolve, ConfigProvider, Info, useConfig, type Interface } from "../src/config"
 import { settings } from "../src/component/dialog-config"
 import { TuiKeybind } from "../src/config/keybind"
 import { CommandMap, Definitions } from "../src/config/v1/keybind"
@@ -108,15 +108,6 @@ test("shows the new session location default in settings", () => {
   expect(settings.find((setting) => setting.path.join(".") === "session.new_location")?.default).toBe("launch")
 })
 
-test("shows the opt-in primary selection in terminal settings", () => {
-  expect(decodeInfo({ terminal: { primary_selection: true } })).toEqual({ terminal: { primary_selection: true } })
-  expect(settings.find((setting) => setting.path.join(".") === "terminal.primary_selection")).toMatchObject({
-    category: "Terminal",
-    default: false,
-    values: [false, true],
-  })
-})
-
 test("shows the TPS default in session settings", () => {
   const setting = settings.find((setting) => setting.path.join(".") === "session.tps")
   expect(setting?.category).toBe("Session")
@@ -141,13 +132,16 @@ test("names tool grouping explicitly in settings", () => {
 })
 
 test("validates terminal copy behavior", () => {
-  expect(decodeInfo({ terminal: { copy: "manual" } })).toEqual({ terminal: { copy: "manual" } })
-  expect(decodeInfo({ terminal: { copy: "select" } })).toEqual({ terminal: { copy: "select" } })
+  for (const copy of ["manual", "select", "primary", "both"] as const) {
+    expect(decodeInfo({ terminal: { copy } })).toEqual({ terminal: { copy } })
+    expect(copyMode({ terminal: { copy } })).toBe(copy)
+  }
   expect(() => decodeInfo({ terminal: { copy: "always" } })).toThrow()
+  expect(copyMode({})).toBe(process.platform === "win32" ? "manual" : process.platform === "linux" ? "both" : "select")
 
   const setting = settings.find((setting) => setting.path.join(".") === "terminal.copy")
-  expect(setting?.values).toEqual(["manual", "select"])
-  expect(setting?.default).toBe(process.platform === "win32" ? "manual" : "select")
+  expect(setting?.values).toEqual(["manual", "select", "primary", "both"])
+  expect(setting?.default).toBe(copyMode({}))
 })
 
 test("uses command IDs as keybind keys", () => {

@@ -57,6 +57,15 @@ export const Plugin = Schema.Union([
 export const DiffSource = Schema.Union([Vcs.Mode, Schema.Literal("turn")])
 export type DiffSource = Schema.Schema.Type<typeof DiffSource>
 
+export const CopyMode = Schema.Literals(["manual", "select", "primary", "both"])
+export type CopyMode = Schema.Schema.Type<typeof CopyMode>
+
+export function copyMode(config: Pick<Info, "terminal">): CopyMode {
+  if (config.terminal?.copy) return config.terminal.copy
+  if (process.platform === "win32") return "manual"
+  return process.platform === "linux" ? "both" : "select"
+}
+
 export const Cursor = Schema.Struct({
   style: Schema.optional(Schema.Literals(["block", "underline", "line", "default"])).annotate({
     description: "Cursor shape. Use 'default' to preserve the terminal setting",
@@ -128,11 +137,9 @@ export const Info = Schema.Struct({
   terminal: Schema.optional(
     Schema.Struct({
       title: Schema.optional(Schema.Boolean).annotate({ description: "Update the terminal window title" }),
-      copy: Schema.optional(Schema.Literals(["manual", "select"])).annotate({
-        description: "Copy text manually or immediately after selecting it",
-      }),
-      primary_selection: Schema.optional(Schema.Boolean).annotate({
-        description: "Also copy text to the primary selection used by middle-click paste",
+      copy: Schema.optional(CopyMode).annotate({
+        description:
+          "Copy text manually, or on selection to the clipboard ('select'), the primary selection for middle-click paste ('primary'), or both",
       }),
     }),
   ).annotate({ description: "Terminal integration settings" }),
