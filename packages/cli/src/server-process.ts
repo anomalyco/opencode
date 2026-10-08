@@ -24,6 +24,7 @@ export type Options = {
   readonly mode: Mode
   readonly hostname?: string
   readonly port?: number
+  readonly noAuth?: boolean
   readonly cors?: readonly string[]
 }
 
@@ -75,18 +76,19 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
         yield* RetainedImage.retain(global.cache, "service")
       const { start } = yield* Effect.promise(() => import("@opencode/server/process"))
       const environmentPassword = yield* Env.password
+      const auth = !options.noAuth && (yield* Env.auth)
       // Keep the lease credential out of the environment inherited by tools.
       if (options.mode === "stdio") {
         delete process.env.OPENCODE_PASSWORD
         delete process.env.OPENCODE_SERVER_PASSWORD
       }
-      const password =
-        options.mode === "service"
+      const password = !auth
+        ? undefined
+        : options.mode === "service"
           ? config.password || randomBytes(32).toString("base64url")
           : environmentPassword
             ? Redacted.value(environmentPassword)
             : randomBytes(32).toString("base64url")
-      if (!password) return yield* Effect.fail(new Error("Missing server password"))
       const instanceID = randomUUID()
       const transform = yield* WebUi.handler()
       const remote = { urls: [] as ReadonlyArray<string> }
@@ -135,7 +137,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
           : {
               onListen: (address, shutdown) =>
                 Effect.gen(function* () {
-                  if (!config.password) yield* ServiceConfig.password(password)
+                  if (password && !config.password) yield* ServiceConfig.password(password)
                   return yield* ServiceRegistration.register({
                     address,
                     password,
@@ -189,7 +191,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
       }
       const url = HttpServer.formatAddress(server.address)
       console.log(options.mode === "stdio" ? JSON.stringify({ url }) : `server listening on ${url}`)
-      if (foreground && !environmentPassword) console.log(`server password ${password}`)
+      if (foreground && password && !environmentPassword) console.log(`server password ${password}`)
       return yield* options.mode === "service"
         ? server.shutdown
         : options.mode === "stdio"

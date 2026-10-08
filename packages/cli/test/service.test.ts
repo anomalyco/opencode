@@ -403,6 +403,37 @@ test("configured managed service port overrides the channel default", async () =
 }, 30_000)
 
 test.each([
+  { args: ["--no-auth"], auth: "true" },
+  { args: [], auth: "false" },
+])(
+  "managed service runs without authentication with $args and OPENCODE_AUTH=$auth",
+  async ({ args, auth }) => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-no-auth-"))
+    const config = path.join(root, "config", "opencode", ServiceConfig.filename())
+    const registration = path.join(root, "state", "opencode", ServiceConfig.filename())
+    await fs.mkdir(path.dirname(config), { recursive: true })
+    await fs.writeFile(config, JSON.stringify({ password: "stored-password" }))
+    const owner = Bun.spawn(
+      [process.execPath, path.join(import.meta.dir, "../src/index.ts"), "serve", "--service", "--port", "0", ...args],
+      { env: isolatedEnv(root, { OPENCODE_AUTH: auth }), stderr: "pipe", stdout: "ignore" },
+    )
+    try {
+      const info = await waitForInfo(registration)
+      expect(info.password).toBeUndefined()
+      expect((await Bun.file(config).json()).password).toBe("stored-password")
+      const endpoint = await waitForService(registration)
+      expect(endpoint?.auth).toBeUndefined()
+      expect((await fetch(new URL("/api/info", info.url))).status).toBe(200)
+    } finally {
+      owner.kill("SIGTERM")
+      await owner.exited
+      await fs.rm(root, { recursive: true, force: true })
+    }
+  },
+  30_000,
+)
+
+test.each([
   { args: [], origins: ["http://192.0.2.10:3001", "https://configured.example.com"] },
   {
     args: ["--cors", "http://192.0.2.20:3001", "--cors", "https://override.example.com"],
@@ -698,6 +729,15 @@ async function waitForInfo(file: string, accept: (info: Info) => boolean = () =>
     await Bun.sleep(50)
   }
   throw new Error("Timed out waiting for service registration")
+}
+
+async function waitForService(file: string) {
+  for (let attempt = 0; attempt < 200; attempt++) {
+    const endpoint = await Effect.runPromise(Service.discover({ file }).pipe(Effect.provide(NodeFileSystem.layer)))
+    if (endpoint) return endpoint
+    await Bun.sleep(50)
+  }
+  throw new Error("Timed out waiting for service readiness")
 }
 
 async function waitForFailed(info: Info) {
