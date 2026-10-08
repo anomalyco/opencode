@@ -139,7 +139,12 @@ bun run --cwd packages/desktop package
 ```
 
 > [!NOTE]
-> If you make changes to the API or SDK (e.g. `packages/opencode/src/server/server.ts`), run `./script/generate.ts` to regenerate the SDK and related files.
+> Use the generation command that matches your changes:
+>
+> - For changes affecting the legacy JavaScript SDK, run `./script/generate.ts` from the repository root. This regenerates the SDK, exports the OpenAPI document, and runs formatting.
+> - After changing the public Protocol or Server `HttpApi`, run `bun run --cwd packages/client generate` from the repository root to regenerate the Promise and Effect clients.
+>
+> Do not edit `packages/client/src/generated` or `packages/client/src/generated-effect` directly.
 
 Please try to follow the [style guide](./AGENTS.md)
 
