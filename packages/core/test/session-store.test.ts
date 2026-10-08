@@ -116,16 +116,48 @@ describe("SessionStore", () => {
             .where(sql`${SessionTable.id} = ${entry.id}`)
             .get()
           expect(row?.directory).toBe(
-            process.platform === "win32" && entry.expected.startsWith("C:")
-              ? entry.expected.replaceAll("/", "\\\\")
-              : process.platform === "win32" && entry.expected.startsWith("//")
-                ? entry.expected.replaceAll("/", "\\\\")
-                : entry.expected,
+            process.platform === "win32" && (entry.expected.startsWith("C:") || entry.expected.startsWith("//"))
+              ? entry.expected.replaceAll("/", "\\")
+              : entry.expected,
           )
           const found = yield* store.list({ directory: AbsolutePath.make(entry.query) })
           expect(found.map((item) => String(item.id))).toContain(entry.id)
+          if (process.platform === "win32" && entry.expected !== "/") {
+            const windows = yield* store.list({ directory: AbsolutePath.make(entry.query.replaceAll("/", "\\")) })
+            expect(windows.map((item) => String(item.id))).toContain(entry.id)
+          }
         }),
       )
+      // Empty directory is a valid legacy storage value, not a synonym for the POSIX root.
+      yield* bus.publish(SessionEvent.Created, {
+        sessionID: Session.ID.make("ses_legacy_empty"),
+        projectID: Project.ID.global,
+        location: { directory: AbsolutePath.make("/somewhere") },
+        slug: "store-test",
+        version: "test",
+      })
+      yield* database.db.run(sql`UPDATE ${SessionTable} SET directory = '' WHERE id = 'ses_legacy_empty'`)
+      const root = yield* store.list({ directory: AbsolutePath.make("/") })
+      expect(root.map((item) => String(item.id))).toEqual(["ses_posix_root"])
+    }),
+  )
+
+  it.effect("keeps POSIX trailing backslashes distinct from path separators", () =>
+    Effect.gen(function* () {
+      if (process.platform === "win32") return
+      const bus = yield* seedSessions([{ id: "ses_plain", updated: 1 }])
+      yield* bus.publish(SessionEvent.Created, {
+        sessionID: Session.ID.make("ses_literal_backslash"),
+        projectID: Project.ID.global,
+        location: { directory: AbsolutePath.make("/project\\") },
+        slug: "store-test",
+        version: "test",
+      })
+      const store = yield* SessionStore.Service
+      const escaped = yield* store.list({ directory: AbsolutePath.make("/project\\/") })
+      expect(escaped.map((item) => String(item.id))).toEqual(["ses_literal_backslash"])
+      const plain = yield* store.list({ directory: AbsolutePath.make("/project/") })
+      expect(plain.map((item) => String(item.id))).toEqual(["ses_plain"])
     }),
   )
 

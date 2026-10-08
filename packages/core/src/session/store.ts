@@ -104,8 +104,9 @@ const layer = Layer.effect(
         const conditions: SQL[] = []
         if ("directory" in input) {
           // Keep legacy rows with trailing slashes discoverable without rewriting persisted sessions.
+          // rtrim('/') is empty, but legacy rows with an empty directory are not the filesystem root.
           conditions.push(
-            sql`rtrim(${SessionTable.directory}, '/') = rtrim(${sql.param(input.directory, SessionTable.directory)}, '/')`,
+            sql`${SessionTable.directory} <> '' AND rtrim(${SessionTable.directory}, '/') = rtrim(${sql.param(input.directory, SessionTable.directory)}, '/')`,
           )
         }
         if (input.workspaceID) conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
