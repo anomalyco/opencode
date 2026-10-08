@@ -14,6 +14,7 @@ const instances = makeGlobalNode({
       return Instance.Service.of({
         provide: (session) => Effect.provide(locations.get(session.location)),
         live: (session) => RcMap.has(locations.rcMap, LocationServiceMap.canonical(session.location)),
+        provideCached: (session) => Instance.cached(locations, LocationServiceMap.canonical(session.location)),
       })
     }),
   ),

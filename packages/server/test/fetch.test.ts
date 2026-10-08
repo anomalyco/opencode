@@ -59,6 +59,21 @@ it.live("returns LocationNotFoundError for a missing folder and recovers once it
         message: `Location not found: ${directory}`,
       })
     }
+    for (const endpoint of [
+      `/api/session/${session.id}/permission`,
+      `/api/session/${session.id}/form`,
+      "/api/session/global/form",
+    ]) {
+      const response = yield* Effect.promise(() =>
+        handler(
+          new Request(`http://opencode.local${endpoint}`, {
+            headers: { "x-opencode-directory": encodeURIComponent(directory) },
+          }),
+        ),
+      )
+      expect(response.status).toBe(200)
+      expect(yield* Effect.promise(() => response.json())).toEqual({ data: [] })
+    }
     yield* Effect.promise(() => fs.mkdir(directory))
     const recovered = yield* Effect.promise(() =>
       handler(
@@ -569,7 +584,7 @@ it.live("routes pending requests through the Session's instance", () =>
     )
     expect(global.status).toBe(200)
     expect(yield* Effect.promise(() => global.json())).toEqual({ data: [] })
-    expect(yield* loaded()).toEqual([{ directory: process.cwd() }])
+    expect(yield* loaded()).toEqual([])
 
     const createdForm = yield* Effect.promise(() =>
       handler(

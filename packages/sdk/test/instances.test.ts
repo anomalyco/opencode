@@ -88,10 +88,11 @@ test("Promise instances are lazy, share by key and Location, and stay isolated b
   expect(await second.sessions.get({ sessionID })).toEqual(separateHost)
   expect(configured).toEqual([])
   expect(setups).toEqual([])
-  // Permission and form lists read instance services, so they acquire the Session's instance.
+  // Pending lists only borrow existing instances; cold hydration does not configure one.
   expect(await first.permission.list({ sessionID })).toEqual([])
   expect(await first.session.form.list({ sessionID })).toEqual([])
-  expect(configured).toEqual(["first:alpha"])
+  expect(configured).toEqual([])
+  expect(setups).toEqual([])
 
   await Promise.all(
     [
@@ -110,6 +111,21 @@ test("Promise instances are lazy, share by key and Location, and stay isolated b
       expect(await input.host.sessions.inbox.list({ sessionID: input.session.id })).toEqual([admitted])
     }),
   )
+
+  const alphaForm = await first.session.form.create({
+    sessionID: original.id,
+    title: "Alpha",
+    fields: [{ key: "answer", type: "string" }],
+  })
+  const betaForm = await first.session.form.create({
+    sessionID: separateKey.id,
+    title: "Beta",
+    fields: [{ key: "answer", type: "string" }],
+  })
+  expect(await first.session.form.list({ sessionID: original.id })).toEqual([alphaForm])
+  expect(await first.session.form.list({ sessionID: separateKey.id })).toEqual([betaForm])
+  expect(await first.session.form.list({ sessionID: sameKey.id })).toEqual([])
+  expect(await second.session.form.list({ sessionID: separateHost.id })).toEqual([])
 
   await first.sessions.switchAgent({ sessionID, agent: "plan" })
   const fork = await first.sessions.fork({ sessionID })
