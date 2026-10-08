@@ -91,6 +91,44 @@ describe("SessionStore", () => {
     }),
   )
 
+  it.effect("preserves POSIX, drive and UNC directory roots", () =>
+    Effect.gen(function* () {
+      const bus = yield* seedSessions([])
+      const cases = [
+        { id: "ses_posix_root", written: "///", query: "/", expected: "/" },
+        { id: "ses_drive_root", written: "C:////", query: "C:/", expected: "C:/" },
+        { id: "ses_unc_root", written: "//server/share////", query: "//server/share/", expected: "//server/share/" },
+      ]
+      const database = yield* Database.Service
+      const store = yield* SessionStore.Service
+      yield* Effect.forEach(cases, (entry) =>
+        Effect.gen(function* () {
+          yield* bus.publish(SessionEvent.Created, {
+            sessionID: Session.ID.make(entry.id),
+            projectID: Project.ID.global,
+            location: { directory: AbsolutePath.make(entry.written) },
+            slug: "store-test",
+            version: "test",
+          })
+          const row = yield* database.db
+            .select({ directory: SessionTable.directory })
+            .from(SessionTable)
+            .where(sql`${SessionTable.id} = ${entry.id}`)
+            .get()
+          expect(row?.directory).toBe(
+            process.platform === "win32" && entry.expected.startsWith("C:")
+              ? entry.expected.replaceAll("/", "\\\\")
+              : process.platform === "win32" && entry.expected.startsWith("//")
+                ? entry.expected.replaceAll("/", "\\\\")
+                : entry.expected,
+          )
+          const found = yield* store.list({ directory: AbsolutePath.make(entry.query) })
+          expect(found.map((item) => String(item.id))).toContain(entry.id)
+        }),
+      )
+    }),
+  )
+
   it.effect("lists by updated time and ID with exclusive two-item pages in either direction", () =>
     Effect.gen(function* () {
       yield* seedSessions([
