@@ -215,6 +215,8 @@ If you have client credentials from the MCP server provider, you can configure t
 }
 ```
 
+When you create the client with the provider, register `http://127.0.0.1:19876/mcp/oauth/callback` as its redirect URI. To use a different one, set `redirectUri` or `callbackPort` (see [OAuth Options](#oauth-options)).
+
 ---
 
 ### Authenticating
@@ -273,6 +275,8 @@ If you want to disable automatic OAuth for a server (e.g., for servers that use 
 | `clientId`     | String          | OAuth client ID. If not provided, dynamic client registration will be attempted. |
 | `clientSecret` | String          | OAuth client secret, if required by the authorization server.                    |
 | `scope`        | String          | OAuth scopes to request during authorization.                                    |
+| `callbackPort` | Number          | Port for the local OAuth callback server. Defaults to `19876`. Ignored if `redirectUri` is set. |
+| `redirectUri`  | String          | OAuth redirect URI. Defaults to `http://127.0.0.1:19876/mcp/oauth/callback`.     |
 
 #### Debugging
 
