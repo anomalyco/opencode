@@ -335,10 +335,10 @@ function crossesStatementBoundary(span: Node, end: number) {
   for (const child of span.descendantsOfType(["variable_assignment", "file_redirect"])) {
     if (!child) continue
     if (child.startIndex >= end) continue
-    if (/[;\r\n]/.test(span.text.slice(start - span.startIndex, child.startIndex - span.startIndex))) return true
+    if (/[;&|\r\n]/.test(span.text.slice(start - span.startIndex, child.startIndex - span.startIndex))) return true
     start = Math.max(start, child.endIndex)
   }
-  return /[;\r\n]/.test(span.text.slice(start - span.startIndex, end - span.startIndex))
+  return /[;&|\r\n]/.test(span.text.slice(start - span.startIndex, end - span.startIndex))
 }
 
 function parts(node: Node) {

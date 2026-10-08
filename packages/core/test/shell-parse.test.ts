@@ -168,6 +168,10 @@ describe("ShellParse", () => {
     ['FOO="a\nb" printf done', 'FOO="a\nb" printf done', 'FOO="a\nb" printf *'],
     ["FOO=bar > 'a;b' printf done", "FOO=bar > 'a;b' printf done", "FOO=bar > 'a;b' printf *"],
     ['FOO=bar > "a\nb" printf done', 'FOO=bar > "a\nb" printf done', 'FOO=bar > "a\nb" printf *'],
+    ["FOO='a&b' printf done", "FOO='a&b' printf done", "FOO='a&b' printf *"],
+    ["FOO='a|b' printf done", "FOO='a|b' printf done", "FOO='a|b' printf *"],
+    ['FOO=bar > "o&t" printf done', 'FOO=bar > "o&t" printf done', 'FOO=bar > "o&t" printf *'],
+    ["FOO=bar > 'o|t' printf done", "FOO=bar > 'o|t' printf done", "FOO=bar > 'o|t' printf *"],
   ] as const)("preserves environment prefixes in saved proposals: %s", async (command, resource, save) => {
     for (const portable of [false, true]) {
       const scanner = portable ? "portable" : "Tree-sitter"
@@ -255,17 +259,21 @@ describe("ShellParse", () => {
     }
   })
 
-  test.each(["FOO=bar > output; printf done", "FOO=bar > output\nprintf done"] as const)(
-    "does not save an assignment head across a statement boundary: %s",
-    async (command) => {
-      for (const portable of [false, true]) {
-        expect(
-          (await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace", { portable }))).commands,
-          portable ? "portable" : "Tree-sitter",
-        ).toEqual(portable ? [{ resource: "printf done", save: "printf *" }] : [{ resource: command }])
-      }
-    },
-  )
+  test.each([
+    ["FOO=bar > output; printf done", "FOO=bar > output; printf done"],
+    ["FOO=bar > output\nprintf done", "FOO=bar > output\nprintf done"],
+    ["FOO=bar > output & printf done", "FOO=bar > output & printf done"],
+    ["FOO=bar > output && printf done", "FOO=bar > output && printf done"],
+    ["FOO=bar > output || printf done", "FOO=bar > output || printf done"],
+    ["FOO=bar > output | printf done", "FOO=bar > output | printf done"],
+  ] as const)("does not save an assignment head across a statement boundary: %s", async (command, resource) => {
+    for (const portable of [false, true]) {
+      expect(
+        (await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace", { portable }))).commands,
+        portable ? "portable" : "Tree-sitter",
+      ).toEqual(portable ? [{ resource: "printf done", save: "printf *" }] : [{ resource }])
+    }
+  })
 
   test.each([
     ['FOO="a*b" printf hello ${X', undefined],
