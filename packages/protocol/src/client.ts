@@ -44,6 +44,7 @@ export const groupNames = {
   "server.message": "message",
   "server.model": "model",
   "server.generate": "generate",
+  "server.voice": "voice",
   "server.provider": "provider",
   "server.integration": "integration",
   "server.websearch": "websearch",

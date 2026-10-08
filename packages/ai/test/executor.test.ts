@@ -403,6 +403,26 @@ describe("RequestExecutor", () => {
     ),
   )
 
+  it.effect("reads provider messages sent as a plain error string", () =>
+    Effect.gen(function* () {
+      const executor = yield* RequestExecutor.Service
+      const error = yield* executor.execute(request).pipe(Effect.flip)
+
+      expectAIError(error)
+      expect(error.message).toBe("Your team has no credits for this endpoint")
+    }).pipe(
+      Effect.provide(
+        fixedResponse(
+          JSON.stringify({
+            code: "The caller does not have permission to execute the specified operation",
+            error: "Your team has no credits for this endpoint",
+          }),
+          { status: 403 },
+        ),
+      ),
+    ),
+  )
+
   it.effect("shows the body when structured provider messages are empty", () =>
     Effect.gen(function* () {
       const executor = yield* RequestExecutor.Service

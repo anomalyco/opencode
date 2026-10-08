@@ -99,6 +99,17 @@ describe("ConfigNormalize", () => {
     expect(result.agents?.reviewer?.system).toBe("Use V2")
   })
 
+  test("keeps voice model selections", () => {
+    const result = normalized({
+      voice: { transcription: { model: "xai/grok-voice-transcribe-2.0" }, speech: { model: "google/tts" } },
+    })
+    expect(result.encoded.voice).toEqual({
+      transcription: { model: { providerID: "xai", model: "grok-voice-transcribe-2.0" } },
+      speech: { model: { providerID: "google", model: "tts" } },
+    })
+    expect(result.diagnostics).toEqual([])
+  })
+
   test("canonicalizes transformed native values through decode then encode", () => {
     const result = normalized({ warming: { interval: "4 minutes", duration: "30 minutes" } })
     expect(result.encoded.warming).toEqual({ interval: "240000 millis", duration: "1800000 millis" })

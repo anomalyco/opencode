@@ -200,7 +200,8 @@ hints (none of the four providers emit one). Later providers: Luma, Kling, MiniM
 #### Speech (TTS)
 
 Shipped in phase 3 (`src/speech.ts`, `src/speech-client.ts`, protocols `openai-speech`, `google-speech`,
-`elevenlabs-speech`, `cartesia-speech`, `deepgram-speech`; new `ElevenLabs`, `Cartesia`, and `Deepgram` facades).
+`elevenlabs-speech`, `cartesia-speech`, `deepgram-speech`, `xai-speech`; new `ElevenLabs`, `Cartesia`, and `Deepgram`
+facades).
 
 ```ts
 const request = Speech.request({
@@ -251,7 +252,7 @@ Gemini 3.8 `generate`) fails the same way as an unsupported field: `UnsupportedO
 
 **Timestamps.** `timestamps: true` on the request asks for alignment. ElevenLabs selects the `with-timestamps`
 endpoints (character-level, NDJSON when streaming); Cartesia sets `add_timestamps` on `/tts/sse` (word-level; a
-`generate` with timestamps collects the SSE stream). OpenAI, Gemini, and Deepgram reject it.
+`generate` with timestamps collects the SSE stream). OpenAI, Gemini, Deepgram, and xAI reject it.
 
 Common-field lowering per provider:
 
@@ -262,6 +263,7 @@ Common-field lowering per provider:
 | ElevenLabs | path voice id (required) | `voice_settings.speed` | `language_code` | unsupported | `with-timestamps` | `credits` from `character-cost` header |
 | Cartesia | `voice` (required) | `generation_config.speed` | `language` | unsupported | `add_timestamps` | none |
 | Deepgram | unsupported (voice is the model) | `speed` query | unsupported | unsupported | unsupported | `characters` from `dg-char-count` header |
+| xAI | `voice_id` (defaults to `eve`) | `speed` | `language` (`auto` when omitted) | unsupported | unsupported | none |
 
 Deferred: `Speech.session(...)` — input-streaming TTS where text arrives incrementally over a WebSocket (ElevenLabs
 `stream-input`, Cartesia WebSocket contexts, Deepgram WebSocket speak) — is a separate scoped resource, not part of
@@ -271,7 +273,7 @@ Deferred: `Speech.session(...)` — input-streaming TTS where text arrives incre
 
 Shipped as the second half of phase 3 (`src/transcription.ts`, `src/transcription-client.ts`, protocols
 `openai-transcription`, `google-transcription`, `deepgram-transcription`, `elevenlabs-transcription`,
-`assemblyai-transcription`; new `AssemblyAI` facade).
+`assemblyai-transcription`, `xai-transcription`; new `AssemblyAI` facade).
 
 ```ts
 const request = Transcription.request({
@@ -339,6 +341,7 @@ Settled rules:
 | Deepgram | inline | raw body, or JSON `{ url }` | words always; `segment` → `utterances` | `diarize_model=latest` + `utterances` | `prompt`, `speakers` | `seconds` (`metadata.duration`) |
 | ElevenLabs | inline | multipart `file`, or `source_url` | words always; `segment` → `diarize` (speaker turns) | `diarize` | `prompt`; `webhook`, per-channel `use_multi_channel` | `seconds` (`audio_duration_secs`) |
 | AssemblyAI | queued (upload → submit → poll) | `/v2/upload` then `audio_url`, or a URL | words always; `segment` → `speaker_labels` | `speaker_labels` | — | `seconds` (`audio_duration`) |
+| xAI | inline (batch `/v1/stt`) | multipart `file` (last field), or `url` | words always; `segment` → `diarize` speaker turns | `diarize` | `prompt`, `speakers` | `seconds` (`duration`) |
 
 Deferred: `Transcription.session(...)` — realtime STT over WebSocket (Deepgram live, AssemblyAI streaming, ElevenLabs
 realtime, OpenAI realtime transcription) — is the same future scoped `session` shape as input-streaming TTS and ships
@@ -423,7 +426,7 @@ implemented):
 |---|---|---|---|---|---|---|
 | `OpenAI` | responses (default), chat | Images API (stream) | *Sora skipped (decision 8)* | ✓ | ✓ | |
 | `Google` | Gemini | Gemini-native | Veo | Gemini TTS | `gemini-3.5-transcribe` | |
-| `XAI` | ✓ | ✓ | ✓ | | | |
+| `XAI` | ✓ | ✓ | ✓ | ✓ | ✓ (batch) | |
 | `ElevenLabs` | | | | ✓ | Scribe | *soundEffect, music (phase 5)* |
 | `Cartesia` | | | | ✓ | | |
 | `Deepgram` | | | | Aura | ✓ | |
@@ -477,7 +480,7 @@ Foundation + Image ship together as the reference implementation, serially. Vide
 
 1. **Foundation** — per-modality selectors, `Media`, `Generation`, `Poll`, `Usage` union, `MediaProtocol` kinds, `@opencode/ai/promise` with `llm` + `image`. Port the five existing image protocols onto it. Unify `MediaPart` and add the `media` LLM event (fixes Gemini image output being dropped).
 2. **Video** — ✅ Veo, xAI, fal, Runway shipped (`MediaProtocol.queued`, `Video.start/generate/resume/stream`, promise `ai.video`). Deferred: `Video.complete` (webhooks), Luma, Kling, MiniMax, Replicate.
-3. **Speech + Transcription** — ✅ Speech: OpenAI, Gemini TTS, ElevenLabs, Cartesia, Deepgram shipped (`MediaProtocol.stream`, `Speech.generate/stream`, promise `ai.speech`). ✅ Transcription: OpenAI, Gemini, Deepgram, ElevenLabs Scribe, AssemblyAI shipped across all three route kinds (`Transcription.generate/stream/start/resume`, promise `ai.transcription`). Deferred: `Speech.session` and `Transcription.session` (WebSocket streaming).
+3. **Speech + Transcription** — ✅ Speech: OpenAI, Gemini TTS, ElevenLabs, Cartesia, Deepgram, xAI shipped (`MediaProtocol.stream`, `Speech.generate/stream`, promise `ai.speech`). ✅ Transcription: OpenAI, Gemini, Deepgram, ElevenLabs Scribe, AssemblyAI, xAI shipped across all three route kinds (`Transcription.generate/stream/start/resume`, promise `ai.transcription`). Deferred: `Speech.session` and `Transcription.session` (WebSocket streaming).
 4. **Image queued routes and partials** — ✅ BFL, fal, Replicate, and Stability creative upscale queued; Stability generate inline; OpenAI `partial_images` streaming (`image-partial` restored). Imagen dropped: shut down on the Gemini API and discontinued on Vertex (2026-06-30). Deferred: Stability's synchronous edit and fast/conservative upscale endpoints.
 5. **Later** — ElevenLabs music/SFX, Lyria, `Speech.session` / `Transcription.session`, realtime.
 

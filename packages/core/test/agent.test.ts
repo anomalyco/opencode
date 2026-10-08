@@ -180,11 +180,42 @@ describe("Agent", () => {
       expect(agents.map((item) => String(item.id)).sort()).toEqual([
         "build",
         "compaction",
+        "companion",
         "explore",
         "general",
         "summary",
         "title",
       ])
+      const companion = (yield* agent.get(Agent.ID.make("companion")))?.permissions ?? []
+      expect(Permission.evaluate("main_send", "*", companion).effect).toBe("allow")
+      expect(Permission.evaluate("read", "src/index.ts", companion).effect).toBe("allow")
+      expect(Permission.evaluate("read", ".env", companion).effect).toBe("deny")
+      expect(Permission.evaluate("edit", "src/index.ts", companion).effect).toBe("deny")
+      expect(Permission.evaluate("shell", "ls", companion).effect).toBe("deny")
+      const shell = (commands: string[]) =>
+        Object.fromEntries(
+          commands.map((command) => [command, Permission.evaluate("shell", command, companion).effect]),
+        )
+      const readOnly = [
+        "git status",
+        "git diff --stat HEAD~1",
+        "git log --oneline -5",
+        "git show HEAD",
+        "git branch -v",
+      ]
+      expect(shell(readOnly)).toEqual(Object.fromEntries(readOnly.map((command) => [command, "allow"])))
+      const writes = [
+        "git commit -m x",
+        "git checkout main",
+        "git branch feature",
+        "git branch -v feature",
+        "git branch -D main",
+        "git diff > patch.txt",
+        "git log --output=log.txt",
+        "git -c core.pager=sh log",
+        "git statusx",
+      ]
+      expect(shell(writes)).toEqual(Object.fromEntries(writes.map((command) => [command, "deny"])))
       expect((yield* agent.get(Agent.defaultID))?.system).toBeUndefined()
       const permissions = (yield* agent.get(Agent.defaultID))?.permissions ?? []
       const compaction = yield* agent.get(Agent.ID.make("compaction"))

@@ -237,6 +237,12 @@ export type SessionForkInput = { readonly sessionID: Session.ID; readonly before
 export type SessionForkOutput = Session.Info
 export type SessionForkOperation<E = never> = (input: SessionForkInput) => Effect.Effect<SessionForkOutput, E>
 
+export type SessionCompanionInput = { readonly sessionID: Session.ID }
+export type SessionCompanionOutput = Session.Info
+export type SessionCompanionOperation<E = never> = (
+  input: SessionCompanionInput,
+) => Effect.Effect<SessionCompanionOutput, E>
+
 export type SessionSwitchAgentInput = { readonly sessionID: Session.ID; readonly agent: Agent.ID }
 export type SessionSwitchAgentOutput = void
 export type SessionSwitchAgentOperation<E = never> = (
@@ -447,6 +453,7 @@ export type SessionLogOutput =
             }
             readonly subpath?: RelativePath | undefined
             readonly parentID?: Session.ID | undefined
+            readonly kind?: Session.Kind | undefined
             readonly slug: string
             readonly title?: string | undefined
             readonly agent?: Agent.ID | undefined
@@ -1449,6 +1456,7 @@ export interface SessionApi<E = never> {
   readonly get: SessionGetOperation<E>
   readonly remove: SessionRemoveOperation<E>
   readonly fork: SessionForkOperation<E>
+  readonly companion: SessionCompanionOperation<E>
   readonly switchAgent: SessionSwitchAgentOperation<E>
   readonly switchModel: SessionSwitchModelOperation<E>
   readonly update: SessionUpdateOperation<E>
@@ -1542,6 +1550,30 @@ export type GenerateTextOperation<E = never> = (input: GenerateTextInput) => Eff
 
 export interface GenerateApi<E = never> {
   readonly text: GenerateTextOperation<E>
+}
+
+export type VoiceTranscribeInput = { readonly mediaType: string; readonly payload: globalThis.Uint8Array }
+export type VoiceTranscribeOutput = { readonly text: string }
+export type VoiceTranscribeOperation<E = never> = (
+  input: VoiceTranscribeInput,
+) => Effect.Effect<VoiceTranscribeOutput, E>
+
+export type VoiceSpeechInput = { readonly text: string }
+export type VoiceSpeechOutput =
+  | {
+      readonly type: "format"
+      readonly format:
+        | { readonly type: "mp3" }
+        | { readonly type: "pcm"; readonly sampleRate: number; readonly channels: number }
+    }
+  | { readonly type: "audio"; readonly data: string }
+  | { readonly type: "done" }
+  | { readonly type: "error"; readonly message: string }
+export type VoiceSpeechOperation<E = never> = (input: VoiceSpeechInput) => Stream.Stream<VoiceSpeechOutput, E>
+
+export interface VoiceApi<E = never> {
+  readonly transcribe: VoiceTranscribeOperation<E>
+  readonly speech: VoiceSpeechOperation<E>
 }
 
 export type ProviderListInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
@@ -2413,6 +2445,7 @@ export interface AppApi<E = never> {
   readonly message: MessageApi<E>
   readonly model: ModelApi<E>
   readonly generate: GenerateApi<E>
+  readonly voice: VoiceApi<E>
   readonly provider: ProviderApi<E>
   readonly integration: IntegrationApi<E>
   readonly mcp: McpApi<E>

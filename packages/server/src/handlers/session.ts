@@ -238,6 +238,16 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         }),
       )
       .handle(
+        "session.companion",
+        Effect.fn(function* (ctx) {
+          return {
+            data: yield* session
+              .companion(ctx.params.sessionID)
+              .pipe(Effect.catchTag("Session.NotFoundError", missingSession), locationErrors),
+          }
+        }),
+      )
+      .handle(
         "session.switchAgent",
         Effect.fn(function* (ctx) {
           yield* session

@@ -14,9 +14,13 @@ import { Permission } from "./permission.js"
 import { TokenUsage } from "./token-usage.js"
 import { Revert } from "./session-revert.js"
 import { SessionFork } from "./session-fork.js"
+import { SessionKind } from "./session-kind.js"
 
 export const ID = SessionID
 export type ID = SessionID
+
+export const Kind = SessionKind.Kind
+export type Kind = SessionKind.Kind
 
 export const Metadata = SessionMetadata
 export type Metadata = SessionMetadata
@@ -31,6 +35,7 @@ export interface Info extends Schema.Schema.Type<typeof Info> {}
 export const Info = Schema.Struct({
   id: ID,
   parentID: ID.pipe(optional),
+  kind: Kind.pipe(optional),
   fork: Schema.Struct({
     sessionID: ID,
     boundary: ForkBoundary,

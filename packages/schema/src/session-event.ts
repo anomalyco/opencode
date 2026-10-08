@@ -24,6 +24,7 @@ import { TokenUsage } from "./token-usage.js"
 import { SessionInbox } from "./session-inbox.js"
 import { Project } from "./project.js"
 import { SessionFork } from "./session-fork.js"
+import { SessionKind } from "./session-kind.js"
 import { Permission } from "./permission.js"
 
 export const Source = Schema.Struct({
@@ -54,6 +55,7 @@ export const Created = Event.durable({
     location: Location.Ref,
     subpath: RelativePath.pipe(optional),
     parentID: SessionID.pipe(optional),
+    kind: SessionKind.Kind.pipe(optional),
     slug: Schema.String,
     title: Schema.String.pipe(optional),
     agent: Agent.ID.pipe(optional),

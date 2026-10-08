@@ -16,6 +16,20 @@ Guidelines:
 
 Complete the user's search request efficiently and report your findings clearly.`
 
+const PROMPT_COMPANION = `You are the companion of an OpenCode coding session, called the main session. The user talks with you, in text or by voice, about what the main session is doing while it keeps working.
+
+Your job:
+- Answer questions about the main session: what it is doing, why, what it changed, and what it waits for.
+- Steer it when the user asks. Use main_send to pass instructions, corrections, or follow-up work. Write each prompt as a clear, self-contained instruction for the main session's agent, not as a transcript of the user's words.
+- Use main_interrupt only when the user wants the main session to stop.
+- Check things yourself with read, grep, and glob when that is faster than asking.
+- You may run read-only git commands with the shell tool: git status, git diff, git log, git show, and plain git branch. Run each one alone, without pipes, redirects, or --output.
+- You cannot edit files or run other commands. Ask the main session to do that with main_send.
+
+Each user turn may start with a <main-session> snapshot. Trust it for the current status. Call main_read or main_status when you need more detail.
+
+Your replies may be read aloud. Keep them short and conversational: a few sentences, no headings or tables, and code only when the user asks for it. When you steer the main session, say briefly what you sent.`
+
 const PROMPT_TITLE = `You are a title generator. You output ONLY a thread title. Nothing else.
 
 <task>
@@ -114,6 +128,45 @@ export const Plugin = define({
           { action: "read", resource: "*.env.example", effect: "allow" },
           { action: "subagent", resource: "*", effect: "deny" },
           { action: "external_directory", resource: "*", effect: "allow" },
+        )
+      })
+
+      editor.update(Agent.ID.make("companion"), (item) => {
+        const externalDirectories = item.permissions.filter(
+          (rule) => rule.action === "external_directory" && rule.effect === "allow",
+        )
+        item.name = Agent.Name.make("Companion")
+        item.description = "Talks with the user about a main session and steers it."
+        item.system = PROMPT_COMPANION
+        item.mode = "primary"
+        item.hidden = true
+        // Clients show no permission prompts for companions, so every rule allows or denies.
+        item.permissions.push(
+          { action: "*", resource: "*", effect: "deny" },
+          { action: "grep", resource: "*", effect: "allow" },
+          { action: "glob", resource: "*", effect: "allow" },
+          { action: "webfetch", resource: "*", effect: "allow" },
+          { action: "websearch", resource: "*", effect: "allow" },
+          { action: "read", resource: "*", effect: "allow" },
+          { action: "read", resource: "*.env", effect: "deny" },
+          { action: "read", resource: "*.env.*", effect: "deny" },
+          { action: "read", resource: "*.env.example", effect: "allow" },
+          { action: "main_*", resource: "*", effect: "allow" },
+          ...["status", "diff", "log", "show"].map((command) => ({
+            action: "shell",
+            resource: `git ${command} *`,
+            effect: "allow" as const,
+          })),
+          // Exact forms only: `git branch <name>` creates a branch, even after -v.
+          ...["", " --show-current", " -a", " -r", " -v", " -vv"].map((flags) => ({
+            action: "shell",
+            resource: `git branch${flags}`,
+            effect: "allow" as const,
+          })),
+          // Redirects and --output write files.
+          { action: "shell", resource: "*>*", effect: "deny" },
+          { action: "shell", resource: "*--output*", effect: "deny" },
+          ...externalDirectories,
         )
       })
 

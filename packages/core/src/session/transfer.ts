@@ -92,6 +92,7 @@ const layer = Layer.effect(
             {
               sessionID,
               parentID: input.data.info.parentID,
+              kind: input.data.info.kind,
               slug: Slug.create(),
               version: app.version,
               projectID: project.id,

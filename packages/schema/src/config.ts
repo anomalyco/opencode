@@ -18,6 +18,7 @@ import { ConfigProvider } from "./config/provider.js"
 import { ConfigReference } from "./config/reference.js"
 import { ConfigWebSearch } from "./config/websearch.js"
 import { ConfigToolOutput } from "./config/tool-output.js"
+import { ConfigVoice } from "./config/voice.js"
 import { ConfigWatcher } from "./config/watcher.js"
 import { ConfigWarming } from "./config/warming.js"
 import { ConfigWorktree } from "./config/worktree.js"
@@ -71,6 +72,9 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   }),
   media: ConfigMedia.Info.pipe(optional).annotate({
     description: "Media processing configuration",
+  }),
+  voice: ConfigVoice.Info.pipe(optional).annotate({
+    description: "Speech-to-text and text-to-speech models for voice conversations",
   }),
   tool_output: ConfigToolOutput.Info.pipe(optional).annotate({
     description: "Tool output truncation thresholds",

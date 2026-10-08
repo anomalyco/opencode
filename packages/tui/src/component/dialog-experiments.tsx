@@ -13,7 +13,18 @@ type Experiment = {
 // In-flight features anyone can opt into. Each entry is temporary: an
 // experiment either graduates (delete the entry, make the behavior
 // unconditional) or dies (delete the entry and the branch it gated).
-export const experiments: Experiment[] = []
+export const experiments: Experiment[] = [
+  {
+    id: "companion",
+    title: "Companion",
+    description: "Talk with a companion, by text or voice, that observes and steers the current session",
+  },
+  {
+    id: "companion_barge_in",
+    title: "Companion barge-in",
+    description: "Keep the microphone open while the companion speaks, so you can talk over and interrupt it",
+  },
+]
 
 export function DialogExperiments() {
   const config = useConfig()

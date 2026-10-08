@@ -7,6 +7,8 @@ import { OpenAIChat } from "../protocols/openai-chat.js"
 import { OpenResponsesChannel } from "../protocols/open-responses-channel.js"
 import { XAIResponses } from "../protocols/xai-responses.js"
 import { XAIImages } from "../protocols/xai-images.js"
+import { XAISpeech } from "../protocols/xai-speech.js"
+import { XAITranscription } from "../protocols/xai-transcription.js"
 import { XAIVideo } from "../protocols/xai-video.js"
 import type { OpenAIOptionsInput } from "./openai-options.js"
 import type { ProviderPackage } from "../provider-package.js"
@@ -29,6 +31,8 @@ export type Settings = ProviderPackage.Settings &
   }
 
 export type { XAIImageOptions } from "../protocols/xai-images.js"
+export type { XAISpeechOptions } from "../protocols/xai-speech.js"
+export type { XAITranscriptionOptions } from "../protocols/xai-transcription.js"
 export type { XAIVideoOptions } from "../protocols/xai-video.js"
 
 const RESPONSES_WEBSOCKET_ROTATE_AFTER_MS = 24 * 60 * 1000
@@ -98,6 +102,8 @@ export const configure = (input: LanguageModelOptions = {}) => {
     chat,
     image: (modelID: string | ModelID) => XAIImages.model({ ...media, id: modelID }),
     video: (modelID: string | ModelID) => XAIVideo.model({ ...media, id: modelID }),
+    speech: (modelID: string | ModelID) => XAISpeech.model({ ...media, id: modelID }),
+    transcription: (modelID: string | ModelID) => XAITranscription.model({ ...media, id: modelID }),
     configure,
   }
 }
@@ -119,3 +125,5 @@ export const responses = provider.responses
 export const chat = provider.chat
 export const image = provider.image
 export const video = provider.video
+export const speech = provider.speech
+export const transcription = provider.transcription

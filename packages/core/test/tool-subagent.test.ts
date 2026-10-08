@@ -636,6 +636,15 @@ describe("SubagentTool", () => {
               message: `Session ${unrelated.id} is not a child of the current session`,
             },
           })
+          const companion = yield* sessions.companion(parent.id)
+          expect(yield* call(companion.id, "call-companion")).toEqual({
+            status: "error",
+            error: {
+              type: "tool.execution",
+              message: `Session ${companion.id} is a companion, not a subagent`,
+            },
+          })
+          expect(yield* sessions.get(companion.id)).toMatchObject({ agent: "companion" })
           expect(yield* call(switched.id, "call-switched-child")).toMatchObject({
             status: "completed",
             metadata: { sessionID: switched.id, status: "completed" },

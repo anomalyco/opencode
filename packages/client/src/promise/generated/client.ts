@@ -33,6 +33,8 @@ import type {
   SessionRemoveOutput,
   SessionForkInput,
   SessionForkOutput,
+  SessionCompanionInput,
+  SessionCompanionOutput,
   SessionSwitchAgentInput,
   SessionSwitchAgentOutput,
   SessionSwitchModelInput,
@@ -109,6 +111,10 @@ import type {
   ModelDefaultOutput,
   GenerateTextInput,
   GenerateTextOutput,
+  VoiceTranscribeInput,
+  VoiceTranscribeOutput,
+  VoiceSpeechInput,
+  VoiceSpeechOutput,
   ProviderListInput,
   ProviderListOutput,
   ProviderGetInput,
@@ -664,6 +670,17 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ).then((value) => value.data),
+      companion: (input: SessionCompanionInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionCompanionOutput }>(
+          {
+            method: "POST",
+            path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/companion`,
+            successStatus: 200,
+            declaredStatuses: [400, 401, 404],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
       switchAgent: (input: SessionSwitchAgentInput, requestOptions?: RequestOptions) =>
         request<SessionSwitchAgentOutput>(
           {
@@ -1149,6 +1166,34 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ).then((value) => value.data),
+    },
+    voice: {
+      transcribe: (input: VoiceTranscribeInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: VoiceTranscribeOutput }>(
+          {
+            method: "POST",
+            path: `/api/experimental/voice/transcribe`,
+            query: { mediaType: input["mediaType"] },
+            body: input["payload"],
+            successStatus: 200,
+            declaredStatuses: [400, 401, 404, 503],
+            empty: false,
+            binaryBody: true,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      speech: (input: VoiceSpeechInput, requestOptions?: RequestOptions): AsyncIterable<VoiceSpeechOutput> =>
+        sse<VoiceSpeechOutput>(
+          {
+            method: "POST",
+            path: `/api/experimental/voice/speech`,
+            body: { text: input["text"] },
+            successStatus: 200,
+            declaredStatuses: [400, 401, 404, 503],
+            empty: false,
+          },
+          requestOptions,
+        ),
     },
     provider: {
       list: (input?: ProviderListInput, requestOptions?: RequestOptions) =>

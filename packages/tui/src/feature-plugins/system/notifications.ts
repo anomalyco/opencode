@@ -38,6 +38,8 @@ export default Plugin.define({
         return
       }
       const session = context.data.session.get(sessionID)
+      // The companion panel shows its replies as they stream.
+      if (session?.kind === "companion") return
       notify(context, sessionID, "Session done", session?.parentID ? "subagent_done" : "done")
     }
 

@@ -13,6 +13,7 @@ test("exposes every standard HTTP API group", () => {
     "message",
     "model",
     "generate",
+    "voice",
     "provider",
     "integration",
     "mcp",

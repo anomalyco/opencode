@@ -453,6 +453,7 @@ const layer = Layer.effectDiscard(
             project_id: event.data.projectID,
             workspace_id: event.data.location.workspaceID ? Workspace.ID.make(event.data.location.workspaceID) : null,
             parent_id: event.data.parentID,
+            kind: event.data.kind,
             slug: event.data.slug,
             directory: event.data.location.directory,
             path: event.data.subpath,

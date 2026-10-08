@@ -18,7 +18,7 @@ import { SessionProjector } from "./session/projector.js"
 import { SessionMessageTable } from "./session/sql.js"
 import { SessionSchema } from "./session/schema.js"
 import { RelativePath } from "./schema.js"
-import { Agent } from "@opencode/schema/agent"
+import { Agent } from "./agent.js"
 import type { Permission } from "@opencode/schema/permission"
 import { App } from "./app.js"
 import { Slug } from "./util/slug.js"
@@ -53,6 +53,7 @@ import {
   DestinationUnavailableError,
 } from "./session/move.js"
 import { SessionModelTransport } from "./session/model-transport.js"
+import { Plugin } from "./plugin/service.js"
 import { llmClient } from "./effect/app-node-platform.js"
 import { Snapshot } from "./snapshot.js"
 import { Session } from "./session/session.js"
@@ -82,6 +83,7 @@ export type ListInput = SessionStore.ListInput
 
 type CreateBaseInput = {
   id?: SessionSchema.ID
+  kind?: SessionSchema.Kind
   title?: string
   agent?: Agent.ID
   model?: Model.Ref
@@ -120,6 +122,10 @@ export interface Interface {
     readonly data: SessionSchema.Info[]
   }>
   readonly create: (input: CreateInput) => Effect.Effect<SessionSchema.Info, NotFoundError>
+  /** The main Session's companion, created on first use. A companion is its own companion. */
+  readonly companion: (
+    sessionID: SessionSchema.ID,
+  ) => Effect.Effect<SessionSchema.Info, NotFoundError | FileSystem.DirectoryNotFoundError>
   readonly fork: (
     input: ForkInput,
   ) => Effect.Effect<SessionSchema.Info, NotFoundError | MessageNotFoundError | ForkEmptyError>
@@ -278,6 +284,7 @@ const layer = Layer.effect(
               version: app.version,
               projectID: project.id,
               parentID: input.parentID,
+              kind: input.kind,
               location,
               subpath: RelativePath.make(path.relative(project.directory, location.directory).replaceAll("\\", "/")),
               title: input.title,
@@ -315,6 +322,25 @@ const layer = Layer.effect(
         if (projected.type === "existing") return projected.session
         // TODO: Restore recorded sessions onto replacement synchronized workspaces in a future API slice.
         return yield* result.get(sessionID).pipe(Effect.orDie)
+      }),
+      companion: Effect.fn("Session.companion")(function* (sessionID) {
+        const main = yield* result.get(sessionID)
+        if (main.kind === "companion") return main
+        const existing = (yield* store.list({ parentID: sessionID })).find((child) => child.kind === "companion")
+        if (existing) return existing
+        const agent = yield* Plugin.awaitActivation.pipe(
+          Effect.andThen(Agent.Service.use((agents) => agents.get(Agent.ID.make("companion")))),
+          instances.provide(main),
+        )
+        return yield* result.create({
+          parentID: sessionID,
+          kind: "companion",
+          title: "Companion",
+          agent: Agent.ID.make("companion"),
+          model: agent?.model ?? main.model,
+          // Main-session approvals must not widen what the companion may do.
+          permissions: [],
+        })
       }),
       fork: Effect.fn("Session.fork")(function* (input) {
         const parent = yield* result.get(input.sessionID)

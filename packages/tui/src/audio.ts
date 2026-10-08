@@ -4,7 +4,8 @@ import { readFile } from "node:fs/promises"
 let audio: Audio | null | undefined
 const sounds = new Map<string, Promise<AudioSound | null>>()
 
-function getAudio() {
+// One engine per process: OpenTUI allows a single capture owner, and all playback shares one mixer.
+export function getAudio() {
   if (audio !== undefined) return audio
   try {
     const next = Audio.create({ autoStart: false })

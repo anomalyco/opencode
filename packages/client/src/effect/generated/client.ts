@@ -39,6 +39,8 @@ import type {
   SessionRemoveOutput,
   SessionForkInput,
   SessionForkOutput,
+  SessionCompanionInput,
+  SessionCompanionOutput,
   SessionSwitchAgentInput,
   SessionSwitchAgentOutput,
   SessionSwitchModelInput,
@@ -115,6 +117,10 @@ import type {
   ModelDefaultOutput,
   GenerateTextInput,
   GenerateTextOutput,
+  VoiceTranscribeInput,
+  VoiceTranscribeOutput,
+  VoiceSpeechInput,
+  VoiceSpeechOutput,
   ProviderListInput,
   ProviderListOutput,
   ProviderGetInput,
@@ -458,6 +464,14 @@ const EndpointSessionFork = (raw: RawClient["server.session"]) => (input: Sessio
     ),
   )
 
+const EndpointSessionCompanion = (raw: RawClient["server.session"]) => (input: SessionCompanionInput) =>
+  preserveEffect<SessionCompanionOutput>()(
+    raw["session.companion"]({ params: { sessionID: input["sessionID"] } }).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
+  )
+
 const EndpointSessionSwitchAgent = (raw: RawClient["server.session"]) => (input: SessionSwitchAgentInput) =>
   preserveEffect<SessionSwitchAgentOutput>()(
     raw["session.switchAgent"]({ params: { sessionID: input["sessionID"] }, payload: { agent: input["agent"] } }).pipe(
@@ -771,6 +785,7 @@ const adaptGroupSession = (raw: RawClient["server.session"]) => ({
   get: EndpointSessionGet(raw),
   remove: EndpointSessionRemove(raw),
   fork: EndpointSessionFork(raw),
+  companion: EndpointSessionCompanion(raw),
   switchAgent: EndpointSessionSwitchAgent(raw),
   switchModel: EndpointSessionSwitchModel(raw),
   update: EndpointSessionUpdate(raw),
@@ -851,6 +866,33 @@ const EndpointGenerateText = (raw: RawClient["server.generate"]) => (input: Gene
   )
 
 const adaptGroupGenerate = (raw: RawClient["server.generate"]) => ({ text: EndpointGenerateText(raw) })
+
+type VoiceTranscribeRequest = Parameters<RawClient["server.voice"]["voice.transcribe"]>[0]
+const EndpointVoiceTranscribe = (raw: RawClient["server.voice"]) => (input: VoiceTranscribeInput) =>
+  preserveEffect<VoiceTranscribeOutput>()(
+    raw["voice.transcribe"]({
+      query: { mediaType: input["mediaType"] },
+      payload: input["payload"],
+    } as VoiceTranscribeRequest).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
+  )
+
+const EndpointVoiceSpeech = (raw: RawClient["server.voice"]) => (input: VoiceSpeechInput) =>
+  preserveStream<VoiceSpeechOutput>()(
+    Stream.unwrap(
+      raw["voice.speech"]({ payload: { text: input["text"] } }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((stream) => stream.pipe(Stream.mapError(mapClientError))),
+      ),
+    ),
+  )
+
+const adaptGroupVoice = (raw: RawClient["server.voice"]) => ({
+  transcribe: EndpointVoiceTranscribe(raw),
+  speech: EndpointVoiceSpeech(raw),
+})
 
 const EndpointProviderList = (raw: RawClient["server.provider"]) => (input?: ProviderListInput) =>
   preserveEffect<ProviderListOutput>()(
@@ -1603,6 +1645,7 @@ const adaptClient = (raw: RawClient) => ({
   message: adaptGroupMessage(raw["server.message"]),
   model: adaptGroupModel(raw["server.model"]),
   generate: adaptGroupGenerate(raw["server.generate"]),
+  voice: adaptGroupVoice(raw["server.voice"]),
   provider: adaptGroupProvider(raw["server.provider"]),
   integration: adaptGroupIntegration(raw["server.integration"]),
   mcp: adaptGroupMcp(raw["server.mcp"]),

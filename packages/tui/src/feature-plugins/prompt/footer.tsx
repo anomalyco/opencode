@@ -21,7 +21,12 @@ export function PromptFooter(props: {
     if (!props.sessionID) return 0
     const count = props.context.data.session
       .family(props.sessionID)
-      .filter((id) => id !== props.sessionID && props.context.data.session.status(id) === "running").length
+      .filter(
+        (id) =>
+          id !== props.sessionID &&
+          props.context.data.session.get(id)?.kind !== "companion" &&
+          props.context.data.session.status(id) === "running",
+      ).length
     return count ? `${count} subagent${count === 1 ? "" : "s"}` : undefined
   })
   const shells = createMemo(() => {

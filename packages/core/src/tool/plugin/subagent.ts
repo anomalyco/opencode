@@ -165,6 +165,8 @@ export const Plugin = {
                 return yield* new ToolFailure({
                   message: `Session ${existing.id} is not a child of the current session`,
                 })
+              if (existing?.kind === "companion")
+                return yield* new ToolFailure({ message: `Session ${existing.id} is a companion, not a subagent` })
               const override = input.model === undefined ? undefined : yield* resolveModel(input.model)
               // Continuing with a different agent switches the child, mirroring create semantics
               // where an explicit model wins over the agent's configured model, which wins over the inherited one.

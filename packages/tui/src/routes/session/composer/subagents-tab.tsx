@@ -40,24 +40,23 @@ export function SubagentsTab(props: { sessionID: string }) {
     const current = session()
     if (!current) return []
 
-    const result = sessionFamily<SessionInfo>(data.session.list(), current.id).map(
-      ({ session, prefix }): SubagentEntry => {
-        const title = withTimestampedFallback(session)
-        const agentMatch = title.match(/@(\w+) subagent/)
-        return {
-          sessionID: session.id,
-          agent: session.agent
-            ? Locale.titlecase(session.agent)
-            : agentMatch
-              ? Locale.titlecase(agentMatch[1])
-              : "Subagent",
-          title: agentMatch ? title.replace(agentMatch[0], "").trim() || title : title,
-          status: data.session.status(session.id),
-          current: session.id === route.sessionID,
-          prefix,
-        }
-      },
-    )
+    const subagents = data.session.list().filter((session) => session.kind !== "companion")
+    const result = sessionFamily<SessionInfo>(subagents, current.id).map(({ session, prefix }): SubagentEntry => {
+      const title = withTimestampedFallback(session)
+      const agentMatch = title.match(/@(\w+) subagent/)
+      return {
+        sessionID: session.id,
+        agent: session.agent
+          ? Locale.titlecase(session.agent)
+          : agentMatch
+            ? Locale.titlecase(agentMatch[1])
+            : "Subagent",
+        title: agentMatch ? title.replace(agentMatch[0], "").trim() || title : title,
+        status: data.session.status(session.id),
+        current: session.id === route.sessionID,
+        prefix,
+      }
+    })
 
     return result.filter((entry) => (filter.active ? entry.status === "running" : entry.status !== "running"))
   })

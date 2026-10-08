@@ -189,7 +189,9 @@ export function Session(props: {
   onCleanup(() => setEpilogue())
   const descendantSessionIDs = createMemo(() => {
     if (session()?.parentID) return []
-    return data.session.family(route.sessionID).filter((id) => id !== route.sessionID)
+    return data.session
+      .family(route.sessionID)
+      .filter((id) => id !== route.sessionID && data.session.get(id)?.kind !== "companion")
   })
   const permissions = createMemo(() => {
     if (session()?.parentID) return []
@@ -2257,6 +2259,9 @@ function UserMessage(props: { message: SessionMessageUser }) {
           flexShrink={0}
         >
           <text fg={theme.text.base}>{props.message.text}</text>
+          <Show when={props.message.metadata?.source === "companion"}>
+            <text fg={theme.text.muted}>via companion</text>
+          </Show>
           <Show when={skills().length}>
             <box flexDirection="row" paddingTop={1} gap={1} flexWrap="wrap">
               <For each={skills()}>
