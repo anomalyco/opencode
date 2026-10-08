@@ -1,5 +1,6 @@
 export * as PluginInternal from "./internal.js"
 
+import { DbQueryTool } from "../tool/plugin/db-query.js"
 import { LLMClient } from "@opencode/ai"
 import type { Plugin } from "@opencode/plugin/effect/plugin"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -234,6 +235,7 @@ const pre = [
   GlobTool.Plugin,
   GrepTool.Plugin,
   OpenCodeTools.Plugin,
+  DbQueryTool.Plugin,
   McpResourceTools.Plugin,
   QuestionTool.Plugin,
   ReadTool.Plugin,

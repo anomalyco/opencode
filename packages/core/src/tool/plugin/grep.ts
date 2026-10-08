@@ -10,6 +10,7 @@ import { Location } from "../../location.js"
 import { FileAccess } from "../../file-access.js"
 import { Permission } from "../../permission.js"
 import { Ripgrep } from "../../ripgrep.js"
+import { Tool } from "../../tool.js"
 import { RelativePath } from "../../schema.js"
 
 export const name = "grep"
@@ -70,8 +71,80 @@ export const Plugin = {
     const access = yield* FileAccess.Service
     const permission = yield* Permission.Service
 
+    const search = (input: typeof Input.Type, context: Tool.Context) =>
+      Effect.gen(function* () {
+        const source = { type: "tool" as const, messageID: context.messageID, id: context.id }
+        const target = yield* access.resolve({ path: input.path ?? "." })
+        yield* access.authorizeExternal([target], context)
+        yield* permission.assert({
+          action: name,
+          resources: [input.pattern],
+          save: ["*"],
+          metadata: {
+            root: ".",
+            path: input.path,
+            include: input.include,
+            literal: input.literal,
+            caseSensitive: input.caseSensitive,
+            limit: input.limit,
+          },
+          sessionID: context.sessionID,
+          agent: context.agent,
+          source,
+        })
+        const root = target.absolute
+        const type = yield* Environment.typeFollowing(environment.files, root).pipe(
+          Effect.catchTag("Environment.NotFound", () =>
+            Effect.fail(new ToolFailure({ message: `Search path does not exist: ${input.path ?? "."}` })),
+          ),
+        )
+        const cwd = type === "directory" ? root : path.dirname(root)
+        const limit = input.limit ?? FileSystem.DEFAULT_SEARCH_LIMIT
+        const matches = yield* ripgrep
+          .grep({
+            cwd,
+            pattern: input.pattern,
+            file: type === "file" ? path.basename(root) : undefined,
+            include: input.include,
+            literal: input.literal,
+            caseSensitive: input.caseSensitive,
+            limit: limit + 1,
+          })
+          .pipe(
+            Effect.timeoutOrElse({
+              duration: FileSystem.DEFAULT_SEARCH_TIMEOUT_MS,
+              orElse: () =>
+                Effect.fail(
+                  new ToolFailure({
+                    message: `Search timed out after ${FileSystem.DEFAULT_SEARCH_TIMEOUT_MS / 1_000} seconds. Consider using a more specific path or pattern.`,
+                  }),
+                ),
+            }),
+            Effect.map((result) =>
+              result.map((match) =>
+                FileSystem.Match.make({
+                  ...match,
+                  entry: FileSystem.Entry.make({
+                    ...match.entry,
+                    path: RelativePath.make(path.relative(location.directory, path.resolve(cwd, match.entry.path))),
+                  }),
+                }),
+              ),
+            ),
+          )
+        return { matches: matches.slice(0, limit), truncated: matches.length > limit }
+      }).pipe(
+        Effect.mapError((error) =>
+          error instanceof ToolFailure
+            ? error
+            : error instanceof Ripgrep.InvalidPatternError
+              ? new ToolFailure({ message: `Invalid regex pattern: ${error.message}` })
+              : new ToolFailure({ message: `Unable to grep for ${input.pattern}`, error }),
+        ),
+      )
+
     yield* ctx.tool
-      .transform((editor) =>
+      .transform((editor) => {
         editor.add({
           name,
           options: { codemode: false },
@@ -80,70 +153,7 @@ export const Plugin = {
           input: Input,
           output: Output,
           execute: (input, context) =>
-            Effect.gen(function* () {
-              const source = { type: "tool" as const, messageID: context.messageID, id: context.id }
-              const target = yield* access.resolve({ path: input.path ?? "." })
-              yield* access.authorizeExternal([target], context)
-              yield* permission.assert({
-                action: name,
-                resources: [input.pattern],
-                save: ["*"],
-                metadata: {
-                  root: ".",
-                  path: input.path,
-                  include: input.include,
-                  literal: input.literal,
-                  caseSensitive: input.caseSensitive,
-                  limit: input.limit,
-                },
-                sessionID: context.sessionID,
-                agent: context.agent,
-                source,
-              })
-              const root = target.absolute
-              const type = yield* Environment.typeFollowing(environment.files, root).pipe(
-                Effect.catchTag("Environment.NotFound", () =>
-                  Effect.fail(new ToolFailure({ message: `Search path does not exist: ${input.path ?? "."}` })),
-                ),
-              )
-              const cwd = type === "directory" ? root : path.dirname(root)
-              const limit = input.limit ?? FileSystem.DEFAULT_SEARCH_LIMIT
-              const matches = yield* ripgrep
-                .grep({
-                  cwd,
-                  pattern: input.pattern,
-                  file: type === "file" ? path.basename(root) : undefined,
-                  include: input.include,
-                  literal: input.literal,
-                  caseSensitive: input.caseSensitive,
-                  limit: limit + 1,
-                })
-                .pipe(
-                  Effect.timeoutOrElse({
-                    duration: FileSystem.DEFAULT_SEARCH_TIMEOUT_MS,
-                    orElse: () =>
-                      Effect.fail(
-                        new ToolFailure({
-                          message: `Search timed out after ${FileSystem.DEFAULT_SEARCH_TIMEOUT_MS / 1_000} seconds. Consider using a more specific path or pattern.`,
-                        }),
-                      ),
-                  }),
-                  Effect.map((result) =>
-                    result.map((match) =>
-                      FileSystem.Match.make({
-                        ...match,
-                        entry: FileSystem.Entry.make({
-                          ...match.entry,
-                          path: RelativePath.make(
-                            path.relative(location.directory, path.resolve(cwd, match.entry.path)),
-                          ),
-                        }),
-                      }),
-                    ),
-                  ),
-                )
-              return { matches: matches.slice(0, limit), truncated: matches.length > limit }
-            }).pipe(
+            search(input, context).pipe(
               Effect.map((result) => ({
                 output: result.matches,
                 content: toModelContent(
@@ -155,16 +165,42 @@ export const Plugin = {
                 ),
                 metadata: { matches: result.matches.length, truncated: result.truncated },
               })),
-              Effect.mapError((error) =>
-                error instanceof ToolFailure
-                  ? error
-                  : error instanceof Ripgrep.InvalidPatternError
-                    ? new ToolFailure({ message: `Invalid regex pattern: ${error.message}` })
-                    : new ToolFailure({ message: `Unable to grep for ${input.pattern}`, error }),
-              ),
             ),
-        }),
-      )
+        })
+        editor.add({
+          name: "fs_search",
+          options: { namespace: "opencode", codemode: true, permission: "grep" },
+          description:
+            "Search file contents as compact JSON inside execute. Filter matches in the program and return only the relevant summary.",
+          input: Schema.Struct({
+            ...Input.fields,
+            limit: Schema.optionalKey(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 50 }))),
+            maxChars: Schema.optionalKey(Schema.Int.check(Schema.isBetween({ minimum: 20, maximum: 1000 }))),
+          }),
+          output: Schema.Struct({
+            matches: Schema.Array(
+              Schema.Struct({ path: Schema.String, line: Schema.Int, text: Schema.String, truncated: Schema.Boolean }),
+            ),
+            count: Schema.Int,
+            truncated: Schema.Boolean,
+          }),
+          execute: (input, context) =>
+            search({ ...input, limit: input.limit ?? 10 }, context).pipe(
+              Effect.map((result) => {
+                const matches = result.matches.map((match) => {
+                  const chars = Array.from(match.text)
+                  return {
+                    path: match.entry.path,
+                    line: match.line,
+                    text: chars.slice(0, input.maxChars ?? 200).join(""),
+                    truncated: chars.length > (input.maxChars ?? 200),
+                  }
+                })
+                return { output: { matches, count: matches.length, truncated: result.truncated } }
+              }),
+            ),
+        })
+      })
       .pipe(Effect.orDie)
   }),
 }
