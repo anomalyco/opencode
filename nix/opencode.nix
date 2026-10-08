@@ -65,6 +65,9 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     install -Dm755 dist/opencode-*/bin/opencode $out/bin/opencode
     install -Dm644 schema.json $out/share/opencode/schema.json
 
+    # A Nix store install cannot self-update: the store is read-only, and
+    # an in-app update attempt fails and can leave a running session in a
+    # bad state. Skip the updater entirely; users update through nix.
     wrapProgram $out/bin/opencode \
       --prefix PATH : ${
         lib.makeBinPath (
@@ -74,7 +77,8 @@ stdenvNoCC.mkDerivation (finalAttrs: {
           # bun runs sysctl to detect if running on rosetta2
           ++ lib.optional stdenvNoCC.hostPlatform.isDarwin sysctl
         )
-      }
+      } \
+      --set OPENCODE_DISABLE_AUTOUPDATE 1
 
     runHook postInstall
   '';
@@ -91,7 +95,10 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     writableTmpDirAsHomeHook
   ];
   doInstallCheck = true;
-  versionCheckKeepEnvironment = [ "HOME" "OPENCODE_DISABLE_MODELS_FETCH" ];
+  versionCheckKeepEnvironment = [
+    "HOME"
+    "OPENCODE_DISABLE_MODELS_FETCH"
+  ];
   versionCheckProgramArg = "--version";
 
   passthru = {
