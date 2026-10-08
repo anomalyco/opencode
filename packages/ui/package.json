@@ -1,6 +1,6 @@
 {
   "name": "@opencode/ui",
-  "version": "2.0.24",
+  "version": "2.0.25",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -117,7 +117,6 @@
     "fuzzysort": "catalog:",
     "katex": "0.16.47",
     "marked": "catalog:",
-    "marked-katex-extension": "5.1.13",
     "marked-shiki": "catalog:",
     "motion": "12.34.5",
     "remeda": "catalog:",

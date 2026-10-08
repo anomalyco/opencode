@@ -60,6 +60,7 @@ const builtins = new Map<string, () => Promise<unknown>>([
   ["@opencode/ai/providers/alibaba/messages", () => import("@opencode/ai/providers/alibaba/messages")],
   ["@opencode/ai/providers/alibaba/responses", () => import("@opencode/ai/providers/alibaba/responses")],
   ["@opencode/ai/providers/anthropic", () => import("@opencode/ai/providers/anthropic")],
+  ["@opencode/ai/providers/anthropic-compatible", () => import("@opencode/ai/providers/anthropic-compatible")],
   ["@opencode/ai/providers/azure", () => import("@opencode/ai/providers/azure")],
   ["@opencode/ai/providers/azure/chat", () => import("@opencode/ai/providers/azure/chat")],
   ["@opencode/ai/providers/azure/responses", () => import("@opencode/ai/providers/azure/responses")],
@@ -95,6 +96,14 @@ const builtins = new Map<string, () => Promise<unknown>>([
   ["@opencode/ai/providers/openai/chat", () => import("@opencode/ai/providers/openai/chat")],
   ["@opencode/ai/providers/openai/responses", () => import("@opencode/ai/providers/openai/responses")],
   ["@opencode/ai/providers/openai-compatible", () => import("@opencode/ai/providers/openai-compatible")],
+  [
+    "@opencode/ai/providers/openai-compatible/responses",
+    () => import("@opencode/ai/providers/openai-compatible/responses"),
+  ],
+  [
+    "@opencode/ai/providers/openai-compatible-responses",
+    () => import("@opencode/ai/providers/openai-compatible-responses"),
+  ],
   ["@opencode/ai/providers/openrouter", () => import("@opencode/ai/providers/openrouter")],
   ["@opencode/ai/providers/togetherai", () => import("@opencode/ai/providers/togetherai")],
   ["@opencode/ai/providers/venice", () => import("@opencode/ai/providers/venice")],

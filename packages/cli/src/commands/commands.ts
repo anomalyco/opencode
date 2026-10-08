@@ -530,6 +530,10 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
           ),
           Flag.optional,
         ),
+        remote: Flag.boolean("remote").pipe(
+          Flag.withDescription("Pair through the OpenTunnel remote address, enabling remote access if needed"),
+          Flag.withDefault(false),
+        ),
       },
     }),
     Spec.make("serve", {

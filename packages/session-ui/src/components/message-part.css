@@ -817,6 +817,8 @@
 
 [data-component="tool-part-wrapper"] {
   width: 100%;
+  /* Revealing a tool lands its title just below the headers that stick above it. */
+  scroll-margin-top: var(--sticky-accordion-top, 0px);
 }
 
 [data-component="dock-prompt"][data-kind="permission"] {

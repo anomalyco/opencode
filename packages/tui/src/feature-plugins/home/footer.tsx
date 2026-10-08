@@ -82,7 +82,7 @@ function View(props: { context: Plugin.Context }) {
   const visibility = createMemo(() => homeFooterVisibility(dimensions().width))
 
   return (
-    <Show when={dimensions().height >= 12 && dimensions().width >= 44}>
+    <Show when={dimensions().height >= 14 && dimensions().width >= 44}>
       <box
         width="100%"
         paddingTop={dimensions().height < 16 ? 0 : 1}

@@ -48,7 +48,10 @@ export interface Interface {
   readonly refresh: () => Effect.Effect<boolean, Error>
   readonly add: (origin: string) => Effect.Effect<Entry, Error>
   readonly remove: (origin: string) => Effect.Effect<void>
+  /** Resolves and caches the configuration for a registered source. */
   readonly resolve: (entry: Entry, variables: Readonly<Record<string, string>>) => Effect.Effect<Config[], Error>
+  /** Returns the last configuration resolved for an origin, kept until the source is removed. */
+  readonly cached: (origin: string) => Effect.Effect<Config[]>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/WellKnown") {}
@@ -97,6 +100,9 @@ const resolveEntry = Effect.fnUntraced(function* (entry: Entry, variables: Reado
 
 const sourcesKey = "wellknown:sources"
 const Sources = Schema.Array(Schema.String)
+const manifestKey = (origin: string) => `wellknown:manifest:${origin}`
+const configKey = (origin: string) => `wellknown:config:${origin}`
+const Configs = Schema.Array(Config)
 
 const layer = Layer.effect(
   Service,
@@ -107,7 +113,22 @@ const layer = Layer.effect(
     const cache = yield* Ref.make(new Map<string, Entry>())
     const lock = Semaphore.makeUnsafe(1)
     const loadEntry = Effect.fn("WellKnown.loadEntry")(function* (origin: string) {
-      const manifest = yield* inspect(origin).pipe(Effect.provideService(HttpClient.HttpClient, http))
+      const manifest = yield* inspect(origin).pipe(
+        Effect.provideService(HttpClient.HttpClient, http),
+        Effect.tap((manifest) => kv.set(manifestKey(origin), manifest)),
+        // An unreachable source keeps its last manifest so its remote config still loads after a restart.
+        Effect.catch((error) =>
+          kv
+            .get(manifestKey(origin))
+            .pipe(
+              Effect.flatMap((cached) =>
+                Schema.is(Manifest)(cached)
+                  ? Effect.logWarning("failed to load wellknown manifest", { origin, error }).pipe(Effect.as(cached))
+                  : Effect.fail(error),
+              ),
+            ),
+        ),
+      )
       return { origin, integrationID: Integration.ID.make(origin), manifest }
     })
 
@@ -167,6 +188,8 @@ const layer = Layer.effect(
             sourcesKey,
             origins.filter((item) => item !== origin),
           )
+          yield* kv.remove(manifestKey(origin))
+          yield* kv.remove(configKey(origin))
           yield* Ref.update(cache, (current) => {
             const next = new Map(current)
             next.delete(origin)
@@ -176,9 +199,15 @@ const layer = Layer.effect(
         },
         (effect, _value) => lock.withPermit(effect),
       ),
-      resolve: Effect.fn("WellKnown.resolveEntry")((entry, variables) =>
-        resolveEntry(entry, variables).pipe(Effect.provideService(HttpClient.HttpClient, http)),
-      ),
+      resolve: Effect.fn("WellKnown.resolveEntry")(function* (entry, variables) {
+        const configs = yield* resolveEntry(entry, variables).pipe(Effect.provideService(HttpClient.HttpClient, http))
+        yield* kv.set(configKey(entry.origin), configs)
+        return configs
+      }),
+      cached: Effect.fn("WellKnown.cached")(function* (origin) {
+        const value = yield* kv.get(configKey(origin))
+        return Schema.is(Configs)(value) ? [...value] : []
+      }),
     })
   }),
 )

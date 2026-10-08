@@ -116,6 +116,10 @@ function copyBinary(source) {
 
 function resolveBinary(name) {
   const packagePath = require.resolve(`${name}/package.json`)
+  // Package managers keep an older platform package when the matching version is not yet on the registry,
+  // which would silently install the previous release under the new launcher.
+  const version = JSON.parse(fs.readFileSync(packagePath, "utf8")).version
+  if (version !== dependencies[name]) throw new Error(`${name} is ${version}, expected ${dependencies[name]}`)
   return path.join(path.dirname(packagePath), "bin", sourceBinary)
 }
 
