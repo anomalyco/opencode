@@ -1169,3 +1169,115 @@ itFragmentFailure.live("session.processor effect tests retain partial legacy par
     { config: cfg },
   ),
 )
+
+const withIdleTimeout = <A, E, R>(ms: number, effect: Effect.Effect<A, E, R>) =>
+  Effect.acquireUseRelease(
+    Effect.sync(() => {
+      const previous = process.env["OPENCODE_STREAM_IDLE_TIMEOUT_MS"]
+      process.env["OPENCODE_STREAM_IDLE_TIMEOUT_MS"] = String(ms)
+      return previous
+    }),
+    () => effect,
+    (previous) =>
+      Effect.sync(() => {
+        if (previous === undefined) delete process.env["OPENCODE_STREAM_IDLE_TIMEOUT_MS"]
+        else process.env["OPENCODE_STREAM_IDLE_TIMEOUT_MS"] = previous
+      }),
+  )
+
+it.live("session.processor effect tests stop a stream that goes silent", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      withIdleTimeout(
+        400,
+        Effect.gen(function* () {
+          const { processors, session, provider } = yield* boot()
+
+          yield* llm.push(reply().text("partial").hang())
+
+          const chat = yield* session.create({})
+          const parent = yield* user(chat.id, "silent")
+          const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+          const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+          const handle = yield* processors.create({ assistantMessage: msg, sessionID: chat.id, model: mdl })
+
+          const value = yield* handle.process({
+            user: {
+              id: parent.id,
+              sessionID: chat.id,
+              role: "user",
+              time: parent.time,
+              agent: parent.agent,
+              model: { providerID: ref.providerID, modelID: ref.modelID },
+            } satisfies SessionV1.User,
+            sessionID: chat.id,
+            model: mdl,
+            agent: agent(),
+            system: [],
+            messages: [{ role: "user", content: "silent" }],
+            tools: {},
+          })
+
+          expect(value).toBe("stop")
+          expect(yield* llm.calls).toBe(1)
+          expect(JSON.stringify(handle.message.error)).toContain("No response from the provider")
+          const status = yield* SessionStatus.Service
+          expect((yield* status.get(chat.id)).type).toBe("idle")
+        }),
+      ),
+    { config: (url) => providerCfg(url) },
+  ),
+)
+
+it.live("session.processor effect tests do not stop a stream while a tool runs", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      withIdleTimeout(
+        400,
+        Effect.gen(function* () {
+          const { processors, session, provider } = yield* boot()
+
+          yield* llm.tool("lookup", { query: "weather" })
+
+          const chat = yield* session.create({})
+          const parent = yield* user(chat.id, "slow tool")
+          const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+          const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+          const handle = yield* processors.create({ assistantMessage: msg, sessionID: chat.id, model: mdl })
+
+          const value = yield* handle.process({
+            user: {
+              id: parent.id,
+              sessionID: chat.id,
+              role: "user",
+              time: parent.time,
+              agent: parent.agent,
+              model: { providerID: ref.providerID, modelID: ref.modelID },
+            } satisfies SessionV1.User,
+            sessionID: chat.id,
+            model: mdl,
+            agent: agent(),
+            system: [],
+            messages: [{ role: "user", content: "slow tool" }],
+            tools: {
+              lookup: tool({
+                description: "Look up information",
+                inputSchema: z.object({ query: z.string() }),
+                execute: async (input) => {
+                  await new Promise((resolve) => setTimeout(resolve, 1_500))
+                  return { title: "Weather lookup", output: `result:${input.query}`, metadata: {} }
+                },
+              }),
+            },
+          })
+
+          const parts = yield* MessageV2.parts(msg.id)
+          const call = parts.find((part): part is SessionV1.ToolPart => part.type === "tool")
+          expect(value).toBe("continue")
+          expect(handle.message.error).toBeUndefined()
+          expect(call?.state.status).toBe("completed")
+        }),
+      ),
+    { config: (url) => providerCfg(url) },
+  ),
+)

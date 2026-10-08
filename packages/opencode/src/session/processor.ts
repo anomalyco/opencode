@@ -2,7 +2,7 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Image } from "@/image/image"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
-import { Cause, Deferred, Effect, Exit, Layer, Context, Scope, Schema } from "effect"
+import { Cause, Clock, Deferred, Effect, Exit, Layer, Context, Scope, Schema } from "effect"
 import * as Stream from "effect/Stream"
 import { Agent } from "@/agent/agent"
 import { Config } from "@/config/config"
@@ -638,6 +638,21 @@ const layer = Layer.effect(
         yield* status.set(ctx.sessionID, { type: "idle" })
       })
 
+      // A provider stream that stays open but sends nothing leaves the session "working" forever.
+      // Tool execution can legitimately be silent for hours (subagents, long commands, permission
+      // prompts), so the clock only runs while no tool is executing.
+      const idleWatchdog = (idle: { at: number; tools: Set<string> }) =>
+        Effect.gen(function* () {
+          const limit = streamIdleTimeoutMs()
+          if (limit <= 0) return yield* Effect.never
+          while (true) {
+            yield* Effect.sleep(Math.max(1, Math.min(limit / 4, 60_000)))
+            const now = yield* Clock.currentTimeMillis
+            if (idle.tools.size > 0) idle.at = now
+            if (now - idle.at >= limit) return yield* Effect.fail(new StreamIdleTimeoutError(limit))
+          }
+        })
+
       const process = Effect.fn("SessionProcessor.process")(function* (streamInput: LLM.StreamInput) {
         yield* Effect.logInfo("process", {
           "session.id": input.sessionID,
@@ -652,11 +667,20 @@ const layer = Layer.effect(
             ctx.reasoningMap = {}
             yield* status.set(ctx.sessionID, { type: "busy" })
             const stream = llm.stream(streamInput)
+            const idle = { at: yield* Clock.currentTimeMillis, tools: new Set<string>() }
 
             yield* stream.pipe(
-              Stream.tap((event) => handleEvent(event)),
+              Stream.tap((event) =>
+                Effect.gen(function* () {
+                  idle.at = yield* Clock.currentTimeMillis
+                  if (event.type === "tool-call") idle.tools.add(event.id)
+                  if (event.type === "tool-result" || event.type === "tool-error") idle.tools.delete(event.id)
+                  yield* handleEvent(event)
+                }),
+              ),
               Stream.takeUntil(() => ctx.needsCompaction),
               Stream.runDrain,
+              Effect.raceFirst(idleWatchdog(idle)),
             )
           }).pipe(
             Effect.onInterrupt(() =>
@@ -730,3 +754,20 @@ export const node = LayerNode.make({
 })
 
 export * as SessionProcessor from "./processor"
+
+const STREAM_IDLE_TIMEOUT_MS = 30 * 60_000
+
+function streamIdleTimeoutMs() {
+  const raw = process.env["OPENCODE_STREAM_IDLE_TIMEOUT_MS"]
+  const value = raw ? Number(raw) : NaN
+  return Number.isFinite(value) ? value : STREAM_IDLE_TIMEOUT_MS
+}
+
+export class StreamIdleTimeoutError extends Error {
+  constructor(limit: number) {
+    super(
+      `No response from the provider for ${limit >= 60_000 ? `${Math.round(limit / 60_000)} minutes` : `${Math.round(limit / 1000)} seconds`}. The turn was stopped; send a message to retry.`,
+    )
+    this.name = "StreamIdleTimeoutError"
+  }
+}
