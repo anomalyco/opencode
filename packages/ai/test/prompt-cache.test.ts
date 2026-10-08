@@ -46,6 +46,35 @@ describe("native prompt cache options", () => {
   )
 
   for (const route of [OpenAIChat.route, OpenAIResponses.route]) {
+    it.effect(`sends GPT-5.6+ cache options unchanged on ${route.id}`, () =>
+      Effect.gen(function* () {
+        for (const id of [
+          "gpt-5.6",
+          "gpt-5.6-2026-08-01",
+          "gpt-5.10",
+          "gpt-6-astra",
+          "gpt-6.1-sol",
+          "deployment-alias",
+        ]) {
+          const request = LLM.request({ model: route.model({ id }), prompt: "Question" })
+          for (const options of [{}, { ttl: "30m" }, { mode: "implicit", ttl: "30m" }, { mode: "explicit" }] as const) {
+            const configured = yield* PromptCache.apply(request, { prompt_cache_options: options })
+            const compiled = yield* compileRequest(configured)
+            expect(compiled.body).toMatchObject({ prompt_cache_options: options })
+            expect(compiled.body).not.toHaveProperty("prompt_cache_retention")
+          }
+          expect((yield* compileRequest(request)).body).not.toHaveProperty("prompt_cache_options")
+          const combined = yield* PromptCache.apply(request, {
+            prompt_cache_retention: "24h",
+            prompt_cache_options: { ttl: "30m" },
+          })
+          expect((yield* compileRequest(combined)).body).toMatchObject({
+            prompt_cache_retention: "24h",
+            prompt_cache_options: { ttl: "30m" },
+          })
+        }
+      }),
+    )
     it.effect(`sends OpenAI retention on ${route.id}`, () =>
       Effect.gen(function* () {
         const request = LLM.request({ model: route.model({ id: "gpt-5.4" }), prompt: "Question" })
@@ -72,11 +101,18 @@ describe("native prompt cache options", () => {
         PromptCache.apply(anthropic, { prompt_cache_retention: "24h" }),
         PromptCache.apply(openai, { cache_control: { type: "ephemeral" } }),
         PromptCache.apply(anthropic, { cache_control: { type: "ephemeral" }, prompt_cache_retention: "24h" }),
+        PromptCache.apply(anthropic, { prompt_cache_options: { ttl: "30m" } }),
+        PromptCache.apply(anthropic, { cache_control: { type: "ephemeral" }, prompt_cache_options: {} }),
+        ...["gpt-4.1", "gpt-5", "gpt-5.5"].map((id) =>
+          PromptCache.apply(LLM.request({ model: OpenAIResponses.route.model({ id }) }), {
+            prompt_cache_options: { ttl: "30m" },
+          }),
+        ),
         PromptCache.apply(LLM.request({ model: OpenAIResponses.route.model({ id: "gpt-5.5" }) }), {
           prompt_cache_retention: "in_memory",
         }),
         PromptCache.apply(LLM.request({ model: OpenAIResponses.route.model({ id: "gpt-6.1-sol" }) }), {
-          prompt_cache_retention: "24h",
+          prompt_cache_retention: "in_memory",
         }),
       ]
       for (const failure of failures) {
@@ -87,25 +123,35 @@ describe("native prompt cache options", () => {
   )
 })
 
-testEffect(
-  dynamicResponse(({ request, text, respond }) =>
-    Effect.sync(() => {
-      expect(new URL(request.url).pathname).toBe("/v1/responses/compact")
-      expect(JSON.parse(text)).toMatchObject({ prompt_cache_retention: "24h" })
-      return respond(
-        JSON.stringify({
-          object: "response.compaction",
-          output: [{ type: "compaction", id: "cmp_cache", encrypted_content: "opaque" }],
-        }),
+for (const scenario of [
+  { model: "gpt-5.4", options: { prompt_cache_retention: "24h" } },
+  { model: "gpt-5.6", options: { prompt_cache_options: { ttl: "30m" } } },
+  { model: "gpt-6.1-sol", options: { prompt_cache_options: { mode: "explicit", ttl: "30m" } } },
+  {
+    model: "gpt-5.6",
+    options: { prompt_cache_retention: "24h", prompt_cache_options: { mode: "implicit", ttl: "30m" } },
+  },
+] as const) {
+  testEffect(
+    dynamicResponse(({ request, text, respond }) =>
+      Effect.sync(() => {
+        expect(new URL(request.url).pathname).toBe("/v1/responses/compact")
+        expect(JSON.parse(text)).toMatchObject(scenario.options)
+        return respond(
+          JSON.stringify({
+            object: "response.compaction",
+            output: [{ type: "compaction", id: "cmp_cache", encrypted_content: "opaque" }],
+          }),
+        )
+      }),
+    ),
+  ).effect(`preserves cache options on native compaction: ${scenario.model} ${JSON.stringify(scenario.options)}`, () =>
+    Effect.gen(function* () {
+      const request = yield* PromptCache.apply(
+        LLM.request({ model: OpenAI.configure({ apiKey: "test" }).responses(scenario.model), prompt: "Question" }),
+        scenario.options,
       )
+      yield* LLMClient.compact(request)
     }),
-  ),
-).effect("preserves retention on native OpenAI compaction requests", () =>
-  Effect.gen(function* () {
-    const request = yield* PromptCache.apply(
-      LLM.request({ model: OpenAI.configure({ apiKey: "test" }).responses("gpt-5.4"), prompt: "Question" }),
-      { prompt_cache_retention: "24h" },
-    )
-    yield* LLMClient.compact(request)
-  }),
-)
+  )
+}

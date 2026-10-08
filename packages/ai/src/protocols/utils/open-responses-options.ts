@@ -38,6 +38,21 @@ export const PromptCacheRetention = Schema.declare<PromptCacheRetention>(
   { title: "PromptCacheRetention" },
 )
 
+export type PromptCacheMode = "implicit" | "explicit" | (string & {})
+export type PromptCacheTTL = "30m" | (string & {})
+export const PromptCacheOptions = Schema.Struct({
+  mode: Schema.optional(
+    Schema.declare<PromptCacheMode>((value): value is PromptCacheMode => typeof value === "string", {
+      title: "PromptCacheMode",
+    }),
+  ),
+  ttl: Schema.optional(
+    Schema.declare<PromptCacheTTL>((value): value is PromptCacheTTL => typeof value === "string", {
+      title: "PromptCacheTTL",
+    }),
+  ),
+})
+
 export const TextVerbositySchema = TextVerbosity
 export const ResponseIncludableSchema = Schema.declare<ResponseIncludable>(
   (value): value is ResponseIncludable => typeof value === "string",
@@ -62,6 +77,7 @@ export const Options = Schema.Struct({
   metadata: lenient(Schema.Record(Schema.String, Schema.String)),
   safetyIdentifier: lenient(Schema.String),
   promptCacheRetention: lenient(PromptCacheRetention),
+  promptCacheOptions: lenient(PromptCacheOptions),
   streamOptions: lenient(StreamOptions),
   topLogprobs: lenient(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 20 }))),
   reasoningEffort: lenient(ReasoningEffort),

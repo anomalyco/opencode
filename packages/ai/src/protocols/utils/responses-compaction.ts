@@ -34,9 +34,7 @@ const Body = Schema.Struct({
   tools: Schema.optional(Schema.Array(JsonObject)),
   prompt_cache_key: optionalNull(Schema.String),
   prompt_cache_retention: optionalNull(Schema.String),
-  prompt_cache_options: optionalNull(
-    Schema.Struct({ mode: Schema.optional(Schema.String), ttl: Schema.optional(Schema.String) }),
-  ),
+  prompt_cache_options: optionalNull(OpenResponsesOptions.PromptCacheOptions),
 })
 
 const Text = Schema.Union([OpenResponses.OpenResponsesInputText, OpenResponses.OpenResponsesOutputText])
@@ -90,6 +88,7 @@ export const make = (
     // The standalone compaction endpoint rejects histories containing configuration updates.
     const native = yield* OpenResponses.lowerConversation(stripEffortUpdates(request), adapter)
     const generation = OpenResponses.lowerGeneration(request)
+    const providerOptions = OpenResponsesOptions.resolve(request)
     const tools = request.tools.length === 0 ? undefined : yield* lowerTools(request)
     const body = yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(Body))(
       mergeJsonRecords(
@@ -102,7 +101,8 @@ export const make = (
           parallel_tool_calls: generation.parallel_tool_calls,
           tools,
           prompt_cache_key: generation.prompt_cache_key,
-          prompt_cache_retention: OpenResponsesOptions.resolve(request).promptCacheRetention,
+          prompt_cache_retention: providerOptions.promptCacheRetention,
+          prompt_cache_options: providerOptions.promptCacheOptions,
         },
         request.http?.body,
       ),

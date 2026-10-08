@@ -10,8 +10,15 @@ export const Control = Schema.Struct({
 
 export const Retention = Schema.Literals(["in_memory", "24h"]).annotate({ identifier: "PromptCache.Retention" })
 
+export const OpenAIOptions = Schema.Struct({
+  mode: Schema.Literals(["implicit", "explicit"]).pipe(optional),
+  ttl: Schema.Literal("30m").pipe(optional),
+}).annotate({ identifier: "PromptCache.OpenAIOptions", parseOptions: { onExcessProperty: "error" } })
+export interface OpenAIOptions extends Schema.Schema.Type<typeof OpenAIOptions> {}
+
 export const Options = Schema.Struct({
   cache_control: Control.pipe(optional),
   prompt_cache_retention: Retention.pipe(optional),
+  prompt_cache_options: OpenAIOptions.pipe(optional),
 }).annotate({ identifier: "PromptCache.Options", parseOptions: { onExcessProperty: "error" } })
 export interface Options extends Schema.Schema.Type<typeof Options> {}

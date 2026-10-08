@@ -61,7 +61,13 @@ describe("SessionModelRequest cache rules", () => {
                   options: { cache_control: { type: "ephemeral", ttl: "1h" } },
                 },
               ],
-              openai: [{ when: { model: "gpt-5.4" }, options: { prompt_cache_retention: "24h" } }],
+              openai: [
+                { when: { model: "gpt-5.4" }, options: { prompt_cache_retention: "24h" } },
+                ...["gpt-5.6", "gpt-6.1-sol"].map((model) => ({
+                  when: { model },
+                  options: { prompt_cache_options: { mode: "implicit", ttl: "30m" } },
+                })),
+              ],
             },
           }),
         }),
@@ -124,6 +130,22 @@ describe("SessionModelRequest cache rules", () => {
           messages: [Message.user("Question")],
         })
         expect((yield* compileRequest(prepared.request)).body).toMatchObject({ prompt_cache_retention: "24h" })
+        for (const id of ["gpt-5.6", "gpt-6.1-sol"]) {
+          const newer = yield* requests[kind]({
+            session: child,
+            agent: Agent.ID.make("research"),
+            model: SessionRunnerModel.resolved(OpenAIResponses.route.model({ id }), {
+              capabilities: model.capabilities,
+              cost: [],
+              limit: model.limit,
+            }),
+            system: [],
+            messages: [Message.user("Question")],
+          })
+          const compiled = yield* compileRequest(newer.request)
+          expect(compiled.body).toMatchObject({ prompt_cache_options: { mode: "implicit", ttl: "30m" } })
+          expect(compiled.body).not.toHaveProperty("prompt_cache_retention")
+        }
       }
       // A resumed session uses the current configuration, not the first request's selection.
       yield* config.setEntries([])
