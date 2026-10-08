@@ -6,33 +6,67 @@ CDP, captured traffic, evaluations, and capture files. Core only registers the
 plugin. Neither endpoint imports the other's implementation.
 
 ```js
-const tab = await tools.browser.tabs.open({ url: "https://example.com" })
-return await tools.browser.snapshot({ tabID: tab.id })
+const tab = await tools.browser.tabs.open({ url: "http://localhost:3000", key: "app" })
+await tools.browser.click({ tabID: tab.id, target: 'role=button[name="Sign in"]' })
+await tools.browser.wait({ tabID: tab.id, text: "Welcome" })
+return await tools.browser.screenshot({ tabID: tab.id, viewport: { width: 1280, height: 800 }, path: "pr/after.png" })
 ```
 
 All page operations require a `tabID` returned by `browser.tabs.open/list`.
-Focus selects the visible Review tab, not an implicit command target. Discover
-current signatures with `search({ namespace: "browser" })`.
-Screenshots require a focused, visible tab; call `browser.tabs.focus` first.
+Focus only shows a tab to the user; no tool needs it. Discover current
+signatures with `search({ namespace: "browser" })`.
+
+## Design
+
+The tool surface follows what agents did in 96 recorded sessions (2,226 Code
+Mode calls). Three guarantees remove most of their failures:
+
+- **Agent tabs always render.** Tabs the agent opens are offscreen Chromium
+  pages. They paint, lay out, run animation frames, and take input whether the
+  Review pane shows them, the app is minimized, or nobody watches. A presenter
+  view in the pane streams their frames and forwards the user's input. An
+  unwatched, idle tab stops painting; its scripts keep running. The user's own
+  tabs stay native views.
+- **One locator grammar.** Every element parameter (`target`, `from`, `to`)
+  takes a ref from `snapshot`/`find`, CSS, `text=`, `role=…[name=…]`, `label=`,
+  `placeholder=`, `testid=`, or `xpath=`, chained with `>>` and `nth=`. Locators
+  resolve when the action runs and search open shadow roots. Actions wait until
+  the element is attached, visible, stable, enabled, and not covered, send real
+  input, and return what changed (`changed.url`, `title`, `dialog`, `errors`).
+- **Time is a value.** `wait` takes one condition (`load`, `text`, `gone`,
+  `target`+`state`, `url`, `script`, `idle`) and returns `{ met, elapsedMs }`;
+  a timeout is a result, not an error, so no `.catch` is needed. With no
+  condition it is a plain delay, the way to pause in Code Mode, which has no
+  timers. `timeout` is accepted as an alias of `timeoutMs`, the name agents
+  guessed most.
+
+Refs stay valid until their element leaves the page; a later snapshot or find
+does not invalidate them.
 
 ## Tools
 
-- Tabs: `tabs.list`, `tabs.open`, `tabs.focus`, `tabs.close`.
-- Navigation: `navigate`, `back`, `forward`, `reload`, `stop`, `frames`.
-- Observation: `snapshot`, `find`, `evaluate`, `wait`, `screenshot`.
-- Input: `click`, `hover`, `drag`, `fill`, `fill_form`, `select`, `check`, `press`, `scroll`, `dialog`.
-- Files: `files.upload`, `files.drop`, `files.list`, `files.get`.
-- Diagnostics: `console`, `network.list`, `network.get`.
-- Performance: `trace.start`, `trace.stop`, `trace.analyze`, `cpu.start`, `cpu.stop`, `cpu.analyze`.
-- Memory: `heap.snapshot`, `heap.summary`, `heap.query`, `heap.object`, `heap.compare`.
-- Audits: `lighthouse` (accessibility, SEO, best practices).
+- Tabs: `tabs.list`, `tabs.open` (`url` or a local `path`, `key` to reuse, `viewport`), `tabs.focus`, `tabs.close`, `preview`.
+- Navigation: `navigate` (`url`, `path`, or `history`), `reload` (returns the errors it caused), `frames`.
+- Reading: `snapshot` (interactive or full outline with refs), `find` (whole-DOM search with facts and styles), `read` (text or Markdown, paginated), `evaluate` (expression, statements, or function with `args`; `saveTo` for large results).
+- Input: `click`, `hover`, `drag`, `fill` (any form control), `type` (real keystrokes), `press`, `scroll`, `dialog`, `upload`, `drop`.
+- Time: `wait`, `watch` (sample a script over time and return the changes).
+- Capture: `screenshot` (any time, optional `viewport` and server `path`), `files.list`, `files.get`.
+- Diagnostics: `console`, `network.list`, `network.get` (with WebSocket frames); both lists take `since` cursors.
+- Environment: `emulate` (viewport, color scheme, motion, media, offline, time zone, locale, user agent), `storage`, `addInitScript`.
+- Users: `handoff` asks the user to act in a tab (sign in, solve a challenge) and waits for Done.
+- Performance: `profile.start`/`profile.stop` (trace or CPU, analysis inline), `heap.snapshot` (summary and growth inline), `heap.query`, `heap.object`, `lighthouse`.
+
+Local files open through `path`: the server serves the file's folder (the whole
+workspace for files inside it) on a loopback address with an unguessable
+prefix, which the desktop reaches through its server-network tunnel. Subagent
+sessions use the browser of the session that started them.
 
 The source of truth for inputs, descriptions, and outputs is
 `Browser.Operations` in `@opencode/plugin-browser/rpc`.
 
-The plugin entrypoint only composes its two owners: `connection.ts` manages
-desktop attachments and pending RPC requests; `tools.ts` runs the tool workflow.
-Server-local file IO stays in `files.ts`. The public `rpc.ts` entrypoint remains
+The plugin entrypoint composes its owners: `connection.ts` manages desktop
+attachments and pending RPC requests; `tools.ts` runs the tool workflow;
+`serve.ts` serves local files to tabs. Server-local file IO stays in `files.ts`. The public `rpc.ts` entrypoint remains
 pure and does not load any of these runtime modules.
 
 ## Tests
@@ -46,7 +80,7 @@ The desktop implementation is the built-in `browser` GUI extension
 The plugin-owned contract is `@opencode/plugin-browser/rpc`. This entrypoint
 contains only schemas and descriptions; it does not load the server plugin or
 filesystem code. The desktop subscribes
-to control events before starting `attach` with `version: 4`. The attachment call
+to control events before starting `attach` with `version: Browser.VERSION`. The attachment call
 stays pending for its lifetime. A matching `attached` event is the readiness barrier.
 
 - `state` publishes the authoritative tab inventory. Tab lookups read only this
@@ -76,7 +110,7 @@ attached for the model to inspect. Temporary exports are not deleted on plugin
 reload, so a returned path remains usable; they follow the host's temporary-file
 lifetime.
 
-Each transfer is limited to 5 MiB total. There is no shared filesystem assumption,
+Each transfer is limited to 25 MiB total. There is no shared filesystem assumption,
 resumable file-transfer service or object store. Browsing uses the connected
 server's network: `localhost:8000` reaches that server's port 8000, while Chromium
 and page JavaScript still run on the desktop. Dev-server ports need not be public.
@@ -104,9 +138,13 @@ validation does not make page text an instruction or grant it authority.
 
 ## Recovering from errors
 
-Errors name the failed operation and the next supported action. Refresh tab IDs
-with `browser.tabs.list`, element refs with `browser.snapshot`, and frame IDs with
-`browser.frames`. File and network request IDs must come from the same tab's
+Errors name the failed operation and the next supported action, with a code:
+`not_found` (nothing matched the locator; the message lists similar visible
+elements), `not_actionable` (it matched but was covered, disabled, hidden, or
+moving), `tab_hidden` (one of the user's own tabs is off screen; open the page in
+an agent tab), `timeout`, `invalid`, `navigation_failed`, `disconnected`, and
+`tab_unavailable`. Refresh tab IDs with `browser.tabs.list` and frame IDs with
+`browser.frames`; prefer locators to stale refs. File and network request IDs must come from the same tab's
 current listing. Trace, CPU, and heap files are not interchangeable.
 
 A timeout, cancellation, or disconnection does not prove the action never ran.

@@ -100,7 +100,7 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
           )
           yield* grant(input.sessionID)
           yield* rpc.events
-            .emit("control", { type: "attached", connectionID: input.connectionID, version: 4 })
+            .emit("control", { type: "attached", connectionID: input.connectionID, version: Browser.VERSION })
             .pipe(Effect.orDie)
           return yield* Deferred.await(browser.closed)
         }).pipe(Effect.scoped),
@@ -162,13 +162,27 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
     Effect.forkScoped({ startImmediately: true }),
   )
 
+  // A subagent's session has no desktop of its own; it borrows the browser of the nearest session that started it.
+  const attachment = (sessionID: Session.ID, depth = 0): Effect.Effect<Attachment | undefined> => {
+    const browser = browsers.get(sessionID)
+    if (browser || depth >= 8) return Effect.succeed(browser)
+    return ctx.session.get({ sessionID }).pipe(
+      Effect.option,
+      Effect.flatMap((session) =>
+        session._tag === "Some" && session.value.parentID
+          ? attachment(session.value.parentID, depth + 1)
+          : Effect.succeed(undefined),
+      ),
+    )
+  }
+
   return {
     target: Effect.fn("BrowserConnection.target")(function* (sessionID: Session.ID, action: Browser.Action) {
-      const browser = browsers.get(sessionID)
+      const browser = yield* attachment(sessionID)
       if (!browser)
         return yield* new Tool.Error({
           message:
-            "[browser.disconnected] No desktop browser is connected to this session. Open this session in the desktop app and wait for it to connect. Then call browser.tabs.list({}). Repeating browser actions while disconnected will not help.",
+            "[browser.disconnected] No desktop browser is connected to this session or the session that started it. Open the session in the desktop app and wait for it to connect. Then call browser.tabs.list({}). Repeating browser actions while disconnected will not help.",
         })
       const tab = "tabID" in action ? browser.state.tabs.find((tab) => tab.id === action.tabID) : undefined
       if ("tabID" in action && !tab)
@@ -211,7 +225,7 @@ const request = Effect.fn("BrowserConnection.request")(function* (
   const requestID = crypto.randomUUID()
   const pending = yield* Deferred.make<Browser.Result, Tool.Error>()
   const command =
-    (action.type === "files.upload" || action.type === "files.drop") && !inspection.inspect
+    (action.type === "upload" || action.type === "drop") && !inspection.inspect
       ? { ...action, paths: files.map((file) => file.name) }
       : action
   browser.pending.set(requestID, {
@@ -241,10 +255,10 @@ const request = Effect.fn("BrowserConnection.request")(function* (
       rpc.events.emit("control", { type: "cancel", connectionID: browser.connectionID, requestID }).pipe(Effect.ignore),
     ),
     Effect.timeoutOrElse({
-      duration: "60 seconds",
+      duration: Browser.deadline(action),
       orElse: () =>
         new Tool.Error({
-          message: `[browser.timeout] browser.${action.type} did not finish within 60 seconds; its outcome is unknown. Check the desktop connection, call browser.tabs.list({}), and inspect the tab or browser.files.list({tabID}) for completed work. Do not blindly repeat a mutating action or start another recording.`,
+          message: `[browser.timeout] browser.${action.type} did not finish within ${Math.round(Browser.deadline(action) / 1000)} seconds; its outcome is unknown. Check the desktop connection, call browser.tabs.list({}), and inspect the tab or browser.files.list({tabID}) for completed work. Do not blindly repeat a mutating action or start another recording.`,
         }),
     }),
     Effect.ensuring(Effect.sync(() => browser.pending.delete(requestID))),
