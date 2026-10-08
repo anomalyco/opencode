@@ -45,7 +45,8 @@ export const ModelsDevPlugin = define({
           integrationID,
           method: {
             type: "env",
-            names: environmentNames(provider),
+            // Every listed variable is treated as a key; plugins override providers that also list setup values.
+            names: [...provider.environment],
           },
         })
       }
@@ -73,14 +74,6 @@ export const ModelsDevPlugin = define({
     if (snapshots(latest) !== loaded.data) yield* apply(latest)
   }),
 })
-
-// models.dev lists every env var a provider needs, including account IDs, hosts, and base URLs that
-// only fill URL templates. Only key-shaped names may become a credential; provider plugins override
-// the env method when a provider needs something else.
-function environmentNames(provider: ModelsDev.Snapshot) {
-  const keys = provider.environment.filter((name) => /_(API_?KEY|TOKEN|PAT)$/.test(name))
-  return keys.length > 0 ? keys : [...provider.environment]
-}
 
 const prepared = new WeakMap<readonly ModelsDev.Snapshot[], readonly ModelsDev.Snapshot[]>()
 
