@@ -314,6 +314,20 @@ describe("FileMutation", () => {
     ),
   )
 
+  it.live("rejects a conditional write when the target file is missing", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const target = yield* (yield* LocationMutation.Service).resolve({ path: "missing.txt" })
+
+        expect(
+          yield* (yield* FileMutation.Service)
+            .writeIfUnchanged({ target, expected: new TextEncoder().encode("older"), content: "replacement" })
+            .pipe(Effect.flip),
+        ).toMatchObject({ _tag: "FileMutation.StaleContentError", path: target.canonical })
+      }).pipe(provide(directory)),
+    ),
+  )
+
   it.live("allows distinct canonical targets to proceed independently", () =>
     withTmp((directory) =>
       Effect.gen(function* () {

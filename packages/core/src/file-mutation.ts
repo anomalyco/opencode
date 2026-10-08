@@ -144,8 +144,10 @@ const layer = Layer.effect(
     const writeIfUnchanged = Effect.fn("FileMutation.writeIfUnchanged")((input: ConditionalWriteInput) =>
       withTargetLock(input.target)(
         Effect.gen(function* () {
-          const current = yield* fs.readFile(input.target.canonical)
-          if (!sameBytes(current, input.expected)) {
+          const current = yield* fs
+            .readFile(input.target.canonical)
+            .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)))
+          if (current === undefined || !sameBytes(current, input.expected)) {
             return yield* new StaleContentError({ path: input.target.canonical })
           }
           yield* typeof input.content === "string"
