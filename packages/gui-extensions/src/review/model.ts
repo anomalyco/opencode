@@ -26,6 +26,13 @@ import {
 
 export type ChangeMode = "git" | "branch" | "turn"
 
+/**
+ * One directory whose changes the review shows. The session's own repository uses an empty `prefix`; a discovered
+ * child repository uses its workspace-relative folder (e.g. `frontend/`), which prefixes the repo-relative paths a
+ * diff returns so the tree, preview and comments resolve against the parent-rooted workspace.
+ */
+export type DiffSource = { directory: string; prefix: string }
+
 type FileSelection = { startLine: number; endLine: number; startChar: number; endChar: number }
 
 export type Demand = { tree: number; files: number; panel: number; details: number }
@@ -94,6 +101,49 @@ export function createReviewModel(input: {
 
   const vcs = createMemo(() => view().server.data.location.vcs.info({ directory: directory() }))
 
+  // A session rooted in a directory without its own VCS but whose children are repositories. Only then do we look
+  // for child repositories; a session inside a real repository keeps its single source.
+  const nestedRoot = createMemo(() => !!view().project && !view().project?.vcs)
+
+  // Child repositories are discovered once per session directory: each immediate subdirectory is asked (through the
+  // existing per-directory VCS lookup) whether it resolves to a repository. One level deep, which covers the common
+  // parent-of-repos workspace.
+  const childReposQuery = createQuery<DiffSource[]>(() => ({
+    queryKey: [ctx.id, view().server.id, "session-child-repos", directory()] as const,
+    enabled: nestedRoot() && view().server.connected,
+    staleTime: 30_000,
+    queryFn: async () => {
+      await screen.file.tree.sync("")
+
+      const entries = screen.file.tree.list("").filter((node) => node.type === "directory" && !node.ignored)
+      const found = await Promise.all(
+        entries.map(async (node): Promise<DiffSource | undefined> => {
+          try {
+            const result = await view().server.client.vcs.get({ location: { directory: node.absolute } })
+
+            return result.data?.provider ? { directory: node.absolute, prefix: `${node.path}/` } : undefined
+          } catch (error) {
+            console.debug("[session-review] failed to probe child directory for a repository", {
+              directory: node.absolute,
+              error,
+            })
+
+            return undefined
+          }
+        }),
+      )
+
+      return found.filter((item): item is DiffSource => item !== undefined)
+    },
+  }))
+
+  const sources = createMemo<DiffSource[]>(() => {
+    if (view().project?.vcs) return [{ directory: directory(), prefix: "" }]
+    if (nestedRoot()) return childReposQuery.data ?? []
+
+    return []
+  })
+
   const options = createMemo<ChangeMode[]>(() => {
     const list: ChangeMode[] = []
     const project = view().project
@@ -111,6 +161,9 @@ export function createReviewModel(input: {
 
     // Turn snapshots are captured only for Git sessions.
     if (project?.vcs === "git" && view().id) list.push("turn")
+
+    // Child repositories expose their combined working-tree changes under the same "git" mode.
+    if (!project?.vcs && sources().length > 0) list.push("git")
 
     return list
   })
@@ -135,6 +188,9 @@ export function createReviewModel(input: {
         view().server.id,
         "session-vcs",
         directory(),
+        sources()
+          .map((source) => source.directory)
+          .join("|"),
         vcs()?.branch.current ?? "",
         vcs()?.branch.default ?? "",
       ] as const,
@@ -151,23 +207,37 @@ export function createReviewModel(input: {
   const diffQuery = createQuery(() => {
     const value = mode()
     const turn = value === "turn"
+    const active = sources()
 
     return {
       queryKey: turn ? turnKey() : ([...vcsKey(), value] as const),
       // Desktop storage loads asynchronously; until this session's mode is known, a request would use the default.
-      enabled: !!stored() && view().server.connected && wantsReview() && !!view().project?.vcs,
+      enabled:
+        !!stored() &&
+        view().server.connected &&
+        wantsReview() &&
+        (!!view().project?.vcs || (nestedRoot() && childReposQuery.isSuccess && active.length > 0)),
       refetchOnMount: "always" as const,
       // A finished turn does not change on focus or filesystem events; refresh it when the session goes idle.
       refetchOnWindowFocus: !turn,
       queryFn: turn
         ? () => view().server.client.session.diff({ sessionID: view().id })
-        : () =>
-            view()
-              .server.client.vcs.diff({
-                location: { directory: directory() },
-                mode: value === "git" ? "working" : value,
-              })
-              .then((result) => result.data),
+        : async () => {
+            const diffMode = value === "git" ? "working" : value
+            const groups = await Promise.all(
+              active.map((source) =>
+                view()
+                  .server.client.vcs.diff({ location: { directory: source.directory }, mode: diffMode })
+                  .then((result) =>
+                    result.data.map((diff) =>
+                      source.prefix ? { ...diff, file: `${source.prefix}${diff.file}` } : diff,
+                    ),
+                  ),
+              ),
+            )
+
+            return groups.flat()
+          },
     }
   })
 
@@ -200,7 +270,12 @@ export function createReviewModel(input: {
     (current) =>
       onCleanup(
         current.data.listen(({ details }) => {
-          if (details.type === "filesystem.changed" && details.location?.directory === current.directory) refresh()
+          if (details.type !== "filesystem.changed") return
+
+          const changed = details.location?.directory
+
+          // The session's own directory, or any child repository's, changing means the combined diff moved.
+          if (changed === current.directory || sources().some((source) => source.directory === changed)) refresh()
         }),
       ),
     { equals: (previous, next) => previous.directory === next.directory && previous.data === next.data },
@@ -349,10 +424,17 @@ export function createReviewModel(input: {
     const root = reviewRootDirectory(view().project?.worktree ?? directory())
     const scoped = reviewDiffDirectory(root, path)
 
+    // A path from a child repository carries its folder prefix; the server returns repo-relative paths, so strip the
+    // prefix to match and add it back to the result the panel compares against `source`.
+    const child = sources().find((item) => item.prefix === "" || path.startsWith(item.prefix))
+    const match = child?.prefix ? path.slice(child.prefix.length) : path
+    const restore = (diff: FileDiffInfo | undefined): FileDiffInfo | undefined =>
+      diff && child?.prefix ? { ...diff, file: path } : diff
+
     const request = (scope: string, context?: number) =>
       queryClient
         .fetchQuery({
-          queryKey: [ctx.id, ...vcsKey(), value, "directory", scope, context, version] as const,
+          queryKey: [ctx.id, ...vcsKey(), value, "directory", scope, match, context, version] as const,
           staleTime: Number.POSITIVE_INFINITY,
           retry: 2,
           queryFn: () =>
@@ -364,7 +446,7 @@ export function createReviewModel(input: {
               })
               .then((result) => result.data),
         })
-        .then((result) => result.find((diff) => diff.file === path))
+        .then((result) => restore(result.find((diff) => diff.file === match)))
 
     if (scoped !== root) {
       const result = await request(scoped).then(valid, (error) => {
@@ -589,7 +671,11 @@ export function createReviewModel(input: {
     noGit: createMemo(() => {
       const project = view().project
 
-      return !!project && !project.vcs
+      if (!project || project.vcs) return false
+
+      // A markerless session root still shows its child repositories; only offer to initialize when discovery has
+      // settled and found none.
+      return childReposQuery.isSuccess && sources().length === 0
     }),
     filter: () => state.filter,
     setFilter: (value: string) => setState("filter", value),
