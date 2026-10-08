@@ -68,11 +68,11 @@ test.each([
   expect(await parser.parse(text)).not.toContain("katex")
 })
 
-// Each shape took seconds at this size when `start` retried the dollar regex from every `$` for every text token.
+// Each repeated unit took seconds at this size when `start` retried the dollar regex from every `$` for every text token.
 test("lexes dollar-heavy paragraphs in near-linear time", () => {
-  const shapes = ["`a` $5 ", "$a ", "\\$$a", "$a\\\\\\ ", "It costs $5, ", "with `c` $x_1$ and "]
+  const units = ["`a` $5 ", "$a ", "\\$$a", "$a\\\\\\ ", "It costs $5, ", "with `c` $x_1$ and "]
   const startedAt = performance.now()
-  shapes.forEach((shape) => parser.lexer(shape.repeat(Math.ceil(10_000 / shape.length))))
+  units.forEach((unit) => parser.lexer(unit.repeat(Math.ceil(10_000 / unit.length))))
   expect(performance.now() - startedAt).toBeLessThan(500)
 })
 
