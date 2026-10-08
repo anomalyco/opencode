@@ -1400,6 +1400,23 @@ export function createData(config: CreateDataInput) {
         list(sessionID: string) {
           return store.session.pending[sessionID] ?? []
         },
+        // Whether a pending steer is waiting behind work rather than about to start it. An execution's
+        // idle boundary promotes every pending steer at once, so a steer waits only once the current
+        // execution has delivered input, or when it outlived an execution that ended without delivering it.
+        waiting(sessionID: string, inboxID: string) {
+          const pending = store.session.pending[sessionID] ?? []
+          const item = pending.find(
+            (entry) => entry.id === inboxID && entry.type === "user" && entry.delivery === "steer",
+          )
+          if (!item) return false
+          const messages = store.session.message[sessionID] ?? []
+          const boundary = messages.findLastIndex((entry) => entry.type === "idle")
+          if ((store.session.active[sessionID] ?? "idle") === "idle")
+            return boundary >= 0 && item.time.created <= messages[boundary].time.created
+          return messages
+            .slice(boundary + 1)
+            .some((entry) => entry.type === "user" && !pending.some((other) => other.id === entry.id))
+        },
         sync(sessionID: string) {
           return sync.run(`session.pending:${sessionID}`, async () => {
             const updates = new Map<string, SessionInboxInfo | SessionInbox.Delivery | undefined>()

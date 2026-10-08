@@ -200,9 +200,7 @@ export function createActiveSessionRegion(input: {
 
       if (!sessionID) return false
 
-      return data.session.pending
-        .list(sessionID)
-        .some((item) => item.id === messageID && item.type === "user" && item.delivery === "steer")
+      return data.session.pending.waiting(sessionID, messageID)
     },
     queue: ({ sessionID, messageID }) =>
       server.api.session.inbox
