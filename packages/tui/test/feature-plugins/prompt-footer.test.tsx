@@ -36,6 +36,7 @@ test("prompt footer separates simultaneous subagent, shell, and usage status", a
       },
       location: {
         model: { list: () => [] },
+        agent: { list: () => [{ mode: "primary", hidden: false }] },
       },
     },
   } as unknown as Context
