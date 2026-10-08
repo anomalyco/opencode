@@ -31,6 +31,7 @@ import { SkillV2 } from "./skill"
 import { SkillGuidance } from "./skill/guidance"
 import { Snapshot } from "./snapshot"
 import { ProjectContext } from "./system-context/project-context"
+import { ProjectImports } from "./system-context/import-context"
 import { ProjectStructure } from "./system-context/structure-context"
 import { SystemContextBuiltIns } from "./system-context/builtins"
 import { SystemContextRegistry } from "./system-context/registry"
@@ -63,6 +64,7 @@ export const locationServices = LayerNode.group([
   SystemContextRegistry.node,
   SystemContextBuiltIns.node,
    ProjectContext.node,
+  ProjectImports.node,
   ProjectStructure.node,
   LocationMutation.node,
   FileMutation.node,
