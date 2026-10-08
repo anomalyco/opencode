@@ -23,6 +23,7 @@ export interface ButtonProps
 
 export function Button(props: ButtonProps) {
   const [split, rest] = splitProps(props, ["variant", "size", "icon", "class", "classList"])
+
   return (
     <Root
       {...rest}

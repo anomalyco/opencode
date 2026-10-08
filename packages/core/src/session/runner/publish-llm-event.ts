@@ -12,6 +12,7 @@ import { SessionSchema } from "../schema.js"
 import { SessionError } from "@opencode/schema/session-error"
 import { Money } from "@opencode/schema/money"
 import { SessionUsage } from "../usage.js"
+import { contentFilterError } from "../to-session-error.js"
 import type { Tool } from "../../tool.js"
 
 type Input = {
@@ -394,7 +395,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
   })
 
   const failUnsettledTools = Effect.fn("SessionRunner.failUnsettledTools")(
-    (error: SessionError.Error, scope: "hosted" | "all" = "all") => failTools(error, scope),
+    (error: SessionError.Error, scope: "hosted" | "all" | "uncalled" = "all") => failTools(error, scope),
   )
 
   const publish = Effect.fnUntraced(function* (event: LLMEvent) {
@@ -543,7 +544,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
         }
         if (event.reason.normalized === "content-filter") {
           providerFailed = true
-          yield* failAssistant({ type: "provider.content-filter", message: "Provider blocked the response" })
+          yield* failAssistant(contentFilterError("Provider blocked the response", event.reason))
           return
         }
         return

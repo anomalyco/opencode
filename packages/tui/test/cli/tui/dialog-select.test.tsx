@@ -4,7 +4,7 @@ import { testRender } from "@opentui/solid"
 import { expect, test } from "bun:test"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
-import { createSignal, onCleanup, onMount } from "solid-js"
+import { batch, createSignal, onCleanup, onMount } from "solid-js"
 import { dialogWidth } from "../../../src/ui/dialog"
 import {
   dialogSelectContentWidth,
@@ -91,7 +91,10 @@ async function mountSelect<T>(
   initial: DialogSelectOption<T>[],
   current?: T,
   focusCurrent?: boolean,
-  select?: Pick<DialogSelectProps<T>, "flat" | "ref" | "onFilter" | "renderFilter" | "onCancel" | "focusTarget">,
+  select?: Pick<
+    DialogSelectProps<T>,
+    "flat" | "ref" | "onFilter" | "renderFilter" | "onCancel" | "focusTarget" | "search"
+  >,
 ) {
   const state = path.join(root, "state")
   await mkdir(state, { recursive: true })
@@ -517,6 +520,27 @@ test("keeps the current option selected when options reorder", async () => {
     await select.app.waitFor(() => select.selected.length === 1)
 
     expect(select.selected).toEqual(["current"])
+  } finally {
+    select.app.renderer.destroy()
+  }
+})
+
+test("custom search follows a current change batched with reordered results", async () => {
+  await using tmp = await tmpdir()
+  const options = ["alpha", "beta", "gamma"].map((value) => ({ title: value, value }))
+  const [results, setResults] = createSignal(options)
+  const select = await mountSelect(tmp.path, options, "alpha", undefined, { search: () => results() })
+
+  try {
+    batch(() => {
+      select.replaceCurrent("gamma")
+      setResults(options.toReversed())
+    })
+    await select.app.waitForFrame((frame) => frame.indexOf("gamma") < frame.indexOf("alpha"))
+    select.app.mockInput.pressEnter()
+    await select.app.waitFor(() => select.selected.length === 1)
+
+    expect(select.selected).toEqual(["gamma"])
   } finally {
     select.app.renderer.destroy()
   }

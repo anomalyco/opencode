@@ -6,7 +6,7 @@ export const Effect = Schema.Literals(["allow", "deny"])
 export type Effect = typeof Effect.Type
 
 export const Info = Schema.Struct({
-  action: Schema.Literals(["provider.use", "permission"]),
+  action: Schema.Literals(["provider.use", "tool.use", "integration.use"]),
   resource: Schema.String,
   effect: Effect,
 })

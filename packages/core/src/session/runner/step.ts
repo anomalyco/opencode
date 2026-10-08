@@ -61,6 +61,11 @@ interface Input {
 const TOOLS_INTERRUPTED = { type: "aborted", message: "Tool execution interrupted" } as const
 const STEP_INTERRUPTED = { type: "aborted", message: "Step interrupted" } as const
 const RESULT_MISSING = { type: "tool.result-missing", message: "Provider did not return a tool result" } as const
+const INPUT_INCOMPLETE = {
+  type: "tool.input-incomplete",
+  message:
+    "Tool call arguments were not completed and were not executed. Re-issue the tool call with complete arguments.",
+} as const
 
 /** Captures Location-scoped dependencies without introducing another service or execution loop. */
 export const make = Effect.gen(function* () {
@@ -216,10 +221,11 @@ export const make = Effect.gen(function* () {
         if (toolFailure) yield* publisher.failUnsettledTools(toolFailure)
         if (interrupted) yield* publisher.failAssistant(STEP_INTERRUPTED)
 
-        // All local fibers have joined; only provider-hosted results can still be missing.
+        // Parsers may leave unfinished calls without an execution event.
         if (llmError || (Exit.isSuccess(stream) && !recorded.providerFailed)) {
           const missing = yield* publisher.failUnsettledTools(RESULT_MISSING, "hosted")
           if (missing && !llmError && !recorded.finish) yield* publisher.failAssistant(RESULT_MISSING)
+          yield* publisher.failUnsettledTools(INPUT_INCOMPLETE, "uncalled")
         }
 
         const record = publisher.record()

@@ -145,6 +145,13 @@
     border: none;
     padding: 8px 12px;
     border-radius: 10px;
+    transition:
+      background-color 200ms ease,
+      color 200ms ease;
+
+    @media (prefers-reduced-motion: reduce) {
+      transition: none;
+    }
 
     [data-highlight="file"],
     [data-highlight="agent"] {
@@ -156,6 +163,11 @@
 
     [data-slot="user-message-mention-prefix"] {
       color: var(--user-message-mention-prefix-color);
+      transition: color 200ms ease;
+
+      @media (prefers-reduced-motion: reduce) {
+        transition: none;
+      }
     }
 
     max-width: 100%;
@@ -652,8 +664,32 @@
   }
 }
 
-[data-component="collapsed-tool-group"] > [data-component="collapsible"].tool-collapsible {
-  --tool-content-gap: 8px;
+[data-component="collapsed-tool-group"] {
+  --context-group-sticky-top: var(--sticky-accordion-top, 0px);
+
+  > [data-component="collapsible"].tool-collapsible {
+    --tool-content-gap: 8px;
+    gap: 0px;
+
+    > [data-slot="collapsible-trigger"][aria-expanded="true"] {
+      position: sticky;
+      top: var(--context-group-sticky-top);
+      /* Above nested file headers as they scroll out under this row. */
+      z-index: 21;
+      height: calc(28px + var(--tool-content-gap));
+      padding-bottom: var(--tool-content-gap);
+      background-color: var(--v2-background-bg-base);
+    }
+
+    /* Nested sticky file headers stop below the open group header. */
+    > [data-slot="collapsible-content"] {
+      --sticky-accordion-top: calc(var(--context-group-sticky-top) + 28px + var(--tool-content-gap));
+    }
+  }
+}
+
+[data-notices-only] > [data-component="collapsed-tool-group"] > [data-component="collapsible"].tool-collapsible {
+  --tool-content-gap: 0px;
 }
 
 [data-component="context-tool-group-list"] {
@@ -781,6 +817,8 @@
 
 [data-component="tool-part-wrapper"] {
   width: 100%;
+  /* Revealing a tool lands its title just below the headers that stick above it. */
+  scroll-margin-top: var(--sticky-accordion-top, 0px);
 }
 
 [data-component="dock-prompt"][data-kind="permission"] {
@@ -1420,6 +1458,90 @@
   }
 }
 
+[data-component="read-tool-group"] {
+  --read-tool-group-height: 32px;
+  width: 100%;
+  min-width: 0;
+  min-height: var(--read-tool-group-height);
+  display: flex;
+  align-items: center;
+  border-radius: var(--radius-md);
+
+  &[role="button"] {
+    cursor: pointer;
+  }
+
+  &:focus-visible {
+    outline: none;
+    background-color: var(--surface-raised-base-hover);
+  }
+
+  [data-slot="read-tool-group-file"] {
+    white-space: nowrap;
+
+    /* Args carry a leading space for their accessible text; the margin completes the 6px row gap. */
+    > [data-slot="basic-tool-tool-arg"] {
+      margin-inline-start: 2px;
+    }
+  }
+
+  [data-slot="read-tool-group-arrow"] {
+    flex-shrink: 0;
+    width: 16px;
+    height: 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--icon-weaker);
+    opacity: 0;
+    transform: rotate(-90deg);
+    transition:
+      opacity 0.15s ease,
+      transform 0.15s ease;
+
+    &:dir(rtl) {
+      transform: rotate(90deg);
+    }
+
+    @media (hover: none) {
+      opacity: 1;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      transition: none;
+    }
+  }
+
+  &:hover [data-slot="read-tool-group-arrow"],
+  &:focus-visible [data-slot="read-tool-group-arrow"] {
+    opacity: 1;
+  }
+
+  &[data-expanded="true"] {
+    /* Wrapped lines use body line height; padding keeps the first line where the collapsed row placed it. */
+    padding-block: calc((var(--read-tool-group-height) - var(--line-height-base)) / 2);
+
+    > [data-component="tool-trigger"] {
+      align-items: flex-start;
+    }
+
+    [data-slot="basic-tool-tool-subtitle"] {
+      overflow: visible;
+      white-space: normal;
+      line-height: var(--line-height-base);
+    }
+
+    [data-slot="read-tool-group-arrow"] {
+      opacity: 1;
+      transform: none;
+    }
+  }
+}
+
+[data-slot="context-tool-group-item"] > [data-component="read-tool-group"] {
+  --read-tool-group-height: 28px;
+}
+
 :root body [data-component="user-message"] {
   font-weight: 440;
 
@@ -1469,29 +1591,42 @@
   background: var(--v2-background-bg-layer-02);
 }
 
-:root body [data-workspace-session] [data-component="user-message"] [data-slot="user-message-text"] {
+:root
+  body
+  [data-workspace-session]
+  [data-component="user-message"]:not([data-pending])
+  [data-slot="user-message-text"] {
   --user-message-mention-prefix-color: var(--v2-blue-300);
 
   background: var(--v2-background-bg-accent);
   color: var(--v2-text-text-contrast);
 }
 
+:root body [data-local-session] [data-component="user-message"] [data-slot="user-message-text"] {
+  border-radius: 8px;
+}
+
 :root[data-color-scheme="light"]
   body
   [data-local-session]
-  [data-component="user-message"]
+  [data-component="user-message"]:not([data-pending])
   [data-slot="user-message-text"] {
   background: var(--v2-blue-100);
   color: var(--v2-blue-700);
-  border-radius: 8px;
 }
 
 :root[data-color-scheme="dark"]
   body
   [data-local-session]
-  [data-component="user-message"]
+  [data-component="user-message"]:not([data-pending])
   [data-slot="user-message-text"] {
   background: var(--v2-blue-1200);
   color: var(--v2-blue-300);
-  border-radius: 8px;
+}
+
+:root body [data-component="user-message"][data-pending] [data-slot="user-message-text"] {
+  --user-message-mention-prefix-color: currentColor;
+
+  background: var(--v2-background-bg-layer-02);
+  color: var(--v2-text-text-base);
 }

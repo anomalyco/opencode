@@ -286,7 +286,15 @@ test("loads location metadata when an open session moves", async () => {
   const setup = await renderSessionTabs("first")
 
   try {
-    await wait(() => setup.locations.includes(directory) && setup.vcsLocations.includes(directory))
+    // server.connected loads the default location on its own, so also wait for the session and its tab:
+    // a move that arrives before either has loaded is dropped.
+    await wait(
+      () =>
+        setup.data.session.get("first") !== undefined &&
+        setup.tabs.tabs().some((tab) => tab.sessionID === "first") &&
+        setup.locations.includes(directory) &&
+        setup.vcsLocations.includes(directory),
+    )
     setup.emit({
       id: "evt_moved",
       created: 1,
@@ -318,6 +326,28 @@ test("keeps each visited session open", async () => {
     await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "third"))
 
     expect(setup.tabs.tabs().map((tab) => tab.sessionID)).toEqual(["first", "second", "third"])
+  } finally {
+    await setup.destroy()
+  }
+})
+
+test("lists closed tabs newest first and reopens a selected entry", async () => {
+  const setup = await renderSessionTabs("first", { persisted: ["first", "second", "third"] })
+  try {
+    await wait(() => setup.tabs.tabs().length === 3)
+    setup.tabs.close("second")
+    await wait(() => setup.tabs.tabs().length === 2)
+    setup.tabs.close("third")
+    await wait(() => setup.tabs.tabs().length === 1)
+    expect(setup.tabs.recentlyClosed().map((tab) => tab.sessionID)).toEqual(["third", "second"])
+    setup.tabs.reopen("second")
+    await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "second"))
+    expect(setup.tabs.current()).toBe("second")
+    expect(setup.tabs.recentlyClosed().map((tab) => tab.sessionID)).toEqual(["third"])
+    setup.tabs.reopen()
+    await wait(() => setup.tabs.tabs().length === 3)
+    expect(setup.tabs.current()).toBe("third")
+    expect(setup.tabs.recentlyClosed()).toEqual([])
   } finally {
     await setup.destroy()
   }

@@ -1,7 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { LLM, LLMEvent, LLMResponse, LanguageModel } from "../../src/index.js"
-import { OpenAIChat } from "../../src/protocols/openai-chat.js"
 import * as OpenAICompatible from "../../src/providers/openai-compatible.js"
 import * as OpenRouter from "../../src/providers/openrouter.js"
 import { LLMClient } from "../../src/route.js"
@@ -89,7 +88,14 @@ for (const item of cases) {
 
           const replay = yield* compileRequest(LLM.request({ model: item.model, messages: [response.message] }))
           expect(replay.body.messages).toMatchObject([
-            { role: "assistant", content: response.text, reasoning: response.reasoning },
+            {
+              role: "assistant",
+              content:
+                item.model.route.id === "openrouter"
+                  ? [{ type: "text", text: response.text, cache_control: { type: "ephemeral" } }]
+                  : response.text,
+              reasoning: response.reasoning,
+            },
           ])
           const replayDetails =
             replay.body.messages[0]?.role === "assistant" ? replay.body.messages[0].reasoning_details : undefined

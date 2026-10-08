@@ -1,4 +1,5 @@
 import fuzzysort from "fuzzysort"
+import type { IconProps } from "@opencode/ui/icon"
 import type { SettingsView } from "./surface"
 import type { LocalProject } from "@/shell/state/layout"
 
@@ -15,17 +16,23 @@ export type SettingsSearchResult = {
   projectInfo?: LocalProject
   entity?: boolean
   topLevel?: boolean
+  /** The page icon a top-level result shows. */
+  icon?: IconProps["name"]
   view: SettingsView
 }
 
 export function rankSettings(query: string, items: SettingsSearchResult[], origin: SettingsView) {
   const value = normalize(query)
+
   if (!value) return []
+
   return items
     .flatMap((item) => {
       const name = item.projectName ? normalize(item.projectName) : undefined
+
       if (name && !` ${value} `.includes(` ${name} `)) return []
       const query = name ? normalize(` ${value} `.replace(` ${name} `, " ")) : value
+
       if (!query) return []
       const tokens = query.split(" ")
       const title = normalize(item.title)
@@ -33,8 +40,10 @@ export function rankSettings(query: string, items: SettingsSearchResult[], origi
       const description = normalize(item.description)
       const context = normalize(`${item.owner} ${item.entity ? "" : item.page}`)
       const fuzzy = fuzzysort.single(query, title)?.score ?? 0
+
       // Context qualifies a setting match; a project name alone should not return all its controls.
       if (!tokens.some((token) => `${primary} ${description}`.includes(token)) && fuzzy < 0.6) return []
+
       const score =
         title === query
           ? 5
@@ -47,13 +56,16 @@ export function rankSettings(query: string, items: SettingsSearchResult[], origi
                 : fuzzy >= 0.6
                   ? 1
                   : 0
+
       if (!score) return []
+
       const proximity =
         origin.type === "project" && origin.server === item.server && origin.project === item.project
           ? 2
           : origin.type !== "root" && origin.server === item.server
             ? 1
             : 0
+
       return [{ item, score, proximity }]
     })
     .sort(

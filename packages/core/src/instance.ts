@@ -114,7 +114,7 @@ const nodes = [
 export const graph = LayerNode.group(nodes)
 
 export type Services = LayerNode.Output<typeof graph>
-export type Error = Layer.Error<ReturnType<typeof layer>>
+export type Error = FileSystem.DirectoryNotFoundError
 
 export interface Options {
   // Plugins this instance is born with; empty and absent are equivalent.
@@ -145,7 +145,7 @@ const vanillaReplacements: LayerNode.Replacements = [
 ]
 
 // One instance is one compiled, fresh copy of the graph standing on a directory.
-export function layer(ref: Location.Ref, options: Options = {}): Layer.Layer<Services> {
+export function layer(ref: Location.Ref, options: Options = {}): Layer.Layer<Services, Error> {
   const startedAt = performance.now()
   // Ordered: vanilla defaults, then caller replacements (which win over the
   // defaults), then instance bindings (which win over everything).
@@ -157,8 +157,18 @@ export function layer(ref: Location.Ref, options: Options = {}): Layer.Layer<Ser
   ]
 
   return LayerNode.compile(graph, { replacements, shared: Node.tags.values.global }).pipe(
-    // Instance boot failures are defects; provided operations retain their typed errors.
-    Layer.orDie,
+    // A missing directory is expected; other instance boot failures remain defects.
+    Layer.catchCause(
+      (cause): Layer.Layer<Services, Error> =>
+        Layer.unwrap(
+          Effect.failCause(cause).pipe(
+            Effect.catch(
+              (error): Effect.Effect<never, Error> =>
+                error instanceof FileSystem.DirectoryNotFoundError ? Effect.fail(error) : Effect.die(error),
+            ),
+          ),
+        ),
+    ),
     Layer.tap((context) => Effect.addFinalizer(() => Context.get(context, LocationLifecycle.Service).shutdown)),
     Layer.tap(() =>
       Effect.logInfo("location services booted", {

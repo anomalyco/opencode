@@ -21,22 +21,27 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { showToast } from "@/shell/notifications/toast"
 
 export { createShellOptions, createSoundPreviewController } from "./behavior"
+
 export type { ShellOption, ShellSelectOption } from "./behavior"
 
 export function createServerShellController(server: Accessor<ServerConnection.Any>) {
   const language = useLanguage()
   const serverCtx = useServerCtx(server)
   const source = () => ServerConnection.key(server())
+
   const [state, actions] = createResource(
     source,
     async () => {
       const context = serverCtx()
+
       const [entries, shells] = await Promise.all([
         context.sdk.api.config.get().catch(() => []),
         context.sdk.api.config.shells().catch(() => []),
       ])
+
       const boundary = entries.findIndex((entry) => entry.type === "directory")
       const global = boundary === -1 ? entries : entries.slice(0, boundary)
+
       return {
         shells,
         shell: global
@@ -109,12 +114,15 @@ export function createAppearanceSettingsController() {
 }
 
 const noneSound = { id: "none", label: "sound.option.none" } as const
+
 export const soundOptions = [noneSound, ...SOUND_OPTIONS]
+
 export type SoundSelectOption = (typeof soundOptions)[number]
 
 export function createSoundSettingsController() {
   const settings = useSettings()
   const preview = createSoundPreviewController(playSoundById)
+
   const channel = (
     enabled: Accessor<boolean>,
     current: Accessor<string>,
@@ -130,11 +138,14 @@ export function createSoundSettingsController() {
     },
     select: (option: SoundSelectOption | null) => {
       if (!option) return
+
       if (option.id === "none") {
         setEnabled(false)
         preview.stop()
+
         return
       }
+
       setEnabled(true)
       set(option.id)
       preview.play(option.id)
@@ -166,4 +177,5 @@ export function createSoundSettingsController() {
 export type ShellSettingsController = ReturnType<typeof createServerShellController>
 
 export type AppearanceSettingsController = ReturnType<typeof createAppearanceSettingsController>
+
 export type SoundSettingsController = ReturnType<typeof createSoundSettingsController>

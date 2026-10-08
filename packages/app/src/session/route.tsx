@@ -14,7 +14,6 @@ import { useNotification } from "@/shell/notifications/notification"
 import { ComposerPersistenceProvider } from "@/composer/persistence"
 import { useData, useServer } from "@/runtime/server/current"
 import { ServerConnection } from "@/runtime/server/registry"
-import { TerminalProvider } from "@/session/terminal/context"
 import { useSettingsCommand } from "@/settings/command"
 import { SessionUIProvider } from "@/shell/routes/session-ui-provider"
 import { useTabs, type PendingSession } from "@/shell/tabs/tabs"
@@ -25,7 +24,7 @@ import { SessionIdentityHeader } from "./session-identity-header"
 import { IncompatibleServerPanel } from "./incompatible-server-panel"
 import { SessionErrorFallback } from "./route-error"
 import { createSessionResolution } from "./session-resolution"
-import { SessionScreen } from "./screen"
+import { SessionScreenView } from "./screen"
 import { PreparingComposer } from "./preparing-composer"
 
 export function TargetSessionRouteContent() {
@@ -53,6 +52,7 @@ export function TargetSessionRouteContent() {
 function PreparingSession(props: { sessionID: string; pending: PendingSession }) {
   const language = useLanguage()
   const providers = useProviders(() => props.pending.draft.directory)
+
   return (
     <SessionStatePanel>
       <DataProvider
@@ -94,6 +94,7 @@ function PreparingSession(props: { sessionID: string; pending: PendingSession })
 
 function TargetSessionSettingsCommand() {
   useSettingsCommand()
+
   return null
 }
 
@@ -116,11 +117,13 @@ function ResolvedTargetSessionRoute() {
   const server = useServer()
   const tabs = useTabs()
   const data = useData()
+
   const current = createSessionResolution(
     () => params.id,
     () => data.session,
     { children: true, connected: () => server.ctx.sdk.connection.status() === "connected" },
   )
+
   const directory = createMemo(() => current()?.location.directory)
 
   return (
@@ -136,7 +139,7 @@ function ResolvedTargetSessionRoute() {
     >
       <Show when={directory()} fallback={<PendingSessionState sessionID={params.id} />}>
         {(value) => (
-          <LocationProvider directory={value}>
+          <LocationProvider directory={value()}>
             <SessionUIProvider directory={value()} server={server.key}>
               <TargetSessionPage />
             </SessionUIProvider>
@@ -157,7 +160,7 @@ function PendingSessionState(props: { sessionID: string }) {
 
 function SessionStatePanel(props: ParentProps) {
   return (
-    <div class="flex min-h-0 flex-1 px-2 pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]">
+    <div class="flex min-h-0 flex-1 px-[var(--shell-inline-inset,8px)] pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]">
       <SessionPanelFrame raised>{props.children}</SessionPanelFrame>
     </div>
   )
@@ -167,30 +170,32 @@ function TargetSessionPage() {
   return (
     // These providers select their scoped state reactively and retain bounded caches,
     // so keep their owners alive while navigating between workspaces on this server.
-    <TerminalProvider>
-      <FileProvider>
-        <ComposerPersistenceProvider>
-          <CommentsProvider>
-            <SessionPage />
-          </CommentsProvider>
-        </ComposerPersistenceProvider>
-      </FileProvider>
-    </TerminalProvider>
+    <FileProvider>
+      <ComposerPersistenceProvider>
+        <CommentsProvider>
+          <SessionPage />
+        </CommentsProvider>
+      </ComposerPersistenceProvider>
+    </FileProvider>
   )
 }
 
 function SessionPage() {
   const session = useSessionModel()
-  return <SessionScreen session={session} />
+
+  return <SessionScreenView session={session} />
 }
 
 function MarkSessionNotificationsViewed(props: { sessionID: () => string | undefined }) {
   const notification = useNotification()
   createEffect(() => {
     const sessionID = props.sessionID()
+
     if (!notification.ready() || !sessionID) return
+
     if (notification.session.unseenCount(sessionID) === 0) return
     notification.session.markViewed(sessionID)
   })
+
   return null
 }

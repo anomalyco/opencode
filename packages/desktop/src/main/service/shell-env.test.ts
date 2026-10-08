@@ -1,22 +1,16 @@
 import { describe, expect, test } from "bun:test"
-import * as NodePath from "@effect/platform-node/NodePath"
+import { NodePath } from "@effect/platform-node"
 import { Effect } from "effect"
 
 import { isNushell, parseShellEnv, resolveUserShell } from "./shell-env"
 
 describe("shell env", () => {
-  test("parseShellEnv supports null-delimited pairs", () => {
-    const env = parseShellEnv(Buffer.from("PATH=/usr/bin:/bin\0FOO=bar=baz\0\0"))
-
-    expect(env.PATH).toBe("/usr/bin:/bin")
-    expect(env.FOO).toBe("bar=baz")
-  })
-
-  test("parseShellEnv ignores invalid entries", () => {
-    const env = parseShellEnv(Buffer.from("INVALID\0=empty\0OK=1\0"))
-
-    expect(Object.keys(env).length).toBe(1)
-    expect(env.OK).toBe("1")
+  test("parseShellEnv reads null-delimited pairs and ignores invalid entries", () => {
+    expect(parseShellEnv(Buffer.from("PATH=/usr/bin:/bin\0FOO=bar=baz\0\0INVALID\0=empty\0OK=1\0"))).toEqual({
+      PATH: "/usr/bin:/bin",
+      FOO: "bar=baz",
+      OK: "1",
+    })
   })
 
   test("resolveUserShell falls back to the login shell before /bin/sh", () => {

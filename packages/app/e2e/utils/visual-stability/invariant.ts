@@ -71,6 +71,7 @@ export function stabilityPlan<RegionName extends string>(
           ...(options.motion ?? []),
           ...(options.flow ?? []),
         ]
+
   return {
     perMarker: options.perMarker,
     aggregateMotion: options.aggregateMotion,

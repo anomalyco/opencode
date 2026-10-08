@@ -845,7 +845,16 @@ const fragmentFixture = (kind: FragmentKind, id: string, chunks: readonly string
       return {
         partialEvents,
         completeEvents: [...partialEvents, LLMEvent.toolInputEnd({ id, name: "echo" })],
-        expectedAssistant: { type: "assistant", content: [expectedContent] },
+        expectedAssistant: {
+          type: "assistant",
+          content: [
+            {
+              type: "tool",
+              id,
+              state: { status: "error", input: {}, error: { type: "tool.input-incomplete" } },
+            },
+          ],
+        },
         expectedContent,
       }
     }
@@ -2714,6 +2723,32 @@ describe("SessionRunnerLLM", () => {
     expect((yield* s.context).some((message) => message.type === "user" && message.text === "Earlier question")).toBe(
       true,
     )
+  })
+
+  scenario("explains a compaction blocked by the provider", function* (s) {
+    yield* s.llm.push(TestLLM.text("Earlier answer", "history"))
+    yield* s.runPrompt("Earlier question")
+    yield* s.llm.push(
+      TestLLM.complete({
+        reason: {
+          normalized: "content-filter",
+          raw: "refusal",
+          category: "cyber",
+          explanation: "This request was declined because it could enable cyber harm.",
+        },
+      }),
+    )
+    const compaction = yield* s.session.compact({ sessionID })
+    yield* s.resume
+
+    expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({
+      status: "failed",
+      error: {
+        type: "provider.content-filter",
+        message:
+          "Compaction summary was blocked by the provider (cyber): This request was declined because it could enable cyber harm.",
+      },
+    })
   })
 
   for (const header of [false, true]) {
@@ -4682,6 +4717,7 @@ describe("SessionRunnerLLM", () => {
     yield* s.runPrompt("Run correlated request")
 
     expect(s.requests[0]?.http?.headers).toEqual({
+      "x-opencode-session-id": sessionID,
       "x-session-affinity": sessionID,
       "X-Session-Id": sessionID,
       "User-Agent": App.useragent(App.make()),
@@ -4703,6 +4739,8 @@ describe("SessionRunnerLLM", () => {
     yield* s.runPrompt("Run child request")
 
     expect(s.requests[0]?.http?.headers).toMatchObject({
+      "x-opencode-session-id": sessionID,
+      "x-opencode-parent-session-id": parentID,
       "x-session-affinity": parentID,
       "X-Session-Id": parentID,
       "x-parent-session-id": parentID,
@@ -5990,6 +6028,30 @@ describe("SessionRunnerLLM", () => {
       {
         type: "session.step.failed.1",
         data: { error: { type: "provider.invalid-output", message: "Invalid JSON input for tool call echo" } },
+      },
+    ])
+  })
+
+  scenario("settles unfinished tool input after an output limit", function* (s) {
+    yield* s.llm.push(
+      TestLLM.complete(
+        { reason: { normalized: "length" } },
+        LLMEvent.toolInputStart({ id: "call-incomplete", name: "echo" }),
+        LLMEvent.toolInputDelta({ id: "call-incomplete", name: "echo", text: '{"text":"partial' }),
+      ),
+      TestLLM.stop(),
+    )
+
+    yield* s.runPrompt("Recover unfinished tool input")
+
+    expect(s.requests).toHaveLength(2)
+    expect(s.executions).toEqual([])
+    expect(requireAssistant(yield* s.context).content).toMatchObject([
+      {
+        type: "tool",
+        id: "call-incomplete",
+        executed: false,
+        state: { status: "error", error: { type: "tool.input-incomplete" } },
       },
     ])
   })

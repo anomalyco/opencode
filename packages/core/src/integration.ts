@@ -7,6 +7,7 @@ import {
   Context,
   Duration,
   Effect,
+  Equal,
   Exit,
   Fiber,
   Layer,
@@ -43,6 +44,9 @@ export type CommandMethod = Integration.CommandMethod
 
 export const KeyMethod = Integration.KeyMethod
 export type KeyMethod = Integration.KeyMethod
+
+export const ExternalMethod = Integration.ExternalMethod
+export type ExternalMethod = Integration.ExternalMethod
 
 export const EnvMethod = Integration.EnvMethod
 export type EnvMethod = Integration.EnvMethod
@@ -81,6 +85,11 @@ export interface KeyImplementation {
   readonly method: KeyMethod
 }
 
+export interface ExternalImplementation {
+  readonly integrationID: ID
+  readonly method: ExternalMethod
+}
+
 export interface CommandImplementation {
   readonly integrationID: ID
   readonly method: CommandMethod
@@ -91,7 +100,12 @@ export interface EnvImplementation {
   readonly method: EnvMethod
 }
 
-export type Implementation = OAuthImplementation | CommandImplementation | KeyImplementation | EnvImplementation
+export type Implementation =
+  | OAuthImplementation
+  | CommandImplementation
+  | KeyImplementation
+  | ExternalImplementation
+  | EnvImplementation
 
 export const Attempt = Integration.Attempt
 export type Attempt = Integration.Attempt
@@ -164,7 +178,7 @@ export interface Interface extends State.Transformable<Editor> {
   readonly connection: {
     /** Returns the active connection for one integration. */
     readonly active: (id: ID) => Effect.Effect<IntegrationConnection.Info | undefined>
-    /** Resolves a connection into usable credential material. */
+    /** Resolves a connection into credential material or an external credential-source reference. */
     readonly resolve: (
       connection: IntegrationConnection.Info,
     ) => Effect.Effect<Credential.Value | undefined, AuthorizationError>
@@ -179,6 +193,17 @@ export interface Interface extends State.Transformable<Editor> {
       /** User-facing label for the stored credential. */
       readonly label?: string
     }) => Effect.Effect<void, AuthorizationError>
+    /** Runs an external method and stores a reference configured by its form answers. */
+    readonly external: (input: {
+      /** Integration receiving the credential. */
+      readonly integrationID: ID
+      /** External method that defines the form and credential source. */
+      readonly methodID: MethodID
+      /** Values collected from the method's form fields. */
+      readonly answer?: Form.Answer
+      /** User-facing label for the stored credential. */
+      readonly label?: string
+    }) => Effect.Effect<void, AuthorizationError>
     /** Selects a stored credential as the active integration connection. */
     readonly activate: (credentialID: Credential.ID) => Effect.Effect<void>
     /** Updates a stored credential exposed as a connection. */
@@ -188,6 +213,12 @@ export interface Interface extends State.Transformable<Editor> {
     ) => Effect.Effect<void>
     /** Removes a stored credential connection. */
     readonly remove: (credentialID: Credential.ID) => Effect.Effect<void>
+    /** Reports or clears a runtime problem with a connection; `get` and `list` project it onto the connection. */
+    readonly status: (input: {
+      readonly integrationID: ID
+      readonly connection: IntegrationConnection.Info
+      readonly status: IntegrationConnection.Status | undefined
+    }) => Effect.Effect<void>
   }
   readonly oauth: {
     /** Starts a stateful OAuth attempt. */
@@ -279,6 +310,10 @@ const layer = Layer.effect(
     const scope = yield* Scope.Scope
     const attempts = SynchronizedRef.makeUnsafe(new Map<AttemptID, AttemptEntry>())
     const commandAttempts = SynchronizedRef.makeUnsafe(new Map<AttemptID, CommandAttemptEntry>())
+    // Runtime-only: statuses describe the current process's view of a connection and are not persisted.
+    const statuses = new Map<string, IntegrationConnection.Status>()
+    const statusKey = (integrationID: ID, connection: IntegrationConnection.Info) =>
+      `${integrationID}:${IntegrationConnection.key(connection)}`
     const state = State.create<Data, Editor>({
       name: "integration",
       initial: () => ({ integrations: new Map<ID, Entry>() }),
@@ -316,6 +351,8 @@ const layer = Layer.effect(
                 return method.id === implementation.method.id
               if (method.type === "command" && implementation.method.type === "command")
                 return method.id === implementation.method.id
+              if (method.type === "external" && implementation.method.type === "external")
+                return method.id === implementation.method.id
               return true
             })
             if (index === -1) current.methods.push(implementation.method as Types.DeepMutable<Method>)
@@ -334,6 +371,7 @@ const layer = Layer.effect(
               if (candidate.type !== method.type) return false
               if (candidate.type === "oauth" && method.type === "oauth") return candidate.id === method.id
               if (candidate.type === "command" && method.type === "command") return candidate.id === method.id
+              if (candidate.type === "external" && method.type === "external") return candidate.id === method.id
               return true
             })
             if (index !== -1) current.methods.splice(index, 1)
@@ -377,7 +415,10 @@ const layer = Layer.effect(
         name: entry.ref.name,
         ...(entry.ref.metadata === undefined ? {} : { metadata: entry.ref.metadata }),
         methods: entry.methods,
-        connections,
+        connections: connections.map((connection) => {
+          const status = statuses.get(statusKey(entry.ref.id, connection))
+          return status ? { ...connection, status } : connection
+        }),
       })
 
     const authorize = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
@@ -686,7 +727,7 @@ const layer = Layer.effect(
           }
           const credential = yield* credentials.get(connection.id)
           if (!credential) return undefined
-          if (credential.value.type === "key") return credential.value
+          if (credential.value.type !== "oauth") return credential.value
           const implementation = state
             .get()
             .integrations.get(credential.integrationID)
@@ -722,11 +763,43 @@ const layer = Layer.effect(
             }),
           })
         }),
+        external: Effect.fn("Integration.connection.external")(function* (input) {
+          const method = state
+            .get()
+            .integrations.get(input.integrationID)
+            ?.methods.find((method) => method.type === "external" && method.id === input.methodID)
+          if (method?.type !== "external")
+            return yield* new AuthorizationError({ cause: new Error(`External method not found: ${input.methodID}`) })
+          const answer = input.answer ?? {}
+          if (method.form) {
+            const invalid = Form.validateFields(method.form) ?? Form.validateAnswer(method.form, answer)
+            if (invalid) return yield* new AuthorizationError({ cause: new Error(invalid) })
+          }
+          if (!method.form && Object.keys(answer).length > 0) {
+            return yield* new AuthorizationError({ cause: new Error("External method does not accept a form answer") })
+          }
+          yield* createCredential({
+            integrationID: input.integrationID,
+            label: input.label,
+            value: Credential.External.make({
+              type: "external",
+              methodID: method.id,
+              ...(Object.keys(answer).length > 0 ? { metadata: answer } : {}),
+            }),
+          })
+        }),
         activate: Effect.fn("Integration.connection.activate")((credentialID) => credentials.activate(credentialID)),
         update: Effect.fn("Integration.connection.update")((credentialID, updates) =>
           credentials.update(credentialID, updates),
         ),
         remove: Effect.fn("Integration.connection.remove")((credentialID) => credentials.remove(credentialID)),
+        status: Effect.fn("Integration.connection.status")(function* (input) {
+          const key = statusKey(input.integrationID, input.connection)
+          if (Equal.equals(statuses.get(key), input.status)) return
+          if (input.status) statuses.set(key, input.status)
+          if (!input.status) statuses.delete(key)
+          yield* bus.publish(Integration.Event.Updated, {})
+        }),
       },
       oauth: {
         connect: connectOAuth,

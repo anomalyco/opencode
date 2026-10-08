@@ -85,6 +85,26 @@ export const IntegrationHandler = HttpApiBuilder.group(Api, "server.integration"
         }),
       )
       .handle(
+        "integration.connect.external",
+        Effect.fn(function* (ctx) {
+          const service = yield* Integration.Service
+          if (!(yield* service.get(ctx.params.integrationID)))
+            return yield* new IntegrationNotFoundError({
+              integrationID: ctx.params.integrationID,
+              message: `Integration not found: ${ctx.params.integrationID}`,
+            })
+          yield* authorize(
+            service.connection.external({
+              integrationID: ctx.params.integrationID,
+              methodID: ctx.payload.methodID,
+              answer: ctx.payload.answer,
+              label: ctx.payload.label,
+            }),
+          )
+          return HttpApiSchema.NoContent.make()
+        }),
+      )
+      .handle(
         "integration.oauth.connect",
         Effect.fn(function* (ctx) {
           const service = yield* Integration.Service

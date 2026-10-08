@@ -4,8 +4,11 @@ import { Global } from "@opencode/util/global"
 import { Effect, FileSystem } from "effect"
 import { createEventStream, createFetch, json } from "./fixture/tui-client"
 import { tmpdir } from "./fixture/fixture"
+import { takeDraft } from "../src/component/prompt/draft-stash"
 
 test("stats shows only this year and returns after errors or success", async () => {
+  // Other app tests can leave a home draft in the process-wide stash.
+  takeDraft(undefined)
   await using state = await tmpdir()
   const setup = await createTestRenderer({ width: 100, height: 34, useThread: false, kittyKeyboard: true })
   setup.renderer.start()
