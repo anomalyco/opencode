@@ -10,7 +10,7 @@ import { partsToContentChunks } from "./content"
 import { ACPPermission } from "./permission"
 import type { Attached } from "./sessions"
 import { ACPTranslate } from "./translate"
-import { planUpdate, completedToolUpdate, errorToolUpdate, pendingToolCall, runningToolUpdate } from "./tool"
+import { completedToolUpdate, errorToolUpdate, pendingToolCall, runningToolUpdate } from "./tool"
 
 export function history(
   client: OpenCodeClient,
@@ -84,7 +84,6 @@ export function updates(message: SessionMessage.Info, cwd: string, capabilities:
     }
     switch (part.state.status) {
       case "completed":
-        const plan = planUpdate(part.state.metadata)
         return [
           call,
           {
@@ -98,7 +97,6 @@ export function updates(message: SessionMessage.Info, cwd: string, capabilities:
               cwd,
             }),
           },
-          ...(plan ? [plan] : []),
         ]
       case "running":
         return [

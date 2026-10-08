@@ -1,44 +1,9 @@
 import { isAbsolute, resolve } from "node:path"
-import type {
-  ToolCall,
-  ToolCallContent,
-  ToolCallLocation,
-  ToolCallUpdate,
-  ToolKind,
-  SessionUpdate,
-} from "@agentclientprotocol/sdk"
+import type { ToolCall, ToolCallContent, ToolCallLocation, ToolCallUpdate, ToolKind } from "@agentclientprotocol/sdk"
 import type { Tool } from "@opencode/schema/tool"
 import { readDisplayText } from "@opencode/tui/mini/tool"
 import { Patch } from "@opencode/util/patch"
-import { Result, Option, Schema } from "effect"
-
-const PlanMetadata = Schema.Struct({
-  acp: Schema.Struct({
-    plan: Schema.Struct({
-      entries: Schema.Array(
-        Schema.Struct({
-          content: Schema.String,
-          priority: Schema.Literals(["low", "medium", "high"]),
-          status: Schema.Literals(["pending", "in_progress", "completed"]),
-        }),
-      ),
-      _meta: Schema.optionalKey(Schema.NullOr(Schema.Record(Schema.String, Schema.Unknown))),
-    }),
-  }),
-})
-const decodePlan = Schema.decodeUnknownOption(PlanMetadata)
-
-/** Plugins can provide ACP's standard plan shape without depending on the ACP transport. */
-export function planUpdate(metadata: Readonly<Record<string, unknown>> | undefined): SessionUpdate | undefined {
-  const decoded = decodePlan(metadata)
-  if (Option.isNone(decoded)) return
-  const plan = decoded.value.acp.plan
-  return {
-    sessionUpdate: "plan",
-    entries: plan.entries.map((entry) => ({ ...entry })),
-    ...(plan._meta ? { _meta: { ...plan._meta } } : {}),
-  }
-}
+import { Result } from "effect"
 
 export type ToolInput = Record<string, unknown>
 
