@@ -92,7 +92,10 @@ export async function proxyInference(
   const requestID = request.headers.get("x-opencode-request-id") ?? request.headers.get("x-opencode-request")
   if (requestID) forwarded.headers.set("x-opencode-request-id", requestID)
 
-  return fetch(forwarded, { redirect: "manual" })
+  const response = await fetch(forwarded, { redirect: "manual" })
+  // SolidStart replaces 404 responses with its own route-not-found body, hiding the inference error.
+  if (response.status !== 404) return response
+  return new Response(response.body, { status: 400, statusText: "Bad Request", headers: response.headers })
 }
 
 // Routing only; the destination owns authentication and revocation after cutover.

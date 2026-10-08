@@ -59,6 +59,7 @@ type BillingSource = "anonymous" | "free" | "byok" | "subscription" | "lite" | "
 
 // Free models whose keyless requests skip legacy checks and go straight to new inference.
 const ANONYMOUS_PROXY_MODELS = new Set([
+  "big-pickle",
   "fledge-alpha-free",
   "jev-1.13-free",
   "ling-3.0-flash-fin-free",
@@ -66,8 +67,10 @@ const ANONYMOUS_PROXY_MODELS = new Set([
   "longcat-2.5-preview-free",
   "mimo-v2.6-flash-free",
   "muse-spark-1.2-contributor-free",
+  "muse-spark-1.3-contributor-free",
   "nemotron-3-ultra-free",
   "nemotron-3.5-lightning-free",
+  "space-bunny-free",
 ])
 
 function resolve(text: string, params?: Record<string, string | number>) {
