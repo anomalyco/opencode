@@ -794,16 +794,14 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
       HttpApiEndpoint.get("session.form.list", "/api/session/:sessionID/form", {
         params: { sessionID: Schema.String },
         success: Schema.Struct({ data: Schema.Array(Form.Info) }),
-        error: SessionNotFoundError,
-      })
-        .middleware(formLocationMiddleware)
-        .annotateMerge(
-          OpenApi.annotations({
-            identifier: "session.form.list",
-            summary: "List session forms",
-            description: "Retrieve pending forms for a session.",
-          }),
-        ),
+        error: [SessionNotFoundError, InvalidRequestError, LocationNotFoundError],
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "session.form.list",
+          summary: "List session forms",
+          description: "Retrieve pending forms for a session.",
+        }),
+      ),
     )
     .add(
       HttpApiEndpoint.post("session.form.create", "/api/session/:sessionID/form", {
