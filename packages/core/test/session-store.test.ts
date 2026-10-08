@@ -51,6 +51,20 @@ const seedSessions = (rows: { id: string; updated: number }[]) =>
   })
 
 describe("SessionStore", () => {
+  it.effect("lists sessions with trailing path separators", () =>
+    Effect.gen(function* () {
+      yield* seedSessions([{ id: "ses_directory", updated: 1 }])
+      const store = yield* SessionStore.Service
+      const paths = ["/project", "/project/", "/project\\\\"] as const
+      yield* Effect.forEach(paths, (directory) =>
+        Effect.gen(function* () {
+          const found = yield* store.list({ directory: AbsolutePath.make(directory) })
+          expect(found.map((session) => String(session.id))).toEqual(["ses_directory"])
+        }),
+      )
+    }),
+  )
+
   it.effect("lists by updated time and ID with exclusive two-item pages in either direction", () =>
     Effect.gen(function* () {
       yield* seedSessions([
