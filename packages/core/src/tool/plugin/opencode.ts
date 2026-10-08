@@ -6,7 +6,10 @@ import type { SessionHooks } from "@opencode/plugin/effect/session"
 import { Model } from "@opencode/schema/model"
 import { AbsolutePath } from "@opencode/schema/schema"
 import { Session } from "@opencode/schema/session"
+import { Worktree } from "@opencode/schema/worktree"
 import { Effect, Schema } from "effect"
+import { FileAccess } from "../../file-access.js"
+import { Permission } from "../../permission.js"
 
 export const RenameInput = Schema.Struct({
   sessionID: Schema.optionalKey(Session.ID).annotate({ description: "Omit to rename the current session." }),
@@ -23,6 +26,21 @@ export const MoveInput = Schema.Struct({
 })
 
 const MoveOutput = Schema.Struct({ sessionID: Session.ID, directory: AbsolutePath })
+
+export const WorktreeCreateInput = Schema.Struct({
+  name: Schema.Trim.check(Schema.isNonEmpty()).annotate({ description: "Worktree name." }),
+})
+
+export const WorktreeRemoveInput = Schema.Struct({
+  directory: AbsolutePath.check(Schema.isMinLength(1)).annotate({
+    description: "Absolute path of the worktree to remove.",
+  }),
+  force: Schema.optionalKey(Schema.Boolean).annotate({
+    description: "Force removal, including uncommitted changes. Defaults to false.",
+  }),
+})
+
+const WorktreeRemoveOutput = Schema.Struct({ directory: AbsolutePath, removed: Schema.Boolean })
 
 export const ModelsInput = Schema.Struct({
   query: Schema.optionalKey(Schema.String).annotate({
@@ -68,6 +86,8 @@ const ModelsOutput = Schema.Struct({
 export const Plugin = {
   id: "opencode.tools",
   effect: Effect.fn("OpenCodeTools.Plugin")(function* (ctx: Context) {
+    const access = yield* FileAccess.Service
+    const permission = yield* Permission.Service
     const hook = (event: SessionHooks["context"]) =>
       Effect.sync(() => {
         event.system.push(
@@ -84,7 +104,7 @@ export const Plugin = {
         draft.namespace({
           name: "opencode",
           description:
-            "Tools for managing OpenCode itself, such as working with sessions, searching the available models, and reading MCP resources.",
+            "Tools for managing OpenCode itself, such as working with sessions and worktrees, searching the available models, and reading MCP resources.",
         })
         draft.add({
           name: "session_rename",
@@ -128,6 +148,67 @@ export const Plugin = {
             }).pipe(
               Effect.mapError(
                 (error) => new ToolFailure({ message: `Unable to move session to ${input.directory}`, error }),
+              ),
+            ),
+        })
+        draft.add({
+          name: "worktree_create",
+          description: "Create a named worktree. Returns its directory.",
+          input: WorktreeCreateInput,
+          output: Worktree.Info,
+          options: { namespace: "opencode", codemode: true },
+          execute: (input) =>
+            ctx.worktree.create({ projectID: ctx.location.project.id, name: input.name }).pipe(
+              Effect.map((output) => ({ output, content: `Created worktree in ${output.directory}.` })),
+              Effect.mapError(
+                (error) => new ToolFailure({ message: `Unable to create worktree ${input.name}`, error }),
+              ),
+            ),
+        })
+        draft.add({
+          name: "worktree_list",
+          description: "List a repository's worktrees.",
+          input: Schema.Struct({}),
+          output: Schema.Struct({ worktrees: Worktree.List }),
+          options: { namespace: "opencode", codemode: true },
+          execute: () =>
+            ctx.worktree.list({ projectID: ctx.location.project.id }).pipe(
+              Effect.map((worktrees) => ({ output: { worktrees } })),
+              Effect.mapError((error) => new ToolFailure({ message: "Unable to list worktrees", error })),
+            ),
+        })
+        draft.add({
+          name: "worktree_remove",
+          description:
+            "Remove a worktree. The repository location selects configuration; directory identifies the worktree to remove.",
+          input: WorktreeRemoveInput,
+          output: WorktreeRemoveOutput,
+          options: { namespace: "opencode", codemode: true, permission: "edit" },
+          execute: (input, context) =>
+            Effect.gen(function* () {
+              // Removing a worktree deletes files, so it requires the same approval as editing them.
+              const target = yield* access.resolve({ path: input.directory, kind: "directory" })
+              yield* access.authorizeExternal([target], context)
+              yield* permission.assert({
+                action: "edit",
+                resources: [target.resource],
+                save: ["*"],
+                sessionID: context.sessionID,
+                agent: context.agent,
+                source: { type: "tool", messageID: context.messageID, id: context.id },
+              })
+              yield* ctx.worktree.remove({
+                projectID: ctx.location.project.id,
+                directory: input.directory,
+                force: input.force ?? false,
+              })
+              return {
+                output: { directory: input.directory, removed: true },
+                content: `Removed worktree ${input.directory}.`,
+              }
+            }).pipe(
+              Effect.mapError(
+                (error) => new ToolFailure({ message: `Unable to remove worktree ${input.directory}`, error }),
               ),
             ),
         })
