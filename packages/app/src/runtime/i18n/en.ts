@@ -10,7 +10,7 @@ export const dict = {
   "session.location.moving": "Moving session…",
   "session.location.moveFailed": "Failed to move session",
   "server.action.authenticate": "Authenticate",
-  "server.status.connecting": "Connecting over SSH…",
+  "server.status.connecting": "Connecting…",
   "server.status.authentication": "Authentication required",
   "command.category.suggested": "Suggested",
   "command.category.view": "View",
