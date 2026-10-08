@@ -269,6 +269,10 @@ import type {
   ConfigShellsOutput,
   ConfigUpdateInput,
   ConfigUpdateOutput,
+  VoiceTranscribeInput,
+  VoiceTranscribeOutput,
+  VoiceRecordingInput,
+  VoiceRecordingOutput,
 } from "../api/api.js"
 import { ClientError } from "./client-error.js"
 
@@ -1583,15 +1587,35 @@ const EndpointConfigGet = (raw: RawClient["server.config"]) => (input?: ConfigGe
 const EndpointConfigShells = (raw: RawClient["server.config"]) => () =>
   preserveEffect<ConfigShellsOutput>()(raw["config.shells"]({}).pipe(Effect.mapError(mapClientError)))
 
-const EndpointConfigUpdate = (raw: RawClient["server.config"]) => (input: ConfigUpdateInput) =>
+const EndpointConfigUpdate = (raw: RawClient["server.config"]) => (input?: ConfigUpdateInput) =>
   preserveEffect<ConfigUpdateOutput>()(
-    raw["config.update"]({ payload: { shell: input["shell"] } }).pipe(Effect.mapError(mapClientError)),
+    raw["config.update"]({ payload: { shell: input?.["shell"], voice: input?.["voice"] } }).pipe(
+      Effect.mapError(mapClientError),
+    ),
   )
 
 const adaptGroupConfig = (raw: RawClient["server.config"]) => ({
   get: EndpointConfigGet(raw),
   shells: EndpointConfigShells(raw),
   update: EndpointConfigUpdate(raw),
+})
+
+const EndpointVoiceTranscribe = (raw: RawClient["server.voice"]) => (input: VoiceTranscribeInput) =>
+  preserveEffect<VoiceTranscribeOutput>()(
+    raw["voice.transcribe"]({
+      query: { location: input["location"] },
+      payload: { audio: input["audio"], mime: input["mime"], prompt: input["prompt"] },
+    }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const EndpointVoiceRecording = (raw: RawClient["server.voice"]) => (input?: VoiceRecordingInput) =>
+  preserveEffect<VoiceRecordingOutput>()(
+    raw["voice.recording"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const adaptGroupVoice = (raw: RawClient["server.voice"]) => ({
+  transcribe: EndpointVoiceTranscribe(raw),
+  recording: EndpointVoiceRecording(raw),
 })
 
 const adaptClient = (raw: RawClient) => ({
@@ -1625,6 +1649,7 @@ const adaptClient = (raw: RawClient) => ({
   migration: adaptGroupMigration(raw["server.migration"]),
   websearch: adaptGroupWebsearch(raw["server.websearch"]),
   config: adaptGroupConfig(raw["server.config"]),
+  voice: adaptGroupVoice(raw["server.voice"]),
 })
 
 export const make = (options?: { readonly baseUrl?: URL | string }) =>

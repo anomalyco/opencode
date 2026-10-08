@@ -34,6 +34,7 @@ import { SessionEvent } from "./session-event.js"
 import { SessionStatusEvent } from "./session-status-event.js"
 import { TuiEvent } from "./tui-event.js"
 import { VcsEvent } from "./vcs-event.js"
+import { VoiceEvent } from "./voice-event.js"
 import { WorkspaceEvent } from "./workspace-event.js"
 import { WorktreeEvent } from "./worktree-event.js"
 import { WebSearch } from "./websearch.js"
@@ -74,6 +75,7 @@ export const ServerDefinitions = Event.inventory(
   // Current events the TUI consumes from the public stream.
   ...SessionStatusEvent.Definitions,
   ...TuiEvent.Definitions,
+  ...VoiceEvent.Definitions,
   ...InstallationEvent.Definitions,
   ...VcsEvent.Definitions,
   McpEvent.StatusChanged,
@@ -89,6 +91,7 @@ export const Definitions = Event.inventory(
   ...featureDefinitions,
   ...LspEvent.Definitions,
   ...TuiEvent.Definitions,
+  ...VoiceEvent.Definitions,
   ...McpEvent.Definitions,
   ...LegacyEventV1.Definitions,
   ...FileSystemV1.Event.Definitions,

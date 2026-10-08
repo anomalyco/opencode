@@ -51,6 +51,7 @@ import { DialogSkill } from "../dialog-skill"
 import { useConfig } from "../../config"
 import { usePromptMove } from "./move"
 import { resolvePastedAttachments } from "./local-attachment"
+import { useVoice } from "./voice"
 import { locationKey, useData } from "../../context/data"
 import { useLocation } from "../../context/location"
 import { useArgs } from "../../context/args"
@@ -367,6 +368,11 @@ export function Prompt(props: PromptProps) {
     extmarkToPart: new Map(),
     interrupt: 0,
   })
+  const voice = useVoice({
+    input: () => input,
+    promptInput: () => store.prompt.text,
+    submit: () => submit(),
+  })
   let disposed = false
   let pasteQueue = Promise.resolve()
 
@@ -416,6 +422,32 @@ export function Prompt(props: PromptProps) {
 
   const promptCommands = createMemo(() =>
     [
+      {
+        title: "Voice input",
+        name: "prompt.voice",
+        category: "Prompt",
+        palette: undefined,
+        run: async () => {
+          if (voice.pendingRetry()) {
+            await voice.confirmRetry()
+          } else {
+            await voice.toggle("send")
+          }
+        },
+      },
+      {
+        title: "Voice input (pause & insert)",
+        name: "prompt.voice.pause",
+        category: "Prompt",
+        palette: undefined,
+        run: async () => {
+          if (voice.pendingRetry()) {
+            await voice.confirmRetry()
+          } else {
+            await voice.toggle("insert")
+          }
+        },
+      },
       {
         title: "Clear prompt",
         name: "prompt.clear",
@@ -646,6 +678,18 @@ export function Prompt(props: PromptProps) {
     priority: 1,
     enabled: !disabled(),
     bindings: ["prompt.queue"],
+  }))
+
+  Keymap.createLayer(() => ({
+    priority: 1,
+    enabled: !disabled(),
+    bindings: ["prompt.voice"],
+  }))
+
+  Keymap.createLayer(() => ({
+    priority: 1,
+    enabled: !disabled(),
+    bindings: ["prompt.voice.pause"],
   }))
 
   Keymap.createLayer(() => ({
@@ -1655,6 +1699,21 @@ export function Prompt(props: PromptProps) {
   return (
     <>
       <box ref={(r: BoxRenderable) => (anchor = r)} visible={props.visible !== false} width="100%">
+        <Show when={voice.recording() || voice.processing()}>
+          <box flexDirection="row" flexWrap="no-wrap" gap={2} flexShrink={0} paddingLeft={3}>
+            <Show
+              when={voice.recording()}
+              fallback={
+                <text fg={theme.text.feedback.warning.base} wrapMode="none">
+                  ⠋ Transcribing
+                </text>
+              }
+            >
+              <text fg={theme.text.feedback.warning.base} wrapMode="none">{`REC ${voice.elapsedLabel()} ●`}</text>
+              <text fg={theme.text.feedback.warning.base} wrapMode="none">{voice.waveform()}</text>
+            </Show>
+          </box>
+        </Show>
         <box
           width="100%"
           border={["left"]}
@@ -1766,6 +1825,11 @@ export function Prompt(props: PromptProps) {
               }}
               onSubmit={() => {
                 if (disabled()) return
+                // While recording, Enter stops and sends the transcription.
+                if (voice.recording()) {
+                  void voice.stopSend()
+                  return
+                }
                 // IME: double-defer so the last composed character (e.g. Korean
                 // hangul) is flushed to plainText before we read it for submission.
                 setTimeout(() => setTimeout(() => submit(), 0), 0)
@@ -1843,6 +1907,55 @@ export function Prompt(props: PromptProps) {
                 modelAlpha={modelMetaAlpha()}
                 variantAlpha={variantMetaAlpha()}
               />
+              <Show
+                when={voice.pendingRetry()}
+                fallback={
+                  <box flexDirection="row" gap={2} alignItems="center">
+                    <Show when={voice.recording()}>
+                      <box
+                        onMouseUp={() => {
+                          void voice.stopInsert()
+                        }}
+                      >
+                        <text fg={theme.text.feedback.warning.base}>▮▮</text>
+                      </box>
+                      <box
+                        onMouseUp={() => {
+                          void voice.stopSend()
+                        }}
+                      >
+                        <text fg={theme.text.feedback.warning.base}>■</text>
+                      </box>
+                      <box
+                        onMouseUp={() => {
+                          voice.cancelRecording()
+                        }}
+                      >
+                        <text fg={theme.text.muted}>✕</text>
+                      </box>
+                    </Show>
+                    <Show when={!voice.recording()}>
+                      <box
+                        onMouseUp={async () => {
+                          if (!voice.enabled() && !voice.processing()) return
+                          await voice.toggle("send")
+                        }}
+                      >
+                        <text fg={voice.color()}>{voice.processing() ? "⠋" : "⊙"}</text>
+                      </box>
+                    </Show>
+                  </box>
+                }
+              >
+                <box flexDirection="row" gap={1}>
+                  <box onMouseUp={() => voice.confirmRetry()}>
+                    <text fg={theme.text.feedback.warning.base}>Retry</text>
+                  </box>
+                  <box onMouseUp={() => voice.cancelRetry()}>
+                    <text fg={theme.text.muted}>Cancel</text>
+                  </box>
+                </box>
+              </Show>
             </box>
           </box>
         </box>

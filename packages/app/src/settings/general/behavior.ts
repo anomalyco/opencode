@@ -1,5 +1,25 @@
 import { onCleanup } from "solid-js"
 
+export type VoiceConfigPatch = {
+  url?: string
+  apiKey?: string
+  model?: string
+}
+
+// Voice ships unconfigured, so empty fields are omitted and an all-empty
+// input clears the stored config (null) instead of writing blank strings.
+export function voiceConfigPatch(input: VoiceConfigPatch): VoiceConfigPatch | null {
+  const voice: VoiceConfigPatch = {}
+
+  if (input.url?.trim()) voice.url = input.url.trim()
+
+  if (input.apiKey?.trim()) voice.apiKey = input.apiKey.trim()
+
+  if (input.model?.trim()) voice.model = input.model.trim()
+
+  return Object.keys(voice).length > 0 ? voice : null
+}
+
 export type ShellOption = {
   path: string
   name: string

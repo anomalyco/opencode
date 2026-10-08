@@ -130,6 +130,14 @@ const icons = {
     viewBox: "0 0 16 16",
     body: `<path d="M4.25 11.75L11.75 4.25M11.75 11.75L4.25 4.25" stroke="currentColor"/>`,
   },
+  mic: {
+    viewBox: "0 0 16 16",
+    body: `<rect x="6" y="1.5" width="4" height="7.5" rx="2" stroke="currentColor"/><path d="M3.75 7.25a4.25 4.25 0 0 0 8.5 0M8 11.5V14M5.75 14h4.5" stroke="currentColor" stroke-linecap="round"/>`,
+  },
+  pause: {
+    viewBox: "0 0 16 16",
+    body: `<rect x="4.75" y="3.5" width="2.5" height="9" rx="1" fill="currentColor"/><rect x="8.75" y="3.5" width="2.5" height="9" rx="1" fill="currentColor"/>`,
+  },
   "outline-xmark": {
     viewBox: "0 0 16 16",
     body: `<path fill-rule="evenodd" clip-rule="evenodd" d="M4.99487 5.70186L7.29297 7.99995L4.99487 10.2981L5.70198 11.0052L8.00008 8.70706L10.2982 11.0052L11.0053 10.2981L8.70718 7.99995L11.0053 5.70186L10.2982 4.99475L8.00008 7.29285L5.70198 4.99475L4.99487 5.70186Z" fill="currentColor"/>`,

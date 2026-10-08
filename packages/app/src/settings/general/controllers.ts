@@ -22,6 +22,8 @@ import { showToast } from "@/shell/notifications/toast"
 
 export { createShellOptions, createSoundPreviewController } from "./behavior"
 
+import { voiceConfigPatch } from "./behavior"
+
 export type { ShellOption, ShellSelectOption } from "./behavior"
 
 export function createServerShellController(server: Accessor<ServerConnection.Any>) {
@@ -61,7 +63,7 @@ export function createServerShellController(server: Accessor<ServerConnection.An
       actions.mutate({ ...previous, shell: value || undefined })
       void serverCtx()
         .sdk.api.config.update({ shell: value || null })
-        .catch((error: unknown) => {
+        .catch((error) => {
           actions.mutate(previous)
           showToast({
             variant: "error",
@@ -175,6 +177,58 @@ export function createSoundSettingsController() {
 }
 
 export type ShellSettingsController = ReturnType<typeof createServerShellController>
+
+export function createServerVoiceController(server: Accessor<ServerConnection.Any>) {
+  const language = useLanguage()
+  const serverCtx = useServerCtx(server)
+  const source = () => ServerConnection.key(server())
+
+  const [state, actions] = createResource(
+    source,
+    async () => {
+      const entries = await serverCtx().sdk.api.config.get().catch(() => [])
+      const boundary = entries.findIndex((entry) => entry.type === "directory")
+      const global = boundary === -1 ? entries : entries.slice(0, boundary)
+
+      const voice = global
+        .flatMap((entry) => (entry.type === "document" && entry.info.voice !== undefined ? [entry.info.voice] : []))
+        .at(-1)
+
+      return {
+        url: voice?.url ?? "",
+        apiKey: voice?.apiKey ?? "",
+        model: voice?.model ?? "",
+      }
+    },
+    { initialValue: { url: "", apiKey: "", model: "" } },
+  )
+
+  const save = (field: "url" | "apiKey" | "model", value: string) => {
+    const previous = state.latest
+    const voice = voiceConfigPatch({ ...previous, [field]: value })
+
+    actions.mutate({ url: voice?.url ?? "", apiKey: voice?.apiKey ?? "", model: voice?.model ?? "" })
+    void serverCtx()
+      .sdk.api.config.update({ voice })
+      .catch((error) => {
+        actions.mutate(previous)
+        showToast({
+          variant: "error",
+          title: language.t("common.requestFailed"),
+          description: error instanceof Error ? error.message : language.t("common.requestFailed"),
+        })
+      })
+  }
+
+  return {
+    url: () => state.latest.url,
+    apiKey: () => state.latest.apiKey,
+    model: () => state.latest.model,
+    save,
+  }
+}
+
+export type ServerVoiceController = ReturnType<typeof createServerVoiceController>
 
 export type AppearanceSettingsController = ReturnType<typeof createAppearanceSettingsController>
 

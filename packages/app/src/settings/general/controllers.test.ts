@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from "bun:test"
 import { createRoot } from "solid-js"
-import { createShellOptions, createSoundPreviewController } from "./behavior"
+import { createShellOptions, createSoundPreviewController, voiceConfigPatch } from "./behavior"
 
 describe("settings controllers", () => {
   test("normalizes shell names and preserves an unavailable configured shell", () => {
@@ -52,5 +52,24 @@ describe("settings controllers", () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+describe("voice settings", () => {
+  test("omits empty fields and trims configured values", () => {
+    expect(
+      voiceConfigPatch({
+        url: " http://127.0.0.1:8797/v1/audio/transcriptions ",
+        apiKey: "",
+        model: " parakeet ",
+      }),
+    ).toEqual({
+      url: "http://127.0.0.1:8797/v1/audio/transcriptions",
+      model: "parakeet",
+    })
+  })
+
+  test("clears the stored config when every field is empty", () => {
+    expect(voiceConfigPatch({ url: "  ", apiKey: "", model: undefined })).toBeNull()
   })
 })

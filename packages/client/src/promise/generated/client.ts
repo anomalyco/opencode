@@ -267,6 +267,10 @@ import type {
   ConfigShellsOutput,
   ConfigUpdateInput,
   ConfigUpdateOutput,
+  VoiceTranscribeInput,
+  VoiceTranscribeOutput,
+  VoiceRecordingInput,
+  VoiceRecordingOutput,
 } from "./types.js"
 import { ClientError } from "./client-error.js"
 
@@ -2225,12 +2229,39 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      update: (input: ConfigUpdateInput, requestOptions?: RequestOptions) =>
+      update: (input?: ConfigUpdateInput, requestOptions?: RequestOptions) =>
         request<ConfigUpdateOutput>(
           {
             method: "PATCH",
             path: `/api/experimental/config`,
-            body: { shell: input["shell"] },
+            body: { shell: input?.["shell"], voice: input?.["voice"] },
+            successStatus: 204,
+            declaredStatuses: [400, 401, 404],
+            empty: true,
+          },
+          requestOptions,
+        ),
+    },
+    voice: {
+      transcribe: (input: VoiceTranscribeInput, requestOptions?: RequestOptions) =>
+        request<VoiceTranscribeOutput>(
+          {
+            method: "POST",
+            path: `/api/voice/transcribe`,
+            query: { location: input["location"] },
+            body: { audio: input["audio"], mime: input["mime"], prompt: input["prompt"] },
+            successStatus: 200,
+            declaredStatuses: [400, 401, 404, 503],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      recording: (input?: VoiceRecordingInput, requestOptions?: RequestOptions) =>
+        request<VoiceRecordingOutput>(
+          {
+            method: "POST",
+            path: `/api/voice/recording`,
+            query: { location: input?.["location"] },
             successStatus: 204,
             declaredStatuses: [400, 401, 404],
             empty: true,

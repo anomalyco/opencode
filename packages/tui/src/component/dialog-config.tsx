@@ -1,8 +1,11 @@
 import { createMemo, createSignal } from "solid-js"
 import { useConfig } from "../config"
 import { useThemes } from "../context/theme"
+import { useDialog } from "../ui/dialog"
+import { DialogPrompt } from "../ui/dialog-prompt"
 import { DialogSelect } from "../ui/dialog-select"
 import { useToast } from "../ui/toast"
+import { exampleTranscriptionUrl } from "../util/voice"
 
 type Setting = {
   title: string
@@ -16,6 +19,8 @@ type Setting = {
   max?: number
   format?: (value: unknown) => string
   keywords?: readonly string[]
+  text?: boolean
+  placeholder?: string
 }
 
 export const settings: Setting[] = [
@@ -315,6 +320,36 @@ export const settings: Setting[] = [
     labels: ["off", "on"],
     keywords: ["debug bar", "developer tools"],
   },
+  {
+    title: "Server URL",
+    category: "Voice",
+    path: ["voice", "url"],
+    default: "",
+    text: true,
+    placeholder: exampleTranscriptionUrl,
+    format: (value) => (String(value ?? "").trim() ? String(value) : "not configured"),
+    keywords: ["transcription", "speech", "dictation", "stt", "whisper", "parakeet", "endpoint"],
+  },
+  {
+    title: "API key",
+    category: "Voice",
+    path: ["voice", "api_key"],
+    default: "",
+    text: true,
+    placeholder: "leave empty for local servers",
+    format: (value) => (String(value ?? "").trim() ? "set" : "not set"),
+    keywords: ["transcription", "token", "bearer", "auth"],
+  },
+  {
+    title: "Model",
+    category: "Voice",
+    path: ["voice", "model"],
+    default: "",
+    text: true,
+    placeholder: "whisper-1",
+    format: (value) => (String(value ?? "").trim() ? String(value) : "default"),
+    keywords: ["transcription", "whisper", "parakeet"],
+  },
 ]
 
 export function settingID(setting: Setting) {
@@ -325,6 +360,7 @@ export function DialogConfig(props: { current?: string }) {
   const config = useConfig()
   const toast = useToast()
   const themes = useThemes()
+  const dialog = useDialog()
   const current = Math.max(
     0,
     settings.findIndex((setting) => settingID(setting) === props.current),
@@ -363,6 +399,7 @@ export function DialogConfig(props: { current?: string }) {
   async function change(direction: number, index = selected()) {
     if (saving()) return
     const setting = settings[index]
+    if (setting.text) return
     const current = value(setting)
     const choices = values(setting)
     const next = choices
@@ -382,6 +419,42 @@ export function DialogConfig(props: { current?: string }) {
       .finally(() => setSaving(false))
   }
 
+  function openText(setting: Setting) {
+    const current = value(setting)
+    const reopen = () => {
+      dialog.replace(() => <DialogConfig current={settingID(setting)} />)
+    }
+    dialog.replace(() => (
+      <DialogPrompt
+        title={setting.title}
+        placeholder={setting.placeholder ?? String(setting.default ?? "")}
+        value={String(current ?? "")}
+        onConfirm={(text) => {
+          const next = text.trim()
+          if (next === String(current ?? "").trim()) {
+            reopen()
+            return
+          }
+          setSaving(true)
+          void config
+            .update((draft) => {
+              const parent = setting.path.slice(0, -1).reduce<Record<string, unknown>>((result, key) => {
+                if (!result[key] || typeof result[key] !== "object") result[key] = {}
+                return result[key] as Record<string, unknown>
+              }, draft)
+              parent[setting.path.at(-1)!] = next
+            })
+            .catch(toast.error)
+            .finally(() => {
+              setSaving(false)
+              reopen()
+            })
+        }}
+        onCancel={reopen}
+      />
+    ))
+  }
+
   return (
     <DialogSelect
       title="Settings"
@@ -389,7 +462,14 @@ export function DialogConfig(props: { current?: string }) {
       current={current}
       filterThreshold={0.7}
       onMove={(option) => setSelected(option.value)}
-      onSelect={(option) => void change(1, option.value)}
+      onSelect={(option) => {
+        const setting = settings[option.value]
+        if (setting?.text) {
+          openText(setting)
+          return
+        }
+        void change(1, option.value)
+      }}
       footerHints={[{ title: "←/→", label: "change" }]}
       bindings={[
         {

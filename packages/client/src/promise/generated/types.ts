@@ -1189,6 +1189,15 @@ export type TuiSessionSelect = {
   data: { sessionID: string }
 }
 
+export type VoiceRecording = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "voice.recording"
+  location?: LocationRef
+  data: {}
+}
+
 export type InstallationUpdated = {
   id: string
   created: number
@@ -2152,6 +2161,7 @@ export type ConfigEntry =
         plugins?: Array<string | { package: string; options?: { [x: string]: JsonValue } }>
         worktree?: ConfigWorktree
         warming?: boolean | { prompt?: string; interval?: string; duration?: string }
+        voice?: { url?: string; apiKey?: string; model?: string }
         providers?: {
           [x: string]: {
             canonical?: string
@@ -2519,6 +2529,7 @@ export type V2Event =
   | TuiCommandExecute
   | TuiToastShow
   | TuiSessionSelect
+  | VoiceRecording
   | InstallationUpdated
   | InstallationUpdateAvailable
   | VcsBranchUpdated
@@ -6693,6 +6704,30 @@ export type ConfigGetOutput = Array<ConfigEntry>
 
 export type ConfigShellsOutput = Array<ConfigShellOption>
 
-export type ConfigUpdateInput = { readonly shell: { readonly shell: string | null }["shell"] }
+export type ConfigUpdateInput = {
+  readonly shell?: {
+    readonly shell?: string | null | null
+    readonly voice?: { readonly url?: string; readonly apiKey?: string; readonly model?: string } | null | null
+  }["shell"]
+  readonly voice?: {
+    readonly shell?: string | null | null
+    readonly voice?: { readonly url?: string; readonly apiKey?: string; readonly model?: string } | null | null
+  }["voice"]
+}
 
 export type ConfigUpdateOutput = void
+
+export type VoiceTranscribeInput = {
+  readonly location?: { readonly location?: { readonly directory?: string | undefined } | undefined }["location"]
+  readonly audio: { readonly audio: string; readonly mime: string; readonly prompt?: string | undefined }["audio"]
+  readonly mime: { readonly audio: string; readonly mime: string; readonly prompt?: string | undefined }["mime"]
+  readonly prompt?: { readonly audio: string; readonly mime: string; readonly prompt?: string | undefined }["prompt"]
+}
+
+export type VoiceTranscribeOutput = { text: string }
+
+export type VoiceRecordingInput = {
+  readonly location?: { readonly location?: { readonly directory?: string | undefined } | undefined }["location"]
+}
+
+export type VoiceRecordingOutput = void
