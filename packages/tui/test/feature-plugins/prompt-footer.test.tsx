@@ -101,6 +101,7 @@ test("prompt footer can hide details", async () => {
       shell: { list: () => [] },
       location: {
         model: { list: () => [{ providerID: "provider", id: "model", limit: { context: 10_000 } }] },
+        agent: { list: () => [{ mode: "primary", hidden: false }] },
       },
     },
   } as unknown as Context
@@ -136,6 +137,51 @@ test("prompt footer can hide details", async () => {
     expect(frame).not.toContain("ctrl+p commands")
 
     setSessionID(undefined)
+    await app.renderOnce()
+    expect(app.captureCharFrame()).not.toContain("shift+tab agents")
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("agent cycle hint needs at least two selectable agents", async () => {
+  const color = RGBA.fromInts(200, 200, 200)
+  const [agents, setAgents] = createSignal([{ mode: "primary", hidden: false }])
+  const context = {
+    location: { directory: "/workspace" },
+    theme: { text: { base: color, muted: color } },
+    keymap: {
+      shortcuts: (id: string) =>
+        id === "agent.cycle" ? ["shift+tab"] : id === "command.palette.show" ? ["ctrl+p"] : [],
+    },
+    data: { location: { agent: { list: () => agents() } } },
+  } as unknown as Context
+  const app = await testRender(
+    () => <PromptFooter context={context} mode="normal" showDetails={true} />,
+    { width: 100, height: 1 },
+  )
+
+  try {
+    await app.renderOnce()
+    expect(app.captureCharFrame()).not.toContain("shift+tab agents")
+    expect(app.captureCharFrame()).toContain("ctrl+p commands")
+
+    setAgents([
+      { mode: "primary", hidden: false },
+      { mode: "subagent", hidden: false },
+      { mode: "primary", hidden: true },
+    ])
+    await app.renderOnce()
+    expect(app.captureCharFrame()).not.toContain("shift+tab agents")
+
+    setAgents([
+      { mode: "primary", hidden: false },
+      { mode: "primary", hidden: false },
+    ])
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("shift+tab agents")
+
+    setAgents([{ mode: "primary", hidden: false }])
     await app.renderOnce()
     expect(app.captureCharFrame()).not.toContain("shift+tab agents")
   } finally {

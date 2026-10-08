@@ -36,7 +36,7 @@ export function PromptMetadataRow(props: {
   return (
     <box flexDirection="row" gap={1} flexGrow={1} flexShrink={1} minWidth={0}>
       <Show
-        when={(props.mode === "shell" || props.agent) && (layout().agent || layout().model)}
+        when={layout().agent || layout().model}
         fallback={<box height={1} />}
       >
         <Show when={layout().agent}>
