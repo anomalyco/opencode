@@ -1,4 +1,5 @@
 import { AIError, ToolFailure, type FinishReasonDetails } from "@opencode/ai"
+import { StorageRetry } from "../database/storage-retry.js"
 import { Tool } from "@opencode/schema/tool"
 import { SessionError } from "@opencode/schema/session-error"
 import { Permission } from "../permission.js"
@@ -82,6 +83,11 @@ export function toSessionError(cause: unknown): SessionError.Error {
   )
     return { type: "provider.no-route", message: cause.message }
   if (cause instanceof Integration.AuthorizationError) return { type: "provider.auth", message: cause.message }
+  if (StorageRetry.isTransient(cause))
+    return {
+      type: "storage",
+      message: `Couldn’t save the session: ${StorageRetry.message(cause) ?? "storage unavailable"}`,
+    }
   return { type: "unknown", message: cause instanceof Error ? cause.message : String(cause) }
 }
 

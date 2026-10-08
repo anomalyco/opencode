@@ -2,6 +2,7 @@ export * as Job from "./job.js"
 
 import { Array, Cause, Clock, Context, Deferred, Effect, Exit, Layer, Schema, Scope, SynchronizedRef } from "effect"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
+import { StorageRetry } from "./database/storage-retry.js"
 import { KV } from "./kv.js"
 import { SessionMessage } from "./session/message.js"
 import { SessionSchema } from "./session/schema.js"
@@ -232,7 +233,19 @@ export const make = Effect.gen(function* () {
             ...(Exit.isFailure(exit) ? { error: errorText(exit.cause) } : {}),
           },
         }
-        if (status !== "cancelled") yield* persistBackground(next)
+        // The durable marker only matters after a restart, while a job left running here would
+        // never resolve its waiters, so an outcome that cannot be persisted still settles.
+        if (status !== "cancelled")
+          yield* persistBackground(next).pipe(
+            StorageRetry.retry(),
+            Effect.catchCauseIf(
+              (cause) => !Cause.hasInterrupts(cause),
+              (cause) =>
+                Effect.logError("Failed to persist background job outcome", cause).pipe(
+                  Effect.annotateLogs({ jobID: id }),
+                ),
+            ),
+          )
         return [{ info: snapshot(next), done: job.done, scope: job.scope }, new Map(jobs).set(id, next)]
       }),
     )

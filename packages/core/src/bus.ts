@@ -5,6 +5,7 @@ import { Event } from "@opencode/schema/event"
 import type { EventLog } from "@opencode/schema/event-log"
 import { and, asc, eq, gt, lte, sql } from "drizzle-orm"
 import { Database } from "./database/database.js"
+import { StorageRetry } from "./database/storage-retry.js"
 import { EventSequenceTable, EventTable } from "./event/sql.js"
 import type { Location } from "@opencode/schema/location"
 import { KeyedMutex } from "./effect/keyed-mutex.js"
@@ -312,6 +313,7 @@ export function configured(options?: Options) {
               )
             }
             const list = projectors.get(versionedType(definition.type, durable.version)) ?? []
+            // A failed attempt commits nothing, so a transient storage failure reruns the whole transaction.
             return yield* Effect.uninterruptible(
               Effect.gen(function* () {
                 const committed = yield* db
@@ -443,7 +445,7 @@ export function configured(options?: Options) {
                 }
                 return committed
               }),
-            )
+            ).pipe(StorageRetry.retry())
           })
         }
 
@@ -573,8 +575,9 @@ export function configured(options?: Options) {
               )
             }
             return yield* durableLocks.withLock(aggregateID)(
-              Effect.uninterruptible(
+              Effect.uninterruptibleMask((restore) =>
                 Effect.gen(function* () {
+                  // A failed attempt commits nothing, so a transient storage failure reruns the whole transaction.
                   const committed = yield* db
                     .transaction(
                       () =>
@@ -651,7 +654,7 @@ export function configured(options?: Options) {
                         }),
                       { behavior: "immediate" },
                     )
-                    .pipe(Effect.orDie)
+                    .pipe(Effect.orDie, Effect.uninterruptible, StorageRetry.retry(), restore)
                   committed.route()
                   yield* Effect.forEach(
                     pubsub.durable.get(aggregateID) ?? [],

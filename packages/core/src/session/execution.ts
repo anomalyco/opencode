@@ -3,6 +3,7 @@ export * as SessionExecution from "./execution.js"
 import { Cause, Context, Effect, Exit, Layer } from "effect"
 import { Bus } from "../bus.js"
 import { Database } from "../database/database.js"
+import { StorageRetry } from "../database/storage-retry.js"
 import { Job } from "../job.js"
 import { Instance } from "../instance/service.js"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
@@ -62,8 +63,14 @@ export const layer = Layer.effect(
     const bus = yield* Bus.Service
     const jobs = yield* Job.Service
     const db = (yield* Database.Service).db
+    // Lifecycle events are the only durable record of a turn's outcome and the claim release, so keep
+    // retrying through a storage outage: a dropped terminal leaves the Session looking busy forever.
+    // The retries wait interruptibly, so shutdown is not held up; the claim then survives for restart.
     const reportLifecycle = <A>(sessionID: SessionSchema.ID, effect: Effect.Effect<A>) =>
       effect.pipe(
+        Effect.catchCauseIf(StorageRetry.isTransient, () =>
+          Effect.interruptible(effect.pipe(StorageRetry.retry(StorageRetry.settlement))),
+        ),
         Effect.tapCause((cause) =>
           Cause.hasInterruptsOnly(cause)
             ? Effect.void

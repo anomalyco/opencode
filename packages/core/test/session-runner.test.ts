@@ -80,6 +80,7 @@ import { Cause, Context, DateTime, Deferred, Effect, Exit, Fiber, Layer, Queue, 
 import { TestClock } from "effect/testing"
 import { asc, desc, eq, sql } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
+import { StorageFault } from "./lib/storage-fault"
 import { promptLocationNode } from "./fixture/prompt-location"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { Expected } from "./lib/session-message"
@@ -271,8 +272,12 @@ const transformTools = (registry: Tool.Interface, tools: Readonly<Record<string,
   registry.transform((editor) =>
     Object.entries(tools).forEach(([name, tool]) => editor.add({ ...tool, name, options: options ?? tool.options })),
   )
+// Lets a suite swap graph nodes, such as storage, without rebuilding the harness.
+const Overrides = Context.Reference<LayerNode.Replacements>("test/SessionRunnerOverrides", {
+  defaultValue: () => [],
+})
 const layer = Layer.unwrap(
-  Effect.map(RunnerState, (state) => {
+  Effect.map(Effect.all([RunnerState, Overrides]), ([state, overrides]) => {
     const modelTransport = Layer.succeed(
       SessionModelTransport.Service,
       SessionModelTransport.Service.of({
@@ -424,6 +429,7 @@ const layer = Layer.unwrap(
       PluginSupervisor.node.replace(Layer.empty),
       Plugin.node.replace(Layer.mock(Plugin.Service, { awaitActivation: Effect.void })),
       SessionModelTransport.node.replace(modelTransport),
+      ...overrides,
     ]
     const runnerLayer = AppNodeBuilder.build(SessionRunnerLLM.node, [
       ...replacements,
@@ -6625,4 +6631,37 @@ describe("SessionRunnerLLM", () => {
     if (!(defect instanceof Error)) return
     expect(defect.message).toBe("Tool input delta before start: call-1")
   })
+})
+
+const disk = StorageFault.make()
+const itFullDisk = testEffect(layer.pipe(Layer.provide(Layer.succeed(Overrides, [Database.node.replace(disk.node)]))))
+
+describe("session runner on a full disk", () => {
+  itFullDisk.effect("a turn waits out a briefly full disk and finishes normally", () =>
+    Effect.gen(function* () {
+      const s = yield* setup
+      yield* s.admit("Echo while the disk fills")
+      yield* s.llm.push(TestLLM.tool("call-disk", "echo", { text: "kept" }), TestLLM.text("Done", "text-disk"))
+      const tools = yield* s.blockTools()
+      const run = yield* s.resume.pipe(Effect.exit, Effect.forkChild)
+      yield* tools.started
+
+      // The tool result and every later step event now wait for storage instead of failing the turn.
+      yield* disk.fill
+      yield* tools.release
+      yield* StorageFault.elapse(10_000)
+      expect(run.pollUnsafe()).toBeUndefined()
+      expect(yield* disk.failures).toBeGreaterThan(0)
+
+      yield* disk.free
+      yield* StorageFault.elapse(5_000)
+      expect(Exit.isSuccess(yield* Fiber.join(run))).toBe(true)
+      expect(s.requests).toHaveLength(2)
+      const assistants = (yield* s.messages).filter((message) => message.type === "assistant")
+      expect(assistants.map((message) => message.finish).toSorted()).toEqual(["stop", "tool-calls"])
+      expect(assistants.flatMap((message) => message.content).find((part) => part.type === "tool")).toMatchObject({
+        state: { status: "completed" },
+      })
+    }),
+  )
 })

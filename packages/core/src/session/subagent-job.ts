@@ -1,6 +1,7 @@
 export * as SubagentJob from "./subagent-job.js"
 
-import { Effect, Scope } from "effect"
+import { Cause, Effect, Scope } from "effect"
+import { StorageRetry } from "../database/storage-retry.js"
 import { Job } from "../job.js"
 import { Session } from "../session.js"
 import { SubagentCompletion } from "./subagent-completion.js"
@@ -26,8 +27,19 @@ export const make: Effect.Effect<Runner, never, Session.Service | Job.Service | 
     notifications.add(key)
     yield* Effect.gen(function* () {
       const info = (yield* jobs.wait({ id: recovery.childSessionID })).info
-      if (info) yield* SubagentCompletion.deliver(sessions, jobs, { ...info, recovery })
+      // Delivery reuses the notification ID, so a retried admission cannot duplicate the notice.
+      if (info)
+        yield* SubagentCompletion.deliver(sessions, jobs, { ...info, recovery }).pipe(
+          StorageRetry.retry(StorageRetry.settlement),
+        )
     }).pipe(
+      Effect.tapCause((cause) =>
+        Cause.hasInterrupts(cause)
+          ? Effect.void
+          : Effect.logError("Failed to notify parent of subagent outcome", cause).pipe(
+              Effect.annotateLogs({ sessionID: recovery.parentSessionID, childID: recovery.childSessionID }),
+            ),
+      ),
       Effect.ensuring(Effect.sync(() => notifications.delete(key))),
       Effect.forkIn(scope, { startImmediately: true }),
     )
