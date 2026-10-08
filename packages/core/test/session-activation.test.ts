@@ -40,6 +40,7 @@ const project = Effect.gen(function* () {
       `export default {
         id: "prompt-readiness",
         async setup(ctx) {
+          await ctx.session.hook("interrupt", (event) => Bun.write(${JSON.stringify(tmp.path)} + "/interrupted-" + event.sessionID, ""))
           await ctx.session.hook("prompt", (event) => {
             event.prompt.text = "Prepared by plugin"
           })
@@ -108,6 +109,18 @@ describe("Session waits for plugin activation", () => {
       expect(yield* Effect.promise(() => Bun.file(path.join(tmp.path, "cancelled-" + second.id)).exists())).toBe(false)
       yield* Fiber.interrupt(other)
       yield* Fiber.await(other)
+    }),
+  )
+
+  it.live("notifies explicit interruption hooks even when the session has no active execution", () =>
+    Effect.gen(function* () {
+      const tmp = yield* project
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({ location: { directory: AbsolutePath.make(tmp.path) } })
+      expect(yield* sessions.interrupt(session.id)).toBe(false)
+      expect(yield* Effect.promise(() => Bun.file(path.join(tmp.path, "interrupted-" + session.id)).exists())).toBe(
+        true,
+      )
     }),
   )
 

@@ -131,6 +131,17 @@ test("a returned command waits for the current execution's final text and termin
   ).toBe(true)
 })
 
+test("closing the ACP transport does not send an explicit user interruption", async () => {
+  const acp = await startSession({
+    onPrompt: ({ sessionID, id }) => [delivered(sessionID, id), textDelta(sessionID, "msg_work", "working")],
+  })
+  const prompt = acp.prompt(acp.sessionId, "work").catch(() => undefined)
+  await acp.waitForUpdate((item) => item.update.sessionUpdate === "agent_message_chunk")
+  await acp[Symbol.asyncDispose]()
+  await prompt
+  expect(acp.server.interrupts).toEqual([])
+})
+
 describe("acp prompt turns over the wire", () => {
   test("streams an admitted turn and resolves with usage after its terminal event", async () => {
     const releaseAdmission = Promise.withResolvers<void>()

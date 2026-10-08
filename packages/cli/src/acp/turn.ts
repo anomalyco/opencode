@@ -67,6 +67,7 @@ export const make = Effect.fnUntraced(function* (input: {
   const scope = yield* Effect.scope
   const drainTimeout = yield* CancelDrainTimeout
   const turns = yield* FiberMap.make<string, PromptResponse, ACPError.Failure>()
+  const cancellationRequests = new Set<string>()
 
   const open = Effect.fnUntraced(function* (ctx: ACPTranslate.TurnContext, state: Ref.Ref<ACPTranslate.TurnState>) {
     // Parented to the service scope; the session scope may already be closed.
@@ -277,6 +278,7 @@ export const make = Effect.fnUntraced(function* (input: {
     events: Fiber.Fiber<ACPTranslate.Terminal, ACPError.Failure>,
   ) {
     yield* Deferred.succeed(turn.cancelled, undefined)
+    if (!cancellationRequests.has(turn.ctx.sessionID)) return
     yield* input.client.session
       .interrupt({ sessionID: turn.ctx.sessionID })
       .pipe(
@@ -389,7 +391,11 @@ export const make = Effect.fnUntraced(function* (input: {
       ),
       (turn) => execute(attached, prompt, turn),
       (turn, exit) => handoff(attached, turn, exit),
-    ).pipe(Effect.interruptible, Effect.exit)
+    ).pipe(
+      Effect.interruptible,
+      Effect.exit,
+      Effect.ensuring(Effect.sync(() => cancellationRequests.delete(attached.id))),
+    )
     return yield* settle(attached, yield* Ref.get(state), exit)
   })
 
@@ -410,14 +416,27 @@ export const make = Effect.fnUntraced(function* (input: {
         return Effect.succeed(forked)
       })
       // A `$/cancel_request` for this prompt cancels its turn like `session/cancel`, rather than failing the request.
-      yield* aborted(signal).pipe(Effect.andThen(Fiber.interrupt(turn)), Effect.forkChild)
+      yield* aborted(signal).pipe(
+        Effect.tap(() =>
+          Effect.sync(() => {
+            if (!input.connection.signal?.aborted) cancellationRequests.add(params.sessionId)
+          }),
+        ),
+        Effect.andThen(Fiber.interrupt(turn)),
+        Effect.forkChild,
+      )
       return yield* Fiber.join(turn)
     }),
     cancel: Effect.fnUntraced(function* (params) {
+      cancellationRequests.add(params.sessionId)
       yield* FiberMap.remove(turns, params.sessionId)
+      cancellationRequests.delete(params.sessionId)
     }),
     close: Effect.fn("cli.acp.turn.close")(function* (sessionID) {
-      if (FiberMap.hasUnsafe(turns, sessionID)) return yield* FiberMap.remove(turns, sessionID)
+      if (FiberMap.hasUnsafe(turns, sessionID)) {
+        cancellationRequests.add(sessionID)
+        return yield* FiberMap.remove(turns, sessionID)
+      }
       yield* ACPClient.decodeSessionID(sessionID).pipe(
         Effect.flatMap((id) => input.client.session.interrupt({ sessionID: id })),
         Effect.catchTag(["ACPInvalidRequestError", "SessionNotFoundError"], () => Effect.void),
