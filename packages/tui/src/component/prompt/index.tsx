@@ -324,7 +324,11 @@ export function Prompt(props: PromptProps) {
       if (msg.agent && isPrimaryAgent) {
         // Keep command line --agent if specified.
         if (!args.agent) local.agent.set(msg.agent)
-        if (msg.model) {
+        // Keep command line --model if specified too: resuming a session with
+        // `--session <id> --model <provider/model>` must not switch back to the
+        // session's last-used model. The variant travels with the model, so it
+        // is only restored when the model itself comes from the session.
+        if (!args.model && msg.model) {
           local.model.set(msg.model)
           local.model.variant.set(msg.model.variant)
         }
