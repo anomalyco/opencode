@@ -23,7 +23,10 @@ const layer = Layer.effect(
     // One slot per requested definition in activation order, including ones whose setup failed, so
     // the prefix diff below stays index-aligned and a failed revision is not retried until it changes.
     const active = new Map<Plugin.ID, Slot>()
-    const lock = Semaphore.makeUnsafe(1)
+    // Readers take one permit; teardown takes every permit. Writers close readiness before
+    // waiting, so new readers cannot overtake them and starve activation.
+    const permits = Number.MAX_SAFE_INTEGER
+    const lock = Semaphore.makeUnsafe(permits)
     const ready = yield* Latch.make(true)
     const pending = new Set<object>()
     let closed = false
@@ -37,6 +40,19 @@ const layer = Layer.effect(
       })
     }
     const hold = () => Effect.sync(holdUnsafe)
+    const withActivation = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+      Effect.gen(function* () {
+        while (true) {
+          yield* ready.await
+          // Readiness can close between the wait and acquiring the activation semaphore.
+          const snapshot = yield* lock.withPermit(
+            Effect.suspend(() =>
+              pending.size > 0 ? Effect.succeed(undefined) : effect.pipe(Effect.map((value) => ({ value }))),
+            ),
+          )
+          if (snapshot) return snapshot.value
+        }
+      })
     const pendingFailures = yield* Queue.unbounded<PendingFailure>()
     let discovered: readonly Failure[] = []
     let inventory: Plugin.Info[] = []
@@ -100,7 +116,7 @@ const layer = Layer.effect(
       yield* Effect.acquireUseRelease(
         hold(),
         () =>
-          lock.withPermit(
+          lock.withPermits(permits)(
             Effect.gen(function* () {
               if (closed) return
               discovered = failures
@@ -188,7 +204,7 @@ const layer = Layer.effect(
             ref: item.ref,
             cause: Cause.die(item.failure.cause),
           })
-          yield* lock.withPermit(
+          yield* lock.withPermits(permits)(
             Effect.gen(function* () {
               if (closed) return
               // Failure is already recorded on its exact activation, so an old queued item
@@ -236,14 +252,19 @@ const layer = Layer.effect(
     )
 
     const close = (exit: Exit.Exit<unknown, unknown>) =>
-      lock.withPermit(
-        Effect.gen(function* () {
-          closed = true
-          pending.clear()
-          ready.openUnsafe()
-          active.clear()
-          yield* State.shutdown(Scope.close(scope, exit))
-        }),
+      Effect.acquireUseRelease(
+        hold(),
+        () =>
+          lock.withPermits(permits)(
+            Effect.gen(function* () {
+              closed = true
+              pending.clear()
+              ready.openUnsafe()
+              active.clear()
+              yield* State.shutdown(Scope.close(scope, exit))
+            }),
+          ),
+        (release) => release,
       )
     yield* Effect.addFinalizer(close)
 
@@ -251,6 +272,7 @@ const layer = Layer.effect(
       activate,
       close,
       awaitActivation: ready.await,
+      withActivation,
       hold,
       list,
     })

@@ -86,6 +86,7 @@ import { Expected } from "./lib/session-message"
 import { permissionLayer } from "./lib/permission"
 import { agentHost, modelHost, host, noProviders } from "./plugin/host"
 import { CodeModeInstructions } from "@opencode/core/codemode/instructions"
+import { PluginTestLayer } from "./plugin/fixture"
 
 const emptyCodeMode = `${CodeModeInstructions.render({ total: 0, shown: 0, namespaces: [] })}\n\n`
 type ToolBarrier = {
@@ -211,6 +212,7 @@ const makeRunnerState = (compaction?: SessionRunnerModel.Resolved["compaction"])
     currentModel: model,
     compaction,
     modelResolveHook: resolvesModel,
+    activationPlugins: undefined as Plugin.Interface | undefined,
     systemBaseline: "Initial context",
     systemRemoved: false,
     systemUnavailable: false,
@@ -422,7 +424,12 @@ const layer = Layer.unwrap(
       Permission.node.replace(permission),
       Config.node.replace(config),
       PluginSupervisor.node.replace(Layer.empty),
-      Plugin.node.replace(Layer.mock(Plugin.Service, { awaitActivation: Effect.void })),
+      Plugin.node.replace(
+        Layer.mock(Plugin.Service, {
+          awaitActivation: Effect.suspend(() => state.activationPlugins?.awaitActivation ?? Effect.void),
+          withActivation: (effect) => Effect.suspend(() => state.activationPlugins?.withActivation(effect) ?? effect),
+        }),
+      ),
       SessionModelTransport.node.replace(modelTransport),
     ]
     const runnerLayer = AppNodeBuilder.build(SessionRunnerLLM.node, [
@@ -5427,6 +5434,89 @@ describe("SessionRunnerLLM", () => {
       expect(DateTime.toEpochMillis(assistant.time.streamed!) - DateTime.toEpochMillis(assistant.time.created)).toBe(
         400,
       )
+    })
+  }
+
+  for (const mode of ["next step", "retry context"] as const) {
+    scenario(`real plugin replacement fences ${mode} without replaying input or tools`, function* (s) {
+      const registry = yield* Layer.build(Layer.fresh(PluginTestLayer)).pipe(Scope.provide(yield* Scope.Scope))
+      const plugins = Context.get(registry, Plugin.Service)
+      const models = Context.get(registry, Model.Service)
+      const providerID = Provider.ID.make("fake")
+      const modelID = Model.ID.make("fake-model")
+      const source: Plugin.Generation = {
+        id: "catalog",
+        revision: "1",
+        effect: (ctx) =>
+          ctx.provider
+            .transform((editor) =>
+              editor.add({
+                info: { ...Provider.Info.empty(providerID), activation: "enabled" },
+                models: [Model.Info.default(providerID, modelID)],
+              }),
+            )
+            .pipe(Effect.asVoid),
+      }
+      yield* plugins.activate([{ id: "preceding", revision: "1", effect: () => Effect.void }, source])
+      s.activationPlugins = plugins
+      s.modelResolveHook = models
+        .available()
+        .pipe(
+          Effect.flatMap((available) =>
+            available.some((model) => model.providerID === providerID && model.id === modelID)
+              ? Effect.void
+              : Effect.fail(new SessionRunnerModel.ModelUnavailableError({ providerID, modelID })),
+          ),
+        )
+      yield* s.admit("Continue across replacement")
+      yield* s.llm.push(
+        mode === "retry context"
+          ? Stream.fail(providerUnavailable())
+          : [
+              LLMEvent.stepStart({ index: 0 }),
+              LLMEvent.toolCall({ id: "once", name: "echo", input: { text: "once" } }),
+              LLMEvent.stepFinish({ index: 0, reason: { normalized: "tool-calls" } }),
+              LLMEvent.finish({ reason: { normalized: "tool-calls" } }),
+            ],
+        TestLLM.text("Recovered", "after-reload"),
+      )
+      const scheduled = yield* subscribeRetries(s)
+      const first = yield* s.llm.gate
+      const run = yield* s.resume.pipe(Effect.forkChild)
+      yield* first.started
+      const entered = yield* Deferred.make<void>()
+      const gate = yield* Deferred.make<void>()
+      const activation = yield* plugins
+        .activate([
+          {
+            id: "preceding",
+            revision: "2",
+            effect: () => Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(gate))),
+          },
+          source,
+        ])
+        .pipe(Effect.forkScoped({ startImmediately: true }))
+      yield* Deferred.await(entered)
+      expect(yield* models.available()).toEqual([])
+      yield* first.release
+      if (mode === "retry context") {
+        yield* Queue.take(scheduled)
+        yield* TestClock.adjust("2400 millis")
+      } else {
+        yield* TestClock.adjust("1 millis")
+      }
+      yield* Effect.yieldNow
+      // Cold installation plus discovery can exceed 30 seconds; readiness remains cancellable,
+      // but must not fail an admitted step before the plugin's own discovery settles.
+      yield* TestClock.adjust("32 seconds")
+      expect(s.requests).toHaveLength(1)
+      expect(run.pollUnsafe()).toBeUndefined()
+      yield* Deferred.succeed(gate, undefined)
+      yield* Fiber.join(activation)
+      yield* Fiber.join(run)
+      expect(s.requests).toHaveLength(2)
+      expect(s.executions).toEqual(mode === "next step" ? ["once"] : [])
+      expect((yield* s.context).filter((message) => message.type === "user")).toHaveLength(1)
     })
   }
 

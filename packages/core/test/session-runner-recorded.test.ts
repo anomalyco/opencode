@@ -107,7 +107,9 @@ const runnerLayer = (llmClient: Layer.Layer<LLMClientService>) =>
     Config.node.replace(config),
     Permission.node.replace(permission),
     PluginSupervisor.node.replace(Layer.empty),
-    Plugin.node.replace(Layer.mock(Plugin.Service, { awaitActivation: Effect.void })),
+    Plugin.node.replace(
+      Layer.mock(Plugin.Service, { awaitActivation: Effect.void, withActivation: (effect) => effect }),
+    ),
   ])
 const execution = (llmClient: Layer.Layer<LLMClientService>) =>
   Layer.effect(
@@ -163,7 +165,9 @@ const testLayer = (llmClient: Layer.Layer<LLMClientService>) =>
       Config.node.replace(config),
       Snapshot.node.replace(Snapshot.noopLayer),
       PluginSupervisor.node.replace(Layer.empty),
-      Plugin.node.replace(Layer.mock(Plugin.Service, { awaitActivation: Effect.void })),
+      Plugin.node.replace(
+        Layer.mock(Plugin.Service, { awaitActivation: Effect.void, withActivation: (effect) => effect }),
+      ),
       SessionExecution.node.replace(execution(llmClient)),
     ],
   )

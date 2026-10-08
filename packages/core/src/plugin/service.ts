@@ -12,6 +12,8 @@ export interface Interface {
   readonly close: (exit: Exit.Exit<unknown, unknown>) => Effect.Effect<void>
   /** Wait for announced updates and activation to settle; failures remain in the inventory. */
   readonly awaitActivation: Effect.Effect<void>
+  /** Run pre-inference resolution against settled registrations, excluding concurrent teardown. */
+  readonly withActivation: <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
   /** Keep readiness pending while preparing an update. Run the returned Effect to release it. */
   readonly hold: () => Effect.Effect<Effect.Effect<void>>
 }

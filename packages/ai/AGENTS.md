@@ -3,6 +3,7 @@
 ## Effect
 
 - Prefer `HttpClient.HttpClient` / `HttpClientResponse.HttpClientResponse` over web `fetch` / `Response` at package boundaries.
+- The native HTTP inference transport disables Bun's runtime fetch idle timeout (`timeout: false`) at its terminal middleware handler, preserving other per-call and middleware fetch options. Its `http.headerTimeout`, `http.chunkTimeout`, `http.timeout`, and Effect cancellation remain authoritative. Standalone `RequestExecutor` calls, native endpoint compaction, and media URL downloads retain normal fetch timeout behavior: those ancillary paths do not own inference deadlines.
 - Use `Stream.Stream` for streaming data flow. Avoid ad hoc async generators or manual web reader loops unless an Effect `Stream` API cannot model the behavior.
 - Use Effect Schema codecs for JSON encode/decode (`Schema.fromJsonString(...)`) instead of direct `JSON.parse` / `JSON.stringify` in implementation code.
 - In `Effect.gen`, yield yieldable errors directly (`return yield* new MyError(...)`) instead of `Effect.fail(new MyError(...))`.

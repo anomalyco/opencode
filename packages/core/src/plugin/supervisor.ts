@@ -35,6 +35,16 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
     Plugin.Info & { readonly state: Extract<Plugin.State, { readonly status: "failed" }> }
   >()
   const plugins = () => [...definitions, ...packages.values()]
+  const retained = (target: string) =>
+    packages.get(target) ??
+    running.get(target) ??
+    [...running].find(([previous]) => packageTarget(previous) === packageTarget(target))?.[1]
+  const retain = (target: string) => {
+    const previous = retained(target)
+    if (!previous) return
+    packages.set(target, previous)
+    enabled.add(previous.id)
+  }
 
   for (const operation of operations) {
     if (operation.type === "remove") {
@@ -74,6 +84,8 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
     }
     if ("pending" in plugin) {
       pending.add(operation.target)
+      // A version change can have a different target while replacing the same package.
+      retain(operation.target)
       continue
     }
     if ("error" in plugin) {
@@ -83,10 +95,7 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
         features: { server: true },
       })
       // The new revision never became a generation, so the one already running keeps its place.
-      const retained = packages.get(operation.target) ?? running.get(operation.target)
-      if (!retained) continue
-      packages.set(operation.target, retained)
-      enabled.add(retained.id)
+      retain(operation.target)
       continue
     }
     failures.delete(operation.target)
@@ -259,6 +268,16 @@ const nodeDeps = [
   Watcher.node,
   PluginInternal.requirements,
 ] as const
+
+// A version-qualified npm spec (`pkg@1`, `@scope/pkg@1`) names the same package,
+// so a replaced version must retain the generation the previous one is running.
+// Every other spec (URL, git, file, relative path) keeps its own identity: the
+// last "@" there is not a version separator, and stripping it would collapse
+// unrelated targets such as `git+ssh://git@host/a` and `.../b` onto one another.
+function packageTarget(target: string) {
+  if (path.isAbsolute(target)) return target
+  return /^(@[^@/:\s]+\/[^@/:\s]+|[^@/:\s]+)(?:@[^@/:\s]+)?$/.exec(target)?.[1] ?? target
+}
 
 function pluginSource(target: string): Plugin.Source {
   if (path.isAbsolute(target)) return { type: "local", path: target }

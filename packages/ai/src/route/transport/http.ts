@@ -1,5 +1,5 @@
-import { Clock, Duration, Effect, Stream } from "effect"
-import { Headers, HttpClientRequest } from "effect/unstable/http"
+import { Clock, Duration, Effect, Option, Stream } from "effect"
+import { FetchHttpClient, Headers, HttpClientRequest } from "effect/unstable/http"
 import { Auth } from "../auth.js"
 import { render as renderEndpoint } from "../endpoint.js"
 import { Framing } from "../framing.js"
@@ -111,7 +111,18 @@ export const httpJson = <Body, Frame>(input: HttpJsonInput<Body, Frame>): HttpJs
       const started = yield* Clock.currentTimeMillis
       // Unlike the header and chunk limits, the whole-request budget has no default.
       const total = request.http?.timeout ? Duration.millis(request.http.timeout) : Duration.infinity
-      const response = yield* runtime.http.execute(prepared.request, prepared.middleware).pipe(
+      // Merge at the terminal handler so middleware fetch options survive, but only inference
+      // (which owns the deadlines below) disables Bun's implicit idle timeout.
+      const middleware: HttpMiddleware = (input, handler) => {
+        const execute: typeof handler = (forwarded) =>
+          Effect.gen(function* () {
+            const options = yield* Effect.serviceOption(FetchHttpClient.RequestInit)
+            const init = { ...Option.getOrUndefined(options), timeout: false }
+            return yield* handler(forwarded).pipe(Effect.provideService(FetchHttpClient.RequestInit, init))
+          })
+        return prepared.middleware ? prepared.middleware(input, execute) : execute(input)
+      }
+      const response = yield* runtime.http.execute(prepared.request, middleware).pipe(
         Effect.timeoutOrElse({
           duration: Duration.min(timeoutDuration(request.http?.headerTimeout), total),
           orElse: () => timeout("request", "Timed out waiting for response headers"),

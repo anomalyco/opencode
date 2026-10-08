@@ -33,22 +33,33 @@ setDefaultTimeout(15_000)
 // Package resolution can be held open so overlapping activations become observable.
 const npm = {
   directory: "",
+  name: "fixture-pkg",
   gate: undefined as Deferred.Deferred<void> | undefined,
   inflight: 0,
   peak: 0,
+  missing: undefined as string | undefined,
+  installGate: undefined as Deferred.Deferred<void> | undefined,
+  installing: false,
 }
 
 const npmLayer = Layer.succeed(
   Npm.Service,
   Npm.Service.of({
-    add: (name) => Effect.succeed({ directory: npm.directory, name }),
+    add: () =>
+      Effect.gen(function* () {
+        npm.installing = true
+        if (npm.installGate) yield* Deferred.await(npm.installGate)
+        npm.installing = false
+        return { directory: npm.directory, name: npm.name }
+      }),
     resolve: (name) =>
       Effect.gen(function* () {
+        if (name === npm.missing) return { directory: path.join(npm.directory, "not-installed"), name }
         npm.inflight++
         npm.peak = Math.max(npm.peak, npm.inflight)
         if (npm.gate) yield* Deferred.await(npm.gate)
         npm.inflight--
-        return { directory: npm.directory, name }
+        return { directory: npm.directory, name: npm.name }
       }),
     check: () => Effect.succeed(false),
     update: (name) => Effect.succeed({ directory: npm.directory, name }),
@@ -287,6 +298,205 @@ describe("PluginSupervisor reload", () => {
       )
     }),
   )
+
+  for (const fails of [false, true]) {
+    it.live(`retains a versioned package during delayed installation (failed replacement: ${fails})`, () =>
+      Effect.gen(function* () {
+        const directory = yield* tmpdirScoped()
+        const configuration = path.join(directory.path, ".opencode/opencode.json")
+        const packageDirectory = (version: number, broken = false) =>
+          Effect.gen(function* () {
+            const root = path.join(directory.path, `pkg-${version}`)
+            yield* Effect.promise(async () => {
+              await Bun.write(
+                path.join(root, "package.json"),
+                JSON.stringify({ name: "fixture-pkg", exports: { "./server": "./server.ts" } }),
+              )
+              await Bun.write(
+                path.join(root, "server.ts"),
+                broken ? 'throw new Error("replacement failed"); export default {}' : greeter(`greet-v${version}`),
+              )
+            })
+            return root
+          })
+        npm.directory = yield* packageDirectory(1)
+        npm.missing = undefined
+        npm.installGate = undefined
+        yield* Effect.promise(() => Bun.write(configuration, JSON.stringify({ plugins: ["fixture-pkg@1.0.0"] })))
+        const watcher = yield* Watcher.Test
+        const locations = yield* LocationServiceMap.Service
+        yield* Effect.gen(function* () {
+          const plugins = yield* Plugin.Service
+          const commands = yield* Command.Service
+          yield* plugins.awaitActivation
+          expect((yield* plugins.list()).filter((entry) => entry.state.status === "failed")).toEqual([])
+          expect(yield* commands.get("greet-v1")).toBeDefined()
+          npm.directory = yield* packageDirectory(2, fails)
+          npm.missing = "fixture-pkg@2.0.0"
+          npm.installGate = yield* Deferred.make<void>()
+          npm.installing = false
+          yield* Effect.promise(() => Bun.write(configuration, JSON.stringify({ plugins: [npm.missing] })))
+          yield* watcher.emit({ path: configuration, type: "update" })
+          yield* settle(() => npm.installing)
+          // Immediate activation must not remove the previous target while npm.add is blocked.
+          expect(yield* commands.get("greet-v1")).toBeDefined()
+          expect((yield* plugins.list()).find((entry) => entry.id === "greeter")?.state.status).toBe("active")
+          yield* Deferred.succeed(npm.installGate, undefined)
+          yield* plugins.awaitActivation
+          expect(yield* commands.get(fails ? "greet-v1" : "greet-v2")).toBeDefined()
+          if (fails) {
+            expect((yield* plugins.list()).some((entry) => entry.state.status === "failed")).toBe(true)
+            npm.directory = yield* packageDirectory(3)
+            npm.missing = undefined
+            npm.installGate = undefined
+            const bus = yield* Bus.Service
+            yield* bus.publish(Event.Updated, {})
+            yield* commands.get("greet-v3").pipe(
+              Effect.flatMap((command) => (command ? Effect.void : Effect.fail("activation pending"))),
+              Effect.retry({ times: 80, schedule: Schedule.spaced("25 millis") }),
+            )
+            expect(yield* commands.get("greet-v1")).toBeUndefined()
+          } else {
+            expect(yield* commands.get("greet-v1")).toBeUndefined()
+          }
+          // Retention is replacement-only, not an authorization to survive configuration deletion.
+          yield* Effect.promise(() => Bun.write(configuration, JSON.stringify({ plugins: [] })))
+          yield* watcher.emit({ path: configuration, type: "update" })
+          yield* commands.get(fails ? "greet-v3" : "greet-v2").pipe(
+            Effect.flatMap((command) => (command ? Effect.fail("activation pending") : Effect.void)),
+            Effect.retry({ times: 80, schedule: Schedule.spaced("25 millis") }),
+          )
+        }).pipe(
+          Effect.scoped,
+          Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
+        )
+      }).pipe(
+        Effect.ensuring(
+          Effect.sync(() => {
+            npm.missing = undefined
+            npm.installGate = undefined
+            npm.installing = false
+          }),
+        ),
+      ),
+    )
+  }
+
+  it.live("retains a scoped versioned package during delayed installation", () =>
+    Effect.gen(function* () {
+      const directory = yield* tmpdirScoped()
+      const configuration = path.join(directory.path, ".opencode/opencode.json")
+      const root = path.join(directory.path, "pkg")
+      yield* Effect.promise(async () => {
+        await Bun.write(
+          path.join(root, "package.json"),
+          JSON.stringify({ name: "@nemlig/fixture-pkg", exports: { "./server": "./server.ts" } }),
+        )
+        await Bun.write(path.join(root, "server.ts"), greeter("greet-scoped"))
+      })
+      npm.directory = root
+      npm.name = "@nemlig/fixture-pkg"
+      npm.missing = undefined
+      npm.installGate = undefined
+      yield* Effect.promise(() => Bun.write(configuration, JSON.stringify({ plugins: ["@nemlig/fixture-pkg@1.0.0"] })))
+      const watcher = yield* Watcher.Test
+      const locations = yield* LocationServiceMap.Service
+      yield* Effect.gen(function* () {
+        const plugins = yield* Plugin.Service
+        const commands = yield* Command.Service
+        yield* plugins.awaitActivation
+        expect(yield* commands.get("greet-scoped")).toBeDefined()
+        npm.missing = "@nemlig/fixture-pkg@2.0.0"
+        npm.installGate = yield* Deferred.make<void>()
+        npm.installing = false
+        yield* Effect.promise(() => Bun.write(configuration, JSON.stringify({ plugins: [npm.missing] })))
+        yield* watcher.emit({ path: configuration, type: "update" })
+        yield* settle(() => npm.installing)
+        // A scoped version bump replaces the same package, so the running generation stays active.
+        expect(yield* commands.get("greet-scoped")).toBeDefined()
+        yield* Deferred.succeed(npm.installGate, undefined)
+        yield* plugins.awaitActivation
+        expect(yield* commands.get("greet-scoped")).toBeDefined()
+        expect((yield* plugins.list()).find((entry) => entry.id === "greeter")?.source).toMatchObject({
+          type: "package",
+          target: "@nemlig/fixture-pkg@2.0.0",
+        })
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
+      )
+    }).pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          npm.name = "fixture-pkg"
+          npm.missing = undefined
+          npm.installGate = undefined
+          npm.installing = false
+        }),
+      ),
+    ),
+  )
+  ;(
+    [
+      { a: "git+ssh://git@host.local/repo-a", b: "git+ssh://git@host.local/repo-b" },
+      { a: "git+https://user@github.com/org/a.git", b: "git+https://user@github.com/org/b.git" },
+    ] as const
+  ).forEach(({ a, b }) => {
+    it.live(`does not retain an unrelated target when a different spec goes pending (${b})`, () =>
+      Effect.gen(function* () {
+        const directory = yield* tmpdirScoped()
+        const configuration = path.join(directory.path, ".opencode/opencode.json")
+        const root = path.join(directory.path, "pkg")
+        yield* Effect.promise(async () => {
+          await Bun.write(
+            path.join(root, "package.json"),
+            JSON.stringify({ name: "fixture-pkg", exports: { "./server": "./server.ts" } }),
+          )
+          await Bun.write(path.join(root, "server.ts"), greeter("greet-host"))
+        })
+        npm.directory = root
+        npm.missing = undefined
+        npm.installGate = undefined
+        yield* Effect.promise(() => Bun.write(configuration, JSON.stringify({ plugins: [a] })))
+        const watcher = yield* Watcher.Test
+        const locations = yield* LocationServiceMap.Service
+        yield* Effect.gen(function* () {
+          const plugins = yield* Plugin.Service
+          const commands = yield* Command.Service
+          yield* plugins.awaitActivation
+          expect(yield* commands.get("greet-host")).toBeDefined()
+          npm.missing = b
+          npm.installGate = yield* Deferred.make<void>()
+          npm.installing = false
+          yield* Effect.promise(() => Bun.write(configuration, JSON.stringify({ plugins: [b] })))
+          yield* watcher.emit({ path: configuration, type: "update" })
+          yield* settle(() => npm.installing)
+          // The only shared suffix is a URL userinfo "@", not a version: the previous package must not stand in.
+          expect(yield* commands.get("greet-host")).toBeUndefined()
+          expect((yield* plugins.list()).find((entry) => entry.id === "greeter")?.source).toBeUndefined()
+          yield* Deferred.succeed(npm.installGate, undefined)
+          yield* plugins.awaitActivation
+          // Once installed it activates on its own identity, not a retained one.
+          expect(yield* commands.get("greet-host")).toBeDefined()
+          expect((yield* plugins.list()).find((entry) => entry.id === "greeter")?.source).toMatchObject({
+            type: "package",
+            target: b,
+          })
+        }).pipe(
+          Effect.scoped,
+          Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
+        )
+      }).pipe(
+        Effect.ensuring(
+          Effect.sync(() => {
+            npm.missing = undefined
+            npm.installGate = undefined
+            npm.installing = false
+          }),
+        ),
+      ),
+    )
+  })
 
   it.effect("serializes the periodic refresh behind an in-flight reload", () =>
     Effect.gen(function* () {

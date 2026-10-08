@@ -64,7 +64,7 @@ const layer = Layer.effect(
         const control = pending.type === "compaction" || pending.type === "move"
         if (promotable === "steer" && pending.delivery === "queue" && !control) return DrainResult.Complete()
       }
-      yield* plugins.awaitActivation
+      yield* plugins.withActivation(Effect.void)
       yield* settleStaleCompactions(sessionID)
       yield* settleStaleToolCalls(sessionID)
 
@@ -112,8 +112,8 @@ const layer = Layer.effect(
               if (pending?.type === "compaction") {
                 const compacted = yield* restore(
                   Effect.gen(function* () {
-                    const selected = yield* context.select(sessionID)
-                    const model = yield* context.resolveModel(selected.session)
+                    const selected = yield* plugins.withActivation(context.select(sessionID))
+                    const model = yield* plugins.withActivation(context.resolveModel(selected.session))
                     // Preview updates without admitting them after the already-delivered compaction marker.
                     const history = yield* SessionHistory.preview(
                       db,
@@ -176,7 +176,7 @@ const layer = Layer.effect(
                       onlyIfMissing: true,
                     })
                   if (promoted > 0) step = 1
-                  return { _tag: "Ready" as const, context: yield* context.load(selected) }
+                  return { _tag: "Ready" as const, context: yield* plugins.withActivation(context.load(selected)) }
                 }),
               )
               if (ready) return ready
@@ -196,7 +196,7 @@ const layer = Layer.effect(
     })
 
     const prepareContext = Effect.fn("SessionRunner.prepareContext")(function* (sessionID: SessionSchema.ID) {
-      const selected = yield* context.select(sessionID)
+      const selected = yield* plugins.withActivation(context.select(sessionID))
       // A blocked initial instruction baseline must leave admitted input pending.
       yield* InstructionState.prepare(db, bus, selected.instructions, sessionID)
       return selected
@@ -212,7 +212,11 @@ const layer = Layer.effect(
       let recoverContinuation = true
       while (true) {
         // Reuse boundary preparation once; retries refresh context without delivering more input.
-        const loaded = initial ?? (yield* prepareContext(sessionID).pipe(Effect.flatMap(context.load)))
+        const loaded =
+          initial ??
+          (yield* prepareContext(sessionID).pipe(
+            Effect.flatMap((selected) => plugins.withActivation(context.load(selected))),
+          ))
         initial = undefined
         const compacted = yield* compaction.compact({ reason: "auto", context: loaded })
         if (compacted.status === "failed") return yield* new StepFailedError({ error: compacted.error })
