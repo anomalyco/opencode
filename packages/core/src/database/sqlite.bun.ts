@@ -90,6 +90,9 @@ const nativeLayer = (config: Config) =>
         create: config.create ?? true,
       })
       yield* Effect.addFinalizer(() => Effect.sync(() => native.close()))
+      // Switching a fresh file to WAL takes an exclusive lock, so another process opening the same
+      // database at the same time must wait for it rather than fail with SQLITE_BUSY.
+      native.run("PRAGMA busy_timeout = 5000;")
       if (config.disableWAL !== true) native.run("PRAGMA journal_mode = WAL;")
       return native
     }),
