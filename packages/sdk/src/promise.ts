@@ -17,7 +17,8 @@ export interface InstanceOptions {
   readonly configure: (key: string) => InstanceConfiguration | Promise<InstanceConfiguration>
 }
 
-export interface CreateOptions extends Omit<EmbeddedHost.CreateOptions, "workspaceProviders" | "instances"> {
+export interface CreateOptions
+  extends Omit<EmbeddedHost.CreateOptions, "workspaceProviders" | "instances" | "password" | "urls"> {
   readonly plugins?: ReadonlyArray<Plugin.Plugin>
   readonly instances?: InstanceOptions
 }

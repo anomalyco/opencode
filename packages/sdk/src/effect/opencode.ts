@@ -31,6 +31,13 @@ export type Interface = Omit<OpenCodeClient, "plugin" | "workspace"> & {
     readonly destroy: (options: { readonly workspaceID: Workspace.ID }) => ReturnType<Workspace.Interface["destroy"]>
   }
   readonly plugin: EmbeddedHost.Interface["plugins"]["register"] & OpenCodeClient["plugin"]
+  /**
+   * This instance's HTTP API for external opencode clients, with CORS but without response compression.
+   * Serve it with an Effect `HttpServer`; a fetch handler cannot accept PTY WebSockets. Stop that server
+   * before closing this instance. Node's server waits for open SSE streams, so call `closeAllConnections()`
+   * when stopping it. Bun closes requests idle for 10 seconds and SSE heartbeats every 15, so set `idleTimeout: 0`.
+   */
+  readonly http: EmbeddedHost.Interface["http"]
 }
 
 export const create: <R = never>(
@@ -64,6 +71,7 @@ export const create: <R = never>(
       destroy: ({ workspaceID }: { readonly workspaceID: Workspace.ID }) => host.workspace.destroy(workspaceID),
     },
     plugin: Object.assign(host.plugins.register, client.plugin),
+    http: host.http,
   }
 })
 

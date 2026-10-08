@@ -732,6 +732,7 @@
         "effect": "catalog:",
       },
       "devDependencies": {
+        "@effect/platform-node": "catalog:",
         "@opencode/ai": "workspace:*",
         "@opencode/httpapi-codegen": "workspace:*",
         "@opencode/protocol": "workspace:*",
