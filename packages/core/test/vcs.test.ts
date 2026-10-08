@@ -581,6 +581,65 @@ describe("Vcs", () => {
     ),
   )
 
+  it.live("batches untracked files without spawning Git per file or touching the index", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const count = 40
+        yield* Effect.promise(async () => {
+          await initRepo(directory)
+          await fs.writeFile(path.join(directory, "keep.txt"), "one\n")
+          await fs.writeFile(path.join(directory, ".gitignore"), "*.log\n")
+          await commitAll(directory, "initial")
+          await fs.writeFile(path.join(directory, "staged.txt"), "staged\n")
+          await $`git add staged.txt`.cwd(directory).quiet()
+          await fs.mkdir(path.join(directory, "evals/nested"), { recursive: true })
+          await Promise.all(
+            Array.from({ length: count }, (_, index) =>
+              fs.writeFile(path.join(directory, `evals/nested/file-${index}.md`), `line ${index}\nmore\n`),
+            ),
+          )
+          await fs.writeFile(path.join(directory, "evals/ignored.log"), "ignored\n")
+        })
+        const index = yield* Effect.promise(() => fs.readFile(path.join(directory, ".git/index")))
+        const vcs = yield* Vcs.Service
+        const processes = yield* AppProcess.Service
+        let spawned = 0
+        const context = host()
+        yield* VcsGitPlugin.Plugin.effect({
+          ...context,
+          vcs: { ...context.vcs, transform: vcs.transform, reload: vcs.reload },
+        }).pipe(
+          Effect.provideService(
+            AppProcess.Service,
+            AppProcess.Service.of({
+              ...processes,
+              run: (command, options) => {
+                spawned++
+                return processes.run(command, options)
+              },
+            }),
+          ),
+        )
+
+        const diff = yield* vcs.diff("working")
+        const status = yield* vcs.status()
+        expect(spawned).toBeLessThan(count)
+        expect(diff.map((row) => row.file)).toEqual(status.map((row) => row.file))
+        expect(diff).toHaveLength(count + 1)
+        expect(diff.some((row) => row.file.endsWith(".log"))).toBeFalse()
+        expect(diff.find((row) => row.file === "staged.txt")).toMatchObject({ status: "added", additions: 1 })
+        expect(diff.find((row) => row.file === "evals/nested/file-7.md")).toMatchObject({
+          status: "added",
+          additions: 2,
+          deletions: 0,
+        })
+        expect(diff.find((row) => row.file === "evals/nested/file-7.md")?.patch).toContain("+line 7")
+        expect(status.find((row) => row.file === "evals/nested/file-7.md")).toMatchObject({ additions: 2 })
+        expect(yield* Effect.promise(() => fs.readFile(path.join(directory, ".git/index")))).toEqual(index)
+      }).pipe(provide(directory, { git: true, worktree: directory })),
+    ),
+  )
+
   it.live("caches branch info and publishes HEAD changes", () =>
     withGit((directory) =>
       Effect.gen(function* () {
