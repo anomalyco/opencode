@@ -47,10 +47,15 @@ type ModelState = {
   errors: Record<string, string | undefined>
   /** Each session's page icons and zoom by tab, as this desktop reports them. */
   pages: Record<string, Record<string, PageDetail | undefined> | undefined>
+  /** Each session's handoffs that wait for the user, oldest first. */
+  handoffs: Record<string, readonly Handoff[] | undefined>
 }
 
 /** A page's icon as a data URL, and its zoom factor, 1 at 100%. */
 type PageDetail = { icon?: string; zoom: number }
+
+/** The agent asking the user to act in a tab. `reason` is the agent's own text: render it as text only. */
+type Handoff = { requestID: string; tabID: Browser.TabID; reason: string }
 
 /** A mounted pane; the newest one answers the reload and inspect commands. */
 type PaneHandle = {
@@ -84,7 +89,15 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
   const owner = getOwner()
   const history = ctx.stores.history
-  const [state, setState] = createStore<ModelState>({ attachments: {}, unsupported: {}, errors: {}, pages: {} })
+
+  const [state, setState] = createStore<ModelState>({
+    attachments: {},
+    unsupported: {},
+    errors: {},
+    pages: {},
+    handoffs: {},
+  })
+
   const [panes, setPanes] = createSignal<readonly PaneHandle[]>([])
   const live = new Map<string, Live>()
   const listeners = new Map<string, (event: PaneEvent) => void>()
@@ -160,8 +173,12 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     batch(() => {
       setState("attachments", id, undefined)
       setState("pages", id, undefined)
+      setState("handoffs", id, undefined)
     })
   }
+
+  const settle = (id: string, requestID: string) =>
+    setState("handoffs", id, (list) => list?.filter((item) => item.requestID !== requestID))
 
   const attach = (ref: SessionRef) => {
     const id = ref.key
@@ -195,7 +212,15 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
           layout.open(key(tabID), ref, { tab: "select" })
         },
-        preview: (path) => preview(entry, path),
+        preview: (path, requestID) => preview(entry, path, requestID),
+        // Main focuses the handoff's tab first, so the pane shows the request above that tab's page.
+        handoff: (event) => {
+          if (event.type === "handoff.end") return settle(id, event.requestID)
+          setState("handoffs", id, (list) => [
+            ...(list ?? []).filter((item) => item.requestID !== event.requestID),
+            { requestID: event.requestID, tabID: event.tabID, reason: event.reason },
+          ])
+        },
         inspect: (event) => inspectors.get(id)?.forEach((listener) => listener(event)),
         page: (event) => {
           setState("pages", id, (pages) => ({
@@ -215,13 +240,17 @@ export function createModel(ctx: SetupContext<typeof definition>) {
             return close(id)
           }
 
-          if (next.registration !== entry.registration) {
+          const replaced = next.registration !== entry.registration
+
+          if (replaced) {
             entry.registration = next.registration
 
             if (next.registration) entry.revision++
           }
 
           batch(() => {
+            // A handoff belongs to the binding that asked: main ends it with that binding, and no other can answer it.
+            if (replaced) setState("handoffs", id, undefined)
             setState(
               "attachments",
               id,
@@ -288,10 +317,15 @@ export function createModel(ctx: SetupContext<typeof definition>) {
           }),
       )
 
-      // Previews made while another session was on screen open once the user returns to this one.
+      // Previews made while another session was on screen open once the user returns to this one. The agent already
+      // heard they were queued.
       createKeyed(
         () => sessions.current()?.key === ref.key && ctx.screen.current(),
-        () => entry.previews.splice(0).forEach((path) => preview(entry, path)),
+        () => {
+          const view = sessions.current()
+
+          if (view) entry.previews.splice(0).forEach((href) => links.open({ href, session: view, background: true }))
+        },
       )
 
       return dispose
@@ -428,17 +462,20 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   }
 
   // The agent's browser.preview tool: the link router picks the browser for HTML, the file panel otherwise. Only the
-  // session's screen resolves workspace paths, so a preview for a session that is not on screen waits for it.
-  const preview = (entry: Live, path: string) => {
+  // session's screen resolves workspace paths, so a preview for a session that is not on screen waits for it. The
+  // agent hears at once whether it opened, waits, or has nothing to open it.
+  const preview = (entry: Live, path: string, requestID: string) => {
     const view = sessions.current()
 
     if (view?.key === entry.ref.key && ctx.screen.current()) {
-      links.open({ href: path, session: view, background: true })
+      const opened = links.open({ href: path, session: view, background: true })
+      entry.registration?.previewed(requestID, opened, opened ? undefined : "unavailable")
 
       return
     }
 
     if (!entry.previews.includes(path)) entry.previews.push(path)
+    entry.registration?.previewed(requestID, false, "queued")
   }
 
   return {
@@ -461,6 +498,14 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     page: (session: Session, tabID: string) => state.pages[session.key]?.[tabID],
     zoom(session: Session, tabID: Browser.TabID, zoom: Zoom) {
       live.get(session.key)?.connection.zoom(tabID, zoom)
+    },
+    /** The agent's handoffs on a tab that wait for the user, oldest first. */
+    handoffs: (session: Session, tabID: string) =>
+      state.handoffs[session.key]?.filter((item) => item.tabID === tabID) ?? [],
+    /** Answers a handoff: the user finished what the agent asked (done) or dismissed it. */
+    answer(session: Session, requestID: string, done: boolean) {
+      live.get(session.key)?.registration?.handoff(requestID, done)
+      settle(session.key, requestID)
     },
     /** The page's cookie count; undefined while the pane cannot answer. */
     site: (session: Session, tabID: Browser.TabID) => live.get(session.key)?.connection.site(tabID),

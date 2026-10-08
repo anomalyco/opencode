@@ -52,4 +52,7 @@ export default {
   "zoom.percent": "{{percent}}%",
   "link.copy": "Copy link",
   "history.clear": "Clear browsing history",
+  "handoff.title": "The agent needs you",
+  "handoff.done": "Done",
+  "handoff.dismiss": "Dismiss",
 }

@@ -555,3 +555,27 @@ story("zooms the page from the browser options in view and keeps its zoom in the
   await expect(root.getByText("Zoom: 100", { exact: true })).toBeVisible()
   await expect(zoom).toBeHidden()
 })
+
+story("shows the agent's handoff above the page and sends the user's answer", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  const handoff = root.locator('[data-component="browser-handoff"]')
+  await root.getByRole("button", { name: "Agent handoff", exact: true }).click()
+  await expect(handoff).toContainText("The agent needs you")
+  await expect(handoff).toContainText("Sign in with the test account, then press Done.")
+
+  // The native page is drawn above the DOM, so the request sits above the page's box instead of under it.
+  const bar = await handoff.boundingBox()
+  const box = await root.locator("#browser-panel [data-component='browser-handoff'] ~ *").first().boundingBox()
+  expect(bar && box && box.y >= bar.y + bar.height - 1).toBe(true)
+
+  await handoff.getByRole("button", { name: "Done", exact: true }).click()
+  await expect(root.getByText("Handoff answers: req_1 done", { exact: true })).toBeVisible()
+  await expect(handoff).toHaveCount(0)
+
+  // A handoff that ends without the user (timeout, cancel) leaves without an answer.
+  await root.getByRole("button", { name: "Agent handoff", exact: true }).click()
+  await expect(handoff).toBeVisible()
+  await root.getByRole("button", { name: "End handoff", exact: true }).click()
+  await expect(handoff).toHaveCount(0)
+  await expect(root.getByText("Handoff answers: req_1 done", { exact: true })).toBeVisible()
+})

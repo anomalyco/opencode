@@ -11,7 +11,7 @@ import { showToast } from "@opencode/ui/toast"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { createEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
-import { createMemo, For, on, onCleanup, Show, type Accessor, type JSX } from "solid-js"
+import { createMemo, createUniqueId, For, on, onCleanup, Show, type Accessor, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { Browser } from "@opencode/plugin-browser/rpc"
 import { createKeyed, useExtension, usePanel, type PanelTab, type MountedSession, type SessionScreen } from "../sdk"
@@ -157,6 +157,15 @@ export default function SessionBrowserPane(props: {
 
     return tab ? props.model.embed(props.session, tab.id) : undefined
   }
+
+  // The agent's oldest request that the user act in this page; answering it shows the next.
+  const handoff = () => {
+    const tab = state()
+
+    return tab ? props.model.handoffs(props.session, tab.id)[0] : undefined
+  }
+
+  const handoffID = createUniqueId()
 
   let box: HTMLDivElement | undefined
   let input: HTMLInputElement | undefined
@@ -860,6 +869,51 @@ export default function SessionBrowserPane(props: {
         >
           {error()}
         </div>
+      </Show>
+      {/* Above the page, not over it: the page is a native view drawn above the DOM, so its box shrinks below. */}
+      <Show when={handoff()}>
+        {(current) => (
+          <div
+            data-component="browser-handoff"
+            role="group"
+            aria-labelledby={`${handoffID}-title`}
+            aria-describedby={`${handoffID}-reason`}
+          >
+            <div data-slot="browser-handoff-message" role="status">
+              <Icon name="window-cursor" />
+              <div data-slot="browser-handoff-text">
+                <span id={`${handoffID}-title`} data-slot="browser-handoff-title">
+                  {extension.t("handoff.title")}
+                </span>
+                {/* The agent's own words: text only, in their own direction. */}
+                <span
+                  id={`${handoffID}-reason`}
+                  data-slot="browser-handoff-reason"
+                  dir="auto"
+                  title={current().reason}
+                >
+                  {current().reason}
+                </span>
+              </div>
+            </div>
+            <div data-slot="browser-handoff-actions">
+              <Button
+                size="small"
+                variant="ghost"
+                onClick={() => props.model.answer(props.session, current().requestID, false)}
+              >
+                {extension.t("handoff.dismiss")}
+              </Button>
+              <Button
+                size="small"
+                variant="contrast"
+                onClick={() => props.model.answer(props.session, current().requestID, true)}
+              >
+                {extension.t("handoff.done")}
+              </Button>
+            </div>
+          </div>
+        )}
       </Show>
       <embeds.View
         id={embed()}
