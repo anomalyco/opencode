@@ -524,6 +524,92 @@ describe("ShellTool scanner permissions", () => {
           }
         }),
       ))
+
+    test(`${scanner}: environment prefixes persist scoped approval and preserve raw deny`, () =>
+      withScanner(portable, (registry, fixture) =>
+        Effect.gen(function* () {
+          const saved = yield* PermissionSaved.Service
+          const location = yield* Location.Service
+          const marker = path.join(fixture.active, "marker")
+          const command = "FOO=bar printf hello > marker"
+          const first = yield* runPermissionCommand(registry, command, marker, ["always"])
+          expect(first.exit).toMatchObject({
+            _tag: "Success",
+            value: { status: "completed", metadata: { exit: 0 } },
+          })
+          expect(yield* Effect.promise(() => Bun.file(marker).text())).toBe("hello")
+
+          yield* Effect.promise(() => fs.rm(marker, { force: true }))
+          const repeat = yield* runPermissionCommand(registry, command, marker, [])
+          expect(repeat.requests).toEqual([])
+          expect(repeat.exit).toMatchObject({
+            _tag: "Success",
+            value: { status: "completed", metadata: { exit: 0 } },
+          })
+          expect(yield* Effect.promise(() => Bun.file(marker).text())).toBe("hello")
+
+          yield* Effect.promise(() => fs.rm(marker, { force: true }))
+          const arity = yield* runPermissionCommand(registry, "FOO=bar printf bye > marker", marker, [])
+          expect(arity.requests).toEqual([])
+          expect(arity.exit).toMatchObject({
+            _tag: "Success",
+            value: { status: "completed", metadata: { exit: 0 } },
+          })
+          expect(yield* Effect.promise(() => Bun.file(marker).text())).toBe("bye")
+
+          // Deferred so a regression fails as an unexpected repeat prompt, not only as a proposal mismatch.
+          expect(first.requests).toMatchObject([{ action: "shell", resources: [command], save: ["FOO=bar printf *"] }])
+          expect((yield* saved.list()).map((item) => item.resource)).toEqual(["FOO=bar printf *"])
+
+          yield* saved.add({ projectID: location.project.id, action: "shell", resources: ["printf *"] })
+          yield* Effect.promise(() => fs.rm(marker, { force: true }))
+          const changed = yield* runPermissionCommand(registry, "FOO=baz printf hello > marker", marker, ["once"])
+          expect(changed.requests).toHaveLength(1)
+          expect(changed.exit).toMatchObject({
+            _tag: "Success",
+            value: { status: "completed", metadata: { exit: 0 } },
+          })
+
+          const agents = yield* Agent.Service
+          yield* agents.transform((editor) =>
+            editor.update(toolIdentity.agent, (agent) => {
+              agent.permissions = [{ action: "shell", resource: command, effect: "deny" }]
+            }),
+          )
+          yield* Effect.promise(() => fs.rm(marker, { force: true }))
+          const denied = yield* runPermissionCommand(registry, command, marker, [])
+          expect(denied.requests).toEqual([])
+          expect(denied.exit).toMatchObject({
+            _tag: "Success",
+            value: { status: "error", error: { message: expect.stringContaining("Permission denied: shell") } },
+          })
+          expect(yield* Effect.promise(() => Bun.file(marker).exists())).toBe(false)
+        }),
+      ))
+
+    test(`${scanner}: environment prefixes with unsafe characters omit save without skipping authorization`, () =>
+      withScanner(portable, (registry, fixture) =>
+        Effect.gen(function* () {
+          const saved = yield* PermissionSaved.Service
+          const marker = path.join(fixture.active, "marker")
+          const command = 'FOO="a*b" printf hello > marker'
+          const first = yield* runPermissionCommand(registry, command, marker, ["always"])
+          expect(first.requests).toMatchObject([{ action: "shell", resources: [command], save: [] }])
+          expect(first.exit).toMatchObject({
+            _tag: "Success",
+            value: { status: "completed", metadata: { exit: 0 } },
+          })
+          expect(yield* Effect.promise(() => Bun.file(marker).text())).toBe("hello")
+          expect(yield* saved.list()).toEqual([])
+
+          yield* Effect.promise(() => fs.rm(marker, { force: true }))
+          const second = yield* runPermissionCommand(registry, command, marker, ["reject"])
+          expect(second.requests).toMatchObject([{ action: "shell", resources: [command], save: [] }])
+          expect(Exit.isFailure(second.exit)).toBe(true)
+          expect(yield* Effect.promise(() => Bun.file(marker).exists())).toBe(false)
+          expect(yield* saved.list()).toEqual([])
+        }),
+      ))
   }
 })
 

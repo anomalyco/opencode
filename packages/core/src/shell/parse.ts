@@ -16,7 +16,7 @@ const POWERSHELL_PATH_FLAG_RE =
   /^-(?:p(?:ath|at|a)?|lp|l(?:i(?:t(?:e(?:r(?:a(?:l(?:p(?:a(?:t(?:h)?)?)?)?)?)?)?)?)?)?|psp(?:a(?:t(?:h)?)?)?):?$/i
 
 export type Result = {
-  commands: Array<{ resource: string; save: string }>
+  commands: Array<{ resource: string; save?: string }>
   directories: string[]
 }
 
@@ -192,13 +192,44 @@ const scanLegacy = Effect.fnUntraced(function* (command: string, shell: string, 
               result.directories.push(...directoryArgs(command, powershell, cwd, shell))
               return result
             }
-            result.commands.push({
-              resource: (node.parent?.type === "redirected_statement" ? node.parent.text : node.text).trim(),
-              save: `${prefix(tokens).join(" ")} *`,
-            })
+            const span = node.parent?.type === "redirected_statement" ? node.parent : node
+            const resource = span.text.trim()
+            if (powershell) {
+              result.commands.push({
+                resource,
+                save: `${prefix(tokens).join(" ")} *`,
+              })
+              return result
+            }
+            const executable = node.childForFieldName("name")
+            if (!executable || executable.text === "") {
+              result.commands.push({ resource })
+              return result
+            }
+            if (
+              !Array.from({ length: node.childCount }, (_, index) => node.child(index)).some(
+                (child) =>
+                  child?.type === "variable_assignment" ||
+                  (child?.type === "ERROR" && child.descendantsOfType("variable_assignment").length > 0),
+              )
+            ) {
+              result.commands.push({ resource, save: `${prefix(tokens).join(" ")} *` })
+              return result
+            }
+            const save = proposal(
+              resource.slice(
+                0,
+                Math.max(
+                  0,
+                  executable.startIndex - (span.startIndex + (span.text.length - span.text.trimStart().length)),
+                ),
+              ),
+              tokens,
+            )
+            result.commands.push({ resource, ...(save !== undefined ? { save } : {}) })
             return result
           },
-          { commands: [] as Array<{ resource: string; save: string }>, directories: [] as string[] },
+          { commands: [] as Result["commands"], directories: [] as string[] },
         ),
       ),
     (tree) => Effect.sync(() => tree.delete()),
@@ -263,12 +294,20 @@ export const scanPortable = Effect.fnUntraced(function* (command: string, shell:
       )
       continue
     }
+    if (!powershell) {
+      const save = proposal(
+        item.commandOffset ? item.resource.slice(0, item.commandOffset) : "",
+        words.slice(0, PREFIX_LENGTH),
+      )
+      output.commands.push({ resource: item.resource, ...(save !== undefined ? { save } : {}) })
+      continue
+    }
     const selected = prefix(words.slice(0, PREFIX_LENGTH))
     const conventional = `${selected.join(" ")} *`
     const end = item.wordEnds?.[selected.length - 1]
     // Keep existing grants stable unless normalized spacing loses the original source boundary.
     const save =
-      !powershell || end === undefined || Wildcard.match(item.resource, conventional)
+      end === undefined || Wildcard.match(item.resource, conventional)
         ? conventional
         : (() => {
             const boundary =
@@ -377,6 +416,13 @@ function prefix(tokens: string[]) {
     if (arity !== undefined) return tokens.slice(0, arity)
   }
   return tokens.slice(0, 1)
+}
+
+// Wildcard treats * and ? as glob syntax and normalizes backslash, so such a head cannot be saved literally.
+function proposal(head: string, tokens: string[]) {
+  if (tokens.length === 0 || tokens[0] === "") return undefined
+  if (/[*?\\]/.test(head)) return undefined
+  return `${head}${prefix(tokens).join(" ")} *`
 }
 
 function resolve(asset: string) {

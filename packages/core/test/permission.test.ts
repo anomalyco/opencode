@@ -572,7 +572,7 @@ describe("shell scanner permission impact", () => {
               assertion({
                 action: "shell",
                 resources: parsed.commands.map((command) => command.resource),
-                save: parsed.commands.map((command) => command.save),
+                save: parsed.commands.flatMap((command) => (command.save !== undefined ? [command.save] : [])),
               }),
             )
             expect(result.effect, portable ? "native" : "legacy").toBe(scenario.expected[index])
@@ -580,7 +580,9 @@ describe("shell scanner permission impact", () => {
             expect(pending).toHaveLength(result.effect === "ask" ? 1 : 0)
             if (result.effect !== "ask") continue
             expect(pending[0]?.resources).toEqual(parsed.commands.map((command) => command.resource))
-            expect(pending[0]?.save).toEqual(parsed.commands.map((command) => command.save))
+            expect(pending[0]?.save).toEqual(
+              parsed.commands.flatMap((command) => (command.save !== undefined ? [command.save] : [])),
+            )
             yield* service.reply({ requestID: result.id, reply: "once" })
             expect(yield* service.list()).toEqual([])
           }
@@ -649,14 +651,14 @@ describe("shell scanner permission impact", () => {
       name: "assignment redirect prefix",
       shell: "bash",
       command: "FOO=bar > output; printf done",
-      grants: [["printf *"], ["printf *"]],
-      // Identical saved rules cover only the native resource, regardless of which parser saved them.
+      grants: [["FOO=bar > output; printf *"], ["printf *"]],
+      // Legacy preserves the glued assignment head, so its scoped rule covers only the glued repeat.
       repeat: [
-        ["ask", "allow"],
+        ["allow", "ask"],
         ["ask", "allow"],
       ],
       next: "printf next",
-      nextEffect: ["allow", "allow"],
+      nextEffect: ["ask", "allow"],
     },
     {
       name: "PowerShell tab prefix",
@@ -682,7 +684,7 @@ describe("shell scanner permission impact", () => {
             assertion({
               action: "shell",
               resources: parsed.commands.map((command) => command.resource),
-              save: parsed.commands.map((command) => command.save),
+              save: parsed.commands.flatMap((command) => (command.save !== undefined ? [command.save] : [])),
             }),
           )
           expect(first.effect).toBe("ask")
@@ -700,7 +702,7 @@ describe("shell scanner permission impact", () => {
                 assertion({
                   action: "shell",
                   resources: parsed.commands.map((command) => command.resource),
-                  save: parsed.commands.map((command) => command.save),
+                  save: parsed.commands.flatMap((command) => (command.save !== undefined ? [command.save] : [])),
                 }),
               )
               expect(result.effect, `${target ? "native" : "legacy"}: ${command}`).toBe(

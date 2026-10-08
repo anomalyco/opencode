@@ -29,7 +29,10 @@ describe("native shell syntax compatibility", () => {
     const legacy = await Effect.runPromise(ShellParse.scan(command, "pwsh", "/workspace"))
     const native = await Effect.runPromise(ShellParse.scan(command, "pwsh", "/workspace", { portable: true }))
     expect(native.commands.map((item) => item.resource)).toEqual(legacy.commands.map((item) => item.resource))
-    for (const item of native.commands) expect(Wildcard.match(item.resource, item.save), item.resource).toBe(true)
+    for (const item of native.commands) {
+      if (item.save === undefined) continue
+      expect(Wildcard.match(item.resource, item.save), item.resource).toBe(true)
+    }
   })
 
   for (const shell of ["bash", "zsh"]) {

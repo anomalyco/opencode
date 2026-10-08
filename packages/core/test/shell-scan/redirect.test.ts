@@ -116,7 +116,9 @@ describe("Bash redirect resource oracle", () => {
     expect(legacy.commands[1]).toEqual({ resource: "cat", save: "cat *" })
     const native = await Effect.runPromise(ShellParse.scanPortable(source, "/bin/bash", "/workspace"))
     expect(native).toEqual(legacy)
-    expect(native.commands.every((command) => Wildcard.match(command.resource, command.save))).toBe(true)
+    expect(
+      native.commands.every((command) => command.save === undefined || Wildcard.match(command.resource, command.save)),
+    ).toBe(true)
   })
 
   test.each(["cat\\\n", "cat \\\n", "cat\\\n\\\n", "cat\\\n;", "cat >out\\\n", "cat >out \\\n"])(
@@ -129,7 +131,11 @@ describe("Bash redirect resource oracle", () => {
       expect(result.commands[0]?.rawWords).toEqual(["cat"])
       const native = await Effect.runPromise(ShellParse.scanPortable(source, "/bin/bash", "/workspace"))
       expect(native.commands[0]).toEqual({ resource: source.includes(">out") ? "cat >out" : "cat", save: "cat *" })
-      expect(native.commands.every((command) => Wildcard.match(command.resource, command.save))).toBe(true)
+      expect(
+        native.commands.every(
+          (command) => command.save === undefined || Wildcard.match(command.resource, command.save),
+        ),
+      ).toBe(true)
     },
   )
 
@@ -152,7 +158,7 @@ describe("Bash redirect resource oracle", () => {
     expect(legacy.commands).toEqual([{ resource: "printf ok", save: "printf *" }])
     expect(native.commands).toEqual([
       { resource: "printf ok", save: "printf *" },
-      { resource: "FOO=bar >output git status", save: "git status *" },
+      { resource: "FOO=bar >output git status", save: "FOO=bar >output git status *" },
     ])
   })
 
