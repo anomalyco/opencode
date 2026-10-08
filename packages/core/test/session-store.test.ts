@@ -64,14 +64,28 @@ describe("SessionStore", () => {
         version: "test",
       })
       const database = yield* Database.Service
-      // Simulate a session written before directory-column normalization.
-      yield* database.db.run(sql`UPDATE ${SessionTable} SET directory = '/project///' WHERE id = 'ses_directory_slash'`)
+      const written = yield* database.db
+        .select({ directory: SessionTable.directory })
+        .from(SessionTable)
+        .where(sql`${SessionTable.id} = 'ses_directory_slash'`)
+        .get()
+      expect(written?.directory).toBe("/project")
+
+      // Keep the newly written row intact: legacy data must be a separate session.
+      yield* bus.publish(SessionEvent.Created, {
+        sessionID: Session.ID.make("ses_directory_legacy"),
+        projectID: Project.ID.global,
+        location: { directory: AbsolutePath.make("/project") },
+        slug: "store-test",
+        version: "test",
+      })
+      yield* database.db.run(sql`UPDATE ${SessionTable} SET directory = '/project///' WHERE id = 'ses_directory_legacy'`)
       const store = yield* SessionStore.Service
       const paths = ["/project", "/project/", ...(process.platform === "win32" ? ["/project\\\\"] : [])]
       yield* Effect.forEach(paths, (directory) =>
         Effect.gen(function* () {
           const found = yield* store.list({ directory: AbsolutePath.make(directory) })
-          expect(found.map((session) => String(session.id)).sort()).toEqual(["ses_directory", "ses_directory_slash"])
+          expect(found.map((session) => String(session.id)).sort()).toEqual(["ses_directory", "ses_directory_legacy", "ses_directory_slash"])
         }),
       )
     }),
