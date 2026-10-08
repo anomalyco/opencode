@@ -20,7 +20,7 @@ function resolveLocation(options: Record<string, any>) {
     process.env.GOOGLE_VERTEX_LOCATION ??
     process.env.GOOGLE_CLOUD_LOCATION ??
     process.env.VERTEX_LOCATION ??
-    "us-central1"
+    "global"
   )
 }
 

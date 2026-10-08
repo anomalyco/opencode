@@ -43,6 +43,26 @@ test("service disabled accepts only booleans without changing configuration on i
   }
 })
 
+// Enabling remote creates a real tunnel, so only the paths that stay local are covered here.
+test("service remote accepts only booleans and persists across set and unset", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-remote-config-"))
+  const layer = Global.layerWith({ config: path.join(root, "config"), state: path.join(root, "state") })
+  const run = <A, E>(effect: Effect.Effect<A, E, Global.Service | FileSystem.FileSystem>) =>
+    Effect.runPromise(effect.pipe(Effect.provide(layer), Effect.provide(NodeFileSystem.layer)))
+  try {
+    expect(await run(ServiceConfig.get("remote"))).toBe("false")
+    await expect(run(ServiceConfig.set("remote", "on"))).rejects.toThrow("Remote must be true or false")
+    expect(await run(ServiceConfig.read())).toEqual({})
+    await run(ServiceConfig.set("remote", "false"))
+    expect(await run(ServiceConfig.read())).toEqual({ remote: false })
+    expect(await run(ServiceConfig.get("remote"))).toBe("false")
+    await run(ServiceConfig.unset("remote"))
+    expect(await run(ServiceConfig.read())).toEqual({})
+  } finally {
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})
+
 test("local channel stores service config with the local service filename", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-"))
   try {

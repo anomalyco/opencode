@@ -108,14 +108,13 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
       .handleRaw(
         "persistentPty.connect",
         Effect.fn("PersistentPtyHandler.connect")(function* (ctx) {
+          if (!isAllowedRequestOrigin(ctx.request.headers.origin, ctx.request.headers.host, cors))
+            return HttpServerResponse.empty({ status: 403 })
+
           const url = new URL(ctx.request.url, "http://localhost")
           const ticket = url.searchParams.get(PTY_CONNECT_TICKET_QUERY)
-          if (ticket) {
-            const valid = isAllowedRequestOrigin(ctx.request.headers.origin, ctx.request.headers.host, cors)
-              ? yield* tickets.consume({ ticket, ptyID: ctx.params.ptyID })
-              : false
-            if (!valid) return HttpServerResponse.empty({ status: 403 })
-          }
+          if (ticket && !(yield* tickets.consume({ ticket, ptyID: ctx.params.ptyID })))
+            return HttpServerResponse.empty({ status: 403 })
 
           const cursor = Number(url.searchParams.get("cursor") ?? "0")
           const role = url.searchParams.get("role") === "observer" ? "observer" : "controller"

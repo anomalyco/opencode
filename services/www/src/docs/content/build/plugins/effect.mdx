@@ -3,11 +3,14 @@ title: "Effect"
 ---
 
 `@opencode/plugin/effect` is the Effect-native version of the OpenCode plugin API. Its context operations return
-Effects or Streams, callbacks return Effects, and plugin lifetime is represented by `Scope`. Install `effect` with the
-plugin package.
+Effects or Streams, callbacks return Effects, and plugin lifetime is represented by `Scope`.
+
+OpenCode provides `effect` (including exported `effect/*` subpaths) and `@opencode/plugin` at runtime when loading
+plugins and their `node_modules` dependencies. Install them as peer/dev dependencies for local type-checking and testing
+rather than bundling them into your plugin.
 
 ```sh
-bun add @opencode/plugin effect
+bun add --peer @opencode/plugin effect
 ```
 
 Export an Effect plugin from `.opencode/plugins/` to load it automatically.
@@ -1500,7 +1503,7 @@ type Transform<Input> = (callback: (input: Input) => void) => Effect.Effect<Regi
 ## Publish
 
 A package plugin uses the same default export as a local Effect plugin. Export the Effect implementation from the main
-entrypoint and declare both runtime dependencies.
+entrypoint and declare `effect` as a `peerDependency`.
 
 ```json title="package.json"
 {
@@ -1511,11 +1514,27 @@ entrypoint and declare both runtime dependencies.
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@opencode/plugin": "latest",
-    "effect": "4.0.0-rc.111"
+    "@opencode/plugin": "latest"
+  },
+  "peerDependencies": {
+    "effect": ">=4.0.0-rc.112"
   }
 }
 ```
+
+OpenCode redirects imports of `effect`, exported `effect/*` subpaths, and `@opencode/plugin` (including imports from
+dependencies in the plugin's `node_modules`) to the host's runtime instances so fibers, loggers, and `Schema` parsers
+share one runtime copy.
+
+- Do not bundle `effect` into the published plugin artifact. If you build with a bundler, mark `effect` and `effect/*`
+  external.
+- Plugins and their `node_modules` dependencies always execute against the host OpenCode release's `effect` instance.
+  Use `effect` APIs and module paths compatible with the OpenCode release you target; dependencies built on another
+  `effect` major (such as Effect 3) also receive the host's `effect` and are not supported.
+- Only public `effect` subpaths are provided. A plugin that imports one of Effect's private `internal` modules fails to
+  load with an error naming the path.
+- The compiled OpenCode binary does not include the Scalar and Swagger UI assets used by Effect's HTTP API docs pages;
+  serving those pages from a plugin shows a notice instead.
 
 The package entrypoint exports `Plugin.define` with an `effect` function.
 

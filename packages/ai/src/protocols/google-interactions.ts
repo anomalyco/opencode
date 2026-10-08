@@ -33,7 +33,7 @@ const Options = Schema.Struct({
   store: lenient(Schema.Boolean),
   thinkingLevel: lenient(ThinkingLevel),
   thinkingSummaries: lenient(knownString<"auto" | "none">()),
-  serviceTier: lenient(knownString<"standard" | "flex" | "priority">()),
+  serviceTier: lenient(knownString<"standard" | "flex" | "priority" | "deferred">()),
 })
 export type OptionsInput = typeof Options.Encoded
 export type ProviderOptionsInput = OptionsInput

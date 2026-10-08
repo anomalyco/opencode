@@ -14,6 +14,7 @@ import { Env } from "./env"
 import { ServiceConfig } from "./services/service-config"
 import { RetainedImage } from "./services/retained-image"
 import { ServiceRegistration } from "./services/service-registration"
+import { RemoteTunnel } from "./services/remote-tunnel"
 import { WebUi } from "./services/web-ui"
 import { databasePath } from "./database-path"
 
@@ -90,6 +91,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
       if (!password) return yield* Effect.fail(new Error("Missing server password"))
       const instanceID = randomUUID()
       const transform = yield* WebUi.handler()
+      const remote = { urls: [] as ReadonlyArray<string> }
       const launch = start(
         {
           app: {
@@ -146,6 +148,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
                 }),
             },
         transform,
+        () => remote.urls,
       )
       const server = yield* launch.pipe(
         Effect.catch((error) => {
@@ -172,6 +175,19 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
         }),
       )
       if (server === undefined) return
+      if (serviceOptions !== undefined && config.remote === true && server.address._tag === "TcpAddress") {
+        const bound = server.address.hostname
+        // A wildcard bind also listens on loopback, which is all the tunnel needs to reach.
+        const host = bound === "0.0.0.0" || bound === "::" ? "127.0.0.1" : bound.includes(":") ? `[${bound}]` : bound
+        yield* Effect.forkScoped(
+          RemoteTunnel.run({
+            target: `${host}:${server.address.port}`,
+            onURL: (url) => {
+              remote.urls = url === undefined ? [] : [url]
+            },
+          }),
+        )
+      }
       const url = HttpServer.formatAddress(server.address)
       console.log(options.mode === "stdio" ? JSON.stringify({ url }) : `server listening on ${url}`)
       if (foreground && !environmentPassword) console.log(`server password ${password}`)

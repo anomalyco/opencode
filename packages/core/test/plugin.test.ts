@@ -98,7 +98,7 @@ it.live("loads a local plugin with its configured options", () =>
       target: path.join(import.meta.dir, "plugin/fixtures/greeting.ts"),
       options: { description: "Configured greeting" },
     })
-    if ("pending" in definition) return yield* Effect.die("Local plugin was not loaded")
+    if ("pending" in definition || "blocked" in definition) return yield* Effect.die("Local plugin was not loaded")
     yield* plugins.activate([definition])
 
     expect(yield* commands.get("greet")).toMatchObject({ description: "Configured greeting" })

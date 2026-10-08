@@ -214,6 +214,9 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       sessionTabPreview: {},
     })
 
+    // Opening Home with its shortcut focuses session search, so typing filters immediately.
+    let homeSearchFocus = false
+
     // Names of other session-scoped stores, e.g. extension storage, so pruning drops them with the layout state.
     const [scoped, setScoped, , scopedReady] = persisted(
       Persist.global("layout.scoped"),
@@ -354,6 +357,17 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         selection: createMemo(() => store.home.selection),
         setSelection(selection: HomeProjectSelection) {
           setStore("home", "selection", reconcile(selection))
+        },
+        searchFocus: {
+          request() {
+            homeSearchFocus = true
+          },
+          take() {
+            const requested = homeSearchFocus
+            homeSearchFocus = false
+
+            return requested
+          },
         },
       },
       sessionState: {
