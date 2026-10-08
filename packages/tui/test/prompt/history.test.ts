@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test"
-import { isDuplicateEntry, MAX_HISTORY_ENTRIES, parsePromptHistory, type PromptInfo } from "../../src/prompt/history"
+import {
+  createPromptHistory,
+  isDuplicateEntry,
+  MAX_HISTORY_ENTRIES,
+  parsePromptHistory,
+  type PromptInfo,
+} from "../../src/prompt/history"
 
 const entry = (input: string, parts: PromptInfo["parts"] = []): PromptInfo => ({ input, parts })
 
@@ -35,5 +41,33 @@ describe("prompt history", () => {
       { type: "file", mime: "image/png", filename: "b.png", url: "data:image/png;base64,BBB" },
     ])
     expect(isDuplicateEntry(a, b)).toBe(false)
+  })
+
+  test("preserves entries appended while startup history is loading", async () => {
+    let disk = JSON.stringify(entry("existing")) + "\n"
+    let resolveRead: (() => void) | undefined
+    const history = createPromptHistory({
+      read() {
+        const snapshot = disk
+        return new Promise((resolve) => {
+          resolveRead = () => resolve(snapshot)
+        })
+      },
+      async write(content) {
+        disk = content
+      },
+      async append(content) {
+        disk += content
+      },
+    })
+
+    const loading = history.load()
+    history.append(entry("submitted during startup"))
+    resolveRead?.()
+    await loading
+
+    expect(parsePromptHistory(disk)).toEqual([entry("existing"), entry("submitted during startup")])
+    expect(history.move(-1, "")).toEqual(entry("submitted during startup"))
+    expect(history.move(-1, "submitted during startup")).toEqual(entry("existing"))
   })
 })
