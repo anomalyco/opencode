@@ -105,7 +105,7 @@ async function toggle(setup: Setup, label: string) {
 }
 
 test.each([0, 1, 3])(
-  "low activity details open above a summary that keeps its row, %i wheel steps from the bottom",
+  "low activity details open below a summary that keeps its row, %i wheel steps from the bottom",
   async (steps) => {
     await withSession(async (setup) => {
       await Array.from({ length: steps }).reduce<Promise<void>>(
@@ -125,8 +125,8 @@ test.each([0, 1, 3])(
       expect(expand.frames).toEqual([expand.row])
       const expanded = lines(setup.captureCharFrame())
       expect(expanded[expand.row]).toContain(`− ${label}`)
-      expect(expanded.slice(0, expand.row).join("\n")).toContain(`turn ${turn} step ${commands! - 1} output`)
-      expect(expanded.slice(expand.row).join("\n")).toContain(`Turn ${turn} answer`)
+      expect(expanded.slice(expand.row + 1).join("\n")).toContain(`echo turn ${turn} step 0`)
+      expect(expanded.slice(0, expand.row).join("\n")).not.toContain(`echo turn ${turn} step`)
 
       const collapse = await toggle(setup, label)
       expect(collapse.frames).toEqual([expand.row])

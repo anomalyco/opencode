@@ -198,10 +198,7 @@ function GroupContent(props: GroupProps) {
   )
 }
 
-/**
- * Low verbosity: one summary for a run of tools, thoughts and instruction loads.
- * Details open above the summary, which stays on the row that was clicked.
- */
+/** Low verbosity: one summary for a run of tools, thoughts and instruction loads. */
 function ActivityGroup(props: GroupProps) {
   const theme = useTheme()
   const disclosure = useDisclosure(props)
@@ -211,11 +208,6 @@ function ActivityGroup(props: GroupProps) {
   return (
     <GroupAnchor groupID={disclosure.id()} active={summary().label !== ""}>
       <Show when={summary().label}>
-        <Show when={disclosure.expanded()}>
-          <box flexDirection="column" gap={1} marginBottom={1}>
-            <Children {...props} nodes={props.node.children} mode="normal" />
-          </box>
-        </Show>
         <InlineToolRow
           icon={disclosure.expanded() ? "−" : "+"}
           color={hover() ? theme.text.base : theme.text.muted}
@@ -228,6 +220,11 @@ function ActivityGroup(props: GroupProps) {
         >
           {summary().label}
         </InlineToolRow>
+        <Show when={disclosure.expanded()}>
+          <box flexDirection="column" gap={1} marginTop={1}>
+            <Children {...props} nodes={props.node.children} mode="normal" />
+          </box>
+        </Show>
       </Show>
       <PendingEntries {...props} entries={entries()} />
     </GroupAnchor>

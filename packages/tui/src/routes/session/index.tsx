@@ -1354,8 +1354,7 @@ export function Session(props: {
         anchors,
         groupExpanded,
         setGroupExpanded: (groupID, expanded, anchor) => {
-          // At the bottom, sticky scrolling already keeps rows in place when only content above them changes.
-          if (anchor && isAwayFromBottom()) {
+          if (anchor) {
             const hold = { node: anchor, top: layoutTop(anchor) - scroll.scrollTop }
             held = hold
             afterLayout(() => {
