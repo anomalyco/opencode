@@ -437,6 +437,66 @@ test("the original managed service contender binds when the occupied port is rel
   }
 }, 45_000)
 
+test.skipIf(process.platform !== "win32")("unbindable managed service port falls back to an available port", async () => {
+  // A Windows excluded TCP range makes bind() fail while nothing listens there.
+  // Find a port with that signature; a Windows host without one cannot cover this path.
+  const port = await unbindablePort()
+  if (port === undefined) return
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-unbindable-"))
+  const registration = path.join(root, "state", "opencode", "service-local.json")
+  const config = path.join(root, "config", "opencode", "service-local.json")
+  await fs.mkdir(path.join(root, "config", "opencode"), { recursive: true })
+  await fs.writeFile(config, JSON.stringify({ port }))
+  const contender = Bun.spawn([process.execPath, path.join(import.meta.dir, "../src/index.ts"), "serve", "--service"], {
+    env: serviceEnv(root),
+    stderr: "pipe",
+    stdout: "pipe",
+  })
+  try {
+    // The fallback path reboots the server after a 15 s incumbent wait, so allow
+    // a longer registration budget than the shared waitForInfo window.
+    const info = await (async () => {
+      const deadline = Date.now() + 120_000
+      while (Date.now() < deadline) {
+        if (contender.exitCode !== null) return undefined
+        const found = await waitForInfo(registration).catch(() => undefined)
+        if (found !== undefined) return found
+      }
+      return undefined
+    })()
+    expect(info?.pid).toBe(contender.pid)
+    expect(info, "service must register").toBeDefined()
+    expect(new URL(info!.url).port).not.toBe(String(port))
+    expect(
+      await fetch(new URL("/api/info", info!.url), {
+        headers: { authorization: "Basic " + btoa(`opencode:${info!.password}`) },
+      }).then((response) => response.json()),
+    ).toMatchObject({ pid: contender.pid, version: OPENCODE_VERSION })
+    // Effect warnings go to the service log file, never to stdio (the contender
+    // stays alive, so its output streams must not be awaited here).
+    const log = path.join(root, "data", "opencode", "log", "opencode-local.log")
+    let warning: string | undefined
+    for (let attempt = 0; attempt < 200 && warning === undefined; attempt++) {
+      const text = await Bun.file(log)
+        .text()
+        .catch(() => "")
+      if (text.includes(`Managed service port ${port} on 127.0.0.1 could not be bound`)) warning = text
+      else await Bun.sleep(100)
+    }
+    expect(warning).toContain("opencode service set port <port>")
+    // The fallback must not rewrite the user's configured port.
+    expect(await Bun.file(config).json()).toMatchObject({ port })
+    expect(contender.exitCode).toBe(null)
+    await Effect.runPromise(Service.stop({ file: registration }).pipe(Effect.provide(NodeFileSystem.layer)))
+    expect(await waitForExit(contender)).toBe(true)
+    expect(await Bun.file(registration).exists()).toBe(false)
+  } finally {
+    contender.kill("SIGTERM")
+    await contender.exited
+    await fs.rm(root, { recursive: true, force: true })
+  }
+}, 180_000)
+
 test("unresponsive managed port occupancy reports a bounded conflict", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-unresponsive-conflict-"))
   const recognizing = Promise.withResolvers<void>()
@@ -717,4 +777,57 @@ function waitForExit(process: Bun.Subprocess, timeout = 10_000) {
 async function expectPortAvailable(port: number) {
   const server = Bun.serve({ hostname: "127.0.0.1", port, fetch: () => new Response() })
   await server.stop(true)
+}
+
+// A port nothing can bind but nothing listens on (e.g. inside a Windows
+// excluded TCP range): bind fails while a TCP connect is refused.
+async function unbindablePort() {
+  const candidates = [49374, ...excludedPortSamples(), ...randomPorts(32)]
+  for (const port of candidates) {
+    let holder: { stop: (closeActiveConnections?: boolean) => void } | undefined
+    try {
+      holder = Bun.serve({ hostname: "127.0.0.1", port, fetch: () => new Response() })
+    } catch {
+      if (await connectionRefused("127.0.0.1", port)) return port
+      continue
+    }
+    await holder.stop(true)
+  }
+  return undefined
+}
+
+function excludedPortSamples() {
+  if (process.platform !== "win32") return []
+  try {
+    const output = Bun.spawnSync(["netsh", "interface", "ipv4", "show", "excludedportrange", "protocol=tcp"])
+    const text = output.stdout.toString()
+    const samples: number[] = []
+    for (const match of text.matchAll(/^\s*(\d+)\s+(\d+)\s*$/gm)) {
+      const start = Number(match[1])
+      const end = Number(match[2])
+      if (Number.isInteger(start) && Number.isInteger(end) && end > start) {
+        samples.push(start, Math.floor((start + end) / 2))
+        if (samples.length >= 8) break
+      }
+    }
+    return samples
+  } catch {
+    return []
+  }
+}
+
+function randomPorts(count: number) {
+  const ports = new Set<number>()
+  while (ports.size < count) ports.add(49_152 + Math.floor(Math.random() * (65_535 - 49_152)))
+  return [...ports]
+}
+
+async function connectionRefused(hostname: string, port: number) {
+  try {
+    const socket = await Bun.connect({ hostname, port, socket: { data: () => {}, error: () => {} } })
+    socket.end()
+    return false
+  } catch {
+    return true
+  }
 }

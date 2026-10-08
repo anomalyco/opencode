@@ -7,6 +7,7 @@ import { Global } from "@opencode/util/global"
 import { OPENCODE_ARTIFACT, OPENCODE_CHANNEL, OPENCODE_VERSION } from "./version"
 import { AppProcess } from "@opencode/util/process"
 import { randomBytes, randomUUID } from "node:crypto"
+import { createConnection } from "node:net"
 import { Effect, Option, Redacted, Schema } from "effect"
 import { PersistentPty } from "@opencode/schema/persistent-pty"
 import { HttpServer } from "effect/unstable/http"
@@ -88,50 +89,50 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
       if (!password) return yield* Effect.fail(new Error("Missing server password"))
       const instanceID = randomUUID()
       const transform = yield* WebUi.handler()
-      const launch = start(
-        {
-          app: {
-            name: process.env.OPENCODE_CLIENT ?? OPENCODE_ARTIFACT,
-            version: OPENCODE_VERSION,
-            channel: OPENCODE_CHANNEL,
-          },
-          hostname,
-          port,
-          cors: options.cors ?? config.cors,
-          password,
-          pty: { handoff },
-          simulation: truthy(process.env.OPENCODE_SIMULATE),
-          database: {
-            path: databasePath(global.data),
-          },
-          models: {
-            url: process.env.OPENCODE_MODELS_URL,
-            file: process.env.OPENCODE_MODELS_PATH,
-            fetch: !truthy(process.env.OPENCODE_DISABLE_MODELS_FETCH),
-          },
-          config: {
-            directory: process.env.OPENCODE_CONFIG_DIR,
-            project: !truthy(
-              process.env.OPENCODE_CONFIG_PROJECT_DISABLE ?? process.env.OPENCODE_DISABLE_PROJECT_CONFIG,
-            ),
-            file: process.env.OPENCODE_CONFIG,
-            content: process.env.OPENCODE_CONFIG_CONTENT,
-          },
-          windows: {
-            gitbash: process.env.OPENCODE_GIT_BASH_PATH,
-          },
-          fs: {
-            filewatcher: !truthy(process.env.OPENCODE_FILEWATCHER_DISABLE ?? process.env.OPENCODE_DISABLE_FILEWATCHER),
-            fff:
-              process.env.OPENCODE_DISABLE_FFF === undefined
-                ? process.platform !== "win32"
-                : !truthy(process.env.OPENCODE_DISABLE_FFF),
-          },
+      const serverOptions = {
+        app: {
+          name: process.env.OPENCODE_CLIENT ?? OPENCODE_ARTIFACT,
+          version: OPENCODE_VERSION,
+          channel: OPENCODE_CHANNEL,
         },
+        hostname,
+        port,
+        cors: options.cors ?? config.cors,
+        password,
+        pty: { handoff },
+        simulation: truthy(process.env.OPENCODE_SIMULATE),
+        database: {
+          path: databasePath(global.data),
+        },
+        models: {
+          url: process.env.OPENCODE_MODELS_URL,
+          file: process.env.OPENCODE_MODELS_PATH,
+          fetch: !truthy(process.env.OPENCODE_DISABLE_MODELS_FETCH),
+        },
+        config: {
+          directory: process.env.OPENCODE_CONFIG_DIR,
+          project: !truthy(
+            process.env.OPENCODE_CONFIG_PROJECT_DISABLE ?? process.env.OPENCODE_DISABLE_PROJECT_CONFIG,
+          ),
+          file: process.env.OPENCODE_CONFIG,
+          content: process.env.OPENCODE_CONFIG_CONTENT,
+        },
+        windows: {
+          gitbash: process.env.OPENCODE_GIT_BASH_PATH,
+        },
+        fs: {
+          filewatcher: !truthy(process.env.OPENCODE_FILEWATCHER_DISABLE ?? process.env.OPENCODE_DISABLE_FILEWATCHER),
+          fff:
+            process.env.OPENCODE_DISABLE_FFF === undefined
+              ? process.platform !== "win32"
+              : !truthy(process.env.OPENCODE_DISABLE_FFF),
+        },
+      }
+      const serviceLifecycle =
         serviceOptions === undefined
           ? undefined
           : {
-              onListen: (address, shutdown) =>
+              onListen: (address: HttpServer.Address, shutdown: Effect.Effect<void>) =>
                 Effect.gen(function* () {
                   if (!config.password) yield* ServiceConfig.password(password)
                   return yield* ServiceRegistration.register({
@@ -142,12 +143,17 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
                     shutdown,
                   })
                 }),
-            },
-        transform,
-      )
+            }
+      const launchOn = (fallbackPort: boolean) =>
+        start(
+          fallbackPort ? { ...serverOptions, port: undefined } : serverOptions,
+          serviceLifecycle,
+          transform,
+        )
+      const launch = launchOn(false)
       const server = yield* launch.pipe(
         Effect.catch((error) => {
-          if (findIncumbent === undefined || !addressInUse(error)) return Effect.fail(error)
+          if (findIncumbent === undefined || port === undefined || !addressInUse(error)) return Effect.fail(error)
           return Effect.gen(function* () {
             const deadline = Date.now() + 15_000
             while (Date.now() < deadline) {
@@ -158,6 +164,21 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
               // Failed binds close their scope; a successful bind may take longer than this window to boot.
               const server = yield* launch.pipe(Effect.catchIf(addressInUse, () => Effect.void))
               if (server !== undefined) return server
+            }
+            // No incumbent claimed the port, and nothing accepts connections on it:
+            // the port is unusable (e.g. a Windows excluded TCP range) rather than
+            // occupied. Bind an automatically selected port so the managed service
+            // still starts; registration records the actual address.
+            if (!(yield* acceptsConnections(hostname, port))) {
+              const fallback = yield* launchOn(true).pipe(Effect.catchIf(addressInUse, () => Effect.void))
+              if (fallback !== undefined) {
+                yield* Effect.logWarning(
+                  `Managed service port ${port} on ${hostname} could not be bound and no running service owns it, ` +
+                    `so the service is listening on ${HttpServer.formatAddress(fallback.address)} instead. ` +
+                    "Configure a usable port with `opencode service set port <port>`.",
+                )
+                return fallback
+              }
             }
             return yield* Effect.fail(
               new Error(
@@ -194,6 +215,30 @@ function addressInUse(error: unknown): boolean {
   if (typeof error !== "object" || error === null) return false
   if ("code" in error && error.code === "EADDRINUSE") return true
   return "cause" in error && addressInUse(error.cause)
+}
+
+// True when something accepts TCP connections on hostname:port. Used after the
+// incumbent wait expires to tell a genuine port collision (fail with an
+// actionable error) from an unusable port nothing owns, such as a Windows
+// excluded TCP range (fall back to an automatically selected port).
+function acceptsConnections(hostname: string, port: number) {
+  return Effect.promise<boolean>(
+    () =>
+      new Promise<boolean>((resolve) => {
+        let settled = false
+        const socket = createConnection({ host: hostname, port })
+        const settle = (occupied: boolean) => {
+          if (settled) return
+          settled = true
+          socket.destroy()
+          resolve(occupied)
+        }
+        socket.once("connect", () => settle(true))
+        socket.once("error", () => settle(false))
+        socket.setTimeout(2_000)
+        socket.once("timeout", () => settle(false))
+      }),
+  )
 }
 
 function waitForStdinClose() {
