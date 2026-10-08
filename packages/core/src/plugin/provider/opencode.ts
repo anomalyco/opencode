@@ -1,4 +1,4 @@
-import { Duration, Effect, Equal, Option, Schema, Scope, Semaphore, Stream } from "effect"
+import { Duration, Effect, Equal, Option, Schema, SchemaGetter, Scope, Semaphore, Stream } from "effect"
 import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect/integration"
 import { define } from "@opencode/plugin/effect/plugin"
 import type { SessionHttpResponse } from "@opencode/plugin/effect/session"
@@ -9,6 +9,7 @@ import { Credential } from "../../credential.js"
 import { Integration } from "../../integration.js"
 import { IntegrationConnection } from "../../integration/connection.js"
 import { ManagedPolicy } from "../../managed-policy.js"
+import { Model } from "../../model.js"
 import { Provider } from "../../provider.js"
 import { WebSearch } from "../../websearch.js"
 import { ConfigPolicy } from "@opencode/schema/config/policy"
@@ -35,7 +36,20 @@ const RemoteResponse = Schema.Struct({
   }).pipe(Schema.optional),
   // Organization policy compiled for the authenticated caller; omitted when there is none.
   experimental: Schema.Struct({
-    policies: Schema.Array(ConfigPolicy.Info).pipe(Schema.optional),
+    policies: Schema.Array(Schema.Unknown).pipe(
+      Schema.decodeTo(Schema.Unknown, {
+        // Filter only unsupported actions. Malformed supported statements still fail validation.
+        decode: SchemaGetter.transform((policies) =>
+          policies.filter((policy) => {
+            const action = Schema.decodeUnknownOption(Schema.Struct({ action: Schema.String }))(policy)
+            return Option.isNone(action) || Schema.is(ConfigPolicy.Info.fields.action)(action.value.action)
+          }),
+        ),
+        encode: SchemaGetter.passthrough({ strict: false }),
+      }),
+      Schema.decodeTo(Schema.Array(ConfigPolicy.Info)),
+      Schema.optional,
+    ),
   }).pipe(Schema.optional),
 })
 const Device = Schema.Struct({
@@ -200,7 +214,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Manag
       }
       return yield* ctx.integration.connection.resolve(connection).pipe(
         Effect.flatMap((credential) => {
-          if (!credential)
+          if (!credential || credential.type === "external")
             return Effect.succeed({ config: undefined, connection, organization: undefined, mcp: undefined })
           return fetchConfig(http, credential).pipe(
             Effect.map((config) => ({
@@ -271,11 +285,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Manag
             model.package = config.package ?? (item.package !== undefined ? undefined : model.package)
             if (item.settings?.baseURL !== undefined && model.settings) delete model.settings.baseURL
             if (config.capabilities !== undefined)
-              model.capabilities = {
-                ...config.capabilities,
-                input: [...config.capabilities.input],
-                output: [...config.capabilities.output],
-              }
+              model.capabilities = Model.mergeCapabilities(config.capabilities, model.capabilities)
             model.settings = Provider.mergeOverlay(
               withoutCredentials(model.settings),
               withoutCredentials(config.settings),
@@ -363,7 +373,8 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Manag
               return yield* Effect.fail(new Error("OpenCode Console connection changed"))
             }
             const credential = yield* ctx.integration.connection.resolve(active)
-            if (!credential) return yield* Effect.fail(new Error("OpenCode Console is not connected"))
+            if (!credential || credential.type === "external")
+              return yield* Effect.fail(new Error("OpenCode Console is not connected"))
             const metadata = credential.metadata
             const orgID = typeof metadata?.orgID === "string" ? metadata.orgID : undefined
             const token = credential.type === "oauth" ? credential.access : credential.key
@@ -464,16 +475,13 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Manag
 
     // Console config can change independently of local credential activity, so re-fetch
     // periodically and only rebuild the catalog and search providers when the snapshot differs.
-    yield* Effect.sleep(Duration.minutes(1)).pipe(
-      Effect.andThen(check()),
-      Effect.forever,
-      Effect.forkScoped,
-    )
+    yield* Effect.sleep(Duration.minutes(1)).pipe(Effect.andThen(check()), Effect.forever, Effect.forkScoped)
   }),
 })
 
-function fetchConfig(http: HttpClient.HttpClient, value: Credential.Value) {
-  return http
+function fetchConfig(http: HttpClient.HttpClient, value: Credential.Key | Credential.OAuth) {
+  // Scoped so responses whose body is never read (404, errors) are released here instead of by a GC-time abort.
+  return HttpClient.withScope(http)
     .execute(
       HttpClientRequest.get(`${serverUrl(value)}/api/v2/config`).pipe(
         HttpClientRequest.acceptJson,
@@ -501,6 +509,7 @@ function fetchConfig(http: HttpClient.HttpClient, value: Credential.Value) {
           )
         }),
       ),
+      Effect.scoped,
     )
 }
 
@@ -533,7 +542,7 @@ function organizationName(credential: Credential.Value) {
   return typeof credential.metadata?.orgName === "string" ? credential.metadata.orgName : undefined
 }
 
-function credentialHeaders(value: Credential.Value): Record<string, string> {
+function credentialHeaders(value: Credential.Key | Credential.OAuth): Record<string, string> {
   const orgID = value.metadata?.orgID
   return {
     authorization: `Bearer ${value.type === "oauth" ? value.access : value.key}`,

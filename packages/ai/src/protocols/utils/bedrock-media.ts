@@ -76,7 +76,7 @@ function documentName(filename: string | undefined, names: Set<string>) {
   return name
 }
 
-const mediaBase64 = Effect.fn("BedrockMedia.mediaBase64")(function* (part: MediaPart) {
+const mediaBase64 = Effect.fnUntraced(function* (part: MediaPart) {
   const media = yield* ProviderShared.requireInlineMedia("Bedrock Converse", part.media)
   const bytes = yield* Effect.fromResult(Encoding.decodeBase64(media.base64)).pipe(
     Effect.mapError((cause) =>
@@ -91,7 +91,7 @@ const mediaBase64 = Effect.fn("BedrockMedia.mediaBase64")(function* (part: Media
 // document block. Image MIME types not in `IMAGE_FORMATS` (e.g. `image/svg+xml`)
 // get an image-specific error so the caller knows it's a format-support issue,
 // not a kind-detection issue.
-export const lower = Effect.fn("BedrockMedia.lower")(function* (part: MediaPart, documentNames: Set<string>) {
+export const lower = Effect.fnUntraced(function* (part: MediaPart, documentNames: Set<string>) {
   const mime = part.media.mediaType.toLowerCase()
   const imageFormat = IMAGE_FORMATS[mime as keyof typeof IMAGE_FORMATS]
   if (imageFormat) {

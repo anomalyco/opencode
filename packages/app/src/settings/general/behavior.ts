@@ -16,13 +16,16 @@ export type ShellSelectOption = {
 export function createShellOptions(input: { shells: ShellOption[]; current: string | undefined }) {
   const counts = input.shells.reduce((result, shell) => {
     result.set(shell.name, (result.get(shell.name) ?? 0) + 1)
+
     return result
   }, new Map<string, number>())
+
   const options: ShellSelectOption[] = [
     { id: "auto", value: "", name: "", terminalOnly: false },
     ...input.shells.map((shell) => {
       const ambiguous = (counts.get(shell.name) ?? 0) > 1
       const name = ambiguous ? shell.path : shell.name
+
       return {
         id: shell.path,
         value: ambiguous ? shell.path : shell.name,
@@ -31,9 +34,11 @@ export function createShellOptions(input: { shells: ShellOption[]; current: stri
       }
     }),
   ]
+
   if (input.current && !options.some((option) => option.value === input.current)) {
     options.push({ id: input.current, value: input.current, name: input.current, terminalOnly: false })
   }
+
   return options
 }
 
@@ -49,8 +54,10 @@ export function createSoundPreviewController(player: (id: string | undefined) =>
     cleanup = undefined
     timeout = undefined
   }
+
   const play = (id: string | undefined) => {
     stop()
+
     if (!id) return
     const current = ++run
     timeout = setTimeout(() => {
@@ -58,13 +65,16 @@ export function createSoundPreviewController(player: (id: string | undefined) =>
       void player(id).then((next) => {
         if (run === current) {
           cleanup = next
+
           return
         }
+
         next?.()
       })
     }, 100)
   }
 
   onCleanup(stop)
+
   return { play, stop }
 }

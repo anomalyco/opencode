@@ -18,6 +18,13 @@ describe("markdown stream", () => {
     expect(stream(raw, true)).toEqual([{ raw, src, mode: "live" }])
   })
 
+  test("keeps a display math block with a blank line in one stable block", () => {
+    expect(stream("$$\na\n\nb\n$$\n\nafter", true)).toEqual([
+      { raw: "$$\na\n\nb\n$$\n\n", src: "$$\na\n\nb\n$$\n\n", mode: "full" },
+      { raw: "after", src: "after", mode: "live" },
+    ])
+  })
+
   test("keeps incomplete links non-clickable until they finish", () => {
     expect(stream("see [docs](https://example.com/gu", true)).toEqual([
       { raw: "see [docs](https://example.com/gu", src: "see docs", mode: "live" },

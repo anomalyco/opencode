@@ -103,15 +103,8 @@ const OpenAIResponsesToolChoice = Schema.Union([
   Schema.Struct({ type: Schema.tag("image_generation") }),
 ])
 
-const OpenAIResponsesInputItem = Schema.Union([
-  OpenResponses.InputItem,
-  OpenAIResponsesHostedToolItem,
-  OpenResponses.ConfigurationUpdate,
-])
-
 const OpenAIResponsesCoreFields = {
   ...OpenResponses.coreFields,
-  input: Schema.Array(OpenAIResponsesInputItem),
   tools: optionalArray(OpenAIResponsesTools),
   tool_choice: Schema.optional(OpenAIResponsesToolChoice),
   context_management: Schema.optional(
@@ -134,7 +127,7 @@ export type OpenAIResponsesBody = Schema.Schema.Type<typeof OpenAIResponsesBody>
 export const CompactionTrigger = Schema.Struct({ type: Schema.Literal("compaction_trigger") })
 const CheckpointBody = Schema.Struct({
   ...OpenAIResponsesBody.fields,
-  input: Schema.Array(Schema.Union([OpenAIResponsesInputItem, CompactionTrigger])),
+  input: Schema.Array(Schema.Union([OpenResponses.InputItem, CompactionTrigger])),
 })
 
 const adapter = {
@@ -143,14 +136,15 @@ const adapter = {
   restoreHostedToolItem: (item: unknown) => (Schema.is(OpenAIResponsesHostedToolItem)(item) ? item : undefined),
 } satisfies OpenResponses.ProviderAdapter
 
-// GPT-6 Astra, Sol, and Luna accept `configuration_update` only in standard mode (not `reasoning.mode: "pro"` or
-// `-pro` slugs), and never alongside automatic `context_management` compaction.
+// GPT-6 and later default to `configuration_update` support, except in `reasoning.mode: "pro"`
+// or alongside automatic `context_management` compaction.
 const supportsEffortUpdates = (request: LLMRequest) => {
   if (request.providerOptions?.contextManagement !== undefined) return false
   if (Schema.is(Schema.Struct({ mode: Schema.Literal("pro") }))(request.http?.body?.reasoning)) return false
   const override = request.model.compatibility?.supportsEffortUpdates
   if (override !== undefined) return override
-  return /(?:^|\/)gpt-6-(?:astra|sol|luna)$/i.test(request.model.id)
+  const match = /(?:^|\/)gpt-(\d+)(?:\.\d+)?(?:-|$)/i.exec(request.model.id)
+  return match !== null && Number(match[1]) >= 6
 }
 
 const nativeImageToolInput = (tool: ToolDefinition) => {
@@ -163,7 +157,7 @@ const nativeImageTool = (tool: ToolDefinition) => {
   return Schema.is(OpenAIResponsesImageGenerationTool)(native) ? native : undefined
 }
 
-const lowerTool = Effect.fn("OpenAIResponses.lowerTool")(function* (tool: ToolDefinition) {
+const lowerTool = Effect.fnUntraced(function* (tool: ToolDefinition) {
   const native = nativeImageToolInput(tool)
   if (native !== undefined) {
     if (Schema.is(OpenAIResponsesImageGenerationTool)(native)) return native
@@ -174,7 +168,7 @@ const lowerTool = Effect.fn("OpenAIResponses.lowerTool")(function* (tool: ToolDe
 
 // Native namespaces hold only function tools, so deeper levels flatten into
 // the leaf names the same way non-native protocols flatten the whole tree.
-const lowerToolEntry = Effect.fn("OpenAIResponses.lowerToolEntry")(function* (tool: ToolEntry) {
+const lowerToolEntry = Effect.fnUntraced(function* (tool: ToolEntry) {
   if (tool.type === "tool") return yield* lowerTool(tool)
   // OpenAI requires a namespace description; fall back to a generic one so a
   // missing description never blocks the request.
@@ -201,15 +195,13 @@ const lowerToolChoice = (toolChoice: NonNullable<LLMRequest["toolChoice"]>, tool
         : { type: "function" as const, name },
   })
 
-const decodeBody = ProviderShared.validateWith(Schema.decodeUnknownEffect(OpenAIResponsesBody))
-
 const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request: LLMRequest) {
   const management = yield* ProviderShared.validateWith(
     Schema.decodeUnknownEffect(Schema.UndefinedOr(ContextManagement)),
   )(request.providerOptions?.contextManagement)
   const options = OpenResponsesOptions.resolve(request)
   const updates = resolveEffortUpdates(request, options.reasoningEffort)
-  return yield* decodeBody({
+  return {
     ...(yield* OpenResponses.lowerConversation(updates.request, adapter)),
     ...OpenResponses.lowerGeneration(request, { ...options, reasoningEffort: updates.effort }),
     context_management: management?.map((edit) => ({ type: edit.type, compact_threshold: edit.compactThreshold })),
@@ -219,7 +211,7 @@ const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request:
         ? undefined
         : (OpenResponses.allowedToolChoice(request) ??
           (request.toolChoice ? yield* lowerToolChoice(request.toolChoice, request.tools) : undefined)),
-  })
+  }
 })
 
 const checkpointBody = {
@@ -245,7 +237,7 @@ const checkpointBody = {
   }),
 }
 
-const hostedToolResult = Effect.fn("OpenAIResponses.hostedToolResult")(function* (item: ResponsesHostedTools.Item) {
+const hostedToolResult = Effect.fnUntraced(function* (item: ResponsesHostedTools.Item) {
   const isError = item.error !== undefined && item.error !== null
   if (item.type === "image_generation_call" && item.result) {
     yield* Effect.fromResult(Encoding.decodeBase64(item.result)).pipe(

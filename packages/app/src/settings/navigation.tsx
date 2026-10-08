@@ -34,13 +34,17 @@ export function SettingsNavigation(props: {
   const surface = useSettingsSurface()
   const searchable = () => surface.view().type === "root"
   const language = useLanguage()
+
   const back = () => {
     if (!searchable() && surface.search.back()) return
     props.onBack()
   }
+
   const backLabel = () =>
     !searchable() && surface.search.state.selected ? language.t("settings.backToSettings") : props.backLabel
+
   const current = () => props.groups.flatMap((group) => group.items).find((item) => item.value === props.value)
+
   const change = (value: string) => {
     surface.search.clear()
     props.onChange(value)

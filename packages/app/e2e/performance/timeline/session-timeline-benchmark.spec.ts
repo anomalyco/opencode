@@ -62,6 +62,7 @@ benchmark.describe("performance: review pane", () => {
     benchmark.setTimeout(240_000)
     const historyTurns = Number(process.env.REVIEW_PANE_HISTORY_TURNS ?? 72)
     const diffs = createReviewDiffs()
+
     const fixture = await setupTimelineBenchmark(page, {
       historyTurns,
       eventBatch: 1,
@@ -76,6 +77,7 @@ benchmark.describe("performance: review pane", () => {
 
     const open = await measureReviewPaneLoad(page, diffs[0]!.file)
     const switches = []
+
     for (const diff of diffs.slice(1, 4)) switches.push(await measureReviewNextFile(page, diff.file))
 
     report(
@@ -101,6 +103,7 @@ async function runTimelineStreamBenchmark(page: Page, options: TimelineStreamOpt
   const profileCPU = process.env.TIMELINE_CPU_PROFILE === "1"
   const profileVisual = !minimal && profileCPU && process.env.TIMELINE_VISUAL_PROFILE !== "0"
   const diffs = options.reviewDiffs || options.reviewPane ? createReviewDiffs() : undefined
+
   const fixture = await setupTimelineBenchmark(page, {
     historyTurns,
     eventBatch,
@@ -119,6 +122,7 @@ async function runTimelineStreamBenchmark(page: Page, options: TimelineStreamOpt
   await fixture.waitForStableGeometry()
 
   const reviewPane = options.reviewPane && diffs ? await measureReviewPaneLoad(page, diffs[0]!.file) : undefined
+
   if (reviewPane) await fixture.waitForStableGeometry()
 
   const profile = await startTimelineProfile(page, { cpuThrottle, profileCPU })
@@ -140,11 +144,13 @@ async function runTimelineStreamBenchmark(page: Page, options: TimelineStreamOpt
   await expect(fixture.text).toContainText("benchmark-complete")
   await expect(fixture.text).toContainText("Streaming")
   await fixture.waitForStableGeometry()
+
   const metrics = await collectTimelineStreamMetrics(page, {
     textPartID,
     finalIndex: deltaCount,
     navigations: benchmarkDiagnostics(page).navigations,
   })
+
   const delivered = deltas.length - fixture.transport.pendingCount()
   await profile.stop()
 
@@ -170,6 +176,7 @@ async function runTimelineStreamBenchmark(page: Page, options: TimelineStreamOpt
   }
 
   await profile.reset()
+
   return result
 }
 
@@ -180,6 +187,7 @@ async function measureReviewPaneLoad(page: Page, file: string) {
   await startReviewPaneProbe(page)
   await page.getByRole("button", { name: "Toggle review" }).click()
   await expect(page.locator("#review-panel")).toBeVisible()
+
   return collectReviewPaneProbe(page)
 }
 
@@ -187,6 +195,7 @@ async function measureReviewNextFile(page: Page, file: string) {
   await installReviewPaneProbe(page, { file })
   await startReviewPaneProbe(page)
   await page.getByRole("button", { name: "Next file" }).click()
+
   return collectReviewPaneProbe(page)
 }
 
@@ -202,20 +211,25 @@ async function installReviewPaneProbe(page: Page, input: { file: string }) {
       const review = panel?.querySelector<HTMLElement>('[data-component="session-review-v2"]')
       const rect = (review ?? panel)?.getBoundingClientRect()
       const text = panel?.textContent ?? ""
+
       const previewHeader = panel?.querySelector<HTMLElement>(
         '[data-slot="session-review-v2-file-header"]',
       )?.textContent
+
       const header = previewHeader ?? text
       const viewers = panel ? [...panel.querySelectorAll<HTMLElement>('[data-component="file"][data-mode="diff"]')] : []
       const codeBlocks = panel?.querySelectorAll("code").length ?? 0
+
       const diffLines = viewers.reduce(
         (sum, viewer) =>
           sum +
           (viewer.shadowRoot?.querySelectorAll("[data-line]").length ?? viewer.querySelectorAll("[data-line]").length),
         0,
       )
+
       const panelVisible =
         !!panel && panel.getAttribute("aria-hidden") !== "true" && !!rect && rect.width > 0 && rect.height > 0
+
       return {
         panelVisible,
         header: header.slice(0, 500),
@@ -235,6 +249,7 @@ async function installReviewPaneProbe(page: Page, input: { file: string }) {
         setTimeout(() => {
           if (!running || started === undefined) return
           samples.push({ observedAtMs: performance.now() - started, ...paneState() })
+
           if (performance.now() - started < 10_000) sample()
         }, 0)
       })
@@ -263,9 +278,12 @@ async function startReviewPaneProbe(page: Page) {
 async function collectReviewPaneProbe(page: Page) {
   await page.waitForFunction((streak) => {
     const samples = (window as Window & { __reviewPaneProbe?: ReviewPaneProbe }).__reviewPaneProbe?.samples
+
     if (!samples) return false
+
     return samples.some((_, index) => {
       const stable = samples.slice(index, index + streak)
+
       return stable.length === streak && stable.every((sample) => sample.ready)
     })
   }, reviewReadyStreak)
@@ -273,17 +291,22 @@ async function collectReviewPaneProbe(page: Page) {
   const samples = await page.evaluate(() => {
     const probe = (window as Window & { __reviewPaneProbe?: ReviewPaneProbe }).__reviewPaneProbe!
     probe.stop()
+
     return probe.samples
   })
+
   return { summary: summarizeReviewPaneSamples(samples), samples }
 }
 
 function summarizeReviewPaneSamples(samples: ReviewPaneSample[]) {
   const firstReady = samples.find((sample) => sample.ready)
+
   const stableIndex = samples.findIndex((_, index) => {
     const stable = samples.slice(index, index + reviewReadyStreak)
+
     return stable.length === reviewReadyStreak && stable.every((sample) => sample.ready)
   })
+
   return {
     samples: samples.length,
     firstReadyObservedMs: firstReady?.observedAtMs ?? null,

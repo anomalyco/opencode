@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "metadata": {
+    "provider": "cloudflare-ai-gateway",
+    "route": "cloudflare-ai-gateway-messages",
+    "transport": "http",
+    "model": "claude-haiku-4-5",
+    "tags": [
+      "prefix:cloudflare-ai-gateway",
+      "provider:cloudflare-ai-gateway",
+      "tool",
+      "tool-loop",
+      "golden"
+    ],
+    "name": "cloudflare-ai-gateway/cloudflare-ai-gateway-claude-haiku-4-5-tool-loop",
+    "recordedAt": "2026-09-30T04:35:45.222Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://gateway.ai.cloudflare.com/v1/{account}/{gateway}/anthropic/v1/messages",
+        "headers": {
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"claude-haiku-4-5\",\"system\":[{\"type\":\"text\",\"text\":\"Use the get_weather tool exactly once. After the tool result, reply exactly: Paris is sunny.\"}],\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"What is the weather in Paris?\"}]}],\"tools\":[{\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false}}],\"stream\":true,\"max_tokens\":80,\"temperature\":0}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream; charset=utf-8"
+        },
+        "body": "event: message_start\ndata: {\"p\": \"f2f6a212\", \"type\":\"message_start\",\"message\":{\"model\":\"claude-haiku-4-5-20251001\",\"id\":\"msg_011CfZ16jzmxrCrHLxeCxrL8\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"container\":null,\"stop_reason\":null,\"stop_sequence\":null,\"stop_details\":null,\"usage\":{\"input_tokens\":593,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":26,\"service_tier\":\"standard\",\"inference_geo\":\"not_available\"},\"diagnostics\":null}    }\n\nevent: content_block_start\ndata: {\"p\": \"7\", \"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"tool_use\",\"id\":\"toolu_019hb1DDwKBNMMeaKjZf1CpS\",\"name\":\"get_weather\",\"input\":{},\"caller\":{\"type\":\"direct\"}}             }\n\nevent: ping\ndata: {\"p\": \"e112b39d9a4869\", \"type\": \"ping\"}\n\nevent: content_block_delta\ndata: {\"p\": \"12d\", \"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"\"}            }\n\nevent: content_block_delta\ndata: {\"p\": \"2\", \"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"city\\\"\"} }\n\nevent: content_block_delta\ndata: {\"p\": \"f6bb01e5ae5c1c7\", \"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\": \\\"Pari\"}         }\n\nevent: content_block_delta\ndata: {\"p\": \"c26aa17\", \"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"s\\\"}\"}     }\n\nevent: content_block_stop\ndata: {\"p\": \"16f665\", \"type\":\"content_block_stop\",\"index\":0      }\n\nevent: message_delta\ndata: {\"p\": \"e00cc845875\", \"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"tool_use\",\"stop_sequence\":null,\"stop_details\":null,\"container\":null},\"usage\":{\"input_tokens\":593,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":54}               }\n\nevent: message_stop\ndata: {\"p\": \"5082e73ce8055a\", \"type\":\"message_stop\"    }\n\n"
+      }
+    },
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://gateway.ai.cloudflare.com/v1/{account}/{gateway}/anthropic/v1/messages",
+        "headers": {
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"claude-haiku-4-5\",\"system\":[{\"type\":\"text\",\"text\":\"Use the get_weather tool exactly once. After the tool result, reply exactly: Paris is sunny.\"}],\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"What is the weather in Paris?\"}]},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_019hb1DDwKBNMMeaKjZf1CpS\",\"name\":\"get_weather\",\"input\":{\"city\":\"Paris\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_019hb1DDwKBNMMeaKjZf1CpS\",\"content\":\"{\\\"temperature\\\":22,\\\"condition\\\":\\\"sunny\\\"}\"}]}],\"tools\":[{\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false}}],\"stream\":true,\"max_tokens\":80,\"temperature\":0}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream; charset=utf-8"
+        },
+        "body": "event: message_start\ndata: {\"p\": \"ff048fa113d17ffc\", \"type\":\"message_start\",\"message\":{\"model\":\"claude-haiku-4-5-20251001\",\"id\":\"msg_011CfZ16ooU6seiMzxt69doW\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"container\":null,\"stop_reason\":null,\"stop_sequence\":null,\"stop_details\":null,\"usage\":{\"input_tokens\":668,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":1,\"service_tier\":\"standard\",\"inference_geo\":\"not_available\"},\"diagnostics\":null}             }\n\nevent: content_block_start\ndata: {\"p\": \"5172b1\", \"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}              }\n\nevent: ping\ndata: {\"p\": \"d\", \"type\": \"ping\"}\n\nevent: content_block_delta\ndata: {\"p\": \"7f847273c\", \"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Paris\"}  }\n\nevent: content_block_delta\ndata: {\"p\": \"1de4\", \"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" is sunny\"}}\n\nevent: content_block_delta\ndata: {\"p\": \"d61\", \"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\".\"}}\n\nevent: content_block_stop\ndata: {\"p\": \"29638a9b46e21ecd\", \"type\":\"content_block_stop\",\"index\":0       }\n\nevent: message_delta\ndata: {\"p\": \"8e5f9442b03f76\", \"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"stop_details\":null,\"container\":null},\"usage\":{\"input_tokens\":668,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":7}         }\n\nevent: message_stop\ndata: {\"p\": \"97d9afcead79c7a\", \"type\":\"message_stop\"    }\n\n"
+      }
+    }
+  ]
+}

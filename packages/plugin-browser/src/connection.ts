@@ -19,9 +19,38 @@ type Attachment = {
 export type Connection = Effect.Success<ReturnType<typeof make>>
 
 export const make = Effect.fn("BrowserConnection.make")(function* (
-  ctx: Pick<Context, "rpc" | "session" | "location" | "event">,
+  ctx: Pick<Context, "agent" | "rpc" | "session" | "location" | "event">,
 ) {
   const browsers = new Map<Session.ID, Attachment>()
+  // Appended after config, so every agent hides the browser until an attachment allows it.
+  yield* ctx.agent.transform((editor) =>
+    editor.list().forEach((agent) => agent.permissions.push({ action: "browser", resource: "*", effect: "deny" })),
+  )
+  // Each attachment adds and removes its own allow, so a replaced attachment keeps the new one's.
+  const grant = (sessionID: Session.ID) =>
+    Effect.acquireRelease(
+      ctx.session.get({ sessionID }).pipe(
+        Effect.flatMap((session) =>
+          ctx.session.update({
+            sessionID,
+            permissions: [...(session.permissions ?? []), { action: "browser", resource: "*", effect: "allow" }],
+          }),
+        ),
+        Effect.orDie,
+      ),
+      () =>
+        ctx.session.get({ sessionID }).pipe(
+          Effect.flatMap((session) => {
+            const permissions = session.permissions ?? []
+            const index = permissions.findIndex(
+              (rule) => rule.action === "browser" && rule.resource === "*" && rule.effect === "allow",
+            )
+            if (index === -1) return Effect.void
+            return ctx.session.update({ sessionID, permissions: permissions.toSpliced(index, 1) })
+          }),
+          Effect.ignore,
+        ),
+    )
   let active = true
   const close = (sessionID: Session.ID, reason: "closed" | "replaced" = "closed") =>
     Effect.gen(function* () {
@@ -69,6 +98,7 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
             }),
             (browser) => (browsers.get(input.sessionID) === browser ? close(input.sessionID) : Effect.void),
           )
+          yield* grant(input.sessionID)
           yield* rpc.events
             .emit("control", { type: "attached", connectionID: input.connectionID, version: 4 })
             .pipe(Effect.orDie)

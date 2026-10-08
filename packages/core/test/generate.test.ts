@@ -16,7 +16,7 @@ import { testEffect } from "./lib/effect"
 
 const selected = Info.make({
   ...Info.default(Provider.ID.make("test-provider"), ID.make("gemini")),
-  package: Provider.aisdk("@ai-sdk/cohere"),
+  package: Provider.aisdk("@ai-sdk/perplexity"),
 })
 const runtime = LanguageModel.make({ id: "gemini", provider: "test-provider", route: OpenAIChat.route })
 
@@ -32,6 +32,7 @@ const integrations = Layer.mock(Integration.Service, {
     active: () => Effect.undefined,
     resolve: () => Effect.die("unused"),
     key: () => Effect.die("unused"),
+    external: () => Effect.die("unused"),
     activate: () => Effect.die("unused"),
     update: () => Effect.die("unused"),
     remove: () => Effect.die("unused"),

@@ -1890,26 +1890,38 @@ const pathFileNamePrefixes = new Set([
 
 export function inlineCodeKind(text: string): "path" | "url" | undefined {
   if (/^https?:\/\//i.test(text)) return "url"
+
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(text)) return
+
   if (text === "/") return
+
   if (/^\/[a-z][a-z0-9-]*$/i.test(text)) return
+
   if (/\s/.test(text)) return
+
   if (/[()\[\]{}*+=<>|&^"';]/.test(text)) return
+
   if (/[/\\]/.test(text) || /^\.\.?[/\\]/.test(text) || hasPathExtension(text) || hasPathFileName(text)) return "path"
 }
 
 function hasPathExtension(text: string) {
   const value = text.toLowerCase()
+
   if (value.endsWith(".d.ts")) return true
   const index = value.lastIndexOf(".")
+
   if (index === -1) return false
+
   return pathExtensions.has(value.slice(index + 1))
 }
 
 function hasPathFileName(text: string) {
   const value = text.toLowerCase()
+
   if (pathFileNames.has(value)) return true
   const index = value.indexOf(".")
+
   if (index === -1) return false
+
   return pathFileNamePrefixes.has(value.slice(0, index))
 }

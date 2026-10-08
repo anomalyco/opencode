@@ -1,4 +1,4 @@
-import { AIError, ToolFailure } from "@opencode/ai"
+import { AIError, ToolFailure, type FinishReasonDetails } from "@opencode/ai"
 import { Tool } from "@opencode/schema/tool"
 import { SessionError } from "@opencode/schema/session-error"
 import { Permission } from "../permission.js"
@@ -83,6 +83,15 @@ export function toSessionError(cause: unknown): SessionError.Error {
     return { type: "provider.no-route", message: cause.message }
   if (cause instanceof Integration.AuthorizationError) return { type: "provider.auth", message: cause.message }
   return { type: "unknown", message: cause instanceof Error ? cause.message : String(cause) }
+}
+
+export function contentFilterError(summary: string, reason: FinishReasonDetails): SessionError.Error {
+  return {
+    type: "provider.content-filter",
+    message: [reason.category === undefined ? summary : `${summary} (${reason.category})`, reason.explanation]
+      .filter(Boolean)
+      .join(": "),
+  }
 }
 
 function providerError(type: string, reason: AIError["reason"]): SessionError.Error {

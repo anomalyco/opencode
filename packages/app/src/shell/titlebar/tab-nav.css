@@ -272,3 +272,30 @@
     transform: translateX(-50%);
   }
 }
+
+/* A prompt that arrives in a background tab rings it once, like the TUI's prompt pulse. */
+[data-titlebar-tab] [data-slot="tab-prompt-pulse"] {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  box-shadow: inset 0 0 0 1px var(--v2-border-border-strong);
+  animation: tab-prompt-pulse 900ms ease-out;
+}
+
+@keyframes tab-prompt-pulse {
+  20% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-titlebar-tab] [data-slot="tab-prompt-pulse"] {
+    animation: none;
+  }
+}

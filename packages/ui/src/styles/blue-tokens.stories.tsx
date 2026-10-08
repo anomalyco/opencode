@@ -13,6 +13,7 @@ import { SplitButton, SplitButtonAction, SplitButtonMenuTrigger } from "../actio
 import { Icon } from "../icons/icon/icon"
 
 const blue = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200] as const
+
 const unused = new Set([1000])
 
 const section = {

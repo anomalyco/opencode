@@ -1,0 +1,17 @@
+export default {
+  "tab.title": "Revizuire",
+  "tab.count.one": "{{count}} fișier a fost modificat",
+  "tab.count.few": "{{count}} fișiere modificate",
+  "tab.count.other": "{{count}} de fișiere modificate",
+  "mobile.title.one": "Modificare",
+  "mobile.title.few": "Modificări",
+  "mobile.title.other": "Modificări",
+  "empty.git": "Nicio modificare necomisă încă",
+  "empty.branch": "Nicio modificare pe ramură încă",
+  "git.title": "Creează un depozit Git",
+  "git.description": "Urmărește, revizuiește și anulează modificările din acest proiect",
+  loadingChanges: "Se încarcă modificările…",
+  noChanges: "Nicio modificare",
+  "settings.wrapLines.title": "Încadrează liniile",
+  "settings.wrapLines.description": "Înfășurați linii lungi în diferențele mobile în loc să derulați pe orizontală",
+}

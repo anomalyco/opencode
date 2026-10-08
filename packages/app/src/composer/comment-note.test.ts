@@ -1,41 +1,80 @@
 import { describe, expect, test } from "bun:test"
-import { commentContextItem, formatBrowserCommentNote, readPromptPresentation } from "./comment-note"
+import { commentContextItem, readPromptPresentation } from "./comment-note"
+import { createMemoryComposerState } from "./state"
 
-const browser = {
-  type: "browser" as const,
-  tabID: "tab_00000000-0000-4000-8000-000000000000",
-  url: "http://localhost:5173/",
-  element: { ref: "e42", selector: "#save", label: "button#save" },
+const durable = {
+  type: "note" as const,
+  origin: "example",
+  label: "button#save",
+  icon: "select-element",
+  subject: 'the "button#save" element',
+  href: "tab_00000000-0000-4000-8000-000000000000",
   comment: "Rename this",
 }
 
-describe("browser element comments", () => {
+const note = { ...durable, live: { subject: 'the "button#save" element (browser ref @e42)' } }
+
+describe("extension notes", () => {
   test("read from message metadata beside file comments and skip malformed entries", () => {
+    // Metadata a build before extension notes sent for a browser element comment.
+    const browser = {
+      type: "browser",
+      tabID: "tab_00000000-0000-4000-8000-000000000000",
+      url: "http://localhost:5173/settings",
+      title: "Settings",
+      element: {
+        ref: "e42",
+        selector: "#settings > button.primary",
+        label: "button.primary",
+        role: "button",
+        name: "Save",
+        text: "Save",
+      },
+      comment: "Match @src/button.css",
+    }
+
     const value = readPromptPresentation({
       displayText: "hi",
-      comments: [browser, { ...browser, element: { label: "button" } }, { path: "src/app.ts", comment: "Keep" }],
+      comments: [
+        note,
+        { ...note, label: 42 },
+        browser,
+        { ...browser, element: { label: "button" } },
+        { path: "src/app.ts", comment: "Keep" },
+      ],
     })
-    expect(value?.comments).toEqual([browser, { path: "src/app.ts", comment: "Keep" }])
+
+    expect(value?.comments).toEqual([
+      note,
+      {
+        type: "note",
+        origin: "browser",
+        label: "button.primary",
+        icon: "select-element",
+        subject:
+          'the "button.primary" element in browser tab tab_00000000-0000-4000-8000-000000000000 at http://localhost:5173/settings (role button; accessible name "Save"; selector "#settings > button.primary")',
+        href: "tab_00000000-0000-4000-8000-000000000000",
+        comment: "Match @src/button.css",
+      },
+      { path: "src/app.ts", comment: "Keep" },
+    ])
   })
 
-  test("explain a selector that crosses into a shadow root", () => {
-    expect(
-      formatBrowserCommentNote({ ...browser, element: { ...browser.element, selector: "#card >>> div > button" } }),
-    ).toContain('selector "#card >>> div > button" (">>>" enters a shadow root)')
-    expect(formatBrowserCommentNote(browser)).not.toContain("shadow root")
+  test("update and detach by commentID reach notes as well as file comments", () => {
+    const context = createMemoryComposerState().context
+    context.add({ type: "file", path: "src/app.ts", comment: "Keep", commentID: "file" })
+    context.add({ ...note, commentID: "note" })
+    context.updateComment("note", { comment: "Rename that" })
+    context.updateComment("file", { comment: "Keep this" })
+    expect(context.items().map((item) => [item.commentID, item.comment])).toEqual([
+      ["file", "Keep this"],
+      ["note", "Rename that"],
+    ])
+    context.removeComment("note")
+    expect(context.items().map((item) => item.commentID)).toEqual(["file"])
   })
 
-  test("leave out a selector that was too long to keep", () => {
-    expect(formatBrowserCommentNote({ ...browser, element: { ...browser.element, selector: "" } })).toBe(
-      'The user made the following comment regarding the "button#save" element in browser tab tab_00000000-0000-4000-8000-000000000000 at http://localhost:5173/ (browser ref @e42, usable as ref in any browser tool including browser.evaluate until the page navigates): Rename this',
-    )
-  })
-
-  test("return to the composer without their element ref", () => {
-    expect(commentContextItem(browser)).toEqual({
-      ...browser,
-      element: { selector: "#save", label: "button#save" },
-      commentID: expect.any(String),
-    })
+  test("return to the composer without their live part", () => {
+    expect(commentContextItem(note)).toEqual({ ...durable, commentID: expect.any(String) })
   })
 })

@@ -1,13 +1,14 @@
 import { expect, test, type Page } from "@playwright/test"
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises"
 import { createServer, type ServerResponse } from "node:http"
+import type { AddressInfo } from "node:net"
 import { once } from "node:events"
 import { createHash } from "node:crypto"
 import { join, extname, relative, sep } from "node:path"
 import { tmpdir } from "node:os"
 import { fileURLToPath } from "node:url"
 import { build } from "vite"
-import { serviceWorker } from "../../vite.pwa"
+import { onDemandAsset, serviceWorker } from "../../vite.pwa"
 
 type Site = {
   url: string
@@ -22,6 +23,7 @@ const fixture = test.extend<{ site: Site }, { builds: Record<string, Record<stri
     async ({}, use) => {
       const directory = await mkdtemp(join(tmpdir(), "opencode-precache-"))
       const builds: Record<string, Record<string, Buffer>> = {}
+
       try {
         for (const version of ["old", "new"]) {
           const root = join(directory, version)
@@ -57,11 +59,13 @@ const fixture = test.extend<{ site: Site }, { builds: Record<string, Record<stri
                 .filter((entry) => entry.isFile())
                 .map(async (entry) => {
                   const path = join(entry.parentPath, entry.name)
+
                   return ["/" + relative(outDir, path).split(sep).join("/"), await readFile(path)]
                 }),
             ),
           )
         }
+
         await use(builds)
       } finally {
         await rm(directory, { recursive: true, force: true })
@@ -74,23 +78,29 @@ const fixture = test.extend<{ site: Site }, { builds: Record<string, Record<stri
     const requests: string[] = []
     const blocked: ServerResponse[] = []
     const release = () => blocked.splice(0).forEach((response) => response.end(builds.new["/large.bin"]))
+
     const server = createServer((request, response) => {
       const url = new URL(request.url ?? "/", "http://localhost")
       const path = url.pathname
       requests.push(path)
       response.setHeader("cache-control", "no-store")
+
       if (path === "/observer.html")
         return void response.writeHead(200, { "content-type": "text/html" }).end("<title>Worker observer</title>")
+
       if (path === "/api/info")
         return void response
           .writeHead(200, { "content-type": "application/json" })
           .end(`{"version":"test","pid":1,"urls":["${url.origin}"],"paths":{"tmp":"/tmp/opencode"}}`)
+
       if (path === "/sw.js" && state.legacy && state.version === "old") {
         // Model the shipped worker's shared precache name and cache-first navigation behavior.
         const urls = Object.keys(builds.old).filter(
           (path) => path === "/index.html" || (path.startsWith("/_assets/") && path.endsWith(".js")),
         )
+
         response.setHeader("content-type", "text/javascript")
+
         return void response.end(`
           self.addEventListener("install", event => event.waitUntil(
             caches.open("workbox-precache-v2-" + self.registration.scope).then(cache => cache.addAll(${JSON.stringify(urls)}))
@@ -101,32 +111,44 @@ const fixture = test.extend<{ site: Site }, { builds: Record<string, Record<stri
           ));
         `)
       }
+
       if (path === "/index.html" && state.fault === "mixed-html")
         return void response.writeHead(200, { "content-type": "text/html" }).end(builds.old["/index.html"])
+
       if (path === "/large.bin" && state.fault && state.fault !== "mixed-html") {
         if (state.fault === "blocked") return void blocked.push(response)
+
         if (state.fault === "failed") return void response.writeHead(503).end("Unavailable")
+
         if (state.fault === "html")
           return void response.writeHead(200, { "content-type": "text/html" }).end("<html>Wrong fallback</html>")
+
         return void response.end("Incorrect bytes with a successful status")
       }
+
       const file = builds[state.version][path]
-      const types: Record<string, string> = {
-        ".js": "text/javascript",
-        ".html": "text/html",
-        ".json": "application/json",
-        ".wasm": "application/wasm",
-      }
-      response.setHeader("content-type", types[extname(path)] ?? "application/octet-stream")
+
+      const types = new Map([
+        [".js", "text/javascript"],
+        [".html", "text/html"],
+        [".json", "application/json"],
+        [".wasm", "application/wasm"],
+      ])
+
+      response.setHeader("content-type", types.get(extname(path)) ?? "application/octet-stream")
+
       if (file) return void response.end(file)
+
       if (extname(path)) return void response.writeHead(404).end("Not found")
       response.setHeader("content-type", "text/html")
       response.end(builds[state.version]["/index.html"])
     })
+
     server.listen(0, "127.0.0.1")
     await once(server, "listening")
-    const address = server.address()
-    if (!address || typeof address === "string") throw new Error("Expected a TCP address")
+    // SAFETY: a server listening on a host and port reports an AddressInfo; only pipe servers report a string.
+    const address = server.address() as AddressInfo
+
     try {
       await use({
         url: `http://127.0.0.1:${address.port}`,
@@ -163,7 +185,9 @@ async function install(page: Page, url: string) {
 async function update(page: Page) {
   return page.evaluateHandle(async () => {
     const registration = await navigator.serviceWorker.getRegistration()
+
     if (!registration) throw new Error("Missing installed worker")
+
     const found = new Promise<ServiceWorker>((resolve) =>
       registration.addEventListener(
         "updatefound",
@@ -174,7 +198,9 @@ async function update(page: Page) {
         { once: true },
       ),
     )
+
     await registration.update()
+
     return found
   })
 }
@@ -205,17 +231,21 @@ fixture(
       expect(output["/sw.js.map"]).toBeUndefined()
       expect(Object.keys(output).some((path) => path.startsWith("/_assets/") && path.endsWith(".map"))).toBe(true)
     }
+
     await install(page, site.url)
     const files = ["/nested/data.json", "/nested/font.woff2", "/nested/module.wasm", "/large.bin"]
     await context.setOffline(true)
+
     for (const path of files) {
       const digest = await page.evaluate(
         async (path) =>
           Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", await (await fetch(path)).arrayBuffer()))),
         path,
       )
+
       expect(Buffer.from(digest)).toEqual(createHash("sha256").update(builds.old[path]).digest())
     }
+
     expect(site.requests).not.toContain("/_headers")
     expect(site.requests).not.toContain("/_redirects")
     expect(site.requests.filter((path) => path.endsWith(".map"))).toEqual([])
@@ -254,8 +284,11 @@ fixture(
     await expect
       .poll(() =>
         replacement.evaluate(() => {
-          const registration = (self as unknown as { registration: ServiceWorkerRegistration }).registration
-          return { waiting: !!registration.waiting, active: registration.active?.state }
+          // This runs in the service worker, whose global scope holds its registration.
+          const registration =
+            "registration" in self && self.registration instanceof ServiceWorkerRegistration ? self.registration : undefined
+
+          return { waiting: !!registration?.waiting, active: registration?.active?.state }
         }),
       )
       .toEqual({ waiting: false, active: "activated" })
@@ -347,39 +380,57 @@ fixture("does not substitute cached HTML for API or missing asset navigations", 
   expect(await asset?.text()).toBe("Not found")
 })
 
-test("the production build precaches every deployable file", async ({ page, context }) => {
+test("the production build precaches every deployable file except on-demand Office assets", async ({
+  page,
+  context,
+}) => {
   const directory = new URL("../../dist/", import.meta.url)
-  const files = (await readdir(directory, { recursive: true, withFileTypes: true }))
+
+  const deployable = (await readdir(directory, { recursive: true, withFileTypes: true }))
     .filter((entry) => entry.isFile())
     .map((entry) => "/" + relative(fileURLToPath(directory), join(entry.parentPath, entry.name)).split(sep).join("/"))
     .filter((path) => !path.endsWith(".map") && !["/_headers", "/_redirects", "/sw.js"].includes(path))
+
+  const files = deployable.filter((path) => !onDemandAsset(path))
+
   expect(files.length).toBeGreaterThan(1)
+  // The Office engines ship but load on demand, so a build without them would make this exclusion vacuous.
+  expect(deployable.some((path) => path.endsWith(".wasm") && onDemandAsset(path))).toBe(true)
+
   const server = createServer(async (request, response) => {
     const path = new URL(request.url ?? "/", "http://localhost").pathname
     response.setHeader("cache-control", "no-store")
+
     if (path === "/probe.html")
       return void response.writeHead(200, { "content-type": "text/html" }).end("<title>Precache probe</title>")
     const bytes = await readFile(new URL(`.${path}`, directory)).catch(() => undefined)
+
     if (!bytes) return void response.writeHead(404).end("Not found")
+
     if (path.endsWith(".js")) response.setHeader("content-type", "text/javascript")
+
     if (path.endsWith(".html")) {
       response.setHeader("content-type", "text/html")
       // Inspect the real cached HTML without executing the app or contacting a backend.
       response.setHeader("content-security-policy", "default-src 'none'")
     }
+
     response.end(bytes)
   })
+
   server.listen(0, "127.0.0.1")
   await once(server, "listening")
-  const address = server.address()
-  if (!address || typeof address === "string") throw new Error("Expected a TCP address")
+  // SAFETY: a server listening on a host and port reports an AddressInfo; only pipe servers report a string.
+  const address = server.address() as AddressInfo
   const url = `http://127.0.0.1:${address.port}`
+
   try {
     await page.goto(`${url}/probe.html`)
     await page.evaluate(async () => {
       await navigator.serviceWorker.register("/sw.js")
       await navigator.serviceWorker.ready
     })
+
     const cached = await page.evaluate(async () =>
       (
         await Promise.all(
@@ -391,6 +442,7 @@ test("the production build precaches every deployable file", async ({ page, cont
         .flat()
         .sort(),
     )
+
     expect(cached).toEqual(files.sort())
     await context.setOffline(true)
     const response = await page.goto(`${url}/workspace/offline-probe`)

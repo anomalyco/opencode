@@ -9,6 +9,8 @@ describe("Provider", () => {
       "@opencode/ai/providers/cerebras",
       "@opencode/ai/providers/cloudflare-ai-gateway",
       "@opencode/ai/providers/cloudflare-workers-ai",
+      "@opencode/ai/providers/cohere",
+      "@opencode/ai/providers/cohere/chat",
       "@opencode/ai/providers/deepinfra",
       "@opencode/ai/providers/deepseek",
       "@opencode/ai/providers/fireworks",
@@ -20,6 +22,7 @@ describe("Provider", () => {
       "@opencode/ai/providers/groq",
       "@opencode/ai/providers/mistral",
       "@opencode/ai/providers/togetherai",
+      "@opencode/ai/providers/vercel-ai-gateway",
     ]
 
     for (const specifier of packages) {

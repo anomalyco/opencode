@@ -19,22 +19,6 @@ export type ComposerControls = {
     paid: boolean
     loading: boolean
   }
-  session: {
-    tabs: {
-      active: () => string | undefined
-      all: () => string[]
-      open: (tab: string) => void | Promise<void>
-      setActive: (tab: string) => void
-    }
-    reviewPanel: {
-      opened: () => boolean
-      open: () => void
-    }
-    /** Present in sessions with a desktop browser pane. */
-    browser?: {
-      reveal: (tabID: string, ref?: string) => void
-    }
-  }
 }
 
 export type ComposerSelection = {
@@ -72,19 +56,39 @@ export type ComposerSession = {
     clear: (messageID: string) => void
   }
   api: {
-    command: (input: Parameters<ServerSDK["api"]["session"]["command"]>[0]) => Promise<unknown>
-    shell: (input: Parameters<ServerSDK["api"]["session"]["shell"]>[0]) => Promise<unknown>
-    switchAgent: (input: Parameters<ServerSDK["api"]["session"]["switchAgent"]>[0]) => Promise<unknown>
-    switchModel: (input: Parameters<ServerSDK["api"]["session"]["switchModel"]>[0]) => Promise<unknown>
+    command: (
+      input: Parameters<ServerSDK["api"]["session"]["command"]>[0],
+    ) => ReturnType<ServerSDK["api"]["session"]["command"]>
+    shell: (
+      input: Parameters<ServerSDK["api"]["session"]["shell"]>[0],
+    ) => ReturnType<ServerSDK["api"]["session"]["shell"]>
+    switchAgent: (
+      input: Parameters<ServerSDK["api"]["session"]["switchAgent"]>[0],
+    ) => ReturnType<ServerSDK["api"]["session"]["switchAgent"]>
+    switchModel: (
+      input: Parameters<ServerSDK["api"]["session"]["switchModel"]>[0],
+    ) => ReturnType<ServerSDK["api"]["session"]["switchModel"]>
+    revert: {
+      commit: (
+        input: Parameters<ServerSDK["api"]["session"]["revert"]["commit"]>[0],
+      ) => ReturnType<ServerSDK["api"]["session"]["revert"]["commit"]>
+    }
   }
   data: {
     location: { command: Pick<Data["location"]["command"], "list"> }
     session: {
-      prompt: (input: Parameters<Data["session"]["prompt"]>[0]) => Promise<unknown>
+      prompt: (input: Parameters<Data["session"]["prompt"]>[0]) => ReturnType<Data["session"]["prompt"]>
       setStatus: Data["session"]["setStatus"]
     }
   }
-  current: Accessor<{ agent?: string; model?: { id: string; providerID: string; variant?: string } } | undefined>
+  current: Accessor<
+    | {
+        agent?: string
+        model?: { id: string; providerID: string; variant?: string }
+        revert?: { messageID: string }
+      }
+    | undefined
+  >
   admitted: (messageID: string) => boolean
 }
 

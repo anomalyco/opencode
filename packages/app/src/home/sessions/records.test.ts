@@ -50,6 +50,7 @@ describe("buildHomeSessionRecords", () => {
 
   test("prefers the added project whose directory matches over a sibling entry with the same ID", () => {
     const nested = { id: "project-a", worktree: "/repo/a/packages/app", expanded: true } as LocalProject
+
     const records = buildHomeSessionRecords({
       sessions: () => [session("n", "/repo/a/packages/app", "project-a")],
       projectDirectories: () => undefined,
@@ -58,20 +59,27 @@ describe("buildHomeSessionRecords", () => {
 
     expect(records[0]?.project.worktree).toBe("/repo/a/packages/app")
   })
+
+  test("orders by update time and uses the id only to break equal timestamps", () => {
+    const at = (id: string, updated: number) => ({
+      ...session(id, "/repo/a", "project-a"),
+      time: { created: 1, updated },
+    })
+
+    const records = buildHomeSessionRecords({
+      sessions: () => [at("ses_z", 2), at("ses_old", 1), at("ses_a", 2)],
+      projectDirectories: () => undefined,
+      projects: () => [opened],
+    })
+
+    expect(records.map((record) => record.session.id)).toEqual(["ses_a", "ses_z", "ses_old"])
+  })
 })
 
-describe("homeSessionLocation", () => {
-  test("returns the worktree directory name and branch", () => {
-    expect(homeSessionLocation("/repo/.worktrees/crisp-cactus", "feature/home")).toEqual({
-      worktree: "crisp-cactus",
-      branch: "feature/home",
-    })
+test("homeSessionLocation returns the worktree directory name and branch when known", () => {
+  expect(homeSessionLocation("/repo/.worktrees/crisp-cactus", "feature/home")).toEqual({
+    worktree: "crisp-cactus",
+    branch: "feature/home",
   })
-
-  test("uses the worktree name while branch metadata is unavailable", () => {
-    expect(homeSessionLocation("/repo/.worktrees/crisp-cactus")).toEqual({
-      worktree: "crisp-cactus",
-      branch: undefined,
-    })
-  })
+  expect(homeSessionLocation("/repo/.worktrees/crisp-cactus")).toEqual({ worktree: "crisp-cactus", branch: undefined })
 })

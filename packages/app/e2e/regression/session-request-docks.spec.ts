@@ -1,14 +1,14 @@
-import { base64Encode } from "@opencode/util/encode"
 import { expect, test, type Page } from "@playwright/test"
-import { mockOpenCodeServer } from "../utils/mock-server"
+import { SERVER, sessionHref } from "../utils/app"
 import { installSseTransport } from "../utils/sse-transport"
 import { expectSessionTitle } from "../utils/waits"
+import { mockWorkspace, type WorkspaceInput } from "../utils/workspace"
 
 const directory = "C:/OpenCode/RequestDocks"
-const projectID = "proj_request_docks"
+
 const sessionID = "ses_request_docks"
+
 const title = "Request dock regression"
-const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
 
 test("shows a pending question dock", async ({ page }) => {
   await mockServer(page, {
@@ -35,7 +35,7 @@ test("shows a pending question dock", async ({ page }) => {
     ],
   })
 
-  await page.goto(`/server/${base64Encode(server)}/session/${sessionID}`)
+  await page.goto(sessionHref(sessionID))
   await expectSessionTitle(page, title)
 
   const question = page.locator('[data-component="dock-prompt"][data-kind="question"]')
@@ -43,11 +43,10 @@ test("shows a pending question dock", async ({ page }) => {
   await expect(question.getByText("Which implementation should be used?")).toBeVisible()
   await expect(question.getByRole("radio", { name: /Minimal/ })).toBeVisible()
   await expect(question.getByRole("radio", { name: /Extended/ })).toBeVisible()
-  await expect(page.locator('[data-component="session-composer"]')).toHaveCount(0)
+  await expect(page.locator('[data-component="composer"]')).toHaveCount(0)
 
   const rejectRequests: string[] = []
   page.on("request", (request) => {
-    if (request.method() !== "POST") return
     if (
       request.method() === "DELETE" &&
       new URL(request.url()).pathname === `/api/session/${sessionID}/form/frm_question_request`
@@ -73,30 +72,36 @@ test("shows a pending question dock", async ({ page }) => {
   expect(rejectRequests).toEqual([])
 
   await question.getByRole("radio", { name: /Minimal/ }).click()
+
   const reply = page.waitForRequest(
     (request) =>
       request.method() === "POST" &&
       new URL(request.url()).pathname === `/api/session/${sessionID}/form/frm_question_request/reply`,
   )
+
   await question.getByRole("button", { name: "Submit" }).click()
   expect((await reply).postDataJSON()).toEqual({ answer: { q0: "minimal" } })
 })
 
 test("shows a pending permission dock", async ({ page }) => {
+  const replies: { sessionID: string; permissionID: string; body: unknown }[] = []
   await mockServer(page, {
-    permissions: [
-      {
-        id: "permission-request",
-        sessionID,
-        permission: "shell",
-        patterns: ["git status", "git diff"],
-        metadata: {},
-        always: [],
-      },
-    ],
+    onPermissionReply: (reply) => replies.push(reply),
+    sessionPermissions: {
+      [sessionID]: [
+        {
+          id: "permission-request",
+          sessionID,
+          permission: "shell",
+          patterns: ["git status", "git diff"],
+          metadata: {},
+          always: [],
+        },
+      ],
+    },
   })
 
-  await page.goto(`/server/${base64Encode(server)}/session/${sessionID}`)
+  await page.goto(sessionHref(sessionID))
   await expectSessionTitle(page, title)
 
   const permission = page.locator('[data-component="dock-prompt"][data-kind="permission"]')
@@ -104,43 +109,48 @@ test("shows a pending permission dock", async ({ page }) => {
   await expect(permission.getByText("git status")).toBeVisible()
   await expect(permission.getByText("git diff")).toBeVisible()
   await expect(permission.locator('[data-slot="permission-footer-actions"] button')).toHaveCount(3)
-  await expect(page.locator('[data-component="session-composer"]')).toHaveCount(0)
+  await expect(page.locator('[data-component="composer"]')).toHaveCount(0)
 
-  const reply = page.waitForRequest((request) => request.method() === "POST")
+  const reply = page.waitForResponse((response) => response.request().method() === "POST")
   await permission.getByRole("button", { name: "Allow once" }).click()
-  const request = await reply
-  expect(new URL(request.url()).pathname).toBe(`/api/session/${sessionID}/permission/permission-request/reply`)
-  expect(request.postDataJSON()).toEqual({ decision: "once" })
+  const response = await reply
+  expect(new URL(response.url()).pathname).toBe(`/api/session/${sessionID}/permission/permission-request/reply`)
+  expect(response.request().postDataJSON()).toEqual({ decision: "once" })
+  expect(response.status()).toBe(204)
+  expect(replies).toEqual([{ sessionID, permissionID: "permission-request", body: { decision: "once" } }])
+  await expect(permission).toHaveCount(0)
+  await expect(page.locator('[data-component="composer"]')).toBeVisible()
 })
 
 test("restores the draft caret before typing after a request dock closes", async ({ page }) => {
-  const transport = await installSseTransport(page, {
-    server,
-    retry: 20,
-  })
+  const transport = await installSseTransport(page, { server: SERVER, retry: 20 })
   await mockServer(page, { forms: [] })
-  await page.goto(`/server/${base64Encode(server)}/session/${sessionID}`)
+  await page.goto(sessionHref(sessionID))
   await transport.waitForConnection()
   await expectSessionTitle(page, title)
 
   const editor = page.locator('[data-component="composer-editor"][contenteditable="true"]')
   const draft = "keep the caret at the end"
+
+  const caret = () =>
+    editor.evaluate((element) => {
+      const selection = window.getSelection()
+
+      if (!selection?.rangeCount || !element.contains(selection.anchorNode)) return -1
+      const range = selection.getRangeAt(0).cloneRange()
+      range.selectNodeContents(element)
+      range.setEnd(selection.anchorNode!, selection.anchorOffset)
+
+      return range.toString().length
+    })
+
   await editor.fill(draft)
-  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())))
+  // The editor places the caret after the filled text; move it only from that known position.
+  await expect.poll(caret).toBe(draft.length)
+
   for (let index = 0; index < 4; index++) await page.keyboard.press("ArrowLeft")
   const cursor = draft.length - 4
-  await expect
-    .poll(() =>
-      editor.evaluate((element) => {
-        const selection = window.getSelection()
-        if (!selection?.rangeCount || !element.contains(selection.anchorNode)) return -1
-        const range = selection.getRangeAt(0).cloneRange()
-        range.selectNodeContents(element)
-        range.setEnd(selection.anchorNode!, selection.anchorOffset)
-        return range.toString().length
-      }),
-    )
-    .toBe(cursor)
+  await expect.poll(caret).toBe(cursor)
   await transport.send({
     id: "evt_form_created",
     created: 1700000001000,
@@ -183,55 +193,6 @@ test("restores the draft caret before typing after a request dock closes", async
   await expect(editor).toHaveText(`${draft.slice(0, cursor)}x${draft.slice(cursor)}`)
 })
 
-async function mockServer(
-  page: Page,
-  requests: {
-    permissions?: unknown[] | (() => unknown[])
-    forms?: unknown[] | (() => unknown[])
-    sessionStatus?: Record<string, unknown>
-  },
-) {
-  await mockOpenCodeServer(page, {
-    directory,
-    project: {
-      id: projectID,
-      worktree: directory,
-      vcs: "git",
-      name: "request-docks",
-      time: { created: 1700000000000, updated: 1700000000000 },
-      sandboxes: [],
-    },
-    provider: {
-      all: [
-        {
-          id: "opencode",
-          name: "OpenCode",
-          models: {
-            "claude-opus-4-6": {
-              id: "claude-opus-4-6",
-              name: "Claude Opus 4.6",
-              limit: { context: 200_000 },
-            },
-          },
-        },
-      ],
-      connected: ["opencode"],
-      default: { providerID: "opencode", modelID: "claude-opus-4-6" },
-    },
-    sessions: [
-      {
-        id: sessionID,
-        slug: "request-docks",
-        projectID,
-        directory,
-        title,
-        version: "dev",
-        time: { created: 1700000000000, updated: 1700000000000 },
-      },
-    ],
-    pageMessages: () => ({ items: [] }),
-    permissions: requests.permissions,
-    forms: requests.forms,
-    sessionStatus: requests.sessionStatus,
-  })
+function mockServer(page: Page, requests: Pick<WorkspaceInput, "sessionPermissions" | "onPermissionReply" | "forms">) {
+  return mockWorkspace(page, { name: "RequestDocks", directory, sessions: [{ id: sessionID, title }], ...requests })
 }
