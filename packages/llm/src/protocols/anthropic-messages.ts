@@ -290,6 +290,12 @@ const lowerServerToolCall = (part: ToolCallPart): AnthropicServerToolUseBlock =>
 // Server tool result blocks are typed by name. Anthropic ships three today;
 // extend this list when new server tools land. The block content is the
 // structured payload returned by the provider, which we round-trip as-is.
+//
+// Any other provider-executed tool (e.g. a gateway-managed
+// `openrouter:tool_search` result replayed onto this route) has no valid
+// `server_tool_use` / result encoding, so both halves degrade to text instead
+// of failing the request — a degraded history stays portable, a thrown one
+// bricks the session.
 const serverToolResultType = (name: string): AnthropicServerToolResultType | undefined => {
   if (name === "web_search") return "web_search_tool_result"
   if (name === "code_execution") return "code_execution_tool_result"
@@ -297,12 +303,17 @@ const serverToolResultType = (name: string): AnthropicServerToolResultType | und
   return undefined
 }
 
-const lowerServerToolResult = Effect.fn("AnthropicMessages.lowerServerToolResult")(function* (part: ToolResultPart) {
+const isNativeServerTool = (name: string): boolean => serverToolResultType(name) !== undefined
+
+const lowerServerToolResult = (part: ToolResultPart, breakpoints: Cache.Breakpoints): AnthropicAssistantBlock => {
   const wireType = serverToolResultType(part.name)
-  if (!wireType)
-    return yield* invalid(`Anthropic Messages does not know how to round-trip server tool result for ${part.name}`)
-  return { type: wireType, tool_use_id: part.id, content: part.result.value } satisfies AnthropicServerToolResultBlock
-})
+  if (wireType) return { type: wireType, tool_use_id: part.id, content: part.result.value }
+  return {
+    type: "text",
+    text: `[provider tool result ${part.name}: ${ProviderShared.toolResultText(part)}]`,
+    cache_control: cacheControl(breakpoints, part.cache),
+  }
+}
 
 const lowerImage = Effect.fn("AnthropicMessages.lowerImage")(function* (part: MediaPart) {
   const media = yield* ProviderShared.validateMedia(
@@ -455,11 +466,18 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
           continue
         }
         if (part.type === "tool-call") {
+          if (part.providerExecuted && !isNativeServerTool(part.name)) {
+            content.push({
+              type: "text",
+              text: `[provider tool call ${part.name}: ${ProviderShared.encodeJson(part.input)}]`,
+            })
+            continue
+          }
           content.push(part.providerExecuted ? lowerServerToolCall(part) : lowerToolCall(part))
           continue
         }
         if (part.type === "tool-result" && part.providerExecuted) {
-          content.push(yield* lowerServerToolResult(part))
+          content.push(lowerServerToolResult(part, breakpoints))
           continue
         }
         return yield* invalid(

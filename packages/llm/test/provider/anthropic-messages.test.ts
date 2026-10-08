@@ -691,27 +691,53 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
-  it.effect("rejects round-trip for unknown server tool names", () =>
+  it.effect("degrades round-trip for unknown server tool names to text", () =>
     Effect.gen(function* () {
-      const error = yield* LLMClient.prepare(
+      const prepared = yield* LLMClient.prepare(
         LLM.request({
           id: "req_unknown_server_tool",
           model,
           messages: [
+            Message.user("Search for something."),
             Message.assistant([
+              {
+                type: "tool-call",
+                id: "srvtoolu_abc",
+                name: "openrouter:tool_search",
+                input: { pattern: "websearch" },
+                providerExecuted: true,
+              },
               {
                 type: "tool-result",
                 id: "srvtoolu_abc",
-                name: "future_server_tool",
-                result: { type: "json", value: {} },
+                name: "openrouter:tool_search",
+                result: { type: "json", value: [{ url: "https://example.com" }] },
                 providerExecuted: true,
               },
+              { type: "text", text: "Found it." },
             ]),
+            Message.user("Thanks."),
           ],
         }),
-      ).pipe(Effect.flip)
+      )
 
-      expect(error.message).toContain("future_server_tool")
+      expect(prepared.body).toMatchObject({
+        messages: [
+          { role: "user", content: [{ type: "text", text: "Search for something." }] },
+          {
+            role: "assistant",
+            content: [
+              { type: "text", text: `[provider tool call openrouter:tool_search: {"pattern":"websearch"}]` },
+              {
+                type: "text",
+                text: `[provider tool result openrouter:tool_search: [{"url":"https://example.com"}]]`,
+              },
+              { type: "text", text: "Found it." },
+            ],
+          },
+          { role: "user", content: [{ type: "text", text: "Thanks." }] },
+        ],
+      })
     }),
   )
 
