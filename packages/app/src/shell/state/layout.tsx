@@ -1,6 +1,6 @@
 import { createStore, produce, reconcile } from "solid-js/store"
-import { Schema, SchemaGetter } from "effect"
-import { batch, createEffect, createMemo, onCleanup, onMount, type Accessor } from "solid-js"
+import { Predicate, Schema, SchemaGetter } from "effect"
+import { batch, createEffect, createMemo, onCleanup, onMount, untrack, type Accessor } from "solid-js"
 import { useLocation } from "@solidjs/router"
 import { createSimpleContext } from "@opencode/ui/context"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -10,56 +10,31 @@ import type { Project } from "@/runtime/server/types"
 import { Persist, persisted, removePersisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
 import { TabStorage } from "@/shell/tabs/schema"
-import { decode64 } from "@/runtime/persistence/base64"
-import { same } from "@/runtime/persistence/equality"
 import { createScrollPersistence, type SessionScroll } from "./scroll"
-import { createPathHelpers } from "@/workspaces/files/path"
-import type { ProjectAvatarVariant } from "@opencode/ui/project-avatar"
 import { SessionStateKey } from "@/runtime/server/scope"
 import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys } from "./helpers"
 import { requireServerKey } from "@/shell/routes/session"
-import { closeSessionTab, openSessionTab, previewSessionTab, type SessionTabs } from "./session-tabs"
-
-export { createSessionKeyReader, ensureSessionKey, pruneSessionKeys }
-
-export type { ProjectAvatarVariant }
+import { closeSessionTab, openSessionTab, previewSessionTab } from "./session-tabs"
 
 const DEFAULT_SIDEBAR_WIDTH = 344
+
 const DEFAULT_FILE_TREE_WIDTH = 200
+
 const DEFAULT_SESSION_WIDTH = 600
-const DEFAULT_TERMINAL_HEIGHT = 280
-const DEFAULT_REVIEW_PANEL_OPENED = false
-export function getProjectAvatarVariant(key?: string): ProjectAvatarVariant {
-  if (key === "mint") return "cyan"
-  if (key === "lime") return "green"
-  if (
-    key === "orange" ||
-    key === "yellow" ||
-    key === "cyan" ||
-    key === "green" ||
-    key === "red" ||
-    key === "pink" ||
-    key === "blue" ||
-    key === "purple" ||
-    key === "gray"
-  )
-    return key
-  return "gray"
-}
+
+const DEFAULT_DOCK_HEIGHT = 280
 
 export type LocalProject = Partial<Project> & { worktree: string; expanded: boolean }
+
 export type HomeProjectSelection = typeof layoutSchema.Type.home.selection
 
-export type ReviewDiffStyle = typeof layoutSchema.Type.review.diffStyle
-export type ReviewChangeMode = NonNullable<(typeof layoutSchema.Type.sessionView)[string]["reviewMode"]>
-export type ReviewPanelSource = "context-button" | "other"
-export type TabPanes = {
-  terminalOpened: Accessor<boolean>
-  setTerminalOpened(opened: boolean): void
-  terminalHeight: Accessor<number | undefined>
-  setTerminalHeight(height: number): void
-  reviewOpened: Accessor<boolean>
-  setReviewOpened(opened: boolean): void
+export type TabRegions = {
+  dockOpened: Accessor<boolean>
+  setDockOpened(opened: boolean): void
+  dockHeight: Accessor<number | undefined>
+  setDockHeight(height: number): void
+  sideOpened: Accessor<boolean>
+  setSideOpened(opened: boolean): void
   sessionWidth: Accessor<number | undefined>
   setSessionWidth(width: number): void
 }
@@ -67,49 +42,24 @@ export type TabPanes = {
 export type LayoutRoute =
   | { type: "home" }
   | { type: "settings" }
+  | { type: "connect" }
   | { type: "draft"; draftID: string }
   | { type: "session"; sessionId: string; server: ServerConnection.Key }
 
-const sessionPath = (key: string) => {
-  const dir = SessionStateKey.route(key).split("/")[0]
-  if (!dir) return
-  const root = decode64(dir)
-  if (!root) return
-  return createPathHelpers(() => root)
-}
-
-const normalizeSessionTab = (path: ReturnType<typeof createPathHelpers> | undefined, tab: string) => {
-  if (!tab.startsWith("file://")) return tab
-  if (!path) return tab
-  return path.tab(tab)
-}
-
-const normalizeSessionTabList = (path: ReturnType<typeof createPathHelpers> | undefined, all: string[]) => {
-  const seen = new Set<string>()
-  return all.flatMap((tab) => {
-    const value = normalizeSessionTab(path, tab)
-    if (seen.has(value)) return []
-    seen.add(value)
-    return [value]
-  })
-}
-
-const normalizeStoredSessionTabs = (key: string, tabs: SessionTabs) => {
-  const path = sessionPath(key)
-  return {
-    all: normalizeSessionTabList(path, tabs.all),
-    active: tabs.active ? normalizeSessionTab(path, tabs.active) : tabs.active,
-  }
-}
-
 export const currentRoute = (pathname: string, search: string): LayoutRoute => {
   const parts = pathname.split("/").filter(Boolean)
+
   if (parts.length === 0) return { type: "home" }
+
   if (parts[0] === "settings") return { type: "settings" }
+
+  if (parts[0] === "connect") return { type: "connect" }
 
   if (parts[0] === "new-session") {
     const draftID = new URLSearchParams(search).get("draftId")
+
     if (!draftID) return { type: "home" }
+
     return { type: "draft", draftID }
   }
 
@@ -126,6 +76,7 @@ export const currentRoute = (pathname: string, search: string): LayoutRoute => {
 
 export const useCurrentRoute = () => {
   const location = useLocation()
+
   return createMemo(() => currentRoute(location.pathname, location.search))
 }
 
@@ -133,8 +84,11 @@ const sessionTabsSchema = Persistence.struct({
   all: Persistence.array(Schema.String),
   active: Persistence.optional(Schema.String),
 })
+
 const sessionViewSchema = Persistence.struct({
   scroll: Persistence.record(Schema.Struct({ x: Schema.Finite, y: Schema.Finite })),
+  // Review state from before extensions. An extension copies each session's entry out once; nothing writes these
+  // any more, and they stay so layout rewrites cannot drop a session's entry before it is copied.
   reviewOpen: Schema.optional(Persistence.array(Schema.String)),
   reviewMode: Schema.optional(Schema.Literals(["git", "branch", "turn"])),
   reviewFile: Schema.optional(Schema.String),
@@ -149,14 +103,18 @@ export const layoutSchema = Persistence.struct({
     workspaces: Persistence.record(Schema.Boolean),
     workspacesDefault: Schema.Boolean,
   }),
+  // The dock and side region state moved to per-tab regions; these fields stay so stored layouts keep decoding.
   terminal: Persistence.struct({ height: Schema.Finite, opened: Schema.Boolean }),
   review: Persistence.struct({
-    diffStyle: Schema.Literals(["unified", "split"]),
     panelOpened: Schema.Boolean,
+    // Owned by the review extension, which copies it out once; kept so layout rewrites cannot drop it first.
+    diffStyle: Schema.optional(Schema.Literals(["unified", "split"])),
   }),
   fileTree: Persistence.struct({
     opened: Schema.Boolean,
     width: Schema.Finite,
+    // The file extension owns the tree's tab now. The stored field stays so the migration below
+    // keeps telling current layouts from ones saved before the tab existed.
     tab: Schema.Literals(["changes", "all"]),
   }),
   session: Persistence.struct({ width: Schema.Finite }),
@@ -194,10 +152,9 @@ export const layoutPersistence = Persistence.migrate(
     Schema.decode({
       decode: SchemaGetter.transform((value) => ({
         ...value,
-        sidebar:
-          typeof value.sidebar?.workspaces === "boolean"
-            ? { ...value.sidebar, workspaces: {}, workspacesDefault: value.sidebar.workspaces }
-            : value.sidebar,
+        sidebar: Predicate.isBoolean(value.sidebar?.workspaces)
+          ? { ...value.sidebar, workspaces: {}, workspacesDefault: value.sidebar.workspaces }
+          : value.sidebar,
         // Only an existing review section inherits the old file-tree panel flag.
         review: value.review
           ? { ...value.review, panelOpened: value.review.panelOpened ?? value.fileTree?.opened }
@@ -214,7 +171,7 @@ export const layoutPersistence = Persistence.migrate(
         sessionTabs: Object.fromEntries(
           Object.entries(value.sessionTabs)
             .filter(([key]) => SessionStateKey.is(key))
-            .map(([key, tabs]) => [key, normalizeStoredSessionTabs(key, tabs)]),
+            .map(([key, tabs]) => [key, { all: [...new Set(tabs.all)], active: tabs.active }]),
         ),
         sessionView: Object.fromEntries(Object.entries(value.sessionView).filter(([key]) => SessionStateKey.is(key))),
       })),
@@ -223,11 +180,14 @@ export const layoutPersistence = Persistence.migrate(
   ),
 )
 
+/** The session key the user is on, whether pruning ran, and when each session key was last used. */
+type SessionKeyUsage = { active: string | undefined; pruned: boolean; used: Map<string, number> }
+
 export function initialLayout(server?: ServerConnection.Key): typeof layoutSchema.Type {
   return {
     sidebar: { opened: false, width: DEFAULT_SIDEBAR_WIDTH, workspaces: {}, workspacesDefault: false },
-    terminal: { height: DEFAULT_TERMINAL_HEIGHT, opened: false },
-    review: { diffStyle: "split", panelOpened: DEFAULT_REVIEW_PANEL_OPENED },
+    terminal: { height: DEFAULT_DOCK_HEIGHT, opened: false },
+    review: { panelOpened: false },
     fileTree: { opened: false, width: DEFAULT_FILE_TREE_WIDTH, tab: "changes" },
     session: { width: DEFAULT_SESSION_WIDTH },
     mobileSidebar: { opened: false },
@@ -249,39 +209,51 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       layoutPersistence,
       initialLayout(servers.list[0] ? ServerConnection.key(servers.list[0]) : undefined),
     )
-    const [ephemeral, setEphemeral] = createStore({
-      reviewPanelSource: "other" as ReviewPanelSource,
-      sessionTabPreview: {} as Record<string, string | undefined>,
+
+    const [ephemeral, setEphemeral] = createStore<{ sessionTabPreview: Record<string, string | undefined> }>({
+      sessionTabPreview: {},
     })
+
+    // Names of other session-scoped stores, e.g. extension storage, so pruning drops them with the layout state.
+    const [scoped, setScoped, , scopedReady] = persisted(
+      Persist.global("layout.scoped"),
+      Persistence.array(Schema.String),
+      [],
+    )
 
     const MAX_SESSION_KEYS = 50
     const PENDING_MESSAGE_TTL_MS = 2 * 60 * 1000
-    const usage = {
-      active: undefined as string | undefined,
+
+    const usage: SessionKeyUsage = {
+      active: undefined,
       pruned: false,
       used: new Map<string, number>(),
     }
 
-    const SESSION_STATE_KEYS = ["prompt", "terminal", "file-view"] as const
-
     const dropSessionState = (keys: string[]) => {
+      const names = ["prompt", "file-view", ...scoped]
+
       for (const key of keys) {
         const scope = SessionStateKey.scope(key)
         const parts = SessionStateKey.route(key).split("/")
         const dir = parts[0]
         const session = parts[1]
+
         if (!dir) continue
 
-        for (const entry of SESSION_STATE_KEYS) {
+        for (const entry of names) {
           const target = session
             ? Persist.serverSession(scope, dir, session, entry)
             : Persist.serverWorkspace(scope, dir, entry)
+
           void removePersisted(target, platform)
         }
       }
     }
 
     function prune(keep?: string) {
+      if (!scopedReady()) return
+
       const drop = pruneSessionKeys({
         keep,
         max: MAX_SESSION_KEYS,
@@ -289,6 +261,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         view: Object.keys(store.sessionView),
         tabs: Object.keys(store.sessionTabs),
       })
+
       if (drop.length === 0) return
 
       setStore(
@@ -318,7 +291,8 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       usage.active = sessionKey
       usage.used.set(sessionKey, Date.now())
 
-      if (!ready()) return
+      if (!ready() || !scopedReady()) return
+
       if (usage.pruned) return
 
       usage.pruned = true
@@ -331,9 +305,11 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       onFlush: (sessionKey, next) => {
         const current = store.sessionView[sessionKey]
         const keep = usage.active ?? sessionKey
+
         if (!current) {
           setStore("sessionView", sessionKey, { scroll: next })
           prune(keep)
+
           return
         }
 
@@ -345,9 +321,11 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     const ensureKey = (key: string) => ensureSessionKey(key, touch, (sessionKey) => scroll.seed(sessionKey))
 
     createEffect(() => {
-      if (!ready()) return
+      if (!ready() || !scopedReady()) return
+
       if (usage.pruned) return
       const active = usage.active
+
       if (!active) return
       usage.pruned = true
       prune(active)
@@ -355,6 +333,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
     onMount(() => {
       const flush = () => batch(() => scroll.flushAll())
+
       const handleVisibility = () => {
         if (document.visibilityState !== "hidden") return
         flush()
@@ -377,59 +356,54 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           setStore("home", "selection", reconcile(selection))
         },
       },
-      terminal: {
-        height: createMemo(() => store.terminal.height),
-        resize(height: number) {
-          setStore("terminal", "height", height)
-        },
-      },
-      review: {
-        diffStyle: createMemo(() => store.review?.diffStyle ?? "split"),
-        setDiffStyle(diffStyle: ReviewDiffStyle) {
-          if (!store.review) {
-            setStore("review", { diffStyle, panelOpened: DEFAULT_REVIEW_PANEL_OPENED })
-            return
-          }
-          setStore("review", "diffStyle", diffStyle)
+      sessionState: {
+        /** Records a session-scoped store, so pruning a session's layout state drops it too. */
+        track(name: string) {
+          untrack(() => {
+            const add = () => setScoped((names) => (names.includes(name) ? names : [...names, name]))
+
+            if (scopedReady()) return add()
+            void scopedReady.promise?.then(add)
+          })
         },
       },
       fileTree: {
         opened: createMemo(() => store.fileTree?.opened ?? true),
         width: createMemo(() => store.fileTree?.width ?? DEFAULT_FILE_TREE_WIDTH),
-        tab: createMemo(() => store.fileTree?.tab ?? "changes"),
-        setTab(tab: "changes" | "all") {
-          if (!store.fileTree) {
-            setStore("fileTree", { opened: true, width: DEFAULT_FILE_TREE_WIDTH, tab })
-            return
-          }
-          setStore("fileTree", "tab", tab)
-        },
         open() {
           if (!store.fileTree) {
             setStore("fileTree", { opened: true, width: DEFAULT_FILE_TREE_WIDTH, tab: "changes" })
+
             return
           }
+
           setStore("fileTree", "opened", true)
         },
         close() {
           if (!store.fileTree) {
             setStore("fileTree", { opened: false, width: DEFAULT_FILE_TREE_WIDTH, tab: "changes" })
+
             return
           }
+
           setStore("fileTree", "opened", false)
         },
         toggle() {
           if (!store.fileTree) {
             setStore("fileTree", { opened: true, width: DEFAULT_FILE_TREE_WIDTH, tab: "changes" })
+
             return
           }
+
           setStore("fileTree", "opened", (x) => !x)
         },
         resize(width: number) {
           if (!store.fileTree) {
             setStore("fileTree", { opened: true, width, tab: "changes" })
+
             return
           }
+
           setStore("fileTree", "width", width)
         },
       },
@@ -438,8 +412,10 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         resize(width: number) {
           if (!store.session) {
             setStore("session", { width })
+
             return
           }
+
           setStore("session", "width", width)
         },
       },
@@ -457,6 +433,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           const at = Date.now()
           touch(sessionKey)
           const current = store.sessionView[sessionKey]
+
           if (!current) {
             setStore("sessionView", sessionKey, {
               scroll: {},
@@ -464,6 +441,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
               pendingMessageAt: at,
             })
             prune(usage.active ?? sessionKey)
+
             return
           }
 
@@ -480,6 +458,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           const current = store.sessionView[sessionKey]
           const message = current?.pendingMessage
           const at = current?.pendingMessageAt
+
           if (!message || !at) return
 
           setStore(
@@ -492,77 +471,13 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           )
 
           if (Date.now() - at > PENDING_MESSAGE_TTL_MS) return
+
           return message
         },
       },
-      view(sessionKey: string | Accessor<string>, panes?: TabPanes) {
+      /** The dock and side regions of a shell tab, and the session panel width beside them. */
+      view(sessionKey: string | Accessor<string>, regions: TabRegions) {
         const key = createSessionKeyReader(sessionKey, ensureKey)
-        const s = createMemo(() => store.sessionView[key()] ?? { scroll: {} })
-        const reviewMode = createMemo(() => {
-          const mode = s().reviewMode
-          if (mode === "git" || mode === "branch" || mode === "turn") return mode
-        })
-        const reviewFile = createMemo(() => {
-          const file = s().reviewFile
-          if (typeof file === "string") return file
-        })
-        const terminalOpened = panes?.terminalOpened ?? createMemo(() => store.terminal?.opened ?? false)
-        const terminalHeight = createMemo(() =>
-          panes
-            ? (panes.terminalHeight() ?? DEFAULT_TERMINAL_HEIGHT)
-            : (store.terminal?.height ?? DEFAULT_TERMINAL_HEIGHT),
-        )
-        const reviewPanelOpened =
-          panes?.reviewOpened ?? createMemo(() => store.review?.panelOpened ?? DEFAULT_REVIEW_PANEL_OPENED)
-        const sessionWidth = createMemo(() =>
-          panes ? (panes.sessionWidth() ?? DEFAULT_SESSION_WIDTH) : store.session.width,
-        )
-        const reviewPanelSource = createMemo(() => (reviewPanelOpened() ? ephemeral.reviewPanelSource : "other"))
-
-        function setTerminalOpened(next: boolean) {
-          if (panes) {
-            panes.setTerminalOpened(next)
-            return
-          }
-          const current = store.terminal
-          if (!current) {
-            setStore("terminal", { height: DEFAULT_TERMINAL_HEIGHT, opened: next })
-            return
-          }
-
-          const value = current.opened ?? false
-          if (value === next) return
-          setStore("terminal", "opened", next)
-        }
-
-        function setReviewPanelOpened(next: boolean, source: ReviewPanelSource) {
-          const nextSource = next ? source : "other"
-          if (panes) {
-            batch(() => {
-              panes.setReviewOpened(next)
-              setEphemeral("reviewPanelSource", nextSource)
-            })
-            return
-          }
-          const current = store.review
-          if (!current) {
-            batch(() => {
-              setStore("review", { diffStyle: "split" as ReviewDiffStyle, panelOpened: next })
-              setEphemeral("reviewPanelSource", nextSource)
-            })
-            return
-          }
-
-          const value = current.panelOpened ?? DEFAULT_REVIEW_PANEL_OPENED
-          if (value === next) {
-            if (ephemeral.reviewPanelSource !== nextSource) setEphemeral("reviewPanelSource", nextSource)
-            return
-          }
-          batch(() => {
-            setStore("review", "panelOpened", next)
-            setEphemeral("reviewPanelSource", nextSource)
-          })
-        }
 
         return {
           scroll(tab: string) {
@@ -571,149 +486,175 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           setScroll(tab: string, pos: SessionScroll) {
             scroll.setScroll(key(), tab, pos)
           },
-          terminal: {
-            opened: terminalOpened,
-            height: terminalHeight,
-            resize(height: number) {
-              if (panes) {
-                panes.setTerminalHeight(height)
-                return
-              }
-              setStore("terminal", "height", height)
-            },
+          dock: {
+            opened: regions.dockOpened,
+            height: createMemo(() => regions.dockHeight() ?? DEFAULT_DOCK_HEIGHT),
+            resize: regions.setDockHeight,
             open() {
-              setTerminalOpened(true)
+              regions.setDockOpened(true)
             },
             close() {
-              setTerminalOpened(false)
-            },
-            toggle() {
-              setTerminalOpened(!terminalOpened())
+              regions.setDockOpened(false)
             },
           },
-          reviewPanel: {
-            opened: reviewPanelOpened,
-            source: reviewPanelSource,
-            width: sessionWidth,
-            resize(width: number) {
-              if (panes) {
-                panes.setSessionWidth(width)
-                return
-              }
-              setStore("session", "width", width)
-            },
-            open(source: ReviewPanelSource = "other") {
-              setReviewPanelOpened(true, source)
-            },
-            close() {
-              setReviewPanelOpened(false, "other")
-            },
+          side: {
+            opened: regions.sideOpened,
             toggle() {
-              setReviewPanelOpened(!reviewPanelOpened(), "other")
+              regions.setSideOpened(!regions.sideOpened())
             },
           },
-          review: {
-            mode: reviewMode,
-            setMode(mode: ReviewChangeMode) {
-              const session = key()
-              const current = store.sessionView[session]
-              if (!current) {
-                setStore("sessionView", session, { scroll: {}, reviewMode: mode })
-                prune(session)
-                return
-              }
-              if (current.reviewMode === mode) return
-              setStore("sessionView", session, "reviewMode", mode)
-              prune(session)
-            },
-            file: reviewFile,
-            setFile(file: string) {
-              const session = key()
-              const current = store.sessionView[session]
-              if (!current) {
-                setStore("sessionView", session, { scroll: {}, reviewFile: file })
-                prune(session)
-                return
-              }
-              if (current.reviewFile === file) return
-              setStore("sessionView", session, "reviewFile", file)
-              prune(session)
-            },
-            open: createMemo(() => s().reviewOpen ?? []),
-            setOpen(open: string[]) {
-              const session = key()
-              const next = Array.from(new Set(open))
-              const current = store.sessionView[session]
-              if (!current) {
-                setStore("sessionView", session, {
-                  scroll: {},
-                  reviewOpen: next,
-                })
-                return
-              }
-
-              if (same(current.reviewOpen, next)) return
-              setStore("sessionView", session, "reviewOpen", next)
-            },
-            openPath(path: string) {
-              const session = key()
-              const current = store.sessionView[session]
-              if (!current) {
-                setStore("sessionView", session, {
-                  scroll: {},
-                  reviewOpen: [path],
-                })
-                return
-              }
-
-              if (!current.reviewOpen) {
-                setStore("sessionView", session, "reviewOpen", [path])
-                return
-              }
-
-              if (current.reviewOpen.includes(path)) return
-              setStore("sessionView", session, "reviewOpen", current.reviewOpen.length, path)
-            },
+          session: {
+            width: createMemo(() => regions.sessionWidth() ?? DEFAULT_SESSION_WIDTH),
+            resize: regions.setSessionWidth,
           },
         }
       },
+      /** Side panel tabs for any session key, mounted or not. Reads are reactive. */
+      panel: {
+        state(session: string) {
+          return store.sessionTabs[session] ?? { all: [] }
+        },
+        open(session: string, tab: string, launchers?: ReadonlySet<string>, first?: boolean) {
+          const next = openSessionTab(
+            { tabs: store.sessionTabs[session] ?? { all: [] }, preview: ephemeral.sessionTabPreview[session] },
+            tab,
+            launchers,
+            first,
+          )
+
+          batch(() => {
+            setStore("sessionTabs", session, next.tabs)
+            setEphemeral("sessionTabPreview", session, next.preview)
+          })
+        },
+        preview(session: string, tab: string, launchers?: ReadonlySet<string>) {
+          const next = previewSessionTab(
+            { tabs: store.sessionTabs[session] ?? { all: [] }, preview: ephemeral.sessionTabPreview[session] },
+            tab,
+            launchers,
+          )
+
+          batch(() => {
+            setStore("sessionTabs", session, next.tabs)
+            setEphemeral("sessionTabPreview", session, next.preview)
+          })
+        },
+        /** Adds a tab at the end of the strip without selecting it or touching the preview. */
+        append(session: string, tab: string) {
+          const current = store.sessionTabs[session]
+
+          if (!current) return setStore("sessionTabs", session, { all: [tab] })
+
+          if (current.all.includes(tab)) return
+          setStore("sessionTabs", session, "all", current.all.length, tab)
+        },
+        focus(session: string, tab: string) {
+          if (!store.sessionTabs[session]) {
+            setStore("sessionTabs", session, { all: [], active: tab })
+
+            return
+          }
+
+          setStore("sessionTabs", session, "active", tab)
+        },
+        close(session: string, tab: string) {
+          const current = store.sessionTabs[session]
+
+          if (!current) return
+          const next = closeSessionTab({ tabs: current, preview: ephemeral.sessionTabPreview[session] }, tab)
+          batch(() => {
+            setStore("sessionTabs", session, next.tabs)
+            setEphemeral("sessionTabPreview", session, next.preview)
+          })
+        },
+        /**
+         * Replaces `to`'s strip, selection, preview tab and scroll offsets with copies of `from`'s, keeping `from`; a key
+         * with nothing stored copies as empty. `to` counts as just used, then pruning runs as for any new key.
+         */
+        copy(from: string, to: string) {
+          const current = store.sessionTabs[from]
+          usage.used.set(to, Date.now())
+          batch(() => {
+            scroll.flush(from)
+            setStore("sessionTabs", to, { all: [...(current?.all ?? [])], active: current?.active })
+            setEphemeral("sessionTabPreview", to, ephemeral.sessionTabPreview[from])
+            scroll.drop([to])
+            setStore("sessionView", to, {
+              scroll: Object.fromEntries(
+                Object.entries(store.sessionView[from]?.scroll ?? {}).map(([key, value]) => [
+                  key,
+                  { x: value.x, y: value.y },
+                ]),
+              ),
+            })
+            prune(usage.active ?? to)
+          })
+        },
+        scroll(session: string, tab: string) {
+          return scroll.scroll(session, tab)
+        },
+        setScroll(session: string, tab: string, pos: SessionScroll) {
+          scroll.setScroll(session, tab, pos)
+        },
+      },
       tabs(sessionKey: string | Accessor<string>) {
         const key = createSessionKeyReader(sessionKey, ensureKey)
-        const path = createMemo(() => sessionPath(key()))
         const tabs = createMemo(() => store.sessionTabs[key()] ?? { all: [] })
-        const normalize = (tab: string) => normalizeSessionTab(path(), tab)
-        const normalizeAll = (all: string[]) => normalizeSessionTabList(path(), all)
+
         const apply = (session: string, next: ReturnType<typeof openSessionTab>) => {
           batch(() => {
             setStore("sessionTabs", session, next.tabs)
             setEphemeral("sessionTabPreview", session, next.preview)
           })
         }
+
         return {
           tabs,
           active: createMemo(() => tabs().active),
-          all: createMemo(() => tabs().all.filter((tab) => tab !== "review")),
+          all: createMemo(() => tabs().all),
           preview: createMemo(() => ephemeral.sessionTabPreview[key()]),
           setActive(tab: string | undefined) {
             const session = key()
-            const next = tab ? normalize(tab) : tab
+
             if (!store.sessionTabs[session]) {
-              setStore("sessionTabs", session, { all: [], active: next })
+              setStore("sessionTabs", session, { all: [], active: tab })
             } else {
-              setStore("sessionTabs", session, "active", next)
+              setStore("sessionTabs", session, "active", tab)
             }
           },
           setAll(all: string[]) {
             const session = key()
-            const next = normalizeAll(all).filter((tab) => tab !== "review")
             batch(() => {
               if (!store.sessionTabs[session]) {
-                setStore("sessionTabs", session, { all: next, active: undefined })
+                setStore("sessionTabs", session, { all, active: undefined })
               } else {
-                setStore("sessionTabs", session, "all", next)
+                setStore("sessionTabs", session, "all", all)
               }
+
               const preview = ephemeral.sessionTabPreview[session]
-              if (preview && !next.includes(preview)) setEphemeral("sessionTabPreview", session, undefined)
+
+              if (preview && !all.includes(preview)) setEphemeral("sessionTabPreview", session, undefined)
+            })
+          },
+          /** Rewrites every stored key, the selected tab and the preview together; keys that collapse into one dedupe. */
+          remap(rewrite: (tab: string) => string) {
+            const session = key()
+            const current = store.sessionTabs[session]
+
+            if (!current) return
+            const all = Array.from(new Set(current.all.map(rewrite)))
+            const active = current.active === undefined ? undefined : rewrite(current.active)
+            const preview = ephemeral.sessionTabPreview[session]
+            // A preview that collapses into a kept tab becomes that kept tab: kept wins.
+            const kept = new Set(current.all.filter((tab) => tab !== preview).map(rewrite))
+            const renamed = preview === undefined ? undefined : rewrite(preview)
+            const nextPreview = renamed !== undefined && kept.has(renamed) ? undefined : renamed
+            const changed = all.length !== current.all.length || all.some((tab, index) => tab !== current.all[index])
+
+            if (!changed && active === current.active && nextPreview === preview) return
+            batch(() => {
+              setStore("sessionTabs", session, { ...current, all, active })
+              setEphemeral("sessionTabPreview", session, nextPreview)
             })
           },
           async open(tab: string) {
@@ -722,7 +663,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
               session,
               openSessionTab(
                 { tabs: store.sessionTabs[session] ?? { all: [] }, preview: ephemeral.sessionTabPreview[session] },
-                normalize(tab),
+                tab,
               ),
             )
           },
@@ -732,24 +673,24 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
               session,
               previewSessionTab(
                 { tabs: store.sessionTabs[session] ?? { all: [] }, preview: ephemeral.sessionTabPreview[session] },
-                normalize(tab),
+                tab,
               ),
             )
           },
           close(tab: string) {
             const session = key()
             const current = store.sessionTabs[session]
+
             if (!current) return
-            apply(
-              session,
-              closeSessionTab({ tabs: current, preview: ephemeral.sessionTabPreview[session] }, normalize(tab)),
-            )
+            apply(session, closeSessionTab({ tabs: current, preview: ephemeral.sessionTabPreview[session] }, tab))
           },
           move(tab: string, to: number) {
             const session = key()
             const current = store.sessionTabs[session]
+
             if (!current) return
             const index = current.all.findIndex((f) => f === tab)
+
             if (index === -1) return
             setStore(
               "sessionTabs",

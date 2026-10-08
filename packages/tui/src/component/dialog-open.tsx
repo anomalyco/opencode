@@ -2,12 +2,11 @@ import { batch, createEffect, createMemo, createResource, createSignal, onCleanu
 import type { OpenCodeEvent, SessionInfo } from "@opencode/client"
 import path from "path"
 import { useTerminalDimensions } from "@opentui/solid"
-import type { RGBA } from "@opentui/core"
 import { dialogWidth, useDialog } from "../ui/dialog"
 import { DialogSelect, dialogSelectContentWidth, type DialogSelectRef } from "../ui/dialog-select"
 import { DialogPrompt } from "../ui/dialog-prompt"
 import { useRoute } from "../context/route"
-import { locationKey, useData } from "../context/data"
+import { useData } from "../context/data"
 import { useClient } from "../context/client"
 import { useLocation } from "../context/location"
 import { useSessionTabs } from "../context/session-tabs"
@@ -21,6 +20,7 @@ import { useToast } from "../ui/toast"
 import { errorMessage } from "../util/error"
 import { stringWidth } from "../util/string-width"
 import { withTimestampedFallback } from "@opencode/util/session-title-fallback"
+import { sessionStatusGutter } from "./dialog-session-list"
 import { Spinner } from "./spinner"
 import { projectName } from "../util/project"
 
@@ -156,28 +156,55 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
   const currentSessionID = createMemo(() =>
     route.data.type === "session" ? data.session.root(route.data.sessionID) : undefined,
   )
+  const attention = (sessionID: string) => sessionTabs.status(sessionID).attention
   const sessions = createMemo(() => {
     const seen = new Set<string>()
     const match = matched()
-    return [...data.session.list(), ...props.sessions, ...(match ? [match] : [])]
-      .filter((session) => {
-        if (session.parentID || seen.has(session.id)) return false
-        seen.add(session.id)
-        return true
-      })
-      .toSorted((a, b) => b.time.updated - a.time.updated)
+    const list = [...data.session.list(), ...props.sessions, ...(match ? [match] : [])].filter((session) => {
+      if (session.parentID || seen.has(session.id)) return false
+      seen.add(session.id)
+      return true
+    })
+    const attentionByID = new Map(list.map((session) => [session.id, Boolean(attention(session.id))]))
+    return list.toSorted((a, b) => {
+      const attentionA = attentionByID.get(a.id) ?? false
+      const attentionB = attentionByID.get(b.id) ?? false
+      if (attentionA !== attentionB) return attentionA ? -1 : 1
+      return b.time.updated - a.time.updated
+    })
+  })
+
+  createEffect(() => {
+    const knownRoots = new Set(props.sessions.map((session) => session.id))
+    const active = data.session.active()
+    active.forEach((id) => {
+      void data.session.permission.sync(id).catch(() => undefined)
+      void data.session.form.sync(id).catch(() => undefined)
+    })
+    new Set(
+      [
+        ...data.session.permission.sessions(),
+        ...data.session.form.sessions(),
+        ...(recent() === true ? active : []),
+      ].map((id) => data.session.root(id)),
+    ).forEach((rootID) => {
+      if (!knownRoots.has(rootID) && !data.session.get(rootID)) {
+        void data.session.sync(rootID).catch(() => undefined)
+      }
+    })
   })
 
   const options = createMemo(() => {
     const tabs = openTabs()
+    const currentID = currentSessionID()
     // With an empty query the menu shows what is not already one keystroke away: open tabs are
-    // visible in the strip, so recents exclude them. Typing widens the pool to every session so
-    // matching a loaded tab by name still switches to it.
-    const recent = filter().trim()
-      ? sessions()
-      : sessions()
-          .filter((session) => !tabs.has(session.id))
-          .slice(0, RECENT_LIMIT)
+    // visible in the strip, so recents exclude them unless a background session is awaiting input.
+    // Typing widens the pool to every session so matching a loaded tab by name still switches to it.
+    const candidates = sessions().filter(
+      (session) => !tabs.has(session.id) || (attention(session.id) && session.id !== currentID),
+    )
+    const attentionCount = candidates.filter((session) => attention(session.id)).length
+    const recent = filter().trim() ? sessions() : candidates.slice(0, Math.max(RECENT_LIMIT, attentionCount))
     const sessionOptions = recent.map((session) => {
       const project = data.project.get(session.projectID)
       const name = projectName(project)
@@ -186,9 +213,11 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
         name && session.location.directory !== project?.canonical && name.toLowerCase() !== basename.toLowerCase()
           ? `${name} · ${basename}`
           : name || basename
+      const state = attention(session.id)
       const running =
-        data.session.status(session.id) === "running" ||
-        data.session.family(session.id).some((id) => data.session.status(id) === "running")
+        !state &&
+        (data.session.status(session.id) === "running" ||
+          data.session.family(session.id).some((id) => data.session.status(id) === "running"))
       return {
         title: withTimestampedFallback(session),
         searchText: `${session.id} ${session.location.directory}`,
@@ -196,34 +225,22 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
         category: "Sessions",
         footer: `${label ? `${Locale.truncate(label, 30)} · ` : ""}${timeAgo(session.time.updated)}`,
         onSelect: () => location.set(session.location),
-        gutter: running
-          ? (color: RGBA) => <Spinner color={color} />
-          : tabs.has(session.id)
-            ? () => <text fg={theme.hue.accent[200]}>▪</text>
-            : undefined,
+        gutter: sessionStatusGutter(
+          theme,
+          state,
+          running,
+          tabs.has(session.id) ? () => <text fg={theme.hue.accent[200]}>▪</text> : undefined,
+        ),
       }
     })
 
     const current = location.ref ?? data.location.default()
-    const seen = new Set<string>()
-    const projectOptions = [
-      ...data.project.list().flatMap((project) =>
-        [project.canonical, ...project.sandboxes].map((directory) => ({
-          directory,
-          project,
-        })),
-      ),
-      ...sessions().map((session) => ({
-        directory: session.location.directory,
-        project: data.project.get(session.projectID),
-      })),
-    ]
-      .filter((item) => {
-        const key = locationKey(item)
-        if (item.directory === "/" || seen.has(key)) return false
-        seen.add(key)
-        return true
-      })
+    const projectOptions = data.project
+      .list()
+      .filter((project) => project.canonical !== "/")
+      // Historical project identities can share a checkout. The list is newest-active first.
+      .filter((project, index, projects) => projects.findIndex((item) => item.canonical === project.canonical) === index)
+      .map((project) => ({ directory: project.canonical, project }))
       .map((item) => {
         const title =
           item.directory === item.project?.canonical
@@ -247,7 +264,7 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
           category: "Projects",
           gutter:
             item.directory === current.directory ||
-            (item.directory === location.current?.project.canonical && !seen.has(locationKey(current)))
+            item.directory === location.current?.project.canonical
               ? () => <text fg={theme.text.formfield.selected}>●</text>
               : undefined,
         }

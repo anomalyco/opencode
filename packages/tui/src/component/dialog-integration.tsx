@@ -1,4 +1,5 @@
-import { TextAttributes } from "@opentui/core"
+import { ScrollBoxRenderable, TextareaRenderable, TextAttributes } from "@opentui/core"
+import { useTerminalDimensions } from "@opentui/solid"
 import type {
   ConnectionInfo,
   IntegrationCommandConnectOutput,
@@ -11,8 +12,9 @@ import type {
   FormValue,
   LocationRef,
 } from "@opencode/client"
-import open from "open"
-import { createEffect, createMemo, createSignal, onCleanup, onMount, Show } from "solid-js"
+import { openUrl } from "@opencode/util/open"
+import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
+import { createStore } from "solid-js/store"
 import { useClipboard } from "../context/clipboard"
 import { useData } from "../context/data"
 import { useClient } from "../context/client"
@@ -24,7 +26,16 @@ import { DialogPrompt } from "../ui/dialog-prompt"
 import { DialogSelect } from "../ui/dialog-select"
 import { Link } from "../ui/link"
 import { useToast } from "../ui/toast"
-import { formLabel, formToggleMultiselect, formValidateValue, type FormAnswerField } from "../util/form"
+import { errorMessage } from "../util/error"
+import {
+  formInitialValues,
+  formLabel,
+  formRows,
+  formSelected,
+  formToggleMultiselect,
+  formValidateValue,
+  type FormAnswerField,
+} from "../util/form"
 
 const INTEGRATION_PRIORITY: Record<string, number> = {
   "opencode-go": 0,
@@ -105,15 +116,17 @@ export function DialogIntegration(
       let category = "Services"
       if (integration.id in INTEGRATION_PRIORITY) category = "Popular"
       if (integration.metadata?.source === "mcp") category = "MCP"
+      const status = integration.connections[0]?.status
       return {
         title: integration.name,
         value: integration.id,
         description: methods.length === 0 ? "Environment only" : undefined,
-        footer: connectionSummary(integration) || undefined,
+        footer: status ? "Sign in required →" : connectionSummary(integration) || undefined,
+        footerColor: status ? theme.text.feedback.warning.base : undefined,
         category,
         disabled: methods.length === 0 && credentials.length === 0,
         gutter:
-          integration.connections.length > 0
+          integration.connections.length > 0 && !status
             ? () => <text fg={theme.text.feedback.success.base}>✓</text>
             : undefined,
         onSelect: () => {
@@ -190,14 +203,17 @@ function manageConnections(
                   ? `Press ${shortcuts.get("dialog.integration.delete")} again to confirm`
                   : connection.label,
                 value: connection.id,
+                footer: connection.status ? "Sign in required →" : undefined,
+                footerColor: connection.status ? theme.text.feedback.warning.base : undefined,
                 category: "Connected accounts",
                 bg: confirming ? theme.background.action.destructive.focused : undefined,
                 fg: confirming ? theme.text.action.destructive.focused : undefined,
                 onSelect: () => {
+                  if (connection.status?.url) return void openUrl(connection.status.url).catch(toast.error)
+                  if (connection.status)
+                    return selectMethod(current() ?? integration, methods, location, dialog, onConnected)
                   if (credentialConnections(current() ?? integration)[0]?.id === connection.id) return
-                  void client.api.credential
-                    .activate({ credentialID: connection.id })
-                    .catch(toast.error)
+                  void client.api.credential.activate({ credentialID: connection.id }).catch(toast.error)
                 },
               }
             }),
@@ -293,7 +309,60 @@ function openMethod(
     ))
     return
   }
+  if (method.type === "external") {
+    void beginExternal(integration, method, location, dialog, onConnected)
+    return
+  }
   void beginOAuth(integration, method, location, dialog, onConnected)
+}
+
+async function beginExternal(
+  integration: IntegrationInfo,
+  method: Extract<ConnectMethod, { type: "external" }>,
+  location: LocationRef,
+  dialog: ReturnType<typeof useDialog>,
+  onConnected?: OnIntegrationConnected,
+) {
+  const answer = method.form ? await formAnswer(dialog, method.label, method.form) : undefined
+  if (answer === null) return
+  dialog.replace(() => (
+    <ExternalStarting
+      integration={integration}
+      method={method}
+      location={location}
+      answer={answer}
+      onConnected={onConnected}
+    />
+  ))
+}
+
+function ExternalStarting(props: {
+  integration: IntegrationInfo
+  method: Extract<ConnectMethod, { type: "external" }>
+  location: LocationRef
+  answer?: FormAnswer
+  onConnected?: OnIntegrationConnected
+}) {
+  const data = useData()
+  const dialog = useDialog()
+  const client = useClient()
+  const toast = useToast()
+
+  onMount(() => {
+    void client.api.integration.connect
+      .external({
+        integrationID: props.integration.id,
+        location: locationQuery(props.location),
+        methodID: props.method.id,
+        ...(props.answer ? { answer: props.answer } : {}),
+      })
+      .then(() => connected(props.integration, props.location, data, dialog, toast, props.onConnected))
+      .catch((cause) => {
+        toast.show({ variant: "error", message: errorMessage(cause) })
+        dialog.clear()
+      })
+  })
+  return <OAuthView title={props.method.label} message="Connecting…" />
 }
 
 async function beginKey(
@@ -308,7 +377,13 @@ async function beginKey(
     : undefined
   if (answer === null) return
   dialog.replace(() => (
-    <KeyMethod integration={integration} method={method} location={location} answer={answer} onConnected={onConnected} />
+    <KeyMethod
+      integration={integration}
+      method={method}
+      location={location}
+      answer={answer}
+      onConnected={onConnected}
+    />
   ))
 }
 
@@ -353,7 +428,7 @@ function CommandStarting(props: {
       })
       .catch((cause) => {
         if (closed) return
-        toast.show({ variant: "error", message: message(cause) })
+        toast.show({ variant: "error", message: errorMessage(cause) })
         dialog.clear()
       })
   })
@@ -406,7 +481,7 @@ function CommandPending(props: {
       })
       .catch((cause) => {
         settled = true
-        toast.show({ variant: "error", message: message(cause) })
+        toast.show({ variant: "error", message: errorMessage(cause) })
         dialog.clear()
       })
   }
@@ -484,7 +559,7 @@ function KeyMethod(props: {
             ...(props.answer ? { answer: props.answer } : {}),
           })
           .then(() => connected(props.integration, props.location, data, dialog, toast, props.onConnected))
-          .catch((cause) => setError(message(cause)))
+          .catch((cause) => setError(errorMessage(cause)))
       }}
       description={() => (
         <Show when={error()}>{(value) => <text fg={theme.text.feedback.error.base}>{value()}</text>}</Show>
@@ -556,7 +631,7 @@ function OAuthStarting(props: {
         ))
       })
       .catch((cause) => {
-        toast.show({ variant: "error", message: message(cause) })
+        toast.show({ variant: "error", message: errorMessage(cause) })
         dialog.clear()
       })
   })
@@ -587,7 +662,7 @@ function OAuthAuto(props: {
         title: "Open authorization URL",
         group: "Dialog",
         run: () => {
-          open(props.attempt.url).catch(() =>
+          openUrl(props.attempt.url).catch(() =>
             toast.show({
               message: "Could not open the browser. Copy the URL and continue manually.",
               variant: "error",
@@ -633,7 +708,7 @@ function OAuthAuto(props: {
       })
       .catch((cause) => {
         settled = true
-        toast.show({ variant: "error", message: message(cause) })
+        toast.show({ variant: "error", message: errorMessage(cause) })
         dialog.clear()
       })
   }
@@ -702,7 +777,7 @@ function OAuthCode(props: {
             settled = true
             return connected(props.integration, props.location, data, dialog, toast, props.onConnected)
           })
-          .catch((cause) => setError(message(cause)))
+          .catch((cause) => setError(errorMessage(cause)))
       }}
       description={() => (
         <box gap={1}>
@@ -801,6 +876,13 @@ async function selectAnswer(
   title: string,
   field: Extract<FormAnswerField, { type: "boolean" | "string" }>,
 ): Promise<FormValue | undefined | typeof CANCELLED> {
+  if (field.type === "string" && field.custom)
+    return new Promise((resolve) => {
+      dialog.replace(
+        () => <StringChoiceField field={field} onSubmit={resolve} />,
+        () => resolve(CANCELLED),
+      )
+    })
   const options =
     field.type === "boolean"
       ? field.default === false
@@ -817,18 +899,12 @@ async function selectAnswer(
           value: option.value as FormValue,
           description: option.description,
         }))
-  const choice = await new Promise<FormValue | typeof CUSTOM | undefined | typeof CANCELLED>((resolve) => {
+  return new Promise<FormValue | undefined | typeof CANCELLED>((resolve) => {
     dialog.replace(
       () => (
-        <DialogSelect<FormValue | typeof CUSTOM | undefined>
+        <DialogSelect<FormValue | undefined>
           title={formLabel(field) || title}
-          options={[
-            ...options,
-            ...(field.type === "string" && field.custom
-              ? [{ title: "Type your own answer", value: CUSTOM as typeof CUSTOM }]
-              : []),
-            ...(!field.required ? [{ title: "Skip", value: undefined }] : []),
-          ]}
+          options={[...options, ...(!field.required ? [{ title: "Skip", value: undefined }] : [])]}
           current={field.type === "string" ? field.default : undefined}
           onSelect={(option) => resolve(option.value)}
         />
@@ -836,11 +912,158 @@ async function selectAnswer(
       () => resolve(CANCELLED),
     )
   })
-  if (choice === CUSTOM) {
-    if (field.type !== "string") return CANCELLED
-    return textAnswer(dialog, title, field, "")
+}
+
+function StringChoiceField(props: {
+  field: Extract<FormAnswerField, { type: "string" }>
+  onSubmit: (value: string | undefined) => void
+}) {
+  const dialog = useDialog()
+  const theme = useTheme().surface("dialog")
+  const dimensions = useTerminalDimensions()
+  const rows = formRows(props.field)
+  const count = rows.length + (props.field.required ? 1 : 2)
+  const [store, setStore] = createStore({
+    selected: formSelected(props.field, props.field.default),
+    editing: false,
+    text: formInitialValues([props.field]).custom[props.field.key] ?? "",
+    error: "",
+  })
+  const [textarea, setTextarea] = createSignal<TextareaRenderable>()
+  let scroll: ScrollBoxRenderable | undefined
+  createEffect(() => {
+    const row = scroll?.getChildren()[store.selected]
+    if (row) scroll?.scrollChildIntoView(row.id)
+  })
+  const fg = (index: number) => (store.selected === index ? theme.text.formfield.focused : theme.text.formfield.base)
+  const submit = (value: string | undefined) => {
+    const invalid = formValidateValue(props.field, value)
+    if (invalid) return setStore("error", invalid)
+    props.onSubmit(value)
   }
-  return choice
+  const select = (index: number) => {
+    setStore({ selected: index, error: "" })
+    if (index === rows.length) return setStore("editing", true)
+    submit(index < rows.length ? String(rows[index].value) : undefined)
+  }
+  const back = () => setStore({ editing: false, text: textarea()?.plainText ?? store.text, error: "" })
+  Keymap.createLayer(() => ({
+    mode: "modal",
+    enabled: !store.editing,
+    commands: [
+      {
+        id: "dialog.select.prev",
+        title: "Previous answer",
+        group: "Form",
+        run: () => setStore("selected", (store.selected + count - 1) % count),
+      },
+      {
+        id: "dialog.select.next",
+        title: "Next answer",
+        group: "Form",
+        run: () => setStore("selected", (store.selected + 1) % count),
+      },
+      { id: "dialog.select.submit", title: "Select answer", group: "Form", run: () => select(store.selected) },
+    ],
+  }))
+  Keymap.createLayer(() => ({
+    mode: "modal",
+    priority: 1,
+    target: textarea,
+    enabled: store.editing,
+    commands: [
+      {
+        id: "dialog.prompt.submit",
+        title: "Submit answer",
+        group: "Form",
+        run: () => submit(textarea()?.plainText.trim() || undefined),
+      },
+      { bind: "escape", title: "Back to answers", group: "Form", run: back },
+    ],
+  }))
+  return (
+    <box paddingLeft={4} paddingRight={4} paddingBottom={1} gap={1}>
+      <box flexDirection="row" justifyContent="space-between">
+        <text fg={theme.text.base} attributes={TextAttributes.BOLD}>
+          {formLabel(props.field)}
+        </text>
+        <text fg={theme.text.muted} onMouseUp={() => (store.editing ? back() : dialog.clear())}>
+          esc
+        </text>
+      </box>
+      <Show when={props.field.description}>{(description) => <text fg={theme.text.muted}>{description()}</text>}</Show>
+      <scrollbox
+        gap={1}
+        height={Math.min(
+          count + rows.filter((row) => row.description).length,
+          Math.max(3, Math.floor(dimensions().height / 2) - 6),
+        )}
+        scrollbarOptions={{ visible: false }}
+        ref={(value: ScrollBoxRenderable) => {
+          scroll = value
+        }}
+      >
+        <For each={rows}>
+          {(row, index) => (
+            <box onMouseUp={() => select(index())}>
+              <text fg={fg(index())}>
+                {index() + 1}. {row.label}
+              </text>
+              <Show when={row.description}>
+                {(description) => (
+                  <box paddingLeft={3}>
+                    <text fg={theme.text.muted}>{description()}</text>
+                  </box>
+                )}
+              </Show>
+            </box>
+          )}
+        </For>
+        <box flexDirection="row" gap={1} onMouseUp={() => select(rows.length)}>
+          <text fg={fg(rows.length)}>{rows.length + 1}.</text>
+          <Show
+            when={store.editing}
+            fallback={<text fg={fg(rows.length)}>{store.text || "Type your own answer"}</text>}
+          >
+            <textarea
+              height={1}
+              flexGrow={1}
+              wrapMode="none"
+              initialValue={store.text}
+              placeholder={props.field.placeholder ?? "Type your own answer"}
+              placeholderColor={theme.text.muted}
+              textColor={theme.text.formfield.focused}
+              focusedTextColor={theme.text.formfield.focused}
+              cursorColor={theme.text.formfield.focused}
+              ref={(value: TextareaRenderable) => {
+                setTextarea(value)
+                value.traits = { status: "ANSWER" }
+                queueMicrotask(() => {
+                  if (value.isDestroyed) return
+                  value.focus()
+                  value.gotoLineEnd()
+                })
+              }}
+              onContentChange={() => {
+                const text = textarea()?.plainText ?? ""
+                setStore("text", text)
+                if (store.error && !formValidateValue(props.field, text.trim() || undefined)) setStore("error", "")
+              }}
+            />
+          </Show>
+        </box>
+        <Show when={!props.field.required}>
+          <text fg={fg(rows.length + 1)} onMouseUp={() => select(rows.length + 1)}>
+            {rows.length + 2}. Skip
+          </text>
+        </Show>
+      </scrollbox>
+      <Show when={store.error}>{(error) => <text fg={theme.text.feedback.error.base}>{error()}</text>}</Show>
+      <text fg={theme.text.muted}>
+        {store.editing ? "enter submit · esc back" : "↑/↓ select · enter confirm · esc cancel"}
+      </text>
+    </box>
+  )
 }
 
 function textAnswer(
@@ -982,7 +1205,7 @@ async function externalAnswer(
         () => <OAuthView title={formLabel(field) || title} message="Opening link…" />,
         () => resolve(CANCELLED),
       )
-      void open(field.url).then(
+      void openUrl(field.url).then(
         () => resolve(true),
         () => resolve(false),
       )
@@ -1009,7 +1232,7 @@ async function connected(
     data.location.provider.sync(location),
   ])
   toast.show({ variant: "success", message: `Connected ${integration.name}` })
-  if (onConnected) {
+  if (onConnected && integration.metadata?.source !== "mcp") {
     onConnected(providerID(data, location, integration.id))
     return
   }
@@ -1030,9 +1253,4 @@ function providerID(data: ReturnType<typeof useData>, location: LocationRef, int
 
 function locationQuery(location: LocationRef) {
   return { directory: location.directory }
-}
-
-function message(cause: unknown) {
-  if (cause instanceof Error) return cause.message
-  return "Authentication failed"
 }

@@ -23,6 +23,7 @@ import {
   SkillNotFoundError,
 } from "@opencode/protocol/errors"
 import { AbsolutePath } from "@opencode/core/schema"
+import { locationErrors } from "../location"
 import { failedMessageDecode, failedSnapshot, missingMessage, missingSession } from "./session-error"
 
 const DefaultSessionsLimit = 50
@@ -133,9 +134,11 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                 model: ctx.payload.model,
                 metadata: ctx.payload.metadata,
                 permissions: ctx.payload.permissions,
-                location: ctx.payload.location ?? { directory: AbsolutePath.make(process.cwd()) },
+                ...(ctx.payload.parentID === undefined
+                  ? { location: ctx.payload.location ?? { directory: AbsolutePath.make(process.cwd()) } }
+                  : { parentID: ctx.payload.parentID }),
               })
-              .pipe(Effect.orDie),
+              .pipe(Effect.catchTag("Session.NotFoundError", missingSession)),
           }
         }),
       )
@@ -266,6 +269,10 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
               yield* title.generate(ctx.params.sessionID)
             }
           }
+          if (ctx.payload.metadata !== undefined)
+            yield* session
+              .setMetadata({ sessionID: ctx.params.sessionID, metadata: ctx.payload.metadata })
+              .pipe(Effect.catchTag("Session.NotFoundError", missingSession))
           if (ctx.payload.permissions !== undefined)
             yield* session
               .setPermissions({ sessionID: ctx.params.sessionID, permissions: ctx.payload.permissions })
@@ -329,6 +336,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                 Effect.catchTag("Session.SkillNotFoundError", (error) =>
                   Effect.fail(new InvalidRequestError({ message: `Skill not found: ${error.skill}`, field: "skills" })),
                 ),
+                locationErrors,
               ),
           }
         }),
@@ -364,6 +372,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                   }),
                 ),
               ),
+              locationErrors,
             )
           return HttpApiSchema.NoContent.make()
         }),
@@ -382,6 +391,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
               Effect.catchTag("Session.SkillNotFoundError", (error) =>
                 Effect.fail(new SkillNotFoundError({ skill: error.skill, message: `Skill not found: ${error.skill}` })),
               ),
+              locationErrors,
             )
           return HttpApiSchema.NoContent.make()
         }),
@@ -465,6 +475,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                 Effect.catchTag("Session.MessageNotFoundError", missingMessage),
                 Effect.catchTag("Session.BusyError", busySession),
                 Effect.catchTag("Snapshot.Error", failedSnapshot("stage session revert", ctx.params.sessionID)),
+                locationErrors,
               ),
           }
         }),
@@ -479,6 +490,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
               Effect.catchTag("Session.NotFoundError", missingSession),
               Effect.catchTag("Session.BusyError", busySession),
               Effect.catchTag("Snapshot.Error", failedSnapshot("clear session revert", ctx.params.sessionID)),
+              locationErrors,
             )
           return HttpApiSchema.NoContent.make()
         }),
@@ -521,6 +533,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                 (error) => new InvalidRequestError({ message: error.message, field: error.field }),
               ),
               Effect.catchTag("Snapshot.Error", failedSnapshot("diff session turn", ctx.params.sessionID)),
+              locationErrors,
             ),
           }
         }),
@@ -688,7 +701,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         "session.form.cancel",
         Effect.fn(function* (ctx) {
           const owned = yield* requireOwnedForm(ctx.params.sessionID, ctx.params.formID)
-          yield* owned.form.cancel(ctx.params.formID).pipe(
+          yield* owned.form.cancel(ctx.params.formID, { message: ctx.query.message }).pipe(
             Effect.catchTags({
               "Form.AlreadySettledError": (error) =>
                 new FormAlreadySettledError({ id: error.id, message: error.message }),

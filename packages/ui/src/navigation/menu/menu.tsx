@@ -47,7 +47,9 @@ const MenuAppearanceContext = createContext<{ appearance: Accessor<MenuAppearanc
 
 function useMenuContext() {
   const ctx = useContext(MenuAppearanceContext)
+
   if (!ctx) throw new Error("Menu components must be used inside Menu or Menu.Context")
+
   return ctx
 }
 
@@ -76,6 +78,7 @@ export interface MenuItemProps extends ComponentProps<typeof DropdownMenu.Item> 
 function MenuItem(props: ParentProps<MenuItemProps>) {
   const ctx = useMenuContext()
   const [s, r] = splitProps(props, ["class", "classList", "children", "shortcut", "badge"])
+
   return (
     <DropdownMenu.Item
       {...r}
@@ -98,6 +101,7 @@ export interface MenuCheckboxItemProps extends ComponentProps<typeof DropdownMen
 function MenuCheckboxItem(props: ParentProps<MenuCheckboxItemProps>) {
   const ctx = useMenuContext()
   const [s, r] = splitProps(props, ["class", "classList", "children", "shortcut", "badge"])
+
   return (
     <DropdownMenu.CheckboxItem
       {...r}
@@ -128,6 +132,7 @@ export interface MenuRadioItemProps extends ComponentProps<typeof DropdownMenu.R
 function MenuRadioItem(props: ParentProps<MenuRadioItemProps>) {
   const ctx = useMenuContext()
   const [s, r] = splitProps(props, ["class", "classList", "children", "shortcut", "badge"])
+
   return (
     <DropdownMenu.RadioItem
       {...r}
@@ -155,9 +160,30 @@ export interface MenuSubTriggerProps extends ComponentProps<typeof DropdownMenu.
   badge?: JSX.Element | string
 }
 
+export interface MenuSubProps extends ComponentProps<typeof DropdownMenu.Sub> {
+  placement?:
+    | "top"
+    | "top-start"
+    | "top-end"
+    | "bottom"
+    | "bottom-start"
+    | "bottom-end"
+    | "left"
+    | "left-start"
+    | "left-end"
+    | "right"
+    | "right-start"
+    | "right-end"
+}
+
+function MenuSub(props: MenuSubProps) {
+  return <DropdownMenu.Sub {...props} />
+}
+
 function MenuSubTrigger(props: ParentProps<MenuSubTriggerProps>) {
   const ctx = useMenuContext()
   const [s, r] = splitProps(props, ["class", "classList", "children", "shortcut", "badge"])
+
   return (
     <DropdownMenu.SubTrigger
       {...r}
@@ -175,6 +201,7 @@ function MenuSubTrigger(props: ParentProps<MenuSubTriggerProps>) {
 function MenuSubContent(props: ComponentProps<typeof DropdownMenu.SubContent>) {
   const ctx = useMenuContext()
   const [s, r] = splitProps(props, ["class", "classList"])
+
   return (
     <DropdownMenu.SubContent
       {...r}
@@ -188,6 +215,7 @@ function MenuSubContent(props: ComponentProps<typeof DropdownMenu.SubContent>) {
 function MenuGroupLabel(props: ComponentProps<typeof DropdownMenu.GroupLabel>) {
   const ctx = useMenuContext()
   const [s, r] = splitProps(props, ["class", "classList"])
+
   return (
     <DropdownMenu.GroupLabel
       {...r}
@@ -201,6 +229,7 @@ function MenuGroupLabel(props: ComponentProps<typeof DropdownMenu.GroupLabel>) {
 function MenuSeparator(props: ComponentProps<typeof DropdownMenu.Separator>) {
   const ctx = useMenuContext()
   const [s, r] = splitProps(props, ["class", "classList"])
+
   return (
     <DropdownMenu.Separator
       {...r}
@@ -214,6 +243,7 @@ function MenuSeparator(props: ComponentProps<typeof DropdownMenu.Separator>) {
 function MenuContent(props: ComponentProps<typeof DropdownMenu.Content>) {
   const ctx = useMenuContext()
   const [s, r] = splitProps(props, ["class", "classList"])
+
   return (
     <DropdownMenu.Content
       {...r}
@@ -231,6 +261,7 @@ export interface MenuProps extends ComponentProps<typeof DropdownMenu> {
 function MenuRoot(props: MenuProps) {
   const [local, rest] = splitProps(props, ["appearance", "children"])
   const appearance = () => local.appearance ?? "compact"
+
   return (
     <MenuAppearanceContext.Provider value={{ appearance }}>
       <DropdownMenu {...rest}>{local.children}</DropdownMenu>
@@ -245,6 +276,7 @@ export interface MenuContextProps extends ComponentProps<typeof ContextMenu> {
 function MenuContextRoot(props: MenuContextProps) {
   const [local, rest] = splitProps(props, ["appearance", "children"])
   const appearance = () => local.appearance ?? "compact"
+
   return (
     <MenuAppearanceContext.Provider value={{ appearance }}>
       <ContextMenu {...rest}>{local.children}</ContextMenu>
@@ -255,6 +287,7 @@ function MenuContextRoot(props: MenuContextProps) {
 function MenuContextContent(props: ComponentProps<typeof ContextMenu.Content>) {
   const ctx = useMenuContext()
   const [s, r] = splitProps(props, ["class", "classList"])
+
   return (
     <ContextMenu.Content
       {...r}
@@ -282,7 +315,7 @@ export const Menu = Object.assign(MenuRoot, {
   Group: DropdownMenu.Group,
   GroupLabel: MenuGroupLabel,
   Separator: MenuSeparator,
-  Sub: DropdownMenu.Sub,
+  Sub: MenuSub,
   SubTrigger: MenuSubTrigger,
   SubContent: MenuSubContent,
   Context: MenuContext,

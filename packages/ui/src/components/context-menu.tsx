@@ -3,23 +3,41 @@ import { splitProps } from "solid-js"
 import type { ComponentProps, ParentProps } from "solid-js"
 
 export interface ContextMenuProps extends ComponentProps<typeof Kobalte> {}
+
 export interface ContextMenuTriggerProps extends ComponentProps<typeof Kobalte.Trigger> {}
+
 export interface ContextMenuIconProps extends ComponentProps<typeof Kobalte.Icon> {}
+
 export interface ContextMenuPortalProps extends ComponentProps<typeof Kobalte.Portal> {}
+
 export interface ContextMenuContentProps extends ComponentProps<typeof Kobalte.Content> {}
+
 export interface ContextMenuArrowProps extends ComponentProps<typeof Kobalte.Arrow> {}
+
 export interface ContextMenuSeparatorProps extends ComponentProps<typeof Kobalte.Separator> {}
+
 export interface ContextMenuGroupProps extends ComponentProps<typeof Kobalte.Group> {}
+
 export interface ContextMenuGroupLabelProps extends ComponentProps<typeof Kobalte.GroupLabel> {}
+
 export interface ContextMenuItemProps extends ComponentProps<typeof Kobalte.Item> {}
+
 export interface ContextMenuItemLabelProps extends ComponentProps<typeof Kobalte.ItemLabel> {}
+
 export interface ContextMenuItemDescriptionProps extends ComponentProps<typeof Kobalte.ItemDescription> {}
+
 export interface ContextMenuItemIndicatorProps extends ComponentProps<typeof Kobalte.ItemIndicator> {}
+
 export interface ContextMenuRadioGroupProps extends ComponentProps<typeof Kobalte.RadioGroup> {}
+
 export interface ContextMenuRadioItemProps extends ComponentProps<typeof Kobalte.RadioItem> {}
+
 export interface ContextMenuCheckboxItemProps extends ComponentProps<typeof Kobalte.CheckboxItem> {}
+
 export interface ContextMenuSubProps extends ComponentProps<typeof Kobalte.Sub> {}
+
 export interface ContextMenuSubTriggerProps extends ComponentProps<typeof Kobalte.SubTrigger> {}
+
 export interface ContextMenuSubContentProps extends ComponentProps<typeof Kobalte.SubContent> {}
 
 function ContextMenuRoot(props: ContextMenuProps) {
@@ -28,6 +46,7 @@ function ContextMenuRoot(props: ContextMenuProps) {
 
 function ContextMenuTrigger(props: ParentProps<ContextMenuTriggerProps>) {
   const [local, rest] = splitProps(props, ["class", "classList", "children"])
+
   return (
     <Kobalte.Trigger
       {...rest}
@@ -44,6 +63,7 @@ function ContextMenuTrigger(props: ParentProps<ContextMenuTriggerProps>) {
 
 function ContextMenuIcon(props: ParentProps<ContextMenuIconProps>) {
   const [local, rest] = splitProps(props, ["class", "classList", "children"])
+
   return (
     <Kobalte.Icon
       {...rest}
@@ -64,6 +84,7 @@ function ContextMenuPortal(props: ContextMenuPortalProps) {
 
 function ContextMenuContent(props: ParentProps<ContextMenuContentProps>) {
   const [local, rest] = splitProps(props, ["class", "classList", "children"])
+
   return (
     <Kobalte.Content
       {...rest}
@@ -80,6 +101,7 @@ function ContextMenuContent(props: ParentProps<ContextMenuContentProps>) {
 
 function ContextMenuArrow(props: ContextMenuArrowProps) {
   const [local, rest] = splitProps(props, ["class", "classList"])
+
   return (
     <Kobalte.Arrow
       {...rest}
@@ -94,6 +116,7 @@ function ContextMenuArrow(props: ContextMenuArrowProps) {
 
 function ContextMenuSeparator(props: ContextMenuSeparatorProps) {
   const [local, rest] = splitProps(props, ["class", "classList"])
+
   return (
     <Kobalte.Separator
       {...rest}
@@ -108,6 +131,7 @@ function ContextMenuSeparator(props: ContextMenuSeparatorProps) {
 
 function ContextMenuGroup(props: ParentProps<ContextMenuGroupProps>) {
   const [local, rest] = splitProps(props, ["class", "classList", "children"])
+
   return (
     <Kobalte.Group
       {...rest}
@@ -124,6 +148,7 @@ function ContextMenuGroup(props: ParentProps<ContextMenuGroupProps>) {
 
 function ContextMenuGroupLabel(props: ParentProps<ContextMenuGroupLabelProps>) {
   const [local, rest] = splitProps(props, ["class", "classList", "children"])
+
   return (
     <Kobalte.GroupLabel
       {...rest}
@@ -140,6 +165,7 @@ function ContextMenuGroupLabel(props: ParentProps<ContextMenuGroupLabelProps>) {
 
 function ContextMenuItem(props: ParentProps<ContextMenuItemProps>) {
   const [local, rest] = splitProps(props, ["class", "classList", "children"])
+
   return (
     <Kobalte.Item
       {...rest}
@@ -156,6 +182,7 @@ function ContextMenuItem(props: ParentProps<ContextMenuItemProps>) {
 
 function ContextMenuItemLabel(props: ParentProps<ContextMenuItemLabelProps>) {
   const [local, rest] = splitProps(props, ["class", "classList", "children"])
+
   return (
     <Kobalte.ItemLabel
       {...rest}
@@ -172,6 +199,7 @@ function ContextMenuItemLabel(props: ParentProps<ContextMenuItemLabelProps>) {
 
 function ContextMenuItemDescription(props: ParentProps<ContextMenuItemDescriptionProps>) {
   const [local, rest] = splitProps(props, ["class", "classList", "children"])
+
   return (
     <Kobalte.ItemDescription
       {...rest}
@@ -188,6 +216,7 @@ function ContextMenuItemDescription(props: ParentProps<ContextMenuItemDescriptio
 
 function ContextMenuItemIndicator(props: ParentProps<ContextMenuItemIndicatorProps>) {
   const [local, rest] = splitProps(props, ["class", "classList", "children"])
+
   return (
     <Kobalte.ItemIndicator
       {...rest}
@@ -204,6 +233,7 @@ function ContextMenuItemIndicator(props: ParentProps<ContextMenuItemIndicatorPro
 
 function ContextMenuRadioGroup(props: ParentProps<ContextMenuRadioGroupProps>) {
   const [local, rest] = splitProps(props, ["class", "classList", "children"])
+
   return (
     <Kobalte.RadioGroup
       {...rest}
@@ -220,6 +250,7 @@ function ContextMenuRadioGroup(props: ParentProps<ContextMenuRadioGroupProps>) {
 
 function ContextMenuRadioItem(props: ParentProps<ContextMenuRadioItemProps>) {
   const [local, rest] = splitProps(props, ["class", "classList", "children"])
+
   return (
     <Kobalte.RadioItem
       {...rest}
@@ -236,6 +267,7 @@ function ContextMenuRadioItem(props: ParentProps<ContextMenuRadioItemProps>) {
 
 function ContextMenuCheckboxItem(props: ParentProps<ContextMenuCheckboxItemProps>) {
   const [local, rest] = splitProps(props, ["class", "classList", "children"])
+
   return (
     <Kobalte.CheckboxItem
       {...rest}
@@ -256,6 +288,7 @@ function ContextMenuSub(props: ContextMenuSubProps) {
 
 function ContextMenuSubTrigger(props: ParentProps<ContextMenuSubTriggerProps>) {
   const [local, rest] = splitProps(props, ["class", "classList", "children"])
+
   return (
     <Kobalte.SubTrigger
       {...rest}
@@ -272,6 +305,7 @@ function ContextMenuSubTrigger(props: ParentProps<ContextMenuSubTriggerProps>) {
 
 function ContextMenuSubContent(props: ParentProps<ContextMenuSubContentProps>) {
   const [local, rest] = splitProps(props, ["class", "classList", "children"])
+
   return (
     <Kobalte.SubContent
       {...rest}

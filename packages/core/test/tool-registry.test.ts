@@ -329,7 +329,6 @@ describe("Tool", () => {
         {
           before: make(),
           "": make(),
-          ["x".repeat(65)]: make(),
           "echo.tool": constant("first"),
           echo_tool: constant("last"),
           execute: make(),

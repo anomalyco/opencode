@@ -1,10 +1,5 @@
-import type { BrowserPaneEvent } from "@opencode/app/desktop"
 import type { DesktopMenuAction } from "@opencode/app/desktop-menu"
 import type { DesktopNativeBundle } from "@opencode/app/i18n/desktop-native"
-import type { UpdaterState } from "@opencode/app/updater"
-import type { WslServersPlatform } from "@opencode/app/wsl/types"
-import type { SshPlatform } from "@opencode/app/ssh"
-import type { BrowserPaneRequest } from "../shared/ipc-rpc/browser"
 import type { WindowBootstrap } from "../shared/window-bootstrap"
 import type {
   ClipboardImage,
@@ -17,27 +12,10 @@ import type {
   TitlebarTheme,
 } from "../shared/ipc-contract"
 
-export type WslServersAPI = WslServersPlatform
-export type UpdaterAPI = {
-  subscribe(cb: (state: UpdaterState) => void): Promise<() => void>
-  check(): Promise<UpdaterState>
-  install(): Promise<void>
-}
-
 export type ElectronAPI = {
   awaitInitialization(): Promise<ServerReadyData>
   reconnectService(): Promise<ServerReadyData>
-  browserPane: {
-    request(request: BrowserPaneRequest): Promise<void>
-    send(request: BrowserPaneRequest): void
-    onEvent(callback: (value: { readonly bindingID: string; readonly event: BrowserPaneEvent }) => void): () => void
-  }
-  wslServers: WslServersAPI
-  sshServers: SshPlatform
-  updater: UpdaterAPI
   consumeInitialDeepLinks(): Promise<string[]>
-  getDefaultServerUrl(): Promise<string | null>
-  setDefaultServerUrl(url: string | null): Promise<void>
   isFirstLaunchOnboardingPending(): Promise<boolean>
   finishFirstLaunchOnboarding(createDefaultProject: boolean): Promise<string | null>
   checkAppExists(appName: string): Promise<boolean>
@@ -65,6 +43,7 @@ export type ElectronAPI = {
   getPathForFile(file: File): string
   saveFile(opts: SaveFilePickerOptions, content: string): Promise<boolean>
   openExternal(url: string): void
+  openBrowser(url: string): Promise<boolean>
   openLocalFile(url: string): void
   openPath(path: string, app?: string): Promise<string | undefined>
   revealPath(path: string): Promise<boolean>

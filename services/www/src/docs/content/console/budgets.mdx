@@ -1,0 +1,86 @@
+---
+title: "Budgets"
+description: "Cap monthly spend for a workspace, its members, and its service accounts."
+---
+
+Budgets cap how much a workspace spends each month. Owners and admins set them from the **Budget limits** panel on
+the **Members** and **Keys** pages.
+
+## Budget levels
+
+| Budget                  | Applies to                                  | Where to set it                                    |
+| ----------------------- | ------------------------------------------- | -------------------------------------------------- |
+| Workspace               | Combined spend of everyone in the workspace | **Members** or **Keys › Monthly workspace budget** |
+| Default user            | Each member without a custom limit          | **Members › Monthly default user budget**          |
+| Custom user             | One member                                  | **Members** table or member page                   |
+| Default service account | Each service account without a custom limit | **Keys › Monthly default service account budget**  |
+| Custom service account  | One service account                         | Service account page                               |
+
+A request must fit under both the workspace budget and the person's own budget. Without any budget, spend is
+unlimited.
+
+## Workspace budget
+
+The workspace budget blocks requests for everyone once the workspace reaches it.
+
+1. Open **Members** or **Keys**.
+2. In **Budget limits**, click **Monthly workspace budget**.
+3. Enter a **Workspace limit** in USD and click **Save**.
+
+## Member budgets
+
+The default user budget applies to every member who has no custom limit. Set it under **Monthly default user budget**.
+
+Give one member a custom limit from either place:
+
+- Click the **Limit** cell in their **Members** row and enter an amount.
+- Open the member and click **Set User Budget** under **Monthly Budget**.
+
+Custom limits are highlighted in the Members table. Clear a custom limit to return the member to the default; the
+member page then shows **Using Default**.
+
+## Service account budgets
+
+Service accounts work the same way. Set **Monthly default service account budget** on the **Keys** page, or open a
+service account and click **Set Service Account Budget**.
+
+## Amounts and resets
+
+- Amounts are in US dollars with up to two decimal places.
+- Budgets reset on the 1st of each month at 00:00 UTC.
+- A `$0` budget blocks all spend that counts toward budgets.
+
+## What counts
+
+| Spend                                                               | Counts toward budgets        |
+| ------------------------------------------------------------------- | ---------------------------- |
+| Paid Console models                                                 | Yes                          |
+| Models on [your own providers](/console/providers) with a price set | Yes, at the configured price |
+| [Web search](/console/websearch)                                    | Yes                          |
+| Free models                                                         | No                           |
+| [Go](/console/go) usage within the plan                             | No                           |
+| Go extra usage paid from credits                                    | Yes                          |
+
+## When a budget is reached
+
+New requests fail with HTTP `429` until the budget resets or an admin raises it. The response does not say which
+budget was reached.
+
+```text
+Upstream request failed: Account budget exceeded
+```
+
+Budgets are checked when a request starts. Requests already in progress finish, so spend can end slightly above the
+limit.
+
+## Track spend
+
+Each member sees their own budget on **Overview**: the amount left, the amount spent, and the reset date.
+
+Owners and admins of workspaces with more than one member also see **Usage**. It breaks down cost by day, model, and
+person, and the **Export usage** button downloads daily totals for the last 7, 30, or 90 days as CSV.
+
+## Automate budgets
+
+Use the [Budgets API](/console/api/budgets) to read every member's budget and set custom limits from your own
+tools.

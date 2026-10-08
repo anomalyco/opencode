@@ -57,7 +57,11 @@ export function layer(options: Options, replacements: () => LayerNode.Replacemen
         ...LocationServiceMap.canonical(session.location),
       })
       const provide = (session: Session.Info) => Effect.provide(instances.get(key(session)))
-      const instances: LayerMap.LayerMap<ReturnType<typeof key>, Instance.Services> = yield* LayerMap.make(
+      const instances: LayerMap.LayerMap<
+        ReturnType<typeof key>,
+        Instance.Services,
+        Instance.Error
+      > = yield* LayerMap.make(
         (input: ReturnType<typeof key>) =>
           Layer.unwrap(
             Effect.gen(function* () {

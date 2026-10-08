@@ -8,7 +8,7 @@ import { Money } from "@opencode/schema/money"
 import { Shell } from "@opencode/schema/shell"
 import { Skill } from "@opencode/schema/skill"
 import { Agent } from "@opencode/core/agent"
-import { asc, eq } from "drizzle-orm"
+import { and, asc, eq } from "drizzle-orm"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -385,6 +385,26 @@ describe("Session.create", () => {
 
       // Absent stays absent: no empty-object normalization.
       expect((yield* session.create({ location })).metadata).toBeUndefined()
+
+      const replacement = { thread: "updated", owner: "host" }
+      yield* session.setMetadata({ sessionID: created.id, metadata: replacement })
+      expect((yield* session.get(created.id)).metadata).toEqual(replacement)
+      expect(
+        yield* db
+          .select({ data: EventTable.data })
+          .from(EventTable)
+          .where(
+            and(
+              eq(EventTable.aggregate_id, created.id),
+              eq(EventTable.type, Bus.versionedType(SessionEvent.MetadataUpdated.type, 1)),
+            ),
+          )
+          .get()
+          .pipe(Effect.orDie),
+      ).toMatchObject({ data: { metadata: replacement } })
+      expect(
+        yield* session.setMetadata({ sessionID: Session.ID.create(), metadata: replacement }).pipe(Effect.flip),
+      ).toBeInstanceOf(Session.NotFoundError)
     }),
   )
 

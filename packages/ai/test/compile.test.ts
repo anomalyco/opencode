@@ -144,7 +144,7 @@ describe("request option precedence", () => {
           type: "function",
           name: "crm",
           description: "Top-level CRM tool",
-          parameters: {},
+          parameters: { type: "object" },
           strict: false,
         },
         {
@@ -152,15 +152,17 @@ describe("request option precedence", () => {
           name: "crm",
           description: "CRM tools",
           tools: [
-            { type: "function", name: "lookup", description: "new", parameters: {}, strict: false },
-            { type: "function", name: "search", description: "search", parameters: {}, strict: false },
+            { type: "function", name: "lookup", description: "new", parameters: { type: "object" }, strict: false },
+            { type: "function", name: "search", description: "search", parameters: { type: "object" }, strict: false },
           ],
         },
         {
           type: "namespace",
           name: "support",
           description: "Support tools",
-          tools: [{ type: "function", name: "lookup", description: "support", parameters: {}, strict: false }],
+          tools: [
+            { type: "function", name: "lookup", description: "support", parameters: { type: "object" }, strict: false },
+          ],
         },
       ])
     }),

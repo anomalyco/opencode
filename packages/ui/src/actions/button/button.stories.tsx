@@ -135,8 +135,10 @@ export const AllStates = {
       "ghost-faint",
       "loading",
     ] as const
+
     const states = ["default", "hover", "pressed", "focus", "disabled"] as const
     const toTitleCase = (value: string) => value.charAt(0).toUpperCase() + value.slice(1)
+
     return (
       <div style={{ display: "grid", gap: "12px" }}>
         <For each={variants}>

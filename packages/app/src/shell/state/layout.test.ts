@@ -1,13 +1,13 @@
 import { describe, expect, test } from "bun:test"
-import { createRoot, createSignal } from "solid-js"
 import { Schema } from "effect"
 import { ServerConnection } from "@/runtime/server/registry"
 import { Persistence } from "@/runtime/persistence/schema"
 import { currentRoute, initialLayout, layoutPersistence, layoutSchema } from "./layout"
+import { createSignal } from "solid-js"
 import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys } from "./helpers"
 
-test("settings has its own layout route", () => {
-  expect(currentRoute("/settings", "")).toEqual({ type: "settings" })
+test.each(["settings", "connect"] as const)("%s has its own layout route", (type) => {
+  expect(currentRoute(`/${type}`, "")).toEqual({ type })
 })
 
 describe("layout persistence", () => {
@@ -33,7 +33,7 @@ describe("layout persistence", () => {
     expect(defaults).toEqual({
       sidebar: { opened: false, width: 344, workspaces: {}, workspacesDefault: false },
       terminal: { height: 280, opened: false },
-      review: { diffStyle: "split", panelOpened: false },
+      review: { panelOpened: false },
       fileTree: { opened: false, width: 200, tab: "changes" },
       session: { width: 600 },
       mobileSidebar: { opened: false },
@@ -46,7 +46,7 @@ describe("layout persistence", () => {
         sidebar: { width: "bad" },
         terminal: null,
         session: { width: undefined },
-        review: { diffStyle: "bad" },
+        review: { panelOpened: "bad" },
       }),
     ).toEqual(defaults)
   })
@@ -54,20 +54,14 @@ describe("layout persistence", () => {
   test("migrates old sidebar and panel settings and writes current fields", () => {
     const value = decode({ sidebar: { workspaces: true }, review: {}, fileTree: { opened: true, width: 260 } })
     expect(value.sidebar).toEqual({ opened: false, width: 344, workspaces: {}, workspacesDefault: true })
-    expect(value.review).toEqual({ diffStyle: "split", panelOpened: true })
+    expect(value.review).toEqual({ panelOpened: true })
     expect(value.fileTree).toEqual({ opened: true, width: 200, tab: "changes" })
     expect(Schema.encodeSync(schema)(value)).toEqual(value)
     expect(decode(Schema.encodeSync(schema)(value))).toEqual(value)
     expect(decode({ fileTree: { opened: true } }).review.panelOpened).toBe(false)
-  })
-
-  test("preserves current panel preferences", () => {
-    const value = decode({
-      review: { diffStyle: "unified", panelOpened: false },
-      fileTree: { opened: true, width: 260, tab: "all" },
-    })
-    expect(value.review).toEqual({ diffStyle: "unified", panelOpened: false })
-    expect(value.fileTree).toEqual({ opened: true, width: 260, tab: "all" })
+    const current = decode({ review: { panelOpened: false }, fileTree: { opened: true, width: 260, tab: "all" } })
+    expect(current.review).toEqual({ panelOpened: false })
+    expect(current.fileTree).toEqual({ opened: true, width: 260, tab: "all" })
   })
 
   test("distinguishes an invalid panel field from an invalid review section", () => {
@@ -82,90 +76,61 @@ describe("layout persistence", () => {
     expect(
       decode({
         sidebar: { workspaces: { good: true, bad: "bad" } },
-        sessionView: { [key]: { scroll, reviewMode: "git" } },
+        sessionView: { [key]: { scroll, pendingMessage: "message" } },
       }),
     ).toMatchObject({
       sidebar: { workspaces: {} },
-      sessionView: { [key]: { scroll: {}, reviewMode: "git" } },
+      sessionView: { [key]: { scroll: {}, pendingMessage: "message" } },
     })
     expect(
-      decode({ sessionView: { [key]: { scroll: { good: { x: 1, y: 2 } }, reviewMode: "bad" } } }).sessionView,
+      decode({ sessionView: { [key]: { scroll: { good: { x: 1, y: 2 } }, pendingMessage: 5 } } }).sessionView,
     ).toEqual({ [key]: { scroll: {} } })
   })
 
   test("keeps scoped state and salvages valid tab entries", () => {
     const key = "local\u0000L3Byb2plY3Q/session"
+
     const value = decode({
-      sessionTabs: { old: { all: ["old"] }, [key]: { all: ["a", null, "a", "b"], active: 12 } },
-      sessionView: { old: { scroll: {} }, [key]: { scroll: {}, reviewOpen: ["a", null, "b"] } },
+      sessionTabs: { old: { all: ["old"] }, [key]: { all: ["a", null, "a", "b", "btw"], active: "btw" } },
+      sessionView: { old: { scroll: {} }, [key]: { scroll: {} } },
     })
-    expect(value.sessionTabs).toEqual({ [key]: { all: ["a", "b"], active: undefined } })
-    expect(value.sessionView).toEqual({ [key]: { scroll: {}, reviewOpen: ["a", "b"] } })
+
+    // Transient tabs leave once the side region stops listing them, not during migration.
+    expect(value.sessionTabs).toEqual({ [key]: { all: ["a", "b", "btw"], active: "btw" } })
+    expect(value.sessionView).toEqual({ [key]: { scroll: {} } })
   })
 })
 
-describe("layout session-key helpers", () => {
-  test("couples touch and scroll seed in order", () => {
-    const calls: string[] = []
-    const result = ensureSessionKey(
+test("session keys touch before seeding scroll state and follow a changing accessor on each read", () => {
+  const calls: string[] = []
+  expect(
+    ensureSessionKey(
       "dir/a",
       (key) => calls.push(`touch:${key}`),
       (key) => calls.push(`seed:${key}`),
-    )
+    ),
+  ).toBe("dir/a")
+  expect(calls).toEqual(["touch:dir/a", "seed:dir/a"])
 
-    expect(result).toBe("dir/a")
-    expect(calls).toEqual(["touch:dir/a", "seed:dir/a"])
-  })
-
-  test("reads dynamic accessor keys lazily", () => {
-    const seen: string[] = []
-
-    createRoot((dispose) => {
-      const [key, setKey] = createSignal("dir/one")
-      const read = createSessionKeyReader(key, (value) => seen.push(value))
-
-      expect(read()).toBe("dir/one")
-      setKey("dir/two")
-      expect(read()).toBe("dir/two")
-
-      dispose()
-    })
-
-    expect(seen).toEqual(["dir/one", "dir/two"])
-  })
+  const seen: string[] = []
+  const [key, setKey] = createSignal("dir/one")
+  const read = createSessionKeyReader(key, (value) => seen.push(value))
+  expect(seen).toEqual([])
+  expect(read()).toBe("dir/one")
+  setKey("dir/two")
+  expect(read()).toBe("dir/two")
+  expect(seen).toEqual(["dir/one", "dir/two"])
 })
 
-describe("pruneSessionKeys", () => {
-  test("keeps active key and drops lowest-used keys", () => {
-    const drop = pruneSessionKeys({
-      keep: "k4",
-      max: 3,
-      used: new Map([
-        ["k1", 1],
-        ["k2", 2],
-        ["k3", 3],
-        ["k4", 4],
-      ]),
-      view: ["k1", "k2", "k4"],
-      tabs: ["k1", "k3", "k4"],
-    })
+test("pruneSessionKeys keeps the active key, drops the lowest-used keys, and never prunes without an active key", () => {
+  const used = new Map([
+    ["k1", 1],
+    ["k2", 2],
+    ["k3", 3],
+    ["k4", 4],
+  ])
 
-    expect(drop).toEqual(["k1"])
-    expect(drop.includes("k4")).toBe(false)
-  })
-
-  test("does not prune without keep key", () => {
-    const drop = pruneSessionKeys({
-      keep: undefined,
-      max: 1,
-      used: new Map([
-        ["k1", 1],
-        ["k2", 2],
-      ]),
-      view: ["k1"],
-      tabs: ["k2"],
-    })
-
-    expect(drop).toEqual([])
-  })
+  const input = { max: 3, used, view: ["k1", "k2", "k4"], tabs: ["k1", "k3", "k4"] }
+  expect(pruneSessionKeys({ ...input, keep: "k4" })).toEqual(["k1"])
+  expect(pruneSessionKeys({ ...input, keep: undefined, max: 1 })).toEqual([])
 })

@@ -44,11 +44,13 @@ describe("apply patch files", () => {
     const before = "const a = 1\nconst b = 2\n"
     const middle = "const a = 2\nconst b = 2\n"
     const after = "const a = 2\nconst b = 3\n"
+
     const patch = (oldText: string, newText: string) =>
       createTwoFilesPatch("a/src/a.ts", "b/src/a.ts", oldText, newText).replace(
         /^(?:Index: [^\n]+\n)?=+\n/,
         "diff --git a/src/a.ts b/src/a.ts\n",
       )
+
     const groups = patchFileGroups([
       {
         file: "src/a.ts",
@@ -86,6 +88,7 @@ describe("apply patch files", () => {
     const before = `const count = 1${newline}export { count }`
     const middle = `const count = 2${newline}export { count }`
     const after = `const count = 3${newline}export { count }`
+
     const groups = patchFileGroups(
       [before, middle].map((value, index) => ({
         file: "count.ts",
@@ -116,6 +119,7 @@ describe("apply patch files", () => {
         deletions: 5,
       },
     ])
+
     expect(groups[0]).toMatchObject({ additions: 1, deletions: 1 })
     expect(groups[0]!.views[0]).toMatchObject({ additions: 1, deletions: 1 })
   })
@@ -134,6 +138,7 @@ describe("apply patch files", () => {
         deletions: 1,
       })),
     )
+
     expect(groups.map((group) => group.path)).toEqual(["b.ts", "a.ts"])
     expect(groups[0]).toMatchObject({ additions: 2, deletions: 2 })
     expect(groups[0]!.views.map((view) => text(view, "additions"))).toEqual(["two\n", "four\n"])
@@ -156,6 +161,7 @@ describe("apply patch files", () => {
         deletions: 1,
       })),
     )
+
     expect(groups[0]).toMatchObject({ type, additions, deletions })
     expect(groups[0]!.views).toHaveLength(1)
     expect(text(groups[0]!.views[0]!, "deletions")).toBe(before)

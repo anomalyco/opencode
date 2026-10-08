@@ -1,3 +1,4 @@
+import type { FileSystem } from "@opencode/core/filesystem"
 import { describe, expect, test } from "bun:test"
 import { AIError, TransportError } from "@opencode/ai"
 import { Database } from "@opencode/core/database/database"
@@ -15,7 +16,6 @@ import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { SessionExecution } from "@opencode/core/session/execution"
 import { SessionRestart } from "@opencode/core/session/execution/restart"
-import { UserInterruptedError } from "@opencode/core/session/error"
 import { SessionEvent } from "@opencode/core/session/event"
 import { SessionInbox } from "@opencode/core/session/inbox"
 import { SessionMessage } from "@opencode/core/session/message"
@@ -50,10 +50,6 @@ describe("SessionExecution lifecycle", () => {
     const interrupted = Effect.runSyncExit(Effect.interrupt)
     expect(SessionExecution.terminal(interrupted)).toEqual({ type: "interrupted", reason: "shutdown" })
     expect(SessionExecution.terminal(interrupted, "user")).toEqual({ type: "interrupted", reason: "user" })
-    expect(SessionExecution.terminal(Exit.fail(new UserInterruptedError()))).toEqual({
-      type: "interrupted",
-      reason: "user",
-    })
   })
 
   it.effect("the sweep only lists claimed top-level Sessions", () =>
@@ -278,6 +274,7 @@ describe("SessionExecution lifecycle", () => {
           sessionID,
           text: "The server restarted while you were working. Continue from where you left off without repeating completed work.",
           description: "Continuing after restart",
+          metadata: { notice: "restart" },
         })),
       )
       // Drains completed naturally, so claims are released and counters reset.
@@ -507,7 +504,7 @@ describe("SessionRestart background recovery", () => {
         run: Deferred.await(complete),
       })
       yield* jobs.background("call-completed-shell")
-      yield* Deferred.succeed(complete, "(no output)\n\nCommand exited with code 7.")
+      yield* Deferred.succeed(complete, "Exited with code 7")
       yield* jobs.wait({ id: "call-completed-shell" })
 
       const scope = yield* Scope.make()
@@ -529,7 +526,7 @@ describe("SessionRestart background recovery", () => {
         {
           type: "synthetic",
           payload: {
-            text: '<shell id="call-completed-shell" state="completed" command="exit 7">\n(no output)\n\nCommand exited with code 7.\n</shell>',
+            text: '<shell id="call-completed-shell" state="completed" command="exit 7">\nExited with code 7\n</shell>',
           },
         },
       ])
@@ -1375,7 +1372,7 @@ function buildExecution(
         () =>
           // The local execution test only needs the Session runner from the Location graph.
           // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
-          runner as unknown as Layer.Layer<LocationServices>,
+          runner as unknown as Layer.Layer<LocationServices, FileSystem.DirectoryNotFoundError>,
       ),
     )
     return yield* Layer.buildWithScope(

@@ -1,7 +1,17 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
-import { CacheHint, LLM, AIError, LLMRequest, Message, ToolCallPart, ToolDefinition, Usage } from "../../src/index.js"
+import {
+  CacheHint,
+  LLM,
+  AIError,
+  LLMRequest,
+  Message,
+  ToolCallPart,
+  ToolDefinition,
+  Usage,
+  Media,
+} from "../../src/index.js"
 import { Auth, Endpoint, LLMClient, Route } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import * as AnthropicMessages from "../../src/protocols/anthropic-messages.js"
@@ -138,11 +148,13 @@ describe("Anthropic Messages route", () => {
     Effect.gen(function* () {
       const enabled = yield* compileRequest(
         LLMRequest.update(request, {
+          generation: { maxTokens: 4_096 },
           providerOptions: { thinking: { type: "enabled", budgetTokens: 1_024 } },
         }),
       )
       const legacy = yield* compileRequest(
         LLMRequest.update(request, {
+          generation: { maxTokens: 4_096 },
           providerOptions: { thinking: { type: "enabled", budget_tokens: 2_048 } },
         }),
       )
@@ -155,6 +167,22 @@ describe("Anthropic Messages route", () => {
       expect(enabled.body.thinking).toEqual({ type: "enabled", budget_tokens: 1_024 })
       expect(legacy.body.thinking).toEqual({ type: "enabled", budget_tokens: 2_048 })
       expect(disabled.body.thinking).toEqual({ type: "disabled" })
+    }),
+  )
+
+  it.effect("fits the thinking budget to half the output limit", () =>
+    Effect.gen(function* () {
+      const thinking = (maxTokens: number) =>
+        compileRequest(
+          LLMRequest.update(request, {
+            generation: { maxTokens },
+            providerOptions: { thinking: { type: "enabled", budgetTokens: 31_999 } },
+          }),
+        ).pipe(Effect.map((prepared) => prepared.body.thinking))
+
+      expect(yield* thinking(64_000)).toEqual({ type: "enabled", budget_tokens: 31_999 })
+      expect(yield* thinking(20_000)).toEqual({ type: "enabled", budget_tokens: 10_000 })
+      expect(yield* thinking(1_500)).toEqual({ type: "enabled", budget_tokens: 1_024 })
     }),
   )
 
@@ -286,6 +314,9 @@ describe("Anthropic Messages route", () => {
         "claude-haiku-5-1",
         "claude-fable-6",
         "anthropic/claude-mythos-7.2",
+        "claude-sonnet-5-5",
+        "claude-opus-4-8@20260101",
+        "claude-nova-6",
       ]
 
       const prepared = yield* Effect.forEach(ids, (id) =>
@@ -366,7 +397,7 @@ describe("Anthropic Messages route", () => {
           model: opus48,
           messages: [
             Message.user("Before."),
-            Message.make({ role: "system", content: { type: "media", mediaType: "image/png", data: "AAECAw==" } }),
+            Message.make({ role: "system", content: { type: "media", media: Media.base64("AAECAw==", "image/png") } }),
           ],
         }),
       ).pipe(Effect.flip)
@@ -400,42 +431,115 @@ describe("Anthropic Messages route", () => {
         (yield* compileRequest(
           LLM.request({
             model: opus48,
-            messages: [Message.user("Before."), Message.system("One."), Message.system("Two.")],
+            messages: [
+              Message.user("Start."),
+              Message.assistant("One."),
+              Message.system("Update."),
+              Message.assistant("Two."),
+            ],
             cache: "none",
           }),
         )).body.messages,
       ).toEqual([
-        {
-          role: "user",
-          content: [
-            { type: "text", text: "Before." },
-            { type: "text", text: "<system-update>\nOne.\n</system-update>" },
-            { type: "text", text: "<system-update>\nTwo.\n</system-update>" },
-          ],
-        },
+        { role: "user", content: [{ type: "text", text: "Start." }] },
+        { role: "assistant", content: [{ type: "text", text: "One." }] },
+        { role: "user", content: [{ type: "text", text: "<system-update>\nUpdate.\n</system-update>" }] },
+        { role: "assistant", content: [{ type: "text", text: "Two." }] },
       ])
     }),
   )
 
-  it.effect("keeps a terminal Vertex system update in the tool-result turn", () =>
+  it.effect("moves system updates to the next assistant turn and sends consecutive updates together", () =>
+    Effect.gen(function* () {
+      const lower = (messages: ReadonlyArray<Message>) =>
+        compileRequest(LLM.request({ model: opus48, messages: [...messages], cache: "none" })).pipe(
+          Effect.map((prepared) => prepared.body.messages),
+        )
+      const system = (text: string) => ({ role: "system", content: [{ type: "text", text, cache_control: undefined }] })
+      const user = (text: string) => ({ role: "user", content: [{ type: "text", text }] })
+      const assistant = (text: string) => ({ role: "assistant", content: [{ type: "text", text }] })
+
+      expect(
+        yield* lower([
+          Message.user("Fix it."),
+          Message.assistant("Done."),
+          Message.system("Update."),
+          Message.user("Next."),
+        ]),
+      ).toEqual([user("Fix it."), assistant("Done."), user("Next."), system("Update.")])
+      expect(yield* lower([Message.user("Before."), Message.system("One."), Message.system("Two.")])).toEqual([
+        user("Before."),
+        system("One."),
+        system("Two."),
+      ])
+      expect(
+        yield* lower([
+          Message.user("Fix it."),
+          Message.assistant("Done."),
+          Message.system("One."),
+          Message.user("Next."),
+          Message.system("Two."),
+          Message.assistant("After."),
+        ]),
+      ).toEqual([
+        user("Fix it."),
+        assistant("Done."),
+        user("Next."),
+        system("One."),
+        system("Two."),
+        assistant("After."),
+      ])
+      expect(
+        yield* lower([
+          Message.user("Use the tool."),
+          Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: {} })]),
+          Message.tool({ id: "call_1", name: "lookup", result: "Done." }),
+          Message.system("Update."),
+          Message.user("Also check tests."),
+        ]),
+      ).toEqual([
+        user("Use the tool."),
+        { role: "assistant", content: [{ type: "tool_use", id: "call_1", name: "lookup", input: {} }] },
+        { role: "user", content: [{ type: "tool_result", tool_use_id: "call_1", content: '"Done."' }] },
+        user("Also check tests."),
+        system("Update."),
+      ])
+    }),
+  )
+
+  it.effect("keeps wrapped system updates in place for models without native system updates", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         LLM.request({
-          model: vertexOpus48,
+          model,
           messages: [
-            Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: {} })]),
-            Message.tool({ id: "call_1", name: "lookup", result: "Done." }),
-            Message.system("Operator update."),
+            Message.user("Fix it."),
+            Message.assistant("Done."),
+            Message.system("Update."),
+            Message.user("Next."),
           ],
           cache: "none",
         }),
       )
 
       expect(prepared.body.messages).toEqual([
-        {
-          role: "assistant",
-          content: [{ type: "tool_use", id: "call_1", name: "lookup", input: {} }],
-        },
+        { role: "user", content: [{ type: "text", text: "Fix it." }] },
+        { role: "assistant", content: [{ type: "text", text: "Done." }] },
+        { role: "user", content: [{ type: "text", text: "<system-update>\nUpdate.\n</system-update>" }] },
+        { role: "user", content: [{ type: "text", text: "Next." }] },
+      ])
+    }),
+  )
+
+  it.effect("sends Vertex system updates after local tool results as native system messages", () =>
+    Effect.gen(function* () {
+      const toolTurn = [
+        Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: {} })]),
+        Message.tool({ id: "call_1", name: "lookup", result: "Done." }),
+        Message.system("Operator update."),
+      ]
+      const lowered = [
+        { role: "assistant", content: [{ type: "tool_use", id: "call_1", name: "lookup", input: {} }] },
         {
           role: "user",
           content: [
@@ -446,55 +550,23 @@ describe("Anthropic Messages route", () => {
               is_error: undefined,
               cache_control: undefined,
             },
-            {
-              type: "text",
-              text: "<system-update>\nOperator update.\n</system-update>",
-              cache_control: undefined,
-            },
           ],
         },
-      ])
-    }),
-  )
+        { role: "system", content: [{ type: "text", text: "Operator update.", cache_control: undefined }] },
+      ]
 
-  it.effect("preserves folded tool-result system updates across multi-turn Vertex history", () =>
-    Effect.gen(function* () {
-      const prepared = yield* compileRequest(
+      const terminal = yield* compileRequest(LLM.request({ model: vertexOpus48, messages: toolTurn, cache: "none" }))
+      const history = yield* compileRequest(
         LLM.request({
           model: vertexOpus48,
-          messages: [
-            Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: {} })]),
-            Message.tool({ id: "call_1", name: "lookup", result: "Done." }),
-            Message.system("Operator update."),
-            Message.assistant("Acknowledged."),
-            Message.user("Next step."),
-          ],
+          messages: [...toolTurn, Message.assistant("Acknowledged."), Message.user("Next step.")],
           cache: "none",
         }),
       )
 
-      expect(prepared.body.messages).toEqual([
-        {
-          role: "assistant",
-          content: [{ type: "tool_use", id: "call_1", name: "lookup", input: {} }],
-        },
-        {
-          role: "user",
-          content: [
-            {
-              type: "tool_result",
-              tool_use_id: "call_1",
-              content: '"Done."',
-              is_error: undefined,
-              cache_control: undefined,
-            },
-            {
-              type: "text",
-              text: "<system-update>\nOperator update.\n</system-update>",
-              cache_control: undefined,
-            },
-          ],
-        },
+      expect(terminal.body.messages).toEqual(lowered)
+      expect(history.body.messages).toEqual([
+        ...lowered,
         { role: "assistant", content: [{ type: "text", text: "Acknowledged." }] },
         { role: "user", content: [{ type: "text", text: "Next step." }] },
       ])
@@ -560,9 +632,9 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
-  it.effect("rejects a system update between a local tool call and its result", () =>
+  it.effect("moves a system update between a local tool call and its result after the result", () =>
     Effect.gen(function* () {
-      const error = yield* compileRequest(
+      const prepared = yield* compileRequest(
         LLM.request({
           model: opus48,
           messages: [
@@ -573,9 +645,13 @@ describe("Anthropic Messages route", () => {
           ],
           cache: "none",
         }),
-      ).pipe(Effect.flip)
+      )
 
-      expect(error.message).toContain("system updates cannot split a local tool call from its tool result")
+      expect(prepared.body.messages.slice(1)).toEqual([
+        { role: "assistant", content: [{ type: "tool_use", id: "call_1", name: "lookup", input: {} }] },
+        { role: "user", content: [{ type: "tool_result", tool_use_id: "call_1", content: '"Done."' }] },
+        { role: "system", content: [{ type: "text", text: "Too early.", cache_control: undefined }] },
+      ])
     }),
   )
 
@@ -1641,6 +1717,40 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
+  it.effect("carries a refusal's category and explanation on the content-filter finish", () =>
+    Effect.gen(function* () {
+      const refusal = (stop_details: unknown) =>
+        LLMClient.generate(request).pipe(
+          Effect.provide(
+            fixedResponse(
+              sseEvents(
+                { type: "message_start", message: { usage: { input_tokens: 5 } } },
+                { type: "message_delta", delta: { stop_reason: "refusal", stop_details }, usage: { output_tokens: 0 } },
+                { type: "message_stop" },
+              ),
+            ),
+          ),
+        )
+
+      expect(
+        (yield* refusal({
+          type: "refusal",
+          category: "cyber",
+          explanation: "This request was declined because it could enable cyber harm.",
+        })).finishReason,
+      ).toEqual({
+        normalized: "content-filter",
+        raw: "refusal",
+        category: "cyber",
+        explanation: "This request was declined because it could enable cyber harm.",
+      })
+      expect((yield* refusal({ type: "refusal", category: null, explanation: null })).finishReason).toEqual({
+        normalized: "content-filter",
+        raw: "refusal",
+      })
+    }),
+  )
+
   it.effect("assembles streamed tool call input", () =>
     Effect.gen(function* () {
       const body = sseEvents(
@@ -2114,8 +2224,8 @@ describe("Anthropic Messages route", () => {
           messages: [
             Message.user([
               { type: "text", text: "What is in this image?" },
-              { type: "media", mediaType: "image/png", data: "AAECAw==" },
-              { type: "media", mediaType: "application/pdf", data: "JVBERi0xLjQ=", filename: "report.pdf" },
+              { type: "media", media: Media.base64("AAECAw==", "image/png") },
+              { type: "media", media: Media.base64("JVBERi0xLjQ=", "application/pdf"), filename: "report.pdf" },
             ]),
           ],
         }),

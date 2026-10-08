@@ -21,6 +21,10 @@ test("browser input bounds and optional fields survive the wire", () => {
   expect(() => decode({ type: "console", tabID, level: "verbose" })).toThrow()
   expect(() => decode({ type: "wait", tabID, condition: "load", timeoutMs: -1 })).toThrow()
   expect(() => decode({ type: "click", tabID: "another-tab", ref: "e1" })).toThrow()
+  expect(decode({ type: "evaluate", tabID, ref: "@e5", script: "(element) => element.id" })).toMatchObject({
+    ref: "@e5",
+  })
+  expect(() => decode({ type: "evaluate", tabID, ref: "button", script: "(element) => element.id" })).toThrow()
   expect(() => decode({ type: "network.list", tabID, resourceType: "imaginary" })).toThrow()
 })
 

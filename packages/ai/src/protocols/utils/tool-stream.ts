@@ -60,14 +60,21 @@ const inputStart = (tool: PendingTool) =>
     providerMetadata: tool.providerMetadata,
   })
 
-const inputDelta = (tool: PendingTool, text: string) =>
-  LLMEvent.toolInputDelta({
-    id: tool.id,
-    name: tool.name,
-    namespace: tool.namespace,
-    text,
-    input: Option.getOrElse(parsePartialInput(tool.input), () => ({})),
-  })
+const inputDelta = (tool: PendingTool, text: string): LLMEvent => {
+  const raw = tool.input
+  let parsed: unknown
+  return {
+    ...LLMEvent.toolInputDelta({
+      id: tool.id,
+      name: tool.name,
+      namespace: tool.namespace,
+      text,
+    }),
+    get input() {
+      return (parsed ??= Option.getOrElse(parsePartialInput(raw), () => ({})))
+    },
+  }
+}
 
 const toolCall = (route: string, tool: PendingTool, inputOverride?: string) => {
   const raw = inputOverride ?? tool.input
@@ -147,7 +154,12 @@ export const appendOrStart = <K extends StreamKey>(
   route: string,
   tools: State<K>,
   key: K,
-  delta: { readonly id?: string; readonly name?: string; readonly text: string },
+  delta: {
+    readonly id?: string
+    readonly name?: string
+    readonly text: string
+    readonly providerMetadata?: ProviderMetadata
+  },
   missingToolMessage: string,
 ): AppendOutcome<K> | AIError => {
   const current = tools[key]
@@ -161,7 +173,7 @@ export const appendOrStart = <K extends StreamKey>(
     namespace: current?.namespace,
     input: `${current?.input ?? ""}${delta.text}`,
     providerExecuted: current?.providerExecuted,
-    providerMetadata: current?.providerMetadata,
+    providerMetadata: current?.providerMetadata ?? delta.providerMetadata,
   }
   if (current && delta.text.length === 0 && current.id === id && current.name === name)
     return { tools, tool: current, events: [] }

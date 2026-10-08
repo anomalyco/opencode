@@ -9,8 +9,8 @@ import { CommandMap, Definitions } from "../src/config/v1/keybind"
 
 const decodeInfo = Schema.decodeUnknownSync(Info)
 
-test("validates the three explicit diff source defaults", () => {
-  for (const source of ["branch", "committed", "working"] as const) {
+test("validates the explicit diff source defaults", () => {
+  for (const source of ["branch", "committed", "working", "turn"] as const) {
     expect(decodeInfo({ diffs: { source } })).toEqual({ diffs: { source } })
   }
   expect(decodeInfo({ diffs: {} })).toEqual({ diffs: {} })
@@ -112,6 +112,14 @@ test("shows the TPS default in session settings", () => {
   const setting = settings.find((setting) => setting.path.join(".") === "session.tps")
   expect(setting?.category).toBe("Session")
   expect(setting?.default).toBe(true)
+})
+
+test("shows transcript verbosity in session settings", () => {
+  expect(settings.find((setting) => setting.path.join(".") === "session.verbosity")).toMatchObject({
+    category: "Session",
+    default: "medium",
+    values: ["low", "medium", "high"],
+  })
 })
 
 test("names tool grouping explicitly in settings", () => {

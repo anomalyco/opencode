@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { createDesktopFiles } from "./files"
 
-function fileApi(events: string[]) {
+function fileApi(events: string[]): Parameters<typeof createDesktopFiles>[0] {
   return {
     openDirectoryPicker: async () => null,
     openFilePicker: async () => ({
@@ -13,6 +13,7 @@ function fileApi(events: string[]) {
     }),
     readPickedFile: async (_token: string, path: string) => {
       events.push(`read:${path}`)
+
       return new TextEncoder().encode(path).buffer
     },
     releasePickedFiles: async (token: string) => {
@@ -21,6 +22,7 @@ function fileApi(events: string[]) {
     getPathForFile: () => "fallback",
     saveFile: async () => false,
     openExternal: () => {},
+    openBrowser: async () => true,
     openLocalFile: () => {},
     resolveAppPath: async () => null,
     openPath: async () => undefined,
@@ -33,6 +35,15 @@ function fileApi(events: string[]) {
 }
 
 describe("desktop attachment files", () => {
+  test("returns the native browser launch result and forwards clipboard text", async () => {
+    const events: string[] = []
+    const files = createDesktopFiles({ ...fileApi(events), openBrowser: async () => false }, "macos")
+
+    expect(await files.openBrowser("https://opencode.ai/console")).toBe(false)
+    await files.writeClipboardText("ses_123")
+    expect(events).toEqual(["clipboard:ses_123"])
+  })
+
   test("reads selected files sequentially and releases the token", async () => {
     const events: string[] = []
     const files = createDesktopFiles(fileApi(events), "windows")
@@ -60,14 +71,5 @@ describe("desktop attachment files", () => {
       }),
     ).rejects.toThrow("attachment rejected")
     expect(events.at(-1)).toBe("release:selection")
-  })
-
-  test("writes clipboard text through the native desktop API", async () => {
-    const events: string[] = []
-    const files = createDesktopFiles(fileApi(events), "windows")
-
-    await files.writeClipboardText("ses_123")
-
-    expect(events).toEqual(["clipboard:ses_123"])
   })
 })

@@ -19,6 +19,7 @@ export function SessionQueuePanel(props: { queue: SessionQueueView }) {
   const language = useLanguage()
   const count = () => props.queue.rows().length
   let listRef!: HTMLDivElement
+
   return (
     <Show when={count() > 0}>
       <div
@@ -47,7 +48,9 @@ export function SessionQueuePanel(props: { queue: SessionQueueView }) {
           ]}
           onDragEnd={(event) => {
             const source = event.operation.source
+
             if (event.canceled || !isSortable(source)) return
+
             if (source.initialIndex === source.index) return
             void props.queue.reorder(
               arrayMove(
@@ -90,6 +93,7 @@ function SessionQueueRow(props: { queue: SessionQueueView; id: string; index: nu
   // shows its actions without hover and its label reads Send: that is how a
   // parked queue resumes.
   const active = () => !props.queue.working() && props.index === 0
+
   const sortable = useSortable({
     get id() {
       return props.id
@@ -101,6 +105,7 @@ function SessionQueueRow(props: { queue: SessionQueueView; id: string; index: nu
       return props.queue.busy()
     },
   })
+
   return (
     <Show when={row()} keyed>
       {(entry) => (
@@ -174,6 +179,18 @@ function SessionQueueRow(props: { queue: SessionQueueView; id: string; index: nu
                 >
                   {props.queue.working() ? language.t("session.queue.steer") : language.t("session.queue.send")}
                 </Button>
+              </Tooltip>
+              <Tooltip placement="top" value={language.t("session.queue.undo")}>
+                <IconButton
+                  data-action="session-queue-undo"
+                  type="button"
+                  size="small"
+                  variant="ghost-muted"
+                  icon={<Icon name="outline-undo" />}
+                  disabled={props.queue.busy()}
+                  aria-label={language.t("session.queue.undo")}
+                  onClick={() => props.queue.undo(props.id)}
+                />
               </Tooltip>
             </Show>
             <Tooltip placement="top" value={language.t("session.queue.remove")}>

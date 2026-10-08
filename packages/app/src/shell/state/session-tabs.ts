@@ -1,9 +1,3 @@
-export const SESSION_OPEN_FILE_TAB = "open-file"
-export const SESSION_BROWSER_TAB = "browser"
-export const sessionBrowserTab = (tabID: string) => `${SESSION_BROWSER_TAB}:${tabID}`
-export const isSessionBrowserTab = (tab: string | undefined) =>
-  !!tab && (tab === SESSION_BROWSER_TAB || tab.startsWith(`${SESSION_BROWSER_TAB}:`))
-
 export type SessionTabs = {
   active?: string
   all: string[]
@@ -14,11 +8,16 @@ export type SessionTabState = {
   preview?: string
 }
 
-const sessionTabPreview = (current: SessionTabState) =>
-  current.preview ?? (current.tabs.all.includes(SESSION_OPEN_FILE_TAB) ? SESSION_OPEN_FILE_TAB : undefined)
+/** A launcher tab (e.g. the file browser) stays replaceable by the next preview even after reload. */
+const sessionTabPreview = (current: SessionTabState, launchers: ReadonlySet<string>) =>
+  current.preview ?? current.tabs.all.find((tab) => launchers.has(tab))
 
-export function previewSessionTab(current: SessionTabState, tab: string): SessionTabState {
-  const preview = sessionTabPreview(current)
+export function previewSessionTab(
+  current: SessionTabState,
+  tab: string,
+  launchers: ReadonlySet<string> = new Set(),
+): SessionTabState {
+  const preview = sessionTabPreview(current, launchers)
   const previewIndex = preview ? current.tabs.all.indexOf(preview) : -1
   const existingIndex = current.tabs.all.indexOf(tab)
 
@@ -26,6 +25,7 @@ export function previewSessionTab(current: SessionTabState, tab: string): Sessio
     if (previewIndex === -1 || preview === tab) {
       return { tabs: { all: current.tabs.all, active: tab }, preview: preview === tab ? tab : undefined }
     }
+
     return {
       tabs: { all: current.tabs.all.filter((item) => item !== preview), active: tab },
     }
@@ -44,16 +44,16 @@ export function previewSessionTab(current: SessionTabState, tab: string): Sessio
   }
 }
 
-export function openSessionTab(current: SessionTabState, tab: string): SessionTabState {
-  const preview = sessionTabPreview(current)
-  if (tab === "review") {
-    return {
-      tabs: { all: current.tabs.all.filter((item) => item !== tab), active: tab },
-      preview,
-    }
-  }
+/** A `first` tab is stored first and keeps the preview tab, so closing it selects the first remaining tab. */
+export function openSessionTab(
+  current: SessionTabState,
+  tab: string,
+  launchers: ReadonlySet<string> = new Set(),
+  first = false,
+): SessionTabState {
+  const preview = sessionTabPreview(current, launchers)
 
-  if (tab === "context") {
+  if (first) {
     return {
       tabs: { all: [tab, ...current.tabs.all.filter((item) => item !== tab)], active: tab },
       preview,
@@ -62,10 +62,12 @@ export function openSessionTab(current: SessionTabState, tab: string): SessionTa
 
   const previewIndex = preview ? current.tabs.all.indexOf(preview) : -1
   const existingIndex = current.tabs.all.indexOf(tab)
+
   if (existingIndex !== -1) {
     if (previewIndex === -1 || preview === tab) {
       return { tabs: { all: current.tabs.all, active: tab } }
     }
+
     return {
       tabs: { all: current.tabs.all.filter((item) => item !== preview), active: tab },
     }
@@ -84,19 +86,13 @@ export function openSessionTab(current: SessionTabState, tab: string): SessionTa
 }
 
 export function closeSessionTab(current: SessionTabState, tab: string): SessionTabState {
-  if (tab === "review") {
-    if (current.tabs.active !== tab) return current
-    return {
-      tabs: { all: current.tabs.all, active: current.tabs.all[0] },
-      preview: current.preview,
-    }
-  }
-
   const all = current.tabs.all.filter((item) => item !== tab)
   const preview = current.preview === tab ? undefined : current.preview
+
   if (current.tabs.active !== tab) return { tabs: { ...current.tabs, all }, preview }
 
   const index = current.tabs.all.indexOf(tab)
+
   return {
     tabs: {
       all,

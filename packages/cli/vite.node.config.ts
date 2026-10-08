@@ -23,7 +23,10 @@ function rawTextPlugin(): Plugin {
   }
 }
 
-function appAssetsPlugin(archive: string): Plugin {
+/** The web UI archive's SEA asset key. The prelude leaves it in place, and the server reads it from SEA memory. */
+export const appArchiveAsset = "app-archive.bin"
+
+function appAssetsPlugin(): Plugin {
   return {
     name: "opencode:app-assets",
     resolveId(id) {
@@ -31,7 +34,13 @@ function appAssetsPlugin(archive: string): Plugin {
     },
     load(id) {
       if (id !== "\0virtual:opencode-app-assets") return
-      return `export default ${archive}`
+      return `import { readFileSync } from "node:fs"
+import path from "node:path"
+import { getRawAsset, isSea } from "node:sea"
+export default () =>
+  isSea()
+    ? new Uint8Array(getRawAsset(${JSON.stringify(appArchiveAsset)}))
+    : readFileSync(path.join(process.env.OPENCODE_NODE_ASSETS_DIR, ${JSON.stringify(appArchiveAsset)}))`
     },
   }
 }
@@ -205,6 +214,7 @@ const __ocPersistentPty = ${JSON.stringify(opencodePtyAsset)}
 if (__ocIsSea()) {
   const __ocPtySpawnHelper = ${JSON.stringify(nodePtySpawnHelper)}
   for (const __ocKey of __ocAssetKeys()) {
+    if (__ocKey === ${JSON.stringify(appArchiveAsset)}) continue
     const __ocTarget = __ocPath.join(__ocAssetRoot, __ocKey)
     if (__ocExists(__ocTarget)) continue
     __ocMkdir(__ocPath.dirname(__ocTarget), { recursive: true })
@@ -243,14 +253,13 @@ export type NodeBuildInput = {
   readonly channel: string
   readonly assetHash: string
   readonly target: NodeTarget
-  readonly appArchive: string
 }
 
 export function mainConfig(input: NodeBuildInput): UserConfig {
   return defineConfig({
     root: dir,
     plugins: [
-      appAssetsPlugin(input.appArchive),
+      appAssetsPlugin(),
       rawTextPlugin(),
       runtimeRequirePlugin(),
       fffNodePlugin(),
@@ -292,5 +301,4 @@ export default mainConfig({
   channel: process.env.OPENCODE_CHANNEL ?? "local",
   assetHash: "local",
   target: nodeTarget(process.platform, process.arch),
-  appArchive: "{}",
 })

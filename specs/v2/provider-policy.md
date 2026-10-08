@@ -6,14 +6,18 @@ Status: **Implemented.**
 
 Policies control whether an operation on a named resource is allowed. Statements are authored in configuration files or delivered by the connected OpenCode Console, and applied by a terminal plugin.
 
-Two consumers exist:
+The supported actions are:
 
 ```text
 action:   provider.use
 resource: provider ID, such as openai or company-ai
 
-action:   permission
+action:   tool.use
 resource: <permission action>:<resource>, such as shell:sudo * or edit:*.env
+
+action:   integration.use
+resource: mcp:<server ID>, plugin:<unversioned package or absolute local path>,
+          hosted:<integration ID>, or skill:<skill ID>
 ```
 
 Provider configuration and provider policy remain separate:
@@ -37,7 +41,7 @@ A provider can be correctly configured and have valid credentials while policy s
 - Policies do not configure endpoints, credentials, models, or provider options.
 - Policies do not make unusable resources usable.
 - Policies do not currently provide conditions, principals, approval prompts, or enforced configuration values.
-- A `permission` statement never grants access; permissions and saved approvals still decide `allow` versus `ask`.
+- A `tool.use` statement never grants access; permissions and saved approvals still decide `allow` versus `ask`.
 
 ## Statement Shape
 
@@ -58,12 +62,12 @@ A provider can be correctly configured and have valid credentials while policy s
 ```ts
 interface PolicyInfo {
   effect: "allow" | "deny"
-  action: "provider.use" | "permission"
+  action: "provider.use" | "tool.use" | "integration.use"
   resource: string
 }
 ```
 
-`ConfigPolicy` owns the statement schema; `action` is a closed set and a statement with any other value is dropped during normalization with a diagnostic. The policy plugin interprets `provider.use` after all other catalog transforms have run and `permission` after every other permission evaluation hook.
+`ConfigPolicy` owns the statement schema; `action` is a closed set and a statement with any other value is dropped during normalization with a diagnostic. The policy plugin interprets `provider.use` after all other catalog transforms have run and `tool.use` after every other permission evaluation hook.
 
 ## Matching
 
@@ -75,8 +79,8 @@ Examples:
 | -------------- | ------------------ | --------------------------------------------------------------- |
 | `provider.use` | `openai`           | Only use of provider ID `openai`                                |
 | `provider.use` | `company-*`        | Use of provider IDs such as `company-us` and `company-eu`       |
-| `permission`   | `shell:git push *` | The `shell` permission for `git push` with or without arguments |
-| `permission`   | `*`                | Every permission check on every resource                        |
+| `tool.use`     | `shell:git push *` | The `shell` permission for `git push` with or without arguments |
+| `tool.use`     | `*`                | Every permission check on every resource                        |
 
 No pattern-specific precedence exists. A specific resource does not automatically beat a wildcard resource. Written/evaluation order controls the result.
 
@@ -214,7 +218,7 @@ The OpenCode Console compiles a workspace's Providers and Tools policies into st
     "policies": [
       { "action": "provider.use", "resource": "*", "effect": "deny" },
       { "action": "provider.use", "resource": "opencode", "effect": "allow" },
-      { "action": "permission", "resource": "shell:sudo *", "effect": "deny" },
+      { "action": "tool.use", "resource": "shell:sudo *", "effect": "deny" },
     ],
   },
 }
@@ -222,6 +226,7 @@ The OpenCode Console compiles a workspace's Providers and Tools policies into st
 
 - `experimental` is omitted when the caller has no statements; omission and an empty array are equivalent.
 - The list is per caller and its order is significant. The client stores it exactly as received; it never reorders, dedupes, or normalizes statements.
+- Every request the Console plugin makes, this fetch and the token refresh included, carries the `User-Agent` `opencode/<channel>/<version>/<app>`. The Console reads it to tell which OpenCode a member runs and whether it evaluates the statements it is being sent; older builds that drop them are otherwise indistinguishable from ones that enforce.
 - `ManagedPolicy` (`packages/core/src/managed-policy.ts`) is the process-global home for the current statements and the organization name. The Console plugin (`opencode.provider.opencode`) writes it whenever its config snapshot is applied; the policy plugin reads it synchronously when evaluating.
 - Statements ride on the Console plugin's snapshot, so they follow the connection: a credential switch replaces them, and a disconnect or a 404 from the Console clears them. Statements from different connections never merge.
 - Freshness is the snapshot's freshness: the next poll (about one minute) or the next credential switch.
@@ -232,7 +237,7 @@ A config fetch or credential refresh that fails for the connection already in pl
 
 ### Messages
 
-When the deciding `permission` statement is organization-managed, the denial reads `Blocked by <organization>'s policy`, or `Blocked by your organization's policy` when the connection has no organization name. Authored statements produce `Blocked by configuration policy`.
+When the deciding `tool.use` statement is organization-managed, the denial reads `Blocked by <organization>'s policy`, or `Blocked by your organization's policy` when the connection has no organization name. Authored statements produce `Blocked by configuration policy`.
 
 ### Protection
 
@@ -242,18 +247,41 @@ Plugin `remove` operations in config ignore `opencode.config.policy` and `openco
 
 Provider policy is not a full sandbox for executable plugins. A denied provider must not be usable through the normal provider/model path, but arbitrary plugin code requires separate governance if that becomes a compliance requirement.
 
-## Permission Policy
+## Tool Policy
 
-`permission` statements run in the `permission.evaluate` hook after agent and session rules, saved approvals, and every other plugin's hook. For each resource the tool checks, the string `<action>:<resource>` is matched against the statement resource; if the last matching statement for any resource is `deny`, the evaluation becomes `deny` with the message above.
+`tool.use` is the only tool-policy action. An allow statement never overrides an agent/session denial or grants a saved approval.
+
+Console-managed config ignores unknown fields and skips statements whose action is unsupported, preserving the order of every supported statement. A future action cannot invalidate the providers or supported policies in the response. Supported actions still require a valid resource and effect; malformed supported statements remain configuration errors. Skipped actions are not enforced by that client. Authored config drops unsupported statements with a diagnostic.
+
+`tool.use` statements run in the `permission.evaluate` hook after agent and session rules, saved approvals, and every other plugin's hook. For each resource the tool checks, the string `<action>:<resource>` is matched against the statement resource; if the last matching statement for any resource is `deny`, the evaluation becomes `deny` with the message above.
 
 ```text
-permission / shell:sudo ls        -> deny   (statement shell:sudo *)
-permission / shell:git status     -> unchanged: the agent's rules decide allow or ask
+tool.use / shell:sudo ls        -> deny   (statement shell:sudo *)
+tool.use / shell:git status     -> unchanged: the agent's rules decide allow or ask
 ```
 
 - A configured `deny` from agent or session rules already denies before the hook runs.
 - A statement `deny` overrides `allow` and `ask`, including saved "Allow always" approvals.
 - A statement `allow` never grants; it only cancels an earlier, broader statement `deny`.
+
+## Skill Integration Policy
+
+Skills use their OpenCode IDs, including a namespace when present. Denied skills are absent from the client catalog and model guidance, and cannot be loaded by the skill tool, a prompt mention, or standalone activation.
+
+```jsonc
+{
+  "experimental": {
+    "policies": [
+      { "action": "integration.use", "resource": "skill:*", "effect": "deny" },
+      { "action": "integration.use", "resource": "skill:team:review", "effect": "allow" },
+    ],
+  },
+}
+```
+
+The protected terminal config policy plugin filters `skill:<id>` through `ctx.skill.transform`, following the provider and MCP catalog pattern. The skill domain does not interpret policy statements. Config and managed policy changes reload the catalog and publish an update after the transformed values are visible. Removing a restriction restores the registered skill without reinstallation. A global integrations allow list also excludes skills unless it explicitly allows their IDs. Skill policy does not remove content already stored in session history or sandbox plugin filesystem access.
+
+Plugin hooks are governed by the existing plugin integration resource: blocking an external plugin prevents its import or unloads its active generation, including its hooks. There is no separate hook resource; required built-in policy and Console authentication plugins remain protected.
 
 ## Interaction With Provider Configuration
 
@@ -295,7 +323,7 @@ Flow:
 3. Run the terminal config policy transform over the reversed authored statements followed by the organization-managed statements.
 4. Remove providers denied by the final matching `provider.use` statement.
 
-Config reload refreshes the plugin's policy snapshot and rebuilds the catalog. A changed Console snapshot rebuilds the catalog through the Console plugin's own reload, which re-runs the terminal transform.
+Config reload refreshes the plugin's policy snapshot and rebuilds the catalog. A changed Console snapshot notifies the policy plugin to rebuild its catalogs and re-run the terminal transforms.
 
 ## Legacy Migration
 
@@ -341,3 +369,11 @@ Equivalent v2 policy:
   },
 }
 ```
+
+## MCP Integration Policy
+
+The protected terminal config policy plugin applies `integration.use` statements to `mcp:<server-name>` using `ctx.mcp.transform`. It removes denied servers after configured and plugin-provided catalog entries are assembled. The MCP domain owns connections and resource cleanup; it does not interpret policy statements.
+
+Plugin activation batches catalog registrations, so denied servers never open an initial connection. Config and managed policy updates reload the catalog. Removing an existing server closes its connection and removes its tools, instructions, prompts, resources, and resource templates. Explicit connect and direct tool, prompt, and resource calls reject removed servers through the ordinary not-found path. Allowing the server again restores its catalog entry and reconnects it.
+
+Policies are evaluated after authored statements and then organization statements, with the final matching statement deciding access. API-added server overrides are inputs to the same catalog, so they also pass through the policy transform. Catalog removal does not sandbox arbitrary executable plugins; plugin import governance remains a separate `plugin:*` integration policy check.

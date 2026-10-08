@@ -1,0 +1,87 @@
+---
+title: "Basics"
+description: "Create, switch, rename, and delete OpenCode Console workspaces, and understand member roles."
+---
+
+A workspace holds everything in the [Console](https://opencode.ai/console): members, credits, budgets, providers,
+policies, and service accounts. Usage and billing are tracked per workspace.
+
+A workspace can have a single member. You can use credits, [your own providers](/console/providers), budgets, and [Go](/console/go) on your own,
+and [invite members](/console/members) only when you need to.
+
+## Your first workspace
+
+Console creates a workspace named **Personal** when you sign up, with you as its owner and only member. If you sign
+up from an invitation, you join the inviting workspace instead and no Personal workspace is created.
+
+## Create a workspace
+
+1. Open the workspace menu in the top bar.
+2. Click **Create Workspace**.
+3. Enter a **Workspace name** and click **Create**.
+
+You become the owner of the new workspace.
+
+## Switch workspaces
+
+Pick another workspace from the workspace menu. Console keeps you on the same page, so switching from
+`/acme/members` opens the other workspace's Members page.
+
+Pending invitations appear at the top of the same menu. See [Members](/console/members#accept-an-invitation).
+
+## Connect OpenCode
+
+Run `/connect` in OpenCode and choose the workspace in the browser. OpenCode then uses that workspace's models,
+policies, and budgets.
+
+```text
+/connect
+```
+
+Run `/connect` again to switch OpenCode to another workspace. Workspace [policies](/policies#console) are replaced
+with the new workspace's, and cleared when you disconnect.
+
+## Roles
+
+Every member has one role. New members always join as **Member**.
+
+| Role   | Can do                                                                                                               |
+| ------ | -------------------------------------------------------------------------------------------------------------------- |
+| Member | Use OpenCode, see their own usage, logs, and budget.                                                                 |
+| Admin  | Everything a member can, plus manage members, billing, budgets, providers, policies, service accounts, and settings. |
+| Owner  | Everything an admin can, plus grant the Owner role and delete the workspace.                                         |
+
+Members only see **Overview**, **Logs**, **Leaderboard** when it is visible to members, and **Settings › Account**.
+
+### Role rules
+
+- A workspace can have several owners, and always keeps at least one.
+- You cannot assign a role higher than your own, so only owners can make someone an owner.
+- You cannot change your own role.
+
+### Transfer ownership
+
+1. As an owner, open **Members** and set the new owner's role to **Owner**.
+2. Ask the new owner to change your role to **Admin** or **Member**.
+
+## Delete a workspace
+
+Only owners can delete a workspace, and only when they belong to at least one other workspace.
+
+1. Open **Settings › General** and click **Delete workspace**.
+2. Tick every acknowledgment.
+3. Click **Delete workspace** to confirm.
+
+Deletion is immediate and cannot be undone:
+
+- Members lose access right away.
+- All service account API keys and pending invitations are revoked.
+- Auto-recharge stops.
+- An active Go subscription ends.
+- Any remaining credit balance is forfeited.
+
+<Callout type="warning">Deletion is blocked while a payment is processing. Try again in a few minutes.</Callout>
+
+## Leave a workspace
+
+Members cannot remove themselves. Ask an owner or admin to [remove you](/console/members#remove-a-member).

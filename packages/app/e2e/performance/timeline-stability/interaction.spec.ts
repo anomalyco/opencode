@@ -16,7 +16,7 @@ import {
   toolPart,
   userMessage,
   waitForVisualSettle,
-} from "./fixture"
+} from "../../utils/timeline"
 
 test("expands and collapses a long completed shell without overlap", async ({ page }, testInfo) => {
   const shellID = "prt_interaction_01_shell"
@@ -35,6 +35,7 @@ test("expands and collapses a long completed shell without overlap", async ({ pa
     `[data-timeline-part-id="${renderedPartID(shellID)}"]`,
     `[data-timeline-part-id="${renderedPartID(followingID)}"]`,
   ])
+
   const regions = defineVisualRegions({
     shell: {
       selector: `[data-timeline-part-id="${renderedPartID(shellID)}"]`,
@@ -45,6 +46,7 @@ test("expands and collapses a long completed shell without overlap", async ({ pa
       closest: '[data-timeline-row="AssistantPart"]',
     },
   })
+
   const plan = visualPlan(regions, [
     { type: "required", regions: ["shell", "following"] },
     { type: "unique", regions: ["shell", "following"] },
@@ -56,6 +58,7 @@ test("expands and collapses a long completed shell without overlap", async ({ pa
     { type: "preserve-bottom-anchor" },
     { type: "flow", regions: ["shell", "following"] },
   ])
+
   await startVisualProbe(page, regions)
   await trigger.click()
   await expect(trigger).toHaveAttribute("aria-expanded", "true")
@@ -78,6 +81,7 @@ test("expands and collapses a completed context group without overlap", async ({
     "prt_interaction_03_grep",
     "prt_interaction_04_list",
   ]
+
   const group = `[data-timeline-part-ids="${ids.join(",")}"]`
   const followingID = "prt_interaction_context_following"
   await setupTimeline(page, {
@@ -96,6 +100,7 @@ test("expands and collapses a completed context group without overlap", async ({
   })
   const trigger = page.locator(`${group} [data-slot="collapsible-trigger"]`)
   await waitForVisualSettle(page, [group, `[data-timeline-part-id="${renderedPartID(followingID)}"]`])
+
   for (const [name, expanded] of [
     ["context-expand", true],
     ["context-collapse", false],
@@ -108,6 +113,7 @@ test("expands and collapses a completed context group without overlap", async ({
         closest: '[data-timeline-row="AssistantPart"]',
       },
     })
+
     await startVisualProbe(page, regions)
     await trigger.click()
     await expect(trigger).toHaveAttribute("aria-expanded", String(expanded))
@@ -170,13 +176,16 @@ test("expands and collapses an edit diff without moving twice", async ({ page },
     cpuRate: 4,
     seedHistory: true,
   })
+
   const trigger = page
     .locator(`[data-timeline-part-id="${renderedPartID(editID)}"] [data-slot="collapsible-trigger"]`)
     .first()
+
   await waitForVisualSettle(page, [
     `[data-timeline-part-id="${renderedPartID(editID)}"]`,
     `[data-timeline-part-id="${renderedPartID(followingID)}"]`,
   ])
+
   const regions = defineVisualRegions({
     edit: {
       selector: `[data-timeline-part-id="${renderedPartID(editID)}"]`,
@@ -187,6 +196,7 @@ test("expands and collapses an edit diff without moving twice", async ({ page },
       closest: '[data-timeline-row="AssistantPart"]',
     },
   })
+
   await startVisualProbe(page, regions)
   await trigger.click()
   await expect(trigger).toHaveAttribute("aria-expanded", "true")

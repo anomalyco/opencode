@@ -18,6 +18,7 @@ export const Diagrams = {
 
 function MermaidTimeline(props: { streaming: boolean }) {
   const [completed, setCompleted] = createSignal(!props.streaming)
+
   const document = createMemo(
     (): SessionDocument => ({
       sessionID: CURRENT_SESSION_ID,
@@ -54,6 +55,7 @@ function MermaidTimeline(props: { streaming: boolean }) {
       ],
     }),
   )
+
   return (
     <section class="mx-auto flex w-full max-w-[840px] flex-col gap-4 p-6">
       <button type="button" onClick={() => setCompleted((value) => !value)}>

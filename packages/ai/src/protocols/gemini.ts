@@ -10,7 +10,6 @@ import {
   LLMEvent,
   Usage,
   type FinishReason,
-  type JsonSchema,
   type LLMRequest,
   type MediaPart,
   type ProviderMetadata,
@@ -20,14 +19,16 @@ import {
   type ToolDefinition,
 } from "../schema/index.js"
 import { classifyProviderFailure } from "../provider-error.js"
+import { Media } from "../media.js"
 import { JsonObject, knownString, lenient, optionalArray, optionalNull, ProviderShared } from "./shared.js"
-import { GeminiToolSchema } from "./utils/gemini-tool-schema.js"
+import { GeminiGenerateContent } from "./utils/gemini-generate-content.js"
 import { Lifecycle } from "./utils/lifecycle.js"
-import { ToolSchemaProjection } from "./utils/tool-schema.js"
 
 const ADAPTER = "gemini"
 // Google documents this sentinel for replaying Gemini 3 function calls after their original signature was lost.
 const SKIP_THOUGHT_SIGNATURE_VALIDATOR = "skip_thought_signature_validator"
+// Gemini 2.5 rejects a budget under the model's minimum: 512 on Flash-Lite, the highest, and 128 on Pro.
+const MIN_THINKING_BUDGET = 512
 export const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 
 // Gemini 3 rejects replayed function calls without a thought signature. Google's SDKs avoid that in normal chats by
@@ -74,8 +75,17 @@ const GeminiInlineDataPart = Schema.Struct({
     mimeType: Schema.String,
     data: Schema.String,
   }),
+  thoughtSignature: optionalNull(Schema.String),
 })
 type GeminiInlineDataPart = Schema.Schema.Type<typeof GeminiInlineDataPart>
+
+/** Gemini Files API reference; the only remote input Gemini accepts. */
+const GeminiFileDataPart = Schema.Struct({
+  fileData: Schema.Struct({
+    mimeType: Schema.String,
+    fileUri: Schema.String,
+  }),
+})
 
 const GeminiFunctionCallPart = Schema.Struct({
   functionCall: Schema.Struct({
@@ -98,6 +108,7 @@ const GeminiFunctionResponsePart = Schema.Struct({
 const GeminiContentPart = Schema.Union([
   GeminiTextPart,
   GeminiInlineDataPart,
+  GeminiFileDataPart,
   GeminiFunctionCallPart,
   GeminiFunctionResponsePart,
 ])
@@ -121,7 +132,7 @@ const GeminiSystemInstruction = Schema.Struct({
 const GeminiFunctionDeclaration = Schema.Struct({
   name: Schema.String,
   description: Schema.String,
-  parameters: Schema.optional(JsonObject),
+  parametersJsonSchema: JsonObject,
 })
 
 const GeminiTool = Schema.Struct({
@@ -255,35 +266,13 @@ interface ParserState {
 }
 
 // =============================================================================
-// Tool Schema Conversion
-// =============================================================================
-// Tool-schema conversion has two distinct concerns:
-//
-// 1. Sanitize — fix common authoring mistakes Gemini rejects: integer/number
-//    enums (must be strings), `required` entries that don't match a property,
-//    untyped arrays (`items` must be present), and `properties`/`required`
-//    keys on non-object scalars. Mirrors OpenCode's historical Gemini rules.
-//
-// 2. Project — lossy mapping from JSON Schema to Gemini's schema dialect:
-//    drop empty root parameter schemas while preserving nested empty objects,
-//    expand type arrays into `anyOf`, derive `nullable: true` from null members,
-//    coerce `const` to `[const]` enum, recurse properties/items, and propagate
-//    only an allowlisted set of keys (description, required, format, type,
-//    nullable, enum, properties, items, allOf, anyOf, oneOf, minLength).
-//    Anything outside the allowlist (e.g. `additionalProperties`, `$ref`) is
-//    silently dropped.
-//
-// Sanitize runs first, then project. The implementation lives in
-// `utils/gemini-tool-schema` so this protocol keeps the same shape as the other
-// provider protocols.
-
-// =============================================================================
 // Request Lowering
 // =============================================================================
-const lowerTool = (tool: ToolDefinition, inputSchema: JsonSchema) => ({
+// Tool schemas go in `parametersJsonSchema`, which accepts standard JSON Schema.
+const lowerTool = (tool: ToolDefinition) => ({
   name: tool.name,
   description: tool.description,
-  parameters: GeminiToolSchema.convert(inputSchema),
+  parametersJsonSchema: tool.inputSchema,
 })
 
 const lowerToolConfig = (toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
@@ -294,10 +283,9 @@ const lowerToolConfig = (toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
     tool: (name) => ({ functionCallingConfig: { mode: "ANY" as const, allowedFunctionNames: [name] } }),
   })
 
-const lowerUserPart = Effect.fn("Gemini.lowerUserPart")(function* (part: TextPart | MediaPart) {
+const lowerContentPart = Effect.fnUntraced(function* (part: TextPart | MediaPart) {
   if (part.type === "text") return { text: part.text }
-  const media = ProviderShared.normalizeMedia(part)
-  return { inlineData: { mimeType: media.mime, data: media.base64 } }
+  return yield* GeminiGenerateContent.mediaPart("Gemini", part.media)
 })
 
 const providerMetadata = (key: string, metadata: Record<string, unknown>): ProviderMetadata => ({ [key]: metadata })
@@ -314,7 +302,7 @@ const lowerToolCall = (part: ToolCallPart, omitIds: boolean, metadataKey: string
   thoughtSignature: thoughtSignature(part.providerMetadata, metadataKey),
 })
 
-const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMRequest) {
+const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest) {
   const contents: GeminiContent[] = []
   const metadataKey = request.model.route.providerMetadataKey ?? String(request.model.provider)
   const omitCallIds = omitsFunctionCallIds(request.model.id)
@@ -344,7 +332,7 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
       for (const part of message.content) {
         if (!ProviderShared.supportsContent(part, ["text", "media"]))
           return yield* ProviderShared.unsupportedContent("Gemini", "user", ["text", "media"])
-        parts.push(yield* lowerUserPart(part))
+        parts.push(yield* lowerContentPart(part))
       }
       contents.push({ role: "user", parts })
       continue
@@ -355,10 +343,21 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
       // Parallel Gemini 3 calls may carry one signature on the first call; unsigned sibling calls are valid.
       let hasSignedToolCall = false
       for (const part of message.content) {
-        if (!ProviderShared.supportsContent(part, ["text", "reasoning", "tool-call"]))
-          return yield* ProviderShared.unsupportedContent("Gemini", "assistant", ["text", "reasoning", "tool-call"])
+        if (!ProviderShared.supportsContent(part, ["text", "reasoning", "tool-call", "media"]))
+          return yield* ProviderShared.unsupportedContent("Gemini", "assistant", [
+            "text",
+            "reasoning",
+            "tool-call",
+            "media",
+          ])
         if (part.type === "text") {
           parts.push({ text: part.text, thoughtSignature: thoughtSignature(part.providerMetadata, metadataKey) })
+          continue
+        }
+        // Generated images replay as model-role inline data so multi-turn image editing keeps the prior output.
+        if (part.type === "media") {
+          const lowered = yield* lowerContentPart(part)
+          parts.push({ ...lowered, thoughtSignature: thoughtSignature(part.providerMetadata, metadataKey) })
           continue
         }
         if (part.type === "reasoning") {
@@ -410,7 +409,7 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
       const media: GeminiInlineDataPart[] = []
       for (const item of content) {
         if (item.type === "text") continue
-        const value = ProviderShared.normalizeToolFile(item)
+        const value = yield* ProviderShared.requireInlineMedia("Gemini", ProviderShared.toolFileMedia(item).media)
         media.push({ inlineData: { mimeType: value.mime, data: value.base64 } })
       }
       if (legacyToolMedia && media.length > 0) (pendingMedia ??= []).push(...media)
@@ -443,7 +442,6 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
   const hasTools = flattened.tools.length > 0
   const generation = request.generation
   const options = yield* decodeOptions(request.providerOptions ?? {})
-  const toolSchemaCompatibility = request.model.compatibility?.toolSchema
   const generationConfig = {
     maxOutputTokens: generation?.maxTokens,
     temperature: generation?.temperature,
@@ -453,10 +451,22 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
     presencePenalty: generation?.presencePenalty,
     seed: generation?.seed,
     stopSequences: generation?.stop,
+    // Gemini accepts a budget above `maxOutputTokens`, but thinking then leaves the answer empty.
     thinkingConfig:
       options.thinkingConfig === undefined
         ? undefined
-        : { ...options.thinkingConfig, includeThoughts: options.thinkingConfig.includeThoughts ?? true },
+        : {
+            ...options.thinkingConfig,
+            includeThoughts: options.thinkingConfig.includeThoughts ?? true,
+            thinkingBudget:
+              options.thinkingConfig.thinkingBudget === undefined
+                ? undefined
+                : ProviderShared.fitThinkingBudget(
+                    options.thinkingConfig.thinkingBudget,
+                    generation?.maxTokens,
+                    MIN_THINKING_BUDGET,
+                  ),
+          },
   }
 
   return {
@@ -465,13 +475,11 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
     safetySettings: options.safetySettings,
     serviceTier: options.serviceTier,
     systemInstruction:
-      request.system.length === 0 ? undefined : { parts: [{ text: ProviderShared.joinText(request.system) }] },
+      request.system.length === 0 ? undefined : { parts: request.system.map((part) => ({ text: part.text })) },
     tools: hasTools
       ? [
           {
-            functionDeclarations: flattened.tools.map((tool) =>
-              lowerTool(tool, ToolSchemaProjection.modelCompatibility(tool.inputSchema, toolSchemaCompatibility)),
-            ),
+            functionDeclarations: flattened.tools.map(lowerTool),
           },
         ]
       : undefined,
@@ -518,19 +526,7 @@ const mapFinishReason = (finishReason: string | undefined, hasToolCalls: boolean
   if (finishReason === undefined) return hasToolCalls ? "tool-calls" : "unknown"
   if (finishReason === "STOP") return hasToolCalls ? "tool-calls" : "stop"
   if (finishReason === "MAX_TOKENS") return "length"
-  if (
-    finishReason === "IMAGE_SAFETY" ||
-    finishReason === "RECITATION" ||
-    finishReason === "SAFETY" ||
-    finishReason === "BLOCKLIST" ||
-    finishReason === "PROHIBITED_CONTENT" ||
-    finishReason === "SPII" ||
-    finishReason === "MODEL_ARMOR" ||
-    finishReason === "IMAGE_PROHIBITED_CONTENT" ||
-    finishReason === "IMAGE_RECITATION" ||
-    finishReason === "LANGUAGE"
-  )
-    return "content-filter"
+  if (GeminiGenerateContent.contentFiltered(finishReason)) return "content-filter"
   if (
     finishReason === "MALFORMED_FUNCTION_CALL" ||
     finishReason === "UNEXPECTED_TOOL_CALL" ||
@@ -662,6 +658,19 @@ const step = (state: ParserState, event: GeminiEvent) => {
     // each block kind must retain the signature attached to its own parts.
     if (signature !== undefined && "thought" in part && part.thought) reasoningSignature = signature
     else if (signature !== undefined && "text" in part) textSignature = signature
+    // Image-capable Gemini models return generated images as inline data parts; surface them as first-class output.
+    if ("inlineData" in part) {
+      lifecycle = Lifecycle.stepStart(lifecycle, events)
+      events.push(
+        LLMEvent.media({
+          media: Media.base64(part.inlineData.data, part.inlineData.mimeType),
+          providerMetadata: signature
+            ? providerMetadata(state.providerMetadataKey, { thoughtSignature: signature })
+            : undefined,
+        }),
+      )
+      continue
+    }
     if ("text" in part && part.text.length > 0) {
       if (part.thought) {
         if (textId !== undefined) {
@@ -794,6 +803,8 @@ export const protocol = Protocol.make({
     schema: GeminiBody,
     from: fromRequest,
   },
+  // Gemini's schema rules are this API's default, including for tuned endpoints whose IDs do not name Gemini.
+  sanitizer: "gemini",
   stream: {
     event: Protocol.jsonEvent(GeminiEvent),
     initial: (request) => ({

@@ -436,7 +436,7 @@ describe("ShellTool scanner permissions", () => {
               value: {
                 status: "completed",
                 metadata: { exit: 0 },
-                content: [{ type: "text", text: `${fixture.outside}\n` }, { type: "text" }],
+                content: [{ type: "text", text: `${fixture.outside}\n` }],
               },
             })
             expect(yield* Effect.promise(() => Bun.file(marker).text())).toBe("reached")
@@ -470,7 +470,7 @@ describe("ShellTool scanner permissions", () => {
             value: {
               status: "completed",
               metadata: { exit: 0 },
-              content: [{ type: "text", text: `${fixture.outside}\n` }, { type: "text" }],
+              content: [{ type: "text", text: `${fixture.outside}\n` }],
             },
           })
           expect(yield* Effect.promise(() => Bun.file(marker).text())).toBe("reached")
@@ -517,7 +517,7 @@ describe("ShellTool scanner permissions", () => {
               value: {
                 status: "completed",
                 metadata: { exit: 0 },
-                content: [{ type: "text", text: `${fixture.outside}\n` }, { type: "text" }],
+                content: [{ type: "text", text: `${fixture.outside}\n` }],
               },
             })
             expect(yield* Effect.promise(() => Bun.file(marker).text())).toBe("reached")
@@ -661,7 +661,7 @@ describe("ShellTool compound syntax approval compatibility", () => {
                 value: {
                   status: "completed",
                   metadata: { exit: 0 },
-                  content: [{ type: "text", text: fixture.output }, { type: "text" }],
+                  content: [{ type: "text", text: fixture.output }],
                 },
               })
             }),
@@ -729,7 +729,7 @@ describe("ShellTool ordinary shell syntax", () => {
                   value: {
                     status: "completed",
                     metadata: { exit: 0 },
-                    content: [{ type: "text", text: fixture.output }, { type: "text" }],
+                    content: [{ type: "text", text: fixture.output }],
                   },
                 })
               }),
@@ -907,10 +907,7 @@ describe("ShellTool", () => {
               const settled = yield* executeTool(registry, call({ command: helloCommand }))
               expect(settled.status).toBe("completed")
               expect(settled.metadata).toMatchObject({ exit: 0, truncated: false })
-              expect(settled.content?.[0]).toEqual({ type: "text", text: "hello" })
-              expect(settled.content?.[1]).toMatchObject(
-                Expected.text(expect.stringContaining("Command exited with code 0.")),
-              )
+              expect(settled.content).toEqual([{ type: "text", text: "hello" }])
               expect(assertions).toMatchObject([
                 {
                   sessionID,
@@ -951,6 +948,59 @@ describe("ShellTool", () => {
 
               expect(settled.status).toBe("completed")
               expect(settled.content?.[0]).toEqual({ type: "text", text: "from-session" })
+            }),
+          )
+        },
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+      ),
+    { timeout: 15_000 },
+  )
+
+  productionIt.live(
+    "identifies agent shell commands without inheriting a stale session ID",
+    () =>
+      Effect.acquireUseRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => {
+          reset()
+          return withSession(tmp.path, (registry) =>
+            Effect.gen(function* () {
+              const sessions = yield* Session.Service
+              yield* sessions.environment({
+                sessionID,
+                variables: { AGENT: "0", OPENCODE: "0", AI_AGENT: "", OPENCODE_SESSION_ID: "stale" },
+              })
+              const command = isWindows
+                ? '[Console]::Out.Write("$env:AGENT|$env:OPENCODE|$env:AI_AGENT|$env:OPENCODE_SESSION_ID")'
+                : 'printf %s "$AGENT|$OPENCODE|$AI_AGENT|$OPENCODE_SESSION_ID"'
+              const settled = yield* executeTool(registry, call({ command }))
+
+              expect(settled.status).toBe("completed")
+              expect(settled.content?.[0]).toEqual({ type: "text", text: `1|1|opencode|${sessionID}` })
+            }),
+          )
+        },
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+      ),
+    { timeout: 15_000 },
+  )
+
+  productionIt.live(
+    "preserves an outer AI_AGENT marker in agent shell commands",
+    () =>
+      Effect.acquireUseRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => {
+          reset()
+          return withSession(tmp.path, (registry) =>
+            Effect.gen(function* () {
+              const sessions = yield* Session.Service
+              yield* sessions.environment({ sessionID, variables: { AI_AGENT: "outer-agent" } })
+              const command = isWindows ? "[Console]::Out.Write($env:AI_AGENT)" : 'printf %s "$AI_AGENT"'
+              const settled = yield* executeTool(registry, call({ command }))
+
+              expect(settled.status).toBe("completed")
+              expect(settled.content?.[0]).toEqual({ type: "text", text: "outer-agent" })
             }),
           )
         },
@@ -1243,6 +1293,78 @@ describe("ShellTool", () => {
     }),
   )
 
+  it.live("enables portable shell scanner by default on local and dev channels with config override", () =>
+    Effect.gen(function* () {
+      if (isWindows) return
+      for (const [channel, configured, expectedPortable] of [
+        ["local", undefined, true],
+        ["dev", undefined, true],
+        ["dev", false, false],
+        ["latest", undefined, false],
+        ["latest", true, true],
+      ] as const) {
+        const channelSupervisor = makeLocationNode({
+          name: `test/shell-plugins-${channel}`,
+          layer: Layer.effectDiscard(
+            registerToolPlugin(ShellTool.Plugin, {
+              app: { name: "opencode", version: "test", channel },
+            }),
+          ),
+          deps: [
+            Config.node,
+            Environment.node,
+            FileAccess.node,
+            Permission.node,
+            Session.node,
+            Job.node,
+            Shell.node,
+            ShellSelect.node,
+            Tool.node,
+          ],
+        })
+        yield* Effect.acquireUseRelease(
+          Effect.promise(() => tmpdir()),
+          (tmp) =>
+            Effect.gen(function* () {
+              reset()
+              if (configured !== undefined)
+                yield* Effect.promise(() =>
+                  Bun.write(
+                    path.join(tmp.path, "opencode.json"),
+                    JSON.stringify({ experimental: { portable_shell_scanner: configured } }),
+                  ),
+                )
+              const settled = yield* withSession(tmp.path, (registry) =>
+                Effect.gen(function* () {
+                  const selection = yield* ShellSelect.Service
+                  yield* selection.transform((editor) => editor.configure("sh"))
+                  return yield* executeTool(
+                    registry,
+                    call({ command: 'printf hello > marker\necho "' }, `call-channel-${channel}-${String(configured)}`),
+                  )
+                }),
+              )
+              if (expectedPortable) {
+                expect(settled).toMatchObject({
+                  status: "error",
+                  error: { message: expect.stringContaining("unterminated-quote") },
+                })
+                expect(assertions).toEqual([])
+                return
+              }
+              expect(settled.status).toBe("completed")
+              expect(assertions.map((item) => item.action)).toEqual(["shell"])
+            }).pipe(
+              Effect.provide(
+                AppNodeBuilder.build(nodes, [...replacements, PluginSupervisor.node.replace(channelSupervisor)]),
+              ),
+            ),
+          (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+        )
+      }
+    }),
+  )
+
   for (const shell of ["sh", "zsh"]) {
     const test = isWindows || !Bun.which(shell) ? it.live.skip : it.live
     test(
@@ -1312,9 +1434,7 @@ describe("ShellTool", () => {
               expect(settled.status).toBe("completed")
               expect(settled.metadata).toMatchObject({ exit: 7, truncated: false })
               expect(settled.content?.[0]).toEqual({ type: "text", text: "body" })
-              expect(settled.content?.[1]).toMatchObject(
-                Expected.text(expect.stringContaining("Command exited with code 7")),
-              )
+              expect(settled.content?.[1]).toMatchObject(Expected.text(expect.stringContaining("Exited with code 7")))
             }),
           ),
         )
@@ -1341,9 +1461,7 @@ describe("ShellTool", () => {
                 if (!content || content.type !== "text") throw new Error("Expected text content")
                 expect(content.text.includes("output-start")).toBe(false)
                 expect(content.text.includes("output-end")).toBe(true)
-                expect(content).toMatchObject(
-                  Expected.text(expect.stringContaining("output truncated; full output saved to:")),
-                )
+                expect(content).toMatchObject(Expected.text(expect.stringContaining("full output saved to ")))
               }),
             ),
           )
@@ -1374,7 +1492,7 @@ describe("ShellTool", () => {
           expect(content.text).not.toContain("one")
           // Windows shells emit CRLF; the assertion targets line limits, not line endings.
           expect(content.text.replaceAll("\r\n", "\n")).toStartWith("two\nthree")
-          expect(content.text).toContain("output truncated; full output saved to:")
+          expect(content.text).toContain("full output saved to ")
         })
       },
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
@@ -1471,7 +1589,7 @@ describe("ShellTool", () => {
             expect((yield* shell.list()).map((info) => info.id)).toContain(id)
             expect((yield* shell.wait(id)).status).toBe("timeout")
             expect((yield* Fiber.join(admitted)).valueOrUndefined?.data.item.payload).toMatchObject({
-              text: expect.stringContaining("Command timed out before completion."),
+              text: expect.stringContaining("Timed out before completion"),
               description: idleCommand,
               metadata: {
                 source: "shell",
@@ -1508,7 +1626,7 @@ describe("ShellTool", () => {
             const shellID = settled.metadata?.shellID
             expect(typeof shellID).toBe("string")
             expect((yield* Fiber.join(admitted)).valueOrUndefined?.data.item.payload).toMatchObject({
-              text: expect.stringContaining("Command exited with code 7."),
+              text: expect.stringContaining("Exited with code 7"),
               description: bodyExitCommand,
               metadata: {
                 source: "shell",
@@ -1558,7 +1676,7 @@ describe("ShellTool", () => {
               {
                 id: settled.metadata?.shellID,
                 status: "completed",
-                output: "(no output)\n\nCommand exited with code 7.",
+                output: "(no output)\n\nExited with code 7",
               },
             ])
           }),
@@ -1682,7 +1800,7 @@ describe("ShellTool", () => {
               process.kill(-info.pid, "SIGTERM")
               const result = yield* shell.wait(id).pipe(Effect.timeoutOption(Duration.seconds(1)))
               expect(result._tag).toBe("Some")
-              if (result._tag === "Some") expect(result.value.status).toBe("exited")
+              if (result._tag === "Some") expect(result.value).toMatchObject({ status: "exited", signal: "SIGTERM" })
               expect((yield* shell.list()).map((item) => item.id)).not.toContain(id)
             }),
           )

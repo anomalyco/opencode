@@ -1,12 +1,17 @@
 import type { Page } from "@playwright/test"
 import { benchmark, expect } from "../benchmark"
-import { setupTimelineBenchmark } from "./session-timeline-benchmark.fixture"
+import { benchmarkLocation, setupTimelineBenchmark } from "./session-timeline-benchmark.fixture"
 
 const changedLinesPerFile = 100
+
 const linesPerSide = changedLinesPerFile / 2
+
 const fileCounts = [1, 10, 100, 1_000, 10_000]
+
 const filesPerDirectory = 100
+
 const readyFrames = 3
+
 const completionTimeoutMs = Number(process.env.REVIEW_PANE_COMPLETION_TIMEOUT_MS ?? 900_000)
 
 type ReviewPaneScalingSample = {
@@ -42,9 +47,15 @@ benchmark.describe("performance: review pane scaling", () => {
         await page.emulateMedia({ reducedMotion: "reduce" })
 
         const patchByteLimit = Number(process.env.REVIEW_PANE_PATCH_BYTE_LIMIT ?? Number.POSITIVE_INFINITY)
+
         if (Number.isNaN(patchByteLimit) || patchByteLimit < 0)
           throw new Error(`Invalid REVIEW_PANE_PATCH_BYTE_LIMIT: ${process.env.REVIEW_PANE_PATCH_BYTE_LIMIT}`)
-        const responseBody = JSON.stringify(createScalingDiffs(fileCount, patchByteLimit))
+
+        const responseBody = JSON.stringify({
+          location: benchmarkLocation,
+          data: createScalingDiffs(fileCount, patchByteLimit),
+        })
+
         await setupTimelineBenchmark(page, {
           historyTurns: 0,
           eventBatch: 1,
@@ -59,10 +70,12 @@ benchmark.describe("performance: review pane scaling", () => {
         )
 
         const expectedRows = fileCount + 2 + Math.ceil(fileCount / filesPerDirectory)
+
         const metrics = await measureReviewPaneLoad(page, {
           expectedFile: reviewFile(0),
           expectedRows,
         })
+
         const search = await measureBroadReviewSearch(page, fileCount)
 
         expect(metrics.logicalRows).toBe(expectedRows)
@@ -105,23 +118,31 @@ async function measureBroadReviewSearch(page: Page, expectedRows: number) {
 
   return page.evaluate((expectedRows) => {
     const startedAt = (window as Window & { __reviewSearchStartedAt?: number }).__reviewSearchStartedAt!
+
     return new Promise<{ stableMs: number; logicalRows: number; renderedRows: number }>((resolve) => {
       let previous = -1
       let streak = 0
+
       const sample = () => {
         const tree = document.querySelector<HTMLElement>('#review-panel [data-component="file-tree-v2"]')
         const rows = [...document.querySelectorAll<HTMLElement>('#review-panel [data-slot="file-tree-v2-row"]')]
         const logicalRows = Number(tree?.dataset.totalRows ?? rows.length)
+
         const ready =
           logicalRows === expectedRows && rows.length > 0 && rows.every((row) => row.textContent?.includes("file-"))
+
         streak = ready && rows.length === previous ? streak + 1 : ready ? 1 : 0
         previous = rows.length
+
         if (streak >= 3) {
           resolve({ stableMs: performance.now() - startedAt, logicalRows, renderedRows: rows.length })
+
           return
         }
+
         requestAnimationFrame(sample)
       }
+
       requestAnimationFrame(sample)
     })
   }, expectedRows)
@@ -130,13 +151,16 @@ async function measureBroadReviewSearch(page: Page, expectedRows: number) {
 function createScalingDiffs(fileCount: number, patchByteLimit: number) {
   const changes = Array.from({ length: linesPerSide }, (_, index) => {
     const line = String(index).padStart(3, "0")
+
     return `-export const value_${line} = "before"\n+export const value_${line} = "after"`
   }).join("\n")
+
   let patchBytes = 0
   let capped = false
 
   return Array.from({ length: fileCount }, (_, index) => {
     const file = reviewFile(index)
+
     const fullPatch = [
       `diff --git a/${file} b/${file}`,
       `--- a/${file}`,
@@ -144,11 +168,14 @@ function createScalingDiffs(fileCount: number, patchByteLimit: number) {
       `@@ -1,${linesPerSide} +1,${linesPerSide} @@`,
       changes,
     ].join("\n")
+
     if (index === 0 && fullPatch.length > patchByteLimit)
       throw new Error(`REVIEW_PANE_PATCH_BYTE_LIMIT must include the active patch (${fullPatch.length} bytes)`)
     const patch = !capped && patchBytes + fullPatch.length <= patchByteLimit ? fullPatch : emptyReviewPatch(file)
+
     if (patch === fullPatch) patchBytes += fullPatch.length
     else capped = true
+
     return {
       file,
       patch,
@@ -186,13 +213,17 @@ async function measureReviewPaneLoad(page: Page, input: { expectedFile: string; 
     probe.stop()
     const startedAt = probe.startedAt!
     const final = probe.samples.at(-1)!
+
     const resources = performance
       .getEntriesByType("resource")
       .filter((entry) => entry.name.includes("/vcs/diff")) as PerformanceResourceTiming[]
+
     const resource = resources.at(-1)
+
     const longTasks = probe.longTasks.filter(
       (entry) => entry.startTime >= startedAt && entry.startTime <= startedAt + probe.stableReadyMs!,
     )
+
     const frameGaps = probe.frameTimesMs.map((time, index) => time - (probe.frameTimesMs[index - 1] ?? 0))
 
     return {
@@ -222,6 +253,7 @@ async function installReviewPaneScalingProbe(page: Page, input: { expectedFile: 
       let running = true
       let readyStreak = 0
       const basename = expectedFile.split("/").at(-1)!
+
       const longTaskObserver = PerformanceObserver.supportedEntryTypes.includes("longtask")
         ? new PerformanceObserver((list) => {
             probe.longTasks.push(
@@ -229,6 +261,7 @@ async function installReviewPaneScalingProbe(page: Page, input: { expectedFile: 
             )
           })
         : undefined
+
       const probe: ReviewPaneScalingProbe = {
         samples: [],
         frameTimesMs: [],
@@ -245,25 +278,32 @@ async function installReviewPaneScalingProbe(page: Page, input: { expectedFile: 
         const tree = panel?.querySelector<HTMLElement>('[data-component="file-tree-v2"]')
         const rows = panel?.querySelectorAll('[data-slot="file-tree-v2-row"]') ?? []
         const fileRows = panel?.querySelectorAll('button[data-slot="file-tree-v2-row"]') ?? []
+
         const header =
           panel?.querySelector<HTMLElement>('[data-slot="session-review-v2-file-header"]')?.textContent?.trim() ?? ""
+
         const viewers = panel
           ? [...panel.querySelectorAll<HTMLElement>('[data-component="file"][data-mode="diff"]')]
           : []
+
         const diffLines = viewers.reduce(
           (sum, viewer) =>
             sum + (viewer.querySelector("diffs-container")?.shadowRoot?.querySelectorAll("[data-line]").length ?? 0),
           0,
         )
+
         const observedAtMs = time - probe.startedAt
         const logicalRows = Number(tree?.dataset.totalRows ?? rows.length)
+
         const ready =
           logicalRows === expectedRows &&
           fileRows.length > 0 &&
           header.includes(basename) &&
           viewers.length === 1 &&
           diffLines > 0
+
         const previous = probe.samples.at(-1)
+
         const stable =
           ready &&
           previous?.ready === true &&
@@ -283,12 +323,17 @@ async function installReviewPaneScalingProbe(page: Page, input: { expectedFile: 
           header,
           ready,
         })
+
         if (probe.firstTreeRowMs === undefined && rows.length > 0) probe.firstTreeRowMs = observedAtMs
+
         if (probe.logicalTreeReadyMs === undefined && logicalRows === expectedRows)
           probe.logicalTreeReadyMs = observedAtMs
+
         if (probe.firstDiffRenderMs === undefined && diffLines > 0) probe.firstDiffRenderMs = observedAtMs
         readyStreak = !ready ? 0 : stable ? readyStreak + 1 : 1
+
         if (readyStreak === stableFrames) probe.stableReadyMs = observedAtMs
+
         if (probe.stableReadyMs === undefined) requestAnimationFrame(sample)
       }
 
@@ -297,6 +342,7 @@ async function installReviewPaneScalingProbe(page: Page, input: { expectedFile: 
         "click",
         (event) => {
           const toggle = event.target instanceof Element ? event.target.closest("button") : undefined
+
           if (!toggle?.hasAttribute("data-review-pane-scaling-toggle")) return
           probe.startedAt = performance.now()
           performance.mark("opencode.review-pane-scaling.click")

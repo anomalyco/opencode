@@ -1,9 +1,9 @@
 import { Money } from "@opencode/schema/money"
 import { Agent } from "@opencode/schema/agent"
-import { Session } from "@opencode/schema/session"
+import { Session } from "@opencode/core/session"
 import { OpenAIResponses } from "@opencode/ai/protocols/openai-responses"
 import { describe, expect } from "bun:test"
-import { ConfigProvider, DateTime, Effect } from "effect"
+import { DateTime, Effect } from "effect"
 import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
 import { Location } from "@opencode/core/location"
@@ -41,10 +41,14 @@ function required<T>(value: T | undefined): T {
   return value
 }
 
-const request = Effect.fn(function* (providerID: Provider.ID, baseURL: string) {
+const request = Effect.fn(function* (
+  providerID: Provider.ID,
+  baseURL: string,
+  sessionID = Session.ID.make("ses_test"),
+) {
   const hooks = yield* PluginHooks.Service
   const event = yield* hooks.trigger("session", "model.request", {
-    sessionID: Session.ID.make("ses_test"),
+    sessionID,
     agent: Agent.ID.make("build"),
     model: Model.Ref.make({ providerID, id: Model.ID.make("gpt-5.5") }),
     kind: "primary",
@@ -69,12 +73,12 @@ describe("OpenAIPlugin", () => {
         {
           id: Integration.MethodID.make("chatgpt-browser"),
           type: "oauth",
-          label: "ChatGPT Pro/Plus (browser)",
+          label: "Codex browser (legacy)",
         },
         {
           id: Integration.MethodID.make("chatgpt-headless"),
           type: "oauth",
-          label: "ChatGPT Pro/Plus (headless)",
+          label: "Codex device code (legacy)",
         },
       ])
     }),
@@ -156,6 +160,12 @@ describe("OpenAIPlugin", () => {
       expect(custom.headers).not.toHaveProperty("originator")
       expect(proxy.baseURL).toBe("https://proxy.example/v1?region=us")
       expect(proxy.headers).toMatchObject({ originator: "opencode", "session-id": "ses_test" })
+      const sessions = yield* Session.Service
+      const location = yield* Location.Service
+      const parent = yield* sessions.create({ location: { directory: location.directory } })
+      const child = yield* sessions.create({ parentID: parent.id })
+      const childRequest = yield* request(Provider.ID.openai, "https://api.openai.com/v1", child.id)
+      expect(childRequest.headers).toMatchObject({ "session-id": parent.id })
       const eligible = required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-5.5")))
       expect(eligible.package).toBe("@opencode/ai/providers/openai")
       expect(eligible.headers).toMatchObject({ originator: "opencode", "chatgpt-account-id": "acct_123" })
@@ -213,6 +223,31 @@ describe("OpenAIPlugin", () => {
       expect(direct.hasHttpHooks).toBe(false)
       expect(provider.headers).not.toHaveProperty("originator")
       expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-4.1"))).enabled).toBe(true)
+    }),
+  )
+
+  it.effect("omits the default output limit from OpenAI steps and compaction", () =>
+    Effect.gen(function* () {
+      yield* addPlugin()
+      const hooks = yield* PluginHooks.Service
+      const maxTokens = (providerID: Provider.ID) =>
+        Effect.gen(function* () {
+          const draft = {
+            sessionID: Session.ID.make("ses_test"),
+            model: Model.Ref.make({ providerID, id: Model.ID.make("gpt-5.5") }),
+            system: [],
+            messages: [],
+            options: { maxTokens: 128_000 },
+          }
+          const events = [
+            yield* hooks.trigger("session", "context", { ...draft, agent: Agent.ID.make("build"), tools: {} }),
+            yield* hooks.trigger("session", "compaction", { ...draft, agent: Agent.ID.make("build"), tools: {} }),
+          ]
+          return events.map((event) => event.options.maxTokens)
+        })
+
+      expect(yield* maxTokens(Provider.ID.openai)).toEqual([undefined, undefined])
+      expect(yield* maxTokens(Provider.ID.azure)).toEqual([128_000, 128_000])
     }),
   )
 

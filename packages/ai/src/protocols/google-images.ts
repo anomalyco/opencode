@@ -1,40 +1,32 @@
-import { Effect, Encoding, Schema } from "effect"
-import { Headers, HttpClientRequest } from "effect/unstable/http"
-import {
-  GeneratedImage,
-  ImageModel,
-  ImageResponse,
-  type ImageInput,
-  type ImageRequestFor,
-  type ImageRoute,
-} from "../image.js"
-import { Auth, type Definition as AuthDefinition } from "../route/auth.js"
-import { AIError, Usage, mergeHttpOptions, mergeJsonRecords, type HttpOptions } from "../schema/index.js"
+import { Effect, Schema } from "effect"
+import type { HttpClientResponse } from "effect/unstable/http"
+import { ImageModel, ImageResponse, type ImageRequestFor } from "../image.js"
+import { MediaProtocol } from "../route/media-protocol.js"
+import { MediaRoute } from "../route/media.js"
+import { mergeJsonRecords, type OpenString } from "../schema/index.js"
 import { ProviderShared } from "./shared.js"
-import { ImageInputs } from "./utils/image-input.js"
+import { GeminiGenerateContent } from "./utils/gemini-generate-content.js"
+import { MediaInput } from "./utils/media-input.js"
 
-const ADAPTER = "google-images"
+const route = MediaProtocol.identity({ id: "google-images", name: "Google Images", provider: "google" })
 export const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 
-export type GoogleImageString<Known extends string> = Known | (string & {})
+// ---------------------------------------------------------------------------
+// 1. Public model input
+// ---------------------------------------------------------------------------
 
+/** Provider-native options. Common fields (`aspectRatio`, `seed`, `images`) live on the request. */
 export type GoogleImageOptions = {
-  readonly aspectRatio?: GoogleImageString<
-    "1:1" | "2:3" | "3:2" | "3:4" | "4:3" | "4:5" | "5:4" | "9:16" | "16:9" | "21:9"
-  >
-  readonly imageSize?: GoogleImageString<"1K" | "2K" | "4K">
-  readonly seed?: number
-  readonly thinkingLevel?: GoogleImageString<"MINIMAL" | "LOW" | "MEDIUM" | "HIGH">
+  readonly imageSize?: OpenString<"1K" | "2K" | "4K">
+  readonly thinkingLevel?: OpenString<"MINIMAL" | "LOW" | "MEDIUM" | "HIGH">
   readonly includeThoughts?: boolean
 } & Record<string, unknown>
 
-export type GoogleImageBody = Record<string, unknown> & {
-  readonly contents: ReadonlyArray<{
-    readonly role: "user"
-    readonly parts: ReadonlyArray<Record<string, unknown>>
-  }>
-  readonly generationConfig: Record<string, unknown>
-}
+export type Request = ImageRequestFor<GoogleImageOptions>
+
+// ---------------------------------------------------------------------------
+// 2. Response schema
+// ---------------------------------------------------------------------------
 
 const GoogleUsage = Schema.StructWithRest(
   Schema.Struct({
@@ -85,30 +77,20 @@ const GoogleImageResponse = Schema.Struct({
   promptFeedback: Schema.optional(Schema.Unknown),
 })
 
-export interface ModelInput {
-  readonly id: string
-  readonly auth: AuthDefinition
-  readonly baseURL?: string
-  readonly headers?: Record<string, string>
-  readonly http?: HttpOptions
-}
+// ---------------------------------------------------------------------------
+// 5. Request body construction
+// ---------------------------------------------------------------------------
 
-const nativeOptions = (options: GoogleImageOptions | undefined) => {
-  const { aspectRatio, imageSize, seed, thinkingLevel, includeThoughts, ...native } = options ?? {}
-  const image = {
-    aspectRatio,
-    imageSize,
-  }
-  const thinkingConfig = {
-    thinkingLevel,
-    includeThoughts,
-  }
+const generationConfig = (request: Request) => {
+  const { imageSize, thinkingLevel, includeThoughts, ...native } = request.providerOptions ?? {}
+  const imageConfig = { aspectRatio: request.aspectRatio, imageSize }
+  const thinkingConfig = { thinkingLevel, includeThoughts }
   return (
     mergeJsonRecords(
       {
         responseModalities: ["IMAGE"],
-        imageConfig: Object.values(image).some((value) => value !== undefined) ? image : undefined,
-        seed,
+        imageConfig: Object.values(imageConfig).some((value) => value !== undefined) ? imageConfig : undefined,
+        seed: request.seed,
         thinkingConfig: Object.values(thinkingConfig).some((value) => value !== undefined) ? thinkingConfig : undefined,
       },
       native,
@@ -116,176 +98,187 @@ const nativeOptions = (options: GoogleImageOptions | undefined) => {
   )
 }
 
-const applyQuery = (url: string, query: Record<string, string> | undefined) => {
-  if (!query) return url
-  const next = new URL(url)
-  Object.entries(query).forEach(([key, value]) => next.searchParams.set(key, value))
-  return next.toString()
-}
+const fromRequest = Effect.fn("GoogleImages.fromRequest")(function* (request: Request) {
+  if (request.n !== undefined && request.n > 1)
+    return yield* route.unsupported(
+      "media.n",
+      `${route.name} generates one image per request; call it once per image instead of n=${request.n}`,
+    )
+  const parts = yield* Effect.forEach(request.images ?? [], (image) =>
+    GeminiGenerateContent.mediaPart(route.name, image),
+  )
+  return MediaProtocol.json(
+    mergeJsonRecords(
+      {
+        contents: [{ role: "user", parts: [{ text: request.prompt }, ...parts] }],
+        generationConfig: generationConfig(request),
+      },
+      request.http?.body,
+    ) ?? {},
+  )
+})
 
-export const model = (input: ModelInput) => {
-  const route: ImageRoute<GoogleImageOptions> = {
-    id: ADAPTER,
-    generate: Effect.fn("GoogleImages.generate")(function* (request: ImageRequestFor<GoogleImageOptions>, execute) {
-      const imageParts = yield* Effect.forEach(request.images ?? [], googleImagePart)
-      const http = mergeHttpOptions(request.model.http, request.http)
-      const requestBody = mergeJsonRecords(
-        {
-          contents: [{ role: "user", parts: [{ text: request.prompt }, ...imageParts] }],
-          generationConfig: nativeOptions(request.options),
-        },
-        http?.body,
-      ) as GoogleImageBody
-      const text = ProviderShared.encodeJson(requestBody)
-      const url = applyQuery(
-        `${(input.baseURL ?? DEFAULT_BASE_URL).replace(/\/$/, "")}/models/${request.model.id}:generateContent`,
-        http?.query,
-      )
-      const headers = yield* Auth.toEffect(input.auth)({
-        request,
-        method: "POST",
-        url,
-        body: text,
-        headers: Headers.fromInput({ ...input.headers, ...http?.headers }),
-      })
-      const response = yield* execute(
-        HttpClientRequest.post(url).pipe(
-          HttpClientRequest.setHeaders(headers),
-          HttpClientRequest.bodyText(text, "application/json"),
-        ),
-      )
-      const output = yield* ProviderShared.imageResponse(ADAPTER, "Google Images", response)
-      const decoded = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(GoogleImageResponse))(output.body).pipe(
-        Effect.mapError((cause) => output.invalid("Google Images returned an invalid response", cause)),
-      )
-      const candidates = decoded.candidates ?? []
-      const candidateMetadata = candidates.map((candidate, candidateIndex) => ({
-        index: candidate.index ?? candidateIndex,
-        finishReason: candidate.finishReason,
-        finishMessage: candidate.finishMessage,
-        safetyRatings: candidate.safetyRatings,
-        citationMetadata: candidate.citationMetadata,
-        groundingMetadata: candidate.groundingMetadata,
-        parts: (candidate.content?.parts ?? []).map((part) =>
-          part.inlineData === undefined
-            ? {
-                type: "text",
-                text: part.text,
-                thought: part.thought,
-                thoughtSignature: part.thoughtSignature,
-              }
-            : {
-                type: "inlineData",
-                mediaType: part.inlineData.mimeType,
-                thought: part.thought,
-                thoughtSignature: part.thoughtSignature,
-              },
-        ),
-      }))
-      const encoded = candidates.flatMap((candidate, candidateIndex) =>
-        (candidate.content?.parts ?? []).flatMap((part, partIndex) =>
-          part.inlineData === undefined || part.thought === true
-            ? []
-            : [{ candidate, candidateIndex, partIndex, inlineData: part.inlineData }],
-        ),
-      )
-      const images = yield* Effect.forEach(encoded, (item) =>
-        Effect.fromResult(Encoding.decodeBase64(item.inlineData.data)).pipe(
-          Effect.mapError((cause) =>
-            output.invalid(
-              `Google Images candidate ${item.candidateIndex} part ${item.partIndex} contains invalid base64 data`,
-              cause,
-            ),
-          ),
-          Effect.map(
-            (data) =>
-              new GeneratedImage({
-                mediaType: item.inlineData.mimeType,
-                data,
-                providerMetadata: {
-                  google: {
-                    candidateIndex: item.candidate.index ?? item.candidateIndex,
-                    partIndex: item.partIndex,
-                    finishReason: item.candidate.finishReason,
-                    safetyRatings: item.candidate.safetyRatings,
-                    citationMetadata: item.candidate.citationMetadata,
-                    groundingMetadata: item.candidate.groundingMetadata,
-                    thoughtSignature: item.candidate.content?.parts[item.partIndex]?.thoughtSignature,
-                  },
-                },
-              }),
-          ),
-        ),
-      )
-      if (images.length === 0) {
-        const finishReasons = candidates.flatMap((candidate) =>
-          candidate.finishReason === undefined ? [] : [candidate.finishReason],
-        )
-        return yield* output.invalid(
-          `Google Images returned no final images${
-            finishReasons.length === 0 ? "" : ` (finish reasons: ${finishReasons.join(", ")})`
-          }; inspect body for prompt feedback and candidate details`,
-        )
-      }
-      const usage = decoded.usageMetadata
-      const outputTokens =
-        usage?.candidatesTokenCount === undefined
-          ? undefined
-          : usage.candidatesTokenCount + (usage.thoughtsTokenCount ?? 0)
-      return new ImageResponse({
-        images,
-        usage:
-          usage === undefined
-            ? undefined
-            : new Usage({
-                inputTokens: usage.promptTokenCount,
-                outputTokens,
-                nonCachedInputTokens: ProviderShared.subtractTokens(
-                  usage.promptTokenCount,
-                  usage.cachedContentTokenCount,
-                ),
-                cacheReadInputTokens: usage.cachedContentTokenCount,
-                reasoningTokens: usage.thoughtsTokenCount,
-                totalTokens: ProviderShared.totalTokens(usage.promptTokenCount, outputTokens, usage.totalTokenCount),
-                providerMetadata: { google: usage },
-              }),
+// ---------------------------------------------------------------------------
+// 6. Response decoding
+// ---------------------------------------------------------------------------
+
+const decodeDocument = route.decodeJson(GoogleImageResponse)
+
+const decodeResponse = Effect.fn("GoogleImages.decodeResponse")(function* (
+  response: HttpClientResponse.HttpClientResponse,
+) {
+  const output = yield* decodeDocument(response)
+  const decoded = output.value
+  const candidates = decoded.candidates ?? []
+  const candidateMetadata = candidates.map((candidate, candidateIndex) => ({
+    index: candidate.index ?? candidateIndex,
+    finishReason: candidate.finishReason,
+    finishMessage: candidate.finishMessage,
+    safetyRatings: candidate.safetyRatings,
+    citationMetadata: candidate.citationMetadata,
+    groundingMetadata: candidate.groundingMetadata,
+    parts: (candidate.content?.parts ?? []).map((part) =>
+      part.inlineData === undefined
+        ? { type: "text", text: part.text, thought: part.thought, thoughtSignature: part.thoughtSignature }
+        : {
+            type: "inlineData",
+            mediaType: part.inlineData.mimeType,
+            thought: part.thought,
+            thoughtSignature: part.thoughtSignature,
+          },
+    ),
+  }))
+  // Thought parts are drafts; only non-thought inline data is a final image.
+  const encoded = candidates.flatMap((candidate, candidateIndex) =>
+    (candidate.content?.parts ?? []).flatMap((part, partIndex) =>
+      part.inlineData === undefined || part.thought === true
+        ? []
+        : [
+            {
+              candidate,
+              candidateIndex,
+              partIndex,
+              inlineData: part.inlineData,
+              thoughtSignature: part.thoughtSignature,
+            },
+          ],
+    ),
+  )
+  const images = yield* Effect.forEach(encoded, (item) =>
+    MediaInput.decodedAsset(
+      output.invalid,
+      `${route.name} candidate ${item.candidateIndex} part ${item.partIndex}`,
+      item.inlineData.data,
+      item.inlineData.mimeType,
+      {
         providerMetadata: {
           google: {
-            modelVersion: decoded.modelVersion,
-            responseId: decoded.responseId,
-            promptFeedback: decoded.promptFeedback,
-            candidates: candidateMetadata,
+            candidateIndex: item.candidate.index ?? item.candidateIndex,
+            partIndex: item.partIndex,
+            finishReason: item.candidate.finishReason,
+            safetyRatings: item.candidate.safetyRatings,
+            citationMetadata: item.candidate.citationMetadata,
+            groundingMetadata: item.candidate.groundingMetadata,
+            thoughtSignature: item.thoughtSignature,
           },
         },
-      })
-    }),
-  }
-  return ImageModel.make<GoogleImageOptions>({ id: input.id, provider: "google", route, http: input.http })
-}
-
-const googleImagePart = (image: ImageInput): Effect.Effect<Record<string, unknown>, AIError> => {
-  if (image.type === "bytes")
-    return Effect.succeed({ inlineData: { mimeType: image.mediaType, data: Encoding.encodeBase64(image.data) } })
-  if (image.type === "file-uri") return Effect.succeed({ fileData: { mimeType: image.mediaType, fileUri: image.uri } })
-  if (image.type === "url")
-    return ImageInputs.decodeDataUrl(image.url).pipe(
-      Effect.flatMap((decoded) => {
-        if (decoded === undefined)
-          return Effect.fail(
-            ImageInputs.invalid(
-              "Google generateContent does not fetch public image URLs; use bytes, a data URL, or a Gemini file URI",
-            ),
-          )
-        return Effect.succeed({
-          inlineData: { mimeType: decoded.mediaType, data: Encoding.encodeBase64(decoded.data) },
-        })
-      }),
-    )
-  return Effect.fail(
-    ImageInputs.invalid("Google generateContent requires Gemini file URIs rather than provider file IDs"),
+      },
+    ),
   )
-}
+  if (images.length === 0) {
+    const finishReasons = candidates.flatMap((candidate) =>
+      candidate.finishReason === undefined ? [] : [candidate.finishReason],
+    )
+    return yield* output.invalid(
+      `${route.name} returned no final images${
+        finishReasons.length === 0 ? "" : ` (finish reasons: ${finishReasons.join(", ")})`
+      }; inspect body for prompt feedback and candidate details`,
+    )
+  }
+  // Candidates that stopped for a safety or policy reason are partial results, not a silent drop.
+  const notices = [
+    ...(decoded.promptFeedback === undefined
+      ? []
+      : [
+          {
+            type: "filtered" as const,
+            message: `${route.name} reported prompt feedback`,
+            providerMetadata: { google: { promptFeedback: decoded.promptFeedback } },
+          },
+        ]),
+    ...candidates.flatMap((candidate, index) =>
+      candidate.finishReason === undefined || candidate.finishReason === "STOP"
+        ? []
+        : [
+            {
+              type: "filtered" as const,
+              message: `${route.name} candidate ${candidate.index ?? index} finished with ${candidate.finishReason}${
+                candidate.finishMessage === undefined ? "" : `: ${candidate.finishMessage}`
+              }`,
+              providerMetadata: {
+                google: {
+                  candidateIndex: candidate.index ?? index,
+                  finishReason: candidate.finishReason,
+                  finishMessage: candidate.finishMessage,
+                  safetyRatings: candidate.safetyRatings,
+                },
+              },
+            },
+          ],
+    ),
+  ]
+  const usage = decoded.usageMetadata
+  const outputTokens =
+    usage?.candidatesTokenCount === undefined ? undefined : usage.candidatesTokenCount + (usage.thoughtsTokenCount ?? 0)
+  return new ImageResponse({
+    images,
+    notices: notices.length === 0 ? undefined : notices,
+    usage:
+      usage === undefined
+        ? undefined
+        : {
+            type: "tokens",
+            input: usage.promptTokenCount,
+            output: outputTokens,
+            total: ProviderShared.totalTokens(usage.promptTokenCount, outputTokens, usage.totalTokenCount),
+            details: {
+              reasoningTokens: usage.thoughtsTokenCount,
+              cacheReadInputTokens: usage.cachedContentTokenCount,
+              google: usage,
+            },
+          },
+    providerMetadata: {
+      google: {
+        modelVersion: decoded.modelVersion,
+        responseId: decoded.responseId,
+        promptFeedback: decoded.promptFeedback,
+        candidates: candidateMetadata,
+      },
+    },
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 7. Protocol and route
+// ---------------------------------------------------------------------------
+
+export const protocol = MediaProtocol.inline<Request, ImageResponse>(route, {
+  unsupported: ["mask", "size", "format"],
+  body: { from: fromRequest },
+  response: { decode: decodeResponse },
+})
+
+export const model = (input: MediaRoute.ModelInput) =>
+  ImageModel.fromRoute<GoogleImageOptions>(
+    {
+      protocol,
+      baseURL: DEFAULT_BASE_URL,
+      path: ({ request }) => `/models/${request.model.id}:generateContent`,
+    },
+    input,
+  )
 
 export const GoogleImages = {
+  protocol,
   model,
 } as const

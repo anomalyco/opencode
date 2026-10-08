@@ -6,6 +6,7 @@ import {
   type LanguageModelProviderOptions,
   type ProviderOptions,
 } from "../src/index.js"
+import { ai } from "../src/promise.js"
 import { OpenAIChat } from "../src/protocols.js"
 
 interface ExampleOptions {
@@ -31,6 +32,10 @@ const generated = LLM.generate(LLM.request({ model, prompt: "Hello" }))
 type GenerateRequirements = Assert<Equal<Requirements<typeof generated>, LLMClientService>>
 const streamed = LLM.stream(LLM.request({ model, prompt: "Hello" }))
 type StreamClientRequirements = Assert<Equal<StreamRequirements<typeof streamed>, LLMClientService>>
+const generatedFromInput = LLM.generate({ model, prompt: "Hello", providerOptions: { mode: "fast" } })
+type InputGenerateRequirements = Assert<Equal<Requirements<typeof generatedFromInput>, LLMClientService>>
+const streamedFromInput = LLM.stream({ model, prompt: "Hello", providerOptions: { mode: "thorough" } })
+type InputStreamRequirements = Assert<Equal<StreamRequirements<typeof streamedFromInput>, LLMClientService>>
 
 LLM.request({
   model,
@@ -38,6 +43,11 @@ LLM.request({
   // @ts-expect-error Known provider options preserve their value types.
   providerOptions: { mode: "slow" },
 })
+
+// @ts-expect-error Direct input keeps the selected model's provider option types.
+LLM.generate({ model, prompt: "Hello", providerOptions: { mode: "slow" } })
+// @ts-expect-error Stream input keeps the selected model's provider option types.
+LLM.stream({ model, prompt: "Hello", providerOptions: { mode: "slow" } })
 
 const generatedObject = LLM.generateObject({
   model,
@@ -69,5 +79,16 @@ const options: LanguageModelProviderOptions<typeof model> = { mode: "fast" }
 void (options satisfies LanguageModelProviderOptions<typeof model>)
 void (true satisfies GenerateRequirements)
 void (true satisfies StreamClientRequirements)
+void (true satisfies InputGenerateRequirements)
+void (true satisfies InputStreamRequirements)
 void (true satisfies GenerateObjectRequirements)
 void (true satisfies GenerateDynamicObjectRequirements)
+
+void ai.llm.generate({ model, prompt: "Hello", providerOptions: { mode: "fast" } })
+void ai.llm.stream({ model, prompt: "Hello", providerOptions: { mode: "thorough" } })
+void ai.llm.generate(ai.llm.request({ model, prompt: "Hello" }))
+void ai.llm.stream(ai.llm.request({ model, prompt: "Hello" }))
+// @ts-expect-error Promise direct input keeps the selected model's provider option types.
+void ai.llm.generate({ model, prompt: "Hello", providerOptions: { mode: "slow" } })
+// @ts-expect-error Promise stream input keeps the selected model's provider option types.
+void ai.llm.stream({ model, prompt: "Hello", providerOptions: { mode: "slow" } })

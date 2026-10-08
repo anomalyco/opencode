@@ -12,6 +12,7 @@ export function createRefCountMap<T>(
     const id = identity(key)
     onCleanup(() => {
       refCounts.set(id, (refCounts.get(id) ?? 0) - 1)
+
       if (refCounts.get(id) === 0) {
         remove?.(id)
         items.delete(id)
@@ -20,13 +21,17 @@ export function createRefCountMap<T>(
     })
 
     const cached = items.get(id)
+
     if (cached) {
       refCounts.set(id, (refCounts.get(id) ?? 0) + 1)
+
       return cached
     }
+
     const item = create(key)
     items.set(id, item)
     refCounts.set(id, 1)
+
     return item
   }
 }

@@ -3,6 +3,7 @@ import picker from "@brendonovich/vite-plugin-opencode"
 export function pickerPlugin() {
   const plugin = picker()
   const client = "/__vite_opencode_picker_client.js"
+
   return {
     ...plugin,
     resolveId(id: string) {

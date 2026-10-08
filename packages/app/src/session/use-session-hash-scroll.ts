@@ -27,17 +27,20 @@ export const useSessionHashScroll = (input: {
   let pendingKey = ""
   let clearing = false
 
-  const location = useLocation()
+  const location = useLocation<{ reveal?: string }>()
   const navigate = useNavigate()
 
   const frames = new Set<number>()
+
   const queue = (fn: () => void) => {
     const id = requestAnimationFrame(() => {
       frames.delete(id)
       fn()
     })
+
     frames.add(id)
   }
+
   const cancel = () => {
     for (const id of frames) cancelAnimationFrame(id)
     frames.clear()
@@ -46,7 +49,9 @@ export const useSessionHashScroll = (input: {
   const clearMessageHash = () => {
     cancel()
     input.consumePendingMessage(input.sessionKey())
+
     if (input.pendingMessage()) input.setPendingMessage(undefined)
+
     if (!location.hash) return
     clearing = true
     navigate(location.pathname + location.search, { replace: true })
@@ -54,6 +59,7 @@ export const useSessionHashScroll = (input: {
 
   const updateHash = (id: string) => {
     const hash = `#${input.anchor(id)}`
+
     if (location.hash === hash) return
     clearing = false
     navigate(location.pathname + location.search + hash, {
@@ -63,6 +69,7 @@ export const useSessionHashScroll = (input: {
 
   const scrollToElement = (el: HTMLElement, behavior: ScrollBehavior) => {
     const root = input.scroller()
+
     if (!root) return false
 
     const a = el.getBoundingClientRect()
@@ -71,27 +78,33 @@ export const useSessionHashScroll = (input: {
     const inset = sticky instanceof HTMLElement ? sticky.offsetHeight : 0
     const top = Math.max(0, a.top - b.top + root.scrollTop - inset)
     root.scrollTo({ top, behavior })
+
     return true
   }
 
   const seek = (id: string, behavior: ScrollBehavior, left = 4): boolean => {
     input.revealMessage?.(id)
     const el = document.getElementById(input.anchor(id))
+
     if (el) return scrollToElement(el, behavior)
+
     if (left <= 0) return false
     queue(() => {
       seek(id, behavior, left - 1)
     })
+
     return false
   }
 
   const scrollToMessage = (message: SessionMessageUser, behavior: ScrollBehavior = "smooth") => {
     cancel()
+
     if (input.currentMessageId() !== message.id) input.setActiveMessage(message)
     input.revealMessage?.(message.id)
 
     if (seek(message.id, behavior)) {
       updateHash(message.id)
+
       return
     }
 
@@ -100,39 +113,54 @@ export const useSessionHashScroll = (input: {
 
   const applyHash = (behavior: ScrollBehavior) => {
     const hash = location.hash.slice(1)
+
     if (!hash) {
+      // A route that opens the session on a tool call leaves the scroll to the timeline, which reveals the call.
+      if (location.state?.reveal) return
+
       input.follow.toBottom()
       const el = input.scroller()
+
       if (el) input.scheduleScrollState(el)
+
       return
     }
 
     const messageId = messageIdFromHash(hash)
+
     if (messageId) {
       input.follow.unpin()
       const msg = messageById().get(messageId)
+
       if (msg) {
         scrollToMessage(msg, behavior)
+
         return
       }
+
       return
     }
 
     const target = document.getElementById(hash)
+
     if (target) {
       input.follow.unpin()
       scrollToElement(target, behavior)
+
       return
     }
 
     input.follow.toBottom()
     const el = input.scroller()
+
     if (el) input.scheduleScrollState(el)
   }
 
   createEffect(() => {
     const hash = location.hash
+
     if (!hash) clearing = false
+
     if (!input.sessionID() || !input.messagesReady()) return
     cancel()
     queue(() => applyHash("auto"))
@@ -144,11 +172,14 @@ export const useSessionHashScroll = (input: {
     visibleUserMessages()
 
     let targetId = input.pendingMessage()
+
     if (!targetId) {
       const key = input.sessionKey()
+
       if (pendingKey !== key) {
         pendingKey = key
         const next = input.consumePendingMessage(key)
+
         if (next) {
           input.setPendingMessage(next)
           targetId = next
@@ -157,13 +188,16 @@ export const useSessionHashScroll = (input: {
     }
 
     if (!targetId && !clearing) targetId = messageIdFromHash(location.hash)
+
     if (!targetId) return
 
     const pending = input.pendingMessage() === targetId
     const msg = messageById().get(targetId)
+
     if (!msg) return
 
     if (pending) input.setPendingMessage(undefined)
+
     if (input.currentMessageId() === targetId && !pending) return
 
     input.follow.unpin()
@@ -173,14 +207,19 @@ export const useSessionHashScroll = (input: {
 
   createEffect(() => {
     const sessionID = input.sessionID()
+
     if (!sessionID || !input.messagesReady()) return
 
     visibleUserMessages()
 
     let targetId = input.pendingMessage()
+
     if (!targetId && !clearing) targetId = messageIdFromHash(location.hash)
+
     if (!targetId) return
+
     if (messageById().has(targetId)) return
+
     if (!input.historyMore() || input.historyLoading()) return
 
     void input.loadMore(sessionID)

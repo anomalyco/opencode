@@ -11,11 +11,9 @@ import {
   useCommand,
   useCurrentRoute,
   useLanguage,
+  useExtensionServers,
   useTabs,
-  useWslServers,
-  useSsh,
   type LayoutRoute,
-  type UpdaterPlatform,
 } from "@opencode/app/desktop"
 import { useTheme } from "@opencode/ui/theme/context"
 import type { BaseRouterProps } from "@solidjs/router"
@@ -30,16 +28,15 @@ import { preloadStoredLocale } from "./startup/locale"
 import { LoadingSplash } from "./startup/splash"
 import { getLastActiveUrl } from "./window/route-storage"
 import { DesktopMemoryRouter } from "./window/router"
-import { availableStartupServer, readyWslConnections } from "./wsl/connections"
-import { createSshConnections } from "./ssh/connections"
 
 const MigrationStatus = lazy(() => import("./migration-status").then((module) => ({ default: module.MigrationStatus })))
 
-export function DesktopApp(props: { api: ElectronAPI; updater: UpdaterPlatform; version: string }) {
+export function DesktopApp(props: { api: ElectronAPI; version: string }) {
   const windowState = { id: props.api.getWindowID(), version: props.version }
   const initialUrl = getLastActiveUrl(windowState.id)
   const url = new URL(initialUrl, "http://localhost")
   const route = currentRoute(url.pathname, url.search)
+
   const [startup, setStartup] = createStore({
     ready: false,
     visible: true,
@@ -48,29 +45,33 @@ export function DesktopApp(props: { api: ElectronAPI; updater: UpdaterPlatform; 
     drawingReady: false,
     route,
   })
+
   // The window was created with the answers the shell gate needs; only a fresh install, which has no
   // onboarding decision yet, asks over IPC and waits for the port.
   const bootstrap = props.api.getWindowBootstrap()
+
   const [firstLaunch] = createResource(() =>
     bootstrap.firstLaunchPending !== undefined
       ? Promise.resolve(bootstrap.firstLaunchPending)
       : props.api.isFirstLaunchOnboardingPending().catch((error) => {
           console.error("[desktop-onboarding] first launch check failed", error)
+
           return false
         }),
   )
-  const platform = createDesktopPlatform(props.api, windowState, props.updater)
+
+  const platform = createDesktopPlatform(props.api, windowState)
   const [sidecar, { mutate: setSidecar }] = createResource(() => props.api.awaitInitialization())
-  const [defaultServer] = createResource(async () => {
-    if (bootstrap.defaultServerUrl === undefined) return platform.getDefaultServer?.()
-    return bootstrap.defaultServerUrl ? ServerConnection.Key.make(bootstrap.defaultServerUrl) : null
-  })
+
   const [locale] = createResource(() => preloadStoredLocale(platform))
+
   const [initialRoute] = createResource(
     () => !firstLaunch.loading && (firstLaunch() && initialUrl === "/" ? "/new-session" : initialUrl),
     preloadRoute,
   )
+
   const router = (routerProps: BaseRouterProps) => <DesktopMemoryRouter {...routerProps} windowID={windowState.id} />
+
   const readyToReveal = () =>
     startup.ready &&
     (!import.meta.env.OPENCODE_TEST_ONBOARDING || !firstLaunch() || initialUrl !== "/" || startup.drawingReady)
@@ -82,22 +83,15 @@ export function DesktopApp(props: { api: ElectronAPI; updater: UpdaterPlatform; 
   })
 
   function ReadyApp() {
-    const wslServers = useWslServers()
-    const ssh = useSsh()
-    const sshConnections = createSshConnections(props.api.sshServers)
+    const extensions = useExtensionServers()
     const language = useLanguage()
-    const ready = createMemo(
-      () =>
-        !firstLaunch.loading &&
-        !defaultServer.loading &&
-        !sidecar.loading &&
-        !locale.loading &&
-        !wslServers.isLoading &&
-        !ssh.loading,
-    )
+
+    const ready = createMemo(() => !firstLaunch.loading && !sidecar.loading && !locale.loading && extensions.ready())
+
     const servers = createMemo(() => {
       const data = initializationData(sidecar)
       const list: ServerConnection.Any[] = []
+
       if (data) {
         list.push({
           displayName: language.t("desktop.server.local"),
@@ -107,40 +101,33 @@ export function DesktopApp(props: { api: ElectronAPI; updater: UpdaterPlatform; 
           reconnect: createSidecarResolver({ api: props.api, current: sidecar, update: setSidecar }),
         })
       }
-      list.push(...readyWslConnections(wslServers.data, language.t("wsl.server.label")))
-      list.push(...sshConnections({ servers: ssh.servers }, language.t("ssh.label")))
+
+      list.push(...extensions.list())
+
       return list
     })
-    const effectiveDefaultServer = createMemo(() =>
-      ServerConnection.Key.make(availableStartupServer(defaultServer.latest, wslServers.data)),
-    )
 
     return (
       <Show when={ready()}>
-        <Show when={effectiveDefaultServer()} keyed>
-          {(key) => (
-            <AppInterface defaultServer={key} servers={servers()} router={router}>
-              <DesktopStartupReady
-                routeReady={!initialRoute.loading && startup.onboardingReady}
-                onReady={() => setStartup("ready", true)}
-                onRoute={(route) => setStartup("route", route)}
-              />
-              <DesktopFirstLaunchOnboarding
-                api={props.api}
-                initialUrl={initialUrl}
-                serverKey={key}
-                pending={firstLaunch() ?? false}
-                onReady={() => setStartup("onboardingReady", true)}
-              />
-              <DesktopEffects api={props.api} />
-              <Suspense fallback={null}>
-                <Show when={initializationData(sidecar)} keyed>
-                  {(server) => <MigrationStatus server={server} />}
-                </Show>
-              </Suspense>
-            </AppInterface>
-          )}
-        </Show>
+        <AppInterface servers={servers()} router={router}>
+          <DesktopStartupReady
+            routeReady={!initialRoute.loading && startup.onboardingReady}
+            onReady={() => setStartup("ready", true)}
+            onRoute={(route) => setStartup("route", route)}
+          />
+          <DesktopFirstLaunchOnboarding
+            api={props.api}
+            initialUrl={initialUrl}
+            pending={firstLaunch() ?? false}
+            onReady={() => setStartup("onboardingReady", true)}
+          />
+          <DesktopEffects api={props.api} />
+          <Suspense fallback={null}>
+            <Show when={initializationData(sidecar)} keyed>
+              {(server) => <MigrationStatus server={server} />}
+            </Show>
+          </Suspense>
+        </AppInterface>
       </Show>
     )
   }
@@ -192,6 +179,7 @@ function DesktopStartupReady(props: {
     if (!props.routeReady || !tabs.ready() || !tabs.infoReady()) return
     props.onReady()
   })
+
   return null
 }
 
@@ -204,6 +192,7 @@ function DesktopEffects(props: { api: ElectronAPI }) {
     theme.themeId()
     theme.mode()
     const background = getComputedStyle(document.documentElement).getPropertyValue("--background-base").trim()
+
     if (background) void props.api.setBackgroundColor(background)
   })
 

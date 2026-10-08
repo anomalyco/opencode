@@ -31,28 +31,22 @@ const XAIResponsesHostedToolItem = Schema.Union([
   ),
 ])
 
-const XAIResponsesBody = Schema.Struct({
-  ...OpenResponses.coreFields,
-  input: Schema.Array(Schema.Union([OpenResponses.InputItem, XAIResponsesHostedToolItem])),
-  stream: Schema.Literal(true),
-})
-
 const adapter = {
   id: ADAPTER,
   name: NAME,
   restoreHostedToolItem: (item: unknown) => (Schema.is(XAIResponsesHostedToolItem)(item) ? item : undefined),
 } satisfies OpenResponses.ProviderAdapter
 
-const decodeBody = ProviderShared.validateWith(Schema.decodeUnknownEffect(XAIResponsesBody))
 const fromRequest = Effect.fn("XAIResponses.fromRequest")(function* (request: LLMRequest) {
   if (request.providerOptions?.contextManagement !== undefined)
     return yield* ProviderShared.unsupportedOperation({
       operation: "in-band-compaction",
       provider: request.model.provider,
       route: request.model.route.id,
-      message: "xAI requires explicit compaction through LLMClient.compact; automatic context management is not supported",
+      message:
+        "xAI requires explicit compaction through LLMClient.compact; automatic context management is not supported",
     })
-  return yield* decodeBody(yield* OpenResponses.fromRequestWithAdapter(request, adapter))
+  return yield* OpenResponses.fromRequestWithAdapter(request, adapter)
 })
 
 const HOSTED_TOOLS = {
@@ -82,7 +76,7 @@ const step = (state: OpenResponses.ParserState, input: OpenResponses.Event) => {
 export const protocol = Protocol.make({
   id: ADAPTER,
   body: {
-    schema: XAIResponsesBody,
+    schema: OpenResponses.OpenResponsesBody,
     from: fromRequest,
   },
   stream: {
@@ -93,6 +87,8 @@ export const protocol = Protocol.make({
   },
 })
 
-export const compact = ResponsesCompaction.make(adapter)
+export const compact = ResponsesCompaction.make(adapter, (request) =>
+  OpenResponses.lowerTools(ProviderShared.flattenTools(request.tools), adapter),
+)
 
 export * as XAIResponses from "./xai-responses.js"

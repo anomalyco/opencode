@@ -27,6 +27,7 @@ import {
 } from "@/runtime/i18n/desktop-native"
 
 export type Locale = DesktopNativeLocale
+
 export type Direction = "ltr" | "rtl"
 
 const RTL_LOCALES: ReadonlySet<Locale> = new Set(["ar", "he", "ur", "pa", "fa", "dv"])
@@ -36,19 +37,45 @@ function localeDirection(locale: Locale): Direction {
 }
 
 type RawDictionary = typeof en & typeof dict
+
 type Dictionary = Flatten<RawDictionary>
+
 type AppI18nKey = Extract<keyof typeof en, string>
+
 type AppI18nPluralKey = {
   [Key in AppI18nKey]: Key extends `${infer Base}.other` ? (`${Base}.one` extends AppI18nKey ? Base : never) : never
 }[AppI18nKey]
+
 type PluralKey = AppI18nPluralKey | UiI18nPluralKey
+
 type AppI18nPluralLookupKey = `${AppI18nPluralKey}.${UiPluralCategory}`
+
 type TranslationKey<Key extends Extract<keyof Dictionary, string>> = Key extends
   | AppI18nPluralLookupKey
   | UiI18nPluralLookupKey
   ? never
   : Key
+
 type Source = { dict: Record<string, string> }
+
+export function richTemplateParts<Value>(template: string, params: Record<string, Value>) {
+  return template
+    .split(/({{\s*[^}]+?\s*}})/g)
+    .filter(Boolean)
+    .map((part) => {
+      const match = part.match(/^{{\s*([^}]+?)\s*}}$/)
+
+      if (!match) return part
+
+      return params[match[1]] ?? ""
+    })
+}
+
+export function localizedListParts<Value>(locale: string, items: readonly Value[]) {
+  return new Intl.ListFormat(locale, { style: "long", type: "conjunction" })
+    .formatToParts(items.map((_, index) => String(index)))
+    .map((part) => (part.type === "element" ? items[Number(part.value)] : part.value))
+}
 
 function cookie(locale: Locale) {
   return `oc_locale=${encodeURIComponent(locale)}; Path=/; Max-Age=31536000; SameSite=Lax`
@@ -57,6 +84,7 @@ function cookie(locale: Locale) {
 const LOCALES: readonly Locale[] = DESKTOP_NATIVE_LOCALES
 
 const LocaleSchema = Schema.Literals(DESKTOP_NATIVE_LOCALES)
+
 const StoredLocaleSchema = Schema.Struct({
   locale: Schema.String.pipe(
     Schema.decodeTo(LocaleSchema, {
@@ -69,6 +97,7 @@ const StoredLocaleSchema = Schema.Struct({
 const INTL = DESKTOP_NATIVE_LOCALE_TAGS
 
 const base = flatten({ ...en, ...dict })
+
 const dicts = new Map<Locale, Dictionary>([["en", base]])
 
 const merge = (app: Promise<Source>, ui: Promise<Source>) =>
@@ -141,11 +170,15 @@ const loaders: Record<Exclude<Locale, "en">, () => Promise<Dictionary>> = {
 
 function loadDict(locale: Locale) {
   const hit = dicts.get(locale)
+
   if (hit) return Promise.resolve(hit)
+
   if (locale === "en") return Promise.resolve(base)
   const load = loaders[locale]
+
   return load().then((next: Dictionary) => {
     dicts.set(locale, next)
+
     return next
   })
 }
@@ -156,6 +189,7 @@ export function loadLocaleDict(locale: Locale) {
 
 function detectLocale(): Locale {
   if (typeof navigator !== "object") return "en"
+
   return detectDesktopNativeLocale(navigator.languages?.length ? navigator.languages : [navigator.language])
 }
 
@@ -169,11 +203,15 @@ export const languageSchema = Persistence.struct({
 
 function readStoredLocale() {
   if (typeof localStorage !== "object") return
+
   try {
     const raw = localStorage.getItem("opencode.global.dat:language")
+
     if (!raw) return
     const next = Schema.decodeUnknownOption(Schema.fromJsonString(StoredLocaleSchema))(raw)
+
     if (Option.isNone(next)) return
+
     return next.value.locale
   } catch {
     return
@@ -181,6 +219,7 @@ function readStoredLocale() {
 }
 
 const warm = readStoredLocale() ?? detectLocale()
+
 const initialLocale =
   warm === "en"
     ? Promise.resolve(warm)
@@ -204,8 +243,10 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
     const intl = createMemo(() => INTL[locale()])
     const [layout, setLayout] = createStore({ direction: undefined as Direction | undefined })
     const direction = createMemo(() => layout.direction ?? localeDirection(locale()))
+
     const layoutLocale = createMemo(() => {
       if (!layout.direction) return intl()
+
       // Kobalte derives menu direction from locale rather than accepting a direction override.
       return layout.direction === "rtl" ? "ar" : "en"
     })
@@ -221,11 +262,6 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       params?: Record<string, string | number | boolean>,
     ) => string
 
-    const rich = (key: Parameters<typeof t>[0], params: Record<string, JSX.Element>) =>
-      t(key)
-        .split(/(\{\{\w+\}\})/g)
-        .map((part, index) => (index % 2 ? (params[part.slice(2, -2)] ?? part) : part))
-
     const pluralForm = (
       key: PluralKey,
       category: UiPluralCategory,
@@ -234,10 +270,29 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       const current = (dictionary.loading ? base : (dictionary() ?? base)) as Record<string, string>
       const candidate = `${key}.${category}`
       const fallback = `${key}.other`
+
       return resolveTemplate(current[candidate] ?? current[fallback] ?? fallback, params)
     }
+
     const plural = (key: PluralKey, count: number, params?: Record<string, string | number | boolean>) =>
       pluralForm(key, pluralCategory(intl(), count), { ...params, count })
+
+    const tDynamic = <Key extends Extract<keyof Dictionary, string>>(
+      key: TranslationKey<Key>,
+      source: string,
+      params?: Record<string, string | number | boolean>,
+    ) => (intl().toLowerCase().split("-")[0] === "en" ? resolveTemplate(source, params) : t(key, params))
+
+    const rich = <Key extends Extract<keyof Dictionary, string>>(
+      key: TranslationKey<Key>,
+      params: Record<string, JSX.Element>,
+    ) => {
+      const current = (dictionary.loading ? base : (dictionary() ?? base)) as Record<string, string>
+
+      return richTemplateParts(current[key] ?? key, params)
+    }
+
+    const list = (items: readonly JSX.Element[]) => localizedListParts(intl(), items)
 
     const label = (value: Locale) => DESKTOP_NATIVE_LABELS[value]
 
@@ -252,6 +307,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
     createEffect(() => {
       if (!props.onNativeTranslations || dictionary.loading) return
       const current = dictionary()
+
       if (!current) return
       props.onNativeTranslations(
         createDesktopNativeBundle(locale(), (key) => current[key] ?? DESKTOP_NATIVE_ENGLISH[key]),
@@ -267,9 +323,11 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       locales: LOCALES,
       label,
       t,
-      rich,
+      tDynamic,
       plural,
       pluralForm,
+      rich,
+      list,
       setLocale(next: Locale) {
         setStore("locale", normalizeLocale(next))
       },
@@ -282,6 +340,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
 
 export function UiI18nBridge(props: { children?: JSX.Element }) {
   const language = useLanguage()
+
   return (
     <I18nProvider
       value={{

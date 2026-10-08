@@ -5,8 +5,6 @@ import {
   advanceTreePreload,
   nextSuggestionIndex,
   nextTreeScrollTop,
-  pickerTreeEntries,
-  pickerSearchEntries,
   pickerFileSearchQuery,
   pickerMode,
   preloadTreeDirectories,
@@ -23,6 +21,12 @@ import {
   pickerAbsoluteInput,
 } from "./domain"
 
+type Sdk = Parameters<typeof listPickerDirectory>[0]
+
+// The picker only reads `api.file.find` and `api.file.list`.
+const sdk = (file: { find?: (input: never) => Promise<unknown>; list?: (input: never) => Promise<unknown> }) =>
+  ({ api: { file } }) as unknown as Sdk
+
 test("maps server directory entries into Pierre paths", () => {
   expect(
     treeEntries("src/", [
@@ -32,32 +36,24 @@ test("maps server directory entries into Pierre paths", () => {
   ).toEqual(["src/components/", "src/index.ts"])
 })
 
-test("maps Pierre paths back to the selected server root", () => {
-  expect(absoluteTreePath("C:/Users/luke", "src/components/")).toBe("C:/Users/luke/src/components")
-  expect(absoluteTreePath("C:/", "")).toBe("C:/")
-  expect(absoluteTreePath("C:/", "README.md")).toBe("C:/README.md")
-  expect(absoluteTreePath("/home/luke", "README.md")).toBe("/home/luke/README.md")
+test.each([
+  ["C:/Users/luke", "src/components/", "C:/Users/luke/src/components"],
+  ["C:/", "", "C:/"],
+  ["C:/", "README.md", "C:/README.md"],
+  ["/home/luke", "README.md", "/home/luke/README.md"],
+])("maps the Pierre path %p under %p back to %p", (root, path, expected) => {
+  expect(absoluteTreePath(root, path)).toBe(expected)
 })
 
-test("includes files only when the picker selects files", () => {
+test("centralizes file and directory selection policy", () => {
   const nodes = [
     { name: "components", type: "directory" as const },
     { name: "index.ts", type: "file" as const },
   ]
-  expect(pickerTreeEntries("", nodes, "directory")).toEqual(["components/"])
-  expect(pickerTreeEntries("", nodes, "file")).toEqual(["components/", "index.ts"])
-})
 
-test("includes files in file autocomplete while preserving directory navigation", () => {
-  const nodes = [
-    { name: "src", absolute: "/repo/src", type: "directory" as const },
-    { name: "README.md", absolute: "/repo/README.md", type: "file" as const },
-  ]
-  expect(pickerSearchEntries(nodes, "directory")).toEqual([nodes[0]])
-  expect(pickerSearchEntries(nodes, "file")).toEqual(nodes)
-})
+  expect(pickerMode("file", "/repo").entries("src/", nodes)).toEqual(["src/components/", "src/index.ts"])
+  expect(pickerMode("directory").entries("src/", nodes)).toEqual(["src/components/"])
 
-test("centralizes file and directory selection policy", () => {
   const file = pickerMode("file", "/repo")
   expect(file.includeFiles).toBeTrue()
   expect(file.selection("/repo/src", "index.ts")).toBe("src/index.ts")
@@ -77,11 +73,11 @@ test("centralizes file and directory selection policy", () => {
   expect(directory.result("C:/Users/luke", "")).toBe("C:\\Users\\luke")
   expect(directory.result("//Server/Share/repo", "")).toBe("\\\\Server\\Share\\repo")
   expect(directory.result("/repo", "", false)).toBeUndefined()
-})
 
-test("accepts mutations only from the active navigation", () => {
-  expect(activeTreeNavigation(3, 3)).toBeTrue()
-  expect(activeTreeNavigation(2, 3)).toBeFalse()
+  expect(selectedTreePath("/home/luke/repo", "src/", "directory")).toBe("/home/luke/repo/src")
+  expect(selectedTreePath("/home/luke/repo", "src/index.ts", "file")).toBe("src/index.ts")
+  expect(selectedTreePath("/home/luke/repo/src", "index.ts", "file", "/home/luke/repo")).toBe("src/index.ts")
+  expect(selectedTreePath("/home/luke/repo", "src/", "file")).toBeUndefined()
 })
 
 test("preserves POSIX case while matching Windows drives case-insensitively", () => {
@@ -95,29 +91,31 @@ test("preserves POSIX case while matching Windows drives case-insensitively", ()
   expect(pickerMode("file", "C:/").selection("C:/", "file.ts")).toBe("file.ts")
 })
 
-test("displays paths using the selected server path format", () => {
-  expect(displayPickerPath("C:/Users/luke/repos", "C:/Users/luke/repos", "C:/Users/luke")).toBe(
+test.each([
+  [
+    "display",
+    displayPickerPath("C:/Users/luke/repos", "C:/Users/luke/repos", "C:/Users/luke"),
     "C:\\Users\\luke\\repos",
-  )
-  expect(displayPickerPath("C:/Users/luke/repos", "C:\\Users\\luke\\repos", "C:/Users/luke")).toBe(
+  ],
+  [
+    "display",
+    displayPickerPath("C:/Users/luke/repos", "C:\\Users\\luke\\repos", "C:/Users/luke"),
     "C:\\Users\\luke\\repos",
-  )
-  expect(displayPickerPath("/home/luke/repos", "repos", "/home/luke")).toBe("~/repos")
-  expect(displayPickerPath("/home/luke/repos", "~/repos", "/home/luke")).toBe("~/repos")
-})
-
-test("treats the server share prefix as the UNC root", () => {
-  expect(pickerRoot("//Server/Share/repo/src")).toBe("//Server/Share")
-  expect(pickerRoot("\\\\Server\\Share\\repo\\src")).toBe("//Server/Share")
-  expect(pickerParent("//Server/Share")).toBe("//Server/Share")
-  expect(pickerParent("//Server/Share/repo")).toBe("//Server/Share")
-})
-
-test("resolves relative input against the current picker root", () => {
-  expect(pickerAbsoluteInput("src", "/home/luke", "/home/luke/repo")).toBe("/home/luke/repo/src")
-  expect(pickerAbsoluteInput("../other", "/home/luke", "/home/luke/repo")).toBe("/home/luke/other")
-  expect(pickerAbsoluteInput("~/.config", "/home/luke", "/home/luke/repo")).toBe("/home/luke/.config")
-  expect(pickerAbsoluteInput("src", "C:/Users/luke", "C:/Users/luke/repo")).toBe("C:/Users/luke/repo/src")
+  ],
+  ["display", displayPickerPath("/home/luke/repos", "repos", "/home/luke"), "~/repos"],
+  ["display", displayPickerPath("/home/luke/repos", "~/repos", "/home/luke"), "~/repos"],
+  ["UNC root", pickerRoot("//Server/Share/repo/src"), "//Server/Share"],
+  ["UNC root", pickerRoot("\\\\Server\\Share\\repo\\src"), "//Server/Share"],
+  ["UNC parent", pickerParent("//Server/Share"), "//Server/Share"],
+  ["UNC parent", pickerParent("//Server/Share/repo"), "//Server/Share"],
+  ["relative input", pickerAbsoluteInput("src", "/home/luke", "/home/luke/repo"), "/home/luke/repo/src"],
+  ["relative input", pickerAbsoluteInput("../other", "/home/luke", "/home/luke/repo"), "/home/luke/other"],
+  ["relative input", pickerAbsoluteInput("~/.config", "/home/luke", "/home/luke/repo"), "/home/luke/.config"],
+  ["relative input", pickerAbsoluteInput("src", "C:/Users/luke", "C:/Users/luke/repo"), "C:/Users/luke/repo/src"],
+  ["file search", pickerFileSearchQuery("/home/luke/repos", "/home/luke/repos/src/in", "/home/luke"), "src/in"],
+  ["file search", pickerFileSearchQuery("/home/luke", "~/repos/op", "/home/luke"), "repos/op"],
+])("uses the selected server path format for %s: %p", (_name, actual, expected) => {
+  expect(actual).toBe(expected)
 })
 
 test("exposes autocomplete results only for their source query", () => {
@@ -126,27 +124,27 @@ test("exposes autocomplete results only for their source query", () => {
   expect(currentPickerSuggestions(result, "/repo/test")).toEqual([])
 })
 
-test("scopes file autocomplete to the current browser root", () => {
-  expect(pickerFileSearchQuery("/home/luke/repos", "/home/luke/repos/src/in", "/home/luke")).toBe("src/in")
-  expect(pickerFileSearchQuery("/home/luke", "~/repos/op", "/home/luke")).toBe("repos/op")
-})
-
 test("resolves directory autocomplete from the browser root without changing location", async () => {
   const calls: unknown[] = []
   const location = { directory: "/repo", workspace: "workspace_1" }
-  const sdk = {
-    api: {
-      file: {
-        find: (input: unknown) => {
-          calls.push(input)
-          return Promise.resolve({ location, data: [{ path: "src/components/", type: "directory" }] })
-        },
-        list: () => Promise.resolve({ data: [] }),
-      },
+
+  const api = sdk({
+    find: (input) => {
+      calls.push(input)
+
+      return Promise.resolve({ location, data: [{ path: "src/components/", type: "directory" }] })
     },
-  } as unknown as Parameters<typeof createDirectorySearch>[0]["sdk"]
+    list: () => Promise.resolve({ data: [] }),
+  })
+
   let base = "/repo"
-  const search = createDirectorySearch({ sdk, home: () => "/home/luke", base: () => base, location: () => location })
+
+  const search = createDirectorySearch({
+    sdk: api,
+    home: () => "/home/luke",
+    base: () => base,
+    location: () => location,
+  })
 
   expect(await search("components")).toEqual(["/repo/src/components"])
   base = "/repo/src"
@@ -161,30 +159,29 @@ test("resolves directory autocomplete from the browser root without changing loc
 test("lists absolute parents and preloads siblings through a stable workspace", async () => {
   const calls: unknown[] = []
   const location = { directory: "/repo/current", workspace: "workspace_1" }
-  const sdk = {
-    api: {
-      file: {
-        list: async (input: { path?: string }) => {
-          calls.push(input)
-          return {
-            location,
-            data:
-              input.path === "/repo"
-                ? [
-                    { path: "./", type: "directory" },
-                    { path: "../sibling/", type: "directory" },
-                  ]
-                : [{ path: "../sibling/src/", type: "directory" }],
-          }
-        },
-      },
+
+  const api = sdk({
+    list: async (input: { path?: string }) => {
+      calls.push(input)
+
+      return {
+        location,
+        data:
+          input.path === "/repo"
+            ? [
+                { path: "./", type: "directory" },
+                { path: "../sibling/", type: "directory" },
+              ]
+            : [{ path: "../sibling/src/", type: "directory" }],
+      }
     },
-  } as unknown as Parameters<typeof listPickerDirectory>[0]
-  expect(await listPickerDirectory(sdk, location, "/repo")).toEqual([
+  })
+
+  expect(await listPickerDirectory(api, location, "/repo")).toEqual([
     { name: "current", absolute: "/repo/current", type: "directory" },
     { name: "sibling", absolute: "/repo/sibling", type: "directory" },
   ])
-  expect(await listPickerDirectory(sdk, location, "/repo/sibling")).toEqual([
+  expect(await listPickerDirectory(api, location, "/repo/sibling")).toEqual([
     { name: "src", absolute: "/repo/sibling/src", type: "directory" },
   ])
   expect(calls).toEqual([
@@ -196,58 +193,76 @@ test("lists absolute parents and preloads siblings through a stable workspace", 
 test("uses listings for typed searches outside the current location", async () => {
   const calls: unknown[] = []
   const location = { directory: "/repo/current", workspace: "workspace_1" }
-  const sdk = {
-    api: {
-      file: {
-        find: () => Promise.reject(new Error("outside searches must not change location")),
-        list: async (input: unknown) => {
-          calls.push(input)
-          return { location, data: [{ path: "../sibling/", type: "directory" }] }
-        },
-      },
+
+  const api = sdk({
+    find: () => Promise.reject(new Error("outside searches must not change location")),
+    list: async (input) => {
+      calls.push(input)
+
+      return { location, data: [{ path: "../sibling/", type: "directory" }] }
     },
-  } as unknown as Parameters<typeof createDirectorySearch>[0]["sdk"]
-  const search = createDirectorySearch({ sdk, home: () => "/home/luke", base: () => "/repo", location: () => location })
+  })
+
+  const search = createDirectorySearch({
+    sdk: api,
+    home: () => "/home/luke",
+    base: () => "/repo",
+    location: () => location,
+  })
+
   expect(await search("sib")).toEqual(["/repo/sibling"])
   expect(calls).toEqual([{ location, path: "/repo" }])
 })
 
 test("keeps literal tilde directory names in server listing and search results", async () => {
   const location = { directory: "/repo" }
-  const sdk = {
-    api: {
-      file: {
-        list: async () => ({ location, data: [{ path: "~/", type: "directory" }] }),
-        find: async () => ({ location, data: [{ path: "~/nested/", type: "directory" }] }),
-      },
-    },
-  } as unknown as Parameters<typeof listPickerDirectory>[0]
-  expect(await listPickerDirectory(sdk, location, "/repo")).toEqual([
+
+  const api = sdk({
+    list: async () => ({ location, data: [{ path: "~/", type: "directory" }] }),
+    find: async () => ({ location, data: [{ path: "~/nested/", type: "directory" }] }),
+  })
+
+  expect(await listPickerDirectory(api, location, "/repo")).toEqual([
     { name: "~", absolute: "/repo/~", type: "directory" },
   ])
-  const search = createDirectorySearch({ sdk, home: () => "/home/user", base: () => "/repo", location: () => location })
+
+  const search = createDirectorySearch({
+    sdk: api,
+    home: () => "/home/user",
+    base: () => "/repo",
+    location: () => location,
+  })
+
   expect(await search("nested")).toEqual(["/repo/~/nested"])
 })
 
 test("discards stale typed results without changing the request location", async () => {
   const location = { directory: "/repo" }
+
   const pending = Promise.withResolvers<{
     location: typeof location
     data: Array<{ path: string; type: "directory" }>
   }>()
+
   const calls: unknown[] = []
-  const sdk = {
-    api: {
-      file: {
-        find: async (input: { query: string }) => {
-          calls.push(input)
-          if (input.query === "old") return pending.promise
-          return { location, data: [{ path: "new/", type: "directory" }] }
-        },
-      },
+
+  const api = sdk({
+    find: async (input: { query: string }) => {
+      calls.push(input)
+
+      if (input.query === "old") return pending.promise
+
+      return { location, data: [{ path: "new/", type: "directory" }] }
     },
-  } as unknown as Parameters<typeof createDirectorySearch>[0]["sdk"]
-  const search = createDirectorySearch({ sdk, home: () => "/home/luke", base: () => "/repo", location: () => location })
+  })
+
+  const search = createDirectorySearch({
+    sdk: api,
+    home: () => "/home/luke",
+    base: () => "/repo",
+    location: () => location,
+  })
+
   const stale = search("old")
   expect(await search("new")).toEqual(["/repo/new"])
   pending.resolve({ location, data: [{ path: "old/", type: "directory" }] })
@@ -260,22 +275,21 @@ test("discards stale typed results without changing the request location", async
 
 test("maps server-native drive and share paths without rebasing the location", async () => {
   const calls: unknown[] = []
-  const sdk = {
-    api: {
-      file: {
-        list: async (input: { location: { directory: string }; path: string }) => {
-          calls.push(input)
-          return { location: input.location, data: [{ path: "../sibling/", type: "directory" }] }
-        },
-      },
+
+  const api = sdk({
+    list: async (input: { location: { directory: string }; path: string }) => {
+      calls.push(input)
+
+      return { location: input.location, data: [{ path: "../sibling/", type: "directory" }] }
     },
-  } as unknown as Parameters<typeof listPickerDirectory>[0]
+  })
+
   const drive = { directory: "C:\\Repo\\Current", workspace: "workspace_1" }
-  expect(await listPickerDirectory(sdk, drive, "c:/repo")).toEqual([
+  expect(await listPickerDirectory(api, drive, "c:/repo")).toEqual([
     { name: "sibling", type: "directory", absolute: "C:/Repo/sibling" },
   ])
   const share = { directory: "\\\\Server\\Share\\Current", workspace: "workspace_2" }
-  expect(await listPickerDirectory(sdk, share, "//server/share")).toEqual([
+  expect(await listPickerDirectory(api, share, "//server/share")).toEqual([
     { name: "sibling", type: "directory", absolute: "//Server/Share/sibling" },
   ])
   expect(calls).toEqual([
@@ -284,113 +298,99 @@ test("maps server-native drive and share paths without rebasing the location", a
   ])
 })
 
-test("keeps indexed directory results for servers that support empty search", async () => {
-  const location = { directory: "/home/luke" }
-  const sdk = {
-    api: {
-      file: {
-        find: () => Promise.resolve({ location, data: [{ path: "projects/", type: "directory" }] }),
-        list: () => Promise.reject(new Error("listing should not run when search returns results")),
-      },
+const home = { directory: "/home/luke" }
+
+const projects = Array.from({ length: 60 }, (_, index) => ({ path: `project-${index}/`, type: "directory" as const }))
+
+const fallbacks: {
+  name: string
+  query: string
+  find: () => Promise<unknown>
+  list: () => Promise<unknown>
+  expected: string[]
+  listed: string[]
+}[] = [
+  {
+    name: "keeps indexed results for servers that support empty search",
+    query: "",
+    find: () => Promise.resolve({ location: home, data: [{ path: "projects/", type: "directory" }] }),
+    list: () => Promise.reject(new Error("listing should not run when search returns results")),
+    expected: ["/home/luke/projects"],
+    listed: [],
+  },
+  {
+    name: "lists the default directory when empty search is unsupported",
+    query: "",
+    find: () => Promise.resolve({ data: [] }),
+    list: () => Promise.resolve({ location: home, data: [...projects, { path: "README.md", type: "file" }] }),
+    expected: projects.map((item) => `/home/luke/${item.path.slice(0, -1)}`),
+    listed: ["/home/luke"],
+  },
+  {
+    name: "matches the default directory listing when typed search is unsupported",
+    query: "documents",
+    find: () => Promise.resolve({ data: [] }),
+    list: () =>
+      Promise.resolve({
+        location: home,
+        data: [
+          { path: "Documents/", type: "directory" },
+          { path: "Downloads/", type: "directory" },
+        ],
+      }),
+    expected: ["/home/luke/Documents"],
+    listed: ["/home/luke"],
+  },
+]
+
+test.each(fallbacks)("directory search $name", async (row) => {
+  const listed: unknown[] = []
+
+  const api = sdk({
+    find: row.find,
+    list: (input: { location?: { directory?: string } }) => {
+      listed.push(input.location?.directory)
+
+      return row.list()
     },
-  } as unknown as Parameters<typeof createDirectorySearch>[0]["sdk"]
-  const search = createDirectorySearch({
-    sdk,
-    home: () => "/home/luke",
-    base: () => "/home/luke",
-    location: () => location,
   })
 
-  expect(await search("")).toEqual(["/home/luke/projects"])
-})
-
-test("lists the default directory when empty search is unsupported", async () => {
-  const location = { directory: "/home/luke" }
-  const calls: string[] = []
-  const directories = Array.from({ length: 60 }, (_, index) => ({
-    path: `project-${index}/`,
-    type: "directory" as const,
-  }))
-  const sdk = {
-    api: {
-      file: {
-        find: () => Promise.resolve({ data: [] }),
-        list: (input: { location?: { directory?: string } }) => {
-          calls.push(input.location?.directory ?? "")
-          return Promise.resolve({
-            location,
-            data: [...directories, { path: "README.md", type: "file" }],
-          })
-        },
-      },
-    },
-  } as unknown as Parameters<typeof createDirectorySearch>[0]["sdk"]
   const search = createDirectorySearch({
-    sdk,
+    sdk: api,
     home: () => "/home/luke",
     base: () => "/home/luke",
-    location: () => location,
+    location: () => home,
   })
 
-  const results = await search("")
-  expect(results).toHaveLength(60)
-  expect(results.at(-1)).toBe("/home/luke/project-59")
-  expect(calls).toEqual(["/home/luke"])
-})
-
-test("matches the default directory listing when typed search is unsupported", async () => {
-  const location = { directory: "/home/luke" }
-  const sdk = {
-    api: {
-      file: {
-        find: () => Promise.resolve({ data: [] }),
-        list: () =>
-          Promise.resolve({
-            location,
-            data: [
-              { path: "Documents/", type: "directory" },
-              { path: "Downloads/", type: "directory" },
-            ],
-          }),
-      },
-    },
-  } as unknown as Parameters<typeof createDirectorySearch>[0]["sdk"]
-  const search = createDirectorySearch({
-    sdk,
-    home: () => "/home/luke",
-    base: () => "/home/luke",
-    location: () => location,
-  })
-
-  expect(await search("documents")).toEqual(["/home/luke/Documents"])
+  expect(await search(row.query)).toEqual(row.expected)
+  expect(listed).toEqual(row.listed)
 })
 
 test("searches from an absolute root without a default base", async () => {
   const location = { directory: "/" }
   const directories: string[] = []
-  const sdk = {
-    api: {
-      file: {
-        list: (input: { location?: { directory?: string } }) => {
-          directories.push(input.location?.directory ?? "")
-          return Promise.resolve({
-            location,
-            data: [
-              { path: "Users/", type: "directory" },
-              { path: "tmp/", type: "directory" },
-            ],
-          })
-        },
-      },
+
+  const api = sdk({
+    list: (input: { location?: { directory?: string } }) => {
+      directories.push(input.location?.directory ?? "")
+
+      return Promise.resolve({
+        location,
+        data: [
+          { path: "Users/", type: "directory" },
+          { path: "tmp/", type: "directory" },
+        ],
+      })
     },
-  } as unknown as Parameters<typeof createDirectorySearch>[0]["sdk"]
-  const search = createDirectorySearch({ sdk, home: () => "", base: () => undefined, location: () => location })
+  })
+
+  const search = createDirectorySearch({ sdk: api, home: () => "", base: () => undefined, location: () => location })
 
   expect(await search("/")).toEqual(["/Users", "/tmp"])
   expect(directories).toEqual(["/"])
 })
 
-test("identifies the next directory level to preload", () => {
+test("identifies the next directory level to preload once for every expanded directory", () => {
   expect(
     preloadTreeDirectories("src/", [
       { name: "components", type: "directory" },
@@ -398,9 +398,7 @@ test("identifies the next directory level to preload", () => {
       { name: "utils", type: "directory" },
     ]),
   ).toEqual(["src/components/", "src/utils/"])
-})
 
-test("advances preloading once for every expanded directory", () => {
   const advanced = new Set<string>()
   expect(advanceTreePreload(advanced, "")).toBeTrue()
   expect(advanceTreePreload(advanced, "")).toBeFalse()
@@ -414,6 +412,7 @@ test("limits background tasks and prioritizes newly requested work", async () =>
   const started: string[] = []
   let active = 0
   let maximum = 0
+
   const task = (name: string, blocker?: Promise<void>) => async () => {
     started.push(name)
     active++
@@ -428,6 +427,7 @@ test("limits background tasks and prioritizes newly requested work", async () =>
     queue.schedule("preload", "background", task("preload")),
     queue.schedule("opened", "user", task("opened")),
   ]
+
   await Promise.resolve()
   expect(started).toEqual(["first", "second"])
 
@@ -442,10 +442,19 @@ test("limits background tasks and prioritizes newly requested work", async () =>
   expect(maximum).toBe(2)
 })
 
-test("clamps bridged tree wheel scrolling", () => {
-  expect(nextTreeScrollTop(100, 40, 500, 200)).toBe(140)
-  expect(nextTreeScrollTop(10, -40, 500, 200)).toBe(0)
-  expect(nextTreeScrollTop(290, 40, 500, 200)).toBe(300)
+test.each([
+  [3, 3, true],
+  [2, 3, false],
+])("a tree mutation from navigation %p applies during navigation %p: %p", (request, current, expected) => {
+  expect(activeTreeNavigation(request, current)).toBe(expected)
+})
+
+test.each([
+  [100, 40, 140],
+  [10, -40, 0],
+  [290, 40, 300],
+])("bridged wheel scrolling from %p by %p clamps to %p", (current, delta, expected) => {
+  expect(nextTreeScrollTop(current, delta, 500, 200)).toBe(expected)
 })
 
 test("wraps autocomplete keyboard navigation", () => {
@@ -453,11 +462,4 @@ test("wraps autocomplete keyboard navigation", () => {
   expect(nextSuggestionIndex(3, 1, 4)).toBe(0)
   expect(nextSuggestionIndex(0, -1, 4)).toBe(3)
   expect(nextSuggestionIndex(0, 1, 0)).toBe(-1)
-})
-
-test("returns absolute directories and relative files", () => {
-  expect(selectedTreePath("/home/luke/repo", "src/", "directory")).toBe("/home/luke/repo/src")
-  expect(selectedTreePath("/home/luke/repo", "src/index.ts", "file")).toBe("src/index.ts")
-  expect(selectedTreePath("/home/luke/repo/src", "index.ts", "file", "/home/luke/repo")).toBe("src/index.ts")
-  expect(selectedTreePath("/home/luke/repo", "src/", "file")).toBeUndefined()
 })

@@ -17,7 +17,7 @@ Run `/connect`, choose a provider, and enter its credentials. Then run `/models`
 ## Go
 
 [OpenCode Go](/console/go) is an optional subscription for coding models tested by the OpenCode team. Subscribe in the
-[console](https://console.opencode.ai), copy your API key, then connect it as **OpenCode Go**.
+[console](https://opencode.ai/console), copy your API key, then connect it as **OpenCode Go**.
 
 ```text
 /connect
@@ -130,6 +130,31 @@ Both fields can also be set on a model or variant when only part of a provider's
   },
 }
 ```
+
+## Timeouts
+
+HTTP requests wait up to five minutes for response headers and up to five minutes between streamed response chunks.
+Set the provider's `settings.headerTimeout` or `settings.chunkTimeout` to a number of milliseconds to change a limit,
+or to `false` to disable it. `settings.timeout` additionally bounds the whole request from send until the response
+completes; it has no default. These configuration settings apply provider-wide, not per model or variant. On a
+WebSocket transport, `chunkTimeout` bounds the gap between frames instead and defaults to thirty minutes.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "anthropic": {
+      "settings": {
+        "headerTimeout": 600000,
+        "chunkTimeout": false,
+      },
+    },
+  },
+}
+```
+
+A request that exceeds either limit fails with a transport error. OpenCode retries a timed-out request up to three
+times before giving up.
 
 ## Packages
 
@@ -268,7 +293,11 @@ choose **Microsoft Entra ID (Azure CLI)** when connecting Azure.
 az login
 ```
 
-For a resource in another tenant or subscription, select both explicitly.
+Enter the resource name when connecting if it is not already supplied by configuration or the environment. A resource
+name saved with a connection takes precedence over configuration; connect again to change it.
+
+Azure CLI connections use the account selected in the Azure CLI. For a resource in another tenant or subscription,
+select both explicitly.
 
 ```bash
 az login --tenant TENANT_ID
@@ -278,8 +307,32 @@ az account set --subscription NAME_OR_ID
 Instead of configuration, `AZURE_RESOURCE_NAME` supplies the resource name to the OpenCode server. The legacy
 `AZURE_COGNITIVE_SERVICES_RESOURCE_NAME` variable also works.
 
-OpenCode does not query Azure management APIs or discover deployments. If a deployment does not match its catalog
-model name, map an OpenCode model ID to the deployment with `modelID`.
+### Deployments
+
+Azure serves a model only through a deployment, so OpenCode lists the deployments of your resource and shows those
+instead of the whole Azure catalog. The list loads in the background after startup, after connecting, and after
+switching accounts. To pick up a deployment added later, restart OpenCode or connect again.
+
+- Until the list loads for a connection, or if it fails, the whole catalog stays available.
+- A failed reload for the same connection keeps its last complete inventory.
+- Switching accounts never shows the previous account's inventory; the new account starts from the whole catalog.
+- Deployments inherit limits, costs, and capabilities from their catalog models.
+
+Deployment names are their model IDs, in lowercase because Azure ignores case in names, for example
+`azure/gpt-production`. A deployment named after its model, such as `gpt-5-mini`, keeps the catalog ID. These IDs stay
+stable when other deployments are added or removed.
+
+OpenCode matches a deployment to the catalog by the model it deploys, or by its name when Azure spells the model
+differently, as with `gpt-4` for GPT-4 Turbo. A deployment named after another model, such as `gpt-5` deploying
+`gpt-5-mini`, shows that model's name, limits, and costs.
+
+With the Azure CLI, OpenCode lists deployments through the Azure management API, which needs read access to the
+resource. If that fails, and always with an API key, it uses the resource's legacy deployment inventory. Discovery reads
+every page before publishing the list. A custom `settings.baseURL` keeps the catalog.
+
+Configure a deployment explicitly when its model is not in the catalog, such as a fine-tuned model, or to map a model ID
+to a deployment yourself. OpenCode logs a warning naming such deployments. Explicitly configured models are always
+kept.
 
 ```jsonc title="opencode.jsonc"
 {

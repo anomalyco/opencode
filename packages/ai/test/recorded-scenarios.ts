@@ -1,6 +1,7 @@
 import { expect } from "bun:test"
 import { Effect, Schema } from "effect"
 import {
+  Media,
   LLM,
   LLMEvent,
   LLMRequest,
@@ -125,11 +126,6 @@ const assistantContent = (events: ReadonlyArray<LLMEvent>) =>
 
 export const expectFinish = (events: ReadonlyArray<LLMEvent>, reason: FinishReason) =>
   expect(events.at(-1)).toMatchObject({ type: "finish", reason: { normalized: reason } })
-
-export const expectWeatherToolCall = (response: LLMResponse) =>
-  expect(response.toolCalls).toMatchObject([
-    { type: "tool-call", id: expect.any(String), name: weatherToolName, input: { city: "Paris" } },
-  ])
 
 export const expectWeatherToolLoop = (events: ReadonlyArray<LLMEvent>) => {
   const finishes = events.filter(LLMEvent.is.finish)
@@ -330,7 +326,7 @@ const runImageScenario = (context: GoldenScenarioContext) =>
           type: "text",
           text: "The image contains exactly three lowercase English words. Read them left to right and reply with only those words.",
         },
-        { type: "media", mediaType: "image/png", data: yield* restroomImage() },
+        { type: "media", media: Media.base64(yield* restroomImage(), "image/png") },
       ]),
       assistant.expectText(/.+/, {
         system: "Read images carefully. Reply only with the visible text.",

@@ -8,14 +8,18 @@ import { useIntegrations } from "./integrations"
 import { popularProviders } from "./order"
 
 export { popularProviders } from "./order"
+
 const emptyProviderCatalog: ProviderListResponse = { all: new Map(), connected: [], default: {} }
+
 const popularProviderSet = new Set(popularProviders)
 
 export function useProviders(directory: Accessor<string | undefined>) {
   const data = useData()
   const sdk = useServerSDK()
+
   const location = () => {
     const dir = directory()
+
     return dir ? { directory: dir } : undefined
   }
 
@@ -34,15 +38,20 @@ export function useProviders(directory: Accessor<string | undefined>) {
     const ref = location()
     const provider = data.location.provider.list(ref)
     const model = data.location.model.list(ref)
+
     if (!provider || !model) return emptyProviderCatalog
+
     return normalizeProviderList(provider, model)
   })
 
+  const ready = () => {
+    const ref = location()
+
+    return data.location.provider.list(ref) !== undefined && data.location.model.list(ref) !== undefined
+  }
+
   return {
-    ready: () => {
-      const ref = location()
-      return data.location.provider.list(ref) !== undefined && data.location.model.list(ref) !== undefined
-    },
+    ready,
     all: () => providers().all,
     default: () => providers().default,
     // V2 servers list only available providers, so the connectable catalog
@@ -52,7 +61,9 @@ export function useProviders(directory: Accessor<string | undefined>) {
         .list()
         .filter((integration) => popularProviderSet.has(integration.id))
         .map((integration) => ({ id: integration.id, name: integration.name }))
+
       const seen = new Set(catalog.map((integration) => integration.id))
+
       return pipe(
         providers().all,
         Iterable.map(([, p]) => p),
@@ -63,6 +74,7 @@ export function useProviders(directory: Accessor<string | undefined>) {
     },
     connected: () => {
       const connected = new Set(providers().connected)
+
       return pipe(
         providers().all,
         Iterable.map(([, p]) => p),
@@ -70,8 +82,20 @@ export function useProviders(directory: Accessor<string | undefined>) {
         (v) => Array.from(v),
       )
     },
+    // Any stored or detected connection, or a provider with models beyond the keyless OpenCode catalog.
+    // Undefined until both catalogs load, so callers never mistake loading for a first run.
+    anyConnection: () => {
+      if (!integrations.ready() || !ready()) return undefined
+
+      if (integrations.list().some((integration) => integration.connections.length > 0)) return true
+
+      return providers().connected.some(
+        (id) => id !== "opencode" && Object.keys(providers().all.get(id)?.models ?? {}).length > 0,
+      )
+    },
     paid: () => {
       const connected = new Set(providers().connected)
+
       const paid = [
         ...Iterable.filter(
           providers().all,
@@ -80,6 +104,7 @@ export function useProviders(directory: Accessor<string | undefined>) {
             (id !== "opencode" || Object.values(providers().all.get(id)?.models ?? {}).some((m) => m.cost?.input)),
         ),
       ]
+
       return paid
     },
   }

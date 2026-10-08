@@ -1,50 +1,30 @@
-import { Context, Effect, Layer } from "effect"
-import { RequestExecutor } from "./route/executor.js"
-import { mergeHttpOptions, type AIError } from "./schema/index.js"
-import { sanitizeSurrogates } from "./utils/sanitize.js"
-import type { ImageOptions, ImageRequest, ImageRequestFor, ImageResponse } from "./image.js"
+import { Context } from "effect"
+import { MediaClient } from "./media-client.js"
+import {
+  ImageOutputEvent,
+  ImageFinishEvent,
+  type ImageEvent,
+  type ImageRequestFor,
+  type ImageResponse,
+} from "./image.js"
 
-export type Execute = RequestExecutor.Interface["execute"]
+export type Interface = MediaClient.Interface<ImageRequestFor, ImageEvent, ImageResponse>
 
-export interface Interface {
-  readonly generate: <Options extends ImageOptions>(
-    request: ImageRequestFor<Options>,
-  ) => Effect.Effect<ImageResponse, AIError>
-}
-
-export class Service extends Context.Service<Service, Interface>()("@opencode/ImageClient") {}
-
-export const generate = <Options extends ImageOptions>(
-  request: ImageRequestFor<Options>,
-): Effect.Effect<ImageResponse, AIError, Service> =>
-  Effect.gen(function* () {
-    const client = yield* Service
-    return yield* client.generate(request)
-  })
-
-export const layer: Layer.Layer<Service, never, RequestExecutor.Service> = Layer.effect(
-  Service,
-  Effect.gen(function* () {
-    const executor = yield* RequestExecutor.Service
-    return Service.of({
-      generate: (request) =>
-        request.model.route.generate(
-          {
-            ...sanitizeSurrogates({
-              ...request,
-              model: undefined,
-              http: mergeHttpOptions(request.model.http, request.http),
-            }),
-            model: request.model,
-          },
-          executor.execute,
-        ),
-    })
-  }),
-)
+export class ImageClientService extends Context.Service<ImageClientService, Interface>()("@opencode/ImageClient") {}
+export const Service = ImageClientService
+export type Service = ImageClientService
 
 export const ImageClient = {
   Service,
-  layer,
-  generate,
+  ...MediaClient.make(Service, {
+    modality: "image",
+    responseEvents: (response: ImageResponse) => [
+      ...response.images.map((image, index) => ImageOutputEvent.make({ index, image })),
+      ImageFinishEvent.make({
+        usage: response.usage,
+        notices: response.notices,
+        providerMetadata: response.providerMetadata,
+      }),
+    ],
+  }),
 } as const

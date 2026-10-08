@@ -51,7 +51,7 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
     ),
     session: Flag.string("session").pipe(
       Flag.withAlias("s"),
-      Flag.withDescription("Session ID to continue"),
+      Flag.withDescription("Session ID to continue, or to create if it does not exist"),
       Flag.optional,
     ),
     prompt: Flag.string("prompt").pipe(Flag.withDescription("Prompt to use"), Flag.optional),
@@ -73,18 +73,8 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
       },
     }),
     Spec.make("uninstall", {
-      description: "Uninstall OpenCode and remove all related files",
+      description: "Uninstall OpenCode, keeping session data, configuration, and state",
       params: {
-        keepConfig: Flag.boolean("keep-config").pipe(
-          Flag.withAlias("c"),
-          Flag.withDescription("Keep configuration files"),
-          Flag.withDefault(false),
-        ),
-        keepData: Flag.boolean("keep-data").pipe(
-          Flag.withAlias("d"),
-          Flag.withDescription("Keep session data and snapshots"),
-          Flag.withDefault(false),
-        ),
         dryRun: Flag.boolean("dry-run").pipe(
           Flag.withDescription("Show what would be removed without removing"),
           Flag.withDefault(false),
@@ -96,7 +86,15 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
         ),
       },
     }),
-    Spec.make("acp", { description: "Start an Agent Client Protocol server" }),
+    Spec.make("acp", {
+      description: "Start an Agent Client Protocol server",
+      params: {
+        login: Flag.boolean("login").pipe(
+          Flag.withDescription("Run auth login instead of starting the server"),
+          Flag.withDefault(false),
+        ),
+      },
+    }),
     Spec.make("api", {
       description: "Make a request to the running server",
       params: {
@@ -142,10 +140,10 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
       ],
     }),
     Spec.make("auth", {
-      description: "manage AI providers and credentials",
+      description: "manage integrations and credentials",
       commands: [
         Spec.make("list", {
-          description: "list providers and credentials",
+          description: "list integrations and credentials",
           params: {
             ...ServerParams,
             format: Flag.choice("format", ["default", "json"]).pipe(
@@ -155,7 +153,7 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
           },
         }),
         Spec.make("login", {
-          description: "log in to a provider",
+          description: "connect an integration",
           params: {
             ...ServerParams,
             target: Argument.string("target").pipe(
@@ -179,6 +177,26 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
             ),
             credential: Argument.string("credential").pipe(
               Argument.withDescription("Credential ID or label (opens an account picker when omitted)"),
+              Argument.optional,
+            ),
+          },
+        }),
+        Spec.make("export", {
+          description: "print stored credentials, including secrets, as JSON",
+          params: {
+            ...ServerParams,
+            target: Argument.string("target").pipe(
+              Argument.withDescription("Integration ID or name (exports every integration when omitted)"),
+              Argument.optional,
+            ),
+          },
+        }),
+        Spec.make("import", {
+          description: "import credentials exported by auth export",
+          params: {
+            ...ServerParams,
+            file: Argument.string("file").pipe(
+              Argument.withDescription("JSON file to import (reads stdin when omitted)"),
               Argument.optional,
             ),
           },
@@ -228,7 +246,9 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
         }),
         Spec.make("auth", {
           description: "Authenticate with an OAuth-capable remote MCP server",
-          params: { name: Argument.string("name").pipe(Argument.withDescription("Name of the MCP server")) },
+          params: {
+            name: Argument.string("name").pipe(Argument.withDescription("Name of the MCP server"), Argument.optional),
+          },
         }),
         Spec.make("logout", {
           description: "Remove stored OAuth credentials for an MCP server",
@@ -326,7 +346,7 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
         ),
         session: Flag.string("session").pipe(
           Flag.withAlias("s"),
-          Flag.withDescription("Session ID to continue"),
+          Flag.withDescription("Session ID to continue, or to create if it does not exist"),
           Flag.optional,
         ),
         fork: Flag.boolean("fork").pipe(
@@ -366,7 +386,7 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
         ),
         session: Flag.string("session").pipe(
           Flag.withAlias("s"),
-          Flag.withDescription("Session ID to continue"),
+          Flag.withDescription("Session ID to continue, or to create if it does not exist"),
           Flag.optional,
         ),
         fork: Flag.boolean("fork").pipe(
@@ -495,10 +515,10 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
       },
     }),
     Spec.make("pair", {
-      description: "Show server pairing information",
+      description: "Print one-time links to connect a browser or app",
       params: {
         url: Flag.string("url").pipe(
-          Flag.withDescription("Advertise an external HTTP(S) server URL in the pairing QR code"),
+          Flag.withDescription("Use an external HTTP(S) server URL in pairing links"),
           Flag.mapTryCatch(
             (value) => {
               const url = new URL(value)

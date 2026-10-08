@@ -1378,6 +1378,11 @@ export function createData(config: CreateDataInput) {
       status(sessionID: string) {
         return store.session.active[sessionID] ?? "idle"
       },
+      active() {
+        return Object.entries(store.session.active).flatMap(([sessionID, status]) =>
+          status === "running" ? [sessionID] : [],
+        )
+      },
       // Inputs are the pending user and synthetic items; compactions are control items.
       input: {
         list(sessionID: string) {
@@ -1726,6 +1731,11 @@ export function createData(config: CreateDataInput) {
         list(sessionID: string) {
           return store.session.permission[sessionID]
         },
+        sessions() {
+          return Object.entries(store.session.permission).flatMap(([sessionID, requests]) =>
+            requests.length > 0 ? [sessionID] : [],
+          )
+        },
         sync(sessionID: string) {
           return sync.run(`session.permission:${sessionID}`, async () => {
             setStore("session", "permission", sessionID, await api().permission.list({ sessionID }))
@@ -1750,6 +1760,11 @@ export function createData(config: CreateDataInput) {
           if (!ref) return
           const key = locationKey(ref)
           return forms?.filter((form) => form.location && locationKey(form.location) === key)
+        },
+        sessions() {
+          return Object.entries(store.session.form).flatMap(([sessionID, forms]) =>
+            sessionID !== "global" && forms.length > 0 ? [sessionID] : [],
+          )
         },
         sync(sessionID: string, ref?: LocationRef) {
           const key = `session.form:${sessionID}:${sessionID === "global" ? locationKey(ref ?? defaultLocation()) : ""}`
@@ -1788,7 +1803,7 @@ export function createData(config: CreateDataInput) {
     },
     project: {
       list() {
-        return Object.values(store.project.info).toSorted((a, b) => b.time.updated - a.time.updated)
+        return Object.values(store.project.info).toSorted((a, b) => b.time.active - a.time.active)
       },
       get(projectID: string) {
         return store.project.info[projectID]

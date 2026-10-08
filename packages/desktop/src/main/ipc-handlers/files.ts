@@ -8,6 +8,7 @@ export const fileHandlers = FileRpcs.toLayer(
   Effect.gen(function* () {
     const files = yield* DesktopFiles.Service
     const handoff = yield* IpcPortHandoff
+
     return FileRpcs.of({
       FilesOpenDirectoryPicker: ({ options }) => files.openDirectoryPicker(options),
       FilesOpenFilePicker: ({ options }, context) =>
@@ -24,7 +25,8 @@ export const fileHandlers = FileRpcs.toLayer(
       FilesReleasePickedFiles: ({ token }, context) =>
         Effect.sync(() => files.releasePickedFiles(sender(handoff, context).id, token)),
       FilesSaveFile: ({ options, content }) => files.saveFile(options, content).pipe(Effect.orDie),
-      FilesOpenExternal: ({ url }) => openExternalURL(url),
+      FilesOpenExternal: ({ url }) => openExternalURL(url).pipe(Effect.asVoid),
+      FilesOpenBrowser: ({ url }) => (/^https?:/i.test(url) ? openExternalURL(url) : Effect.succeed(false)),
       FilesOpenLocalFile: ({ url }) => openLocalFileURL(url),
       FilesOpenPath: ({ path, application }) =>
         files.openPath(path, application).pipe(

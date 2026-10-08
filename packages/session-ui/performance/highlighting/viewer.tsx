@@ -10,18 +10,24 @@ import "../../../ui/src/styles/theme.css"
 // This fixture uses the production component, normalizer, pool, and worker bundle.
 // Observe messages without replacing the worker or its implementation.
 const messages: { type: string; at: number; end?: number }[] = []
+
 const listening = new WeakSet<Worker>()
+
 const pending = new Map<string, (typeof messages)[number]>()
+
 const postMessage = Worker.prototype.postMessage
+
 Worker.prototype.postMessage = function (message: WorkerRequest, options?: Transferable[] | StructuredSerializeOptions) {
   if (!listening.has(this)) {
     listening.add(this)
     this.addEventListener("message", (event: MessageEvent<WorkerResponse>) => {
       const item = pending.get(event.data.id)
+
       if (item) item.end = performance.now()
       pending.delete(event.data.id)
     }, { capture: true })
   }
+
   const item = { type: message.type, at: performance.now() }
   messages.push(item)
   pending.set(message.id, item)
@@ -31,6 +37,7 @@ Worker.prototype.postMessage = function (message: WorkerRequest, options?: Trans
 function source(count: number, revision: number) {
   return Array.from({ length: count }, (_, index) => {
     const status = index % 10 === 0 ? 200 + revision : 200
+
     return `export async function route${index}(request: Request, context: RouteContext) {
   const account = await context.accounts.find(request.headers.get("account-id"))
   if (!account) return new Response("Account not found", { status: 404 })
@@ -48,13 +55,19 @@ function source(count: number, revision: number) {
 }
 
 const large = new URLSearchParams(location.search).has("large")
+
 const before = source(large ? 1200 : 120, 0)
+
 const inputs = [1, 2].map((revision) => {
   const after = source(large ? 1200 : 120, revision)
+
   return { file: "routes.ts", patch: createPatch("routes.ts", before, after, "", "", { context: Infinity }), after }
 })
+
 const host = document.getElementById("root")!
+
 let dispose: VoidFunction | undefined
+
 let active: ReturnType<typeof normalize> | undefined
 
 document.head.insertAdjacentHTML("beforeend", `<style>
@@ -80,22 +93,27 @@ async function mount(revision: number) {
   const offset = messages.length
   const start = performance.now()
   active = normalize({ ...input, additions: large ? 120 : 12, deletions: large ? 120 : 12 })
-  const pool = getWorkerPool(large ? "none" : "word-alt")!
+  const pool = getWorkerPool(large ? "none" : "word-line")!
   let firstReady = 0
   let rendered = 0
   let finish!: (value: Measurement) => void
   const result = new Promise<Measurement>((resolve) => (finish = resolve))
+
   const check = () => {
     const stats = pool.getStats()
+
     if (!firstReady || !rendered || stats.managerState !== "initialized" || stats.activeTasks || stats.queuedTasks || stats.busyWorkers) return
     const work = messages.slice(offset).filter((item) => item.type === "diff")
+
     if (work.some((item) => !item.end || rendered < item.end)) return
     const root = host.querySelector("diffs-container")?.shadowRoot
     const edit = root?.querySelector('[data-line="11"][data-line-type="change-addition"]')
+
     if (!root || !edit?.textContent?.includes(`status: ${200 + revision}`)) return
     const range = document.createRange()
     range.selectNodeContents(edit)
     const bounds = range.getBoundingClientRect()
+
     if (bounds.top < host.getBoundingClientRect().top || bounds.bottom > host.getBoundingClientRect().bottom) return
     finish({
       readyMs: performance.now() - start,
@@ -107,6 +125,7 @@ async function mount(revision: number) {
       options: pool.getDiffRenderOptions(),
     })
   }
+
   const unsubscribe = pool.subscribeToStatChanges(check)
   // Production surfaces place a header or earlier content above the diff inside a `[role="log"]` scroll content
   // element. An empty diff element at scroll offset 0 makes Pierre's virtualizer anchor its bottom edge and scroll
@@ -123,12 +142,13 @@ async function mount(revision: number) {
   </div>, host)
   const value = await result
   unsubscribe()
+
   return value
 }
 
 export const highlighting = {
   mount,
-  configure(options: Partial<WorkerRenderingOptions>) { return getWorkerPool(large ? "none" : "word-alt")!.setRenderOptions(options) },
+  configure(options: Partial<WorkerRenderingOptions>) { return getWorkerPool(large ? "none" : "word-line")!.setRenderOptions(options) },
   unmount() { dispose?.(); dispose = undefined; host.scrollTop = 0 },
   contents() { return active && { before: text(active, "deletions"), after: text(active, "additions") } },
   input: { before, after: inputs.map((input) => input.after) },
@@ -142,4 +162,5 @@ export const highlighting = {
 }
 
 declare global { interface Window { highlighting: typeof highlighting } }
+
 window.highlighting = highlighting

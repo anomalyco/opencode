@@ -1,0 +1,40 @@
+export default {
+  label: "SSH",
+  placeholder: "ssh user@example.com",
+  add: "SSH serwerini goşuň",
+  "server.menu.label": "SSH serweri",
+  target: "Host ýa-da SSH buýrugy",
+  connect: "Birikdiriň",
+  connectTo: "{{host}} bilen birikdiriň",
+  authenticate: "SSH tanamak",
+  "session.disconnected": "SSH birikmesi hereketsiz",
+  "session.connecting": "SSH serwerine birikmek",
+  "session.reconnectDescription":
+    "Bu sessiýany görmek we gaýtadan işlemek üçin gaýtadan birikdiriň. Uzakdaky sessiýaňyz saklanýar.",
+  "session.reconnect": "Birikdiriň",
+  trust: "Ynam et we birikdir",
+  continue: "Dowam et",
+  update: "Täzelen we täzeden birikdir",
+  project: "Taslamany {{host}}-da açyň",
+  "stage.incompatible": "Serwer täzelenmesi zerur",
+  "error.input":
+    "Host ýa-da SSH birikme buýrugyny giriziň. Uzakdaky buýruklar we goldanmaýan SSH opsiýalaryna rugsat berilmeýär.",
+  "error.connection": "SSH birikmesini gurup bolmady. Toruňyzy we SSH konfigurasiýaňyzy barlaň.",
+  "error.platform":
+    "Bu uzakdaky platforma goldanylmaýar. Awtomatiki gurnama häzirki wagtda x64 ýa-da arm64-de Linux ýa-da macOS talap edýär.",
+  "error.version": "Uzakdaky hyzmat birikmezden ozal bu iş stoly wersiýasyna gabat gelmelidir.",
+  "error.install": "Uzak serweri gurup bolmady Baglanyşygy, disk ýerini barlaň we şol tar gurnalan.",
+  "error.unpublished":
+    "Bu iş stoly wersiýasynda çap edilen uzak serwer ýok. Ösüş gurmak üçin, hostda V2 guruň we işe giriziň, soňra gaýtadan synanyşyň.",
+  "error.service": "SSH birikdirildi, ýöne OpenCode serweri taýýar bolmady.",
+  "error.host-key":
+    "Öý eýesiniň şahsyýetini tassyklap bolmady SSH belli öý eýeleriňizi täzelemezden ozal barmak yzyny barlaň.",
+  "error.ssh-missing": "OpenSSH tapylmady OpenSSH müşderisini guruň we ssh-iň PATH-da elýeterlidigine göz ýetiriň.",
+  "action.authenticate": "Hakyky tassyklamak",
+  "stage.connecting": "SSH-e birikmek…",
+  "stage.authentication": "Hakyky tassyklamak zerur",
+  "form.name": "Serweriň ady (islege görä)",
+  "form.namePlaceholder": "Localhost",
+  "form.add": "Serwer goşuň",
+  "menu.delete": "Poz",
+}

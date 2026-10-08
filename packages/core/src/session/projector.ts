@@ -55,7 +55,7 @@ const forkTitle = (value?: string) => {
   return `${value} (fork #1)`
 }
 
-function applyUsage(db: DatabaseService, sessionID: SessionSchema.ID, value: Usage) {
+function applyUsage(db: DatabaseService, sessionID: SessionSchema.ID, value: Usage, timeUpdated?: number) {
   return db
     .update(SessionTable)
     .set({
@@ -65,9 +65,18 @@ function applyUsage(db: DatabaseService, sessionID: SessionSchema.ID, value: Usa
       tokens_reasoning: sql`${SessionTable.tokens_reasoning} + ${value.tokens.reasoning}`,
       tokens_cache_read: sql`${SessionTable.tokens_cache_read} + ${value.tokens.cache.read}`,
       tokens_cache_write: sql`${SessionTable.tokens_cache_write} + ${value.tokens.cache.write}`,
-      time_updated: sql`${SessionTable.time_updated}`,
+      time_updated: timeUpdated ?? sql`${SessionTable.time_updated}`,
     })
     .where(eq(SessionTable.id, sessionID))
+    .run()
+    .pipe(Effect.orDie)
+}
+
+function touch(db: DatabaseService, event: MessageEvent) {
+  return db
+    .update(SessionTable)
+    .set({ time_updated: event.created })
+    .where(eq(SessionTable.id, event.data.sessionID))
     .run()
     .pipe(Effect.orDie)
 }
@@ -573,6 +582,14 @@ const layer = Layer.effectDiscard(
         .run()
         .pipe(Effect.orDie),
     )
+    yield* bus.project(SessionEvent.MetadataUpdated, (event) =>
+      db
+        .update(SessionTable)
+        .set({ metadata: event.data.metadata, time_updated: event.created })
+        .where(eq(SessionTable.id, event.data.sessionID))
+        .run()
+        .pipe(Effect.orDie),
+    )
     yield* bus.project(SessionEvent.Permissions, (event) =>
       db
         .update(SessionTable)
@@ -673,19 +690,30 @@ const layer = Layer.effectDiscard(
     yield* bus.project(SessionEvent.Skill.Activated, (event) => run(db, event))
     yield* bus.project(SessionEvent.Shell.Started, (event) => run(db, event))
     yield* bus.project(SessionEvent.Shell.Ended, (event) => run(db, event))
-    yield* bus.project(SessionEvent.Step.Started, (event) => run(db, event))
+    yield* bus.project(SessionEvent.Step.Started, (event) =>
+      Effect.gen(function* () {
+        yield* run(db, event)
+        yield* touch(db, event)
+      }),
+    )
     yield* bus.project(SessionEvent.Step.Streamed, (event) => run(db, event))
     yield* bus.project(SessionEvent.Step.Ended, (event) =>
       Effect.gen(function* () {
         yield* run(db, event)
-        yield* applyUsage(db, event.data.sessionID, event.data)
+        yield* applyUsage(db, event.data.sessionID, event.data, event.created)
       }),
     )
     yield* bus.project(SessionEvent.Step.Failed, (event) =>
       Effect.gen(function* () {
         yield* run(db, event)
         if (event.data.cost !== undefined && event.data.tokens !== undefined)
-          yield* applyUsage(db, event.data.sessionID, { cost: event.data.cost, tokens: event.data.tokens })
+          yield* applyUsage(
+            db,
+            event.data.sessionID,
+            { cost: event.data.cost, tokens: event.data.tokens },
+            event.created,
+          )
+        else yield* touch(db, event)
       }),
     )
     yield* bus.project(SessionEvent.Text.Started, (event) => run(db, event))

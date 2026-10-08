@@ -1,0 +1,84 @@
+---
+title: "Billing"
+description: "Add credits, set up auto-recharge, manage payment methods, and download invoices in OpenCode Console."
+---
+
+Console is free for any team size, with no seat fees. You pay only for usage, from prepaid credits that cover the
+whole workspace. Owners and admins manage billing in **Settings › Billing**.
+
+Usage through [your own providers](/console/providers) is billed by the provider, not by Console.
+
+## Add a payment method
+
+1. Open **Settings › Billing**.
+2. Under **Payment methods**, click **Add**.
+3. Choose a method and finish the Stripe setup.
+
+Supported payment methods:
+
+- Card
+- Link
+- Alipay
+- UPI
+- WeChat Pay
+
+Use **⋯ › Make default** to choose the method for automatic charges. Removing a method can stop auto-recharge and Go
+renewals that use it.
+
+## Add credits
+
+1. Under **Credits**, click **Add credits**.
+2. Pick $10, $50, or $100, or choose **Other** and enter an amount.
+3. Choose a payment method and click **Confirm and pay**.
+
+A processing fee of 4.6% + $0.31 is added on top, so a $50 purchase costs $52.61 and the full $50 is added to the
+balance.
+
+## Auto-recharge
+
+Auto-recharge buys credits when the balance runs low.
+
+1. Under **Auto-recharge**, click **Add rule**.
+2. Set the balance that triggers a charge and the amount to add.
+3. Click **Save**.
+
+Auto-recharge charges the default payment method, including the processing fee. If a charge fails, auto-recharge
+turns off until you set it up again.
+
+## Check your balance
+
+The **Credits** card on **Overview** shows the balance for owners and admins.
+
+## When credits run out
+
+Paid requests fail with HTTP `402` once the balance reaches zero. The balance never goes negative.
+
+```text
+Upstream request failed: Insufficient account funds
+```
+
+## Invoices
+
+Every payment appears under **Invoices** with its status and a link to **Download invoice** or **View receipt**.
+
+| Entry            | Created by         |
+| ---------------- | ------------------ |
+| Balance top-up   | Adding credits     |
+| Automatic top-up | Auto-recharge      |
+| Go subscription  | Subscribing to Go  |
+| Go renewal       | Monthly Go renewal |
+| Monthly Usage    | Invoiced billing   |
+
+## Invoiced billing
+
+Workspaces with a credit agreement can be invoiced monthly instead of buying credits. Contact support to set it up.
+
+- Usage draws on a credit limit instead of a prepaid balance.
+- The invoice for each month is issued on the 1st (UTC) and is due 14 days later.
+- Open invoices have a **Pay now** button.
+- Requests fail with HTTP `402` when the credit limit is reached or an invoice is overdue.
+
+## Go
+
+[OpenCode Go](/console/go) subscriptions use the same payment methods and appear in the same invoice list. Turn on
+**Extra usage** on the **Overview** credits card to pay from credits once a Go limit is reached.

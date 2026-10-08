@@ -1,7 +1,6 @@
-import { fileURLToPath } from "node:url"
-import { expect, story } from "../../storybook/playwright/story"
+import { expect, sourceURL, story } from "../../storybook/playwright/story"
 
-const fixture = `/@fs/${fileURLToPath(new URL("./timeline-virtualizer.fixture.tsx", import.meta.url)).replaceAll("\\", "/")}`
+const fixture = sourceURL(new URL("./timeline-virtualizer.fixture.tsx", import.meta.url))
 
 story.beforeEach(async ({ mount }) => {
   const component = await mount("opencode-composer-flow--mixed-attachments")
@@ -18,11 +17,14 @@ story("spaces the first mobile message without changing desktop spacing", async 
   await root.getByRole("button", { name: "Complete Markdown", exact: true }).click()
   const content = root.locator("[data-timeline-virtual-content]")
   await expect(content).toHaveCSS("visibility", "visible")
+
   const gap = () =>
     root.locator('[data-timeline-key="user-message:message-0"]').evaluate((element) => {
       const viewport = element.closest("[data-scrollable]")!
+
       return element.getBoundingClientRect().top - viewport.getBoundingClientRect().top
     })
+
   await expect.poll(gap).toBe(16)
   await root.evaluate((element) => element.setAttribute("dir", "rtl"))
   await expect.poll(gap).toBe(16)
@@ -76,12 +78,14 @@ for (const input of [
       await root.locator("[data-scrollable]").dispatchEvent("wheel", { deltaY: -1 })
       await expect(root.getByTestId("timeline-controls")).toHaveAttribute("data-pinned", "false")
     }
+
     if (input.name === "zero-height") {
       await root.getByRole("button", { name: "Hide viewport", exact: true }).click()
       // Wait for ResizeObserver to clear the actual range, not just for display:none.
       await expect(root).toHaveAttribute("data-observed-height", "0")
       await expect(content.locator("[data-timeline-key]")).toHaveCount(0)
     }
+
     await expect(root).not.toHaveAttribute("data-first-reveal")
     const resizes = await root.getAttribute("data-viewport-resizes")
     await root.getByRole("button", { name: "Reconnect ready rows", exact: true }).click()
@@ -94,6 +98,7 @@ for (const input of [
       viewportHeight: 180,
       ...(input.name === "offset-only" ? { scrollTop: 0 } : {}),
     })
+
     if (input.name === "offset-only") {
       // This repair must not depend on another native scroll or resize delivery.
       await expect(root).toHaveAttribute("data-scrolls", "0")

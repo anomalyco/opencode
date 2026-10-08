@@ -46,6 +46,7 @@ export type Path = {
 }
 
 export type VcsInfo = { branch?: string; default_branch?: string }
+
 export type LspStatus = { id: string; name: string; root: string; status: "connected" | "error" }
 
 export type Agent = {
@@ -129,6 +130,9 @@ export type Model = {
 
 export type Provider = {
   id: string
+  canonical?: string
+  /** Integration that connects this provider; differs from `id` for Console-managed providers. */
+  integrationID?: string
   name: string
   source: "env" | "config" | "custom" | "api"
   env: string[]

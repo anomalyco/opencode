@@ -11,7 +11,6 @@ import type { FormInfo, PermissionRequest, SessionStatus } from "@opencode/clien
 import type { SessionDocument } from "@opencode/session-ui/document"
 import { CurrentSessionProviders, STORY_MODEL } from "@opencode/session-ui/storybook"
 import { SessionTimeline } from "@opencode/session-ui/timeline"
-import { SessionReviewEmptyChangesV2 } from "@opencode/session-ui/v2/session-review-empty-changes-v2"
 import { createComposerEditor } from "@/composer/editor/interaction"
 import type { ComposerPersistedState } from "@/composer/types"
 import { Button } from "@opencode/ui/button"
@@ -20,12 +19,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
 import { Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/runtime/i18n/language"
-import { ReviewPanelView } from "@/session/review/panel"
-import { createReviewPanelState } from "@/session/review/panel-state"
-import { TerminalSurface } from "@/session/terminal/surface"
 import type { WebSearchRequestModel } from "./requests/websearch"
 
 const modelReady = Object.assign(() => true, { promise: undefined }) satisfies ModelSelection["ready"]
+
 const storyComposerModel = {
   id: STORY_MODEL.id,
   providerID: STORY_MODEL.providerID,
@@ -92,6 +89,7 @@ export type SessionPreviewProps = {
 export function SessionPreview(props: SessionPreviewProps) {
   const [state, setState] = createStore({ revision: 1 })
   const queryClient = new QueryClient({ defaultOptions: { mutations: { retry: false } } })
+
   return (
     <QueryClientProvider client={queryClient}>
       <Show when={state.revision} keyed>
@@ -130,6 +128,7 @@ function createPromptController(input: {
     model: { providerID: STORY_MODEL.providerID, modelID: STORY_MODEL.id, variant: STORY_MODEL.variant },
     context: { items: [] },
   })
+
   const interaction = createComposerEditor({
     store: draft,
     commands: () => [],
@@ -143,6 +142,7 @@ function createPromptController(input: {
         working: () => input.status().type !== "idle",
         onSubmit: () => {
           const value = interaction.value().trim()
+
           if (!value) return
           input.onSubmit(value)
           draft[1]("prompt", [{ type: "text", content: "", start: 0, end: 0 }])
@@ -156,6 +156,7 @@ function createPromptController(input: {
       },
     },
   })
+
   return {
     controller: {
       ...interaction,
@@ -170,6 +171,7 @@ function createPromptController(input: {
 
 function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void }) {
   const language = useLanguage()
+
   const [state, setState] = createStore<{
     activity: string
     reviewOpened: boolean
@@ -181,6 +183,7 @@ function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void 
     request: props.request,
     searchProvider: "random",
   })
+
   const prompt = createPromptController({
     initial: props.draft ?? "",
     placeholder: language.t("prompt.placeholder.normal"),
@@ -189,6 +192,7 @@ function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void 
     onSubmit: (text) => setState("activity", `Submitted locally: ${text}`),
     onStop: () => setState("activity", "Requested a local stop"),
   })
+
   const region = {
     state: {
       questionRequest: () => (state.request?.type === "question" ? state.request.value : undefined),
@@ -274,9 +278,7 @@ function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void 
                     id="review-panel"
                     class="min-w-0 flex-1 flex flex-col gap-2 border-l border-border-weak-base md:max-w-[52%]"
                   >
-                    <div class="min-h-0 flex-1">
-                      <SessionReviewPane diffs={props.document.diffs} />
-                    </div>
+                    <div class="min-h-0 flex-1" />
                     <Show when={props.terminal}>{(terminal) => <SessionTerminalPreview terminal={terminal()} />}</Show>
                   </aside>
                 </Show>
@@ -292,29 +294,33 @@ function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void 
   )
 }
 
+// A static copy of the dock frame the extension host draws around the terminal panel.
 function SessionTerminalPreview(props: { terminal: NonNullable<SessionPreviewProps["terminal"]> }) {
   return (
-    <TerminalSurface
-      label={props.terminal.title}
-      opened
-      desktop
-      stacked
-      height="220px"
-      contentHeight="220px"
-      pane={220}
-      max={360}
-      resizing={false}
-      onResizeStart={() => undefined}
-      onResize={() => undefined}
-      onCollapse={() => undefined}
+    <aside
+      id="terminal-panel"
+      data-component="terminal-panel"
+      data-opened="true"
+      data-size-animated="true"
+      role="region"
+      aria-label={props.terminal.title}
+      aria-hidden="false"
+      class="relative shrink-0 overflow-hidden bg-v2-background-bg-base w-full rounded-[10px] shadow-[var(--v2-elevation-raised)] will-change-[height]"
+      style={{ height: "220px", "--terminal-panel-height": "220px" }}
     >
-      <div class="h-10 shrink-0 flex items-center border-b border-border-weaker-base px-3 text-13-medium text-text-strong">
-        {props.terminal.title}
+      <div
+        data-slot="terminal-panel-content"
+        class="absolute inset-x-0 top-0 flex flex-col overflow-hidden"
+        style={{ height: "220px" }}
+      >
+        <div class="h-10 shrink-0 flex items-center border-b border-border-weaker-base px-3 text-13-medium text-text-strong">
+          {props.terminal.title}
+        </div>
+        <pre dir="ltr" class="min-h-0 flex-1 overflow-auto px-4 py-3 font-mono text-12-regular text-text-base">
+          {props.terminal.lines.join("\n")}
+        </pre>
       </div>
-      <pre dir="ltr" class="min-h-0 flex-1 overflow-auto px-4 py-3 font-mono text-12-regular text-text-base">
-        {props.terminal.lines.join("\n")}
-      </pre>
-    </TerminalSurface>
+    </aside>
   )
 }
 
@@ -327,6 +333,7 @@ function SessionSurfaceHeader(props: {
   onReset: () => void
 }) {
   const language = useLanguage()
+
   return (
     <header class="flex min-h-14 shrink-0 items-center justify-between gap-4 border-b border-border-weak-base px-4 py-2">
       <div class="flex min-w-0 items-center gap-3">
@@ -349,32 +356,9 @@ function SessionSurfaceHeader(props: {
           }}
         />
         <Button size="small" variant="neutral" onClick={props.onReset}>
-          Reset
+          {language.t("common.reset")}
         </Button>
       </div>
     </header>
-  )
-}
-
-function SessionReviewPane(props: { diffs: SessionDocument["diffs"] }) {
-  const language = useLanguage()
-  const review = createReviewPanelState()
-  const [state, setState] = createStore({
-    active: props.diffs[0]?.file,
-    diffStyle: "unified" as "unified" | "split",
-  })
-  return (
-    <ReviewPanelView
-      title={language.t("ui.sessionReview.title.lastTurn")}
-      empty={<SessionReviewEmptyChangesV2 />}
-      diffs={props.diffs}
-      diffsReady
-      activeFile={state.active}
-      onSelectFile={(file) => setState("active", file)}
-      diffStyle={state.diffStyle}
-      onDiffStyleChange={(value) => setState("diffStyle", value)}
-      state={review}
-      fileList="flat"
-    />
   )
 }

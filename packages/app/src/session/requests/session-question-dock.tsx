@@ -3,6 +3,7 @@ import { createStore } from "solid-js/store"
 import { useMutation } from "@tanstack/solid-query"
 import { Button } from "@opencode/ui/button"
 import { IconButton } from "@opencode/ui/icon-button"
+import { Tooltip } from "@opencode/ui/tooltip"
 import { DockPrompt } from "@opencode/session-ui/dock-prompt"
 import { Icon } from "@opencode/ui/icon"
 import { useSpring } from "@opencode/ui/motion-spring"
@@ -13,8 +14,11 @@ import { makeEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useServerSDK } from "@/runtime/server/client"
 import { ScopedKey } from "@/runtime/server/scope"
+import { useCommand } from "@/shell/commands/command"
 
 const cache = new Map<string, { tab: number; answers: string[][]; custom: string[]; customOn: boolean[] }>()
+
+const IS_MAC = typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
 
 type QuestionField = FormStringField | FormMultiselectField
 
@@ -70,6 +74,7 @@ function Option(props: {
 export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () => void }> = (props) => {
   const serverSDK = useServerSDK()
   const language = useLanguage()
+  const command = useCommand()
   const cacheKey = ScopedKey.from(serverSDK.scope, props.request.id)
 
   const questions = createMemo(() =>
@@ -81,9 +86,11 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
       multiple: field.type === "multiselect",
     })),
   )
+
   const total = createMemo(() => questions().length)
 
   const cached = cache.get(cacheKey)
+
   const [store, setStore] = createStore({
     tab: cached?.tab ?? 0,
     answers: cached?.answers ?? ([] as string[][]),
@@ -111,8 +118,10 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
 
   const summary = createMemo(() => {
     const n = Math.min(store.tab + 1, total())
+
     return language.t("session.question.progress", { current: n, total: total() })
   })
+
   const customLabel = () => language.t("ui.messagePart.option.typeOwnAnswer")
   const customPlaceholder = () => language.t("ui.question.custom.placeholder")
 
@@ -126,15 +135,20 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
     const next = value.trim()
 
     setStore("custom", store.tab, value)
+
     if (!selected) return
 
     if (multi()) {
       setStore("answers", store.tab, (current = []) => {
         const removed = prev ? current.filter((item) => item.trim() !== prev) : current
+
         if (!next) return removed
+
         if (removed.some((item) => item.trim() === next)) return removed
+
         return [...removed, next]
       })
+
       return
     }
 
@@ -146,14 +160,18 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
 
     const scroller = document.querySelector(".scroll-view__viewport")
     const head = scroller instanceof HTMLElement ? scroller.firstElementChild : undefined
+
     const top =
       head instanceof HTMLElement && head.classList.contains("sticky") ? head.getBoundingClientRect().bottom : 0
+
     if (!top) {
       root.style.removeProperty("--question-prompt-max-height")
+
       return
     }
 
     const dock = root.closest('[data-component="session-composer-dock"]')
+
     if (!(dock instanceof HTMLElement)) return
 
     const dockBottom = dock.getBoundingClientRect().bottom
@@ -167,7 +185,9 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
 
   const pickFocus = (tab: number = store.tab) => {
     const list = questions()[tab]?.options ?? []
+
     if (store.customOn[tab] === true) return list.length
+
     return Math.max(
       0,
       list.findIndex((item) => store.answers[tab]?.includes(item.value) ?? false),
@@ -177,7 +197,9 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
   const focus = (i: number) => {
     const next = clamp(i)
     setStore("focus", next)
+
     if (store.editing) return
+
     if (focusFrame !== undefined) cancelAnimationFrame(focusFrame)
     focusFrame = requestAnimationFrame(() => {
       focusFrame = undefined
@@ -188,6 +210,7 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
 
   onMount(() => {
     let raf: number | undefined
+
     const update = () => {
       if (raf !== undefined) cancelAnimationFrame(raf)
       raf = requestAnimationFrame(() => {
@@ -213,6 +236,7 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
 
   createEffect(() => {
     const el = optionsRef
+
     if (!el) return
     const update = () => setStore("optionsHeight", (height) => Math.max(height, el.scrollHeight))
     update()
@@ -221,6 +245,7 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
 
   onCleanup(() => {
     if (focusFrame !== undefined) cancelAnimationFrame(focusFrame)
+
     if (replied) return
     cache.set(cacheKey, {
       tab: store.tab,
@@ -261,6 +286,8 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
   }))
 
   const sending = createMemo(() => replyMutation.isPending || rejectMutation.isPending)
+  const submitShortcut = () => (IS_MAC ? "⌘⏎" : `${language.t("common.key.ctrl")}+⏎`)
+  const backShortcut = () => (IS_MAC ? "⌘[" : `${language.t("common.key.alt")}+←`)
 
   const reply = (answer: FormAnswer) => {
     if (sending()) return
@@ -277,7 +304,9 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
       Object.fromEntries(
         questions().flatMap((question, index) => {
           const answers = store.answers[index] ?? []
+
           if (answers.length === 0) return []
+
           return [[question.field.key, question.multiple ? answers : answers[0]]]
         }),
       ),
@@ -285,6 +314,7 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
 
   const answered = (i: number) => {
     if ((store.answers[i]?.length ?? 0) > 0) return true
+
     return store.customOn[i] === true && (store.custom[i] ?? "").trim().length > 0
   }
 
@@ -292,7 +322,9 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
 
   const pick = (answer: string, custom: boolean = false) => {
     setStore("answers", store.tab, [answer])
+
     if (custom) setStore("custom", store.tab, answer)
+
     if (!custom) setStore("customOn", store.tab, false)
     setStore("editing", false)
   }
@@ -300,6 +332,7 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
   const toggle = (answer: string) => {
     setStore("answers", store.tab, (current = []) => {
       if (current.includes(answer)) return current.filter((item) => item !== answer)
+
       return [...current, answer]
     })
   }
@@ -312,18 +345,22 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
       setStore("customOn", store.tab, true)
       setStore("editing", true)
       customUpdate(input(), true)
+
       return
     }
 
     const next = !on()
     setStore("customOn", store.tab, next)
+
     if (next) {
       setStore("editing", true)
       customUpdate(input(), true)
+
       return
     }
 
     const value = input().trim()
+
     if (value) setStore("answers", store.tab, (current = []) => current.filter((item) => item.trim() !== value))
     setStore("editing", false)
     focus(options().length)
@@ -332,6 +369,7 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
   const customOpen = () => {
     if (sending()) return
     setStore("focus", options().length)
+
     if (!on()) setStore("customOn", store.tab, true)
     setStore("editing", true)
     customUpdate(input(), true)
@@ -348,38 +386,59 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
     if (event.key === "Escape") {
       event.preventDefault()
       reject()
+
+      return
+    }
+
+    const previous = IS_MAC
+      ? event.metaKey && !event.ctrlKey && !event.altKey && event.key === "["
+      : event.altKey && !event.ctrlKey && !event.metaKey && event.key === "ArrowLeft"
+
+    if (previous) {
+      if (event.repeat) return
+      event.preventDefault()
+      back()
+
       return
     }
 
     const mod = (event.metaKey || event.ctrlKey) && !event.altKey
+
     if (mod && event.key === "Enter") {
       if (event.repeat) return
       event.preventDefault()
       next()
+
       return
     }
 
     const target =
       event.target instanceof HTMLElement ? event.target.closest('[data-slot="question-options"]') : undefined
+
     if (store.editing) return
+
     if (!(target instanceof HTMLElement)) return
+
     if (event.altKey || event.ctrlKey || event.metaKey) return
 
     if (event.key === "ArrowDown" || event.key === "ArrowRight") {
       event.preventDefault()
       move(1)
+
       return
     }
 
     if (event.key === "ArrowUp" || event.key === "ArrowLeft") {
       event.preventDefault()
       move(-1)
+
       return
     }
 
     if (event.key === "Home") {
       event.preventDefault()
       focus(0)
+
       return
     }
 
@@ -393,16 +452,21 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
 
     if (optIndex === options().length) {
       customOpen()
+
       return
     }
 
     const opt = options()[optIndex]
+
     if (!opt) return
+
     if (multi()) {
       setStore("editing", false)
       toggle(opt.value)
+
       return
     }
+
     pick(opt.value)
   }
 
@@ -432,25 +496,30 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
 
   const next = () => {
     if (sending()) return
+
     if (store.editing) commitCustom()
 
     if (store.tab >= total() - 1) {
       submit()
+
       return
     }
 
     const tab = store.tab + 1
     setStore("tab", tab)
     setStore("editing", false)
+
     if (!store.minimized) focus(pickFocus(tab))
   }
 
   const back = () => {
     if (sending()) return
+
     if (store.tab <= 0) return
     const tab = store.tab - 1
     setStore("tab", tab)
     setStore("editing", false)
+
     if (!store.minimized) focus(pickFocus(tab))
   }
 
@@ -458,8 +527,22 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
     if (sending()) return
     setStore("tab", tab)
     setStore("editing", false)
+
     if (!store.minimized) focus(pickFocus(tab))
   }
+
+  command.register("session.question.back", () => [
+    {
+      id: "session.question.back",
+      title: language.t("ui.common.back"),
+      keybind: IS_MAC ? "mod+[" : "alt+arrowleft",
+      hidden: true,
+      // Stay registered while sending so the shortcut does not fall through to history navigation.
+      disabled: store.tab <= 0,
+      when: () => store.tab > 0,
+      onSelect: back,
+    },
+  ])
 
   const minimize = () => {
     if (sending()) return
@@ -518,9 +601,25 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
             </Button>
             <div data-slot="question-footer-actions">
               <Show when={store.tab > 0}>
-                <Button variant="neutral" size="large" disabled={sending()} onClick={back}>
-                  {language.t("ui.common.back")}
-                </Button>
+                <Tooltip
+                  placement="top"
+                  value={
+                    <>
+                      {language.t("ui.common.back")}
+                      <span class="opacity-60">{backShortcut()}</span>
+                    </>
+                  }
+                >
+                  <Button
+                    variant="neutral"
+                    size="large"
+                    disabled={sending()}
+                    onClick={back}
+                    aria-keyshortcuts={IS_MAC ? "Meta+[" : "Alt+ArrowLeft"}
+                  >
+                    {language.t("ui.common.back")}
+                  </Button>
+                </Tooltip>
               </Show>
               <Button
                 variant={last() ? "submit" : "neutral"}
@@ -530,6 +629,9 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
                 aria-keyshortcuts="Meta+Enter Control+Enter"
               >
                 {last() ? language.t("ui.common.submit") : language.t("ui.common.next")}
+                <span data-slot="question-submit-shortcut" aria-hidden="true" class="text-11-medium opacity-60">
+                  {submitShortcut()}
+                </span>
               </Button>
             </div>
           </>
@@ -611,10 +713,13 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
               onMouseDown={(e) => {
                 if (sending()) {
                   e.preventDefault()
+
                   return
                 }
+
                 if (e.target instanceof HTMLTextAreaElement) return
                 const input = e.currentTarget.querySelector('[data-slot="question-custom-input"]')
+
                 if (input instanceof HTMLTextAreaElement) input.focus()
               }}
               onSubmit={(e) => {
@@ -639,9 +744,12 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
                       e.preventDefault()
                       setStore("editing", false)
                       focus(options().length)
+
                       return
                     }
+
                     if ((e.metaKey || e.ctrlKey) && !e.altKey) return
+
                     if (e.key !== "Enter" || e.shiftKey) return
                     e.preventDefault()
                     commitCustom()

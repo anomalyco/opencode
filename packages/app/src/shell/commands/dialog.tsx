@@ -18,19 +18,24 @@ import "./dialog.css"
 
 function groups(entries: CommandPaletteEntry[]) {
   const map = new Map<string, CommandPaletteEntry[]>()
+
   for (const entry of entries) map.set(entry.category, [...(map.get(entry.category) ?? []), entry])
+
   return Array.from(map.entries()).map(([category, entries]) => ({ category, entries }))
 }
 
 export function matchesCommandPaletteEntry(entry: CommandPaletteEntry, query: string) {
   const value = query.toLowerCase()
+
   return [entry.title, entry.description, entry.category].some((text) => text?.toLowerCase().includes(value))
 }
 
 export function DialogCommandPalette(props: { onOpenFile?: (path: string) => void }) {
   const palette = createCommandPaletteModel(props)
+
   const items = (q: string) => {
     if (!q) return [...palette.preferredCommandEntries(), ...palette.recentFileEntries()]
+
     return palette.commandEntries().filter((entry) => matchesCommandPaletteEntry(entry, q))
   }
 
@@ -44,6 +49,7 @@ export function DialogCommandPalette(props: { onOpenFile?: (path: string) => voi
           if (!query) return []
           const files = await palette.file.searchFiles(query, { signal })
           const category = palette.language.t("palette.group.files")
+
           return files.map((path) => createCommandPaletteFileEntry(path, category))
         },
       ]}
@@ -69,10 +75,12 @@ export function CommandPaletteView(props: {
   const search = createCommandPaletteSearch({ query: () => store.query, items: props.items, sources: props.sources })
   const visibleEntries = search.items
   const groupedEntries = createMemo(() => groups(visibleEntries()))
+
   // Keep keyboard selection stable when another search source adds results.
   const activeEntry = createMemo(
     () => visibleEntries().find((entry) => entry.id === store.active) ?? visibleEntries()[0],
   )
+
   const openSessions = createMemo(
     () => new Set(tabs.store.flatMap((tab) => (tab.type === "session" ? [`${tab.server}\0${tab.sessionId}`] : []))),
   )
@@ -80,6 +88,7 @@ export function CommandPaletteView(props: {
   createEffect(() => {
     // Pin automatic selection too: a later source can insert rows before it.
     const id = activeEntry()?.id
+
     if (store.active !== id) setStore("active", id)
   })
 
@@ -91,6 +100,7 @@ export function CommandPaletteView(props: {
 
   const move = (delta: -1 | 1) => {
     const count = visibleEntries().length
+
     if (count === 0) return
     const index = visibleEntries().findIndex((entry) => entry.id === activeEntry()?.id)
     setStore("active", visibleEntries()[(index + delta + count) % count].id)
@@ -103,18 +113,24 @@ export function CommandPaletteView(props: {
     if (event.key === "ArrowDown") {
       event.preventDefault()
       move(1)
+
       return
     }
+
     if (event.key === "ArrowUp") {
       event.preventDefault()
       move(-1)
+
       return
     }
+
     if (event.key === "Enter") {
       event.preventDefault()
       props.select(activeEntry())
+
       return
     }
+
     if (event.key === "Escape") {
       event.preventDefault()
       props.close()

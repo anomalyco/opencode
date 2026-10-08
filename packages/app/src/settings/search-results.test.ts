@@ -6,11 +6,14 @@ import { rankSettings } from "./search-results"
 import type { SettingsView } from "./surface"
 
 const strings: Record<string, string> = { ...dict, ...en }
+
 const project = { id: "proj_opencode", name: "OpenCode", worktree: "/projects/opencode", expanded: false }
+
 const servers: SettingsSearchServer[] = [
   { key: "local", name: "Local server", connected: true, projects: [project] },
   { key: "remote", name: "Build server", connected: true, projects: [project] },
 ]
+
 const root: SettingsView = { type: "root", tab: "general" }
 
 function index(input: Partial<Parameters<typeof settingsSearchIndex>[0]> = {}) {
@@ -18,7 +21,6 @@ function index(input: Partial<Parameters<typeof settingsSearchIndex>[0]> = {}) {
     servers,
     desktop: false,
     browser: false,
-    dev: false,
     mobile: false,
     translate: (key) => strings[key],
     ...input,
@@ -49,16 +51,17 @@ describe("settings search index", () => {
     expect(rankSettings("font", items, root)).toHaveLength(3)
   })
 
-  test("only advertises settings supported by this platform and channel", () => {
+  test("only advertises settings supported by this platform", () => {
     const targets = (input: Parameters<typeof index>[0]) => index(input).map((item) => item.view.target)
     expect(targets({})).not.toContain("settings-pinch-zoom")
     expect(targets({})).not.toContain("settings-experimental-browser")
     expect(targets({})).not.toContain("settings-show-project-icon")
+    expect(targets({})).toContain("settings-tab-layout")
     expect(targets({ desktop: true })).toContain("settings-pinch-zoom")
-    expect(targets({ browser: true })).toContain("settings-experimental-browser")
-    expect(targets({ dev: true })).toContain("settings-show-project-icon")
-    expect(targets({ dev: true })).not.toContain("settings-mobile-titlebar-bottom")
-    expect(targets({ dev: true, mobile: true })).toContain("settings-mobile-titlebar-bottom")
+    expect(targets({ browser: true })).not.toContain("settings-experimental-browser")
+    expect(targets({})).not.toContain("settings-show-project-icon")
+    expect(targets({})).not.toContain("settings-mobile-titlebar-bottom")
+    expect(targets({ mobile: true })).toContain("settings-mobile-titlebar-bottom")
   })
 
   test("uses section labels and stable identities independent of translated text", () => {
@@ -91,7 +94,7 @@ describe("settings search ranking", () => {
       "Default environment",
     ])
     expect(rankSettings("mcps", index(), root).map((item) => item.view.type)).toEqual(["server", "server"])
-    expect(rankSettings("project name", index(), root).map((item) => item.title)).toEqual(["Show project names"])
+    expect(rankSettings("project name", index(), root)).toEqual([])
     expect(rankSettings("startup", index(), root)).toEqual([])
   })
 
@@ -133,6 +136,7 @@ describe("settings search ranking", () => {
       tab: "general",
       parent: "server",
     }
+
     expect(rankSettings("opencode name", index(), origin).map((item) => item.server)).toEqual(["remote", "local"])
   })
 

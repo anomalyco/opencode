@@ -11,6 +11,7 @@ function setup(list: (directory: string) => Promise<WorktreeDirectory[]>) {
   const refreshes: string[] = []
   const calls: string[] = []
   const updates: Array<[string, WorktreeDirectory[]]> = []
+
   const inventory = createWorktreeInventory({
     scope: ServerScope.local,
     queryClient: client,
@@ -18,10 +19,12 @@ function setup(list: (directory: string) => Promise<WorktreeDirectory[]>) {
       list: (input) => {
         const directory = input.projectID
         calls.push(directory)
+
         return list(directory)
       },
       refresh: (input) => {
         refreshes.push(input.projectID)
+
         return refreshed.promise
       },
     }),
@@ -29,16 +32,20 @@ function setup(list: (directory: string) => Promise<WorktreeDirectory[]>) {
       updates.push([directory, items])
     },
   })
+
   return { client, calls, updates, inventory, refreshed, refreshes }
 }
 
 describe("createWorktreeInventory", () => {
   test("lists a project, shares in-flight work, and publishes each result", async () => {
     const gate = Promise.withResolvers<void>()
+
     const setupResult = setup(async (directory) => {
       await gate.promise
+
       return [{ directory }, { directory: `${directory}/feature`, strategy: "git" }]
     })
+
     const first = setupResult.inventory.list("/repo")
     const second = setupResult.inventory.list("/repo")
     expect(setupResult.calls).toEqual(["/repo"])
@@ -66,10 +73,13 @@ describe("createWorktreeInventory", () => {
 
   test("a failed list is not cached and never rejects the caller", async () => {
     let fail = true
+
     const setupResult = setup(async (directory) => {
       if (fail) throw new Error("Location unavailable")
+
       return [{ directory }]
     })
+
     expect(await setupResult.inventory.list("/repo")).toBeUndefined()
     expect(setupResult.inventory.cached("/repo")).toBeUndefined()
     fail = false
@@ -107,7 +117,7 @@ describe("withWorktreeInventory", () => {
     id: "project",
     canonical: "/repo",
     name: "Before",
-    time: { created: 1, updated: 1 },
+    time: { created: 1, updated: 1, active: 1 },
     sandboxes: [],
   }
 
@@ -117,6 +127,7 @@ describe("withWorktreeInventory", () => {
       { directory: "/repo/feature", strategy: "git" },
       { directory: "/elsewhere" },
     ]
+
     expect(withWorktreeInventory(normalizeProjectInfo(metadata), worktrees)).toMatchObject({
       worktree: "/repo",
       sandboxes: ["/repo/feature", "/elsewhere"],
@@ -128,7 +139,13 @@ describe("withWorktreeInventory", () => {
     const project = normalizeProjectInfo(metadata)
     expect(withWorktreeInventory(project, undefined)).toBe(project)
     const cached = [{ directory: "/repo" }, { directory: "/repo/feature", strategy: "git" }]
-    const updated = updateProjectInfo(withWorktreeInventory(project, cached), { ...metadata, name: "After" })
+
+    const updated = updateProjectInfo(
+      { ...withWorktreeInventory(project, cached), worktree: "/old-repo" },
+      { ...metadata, name: "After" },
+    )
+
+    expect(updated).toMatchObject({ worktree: "/repo", worktrees: cached })
     expect(withWorktreeInventory(updated, cached)).toMatchObject({ name: "After", sandboxes: ["/repo/feature"] })
   })
 })

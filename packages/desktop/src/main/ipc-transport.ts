@@ -39,8 +39,10 @@ export const IpcServerProtocolLive = Layer.unwrap(
 
           const disconnect = Effect.fnUntraced(function* (id: number) {
             const binding = bindings.get(id)
+
             if (!binding) return
             bindings.delete(id)
+
             if (senderBindings.get(binding.sender.id) === id) senderBindings.delete(binding.sender.id)
             binding.port.off("message", binding.onMessage)
             binding.port.off("close", binding.onClose)
@@ -52,16 +54,23 @@ export const IpcServerProtocolLive = Layer.unwrap(
 
           const bind = Effect.fnUntraced(function* (sender: WebContents, port: MessagePortMain) {
             const previous = senderBindings.get(sender.id)
+
             if (previous !== undefined) yield* disconnect(previous)
+
             if (sender.isDestroyed()) {
               port.close()
+
               return
             }
 
             const id = nextClientId++
+
             const onMessage = (event: Electron.MessageEvent) => {
+              // SAFETY: the other end of this port is the renderer's ipc-client, which posts only RPC client
+              // messages; the RPC server decodes each request's payload with that RPC's schema.
               Queue.offerUnsafe(inbound, [id, event.data as RpcMessage.FromClientEncoded] as const)
             }
+
             const onClose = () => runFork(disconnect(id))
             const unbindEvents = yield* bindIpcEvents(sender.id)
             const binding = { id, sender, port, onMessage, onClose, unbindEvents }

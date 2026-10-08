@@ -236,7 +236,7 @@ const setup = Effect.gen(function* () {
     db,
     bus,
     session,
-    instructions: yield* instructionBuiltIns.load(sessionID),
+    instructions: yield* instructionBuiltIns.load(),
     instances: Instance.Service.of({
       // Generation only exercises the Location's model context.
       provide: () =>
