@@ -27,12 +27,12 @@ function resolveProject(options: Record<string, any>) {
 }
 
 function resolveLocation(options: Record<string, any>) {
-  return (
+  return String(
     options.location ??
-    process.env.GOOGLE_VERTEX_LOCATION ??
-    process.env.GOOGLE_CLOUD_LOCATION ??
-    process.env.VERTEX_LOCATION ??
-    "global"
+      process.env.GOOGLE_VERTEX_LOCATION ??
+      process.env.GOOGLE_CLOUD_LOCATION ??
+      process.env.VERTEX_LOCATION ??
+      "global",
   )
 }
 
@@ -161,7 +161,7 @@ export const GoogleVertexPlugin = define({
           continue
         const settings = settingsFor(item.provider)
         const project = resolveProject(settings)
-        const location = String(resolveLocation(settings))
+        const location = resolveLocation(settings)
         evt.update(item.provider.id, (provider) => {
           // Vertex authenticates through ADC rather than a key credential, so a
           // resolvable project is what makes the provider usable.
@@ -189,7 +189,7 @@ export const GoogleVertexPlugin = define({
           continue
         const settings = settingsFor(item.provider)
         const project = resolveProject(settings)
-        const location = String(resolveLocation(settings))
+        const location = resolveLocation(settings)
         for (const model of models.list(item.provider.id)) {
           if (typeof model.settings?.baseURL !== "string") continue
           models.update(item.provider.id, model.id, (draft) => {
