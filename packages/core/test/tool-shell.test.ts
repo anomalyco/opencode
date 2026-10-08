@@ -539,23 +539,19 @@ describe("ShellTool scanner permissions", () => {
           })
           expect(yield* Effect.promise(() => Bun.file(marker).text())).toBe("hello")
 
-          yield* Effect.promise(() => fs.rm(marker, { force: true }))
-          const repeat = yield* runPermissionCommand(registry, command, marker, [])
-          expect(repeat.requests).toEqual([])
-          expect(repeat.exit).toMatchObject({
-            _tag: "Success",
-            value: { status: "completed", metadata: { exit: 0 } },
-          })
-          expect(yield* Effect.promise(() => Bun.file(marker).text())).toBe("hello")
-
-          yield* Effect.promise(() => fs.rm(marker, { force: true }))
-          const changedArgument = yield* runPermissionCommand(registry, "FOO=bar printf bye > marker", marker, [])
-          expect(changedArgument.requests).toEqual([])
-          expect(changedArgument.exit).toMatchObject({
-            _tag: "Success",
-            value: { status: "completed", metadata: { exit: 0 } },
-          })
-          expect(yield* Effect.promise(() => Bun.file(marker).text())).toBe("bye")
+          for (const [approved, output] of [
+            [command, "hello"],
+            ["FOO=bar printf bye > marker", "bye"],
+          ]) {
+            yield* Effect.promise(() => fs.rm(marker, { force: true }))
+            const result = yield* runPermissionCommand(registry, approved, marker, [])
+            expect(result.requests, approved).toEqual([])
+            expect(result.exit, approved).toMatchObject({
+              _tag: "Success",
+              value: { status: "completed", metadata: { exit: 0 } },
+            })
+            expect(yield* Effect.promise(() => Bun.file(marker).text()), approved).toBe(output)
+          }
 
           // Deferred so a regression fails as an unexpected repeat prompt, not only as a proposal mismatch.
           expect(first.requests).toMatchObject([{ action: "shell", resources: [command], save: ["FOO=bar printf *"] }])
@@ -575,7 +571,6 @@ describe("ShellTool scanner permissions", () => {
           }
 
           yield* saved.add({ projectID: location.project.id, action: "shell", resources: ["printf *"] })
-          yield* Effect.promise(() => fs.rm(marker, { force: true }))
           const changed = yield* runPermissionCommand(registry, "FOO=baz printf hello > marker", marker, ["once"])
           expect(changed.requests).toHaveLength(1)
           expect(changed.exit).toMatchObject({

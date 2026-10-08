@@ -216,6 +216,10 @@ const scanLegacy = Effect.fnUntraced(function* (command: string, shell: string, 
               result.commands.push({ resource, save: `${prefix(tokens).join(" ")} *` })
               return result
             }
+            if (crossesStatementBoundary(span, executable.startIndex)) {
+              result.commands.push({ resource })
+              return result
+            }
             const save = proposal(
               resource.slice(
                 0,
@@ -324,6 +328,18 @@ export const scanPortable = Effect.fnUntraced(function* (command: string, shell:
   }
   return output
 })
+
+// Grammar recovery can glue statements together; quoted assignment/redirect contents are not boundaries.
+function crossesStatementBoundary(span: Node, end: number) {
+  let start = span.startIndex
+  for (const child of span.descendantsOfType(["variable_assignment", "file_redirect"])) {
+    if (!child) continue
+    if (child.startIndex >= end) continue
+    if (/[;\r\n]/.test(span.text.slice(start - span.startIndex, child.startIndex - span.startIndex))) return true
+    start = Math.max(start, child.endIndex)
+  }
+  return /[;\r\n]/.test(span.text.slice(start - span.startIndex, end - span.startIndex))
+}
 
 function parts(node: Node) {
   return Array.from({ length: node.childCount }).flatMap((_, index): Part[] => {

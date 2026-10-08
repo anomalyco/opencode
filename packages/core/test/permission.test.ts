@@ -651,10 +651,10 @@ describe("shell scanner permission impact", () => {
       name: "assignment redirect prefix",
       shell: "bash",
       command: "FOO=bar > output; printf done",
-      grants: [["FOO=bar > output; printf *"], ["printf *"]],
-      // Legacy preserves the glued assignment head, so its scoped rule covers only the glued repeat.
+      grants: [[], ["printf *"]],
+      // Omit a cross-statement proposal without changing the glued Tree-sitter authorization resource.
       repeat: [
-        ["allow", "ask"],
+        ["ask", "ask"],
         ["ask", "allow"],
       ],
       next: "printf next",
@@ -674,7 +674,7 @@ describe("shell scanner permission impact", () => {
     },
   ] as const) {
     for (const [origin, portable] of [false, true].entries()) {
-      it.live(`${fixture.name}: always allow from ${portable ? "native" : "legacy"}, then use either parser`, () =>
+      it.live(`${fixture.name}: always from ${portable ? "portable" : "Tree-sitter"}, then use either parser`, () =>
         Effect.gen(function* () {
           yield* setup()
           const service = yield* Permission.Service
@@ -705,7 +705,7 @@ describe("shell scanner permission impact", () => {
                   save: parsed.commands.flatMap((command) => (command.save !== undefined ? [command.save] : [])),
                 }),
               )
-              expect(result.effect, `${target ? "native" : "legacy"}: ${command}`).toBe(
+              expect(result.effect, `${target ? "portable" : "Tree-sitter"}: ${command}`).toBe(
                 command === fixture.next ? fixture.nextEffect[origin] : fixture.repeat[origin]?.[index],
               )
               if (result.effect === "ask") yield* service.reply({ requestID: result.id, reply: "once" })

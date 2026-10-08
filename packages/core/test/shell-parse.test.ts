@@ -164,6 +164,10 @@ describe("ShellParse", () => {
     ["  FOO=bar git status  ", "FOO=bar git status", "FOO=bar git status *"],
     ["FOO='a b' git status", "FOO='a b' git status", "FOO='a b' git status *"],
     ['FOO="a=b" git status', 'FOO="a=b" git status', 'FOO="a=b" git status *'],
+    ["FOO='a;b' printf done", "FOO='a;b' printf done", "FOO='a;b' printf *"],
+    ['FOO="a\nb" printf done', 'FOO="a\nb" printf done', 'FOO="a\nb" printf *'],
+    ["FOO=bar > 'a;b' printf done", "FOO=bar > 'a;b' printf done", "FOO=bar > 'a;b' printf *"],
+    ['FOO=bar > "a\nb" printf done', 'FOO=bar > "a\nb" printf done', 'FOO=bar > "a\nb" printf *'],
   ] as const)("preserves environment prefixes in saved proposals: %s", async (command, resource, save) => {
     for (const portable of [false, true]) {
       const scanner = portable ? "portable" : "Tree-sitter"
@@ -251,15 +255,17 @@ describe("ShellParse", () => {
     }
   })
 
-  test("documents the inherited empty-executable divergence without losing authorization", async () => {
-    const command = "FOO=bar >out"
-    const legacy = await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace"))
-    expect(legacy.commands).toEqual([{ resource: command }])
-    expect(legacy.commands[0]?.save).toBeUndefined()
-    expect(
-      (await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace", { portable: true }))).commands,
-    ).toEqual([])
-  })
+  test.each(["FOO=bar > output; printf done", "FOO=bar > output\nprintf done"] as const)(
+    "does not save an assignment head across a statement boundary: %s",
+    async (command) => {
+      for (const portable of [false, true]) {
+        expect(
+          (await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace", { portable }))).commands,
+          portable ? "portable" : "Tree-sitter",
+        ).toEqual(portable ? [{ resource: "printf done", save: "printf *" }] : [{ resource: command }])
+      }
+    },
+  )
 
   test.each([
     ['FOO="a*b" printf hello ${X', undefined],
