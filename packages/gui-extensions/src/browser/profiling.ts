@@ -6,6 +6,20 @@ import type { Cdp } from "./cdp"
 import type { BrowserFiles } from "./files"
 import { analyzeCpu, analyzeTrace, parseHeap } from "./analysis"
 
+/** A retained capture to analyze. */
+export type Analysis =
+  | { readonly type: "trace"; readonly fileID: Browser.FileID; readonly limit?: number }
+  | { readonly type: "cpu"; readonly fileID: Browser.FileID; readonly limit?: number }
+  | { readonly type: "heap.summary"; readonly fileID: Browser.FileID; readonly limit?: number }
+  | { readonly type: "heap.query"; readonly fileID: Browser.FileID; readonly name?: string; readonly limit?: number }
+  | { readonly type: "heap.object"; readonly fileID: Browser.FileID; readonly id: number; readonly limit?: number }
+  | {
+      readonly type: "heap.compare"
+      readonly before: Browser.FileID
+      readonly after: Browser.FileID
+      readonly limit?: number
+    }
+
 export type Recording = {
   owner: WebContents
   pid: number
@@ -49,12 +63,13 @@ export function createProfiling(
     try {
       const data = Buffer.from(file.data)
 
+      // SAFETY: fromJsonString(Schema.Unknown) only runs JSON.parse, whose result is always a JSON value.
       return Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(
         (file.name.endsWith(".gz") ? gunzipSync(data, { maxOutputLength: 128 * 1024 * 1024 }) : data).toString("utf8"),
-      )
+      ) as Schema.Json
     } catch (error) {
       throw new Error(
-        "Selected file cannot be decoded as a JSON capture, or expands beyond the 128 MiB analysis limit. Call browser.files.list({tabID}) and choose the fileID from the matching trace, CPU, or heap capture, not a screenshot/download. Do not retry the same invalid file.",
+        "Selected file cannot be decoded as a JSON capture, or expands beyond the 128 MiB analysis limit. Call browser.files.list({tabID}) and choose the file ID of a heap snapshot, not a screenshot or download. Do not retry the same invalid file.",
         { cause: error },
       )
     }
@@ -64,7 +79,7 @@ export function createProfiling(
     if (!cpu)
       return Promise.reject(
         new Error(
-          "No CPU profile has been started in this tab. Call browser.cpu.start({tabID}), perform the interaction to inspect, then browser.cpu.stop({tabID}).",
+          "No CPU profile has been started in this tab. Call browser.profile.start({tabID, kind: \"cpu\"}), perform the interaction to inspect, then browser.profile.stop({tabID}).",
         ),
       )
 
@@ -92,17 +107,16 @@ export function createProfiling(
       if (shared.recording)
         throw new Error(
           shared.recording.owner === contents
-            ? "A performance trace is already active in this tab. Use browser.trace.stop({tabID}) to finish it before starting another."
+            ? "A recording is already active in this tab. Use browser.profile.stop({tabID}) to finish it before starting another."
             : "Another tab owns the active performance trace. Wait for its owner to finish; do not stop or replace another tab's recording.",
         )
       const complete = Promise.withResolvers<{ stream?: string; dataLossOccurred: boolean }>()
       const off = cdp.on("Tracing.tracingComplete", (event) => complete.resolve(event))
 
-      const owner = {
+      const owner: Recording = {
         owner: contents,
         pid: contents.getOSProcessId(),
         started: performance.now(),
-        timer: undefined as ReturnType<typeof setTimeout> | undefined,
         finish: () => {
           if (trace) return trace
           trace = (async () => {
@@ -141,7 +155,7 @@ export function createProfiling(
 
                   if (bytes > 64 * 1024 * 1024)
                     throw new Error(
-                      "Trace exceeded its 64 MiB desktop capture limit. Record a shorter interaction with a smaller durationMs in browser.trace.start; do not repeat the same recording unchanged.",
+                      "Trace exceeded its 64 MiB desktop capture limit. Record a shorter interaction with a smaller durationMs in browser.profile.start; do not repeat the same recording unchanged.",
                     )
                   chunks.push(buffer)
 
@@ -230,14 +244,14 @@ export function createProfiling(
 
       return Promise.reject(
         new Error(
-          "This tab has no performance trace to stop. Call browser.trace.start({tabID}), perform the interaction to inspect, then browser.trace.stop({tabID}).",
+          "This tab has no recording to stop. Call browser.profile.start({tabID, kind}), perform the interaction to inspect, then browser.profile.stop({tabID}).",
         ),
       )
     },
     async startCpu() {
       if (cpu && !cpu.result)
         throw new Error(
-          "A CPU profile is already active in this tab. Use browser.cpu.stop({tabID}) before starting another profile.",
+          "A recording is already active in this tab. Use browser.profile.stop({tabID}) before starting another.",
         )
       await cdp.send("Profiler.enable")
       await cdp.send("Profiler.start")
@@ -284,12 +298,13 @@ export function createProfiling(
         ...source(),
       ])
     },
-    async analyze(
-      action: Extract<
-        Browser.Action,
-        { type: "trace.analyze" | "cpu.analyze" | "heap.summary" | "heap.query" | "heap.object" | "heap.compare" }
-      >,
-    ) {
+    /** The recording this tab is running, which profile.stop finishes. */
+    active(): "trace" | "cpu" | undefined {
+      if (shared.recording?.owner === contents) return "trace"
+
+      if (cpu && !cpu.result) return "cpu"
+    },
+    async analyze(action: Analysis) {
       if (action.type === "heap.compare") {
         const before = parseHeap(await json(action.before)).classes
         const after = parseHeap(await json(action.after)).classes
@@ -309,9 +324,9 @@ export function createProfiling(
 
       const value = await json(action.fileID)
 
-      if (action.type === "trace.analyze") return analyzeTrace(value, action.limit)
+      if (action.type === "trace") return analyzeTrace(value, action.limit)
 
-      if (action.type === "cpu.analyze") return analyzeCpu(value, action.limit)
+      if (action.type === "cpu") return analyzeCpu(value, action.limit)
       const heap = parseHeap(value)
 
       if (action.type === "heap.summary") return heap.summary(action.limit)

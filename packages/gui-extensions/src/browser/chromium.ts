@@ -1,12 +1,27 @@
 import { Browser } from "@opencode/plugin-browser/rpc"
-import electron, { type BrowserWindow, type WebContents } from "electron"
+import electron, { type BrowserWindow, type WebContents, type WebContentsView } from "electron"
 import type { Protocol } from "devtools-protocol"
 import { Schema } from "effect"
 import type { Embeds } from "../sdk/main"
 import { createCdp, abortError, waitFor } from "./cdp"
 import { createBrowserFiles } from "./files"
 import { createDiagnostics } from "./diagnostics"
+import { BrowserError } from "./errors"
 import { loadIcon } from "./icon"
+import { parseChord, typedKey, type KeyEvent } from "./keys"
+import { isExplicitLocator, parseLocator, type Step } from "./locator"
+import {
+  PageControl,
+  PageCount,
+  PageEntries,
+  PageInfo,
+  PageOutcome,
+  PagePosition,
+  PageRead,
+  pageCall,
+  type PageMethod,
+} from "./page"
+import type { Presenter, Presenters } from "./presenter"
 import { createProfiling, type Recording } from "./profiling"
 import type { BrowserNetwork } from "./network"
 import {
@@ -22,23 +37,30 @@ import type { PaneElement } from "./ipc"
 
 type Element = { backendID: number; frameID: string; sessionID?: string }
 
+/** A page object an operation holds, released with its object group. */
+type Remote = { objectId: string; sessionID?: string }
+
+/** One operation's remote objects, released together when it ends. */
+type Scope = { group: string; sessions: Set<string | undefined> }
+
+type Located = { element: Element; remote: Remote; count: number }
+
+/** What a page helper checks before an action: the element must exist, or also be ready for that input. */
+type Readiness = "exists" | "click" | "hover" | "fill" | "type" | "drag" | "upload"
+
+type Emulation = {
+  viewport?: Browser.Viewport
+  colorScheme?: "light" | "dark"
+  reducedMotion?: "reduce" | "no-preference"
+  media?: "screen" | "print"
+  offline: boolean
+  timezone?: string
+  locale?: string
+  userAgent?: string
+}
+
 /** State every page of the pane shares: the element ref allocator and the app-wide trace recording. */
 export type Shared = { ref: () => string; recording?: Recording }
-
-// Captures and downloads belong to the tab, not whichever document it now shows; navigate replaces it anyway.
-const retainedOperations: readonly Browser.Method[] = [
-  "navigate",
-  "files.list",
-  "files.get",
-  "trace.stop",
-  "trace.analyze",
-  "cpu.stop",
-  "cpu.analyze",
-  "heap.summary",
-  "heap.query",
-  "heap.object",
-  "heap.compare",
-]
 
 // Input the page receives while the element picker is on would pick an element instead.
 const pointerOperations: readonly Browser.Method[] = [
@@ -46,18 +68,15 @@ const pointerOperations: readonly Browser.Method[] = [
   "hover",
   "drag",
   "fill",
-  "fill_form",
-  "select",
-  "check",
+  "type",
   "press",
   "scroll",
-  "files.drop",
+  "drop",
+  "upload",
 ]
 
-/** Virtual key codes of the named keys `press` accepts. */
-interface KeyCodes {
-  readonly [key: string]: number
-}
+// Input whose JavaScript dialog is an outcome to report, not a failure: the click that opens a confirm worked.
+const dialogOutcomes: readonly Browser.Method[] = ["click", "hover", "drag", "fill", "type", "press", "upload", "drop"]
 
 // Chromium DevTools' element picker colors, so the overlay matches the Elements panel.
 const inspectHighlight: Protocol.Overlay.HighlightConfig = {
@@ -86,6 +105,59 @@ const inspectOff = { mode: "none", highlightConfig: inspectHighlight }
 
 // Chromium's zoom presets, so a step lands where it would in the system browser.
 const zoomSteps = [0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5]
+
+// The agent's tabs start at a desktop layout instead of the narrow pane's width.
+const defaultSize = { width: 1280, height: 800 }
+
+// Roles whose elements an agent acts on; each gets a ref in a snapshot.
+const actionableRoles = new Set([
+  "button",
+  "link",
+  "textbox",
+  "searchbox",
+  "combobox",
+  "checkbox",
+  "radio",
+  "switch",
+  "slider",
+  "spinbutton",
+  "option",
+  "menuitem",
+  "menuitemcheckbox",
+  "menuitemradio",
+  "tab",
+  "treeitem",
+  "listbox",
+  "textarea",
+])
+
+// Roles that give interactive elements their context in an "interactive" snapshot.
+const contextRoles = new Set([
+  "heading",
+  "dialog",
+  "alertdialog",
+  "alert",
+  "navigation",
+  "main",
+  "banner",
+  "contentinfo",
+  "complementary",
+  "form",
+  "region",
+  "tablist",
+  "menu",
+  "menubar",
+  "toolbar",
+  "list",
+  "table",
+  "grid",
+  "tree",
+  "group",
+  "status",
+])
+
+// Wrapper roles that only add depth; they are skipped without a name.
+const wrapperRoles = new Set(["generic", "none", "presentation", "InlineTextBox", "LineBreak", "paragraph", "Section"])
 
 /** A page's icon as a data URL, and its zoom factor, 1 at 100%. */
 export type PageDetail = { icon?: string; zoom: number }
@@ -119,6 +191,25 @@ function zoomStep(current: number, direction: "in" | "out" | "reset") {
   return zoomSteps.findLast((step) => step < current - 0.001) ?? current
 }
 
+/** Whether a script is a function the page calls with arguments, rather than an expression or statements. */
+export function functionSource(script: string) {
+  return /^\s*(?:async\s+)?(?:function\b|\((?:[^()]|\([^()]*\))*\)\s*=>|[A-Za-z_$][\w$]*\s*=>)/.test(script)
+}
+
+function delay(ms: number, signal?: AbortSignal) {
+  return new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, ms)
+    signal?.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(timer)
+        resolve()
+      },
+      { once: true },
+    )
+  })
+}
+
 export type BrowserPage = ReturnType<typeof createBrowserPage>
 
 export function createBrowserPage(
@@ -139,11 +230,20 @@ export function createBrowserPage(
     fail: () => void
     /** Adopts a page the document opened; a background one leaves the current tab selected. */
     popup: (options: Electron.BrowserWindowConstructorOptions, background: boolean) => WebContents
+    /** An agent tab's link that opens a new tab: the pane opens it as another agent tab. */
+    open: (url: string, background: boolean) => void
     initialize?: boolean
     restore?: Browser.Tab
     popupOptions?: Electron.BrowserWindowConstructorOptions
     /** Directories whose files may load as file:// documents; empty when the server is remote. */
     fileRoots?: () => ReadonlyArray<string>
+    /** Who opened the tab. The agent's tabs render offscreen, so they work while nobody watches. */
+    owner: "agent" | "user"
+    /** The agent's key for the tab. */
+    key?: string
+    /** A viewport the agent pinned before the tab was restored. */
+    viewport?: { width: number; height: number }
+    presenters: Presenters
     shared: Shared
     embeds: Embeds
   },
@@ -154,25 +254,68 @@ export function createBrowserPage(
     },
   }
 
-  const view = new electron.WebContentsView({
-    ...options.popupOptions,
-    webPreferences: {
-      partition: options.partition,
-      nodeIntegration: false,
-      contextIsolation: true,
-      sandbox: true,
-      webSecurity: true,
-      webviewTag: false,
-      devTools: false,
-      backgroundThrottling: false,
-      // Agent navigation, including in hidden tabs, must not take the user's keyboard focus.
-      focusOnNavigation: false,
-    },
-  })
+  const preferences: Electron.WebPreferences = {
+    partition: options.partition,
+    nodeIntegration: false,
+    contextIsolation: true,
+    sandbox: true,
+    webSecurity: true,
+    webviewTag: false,
+    devTools: false,
+    backgroundThrottling: false,
+    // Agent navigation, including in hidden tabs, must not take the user's keyboard focus.
+    focusOnNavigation: false,
+  }
 
-  const contents = view.webContents
+  // The agent's tabs render into an offscreen window: Chromium keeps them painting, laid out, and receiving input
+  // whether the pane shows them, the app is minimized, or nobody looks. A presenter view shows their frames.
+  const scale = electron.screen.getDisplayMatching(win.getBounds()).scaleFactor
+  const offscreen = options.owner === "agent" && !options.popupOptions
+
+  const host = offscreen
+    ? new electron.BrowserWindow({
+        show: false,
+        width: options.viewport?.width ?? defaultSize.width,
+        height: options.viewport?.height ?? defaultSize.height,
+        useContentSize: true,
+        webPreferences: { ...preferences, offscreen: { deviceScaleFactor: scale } },
+      })
+    : undefined
+
+  const emulation: Emulation = { offline: false, viewport: options.viewport }
+
+  // The page's contents, and the view the pane lays out: the offscreen page's presenter, or the page itself.
+  const surface: { contents: WebContents; view: WebContentsView; presenter?: Presenter } = host
+    ? offscreenSurface(host)
+    : nativeSurface()
+
+  const contents = surface.contents
+  const view = surface.view
+  const presenter = surface.presenter
+  // Whether the user can see the tab, and how many agent operations are running on it.
+  let watched = false
+  let busy = 0
+  let unpinned: number[] | undefined
+
+  // An offscreen tab paints at full rate while watched, while the agent works on it, and not at all otherwise; its
+  // scripts keep running either way.
+  const paint = () => {
+    if (!host || contents.isDestroyed()) return
+
+    if (watched || busy > 0) {
+      contents.setFrameRate(watched ? 60 : 30)
+
+      if (!contents.isPainting()) contents.startPainting()
+
+      return
+    }
+
+    if (contents.isPainting()) contents.stopPainting()
+  }
+
   const detachNetwork = options.network?.attach(contents)
-  contents.on("before-input-event", (event, input) => {
+
+  const shortcuts = (event: Electron.Event, input: Electron.Input) => {
     if (input.type !== "keyDown") return
 
     if (input.key === "F5" && !input.meta && !input.control && !input.alt && !input.shift) {
@@ -212,9 +355,14 @@ export function createBrowserPage(
     if (!direction) return
     event.preventDefault()
     zoom(direction)
-  })
+  }
+
+  contents.on("before-input-event", shortcuts)
   // Ctrl or Cmd with the mouse wheel; Electron leaves applying it to the app.
   contents.on("zoom-changed", (_event, direction) => zoom(direction))
+
+  // The user types into an offscreen tab through its presenter, which sees the keys first.
+  if (presenter) presenter.view.webContents.on("before-input-event", shortcuts)
 
   const zoom = (direction: "in" | "out" | "reset") => {
     const current = contents.getZoomFactor()
@@ -257,7 +405,9 @@ export function createBrowserPage(
   const files = createBrowserFiles(sourceURLs)
   const diagnostics = createDiagnostics(cdp)
   const profiling = createProfiling(contents, cdp, files, sourceURLs, options.shared)
+  // Element refs by name, and the ref each element already has, so a later snapshot or find keeps the same names.
   const refs = new Map<string, Element>()
+  const named = new Map<string, string>()
   // Elements the user picked. Their refs outlive later snapshots, so a comment keeps pointing at
   // the element until the document changes.
   const picked = new Map<string, Element>()
@@ -275,6 +425,9 @@ export function createBrowserPage(
   // The first restored navigation consumes the generation reserved in the unloaded inventory.
   let generation = options.restore ? options.restore.generation - 1 : 0
   let revision = 0
+  // The HTTP status of the main document, once known.
+  let status: number | undefined
+  let recordingKind: "trace" | "cpu" | undefined
   cdp.on("Page.frameNavigated", ({ frame }) => {
     documents.set(frame.id, frame.url)
     revision++
@@ -304,6 +457,10 @@ export function createBrowserPage(
       canGoBack: contents.navigationHistory.canGoBack(),
       canGoForward: contents.navigationHistory.canGoForward(),
       generation,
+      owner: options.owner,
+      watched,
+      key: options.key,
+      viewport: emulation.viewport && { width: emulation.viewport.width, height: emulation.viewport.height },
     }
 
     return failure ? { ...page, loadError: failure.message, ...history } : { ...page, ...history }
@@ -316,11 +473,13 @@ export function createBrowserPage(
   const reset = (event: Electron.Event<{ url: string; isMainFrame: boolean; isSameDocument: boolean }>) => {
     if (!event.isMainFrame || event.isSameDocument) return
     failure = undefined
+    status = undefined
     generation++
     documents.clear()
     refs.clear()
+    named.clear()
     picked.clear()
-    diagnostics.clear()
+    diagnostics.navigated()
 
     if (inspecting) void toggleInspect(false)
     publish()
@@ -332,10 +491,12 @@ export function createBrowserPage(
   }
 
   contents.on("did-start-navigation", reset)
-  contents.on("did-navigate", (_event, url, status, statusText) => {
+  contents.on("did-navigate", (_event, url, code, statusText) => {
+    status = code > 0 ? code : undefined
+
     // The server-network proxy answers an unreachable HTTP target with an empty 502. Other
     // error statuses are real documents from the user's server and stay visible.
-    if (status === 502) failure = { url, message: `${status} ${statusText}`.trim().slice(0, 2_048) }
+    if (code === 502) failure = { url, message: `${code} ${statusText}`.trim().slice(0, 2_048) }
 
     // Another site's icon arrives with its document; the same site keeps its icon meanwhile, as tabs do. Files and blank
     // pages have no shared origin, so each keeps none.
@@ -396,28 +557,36 @@ export function createBrowserPage(
   contents.on("will-frame-navigate", guard)
   contents.on("will-redirect", guard)
   // Links opened with Cmd or Ctrl arrive as background tabs, and stay behind the current one as in the system browser.
-  contents.setWindowOpenHandler(({ url, disposition }) =>
-    url === "about:blank" || destinationOrigin(url)
-      ? {
-          action: "allow",
-          outlivesOpener: true,
-          overrideBrowserWindowOptions: {
-            webPreferences: {
-              nodeIntegration: false,
-              contextIsolation: true,
-              sandbox: true,
-              webSecurity: true,
-              webviewTag: false,
-              devTools: false,
-              // Electron applies these preferences before the popup is adopted by our view.
-              focusOnNavigation: false,
-              partition: options.partition,
-            },
-          },
-          createWindow: (popupOptions) => options.popup(popupOptions, disposition === "background-tab"),
-        }
-      : { action: "deny" },
-  )
+  contents.setWindowOpenHandler(({ url, disposition }) => {
+    if (url !== "about:blank" && !destinationOrigin(url)) return { action: "deny" }
+
+    // An offscreen page cannot adopt a popup's contents. A link that opens a tab becomes another agent tab; a
+    // scripted window (OAuth and similar flows that need window.opener) stays a native popup.
+    if (offscreen && (disposition === "foreground-tab" || disposition === "background-tab")) {
+      options.open(url, disposition === "background-tab")
+
+      return { action: "deny" }
+    }
+
+    return {
+      action: "allow",
+      outlivesOpener: true,
+      overrideBrowserWindowOptions: {
+        webPreferences: {
+          nodeIntegration: false,
+          contextIsolation: true,
+          sandbox: true,
+          webSecurity: true,
+          webviewTag: false,
+          devTools: false,
+          // Electron applies these preferences before the popup is adopted by our view.
+          focusOnNavigation: false,
+          partition: options.partition,
+        },
+      },
+      createWindow: (popupOptions) => options.popup(popupOptions, disposition === "background-tab"),
+    }
+  })
 
   const download = (_event: Electron.Event, item: Electron.DownloadItem, source: WebContents) => {
     if (source !== contents) return
@@ -434,9 +603,9 @@ export function createBrowserPage(
 
         if (file.bytes > Browser.MAX_FILE_BYTES) item.cancel()
       })
-      item.once("done", (_event, status) => {
+      item.once("done", (_event, done) => {
         file.bytes = item.getReceivedBytes()
-        file.state = status === "completed" ? "completed" : "failed"
+        file.state = done === "completed" ? "completed" : "failed"
       })
     } catch {
       item.cancel()
@@ -516,6 +685,12 @@ export function createBrowserPage(
   // A hidden page cannot be picked from, and a comment's frozen still already shows the
   // picked element, so hiding ends the picker, any pick in progress, and the highlight.
   embed.on("visible", (visible) => {
+    if (visible !== watched) {
+      watched = visible
+      paint()
+      publish()
+    }
+
     if (visible || closed) return
     picks++
     void (inspecting ? toggleInspect(false) : hideHighlight())
@@ -544,7 +719,15 @@ export function createBrowserPage(
       flatten: true,
       filter: [{ type: "iframe", exclude: false }, { exclude: true }],
     }),
-  ]).then(() => undefined)
+    // An offscreen page never has the app's focus; it must still behave as the focused page it is to the agent.
+    ...(host
+      ? [
+          cdp.send("Emulation.setFocusEmulationEnabled", { enabled: true }),
+          Promise.resolve().then(() => contents.focus()),
+        ]
+      : []),
+    ...(emulation.viewport && !host ? [applyViewport()] : []),
+  ]).then(() => paint())
 
   return {
     view,
@@ -578,13 +761,13 @@ export function createBrowserPage(
      */
     async clearSite() {
       const url = contents.getURL()
-      const origin = destinationOrigin(url)
+      const site = destinationOrigin(url)
 
-      if (closed || !origin) return
+      if (closed || !site) return
       const cookies = await contents.session.cookies.get({ url })
       await Promise.all(cookies.map((cookie) => contents.session.cookies.remove(cookieURL(cookie), cookie.name)))
       await contents.session.clearStorageData({
-        origin,
+        origin: site,
         storages: ["localstorage", "indexdb", "serviceworkers", "cachestorage", "filesystem", "shadercache"],
       })
 
@@ -618,15 +801,7 @@ export function createBrowserPage(
           "Browser target changed while permission was pending. Take a fresh snapshot or listing and request the action again; it was not executed.",
         )
 
-      if (
-        command.generation !== undefined &&
-        command.generation !== generation &&
-        !retainedOperations.includes(command.action.type)
-      )
-        throw new Error(
-          "The document changed before this operation ran. Call browser.tabs.list({}) to check its current URL, then browser.snapshot({tabID}) for fresh refs. Reconsider the action before retrying on the new page.",
-        )
-      const modal = Promise.withResolvers<never>()
+      const modal = Promise.withResolvers<Browser.Result>()
       const cancelled = Promise.withResolvers<never>()
       // The action underneath the race keeps running after a dialog wins it; it checks this
       // signal before each further step, so a validation alert on one field stops the rest.
@@ -645,8 +820,20 @@ export function createBrowserPage(
 
       signal.addEventListener("abort", cancel, { once: true })
 
-      const reject = () => {
+      const opened = () => {
         if (command.action.type !== "navigate") run.abort()
+
+        if (dialog && dialogOutcomes.includes(command.action.type)) {
+          modal.resolve(
+            result({
+              tab: state(),
+              changed: { navigated: false, dialog: { type: dialog.type, message: dialog.message } },
+            }),
+          )
+
+          return
+        }
+
         modal.reject(
           new Error(
             'A JavaScript dialog opened while the action was running. Inspect it with browser.dialog({tabID,action:"get"}) and accept or dismiss it. Do not repeat the original action just to close the dialog.',
@@ -654,7 +841,9 @@ export function createBrowserPage(
         )
       }
 
-      if (command.action.type !== "dialog") dialogs.add(reject)
+      if (command.action.type !== "dialog") dialogs.add(opened)
+      busy++
+      paint()
 
       try {
         return await Promise.race([
@@ -664,7 +853,12 @@ export function createBrowserPage(
         ])
       } finally {
         signal.removeEventListener("abort", cancel)
-        dialogs.delete(reject)
+        dialogs.delete(opened)
+        // A short tail keeps frames coming for the agent's next call.
+        setTimeout(() => {
+          busy--
+          paint()
+        }, 1_000)
       }
     },
     async dispose() {
@@ -676,12 +870,44 @@ export function createBrowserPage(
       await profiling.dispose()
       cdp.dispose()
       refs.clear()
+      named.clear()
       picked.clear()
       embed.dispose()
+      presenter?.dispose()
+
+      if (host && !host.isDestroyed()) host.destroy()
 
       if (!contents.isDestroyed()) contents.close({ waitForBeforeUnload: false })
       await files.dispose()
     },
+  }
+
+  function offscreenSurface(window: BrowserWindow) {
+    const created = options.presenters.create({
+      page: window.webContents,
+      window,
+      pinned: () => emulation.viewport && { width: emulation.viewport.width, height: emulation.viewport.height },
+    })
+
+    return { contents: window.webContents, view: created.view, presenter: created }
+  }
+
+  function nativeSurface() {
+    const created = new electron.WebContentsView({ ...options.popupOptions, webPreferences: preferences })
+
+    return { contents: created.webContents, view: created }
+  }
+
+  function result<T>(value: T, attached: Browser.File[] = []): Browser.Result {
+    // The JSON round trip drops properties that are undefined, as the wire does.
+    const json = Schema.decodeUnknownSync(Schema.Json)(JSON.parse(JSON.stringify(value) ?? "null"))
+
+    if (JSON.stringify(json).length > 512_000)
+      throw new Error(
+        "Browser result exceeds 512000 JSON characters. Ask for less: fewer entries, a smaller snapshot (maxLines), maxChars on read, selected fields in evaluate, or saveTo to write an evaluate result to a server file.",
+      )
+
+    return { value: json, files: attached }
   }
 
   async function execute(
@@ -692,298 +918,256 @@ export function createBrowserPage(
   ): Promise<Browser.Result> {
     const captureSources = sourceURLs()
     const transfer = (id: Browser.FileID) => files.transfer(id, approved?.resources)
+    const scope: Scope = { group: `opencode-${crypto.randomUUID()}`, sessions: new Set() }
 
-    const result = <T>(value: T, attached: Browser.File[] = []): Browser.Result => {
-      const json = Schema.decodeUnknownSync(Schema.Json)(value)
-
-      if (JSON.stringify(json).length > 512_000)
-        throw new Error(
-          "Browser result exceeds 512000 JSON characters. Request fewer entries, reduce snapshot depth, or return only selected fields from the evaluation script. Repeating the same request will not reduce its output.",
-        )
-
-      return { value: json, files: attached }
+    try {
+      return await run(action, transfers, signal, scope, captureSources, transfer)
+    } finally {
+      scope.sessions.forEach((sessionID) =>
+        void cdp.send("Runtime.releaseObjectGroup", { objectGroup: scope.group }, sessionID).catch(() => undefined),
+      )
     }
+  }
 
+  async function run(
+    action: Browser.Action,
+    transfers: readonly Browser.File[],
+    signal: AbortSignal,
+    scope: Scope,
+    captureSources: readonly string[],
+    transfer: (id: Browser.FileID) => Promise<Browser.File>,
+  ): Promise<Browser.Result> {
     switch (action.type) {
       case "navigate": {
-        const url = normalizeURL(action.url, policy)
+        const before = generation
+
+        if (action.history) {
+          const history = contents.navigationHistory
+
+          if (action.history === "back" ? !history.canGoBack() : !history.canGoForward())
+            throw new BrowserError("invalid", `This tab has no page to go ${action.history} to.`)
+
+          if (action.history === "back") history.goBack()
+          else history.goForward()
+          await loaded(before, action.waitUntil ?? "load", action.timeoutMs ?? 30_000, signal)
+
+          return result({ ...state(), status })
+        }
+
+        const url = normalizeURL(action.url ?? "about:blank", policy)
         const cancel = () => contents.stop()
         signal.addEventListener("abort", cancel, { once: true })
 
         try {
-          await contents.loadURL(url)
+          await loaded(before, action.waitUntil ?? "load", action.timeoutMs ?? 30_000, signal, contents.loadURL(url))
         } finally {
           signal.removeEventListener("abort", cancel)
         }
 
         abortError(signal)
 
-        return result(state())
+        return result({ ...state(), status })
       }
 
       case "back":
       case "forward":
       case "reload":
       case "stop": {
+        const mark = diagnostics.mark()
+        const before = generation
+
         if (action.type === "back" && contents.navigationHistory.canGoBack()) contents.navigationHistory.goBack()
 
         if (action.type === "forward" && contents.navigationHistory.canGoForward())
           contents.navigationHistory.goForward()
 
-        if (action.type === "reload") contents.reload()
+        if (action.type === "reload") {
+          if ("hard" in action && action.hard) contents.reloadIgnoringCache()
+          else contents.reload()
+        }
 
-        if (action.type === "stop") contents.stop()
+        if (action.type === "stop") {
+          contents.stop()
 
-        if (action.type !== "stop") await waitFor(() => !contents.isLoading(), signal, 30_000)
+          return result(state())
+        }
 
-        return result(state())
+        if (action.type !== "reload") {
+          await waitFor(() => !contents.isLoading(), signal, 30_000)
+
+          return result(state())
+        }
+
+        await loaded(before, action.waitUntil ?? "load", action.timeoutMs ?? 30_000, signal)
+
+        return result({ ...state(), status, errors: diagnostics.errorsSince(mark) })
       }
 
       case "frames":
         return result({ tab: state(), frames: await frames() })
       case "snapshot":
+        return result({ tab: state(), ...(await snapshot(action, scope)) })
       case "find":
-        return result({ tab: state(), ...(await snapshot(action)) })
+        return result({ tab: state(), ...(await find(action, scope)) })
+      case "read": {
+        const self = action.target
+          ? (await resolve(action.target, "exists", 5_000, false, signal, scope)).remote
+          : await windowObject(action.frameID, scope)
+
+        const value = await call(
+          PageRead,
+          "read",
+          self,
+          [
+            { value: action.format ?? "text" },
+            { value: action.after ?? null },
+            { value: action.before ?? null },
+            { value: action.offset ?? 0 },
+            { value: action.maxChars ?? 8_000 },
+          ],
+          scope,
+        )
+
+        return result({ tab: state(), ...value })
+      }
+
       case "evaluate": {
-        if (action.ref && action.frameID)
-          throw new Error(
-            "Pass either ref or frameID to browser.evaluate, not both. A ref already runs in its element's frame.",
-          )
-        const context = action.frameID ? contexts.get(action.frameID) : undefined
+        const value = await evaluate(action.script, action.args ?? [], {
+          target: action.target,
+          frameID: action.frameID,
+          timeoutMs: action.timeoutMs ?? 30_000,
+          signal,
+          scope,
+        })
 
-        if (action.frameID && !context)
-          throw new Error(
-            "Frame context is unavailable. Call browser.frames({tabID}) and use a current frameID from this tab, or omit frameID to target the main frame.",
-          )
-        const element = action.ref ? target(action.ref) : undefined
-        const objectId = element ? await resolve(element) : undefined
+        if (!action.saveTo) return result({ tab: state(), value })
+        const id = await files.save("result.json", "application/json", Buffer.from(JSON.stringify(value)), captureSources)
 
-        // With a ref, the script is a function that receives the element as its argument and as `this`.
-        const value = await (element && objectId
-          ? cdp
-              .send(
-                "Runtime.callFunctionOn",
-                {
-                  objectId,
-                  functionDeclaration: action.script,
-                  arguments: [{ objectId }],
-                  awaitPromise: true,
-                  returnByValue: true,
-                  userGesture: true,
-                },
-                element.sessionID,
-              )
-              .finally(() => cdp.send("Runtime.releaseObject", { objectId }, element.sessionID).catch(() => undefined))
-          : cdp.send(
-              "Runtime.evaluate",
-              {
-                expression: action.script,
-                contextId: context?.id,
-                awaitPromise: true,
-                returnByValue: true,
-                userGesture: true,
-              },
-              context?.sessionID,
-            ))
-
-        if (value.exceptionDetails)
-          throw new Error(
-            `Page JavaScript threw an exception. Check the script and ${action.ref ? "ref" : "frameID"}; inspect the page before repeating code with side effects. Details: ${(value.exceptionDetails.exception?.description ?? value.exceptionDetails.text).slice(0, 800)}`,
-          )
-        abortError(signal)
-
-        return result({ tab: state(), value: value.result.value ?? null })
+        return result({ tab: state(), value: null }, [await transfer(id)])
       }
 
       case "click":
-        await click(target(action.ref), action.button ?? "left", action.count ?? 1, action.modifiers)
-        break
-      case "hover":
-        await cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", ...(await point(target(action.ref))) })
-        break
-      case "drag": {
-        const source = target(action.from)
-        const destination = target(action.to)
-        await point(destination)
-        const from = await point(source)
-        const box = await rect(destination)
-        const to = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
-        const html5 = await call(source, "function() { return this.draggable; }")
-        let data: Protocol.Input.DragData | undefined
-
-        const off = cdp.on("Input.dragIntercepted", (event) => {
-          data = event.data
-        })
-
-        await cdp.send("Input.setInterceptDrags", { enabled: true })
-        await cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", ...from })
-        await cdp.send("Input.dispatchMouseEvent", {
-          type: "mousePressed",
-          ...from,
-          button: "left",
-          buttons: 1,
-          clickCount: 1,
-        })
-
-        try {
-          for (let i = 1; i <= 10; i++) {
-            abortError(signal)
-            await cdp.send("Input.dispatchMouseEvent", {
-              type: "mouseMoved",
-              x: from.x + ((to.x - from.x) * i) / 10,
-              y: from.y + ((to.y - from.y) * i) / 10,
-              button: "left",
-              buttons: 1,
-            })
-          }
-
-          if (html5) await waitFor(() => data !== undefined, signal, 2_000)
-
-          if (data) {
-            for (const type of ["dragEnter", "dragOver", "drop"])
-              await cdp.send("Input.dispatchDragEvent", { type, ...to, data })
-          }
-        } finally {
-          off()
-          await cdp.send("Input.setInterceptDrags", { enabled: false })
-          await cdp.send("Input.dispatchMouseEvent", { type: "mouseReleased", ...to, button: "left", clickCount: 1 })
-        }
-
-        break
-      }
-
-      case "fill":
-        await fill(target(action.ref), action.text, signal)
-        break
-      case "fill_form":
-        for (const field of action.fields) {
-          abortError(signal)
-
-          if (field.type === "text") await fill(target(field.ref), field.value, signal)
-
-          if (field.type === "select") await select(target(field.ref), field.values)
-
-          if (field.type === "check") await check(target(field.ref), field.checked)
-        }
-
-        break
-      case "select":
-        await select(target(action.ref), action.values)
-        break
-      case "check":
-        await check(target(action.ref), action.checked)
-        break
-      case "press":
-        await key(action.key)
-        break
-      case "scroll": {
-        const bounds = view.getBounds()
-        await cdp.send("Input.dispatchMouseEvent", {
-          type: "mouseWheel",
-          x: bounds.width / 2,
-          y: bounds.height / 2,
-          deltaX: action.deltaX ?? 0,
-          deltaY: action.deltaY,
-        })
-        break
-      }
-
-      case "wait": {
-        if (action.condition !== "load" && !action.text)
-          throw new Error(
-            'browser.wait requires non-empty text for condition "text" or "textGone". Use condition "load" without text to wait for loading.',
-          )
-        await waitFor(
-          async () => {
-            if (action.condition === "load") return !contents.isLoading()
-            const context = action.frameID ? contexts.get(action.frameID) : undefined
-
-            if (action.frameID && !context)
-              throw new Error(
-                "Frame context is unavailable. Call browser.frames({tabID}) and use a frameID from this tab.",
-              )
-
-            const value = await cdp.send(
-              "Runtime.evaluate",
-              {
-                expression: `document.body?.innerText.includes(${JSON.stringify(action.text)}) ?? false`,
-                returnByValue: true,
-                contextId: context?.id,
-              },
-              context?.sessionID,
+        return result(
+          await acting(signal, async () => {
+            const located = await resolve(
+              action.target,
+              "click",
+              action.timeoutMs,
+              action.force,
+              signal,
+              scope,
+              action.position,
             )
 
-            return Boolean(value.result.value) === (action.condition === "text")
-          },
-          signal,
-          action.timeoutMs,
-        ).catch((error) => {
-          if (signal.aborted) throw error
-          throw new Error(
-            `browser.wait failed for condition ${JSON.stringify(action.condition)} (timeoutMs: ${action.timeoutMs ?? 10_000}). Inspect browser.snapshot({tabID}) and check text/frameID before retrying; timeoutMs can be increased up to 30000 for a genuinely slow page. Details: ${error instanceof Error ? error.message : String(error)}`,
-          )
-        })
-        break
-      }
+            await click(located.element, action.button ?? "left", action.count ?? 1, action.modifiers, action.position)
 
-      case "screenshot": {
-        if (action.ref && action.fullPage)
-          throw new Error(
-            "Choose either ref for an element screenshot or fullPage:true for the whole page. Remove the other argument before retrying.",
-          )
-        await waitFor(() => view.getVisible() && win.isVisible() && !win.isMinimized(), signal, 3_000).catch(
-          (error) => {
-            if (signal.aborted) throw error
-            throw new Error(
-              "Screenshot needs a visible tab. Call browser.tabs.focus and keep its desktop window visible.",
-            )
-          },
+            return located.count
+          }),
         )
-        const element = action.ref ? await rect(target(action.ref), true) : undefined
-        const metrics = await cdp.send("Page.getLayoutMetrics")
+      case "hover":
+        return result(
+          await acting(signal, async () => {
+            const located = await resolve(action.target, "hover", action.timeoutMs, false, signal, scope)
+            await mouse({ type: "mouseMoved", ...(await point(located.element)) })
 
-        const bounds = element
-          ? {
-              ...element,
-              x: element.x + metrics.cssVisualViewport.pageX,
-              y: element.y + metrics.cssVisualViewport.pageY,
+            return located.count
+          }),
+        )
+      case "drag":
+        return result(
+          await acting(signal, async () => {
+            const source = await resolve(action.from, "drag", action.timeoutMs, false, signal, scope)
+            const destination = await resolve(action.to, "hover", action.timeoutMs, false, signal, scope)
+            await drag(source.element, destination.element, signal)
+
+            return source.count
+          }),
+        )
+      case "fill":
+        return result(await acting(signal, () => fill(action, signal, scope)))
+      case "type":
+        return result(
+          await acting(signal, async () => {
+            const located = action.target
+              ? await resolve(action.target, "type", action.timeoutMs, false, signal, scope)
+              : undefined
+
+            if (located) {
+              await cdp.send("DOM.focus", { backendNodeId: located.element.backendID }, located.element.sessionID)
+
+              if (!action.clear) await caretToEnd(located.remote)
             }
-          : action.fullPage
-            ? metrics.cssContentSize
-            : {
-                x: metrics.cssVisualViewport.pageX,
-                y: metrics.cssVisualViewport.pageY,
-                width: metrics.cssVisualViewport.clientWidth,
-                height: metrics.cssVisualViewport.clientHeight,
+
+            if (action.clear) {
+              await press(parseChord(process.platform === "darwin" ? "Meta+A" : "Control+A"))
+              await press(parseChord("Backspace"))
+            }
+
+            for (const char of action.text) {
+              abortError(signal)
+              const key = typedKey(char)
+
+              if (key) await press(key)
+              else await cdp.send("Input.insertText", { text: char })
+
+              if (action.delayMs) await delay(action.delayMs, signal)
+            }
+
+            if (action.submit) await press(parseChord("Enter"))
+
+            return located?.count
+          }),
+        )
+      case "press":
+        return result(
+          await acting(signal, async () => {
+            const chord = (() => {
+              try {
+                return parseChord(action.key)
+              } catch (error) {
+                throw new BrowserError("invalid", error instanceof Error ? error.message : String(error))
               }
+            })()
 
-        const pixelRatio = contents.getZoomFactor() * electron.screen.getDisplayMatching(win.getBounds()).scaleFactor
-        const scale = Math.min(1, (action.maxWidth ?? 2000) / (bounds.width * pixelRatio))
+            const located = action.target
+              ? await resolve(action.target, "exists", action.timeoutMs, false, signal, scope)
+              : undefined
 
-        if (bounds.width <= 0 || bounds.height <= 0)
-          throw new Error(
-            "Element or page has no visible screenshot area. Take a fresh snapshot and choose a visible element, or omit ref to capture the viewport.",
-          )
+            if (located)
+              await cdp.send("DOM.focus", { backendNodeId: located.element.backendID }, located.element.sessionID)
+            await press(chord)
 
-        if (bounds.width * bounds.height * (scale * pixelRatio) ** 2 > 16_000_000)
-          throw new Error("Screenshot exceeds 16 megapixels; capture an element or use a smaller maxWidth.")
-        const format = action.format ?? "png"
+            return located?.count
+          }),
+        )
+      case "scroll": {
+        const before = { url: contents.getURL(), title: contents.getTitle(), generation, mark: diagnostics.mark() }
 
-        const capture = await cdp.send("Page.captureScreenshot", {
-          format,
-          quality: format === "png" ? undefined : (action.quality ?? 80),
-          captureBeyondViewport: true,
-          clip: { ...bounds, scale },
-        })
+        const located = action.target
+          ? await resolve(action.target, "exists", action.timeoutMs, false, signal, scope)
+          : undefined
 
-        const id = await files.save(`screenshot.${format}`, `image/${format}`, Buffer.from(capture.data, "base64"), [
-          ...captureSources,
-          ...sourceURLs(),
-        ])
+        const self = located?.remote ?? (await windowObject(undefined, scope))
 
-        return result({ tab: state() }, [await transfer(id)])
+        const position = await call(
+          PagePosition,
+          "scroll",
+          self,
+          [{ value: action.to ?? null }, { value: action.by ?? null }],
+          scope,
+        )
+
+        await delay(50, signal)
+
+        return result({ tab: state(), changed: changes(before, located?.count), position })
       }
 
+      case "wait":
+        return result(await wait(action, signal, scope))
+      case "watch":
+        return result(await watch(action, signal, scope))
+      case "screenshot":
+        return result(...(await screenshot(action, signal, scope, captureSources, transfer)))
       case "dialog": {
         if (action.action !== "get") {
           if (!dialog)
@@ -1000,77 +1184,143 @@ export function createBrowserPage(
         return result({ tab: state(), dialog })
       }
 
-      case "files.upload":
-      case "files.drop": {
-        if (!transfers.length)
-          throw new Error(
-            "Upload command has no file bytes. Supply server-local paths to browser.files.upload/drop; do not call the desktop RPC directly with desktop paths. If paths were supplied, report a client/server transfer mismatch.",
-          )
+      case "upload":
+      case "drop":
+        return result(
+          await acting(signal, async () => {
+            if (!transfers.length)
+              throw new Error(
+                "Upload command has no file bytes. Supply server-local paths to browser.upload or browser.drop; do not call the desktop RPC directly with desktop paths. If paths were supplied, report a client/server transfer mismatch.",
+              )
 
-        const local = await Promise.all(
-          transfers.map(async (file) => files.get(await files.save(file.name, file.mime, file.data)).path),
+            const local = await Promise.all(
+              transfers.map(async (file) => files.get(await files.save(file.name, file.mime, file.data)).path),
+            )
+
+            // File inputs are often visually hidden behind a styled button; they only need to exist.
+            const located = await resolve(
+              action.target,
+              action.type === "upload" ? "exists" : "hover",
+              5_000,
+              false,
+              signal,
+              scope,
+            )
+
+            const element = located.element
+
+            if (action.type === "upload") {
+              const control = await call(PageControl, "control", located.remote, [{ objectId: located.remote.objectId }], scope)
+
+              if (control.kind !== "file")
+                throw new BrowserError(
+                  "not_actionable",
+                  `${action.target} is not a file input. Pass a locator for input[type=file] (it may be hidden behind a styled button, which is fine), or use browser.drop for a drop area.`,
+                )
+              await cdp.send("DOM.setFileInputFiles", { files: local, backendNodeId: element.backendID }, element.sessionID)
+
+              return located.count
+            }
+
+            const position = await point(element)
+
+            for (const type of ["dragEnter", "dragOver", "drop"])
+              await cdp.send("Input.dispatchDragEvent", {
+                type,
+                ...position,
+                data: { items: [], files: local, dragOperationsMask: 1 },
+              })
+
+            return located.count
+          }),
         )
-
-        const element = target(action.ref)
-
-        if (action.type === "files.upload")
-          await cdp.send("DOM.setFileInputFiles", { files: local, backendNodeId: element.backendID }, element.sessionID)
-
-        if (action.type === "files.drop") {
-          const position = await point(element)
-
-          for (const type of ["dragEnter", "dragOver", "drop"])
-            await cdp.send("Input.dispatchDragEvent", {
-              type,
-              ...position,
-              data: { items: [], files: local, dragOperationsMask: 1 },
-            })
-        }
-
-        break
-      }
-
       case "files.list":
         return result({ tab: state(), files: files.list() })
       case "files.get":
-        return result({ tab: state() }, [await transfer(action.fileID)])
+        return result({ tab: state() }, [await transfer(action.id)])
       case "console":
         return result({ tab: state(), ...diagnostics.console(action) })
       case "network.list":
         return result({ tab: state(), ...diagnostics.list(action) })
       case "network.get":
         return result({ tab: state(), ...(await diagnostics.get(action)) })
-      case "trace.start":
-        await profiling.startTrace(action.durationMs)
+      case "emulate":
+        return result({ tab: state(), emulation: await emulate(action) })
+      case "storage":
+        return result({ tab: state(), entries: await storage(action, scope) })
+      case "addInitScript": {
+        const args = JSON.stringify(action.args ?? [])
 
-        return result({ tab: state(), recording: true })
-      case "trace.stop": {
-        const value = await profiling.stopTrace()
+        const source = functionSource(action.script)
+          ? `;(${action.script})(...${args});`
+          : `;(function (args) {\n${action.script}\n})(${args});`
 
-        return result({ tab: state(), durationMs: value.durationMs, incomplete: value.incomplete }, [
-          await transfer(value.id),
-        ])
+        const added = await cdp.send("Page.addScriptToEvaluateOnNewDocument", { source })
+
+        return result({ tab: state(), id: added.identifier })
       }
 
-      case "cpu.start":
-        await profiling.startCpu()
+      case "profile.start":
+        if (action.kind === "trace") await profiling.startTrace(action.durationMs)
+        else await profiling.startCpu()
+        recordingKind = action.kind
 
         return result({ tab: state(), recording: true })
-      case "cpu.stop": {
+      case "profile.stop": {
+        const kind = profiling.active() ?? recordingKind
+
+        if (!kind)
+          throw new BrowserError(
+            "invalid",
+            'This tab has no recording to stop. Call browser.profile.start({tabID, kind: "trace" | "cpu"}), perform the interaction, then browser.profile.stop({tabID}).',
+          )
+        recordingKind = undefined
+
+        if (kind === "trace") {
+          const value = await profiling.stopTrace()
+          const analysis = await profiling.analyze({ type: "trace", fileID: value.id, limit: action.limit ?? 50 })
+
+          return result(
+            { tab: state(), kind, durationMs: value.durationMs, incomplete: value.incomplete, ...analysis },
+            [await transfer(value.id)],
+          )
+        }
+
         const value = await profiling.stopCpu()
+        const analysis = await profiling.analyze({ type: "cpu", fileID: value.id, limit: action.limit ?? 50 })
 
-        return result({ tab: state(), durationMs: value.durationMs }, [await transfer(value.id)])
+        return result({ tab: state(), kind, ...analysis, durationMs: value.durationMs }, [await transfer(value.id)])
       }
 
-      case "heap.snapshot":
-        return result({ tab: state() }, [await transfer(await profiling.heap())])
-      case "trace.analyze":
-      case "cpu.analyze":
-      case "heap.summary":
+      case "heap.snapshot": {
+        const id = await profiling.heap()
+        const summary = await profiling.analyze({ type: "heap.summary", fileID: id, limit: action.limit ?? 50 })
+
+        const growth = action.compareTo
+          ? await profiling.analyze({ type: "heap.compare", before: action.compareTo, after: id, limit: action.limit ?? 50 })
+          : undefined
+
+        return result(
+          { tab: state(), ...summary, growth: growth && "classes" in growth ? growth.classes : undefined },
+          [await transfer(id)],
+        )
+      }
+
       case "heap.query":
+        return result({
+          tab: state(),
+          ...(await profiling.analyze({
+            type: "heap.query",
+            fileID: action.fileID,
+            name: action.name,
+            limit: action.limit,
+          })),
+        })
       case "heap.object":
-      case "heap.compare":
-        return result({ tab: state(), ...(await profiling.analyze(action)) })
+        return result({
+          tab: state(),
+          ...(await profiling.analyze({ type: "heap.object", fileID: action.fileID, id: action.id, limit: action.limit })),
+        })
       case "lighthouse": {
         const { audit } = await import("./lighthouse")
         const report = await audit(contents, files, cdp, captureSources)
@@ -1086,11 +1336,1271 @@ export function createBrowserPage(
           "This operation was routed to a page instead of the tab manager. Report a desktop/plugin routing mismatch; changing tab IDs or repeating the operation will not fix it.",
         )
     }
+  }
 
+  // ---- Waiting for the page ----
+
+  /** Waits until a navigation started after `before` reached `until`; a slow page returns still loading. */
+  async function loaded(
+    before: number,
+    until: "commit" | "load" | "idle",
+    timeoutMs: number,
+    signal: AbortSignal,
+    navigation?: Promise<void>,
+  ) {
+    const deadline = Date.now() + timeoutMs
+    const remaining = () => Math.max(0, deadline - Date.now())
+
+    // Chromium aborts a load whose document became another navigation (a redirect, or YouTube's own routing), but a
+    // document did commit: that is a loaded page, not a failure.
+    const committed = navigation?.catch((error: Error) => {
+      if (generation !== before && /ERR_ABORTED|\(-3\)/.test(String(error.message))) return
+      throw error
+    })
+
+    if (until === "commit") {
+      await Promise.race([committed, waitFor(() => generation !== before, signal, remaining())]).catch((error) => {
+        if (navigation && !/within/.test(error instanceof Error ? error.message : "")) throw error
+      })
+
+      return
+    }
+
+    const settled = committed ?? waitFor(() => !contents.isLoading(), signal, remaining())
+    const timer = delay(remaining(), signal).then(() => "timeout" as const)
+    await Promise.race([settled.then(() => "done" as const), timer])
+
+    if (until !== "idle" || Date.now() >= deadline) return
+    let quiet = Date.now()
+
+    while (Date.now() < deadline && !signal.aborted) {
+      if (contents.isLoading() || diagnostics.pending() > 0) quiet = Date.now()
+
+      if (Date.now() - quiet >= 500) return
+      await delay(100, signal)
+    }
+  }
+
+  /** Runs an input action and reports what it changed once the page settled. */
+  async function acting(signal: AbortSignal, action: () => Promise<number | undefined>) {
+    const before = { url: contents.getURL(), title: contents.getTitle(), generation, mark: diagnostics.mark() }
+    const revision = dialogRevision
+    const matches = await action()
+    await delay(100, signal)
+
+    if (generation !== before.generation || contents.isLoading())
+      await waitFor(() => !contents.isLoading(), signal, 10_000).catch(() => undefined)
+    await delay(50, signal)
+
+    const changed = changes(before, matches)
+
+    return {
+      tab: state(),
+      changed:
+        dialog && dialogRevision !== revision
+          ? { ...changed, dialog: { type: dialog.type, message: dialog.message } }
+          : changed,
+    }
+  }
+
+  function changes(
+    before: { url: string; title: string; generation: number; mark: number },
+    matches?: number,
+  ): Browser.Changed {
+    const url = contents.getURL()
+    const title = contents.getTitle()
+    const errors = diagnostics.errorsSince(before.mark)
+
+    return {
+      navigated: generation !== before.generation,
+      url: url === before.url ? undefined : url,
+      title: title === before.title ? undefined : title.slice(0, 2_048),
+      errors: errors.length ? errors : undefined,
+      matches,
+    }
+  }
+
+  async function wait(action: Extract<Browser.Action, { type: "wait" }>, signal: AbortSignal, scope: Scope) {
+    const started = Date.now()
+    const timeout = action.timeoutMs ?? 10_000
+
+    const given = [action.load, action.text, action.gone, action.target, action.url, action.script, action.idle].filter(
+      (value) => value !== undefined,
+    )
+
+    if (given.length > 1)
+      throw new BrowserError(
+        "invalid",
+        "Pass one condition to browser.wait: load, text, gone, target (with state), url, script, or idle.",
+      )
+
+    // No condition is a plain delay, which is what a wait without one always meant.
+    if (!given.length) {
+      await delay(timeout, signal)
+
+      return { tab: state(), met: true, elapsedMs: Date.now() - started }
+    }
+
+    const gone = action.gone
+    const goneSteps = gone !== undefined && isExplicitLocator(gone) ? steps(gone) : undefined
+    let observed: Schema.Json | undefined
+
+    const check = async (): Promise<boolean> => {
+      if (action.load)
+        return (
+          !contents.isLoading() &&
+          (await evaluate("document.readyState", [], { frameID: action.frameID, timeoutMs: 5_000, signal, scope })) ===
+            "complete"
+        )
+
+      if (action.url !== undefined) {
+        observed = contents.getURL()
+        const pattern = /^\/(.+)\/([a-z]*)$/.exec(action.url)
+
+        return pattern ? new RegExp(pattern[1] ?? "", pattern[2]).test(observed) : observed.includes(action.url)
+      }
+
+      if (action.text !== undefined) {
+        const present = await call(
+          Schema.Boolean,
+          "textPresent",
+          await windowObject(action.frameID, scope),
+          [{ value: action.text }, { value: true }],
+          scope,
+        )
+
+        return action.state === "hidden" || action.state === "detached" ? !present : present
+      }
+
+      if (gone !== undefined) {
+        if (goneSteps) return (await within(await windowObject(action.frameID, scope), goneSteps, "", scope, false)).visible === 0
+
+        const present = await call(
+          Schema.Boolean,
+          "textPresent",
+          await windowObject(action.frameID, scope),
+          [{ value: gone }, { value: true }],
+          scope,
+        )
+
+        return !present
+      }
+
+      if (action.target !== undefined) {
+        const state = action.state ?? "visible"
+        const found = await locate(steps(action.target), action.frameID, scope, state === "enabled")
+
+        if (state === "attached") return found.count > 0
+
+        if (state === "detached") return found.count === 0
+
+        if (state === "hidden") return found.visible === 0
+
+        if (state === "visible") return found.visible > 0
+
+        if (!found.located) return false
+
+        const ready = await call(
+          PageOutcome,
+          "actionable",
+          found.located.remote,
+          [{ objectId: found.located.remote.objectId }, { value: "click" }],
+          scope,
+        )
+
+        return ready.ok || !/disabled|not visible|detached/.test(ready.reason)
+      }
+
+      if (action.script !== undefined) {
+        observed = await evaluate(action.script, action.args ?? [], {
+          frameID: action.frameID,
+          timeoutMs: 5_000,
+          signal,
+          scope,
+        })
+
+        return Boolean(observed)
+      }
+
+      if (action.idle !== undefined) {
+        const idle = await call(Schema.Number, "idle", await windowObject(action.frameID, scope), [], scope)
+
+        return diagnostics.pending() === 0 && idle >= action.idle
+      }
+
+      return true
+    }
+
+    while (true) {
+      abortError(signal)
+
+      const met = await check().catch((error: Error) => {
+        // A wrong condition fails at once; a document changing under the check is retried.
+        if (error instanceof BrowserError && error.code === "invalid") throw error
+
+        return false
+      })
+
+      const elapsedMs = Date.now() - started
+
+      if (met) return { tab: state(), met: true, elapsedMs, observed }
+
+      if (elapsedMs >= timeout)
+        return { tab: state(), met: false, elapsedMs, observed: observed ?? { url: contents.getURL() } }
+      await delay(Math.min(100, timeout - elapsedMs), signal)
+    }
+  }
+
+  async function watch(action: Extract<Browser.Action, { type: "watch" }>, signal: AbortSignal, scope: Scope) {
+    const started = Date.now()
+    const every = action.everyMs ?? 250
+    const max = action.maxSamples ?? 100
+    const samples: { t: number; value: Schema.Json }[] = []
+    let last: string | undefined
+
+    while (Date.now() - started < action.durationMs && samples.length < max) {
+      abortError(signal)
+
+      const value = await evaluate(action.script, action.args ?? [], {
+        frameID: action.frameID,
+        timeoutMs: Math.max(1_000, every),
+        signal,
+        scope,
+      }).catch((error: Error): Schema.Json => ({ error: String(error.message).slice(0, 300) }))
+
+      const json = JSON.stringify(value)
+
+      if (json !== last) {
+        samples.push({ t: Date.now() - started, value })
+        last = json
+      }
+
+      await delay(every, signal)
+    }
+
+    return { tab: state(), samples, ended: samples.length >= max ? ("samples" as const) : ("duration" as const) }
+  }
+
+  // ---- Locators ----
+
+  function steps(target: string) {
+    try {
+      return parseLocator(target)
+    } catch (error) {
+      throw new BrowserError("invalid", error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  /** Finds a locator's first visible match without waiting; also counts every match. */
+  async function locate(list: readonly Step[], frameID: string | undefined, scope: Scope, pick = true) {
+    const [first, ...rest] = list
+
+    if (first?.kind === "ref") {
+      const element = refElement(first.ref)
+      const remote = await remoteOf(element, scope)
+
+      if (!rest.length) return { located: { element, remote, count: 1 }, count: 1, visible: 1 }
+
+      return within(remote, rest, element.frameID, scope, pick)
+    }
+
+    const self = await windowObject(frameID, scope)
+
+    return within(self, list, self.frameID, scope, pick)
+  }
+
+  async function within(
+    self: Remote,
+    list: readonly Step[],
+    frameID: string,
+    scope: Scope,
+    pick: boolean,
+  ): Promise<{ located?: Located; count: number; visible: number }> {
+    const counted = await call(PageCount, "count", self, [{ value: list }], scope)
+
+    if (!counted.count || !pick) return counted
+    const picked = await callRemote("first", self, [{ value: list }], scope)
+
+    if (!picked) return counted
+    const node = await cdp.send("DOM.describeNode", { objectId: picked }, self.sessionID)
+
+    return {
+      ...counted,
+      located: {
+        element: { backendID: node.node.backendNodeId, frameID, sessionID: self.sessionID },
+        remote: { objectId: picked, sessionID: self.sessionID },
+        count: counted.count,
+      },
+    }
+  }
+
+  /**
+   * Waits until a locator matches an element that is ready for the input, then returns it. A missing or blocked
+   * element fails with what the page shows instead, so the agent can correct the locator.
+   */
+  async function resolve(
+    target: string,
+    readiness: Readiness,
+    timeoutMs: number | undefined,
+    force: boolean | undefined,
+    signal: AbortSignal,
+    scope: Scope,
+    position?: { x: number; y: number },
+  ): Promise<Located> {
+    const list = steps(target)
+    const timeout = timeoutMs ?? 5_000
+    const deadline = Date.now() + timeout
+    const last = { count: 0, visible: 0, reason: "" }
+
+    while (true) {
+      abortError(signal)
+
+      const found = await locate(list, undefined, scope).catch((error: Error) => {
+        // A stale ref or bad syntax will not fix itself; a document changing under the search will.
+        if (error instanceof BrowserError || /ref is stale/.test(String(error.message))) throw error
+
+        return undefined
+      })
+
+      if (found) {
+        last.count = found.count
+        last.visible = found.visible
+      }
+
+      if (found?.located) {
+        if (force || readiness === "exists") return found.located
+
+        // The point an explicit click position names is hit-tested instead of the center.
+        const args: Protocol.Runtime.CallArgument[] = [{ objectId: found.located.remote.objectId }, { value: readiness }]
+
+        if (position) args.push({ value: position })
+
+        const ready = await call(PageOutcome, "actionable", found.located.remote, args, scope).catch(
+          () => ({ ok: false, reason: "changed while checking" }) as const,
+        )
+
+        if (ready.ok) return found.located
+        last.reason = ready.reason
+      }
+
+      if (Date.now() >= deadline) throw await missing(target, list, last, timeout, scope)
+      await delay(100, signal)
+    }
+  }
+
+  async function missing(
+    target: string,
+    list: readonly Step[],
+    last: { count: number; visible: number; reason: string },
+    timeout: number,
+    scope: Scope,
+  ) {
+    if (last.count && last.reason) {
+      const hint = /covered/.test(last.reason)
+        ? "Close what covers it first (a dialog, menu, or banner), or pass force: true."
+        : /disabled/.test(last.reason)
+          ? 'Fill what it depends on first, or wait for it: browser.wait({tabID, target, state: "enabled"}).'
+          : /not visible/.test(last.reason)
+            ? "It may be inside a closed menu, tab, or collapsed section; open that first, or use a locator for a visible element."
+            : /editable/.test(last.reason)
+              ? "Target the input, textarea, or editor itself, not its label or wrapper."
+              : /moving/.test(last.reason)
+                ? "It is still animating; retry, or pass force: true."
+                : "Inspect the page with browser.find or browser.snapshot."
+
+      return new BrowserError(
+        "not_actionable",
+        `${last.count} element${last.count === 1 ? "" : "s"} matched ${target}, but it was ${last.reason} for ${timeout} ms. ${hint}`,
+      )
+    }
+
+    const query = list
+      .map((step) =>
+        step.kind === "text" || step.kind === "label" || step.kind === "placeholder"
+          ? step.text
+          : step.kind === "role"
+            ? `${step.role} ${step.name ?? ""}`
+            : step.kind === "testid"
+              ? step.id
+              : step.kind === "css"
+                ? step.selector.replace(/[^a-zA-Z0-9]+/g, " ")
+                : "",
+      )
+      .join(" ")
+      .trim()
+
+    const similar = await call(
+      Schema.Array(Schema.String),
+      "suggest",
+      await windowObject(undefined, scope),
+      [{ value: query || target }, { value: 8 }],
+      scope,
+    ).catch(() => [])
+
+    return new BrowserError(
+      "not_found",
+      `${last.count ? `${last.count} element${last.count === 1 ? "" : "s"} matched ${target} but none is visible` : `Nothing matched ${target}`} after ${timeout} ms.${similar.length ? ` Visible elements that look related: ${similar.join(", ")}.` : ""} Use browser.find or browser.snapshot to see the page, and prefer text=, role=, or label= locators over guessed CSS.`,
+    )
+  }
+
+  async function windowObject(frameID: string | undefined, scope: Scope): Promise<Remote & { frameID: string }> {
+    const context = frameID ? contexts.get(frameID) : undefined
+
+    if (frameID && !context)
+      throw new BrowserError(
+        "invalid",
+        "Frame context is unavailable. Call browser.frames({tabID}) and use a current frameID from this tab, or omit frameID for the main frame.",
+      )
+    scope.sessions.add(context?.sessionID)
+
+    const [value, tree] = await Promise.all([
+      cdp.send("Runtime.evaluate", { expression: "window", contextId: context?.id, objectGroup: scope.group }, context?.sessionID),
+      frameID ? undefined : cdp.send("Page.getFrameTree"),
+    ])
+
+    if (!value.result.objectId) throw new Error("The page has no window to run in yet; it may still be loading.")
+
+    return { objectId: value.result.objectId, sessionID: context?.sessionID, frameID: frameID ?? tree?.frameTree.frame.id ?? "" }
+  }
+
+  async function remoteOf(element: Element, scope: Scope): Promise<Remote> {
+    scope.sessions.add(element.sessionID)
+
+    const object = await cdp.send(
+      "DOM.resolveNode",
+      { backendNodeId: element.backendID, objectGroup: scope.group },
+      element.sessionID,
+    )
+
+    if (!object.object.objectId)
+      throw new Error(
+        "Element ref is stale: its element left the page. Use a locator (text=, role=, label=, CSS) or call browser.find again.",
+      )
+
+    return { objectId: object.object.objectId, sessionID: element.sessionID }
+  }
+
+  /** Calls a page helper with `this` bound to `self` and decodes its JSON value. */
+  async function call<A>(
+    schema: Schema.Decoder<A>,
+    method: PageMethod,
+    self: Remote,
+    args: readonly Protocol.Runtime.CallArgument[],
+    scope: Scope,
+  ): Promise<A> {
+    scope.sessions.add(self.sessionID)
+
+    const value = await cdp.send(
+      "Runtime.callFunctionOn",
+      {
+        objectId: self.objectId,
+        functionDeclaration: pageCall(method),
+        arguments: args,
+        returnByValue: true,
+        awaitPromise: true,
+        objectGroup: scope.group,
+      },
+      self.sessionID,
+    )
+
+    if (value.exceptionDetails)
+      throw new Error(
+        `${(value.exceptionDetails.exception?.description ?? value.exceptionDetails.text).replace(/^Error: /, "").slice(0, 400)}`,
+      )
+
+    return Schema.decodeUnknownSync(schema)(value.result.value)
+  }
+
+  /** Calls a page helper that returns an element, kept as a remote object in the operation's group. */
+  async function callRemote(
+    method: PageMethod,
+    self: Remote,
+    args: readonly Protocol.Runtime.CallArgument[],
+    scope: Scope,
+  ) {
+    scope.sessions.add(self.sessionID)
+
+    const value = await cdp.send(
+      "Runtime.callFunctionOn",
+      {
+        objectId: self.objectId,
+        functionDeclaration: pageCall(method),
+        arguments: args,
+        returnByValue: false,
+        awaitPromise: true,
+        objectGroup: scope.group,
+      },
+      self.sessionID,
+    )
+
+    if (value.exceptionDetails) return undefined
+
+    return value.result.subtype === "null" ? undefined : value.result.objectId
+  }
+
+  /** The ref an element already has, or a new one. Refs live until the element's document changes. */
+  function refFor(element: Element) {
+    const key = `${element.frameID}:${element.backendID}`
+    const known = named.get(key)
+
+    if (known) return known
+
+    const pinned = Array.from(picked).find(
+      ([, item]) => item.backendID === element.backendID && item.frameID === element.frameID,
+    )?.[0]
+
+    if (pinned) return pinned
+    const ref = options.shared.ref()
+    refs.set(ref, element)
+    named.set(key, ref)
+
+    return ref
+  }
+
+  function refElement(ref: string): Element {
+    const key = ref.replace(/^@/, "")
+    const value = refs.get(key) ?? picked.get(key)
+
+    if (!value)
+      throw new Error(
+        "Element ref is stale or belongs to another tab: refs end when their document changes. Use a locator such as text=, role=, label=, or CSS instead, or call browser.find again.",
+      )
+
+    return value
+  }
+
+  // ---- Reading ----
+
+  async function find(action: Extract<Browser.Action, { type: "find" }>, scope: Scope) {
+    if ((action.target === undefined) === (action.text === undefined))
+      throw new BrowserError("invalid", "Pass target (a locator) or text to browser.find, not both and not neither.")
+
+    const list: readonly Step[] =
+      action.target !== undefined ? steps(action.target) : [{ kind: "text", text: action.text ?? "", exact: false }]
+
+    const [first, ...tail] = list
+    const limit = action.limit ?? 20
+    const element = first?.kind === "ref" ? refElement(first.ref) : undefined
+    const rest = element ? tail : list
+    const root = element ? undefined : await windowObject(action.frameID, scope)
+    const self = element ? await remoteOf(element, scope) : root
+
+    if (!self) return { matches: [], total: 0 }
+    const frameID = element?.frameID ?? root?.frameID ?? ""
+
+    // A bare ref is its own only match.
+    const objects =
+      rest.length === 0
+        ? [self.objectId]
+        : await callRemote("all", self, [{ value: rest }, { value: limit }], scope).then(async (array) => {
+            if (!array) return []
+
+            const properties = await cdp.send(
+              "Runtime.getProperties",
+              { objectId: array, ownProperties: true },
+              self.sessionID,
+            )
+
+            return properties.result
+              .filter((property) => /^\d+$/.test(property.name) && property.value?.objectId)
+              .flatMap((property) => (property.value?.objectId ? [property.value.objectId] : []))
+          })
+
+    const total =
+      rest.length === 0 ? 1 : (await call(PageCount, "count", self, [{ value: rest }], scope)).count
+
+    const matches = await Promise.all(
+      objects.slice(0, limit).map(async (objectId) => {
+        const node = await cdp.send("DOM.describeNode", { objectId }, self.sessionID)
+        const ref = refFor({ backendID: node.node.backendNodeId, frameID, sessionID: self.sessionID })
+
+        const info = await call(
+          PageInfo,
+          "info",
+          self,
+          [{ objectId }, { value: action.fields ?? [] }, { value: action.styles ?? [] }],
+          scope,
+        )
+
+        return { ref: Browser.Ref.make(`@${ref}`), ...info }
+      }),
+    )
+
+    return { matches, total }
+  }
+
+  async function snapshot(action: Extract<Browser.Action, { type: "snapshot" }>, scope: Scope) {
+    const tree = await frames()
+
+    const selected = action.target
+      ? (await resolve(action.target, "exists", 5_000, false, new AbortController().signal, scope)).element
+      : undefined
+
+    const frameID = selected?.frameID || action.frameID || tree[0]?.id
+
+    if (!frameID || !tree.some((frame) => frame.id === frameID))
+      throw new BrowserError(
+        "invalid",
+        "Frame is unavailable. Call browser.frames({tabID}) and use a current frameID from this tab; omit frameID for the main frame.",
+      )
+    const sessionID = sessionFor(frameID, tree)
+    const ax = await cdp.send("Accessibility.getFullAXTree", { frameId: frameID }, sessionID)
+    const nodes = new Map(ax.nodes.map((node) => [node.nodeId, node]))
+    const root = selected ? ax.nodes.find((node) => node.backendDOMNodeId === selected.backendID) : ax.nodes[0]
+
+    if (!root)
+      throw new BrowserError(
+        "not_found",
+        "That element is not in the page's accessibility tree (it may be hidden). Snapshot the whole page instead, or use browser.find.",
+      )
+
+    const mode = action.mode ?? "interactive"
+    const maxLines = action.maxLines ?? 500
+    const lines: string[] = []
+    let refsAdded = 0
+    let reason: "lines" | "chars" | undefined
+
+    const walk = async (node: Protocol.Accessibility.AXNode, level: number): Promise<void> => {
+      if (lines.length >= maxLines) {
+        reason = "lines"
+
+        return
+      }
+
+      const role = String(node.role?.value ?? "node")
+        .replace(/[^a-zA-Z0-9_-]/g, "")
+        .slice(0, 40)
+
+      const name = String(node.name?.value ?? "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 300)
+
+      const properties = new Map(node.properties?.map((property) => [property.name, property.value.value]) ?? [])
+      const editable = Boolean(properties.get("editable"))
+      const element = node.backendDOMNodeId ? { backendID: node.backendDOMNodeId, frameID, sessionID } : undefined
+
+      const refable =
+        !node.ignored &&
+        role !== "RootWebArea" &&
+        (actionableRoles.has(role) || editable || Boolean(properties.get("focusable")))
+
+      const shown =
+        !node.ignored &&
+        role !== "RootWebArea" &&
+        (refable ||
+          (mode === "full"
+            ? !(wrapperRoles.has(role) && !name) && !(role === "StaticText" && !name)
+            : contextRoles.has(role) && (role !== "group" || !!name)))
+
+      if (shown) {
+        const ref = refable && element ? refFor(element) : ""
+
+        if (ref) refsAdded++
+
+        const flags = (["checked", "disabled", "expanded", "selected", "pressed", "required", "invalid"] as const).flatMap(
+          (flag) => {
+            const value = properties.get(flag)
+
+            return value !== undefined && value !== false && value !== "false" ? [`${flag}=${value}`] : []
+          },
+        )
+
+        const value =
+          refable && node.value?.value !== undefined && String(node.value.value)
+            ? ` value=${JSON.stringify(String(node.value.value).slice(0, 80))}`
+            : ""
+
+        const box = action.boxes && ref && element ? await rect(element).catch(() => undefined) : undefined
+
+        lines.push(
+          `${"  ".repeat(level)}${ref ? `@${ref} ` : ""}[${role}] ${JSON.stringify(name)}${value}${flags.length ? ` ${flags.join(" ")}` : ""}${box ? ` box=${JSON.stringify({ x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width), height: Math.round(box.height) })}` : ""}`,
+        )
+      }
+
+      // An editor's contents are its value, not more elements to list.
+      if (["textbox", "searchbox"].includes(role) || editable) return
+
+      for (const childID of node.childIds ?? []) {
+        const child = nodes.get(childID)
+
+        if (child) await walk(child, shown ? level + 1 : level)
+      }
+    }
+
+    await walk(root, 0)
+    const content = lines.join("\n")
+
+    if (content.length > Browser.MAX_TEXT) reason = "chars"
+
+    return {
+      content: content.slice(0, Browser.MAX_TEXT),
+      refs: refsAdded,
+      truncated: reason !== undefined,
+      reason,
+    }
+  }
+
+  async function evaluate(
+    script: string,
+    args: readonly Schema.Json[],
+    input: { target?: string; frameID?: string; timeoutMs: number; signal: AbortSignal; scope: Scope },
+  ): Promise<Schema.Json> {
+    const isFunction = functionSource(script)
+
+    if (input.target && !isFunction)
+      throw new BrowserError(
+        "invalid",
+        "With target, script must be a function that receives the element, for example (element) => element.textContent.",
+      )
+
+    const evaluation = (async () => {
+      if (input.target || isFunction) {
+        const element = input.target
+          ? (await resolve(input.target, "exists", 5_000, false, input.signal, input.scope)).remote
+          : undefined
+
+        const self = element ?? (await windowObject(input.frameID, input.scope))
+
+        return cdp.send(
+          "Runtime.callFunctionOn",
+          {
+            objectId: self.objectId,
+            functionDeclaration: script,
+            arguments: [...(element ? [{ objectId: element.objectId }] : []), ...args.map((value) => ({ value }))],
+            returnByValue: true,
+            awaitPromise: true,
+            userGesture: true,
+          },
+          self.sessionID,
+        )
+      }
+
+      const context = input.frameID ? contexts.get(input.frameID) : undefined
+
+      if (input.frameID && !context)
+        throw new BrowserError(
+          "invalid",
+          "Frame context is unavailable. Call browser.frames({tabID}) and use a current frameID from this tab, or omit frameID for the main frame.",
+        )
+      const json = JSON.stringify(args)
+
+      // Chromium's parser decides what the script is, without running it: an expression (an object literal too) is
+      // returned; statements run like the DevTools console, which keeps the last value and lets calls redeclare const;
+      // statements with a top-level return run as a function body.
+      const compiles = async (source: string) =>
+        !(
+          await cdp.send(
+            "Runtime.compileScript",
+            { expression: source, sourceURL: "", persistScript: false, executionContextId: context?.id },
+            context?.sessionID,
+          )
+        ).exceptionDetails
+
+      const form = await (async () => {
+        if (await compiles(`(${script}\n)`)) return "expression" as const
+
+        if (await compiles(script)) return "statements" as const
+
+        return "body" as const
+      })()
+
+      const sources = {
+        expression: `(async (args) => (${script}\n))(${json})`,
+        statements: `${args.length ? `const args = ${json};\n` : ""}${script}`,
+        body: `(async (args) => {\n${script}\n})(${json})`,
+      }
+
+      return cdp.send(
+        "Runtime.evaluate",
+        {
+          expression: sources[form],
+          contextId: context?.id,
+          awaitPromise: true,
+          returnByValue: true,
+          userGesture: true,
+          replMode: form === "statements",
+        },
+        context?.sessionID,
+      )
+    })()
+
+    const timeout = delay(input.timeoutMs, input.signal).then(() => {
+      throw new BrowserError(
+        "timeout",
+        `The script did not finish within ${input.timeoutMs} ms. Its page work may still be running. Await only what you need, or raise timeoutMs.`,
+      )
+    })
+
+    const value = await Promise.race([evaluation, timeout])
+
+    if (value.exceptionDetails)
+      throw new Error(
+        `Page JavaScript threw an exception. Check the script${input.target ? " and target" : ""}; inspect the page before repeating code with side effects. Details: ${(value.exceptionDetails.exception?.description ?? value.exceptionDetails.text).slice(0, 800)}`,
+      )
+
+    return Schema.decodeUnknownSync(Schema.Json)(value.result.value ?? null)
+  }
+
+  // ---- Acting ----
+
+  function mouse(params: Protocol.Input.DispatchMouseEventRequest) {
+    return delivered(cdp.send("Input.dispatchMouseEvent", params))
+  }
+
+  async function press(key: KeyEvent) {
+    await delivered(cdp.send("Input.dispatchKeyEvent", { type: "keyDown", ...key }))
+    await delivered(
+      cdp.send("Input.dispatchKeyEvent", {
+        type: "keyUp",
+        key: key.key,
+        code: key.code,
+        windowsVirtualKeyCode: key.windowsVirtualKeyCode,
+        modifiers: key.modifiers,
+      }),
+    )
+  }
+
+  /** A user's tab that is not on screen can stall input; that is reported instead of hanging. */
+  function delivered<A>(sent: Promise<A>) {
+    if (host) return sent
+
+    return Promise.race([
+      sent,
+      delay(5_000).then(() => {
+        throw new BrowserError(
+          "tab_hidden",
+          "The page did not take the input: it is one of the user's own tabs and is not on screen. Open the page in your own tab with browser.tabs.open({url}) (agent tabs work in the background), or ask the user to show this tab.",
+        )
+      }),
+    ])
+  }
+
+  async function caretToEnd(remote: Remote) {
+    await cdp
+      .send(
+        "Runtime.callFunctionOn",
+        {
+          objectId: remote.objectId,
+          functionDeclaration:
+            "function() { if (typeof this.setSelectionRange === 'function' && typeof this.value === 'string') { try { this.setSelectionRange(this.value.length, this.value.length) } catch {} return } if (this.isContentEditable) { const range = document.createRange(); range.selectNodeContents(this); range.collapse(false); const selection = getSelection(); selection.removeAllRanges(); selection.addRange(range) } }",
+        },
+        remote.sessionID,
+      )
+      .catch(() => undefined)
+  }
+
+  async function fill(action: Extract<Browser.Action, { type: "fill" }>, signal: AbortSignal, scope: Scope) {
+    const found = await resolve(action.target, "exists", action.timeoutMs, false, signal, scope)
+    const control = await call(PageControl, "control", found.remote, [{ objectId: found.remote.objectId }], scope)
+    const value = action.value
+    const flag = value === true || value === "true" ? true : value === false || value === "false" ? false : undefined
+
+    if (control.kind === "file")
+      throw new BrowserError("invalid", `${action.target} is a file input. Use browser.upload({tabID, target, paths}).`)
+
+    if (control.kind === "checkbox" || control.kind === "radio" || control.kind === "switch") {
+      if (flag === undefined)
+        throw new BrowserError("invalid", `${action.target} is a ${control.kind}; fill it with true or false.`)
+
+      const checked = Schema.NullOr(Schema.Boolean)
+      const current = await call(checked, "checked", found.remote, [{ objectId: found.remote.objectId }], scope)
+
+      if (control.kind === "radio" && current === true && !flag)
+        throw new BrowserError(
+          "invalid",
+          "A selected radio button cannot be cleared; fill another radio in its group with true.",
+        )
+
+      // Styled checkboxes hide their input (opacity 0) behind a label or a drawn box. When the input itself cannot take
+      // a pointer click, its own click() toggles it and fires the events frameworks listen for, as a label click would.
+      const pointer = await call(
+        PageOutcome,
+        "actionable",
+        found.remote,
+        [{ objectId: found.remote.objectId }, { value: "click" }],
+        scope,
+      )
+
+      if (current !== flag && pointer.ok) await click(found.element)
+
+      if (current !== flag && !pointer.ok)
+        await cdp.send(
+          "Runtime.callFunctionOn",
+          { objectId: found.remote.objectId, functionDeclaration: "function() { this.click() }", userGesture: true },
+          found.remote.sessionID,
+        )
+
+      const after = await call(checked, "checked", found.remote, [{ objectId: found.remote.objectId }], scope)
+
+      if (after !== flag)
+        throw new BrowserError(
+          "not_actionable",
+          "The page did not keep the requested checked state. Inspect its validation (browser.read or browser.find) before trying again.",
+        )
+
+      return found.count
+    }
+
+    if (value === true || value === false)
+      throw new BrowserError(
+        "invalid",
+        `${action.target} is a ${control.kind} control; fill it with text, not true or false.`,
+      )
+
+    const values = Array.isArray(value) ? value : [String(value)]
+    const text = values.join("\n")
+
+    if (control.kind === "select" || control.kind === "range" || control.kind === "date" || control.kind === "color") {
+      const located = await resolve(action.target, "fill", action.timeoutMs, false, signal, scope)
+
+      const outcome = await call(
+        PageOutcome,
+        control.kind === "select" ? "select" : "setValue",
+        located.remote,
+        [{ objectId: located.remote.objectId }, { value: control.kind === "select" ? values : text }],
+        scope,
+      )
+
+      if (!outcome.ok) throw new BrowserError("not_actionable", outcome.reason)
+
+      return located.count
+    }
+
+    const located = await resolve(action.target, "fill", action.timeoutMs, false, signal, scope)
+    await cdp.send("DOM.focus", { backendNodeId: located.element.backendID }, located.element.sessionID)
+    // Focusing this field blurs the previous one; a validation dialog from that blur must stop here.
+    abortError(signal)
+    await press(parseChord(process.platform === "darwin" ? "Meta+A" : "Control+A"))
+    await press(parseChord("Backspace"))
     abortError(signal)
 
-    return result(state())
+    if (text) await cdp.send("Input.insertText", { text })
+
+    return located.count
   }
+
+  async function click(
+    element: Element,
+    button: Protocol.Input.MouseButton = "left",
+    count = 1,
+    modifiers: readonly string[] = [],
+    position?: { x: number; y: number },
+  ) {
+    const at = await point(element, position)
+    const flags = modifiers.reduce((mask, key) => mask | ({ Alt: 1, Control: 2, Meta: 4, Shift: 8 }[key] ?? 0), 0)
+    await mouse({ type: "mouseMoved", ...at, modifiers: flags })
+
+    for (let clickCount = 1; clickCount <= count; clickCount++) {
+      await mouse({ type: "mousePressed", ...at, button, clickCount, modifiers: flags })
+      await mouse({ type: "mouseReleased", ...at, button, clickCount, modifiers: flags })
+    }
+  }
+
+  async function drag(source: Element, destination: Element, signal: AbortSignal) {
+    await point(destination)
+    const from = await point(source)
+    const box = await rect(destination)
+    const to = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+    const html5 = await describeCall(source, "function() { return this.draggable; }")
+    let data: Protocol.Input.DragData | undefined
+
+    const off = cdp.on("Input.dragIntercepted", (event) => {
+      data = event.data
+    })
+
+    await cdp.send("Input.setInterceptDrags", { enabled: true })
+    await mouse({ type: "mouseMoved", ...from })
+    await mouse({ type: "mousePressed", ...from, button: "left", buttons: 1, clickCount: 1 })
+
+    try {
+      for (let i = 1; i <= 10; i++) {
+        abortError(signal)
+        await mouse({
+          type: "mouseMoved",
+          x: from.x + ((to.x - from.x) * i) / 10,
+          y: from.y + ((to.y - from.y) * i) / 10,
+          button: "left",
+          buttons: 1,
+        })
+      }
+
+      if (html5) await waitFor(() => data !== undefined, signal, 2_000)
+
+      if (data) {
+        for (const type of ["dragEnter", "dragOver", "drop"])
+          await cdp.send("Input.dispatchDragEvent", { type, ...to, data })
+      }
+    } finally {
+      off()
+      await cdp.send("Input.setInterceptDrags", { enabled: false })
+      await mouse({ type: "mouseReleased", ...to, button: "left", clickCount: 1 })
+    }
+  }
+
+  async function point(element: Element, position?: { x: number; y: number }) {
+    const box = await rect(element, true)
+
+    return position
+      ? { x: box.x + position.x, y: box.y + position.y }
+      : { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+  }
+
+  // ---- Capture and emulation ----
+
+  async function screenshot(
+    action: Extract<Browser.Action, { type: "screenshot" }>,
+    signal: AbortSignal,
+    scope: Scope,
+    captureSources: readonly string[],
+    transfer: (id: Browser.FileID) => Promise<Browser.File>,
+  ): Promise<[value: object, files: Browser.File[]]> {
+    if (action.target && action.fullPage)
+      throw new BrowserError(
+        "invalid",
+        "Choose either target for an element screenshot or fullPage: true for the whole page, not both.",
+      )
+
+    // The user's own tabs render only on screen; the agent's render offscreen and capture any time.
+    if (!host)
+      await waitFor(() => view.getVisible() && win.isVisible() && !win.isMinimized(), signal, 3_000).catch((error) => {
+        if (signal.aborted) throw error
+        throw new BrowserError(
+          "tab_hidden",
+          "This is one of the user's own tabs and it is not on screen, so it cannot be captured. Open the page in your own tab with browser.tabs.open({url}) (agent tabs capture in the background), or ask the user to show it.",
+        )
+      })
+
+    const restore = action.viewport ? await temporaryViewport(action.viewport) : undefined
+
+    try {
+      const located = action.target ? await resolve(action.target, "exists", 5_000, false, signal, scope) : undefined
+      const element = located ? await rect(located.element, true) : undefined
+      const metrics = await cdp.send("Page.getLayoutMetrics")
+
+      const bounds = element
+        ? {
+            ...element,
+            x: element.x + metrics.cssVisualViewport.pageX,
+            y: element.y + metrics.cssVisualViewport.pageY,
+          }
+        : action.fullPage
+          ? metrics.cssContentSize
+          : {
+              x: metrics.cssVisualViewport.pageX,
+              y: metrics.cssVisualViewport.pageY,
+              width: metrics.cssVisualViewport.clientWidth,
+              height: metrics.cssVisualViewport.clientHeight,
+            }
+
+      const pixelRatio = contents.getZoomFactor() * (host ? scale : electron.screen.getDisplayMatching(win.getBounds()).scaleFactor)
+      const scaled = Math.min(1, (action.maxWidth ?? 2000) / (bounds.width * pixelRatio))
+
+      if (bounds.width <= 0 || bounds.height <= 0)
+        throw new BrowserError(
+          "not_actionable",
+          "The element or page has no visible area to capture. Choose a visible element, or omit target to capture the viewport.",
+        )
+
+      if (bounds.width * bounds.height * (scaled * pixelRatio) ** 2 > 16_000_000)
+        throw new BrowserError("invalid", "Screenshot exceeds 16 megapixels; capture an element or use a smaller maxWidth.")
+      const format = action.format ?? "png"
+
+      const capture = await cdp.send("Page.captureScreenshot", {
+        format,
+        quality: format === "png" ? undefined : (action.quality ?? 80),
+        captureBeyondViewport: true,
+        clip: { ...bounds, scale: scaled },
+      })
+
+      const data = Buffer.from(capture.data, "base64")
+      const size = electron.nativeImage.createFromBuffer(data).getSize()
+
+      const id = await files.save(`screenshot.${format}`, `image/${format}`, data, [
+        ...captureSources,
+        ...sourceURLs(),
+      ])
+
+      return [{ tab: state(), width: size.width, height: size.height }, [await transfer(id)]]
+    } finally {
+      await restore?.()
+    }
+  }
+
+  /** Renders the page at another size until the returned restore runs. */
+  async function temporaryViewport(viewport: Browser.Viewport) {
+    const previous = emulation.viewport
+    emulation.viewport = viewport
+    await applyViewport()
+
+    return async () => {
+      emulation.viewport = previous
+      await applyViewport()
+    }
+  }
+
+  /** Applies the pinned viewport, or lets the page follow the pane again. */
+  async function applyViewport() {
+    const viewport = emulation.viewport
+
+    if (host) {
+      // The size the page had before a pin, which it returns to when no presenter reports one.
+      if (viewport) {
+        unpinned ??= host.getContentSize()
+        host.setContentSize(viewport.width, viewport.height)
+      }
+
+      if (!viewport && unpinned) {
+        host.setContentSize(unpinned[0] ?? defaultSize.width, unpinned[1] ?? defaultSize.height)
+        unpinned = undefined
+      }
+
+      presenter?.resize()
+
+      if (viewport && (viewport.mobile || viewport.deviceScaleFactor))
+        await cdp.send("Emulation.setDeviceMetricsOverride", {
+          width: viewport.width,
+          height: viewport.height,
+          deviceScaleFactor: viewport.deviceScaleFactor ?? 0,
+          mobile: viewport.mobile ?? false,
+        })
+      else await cdp.send("Emulation.clearDeviceMetricsOverride")
+
+      // A resized offscreen window lays out on its next frame; the agent's next read must see the new size.
+      const width = viewport?.width ?? host.getContentSize()[0]
+      await waitFor(
+        async () =>
+          (await cdp.send("Runtime.evaluate", { expression: "innerWidth", returnByValue: true })).result.value ===
+          width,
+        new AbortController().signal,
+        1_000,
+      ).catch(() => undefined)
+
+      return
+    }
+
+    if (!viewport) {
+      await cdp.send("Emulation.clearDeviceMetricsOverride")
+
+      return
+    }
+
+    await cdp.send("Emulation.setDeviceMetricsOverride", {
+      width: viewport.width,
+      height: viewport.height,
+      deviceScaleFactor: viewport.deviceScaleFactor ?? 0,
+      mobile: viewport.mobile ?? false,
+    })
+  }
+
+  async function emulate(action: Extract<Browser.Action, { type: "emulate" }>) {
+    if (action.reset) {
+      emulation.viewport = undefined
+      emulation.colorScheme = undefined
+      emulation.reducedMotion = undefined
+      emulation.media = undefined
+      emulation.offline = false
+      emulation.timezone = undefined
+      emulation.locale = undefined
+      emulation.userAgent = undefined
+    }
+
+    if (action.viewport !== undefined) emulation.viewport = action.viewport ?? undefined
+
+    if (action.colorScheme !== undefined) emulation.colorScheme = action.colorScheme ?? undefined
+
+    if (action.reducedMotion !== undefined) emulation.reducedMotion = action.reducedMotion ?? undefined
+
+    if (action.media !== undefined) emulation.media = action.media ?? undefined
+
+    if (action.offline !== undefined) emulation.offline = action.offline
+
+    if (action.timezone !== undefined) emulation.timezone = action.timezone ?? undefined
+
+    if (action.locale !== undefined) emulation.locale = action.locale ?? undefined
+
+    if (action.userAgent !== undefined) emulation.userAgent = action.userAgent ?? undefined
+
+    await applyViewport()
+    await cdp.send("Emulation.setEmulatedMedia", {
+      media: emulation.media ?? "",
+      features: [
+        { name: "prefers-color-scheme", value: emulation.colorScheme ?? "" },
+        { name: "prefers-reduced-motion", value: emulation.reducedMotion ?? "" },
+      ],
+    })
+    await cdp.send("Network.emulateNetworkConditions", {
+      offline: emulation.offline,
+      latency: 0,
+      downloadThroughput: -1,
+      uploadThroughput: -1,
+    })
+    await cdp
+      .send("Emulation.setTimezoneOverride", { timezoneId: emulation.timezone ?? "" })
+      .catch(() => {
+        if (emulation.timezone)
+          throw new BrowserError("invalid", `Unknown time zone ${emulation.timezone}. Use an IANA name such as Europe/Berlin.`)
+      })
+    await cdp.send("Emulation.setLocaleOverride", emulation.locale ? { locale: emulation.locale } : {}).catch(() => {
+      if (emulation.locale) throw new BrowserError("invalid", `Unknown locale ${emulation.locale}. Use a BCP 47 tag such as de-DE.`)
+    })
+    await cdp.send("Emulation.setUserAgentOverride", { userAgent: emulation.userAgent ?? contents.session.getUserAgent() })
+    publish()
+
+    return { ...emulation }
+  }
+
+  async function storage(action: Extract<Browser.Action, { type: "storage" }>, scope: Scope) {
+    if (action.area !== "cookies") {
+      return call(
+        PageEntries,
+        "storage",
+        await windowObject(undefined, scope),
+        [
+          { value: action.area },
+          { value: action.action },
+          { value: action.entries ?? null },
+          { value: action.keys ?? null },
+        ],
+        scope,
+      )
+    }
+
+    const url = contents.getURL()
+
+    if (!destinationOrigin(url))
+      throw new BrowserError("invalid", "Cookies belong to web pages. Navigate the tab to the site first.")
+    const cookies = contents.session.cookies
+
+    if (action.action === "set") {
+      const entries = Object.entries(action.entries ?? {})
+      await Promise.all(entries.map(([name, value]) => cookies.set({ url, name, value })))
+
+      return entries.map(([name]) => ({ name, value: "<redacted>" }))
+    }
+
+    const all = await cookies.get({ url })
+    const chosen = action.keys ? all.filter((cookie) => action.keys?.includes(cookie.name)) : all
+
+    if (action.action === "clear") {
+      await Promise.all(chosen.map((cookie) => cookies.remove(cookieURL(cookie), cookie.name)))
+
+      return []
+    }
+
+    // The model never reads cookie values, as with request headers; names and scope are enough to reason about them.
+    return chosen.map((cookie) => ({
+      name: cookie.name,
+      value: "<redacted>",
+      domain: cookie.domain,
+      path: cookie.path,
+      expires: cookie.expirationDate,
+      httpOnly: cookie.httpOnly ?? false,
+      secure: cookie.secure ?? false,
+    }))
+  }
+
+  // ---- Permission metadata ----
 
   async function inspect(action: Browser.Action): Promise<Browser.Target> {
     // Most CDP queries cannot run while a JavaScript dialog blocks the renderer.
@@ -1101,7 +2611,13 @@ export function createBrowserPage(
       }
 
     const fileIDs =
-      action.type === "heap.compare" ? [action.before, action.after] : "fileID" in action ? [action.fileID] : []
+      action.type === "heap.query" || action.type === "heap.object"
+        ? [action.fileID]
+        : action.type === "files.get"
+          ? [action.id]
+          : action.type === "heap.snapshot" && action.compareTo
+            ? [action.compareTo]
+            : []
 
     if (fileIDs.length)
       return {
@@ -1111,21 +2627,23 @@ export function createBrowserPage(
 
     if (action.type === "network.get") return { resources: [diagnostics.info(action.id).url], key: action.id }
 
-    if (action.type === "trace.stop" || action.type === "cpu.stop")
-      return profiling.target(action.type === "trace.stop" ? "trace" : "cpu")
+    if (action.type === "profile.stop") return profiling.target(profiling.active() ?? recordingKind ?? "trace")
     const tree = await frames()
     tree.forEach((frame) => documents.set(frame.id, frame.url))
 
-    const refs =
+    const locators =
       action.type === "drag"
         ? [action.from, action.to]
-        : action.type === "fill_form"
-          ? action.fields.map((field) => field.ref)
-          : "ref" in action && action.ref
-            ? [action.ref]
-            : []
+        : "target" in action && action.target !== undefined
+          ? [action.target]
+          : []
 
-    const selected = refs.map(target)
+    // Only refs name an element before the action runs; other locators resolve against the document then.
+    const selected = locators.flatMap((locator) => {
+      const first = steps(locator)[0]
+
+      return first?.kind === "ref" ? [refElement(first.ref)] : []
+    })
 
     const frameIDs = selected.length
       ? selected.map((element) => element.frameID)
@@ -1141,12 +2659,12 @@ export function createBrowserPage(
       return frame.url
     })
 
-    const capture = ["screenshot", "lighthouse", "trace.start", "cpu.start", "heap.snapshot"].includes(action.type)
+    const capture = ["screenshot", "lighthouse", "profile.start", "heap.snapshot"].includes(action.type)
 
     return {
       resources: [
         ...new Set(
-          action.type === "navigate"
+          action.type === "navigate" && action.url
             ? [new URL(normalizeURL(action.url, policy)).href]
             : capture
               ? sourceURLs()
@@ -1155,21 +2673,11 @@ export function createBrowserPage(
                 : [contents.getURL()],
         ),
       ].sort(),
-      key: JSON.stringify([generation, revision, selected]),
+      key: JSON.stringify([generation, revision, selected, locators]),
     }
   }
 
-  function target(ref: Browser.Ref): Element {
-    const key = ref.replace(/^@/, "")
-    const value = refs.get(key) ?? picked.get(key)
-
-    if (!value)
-      throw new Error(
-        "Element ref is stale or belongs to another tab. Call browser.snapshot({tabID}) and use a ref from that tab's newest snapshot. Do not reuse refs after navigation or a newer snapshot.",
-      )
-
-    return value
-  }
+  // ---- Element geometry, shared with the element picker ----
 
   async function frames() {
     const root = await cdp.send("Page.getFrameTree")
@@ -1206,8 +2714,8 @@ export function createBrowserPage(
     return result
   }
 
-  async function call(element: Element, functionDeclaration: string, args: unknown[] = []) {
-    const objectId = await resolve(element)
+  async function describeCall(element: Element, functionDeclaration: string, args: unknown[] = []) {
+    const objectId = await resolveObject(element)
 
     try {
       const result = await cdp.send(
@@ -1233,12 +2741,12 @@ export function createBrowserPage(
     }
   }
 
-  async function resolve(element: Element) {
+  async function resolveObject(element: Element) {
     const object = await cdp.send("DOM.resolveNode", { backendNodeId: element.backendID }, element.sessionID)
 
     if (!object.object.objectId)
       throw new Error(
-        "Element is no longer available. Call browser.snapshot({tabID}) and use a fresh ref; the page may have replaced the element.",
+        "Element is no longer available: the page replaced it. Use a locator (text=, role=, label=, CSS) instead of the old ref.",
       )
 
     return object.object.objectId
@@ -1247,16 +2755,21 @@ export function createBrowserPage(
   async function rect(element: Element, scroll = false) {
     if (scroll) {
       await cdp.send("DOM.scrollIntoViewIfNeeded", { backendNodeId: element.backendID }, element.sessionID)
-      // Force a compositor update after scrolling. requestAnimationFrame can
-      // stall in a hidden WebContentsView, even with background throttling off.
-      await contents.capturePage(undefined, { stayHidden: false, stayAwake: true })
+
+      // A user's tab that is not on screen may hold its last frame; a capture makes Chromium lay it out again. The
+      // agent's offscreen tabs are painting while they work.
+      if (!host)
+        await Promise.race([
+          contents.capturePage(undefined, { stayHidden: true, stayAwake: true }).catch(() => undefined),
+          delay(1_000),
+        ])
     }
 
     const bounds = Schema.Struct({ x: Schema.Finite, y: Schema.Finite, width: Schema.Finite, height: Schema.Finite })
 
     const value = {
       ...Schema.decodeUnknownSync(bounds)(
-        await call(
+        await describeCall(
           element,
           "function() { const r = this.getBoundingClientRect(); return {x:r.x,y:r.y,width:r.width,height:r.height}; }",
         ),
@@ -1274,7 +2787,7 @@ export function createBrowserPage(
       const box = Schema.decodeUnknownSync(
         Schema.Struct({ ...bounds.fields, scaleX: Schema.Finite, scaleY: Schema.Finite }),
       )(
-        await call(
+        await describeCall(
           { backendID: owner.backendNodeId, ...parent },
           "function() { const r = this.getBoundingClientRect(); const sx = this.offsetWidth ? r.width / this.offsetWidth : 1; const sy = this.offsetHeight ? r.height / this.offsetHeight : 1; return {x:r.x+this.clientLeft*sx,y:r.y+this.clientTop*sy,width:r.width,height:r.height,scaleX:sx,scaleY:sy}; }",
         ),
@@ -1299,231 +2812,7 @@ export function createBrowserPage(
     return id ? sessions.get(id) : undefined
   }
 
-  async function point(element: Element) {
-    const box = await rect(element, true)
-
-    return { x: box.x + box.width / 2, y: box.y + box.height / 2 }
-  }
-
-  async function click(element: Element, button = "left", count = 1, modifiers: readonly string[] = []) {
-    const position = await point(element)
-    const flags = modifiers.reduce((mask, key) => mask | ({ Alt: 1, Control: 2, Meta: 4, Shift: 8 }[key] ?? 0), 0)
-    await cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", ...position, modifiers: flags })
-
-    for (let clickCount = 1; clickCount <= count; clickCount++) {
-      await cdp.send("Input.dispatchMouseEvent", {
-        type: "mousePressed",
-        ...position,
-        button,
-        clickCount,
-        modifiers: flags,
-      })
-      await cdp.send("Input.dispatchMouseEvent", {
-        type: "mouseReleased",
-        ...position,
-        button,
-        clickCount,
-        modifiers: flags,
-      })
-    }
-  }
-
-  async function fill(element: Element, value: string, signal: AbortSignal) {
-    const kind = await call(
-      element,
-      "function() { if (this.disabled || this.readOnly) return; if (this instanceof HTMLTextAreaElement || this.isContentEditable) return 'text'; if (!(this instanceof HTMLInputElement)) return; if (['date','time','datetime-local','month','week'].includes(this.type)) return 'structured'; if (!['file','checkbox','radio','button','submit','reset','image','hidden','range','color'].includes(this.type)) return 'text'; }",
-    )
-
-    if (!kind)
-      throw new Error(
-        "Target is not an enabled editable text field. Take a fresh snapshot and choose a textbox; use browser.select for dropdowns, browser.check for checkboxes/radios, or browser.files.upload for file inputs.",
-      )
-
-    // Keyboard input cannot compose a date or time control's value; Chromium clears a malformed one.
-    if (kind === "structured") {
-      await call(
-        element,
-        "function(value) { const previous = this.value; this.focus(); this.value = value; if (this.value !== value) { this.value = previous; throw new Error('The ' + this.type + ' input rejected this value and keeps its previous one. Use its required format, for example 2026-09-07 for date, 14:45 for time, 2026-09-07T14:45 for datetime-local, 2026-09 for month, or 2026-W37 for week.'); } this.dispatchEvent(new Event('input',{bubbles:true})); this.dispatchEvent(new Event('change',{bubbles:true})); }",
-        [value],
-      )
-
-      return
-    }
-
-    await cdp.send("DOM.focus", { backendNodeId: element.backendID }, element.sessionID)
-    // Focusing this field blurs the previous one; a validation dialog from that blur must stop here.
-    abortError(signal)
-    await key(process.platform === "darwin" ? "Meta+A" : "Control+A")
-    await key("Backspace")
-    abortError(signal)
-    await cdp.send("Input.insertText", { text: value })
-  }
-
-  async function select(element: Element, values: readonly string[]) {
-    await call(
-      element,
-      `function(values) { if (!(this instanceof HTMLSelectElement) || this.disabled) throw new Error('Target is not an enabled HTML select. Take a fresh snapshot and choose an enabled dropdown ref.'); if (!this.multiple && values.length !== 1) throw new Error('This dropdown accepts exactly one value; pass a one-item values array.'); for (const value of values) if (!Array.from(this.options).some(option => option.value === value && !option.disabled)) throw new Error('Option value was not found or is disabled. Inspect option values with browser.evaluate before retrying browser.select; values are not visible labels.'); for (const option of this.options) option.selected = values.includes(option.value); this.dispatchEvent(new Event('input',{bubbles:true})); this.dispatchEvent(new Event('change',{bubbles:true})); }`,
-      [values],
-    )
-  }
-
-  async function check(element: Element, checked: boolean) {
-    const current = await call(
-      element,
-      "function(checked) { if (!(this instanceof HTMLInputElement) || !['checkbox','radio'].includes(this.type) || this.disabled) throw new Error('Target is not an enabled checkbox or radio. Take a fresh snapshot and choose the correct ref.'); if (this.type === 'radio' && this.checked && !checked) throw new Error('A selected radio cannot be cleared by clicking it. Select a different radio in its group instead.'); return this.checked; }",
-      [checked],
-    )
-
-    if (current !== checked) await click(element)
-
-    if ((await call(element, "function() { return this.checked; }")) !== checked)
-      throw new Error(
-        "The page did not keep the requested checked state. Inspect the current snapshot and page validation before retrying; do not blindly toggle the control again.",
-      )
-  }
-
-  async function key(chord: string) {
-    if (!chord)
-      throw new Error(
-        "A key is required. Use a named key such as Enter or ArrowDown, a single character, or a chord such as Control+A.",
-      )
-    const parts = (chord.endsWith("+") ? chord.slice(0, -1) : chord).split("+")
-    const key = parts.pop() || "+"
-
-    const modifiers = parts.reduce((mask, key) => {
-      const bit = { Alt: 1, Control: 2, Meta: 4, Shift: 8 }[key]
-
-      if (!bit)
-        throw new Error(
-          `Unknown key modifier ${JSON.stringify(key)}. Supported modifiers are Alt, Control, Meta, and Shift; for example Control+A. Use Meta for macOS command shortcuts.`,
-        )
-
-      return mask | bit
-    }, 0)
-
-    const codes: KeyCodes = {
-      Enter: 13,
-      Tab: 9,
-      Escape: 27,
-      Backspace: 8,
-      Delete: 46,
-      ArrowUp: 38,
-      ArrowDown: 40,
-      ArrowLeft: 37,
-      ArrowRight: 39,
-      PageUp: 33,
-      PageDown: 34,
-      Home: 36,
-      End: 35,
-      Space: 32,
-    }
-
-    const code =
-      codes[key] ??
-      (key.length === 1
-        ? key.toUpperCase().charCodeAt(0)
-        : /^F([1-9]|1[0-2])$/.test(key)
-          ? 111 + Number(key.slice(1))
-          : undefined)
-
-    if (code === undefined)
-      throw new Error(
-        `Unknown key ${JSON.stringify(key)}. Use Enter, Tab, Escape, Backspace, Delete, ArrowUp/Down/Left/Right, PageUp/Down, Home, End, Space, F1–F12, or one character. Use browser.fill for text.`,
-      )
-    // Named keys need their character data too: Enter submits forms and inserts newlines only with "\r".
-    const text = key === "Enter" ? "\r" : key === "Space" ? " " : key.length === 1 ? key : undefined
-
-    const event = { key: key === "Space" ? " " : key, windowsVirtualKeyCode: code, modifiers }
-    const params = text !== undefined && !(modifiers & 6) ? { ...event, text } : event
-
-    await cdp.send("Input.dispatchKeyEvent", { type: "keyDown", ...params })
-    await cdp.send("Input.dispatchKeyEvent", { type: "keyUp", ...params })
-  }
-
-  async function snapshot(action: Extract<Browser.Action, { type: "snapshot" | "find" }>) {
-    const tree = await frames()
-    const selected = action.type === "snapshot" && action.ref ? target(action.ref) : undefined
-    const frameID = selected?.frameID ?? action.frameID ?? tree[0]?.id
-
-    if (!frameID || !tree.some((frame) => frame.id === frameID))
-      throw new Error(
-        "Frame is unavailable. Call browser.frames({tabID}) and use a current frameID from this tab; omit frameID for the main frame.",
-      )
-    const sessionID = sessionFor(frameID, tree)
-    const depth = action.type === "snapshot" ? (action.depth ?? 8) : 8
-    const ax = await cdp.send("Accessibility.getFullAXTree", { frameId: frameID, depth }, sessionID)
-    const nodes = new Map(ax.nodes.map((node) => [node.nodeId, node]))
-    const root = selected ? ax.nodes.find((node) => node.backendDOMNodeId === selected.backendID) : ax.nodes[0]
-
-    if (!root)
-      throw new Error(
-        "Element is absent from this frame's accessibility snapshot. Retry browser.snapshot with the same tabID and no ref to refresh the frame, then choose a returned ref.",
-      )
-    refs.clear()
-    const pinned = new Map(Array.from(picked, ([ref, element]) => [`${element.frameID}:${element.backendID}`, ref]))
-    const lines: string[] = []
-    let truncated = false
-
-    const walk = async (node: Protocol.Accessibility.AXNode, level: number): Promise<void> => {
-      if (level > depth || lines.length >= 500) {
-        truncated = true
-
-        return
-      }
-
-      const role = String(node.role?.value ?? "node")
-        .replace(/[^a-zA-Z0-9_-]/g, "")
-        .slice(0, 40)
-
-      const properties = new Map(node.properties?.map((property) => [property.name, property.value.value]) ?? [])
-
-      if (!node.ignored) {
-        const actionable =
-          role !== "RootWebArea" &&
-          (properties.get("focusable") || /^(button|link|textbox|combobox|checkbox|radio|option)$/.test(role))
-
-        // A picked element keeps the ref its comment names, even when it is not otherwise actionable.
-        const known = node.backendDOMNodeId ? pinned.get(`${frameID}:${node.backendDOMNodeId}`) : undefined
-        const ref = known ?? (actionable && node.backendDOMNodeId ? options.shared.ref() : "")
-        const element = node.backendDOMNodeId ? { backendID: node.backendDOMNodeId, frameID, sessionID } : undefined
-
-        if (ref && element && !known) refs.set(ref, element)
-
-        const flags = (["checked", "disabled", "expanded", "selected"] as const).flatMap((name) =>
-          properties.has(name) ? [`${name}=${properties.get(name)}`] : [],
-        )
-
-        const box =
-          action.type === "snapshot" && action.boxes && ref && element
-            ? await rect(element).catch(() => undefined)
-            : undefined
-
-        lines.push(
-          `${"  ".repeat(level)}${ref ? `@${ref} ` : ""}[${role}] ${JSON.stringify(
-            String(node.name?.value ?? "")
-              .replace(/\s+/g, " ")
-              .slice(0, 300),
-          )} ${flags.join(" ")}${box ? ` box=${JSON.stringify(box)}` : ""}`,
-        )
-      }
-
-      if (["textbox", "searchbox"].includes(role) || properties.get("editable")) return
-
-      for (const childID of node.childIds ?? []) {
-        const child = nodes.get(childID)
-
-        if (child) await walk(child, level + 1)
-      }
-    }
-
-    await walk(root, 0)
-
-    const content = (
-      action.type === "find" ? lines.filter((line) => line.toLowerCase().includes(action.text.toLowerCase())) : lines
-    ).join("\n")
-
-    return { content: content.slice(0, Browser.MAX_TEXT), truncated: truncated || content.length > Browser.MAX_TEXT }
-  }
+  // ---- The user's element picker ----
 
   async function toggleInspect(enabled: boolean) {
     picks++
@@ -1670,7 +2959,7 @@ export function createBrowserPage(
     return Schema.decodeUnknownSync(
       Schema.Struct({ label: Schema.String, selector: Schema.String, text: Schema.optionalKey(Schema.String) }),
     )(
-      await call(
+      await describeCall(
         element,
         `function() {
           const clip = (value, max) => (value.length > max ? value.slice(0, max - 1) + "\u2026" : value)

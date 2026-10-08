@@ -81,7 +81,7 @@ test("heap parsing rejects edge counts and targets the file does not carry", () 
 })
 
 test("wrong capture formats identify the matching capture tool", () => {
-  expect(() => analyzeTrace({ nodes: [] })).toThrow("browser.trace.stop")
-  expect(() => analyzeCpu({ traceEvents: [] })).toThrow("browser.cpu.stop")
+  expect(() => analyzeTrace({ nodes: [] })).toThrow('kind: "trace"')
+  expect(() => analyzeCpu({ traceEvents: [] })).toThrow('kind: "cpu"')
   expect(() => parseHeap({ traceEvents: [] })).toThrow("browser.heap.snapshot")
 })

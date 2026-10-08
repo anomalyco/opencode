@@ -6,21 +6,19 @@ import path from "node:path"
 
 export type BrowserFiles = ReturnType<typeof createBrowserFiles>
 
+type RetainedFile = {
+  id: Browser.FileID
+  name: string
+  mime: string
+  bytes: number
+  state: "pending" | "completed" | "failed"
+  path: string
+  resources: readonly string[]
+}
+
 export function createBrowserFiles(source: () => readonly string[]) {
   const directory = path.join(tmpdir(), `opencode-browser-client-${crypto.randomUUID()}`)
-
-  const files = new Map<
-    Browser.FileID,
-    {
-      id: Browser.FileID
-      name: string
-      mime: string
-      bytes: number
-      state: "pending" | "completed" | "failed"
-      path: string
-      resources: readonly string[]
-    }
-  >()
+  const files = new Map<Browser.FileID, RetainedFile>()
 
   // Captures, uploads, and heap snapshots sit in the shared temp directory; keep them owner-only.
   const ready = mkdir(directory, { recursive: true, mode: 0o700 })
@@ -35,12 +33,12 @@ export function createBrowserFiles(source: () => readonly string[]) {
       // setSavePath must run during Electron's synchronous will-download callback.
       mkdirSync(target, { recursive: true, mode: 0o700 })
 
-      const file = {
+      const file: RetainedFile = {
         id,
         name: name.slice(0, 2_048),
         mime,
         bytes: 0,
-        state: "pending" as "pending" | "completed" | "failed",
+        state: "pending",
         // A page receives this basename as the uploaded File.name, so spaces and non-ASCII stay;
         // only characters no supported filesystem accepts are replaced. Each file has its own
         // directory, so names never collide.
@@ -61,15 +59,15 @@ export function createBrowserFiles(source: () => readonly string[]) {
     async save(name: string, mime: string, data: Uint8Array, resources = source()) {
       if (data.byteLength > Browser.MAX_FILE_BYTES)
         throw new Error(
-          "Capture exceeds the 5 MiB transfer limit. Reduce screenshot maxWidth/quality or trace duration; for a heap snapshot, use a smaller page/test case. Do not retry an identical capture.",
+          "Capture exceeds the 25 MiB transfer limit. Reduce screenshot maxWidth/quality or trace duration; for a heap snapshot, use a smaller page/test case. Do not retry an identical capture.",
         )
       await ready
       const file = this.add(name, mime, resources)
-      await writeFile(file.path, data, { mode: 0o600 }).catch((error: unknown) => {
+      await writeFile(file.path, data, { mode: 0o600 }).catch((cause: unknown) => {
         file.state = "failed"
         throw new Error(
           "Cannot write the capture on the desktop. Ask the user to check desktop temporary-directory access and free space before retrying.",
-          { cause: error },
+          { cause },
         )
       })
       file.bytes = data.byteLength
@@ -82,7 +80,7 @@ export function createBrowserFiles(source: () => readonly string[]) {
 
       if (!file)
         throw new Error(
-          "File ID is not retained in this tab. Call browser.files.list({tabID}) and use an exact returned fileID from the same tab, not a server path or request ID.",
+          "File ID is not retained in this tab. Call browser.files.list({tabID}) and use an exact returned file id from the same tab, not a server path or request ID.",
         )
 
       if (file.state === "pending")
@@ -107,17 +105,17 @@ export function createBrowserFiles(source: () => readonly string[]) {
 
       if (
         (
-          await stat(file.path).catch((error: unknown) => {
-            throw unavailableFile(error)
+          await stat(file.path).catch((cause: unknown) => {
+            throw unavailableFile(cause)
           })
         ).size > Browser.MAX_FILE_BYTES
       )
         throw new Error(
-          "File exceeds the 5 MiB transfer limit. Choose a smaller completed file; repeating browser.files.get for this file will not help.",
+          "File exceeds the 25 MiB transfer limit. Choose a smaller completed file; repeating browser.files.get for this file will not help.",
         )
 
-      const data = await readFile(file.path).catch((error: unknown) => {
-        throw unavailableFile(error)
+      const data = await readFile(file.path).catch((cause: unknown) => {
+        throw unavailableFile(cause)
       })
 
       return { id, name: file.name, mime: file.mime, data: new Uint8Array(data) }
@@ -126,9 +124,9 @@ export function createBrowserFiles(source: () => readonly string[]) {
   }
 }
 
-function unavailableFile(error: unknown) {
+function unavailableFile(cause: unknown) {
   return new Error(
     "The retained file cannot be read on the desktop. Its temporary copy may have been removed. Use an already exported server-local path if available, or deliberately create a new capture.",
-    { cause: error },
+    { cause },
   )
 }

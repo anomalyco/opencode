@@ -1,9 +1,18 @@
 import { Browser } from "@opencode/plugin-browser/rpc"
-import { Schema } from "effect"
+import { Schema, type Types } from "effect"
 import type { MainStoreFrom, Storage } from "../sdk/main"
 
 const Stored = Schema.Struct({
-  tabs: Schema.Array(Schema.Struct({ id: Browser.TabID, url: Browser.Tab.fields.url })),
+  tabs: Schema.Array(
+    Schema.Struct({
+      id: Browser.TabID,
+      url: Browser.Tab.fields.url,
+      // Added later: rows saved before keep the user's kind of tab.
+      owner: Schema.optionalKey(Browser.Tab.fields.owner),
+      key: Schema.optionalKey(Schema.String),
+      viewport: Schema.optionalKey(Schema.Struct({ width: Schema.Int, height: Schema.Int })),
+    }),
+  ),
   focusedTabID: Schema.NullOr(Browser.TabID),
 })
 
@@ -32,7 +41,22 @@ export function createBrowserRestoreStore(storage: Storage) {
     load: (key: string) => store(key).value,
     save(key: string, state: Stored) {
       const target = store(key)
-      const value = { tabs: state.tabs.map((tab) => ({ id: tab.id, url: tab.url })), focusedTabID: state.focusedTabID }
+
+      const value = {
+        tabs: state.tabs.map((tab) => {
+          // Fields keep the schema's order: the comparison below is on the JSON text.
+          const row: Types.Mutable<Stored["tabs"][number]> = { id: tab.id, url: tab.url }
+
+          if (tab.owner) row.owner = tab.owner
+
+          if (tab.key) row.key = tab.key
+
+          if (tab.viewport) row.viewport = tab.viewport
+
+          return row
+        }),
+        focusedTabID: state.focusedTabID,
+      }
 
       if (JSON.stringify(target.value) !== JSON.stringify(value)) target.set(value)
     },
