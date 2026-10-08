@@ -45,6 +45,38 @@ const assistantRow = (
 }
 
 describe("SessionProjector", () => {
+  it.effect("lists sessions with trailing directory separators", () =>
+    Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      const directory = AbsolutePath.make("/project/work")
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: sessionID,
+          project_id: Project.ID.global,
+          slug: "test",
+          directory,
+          title: "test",
+          version: "test",
+        })
+        .run()
+        .pipe(Effect.orDie)
+
+      const sessions = yield* SessionV2.Service
+      const plain = yield* sessions.list({ directory })
+      const slash = yield* sessions.list({ directory: AbsolutePath.make("/project/work/") })
+      const backslash = yield* sessions.list({ directory: AbsolutePath.make("/project/work\\") })
+      expect(plain.map((session) => session.id)).toEqual([sessionID])
+      expect(slash.map((session) => session.id)).toEqual([sessionID])
+      expect(backslash.map((session) => session.id)).toEqual([sessionID])
+    }).pipe(Effect.provide(sessionsLayer)),
+  )
+
   it.effect("projects moved sessions without the transitional context epoch table", () =>
     Effect.gen(function* () {
       const { db } = yield* Database.Service
