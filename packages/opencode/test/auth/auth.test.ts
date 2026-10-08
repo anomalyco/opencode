@@ -76,13 +76,12 @@ describe("Auth", () => {
       expect(after["anthropic"]).toBeUndefined()
     }),
   )
-})
 
   // A mutation must not drop credentials the running build cannot decode.
   // `all()` filters those out for reads, and the old `set`/`remove` wrote back
-  // the filtered map, so a single `set` permanently deleted every entry whose
-  // JSON shape this build did not recognize (see #42387).
-  it.instance("set preserves entries the current build cannot decode", () =>
+  // the filtered map, so a single mutation permanently deleted every entry
+  // whose JSON shape this build did not recognize (see #42387).
+  it.instance("set and remove preserve entries the current build cannot decode", () =>
     Effect.gen(function* () {
       const auth = yield* Auth.Service
       const file = path.join(Global.Path.data, "auth.json")
@@ -103,16 +102,24 @@ describe("Auth", () => {
         }),
       )
 
+      // set: the undecodable entry must survive, the valid one stay intact.
       yield* auth.set("openai", { type: "api", key: "new-key" })
+      const afterSet = JSON.parse(yield* Effect.promise(() => Filesystem.readText(file)))
+      expect(afterSet["anthropic"]).toEqual({ type: "api", key: "keep-me" })
+      expect(afterSet["future-provider"]).toEqual({ type: "something-new", secret: "opaque", version: 99 })
+      expect(afterSet["openai"]).toEqual({ type: "api", key: "new-key" })
 
-      const onDisk = JSON.parse(yield* Effect.promise(() => Filesystem.readText(file)))
-      expect(onDisk["anthropic"]).toEqual({ type: "api", key: "keep-me" })
-      expect(onDisk["future-provider"]).toEqual({ type: "something-new", secret: "opaque", version: 99 })
-      expect(onDisk["openai"]).toEqual({ type: "api", key: "new-key" })
+      // remove (the `auth logout` path from the issue): removing one key must
+      // not take the undecodable entry with it.
+      yield* auth.remove("anthropic")
+      const afterRemove = JSON.parse(yield* Effect.promise(() => Filesystem.readText(file)))
+      expect(afterRemove["anthropic"]).toBeUndefined()
+      expect(afterRemove["future-provider"]).toEqual({ type: "something-new", secret: "opaque", version: 99 })
 
       // and reads still ignore the undecodable entry
       const all = yield* auth.all()
-      expect(all["anthropic"]).toBeDefined()
+      expect(all["anthropic"]).toBeUndefined()
       expect(all["future-provider"]).toBeUndefined()
     }),
   )
+})
