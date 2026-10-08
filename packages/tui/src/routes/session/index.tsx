@@ -126,7 +126,7 @@ import { INLINE_TOOL_ICON_WIDTH, InlineToolRow, ReasoningPart, TextPart, toolDis
 import { defaultVerbosity, type GroupKind, type SessionEntry } from "./grouping/session"
 import { SessionGroupView } from "./group-view"
 import { useEntryAnchor } from "./anchor-view"
-import { containsAnchor, createTimelineAnchors } from "./anchors"
+import { containsAnchor, createTimelineAnchors, groupID } from "./anchors"
 import { rowsAfter, rowsBefore, rowWeight } from "./mount-budget"
 export { InlineToolRow } from "./message-parts"
 export { toolDisplay } from "./message-parts"
@@ -1353,15 +1353,18 @@ export function Session(props: {
       value={{
         anchors,
         groupExpanded,
-        setGroupExpanded: (groupID, expanded, anchor) => {
-          if (anchor) {
+        setGroupExpanded: (id, expanded, anchor) => {
+          // A group that ends the transcript would open off screen while the reader follows the bottom.
+          const last = rows.findLast((row) => row.type !== "assistant-footer" && row.type !== "turn-usage")
+          const ending = last?.type === "group" && groupID(last, 0) === id
+          if (anchor && !(ending && !isAwayFromBottom())) {
             const hold = { node: anchor, top: layoutTop(anchor) - scroll.scrollTop }
             held = hold
             afterLayout(() => {
               if (held === hold) held = undefined
             })
           }
-          sessionTabs.setGroupExpanded(sessionID, groupID, expanded)
+          sessionTabs.setGroupExpanded(sessionID, id, expanded)
           afterLayout(saveScrollAnchor)
         },
         get width() {

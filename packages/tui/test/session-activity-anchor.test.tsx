@@ -47,15 +47,38 @@ const messages: SessionMessageInfo[] = Array.from({ length: 6 }, (_, turn) => [
     ],
   },
 ]).flat()
+// A turn still running its commands, so its summary ends the transcript.
+const running: SessionMessageInfo[] = [
+  { type: "user", id: "user-running", text: "Running prompt", time: { created: 100 } },
+  {
+    type: "assistant",
+    id: "assistant-running",
+    agent: "build",
+    model,
+    time: { created: 101 },
+    content: Array.from({ length: 1 }, (_, index) => ({
+      type: "tool" as const,
+      id: `shell-running-${index}`,
+      name: "shell",
+      time: { created: 101, completed: 102 },
+      state: {
+        status: "completed" as const,
+        input: { command: `echo running step ${index}` },
+        content: [{ type: "text" as const, text: `running step ${index} output` }] as [{ type: "text"; text: string }],
+        metadata: {},
+      },
+    })),
+  },
+]
 
-async function withSession(run: (setup: Setup) => Promise<void>) {
+async function withSession(run: (setup: Setup) => Promise<void>, history = messages) {
   await using state = await tmpdir()
   const setup = await createTestRenderer({ width: 100, height: 30, useThread: false, kittyKeyboard: true })
   setup.renderer.start()
   const calls = createFetch((url) => {
     if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
     if (url.pathname === `/api/session/${session.id}`) return json({ data: session })
-    if (url.pathname === `/api/session/${session.id}/message`) return json({ data: messages.toReversed(), cursor: {} })
+    if (url.pathname === `/api/session/${session.id}/message`) return json({ data: history.toReversed(), cursor: {} })
     if (url.pathname === `/api/session/${session.id}/inbox` || url.pathname === `/api/session/${session.id}/permission`)
       return json({ data: [] })
   }, createEventStream())
@@ -76,7 +99,7 @@ async function withSession(run: (setup: Setup) => Promise<void>) {
     }).pipe(Effect.provide(Global.layerWith({ state: state.path })), Effect.provide(FileSystem.layerNoop({}))),
   )
   try {
-    await setup.waitForFrame((frame) => frame.includes("Turn 5 answer"))
+    await setup.waitForFrame((frame) => frame.includes(history === messages ? "Turn 5 answer" : "1 command"))
     await setup.waitForVisualIdle({ quietFrames: 3 })
     await run(setup)
   } finally {
@@ -135,3 +158,22 @@ test.each([0, 1, 3])(
   },
   20000,
 )
+
+test("a low activity summary that ends the transcript opens like v2 at the bottom", async () => {
+  await withSession(
+    async (setup) => {
+      const label = "1 command"
+      const expand = await toggle(setup, label)
+      const expanded = lines(setup.captureCharFrame())
+      const row = expanded.findIndex((line) => line.includes(`− ${label}`))
+      expect(row).toBeLessThan(expand.row)
+      expect(expanded.slice(row + 1).join("\n")).toContain("running step 0 output")
+      expect(expanded.join("\n")).not.toContain("Jump to latest")
+
+      const collapse = await toggle(setup, label)
+      expect(collapse.frames.at(-1)).toBe(expand.row)
+      expect(lines(setup.captureCharFrame())[expand.row]).toContain(`+ ${label}`)
+    },
+    [...messages, ...running],
+  )
+}, 20000)
