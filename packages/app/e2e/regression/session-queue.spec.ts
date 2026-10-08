@@ -749,6 +749,7 @@ for (const [action, status] of [
       status === "steering"
         ? [{ id: "msg_queue_delivered", type: "user", text: "First prompt", time: { created: 1 } }]
         : []
+
     const mock = createQueueMock(["U2: Also check the retry path."], delivered)
     const inboxID = mock.rows[0].id
     mock.rows[0].delivery = "steer"
