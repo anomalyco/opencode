@@ -32,6 +32,7 @@ export const SessionMessagesQuery = Schema.Struct({
       "shell",
       "assistant",
       "compaction",
+      "idle",
     ] satisfies ReadonlyArray<SessionMessage.Type>),
   ).annotate({
     description:
