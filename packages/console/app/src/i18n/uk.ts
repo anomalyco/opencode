@@ -2,7 +2,6 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
-  "go.promo.spaceBunny": "Space Bunny Free — нова анонімна модель, доступна протягом обмеженого часу",
   "go.referral.ended.label": "Попередження",
   "go.referral.ended":
     "Реферальну програму завершено. Реферальні посилання більше не нараховують кредити ні вам, ні тому, хто ними поділився.",
@@ -262,6 +261,7 @@ export const dict = {
     "Усі моделі Zen розміщені в США. Провайдери дотримуються політики нульового зберігання та не використовують ваші дані для навчання моделей, за",
   "zen.privacy.exceptionsLink": "такими винятками",
 
+  "go.promo.step5": "Нова модель Step 5 Preview Free тимчасово доступна безкоштовно.",
   "go.title": "OpenCode Go | Недорогі моделі кодування для всіх",
   "go.meta.description":
     "Go коштує $10/місяць, зі щедрими лімітами використання та надійним доступом до провідних моделей для кодування.",
@@ -781,6 +781,14 @@ export const dict = {
   "enterprise.form.email.placeholder": "jeff@amazon.com",
   "enterprise.form.phone.label": "Номер телефону",
   "enterprise.form.phone.placeholder": "+1 234 567 8900",
+  "enterprise.form.inferenceSpend.label": "Які поточні щомісячні витрати вашої компанії на інференс (USD)?",
+  "enterprise.form.inferenceSpend.placeholder": "Виберіть діапазон (необов'язково)",
+  "enterprise.form.inferenceSpend.none": "Витрат поки немає",
+  "enterprise.form.inferenceSpend.under1k": "Менше $1K",
+  "enterprise.form.inferenceSpend.1kTo10k": "$1K–$10K",
+  "enterprise.form.inferenceSpend.10kTo50k": "$10K–$50K",
+  "enterprise.form.inferenceSpend.50kTo100k": "$50K–$100K",
+  "enterprise.form.inferenceSpend.over100k": "$100K або більше",
   "enterprise.form.message.label": "Яку проблему ви намагаєтеся вирішити?",
   "enterprise.form.message.placeholder": "Нам потрібна допомога з...",
   "enterprise.form.send": "Надіслати",
@@ -789,6 +797,7 @@ export const dict = {
   "enterprise.form.success.submitted": "Форму успішно надіслано.",
   "enterprise.form.error.allFieldsRequired": "Усі поля обов'язкові.",
   "enterprise.form.error.invalidEmailFormat": "Недійсний формат email.",
+  "enterprise.form.error.invalidInferenceSpend": "Виберіть допустимий діапазон витрат на інференс.",
   "enterprise.form.error.internalServer": "Внутрішня помилка сервера.",
   "enterprise.faq.title": "FAQ",
   "enterprise.faq.q1": "Що таке OpenCode Enterprise?",

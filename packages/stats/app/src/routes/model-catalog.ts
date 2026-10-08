@@ -1,4 +1,4 @@
-import { statModel } from "@opencode-ai/stats-core/domain/model-normalization"
+import { STEALTH_MODELS, statModel } from "@opencode-ai/stats-core/domain/model-normalization"
 import { query } from "@solidjs/router"
 
 export const modelCatalogSourceUrl = "https://models.opencode.ai/catalog.json"
@@ -34,6 +34,8 @@ export type ModelCatalogEntry = {
   benchmarks: ModelCatalogBenchmark[]
 }
 
+export type ModelCatalogSpecs = Pick<ModelCatalogEntry, "knowledge" | "releaseDate" | "limit" | "modalities">
+
 export type ModelCatalogBenchmark = {
   name: string
   score: number
@@ -56,9 +58,31 @@ export type ModelCatalog = {
   models: ModelCatalogEntry[]
   aliases?: ModelCatalogEntry[]
   labs: ModelCatalogLab[]
+  // Stealth models stay out of the lab catalog, but their OpenCode listings publish limits and modalities.
+  stealthSpecs: Record<string, ModelCatalogSpecs>
 }
 
-export async function loadModelCatalog() {
+const catalogTtlMs = 5 * 60 * 1000
+let cachedCatalog: { expiresAt: number; value: Promise<ModelCatalog> } | undefined
+
+// The catalog is about 11 MB of JSON to fetch and parse and rarely changes, so share it across requests.
+export function loadModelCatalog() {
+  const now = Date.now()
+  if (cachedCatalog && cachedCatalog.expiresAt > now) return cachedCatalog.value
+  const value = fetchModelCatalog()
+  const entry = { expiresAt: now + catalogTtlMs, value }
+  cachedCatalog = entry
+  // An empty catalog means a source failed, so retry on the next request instead of serving it for the TTL.
+  const evict = () => {
+    if (cachedCatalog === entry) cachedCatalog = undefined
+  }
+  value.then((catalog) => {
+    if (catalog.models.length === 0) evict()
+  }, evict)
+  return value
+}
+
+async function fetchModelCatalog() {
   const [models, pricing, labs] = await Promise.all([
     fetchCatalogPayload(modelCatalogSourceUrl),
     fetchCatalogPayload(modelCatalogPricingUrl),
@@ -91,21 +115,56 @@ export function findModelCatalogLab(catalog: ModelCatalog, lab: string) {
   return catalog.labs.find((entry) => entry.id === id)
 }
 
+export function catalogModelPath(entry: Pick<ModelCatalogEntry, "lab" | "slug">) {
+  return `/data/${entry.lab}/${entry.slug}`
+}
+
+export function catalogLabPath(lab: string) {
+  return `/data/${catalogLabSlug(lab)}`
+}
+
+export function canonicalModelEntry(catalog: ModelCatalog, model: string, lab: string) {
+  const entry = findModelCatalogEntry(catalog, model, lab)
+  // A catalog path is only canonical if it resolves back to the same entry, which rules out redirect loops.
+  if (!entry || findModelCatalogEntry(catalog, entry.slug, entry.lab)?.id !== entry.id) return undefined
+  return entry
+}
+
+export function modelPagePath(catalog: ModelCatalog, lab: string, model: string) {
+  const entry = canonicalModelEntry(catalog, model, lab)
+  if (entry) return catalogModelPath(entry)
+  return `/data/${catalogSlug(lab)}/${catalogSlug(model)}`
+}
+
 export function formatCatalogLabName(lab: string) {
   const known: Record<string, string> = {
+    ai21: "AI21",
+    aisingapore: "AI Singapore",
     alibaba: "Alibaba",
     anthropic: "Anthropic",
+    "arcee-ai": "Arcee AI",
+    "bytedance-seed": "ByteDance Seed",
     cohere: "Cohere",
+    deepreinforce: "DeepReinforce",
     deepseek: "DeepSeek",
     google: "Google",
+    ibm: "IBM",
+    inclusionai: "inclusionAI",
     meta: "Meta",
     minimax: "MiniMax",
     mistral: "Mistral",
     moonshotai: "Moonshot",
+    "nex-agi": "Nex AGI",
+    nvidia: "NVIDIA",
     openai: "OpenAI",
+    openbmb: "OpenBMB",
     perplexity: "Perplexity",
+    quiverai: "QuiverAI",
+    sdaia: "SDAIA",
     stepfun: "StepFun",
+    "swiss-ai": "Swiss AI",
     tencent: "Tencent",
+    thinkingmachines: "Thinking Machines",
     xai: "xAI",
     xiaomi: "Xiaomi",
     zai: "Z.ai",
@@ -181,7 +240,33 @@ export function buildModelCatalog(payload: unknown, pricingPayload?: unknown, la
         return result
       }, {}),
     ).toSorted((a, b) => a.name.localeCompare(b.name)),
+    stealthSpecs: readStealthModelSpecs(pricingPayload),
   }
+}
+
+function readStealthModelSpecs(payload: unknown): Record<string, ModelCatalogSpecs> {
+  if (!isRecord(payload)) return {}
+  return Object.fromEntries(
+    // Later entries win, so the opencode listing takes precedence over opencode-go.
+    ["opencode-go", "opencode"]
+      .map((provider) => payload[provider])
+      .flatMap((provider) => (isRecord(provider) && isRecord(provider.models) ? Object.entries(provider.models) : []))
+      .flatMap(([id, value]) => {
+        const model = statModel(id, undefined)
+        if (!STEALTH_MODELS.has(model) || !isRecord(value)) return []
+        return [
+          [
+            model,
+            {
+              knowledge: stringValue(value.knowledge),
+              releaseDate: stringValue(value.release_date),
+              limit: readCatalogLimit(value.limit),
+              modalities: readCatalogModalities(value.modalities),
+            },
+          ] as const,
+        ]
+      }),
+  )
 }
 
 function readModelCatalogEntry(value: unknown): ModelCatalogEntry[] {

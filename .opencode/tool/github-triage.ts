@@ -5,8 +5,8 @@ const TEAM = {
   tui: ["kommander", "simonklee"],
   desktop_web: ["Hona", "Brendonovich"],
   core: ["jlongster", "rekram1-node", "neriousy", "nexxeln", "kitlangton"],
-  inference: ["fwang", "MrMushrooooom", "starptech"],
-  windows: ["Hona"],
+  inference: ["fwang", "vaprdev", "vimtor"],
+  windows: ["Hona", "neriousy"],
 } as const
 
 function pick<T>(items: readonly T[]) {
