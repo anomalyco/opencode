@@ -235,6 +235,55 @@ describe("Git trees", () => {
     }),
   )
 
+  it.live("diffs a path selection longer than any platform command line", () =>
+    Effect.gen(function* () {
+      const root = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+      )
+      yield* Effect.promise(async () => {
+        await initRepo(root.path)
+        await fs.mkdir(path.join(root.path, "dir", "nested"), { recursive: true })
+        await Bun.write(path.join(root.path, "changed.txt"), "before\n")
+        await Bun.write(path.join(root.path, "removed.txt"), "removed\n")
+        await Bun.write(path.join(root.path, "dir", "nested", "file.txt"), "before\n")
+      })
+      const git = yield* Git.Service
+      const repository = yield* git.repo.discover(AbsolutePath.make(root.path))
+      if (!repository) throw new Error("Repository not found")
+      const before = yield* git.tree.capture({ repository, scopes: [RelativePath.make(".")] })
+      yield* Effect.promise(async () => {
+        await Bun.write(path.join(root.path, "changed.txt"), "after\n")
+        await fs.rm(path.join(root.path, "removed.txt"))
+        await Bun.write(path.join(root.path, "dir", "nested", "file.txt"), "after\n")
+        await Bun.write(path.join(root.path, "first.txt"), "first\n")
+        await Bun.write(path.join(root.path, "last.txt"), "last\n")
+        await Bun.write(path.join(root.path, "unselected.txt"), "unselected\n")
+      })
+      const after = yield* git.tree.capture({ repository, scopes: [RelativePath.make(".")] })
+      const missing = Array.from({ length: 30_000 }, (_, index) =>
+        RelativePath.make(`missing/${String(index).padStart(6, "0")}/${"x".repeat(80)}.txt`),
+      )
+      const paths = ["first.txt", "changed.txt", "removed.txt", "dir", ...missing, "last.txt"].map((file) =>
+        RelativePath.make(file),
+      )
+
+      const diffs = yield* git.tree.diff({ repository, from: before, to: after, paths })
+      expect(diffs.map((item) => [item.file, item.status, item.additions, item.deletions])).toEqual([
+        ["changed.txt", "modified", 1, 1],
+        ["dir/nested/file.txt", "modified", 1, 1],
+        ["first.txt", "added", 1, 0],
+        ["last.txt", "added", 1, 0],
+        ["removed.txt", "deleted", 0, 1],
+      ])
+      expect(diffs[0]?.patch).toContain("-before\n+after\n")
+      expect(diffs[2]?.patch).toContain("+first\n")
+      expect(diffs[4]?.patch).toContain("-removed\n")
+      expect(yield* git.tree.diff({ repository, from: before, to: after, paths: missing })).toEqual([])
+      expect(yield* git.tree.write(repository)).toBe(after)
+    }),
+  )
+
   it.live("captures, compares, previews, and restores scoped trees", () =>
     Effect.gen(function* () {
       const root = yield* Effect.acquireRelease(
