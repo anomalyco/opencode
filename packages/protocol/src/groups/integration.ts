@@ -80,6 +80,27 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
       ),
   )
   .add(
+    HttpApiEndpoint.post("integration.connect.external", "/api/integration/:integrationID/connect/external", {
+      params: { integrationID: Integration.ID },
+      query: LocationQuery,
+      payload: Schema.Struct({
+        methodID: Integration.MethodID,
+        answer: Schema.optional(Form.Answer),
+        label: Schema.optional(Schema.String),
+      }),
+      success: HttpApiSchema.NoContent,
+      error: [IntegrationNotFoundError, InvalidRequestError],
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "integration.connect.external",
+          summary: "Connect with external credentials",
+          description: "Run an external authentication method and store a reference to its credential source.",
+        }),
+      ),
+  )
+  .add(
     HttpApiEndpoint.post("integration.oauth.connect", "/api/integration/:integrationID/connect/oauth", {
       params: { integrationID: Integration.ID },
       query: LocationQuery,

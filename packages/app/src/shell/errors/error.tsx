@@ -2,134 +2,162 @@ import { TextField } from "@opencode/ui/text-field"
 import type { captureException } from "@sentry/solid"
 import { Logo } from "@opencode/ui/logo"
 import { Button } from "@opencode/ui/button"
-import { Component, createSignal, onMount, Show } from "solid-js"
+import { Component, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { createStore } from "solid-js/store"
+import { Predicate } from "effect"
+import { Updater } from "@opencode/gui-extensions/updater"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useLanguage } from "@/runtime/i18n/language"
+import { createIpcClients } from "@/runtime/extension/ipc"
 import { Icon } from "@opencode/ui/icon"
 import { errorDescriptionKey, errorStatus } from "./description"
 
 export type InitError = {
-  name: string
-  data: Record<string, unknown>
+  name: unknown
+  data: object
 }
 
 type Translator = ReturnType<typeof useLanguage>["t"]
+
 const CHAIN_SEPARATOR = "\n" + "─".repeat(40) + "\n"
 
 function isIssue(value: unknown): value is { message: string; path: string[] } {
-  if (!value || typeof value !== "object") return false
-  if (!("message" in value) || !("path" in value)) return false
-  const message = (value as { message: unknown }).message
-  const path = (value as { path: unknown }).path
-  if (typeof message !== "string") return false
-  if (!Array.isArray(path)) return false
-  return path.every((part) => typeof part === "string")
-}
-
-function isInitError(error: unknown): error is InitError {
   return (
-    typeof error === "object" &&
-    error !== null &&
-    "name" in error &&
-    "data" in error &&
-    typeof (error as InitError).data === "object"
+    Predicate.hasProperty(value, "message") &&
+    Predicate.hasProperty(value, "path") &&
+    Predicate.isString(value.message) &&
+    Array.isArray(value.path) &&
+    value.path.every(Predicate.isString)
   )
 }
 
-function safeJson(value: unknown, circular: string): string {
+function isInitError(value: unknown): value is InitError {
+  return (
+    Predicate.hasProperty(value, "name") &&
+    Predicate.hasProperty(value, "data") &&
+    Predicate.isObjectKeyword(value.data) &&
+    !Predicate.isFunction(value.data)
+  )
+}
+
+/** A field of an init error's payload when `is` accepts it. */
+function read<T>(error: InitError, key: string, is: (value: unknown) => value is T) {
+  const value = Predicate.hasProperty(error.data, key) ? error.data[key] : undefined
+
+  return is(value) ? value : undefined
+}
+
+function safeJson(cause: unknown, circular: string): string {
   const seen = new WeakSet<object>()
+
   const json = JSON.stringify(
-    value,
+    cause,
     (_key, val) => {
-      if (typeof val === "bigint") return val.toString()
-      if (typeof val === "object" && val) {
+      if (Predicate.isBigInt(val)) return val.toString()
+
+      if (Predicate.isObjectKeyword(val) && !Predicate.isFunction(val)) {
         if (seen.has(val)) return circular
         seen.add(val)
       }
+
       return val
     },
     2,
   )
-  return json ?? String(value)
+
+  return json ?? String(cause)
 }
 
 function formatInitError(error: InitError, t: Translator): string {
-  const data = error.data
-  const json = (value: unknown) => safeJson(value, t("error.page.circular"))
+  const json = (cause: unknown) => safeJson(cause, t("error.page.circular"))
+
+  // The field as text: the string itself, else its JSON.
+  const shown = (key: string) => read(error, key, Predicate.isString) ?? json(read(error, key, Predicate.isUnknown))
+
   switch (error.name) {
     case "MCPFailed": {
-      const name = typeof data.name === "string" ? data.name : ""
+      const name = read(error, "name", Predicate.isString) ?? ""
+
       return t("error.chain.mcpFailed", { name })
     }
+
     case "ProviderAuthError": {
-      const providerID = typeof data.providerID === "string" ? data.providerID : t("common.unknown")
-      const message = typeof data.message === "string" ? data.message : json(data.message)
-      return t("error.chain.providerAuthFailed", { provider: providerID, message })
+      const providerID = read(error, "providerID", Predicate.isString) ?? t("common.unknown")
+
+      return t("error.chain.providerAuthFailed", { provider: providerID, message: shown("message") })
     }
+
     case "APIError": {
-      const message = typeof data.message === "string" ? data.message : t("error.chain.apiError")
+      const message = read(error, "message", Predicate.isString) ?? t("error.chain.apiError")
       const lines: string[] = [message]
+      const statusCode = read(error, "statusCode", Predicate.isNumber)
+      const retryable = read(error, "isRetryable", Predicate.isBoolean)
+      const responseBody = read(error, "responseBody", Predicate.isString)
 
-      if (typeof data.statusCode === "number") {
-        lines.push(t("error.chain.status", { status: data.statusCode }))
+      if (statusCode !== undefined) {
+        lines.push(t("error.chain.status", { status: statusCode }))
       }
 
-      if (typeof data.isRetryable === "boolean") {
-        lines.push(t("error.chain.retryable", { retryable: data.isRetryable }))
+      if (retryable !== undefined) {
+        lines.push(t("error.chain.retryable", { retryable }))
       }
 
-      if (typeof data.responseBody === "string" && data.responseBody) {
-        lines.push(t("error.chain.responseBody", { body: data.responseBody }))
+      if (responseBody) {
+        lines.push(t("error.chain.responseBody", { body: responseBody }))
       }
 
       return lines.join("\n")
     }
-    case "ProviderModelNotFoundError": {
-      const { providerID, modelID, suggestions } = data as {
-        providerID: string
-        modelID: string
-        suggestions?: string[]
-      }
 
-      const suggestionsLine =
-        Array.isArray(suggestions) && suggestions.length
-          ? [t("error.chain.didYouMean", { suggestions: suggestions.join(", ") })]
-          : []
+    case "ProviderModelNotFoundError": {
+      const suggestions = read(error, "suggestions", Array.isArray)
+
+      const suggestionsLine = suggestions?.length
+        ? [t("error.chain.didYouMean", { suggestions: suggestions.join(", ") })]
+        : []
 
       return [
-        t("error.chain.modelNotFound", { provider: providerID, model: modelID }),
+        t("error.chain.modelNotFound", {
+          provider: read(error, "providerID", Predicate.isString) ?? "",
+          model: read(error, "modelID", Predicate.isString) ?? "",
+        }),
         ...suggestionsLine,
         t("error.chain.checkConfig"),
       ].join("\n")
     }
+
     case "ProviderInitError": {
-      const providerID = typeof data.providerID === "string" ? data.providerID : t("common.unknown")
+      const providerID = read(error, "providerID", Predicate.isString) ?? t("common.unknown")
+
       return t("error.chain.providerInitFailed", { provider: providerID })
     }
+
     case "ConfigJsonError": {
-      const path = typeof data.path === "string" ? data.path : json(data.path)
-      const message = typeof data.message === "string" ? data.message : ""
+      const path = shown("path")
+      const message = read(error, "message", Predicate.isString) ?? ""
+
       if (message) return t("error.chain.configJsonInvalidWithMessage", { path, message })
+
       return t("error.chain.configJsonInvalid", { path })
     }
-    case "ConfigDirectoryTypoError": {
-      const path = typeof data.path === "string" ? data.path : json(data.path)
-      const dir = typeof data.dir === "string" ? data.dir : json(data.dir)
-      const suggestion = typeof data.suggestion === "string" ? data.suggestion : json(data.suggestion)
-      return t("error.chain.configDirectoryTypo", { dir, path, suggestion })
-    }
-    case "ConfigFrontmatterError": {
-      const path = typeof data.path === "string" ? data.path : json(data.path)
-      const message = typeof data.message === "string" ? data.message : json(data.message)
-      return t("error.chain.configFrontmatterError", { path, message })
-    }
+
+    case "ConfigDirectoryTypoError":
+      return t("error.chain.configDirectoryTypo", {
+        dir: shown("dir"),
+        path: shown("path"),
+        suggestion: shown("suggestion"),
+      })
+
+    case "ConfigFrontmatterError":
+      return t("error.chain.configFrontmatterError", { path: shown("path"), message: shown("message") })
+
     case "ConfigInvalidError": {
-      const issues = Array.isArray(data.issues)
-        ? data.issues.filter(isIssue).map((issue) => "↳ " + issue.message + " " + issue.path.join("."))
-        : []
-      const message = typeof data.message === "string" ? data.message : ""
-      const path = typeof data.path === "string" ? data.path : json(data.path)
+      const issues = (read(error, "issues", Array.isArray) ?? [])
+        .filter(isIssue)
+        .map((issue) => "↳ " + issue.message + " " + issue.path.join("."))
+
+      const message = read(error, "message", Predicate.isString) ?? ""
+      const path = shown("path")
 
       const line = message
         ? t("error.chain.configInvalidWithMessage", { path, message })
@@ -137,38 +165,39 @@ function formatInitError(error: InitError, t: Translator): string {
 
       return [line, ...issues].join("\n")
     }
-    case "UnknownError":
-      return typeof data.message === "string" ? data.message : json(data)
+
     default:
-      if (typeof data.message === "string") return data.message
-      return json(data)
+      return read(error, "message", Predicate.isString) ?? json(error.data)
   }
 }
 
-function formatErrorChain(error: unknown, t: Translator, depth = 0, parentMessage?: string): string {
-  const json = (value: unknown) => safeJson(value, t("error.page.circular"))
-  if (!error) return t("error.chain.unknown")
+function formatErrorChain(cause: unknown, t: Translator, depth = 0, parentMessage?: string): string {
+  if (!cause) return t("error.chain.unknown")
 
-  if (isInitError(error)) {
-    const message = formatInitError(error, t)
+  if (isInitError(cause)) {
+    const message = formatInitError(cause, t)
+
     if (depth > 0 && parentMessage === message) return ""
+
     const indent = depth > 0 ? `\n${CHAIN_SEPARATOR}${t("error.chain.causedBy")}\n` : ""
-    return indent + `${error.name}\n${message}`
+
+    return indent + `${cause.name}\n${message}`
   }
 
-  if (error instanceof Error) {
-    const isDuplicate = depth > 0 && parentMessage === error.message
+  if (cause instanceof Error) {
+    const isDuplicate = depth > 0 && parentMessage === cause.message
     const parts: string[] = []
     const indent = depth > 0 ? `\n${CHAIN_SEPARATOR}${t("error.chain.causedBy")}\n` : ""
 
-    const header = `${error.name}${error.message ? `: ${error.message}` : ""}`
-    const stack = error.stack?.trim()
+    const header = `${cause.name}${cause.message ? `: ${cause.message}` : ""}`
+    const stack = cause.stack?.trim()
 
     if (stack) {
       const startsWithHeader = stack.startsWith(header)
 
       if (isDuplicate && startsWithHeader) {
         const trace = stack.split("\n").slice(1).join("\n").trim()
+
         if (trace) {
           parts.push(indent + trace)
         }
@@ -191,8 +220,9 @@ function formatErrorChain(error: unknown, t: Translator, depth = 0, parentMessag
       parts.push(indent + header)
     }
 
-    if (error.cause) {
-      const causeResult = formatErrorChain(error.cause, t, depth + 1, error.message)
+    if (cause.cause) {
+      const causeResult = formatErrorChain(cause.cause, t, depth + 1, cause.message)
+
       if (causeResult) {
         parts.push(causeResult)
       }
@@ -201,18 +231,21 @@ function formatErrorChain(error: unknown, t: Translator, depth = 0, parentMessag
     return parts.join("\n\n")
   }
 
-  if (typeof error === "string") {
-    if (depth > 0 && parentMessage === error) return ""
+  if (Predicate.isString(cause)) {
+    if (depth > 0 && parentMessage === cause) return ""
+
     const indent = depth > 0 ? `\n${CHAIN_SEPARATOR}${t("error.chain.causedBy")}\n` : ""
-    return indent + error
+
+    return indent + cause
   }
 
   const indent = depth > 0 ? `\n${CHAIN_SEPARATOR}${t("error.chain.causedBy")}\n` : ""
-  return indent + json(error)
+
+  return indent + safeJson(cause, t("error.page.circular"))
 }
 
-function formatError(error: unknown, t: Translator): string {
-  return formatErrorChain(error, t, 0)
+function formatError(cause: unknown, t: Translator): string {
+  return formatErrorChain(cause, t, 0)
 }
 
 interface ErrorPageProps {
@@ -225,9 +258,13 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
   const formattedError = () => formatError(props.error, language.t)
   const status = () => errorStatus(props.error)
   let recordedFatalError: Promise<void> | undefined
-  const [store, setStore] = createStore({
-    actionError: undefined as string | undefined,
-    captureException: undefined as typeof captureException | undefined,
+
+  const [store, setStore] = createStore<{
+    actionError: string | undefined
+    captureException: typeof captureException | undefined
+  }>({
+    actionError: undefined,
+    captureException: undefined,
   })
 
   function ensureFatalErrorRecorded() {
@@ -239,6 +276,7 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
         platform: platform.platform,
         os: platform.os,
       }) ?? Promise.resolve()
+
     return recordedFatalError
   }
 
@@ -251,13 +289,19 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
       .catch(() => undefined)
   })
 
+  // A crash can take the extension root down with the app, so the page reaches the updater's
+  // main-process Ipc over the bridge itself.
+  const ipcs = createIpcClients(platform.extensions)
+  onCleanup(ipcs.dispose)
+  const updater = () => ipcs.typed(Updater)
+
   async function checkForUpdates() {
-    const state = await platform.updater?.check()
+    const state = await updater()?.check()
     setStore("actionError", state?.status === "error" ? state.message : undefined)
   }
 
   async function installUpdate() {
-    await platform.updater
+    await updater()
       ?.install()
       .then(() => setStore("actionError", undefined))
       .catch((err) => {
@@ -266,12 +310,14 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
   }
 
   const updateVersion = () => {
-    const state = platform.updater?.state()
+    const state = updater()?.state()
+
     return state?.status === "ready" || state?.status === "download-required" ? state.version : undefined
   }
 
   async function exportDebugLogs() {
     const exportLogs = platform.exportDebugLogs
+
     if (!exportLogs) return
     await ensureFatalErrorRecorded()
       .then(() => exportLogs())
@@ -319,6 +365,7 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
           <Show when={store.captureException}>
             {(capture) => {
               const [reported, setReported] = createSignal(false)
+
               return (
                 <Button
                   size="large"
@@ -333,7 +380,7 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
               )
             }}
           </Show>
-          <Show when={platform.updater}>
+          <Show when={updater()}>
             <Show
               when={updateVersion()}
               fallback={
@@ -341,9 +388,9 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
                   size="large"
                   variant="ghost"
                   onClick={checkForUpdates}
-                  disabled={["checking", "downloading", "installing"].includes(platform.updater?.state().status ?? "")}
+                  disabled={["checking", "downloading", "installing"].includes(updater()?.state()?.status ?? "")}
                 >
-                  {platform.updater?.state().status === "checking"
+                  {updater()?.state()?.status === "checking"
                     ? language.t("error.page.action.checking")
                     : language.t("error.page.action.checkUpdates")}
                 </Button>

@@ -3,7 +3,6 @@ export type SettingsRootTab =
   | "appearance"
   | "notifications"
   | "shortcuts"
-  | "pairing"
   | "projects"
   | "workspaces"
   | "providers"
@@ -11,13 +10,25 @@ export type SettingsRootTab =
   | "extensions"
   | "servers"
   | "experimental"
+  | "gui-extensions"
   | "about"
 
+declare const extensionTab: unique symbol
+
+/** A root page a GUI extension contributes; the value is its SettingsPage id. */
+export type SettingsExtensionTab = string & { readonly [extensionTab]: true }
+
 export type SettingsServerTab = "general" | "projects" | "workspaces" | "providers" | "models" | "extensions"
+
 export type SettingsProjectTab = "general" | "workspaces" | "extensions"
 
-export type SettingsView = (
-  | { type: "root"; tab: SettingsRootTab }
+type SettingsViewState = {
+  target?: string
+  subtab?: "mcps" | "plugins" | "skills" | "lsps"
+  searchActivation?: number
+}
+
+type SettingsNestedView =
   | { type: "server"; server: string; tab: SettingsServerTab }
   | {
       type: "project"
@@ -26,11 +37,12 @@ export type SettingsView = (
       tab: SettingsProjectTab
       parent: "root" | "server"
     }
-) & {
-  target?: string
-  subtab?: "mcps" | "plugins" | "skills" | "lsps"
-  searchActivation?: number
-}
+
+export type SettingsView = ({ type: "root"; tab: SettingsRootTab | SettingsExtensionTab } | SettingsNestedView) &
+  SettingsViewState
+
+/** A view of a page the host owns. */
+export type SettingsHostView = ({ type: "root"; tab: SettingsRootTab } | SettingsNestedView) & SettingsViewState
 
 export type SettingsTransientView = Pick<SettingsView, "target" | "searchActivation">
 
@@ -39,7 +51,6 @@ const rootTabs: Record<SettingsRootTab, true> = {
   appearance: true,
   notifications: true,
   shortcuts: true,
-  pairing: true,
   projects: true,
   workspaces: true,
   providers: true,
@@ -47,8 +58,10 @@ const rootTabs: Record<SettingsRootTab, true> = {
   extensions: true,
   servers: true,
   experimental: true,
+  "gui-extensions": true,
   about: true,
 }
+
 const serverTabs: Record<SettingsServerTab, true> = {
   general: true,
   projects: true,
@@ -57,11 +70,13 @@ const serverTabs: Record<SettingsServerTab, true> = {
   models: true,
   extensions: true,
 }
+
 const projectTabs: Record<SettingsProjectTab, true> = {
   general: true,
   workspaces: true,
   extensions: true,
 }
+
 const subtabs: Record<NonNullable<SettingsView["subtab"]>, true> = {
   mcps: true,
   plugins: true,
@@ -73,6 +88,7 @@ export function parseSettingsView(
   search: string,
   multipleServers: boolean,
   transient?: SettingsTransientView,
+  extensionTabs?: ReadonlySet<string>,
 ): SettingsView {
   const params = new URLSearchParams(search)
   const tab = params.get("tab") ?? "general"
@@ -92,20 +108,31 @@ export function parseSettingsView(
       ...transient,
     }
   }
+
   if (!project && server && isServerTab(tab))
     return { type: "server", server, tab, subtab: nested === "lsps" ? undefined : nested, ...transient }
+
   if (!project && !server && isRootTab(tab))
     return { type: "root", tab, subtab: nested === "lsps" ? undefined : nested, ...transient }
+
+  if (!project && !server && extensionTabs && isExtensionTab(tab, extensionTabs))
+    return { type: "root", tab, subtab: undefined, ...transient }
+
   return { type: "root", tab: "general", ...transient }
 }
 
 export function settingsViewUrl(view: SettingsView) {
   const params = new URLSearchParams()
+
   if (view.type !== "root") params.set("server", view.server)
+
   if (view.type === "project") params.set("project", view.project)
+
   if (view.tab !== "general") params.set("tab", view.tab)
+
   if (view.tab === "extensions" && view.subtab) params.set("subtab", view.subtab)
   const search = params.toString()
+
   return search ? `/settings?${search}` : "/settings"
 }
 
@@ -119,17 +146,26 @@ export function settingsViewRedirect(input: {
   servers: readonly RedirectServer[]
 }): { type: "back" } | { type: "server"; server: string } | { type: "root"; tab: SettingsRootTab } | undefined {
   const view = input.view
+
   if (view.type === "root" || !input.loaded) return
   const server = input.servers.find((item) => item.key === view.server)
+
   if (!server) return { type: "back" }
+
   // A starting WSL or SSH server connects shortly; only an unavailable one leaves the project page.
   if (view.type === "project" && !server.connected && !server.starting) return { type: "server", server: server.key }
+
   if (view.type === "server" && input.servers.length === 1)
     return { type: "root", tab: view.tab === "general" ? "servers" : view.tab }
 }
 
 export function isRootTab(value: string): value is SettingsRootTab {
   return Object.hasOwn(rootTabs, value)
+}
+
+/** Host tabs win over an extension page with the same id. */
+export function isExtensionTab(value: string, tabs: ReadonlySet<string>): value is SettingsExtensionTab {
+  return !isRootTab(value) && tabs.has(value)
 }
 
 export function isServerTab(value: string): value is SettingsServerTab {

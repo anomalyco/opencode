@@ -26,8 +26,11 @@ import {
 } from "./controller"
 
 const SHOW_HOME_SESSION_ARCHIVE = false
+
 const HOME_SECTION_LABEL = "text-v2-text-text-muted [font-weight:440]"
+
 const HOME_SESSION_SEARCH_RESULTS_ID = "home-session-search-results"
+
 const HOME_SESSION_LONG_PRESS_MS = 500
 
 // Middle-click or Cmd+click on macOS (Ctrl+click elsewhere) opens a session
@@ -97,6 +100,7 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
   const [rowUI, setRowUI] = createStore<HomeSessionRowUI>({ menu: undefined, editor: undefined })
   const [hover, setHover] = createStore<{ sessionID: string | undefined }>({ sessionID: undefined })
   const showLocations = createAltHold(props.desktop, props.onRevealLocations)
+
   return (
     <section
       ref={props.onSetHoverTarget}
@@ -347,20 +351,28 @@ function HomeSessionSearch(
                 event.preventDefault()
                 props.onSearchClose()
                 event.currentTarget.blur()
+
                 return
               }
+
               if (!props.searchOpen || props.searchResults.length === 0) return
+
               if (event.altKey || event.metaKey) return
+
               if (event.key === "ArrowDown") {
                 event.preventDefault()
                 props.onSearchMove(1)
+
                 return
               }
+
               if (event.key === "ArrowUp") {
                 event.preventDefault()
                 props.onSearchMove(-1)
+
                 return
               }
+
               if (event.key === "Enter" && !event.isComposing) {
                 event.preventDefault()
                 props.onSearchSelectActive()
@@ -504,8 +516,10 @@ function HomeSessionRow(
   // row components, so instance refs can point at detached nodes by the time
   // deferred focus runs.
   const rowSelector = () => `[data-component="home-session-row-container"][data-session-id="${sessionID()}"]`
+
   const rowButton = () =>
     document.querySelector<HTMLButtonElement>(`${rowSelector()} [data-component="home-session-row"]`)
+
   const renameInput = () =>
     document.querySelector<HTMLInputElement>(`${rowSelector()} [data-component="home-session-rename"]`)
 
@@ -514,6 +528,7 @@ function HomeSessionRow(
     longPressTimer = undefined
     longPressStart = undefined
   }
+
   onCleanup(clearLongPress)
 
   const openMenu = (element: HTMLElement, clientX: number, clientY: number) => {
@@ -529,12 +544,15 @@ function HomeSessionRow(
       input?.select()
     })
   }
+
   const closeEditor = () => {
     if (editor()?.renaming) return
     props.setRowUI("editor", (value) => (value?.id === sessionID() ? undefined : value))
   }
+
   const saveEditor = async () => {
     const current = editor()
+
     if (!current || current.renaming) return
     props.setRowUI("editor", { ...current, renaming: true })
     const saved = await props.onRenameSession(props.server, props.record.session, current.draft)
@@ -543,14 +561,18 @@ function HomeSessionRow(
     const restore = document.activeElement === document.body || document.activeElement === renameInput()
     props.setRowUI("editor", (value) => {
       if (value?.id !== sessionID()) return value
+
       return saved ? undefined : { ...value, renaming: false }
     })
+
     if (!restore) return
     requestAnimationFrame(() => {
       if (saved) {
         rowButton()?.focus()
+
         return
       }
+
       renameInput()?.focus()
     })
   }
@@ -596,16 +618,20 @@ function HomeSessionRow(
                 }}
                 onKeyDown={(event) => {
                   event.stopPropagation()
+
                   // Enter and Escape during IME composition commit or cancel
                   // the composition, not the rename. Safari can report the
                   // composition-confirming keydown with isComposing false but
                   // keyCode 229.
                   if (event.isComposing || event.keyCode === 229) return
+
                   if (event.key === "Enter") {
                     event.preventDefault()
                     void saveEditor()
+
                     return
                   }
+
                   if (event.key !== "Escape") return
                   event.preventDefault()
                   closeEditor()
@@ -642,6 +668,7 @@ function HomeSessionRow(
           onMouseLeave={() => props.onHoverSession(undefined)}
           onPointerDown={(event) => {
             suppressClick = false
+
             if (event.pointerType !== "touch") return
             clearLongPress()
             const element = event.currentTarget
@@ -656,6 +683,7 @@ function HomeSessionRow(
           }}
           onPointerMove={(event) => {
             if (!longPressStart) return
+
             if (Math.abs(event.clientX - longPressStart.x) <= 8 && Math.abs(event.clientY - longPressStart.y) <= 8)
               return
             clearLongPress()
@@ -677,11 +705,14 @@ function HomeSessionRow(
             // never that click and passes through.
             if (suppressClick) {
               suppressClick = false
+
               if (event.detail !== 0) {
                 event.preventDefault()
+
                 return
               }
             }
+
             props.onOpenSession(props.record.session, { background: isBackgroundOpen(event) })
           }}
           onAuxClick={(event) => {
@@ -743,6 +774,7 @@ function HomeSessionRow(
               event.preventDefault()
               const outside = menuInteractedOutside
               menuInteractedOutside = false
+
               if (outside || editor()) return
               requestAnimationFrame(() => rowButton()?.focus())
             }}
@@ -809,6 +841,7 @@ function HomeSessionLocation(props: {
   desktop: boolean
 }) {
   if (!props.desktop) return null
+
   return (
     <span
       dir="ltr"

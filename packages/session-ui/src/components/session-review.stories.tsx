@@ -51,6 +51,7 @@ export const UnifiedDark = {
 function InteractiveCommentsStory() {
   const [state, setState] = createStore({ comments: [] as SessionReviewComment[] })
   const file = "src/review.ts"
+
   const diffs = [
     {
       file,
@@ -61,6 +62,7 @@ function InteractiveCommentsStory() {
         "diff --git a/src/review.ts b/src/review.ts\n--- a/src/review.ts\n+++ b/src/review.ts\n@@ -1,3 +1,3 @@\n export const first = 1\n-export const value = 'before'\n+export const value = 'after'\n export const last = 3\n",
     },
   ]
+
   return (
     <CurrentSessionProviders document={editThenTestDocument}>
       <div class="mx-auto h-screen min-h-[620px] w-full max-w-[900px] overflow-hidden bg-background-base">
@@ -148,6 +150,7 @@ export const LargeFile = {
     const before = { name: "large.ts", contents: `export const value = 'before'\n${padding}` }
     const after = { name: "large.ts", contents: `export const value = 'after'\n${padding}` }
     const input = args.source === "metadata" ? { fileDiff: parseDiffFromFile(before, after) } : { before, after }
+
     return (
       <div class="h-screen overflow-auto bg-background-base">
         <File mode="diff" {...input} diffStyle={args.split ? "split" : "unified"} />

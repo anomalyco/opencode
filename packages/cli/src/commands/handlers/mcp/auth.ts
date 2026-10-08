@@ -4,7 +4,7 @@ import { OpenCode, type IntegrationInfo, type IntegrationOAuthMethod, type McpSe
 import { Commands } from "../../commands"
 import { Runtime } from "../../../framework/runtime"
 import { Service } from "@opencode/client/effect/service"
-import { ServiceConfig } from "../../../services/service-config"
+import { ServerConnection } from "../../../services/server-connection"
 import { selectIntegration, type IntegrationChoice } from "../../../ui/integration-picker"
 import { handlePromptErrors, prompt, requireInteractive } from "../../../ui/prompt"
 import { answerForm } from "../auth/form"
@@ -21,7 +21,7 @@ export default Runtime.handler(
 const authenticate = Effect.fn("cli.mcp.auth.run")(function* (name?: string) {
   if (!name) yield* requireInteractive("Pass an MCP server name when running without an interactive terminal")
   intro("Authenticate an MCP server")
-  const endpoint = yield* Service.ensure(yield* ServiceConfig.options())
+  const { endpoint } = yield* ServerConnection.resolve()
   const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) })
   const integrations = yield* loadIntegrations(client)
   const servers = yield* request((signal) => client.mcp.list({ location }, { signal }))

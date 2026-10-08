@@ -8,6 +8,7 @@ import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { llmClient } from "@opencode/core/effect/app-node-platform"
 import { Instructions } from "@opencode/core/instructions/index"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
+import { Location } from "@opencode/core/location"
 import { Project } from "@opencode/core/project"
 import { ProjectTable } from "@opencode/core/project/sql"
 import { AbsolutePath } from "@opencode/core/schema"
@@ -40,7 +41,10 @@ const it = testEffect(
       PluginHooks.node,
       llmClient,
     ]),
-    [Bus.node.replace(Bus.configured({ persist: true }))],
+    [
+      Bus.node.replace(Bus.configured({ persist: true })),
+      Location.node.replace(Location.boundNode({ directory: AbsolutePath.make("/project") })),
+    ],
   ),
 )
 

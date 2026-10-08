@@ -127,6 +127,8 @@ import type {
   IntegrationWellknownAddOutput,
   IntegrationConnectKeyInput,
   IntegrationConnectKeyOutput,
+  IntegrationConnectExternalInput,
+  IntegrationConnectExternalOutput,
   IntegrationOauthConnectInput,
   IntegrationOauthConnectOutput,
   IntegrationOauthStatusInput,
@@ -153,6 +155,9 @@ import type {
   McpDisconnectOutput,
   McpResourceCatalogInput,
   McpResourceCatalogOutput,
+  CredentialListOutput,
+  CredentialCreateInput,
+  CredentialCreateOutput,
   CredentialUpdateInput,
   CredentialUpdateOutput,
   CredentialActivateInput,
@@ -239,6 +244,8 @@ import type {
   WorktreeRemoveOutput,
   WorktreeRefreshInput,
   WorktreeRefreshOutput,
+  VcsInitInput,
+  VcsInitOutput,
   VcsGetInput,
   VcsGetOutput,
   VcsBaseInput,
@@ -390,6 +397,7 @@ const EndpointSessionCreate = (raw: RawClient["server.session"]) => (input?: Ses
     raw["session.create"]({
       payload: {
         id: input?.["id"],
+        parentID: input?.["parentID"],
         title: input?.["title"],
         agent: input?.["agent"],
         model: input?.["model"],
@@ -732,9 +740,10 @@ const EndpointSessionFormReply = (raw: RawClient["server.session"]) => (input: S
 
 const EndpointSessionFormCancel = (raw: RawClient["server.session"]) => (input: SessionFormCancelInput) =>
   preserveEffect<SessionFormCancelOutput>()(
-    raw["session.form.cancel"]({ params: { sessionID: input["sessionID"], formID: input["formID"] } }).pipe(
-      Effect.mapError(mapClientError),
-    ),
+    raw["session.form.cancel"]({
+      params: { sessionID: input["sessionID"], formID: input["formID"] },
+      query: { message: input["message"] },
+    }).pipe(Effect.mapError(mapClientError)),
   )
 
 const EndpointSessionEnvironment = (raw: RawClient["server.session"]) => (input: SessionEnvironmentInput) =>
@@ -890,6 +899,16 @@ const EndpointIntegrationConnectKey = (raw: RawClient["server.integration"]) => 
     }).pipe(Effect.mapError(mapClientError)),
   )
 
+const EndpointIntegrationConnectExternal =
+  (raw: RawClient["server.integration"]) => (input: IntegrationConnectExternalInput) =>
+    preserveEffect<IntegrationConnectExternalOutput>()(
+      raw["integration.connect.external"]({
+        params: { integrationID: input["integrationID"] },
+        query: { location: input["location"] },
+        payload: { methodID: input["methodID"], answer: input["answer"], label: input["label"] },
+      }).pipe(Effect.mapError(mapClientError)),
+    )
+
 const EndpointIntegrationOauthConnect =
   (raw: RawClient["server.integration"]) => (input: IntegrationOauthConnectInput) =>
     preserveEffect<IntegrationOauthConnectOutput>()(
@@ -958,7 +977,7 @@ const adaptGroupIntegration = (raw: RawClient["server.integration"]) => ({
   list: EndpointIntegrationList(raw),
   get: EndpointIntegrationGet(raw),
   wellknown: { add: EndpointIntegrationWellknownAdd(raw) },
-  connect: { key: EndpointIntegrationConnectKey(raw) },
+  connect: { key: EndpointIntegrationConnectKey(raw), external: EndpointIntegrationConnectExternal(raw) },
   oauth: {
     connect: EndpointIntegrationOauthConnect(raw),
     status: EndpointIntegrationOauthStatus(raw),
@@ -1021,6 +1040,30 @@ const adaptGroupMcp = (raw: RawClient["server.mcp"]) => ({
   resource: { catalog: EndpointMcpResourceCatalog(raw) },
 })
 
+const EndpointCredentialList = (raw: RawClient["server.credential"]) => () =>
+  preserveEffect<CredentialListOutput>()(
+    raw["credential.list"]({}).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
+  )
+
+const EndpointCredentialCreate = (raw: RawClient["server.credential"]) => (input: CredentialCreateInput) =>
+  preserveEffect<CredentialCreateOutput>()(
+    raw["credential.create"]({
+      payload: {
+        id: input["id"],
+        integrationID: input["integrationID"],
+        label: input["label"],
+        value: input["value"],
+        activate: input["activate"],
+      },
+    }).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
+  )
+
 const EndpointCredentialUpdate = (raw: RawClient["server.credential"]) => (input: CredentialUpdateInput) =>
   preserveEffect<CredentialUpdateOutput>()(
     raw["credential.update"]({
@@ -1042,6 +1085,8 @@ const EndpointCredentialRemove = (raw: RawClient["server.credential"]) => (input
   )
 
 const adaptGroupCredential = (raw: RawClient["server.credential"]) => ({
+  list: EndpointCredentialList(raw),
+  create: EndpointCredentialCreate(raw),
   update: EndpointCredentialUpdate(raw),
   activate: EndpointCredentialActivate(raw),
   remove: EndpointCredentialRemove(raw),
@@ -1450,6 +1495,13 @@ const adaptGroupWorktree = (raw: RawClient["server.worktree"]) => ({
   refresh: EndpointWorktreeRefresh(raw),
 })
 
+const EndpointVcsInit = (raw: RawClient["server.vcs"]) => (input?: VcsInitInput) =>
+  preserveEffect<VcsInitOutput>()(
+    raw["vcs.init"]({ query: { location: input?.["location"], provider: input?.["provider"] } }).pipe(
+      Effect.mapError(mapClientError),
+    ),
+  )
+
 const EndpointVcsGet = (raw: RawClient["server.vcs"]) => (input?: VcsGetInput) =>
   preserveEffect<VcsGetOutput>()(
     raw["vcs.get"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
@@ -1480,6 +1532,7 @@ const EndpointVcsDiff = (raw: RawClient["server.vcs"]) => (input: VcsDiffInput) 
   )
 
 const adaptGroupVcs = (raw: RawClient["server.vcs"]) => ({
+  init: EndpointVcsInit(raw),
   get: EndpointVcsGet(raw),
   base: EndpointVcsBase(raw),
   status: EndpointVcsStatus(raw),

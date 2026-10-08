@@ -6,8 +6,10 @@ describe("createAltHold", () => {
   test("is active only while Alt is held and resets on blur", () => {
     let active = () => false
     let presses = 0
+
     const dispose = createRoot((dispose) => {
       active = createAltHold(true, () => presses++)
+
       return dispose
     })
 
@@ -28,9 +30,11 @@ describe("createAltHold", () => {
 
   test("does nothing outside Desktop", () => {
     let presses = 0
+
     const active = createRoot((dispose) => {
       const value = createAltHold(false, () => presses++)
       dispose()
+
       return value
     })
 

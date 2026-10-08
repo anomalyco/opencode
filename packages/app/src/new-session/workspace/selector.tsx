@@ -4,9 +4,8 @@ import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Menu } from "@opencode/ui/menu"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { Icon } from "@opencode/ui/icon"
-import { getFilename } from "@opencode/util/path"
+import { getFilename, sameDirectory } from "@opencode/util/path"
 import { useLanguage } from "@/runtime/i18n/language"
-import { sameDirectory } from "@/workspaces/paths"
 
 export function PromptWorkspaceSelector(props: {
   value: string
@@ -24,51 +23,73 @@ export function PromptWorkspaceSelector(props: {
 }) {
   const language = useLanguage()
   const summary = () => props.variant === "summary"
+
   const placement = createMemo(() =>
     summary() ? (language.direction() === "rtl" ? "right-start" : "left-start") : "bottom",
   )
+
   const [search, setSearch] = createStore({ workspaces: "", branches: "" })
   let searchInput: HTMLInputElement | undefined
   let branchSearchInput: HTMLInputElement | undefined
   let focusSearch = false
   const branchTruncation = createTruncatedText()
+
   const focusWorktreeSearch = () =>
     requestAnimationFrame(() => requestAnimationFrame(() => searchInput?.focus({ preventScroll: true })))
+
   let pending: { type: "select"; value: string } | { type: "create"; branch: string } | { type: "viewAll" } | undefined
   const selected = () => (sameDirectory(props.value, props.projectRoot) ? "main" : props.value)
+
   const workspaces = createMemo(() => {
     const query = search.workspaces.trim().toLowerCase()
+
     if (!query) return props.workspaces
+
     return props.workspaces.filter((workspace) => getFilename(workspace).toLowerCase().includes(query))
   })
+
   const icon = () => {
     if (selected() === "main") return "monitor"
+
     if (selected() === "create") return "plus"
+
     return "outline-worktree"
   }
+
   const select = (value: string) => {
     pending = { type: "select", value }
   }
+
   const onOpenChange = (open: boolean) => {
     if (open) {
       setSearch({ workspaces: "", branches: "" })
       props.onSearch("")
+
       return
     }
+
     const action = pending
     pending = undefined
+
     if (action?.type === "select") props.onChange(action.value)
+
     if (action?.type === "create") props.onCreate(action.branch)
+
     if (action?.type === "viewAll") {
       props.onViewAll()
+
       return
     }
+
     props.onDone?.()
   }
+
   const label = () => {
     if (selected() === "main")
       return language.t(summary() ? "session.new.workspace.local" : "session.new.workspace.triggerLocal")
+
     if (props.value === "create") return language.t("workspace.new")
+
     return getFilename(props.value)
   }
 
@@ -174,8 +195,10 @@ export function PromptWorkspaceSelector(props: {
                   onOpenChange={(open) => {
                     if (!open) {
                       focusSearch = false
+
                       return
                     }
+
                     if (!focusSearch || props.workspaces.length < 10) return
                     focusSearch = false
                     focusWorktreeSearch()
@@ -304,7 +327,7 @@ export function PromptWorkspaceSelector(props: {
                   setTimeout(() => requestAnimationFrame(() => branchSearchInput?.focus({ preventScroll: true })))
                 }}
               >
-                <div class="flex h-7 shrink-0 items-center gap-2 rounded-sm pl-3 pr-2.5 text-v2-icon-icon-muted">
+                <div class="flex h-7 shrink-0 items-center gap-2 rounded-sm pl-3 pr-1 text-v2-icon-icon-muted">
                   <Icon name="magnifying-glass" size="small" class="shrink-0" />
                   <input
                     ref={(element) => {
@@ -332,7 +355,7 @@ export function PromptWorkspaceSelector(props: {
                   <Show when={search.branches.trim()}>
                     <button
                       type="button"
-                      class="flex size-5 items-center justify-center rounded-sm text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover"
+                      class="flex size-5 items-center justify-center rounded-sm bg-transparent text-v2-icon-icon-faint transition-colors hover:text-v2-icon-icon-base focus-visible:text-v2-icon-icon-base active:text-v2-icon-icon-base"
                       onPointerDown={(event) => event.preventDefault()}
                       onClick={() => {
                         setSearch("branches", "")
@@ -340,7 +363,7 @@ export function PromptWorkspaceSelector(props: {
                       }}
                       aria-label={language.t("common.clear")}
                     >
-                      <Icon name="close-small" size="small" />
+                      <Icon name="circle-xmark" />
                     </button>
                   </Show>
                 </div>
@@ -372,16 +395,22 @@ export function PromptWorkspaceSelector(props: {
 export function PromptGitStatus(props: { branch?: string; noGit?: boolean; from?: boolean; class?: string }) {
   const language = useLanguage()
   const truncation = createTruncatedText()
+
   const label = () => {
     if (props.noGit) return language.t("session.new.git.none")
+
     if (!props.branch) return undefined
+
     if (props.from) return language.t("session.new.workspace.fromBranch", { branch: props.branch })
+
     return props.branch
   }
 
   const icon = () => {
     if (props.noGit) return "monitor"
+
     if (props.from) return "branch-out"
+
     return "branch"
   }
 
@@ -409,6 +438,7 @@ export function PromptGitStatus(props: { branch?: string; noGit?: boolean; from?
 
 function createTruncatedText() {
   const [truncated, setTruncated] = createSignal(false)
+
   return {
     truncated,
     observe: (element: HTMLSpanElement) =>

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { describe, it } from "node:test"
@@ -11,7 +11,7 @@ const source = 'throw new Error("Plugin code must not run during resolution")'
 const name = "@fixture/plugin"
 
 async function fixture(files: Record<string, string>, installed = false) {
-  const root = await mkdtemp(path.join(tmpdir(), "opencode-host-"))
+  const root = await realpath(await mkdtemp(path.join(tmpdir(), "opencode-host-")))
   const directory = installed ? path.join(root, "node_modules", name) : root
   await Promise.all(
     Object.entries(files).map(async ([file, content]) => {

@@ -2,7 +2,8 @@ import type { CDPSession, Page } from "@playwright/test"
 import { benchmark, expect } from "../benchmark"
 import { mockOpenCodeServer } from "../../utils/mock-server"
 import { APP_READY_TIMEOUT } from "../../utils/waits"
-import { fixture as stress } from "./session-timeline-stress.fixture"
+import { SERVER } from "../../utils/app"
+import { fixture as stress } from "../../utils/session-fixture"
 import { createHomeIndexFixture, type HomeIndexFixture } from "./home-session-index.fixture"
 
 // Home fetches the root-session index on mount. These cases hold the visible
@@ -10,12 +11,16 @@ import { createHomeIndexFixture, type HomeIndexFixture } from "./home-session-in
 // bytes, main-thread work, time to actionable rows, and retained heap can be
 // attributed to index handling rather than to what the user sees.
 const sizes = (process.env.HOME_INDEX_SIZES ?? "500,5000,10000").split(",").map(Number)
+
 const churnSize = Number(process.env.HOME_INDEX_CHURN_SIZE ?? 10_000)
+
 const updates = Number(process.env.HOME_INDEX_UPDATES ?? 20)
+
 // Forced GC changes timing; retention runs stay separate from clean timing runs.
 const memory = process.env.OPENCODE_PERFORMANCE_MEMORY === "1"
 
 const rowContainer = '[data-component="home-session-row-container"]'
+
 const row = '[data-component="home-session-row"]'
 
 type Probe = {
@@ -28,7 +33,7 @@ type Probe = {
 
 type ProbeWindow = Window & {
   __homeIndexProbe?: Probe
-  __mockServerStream?: { push: (payloads: unknown[]) => void }
+  __mockServerStreams?: Record<string, { push: (payloads: unknown[]) => void }>
 }
 
 // Interaction-scoped tracing keeps the page-lifetime Chrome trace off unless a
@@ -64,11 +69,13 @@ benchmark.describe("performance: home session index", () => {
       const metrics = await performanceMetrics(cdp)
       const retained = memory ? await retainedHeap(cdp) : undefined
       await network.settle()
+
       if (testInfo.repeatEachIndex === 0) {
         const path = testInfo.outputPath(`home-${count}.png`)
         await page.screenshot({ path })
         await testInfo.attach(`home-${count}`, { path, contentType: "image/png" })
       }
+
       report(
         {
           listRequests: network.list.requests,
@@ -119,16 +126,20 @@ benchmark.describe("performance: home session index", () => {
       const prefetch = page.waitForResponse(
         (response) => response.request().method() === "GET" && response.url().includes(`/api/session/${target.id}`),
       )
+
       await page.goto("/")
       await expect(page.locator(row)).toHaveCount(fixture.expected.visible, { timeout: APP_READY_TIMEOUT })
       await prefetch
+
       const titleLocator = page.locator(
         `${rowContainer}[data-session-id="${target.id}"] [data-component="home-session-title"]`,
       )
+
       await expect(titleLocator).toHaveText(fixture.expected.newestTitle)
 
       const before = await performanceMetrics(cdp)
       const samples: number[] = []
+
       for (let index = 1; index <= updates; index++) {
         const title = `${fixture.expected.newestTitle} · update ${index}`
         // The completed run bumps the session's updated time and title on the
@@ -136,12 +147,16 @@ benchmark.describe("performance: home session index", () => {
         target.title = title
         target.time.updated += 1000
         target.time.idle = target.time.updated
+
         const pushed = await page.evaluate(
-          ({ id, title, event }) => {
+          ({ id, title, event, server }) => {
             const host = window as ProbeWindow
-            if (!host.__homeIndexProbe || !host.__mockServerStream) throw new Error("Missing Home index probe")
+            const stream = host.__mockServerStreams?.[server]
+
+            if (!host.__homeIndexProbe || !stream) throw new Error("Missing Home index probe")
             host.__homeIndexProbe.pending[id] = title
-            host.__mockServerStream.push([event])
+            stream.push([event])
+
             return performance.now()
           },
           {
@@ -153,15 +168,20 @@ benchmark.describe("performance: home session index", () => {
               type: "session.execution.succeeded",
               data: { sessionID: target.id },
             },
+            server: SERVER,
           },
         )
+
         await expect(titleLocator).toHaveText(title)
+
         const seen = await page.evaluate(({ title }) => (window as ProbeWindow).__homeIndexProbe?.titles[title], {
           title,
         })
+
         if (seen === undefined) throw new Error(`Probe did not observe title: ${title}`)
         samples.push(seen - pushed)
       }
+
       const after = await performanceMetrics(cdp)
       await network.settle()
       const sorted = samples.toSorted((a, b) => a - b)
@@ -224,9 +244,11 @@ async function setup(page: Page, fixture: HomeIndexFixture) {
       const host = window as ProbeWindow
       const probe: Probe = { expected, pending: {}, titles: {} }
       host.__homeIndexProbe = probe
+
       const observer = new MutationObserver(() => {
         if (probe.rows === undefined) {
           const count = document.querySelectorAll('[data-component="home-session-row"]').length
+
           if (count >= probe.expected) {
             probe.rows = performance.now()
             requestAnimationFrame((time) => {
@@ -234,15 +256,18 @@ async function setup(page: Page, fixture: HomeIndexFixture) {
             })
           }
         }
+
         for (const [id, title] of Object.entries(probe.pending)) {
           const element = document.querySelector(
             `[data-component="home-session-row-container"][data-session-id="${id}"] [data-component="home-session-title"]`,
           )
+
           if (element?.textContent !== title) continue
           probe.titles[title] = performance.now()
           delete probe.pending[id]
         }
       })
+
       // Init scripts run before <html> exists; the document node itself is always observable.
       observer.observe(document, { childList: true, subtree: true, characterData: true })
     },
@@ -253,10 +278,12 @@ async function setup(page: Page, fixture: HomeIndexFixture) {
   const pending: Promise<void>[] = []
   page.on("response", (response) => {
     const request = response.request()
+
     if (request.method() !== "GET") return
     const url = new URL(response.url())
     const isList = url.pathname === "/api/session"
     const isGet = /^\/api\/session\/[^/]+$/.test(url.pathname)
+
     if (!isList && !isGet) return
     const bucket = isList ? list : get
     bucket.requests += 1
@@ -269,6 +296,7 @@ async function setup(page: Page, fixture: HomeIndexFixture) {
         .catch(() => {}),
     )
   })
+
   return {
     list,
     get,
@@ -279,7 +307,9 @@ async function setup(page: Page, fixture: HomeIndexFixture) {
 async function readProbe(page: Page) {
   const probe = await page.evaluate(() => {
     const host = window as ProbeWindow
+
     if (!host.__homeIndexProbe) throw new Error("Missing Home index probe")
+
     // Resource timing marks when the last index page finished arriving, so
     // rows - listEnd isolates parse, merge, and render from transfer and boot.
     const listEnd = Math.max(
@@ -289,14 +319,18 @@ async function readProbe(page: Page) {
         .filter((entry) => new URL(entry.name).pathname === "/api/session")
         .map((entry) => (entry as PerformanceResourceTiming).responseEnd),
     )
+
     return { rows: host.__homeIndexProbe.rows, frame: host.__homeIndexProbe.frame, listEnd }
   })
+
   if (probe.rows === undefined) throw new Error("Probe did not observe the expected Home rows")
+
   return { rows: probe.rows, frame: probe.frame, listEnd: probe.listEnd }
 }
 
 async function performanceMetrics(cdp: CDPSession) {
   const result = await cdp.send("Performance.getMetrics")
+
   return Object.fromEntries(result.metrics.map((metric) => [metric.name, metric.value])) as Record<string, number>
 }
 
@@ -305,11 +339,13 @@ async function retainedHeap(cdp: CDPSession) {
   await cdp.send("HeapProfiler.collectGarbage")
   const heap = await cdp.send("Runtime.getHeapUsage")
   const dom = await cdp.send("Memory.getDOMCounters")
+
   return { usedSize: heap.usedSize, nodes: dom.nodes }
 }
 
 function median(sorted: number[]) {
   if (sorted.length === 0) return undefined
   const middle = Math.floor(sorted.length / 2)
+
   return sorted.length % 2 === 0 ? (sorted[middle - 1] + sorted[middle]) / 2 : sorted[middle]
 }

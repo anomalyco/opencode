@@ -7,7 +7,6 @@ import { FinishReason } from "./llm.js"
 import { Content } from "./tool.js"
 import { Model } from "./model.js"
 import { NonNegativeInt, PositiveInt, RelativePath } from "./schema.js"
-import { FileAttachment } from "./prompt.js"
 import { SessionID } from "./session-id.js"
 import { SessionMetadata } from "./session-metadata.js"
 import { Location } from "./location.js"
@@ -26,8 +25,6 @@ import { SessionInbox } from "./session-inbox.js"
 import { Project } from "./project.js"
 import { SessionFork } from "./session-fork.js"
 import { Permission } from "./permission.js"
-
-export { FileAttachment }
 
 export const Source = Schema.Struct({
   start: NonNegativeInt,

@@ -15,6 +15,9 @@
   font-family: var(--font-family-sans);
   font-size: var(--font-size-base); /* 14px */
   line-height: 160%;
+  /* Shells such as the app's turn off selection for chrome; Markdown is content, so it stays selectable. */
+  -webkit-user-select: text;
+  user-select: text;
 
   [data-markdown-word] {
     display: inline;
@@ -81,7 +84,7 @@
   strong,
   b {
     color: var(--v2-text-text-base);
-    font-weight: var(--font-weight-medium);
+    font-weight: var(--font-weight-bold);
   }
 
   /* Paragraphs */
@@ -152,6 +155,26 @@
 
   a[data-local-link] {
     cursor: pointer;
+  }
+
+  .markdown-session-link {
+    display: inline;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--text-interactive-base);
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .markdown-session-link:hover {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .markdown-session-link:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
   }
 
   &[data-local-links] :not(pre) > code[data-inline-code-kind="path"]:not(a > code) {
