@@ -6,7 +6,7 @@ import { createPluginSources } from "@opencode/plugin/source"
 import { Npm } from "@opencode/util/npm"
 import { Deferred, Effect, FiberSet, PubSub, Schema, Stream } from "effect"
 import path from "path"
-import { stat, realpath } from "node:fs/promises"
+import { stat } from "node:fs/promises"
 import { fileURLToPath, pathToFileURL } from "url"
 import type { ConfigPluginSource } from "../config/plugin/source.js"
 import type { Generation } from "../plugin.js"
@@ -109,15 +109,10 @@ const load = Effect.fn("PluginModule.load")(function* (
       : yield* npm.add(operation.target)
   // Legacy auto-discovery still admits standalone server sources. Configured
   // local plugins always arrive here as directories.
-  const file = local && (yield* Effect.promise(() => stat(operation.target))).isFile()
-  // Resolve the directory to its real path before asking the runtime for its
-  // entrypoints: the runtime caches a symlinked directory's resolution for the
-  // life of the process, so a plugin directory symlink retargeted since startup
-  // would otherwise keep loading the previous target.
-  const directory = local && !file ? yield* Effect.promise(() => realpath(operation.target)) : operation.target
-  const entrypoints: Host.Entrypoints = file
-    ? { server: pathToFileURL(operation.target).href }
-    : yield* Effect.sync(() => Host.resolve(installed ?? { directory }))
+  const entrypoints: Host.Entrypoints =
+    local && (yield* Effect.promise(() => stat(operation.target))).isFile()
+      ? { server: pathToFileURL(operation.target).href }
+      : yield* Effect.sync(() => Host.resolve(installed ?? { directory: operation.target }))
   const entrypoint = entrypoints.server
   if (!local && options?.install === false && !entrypoint) return { pending: true as const }
   if (!entrypoint) return yield* new LoadError({ message: `Plugin entrypoint not found: ${operation.target}` })
