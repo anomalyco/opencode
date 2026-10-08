@@ -76,6 +76,7 @@ export function buildLocationServiceMap(
         Instance.node.replace(
           Layer.succeed(Instance.Service, {
             provide: (session) => Effect.provide(map.get(session.location)),
+            provideCached: (session) => Instance.cached(map, LocationServiceMap.canonical(session.location)),
           }),
         ),
         ...replacements,

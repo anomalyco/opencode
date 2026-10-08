@@ -117,6 +117,8 @@ const sourceProbe = (options: { execution?: boolean } = {}) =>
               Effect.gen(function* () {
                 const locations = yield* LocationServiceMap.Service
                 return Instance.Service.of({
+                  provideCached: (session) =>
+                    Instance.cached(locations, LocationServiceMap.canonical(session.location)),
                   provide: (session) => (effect) =>
                     Effect.gen(function* () {
                       if (session.location.directory === source) {
@@ -304,6 +306,10 @@ describe("Session.move", () => {
                       { idleTimeToLive: Duration.infinity },
                     )
                     const selector = Instance.Service.of({
+                      provideCached: (session) =>
+                        session.id === selectedID && session.location.directory === source.directory
+                          ? Instance.cached(privateInstances, session.id)
+                          : Instance.cached(locations, LocationServiceMap.canonical(session.location)),
                       provide: (session) =>
                         Effect.provide(
                           session.id === selectedID && session.location.directory === source.directory

@@ -238,6 +238,8 @@ const setup = Effect.gen(function* () {
     session,
     instructions: yield* instructionBuiltIns.load(),
     instances: Instance.Service.of({
+      // Generation has no cached graph in this fixture.
+      provideCached: () => () => Effect.succeedNone,
       // Generation only exercises the Location's model context.
       provide: () =>
         Effect.provide(

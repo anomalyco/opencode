@@ -1,9 +1,9 @@
-import { Instance } from "@opencode/core/instance/service"
 import { Location } from "@opencode/core/location"
+import { Instance } from "@opencode/core/instance/service"
 import { Permission } from "@opencode/core/permission"
 import { PermissionSaved } from "@opencode/core/permission/saved"
 import { Session } from "@opencode/core/session"
-import { Effect } from "effect"
+import { Effect, Option } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { Api } from "../api"
 import { PermissionNotFoundError } from "@opencode/protocol/errors"
@@ -16,8 +16,8 @@ function missingRequest(id: Permission.ID) {
 
 export const PermissionHandler = HttpApiBuilder.group(Api, "server.permission", (handlers) =>
   Effect.gen(function* () {
-    const instances = yield* Instance.Service
     const sessions = yield* Session.Service
+    const instances = yield* Instance.Service
     const requireOwnedRequest = Effect.fnUntraced(function* (
       sessionID: Permission.Request["sessionID"],
       requestID: Permission.ID,
@@ -62,8 +62,8 @@ export const PermissionHandler = HttpApiBuilder.group(Api, "server.permission", 
           const session = yield* sessionInfo(sessions, ctx.params.sessionID)
           const requests = yield* Permission.Service.use((permission) =>
             permission.forSession(ctx.params.sessionID),
-          ).pipe(instances.provide(session), locationErrors)
-          return { data: requests }
+          ).pipe(instances.provideCached(session), locationErrors)
+          return { data: Option.getOrElse(requests, () => []) }
         }),
       )
       .handle(
