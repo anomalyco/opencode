@@ -75,6 +75,7 @@ export const iconNames = [
   "github-models",
   "github-copilot",
   "friendli",
+  "fluence",
   "firmware",
   "fireworks-ai",
   "fastrouter",
