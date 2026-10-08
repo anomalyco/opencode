@@ -341,9 +341,6 @@ export const dict = {
   "dialog.server.edit.title": "Редагувати сервер",
 
   "dialog.server.menu.edit": "Редагувати",
-  "dialog.server.menu.default": "Встановити за замовчуванням",
-  "dialog.server.menu.defaultRemove": "Скасувати використання за замовчуванням",
-  "dialog.server.status.default": "За замовчуванням",
 
   "dialog.project.edit.title": "Редагувати проєкт",
   "dialog.project.edit.icon": "Іконка",

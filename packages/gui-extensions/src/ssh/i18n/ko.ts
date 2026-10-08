@@ -35,8 +35,5 @@ export default {
   "form.name": "서버 이름 (선택 사항)",
   "form.namePlaceholder": "Localhost",
   "form.add": "서버 추가",
-  "server.default": "기본값",
-  "menu.default": "기본값으로 설정",
-  "menu.defaultRemove": "기본값 제거",
   "menu.delete": "삭제",
 }

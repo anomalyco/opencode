@@ -323,9 +323,6 @@ export const dict = {
   "dialog.server.edit.title": "Sunting server",
 
   "dialog.server.menu.edit": "Sunting",
-  "dialog.server.menu.default": "Tetapkan sebagai bawaan",
-  "dialog.server.menu.defaultRemove": "Hapus bawaan",
-  "dialog.server.status.default": "Bawaan",
 
   "dialog.project.edit.title": "Sunting proyek",
   "dialog.project.edit.icon": "Ikon",

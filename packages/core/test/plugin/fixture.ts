@@ -54,6 +54,8 @@ const npmLayer = Layer.succeed(
 
 const generateLayer = Layer.succeed(Generate.Service, Generate.Service.of({ text: () => Effect.succeed("") }))
 
+const configLayer = Config.testLayer()
+
 const permissionLayer = Layer.succeed(
   Permission.Service,
   Permission.Service.of({
@@ -75,6 +77,7 @@ export const PluginTestLayer = AppNodeBuilder.build(
     Location.node,
     Npm.node,
     Credential.node,
+    Config.node,
     Bus.node,
     Form.node,
     Generate.node,
@@ -109,9 +112,9 @@ export const PluginTestLayer = AppNodeBuilder.build(
   [
     Location.node.replace(tempLocationLayer),
     Npm.node.replace(npmLayer),
-    Config.node.replace(Config.testLayer()),
+    Config.node.replace(configLayer),
     Mcp.node.replace(emptyMcpLayer),
     Generate.node.replace(generateLayer),
     Permission.node.replace(permissionLayer),
   ],
-)
+).pipe(Layer.provideMerge(configLayer))

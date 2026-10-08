@@ -86,10 +86,6 @@ export function createHomeProjectsController(home: HomeController) {
         const key = ServerConnection.key(conn)
         setState("collapsed", key, !state().collapsed[key])
       },
-      canDefault: serverManagement.defaults.available,
-      defaultKey: serverManagement.defaults.key,
-      setDefault: (conn: ServerConnection.Any | undefined) =>
-        serverManagement.defaults.set(conn ? ServerConnection.key(conn) : null),
       canRemove: (conn: ServerConnection.Any) => serverManagement.connection.canRemove(ServerConnection.key(conn)),
       remove: (conn: ServerConnection.Any) => serverManagement.connection.remove(ServerConnection.key(conn)),
       canHide: (conn: ServerConnection.Any) => serverManagement.connection.canHide(ServerConnection.key(conn)),

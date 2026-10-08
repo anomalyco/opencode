@@ -34,8 +34,5 @@ export default {
   "form.name": "ຊື່ເຊີບເວີ (ທາງເລືອກ)",
   "form.namePlaceholder": "Localhost",
   "form.add": "ເພີ່ມເຊີບເວີ",
-  "server.default": "ຄ່າເລີ່ມຕົ້ນ",
-  "menu.default": "ຕັ້ງເປັນຄ່າເລີ່ມຕົ້ນ",
-  "menu.defaultRemove": "ເອົາຄ່າເລີ່ມຕົ້ນ",
   "menu.delete": "ລຶບ",
 }

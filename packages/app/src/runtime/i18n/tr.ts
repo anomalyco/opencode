@@ -324,9 +324,6 @@ export const dict = {
   "dialog.server.edit.title": "Sunucuyu düzenle",
 
   "dialog.server.menu.edit": "Düzenle",
-  "dialog.server.menu.default": "Varsayılan olarak ayarla",
-  "dialog.server.menu.defaultRemove": "Varsayılanı kaldır",
-  "dialog.server.status.default": "Varsayılan",
 
   "dialog.project.edit.title": "Projeyi düzenle",
   "dialog.project.edit.icon": "Simge",

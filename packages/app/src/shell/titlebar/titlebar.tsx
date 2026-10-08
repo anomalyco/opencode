@@ -452,7 +452,10 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                 category: language.t("command.category.view"),
                 keybind: windows() ? "alt+home" : "mod+b",
                 hidden: true,
-                onSelect: toggleHome,
+                onSelect: () => {
+                  if (layout.route().type !== "home") layout.home.searchFocus.request()
+                  toggleHome()
+                },
               },
             ])
 

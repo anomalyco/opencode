@@ -73,10 +73,14 @@ const authorize = Effect.fn(function* () {
   return new URL(attempt.url)
 })
 
-const request = Effect.fn(function* (providerID: Provider.ID, baseURL: string) {
+const request = Effect.fn(function* (
+  providerID: Provider.ID,
+  baseURL: string,
+  sessionID = Session.ID.make("ses_test"),
+) {
   const hooks = yield* PluginHooks.Service
   const event = yield* hooks.trigger("session", "model.request", {
-    sessionID: Session.ID.make("ses_test"),
+    sessionID,
     agent: Agent.ID.make("build"),
     model: Model.Ref.make({ providerID, id: Model.ID.make("gpt-5.5") }),
     kind: "primary",
@@ -767,8 +771,21 @@ describe("ChatGPTPlugin", () => {
       expect(provider.settings?.baseURL).toBe("https://api.openai.com/v1")
       expect(provider.headers).not.toHaveProperty("x-openai-chatpass-test")
       expect(direct.baseURL).toBe("https://api.openai.com/v1")
-      expect(direct.headers).toEqual({})
+      expect(direct.headers).toEqual({
+        "session-id": "ses_test",
+        "thread-id": "ses_test",
+        "x-client-request-id": "ses_test",
+      })
       expect(direct.hasHttpHooks).toBe(false)
+      const sessions = yield* Session.Service
+      const location = yield* Location.Service
+      const parent = yield* sessions.create({ location: { directory: location.directory } })
+      const child = yield* sessions.create({ parentID: parent.id })
+      expect((yield* request(Provider.ID.openai, "https://api.openai.com/v1", child.id)).headers).toEqual({
+        "session-id": parent.id,
+        "thread-id": child.id,
+        "x-client-request-id": child.id,
+      })
       const eligible = required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-5.5")))
       expect(eligible.package).toBe("@opencode/ai/providers/openai")
       expect(eligible.headers).not.toHaveProperty("x-openai-chatpass-test")
@@ -845,6 +862,7 @@ describe("ChatGPTPlugin", () => {
       expect(provider.settings?.transport).toBe("websocket")
       expect(model.settings?.transport).toBeUndefined()
       expect(direct.baseURL).toBe("https://api.openai.com/v1")
+      expect(direct.headers).toEqual({})
       expect(direct.hasHttpHooks).toBe(false)
       expect(provider.headers).not.toHaveProperty("x-openai-chatpass-test")
       expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-4.1"))).enabled).toBe(true)

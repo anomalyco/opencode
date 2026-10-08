@@ -4,7 +4,6 @@ import type { ElectronAPI } from "../api-types"
 
 export function DesktopFirstLaunchOnboarding(props: {
   api: ElectronAPI
-  serverKey: ServerConnection.Key
   initialUrl: string
   pending: boolean
   onReady: () => void
@@ -45,10 +44,11 @@ export function DesktopFirstLaunchOnboarding(props: {
       if (!shouldTrigger || !directory) return
 
       console.info("[desktop-onboarding] starting first launch draft", { directory })
-      const projects = server.projects.forServer(props.serverKey)
+      const sidecar = ServerConnection.Key.make("sidecar")
+      const projects = server.projects.forServer(sidecar)
       projects.open(directory)
       projects.touch(directory)
-      const connection = server.list.find((connection) => ServerConnection.key(connection) === props.serverKey)
+      const connection = server.list.find((connection) => ServerConnection.key(connection) === sidecar)
 
       if (connection) {
         const data = global.ensureServerCtx(connection).data
@@ -56,7 +56,7 @@ export function DesktopFirstLaunchOnboarding(props: {
         await Promise.all([data.location.provider.sync({ directory }), data.location.model.sync({ directory })])
       }
 
-      tabs.select(await tabs.newDraft({ server: props.serverKey, directory }))
+      tabs.select(await tabs.newDraft({ server: sidecar, directory }))
     } finally {
       props.onReady()
     }

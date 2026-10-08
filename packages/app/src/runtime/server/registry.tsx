@@ -214,11 +214,7 @@ export namespace ServerConnection {
 export const { use: useServers, provider: ServersProvider } = createSimpleContext({
   name: "Server",
   gate: true,
-  init: (props: {
-    defaultServer?: ServerConnection.Key
-    canonicalLocalServer?: ServerConnection.Key
-    servers?: Array<ServerConnection.Any>
-  }) => {
+  init: (props: { canonicalLocalServer?: ServerConnection.Key; servers?: Array<ServerConnection.Any> }) => {
     const [store, setStore, _, hydrated] = persisted(
       {
         ...Persist.global("server"),

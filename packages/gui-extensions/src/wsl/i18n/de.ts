@@ -53,8 +53,5 @@ export default {
     "Zeitüberschreitung bei der Integritätsprüfung des Sidecars für {{distro}} nach {{timeout}} ms",
   "error.commandTimeout": "Zeitüberschreitung bei {{command}} {{args}} nach {{timeout}} ms",
   "error.failedPort": "Port konnte nicht abgerufen werden",
-  "server.default": "Standard",
-  "menu.default": "Als Standard festlegen",
-  "menu.defaultRemove": "Standard entfernen",
   "menu.remove": "Entfernen",
 }

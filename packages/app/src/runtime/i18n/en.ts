@@ -86,6 +86,7 @@ export const dict = {
   "palette.empty": "No results found",
   "palette.group.commands": "Commands",
   "palette.group.files": "Files",
+  "palette.group.recentSessions": "Recent sessions",
 
   "dialog.provider.search.placeholder": "Search providers",
   "dialog.provider.empty": "No providers found",
@@ -377,12 +378,9 @@ export const dict = {
     "Your sign-in for this server is no longer valid. Paste a new pairing link, or enter the server password.",
 
   "dialog.server.menu.edit": "Edit",
-  "dialog.server.menu.default": "Set as default",
-  "dialog.server.menu.defaultRemove": "Remove default",
   "dialog.server.menu.remove": "Remove",
   "dialog.server.menu.hide": "Hide from project list",
   "dialog.server.menu.show": "Show in project list",
-  "dialog.server.status.default": "Default",
 
   "server.row.incompatible":
     "This server is running OpenCode {{version}}, which isn't compatible with this app. Upgrade it to OpenCode V2 to continue.",

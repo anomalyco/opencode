@@ -127,7 +127,27 @@ const authenticate = Effect.fn("cli.auth.login.authenticate")(function* (
 ) {
   if (method.type === "key") return yield* keyLogin(client, integration, method, answer)
   if (method.type === "command") return yield* commandLogin(client, integration, method)
+  if (method.type === "external") return yield* externalLogin(client, integration, method, answer)
   return yield* oauthLogin(client, integration, method, answer)
+})
+
+const externalLogin = Effect.fn("cli.auth.login.external")(function* (
+  client: OpenCodeClient,
+  integration: IntegrationInfo,
+  method: Extract<ConnectMethod, { type: "external" }>,
+  answer?: FormAnswer,
+) {
+  const progress = spinner()
+  progress.start("Saving credential...")
+  yield* request((signal) =>
+    client.integration.connect.external(
+      { integrationID: integration.id, methodID: method.id, answer, location },
+      { signal },
+    ),
+  ).pipe(
+    Effect.tap(() => Effect.sync(() => progress.stop(`Connected to ${integration.name}`))),
+    Effect.tapCause(() => Effect.sync(() => progress.stop("Authentication failed", 1))),
+  )
 })
 
 const keyLogin = Effect.fn("cli.auth.login.key")(function* (

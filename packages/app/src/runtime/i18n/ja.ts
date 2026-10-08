@@ -296,9 +296,6 @@ export const dict = {
   "dialog.server.add.password": "パスワード (オプション)",
   "dialog.server.edit.title": "サーバーを編集",
   "dialog.server.menu.edit": "編集",
-  "dialog.server.menu.default": "デフォルトに設定",
-  "dialog.server.menu.defaultRemove": "デフォルト設定を解除",
-  "dialog.server.status.default": "デフォルト",
 
   "dialog.project.edit.title": "プロジェクトを編集",
   "dialog.project.edit.icon": "アイコン",

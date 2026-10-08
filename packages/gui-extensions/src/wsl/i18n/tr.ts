@@ -52,8 +52,5 @@ export default {
   "error.healthTimeout": "{{distro}} Sidecar sistem durumu denetimi {{timeout}} ms sonra zaman aşımına uğradı",
   "error.commandTimeout": "{{command}} {{args}} komutu {{timeout}} ms sonra zaman aşımına uğradı",
   "error.failedPort": "Bağlantı noktası alınamadı",
-  "server.default": "Varsayılan",
-  "menu.default": "Varsayılan olarak ayarla",
-  "menu.defaultRemove": "Varsayılanı kaldır",
   "menu.remove": "Kaldır",
 }

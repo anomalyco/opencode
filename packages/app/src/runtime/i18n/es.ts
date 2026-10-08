@@ -535,9 +535,6 @@ export const dict = {
   "dialog.server.edit.title": "Editar servidor",
 
   "dialog.server.menu.edit": "Editar",
-  "dialog.server.menu.default": "Establecer como predeterminado",
-  "dialog.server.menu.defaultRemove": "Quitar como predeterminado",
-  "dialog.server.status.default": "Predeterminado",
 
   "dialog.project.edit.title": "Editar proyecto",
   "dialog.project.edit.icon": "Icono",

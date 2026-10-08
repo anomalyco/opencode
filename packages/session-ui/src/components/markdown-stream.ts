@@ -17,7 +17,7 @@ export type Projection = {
 }
 
 // Split with the renderer's math syntax so a display block is never cut into separately rendered pieces.
-const lexer = new Marked(...markdownMath)
+const lexer = new Marked(markdownMath)
 
 function refs(text: string) {
   if (!text.includes("]:")) return false

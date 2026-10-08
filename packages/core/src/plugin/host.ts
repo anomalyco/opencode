@@ -288,6 +288,13 @@ export const make = Effect.fn("PluginHost.make")(function* (
             answer: input.answer,
             label: input.label,
           }),
+        external: (input) =>
+          integration.connection.external({
+            integrationID: Integration.ID.make(input.integrationID),
+            methodID: Integration.MethodID.make(input.methodID),
+            answer: input.answer,
+            label: input.label,
+          }),
       },
       oauth: {
         connect: (input) =>
@@ -662,6 +669,12 @@ function methodImplementation(input: IntegrationMethodRegistration): Integration
     }
   }
   if (input.method.type === "command") {
+    return {
+      integrationID: Integration.ID.make(input.integrationID),
+      method: { ...input.method, id: Integration.MethodID.make(input.method.id) },
+    }
+  }
+  if (input.method.type === "external") {
     return {
       integrationID: Integration.ID.make(input.integrationID),
       method: { ...input.method, id: Integration.MethodID.make(input.method.id) },

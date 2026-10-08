@@ -319,9 +319,6 @@ export const dict = {
   "dialog.server.edit.title": "แก้ไขเซิร์ฟเวอร์",
 
   "dialog.server.menu.edit": "แก้ไข",
-  "dialog.server.menu.default": "ตั้งเป็นค่าเริ่มต้น",
-  "dialog.server.menu.defaultRemove": "เอาค่าเริ่มต้นออก",
-  "dialog.server.status.default": "ค่าเริ่มต้น",
 
   "dialog.project.edit.title": "แก้ไขโปรเจกต์",
   "dialog.project.edit.icon": "ไอคอน",

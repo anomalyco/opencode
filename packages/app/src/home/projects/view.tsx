@@ -52,8 +52,6 @@ export type HomeProjectsViewProps = {
   serverHealth: (server: ServerConnection.Any) => ServerHealth | undefined
   projectsForServer: (server: ServerConnection.Any) => LocalProject[]
   collapsed: (server: ServerConnection.Any) => boolean
-  canDefaultServer: boolean
-  defaultServerKey: ServerConnection.Key | null | undefined
   canRevealProject: (server: ServerConnection.Any) => boolean
   unseenCount: (server: ServerConnection.Any, project: LocalProject) => number
   onWheel: (event: WheelEvent) => void
@@ -62,7 +60,6 @@ export type HomeProjectsViewProps = {
   onAuthenticateServer?: (server: ServerConnection.Any) => void
   onToggleCollapsed: (server: ServerConnection.Any) => void
   onEditServer: (server: ServerConnection.Http) => void
-  onSetDefaultServer: (server: ServerConnection.Any | undefined) => void
   canRemoveServer: (server: ServerConnection.Any) => boolean
   onRemoveServer: (server: ServerConnection.Any) => void
   canHideServer: (server: ServerConnection.Any) => boolean
@@ -347,12 +344,9 @@ function HomeServerRow(props: {
   language: HomeProjectsViewProps["language"]
   projectsForServer: HomeProjectsViewProps["projectsForServer"]
   contextMenuOpen: HomeProjectsContextMenuProps["contextMenuOpen"]
-  canDefaultServer: HomeProjectsViewProps["canDefaultServer"]
-  defaultServerKey: HomeProjectsViewProps["defaultServerKey"]
   onFocusServer: HomeProjectsViewProps["onFocusServer"]
   onToggleCollapsed: HomeProjectsViewProps["onToggleCollapsed"]
   onEditServer: HomeProjectsViewProps["onEditServer"]
-  onSetDefaultServer: HomeProjectsViewProps["onSetDefaultServer"]
   canRemoveServer: HomeProjectsViewProps["canRemoveServer"]
   onRemoveServer: HomeProjectsViewProps["onRemoveServer"]
   canHideServer: HomeProjectsViewProps["canHideServer"]
@@ -470,13 +464,9 @@ function HomeServerRow(props: {
           <ServerRowMenuView
             server={props.server}
             labels={serverMenuLabels(props.language)}
-            canDefault={props.canDefaultServer}
-            isDefault={props.defaultServerKey === ServerConnection.key(props.server)}
             canRemove={props.canRemoveServer(props.server)}
             canHide={props.canHideServer(props.server)}
             onEdit={props.onEditServer}
-            onSetDefault={() => props.onSetDefaultServer(props.server)}
-            onRemoveDefault={() => props.onSetDefaultServer(undefined)}
             onRemove={() => props.onRemoveServer(props.server)}
             onHide={() => props.onHideServer(props.server)}
             open={props.contextMenuOpen(contextMenuID())}

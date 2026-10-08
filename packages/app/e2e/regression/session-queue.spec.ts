@@ -737,15 +737,30 @@ test("/compact runs with the composer model and shows a queued compaction, as in
   expect(models).toMatchObject([{ model: { id: "queue-model", providerID: "opencode" } }])
 })
 
-for (const action of ["Move to queue", "Delete"] as const) {
-  test(`${action} on a pending steer replaces Revert, as in the TUI`, async ({ page }) => {
-    const mock = createQueueMock(["U2: Also check the retry path."])
+for (const [action, status] of [
+  ["Move to queue", "steering"],
+  ["Delete", "steering"],
+  ["Move to queue", "starting"],
+  ["Delete", "starting"],
+] as const) {
+  test(`${action} on a ${status} pending steer replaces Revert, as in the TUI`, async ({ page }) => {
+    // A steer waits behind work only once the running execution delivered input; before that it is starting.
+    const delivered: SessionMessageInfo[] =
+      status === "steering"
+        ? [{ id: "msg_queue_delivered", type: "user", text: "First prompt", time: { created: 1 } }]
+        : []
+
+    const mock = createQueueMock(["U2: Also check the retry path."], delivered)
     const inboxID = mock.rows[0].id
     mock.rows[0].delivery = "steer"
     const view = await openQueue(page, mock)
     const pending = userRow(page, inboxID)
 
     await expect(pending).toContainText("U2: Also check the retry path.")
+    const message = pending.locator('[data-component="user-message"]')
+
+    if (status === "steering") await expect(message).toHaveAttribute("data-pending", "true")
+    else await expect(message).not.toHaveAttribute("data-pending")
     await pending.hover()
     await expect(pending.getByRole("button", { name: "Revert message" })).toHaveCount(0)
     await pending.getByRole("button", { name: action }).click()

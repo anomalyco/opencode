@@ -1,4 +1,3 @@
-import { Badge } from "@opencode/ui/badge"
 import { Button } from "@opencode/ui/button"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { createMemo, Show, type Component } from "solid-js"
@@ -81,9 +80,6 @@ export const SettingsServerGeneral: Component<{
                               {language.t("server.action.authenticate")}
                             </Button>
                           )}
-                        </Show>
-                        <Show when={controller.defaults.available() && controller.defaults.key() === props.entry.key}>
-                          <Badge>{language.t("dialog.server.status.default")}</Badge>
                         </Show>
                         <ServerRowMenu server={server()} domain={controller} onEdit={edit} />
                       </div>

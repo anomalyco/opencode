@@ -1597,6 +1597,18 @@ export type IntegrationConnectKeyOperation<E = never> = (
   input: IntegrationConnectKeyInput,
 ) => Effect.Effect<IntegrationConnectKeyOutput, E>
 
+export type IntegrationConnectExternalInput = {
+  readonly integrationID: Integration.ID
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly methodID: Integration.MethodID
+  readonly answer?: Form.Answer | undefined
+  readonly label?: string | undefined
+}
+export type IntegrationConnectExternalOutput = void
+export type IntegrationConnectExternalOperation<E = never> = (
+  input: IntegrationConnectExternalInput,
+) => Effect.Effect<IntegrationConnectExternalOutput, E>
+
 export type IntegrationOauthConnectInput = {
   readonly integrationID: Integration.ID
   readonly location?: { readonly directory?: string | undefined } | undefined
@@ -1687,7 +1699,10 @@ export interface IntegrationApi<E = never> {
   readonly list: IntegrationListOperation<E>
   readonly get: IntegrationGetOperation<E>
   readonly wellknown: { readonly add: IntegrationWellknownAddOperation<E> }
-  readonly connect: { readonly key: IntegrationConnectKeyOperation<E> }
+  readonly connect: {
+    readonly key: IntegrationConnectKeyOperation<E>
+    readonly external: IntegrationConnectExternalOperation<E>
+  }
   readonly oauth: {
     readonly connect: IntegrationOauthConnectOperation<E>
     readonly status: IntegrationOauthStatusOperation<E>

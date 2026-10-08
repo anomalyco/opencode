@@ -38,8 +38,5 @@ export default {
   "form.name": "Nom del servidor (opcional)",
   "form.namePlaceholder": "Localhost",
   "form.add": "Afegeix servidor",
-  "server.default": "Per defecte",
-  "menu.default": "Estableix com a predeterminat",
-  "menu.defaultRemove": "Elimina el valor predeterminat",
   "menu.delete": "Suprimeix",
 }

@@ -312,9 +312,6 @@ export const dict = {
   "dialog.server.edit.title": "Uredi server",
 
   "dialog.server.menu.edit": "Uredi",
-  "dialog.server.menu.default": "Postavi kao podrazumijevano",
-  "dialog.server.menu.defaultRemove": "Ukloni podrazumijevano",
-  "dialog.server.status.default": "Podrazumijevano",
 
   "dialog.project.edit.title": "Uredi projekat",
   "dialog.project.edit.icon": "Ikonica",

@@ -15,8 +15,8 @@ import { getScrollAcceleration } from "../../util/scroll"
 
 const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
 
-// The part is passed as a live accessor prop so the dialog follows the tool
-// while child calls stream and the output arrives.
+// The part is the live store object, so the dialog follows the tool while child
+// calls stream and the output arrives.
 export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
   const dialog = useDialog()
   const clipboard = useClipboard()

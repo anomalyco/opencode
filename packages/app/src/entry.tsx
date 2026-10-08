@@ -16,7 +16,7 @@ import pkg from "../package.json"
 import { ServerConnection } from "@/runtime/server/registry"
 
 const getLocale = () => {
-  if (typeof navigator !== "object") return "en" as const
+  if (typeof navigator === "undefined") return "en" as const
   const languages = navigator.languages?.length ? navigator.languages : [navigator.language]
 
   for (const language of languages) {
@@ -101,7 +101,6 @@ if (root instanceof HTMLElement && root.dataset.opencodeMounted === undefined) {
         <PlatformProvider value={web.platform}>
           <AppBaseProviders locale={locale}>
             <AppInterface
-              defaultServer={web.defaultServerUrl ? ServerConnection.Key.make(web.defaultServerUrl) : undefined}
               canonicalLocalServer={server ? ServerConnection.key(server) : undefined}
               servers={server ? [server] : []}
             >

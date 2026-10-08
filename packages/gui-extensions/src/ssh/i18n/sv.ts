@@ -38,8 +38,5 @@ export default {
   "form.name": "Servernamn (valfritt)",
   "form.namePlaceholder": "Localhost",
   "form.add": "Lägg till server",
-  "server.default": "Standard",
-  "menu.default": "Ställ in som standard",
-  "menu.defaultRemove": "Ta bort standard",
   "menu.delete": "Radera",
 }

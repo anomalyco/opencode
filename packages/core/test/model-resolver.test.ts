@@ -425,6 +425,7 @@ describe("ModelResolver", () => {
         },
         resolve: () => Effect.die("unused"),
         key: () => Effect.die("unused"),
+        external: () => Effect.die("unused"),
         activate: () => Effect.die("unused"),
         update: () => Effect.die("unused"),
         remove: () => Effect.die("unused"),
@@ -782,6 +783,43 @@ describe("ModelResolver", () => {
 
       expect(headers.authorization).toBe("Bearer stored-secret")
     }),
+  )
+
+  it.effect("lets Azure CLI requests past package auth for the Azure plugin to authorize", () =>
+    withConfigEnv({}, () =>
+      Effect.gen(function* () {
+        const credential = Credential.External.make({
+          type: "external",
+          methodID: Integration.MethodID.make("azure-cli"),
+          metadata: { resourceName: "cli-resource" },
+        })
+        const azure = yield* ModelResolver.fromCatalogModel(
+          model(Provider.aisdk("@ai-sdk/azure"), { providerID: Provider.ID.azure, headers: {}, body: {} }),
+          credential,
+        )
+        const foundry = yield* ModelResolver.fromCatalogModel(
+          model(Provider.aisdk("@ai-sdk/anthropic"), {
+            providerID: Provider.ID.azure,
+            settings: { baseURL: "https://cli-resource.services.ai.azure.com/anthropic/v1" },
+            headers: {},
+            body: {},
+          }),
+          credential,
+        )
+        const authorize = (resolved: LanguageModel) =>
+          resolved.route.auth.apply({
+            request: LLM.request({ model: resolved, prompt: "Hello" }),
+            method: "POST",
+            url: "https://cli-resource.openai.azure.com/openai/v1/responses",
+            body: "{}",
+            headers: Headers.empty,
+          })
+
+        expect(azure.route.endpoint.baseURL).toBe("https://cli-resource.openai.azure.com/openai/v1")
+        expect((yield* authorize(azure))["api-key"]).toBe("azure-cli")
+        expect((yield* authorize(foundry)).authorization).toBe("Bearer azure-cli")
+      }),
+    ),
   )
 
   it.effect("does not project API key metadata into the request body", () =>

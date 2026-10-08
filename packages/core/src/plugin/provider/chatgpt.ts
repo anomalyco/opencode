@@ -13,6 +13,7 @@ import { Integration } from "../../integration.js"
 import { Model } from "../../model.js"
 import { OauthCallbackPage } from "../../oauth/page.js"
 import { Provider } from "../../provider.js"
+import { SessionAffinity } from "../../session/affinity.js"
 import type { PluginInternal } from "../internal.js"
 
 // First-time sign-in registers a user-owned client; OpenAI returns its issued client ID on the callback.
@@ -261,6 +262,21 @@ export const ChatGPTPlugin = define({
         Effect.sync(() => {
           if (!chatgpt || !nonRetryableSharingCodes.some((code) => event.error.response?.body.includes(code))) return
           event.decision = { retry: false }
+        }),
+      { providerID },
+    )
+    yield* ctx.session.hook(
+      "model.request",
+      (evt) =>
+        Effect.gen(function* () {
+          if (!chatgpt) return
+          const session = yield* ctx.session
+            .get({ sessionID: evt.sessionID })
+            .pipe(Effect.orElseSucceed(() => undefined))
+          // Mirror the Codex client's session headers: ChatGPT derives prompt-cache affinity from session-id.
+          evt.headers["session-id"] = session ? SessionAffinity.get(session) : evt.sessionID
+          evt.headers["thread-id"] = evt.sessionID
+          evt.headers["x-client-request-id"] = evt.sessionID
         }),
       { providerID },
     )

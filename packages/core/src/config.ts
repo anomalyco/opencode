@@ -144,19 +144,19 @@ export const layer = (options?: Options) =>
 
       const loadWellknownEntry = Effect.fnUntraced(function* (entry: WellKnown.Entry) {
         const auth = entry.manifest.auth
-        if (!auth) return []
         const credential = (yield* credentials.list(entry.integrationID)).at(-1)
-        if (!credential || credential.value.type !== "key") return []
-        const variables = { [auth.env]: credential.value.key }
-        const configs = yield* wellknown
-          .resolve(entry, variables)
-          .pipe(
-            Effect.catch(() =>
-              Effect.logWarning("failed to load wellknown config", { source: entry.origin }).pipe(
-                Effect.as([] as const),
-              ),
+        const variables = auth && credential?.value.type === "key" ? { [auth.env]: credential.value.key } : undefined
+        // A failed refresh, including a missing credential, keeps the last resolved config so remote providers
+        // and allowlists do not disappear; only removing the source clears it.
+        const configs = yield* (
+          variables ? wellknown.resolve(entry, variables) : Effect.fail(new Error("No usable wellknown credential"))
+        ).pipe(
+          Effect.catch((error) =>
+            Effect.logWarning("failed to load wellknown config", { source: entry.origin, error }).pipe(
+              Effect.andThen(wellknown.cached(entry.origin)),
             ),
-          )
+          ),
+        )
         return yield* Effect.forEach(configs, (config) =>
           ConfigVariable.substitute({
             type: "virtual",

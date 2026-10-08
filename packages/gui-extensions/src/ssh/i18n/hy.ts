@@ -36,8 +36,5 @@ export default {
   "form.name": "Սերվերի անունը (ըստ ցանկության)",
   "form.namePlaceholder": "Localhost",
   "form.add": "Ավելացնել սերվեր",
-  "server.default": "Լռելյայն",
-  "menu.default": "Սահմանել որպես լռելյայն",
-  "menu.defaultRemove": "Հեռացնել լռելյայն",
   "menu.delete": "Ջնջել",
 }

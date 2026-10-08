@@ -53,8 +53,5 @@ export default {
     "⁨{{distro}}⁩ ހެލްތު ޗެކް ކުރުމަށް ސައިޑްކާރ ޓައިމް އައުޓް ކޮށްފައިވަނީ ⁨{{timeout}}⁩ms އަށް ފަހުގައެވެ",
   "error.commandTimeout": "⁨{{command}}⁩ ⁨{{args}}⁩ ޓައިމް އައުޓް ކޮށްފައިވަނީ ⁨{{timeout}}⁩ms އަށް ފަހުގައެވެ",
   "error.failedPort": "ބަނދަރު ހޯދުމަށް ނާކާމިޔާބުވިއެވެ",
-  "server.default": "ޑީފޯލްޓް",
-  "menu.default": "ޑިފޯލްޓް ގޮތުގައި ސެޓްކުރުން",
-  "menu.defaultRemove": "ޑިފޯލްޓް ނައްތާލާށެވެ",
   "menu.remove": "ރިމޫވް",
 }
