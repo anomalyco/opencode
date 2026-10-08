@@ -611,6 +611,12 @@ function isAfter(info: Info, other?: Info) {
 
 // Providers often wrap socket/DNS failures, so the code may only exist on a cause.
 // An explicit non-transient marker means the provider already gave up retrying.
+// The AI SDK wraps a failed fetch in an APICallError whose cause carries the socket error code.
+function withNetworkCode(metadata: Record<string, string> | undefined, e: unknown) {
+  const code = networkErrorCode(e)
+  return code ? { ...metadata, code } : metadata
+}
+
 function networkErrorCode(e: unknown) {
   let current = e
   for (let depth = 0; depth < 8 && isRecord(current); depth++) {
@@ -716,7 +722,7 @@ export function fromError(
           isRetryable: parsed.isRetryable,
           responseHeaders: parsed.responseHeaders,
           responseBody: parsed.responseBody,
-          metadata: parsed.metadata,
+          metadata: withNetworkCode(parsed.metadata, e),
         },
         { cause: e },
       ).toObject()

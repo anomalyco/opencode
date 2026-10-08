@@ -522,6 +522,29 @@ describe("session.message-v2.fromError", () => {
     expect(SessionRetry.retryable(result, retryProvider)).toEqual({ message: "Cursor HTTP/2 connection failed" })
   })
 
+  test("Bun connection failures wrapped by the AI SDK get the network retry budget", () => {
+    // What Bun's fetch throws when the network is down, wrapped the way @ai-sdk/provider-utils does.
+    const bun = Object.assign(new Error("Unable to connect. Is the computer able to access the url?"), {
+      code: "ConnectionRefused",
+    })
+    const error = new APICallError({
+      message: `Cannot connect to API: ${bun.message}`,
+      cause: bun,
+      url: "https://api.anthropic.com/v1/messages",
+      requestBodyValues: {},
+      isRetryable: true,
+    })
+    const result = MessageV2.fromError(error, { providerID })
+    if (!SessionV1.APIError.isInstance(result)) throw new Error("expected APIError")
+    expect(result.data.metadata?.code).toBe("ConnectionRefused")
+    expect(result.data.metadata?.url).toBe("https://api.anthropic.com/v1/messages")
+    expect(SessionRetry.retryable(result, retryProvider)).toEqual({ message: error.message })
+  })
+
+  test("Bun's unreachable-host message is retryable on its own", () => {
+    expect(SessionRetry.retryable(wrap("Cannot connect to API: Was there a typo in the url or port?"), retryProvider)).toBeDefined()
+  })
+
   test("network failures a provider marked non-transient are not retried", () => {
     const inner = Object.assign(new Error("Cursor HTTP/2 connection failed"), { transient: true, code: "ENOTFOUND" })
     const exhausted = Object.assign(new Error("Cursor Run failed after 3 attempts", { cause: inner }), {

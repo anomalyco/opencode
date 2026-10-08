@@ -28,8 +28,9 @@ export const RETRY_JITTER_FACTOR = 0.25
 export const RETRY_MAX_DELAY_NO_HEADERS = 30_000 // 30 seconds
 export const RETRY_MAX_DELAY = 2_147_483_647 // max 32-bit signed integer for setTimeout
 export const RETRY_MAX_RETRIES = 5
-// About 10 minutes of backoff, enough to ride out a dropped connection.
-export const RETRY_MAX_RETRIES_NETWORK = 24
+// About 6 hours at the 30 second backoff cap, so an outage is waited out instead of
+// failing the turn. The session shows the retry status the whole time.
+export const RETRY_MAX_RETRIES_NETWORK = 720
 
 export const NETWORK_ERROR_CODES = new Set([
   "ECONNABORTED",
@@ -47,13 +48,19 @@ export const NETWORK_ERROR_CODES = new Set([
   "ERR_HTTP2_SESSION_ERROR",
   "ERR_HTTP2_STREAM_CANCEL",
   "ERR_HTTP2_STREAM_ERROR",
+  // Bun's fetch reports connection failures with its own codes.
+  "ConnectionClosed",
+  "ConnectionRefused",
+  "ConnectionResetByPeer",
+  "ConnectionTimeout",
+  "FailedToOpenSocket",
 ])
 
 const RETRYABLE_MESSAGE_PATTERNS = [
   /429|500|502|503|504|524/i,
   /rate increased too quickly|rate limit|rate-limit|rate_limit|too many requests/i,
   /overloaded|service unavailable|service_unavailable|service-unavailable|internal error|internal_error|internal server error|server error|server_error|server-error|provider returned error|provider_returned_error|provider-returned-error/i,
-  /terminated|fetch failed|failed to fetch|network[-_\s]error|upstream connect|connection error|connection refused|connection lost|socket connection was closed|socket hang up|reset before headers|getaddrinfo|enotfound|eai_again|econnrefused|econnreset|etimedout/i,
+  /terminated|fetch failed|failed to fetch|network[-_\s]error|upstream connect|connection error|connection refused|connection lost|socket connection was closed|socket hang up|reset before headers|unable to connect|was there a typo in the url or port|getaddrinfo|enotfound|eai_again|econnrefused|econnreset|etimedout/i,
   /^timeout$|\b(?:request|response|connection|network|stream|read) (?:timeout|timed out|time out)\b/i,
   /try your request again|retry your request|resource exhausted|resource_exhausted/i,
   /\btry again (?:later|in\b)|\b(?:currently|temporarily) at capacity\b/i,
