@@ -46,13 +46,23 @@ export interface BridgeLayout {
     readonly height: number
   }
   /** The window's content size the bounds were measured against. */
-  readonly viewport?: { readonly width: number; readonly height: number }
+  readonly viewport?: {
+    /** Content width in window pixels. */
+    readonly width: number
+    /** Content height in window pixels. */
+    readonly height: number
+  }
   /** RGBA of the backdrop the rounded corners show. */
   readonly background?: readonly [number, number, number, number]
   /** Radius of the bottom corners. */
   readonly radius?: number
   /** The rounded card's hairline ring, which the corner masks would otherwise paint over. */
-  readonly border?: { readonly color: readonly [number, number, number, number]; readonly width: number }
+  readonly border?: {
+    /** RGBA of the ring. */
+    readonly color: readonly [number, number, number, number]
+    /** Ring width in window pixels. */
+    readonly width: number
+  }
 }
 
 /** An extension as the extension manager lists it. */

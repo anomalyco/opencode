@@ -20,7 +20,7 @@ type Entry = {
   readonly listeners: Set<(visible: boolean) => void>
 }
 
-// A box edge this close to the window edge follows it while the renderer's layout catches up.
+// A box edge this many CSS px from the window edge follows it while the renderer's layout catches up.
 const WINDOW_GUTTER = 24
 
 /**
@@ -37,9 +37,14 @@ export function createEmbeds() {
     const viewport = entry.layout?.viewport
     // The renderer measures a frame or more behind a window resize. Edges beside the window
     // edge follow it now, so the view and its corner masks do not trail inside the panel.
+    // This assumes the box takes the whole change, as the side panel beside the fixed-width chat does.
     const [width = 0, height = 0] = entry.window.getContentSize()
-    // A one-DIP difference is the renderer's rounding of its zoomed viewport, not a resize.
-    const follow = (inset: number, change: number) => (inset <= WINDOW_GUTTER && Math.abs(change) > 1 ? change : 0)
+    const zoom = entry.window.webContents.getZoomFactor()
+
+    // The renderer's viewport is whole CSS px, so it can be off by one CSS px plus rounding; that is not a resize.
+    const follow = (inset: number, change: number) =>
+      inset <= WINDOW_GUTTER * zoom && Math.abs(change) >= zoom + 1 ? change : 0
+
     const dx = layout && viewport ? follow(viewport.width - layout.x - layout.width, width - viewport.width) : 0
     const dy = layout && viewport ? follow(viewport.height - layout.y - layout.height, height - viewport.height) : 0
 
@@ -65,6 +70,7 @@ export function createEmbeds() {
       const background = entry.layout?.background
       const border = entry.layout?.border
       const scale = screen.getDisplayMatching(entry.window.getBounds()).scaleFactor
+
       const key =
         background && size > 0 ? `${background}:${size}:${scale}:${border?.color ?? ""}:${border?.width ?? ""}` : ""
 
@@ -118,10 +124,12 @@ export function createEmbeds() {
   return {
     create(owner: Instance, view: WebContentsView, window: BrowserWindow): Embed {
       const id = randomUUID()
+
       if (!resizing.has(window)) {
         resizing.add(window)
         window.on("resize", () => entries.forEach((entry) => entry.window === window && apply(entry)))
       }
+
       const corners = [new ImageView(), new ImageView()]
       view.setVisible(false)
       window.contentView.addChildView(view)

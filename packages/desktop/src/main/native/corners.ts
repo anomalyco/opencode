@@ -24,8 +24,10 @@ export function createCornerImages(
         const inside = coverage(size, distance)
         const base = ((1 - inside) * color[3]) / 255
         const line = border ? ((coverage(size + ring, distance) - inside) * border.color[3]) / 255 : 0
+
         const channel = (index: number) =>
           Math.round((border ? border.color[index] : 0) * line + color[index] * base * (1 - line))
+
         const offset = (y * size + x) * 4
         // NativeImage bitmaps use premultiplied BGRA on supported desktop platforms.
         pixels[offset] = channel(2)

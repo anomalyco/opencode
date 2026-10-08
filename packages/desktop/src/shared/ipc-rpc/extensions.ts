@@ -40,6 +40,7 @@ export type ExtensionFailure = typeof ExtensionFailure.Type
 // Window DIPs from the renderer, zoom applied. Background is RGBA with every channel 0-255; corners
 // in that color mask the view's bottom edge to `radius`, redrawing the card's `border` ring along the arc.
 const channel = Schema.Finite.check(Schema.isBetween({ minimum: 0, maximum: 255 }))
+
 const rgba = Schema.Tuple([channel, channel, channel, channel])
 
 export const ExtensionLayout = Schema.Struct({
