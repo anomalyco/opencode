@@ -10,6 +10,7 @@ import { Database } from "@opencode/core/database/database"
 import { Project } from "@opencode/core/project"
 import { ProjectSchema } from "@opencode/core/project/schema"
 import { ProjectTable } from "@opencode/core/project/sql"
+import { WorktreeTable } from "@opencode/core/worktree/sql"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Hash } from "@opencode/util/hash"
 import { tmpdir } from "./fixture/tmpdir"
@@ -193,6 +194,42 @@ describe("Project.resolve", () => {
       expect(result.canonical).toBe(result.directory)
       expect(result.previous).toBeUndefined()
       expect(result.vcs).toBeUndefined()
+    }),
+  )
+
+  it.live("resolves markerless strategy-owned worktrees to their owning project", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      const db = (yield* Database.Service).db
+      const project = yield* Project.Service
+      const root = yield* real(tmp.path)
+      const source = path.join(root, "source")
+      const managed = path.join(root, "managed")
+      const nested = path.join(managed, "packages", "app")
+      const unowned = path.join(root, "unowned")
+      yield* Effect.promise(() =>
+        Promise.all([nested, source, unowned].map((item) => fs.mkdir(item, { recursive: true }))),
+      )
+      const owner = yield* project.resolve(abs(source))
+      yield* db
+        .insert(WorktreeTable)
+        .values([
+          { project_id: owner.id, directory: abs(managed), strategy: "plugin" },
+          { project_id: owner.id, directory: abs(unowned) },
+        ])
+        .run()
+
+      const worktree = yield* project.resolve(abs(managed))
+      const child = yield* project.resolve(abs(nested))
+      const other = yield* project.resolve(abs(unowned))
+
+      expect(worktree).toEqual({ id: owner.id, directory: abs(managed), canonical: abs(source), vcs: undefined })
+      expect(child).toEqual(worktree)
+      expect(other.id).not.toBe(owner.id)
+      expect((yield* project.list()).map((item) => item.id).toSorted()).toEqual([owner.id, other.id].toSorted())
     }),
   )
 
