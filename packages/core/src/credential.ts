@@ -19,6 +19,9 @@ export type OAuth = Credential.OAuth
 export const Key = Credential.Key
 export type Key = Credential.Key
 
+export const External = Credential.External
+export type External = Credential.External
+
 export const Value = Credential.Value
 export type Value = Credential.Value
 
@@ -38,11 +41,16 @@ export interface Interface {
   readonly list: (integrationID: Integration.ID) => Effect.Effect<Info[]>
   /** Returns one stored credential by ID. */
   readonly get: (id: ID) => Effect.Effect<Info | undefined>
-  /** Creates a credential for an integration and returns the new record. */
+  /**
+   * Creates a credential for an integration and returns the new record. The new credential becomes the
+   * integration's selection unless `activate` is false and the integration already has a credential.
+   */
   readonly create: (input: {
+    readonly id?: ID
     readonly integrationID: Integration.ID
     readonly value: Value
     readonly label?: string
+    readonly activate?: boolean
   }) => Effect.Effect<Info>
   /** Selects a stored credential for its integration. */
   readonly activate: (id: ID) => Effect.Effect<void>
@@ -99,19 +107,30 @@ const layer = Layer.effect(
       }),
       create: Effect.fn("Credential.create")(function* (input) {
         const credential = new Info({
-          id: ID.create(),
+          id: input.id ?? ID.create(),
           integrationID: input.integrationID,
           label: input.label ?? "default",
           value: input.value,
         })
-        yield* db
+        const activated = yield* db
           .transaction((tx) =>
             Effect.gen(function* () {
-              yield* tx
-                .update(CredentialTable)
-                .set({ active: false })
+              const current = yield* tx
+                .select({ id: CredentialTable.id, active: CredentialTable.active })
+                .from(CredentialTable)
                 .where(eq(CredentialTable.integration_id, credential.integrationID))
-                .run()
+                .orderBy(desc(CredentialTable.active), desc(CredentialTable.time_created), desc(CredentialTable.id))
+                .get()
+              const activate = input.activate !== false || !current
+              if (activate)
+                yield* tx
+                  .update(CredentialTable)
+                  .set({ active: false })
+                  .where(eq(CredentialTable.integration_id, credential.integrationID))
+                  .run()
+              // Legacy rows have no active flag and the newest one is selected, so pin it before inserting a newer row.
+              if (!activate && current && !current.active)
+                yield* tx.update(CredentialTable).set({ active: true }).where(eq(CredentialTable.id, current.id)).run()
               yield* tx
                 .insert(CredentialTable)
                 .values({
@@ -119,9 +138,10 @@ const layer = Layer.effect(
                   integration_id: credential.integrationID,
                   label: credential.label,
                   value: credential.value,
-                  active: true,
+                  active: activate,
                 })
                 .run()
+              return activate
             }),
           )
           .pipe(
@@ -138,13 +158,15 @@ const layer = Layer.effect(
           credentialID: credential.id,
           integrationID: credential.integrationID,
           type: credential.value.type,
+          active: activated,
         })
         yield* bus.publish(Event.Updated, {}, { global: true })
-        yield* bus.publish(
-          Event.Switched,
-          { integrationID: credential.integrationID, credentialID: credential.id },
-          { global: true },
-        )
+        if (activated)
+          yield* bus.publish(
+            Event.Switched,
+            { integrationID: credential.integrationID, credentialID: credential.id },
+            { global: true },
+          )
         return credential
       }),
       activate: Effect.fn("Credential.activate")(function* (id) {

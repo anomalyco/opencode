@@ -365,7 +365,6 @@ export const dict = {
   "tui.session.shareSession": "სესიის გაზიარება",
   "tui.session.jumpToMessage": "შეტყობინებაზე გადასვლა",
   "tui.session.forkSession": "სესიის განშტოება",
-  "tui.session.unshareSession": "სესიის გაზიარების გაუქმება",
   "tui.session.undoPreviousMessage": "წინა შეტყობინების გაუქმება",
   "tui.session.nothingToUndo": "გასაუქმებელი არაფერია",
   "tui.session.toggleSessionScrollbar": "სესიის გადახვევის ზოლის გადართვა",
@@ -1037,6 +1036,12 @@ export const dict = {
   "tui.promptUi.noDirectories": "შესაბამისი საქაღალდეები არ არის",
   "tui.promptUi.fileSearchFailed": "ფაილების ძებნა ვერ მოხერხდა. ხელახლა საცდელად გააგრძელეთ აკრეფა.",
   "tui.promptUi.noReferences": "შესაბამისი ფაილები, აგენტები ან მითითებები არ არის",
+  "tui.details.submitAnswer": "Submit answer",
+  "tui.details.backToAnswers": "Back to answers",
+  "tui.details.editAnswerHint": "enter submit · esc back",
+  "tui.details.selectAnswerHint": "↑/↓ select · enter confirm · esc cancel",
+  "tui.dialogs.recentlyClosedTabs": "Recently closed tabs",
+  "tui.dialogs.noRecentlyClosedTabs": "No recently closed tabs",
 }
 
 export default dict

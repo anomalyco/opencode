@@ -833,7 +833,6 @@ export const dict = {
   "tui.session.shareSession": "ክፍለ ጊዜ አጋራ",
   "tui.session.jumpToMessage": "ወደ መልእክት ዝለል",
   "tui.session.forkSession": "ከክፍለ ጊዜው አዲስ ቅርንጫፍ ፍጠር",
-  "tui.session.unshareSession": "ክፍለ-ጊዜን አታጋራ",
   "tui.session.undoPreviousMessage": "የቀደመውን መልእክት ቀልብስ",
   "tui.session.nothingToUndo": "ምንም የሚቀለበስ ነገር የለም",
   "tui.session.toggleSessionScrollbar": "የክፍለ ጊዜ ማሸብለያ አሞሌን ቀይር",
@@ -1022,6 +1021,12 @@ export const dict = {
   "tui.devtools.connecting": "በመገናኘት ላይ",
   "tui.devtools.reconnecting": "እንደገና በመገናኘት ላይ",
   "tui.devtools.unknown": "ያልታወቀ",
+  "tui.details.submitAnswer": "Submit answer",
+  "tui.details.backToAnswers": "Back to answers",
+  "tui.details.editAnswerHint": "enter submit · esc back",
+  "tui.details.selectAnswerHint": "↑/↓ select · enter confirm · esc cancel",
+  "tui.dialogs.recentlyClosedTabs": "Recently closed tabs",
+  "tui.dialogs.noRecentlyClosedTabs": "No recently closed tabs",
 }
 
 export default dict

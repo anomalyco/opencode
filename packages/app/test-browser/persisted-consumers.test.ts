@@ -23,6 +23,7 @@ test("persisted model selection hydrates, updates and serializes the schema shap
           notify: async () => {},
         },
       )
+
       expect(state.session.session1?.agent).toBe("plan")
       setState("session", "session1", { agent: "build", variant: null })
       expect(state.session.session1?.agent).toBe("build")

@@ -365,7 +365,6 @@ export const dict = {
   "tui.session.shareSession": "Kopīgot sesiju",
   "tui.session.jumpToMessage": "Pāriet uz ziņojumu",
   "tui.session.forkSession": "Atzarot sesiju",
-  "tui.session.unshareSession": "Pārtraukt sesijas kopīgošanu",
   "tui.session.undoPreviousMessage": "Atsaukt iepriekšējo ziņojumu",
   "tui.session.nothingToUndo": "Nav ko atsaukt",
   "tui.session.toggleSessionScrollbar": "Pārslēgt sesijas ritjoslu",
@@ -1056,6 +1055,12 @@ export const dict = {
   "tui.promptUi.noDirectories": "Nav atbilstošu mapju",
   "tui.promptUi.fileSearchFailed": "Neizdevās meklēt failus. Turpiniet rakstīt, lai mēģinātu vēlreiz.",
   "tui.promptUi.noReferences": "Nav atbilstošu failu, aģentu vai atsauču",
+  "tui.details.submitAnswer": "Submit answer",
+  "tui.details.backToAnswers": "Back to answers",
+  "tui.details.editAnswerHint": "enter submit · esc back",
+  "tui.details.selectAnswerHint": "↑/↓ select · enter confirm · esc cancel",
+  "tui.dialogs.recentlyClosedTabs": "Recently closed tabs",
+  "tui.dialogs.noRecentlyClosedTabs": "No recently closed tabs",
 }
 
 export default dict

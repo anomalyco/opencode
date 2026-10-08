@@ -10,6 +10,10 @@ import { ServiceConfig } from "../../services/service-config"
 export default Runtime.handler(
   Commands.commands.pair,
   Effect.fn("cli.pair")(function* (input: Runtime.Input<typeof Commands.commands.pair>) {
+    if ((yield* ServiceConfig.read()).disabled === true)
+      return yield* Effect.fail(
+        new Error("Pairing requires the background service; run `opencode service unset disabled` first"),
+      )
     const endpoint = yield* Service.ensure(yield* ServiceConfig.options())
     const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) })
     const urls = Option.isSome(input.url)
@@ -17,17 +21,22 @@ export default Runtime.handler(
       : (yield* Effect.tryPromise(() => client.server.info())).urls
     const pairing = yield* Effect.tryPromise(() => client.server.pair())
     const links = urls.map((url) => new URL(`/auth/connect/${pairing.code}`, url).href)
+    // Loopback URLs are useless to the scanning device, so the QR code only carries reachable addresses.
+    const remote = urls.filter((url) => !isLoopback(new URL(url).hostname))
     process.stdout.write(
       [
         "",
         `  Open a link to connect. Links work once and expire in ${Math.round(pairing.expires_in / 60)} minutes.`,
         "",
         ...(links.length ? links.map((link) => `  ${link}`) : ["  (no server URLs)"]),
-        ...(links[0]
+        ...(remote.length
           ? [
               "",
-              renderUnicodeCompact(links[0], { border: 2 })
-                .split(EOL)
+              // uqr separates rows with "\n" on every platform, so splitting on EOL ("\r\n" on Windows) indents only the first row.
+              renderUnicodeCompact(JSON.stringify({ code: pairing.code, urls: remote }), {
+                border: 2,
+              })
+                .split("\n")
                 .map((line) => "  " + line)
                 .join(EOL),
             ]
@@ -51,3 +60,9 @@ export default Runtime.handler(
     )
   }),
 )
+
+function isLoopback(hostname: string) {
+  return (
+    hostname === "localhost" || hostname.endsWith(".localhost") || hostname.startsWith("127.") || hostname === "[::1]"
+  )
+}

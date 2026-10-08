@@ -253,7 +253,6 @@ export const dict = {
   "tui.session.shareSession": "مشاركة الجلسة",
   "tui.session.jumpToMessage": "الانتقال إلى رسالة",
   "tui.session.forkSession": "تفريع الجلسة",
-  "tui.session.unshareSession": "إلغاء مشاركة الجلسة",
   "tui.session.undoPreviousMessage": "التراجع عن الرسالة السابقة",
   "tui.session.nothingToUndo": "لا يوجد ما يمكن التراجع عنه",
   "tui.session.toggleSessionScrollbar": "إظهار/إخفاء شريط تمرير الجلسة",
@@ -1097,6 +1096,12 @@ export const dict = {
   "tui.promptUi.noDirectories": "لا توجد مجلدات مطابقة",
   "tui.promptUi.fileSearchFailed": "تعذر البحث في الملفات. تابع الكتابة للمحاولة مجددًا.",
   "tui.promptUi.noReferences": "لا توجد ملفات أو وكلاء أو مراجع مطابقة",
+  "tui.details.submitAnswer": "Submit answer",
+  "tui.details.backToAnswers": "Back to answers",
+  "tui.details.editAnswerHint": "enter submit · esc back",
+  "tui.details.selectAnswerHint": "↑/↓ select · enter confirm · esc cancel",
+  "tui.dialogs.recentlyClosedTabs": "Recently closed tabs",
+  "tui.dialogs.noRecentlyClosedTabs": "No recently closed tabs",
 }
 
 export default dict

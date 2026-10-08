@@ -7,6 +7,7 @@ import { openDatabase } from "./database"
 import { createStateStore } from "./state"
 
 const roots: string[] = []
+
 // Bun's node:sqlite shim keeps prepared statements alive after close(), which pins the WAL files
 // on Windows. Node (and so Electron) finalizes them; tolerate the leftover here only.
 afterEach(() =>
@@ -15,26 +16,21 @@ afterEach(() =>
 
 const open = () => {
   const database = openDatabase(":memory:")
-  return { db: database.db, store: createStateStore(database.db, { delay: 1_000 }) }
+
+  return { db: database.db, store: createStateStore(database.db) }
 }
+
 const rows = (db: ReturnType<typeof openDatabase>["db"]) =>
   db.all<{ name: string; key: string; value: string }>(sql`SELECT name, key, value FROM state ORDER BY name, key`)
 
 describe("state store", () => {
-  test("reads its own queued writes before they reach the database", () => {
+  test("reads its own queued set and delete before they reach the database", () => {
     const { db, store } = open()
     store.set("global", "model", "a")
     expect(store.get("global", "model")).toBe("a")
     expect(rows(db)).toEqual([])
     store.flush()
     expect(rows(db)).toEqual([{ name: "global", key: "model", value: "a" }])
-    expect(store.get("global", "model")).toBe("a")
-  })
-
-  test("delete is visible immediately and removes the row on flush", () => {
-    const { db, store } = open()
-    store.set("global", "model", "a")
-    store.flush()
     store.delete("global", "model")
     expect(store.get("global", "model")).toBeNull()
     expect(store.items("global").items).toEqual({})
@@ -63,16 +59,20 @@ describe("state store", () => {
     store.set("w2", "tabs", "[]")
     store.flush()
     store.set("w1", "recent", "{}")
+    store.set("w2", "recent", "{}")
     store.clear("w1")
     expect(store.get("w1", "recent")).toBeNull()
     store.flush()
-    expect(rows(db)).toEqual([{ name: "w2", key: "tabs", value: "[]" }])
+    expect(rows(db)).toEqual([
+      { name: "w2", key: "recent", value: "{}" },
+      { name: "w2", key: "tabs", value: "[]" },
+    ])
   })
 
   test("a failed flush keeps every acknowledged write until a later flush succeeds", () => {
     const database = openDatabase(":memory:")
     const errors: unknown[] = []
-    const store = createStateStore(database.db, { delay: 1_000, onError: (error) => errors.push(error) })
+    const store = createStateStore(database.db, { onError: (error) => errors.push(error) })
     store.set("w", "tabs", "[1]")
     store.set("w", "recent", "{}")
     database.db.run(sql`DROP TABLE state`)
@@ -83,11 +83,13 @@ describe("state store", () => {
       sql`CREATE TABLE state (name TEXT NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL, updated_at INTEGER NOT NULL, PRIMARY KEY (name, key))`,
     )
     store.set("w", "info", "{}")
+    // A write made after the failure wins over the retried one.
+    store.set("w", "tabs", "[2]")
     store.flush()
     expect(rows(database.db)).toEqual([
       { name: "w", key: "info", value: "{}" },
       { name: "w", key: "recent", value: "{}" },
-      { name: "w", key: "tabs", value: "[1]" },
+      { name: "w", key: "tabs", value: "[2]" },
     ])
   })
 
@@ -96,19 +98,12 @@ describe("state store", () => {
     roots.push(root)
     const file = path.join(root, "drafts.sqlite")
     const first = openDatabase(file)
-    const store = createStateStore(first.db, { delay: 1_000 })
+    const store = createStateStore(first.db)
     store.set("global", "model", "a")
     store.close()
     first.close()
     const second = openDatabase(file)
     expect(createStateStore(second.db).get("global", "model")).toBe("a")
     second.close()
-  })
-
-  test("a burst of writes to one key lands as a single upsert", () => {
-    const { db, store } = open()
-    for (let index = 0; index < 100; index++) store.set("global", "layout", `${index}`)
-    store.flush()
-    expect(rows(db)).toEqual([{ name: "global", key: "layout", value: "99" }])
   })
 })

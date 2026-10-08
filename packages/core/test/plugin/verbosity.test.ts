@@ -94,11 +94,11 @@ it.effect("sets known OpenAI Responses defaults without overriding configured or
         ["azure", "@opencode/ai/providers/azure/responses", "gpt-5.5"],
         ["bedrock-mantle", "@opencode/ai/providers/amazon-bedrock/mantle/responses", "openai.gpt-6-sol"],
         ["cloudflare", "@opencode/ai/providers/cloudflare-ai-gateway", "openai/gpt-5.6-sol"],
-        ["vercel", Provider.aisdk("@ai-sdk/gateway"), "openai/gpt-6-astra-fast"],
+        ["vercel", "@opencode/ai/providers/vercel-ai-gateway", "openai/gpt-6-astra-fast"],
         ["azure-chat", "@opencode/ai/providers/azure/chat", "gpt-5.5"],
         ["bedrock-converse", "@opencode/ai/providers/amazon-bedrock", "global.openai.gpt-6-sol"],
         ["cloudflare-chat", "@opencode/ai/providers/cloudflare-ai-gateway", "workers-ai/gpt-5.5"],
-        ["vercel-other", Provider.aisdk("@ai-sdk/gateway"), "anthropic/gpt-5.5"],
+        ["vercel-other", "@opencode/ai/providers/vercel-ai-gateway", "anthropic/gpt-5.5"],
       ] as const) {
         editor.add({
           info: { ...Provider.Info.empty(Provider.ID.make(providerID)), package: packageName },

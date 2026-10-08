@@ -3,15 +3,19 @@ import { createStore } from "solid-js/store"
 import type { HomeSessionGroup } from "./sessions/controller"
 
 const HOME_SESSION_HEADER_STICKY_TOP = 12
+
 const HOME_SESSION_HEADER_TEXT_HEIGHT = 16
+
 const HOME_SESSION_HEADER_FADE_DISTANCE = 16
 
 export function createHomeScrollController(groups: Accessor<HomeSessionGroup[]>) {
   const [thumbTrack, setThumbTrack] = createSignal<HTMLDivElement>()
   const [hoverTarget, setHoverTarget] = createSignal<HTMLElement>()
+
   const [state, setState] = createStore({
     titleOpacity: {} as Partial<Record<HomeSessionGroup["id"], number>>,
   })
+
   const headerRefs = new Map<HomeSessionGroup["id"], HTMLDivElement>()
   const headerOffsets = new Map<HomeSessionGroup["id"], number>()
   let viewport: HTMLDivElement | undefined
@@ -29,10 +33,12 @@ export function createHomeScrollController(groups: Accessor<HomeSessionGroup[]>)
     headerOffsets.forEach((_, id) => {
       if (!ids.has(id)) headerOffsets.delete(id)
     })
+
     if (items.length === 0) {
       content = undefined
       bindResizeObserver()
     }
+
     queuePositionUpdate()
   })
 
@@ -44,8 +50,10 @@ export function createHomeScrollController(groups: Accessor<HomeSessionGroup[]>)
   function queuePositionUpdate() {
     if (typeof requestAnimationFrame === "undefined") {
       updatePositionCache()
+
       return
     }
+
     if (positionFrame !== undefined) return
     positionFrame = requestAnimationFrame(() => {
       positionFrame = undefined
@@ -55,15 +63,20 @@ export function createHomeScrollController(groups: Accessor<HomeSessionGroup[]>)
 
   function updatePositionCache() {
     if (!viewport) return
+
     const header = groups()
       .map((group) => headerRefs.get(group.id))
       .find((element) => element !== undefined)
+
     if (header && typeof getComputedStyle === "function") {
       const top = Number.parseFloat(getComputedStyle(header).top)
+
       if (Number.isFinite(top)) stickyTop = top
     }
+
     groups().forEach((group) => {
       const element = headerRefs.get(group.id)
+
       if (element) headerOffsets.set(group.id, element.offsetTop)
     })
     update(viewport.scrollTop)
@@ -76,27 +89,36 @@ export function createHomeScrollController(groups: Accessor<HomeSessionGroup[]>)
         .slice(index + 1)
         .map((item) => headerOffsets.get(item.id))
         .find((offset) => offset !== undefined)
+
       const fadeEnd = stickyTop + HOME_SESSION_HEADER_TEXT_HEIGHT
       const nextTop = nextOffset === undefined ? undefined : nextOffset - scrollTop
+
       const opacity =
         nextTop === undefined ? 1 : Math.max(0, Math.min(1, (nextTop - fadeEnd) / HOME_SESSION_HEADER_FADE_DISTANCE))
+
       setState("titleOpacity", group.id, Math.round(opacity * 1000) / 1000)
     })
   }
 
   function bindResizeObserver() {
     resizeObserver?.disconnect()
+
     if (typeof ResizeObserver === "undefined") return
     resizeObserver = new ResizeObserver(queuePositionUpdate)
+
     if (viewport) resizeObserver.observe(viewport)
+
     if (content) resizeObserver.observe(content)
   }
 
   function containWheel(event: WheelEvent) {
     if (!viewport) return
+
     if (event.defaultPrevented || event.ctrlKey || !event.deltaY) return
+
     if (!(event.target instanceof Element)) return
     const scrollable = event.target.closest<HTMLElement>("[data-scrollable]")
+
     if (
       scrollable !== viewport &&
       scrollable &&
@@ -123,6 +145,7 @@ export function createHomeScrollController(groups: Accessor<HomeSessionGroup[]>)
       containWheel,
       containOuterWheel: (event: WheelEvent) => {
         if (!viewport) return
+
         if (event.target instanceof Node && viewport.contains(event.target)) return
         containWheel(event)
       },

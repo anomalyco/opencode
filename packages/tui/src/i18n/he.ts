@@ -240,7 +240,6 @@ export const dict = {
   "tui.session.shareSession": "שתף הפעלה",
   "tui.session.jumpToMessage": "עבור להודעה",
   "tui.session.forkSession": "פצל הפעלה",
-  "tui.session.unshareSession": "בטל שיתוף הפעלה",
   "tui.session.undoPreviousMessage": "בטל את ההודעה הקודמת",
   "tui.session.nothingToUndo": "אין מה לבטל",
   "tui.session.toggleSessionScrollbar": "הצג/הסתר את פס גלילת ההפעלה",
@@ -1043,6 +1042,12 @@ export const dict = {
   "tui.promptUi.noDirectories": "אין תיקיות תואמות",
   "tui.promptUi.fileSearchFailed": "לא ניתן לחפש קבצים. המשך להקליד כדי לנסות שוב.",
   "tui.promptUi.noReferences": "אין קבצים, סוכנים או הפניות תואמים",
+  "tui.details.submitAnswer": "Submit answer",
+  "tui.details.backToAnswers": "Back to answers",
+  "tui.details.editAnswerHint": "enter submit · esc back",
+  "tui.details.selectAnswerHint": "↑/↓ select · enter confirm · esc cancel",
+  "tui.dialogs.recentlyClosedTabs": "Recently closed tabs",
+  "tui.dialogs.noRecentlyClosedTabs": "No recently closed tabs",
 }
 
 export default dict

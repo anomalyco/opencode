@@ -14,7 +14,6 @@ const it = testEffect(PluginTestLayer)
 
 const addPlugin = Effect.fn(function* () {
   const plugin = yield* Plugin.Service
-  const aisdk = yield* AISDK.Service
   const host = yield* PluginHost.make(plugin)
   yield* GoogleVertexPlugin.effect(host)
 })
@@ -307,7 +306,6 @@ describe("GoogleVertexPlugin", () => {
 
   it.effect("trims model IDs before selecting language models", () =>
     Effect.gen(function* () {
-      const plugin = yield* Plugin.Service
       const aisdk = yield* AISDK.Service
       const calls: string[] = []
       yield* addPlugin()

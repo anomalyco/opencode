@@ -19,12 +19,15 @@ describe("settings store", () => {
     expect(createSettingsStore(file).get("backgroundColor")).toBe("#ffffff")
   })
 
-  test("starts empty without a file and creates it on the first write", () => {
+  test("starts empty without a file, creates it on the first write, and refuses undefined", () => {
     const file = path.join(dir(), "nested", "opencode.updater")
     const store = createSettingsStore(file)
     expect(store.get("ready")).toBeUndefined()
     expect(existsSync(file)).toBe(false)
     store.set("ready", { version: "1.0.0" })
+    // Like electron-store, undefined is refused instead of treated as a delete.
+    expect(() => store.set("ready", undefined)).toThrow(TypeError)
+    expect(store.get("ready")).toEqual({ version: "1.0.0" })
     expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({ ready: { version: "1.0.0" } })
     store.delete("ready")
     expect(store.get("ready")).toBeUndefined()
@@ -39,10 +42,5 @@ describe("settings store", () => {
     expect(existsSync(`${file}.corrupt`)).toBe(true)
     store.set("firstLaunchOnboardingComplete", true)
     expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({ firstLaunchOnboardingComplete: true })
-  })
-
-  test("rejects undefined like electron-store did", () => {
-    const store = createSettingsStore(path.join(dir(), "opencode.settings"))
-    expect(() => store.set("key", undefined)).toThrow(TypeError)
   })
 })

@@ -365,7 +365,6 @@ export const dict = {
   "tui.session.shareSession": "Munkamenet megosztása",
   "tui.session.jumpToMessage": "Ugrás az üzenethez",
   "tui.session.forkSession": "Munkamenet elágaztatása",
-  "tui.session.unshareSession": "Munkamenet megosztásának megszüntetése",
   "tui.session.undoPreviousMessage": "Előző üzenet visszavonása",
   "tui.session.nothingToUndo": "Nincs mit visszavonni",
   "tui.session.toggleSessionScrollbar": "Munkamenet görgetősávjának váltása",
@@ -1037,6 +1036,12 @@ export const dict = {
   "tui.promptUi.noDirectories": "Nincsenek megfelelő könyvtárak",
   "tui.promptUi.fileSearchFailed": "A fájlok keresése sikertelen. Gépeljen tovább az újrapróbálkozáshoz.",
   "tui.promptUi.noReferences": "Nincsenek megfelelő fájlok, ügynökök vagy hivatkozások",
+  "tui.details.submitAnswer": "Submit answer",
+  "tui.details.backToAnswers": "Back to answers",
+  "tui.details.editAnswerHint": "enter submit · esc back",
+  "tui.details.selectAnswerHint": "↑/↓ select · enter confirm · esc cancel",
+  "tui.dialogs.recentlyClosedTabs": "Recently closed tabs",
+  "tui.dialogs.noRecentlyClosedTabs": "No recently closed tabs",
 }
 
 export default dict

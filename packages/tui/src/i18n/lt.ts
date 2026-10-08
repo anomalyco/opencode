@@ -365,7 +365,6 @@ export const dict = {
   "tui.session.shareSession": "Bendrinti sesiją",
   "tui.session.jumpToMessage": "Pereiti į žinutę",
   "tui.session.forkSession": "Atšakoti sesiją",
-  "tui.session.unshareSession": "Nebebendrinti sesijos",
   "tui.session.undoPreviousMessage": "Atšaukti ankstesnę žinutę",
   "tui.session.nothingToUndo": "Nėra ko atšaukti",
   "tui.session.toggleSessionScrollbar": "Perjungti sesijos slinkties juostą",
@@ -1076,6 +1075,12 @@ export const dict = {
   "tui.promptUi.noDirectories": "Nėra atitinkančių katalogų",
   "tui.promptUi.fileSearchFailed": "Nepavyko ieškoti failų. Toliau rašykite, kad bandytumėte dar kartą.",
   "tui.promptUi.noReferences": "Nėra atitinkančių failų, agentų ar nuorodų",
+  "tui.details.submitAnswer": "Submit answer",
+  "tui.details.backToAnswers": "Back to answers",
+  "tui.details.editAnswerHint": "enter submit · esc back",
+  "tui.details.selectAnswerHint": "↑/↓ select · enter confirm · esc cancel",
+  "tui.dialogs.recentlyClosedTabs": "Recently closed tabs",
+  "tui.dialogs.noRecentlyClosedTabs": "No recently closed tabs",
 }
 
 export default dict

@@ -841,7 +841,6 @@ export const dict = {
   "tui.session.shareSession": "Sessiyanı paylaş",
   "tui.session.jumpToMessage": "Mesaja keç",
   "tui.session.forkSession": "Sessiyanı fork et",
-  "tui.session.unshareSession": "Sessiya paylaşımını dayandır",
   "tui.session.undoPreviousMessage": "Əvvəlki mesajı geri al",
   "tui.session.nothingToUndo": "Geri alınacaq bir şey yoxdur",
   "tui.session.toggleSessionScrollbar": "Sessiya sürüşdürmə zolağını aç/bağla",
@@ -1033,6 +1032,12 @@ export const dict = {
   "tui.devtools.connecting": "Qoşulur",
   "tui.devtools.reconnecting": "Yenidən qoşulur",
   "tui.devtools.unknown": "Naməlum",
+  "tui.details.submitAnswer": "Submit answer",
+  "tui.details.backToAnswers": "Back to answers",
+  "tui.details.editAnswerHint": "enter submit · esc back",
+  "tui.details.selectAnswerHint": "↑/↓ select · enter confirm · esc cancel",
+  "tui.dialogs.recentlyClosedTabs": "Recently closed tabs",
+  "tui.dialogs.noRecentlyClosedTabs": "No recently closed tabs",
 }
 
 export default dict

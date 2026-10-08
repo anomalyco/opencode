@@ -844,7 +844,6 @@ export const dict = {
   "tui.session.shareSession": "វគ្គចែករំលែក",
   "tui.session.jumpToMessage": "លោតទៅសារ",
   "tui.session.forkSession": "បង្កើតសាខាថ្មីពីសម័យ",
-  "tui.session.unshareSession": "ឈប់ចែករំលែកវគ្គ",
   "tui.session.undoPreviousMessage": "មិនធ្វើវិញសារពីមុន",
   "tui.session.nothingToUndo": "គ្មានអ្វីត្រូវលុបចោលទេ។",
   "tui.session.toggleSessionScrollbar": "បិទបើករបាររមូរសម័យ",
@@ -1036,6 +1035,12 @@ export const dict = {
   "tui.devtools.connecting": "ការភ្ជាប់",
   "tui.devtools.reconnecting": "ភ្ជាប់ឡើងវិញ",
   "tui.devtools.unknown": "មិនស្គាល់",
+  "tui.details.submitAnswer": "Submit answer",
+  "tui.details.backToAnswers": "Back to answers",
+  "tui.details.editAnswerHint": "enter submit · esc back",
+  "tui.details.selectAnswerHint": "↑/↓ select · enter confirm · esc cancel",
+  "tui.dialogs.recentlyClosedTabs": "Recently closed tabs",
+  "tui.dialogs.noRecentlyClosedTabs": "No recently closed tabs",
 }
 
 export default dict

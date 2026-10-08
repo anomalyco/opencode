@@ -292,7 +292,6 @@ export const dict = {
   "tui.session.shareSession": "セッションを共有",
   "tui.session.jumpToMessage": "メッセージに移動",
   "tui.session.forkSession": "セッションを分岐",
-  "tui.session.unshareSession": "セッションの共有を解除",
   "tui.session.undoPreviousMessage": "前のメッセージを元に戻す",
   "tui.session.nothingToUndo": "元に戻すものがありません",
   "tui.session.toggleSessionScrollbar": "セッションのスクロールバーを切り替え",
@@ -1034,6 +1033,12 @@ export const dict = {
   "tui.permissionDisplay.choices": "権限の選択肢",
   "tui.permissionDisplay.minimize": "最小化",
   "tui.permissionDisplay.fullscreen": "全画面",
+  "tui.details.submitAnswer": "Submit answer",
+  "tui.details.backToAnswers": "Back to answers",
+  "tui.details.editAnswerHint": "enter submit · esc back",
+  "tui.details.selectAnswerHint": "↑/↓ select · enter confirm · esc cancel",
+  "tui.dialogs.recentlyClosedTabs": "Recently closed tabs",
+  "tui.dialogs.noRecentlyClosedTabs": "No recently closed tabs",
 }
 
 export default dict

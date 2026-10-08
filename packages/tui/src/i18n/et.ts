@@ -364,7 +364,6 @@ export const dict = {
   "tui.session.shareSession": "Jaga seanssi",
   "tui.session.jumpToMessage": "Liigu sõnumile",
   "tui.session.forkSession": "Hargne seansist",
-  "tui.session.unshareSession": "Lõpeta seansi jagamine",
   "tui.session.undoPreviousMessage": "Võta eelmine sõnum tagasi",
   "tui.session.nothingToUndo": "Pole midagi tagasi võtta",
   "tui.session.toggleSessionScrollbar": "Lülita seansi kerimisriba",
@@ -1032,6 +1031,12 @@ export const dict = {
   "tui.promptUi.noDirectories": "Ühtegi sobivat kataloogi pole",
   "tui.promptUi.fileSearchFailed": "Faile ei saanud otsida. Jätkake tippimist, et uuesti proovida.",
   "tui.promptUi.noReferences": "Ühtegi sobivat faili, agenti ega viiteid pole",
+  "tui.details.submitAnswer": "Submit answer",
+  "tui.details.backToAnswers": "Back to answers",
+  "tui.details.editAnswerHint": "enter submit · esc back",
+  "tui.details.selectAnswerHint": "↑/↓ select · enter confirm · esc cancel",
+  "tui.dialogs.recentlyClosedTabs": "Recently closed tabs",
+  "tui.dialogs.noRecentlyClosedTabs": "No recently closed tabs",
 }
 
 export default dict

@@ -809,7 +809,6 @@ export const dict = {
   "tui.session.jumpToMessage": "संदेश पर जाएँ",
   "tui.session.forkSession": "सेशन फ़ोर्क करें",
   "tui.session.compactSession": "सेशन संक्षिप्त करें",
-  "tui.session.unshareSession": "सेशन साझा करना बंद करें",
   "tui.session.undoPreviousMessage": "पिछला संदेश पूर्ववत करें",
   "tui.session.nothingToUndo": "पूर्ववत करने के लिए कुछ नहीं",
   "tui.session.redo": "फिर से करें",
@@ -1028,6 +1027,12 @@ export const dict = {
   "tui.devtools.connecting": "कनेक्ट हो रहा है",
   "tui.devtools.reconnecting": "पुनः कनेक्ट हो रहा है",
   "tui.devtools.unknown": "अज्ञात",
+  "tui.details.submitAnswer": "Submit answer",
+  "tui.details.backToAnswers": "Back to answers",
+  "tui.details.editAnswerHint": "enter submit · esc back",
+  "tui.details.selectAnswerHint": "↑/↓ select · enter confirm · esc cancel",
+  "tui.dialogs.recentlyClosedTabs": "Recently closed tabs",
+  "tui.dialogs.noRecentlyClosedTabs": "No recently closed tabs",
 }
 
 export default dict

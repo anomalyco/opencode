@@ -245,7 +245,6 @@ export const dict = {
   "tui.session.shareSession": "سیشن شیئر کریں",
   "tui.session.jumpToMessage": "پیغام پر جائیں",
   "tui.session.forkSession": "سیشن کی شاخ بنائیں",
-  "tui.session.unshareSession": "سیشن کی شیئرنگ بند کریں",
   "tui.session.undoPreviousMessage": "پچھلا پیغام واپس لیں",
   "tui.session.nothingToUndo": "واپس لینے کے لیے کچھ نہیں",
   "tui.session.toggleSessionScrollbar": "سیشن کا اسکرول بار دکھائیں/چھپائیں",
@@ -1033,6 +1032,12 @@ export const dict = {
   "tui.promptUi.noDirectories": "کوئی مماثل ڈائریکٹری نہیں",
   "tui.promptUi.fileSearchFailed": "فائلیں تلاش نہیں ہو سکیں۔ دوبارہ کوشش کے لیے ٹائپ کرتے رہیں۔",
   "tui.promptUi.noReferences": "کوئی مماثل فائل، ایجنٹ یا حوالہ نہیں",
+  "tui.details.submitAnswer": "Submit answer",
+  "tui.details.backToAnswers": "Back to answers",
+  "tui.details.editAnswerHint": "enter submit · esc back",
+  "tui.details.selectAnswerHint": "↑/↓ select · enter confirm · esc cancel",
+  "tui.dialogs.recentlyClosedTabs": "Recently closed tabs",
+  "tui.dialogs.noRecentlyClosedTabs": "No recently closed tabs",
 }
 
 export default dict

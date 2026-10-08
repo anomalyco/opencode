@@ -292,7 +292,6 @@ export const dict = {
   "tui.session.shareSession": "Dela session",
   "tui.session.jumpToMessage": "Gå till meddelande",
   "tui.session.forkSession": "Förgrena session",
-  "tui.session.unshareSession": "Sluta dela session",
   "tui.session.undoPreviousMessage": "Ångra föregående meddelande",
   "tui.session.nothingToUndo": "Inget att ångra",
   "tui.session.toggleSessionScrollbar": "Visa/dölj sessionens rullningslist",
@@ -1037,6 +1036,12 @@ export const dict = {
   "tui.permissionDisplay.choices": "Val av behörighet",
   "tui.permissionDisplay.minimize": "minimera",
   "tui.permissionDisplay.fullscreen": "helskärm",
+  "tui.details.submitAnswer": "Submit answer",
+  "tui.details.backToAnswers": "Back to answers",
+  "tui.details.editAnswerHint": "enter submit · esc back",
+  "tui.details.selectAnswerHint": "↑/↓ select · enter confirm · esc cancel",
+  "tui.dialogs.recentlyClosedTabs": "Recently closed tabs",
+  "tui.dialogs.noRecentlyClosedTabs": "No recently closed tabs",
 }
 
 export default dict

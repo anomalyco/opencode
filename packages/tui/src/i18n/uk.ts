@@ -296,7 +296,6 @@ export const dict = {
   "tui.session.shareSession": "Поділитися сесією",
   "tui.session.jumpToMessage": "Перейти до повідомлення",
   "tui.session.forkSession": "Створити відгалуження сесії",
-  "tui.session.unshareSession": "Закрити доступ до сесії",
   "tui.session.undoPreviousMessage": "Скасувати попереднє повідомлення",
   "tui.session.nothingToUndo": "Нічого скасовувати",
   "tui.session.toggleSessionScrollbar": "Показати/приховати смугу прокручування сесії",
@@ -1076,6 +1075,12 @@ export const dict = {
   "tui.plugins.failedCount.many": "Збій {{count}} плагінів",
   "tui.sidebar.errors.few": "{{count}} помилки",
   "tui.sidebar.errors.many": "{{count}} помилок",
+  "tui.details.submitAnswer": "Submit answer",
+  "tui.details.backToAnswers": "Back to answers",
+  "tui.details.editAnswerHint": "enter submit · esc back",
+  "tui.details.selectAnswerHint": "↑/↓ select · enter confirm · esc cancel",
+  "tui.dialogs.recentlyClosedTabs": "Recently closed tabs",
+  "tui.dialogs.noRecentlyClosedTabs": "No recently closed tabs",
 }
 
 export default dict

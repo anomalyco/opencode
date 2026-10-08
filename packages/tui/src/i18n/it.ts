@@ -356,7 +356,6 @@ export const dict = {
   "tui.session.shareSession": "Condividi sessione",
   "tui.session.jumpToMessage": "Vai al messaggio",
   "tui.session.forkSession": "Crea una diramazione della sessione",
-  "tui.session.unshareSession": "Interrompi la condivisione della sessione",
   "tui.session.undoPreviousMessage": "Annulla il messaggio precedente",
   "tui.session.nothingToUndo": "Nulla da annullare",
   "tui.session.toggleSessionScrollbar": "Mostra/nascondi la barra di scorrimento della sessione",
@@ -1061,6 +1060,12 @@ export const dict = {
   "tui.transcript.childSessionTitle": "Sessione figlia - {{date}}",
   "tui.dialogs.newSessionTitle": "Nuova sessione - {{timestamp}}",
   "tui.dialogs.configuration": "Configurazione",
+  "tui.details.submitAnswer": "Submit answer",
+  "tui.details.backToAnswers": "Back to answers",
+  "tui.details.editAnswerHint": "enter submit · esc back",
+  "tui.details.selectAnswerHint": "↑/↓ select · enter confirm · esc cancel",
+  "tui.dialogs.recentlyClosedTabs": "Recently closed tabs",
+  "tui.dialogs.noRecentlyClosedTabs": "No recently closed tabs",
 }
 
 export default dict

@@ -847,7 +847,6 @@ export const dict = {
   "tui.session.shareSession": "Мубодилаи сессия",
   "tui.session.jumpToMessage": "Ба паём гузаред",
   "tui.session.forkSession": "Шоха кардани сессия",
-  "tui.session.unshareSession": "Қатъи мубодилаи сессия",
   "tui.session.undoPreviousMessage": "Паёми қаблиро бекор кунед",
   "tui.session.nothingToUndo": "Ҳеҷ чиз барои бекор кардан нест",
   "tui.session.toggleSessionScrollbar": "Иваз кардани панели паймоиш",
@@ -1041,6 +1040,12 @@ export const dict = {
   "tui.devtools.connecting": "Пайвастшавӣ",
   "tui.devtools.reconnecting": "Аз нав пайваст шудан",
   "tui.devtools.unknown": "Номаълум",
+  "tui.details.submitAnswer": "Submit answer",
+  "tui.details.backToAnswers": "Back to answers",
+  "tui.details.editAnswerHint": "enter submit · esc back",
+  "tui.details.selectAnswerHint": "↑/↓ select · enter confirm · esc cancel",
+  "tui.dialogs.recentlyClosedTabs": "Recently closed tabs",
+  "tui.dialogs.noRecentlyClosedTabs": "No recently closed tabs",
 }
 
 export default dict

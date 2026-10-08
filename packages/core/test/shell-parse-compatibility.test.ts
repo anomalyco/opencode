@@ -93,12 +93,42 @@ describe("portable shell parser compatibility", () => {
   test("extracts inline PowerShell directory flags with case-insensitive names and quoted values", async () => {
     const result = await Effect.runPromise(
       ShellParse.scanPortable(
-        "Set-Location -LITERALPATH:C:\\outside; Set-Location -pAtH:'../other dir'",
+        "Set-Location -LITERALPATH:C:\\outside; Set-Location -pAtH:'../other dir'; Set-Location -p:/short; Set-Location -lp /literal; Set-Location -l:/prefix; Set-Location -lit:/litprefix; Set-Location -pat:/patprefix; Set-Location -PSPath:/pspath; Set-Location '-outside'; Set-Location -/../../outside; Set-Location -Path -- -/../../outside2; Set-Location -- -outside2; Set-Location -`outside3; Set-Location \"../`$a/../outside4\"; Set-Location /out`side; Set-Location 'C:\\quoted'",
         "pwsh",
         "/workspace",
       ),
     )
-    expect(result).toEqual({ commands: [], directories: ["C:\\outside", "../other dir"] })
+    expect(result).toEqual({
+      commands: [],
+      directories: [
+        "C:\\outside",
+        "../other dir",
+        "/short",
+        "/literal",
+        "/prefix",
+        "/litprefix",
+        "/patprefix",
+        "/pspath",
+        "-outside",
+        "-/../../outside",
+        "-/../../outside2",
+        "-outside2",
+        "-outside3",
+        "../$a/../outside4",
+        "/outside",
+        "C:\\quoted",
+      ],
+    })
+  })
+
+  test("retains statement-head ForEach-Object cmdlet calls when non-scriptblock parameters are present", async () => {
+    const result = await Effect.runPromise(
+      ShellParse.scanPortable("ForEach-Object -InputObject $proc -MemberName Kill", "pwsh", "/workspace"),
+    )
+    expect(result).toEqual({
+      commands: [{ resource: "ForEach-Object -InputObject $proc -MemberName Kill", save: "ForEach-Object *" }],
+      directories: [],
+    })
   })
 })
 

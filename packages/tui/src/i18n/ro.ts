@@ -356,7 +356,6 @@ export const dict = {
   "tui.session.shareSession": "Partajează sesiunea",
   "tui.session.jumpToMessage": "Mergi la mesaj",
   "tui.session.forkSession": "Ramifică sesiunea",
-  "tui.session.unshareSession": "Oprește partajarea sesiunii",
   "tui.session.undoPreviousMessage": "Anulează mesajul anterior",
   "tui.session.nothingToUndo": "Nimic de anulat",
   "tui.session.toggleSessionScrollbar": "Arată/ascunde bara de derulare a sesiunii",
@@ -1057,6 +1056,12 @@ export const dict = {
   "tui.transcript.childSessionTitle": "Sesiune copil - {{date}}",
   "tui.dialogs.newSessionTitle": "Sesiune nouă - {{timestamp}}",
   "tui.dialogs.configuration": "Configurație",
+  "tui.details.submitAnswer": "Submit answer",
+  "tui.details.backToAnswers": "Back to answers",
+  "tui.details.editAnswerHint": "enter submit · esc back",
+  "tui.details.selectAnswerHint": "↑/↓ select · enter confirm · esc cancel",
+  "tui.dialogs.recentlyClosedTabs": "Recently closed tabs",
+  "tui.dialogs.noRecentlyClosedTabs": "No recently closed tabs",
 }
 
 export default dict

@@ -365,7 +365,6 @@ export const dict = {
   "tui.session.shareSession": "Κοινοποίηση συνεδρίας",
   "tui.session.jumpToMessage": "Μετάβαση σε μήνυμα",
   "tui.session.forkSession": "Διακλάδωση συνεδρίας",
-  "tui.session.unshareSession": "Κατάργηση κοινοποίησης συνεδρίας",
   "tui.session.undoPreviousMessage": "Αναίρεση προηγούμενου μηνύματος",
   "tui.session.nothingToUndo": "Δεν υπάρχει τίποτα για αναίρεση",
   "tui.session.toggleSessionScrollbar": "Εναλλαγή γραμμής κύλισης συνεδρίας",
@@ -1049,6 +1048,12 @@ export const dict = {
   "tui.promptUi.fileSearchFailed":
     "Δεν ήταν δυνατή η αναζήτηση αρχείων. Συνεχίστε να πληκτρολογείτε για να προσπαθήσετε ξανά.",
   "tui.promptUi.noReferences": "Δεν υπάρχουν αρχεία, πράκτορες ή αναφορές που να ταιριάζουν",
+  "tui.details.submitAnswer": "Submit answer",
+  "tui.details.backToAnswers": "Back to answers",
+  "tui.details.editAnswerHint": "enter submit · esc back",
+  "tui.details.selectAnswerHint": "↑/↓ select · enter confirm · esc cancel",
+  "tui.dialogs.recentlyClosedTabs": "Recently closed tabs",
+  "tui.dialogs.noRecentlyClosedTabs": "No recently closed tabs",
 }
 
 export default dict

@@ -292,7 +292,6 @@ export const dict = {
   "tui.session.shareSession": "Sessie delen",
   "tui.session.jumpToMessage": "Naar bericht springen",
   "tui.session.forkSession": "Sessie vertakken",
-  "tui.session.unshareSession": "Delen van sessie stoppen",
   "tui.session.undoPreviousMessage": "Vorig bericht ongedaan maken",
   "tui.session.nothingToUndo": "Niets om ongedaan te maken",
   "tui.session.toggleSessionScrollbar": "Sessieschuifbalk tonen/verbergen",
@@ -1038,6 +1037,12 @@ export const dict = {
   "tui.permissionDisplay.choices": "Toestemmingskeuzes",
   "tui.permissionDisplay.minimize": "minimaliseren",
   "tui.permissionDisplay.fullscreen": "volledig scherm",
+  "tui.details.submitAnswer": "Submit answer",
+  "tui.details.backToAnswers": "Back to answers",
+  "tui.details.editAnswerHint": "enter submit · esc back",
+  "tui.details.selectAnswerHint": "↑/↓ select · enter confirm · esc cancel",
+  "tui.dialogs.recentlyClosedTabs": "Recently closed tabs",
+  "tui.dialogs.noRecentlyClosedTabs": "No recently closed tabs",
 }
 
 export default dict

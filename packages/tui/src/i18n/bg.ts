@@ -292,7 +292,6 @@ export const dict = {
   "tui.session.shareSession": "Споделяне на сесията",
   "tui.session.jumpToMessage": "Отиване до съобщение",
   "tui.session.forkSession": "Разклоняване на сесията",
-  "tui.session.unshareSession": "Спиране на споделянето на сесията",
   "tui.session.undoPreviousMessage": "Отмяна на предишното съобщение",
   "tui.session.nothingToUndo": "Няма нищо за отмяна",
   "tui.session.toggleSessionScrollbar": "Показване/скриване на лентата за превъртане на сесията",
@@ -1041,6 +1040,12 @@ export const dict = {
   "tui.permissionDisplay.choices": "Избор на разрешение",
   "tui.permissionDisplay.minimize": "минимизиране",
   "tui.permissionDisplay.fullscreen": "цял екран",
+  "tui.details.submitAnswer": "Submit answer",
+  "tui.details.backToAnswers": "Back to answers",
+  "tui.details.editAnswerHint": "enter submit · esc back",
+  "tui.details.selectAnswerHint": "↑/↓ select · enter confirm · esc cancel",
+  "tui.dialogs.recentlyClosedTabs": "Recently closed tabs",
+  "tui.dialogs.noRecentlyClosedTabs": "No recently closed tabs",
 }
 
 export default dict

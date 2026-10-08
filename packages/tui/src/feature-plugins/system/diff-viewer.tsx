@@ -307,7 +307,6 @@ export function DiffViewerContent(props: {
   sourceDetail?: string
   sourceBase?: Pick<Vcs.Base, "name" | "ref"> | null
   unavailable?: boolean
-  navigation?: "tree" | "list"
   loadImage?: (file: string, signal: AbortSignal) => Promise<Uint8Array>
   preferences?: DiffPreferences
   onPreferencesChange?: (value: DiffPreferences) => void
@@ -896,7 +895,6 @@ export function DiffViewerContent(props: {
                   files={files()}
                   loading={props.loading ?? false}
                   error={props.error}
-                  layout={props.navigation}
                   width={fileTreeWidth()}
                   selectedFileIndex={
                     selectedFileIndex() ?? (singlePatch() ? visiblePatchFiles()[0]?.fileIndex : undefined)

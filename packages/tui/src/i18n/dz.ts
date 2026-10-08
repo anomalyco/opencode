@@ -851,7 +851,6 @@ export const dict = {
   "tui.session.shareSession": "བརྗེ་སོར་གྱི་ལཱ་ཡུན།",
   "tui.session.jumpToMessage": "འཕྲིན་དོན་ལུ་མཆོང་།",
   "tui.session.forkSession": "ལཱ་ཡུན་གྱི་ཡན་ལག་གསརཔ་བཟོ",
-  "tui.session.unshareSession": "ལཱ་ཡུན་རུབ་བཤུབ་འབད།",
   "tui.session.undoPreviousMessage": "ཧེ་མའི་འཕྲིན་དོན་རྒྱབ་བཤོལ་འབད།",
   "tui.session.nothingToUndo": "ཕྱིར་འཐེན་གང་ཡང་མེད།",
   "tui.session.toggleSessionScrollbar": "ལཱ་ཡུན་བཤུད་སྒྲིལ་ཕྲ་རིང་སོར་སྟོན་འབད།",
@@ -1046,6 +1045,12 @@ export const dict = {
   "tui.devtools.connecting": "མཐུད་དོ།",
   "tui.devtools.reconnecting": "ལོག་མཐུད་དོ།",
   "tui.devtools.unknown": "མི་ཤེས་པ།",
+  "tui.details.submitAnswer": "Submit answer",
+  "tui.details.backToAnswers": "Back to answers",
+  "tui.details.editAnswerHint": "enter submit · esc back",
+  "tui.details.selectAnswerHint": "↑/↓ select · enter confirm · esc cancel",
+  "tui.dialogs.recentlyClosedTabs": "Recently closed tabs",
+  "tui.dialogs.noRecentlyClosedTabs": "No recently closed tabs",
 }
 
 export default dict

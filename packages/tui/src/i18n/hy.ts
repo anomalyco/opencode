@@ -365,7 +365,6 @@ export const dict = {
   "tui.session.shareSession": "Կիսվել աշխատաշրջանով",
   "tui.session.jumpToMessage": "Անցնել հաղորդագրությանը",
   "tui.session.forkSession": "Ճյուղավորել աշխատաշրջանը",
-  "tui.session.unshareSession": "Դադարեցնել աշխատաշրջանի համօգտագործումը",
   "tui.session.undoPreviousMessage": "Հետարկել նախորդ հաղորդագրությունը",
   "tui.session.nothingToUndo": "Հետարկելու բան չկա",
   "tui.session.toggleSessionScrollbar": "Փոխարկել աշխատաշրջանի ոլորման գոտին",
@@ -1038,6 +1037,12 @@ export const dict = {
   "tui.promptUi.noDirectories": "Համապատասխան պանակներ չկան",
   "tui.promptUi.fileSearchFailed": "Չհաջողվեց որոնել ֆայլերը։ Շարունակեք մուտքագրել՝ նորից փորձելու համար։",
   "tui.promptUi.noReferences": "Համապատասխան ֆայլեր, գործակալներ կամ հղումներ չկան",
+  "tui.details.submitAnswer": "Submit answer",
+  "tui.details.backToAnswers": "Back to answers",
+  "tui.details.editAnswerHint": "enter submit · esc back",
+  "tui.details.selectAnswerHint": "↑/↓ select · enter confirm · esc cancel",
+  "tui.dialogs.recentlyClosedTabs": "Recently closed tabs",
+  "tui.dialogs.noRecentlyClosedTabs": "No recently closed tabs",
 }
 
 export default dict

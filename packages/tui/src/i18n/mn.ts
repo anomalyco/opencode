@@ -843,7 +843,6 @@ export const dict = {
   "tui.session.shareSession": "Хурал хуваалцах",
   "tui.session.jumpToMessage": "Мессеж рүү үсрэх",
   "tui.session.forkSession": "Сессээс шинэ салаа үүсгэх",
-  "tui.session.unshareSession": "Хувийн бус хуваалцахыг цуцлах",
   "tui.session.undoPreviousMessage": "Өмнөх мессежийг буцаах",
   "tui.session.nothingToUndo": "Буцаах зүйл байхгүй",
   "tui.session.toggleSessionScrollbar": "Хурлын гүйлгэгчийг унтраах/асах",
@@ -1035,6 +1034,12 @@ export const dict = {
   "tui.devtools.connecting": "Холбогдож байна",
   "tui.devtools.reconnecting": "Дахин холбогдож байна",
   "tui.devtools.unknown": "Танигдаагүй",
+  "tui.details.submitAnswer": "Submit answer",
+  "tui.details.backToAnswers": "Back to answers",
+  "tui.details.editAnswerHint": "enter submit · esc back",
+  "tui.details.selectAnswerHint": "↑/↓ select · enter confirm · esc cancel",
+  "tui.dialogs.recentlyClosedTabs": "Recently closed tabs",
+  "tui.dialogs.noRecentlyClosedTabs": "No recently closed tabs",
 }
 
 export default dict

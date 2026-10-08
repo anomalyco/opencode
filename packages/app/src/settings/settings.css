@@ -8,10 +8,10 @@
 .settings-screen {
   display: flex;
   flex: 1;
-  width: calc(100% - 16px);
+  width: calc(100% - 2 * var(--shell-inline-inset, 8px));
   min-width: 0;
   min-height: 0;
-  margin-inline: 8px;
+  margin-inline: var(--shell-inline-inset, 8px);
   margin-block: var(--shell-top-inset, 8px) var(--shell-bottom-inset, 8px);
   justify-content: center;
   overflow: hidden;
@@ -31,7 +31,6 @@
 @media (max-width: 767px) {
   .settings-screen {
     --settings-mobile-inner-inset: 8px;
-    margin-block-start: var(--settings-top-inset, var(--shell-top-inset, 8px));
   }
 }
 
@@ -288,6 +287,152 @@
 .settings-about-content a:focus-visible {
   color: var(--v2-text-text-base);
   text-decoration: underline;
+}
+
+.settings-about-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  letter-spacing: inherit;
+}
+
+.settings-about-link:hover,
+.settings-about-link:focus-visible {
+  color: var(--v2-text-text-base);
+  text-decoration: underline;
+}
+
+.settings-notices {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 0 20px 20px;
+  color: var(--v2-text-text-muted);
+  font-size: 13px;
+  line-height: var(--line-height-base);
+}
+
+.settings-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings-notice p {
+  margin: 0;
+}
+
+.settings-notice-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--v2-text-text-base);
+  font-weight: 540;
+}
+
+.settings-notice-heading span {
+  color: var(--v2-text-text-faint);
+  font-weight: 440;
+}
+
+.settings-notice-heading a {
+  color: inherit;
+}
+
+.settings-notice summary {
+  cursor: pointer;
+  color: var(--v2-text-text-faint);
+}
+
+.settings-notice pre {
+  margin: 0;
+  font-family: var(--font-family-mono);
+  font-size: 11px;
+  line-height: var(--line-height-compact);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.settings-notice details pre {
+  margin-top: 8px;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--v2-background-bg-layer-02);
+}
+
+.settings-crates {
+  padding-top: 20px;
+  border-top: 0.5px solid var(--v2-border-border-base);
+}
+
+.settings-crates h3,
+.settings-crates h4 {
+  margin: 0;
+  font-size: 13px;
+  line-height: var(--line-height-base);
+}
+
+.settings-crates h4 {
+  margin-top: 8px;
+  color: var(--v2-text-text-base);
+  font-weight: 540;
+}
+
+.settings-crate-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.settings-crate {
+  line-height: var(--line-height-compact);
+}
+
+.settings-crate-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-crate-heading > span:first-child {
+  color: var(--v2-text-text-faint);
+}
+
+.settings-crate-heading a {
+  color: var(--v2-text-text-base);
+}
+
+.settings-crate-heading > span:last-child {
+  flex-shrink: 0;
+  color: var(--v2-text-text-faint);
+}
+
+.settings-crate-heading strong {
+  color: var(--v2-text-text-base);
+  font-weight: 540;
+}
+
+.settings-crate p {
+  color: var(--v2-text-text-faint);
+  font-size: 12px;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.settings-crates summary span {
+  margin-inline-start: 8px;
+}
+
+.settings-crates details > p {
+  margin-top: 8px;
 }
 
 .settings-back {
@@ -1072,14 +1217,6 @@
 .settings-project-card[data-menu="true"] {
   background: var(--v2-background-bg-layer-02);
 }
-.settings-tab-search-clear {
-  position: absolute;
-  top: 50%;
-  inset-inline-end: 6px;
-  z-index: 1;
-  transform: translateY(-50%);
-}
-
 .settings-models {
   gap: 12px;
 }
@@ -1810,7 +1947,8 @@
 .settings-server-dialog-error {
   font-size: 11px;
   font-weight: 440;
-  line-height: 1;
+  /* Pairing errors are full sentences that wrap. */
+  line-height: var(--line-height-compact);
   color: var(--v2-state-fg-danger);
 }
 
@@ -1818,6 +1956,25 @@
   font-size: 13px;
   line-height: var(--line-height-base);
   color: var(--v2-text-text-muted);
+}
+
+.settings-server-dialog-notice {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border: 1px solid var(--v2-border-border-base);
+  border-radius: 6px;
+  background: var(--v2-background-bg-layer-01);
+  font-size: 13px;
+  line-height: var(--line-height-base);
+  color: var(--v2-text-text-base);
+}
+
+.settings-server-dialog-notice [data-slot="icon-svg"] {
+  flex: none;
+  margin-block: 2px;
+  color: var(--v2-icon-icon-muted);
 }
 
 .settings-extensions-tabs[data-component="tabs-v2"][data-variant="pill"] > [data-slot="tabs-v2-list"] {

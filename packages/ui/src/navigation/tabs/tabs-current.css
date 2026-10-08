@@ -1,10 +1,6 @@
-* {
+[data-component="tabs-v2"] {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  text-rendering: geometricPrecision;
-}
-
-[data-component="tabs-v2"] {
   width: 100%;
   height: 100%;
   display: flex;

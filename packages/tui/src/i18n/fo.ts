@@ -291,7 +291,6 @@ export const dict = {
   "tui.session.shareSession": "Deil setu",
   "tui.session.jumpToMessage": "Far til boð",
   "tui.session.forkSession": "Greina setu",
-  "tui.session.unshareSession": "Steðga deiling av setu",
   "tui.session.undoPreviousMessage": "Angra fyrri boð",
   "tui.session.nothingToUndo": "Einki at angra",
   "tui.session.toggleSessionScrollbar": "Vís/fjal rullibjálka hjá setu",
@@ -1034,6 +1033,12 @@ export const dict = {
   "tui.permissionDisplay.choices": "Loyvisval",
   "tui.permissionDisplay.minimize": "minka",
   "tui.permissionDisplay.fullscreen": "fullskíggja",
+  "tui.details.submitAnswer": "Submit answer",
+  "tui.details.backToAnswers": "Back to answers",
+  "tui.details.editAnswerHint": "enter submit · esc back",
+  "tui.details.selectAnswerHint": "↑/↓ select · enter confirm · esc cancel",
+  "tui.dialogs.recentlyClosedTabs": "Recently closed tabs",
+  "tui.dialogs.noRecentlyClosedTabs": "No recently closed tabs",
 }
 
 export default dict

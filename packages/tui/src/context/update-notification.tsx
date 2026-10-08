@@ -17,7 +17,7 @@ export type UpdateState =
 
 export type UpdateSource = {
   readonly remote: boolean
-  readonly subscribe: (notify: (notice: ClientNotice) => void, signal: AbortSignal) => Promise<void>
+  readonly subscribe: (notify: (notice: ClientNotice) => void) => () => void
   readonly check: (
     signal: AbortSignal,
     onInstall: (version: string) => void,
@@ -115,15 +115,8 @@ export const { use: useUpdateNotification, provider: UpdateNotificationProvider 
     }
 
     onMount(() => {
-      const updater = props.updater
-      if (!updater) return
-      const controller = new AbortController()
-      onCleanup(() => controller.abort())
-      void updater
-        .subscribe((notice) => notify({ ...notice, source: "client" }), controller.signal)
-        .catch((error) => {
-          if (!controller.signal.aborted) log.error("update check failed", { error })
-        })
+      if (!props.updater) return
+      onCleanup(props.updater.subscribe((notice) => notify({ ...notice, source: "client" })))
     })
 
     onCleanup(

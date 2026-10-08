@@ -1,6 +1,18 @@
 import { Tabs } from "@opencode/ui/tabs"
 import { useDialog } from "@opencode/ui/context/dialog"
-import { createEffect, createMemo, on, onCleanup, onMount, Show, Switch, Match, type Accessor } from "solid-js"
+import {
+  createEffect,
+  createMemo,
+  lazy,
+  on,
+  onCleanup,
+  onMount,
+  Show,
+  Suspense,
+  Switch,
+  Match,
+  type Accessor,
+} from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
@@ -10,7 +22,7 @@ import { useGlobal, useServerCtx } from "@/runtime/server/runtime"
 import { ServerConnection } from "@/runtime/server/registry"
 import type { LocalProject } from "@/shell/state/layout"
 import { useServerCollectionController } from "@/servers/registry/controller"
-import { AddServerMenu } from "@/servers/wsl/settings"
+import { AddServerMenu } from "@/servers/registry/add-menu"
 import { DialogServer } from "@/servers/connect/dialog"
 import { LocationProvider } from "@/workspaces/location"
 import { SettingsGeneral } from "./general/general"
@@ -18,12 +30,10 @@ import { SettingsAppearance } from "./appearance/appearance"
 import { experimentalSettingsAvailable, SettingsExperimental } from "./experimental/experimental"
 import { SettingsKeybinds } from "./keybinds/keybinds"
 import { SettingsNotifications } from "./notifications/notifications"
-import { SettingsPairing } from "./pairing/pairing"
 import { SettingsProviders } from "./providers/providers"
 import { SettingsModels } from "./models/models"
 import { SettingsServerGeneral } from "./servers/servers"
 import { useSettingsServers, useSettingsServersLoaded, type SettingsServer } from "./servers/inventory"
-import { isSshConnecting } from "@/servers/ssh/types"
 import { SettingsWorkspaces } from "./workspaces/workspaces"
 import { useWorkspacesPrefetch } from "./workspaces/queries"
 import { SettingsProjects } from "./workspaces/projects"
@@ -37,14 +47,20 @@ import { useSettingsSurface } from "./surface"
 import { settingsViewRedirect } from "./route"
 import { pageIcons } from "./pages"
 import { revealSettingsSearch } from "./search-reveal"
+import { ExtensionSettingsPages } from "@/runtime/extension/settings-page-view"
 import "@/settings/settings.css"
+
+const GuiExtensionsSettings = import.meta.env.DEV
+  ? lazy(() =>
+      import("@/runtime/extension/settings-page-dev").then((module) => ({ default: module.GuiExtensionsSettings })),
+    )
+  : undefined
 
 const rootClientTabs = [
   { value: "general", icon: pageIcons.general, label: "settings.tab.preferences" },
   { value: "appearance", icon: pageIcons.appearance, label: "settings.general.section.appearance" },
   { value: "notifications", icon: pageIcons.notifications, label: "settings.tab.notifications" },
   { value: "shortcuts", icon: pageIcons.shortcuts, label: "settings.tab.shortcuts" },
-  { value: "pairing", icon: pageIcons.pairing, label: "settings.pairing.title" },
 ] as const
 
 const serverTabs = [
@@ -58,6 +74,11 @@ const serverTabs = [
 const experimentalTab = [
   { value: "experimental", icon: pageIcons.experimental, label: "settings.tab.experimental" },
 ] as const
+
+const guiExtensionsTab = [
+  { value: "gui-extensions", icon: pageIcons["gui-extensions"], label: "settings.guiExtensions.title" },
+] as const
+
 const aboutTab = [{ value: "about", icon: pageIcons.about, label: "settings.tab.about" }] as const
 
 const nestedServerTabs = [
@@ -84,6 +105,7 @@ export function SettingsScreen() {
   onMount(() => root?.focus({ preventScroll: true }))
   createEffect(() => {
     const next = surface.view().type
+
     if (next === viewType) return
     viewType = next
     queueMicrotask(() => {
@@ -91,6 +113,7 @@ export function SettingsScreen() {
         surface.search.state.query.trim() && surface.search.state.expanded
           ? root?.querySelector<HTMLInputElement>(".settings-search input")
           : root
+
       target?.focus({ preventScroll: true })
     })
   })
@@ -114,24 +137,34 @@ export function SettingsScreen() {
   )
 
   const connection = (key: string) => servers().find((item) => item.key === key)
+
   const project = (server: ServerConnection.Any, directory: string) => {
     const context = global.ensureServerCtx(server)
+
     const value =
       context.projects.list().find((item) => item.worktree === directory) ??
       context.sync.data.project.find((item) => item.worktree === directory)
+
     return value ? { expanded: false, ...value } : undefined
   }
+
   const targetServer = createMemo(() => {
     const view = surface.view()
+
     if (view.type === "root") return undefined
+
     return connection(view.server)
   })
+
   const targetProject = createMemo(() => {
     const view = surface.view()
     const server = targetServer()
+
     if (view.type !== "project" || !server) return undefined
+
     return server.connection && project(server.connection, view.project)
   })
+
   createEffect(() => {
     const next = settingsViewRedirect({
       view: surface.view(),
@@ -139,11 +172,14 @@ export function SettingsScreen() {
       servers: servers().map((item) => ({
         key: item.key,
         connected: !!item.connection,
-        starting: item.wsl?.runtime.kind === "starting" || (!!item.ssh && isSshConnecting(item.ssh.stage)),
+        starting: item.source?.entry.state === "starting",
       })),
     })
+
     if (next?.type === "back") surface.back()
+
     if (next?.type === "server") surface.replaceServer(next.server)
+
     if (next?.type === "root") surface.open(next.tab)
   })
 
@@ -156,11 +192,15 @@ export function SettingsScreen() {
       onKeyDown={(event) => {
         if (event.key !== "Escape" || event.defaultPrevented || dialog.active) return
         event.preventDefault()
+
         if (surface.view().type !== "root" && surface.search.back()) return
+
         if (surface.search.state.query.trim()) {
           surface.search.clear()
+
           return
         }
+
         surface.back()
       }}
     >
@@ -193,52 +233,71 @@ function RootSettings() {
   const inventory = useSettingsServers()
   const loaded = useSettingsServersLoaded()
   const platform = usePlatform()
-  const [state, setState] = createStore({
+
+  const [state, setState] = createStore<{ worktreeFilterReset: number; modelProvider: string | undefined }>({
     worktreeFilterReset: 0,
-    modelProvider: undefined as string | undefined,
+    modelProvider: undefined,
   })
+
   const list = servers.collection.items
   const singleEntry = createMemo(() => (inventory().length === 1 ? inventory()[0] : undefined))
   const single = createMemo(() => singleEntry()?.connection)
   const prefetchWorkspaces = useWorkspacesPrefetch(single)
   const multiple = createMemo(() => inventory().length > 1)
+
   const ordered = createMemo(() => {
     const order = new Map(list().map((server, index) => [ServerConnection.key(server), index]))
-    return inventory().toSorted((a, b) => {
-      const preferred = Number(b.key === servers.defaults.key()) - Number(a.key === servers.defaults.key())
-      if (preferred) return preferred
-      return (order.get(a.key) ?? list().length) - (order.get(b.key) ?? list().length)
-    })
+
+    return inventory().toSorted((a, b) => (order.get(a.key) ?? list().length) - (order.get(b.key) ?? list().length))
   })
+
   const sourceServer = createMemo(() => {
     const route = surface.route()
+
     if (route.type === "session") return connectionFor(list(), route.server)
+
     if (route.type === "draft") {
       const draft = tabs.store.find((item) => item.type === "draft" && item.draftID === route.draftID)
+
       return connectionFor(list(), draft?.server)
     }
+
     return connectionFor(list(), layout.home.selection().server)
   })
+
   const sourceDirectory = useSettingsDirectory(sourceServer)
+  // Development builds list the built-in GUI extensions of this window.
+  const guiExtensions = !!GuiExtensionsSettings && platform.platform === "desktop"
   createEffect(() => {
     const view = surface.view()
-    if (experimentalSettingsAvailable || view.type !== "root" || view.tab !== "experimental") return
-    surface.open("general")
+
+    if (view.type !== "root") return
+
+    if (view.tab === "experimental" && !experimentalSettingsAvailable) surface.open("general")
+
+    if (view.tab === "gui-extensions" && !guiExtensions) surface.open("general")
   })
+
   const addServer = () =>
     void dialog.push(() => (
       <DialogServer mode="add" onSave={(server) => surface.openServer(ServerConnection.key(server))} />
     ))
+
   const groups = createMemo<SettingsNavGroup[]>(() => [
     {
-      items: rootClientTabs
-        .filter((item) => item.value !== "pairing" || !!platform.pair)
-        .map((item) => ({ ...item, label: language.t(item.label) })),
+      items: [
+        ...rootClientTabs.map((item) => ({ ...item, label: language.t(item.label) })),
+        ...surface.extensions.pages().map((item) => ({
+          value: item.value.id,
+          icon: item.value.icon ?? pageIcons.extensions,
+          label: item.value.title,
+        })),
+      ],
     },
     ...(multiple()
       ? [
           {
-            label: language.t("status.popover.tab.servers"),
+            label: language.t("settings.tab.servers"),
             action: <AddServerMenu compact onAddServer={addServer} />,
             items: ordered().map((server) => ({
               value: `server:${server.key}`,
@@ -263,12 +322,15 @@ function RootSettings() {
     ...(experimentalSettingsAvailable
       ? [{ items: experimentalTab.map((item) => ({ ...item, label: language.t(item.label) })) }]
       : []),
+    ...(guiExtensions ? [{ items: guiExtensionsTab.map((item) => ({ ...item, label: language.t(item.label) })) }] : []),
     { items: aboutTab.map((item) => ({ ...item, label: language.t(item.label) })) },
   ])
 
   createEffect(() => {
     const view = surface.view()
+
     if (view.type !== "root" || !loaded() || !multiple()) return
+
     if (["projects", "workspaces", "providers", "models", "extensions", "servers"].includes(view.tab))
       surface.open("general")
   })
@@ -276,8 +338,10 @@ function RootSettings() {
   const change = (value: string) => {
     if (value.startsWith("server:")) {
       surface.openServer(value.slice("server:".length))
+
       return
     }
+
     if (value === "workspaces") setState("worktreeFilterReset", (current) => current + 1)
     surface.select(value)
   }
@@ -303,12 +367,17 @@ function RootSettings() {
       <Tabs.Content value="shortcuts" class="settings-panel">
         <SettingsKeybinds active={surface.view().tab === "shortcuts"} />
       </Tabs.Content>
-      <Tabs.Content value="pairing" class="settings-panel">
-        <SettingsPairing />
-      </Tabs.Content>
+      <ExtensionSettingsPages />
       <Tabs.Content value="experimental" class="settings-panel">
         <SettingsExperimental />
       </Tabs.Content>
+      {GuiExtensionsSettings && guiExtensions && (
+        <Tabs.Content value="gui-extensions" class="settings-panel">
+          <Suspense>
+            <GuiExtensionsSettings />
+          </Suspense>
+        </Tabs.Content>
+      )}
       <Tabs.Content value="about" class="settings-panel settings-about">
         <SettingsAbout active={surface.view().tab === "about"} />
       </Tabs.Content>
@@ -371,10 +440,12 @@ function ServerSettings(props: { entry: SettingsServer }) {
   const surface = useSettingsSurface()
   const activeDirectory = useSettingsDirectory(() => props.entry.connection)
   const prefetchWorkspaces = useWorkspacesPrefetch(() => props.entry.connection)
-  const [state, setState] = createStore({
+
+  const [state, setState] = createStore<{ worktreeFilterReset: number; modelProvider: string | undefined }>({
     worktreeFilterReset: 0,
-    modelProvider: undefined as string | undefined,
+    modelProvider: undefined,
   })
+
   const groups = createMemo<SettingsNavGroup[]>(() => [
     {
       items: nestedServerTabs.map((item) => ({
@@ -385,9 +456,11 @@ function ServerSettings(props: { entry: SettingsServer }) {
       })),
     },
   ])
+
   createEffect(() => {
     if (!props.entry.connection && surface.view().tab !== "general") surface.select("general")
   })
+
   const change = (value: string) => {
     if (value === "workspaces") setState("worktreeFilterReset", (current) => current + 1)
     surface.select(value)
@@ -459,10 +532,12 @@ function ProjectSettings(props: { server: ServerConnection.Any; project: LocalPr
   const language = useLanguage()
   const surface = useSettingsSurface()
   const activeDirectory = useSettingsDirectory(() => props.server)
+
   const prefetchWorkspaces = useWorkspacesPrefetch(
     () => props.server,
     () => props.project.id,
   )
+
   const groups: SettingsNavGroup[] = [
     {
       items: nestedProjectTabs.map((item) => ({
@@ -472,6 +547,7 @@ function ProjectSettings(props: { server: ServerConnection.Any; project: LocalPr
       })),
     },
   ]
+
   return (
     <SettingsServerDataScope server={props.server} directory={props.project.worktree}>
       <LocationProvider directory={props.project.worktree}>
@@ -510,15 +586,20 @@ function useSettingsDirectory(server: Accessor<ServerConnection.Any | undefined>
   const surface = useSettingsSurface()
   const tabs = useTabs()
   const serverCtx = useServerCtx(server)
+
   return createMemo(() => {
     const current = server()
+
     if (!current) return undefined
     const key = ServerConnection.key(current)
     const route = surface.route()
+
     if (route.type === "session" && route.server === key)
       return serverCtx()?.data.session.get(route.sessionId)?.location.directory
+
     if (route.type !== "draft") return undefined
     const draft = tabs.store.find((item) => item.type === "draft" && item.draftID === route.draftID)
+
     return draft?.type === "draft" && draft.server === key ? draft.directory : undefined
   })
 }

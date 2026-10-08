@@ -291,7 +291,6 @@ export const dict = {
   "tui.session.shareSession": "分享会话",
   "tui.session.jumpToMessage": "跳转到消息",
   "tui.session.forkSession": "创建会话分支",
-  "tui.session.unshareSession": "取消分享会话",
   "tui.session.undoPreviousMessage": "撤销上一条消息",
   "tui.session.nothingToUndo": "没有可撤销的内容",
   "tui.session.toggleSessionScrollbar": "切换会话滚动条",
@@ -1022,6 +1021,12 @@ export const dict = {
   "tui.permissionDisplay.choices": "权限选项",
   "tui.permissionDisplay.minimize": "最小化",
   "tui.permissionDisplay.fullscreen": "全屏",
+  "tui.details.submitAnswer": "提交答案",
+  "tui.details.backToAnswers": "返回答案",
+  "tui.details.editAnswerHint": "enter 提交 · esc 返回",
+  "tui.details.selectAnswerHint": "↑/↓ 选择 · enter 确认 · esc 取消",
+  "tui.dialogs.recentlyClosedTabs": "最近关闭的标签页",
+  "tui.dialogs.noRecentlyClosedTabs": "没有最近关闭的标签页",
 }
 
 export default dict

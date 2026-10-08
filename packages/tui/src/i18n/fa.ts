@@ -246,7 +246,6 @@ export const dict = {
   "tui.session.shareSession": "اشتراک‌گذاری جلسه",
   "tui.session.jumpToMessage": "رفتن به پیام",
   "tui.session.forkSession": "انشعاب جلسه",
-  "tui.session.unshareSession": "لغو اشتراک‌گذاری جلسه",
   "tui.session.undoPreviousMessage": "واگرد پیام قبلی",
   "tui.session.nothingToUndo": "چیزی برای واگرد وجود ندارد",
   "tui.session.toggleSessionScrollbar": "نمایش/پنهان کردن نوار پیمایش جلسه",
@@ -1033,6 +1032,12 @@ export const dict = {
   "tui.promptUi.noDirectories": "پوشهٔ منطبقی وجود ندارد",
   "tui.promptUi.fileSearchFailed": "جستجوی فایل‌ها ممکن نشد. برای تلاش دوباره به تایپ ادامه دهید.",
   "tui.promptUi.noReferences": "فایل، عامل یا مرجع منطبقی وجود ندارد",
+  "tui.details.submitAnswer": "Submit answer",
+  "tui.details.backToAnswers": "Back to answers",
+  "tui.details.editAnswerHint": "enter submit · esc back",
+  "tui.details.selectAnswerHint": "↑/↓ select · enter confirm · esc cancel",
+  "tui.dialogs.recentlyClosedTabs": "Recently closed tabs",
+  "tui.dialogs.noRecentlyClosedTabs": "No recently closed tabs",
 }
 
 export default dict

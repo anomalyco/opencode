@@ -782,7 +782,6 @@ export const dict = {
   "tui.session.shareSession": "ސެޝަން ޝެއާކުރުން",
   "tui.session.jumpToMessage": "މެސެޖަށް ދާށެވެ",
   "tui.session.forkSession": "ސެޝަން ފޯކްކުރުން",
-  "tui.session.unshareSession": "ސެޝަން އަންޝެއާކުރުން",
   "tui.session.undoPreviousMessage": "ކުރީގެ މެސެޖް އަންޑޫކުރުން",
   "tui.session.nothingToUndo": "އަންޑޫކުރުމަށް އެއްޗެއް ނެތެވެ",
   "tui.session.toggleSessionScrollbar": "ސެޝަން ސްކްރޯލްބާ ބަދަލުކުރުން",
@@ -1040,6 +1039,12 @@ export const dict = {
   "settings.timeline.category.thinking": "ވިސްނުން",
   "tui.projects.newWorktree": "އާ ވޯކްސްޕޭސް",
   "tui.devtools.server": "ސަރވަރ",
+  "tui.details.submitAnswer": "Submit answer",
+  "tui.details.backToAnswers": "Back to answers",
+  "tui.details.editAnswerHint": "enter submit · esc back",
+  "tui.details.selectAnswerHint": "↑/↓ select · enter confirm · esc cancel",
+  "tui.dialogs.recentlyClosedTabs": "Recently closed tabs",
+  "tui.dialogs.noRecentlyClosedTabs": "No recently closed tabs",
 }
 
 export default dict

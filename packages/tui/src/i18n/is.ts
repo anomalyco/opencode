@@ -292,7 +292,6 @@ export const dict = {
   "tui.session.shareSession": "Deila setu",
   "tui.session.jumpToMessage": "Fara í skilaboð",
   "tui.session.forkSession": "Kvíslun setu",
-  "tui.session.unshareSession": "Hætta að deila setu",
   "tui.session.undoPreviousMessage": "Afturkalla fyrri skilaboð",
   "tui.session.nothingToUndo": "Ekkert að afturkalla",
   "tui.session.toggleSessionScrollbar": "Sýna/fela skrunstiku setu",
@@ -1032,6 +1031,12 @@ export const dict = {
   "tui.permissionDisplay.choices": "Leyfivalkostir",
   "tui.permissionDisplay.minimize": "lágmarka",
   "tui.permissionDisplay.fullscreen": "á öllum skjánum",
+  "tui.details.submitAnswer": "Submit answer",
+  "tui.details.backToAnswers": "Back to answers",
+  "tui.details.editAnswerHint": "enter submit · esc back",
+  "tui.details.selectAnswerHint": "↑/↓ select · enter confirm · esc cancel",
+  "tui.dialogs.recentlyClosedTabs": "Recently closed tabs",
+  "tui.dialogs.noRecentlyClosedTabs": "No recently closed tabs",
 }
 
 export default dict

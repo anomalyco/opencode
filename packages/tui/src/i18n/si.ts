@@ -840,7 +840,6 @@ export const dict = {
   "tui.session.shareSession": "සෙෂන් බෙදාගන්න",
   "tui.session.jumpToMessage": "පණිවිඩයට යන්න",
   "tui.session.forkSession": "සැසියෙන් නව ශාඛාවක් සාදන්න",
-  "tui.session.unshareSession": "සෙෂන් බෙදා නොදෙන්න",
   "tui.session.undoPreviousMessage": "පෙර පණිවිඩය ආපසු ගන්න",
   "tui.session.nothingToUndo": "ආපසු ගත යුතු කිසිවක් නැත",
   "tui.session.toggleSessionScrollbar": "සෙෂන් ස්ක්‍රෝල්බාර් මාරු කරන්න",
@@ -1034,6 +1033,12 @@ export const dict = {
   "tui.devtools.connecting": "සම්බන්ධ වෙමින්",
   "tui.devtools.reconnecting": "නැවත සම්බන්ධ වෙමින්",
   "tui.devtools.unknown": "නොපුරාද",
+  "tui.details.submitAnswer": "Submit answer",
+  "tui.details.backToAnswers": "Back to answers",
+  "tui.details.editAnswerHint": "enter submit · esc back",
+  "tui.details.selectAnswerHint": "↑/↓ select · enter confirm · esc cancel",
+  "tui.dialogs.recentlyClosedTabs": "Recently closed tabs",
+  "tui.dialogs.noRecentlyClosedTabs": "No recently closed tabs",
 }
 
 export default dict

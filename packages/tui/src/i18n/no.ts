@@ -291,7 +291,6 @@ export const dict = {
   "tui.session.shareSession": "Del økt",
   "tui.session.jumpToMessage": "Gå til melding",
   "tui.session.forkSession": "Forgren økt",
-  "tui.session.unshareSession": "Stopp deling av økt",
   "tui.session.undoPreviousMessage": "Angre forrige melding",
   "tui.session.nothingToUndo": "Ingenting å angre",
   "tui.session.toggleSessionScrollbar": "Vis/skjul øktens rullefelt",
@@ -1035,6 +1034,12 @@ export const dict = {
   "tui.permissionDisplay.choices": "Tillatelsesvalg",
   "tui.permissionDisplay.minimize": "minimer",
   "tui.permissionDisplay.fullscreen": "fullskjerm",
+  "tui.details.submitAnswer": "Submit answer",
+  "tui.details.backToAnswers": "Back to answers",
+  "tui.details.editAnswerHint": "enter submit · esc back",
+  "tui.details.selectAnswerHint": "↑/↓ select · enter confirm · esc cancel",
+  "tui.dialogs.recentlyClosedTabs": "Recently closed tabs",
+  "tui.dialogs.noRecentlyClosedTabs": "No recently closed tabs",
 }
 
 export default dict

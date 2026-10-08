@@ -291,7 +291,6 @@ export const dict = {
   "tui.session.shareSession": "分享工作階段",
   "tui.session.jumpToMessage": "跳至訊息",
   "tui.session.forkSession": "建立工作階段分支",
-  "tui.session.unshareSession": "取消分享工作階段",
   "tui.session.undoPreviousMessage": "復原上一則訊息",
   "tui.session.nothingToUndo": "沒有可復原的內容",
   "tui.session.toggleSessionScrollbar": "切換工作階段捲軸",
@@ -1022,6 +1021,12 @@ export const dict = {
   "tui.permissionDisplay.choices": "權限選項",
   "tui.permissionDisplay.minimize": "最小化",
   "tui.permissionDisplay.fullscreen": "全螢幕",
+  "tui.details.submitAnswer": "提交答案",
+  "tui.details.backToAnswers": "返回答案",
+  "tui.details.editAnswerHint": "enter 提交 · esc 返回",
+  "tui.details.selectAnswerHint": "↑/↓ 選擇 · enter 確認 · esc 取消",
+  "tui.dialogs.recentlyClosedTabs": "最近關閉的分頁",
+  "tui.dialogs.noRecentlyClosedTabs": "沒有最近關閉的分頁",
 }
 
 export default dict

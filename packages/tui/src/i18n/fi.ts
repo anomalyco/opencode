@@ -291,7 +291,6 @@ export const dict = {
   "tui.session.shareSession": "Jaa istunto",
   "tui.session.jumpToMessage": "Siirry viestiin",
   "tui.session.forkSession": "Haaroita istunto",
-  "tui.session.unshareSession": "Lopeta istunnon jakaminen",
   "tui.session.undoPreviousMessage": "Kumoa edellinen viesti",
   "tui.session.nothingToUndo": "Ei kumottavaa",
   "tui.session.toggleSessionScrollbar": "Näytä/piilota istunnon vierityspalkki",
@@ -1036,6 +1035,12 @@ export const dict = {
   "tui.permissionDisplay.choices": "Lupavalinnat",
   "tui.permissionDisplay.minimize": "minimoi",
   "tui.permissionDisplay.fullscreen": "koko näyttö",
+  "tui.details.submitAnswer": "Submit answer",
+  "tui.details.backToAnswers": "Back to answers",
+  "tui.details.editAnswerHint": "enter submit · esc back",
+  "tui.details.selectAnswerHint": "↑/↓ select · enter confirm · esc cancel",
+  "tui.dialogs.recentlyClosedTabs": "Recently closed tabs",
+  "tui.dialogs.noRecentlyClosedTabs": "No recently closed tabs",
 }
 
 export default dict

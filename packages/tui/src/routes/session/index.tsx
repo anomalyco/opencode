@@ -9,7 +9,6 @@ import {
   Match,
   on,
   onCleanup,
-  onMount,
   Show,
   Switch,
   type Accessor,
@@ -21,7 +20,7 @@ import { useRoute, useRouteData } from "../../context/route"
 import { createStore } from "solid-js/store"
 import { useData } from "../../context/data"
 import { SplitBorder } from "../../ui/border"
-import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
+import { useTuiTerminalEnvironment } from "../../context/runtime"
 import { Spinner, SPINNER_FRAMES } from "../../component/spinner"
 import { PatchDiff } from "../../component/patch-diff"
 import { useTheme, useThemes } from "../../context/theme"
@@ -55,11 +54,11 @@ import { RetryProvider } from "../../component/retry-provider"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import { useClient } from "../../context/client"
 import { useEditorContext } from "../../context/editor"
-import { openEditor } from "../../editor"
 import { useDialog } from "../../ui/dialog"
 import { DialogSelect } from "../../ui/dialog-select"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { DialogImagePreview } from "../../component/dialog-image-preview"
+import { statusLabel } from "../../component/dialog-workspace-file-changes"
 import { DialogMessage } from "./dialog-message"
 import { DialogFork } from "./dialog-fork"
 import { DialogTimeline } from "./dialog-timeline"
@@ -111,7 +110,6 @@ import { useArgs } from "../../context/args"
 import { withTimestampedFallback } from "@opencode/util/session-title-fallback"
 import { useSessionTabs, type ScrollAnchor } from "../../context/session-tabs"
 import { createSingleFlight } from "../../util/single-flight"
-import type { SessionInbox } from "@opencode/schema/session-inbox"
 import { createDelayedPresence } from "../../util/delayed-presence"
 import { SessionLocationMissing } from "./location-missing"
 import { isRecord } from "../../util/record"
@@ -143,6 +141,7 @@ export function Session(props: {
   promptMuted?: boolean
   sidebarVisible: boolean
   onToggleSidebar: () => void
+  terminals?: boolean
   visibleTerminalID?: string
   onTerminalPicker?: (show: (() => void) | undefined) => void
   width?: number
@@ -159,7 +158,6 @@ export function Session(props: {
   const data = useData()
   const local = useLocal()
   const args = useArgs()
-  const paths = useTuiPaths()
   const configState = useConfig()
   const config = configState.data
   const language = useLanguage()
@@ -228,10 +226,6 @@ export function Session(props: {
     if (props.promptMuted && composer.open) setComposer("open", false)
   })
   const disabled = createMemo(() => promptedPermissions().length > 0 || forms().length > 0)
-
-  const lastAssistant = createMemo(() => {
-    return messages().findLast((x) => x.type === "assistant")
-  })
 
   const dimensions = useTerminalDimensions()
   const thinkingMode = createMemo<ThinkingMode>(() => config.session?.thinking ?? "hide")
@@ -991,14 +985,6 @@ export function Session(props: {
       },
     },
     {
-      title: language.t("tui.session.unshareSession"),
-      id: "session.unshare",
-      group: language.t("command.category.session"),
-      enabled: false,
-      slash: { name: "unshare" },
-      run: () => unavailable("unsharing"),
-    },
-    {
       title: language.t("tui.session.undoPreviousMessage"),
       id: "session.undo",
       group: language.t("command.category.session"),
@@ -1467,9 +1453,7 @@ export function Session(props: {
                   onMouseOut={() => setLatestHovered(false)}
                   onMouseUp={toBottom}
                 >
-                  <text
-                    fg={latestHovered() ? theme.text.action.secondary.hovered : theme.text.action.secondary.base}
-                  >
+                  <text fg={latestHovered() ? theme.text.action.secondary.hovered : theme.text.action.secondary.base}>
                     {language.t("tui.transcript.jumpLatest")}
                   </text>
                 </box>
@@ -1492,6 +1476,7 @@ export function Session(props: {
                   }
                   setComposer("open", false)
                 }}
+                terminals={props.terminals}
                 visibleTerminalID={props.visibleTerminalID}
               />
               <Switch>
@@ -1514,12 +1499,7 @@ export function Session(props: {
                     }}
                   </Show>
                 </Match>
-                <Match
-                  when={
-                    session() &&
-                    currentLocation.error?.location.directory === session()!.location.directory
-                  }
-                >
+                <Match when={session() && currentLocation.error?.location.directory === session()!.location.directory}>
                   <SessionLocationMissing
                     directory={session()!.location.directory}
                     projectID={session()!.projectID}
@@ -2036,12 +2016,7 @@ function SessionNoticeMessageV2(props: { message: SessionMessageInfo }) {
     <Show
       when={completion()}
       fallback={
-        <InlineToolRow
-          icon="◈"
-          color={theme.text.muted}
-          pending={language.t("tui.transcript.notice")}
-          complete={true}
-        >
+        <InlineToolRow icon="◈" color={theme.text.muted} pending={language.t("tui.transcript.notice")} complete={true}>
           {text()}
         </InlineToolRow>
       }
@@ -2160,12 +2135,6 @@ function CompactionQueued() {
       <box border={["top"]} borderColor={theme.border.base} flexGrow={1} />
     </box>
   )
-}
-
-function statusLabel(status: "added" | "modified" | "deleted") {
-  if (status === "added") return "A"
-  if (status === "deleted") return "D"
-  return "M"
 }
 
 function RevertMessage(props: {
@@ -2326,9 +2295,11 @@ function UserMessage(props: { message: SessionMessageUser }) {
               ))
               return
             }
+            // The dialog outlives this row, whose props go stale when a resync drops the message.
+            const messageID = props.message.id
             dialog.replace(() => (
               <DialogMessage
-                messageID={props.message.id}
+                messageID={messageID}
                 sessionID={ctx.sessionID}
                 setPrompt={(value) => promptRef.current?.set(value)}
               />
@@ -2408,6 +2379,7 @@ function QueuedPromptDock(props: { prompts: { id: string; text: string }[]; onOp
 
   return (
     <box
+      marginBottom={1}
       border={["left"]}
       borderColor={theme.border.base}
       customBorderChars={SplitBorder.customBorderChars}
@@ -2425,9 +2397,7 @@ function QueuedPromptDock(props: { prompts: { id: string; text: string }[]; onOp
         flexDirection="row"
       >
         <text fg={theme.text.muted} wrapMode="none" truncate flexGrow={1} flexShrink={1} minWidth={0}>
-          <span style={{ fg: theme.text.base }}>
-            {language.plural("tui.transcript.queued", props.prompts.length)}
-          </span>
+          <span style={{ fg: theme.text.base }}>{language.plural("tui.transcript.queued", props.prompts.length)}</span>
           <Show when={next()}>{(text) => <> · {text()}</>}</Show>
         </text>
       </box>
@@ -2703,11 +2673,9 @@ function useToolPermission(part: () => SessionMessageAssistantTool | undefined) 
 
 function InlineTool(props: {
   icon: string
-  iconColor?: RGBA
   color?: RGBA
   complete: unknown
   pending: string
-  failure?: string
   spinner?: boolean
   running?: boolean
   status?: JSX.Element
@@ -2747,7 +2715,6 @@ function InlineTool(props: {
   return (
     <InlineToolRow
       icon={props.icon}
-      iconColor={props.iconColor}
       color={fg()}
       errorColor={theme.text.feedback.error.base}
       failed={failed()}
@@ -2756,7 +2723,6 @@ function InlineTool(props: {
       errorExpanded={errorExpanded()}
       complete={props.complete}
       pending={props.pending}
-      failure={props.failure}
       spinner={props.spinner}
       status={props.status}
       onMouseOver={() => clickable() && setHover(true)}
@@ -2835,9 +2801,7 @@ function BlockTool(props: BlockToolProps) {
               <Show
                 when={props.spinner}
                 fallback={
-                  <text
-                    fg={permission() ? theme.text.feedback.warning.base : (props.headerColor ?? theme.text.muted)}
-                  >
+                  <text fg={permission() ? theme.text.feedback.warning.base : (props.headerColor ?? theme.text.muted)}>
                     {title()}
                   </text>
                 }
@@ -3026,11 +2990,7 @@ function ShellDisplay(props: {
           <Show
             when={isRunning()}
             fallback={
-              <text
-                fg={theme.text.base}
-                wrapMode={expanded() ? "word" : "char"}
-                maxHeight={expanded() ? undefined : 2}
-              >
+              <text fg={theme.text.base} wrapMode={expanded() ? "word" : "char"} maxHeight={expanded() ? undefined : 2}>
                 {limitedInput()}
               </text>
             }
@@ -3147,6 +3107,12 @@ function Read(props: ToolProps) {
         part={props.part}
       >
         {language.t("tui.transcript.read", { path: pathFormatter.format(stringValue(props.input.path)) })}
+        <Show when={props.input.offset !== undefined || props.input.limit !== undefined}>
+          :{finiteNumber(props.input.offset) || 1}-
+          {props.input.limit
+            ? (finiteNumber(props.input.offset) || 1) + (finiteNumber(props.input.limit) || 0) - 1
+            : ""}
+        </Show>
       </InlineTool>
       <For each={loaded()}>
         {(filepath) => (
@@ -3273,6 +3239,7 @@ function Subagent(props: ToolProps) {
             ),
             description: description() ?? language.t("tui.transcript.subagent"),
           })}
+      {model() ? ` · ${model()}` : ""}
     </InlineTool>
   )
 }
@@ -3362,7 +3329,11 @@ function Execute(props: ToolProps) {
   const hasRuntimeError = createMemo(() => props.metadata.error === true || props.part.state.status === "error")
   const outputPreview = createMemo(() => collapseToolOutput(output(), 4, 4 * Math.max(20, ctx.width - 6)).output)
   const showOutput = createMemo(() => output() && hasRuntimeError())
-  const openDetails = () => dialog.replace(() => <DialogExecute part={props.part} />)
+  const openDetails = () => {
+    // The dialog outlives this row, whose props go stale when a resync drops the message.
+    const part = props.part
+    dialog.replace(() => <DialogExecute part={part} />)
+  }
 
   return (
     <>

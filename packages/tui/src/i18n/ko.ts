@@ -291,7 +291,6 @@ export const dict = {
   "tui.session.shareSession": "세션 공유",
   "tui.session.jumpToMessage": "메시지로 이동",
   "tui.session.forkSession": "세션 분기",
-  "tui.session.unshareSession": "세션 공유 해제",
   "tui.session.undoPreviousMessage": "이전 메시지 실행 취소",
   "tui.session.nothingToUndo": "실행 취소할 항목 없음",
   "tui.session.toggleSessionScrollbar": "세션 스크롤바 표시 전환",
@@ -1029,6 +1028,12 @@ export const dict = {
   "tui.permissionDisplay.choices": "권한 선택지",
   "tui.permissionDisplay.minimize": "최소화",
   "tui.permissionDisplay.fullscreen": "전체 화면",
+  "tui.details.submitAnswer": "Submit answer",
+  "tui.details.backToAnswers": "Back to answers",
+  "tui.details.editAnswerHint": "enter submit · esc back",
+  "tui.details.selectAnswerHint": "↑/↓ select · enter confirm · esc cancel",
+  "tui.dialogs.recentlyClosedTabs": "Recently closed tabs",
+  "tui.dialogs.noRecentlyClosedTabs": "No recently closed tabs",
 }
 
 export default dict

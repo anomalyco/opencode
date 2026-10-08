@@ -365,7 +365,6 @@ export const dict = {
   "tui.session.shareSession": "Ndaj seancën",
   "tui.session.jumpToMessage": "Kalo te mesazhi",
   "tui.session.forkSession": "Degëzo seancën",
-  "tui.session.unshareSession": "Ndalo ndarjen e seancës",
   "tui.session.undoPreviousMessage": "Zhbëj mesazhin e mëparshëm",
   "tui.session.nothingToUndo": "Nuk ka asgjë për të zhbërë",
   "tui.session.toggleSessionScrollbar": "Ndërro shiritin e lëvizjes së seancës",
@@ -1037,6 +1036,12 @@ export const dict = {
   "tui.promptUi.noDirectories": "Nuk ka dosje që përputhen",
   "tui.promptUi.fileSearchFailed": "Nuk mund të kërkoheshin skedarët. Vazhdoni të shkruani për të provuar përsëri.",
   "tui.promptUi.noReferences": "Nuk ka skedarë, agjentë ose referenca që përputhen",
+  "tui.details.submitAnswer": "Submit answer",
+  "tui.details.backToAnswers": "Back to answers",
+  "tui.details.editAnswerHint": "enter submit · esc back",
+  "tui.details.selectAnswerHint": "↑/↓ select · enter confirm · esc cancel",
+  "tui.dialogs.recentlyClosedTabs": "Recently closed tabs",
+  "tui.dialogs.noRecentlyClosedTabs": "No recently closed tabs",
 }
 
 export default dict

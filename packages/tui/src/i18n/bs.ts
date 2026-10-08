@@ -294,7 +294,6 @@ export const dict = {
   "tui.session.shareSession": "Podijeli sesiju",
   "tui.session.jumpToMessage": "Idi na poruku",
   "tui.session.forkSession": "Razgranaj sesiju",
-  "tui.session.unshareSession": "Prekini dijeljenje sesije",
   "tui.session.undoPreviousMessage": "Poništi prethodnu poruku",
   "tui.session.nothingToUndo": "Nema ničega za poništavanje",
   "tui.session.toggleSessionScrollbar": "Prikaži/sakrij traku za pomicanje sesije",
@@ -1055,6 +1054,12 @@ export const dict = {
   "tui.stats.days.few": "{{count}} dana",
   "tui.plugins.failedCount.few": "{{count}} dodatka nisu uspjela",
   "tui.sidebar.errors.few": "{{count}} greške",
+  "tui.details.submitAnswer": "Submit answer",
+  "tui.details.backToAnswers": "Back to answers",
+  "tui.details.editAnswerHint": "enter submit · esc back",
+  "tui.details.selectAnswerHint": "↑/↓ select · enter confirm · esc cancel",
+  "tui.dialogs.recentlyClosedTabs": "Recently closed tabs",
+  "tui.dialogs.noRecentlyClosedTabs": "No recently closed tabs",
 }
 
 export default dict

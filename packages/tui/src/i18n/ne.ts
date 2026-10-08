@@ -838,7 +838,6 @@ export const dict = {
   "tui.session.shareSession": "सत्र साझेदारी गर्नुहोस्",
   "tui.session.jumpToMessage": "सन्देशमा जानुहोस्",
   "tui.session.forkSession": "सत्रबाट नयाँ शाखा बनाउनुहोस्",
-  "tui.session.unshareSession": "सत्र अनसेयर गर्नुहोस्",
   "tui.session.undoPreviousMessage": "अघिल्लो सन्देश पूर्ववत गर्नुहोस्",
   "tui.session.nothingToUndo": "पूर्ववत गर्न केहि छैन",
   "tui.session.toggleSessionScrollbar": "सत्र स्क्रोलबार टगल गर्नुहोस्",
@@ -1030,6 +1029,12 @@ export const dict = {
   "tui.devtools.connecting": "जडान गर्दै",
   "tui.devtools.reconnecting": "पुन: जडान गर्दै",
   "tui.devtools.unknown": "अज्ञात",
+  "tui.details.submitAnswer": "Submit answer",
+  "tui.details.backToAnswers": "Back to answers",
+  "tui.details.editAnswerHint": "enter submit · esc back",
+  "tui.details.selectAnswerHint": "↑/↓ select · enter confirm · esc cancel",
+  "tui.dialogs.recentlyClosedTabs": "Recently closed tabs",
+  "tui.dialogs.noRecentlyClosedTabs": "No recently closed tabs",
 }
 
 export default dict

@@ -296,7 +296,6 @@ export const dict = {
   "tui.session.shareSession": "Sdílet relaci",
   "tui.session.jumpToMessage": "Přejít na zprávu",
   "tui.session.forkSession": "Rozvětvit relaci",
-  "tui.session.unshareSession": "Zrušit sdílení relace",
   "tui.session.undoPreviousMessage": "Vrátit předchozí zprávu",
   "tui.session.nothingToUndo": "Není co vrátit",
   "tui.session.toggleSessionScrollbar": "Přepnout posuvník relace",
@@ -1070,6 +1069,12 @@ export const dict = {
   "tui.plugins.failedCount.many": "{{count}} pluginu selhalo",
   "tui.sidebar.errors.few": "{{count}} chyby",
   "tui.sidebar.errors.many": "{{count}} chyby",
+  "tui.details.submitAnswer": "Submit answer",
+  "tui.details.backToAnswers": "Back to answers",
+  "tui.details.editAnswerHint": "enter submit · esc back",
+  "tui.details.selectAnswerHint": "↑/↓ select · enter confirm · esc cancel",
+  "tui.dialogs.recentlyClosedTabs": "Recently closed tabs",
+  "tui.dialogs.noRecentlyClosedTabs": "No recently closed tabs",
 }
 
 export default dict

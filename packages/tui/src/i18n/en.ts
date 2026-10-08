@@ -810,7 +810,6 @@ export const dict = {
   "tui.session.jumpToMessage": "Jump to message",
   "tui.session.forkSession": "Fork session",
   "tui.session.compactSession": "Compact session",
-  "tui.session.unshareSession": "Unshare session",
   "tui.session.undoPreviousMessage": "Undo previous message",
   "tui.session.nothingToUndo": "Nothing to undo",
   "tui.session.redo": "Redo",
@@ -1029,6 +1028,12 @@ export const dict = {
   "tui.devtools.connecting": "Connecting",
   "tui.devtools.reconnecting": "Reconnecting",
   "tui.devtools.unknown": "Unknown",
+  "tui.details.submitAnswer": "Submit answer",
+  "tui.details.backToAnswers": "Back to answers",
+  "tui.details.editAnswerHint": "enter submit · esc back",
+  "tui.details.selectAnswerHint": "↑/↓ select · enter confirm · esc cancel",
+  "tui.dialogs.recentlyClosedTabs": "Recently closed tabs",
+  "tui.dialogs.noRecentlyClosedTabs": "No recently closed tabs",
 }
 
 export default dict

@@ -24,11 +24,7 @@ type Entry =
       readonly error?: string
     }
 
-export function PluginsDialog(props: {
-  context: Plugin.Context
-  plugins: ReturnType<typeof usePlugin>
-  server?: () => readonly PluginInfo[]
-}) {
+export function PluginsDialog(props: { context: Plugin.Context; plugins: ReturnType<typeof usePlugin> }) {
   const language = useLanguage()
   const dialog = useDialog()
   const [locked, setLocked] = createSignal(false)
@@ -38,7 +34,7 @@ export function PluginsDialog(props: {
   const [showInternal, setShowInternal] = createSignal(false)
   const [pending, setPending] = createSignal<readonly string[]>([])
   const [server, { refetch, mutate }] = createResource(
-    () => (props.server ? undefined : (props.context.location ?? props.context.data.location.default())),
+    () => props.context.location ?? props.context.data.location.default(),
     (location) => props.context.client.plugin.list({ location }).then((result) => result.data),
   )
   onMount(() => dialog.setSize("large"))
@@ -71,7 +67,7 @@ export function PluginsDialog(props: {
         status: plugin.status,
         error: plugin.status === "failed" ? plugin.error : undefined,
       }))
-    const serverEntries: Entry[] = (props.server?.() ?? server() ?? []).map((plugin) => ({
+    const serverEntries: Entry[] = (server() ?? []).map((plugin) => ({
       key: `server:${plugin.id ?? source(plugin, props.context)}`,
       runtime: "server" as const,
       internal: plugin.source.type === "builtin",

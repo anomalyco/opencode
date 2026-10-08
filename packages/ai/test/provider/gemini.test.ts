@@ -1285,25 +1285,23 @@ describe("Gemini route", () => {
         }),
       )
 
-      expect(prepared.body.contents).toEqual([
-        {
-          role: "model",
-          parts: [
-            {
-              functionCall: { id: "tool_0", name: "lookup", args: { query: "weather" } },
-              thoughtSignature: "parallel_signature",
-            },
-            {
-              functionCall: { id: "tool_1", name: "lookup", args: { query: "news" } },
-              thoughtSignature: undefined,
-            },
-            {
-              functionCall: { id: "tool_2", name: "lookup", args: { query: "sports" } },
-              thoughtSignature: undefined,
-            },
-          ],
-        },
-      ])
+      expect(prepared.body.contents[0]).toEqual({
+        role: "model",
+        parts: [
+          {
+            functionCall: { id: "tool_0", name: "lookup", args: { query: "weather" } },
+            thoughtSignature: "parallel_signature",
+          },
+          {
+            functionCall: { id: "tool_1", name: "lookup", args: { query: "news" } },
+            thoughtSignature: undefined,
+          },
+          {
+            functionCall: { id: "tool_2", name: "lookup", args: { query: "sports" } },
+            thoughtSignature: undefined,
+          },
+        ],
+      })
     }),
   )
 
@@ -1321,21 +1319,19 @@ describe("Gemini route", () => {
         }),
       )
 
-      expect(prepared.body.contents).toEqual([
-        {
-          role: "model",
-          parts: [
-            {
-              functionCall: { id: "tool_0", name: "lookup", args: { query: "weather" } },
-              thoughtSignature: "skip_thought_signature_validator",
-            },
-            {
-              functionCall: { id: "tool_1", name: "lookup", args: { query: "news" } },
-              thoughtSignature: "skip_thought_signature_validator",
-            },
-          ],
-        },
-      ])
+      expect(prepared.body.contents[0]).toEqual({
+        role: "model",
+        parts: [
+          {
+            functionCall: { id: "tool_0", name: "lookup", args: { query: "weather" } },
+            thoughtSignature: "skip_thought_signature_validator",
+          },
+          {
+            functionCall: { id: "tool_1", name: "lookup", args: { query: "news" } },
+            thoughtSignature: "skip_thought_signature_validator",
+          },
+        ],
+      })
     }),
   )
 

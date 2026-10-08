@@ -292,7 +292,6 @@ export const dict = {
   "tui.session.shareSession": "Chia sẻ phiên",
   "tui.session.jumpToMessage": "Đi đến tin nhắn",
   "tui.session.forkSession": "Tách nhánh phiên",
-  "tui.session.unshareSession": "Ngừng chia sẻ phiên",
   "tui.session.undoPreviousMessage": "Hoàn tác tin nhắn trước",
   "tui.session.nothingToUndo": "Không có gì để hoàn tác",
   "tui.session.toggleSessionScrollbar": "Bật/tắt thanh cuộn phiên",
@@ -1033,6 +1032,12 @@ export const dict = {
   "tui.permissionDisplay.choices": "Lựa chọn quyền",
   "tui.permissionDisplay.minimize": "thu nhỏ",
   "tui.permissionDisplay.fullscreen": "toàn màn hình",
+  "tui.details.submitAnswer": "Submit answer",
+  "tui.details.backToAnswers": "Back to answers",
+  "tui.details.editAnswerHint": "enter submit · esc back",
+  "tui.details.selectAnswerHint": "↑/↓ select · enter confirm · esc cancel",
+  "tui.dialogs.recentlyClosedTabs": "Recently closed tabs",
+  "tui.dialogs.noRecentlyClosedTabs": "No recently closed tabs",
 }
 
 export default dict

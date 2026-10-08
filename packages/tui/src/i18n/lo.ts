@@ -838,7 +838,6 @@ export const dict = {
   "tui.session.shareSession": "ແບ່ງປັນ ເຊດຊັນ",
   "tui.session.jumpToMessage": "ກະໂດດໄປຫາຂໍ້ຄວາມ",
   "tui.session.forkSession": "ສ້າງສາຂາໃໝ່ຈາກເຊດຊັນ",
-  "tui.session.unshareSession": "ການຍົກເລີກການແບ່ງປັນ",
   "tui.session.undoPreviousMessage": "ຍົກເລີກຂໍ້ຄວາມກ່ອນຫນ້ານີ້",
   "tui.session.nothingToUndo": "ບໍ່ມີຫຍັງຕ້ອງກັບຄືນ",
   "tui.session.toggleSessionScrollbar": "ເປີດສະຫຼັບແຖບເລື່ອນ ເຊດຊັນ",
@@ -1029,6 +1028,12 @@ export const dict = {
   "tui.devtools.connecting": "ການເຊື່ອມຕໍ່",
   "tui.devtools.reconnecting": "ການເຊື່ອມຕໍ່ໃຫມ່",
   "tui.devtools.unknown": "ບໍ່ຮູ້",
+  "tui.details.submitAnswer": "Submit answer",
+  "tui.details.backToAnswers": "Back to answers",
+  "tui.details.editAnswerHint": "enter submit · esc back",
+  "tui.details.selectAnswerHint": "↑/↓ select · enter confirm · esc cancel",
+  "tui.dialogs.recentlyClosedTabs": "Recently closed tabs",
+  "tui.dialogs.noRecentlyClosedTabs": "No recently closed tabs",
 }
 
 export default dict

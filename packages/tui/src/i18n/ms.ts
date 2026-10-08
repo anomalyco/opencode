@@ -291,7 +291,6 @@ export const dict = {
   "tui.session.shareSession": "Kongsi sesi",
   "tui.session.jumpToMessage": "Lompat ke mesej",
   "tui.session.forkSession": "Cabangkan sesi",
-  "tui.session.unshareSession": "Hentikan perkongsian sesi",
   "tui.session.undoPreviousMessage": "Buat asal mesej sebelumnya",
   "tui.session.nothingToUndo": "Tiada apa-apa untuk dibuat asal",
   "tui.session.toggleSessionScrollbar": "Tunjukkan/sembunyikan bar skrol sesi",
@@ -1033,6 +1032,12 @@ export const dict = {
   "tui.permissionDisplay.choices": "Pilihan kebenaran",
   "tui.permissionDisplay.minimize": "kecilkan",
   "tui.permissionDisplay.fullscreen": "skrin penuh",
+  "tui.details.submitAnswer": "Submit answer",
+  "tui.details.backToAnswers": "Back to answers",
+  "tui.details.editAnswerHint": "enter submit · esc back",
+  "tui.details.selectAnswerHint": "↑/↓ select · enter confirm · esc cancel",
+  "tui.dialogs.recentlyClosedTabs": "Recently closed tabs",
+  "tui.dialogs.noRecentlyClosedTabs": "No recently closed tabs",
 }
 
 export default dict

@@ -847,7 +847,6 @@ export const dict = {
   "tui.session.shareSession": "Сподели ја сесијата",
   "tui.session.jumpToMessage": "Скокни до порака",
   "tui.session.forkSession": "Разграни ја сесијата",
-  "tui.session.unshareSession": "Прекини го споделувањето на сесијата",
   "tui.session.undoPreviousMessage": "Врати ја претходната порака",
   "tui.session.nothingToUndo": "Нема што да се врати",
   "tui.session.toggleSessionScrollbar": "Вклучете ја лентата за лизгање сесија",
@@ -1044,6 +1043,12 @@ export const dict = {
   "tui.devtools.connecting": "Поврзување",
   "tui.devtools.reconnecting": "Повторно поврзување",
   "tui.devtools.unknown": "Непознат",
+  "tui.details.submitAnswer": "Submit answer",
+  "tui.details.backToAnswers": "Back to answers",
+  "tui.details.editAnswerHint": "enter submit · esc back",
+  "tui.details.selectAnswerHint": "↑/↓ select · enter confirm · esc cancel",
+  "tui.dialogs.recentlyClosedTabs": "Recently closed tabs",
+  "tui.dialogs.noRecentlyClosedTabs": "No recently closed tabs",
 }
 
 export default dict

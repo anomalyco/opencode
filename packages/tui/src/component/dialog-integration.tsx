@@ -1,5 +1,6 @@
 import { useLanguage } from "../context/language"
-import { TextAttributes } from "@opentui/core"
+import { ScrollBoxRenderable, TextareaRenderable, TextAttributes } from "@opentui/core"
+import { useTerminalDimensions } from "@opentui/solid"
 import type {
   ConnectionInfo,
   IntegrationCommandConnectOutput,
@@ -13,7 +14,8 @@ import type {
   LocationRef,
 } from "@opencode/client"
 import { openUrl } from "@opencode/util/open"
-import { createEffect, createMemo, createSignal, onCleanup, onMount, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
+import { createStore } from "solid-js/store"
 import { useClipboard } from "../context/clipboard"
 import { useData } from "../context/data"
 import { useClient } from "../context/client"
@@ -25,7 +27,16 @@ import { DialogPrompt } from "../ui/dialog-prompt"
 import { DialogSelect } from "../ui/dialog-select"
 import { Link } from "../ui/link"
 import { useToast } from "../ui/toast"
-import { formLabel, formToggleMultiselect, formValidateValue, type FormAnswerField } from "../util/form"
+import { errorMessage } from "../util/error"
+import {
+  formInitialValues,
+  formLabel,
+  formRows,
+  formSelected,
+  formToggleMultiselect,
+  formValidateValue,
+  type FormAnswerField,
+} from "../util/form"
 
 const INTEGRATION_PRIORITY: Record<string, number> = {
   "opencode-go": 0,
@@ -108,15 +119,19 @@ export function DialogIntegration(
       let category = language.t("tui.dialogs.services")
       if (integration.id in INTEGRATION_PRIORITY) category = language.t("tui.dialogs.popular")
       if (integration.metadata?.source === "mcp") category = "MCP"
+      const status = integration.connections[0]?.status
       return {
         title: integration.name,
         value: integration.id,
         description: methods.length === 0 ? language.t("tui.projects.environmentOnly") : undefined,
-        footer: connectionSummary(integration) || undefined,
+        footer: status ? language.t("tui.dialogs.mcpSignIn") : connectionSummary(integration) || undefined,
+        footerColor: status ? theme.text.feedback.warning.base : undefined,
         category,
         disabled: methods.length === 0 && credentials.length === 0,
         gutter:
-          integration.connections.length > 0 ? () => <text fg={theme.text.feedback.success.base}>✓</text> : undefined,
+          integration.connections.length > 0 && !status
+            ? () => <text fg={theme.text.feedback.success.base}>✓</text>
+            : undefined,
         onSelect: () => {
           if (credentials.length)
             return manageConnections(integration, methods, location, dialog, language, props.onConnected)
@@ -194,10 +209,15 @@ function manageConnections(
                   ? language.t("tui.pressKeyAgainToConfirm", { key: shortcuts.get("dialog.integration.delete") ?? "" })
                   : connection.label,
                 value: connection.id,
+                footer: connection.status ? language.t("tui.dialogs.mcpSignIn") : undefined,
+                footerColor: connection.status ? theme.text.feedback.warning.base : undefined,
                 category: language.t("tui.dialogs.connectedAccounts"),
                 bg: confirming ? theme.background.action.destructive.focused : undefined,
                 fg: confirming ? theme.text.action.destructive.focused : undefined,
                 onSelect: () => {
+                  if (connection.status?.url) return void openUrl(connection.status.url).catch(toast.error)
+                  if (connection.status)
+                    return selectMethod(current() ?? integration, methods, location, dialog, language, onConnected)
                   if (credentialConnections(current() ?? integration)[0]?.id === connection.id) return
                   void client.api.credential.activate({ credentialID: connection.id }).catch(toast.error)
                 },
@@ -300,7 +320,62 @@ function openMethod(
     ))
     return
   }
+  if (method.type === "external") {
+    void beginExternal(integration, method, location, dialog, language, onConnected)
+    return
+  }
   void beginOAuth(integration, method, location, dialog, language, onConnected)
+}
+
+async function beginExternal(
+  integration: IntegrationInfo,
+  method: Extract<ConnectMethod, { type: "external" }>,
+  location: LocationRef,
+  dialog: ReturnType<typeof useDialog>,
+  language: Language,
+  onConnected?: OnIntegrationConnected,
+) {
+  const answer = method.form ? await formAnswer(dialog, method.label, method.form, language) : undefined
+  if (answer === null) return
+  dialog.replace(() => (
+    <ExternalStarting
+      integration={integration}
+      method={method}
+      location={location}
+      answer={answer}
+      onConnected={onConnected}
+    />
+  ))
+}
+
+function ExternalStarting(props: {
+  integration: IntegrationInfo
+  method: Extract<ConnectMethod, { type: "external" }>
+  location: LocationRef
+  answer?: FormAnswer
+  onConnected?: OnIntegrationConnected
+}) {
+  const data = useData()
+  const dialog = useDialog()
+  const client = useClient()
+  const toast = useToast()
+  const language = useLanguage()
+
+  onMount(() => {
+    void client.api.integration.connect
+      .external({
+        integrationID: props.integration.id,
+        location: locationQuery(props.location),
+        methodID: props.method.id,
+        ...(props.answer ? { answer: props.answer } : {}),
+      })
+      .then(() => connected(props.integration, props.location, data, dialog, toast, language, props.onConnected))
+      .catch((cause) => {
+        toast.show({ variant: "error", message: errorMessage(cause) })
+        dialog.clear()
+      })
+  })
+  return <OAuthView title={props.method.label} message={language.t("tui.dialogs.mcpConnecting")} />
 }
 
 async function beginKey(
@@ -798,9 +873,7 @@ async function formAnswer(dialog: ReturnType<typeof useDialog>, title: string, f
   for (const field of fields) {
     if (!active(field, answer)) continue
     const value =
-      field.type !== "external" && field.hidden
-        ? field.default
-        : await fieldAnswer(dialog, title, field, language)
+      field.type !== "external" && field.hidden ? field.default : await fieldAnswer(dialog, title, field, language)
     if (value === CANCELLED) return null
     if (value !== undefined) answer[field.key] = value
   }
@@ -837,6 +910,13 @@ async function selectAnswer(
   field: Extract<FormAnswerField, { type: "boolean" | "string" }>,
   language: Language,
 ): Promise<FormValue | undefined | typeof CANCELLED> {
+  if (field.type === "string" && field.custom)
+    return new Promise((resolve) => {
+      dialog.replace(
+        () => <StringChoiceField field={field} onSubmit={resolve} />,
+        () => resolve(CANCELLED),
+      )
+    })
   const options =
     field.type === "boolean"
       ? field.default === false
@@ -853,16 +933,13 @@ async function selectAnswer(
           value: option.value as FormValue,
           description: option.description,
         }))
-  const choice = await new Promise<FormValue | typeof CUSTOM | undefined | typeof CANCELLED>((resolve) => {
+  return new Promise<FormValue | undefined | typeof CANCELLED>((resolve) => {
     dialog.replace(
       () => (
-        <DialogSelect<FormValue | typeof CUSTOM | undefined>
+        <DialogSelect<FormValue | undefined>
           title={formLabel(field) || title}
           options={[
             ...options,
-            ...(field.type === "string" && field.custom
-              ? [{ title: language.t("tui.details.typeYourOwnAnswer"), value: CUSTOM as typeof CUSTOM }]
-              : []),
             ...(!field.required ? [{ title: language.t("tui.dialogs.skip"), value: undefined }] : []),
           ]}
           current={field.type === "string" ? field.default : undefined}
@@ -872,11 +949,170 @@ async function selectAnswer(
       () => resolve(CANCELLED),
     )
   })
-  if (choice === CUSTOM) {
-    if (field.type !== "string") return CANCELLED
-    return textAnswer(dialog, title, field, language, "")
+}
+
+function StringChoiceField(props: {
+  field: Extract<FormAnswerField, { type: "string" }>
+  onSubmit: (value: string | undefined) => void
+}) {
+  const dialog = useDialog()
+  const language = useLanguage()
+  const theme = useTheme().surface("dialog")
+  const dimensions = useTerminalDimensions()
+  const rows = formRows(props.field, language.t)
+  const count = rows.length + (props.field.required ? 1 : 2)
+  const [store, setStore] = createStore({
+    selected: formSelected(props.field, props.field.default),
+    editing: false,
+    text: formInitialValues([props.field]).custom[props.field.key] ?? "",
+    error: "",
+  })
+  const [textarea, setTextarea] = createSignal<TextareaRenderable>()
+  let scroll: ScrollBoxRenderable | undefined
+  createEffect(() => {
+    const row = scroll?.getChildren()[store.selected]
+    if (row) scroll?.scrollChildIntoView(row.id)
+  })
+  const fg = (index: number) => (store.selected === index ? theme.text.formfield.focused : theme.text.formfield.base)
+  const submit = (value: string | undefined) => {
+    const invalid = formValidateValue(props.field, value, language.t)
+    if (invalid) return setStore("error", invalid)
+    props.onSubmit(value)
   }
-  return choice
+  const select = (index: number) => {
+    setStore({ selected: index, error: "" })
+    if (index === rows.length) return setStore("editing", true)
+    submit(index < rows.length ? String(rows[index].value) : undefined)
+  }
+  const back = () => setStore({ editing: false, text: textarea()?.plainText ?? store.text, error: "" })
+  Keymap.createLayer(() => ({
+    mode: "modal",
+    enabled: !store.editing,
+    commands: [
+      {
+        id: "dialog.select.prev",
+        title: language.t("tui.details.previousAnswer"),
+        group: language.t("tui.details.form"),
+        run: () => setStore("selected", (store.selected + count - 1) % count),
+      },
+      {
+        id: "dialog.select.next",
+        title: language.t("tui.details.nextAnswer"),
+        group: language.t("tui.details.form"),
+        run: () => setStore("selected", (store.selected + 1) % count),
+      },
+      {
+        id: "dialog.select.submit",
+        title: language.t("tui.details.selectAnswer"),
+        group: language.t("tui.details.form"),
+        run: () => select(store.selected),
+      },
+    ],
+  }))
+  Keymap.createLayer(() => ({
+    mode: "modal",
+    priority: 1,
+    target: textarea,
+    enabled: store.editing,
+    commands: [
+      {
+        id: "dialog.prompt.submit",
+        title: language.t("tui.details.submitAnswer"),
+        group: language.t("tui.details.form"),
+        run: () => submit(textarea()?.plainText.trim() || undefined),
+      },
+      {
+        bind: "escape",
+        title: language.t("tui.details.backToAnswers"),
+        group: language.t("tui.details.form"),
+        run: back,
+      },
+    ],
+  }))
+  return (
+    <box paddingLeft={4} paddingRight={4} paddingBottom={1} gap={1}>
+      <box flexDirection="row" justifyContent="space-between">
+        <text fg={theme.text.base} attributes={TextAttributes.BOLD}>
+          {formLabel(props.field)}
+        </text>
+        <text fg={theme.text.muted} onMouseUp={() => (store.editing ? back() : dialog.clear())}>
+          esc
+        </text>
+      </box>
+      <Show when={props.field.description}>{(description) => <text fg={theme.text.muted}>{description()}</text>}</Show>
+      <scrollbox
+        gap={1}
+        height={Math.min(
+          count + rows.filter((row) => row.description).length,
+          Math.max(3, Math.floor(dimensions().height / 2) - 6),
+        )}
+        scrollbarOptions={{ visible: false }}
+        ref={(value: ScrollBoxRenderable) => {
+          scroll = value
+        }}
+      >
+        <For each={rows}>
+          {(row, index) => (
+            <box onMouseUp={() => select(index())}>
+              <text fg={fg(index())}>
+                {index() + 1}. {row.label}
+              </text>
+              <Show when={row.description}>
+                {(description) => (
+                  <box paddingLeft={3}>
+                    <text fg={theme.text.muted}>{description()}</text>
+                  </box>
+                )}
+              </Show>
+            </box>
+          )}
+        </For>
+        <box flexDirection="row" gap={1} onMouseUp={() => select(rows.length)}>
+          <text fg={fg(rows.length)}>{rows.length + 1}.</text>
+          <Show
+            when={store.editing}
+            fallback={<text fg={fg(rows.length)}>{store.text || language.t("tui.details.typeYourOwnAnswer")}</text>}
+          >
+            <textarea
+              height={1}
+              flexGrow={1}
+              wrapMode="none"
+              initialValue={store.text}
+              placeholder={props.field.placeholder ?? language.t("tui.details.typeYourOwnAnswer")}
+              placeholderColor={theme.text.muted}
+              textColor={theme.text.formfield.focused}
+              focusedTextColor={theme.text.formfield.focused}
+              cursorColor={theme.text.formfield.focused}
+              ref={(value: TextareaRenderable) => {
+                setTextarea(value)
+                value.traits = { status: "ANSWER" }
+                queueMicrotask(() => {
+                  if (value.isDestroyed) return
+                  value.focus()
+                  value.gotoLineEnd()
+                })
+              }}
+              onContentChange={() => {
+                const text = textarea()?.plainText ?? ""
+                setStore("text", text)
+                if (store.error && !formValidateValue(props.field, text.trim() || undefined, language.t))
+                  setStore("error", "")
+              }}
+            />
+          </Show>
+        </box>
+        <Show when={!props.field.required}>
+          <text fg={fg(rows.length + 1)} onMouseUp={() => select(rows.length + 1)}>
+            {rows.length + 2}. {language.t("tui.dialogs.skip")}
+          </text>
+        </Show>
+      </scrollbox>
+      <Show when={store.error}>{(error) => <text fg={theme.text.feedback.error.base}>{error()}</text>}</Show>
+      <text fg={theme.text.muted}>
+        {store.editing ? language.t("tui.details.editAnswerHint") : language.t("tui.details.selectAnswerHint")}
+      </text>
+    </box>
+  )
 }
 
 function textAnswer(

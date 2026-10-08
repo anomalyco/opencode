@@ -291,7 +291,6 @@ export const dict = {
   "tui.session.shareSession": "แชร์เซสชัน",
   "tui.session.jumpToMessage": "ไปที่ข้อความ",
   "tui.session.forkSession": "แยกเซสชัน",
-  "tui.session.unshareSession": "เลิกแชร์เซสชัน",
   "tui.session.undoPreviousMessage": "เลิกทำข้อความก่อนหน้า",
   "tui.session.nothingToUndo": "ไม่มีสิ่งที่เลิกทำได้",
   "tui.session.toggleSessionScrollbar": "สลับการแสดงแถบเลื่อนเซสชัน",
@@ -1026,6 +1025,12 @@ export const dict = {
   "tui.permissionDisplay.choices": "ตัวเลือกสิทธิ์",
   "tui.permissionDisplay.minimize": "ย่อเล็กสุด",
   "tui.permissionDisplay.fullscreen": "เต็มหน้าจอ",
+  "tui.details.submitAnswer": "Submit answer",
+  "tui.details.backToAnswers": "Back to answers",
+  "tui.details.editAnswerHint": "enter submit · esc back",
+  "tui.details.selectAnswerHint": "↑/↓ select · enter confirm · esc cancel",
+  "tui.dialogs.recentlyClosedTabs": "Recently closed tabs",
+  "tui.dialogs.noRecentlyClosedTabs": "No recently closed tabs",
 }
 
 export default dict

@@ -9,7 +9,9 @@ const copy: CommandPaletteEntry = {
   title: "Copy Session ID",
   category: "Commands",
 }
+
 const file: CommandPaletteEntry = { id: "file:copy.txt", type: "file", title: "copy.txt", category: "Files" }
+
 const session: CommandPaletteEntry = {
   id: "session:copy",
   type: "session",
@@ -20,20 +22,25 @@ const session: CommandPaletteEntry = {
 describe("command palette search", () => {
   test("matches commands synchronously and cancels obsolete requests", () => {
     const signals: AbortSignal[] = []
+
     const root = createRoot((dispose) => {
       const [query, setQuery] = createSignal("")
+
       const search = createCommandPaletteSearch({
         query,
         items: (text) => (text === "copy session" ? [copy] : []),
         sources: [
           (_text, signal) => {
             signals.push(signal)
+
             return new Promise<CommandPaletteEntry[]>(() => {})
           },
         ],
       })
+
       return { search, setQuery, dispose }
     })
+
     root.setQuery(" copy session ")
     expect(root.search.items()).toEqual([copy])
     expect(root.search.loading()).toBe(true)
@@ -50,19 +57,25 @@ describe("command palette search", () => {
     const sessions = Promise.withResolvers<CommandPaletteEntry[]>()
     const fileVisible = Promise.withResolvers<void>()
     const sessionVisible = Promise.withResolvers<void>()
+
     const root = createRoot((dispose) => {
       const [query, setQuery] = createSignal("copy")
+
       const search = createCommandPaletteSearch({
         query,
         items: () => [copy],
         sources: [() => sessions.promise, () => files.promise],
       })
+
       createComputed(() => {
         if (search.items().some((entry) => entry.id === file.id)) fileVisible.resolve()
+
         if (search.items().some((entry) => entry.id === session.id)) sessionVisible.resolve()
       })
+
       return { search, setQuery, dispose }
     })
+
     expect(root.search.items()).toEqual([copy])
     files.resolve([file])
     await fileVisible.promise
@@ -79,17 +92,21 @@ describe("command palette search", () => {
 
   test("failed searches do not hide commands or successful sources", async () => {
     const settled = Promise.withResolvers<void>()
+
     const root = createRoot((dispose) => {
       const search = createCommandPaletteSearch({
         query: () => "copy",
         items: () => [copy],
         sources: [() => Promise.reject(new Error("offline")), () => Promise.resolve([file])],
       })
+
       createComputed(() => {
         if (!search.loading()) settled.resolve()
       })
+
       return { search, dispose }
     })
+
     await settled.promise
     expect(root.search.items()).toEqual([copy, file])
     root.dispose()

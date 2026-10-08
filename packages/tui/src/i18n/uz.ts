@@ -840,7 +840,6 @@ export const dict = {
   "tui.session.shareSession": "Sessiyani ulashish",
   "tui.session.jumpToMessage": "Xabarga o'tish",
   "tui.session.forkSession": "Sessiyani fork qilish",
-  "tui.session.unshareSession": "Sessiyani ulashishni bekor qilish",
   "tui.session.undoPreviousMessage": "Oldingi xabarni bekor qilish",
   "tui.session.nothingToUndo": "Bekor qiladigan narsa yo'q",
   "tui.session.toggleSessionScrollbar": "Sessiya aylantirish panelini almashtirish",
@@ -1039,6 +1038,12 @@ export const dict = {
   "tui.transcript.childSessionTitle": "Quyi sessiya - {{date}}",
   "tui.dialogs.newSessionTitle": "Yangi sessiya - {{timestamp}}",
   "tui.dialogs.configuration": "Konfiguratsiya",
+  "tui.details.submitAnswer": "Submit answer",
+  "tui.details.backToAnswers": "Back to answers",
+  "tui.details.editAnswerHint": "enter submit · esc back",
+  "tui.details.selectAnswerHint": "↑/↓ select · enter confirm · esc cancel",
+  "tui.dialogs.recentlyClosedTabs": "Recently closed tabs",
+  "tui.dialogs.noRecentlyClosedTabs": "No recently closed tabs",
 }
 
 export default dict

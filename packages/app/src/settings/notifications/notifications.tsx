@@ -36,6 +36,7 @@ const SoundSetting: Component<{
 }> = (props) => {
   const language = useLanguage()
   const config = () => soundSettings[props.kind]
+
   return (
     <SettingsRow title={language.t(config().title)} description={language.t(config().description)}>
       <Select

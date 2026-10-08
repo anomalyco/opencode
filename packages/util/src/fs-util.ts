@@ -8,6 +8,7 @@ import { Glob } from "./glob.js"
 import { serviceUse } from "./effect/service-use.js"
 import { makeGlobalNode } from "./effect/app-node.js"
 import { filesystem } from "./effect/app-node-platform.js"
+import { sameDirectory } from "./path.js"
 
 export namespace FSUtil {
   export class FileSystemError extends Schema.TaggedError<FileSystemError>()("FileSystemError", {
@@ -32,6 +33,8 @@ export namespace FSUtil {
     readonly start: string
     readonly stop?: string
     readonly mode?: "all" | "first"
+    /** Only match regular files or directories (following symlinks). By default any existing path matches. */
+    readonly type?: "file" | "directory"
   }
 
   export interface Interface extends FileSystem.FileSystem {
@@ -165,12 +168,18 @@ export namespace FSUtil {
         while (true) {
           for (const target of options.targets) {
             const search = join(current, target)
-            if (yield* fs.exists(search)) {
+            const found =
+              options.type === "file"
+                ? yield* isFile(search)
+                : options.type === "directory"
+                  ? yield* isDir(search)
+                  : yield* fs.exists(search)
+            if (found) {
               result.push(search)
               if (options.mode === "first") return result
             }
           }
-          if (options.stop === current) break
+          if (options.stop && sameDirectory(options.stop, current)) break
           const parent = dirname(current)
           if (parent === current) break
           current = parent
@@ -190,7 +199,7 @@ export namespace FSUtil {
             Effect.orElseSucceed(() => [] as string[]),
           )
           result.push(...matches)
-          if (stop === current) break
+          if (stop && sameDirectory(stop, current)) break
           const parent = dirname(current)
           if (parent === current) break
           current = parent

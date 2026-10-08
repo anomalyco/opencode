@@ -10,5 +10,6 @@ export function sessionLabel(session: Pick<SessionInfo, "title" | "parentID">) {
 export function sessionTitle(title?: string) {
   if (!title) return title
   const match = title.match(pattern)
+
   return match?.[1] ?? title
 }

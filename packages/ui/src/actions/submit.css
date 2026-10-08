@@ -33,18 +33,20 @@
   color: var(--v2-icon-icon-inverse);
 }
 
-:is(
-    [data-component="button-v2"][data-variant="submit"],
-    [data-component="icon-button-v2"]:is([data-variant="submit"], [data-variant="contrast"])
-  ):is(:hover, [data-state="hover"]):not(:disabled) {
-  background-image:
-    linear-gradient(90deg, var(--submit-hover) 0%, var(--submit-hover) 100%),
-    linear-gradient(180deg, var(--submit-highlight) 0%, var(--v2-alpha-light-0) 100%),
-    linear-gradient(
-      90deg,
-      var(--v2-background-bg-icon-button-contrast) 0%,
-      var(--v2-background-bg-icon-button-contrast) 100%
-    );
+@media (hover: hover) {
+  :is(
+      [data-component="button-v2"][data-variant="submit"],
+      [data-component="icon-button-v2"]:is([data-variant="submit"], [data-variant="contrast"])
+    ):is(:hover, [data-state="hover"]):not(:disabled) {
+    background-image:
+      linear-gradient(90deg, var(--submit-hover) 0%, var(--submit-hover) 100%),
+      linear-gradient(180deg, var(--submit-highlight) 0%, var(--v2-alpha-light-0) 100%),
+      linear-gradient(
+        90deg,
+        var(--v2-background-bg-icon-button-contrast) 0%,
+        var(--v2-background-bg-icon-button-contrast) 100%
+      );
+  }
 }
 
 :is(

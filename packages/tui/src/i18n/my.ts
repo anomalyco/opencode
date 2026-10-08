@@ -846,7 +846,6 @@ export const dict = {
   "tui.session.shareSession": "ဆွေးနွေးမှုကို မျှဝေပါ",
   "tui.session.jumpToMessage": "စာကို တက်ကူးပါ",
   "tui.session.forkSession": "စက်ရှင်မှ အခွဲအသစ် ဖန်တီးပါ",
-  "tui.session.unshareSession": "ဆွေးနွေးမှု မမျှဝေတော့ပါ",
   "tui.session.undoPreviousMessage": "ယခင်စာကို အနုတ်ယူပါ",
   "tui.session.nothingToUndo": "အနုတ်ယူရန် မရှိပါ",
   "tui.session.toggleSessionScrollbar": "စက်ရှင် ရွှေ့ကြည့်ဘားကို ပြပါ/ဖျောက်ပါ",
@@ -1040,6 +1039,12 @@ export const dict = {
   "tui.devtools.connecting": "ချိတ်ဆက်နေသည်",
   "tui.devtools.reconnecting": "ပြန်ချိတ်ဆက်နေသည်",
   "tui.devtools.unknown": "မသိနိုင်ပါ",
+  "tui.details.submitAnswer": "Submit answer",
+  "tui.details.backToAnswers": "Back to answers",
+  "tui.details.editAnswerHint": "enter submit · esc back",
+  "tui.details.selectAnswerHint": "↑/↓ select · enter confirm · esc cancel",
+  "tui.dialogs.recentlyClosedTabs": "Recently closed tabs",
+  "tui.dialogs.noRecentlyClosedTabs": "No recently closed tabs",
 }
 
 export default dict

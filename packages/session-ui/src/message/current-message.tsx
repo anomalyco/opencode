@@ -1,16 +1,19 @@
-import type {
-  SessionMessageAssistant,
-  SessionMessageAssistantTool,
-  SessionMessageUser,
-} from "@opencode/client/promise"
+import type { SessionMessageAssistant, SessionMessageAssistantTool, SessionMessageUser } from "@opencode/client/promise"
 import { Match, Switch, type ComponentProps } from "solid-js"
 import type { SessionUserActions, SessionUserAttachmentReference, SessionUserComment } from "../actions"
 import { AssistantReasoningContent, AssistantTextContent, CurrentUserMessageDisplay } from "./message-content"
-import { CurrentContextToolGroup, CurrentFileToolGroup, ToolDisplay } from "../tools/tool-renderer"
+import {
+  CurrentContextToolGroup,
+  CurrentFileToolGroup,
+  CurrentReadToolGroup,
+  ToolDisplay,
+} from "../tools/tool-renderer"
 import { currentToolError, currentToolInput, currentToolMetadata, currentToolOutput } from "./current-tool-state"
 
 export type { SessionUserActions, SessionUserAttachmentReference, SessionUserComment } from "../actions"
+
 export { SessionShellMessage } from "../tools/tool-renderer"
+
 export { currentContentDefaultOpen } from "./current-tool-state"
 
 export function SessionUserMessage(props: {
@@ -100,6 +103,10 @@ export function SessionAssistantContent(props: {
 
 export function SessionContextToolGroup(props: ComponentProps<typeof CurrentContextToolGroup>) {
   return <CurrentContextToolGroup {...props} />
+}
+
+export function SessionReadToolGroup(props: ComponentProps<typeof CurrentReadToolGroup>) {
+  return <CurrentReadToolGroup {...props} />
 }
 
 export function SessionFileToolGroup(props: {

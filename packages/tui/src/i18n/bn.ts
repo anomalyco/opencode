@@ -811,7 +811,6 @@ export const dict = {
   "tui.session.jumpToMessage": "বার্তায় যান",
   "tui.session.forkSession": "সেশন ফর্ক করুন",
   "tui.session.compactSession": "কমপ্যাক্ট সেশন",
-  "tui.session.unshareSession": "সেশন আনশেয়ার করুন",
   "tui.session.undoPreviousMessage": "পূর্ববর্তী বার্তা ফিরিয়ে নিন",
   "tui.session.nothingToUndo": "ফিরিয়ে নেওয়ার কিছু নেই",
   "tui.session.redo": "আবার করুন",
@@ -1030,6 +1029,12 @@ export const dict = {
   "tui.devtools.connecting": "সংযুক্ত হচ্ছে",
   "tui.devtools.reconnecting": "পুনঃসংযোগ করা হচ্ছে",
   "tui.devtools.unknown": "অজানা",
+  "tui.details.submitAnswer": "Submit answer",
+  "tui.details.backToAnswers": "Back to answers",
+  "tui.details.editAnswerHint": "enter submit · esc back",
+  "tui.details.selectAnswerHint": "↑/↓ select · enter confirm · esc cancel",
+  "tui.dialogs.recentlyClosedTabs": "Recently closed tabs",
+  "tui.dialogs.noRecentlyClosedTabs": "No recently closed tabs",
 }
 
 export default dict

@@ -296,7 +296,6 @@ export const dict = {
   "tui.session.shareSession": "Udostępnij sesję",
   "tui.session.jumpToMessage": "Przejdź do wiadomości",
   "tui.session.forkSession": "Utwórz odgałęzienie sesji",
-  "tui.session.unshareSession": "Wyłącz udostępnianie sesji",
   "tui.session.undoPreviousMessage": "Cofnij poprzednią wiadomość",
   "tui.session.nothingToUndo": "Brak zmian do cofnięcia",
   "tui.session.toggleSessionScrollbar": "Przełącz pasek przewijania sesji",
@@ -1076,6 +1075,12 @@ export const dict = {
   "tui.plugins.failedCount.many": "Błędy {{count}} wtyczek",
   "tui.sidebar.errors.few": "{{count}} błędy",
   "tui.sidebar.errors.many": "{{count}} błędów",
+  "tui.details.submitAnswer": "Submit answer",
+  "tui.details.backToAnswers": "Back to answers",
+  "tui.details.editAnswerHint": "enter submit · esc back",
+  "tui.details.selectAnswerHint": "↑/↓ select · enter confirm · esc cancel",
+  "tui.dialogs.recentlyClosedTabs": "Recently closed tabs",
+  "tui.dialogs.noRecentlyClosedTabs": "No recently closed tabs",
 }
 
 export default dict

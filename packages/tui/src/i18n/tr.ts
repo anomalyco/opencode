@@ -292,7 +292,6 @@ export const dict = {
   "tui.session.shareSession": "Oturumu paylaş",
   "tui.session.jumpToMessage": "Mesaja git",
   "tui.session.forkSession": "Oturumu dallandır",
-  "tui.session.unshareSession": "Oturum paylaşımını durdur",
   "tui.session.undoPreviousMessage": "Önceki mesajı geri al",
   "tui.session.nothingToUndo": "Geri alınacak bir şey yok",
   "tui.session.toggleSessionScrollbar": "Oturum kaydırma çubuğunu aç/kapat",
@@ -1035,6 +1034,12 @@ export const dict = {
   "tui.transcript.childSessionTitle": "Alt oturum - {{date}}",
   "tui.dialogs.newSessionTitle": "Yeni oturum - {{timestamp}}",
   "tui.dialogs.configuration": "Yapılandırma",
+  "tui.details.submitAnswer": "Submit answer",
+  "tui.details.backToAnswers": "Back to answers",
+  "tui.details.editAnswerHint": "enter submit · esc back",
+  "tui.details.selectAnswerHint": "↑/↓ select · enter confirm · esc cancel",
+  "tui.dialogs.recentlyClosedTabs": "Recently closed tabs",
+  "tui.dialogs.noRecentlyClosedTabs": "No recently closed tabs",
 }
 
 export default dict

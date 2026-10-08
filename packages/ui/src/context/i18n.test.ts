@@ -7,6 +7,7 @@ const i18n = (locale: string, translated: string) => {
     t: () => translated,
     plural: () => "",
   }
+
   return createUiI18n(source)
 }
 

@@ -33,11 +33,13 @@ export function createSessionMutations(remove: (sessionID: string) => Promise<vo
       const removed = new Set(
         store.session.flatMap((mutation) => (mutation.type === "remove" ? [mutation.sessionID] : [])),
       )
+
       return removed.size === 0 ? [...sessions] : sessions.filter((session) => !removed.has(session.id))
     },
     remove(sessionID: string) {
       const mutation = { id: uuid(), type: "remove" as const, sessionID }
       setStore("session", (current) => [...current, mutation])
+
       return Promise.resolve()
         .then(() => remove(sessionID))
         .catch((error) => {
