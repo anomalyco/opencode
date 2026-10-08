@@ -108,6 +108,12 @@ export const GoogleVertexPlugin = define({
     })
 
     yield* ctx.integration.transform((editor) => {
+      // models.dev lists project, location, and the ADC file path, which configure Google auth rather than
+      // carrying a key. The Express Mode key is the only env credential.
+      editor.method.update({
+        integrationID: Provider.ID.googleVertex,
+        method: { type: "env", names: ["GOOGLE_VERTEX_API_KEY"] },
+      })
       editor.method.update({
         integrationID: Provider.ID.googleVertex,
         method: {

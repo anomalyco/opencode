@@ -74,19 +74,12 @@ export const ModelsDevPlugin = define({
   }),
 })
 
+// models.dev lists every env var a provider needs, including account IDs, hosts, and base URLs that
+// only fill URL templates. Only key-shaped names may become a credential; provider plugins override
+// the env method when a provider needs something else.
 function environmentNames(provider: ModelsDev.Snapshot) {
-  if (provider.info.id === Provider.ID.azure)
-    return [...provider.environment.filter((name) => name.endsWith("_API_KEY")), "AZURE_COGNITIVE_SERVICES_API_KEY"]
-  // models.dev advertises project, location, and the ADC credentials file path for
-  // Vertex. Those configure Google auth rather than carrying a key, so only the
-  // Express Mode key may become a credential; GoogleVertexPlugin handles activation.
-  if (provider.info.id === Provider.ID.googleVertex) return ["GOOGLE_VERTEX_API_KEY"]
-  if (provider.info.id === "cloudflare-workers-ai")
-    return ["CLOUDFLARE_API_KEY", "CLOUDFLARE_WORKERS_AI_TOKEN", "CLOUDFLARE_API_TOKEN"]
-  // The host and gateway URL only fill the base URL template; only the token is a key.
-  if (provider.info.id === "databricks") return ["DATABRICKS_TOKEN"]
-  if (provider.info.id === "neon") return ["NEON_AI_GATEWAY_TOKEN"]
-  return [...provider.environment]
+  const keys = provider.environment.filter((name) => /_(API_?KEY|TOKEN|PAT)$/.test(name))
+  return keys.length > 0 ? keys : [...provider.environment]
 }
 
 const prepared = new WeakMap<readonly ModelsDev.Snapshot[], readonly ModelsDev.Snapshot[]>()

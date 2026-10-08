@@ -150,8 +150,7 @@ describe("ModelsDevPlugin", () => {
           .list(Integration.ID.make(providerID))
           .flatMap((method) => (method.type === "env" ? [method.names] : []))[0]
       })
-      expect(names).toEqual(snapshot[0].environment)
-      expect(names).not.toBe(snapshot[0].environment)
+      expect(names).toEqual(["ACME_API_KEY"])
 
       // Provider-owned records are copies, not the source's nested objects.
       const stored = required(yield* first.providers.get(providerID))
@@ -903,7 +902,7 @@ describe("ModelsDevPlugin", () => {
       expect(yield* providers.get(Provider.ID.make("google-vertex-anthropic"))).toBeUndefined()
       expect(yield* integrations.get(Integration.ID.make("azure"))).toBeDefined()
       expect(yield* integrations.get(Integration.ID.make("azure"))).toMatchObject({
-        methods: [{ type: "key" }, { type: "env", names: ["AZURE_API_KEY", "AZURE_COGNITIVE_SERVICES_API_KEY"] }],
+        methods: [{ type: "key" }, { type: "env", names: ["AZURE_API_KEY"] }],
       })
       expect(yield* integrations.get(Integration.ID.make("google-vertex"))).toBeDefined()
       expect(yield* integrations.get(Integration.ID.make("azure-cognitive-services"))).toBeUndefined()
@@ -941,12 +940,12 @@ describe("ModelsDevPlugin", () => {
                 },
                 {
                   info: {
-                    id: Provider.ID.make("google-vertex"),
-                    name: "Google Vertex",
+                    id: Provider.ID.make("databricks"),
+                    name: "Databricks",
                     activation: "auto",
-                    package: "@opencode/ai/providers/google-vertex",
+                    package: "@opencode/ai/providers/openai-compatible",
                   },
-                  environment: ["GOOGLE_VERTEX_PROJECT", "GOOGLE_VERTEX_LOCATION", "GOOGLE_APPLICATION_CREDENTIALS"],
+                  environment: ["DATABRICKS_HOST", "DATABRICKS_TOKEN"],
                   models: [],
                 },
               ] satisfies readonly ModelsDev.Snapshot[]),
@@ -955,19 +954,12 @@ describe("ModelsDevPlugin", () => {
         ),
       )
 
-      // Vertex authenticates through ADC; project, location, and the credentials
-      // file path are configuration, not API keys.
-      expect(yield* integrations.get(Integration.ID.make("google-vertex"))).toMatchObject({
-        methods: [{ type: "key" }, { type: "env", names: ["GOOGLE_VERTEX_API_KEY"] }],
+      // Hosts and account IDs only fill URL templates; they are not API keys.
+      expect(yield* integrations.get(Integration.ID.make("databricks"))).toMatchObject({
+        methods: [{ type: "key" }, { type: "env", names: ["DATABRICKS_TOKEN"] }],
       })
       expect(yield* integrations.get(Integration.ID.make("cloudflare-workers-ai"))).toMatchObject({
-        methods: [
-          { type: "key" },
-          {
-            type: "env",
-            names: ["CLOUDFLARE_API_KEY", "CLOUDFLARE_WORKERS_AI_TOKEN", "CLOUDFLARE_API_TOKEN"],
-          },
-        ],
+        methods: [{ type: "key" }, { type: "env", names: ["CLOUDFLARE_API_KEY"] }],
       })
       yield* withEnv({ CLOUDFLARE_ACCOUNT_ID: "account", CLOUDFLARE_API_KEY: "token" }, () =>
         integrations.connection
