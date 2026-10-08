@@ -200,7 +200,9 @@ export function createActiveSessionRegion(input: {
 
       if (!sessionID) return false
 
-      return data.session.pending.waiting(sessionID, messageID)
+      const status = data.session.pending.status(sessionID, messageID)
+
+      return status === "steering" || status === "stranded"
     },
     queue: ({ sessionID, messageID }) =>
       server.api.session.inbox

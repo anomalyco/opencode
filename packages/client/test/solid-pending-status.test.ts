@@ -56,46 +56,46 @@ function fixture() {
         ),
       move: (id: string, delivery: "steer" | "queue") =>
         emit("session.inbox.delivery.changed", { inboxID: id, delivery }),
-      waiting: (id: string) => data.session.pending.waiting(sessionID, id),
+      status: (id: string) => data.session.pending.status(sessionID, id),
     }
   })
 }
 
-test("an idle send never looks like a waiting steer from optimistic admission through delivery", async () => {
+test("an idle send is starting from optimistic admission until delivery", async () => {
   const setup = fixture()
   try {
     // The composer marks the Session running in the same task as optimistic admission.
     const sending = setup.data.session.prompt({ sessionID, id: "msg_first", text: "first" })
-    expect(setup.waiting("msg_first")).toBe(false)
+    expect(setup.status("msg_first")).toBe("starting")
     setup.data.session.setStatus(sessionID, "running")
-    expect(setup.waiting("msg_first")).toBe(false)
+    expect(setup.status("msg_first")).toBe("starting")
     await sending
     setup.enqueue("msg_first")
-    expect(setup.waiting("msg_first")).toBe(false)
+    expect(setup.status("msg_first")).toBe("starting")
     setup.started()
-    expect(setup.waiting("msg_first")).toBe(false)
+    expect(setup.status("msg_first")).toBe("starting")
     setup.deliver("msg_first")
-    expect(setup.waiting("msg_first")).toBe(false)
+    expect(setup.status("msg_first")).toBeUndefined()
     expect(setup.data.session.message.get(sessionID, "msg_first")?.type).toBe("user")
   } finally {
     setup.dispose()
   }
 })
 
-test("a steer sent after the execution delivered input waits, and follows delivery changes", () => {
+test("a steer sent after the execution delivered input is steering, and follows delivery changes", () => {
   const setup = fixture()
   try {
     setup.enqueue("msg_first")
     setup.started()
     setup.deliver("msg_first")
     setup.enqueue("msg_steer")
-    expect(setup.waiting("msg_steer")).toBe(true)
+    expect(setup.status("msg_steer")).toBe("steering")
     setup.move("msg_steer", "queue")
-    expect(setup.waiting("msg_steer")).toBe(false)
+    expect(setup.status("msg_steer")).toBe("queued")
     setup.move("msg_steer", "steer")
-    expect(setup.waiting("msg_steer")).toBe(true)
+    expect(setup.status("msg_steer")).toBe("steering")
     setup.deliver("msg_steer")
-    expect(setup.waiting("msg_steer")).toBe(false)
+    expect(setup.status("msg_steer")).toBeUndefined()
   } finally {
     setup.dispose()
   }
@@ -107,31 +107,33 @@ test("rapid follow-ups join the starting execution until it delivers without the
     setup.enqueue("msg_first")
     setup.started()
     setup.enqueue("msg_second")
-    // The idle boundary promotes every pending steer, so both are about to run.
-    expect(setup.waiting("msg_first")).toBe(false)
-    expect(setup.waiting("msg_second")).toBe(false)
-    // Promotion happened before the second admission landed; it now steers the running turn.
+    // The idle boundary promotes every pending steer, so both are starting.
+    expect(setup.status("msg_first")).toBe("starting")
+    expect(setup.status("msg_second")).toBe("starting")
+    // Promotion happened before the second admission landed; it now steers the running execution.
     setup.deliver("msg_first")
-    expect(setup.waiting("msg_second")).toBe(true)
+    expect(setup.status("msg_second")).toBe("steering")
   } finally {
     setup.dispose()
   }
 })
 
-test.each(["failed", "interrupted"] as const)("an undelivered steer waits after execution %s", (outcome) => {
+test.each(["failed", "interrupted"] as const)("an undelivered steer is stranded after execution %s", (outcome) => {
   const setup = fixture()
   try {
     setup.enqueue("msg_first")
     setup.started()
-    expect(setup.waiting("msg_first")).toBe(false)
+    expect(setup.status("msg_first")).toBe("starting")
     setup.settled(outcome)
     expect(setup.data.session.status(sessionID)).toBe("idle")
-    expect(setup.waiting("msg_first")).toBe(true)
-    // The next execution promotes it along with any new steers.
+    expect(setup.status("msg_first")).toBe("stranded")
+    // A new idle send starts fresh, and its execution promotes the stranded steer with it.
     setup.enqueue("msg_retry")
+    expect(setup.status("msg_retry")).toBe("starting")
+    expect(setup.status("msg_first")).toBe("stranded")
     setup.started()
-    expect(setup.waiting("msg_first")).toBe(false)
-    expect(setup.waiting("msg_retry")).toBe(false)
+    expect(setup.status("msg_first")).toBe("starting")
+    expect(setup.status("msg_retry")).toBe("starting")
   } finally {
     setup.dispose()
   }
@@ -145,34 +147,33 @@ test("a later execution starts fresh after an earlier turn delivered input", () 
     setup.deliver("msg_first")
     setup.settled("succeeded")
     setup.enqueue("msg_next")
+    expect(setup.status("msg_next")).toBe("starting")
     setup.started()
-    expect(setup.waiting("msg_next")).toBe(false)
+    expect(setup.status("msg_next")).toBe("starting")
   } finally {
     setup.dispose()
   }
 })
 
-test("a remote idle prompt is presumed to start execution", () => {
+test("a remote idle prompt is starting", () => {
   const setup = fixture()
   try {
     setup.enqueue("msg_remote")
-    expect(setup.waiting("msg_remote")).toBe(false)
+    expect(setup.status("msg_remote")).toBe("starting")
     setup.started()
-    expect(setup.waiting("msg_remote")).toBe(false)
+    expect(setup.status("msg_remote")).toBe("starting")
   } finally {
     setup.dispose()
   }
 })
 
-test("an idle send after a failed execution starts fresh while the leftover steer still waits", () => {
+test("a queued prompt is queued regardless of execution state", () => {
   const setup = fixture()
   try {
-    setup.enqueue("msg_leftover")
+    setup.enqueue("msg_queued", "queue")
+    expect(setup.status("msg_queued")).toBe("queued")
     setup.started()
-    setup.settled("failed")
-    setup.enqueue("msg_next")
-    expect(setup.waiting("msg_leftover")).toBe(true)
-    expect(setup.waiting("msg_next")).toBe(false)
+    expect(setup.status("msg_queued")).toBe("queued")
   } finally {
     setup.dispose()
   }
