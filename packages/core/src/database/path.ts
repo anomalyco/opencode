@@ -53,7 +53,11 @@ export const directoryColumn = customType<{
     return "text"
   },
   toDriver(input) {
-    return input ? absolute(input) : input
+    if (!input) return input
+    const value = absolute(input)
+    const root = process.platform === "win32" ? nodePath.win32.parse(value).root.replaceAll("\\", "/") : nodePath.posix.parse(value).root
+    if (value === root) return value
+    return value.replace(/\/+$/, "")
   },
   fromDriver(input) {
     return input ? toPlatform(absolute(input)) : input
