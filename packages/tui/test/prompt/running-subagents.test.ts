@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { Session } from "@opencode-ai/sdk/v2"
-import { runningSubagents } from "../../src/routes/session/running-subagents"
+import { runningSubagents } from "../../src/component/prompt/running-subagents"
 
 function session(id: string, parentID: string | undefined, title: string, created: number) {
   return { id, parentID, title, time: { created, updated: created } } as Session

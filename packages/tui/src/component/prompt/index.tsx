@@ -57,6 +57,7 @@ import { usePromptWorkspace } from "./workspace"
 import { usePromptMove } from "./move"
 import { readLocalAttachment } from "./local-attachment"
 import { useLocation } from "../../context/location"
+import { RunningSubagents, runningSubagents } from "./running-subagents"
 
 registerOpencodeSpinner()
 
@@ -162,6 +163,9 @@ export function Prompt(props: PromptProps) {
   const dialog = useDialog()
   const toast = useToast()
   const status = createMemo(() => sync.data.session_status?.[props.sessionID ?? ""] ?? { type: "idle" })
+  const subagents = createMemo(() =>
+    props.sessionID ? runningSubagents(sync.data.session, sync.data.session_status, props.sessionID) : [],
+  )
   const history = usePromptHistory()
   const stash = usePromptStash()
   const keymap = useOpencodeKeymap()
@@ -1591,6 +1595,11 @@ export function Prompt(props: PromptProps) {
                     {store.interrupt > 0 ? "again to interrupt" : "interrupt"}
                   </span>
                 </text>
+                <Show when={status().type !== "retry" && subagents().length > 0}>
+                  <box marginLeft={1}>
+                    <RunningSubagents list={subagents()} />
+                  </box>
+                </Show>
               </box>
             </Match>
             <Match when={workspace.notice()}>
@@ -1647,7 +1656,12 @@ export function Prompt(props: PromptProps) {
               {props.hint ?? (
                 <Show when={props.sessionID} fallback={<text />}>
                   <box marginLeft={1}>
-                    <text fg={theme.textMuted}>{location()?.directory ?? paths.cwd}</text>
+                    <Show
+                      when={subagents().length > 0}
+                      fallback={<text fg={theme.textMuted}>{location()?.directory ?? paths.cwd}</text>}
+                    >
+                      <RunningSubagents list={subagents()} />
+                    </Show>
                   </box>
                 </Show>
               )}
