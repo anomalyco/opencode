@@ -549,9 +549,9 @@ describe("ShellTool scanner permissions", () => {
           expect(yield* Effect.promise(() => Bun.file(marker).text())).toBe("hello")
 
           yield* Effect.promise(() => fs.rm(marker, { force: true }))
-          const arity = yield* runPermissionCommand(registry, "FOO=bar printf bye > marker", marker, [])
-          expect(arity.requests).toEqual([])
-          expect(arity.exit).toMatchObject({
+          const changedArgument = yield* runPermissionCommand(registry, "FOO=bar printf bye > marker", marker, [])
+          expect(changedArgument.requests).toEqual([])
+          expect(changedArgument.exit).toMatchObject({
             _tag: "Success",
             value: { status: "completed", metadata: { exit: 0 } },
           })
@@ -560,6 +560,19 @@ describe("ShellTool scanner permissions", () => {
           // Deferred so a regression fails as an unexpected repeat prompt, not only as a proposal mismatch.
           expect(first.requests).toMatchObject([{ action: "shell", resources: [command], save: ["FOO=bar printf *"] }])
           expect((yield* saved.list()).map((item) => item.resource)).toEqual(["FOO=bar printf *"])
+
+          yield* Effect.promise(() => fs.rm(marker, { force: true }))
+          for (const negativeCommand of [
+            "FOO=bar BAZ=qux printf hello > marker",
+            "FOO=bar echo hello > marker",
+            "printf hello > marker",
+          ]) {
+            const negative = yield* runPermissionCommand(registry, negativeCommand, marker, ["reject"])
+            expect(negative.requests, negativeCommand).toHaveLength(1)
+            expect(negative.requests[0]?.resources, negativeCommand).toEqual([negativeCommand])
+            expect(Exit.isFailure(negative.exit), negativeCommand).toBe(true)
+            expect(yield* Effect.promise(() => Bun.file(marker).exists()), negativeCommand).toBe(false)
+          }
 
           yield* saved.add({ projectID: location.project.id, action: "shell", resources: ["printf *"] })
           yield* Effect.promise(() => fs.rm(marker, { force: true }))

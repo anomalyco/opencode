@@ -166,9 +166,10 @@ describe("ShellParse", () => {
     ['FOO="a=b" git status', 'FOO="a=b" git status', 'FOO="a=b" git status *'],
   ] as const)("preserves environment prefixes in saved proposals: %s", async (command, resource, save) => {
     for (const portable of [false, true]) {
+      const scanner = portable ? "portable" : "Tree-sitter"
       const result = await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace", { portable }))
-      expect(result.directories).toEqual([])
-      expect(result.commands).toEqual([{ resource, save }])
+      expect(result.directories, scanner).toEqual([])
+      expect(result.commands, scanner).toEqual([{ resource, save }])
     }
   })
 
@@ -205,6 +206,7 @@ describe("ShellParse", () => {
     for (const portable of [false, true]) {
       expect(
         (await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace", { portable }))).commands,
+        portable ? "portable" : "Tree-sitter",
       ).toEqual([...expected])
     }
   })
@@ -217,20 +219,26 @@ describe("ShellParse", () => {
     "FOO=bar >out* git status",
   ] as const)("omits only the proposal when the preserved head is not literally representable: %s", async (command) => {
     for (const portable of [false, true]) {
+      const scanner = portable ? "portable" : "Tree-sitter"
       const result = await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace", { portable }))
-      expect(result.commands).toHaveLength(1)
-      expect(result.commands[0]?.resource).toBe(command)
-      expect(result.commands[0]?.save).toBeUndefined()
+      expect(result.commands, scanner).toHaveLength(1)
+      expect(result.commands[0]?.resource, scanner).toBe(command)
+      expect(result.commands[0]?.save, scanner).toBeUndefined()
     }
   })
 
   test("retains safe sibling proposals alongside an omitted unsafe prefix", async () => {
-    const command = "FOO='a*b' git status && printf hello"
     for (const portable of [false, true]) {
-      const result = await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace", { portable }))
-      expect(result.commands.map((item) => item.resource)).toEqual(["FOO='a*b' git status", "printf hello"])
-      expect(result.commands[0]?.save).toBeUndefined()
-      expect(result.commands[1]).toEqual({ resource: "printf hello", save: "printf *" })
+      const scanner = portable ? "portable" : "Tree-sitter"
+      const result = await Effect.runPromise(
+        ShellParse.scan("FOO='a*b' git status && printf hello", "/bin/bash", "/workspace", { portable }),
+      )
+      expect(
+        result.commands.map((item) => item.resource),
+        scanner,
+      ).toEqual(["FOO='a*b' git status", "printf hello"])
+      expect(result.commands[0]?.save, scanner).toBeUndefined()
+      expect(result.commands[1], scanner).toEqual({ resource: "printf hello", save: "printf *" })
     }
   })
 
@@ -238,6 +246,7 @@ describe("ShellParse", () => {
     for (const portable of [false, true]) {
       expect(
         (await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace", { portable }))).commands,
+        portable ? "portable" : "Tree-sitter",
       ).toEqual([])
     }
   })
@@ -270,6 +279,7 @@ describe("ShellParse", () => {
       for (const portable of [false, true]) {
         expect(
           (await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace", { portable }))).commands,
+          portable ? "portable" : "Tree-sitter",
         ).toEqual([{ resource: command, save: "printf *" }])
       }
     },
