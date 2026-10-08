@@ -1,11 +1,13 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
+import { sql } from "drizzle-orm"
 import { Bus } from "@opencode/core/bus"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { ProjectTable } from "@opencode/core/project/sql"
 import { SessionProjector } from "@opencode/core/session/projector"
 import { SessionStore } from "@opencode/core/session/store"
+import { SessionTable } from "@opencode/core/session/sql"
 import { Event } from "@opencode/schema/event"
 import { Project } from "@opencode/schema/project"
 import { AbsolutePath } from "@opencode/schema/schema"
@@ -61,6 +63,9 @@ describe("SessionStore", () => {
         slug: "store-test",
         version: "test",
       })
+      const database = yield* Database.Service
+      // Simulate a session written before directory-column normalization.
+      yield* database.db.run(sql`UPDATE ${SessionTable} SET directory = '/project///' WHERE id = 'ses_directory_slash'`)
       const store = yield* SessionStore.Service
       const paths = ["/project", "/project/", ...(process.platform === "win32" ? ["/project\\\\"] : [])]
       yield* Effect.forEach(paths, (directory) =>
