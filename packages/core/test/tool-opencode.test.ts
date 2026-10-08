@@ -231,9 +231,7 @@ worktreeIt.live("creates, lists, and removes worktrees for the plugin's project"
     expect(yield* run("worktree_remove", { directory })).toEqual({ directory, removed: true })
     expect(yield* Effect.promise(() => Bun.file(path.join(directory, ".git")).exists())).toBe(false)
     expect(approvals.assertions).toMatchObject([
-      { action: "external_directory", resources: [path.join(directory, "*")] },
       { action: "edit", resources: [directory], save: ["*"], sessionID: session.id },
-      { action: "external_directory", resources: [path.join(directory, "*")] },
       { action: "edit", resources: [directory], save: ["*"], sessionID: session.id },
     ])
     expect((yield* run("worktree_list", {})).worktrees).not.toContainEqual({ directory, strategy: "git" })

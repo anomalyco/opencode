@@ -188,7 +188,6 @@ export const Plugin = {
             Effect.gen(function* () {
               // Removing a worktree deletes files, so it requires the same approval as editing them.
               const target = yield* access.resolve({ path: input.directory, kind: "directory" })
-              yield* access.authorizeExternal([target], context)
               yield* permission.assert({
                 action: "edit",
                 resources: [target.resource],
