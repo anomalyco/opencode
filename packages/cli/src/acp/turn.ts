@@ -210,6 +210,9 @@ export const make = Effect.fnUntraced(function* (input: {
     while (true) {
       const folded = yield* advance(turn)
       if (folded.terminal) {
+        // A registered executor can own several execution cycles. Its return,
+        // rather than the first terminal event, ends command-owned streaming.
+        if (turn.ctx.command && !(yield* Deferred.isDone(turn.cancelled))) continue
         yield* asksSettled(turn.subscription)
         return folded.terminal
       }
@@ -287,7 +290,7 @@ export const make = Effect.fnUntraced(function* (input: {
       const events = yield* consume(turn).pipe(Effect.forkScoped)
       return yield* Effect.gen(function* () {
         yield* submit(attached, prompt)
-        if (prompt.command) return "succeeded" as const
+        if (prompt.command) return (yield* Ref.get(turn.state)).terminal ?? "succeeded"
         return yield* Fiber.join(events)
       }).pipe(Effect.onInterrupt(() => windDown(turn, events)))
     }).pipe(Effect.scoped)
@@ -360,6 +363,7 @@ export const make = Effect.fnUntraced(function* (input: {
           sessionID: attached.id,
           cwd: attached.cwd,
           start: prompt.start,
+          command: prompt.command !== undefined,
           childUpdates: capabilities.childSessionUpdates,
           compaction: capabilities.compaction,
         },

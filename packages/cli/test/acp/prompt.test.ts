@@ -55,6 +55,44 @@ const held = {
   onInterrupt: ({ sessionID }) => [interrupted(sessionID)],
 } satisfies WireOptions
 
+test("streams every execution submitted by a still-running command", async () => {
+  const gate = Promise.withResolvers<Response>()
+  await using acp = await startSession({
+    fetch: (request) => (request.method === "POST" && request.path.endsWith("/command") ? gate.promise : undefined),
+  })
+  let responded = false
+  const prompt = acp.prompt(acp.sessionId, "/review now").then((result) => {
+    responded = true
+    return result
+  })
+  try {
+    await acp.until(() => acp.server.requests.some((request) => request.path.endsWith("/command")))
+    acp.server.send(delivered(acp.sessionId, "msg_command_owned"), textDelta(acp.sessionId, "msg_phase1", "phase one"))
+    await acp.waitForUpdate(
+      (item) =>
+        item.update.sessionUpdate === "agent_message_chunk" &&
+        item.update.content.type === "text" &&
+        item.update.content.text === "phase one",
+    )
+    acp.server.send(
+      succeeded(acp.sessionId),
+      delivered(acp.sessionId, "msg_command_next"),
+      textDelta(acp.sessionId, "msg_phase2", "phase two"),
+    )
+    await acp.waitForUpdate(
+      (item) =>
+        item.update.sessionUpdate === "agent_message_chunk" &&
+        item.update.content.type === "text" &&
+        item.update.content.text === "phase two",
+    )
+    expect(responded).toBe(false)
+    gate.resolve(new Response(null, { status: 204 }))
+    expect((await prompt).stopReason).toBe("end_turn")
+  } finally {
+    gate.resolve(new Response(null, { status: 204 }))
+  }
+})
+
 describe("acp prompt turns over the wire", () => {
   test("streams an admitted turn and resolves with usage after its terminal event", async () => {
     const releaseAdmission = Promise.withResolvers<void>()
