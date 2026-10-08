@@ -131,10 +131,32 @@ test("a returned command waits for the current execution's final text and termin
   ).toBe(true)
 })
 
-test("closing the ACP transport does not send an explicit user interruption", async () => {
-  const acp = await startSession({
-    onPrompt: ({ sessionID, id }) => [delivered(sessionID, id), textDelta(sessionID, "msg_work", "working")],
+test("a late request cancel cannot make the next transport close send a user interruption", async () => {
+  let holding = false
+  const waiting = Promise.withResolvers<void>()
+  const usage = Promise.withResolvers<Response>()
+  await using acp = await startSession({
+    onPrompt: ({ sessionID, id, text }) => {
+      if (text === "settle") {
+        holding = true
+        return turn(sessionID, id, stepEnded(sessionID, "msg_settle"))
+      }
+      return [delivered(sessionID, id), textDelta(sessionID, "msg_work", "working")]
+    },
+    fetch: (request) => {
+      if (!holding || request.method !== "GET" || !request.path.startsWith("/api/session/")) return
+      waiting.resolve()
+      return usage.promise
+    },
   })
+  const signal = new AbortController()
+  const settling = acp.prompt(acp.sessionId, "settle", signal.signal)
+  await waiting.promise
+  signal.abort()
+  await new Promise((resolve) => setTimeout(resolve, 20))
+  holding = false
+  usage.resolve(Response.json({ data: acp.server.sessions.get(acp.sessionId) }))
+  expect((await settling).stopReason).toBe("cancelled")
   const prompt = acp.prompt(acp.sessionId, "work").catch(() => undefined)
   await acp.waitForUpdate((item) => item.update.sessionUpdate === "agent_message_chunk")
   await acp[Symbol.asyncDispose]()

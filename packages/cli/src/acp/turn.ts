@@ -391,11 +391,7 @@ export const make = Effect.fnUntraced(function* (input: {
       ),
       (turn) => execute(attached, prompt, turn),
       (turn, exit) => handoff(attached, turn, exit),
-    ).pipe(
-      Effect.interruptible,
-      Effect.exit,
-      Effect.ensuring(Effect.sync(() => cancellationRequests.delete(attached.id))),
-    )
+    ).pipe(Effect.interruptible, Effect.exit)
     return yield* settle(attached, yield* Ref.get(state), exit)
   })
 
@@ -417,25 +413,33 @@ export const make = Effect.fnUntraced(function* (input: {
       })
       // A `$/cancel_request` for this prompt cancels its turn like `session/cancel`, rather than failing the request.
       yield* aborted(signal).pipe(
-        Effect.tap(() =>
-          Effect.sync(() => {
-            if (!input.connection.signal?.aborted) cancellationRequests.add(params.sessionId)
-          }),
-        ),
-        Effect.andThen(Fiber.interrupt(turn)),
+        Effect.flatMap(() => {
+          const explicit = !input.connection.signal?.aborted
+          if (explicit) cancellationRequests.add(params.sessionId)
+          return Fiber.interrupt(turn).pipe(
+            Effect.ensuring(
+              Effect.sync(() => {
+                if (explicit) cancellationRequests.delete(params.sessionId)
+              }),
+            ),
+          )
+        }),
         Effect.forkChild,
       )
       return yield* Fiber.join(turn)
     }),
     cancel: Effect.fnUntraced(function* (params) {
       cancellationRequests.add(params.sessionId)
-      yield* FiberMap.remove(turns, params.sessionId)
-      cancellationRequests.delete(params.sessionId)
+      yield* FiberMap.remove(turns, params.sessionId).pipe(
+        Effect.ensuring(Effect.sync(() => cancellationRequests.delete(params.sessionId))),
+      )
     }),
     close: Effect.fn("cli.acp.turn.close")(function* (sessionID) {
       if (FiberMap.hasUnsafe(turns, sessionID)) {
         cancellationRequests.add(sessionID)
-        return yield* FiberMap.remove(turns, sessionID)
+        return yield* FiberMap.remove(turns, sessionID).pipe(
+          Effect.ensuring(Effect.sync(() => cancellationRequests.delete(sessionID))),
+        )
       }
       yield* ACPClient.decodeSessionID(sessionID).pipe(
         Effect.flatMap((id) => input.client.session.interrupt({ sessionID: id })),
