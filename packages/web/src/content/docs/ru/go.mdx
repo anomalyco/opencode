@@ -73,6 +73,7 @@ OpenCode Go работает так же, как любой другой про�
 - **GLM-5.2**
 - **GPT 6 Luna**
 - **GPT 5.6 Luna**
+- **Claude Haiku 5.5**
 - **Kimi K3**
 - **Kimi K2.7 Code**
 - **Kimi K2.6**
@@ -200,6 +201,8 @@ OpenCode Go предназначен для [OpenCode](https://opencode.ai) и �
     | GPT 6 Luna (> 272K tokens)              | $0.20  | $0.75  | $0.02       | $0.25        | **$15**                                        |
     | GPT 5.6 Luna (≤ 272K tokens)            | $0.20  | $1.20  | $0.02       | $0.25        | **$15**                                        |
     | GPT 5.6 Luna (> 272K tokens)            | $0.40  | $1.80  | $0.04       | $0.50        | **$15**                                        |
+    | Claude Haiku 5.5 (≤ 100K tokens)        | $0.10  | $0.50  | $0.01       | $0.125       | **$15**                                        |
+    | Claude Haiku 5.5 (> 100K tokens)        | $0.50  | $2.50  | $0.05       | $0.625       | **$15**                                        |
 
   </TabItem>
   <TabItem label="Go Plus">
@@ -245,6 +248,8 @@ OpenCode Go предназначен для [OpenCode](https://opencode.ai) и �
     | GPT 6 Luna (> 272K tokens)              | $0.20  | $0.75  | $0.02       | $0.25        | **$60**                                        |
     | GPT 5.6 Luna (≤ 272K tokens)            | $0.20  | $1.20  | $0.02       | $0.25        | **$60**                                        |
     | GPT 5.6 Luna (> 272K tokens)            | $0.40  | $1.80  | $0.04       | $0.50        | **$60**                                        |
+    | Claude Haiku 5.5 (≤ 100K tokens)        | $0.10  | $0.50  | $0.01       | $0.125       | **$60**                                        |
+    | Claude Haiku 5.5 (> 100K tokens)        | $0.50  | $2.50  | $0.05       | $0.625       | **$60**                                        |
 
   </TabItem>
 </Tabs>
@@ -295,6 +300,7 @@ Plus увеличены в соответствии с более высоким
     | Grok 4.6                     | 169                  | 423               | 845                |
     | GPT 6 Luna                   | 4,230                | 10,560            | 21,130             |
     | GPT 5.6 Luna                 | 2,050                | 5,100             | 10,250             |
+    | Claude Haiku 5.5             | 3,850                | 9,620             | 19,230             |
 
   </TabItem>
   <TabItem label="Go Plus">
@@ -331,6 +337,7 @@ Plus увеличены в соответствии с более высоким
     | Grok 4.6                     | 676                  | 1,692             | 3,380              |
     | GPT 6 Luna                   | 16,920               | 42,240            | 84,520             |
     | GPT 5.6 Luna                 | 8,200                | 20,400            | 41,000             |
+    | Claude Haiku 5.5             | 15,380               | 38,460            | 76,920             |
 
   </TabItem>
 </Tabs>
@@ -342,6 +349,7 @@ Plus увеличены в соответствии с более высоким
 - GLM-5.3/5.2 — 700 входных, 52,000 кешированных, 150 выходных токенов на запрос
 - GPT 6 Luna — 1,000 входных, 50,000 кешированных, 220 выходных токенов на запрос
 - GPT 5.6 Luna — 1,000 входных, 50,000 кешированных, 220 выходных токенов на запрос
+- Claude Haiku 5.5 — 1,100 входных, 55,000 кешированных, 240 выходных токенов на запрос
 - Kimi K3 — 1,050 входных, 76,500 кешированных, 300 выходных токенов на запрос
 - Kimi K2.7/K2.6 — 870 входных, 55,000 кешированных, 200 выходных токенов на запрос
 - LongCat-2.0 — 920 входных, 88,900 кешированных, 200 выходных токенов на запрос
@@ -404,6 +412,7 @@ Plus увеличены в соответствии с более высоким
 | Grok 4.6                     | grok-4.6                     | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | GPT 6 Luna                   | gpt-6-luna                   | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | GPT 5.6 Luna                 | gpt-5.6-luna                 | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
+| Claude Haiku 5.5             | claude-haiku-5-5             | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | GLM-5.3-Flash                | glm-5.3-flash                | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5.3                      | glm-5.3                      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5.2                      | glm-5.2                      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
@@ -455,6 +464,7 @@ https://opencode.ai/zen/go/v1/models
 | Grok 4.6                     | Не используется | 30 дней         |
 | GPT 6 Luna                   | Не используется | 30 дней         |
 | GPT 5.6 Luna                 | Не используется | 30 дней         |
+| Claude Haiku 5.5             | Не используется | 30 дней         |
 | GLM-5.3-Flash                | Не используется | 0 дней          |
 | GLM-5.3                      | Не используется | 0 дней          |
 | GLM-5.2                      | Не используется | 0 дней          |
@@ -484,6 +494,7 @@ https://opencode.ai/zen/go/v1/models
 
 - **Grok 4.7/4.6:** ZDR отключает важные функции API, зависящие от сохранённых данных, включая Responses API с состоянием, Files and Collections и Batch API. [Подробнее](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
 - **GPT 6 Luna / GPT 5.6 Luna:** Для всех функций API создаются журналы мониторинга злоупотреблений, которые хранятся до 30 дней. [Подробнее](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).
+- **Claude Haiku 5.5:** Запросы хранятся в течение 30 дней в соответствии с [политикой обработки данных Anthropic](https://docs.anthropic.com/en/docs/claude-code/data-usage).
 - **Muse Spark 1.3 Contributor:** Значительно сниженная цена токенов в обмен на разрешение использовать ваши промпты и ответы для обучения будущих моделей Meta. Доступность ограничена регионами, разрешёнными [Политикой географического использования](https://ai.developer.meta.com/legal/geographic-use-policy) Meta. [Подробнее](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
 - **Muse Spark 1.2 Contributor:** Значительно сниженная цена токенов в обмен на разрешение использовать ваши промпты и ответы для обучения будущих моделей Meta. Доступность ограничена регионами, разрешёнными [Политикой географического использования](https://ai.developer.meta.com/legal/geographic-use-policy) Meta. [Подробнее](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
 - **DeepSeek:** Соглашение ZDR продлевается ежемесячно. Текущее соглашение действует до 31 октября 2026 года.

@@ -68,6 +68,7 @@ Den nuværende liste over modeller inkluderer:
 - **GLM-5.2**
 - **GPT 6 Luna**
 - **GPT 5.6 Luna**
+- **Claude Haiku 5.5**
 - **Kimi K3**
 - **Kimi K2.7 Code**
 - **Kimi K2.6**
@@ -191,6 +192,8 @@ Tokenpriser er angivet pr. 1M tokens.
     | GPT 6 Luna (> 272K tokens)              | $0.20  | $0.75  | $0.02       | $0.25        | **$15**                                        |
     | GPT 5.6 Luna (≤ 272K tokens)            | $0.20  | $1.20  | $0.02       | $0.25        | **$15**                                        |
     | GPT 5.6 Luna (> 272K tokens)            | $0.40  | $1.80  | $0.04       | $0.50        | **$15**                                        |
+    | Claude Haiku 5.5 (≤ 100K tokens)        | $0.10  | $0.50  | $0.01       | $0.125       | **$15**                                        |
+    | Claude Haiku 5.5 (> 100K tokens)        | $0.50  | $2.50  | $0.05       | $0.625       | **$15**                                        |
 
   </TabItem>
   <TabItem label="Go Plus">
@@ -236,6 +239,8 @@ Tokenpriser er angivet pr. 1M tokens.
     | GPT 6 Luna (> 272K tokens)              | $0.20  | $0.75  | $0.02       | $0.25        | **$60**                                        |
     | GPT 5.6 Luna (≤ 272K tokens)            | $0.20  | $1.20  | $0.02       | $0.25        | **$60**                                        |
     | GPT 5.6 Luna (> 272K tokens)            | $0.40  | $1.80  | $0.04       | $0.50        | **$60**                                        |
+    | Claude Haiku 5.5 (≤ 100K tokens)        | $0.10  | $0.50  | $0.01       | $0.125       | **$60**                                        |
+    | Claude Haiku 5.5 (> 100K tokens)        | $0.50  | $2.50  | $0.05       | $0.625       | **$60**                                        |
 
   </TabItem>
 </Tabs>
@@ -285,6 +290,7 @@ Tabellerne nedenfor estimerer antallet af anmodninger ud fra typiske Go-forbrugs
     | Grok 4.6                     | 169                  | 423               | 845                |
     | GPT 6 Luna                   | 4,230                | 10,560            | 21,130             |
     | GPT 5.6 Luna                 | 2,050                | 5,100             | 10,250             |
+    | Claude Haiku 5.5             | 3,850                | 9,620             | 19,230             |
 
   </TabItem>
   <TabItem label="Go Plus">
@@ -321,6 +327,7 @@ Tabellerne nedenfor estimerer antallet af anmodninger ud fra typiske Go-forbrugs
     | Grok 4.6                     | 676                  | 1,692             | 3,380              |
     | GPT 6 Luna                   | 16,920               | 42,240            | 84,520             |
     | GPT 5.6 Luna                 | 8,200                | 20,400            | 41,000             |
+    | Claude Haiku 5.5             | 15,380               | 38,460            | 76,920             |
 
   </TabItem>
 </Tabs>
@@ -332,6 +339,7 @@ Estimaterne bruger følgende antal tokens pr. anmodning; det faktiske forbrug va
 - GLM-5.3/5.2 — 700 input, 52,000 cachelagrede, 150 output-tokens pr. anmodning
 - GPT 6 Luna — 1,000 input, 50,000 cachelagrede, 220 output-tokens pr. anmodning
 - GPT 5.6 Luna — 1,000 input, 50,000 cachelagrede, 220 output-tokens pr. anmodning
+- Claude Haiku 5.5 — 1,100 input, 55,000 cachelagrede, 240 output-tokens pr. anmodning
 - Kimi K3 — 1,050 input, 76,500 cachelagrede, 300 output-tokens pr. anmodning
 - Kimi K2.7/K2.6 — 870 input, 55,000 cachelagrede, 200 output-tokens pr. anmodning
 - LongCat-2.0 — 920 input, 88,900 cachelagrede, 200 output-tokens pr. anmodning
@@ -392,6 +400,7 @@ Du kan også få adgang til Go-modeller gennem følgende API-endpoints.
 | Grok 4.6                     | grok-4.6                     | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | GPT 6 Luna                   | gpt-6-luna                   | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | GPT 5.6 Luna                 | gpt-5.6-luna                 | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
+| Claude Haiku 5.5             | claude-haiku-5-5             | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | GLM-5.3-Flash                | glm-5.3-flash                | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5.3                      | glm-5.3                      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5.2                      | glm-5.2                      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
@@ -441,6 +450,7 @@ https://opencode.ai/zen/go/v1/models
 | Grok 4.6                     | Ikke brugt   | 30 dage        |
 | GPT 6 Luna                   | Ikke brugt   | 30 dage        |
 | GPT 5.6 Luna                 | Ikke brugt   | 30 dage        |
+| Claude Haiku 5.5             | Ikke brugt   | 30 dage        |
 | GLM-5.3-Flash                | Ikke brugt   | 0 dage         |
 | GLM-5.3                      | Ikke brugt   | 0 dage         |
 | GLM-5.2                      | Ikke brugt   | 0 dage         |
@@ -470,6 +480,7 @@ https://opencode.ai/zen/go/v1/models
 
 - **Grok 4.7/4.6:** ZDR deaktiverer vigtige API-funktioner, der afhænger af lagrede data, herunder den tilstandsbevarende Responses API, Files and Collections og Batch API. [Læs mere](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
 - **GPT 6 Luna / GPT 5.6 Luna:** Logfiler til overvågning af misbrug genereres ved al brug af API-funktioner og opbevares i op til 30 dage. [Læs mere](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).
+- **Claude Haiku 5.5:** Anmodninger opbevares i 30 dage i overensstemmelse med [Anthropics datapolitikker](https://docs.anthropic.com/en/docs/claude-code/data-usage).
 - **Muse Spark 1.3 Contributor:** Kraftigt nedsatte tokenpriser til gengæld for tilladelse til at bruge dine prompts og modelsvar til at træne fremtidige Meta-modeller. Tilgængeligheden er begrænset til regioner, der er tilladt i henhold til [politikken for geografisk brug](https://ai.developer.meta.com/legal/geographic-use-policy) fra Meta. [Læs mere](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
 - **Muse Spark 1.2 Contributor:** Kraftigt nedsatte tokenpriser til gengæld for tilladelse til at bruge dine prompts og modelsvar til at træne fremtidige Meta-modeller. Tilgængeligheden er begrænset til regioner, der er tilladt i henhold til [politikken for geografisk brug](https://ai.developer.meta.com/legal/geographic-use-policy) fra Meta. [Læs mere](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
 - **DeepSeek:** ZDR-aftalen fornyes månedligt. Den nuværende aftale er gyldig til og med 31. oktober 2026.

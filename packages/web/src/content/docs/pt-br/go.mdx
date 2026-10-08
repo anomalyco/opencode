@@ -73,6 +73,7 @@ A lista atual de modelos inclui:
 - **GLM-5.2**
 - **GPT 6 Luna**
 - **GPT 5.6 Luna**
+- **Claude Haiku 5.5**
 - **Kimi K3**
 - **Kimi K2.7 Code**
 - **Kimi K2.6**
@@ -199,6 +200,8 @@ Os preços de tokens são indicados por 1M tokens.
     | GPT 6 Luna (> 272K tokens)              | $0.20  | $0.75  | $0.02       | $0.25        | **$15**                                        |
     | GPT 5.6 Luna (≤ 272K tokens)            | $0.20  | $1.20  | $0.02       | $0.25        | **$15**                                        |
     | GPT 5.6 Luna (> 272K tokens)            | $0.40  | $1.80  | $0.04       | $0.50        | **$15**                                        |
+    | Claude Haiku 5.5 (≤ 100K tokens)        | $0.10  | $0.50  | $0.01       | $0.125       | **$15**                                        |
+    | Claude Haiku 5.5 (> 100K tokens)        | $0.50  | $2.50  | $0.05       | $0.625       | **$15**                                        |
 
   </TabItem>
   <TabItem label="Go Plus">
@@ -244,6 +247,8 @@ Os preços de tokens são indicados por 1M tokens.
     | GPT 6 Luna (> 272K tokens)              | $0.20  | $0.75  | $0.02       | $0.25        | **$60**                                        |
     | GPT 5.6 Luna (≤ 272K tokens)            | $0.20  | $1.20  | $0.02       | $0.25        | **$60**                                        |
     | GPT 5.6 Luna (> 272K tokens)            | $0.40  | $1.80  | $0.04       | $0.50        | **$60**                                        |
+    | Claude Haiku 5.5 (≤ 100K tokens)        | $0.10  | $0.50  | $0.01       | $0.125       | **$60**                                        |
+    | Claude Haiku 5.5 (> 100K tokens)        | $0.50  | $2.50  | $0.05       | $0.625       | **$60**                                        |
 
   </TabItem>
 </Tabs>
@@ -294,6 +299,7 @@ Plus são dimensionadas de acordo com o limite de uso mais alto de cada modelo.
     | Grok 4.6                     | 169                  | 423               | 845                |
     | GPT 6 Luna                   | 4,230                | 10,560            | 21,130             |
     | GPT 5.6 Luna                 | 2,050                | 5,100             | 10,250             |
+    | Claude Haiku 5.5             | 3,850                | 9,620             | 19,230             |
 
   </TabItem>
   <TabItem label="Go Plus">
@@ -330,6 +336,7 @@ Plus são dimensionadas de acordo com o limite de uso mais alto de cada modelo.
     | Grok 4.6                     | 676                  | 1,692             | 3,380              |
     | GPT 6 Luna                   | 16,920               | 42,240            | 84,520             |
     | GPT 5.6 Luna                 | 8,200                | 20,400            | 41,000             |
+    | Claude Haiku 5.5             | 15,380               | 38,460            | 76,920             |
 
   </TabItem>
 </Tabs>
@@ -341,6 +348,7 @@ As estimativas usam as seguintes quantidades de tokens por requisição; o uso r
 - GLM-5.3/5.2 — 700 tokens de entrada, 52,000 em cache, 150 tokens de saída por requisição
 - GPT 6 Luna — 1,000 tokens de entrada, 50,000 em cache, 220 tokens de saída por requisição
 - GPT 5.6 Luna — 1,000 tokens de entrada, 50,000 em cache, 220 tokens de saída por requisição
+- Claude Haiku 5.5 — 1,100 tokens de entrada, 55,000 em cache, 240 tokens de saída por requisição
 - Kimi K3 — 1,050 tokens de entrada, 76,500 em cache, 300 tokens de saída por requisição
 - Kimi K2.7/K2.6 — 870 tokens de entrada, 55,000 em cache, 200 tokens de saída por requisição
 - LongCat-2.0 — 920 tokens de entrada, 88,900 em cache, 200 tokens de saída por requisição
@@ -403,6 +411,7 @@ Você também pode acessar os modelos do Go através dos seguintes endpoints de 
 | Grok 4.6                     | grok-4.6                     | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | GPT 6 Luna                   | gpt-6-luna                   | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | GPT 5.6 Luna                 | gpt-5.6-luna                 | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
+| Claude Haiku 5.5             | claude-haiku-5-5             | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | GLM-5.3-Flash                | glm-5.3-flash                | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5.3                      | glm-5.3                      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5.2                      | glm-5.2                      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
@@ -454,6 +463,7 @@ https://opencode.ai/zen/go/v1/models
 | Grok 4.6                     | Não usado              | 30 dias           |
 | GPT 6 Luna                   | Não usado              | 30 dias           |
 | GPT 5.6 Luna                 | Não usado              | 30 dias           |
+| Claude Haiku 5.5             | Não usado              | 30 dias           |
 | GLM-5.3-Flash                | Não usado              | 0 dias            |
 | GLM-5.3                      | Não usado              | 0 dias            |
 | GLM-5.2                      | Não usado              | 0 dias            |
@@ -483,6 +493,7 @@ https://opencode.ai/zen/go/v1/models
 
 - **Grok 4.7/4.6:** O ZDR desativa recursos importantes da API que dependem de dados armazenados, incluindo a Responses API com estado, Files and Collections e a Batch API. [Saiba mais](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
 - **GPT 6 Luna / GPT 5.6 Luna:** Logs de monitoramento de abuso são gerados para todo uso de recursos da API e retidos por até 30 dias. [Saiba mais](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).
+- **Claude Haiku 5.5:** As requisições são retidas por 30 dias, de acordo com as [políticas de dados da Anthropic](https://docs.anthropic.com/en/docs/claude-code/data-usage).
 - **Muse Spark 1.3 Contributor:** Preços de tokens com grandes descontos em troca da permissão para usar seus prompts e respostas geradas para treinar futuros modelos da Meta. A disponibilidade é limitada às regiões permitidas pela [Política de Uso Geográfico] da Meta(https://ai.developer.meta.com/legal/geographic-use-policy). [Saiba mais](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
 - **Muse Spark 1.2 Contributor:** Preços de tokens com grandes descontos em troca da permissão para usar seus prompts e respostas geradas para treinar futuros modelos da Meta. A disponibilidade é limitada às regiões permitidas pela [Política de Uso Geográfico] da Meta(https://ai.developer.meta.com/legal/geographic-use-policy). [Saiba mais](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
 - **DeepSeek:** O acordo de ZDR é renovado mensalmente. O acordo atual é válido até 31 de outubro de 2026.

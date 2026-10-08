@@ -64,6 +64,7 @@ OpenCode GoまたはGo Plusをサブスクライブできるのは、1つのワ�
 - **GLM-5.2**
 - **GPT 6 Luna**
 - **GPT 5.6 Luna**
+- **Claude Haiku 5.5**
 - **Kimi K3**
 - **Kimi K2.7 Code**
 - **Kimi K2.6**
@@ -185,6 +186,8 @@ OpenCodeに加えて、以下のクライアントがOpenCode Goで正常に動�
     | GPT 6 Luna (> 272K tokens)              | $0.20  | $0.75  | $0.02       | $0.25        | **$15**                                        |
     | GPT 5.6 Luna (≤ 272K tokens)            | $0.20  | $1.20  | $0.02       | $0.25        | **$15**                                        |
     | GPT 5.6 Luna (> 272K tokens)            | $0.40  | $1.80  | $0.04       | $0.50        | **$15**                                        |
+    | Claude Haiku 5.5 (≤ 100K tokens)        | $0.10  | $0.50  | $0.01       | $0.125       | **$15**                                        |
+    | Claude Haiku 5.5 (> 100K tokens)        | $0.50  | $2.50  | $0.05       | $0.625       | **$15**                                        |
 
   </TabItem>
   <TabItem label="Go Plus">
@@ -230,6 +233,8 @@ OpenCodeに加えて、以下のクライアントがOpenCode Goで正常に動�
     | GPT 6 Luna (> 272K tokens)              | $0.20  | $0.75  | $0.02       | $0.25        | **$60**                                        |
     | GPT 5.6 Luna (≤ 272K tokens)            | $0.20  | $1.20  | $0.02       | $0.25        | **$60**                                        |
     | GPT 5.6 Luna (> 272K tokens)            | $0.40  | $1.80  | $0.04       | $0.50        | **$60**                                        |
+    | Claude Haiku 5.5 (≤ 100K tokens)        | $0.10  | $0.50  | $0.01       | $0.125       | **$60**                                        |
+    | Claude Haiku 5.5 (> 100K tokens)        | $0.50  | $2.50  | $0.05       | $0.625       | **$60**                                        |
 
   </TabItem>
 </Tabs>
@@ -280,6 +285,7 @@ Plusの推定値は、各モデルのより高い利用上限に応じて増加�
     | Grok 4.6                     | 169                  | 423               | 845                |
     | GPT 6 Luna                   | 4,230                | 10,560            | 21,130             |
     | GPT 5.6 Luna                 | 2,050                | 5,100             | 10,250             |
+    | Claude Haiku 5.5             | 3,850                | 9,620             | 19,230             |
 
   </TabItem>
   <TabItem label="Go Plus">
@@ -316,6 +322,7 @@ Plusの推定値は、各モデルのより高い利用上限に応じて増加�
     | Grok 4.6                     | 676                  | 1,692             | 3,380              |
     | GPT 6 Luna                   | 16,920               | 42,240            | 84,520             |
     | GPT 5.6 Luna                 | 8,200                | 20,400            | 41,000             |
+    | Claude Haiku 5.5             | 15,380               | 38,460            | 76,920             |
 
   </TabItem>
 </Tabs>
@@ -327,6 +334,7 @@ Plusの推定値は、各モデルのより高い利用上限に応じて増加�
 - GLM-5.3/5.2 — 700 入力, 52,000 キャッシュ, 150 出力トークン（リクエストあたり）
 - GPT 6 Luna — 1,000 入力, 50,000 キャッシュ, 220 出力トークン（リクエストあたり）
 - GPT 5.6 Luna — 1,000 入力, 50,000 キャッシュ, 220 出力トークン（リクエストあたり）
+- Claude Haiku 5.5 — 1,100 入力, 55,000 キャッシュ, 240 出力トークン（リクエストあたり）
 - Kimi K3 — 1,050 入力, 76,500 キャッシュ, 300 出力トークン（リクエストあたり）
 - Kimi K2.7/K2.6 — 870 入力, 55,000 キャッシュ, 200 出力トークン（リクエストあたり）
 - LongCat-2.0 — 920 入力, 88,900 キャッシュ, 200 出力トークン（リクエストあたり）
@@ -387,6 +395,7 @@ Goでは、含まれる月間利用枠がモデルによって異なります。
 | Grok 4.6                     | grok-4.6                     | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | GPT 6 Luna                   | gpt-6-luna                   | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | GPT 5.6 Luna                 | gpt-5.6-luna                 | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
+| Claude Haiku 5.5             | claude-haiku-5-5             | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | GLM-5.3-Flash                | glm-5.3-flash                | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5.3                      | glm-5.3                      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5.2                      | glm-5.2                      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
@@ -437,6 +446,7 @@ https://opencode.ai/zen/go/v1/models
 | Grok 4.6                     | 使用なし             | 30日        |
 | GPT 6 Luna                   | 使用なし             | 30日        |
 | GPT 5.6 Luna                 | 使用なし             | 30日        |
+| Claude Haiku 5.5             | 使用なし             | 30日        |
 | GLM-5.3-Flash                | 使用なし             | 0日         |
 | GLM-5.3                      | 使用なし             | 0日         |
 | GLM-5.2                      | 使用なし             | 0日         |
@@ -466,6 +476,7 @@ https://opencode.ai/zen/go/v1/models
 
 - **Grok 4.7/4.6:** ZDRでは、保存データに依存する重要なAPI機能（ステートフルなResponses API、Files and Collections、Batch APIなど）が無効になります。 [詳しく見る](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
 - **GPT 6 Luna / GPT 5.6 Luna:** 不正使用監視ログはすべてのAPI機能の使用時に生成され、最大30日間保持されます。 [詳しく見る](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).
+- **Claude Haiku 5.5:** リクエストは[Anthropicのデータポリシー](https://docs.anthropic.com/en/docs/claude-code/data-usage)に従い、30日間保持されます。
 - **Muse Spark 1.3 Contributor:** 将来のMetaモデルのトレーニングにプロンプトと生成結果を使用する許可と引き換えに、トークン料金が大幅に割引されます。利用できるのは、Metaの[地域別利用ポリシー](https://ai.developer.meta.com/legal/geographic-use-policy)で許可されている地域に限られます。 [詳しく見る](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
 - **Muse Spark 1.2 Contributor:** 将来のMetaモデルのトレーニングにプロンプトと生成結果を使用する許可と引き換えに、トークン料金が大幅に割引されます。利用できるのは、Metaの[地域別利用ポリシー](https://ai.developer.meta.com/legal/geographic-use-policy)で許可されている地域に限られます。 [詳しく見る](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
 - **DeepSeek:** ZDR契約は毎月更新されます。現在の契約は2026年10月31日まで有効です。
