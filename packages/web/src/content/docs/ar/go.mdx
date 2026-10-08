@@ -62,6 +62,7 @@ OpenCode Go يمنحك وصولًا موثوقًا إلى نماذج البرم�
 - **GLM-5.2**
 - **GPT 6 Luna**
 - **GPT 5.6 Luna**
+- **Claude Haiku 5.5**
 - **Kimi K3**
 - **Kimi K2.7 Code**
 - **Kimi K2.6**
@@ -185,6 +186,8 @@ OpenCode Go يمنحك وصولًا موثوقًا إلى نماذج البرم�
     | GPT 6 Luna (> 272K tokens)              | $0.20  | $0.75  | $0.02       | $0.25        | **$15**                                        |
     | GPT 5.6 Luna (≤ 272K tokens)            | $0.20  | $1.20  | $0.02       | $0.25        | **$15**                                        |
     | GPT 5.6 Luna (> 272K tokens)            | $0.40  | $1.80  | $0.04       | $0.50        | **$15**                                        |
+    | Claude Haiku 5.5 (≤ 100K tokens)        | $0.10  | $0.50  | $0.01       | $0.125       | **$15**                                        |
+    | Claude Haiku 5.5 (> 100K tokens)        | $0.50  | $2.50  | $0.05       | $0.625       | **$15**                                        |
 
   </TabItem>
   <TabItem label="Go Plus">
@@ -230,6 +233,8 @@ OpenCode Go يمنحك وصولًا موثوقًا إلى نماذج البرم�
     | GPT 6 Luna (> 272K tokens)              | $0.20  | $0.75  | $0.02       | $0.25        | **$60**                                        |
     | GPT 5.6 Luna (≤ 272K tokens)            | $0.20  | $1.20  | $0.02       | $0.25        | **$60**                                        |
     | GPT 5.6 Luna (> 272K tokens)            | $0.40  | $1.80  | $0.04       | $0.50        | **$60**                                        |
+    | Claude Haiku 5.5 (≤ 100K tokens)        | $0.10  | $0.50  | $0.01       | $0.125       | **$60**                                        |
+    | Claude Haiku 5.5 (> 100K tokens)        | $0.50  | $2.50  | $0.05       | $0.625       | **$60**                                        |
 
   </TabItem>
 </Tabs>
@@ -279,6 +284,7 @@ OpenCode Go يمنحك وصولًا موثوقًا إلى نماذج البرم�
     | Grok 4.6                     | 169                  | 423               | 845                |
     | GPT 6 Luna                   | 4,230                | 10,560            | 21,130             |
     | GPT 5.6 Luna                 | 2,050                | 5,100             | 10,250             |
+    | Claude Haiku 5.5             | 3,850                | 9,620             | 19,230             |
 
   </TabItem>
   <TabItem label="Go Plus">
@@ -315,6 +321,7 @@ OpenCode Go يمنحك وصولًا موثوقًا إلى نماذج البرم�
     | Grok 4.6                     | 676                  | 1,692             | 3,380              |
     | GPT 6 Luna                   | 16,920               | 42,240            | 84,520             |
     | GPT 5.6 Luna                 | 8,200                | 20,400            | 41,000             |
+    | Claude Haiku 5.5             | 15,380               | 38,460            | 76,920             |
 
   </TabItem>
 </Tabs>
@@ -326,6 +333,7 @@ OpenCode Go يمنحك وصولًا موثوقًا إلى نماذج البرم�
 - GLM-5.3/5.2 — 700 رمز إدخال، و52,000 رمز مخزن مؤقتًا، و150 رمز إخراج لكل طلب
 - GPT 6 Luna — 1,000 رمز إدخال، و50,000 رمز مخزن مؤقتًا، و220 رمز إخراج لكل طلب
 - GPT 5.6 Luna — 1,000 رمز إدخال، و50,000 رمز مخزن مؤقتًا، و220 رمز إخراج لكل طلب
+- Claude Haiku 5.5 — 1,100 رمز إدخال، و55,000 رمز مخزن مؤقتًا، و240 رمز إخراج لكل طلب
 - Kimi K3 — 1,050 رمز إدخال، و76,500 رمز مخزن مؤقتًا، و300 رمز إخراج لكل طلب
 - Kimi K2.7/K2.6 — 870 رمز إدخال، و55,000 رمز مخزن مؤقتًا، و200 رمز إخراج لكل طلب
 - LongCat-2.0 — 920 رمز إدخال، و88,900 رمز مخزن مؤقتًا، و200 رمز إخراج لكل طلب
@@ -386,6 +394,7 @@ OpenCode Go يمنحك وصولًا موثوقًا إلى نماذج البرم�
 | Grok 4.6                     | grok-4.6                     | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | GPT 6 Luna                   | gpt-6-luna                   | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | GPT 5.6 Luna                 | gpt-5.6-luna                 | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
+| Claude Haiku 5.5             | claude-haiku-5-5             | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | GLM-5.3-Flash                | glm-5.3-flash                | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5.3                      | glm-5.3                      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5.2                      | glm-5.2                      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
@@ -435,6 +444,7 @@ https://opencode.ai/zen/go/v1/models
 | Grok 4.6                     | غير مستخدَمة  | 30 يومًا           |
 | GPT 6 Luna                   | غير مستخدَمة  | 30 يومًا           |
 | GPT 5.6 Luna                 | غير مستخدَمة  | 30 يومًا           |
+| Claude Haiku 5.5             | غير مستخدَمة  | 30 يومًا           |
 | GLM-5.3-Flash                | غير مستخدَمة  | 0 أيام             |
 | GLM-5.3                      | غير مستخدَمة  | 0 أيام             |
 | GLM-5.2                      | غير مستخدَمة  | 0 أيام             |
@@ -464,6 +474,7 @@ https://opencode.ai/zen/go/v1/models
 
 - **Grok 4.7/4.6:** تعطّل ZDR ميزات API مهمة تعتمد على البيانات المخزنة، بما في ذلك Responses API ذات الحالة، وFiles and Collections، وBatch API. [اعرف المزيد](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
 - **GPT 6 Luna / GPT 5.6 Luna:** تُنشأ سجلات مراقبة إساءة الاستخدام لكل استخدام لميزات API، ويُحتفظ بها لمدة تصل إلى 30 يومًا. [اعرف المزيد](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).
+- **Claude Haiku 5.5:** يُحتفظ بالطلبات لمدة 30 يومًا وفقًا [لسياسات البيانات لدى Anthropic](https://docs.anthropic.com/en/docs/claude-code/data-usage).
 - **Muse Spark 1.3 Contributor:** أسعار رموز مخفّضة للغاية مقابل منح الإذن باستخدام مطالباتك وإكمالات النموذج لتدريب نماذج Meta المستقبلية. يقتصر التوفر على المناطق التي تسمح بها [سياسة الاستخدام الجغرافي](https://ai.developer.meta.com/legal/geographic-use-policy) الخاصة بـ Meta. [اعرف المزيد](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
 - **Muse Spark 1.2 Contributor:** أسعار رموز مخفّضة للغاية مقابل منح الإذن باستخدام مطالباتك وإكمالات النموذج لتدريب نماذج Meta المستقبلية. يقتصر التوفر على المناطق التي تسمح بها [سياسة الاستخدام الجغرافي](https://ai.developer.meta.com/legal/geographic-use-policy) الخاصة بـ Meta. [اعرف المزيد](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier).
 - **DeepSeek:** تُجدَّد اتفاقية ZDR شهريًا. الاتفاقية الحالية سارية حتى 31 أكتوبر 2026.

@@ -73,6 +73,7 @@ OpenCode Go ทำงานเหมือนผู้ให้บริกา�
 - **GLM-5.2**
 - **GPT 6 Luna**
 - **GPT 5.6 Luna**
+- **Claude Haiku 5.5**
 - **Kimi K3**
 - **Kimi K2.7 Code**
 - **Kimi K2.6**
@@ -199,6 +200,8 @@ OpenCode Go ออกแบบมาสำหรับ [OpenCode](https://openco
     | GPT 6 Luna (> 272K tokens)              | $0.20  | $0.75  | $0.02       | $0.25        | **$15**                                        |
     | GPT 5.6 Luna (≤ 272K tokens)            | $0.20  | $1.20  | $0.02       | $0.25        | **$15**                                        |
     | GPT 5.6 Luna (> 272K tokens)            | $0.40  | $1.80  | $0.04       | $0.50        | **$15**                                        |
+    | Claude Haiku 5.5 (≤ 100K tokens)        | $0.10  | $0.50  | $0.01       | $0.125       | **$15**                                        |
+    | Claude Haiku 5.5 (> 100K tokens)        | $0.50  | $2.50  | $0.05       | $0.625       | **$15**                                        |
 
   </TabItem>
   <TabItem label="Go Plus">
@@ -244,6 +247,8 @@ OpenCode Go ออกแบบมาสำหรับ [OpenCode](https://openco
     | GPT 6 Luna (> 272K tokens)              | $0.20  | $0.75  | $0.02       | $0.25        | **$60**                                        |
     | GPT 5.6 Luna (≤ 272K tokens)            | $0.20  | $1.20  | $0.02       | $0.25        | **$60**                                        |
     | GPT 5.6 Luna (> 272K tokens)            | $0.40  | $1.80  | $0.04       | $0.50        | **$60**                                        |
+    | Claude Haiku 5.5 (≤ 100K tokens)        | $0.10  | $0.50  | $0.01       | $0.125       | **$60**                                        |
+    | Claude Haiku 5.5 (> 100K tokens)        | $0.50  | $2.50  | $0.05       | $0.625       | **$60**                                        |
 
   </TabItem>
 </Tabs>
@@ -294,6 +299,7 @@ Plus จะเพิ่มตามขีดจำกัดการใช้ง
     | Grok 4.6                     | 169                  | 423               | 845                |
     | GPT 6 Luna                   | 4,230                | 10,560            | 21,130             |
     | GPT 5.6 Luna                 | 2,050                | 5,100             | 10,250             |
+    | Claude Haiku 5.5             | 3,850                | 9,620             | 19,230             |
 
   </TabItem>
   <TabItem label="Go Plus">
@@ -330,6 +336,7 @@ Plus จะเพิ่มตามขีดจำกัดการใช้ง
     | Grok 4.6                     | 676                  | 1,692             | 3,380              |
     | GPT 6 Luna                   | 16,920               | 42,240            | 84,520             |
     | GPT 5.6 Luna                 | 8,200                | 20,400            | 41,000             |
+    | Claude Haiku 5.5             | 15,380               | 38,460            | 76,920             |
 
   </TabItem>
 </Tabs>
@@ -341,6 +348,7 @@ Plus จะเพิ่มตามขีดจำกัดการใช้ง
 - GLM-5.3/5.2 — 700 input, 52,000 cached, 150 output tokens ต่อคำขอ
 - GPT 6 Luna — 1,000 input, 50,000 cached, 220 output tokens ต่อคำขอ
 - GPT 5.6 Luna — 1,000 input, 50,000 cached, 220 output tokens ต่อคำขอ
+- Claude Haiku 5.5 — 1,100 input, 55,000 cached, 240 output tokens ต่อคำขอ
 - Kimi K3 — 1,050 input, 76,500 cached, 300 output tokens ต่อคำขอ
 - Kimi K2.7/K2.6 — 870 input, 55,000 cached, 200 output tokens ต่อคำขอ
 - LongCat-2.0 — 920 input, 88,900 cached, 200 output tokens ต่อคำขอ
@@ -403,6 +411,7 @@ Plus จะเพิ่มตามขีดจำกัดการใช้ง
 | Grok 4.6                     | grok-4.6                     | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | GPT 6 Luna                   | gpt-6-luna                   | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | GPT 5.6 Luna                 | gpt-5.6-luna                 | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
+| Claude Haiku 5.5             | claude-haiku-5-5             | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | GLM-5.3-Flash                | glm-5.3-flash                | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5.3                      | glm-5.3                      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5.2                      | glm-5.2                      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
@@ -454,6 +463,7 @@ https://opencode.ai/zen/go/v1/models
 | Grok 4.6                     | ไม่นำไปใช้  | 30 วัน             |
 | GPT 6 Luna                   | ไม่นำไปใช้  | 30 วัน             |
 | GPT 5.6 Luna                 | ไม่นำไปใช้  | 30 วัน             |
+| Claude Haiku 5.5             | ไม่นำไปใช้  | 30 วัน             |
 | GLM-5.3-Flash                | ไม่นำไปใช้  | 0 วัน              |
 | GLM-5.3                      | ไม่นำไปใช้  | 0 วัน              |
 | GLM-5.2                      | ไม่นำไปใช้  | 0 วัน              |
@@ -483,6 +493,7 @@ https://opencode.ai/zen/go/v1/models
 
 - **Grok 4.7/4.6:** ZDR ปิดใช้ฟีเจอร์ API สำคัญที่ต้องอาศัยข้อมูลที่จัดเก็บไว้ รวมถึง Responses API แบบมีสถานะ, Files and Collections และ Batch API [ดูข้อมูลเพิ่มเติม](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr)
 - **GPT 6 Luna / GPT 5.6 Luna:** ระบบสร้างบันทึกการตรวจสอบการใช้งานในทางที่ผิดสำหรับฟีเจอร์ API ทั้งหมด และเก็บไว้นานสูงสุด 30 วัน [ดูข้อมูลเพิ่มเติม](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring)
+- **Claude Haiku 5.5:** คำขอจะถูกเก็บรักษาไว้เป็นเวลา 30 วัน ตาม[นโยบายข้อมูลของ Anthropic](https://docs.anthropic.com/en/docs/claude-code/data-usage)
 - **Muse Spark 1.3 Contributor:** ราคา token ลดลงอย่างมาก โดยแลกกับการอนุญาตให้นำ prompt และ completion ของคุณไปฝึกโมเดล Meta ในอนาคต การให้บริการจำกัดเฉพาะภูมิภาคที่ได้รับอนุญาตตาม[นโยบายการใช้งานตามพื้นที่ทางภูมิศาสตร์](https://ai.developer.meta.com/legal/geographic-use-policy)ของ Meta [ดูข้อมูลเพิ่มเติม](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier)
 - **Muse Spark 1.2 Contributor:** ราคา token ลดลงอย่างมาก โดยแลกกับการอนุญาตให้นำ prompt และ completion ของคุณไปฝึกโมเดล Meta ในอนาคต การให้บริการจำกัดเฉพาะภูมิภาคที่ได้รับอนุญาตตาม[นโยบายการใช้งานตามพื้นที่ทางภูมิศาสตร์](https://ai.developer.meta.com/legal/geographic-use-policy)ของ Meta [ดูข้อมูลเพิ่มเติม](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier)
 - **DeepSeek:** ข้อตกลง ZDR ต่ออายุทุกเดือน ข้อตกลงปัจจุบันมีผลถึงวันที่ 31 ตุลาคม 2026

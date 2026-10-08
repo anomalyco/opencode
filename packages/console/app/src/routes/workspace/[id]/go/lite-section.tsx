@@ -645,6 +645,7 @@ export function LiteSection(props: { lite: LiteSubscription | undefined }) {
             <li>Grok 4.6</li>
             <li>GPT 6 Luna</li>
             <li>GPT 5.6 Luna</li>
+            <li>Claude Haiku 5.5</li>
             <li>GLM-5.3-Flash</li>
             <li>GLM-5.3</li>
             <li>GLM-5.2</li>
