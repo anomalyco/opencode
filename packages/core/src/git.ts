@@ -44,8 +44,9 @@ export type TreeID = typeof TreeID.Type
 
 const temporaryIndexPrefix = "index.opencode-"
 // Like `git gc --auto`, pack once loose objects accumulate, and combine packs before lookups slow down.
-// Room below Windows' 32,767-character command line for the Git path, repository flags, and quoting.
-const argumentBudget = 24_000
+// Room for paths on one Git command line after the Git path, repository flags, and quoting. Windows caps a command
+// line at 32,767 characters. macOS caps arguments plus environment at 1 MiB, and Linux caps them at 2 MiB by default.
+const argumentBudget = process.platform === "win32" ? 24_000 : 128 * 1024
 const looseObjectLimit = 2048
 const packCountLimit = 16
 
@@ -799,14 +800,6 @@ const layer = Layer.effect(
       ).map((file) => RelativePath.make(file))
     })
 
-    /**
-     * Three batched invocations over the tree pair instead of three per file. An
-     * explicit empty selection diffs nothing; an absent one diffs every changed path.
-     * Patch output is capped like VCS diffs: files past the cap get an empty patch.
-     * A selection too long for one Windows command line is diffed in groups that
-     * share the patch cap; Git orders output by path, so the groups concatenate in
-     * the order a single call would produce.
-     */
     const treeDiff = Effect.fn("Git.tree.diff")(function* (input: {
       repository: Repository
       from: TreeID
@@ -933,10 +926,6 @@ const layer = Layer.effect(
         ),
       )
 
-    /**
-     * One ls-tree per tree. Windows caps a command line at 32,767 characters, so a
-     * selection too long to pass as arguments lists the whole tree instead.
-     */
     const pathsInTree = Effect.fnUntraced(function* (
       repository: Repository,
       tree: TreeID,
@@ -1380,12 +1369,11 @@ function packIndexObjectIDs(bytes: Uint8Array) {
 }
 
 /**
- * Windows caps a command line at 32,767 characters; elsewhere one call takes any
- * selection. Groups are sorted by bytes, the order Git prints paths in, and each
- * path is counted with room for the quotes Windows adds around spaces.
+ * Groups are sorted like Git's output, so groups of file paths concatenate in the
+ * order one call prints them. Each path is counted with room for the quotes Windows
+ * adds around spaces.
  */
 function pathGroups(paths: readonly RelativePath[]) {
-  if (process.platform !== "win32") return [paths]
   return paths
     .toSorted((left, right) => Buffer.compare(Buffer.from(left), Buffer.from(right)))
     .reduce<{ groups: RelativePath[][]; length: number }>(
