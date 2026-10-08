@@ -24,6 +24,8 @@ export async function proxyInference(
     provider?: "openai" | "anthropic" | "google"
     /** The provider's native model ID, not the public Zen alias. */
     model?: string
+    /** Forward keyless requests for this model anonymously instead of serving them here. */
+    anonymous?: boolean
     body: (model?: string) => ReadableStream<Uint8Array>
   },
 ): Promise<Response | undefined> {
@@ -41,10 +43,11 @@ export async function proxyInference(
     : path.startsWith("/google/")
       ? request.headers.get("x-goog-api-key")
       : request.headers.get("authorization")?.split(" ")[1]
-  if (!key || key === "public") return undefined
+  const anonymous = !key || key === "public"
+  if (anonymous && !generation?.anonymous) return undefined
 
   // New Console keys are never in the legacy key table; every legacy key is `sk-`.
-  const legacy = !key.startsWith("oc_sk_")
+  const legacy = !anonymous && !key.startsWith("oc_sk_")
   const workspace = legacy ? await migratedWorkspace(key, generation?.provider) : undefined
   if (legacy && !workspace) return undefined
   const model = workspace?.provider ? generation?.model : undefined
@@ -80,14 +83,19 @@ export async function proxyInference(
     "content-length",
   ])
     forwarded.headers.delete(name)
-  forwarded.headers.set("authorization", `Bearer ${key}`)
+  // Keyless requests must reach new inference without credentials; `public` is not an API key there.
+  if (anonymous) for (const name of ["authorization", "x-api-key", "x-goog-api-key"]) forwarded.headers.delete(name)
+  if (!anonymous) forwarded.headers.set("authorization", `Bearer ${key}`)
   forwarded.headers.set("CF-Access-Client-Id", Resource.CLOUDFLARE_ACCESS_CLIENT_ID.value)
   const ip = request.headers.get("cf-connecting-ip")
   if (ip) forwarded.headers.set("x-zen-ip", ip)
   const requestID = request.headers.get("x-opencode-request-id") ?? request.headers.get("x-opencode-request")
   if (requestID) forwarded.headers.set("x-opencode-request-id", requestID)
 
-  return fetch(forwarded, { redirect: "manual" })
+  const response = await fetch(forwarded, { redirect: "manual" })
+  // SolidStart replaces 404 responses with its own route-not-found body, hiding the inference error.
+  if (response.status !== 404) return response
+  return new Response(response.body, { status: 400, statusText: "Bad Request", headers: response.headers })
 }
 
 // Routing only; the destination owns authentication and revocation after cutover.

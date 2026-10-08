@@ -14,10 +14,16 @@ import { getLastSeenWorkspaceID } from "../workspace/common"
 import {
   IconAlibaba,
   IconAnthropic,
+  IconDeepSeek,
   IconGoogle,
+  IconHunyuan,
+  IconLongCat,
+  IconMeta,
+  IconMiMo,
   IconMiniMax,
   IconMoonshotAI,
   IconOpenAI,
+  IconStepFun,
   IconXai,
   IconZai,
 } from "~/component/icon"
@@ -34,10 +40,12 @@ const checkLoggedIn = query(async () => {
 const models = [
   { name: "Space Bunny", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "LongCat 2.5 Preview Free", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
+  { name: "Step 5 Preview Free", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Grok 4.7", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
   { name: "Grok 4.6", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
   { name: "GPT 6 Luna", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
   { name: "GPT 5.6 Luna", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
+  { name: "Claude Haiku 5.5", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
   { name: "GLM-5.3-Flash", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "GLM-5.3", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "GLM-5.2", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
@@ -97,6 +105,12 @@ export default function Home() {
 
         <div data-component="content">
           <section data-component="hero">
+            <div data-component="desktop-app-banner">
+              <span data-slot="badge">{i18n.t("home.banner.badge")}</span>
+              <div data-slot="content">
+                <span data-slot="text">{i18n.t("go.promo.step5")}</span>
+              </div>
+            </div>
             <Show when={searchParams.ref}>
               <aside data-component="referral-ended-notice" aria-label={i18n.t("go.referral.ended.label")}>
                 <strong>{i18n.t("go.referral.ended.label")}</strong>
@@ -117,6 +131,12 @@ export default function Home() {
                 <IconMoonshotAI />
                 <IconZai />
                 <IconAlibaba />
+                <IconDeepSeek viewBox="-2 -2 28 28" />
+                <IconMiMo />
+                <IconLongCat />
+                <IconHunyuan />
+                <IconMeta />
+                <IconStepFun />
               </div>
               <p data-slot="tagline">{i18n.t("go.hero.tagline")}</p>
             </div>
@@ -302,6 +322,14 @@ export default function Home() {
                     <p>
                       <strong>GPT 6 Luna / GPT 5.6 Luna:</strong> {i18n.t("go.faq.a5.gptRetention")}{" "}
                       <a href="https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring">
+                        {i18n.t("go.faq.a5.learnMore")}
+                      </a>
+                      .
+                    </p>
+                    <p>
+                      <strong>Claude Haiku 5.5:</strong> {i18n.t("go.faq.a5.retention")}:{" "}
+                      {i18n.t("go.faq.a5.retention30")}.{" "}
+                      <a href="https://docs.anthropic.com/en/docs/claude-code/data-usage">
                         {i18n.t("go.faq.a5.learnMore")}
                       </a>
                       .
