@@ -156,7 +156,7 @@ export const Plugin = {
           description: "Create a named worktree. Returns its directory.",
           input: WorktreeCreateInput,
           output: Worktree.Info,
-          options: { namespace: "opencode", codemode: true },
+          options: { namespace: "opencode", codemode: true, pinned: true },
           execute: (input) =>
             ctx.worktree.create({ projectID: ctx.location.project.id, name: input.name }).pipe(
               Effect.map((output) => ({ output, content: `Created worktree in ${output.directory}.` })),
@@ -170,7 +170,7 @@ export const Plugin = {
           description: "List a repository's worktrees.",
           input: Schema.Struct({}),
           output: Schema.Struct({ worktrees: Worktree.List }),
-          options: { namespace: "opencode", codemode: true },
+          options: { namespace: "opencode", codemode: true, pinned: true },
           execute: () =>
             ctx.worktree.list({ projectID: ctx.location.project.id }).pipe(
               Effect.map((worktrees) => ({ output: { worktrees } })),
@@ -183,7 +183,7 @@ export const Plugin = {
             "Remove a worktree. The repository location selects configuration; directory identifies the worktree to remove.",
           input: WorktreeRemoveInput,
           output: WorktreeRemoveOutput,
-          options: { namespace: "opencode", codemode: true, permission: "edit" },
+          options: { namespace: "opencode", codemode: true, pinned: true, permission: "edit" },
           execute: (input, context) =>
             Effect.gen(function* () {
               // Removing a worktree deletes files, so it requires the same approval as editing them.
