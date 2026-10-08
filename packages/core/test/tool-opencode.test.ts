@@ -247,9 +247,11 @@ worktreeIt.live("creates, lists, and removes worktrees for the plugin's project"
       removed: true,
     })
     expect(yield* Effect.promise(() => Bun.file(path.join(directory, ".git")).exists())).toBe(false)
+    // Permission resources always use forward slashes, including on Windows.
+    const resource = directory.replaceAll("\\", "/")
     expect(approvals.assertions).toMatchObject([
-      { action: "edit", resources: [directory], save: ["*"], sessionID: session.id },
-      { action: "edit", resources: [directory], save: ["*"], sessionID: session.id },
+      { action: "edit", resources: [resource], save: ["*"], sessionID: session.id },
+      { action: "edit", resources: [resource], save: ["*"], sessionID: session.id },
     ])
     expect((yield* run("worktree_list", {})).worktrees).not.toContainEqual({ directory, strategy: "git" })
   }),
