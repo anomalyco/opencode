@@ -161,17 +161,12 @@ const scan = Effect.fn("ConfigPluginSource.scan")(function* (
       if (operation.type === "remove" || !path.isAbsolute(operation.target)) return [operation]
       if (!(yield* fs.existsSafe(operation.target))) return [operation]
       const directory = yield* fs.isDir(operation.target)
-      // Resolve the directory before asking the runtime for its entrypoints: the
-      // runtime caches a symlinked directory's resolution for the life of the
-      // process, so a plugin directory symlink retargeted since startup would
-      // otherwise resolve to its old target while the containment check below
-      // compares it against the new one.
-      const root = directory ? yield* fs.resolve(operation.target) : operation.target
       const entrypoints: Host.Entrypoints = directory
-        ? yield* Effect.sync(() => Host.resolve({ directory: root }))
+        ? yield* Effect.sync(() => Host.resolve({ directory: operation.target }))
         : { server: pathToFileURL(operation.target).href }
       if (!entrypoints.server) return []
       if (directory) {
+        const root = yield* fs.resolve(operation.target)
         const server = yield* fs.resolve(fileURLToPath(entrypoints.server))
         if (!FSUtil.contains(root, server)) {
           yield* Effect.logWarning("configured plugin resolves outside its directory", {
