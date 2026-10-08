@@ -216,12 +216,5 @@ export const GoogleVertexPlugin = define({
       ),
       Effect.forkScoped({ startImmediately: true }),
     )
-    yield* ctx.aisdk.hook(
-      "language",
-      Effect.fn(function* (evt) {
-        if (evt.model.providerID !== Provider.ID.googleVertex) return
-        evt.language = evt.sdk.languageModel(String(evt.model.modelID ?? evt.model.id).trim())
-      }),
-    )
   }),
 })
