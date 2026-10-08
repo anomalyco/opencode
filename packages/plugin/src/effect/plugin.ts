@@ -1,4 +1,4 @@
-import type { ExperimentalApi, GenerateApi, PluginApi } from "@opencode/client/effect/api"
+import type { ExperimentalApi, PluginApi } from "@opencode/client/effect/api"
 import type { Location } from "@opencode/schema/location"
 import type { Effect, Scope } from "effect"
 import type { PluginOptions } from "../options.js"
@@ -7,6 +7,7 @@ import type { AgentDomain } from "./agent.js"
 import type { AISDKDomain } from "./aisdk.js"
 import type { CommandDomain } from "./command.js"
 import type { EventDomain } from "./event.js"
+import type { GenerateDomain } from "./generate.js"
 import type { IntegrationDomain } from "./integration.js"
 import type { MCPDomain } from "./mcp.js"
 import type { ModelDomain } from "./model.js"
@@ -37,7 +38,7 @@ export interface Context {
   readonly integration: IntegrationDomain
   readonly mcp: MCPDomain
   readonly model: ModelDomain
-  readonly generate: GenerateApi<unknown>
+  readonly generate: GenerateDomain
   readonly permission: PermissionDomain
   readonly plugin: Pick<PluginApi<unknown>, "list">
   readonly provider: ProviderDomain

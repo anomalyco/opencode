@@ -71,6 +71,7 @@ export function host(overrides: Overrides = {}): Plugin.Context {
       },
     },
     generate: overrides.generate ?? {
+      hook: () => Effect.die("unused generate.hook"),
       text: () => Effect.die("unused generate.text"),
     },
     integration: overrides.integration ?? {
