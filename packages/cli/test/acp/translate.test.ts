@@ -6,6 +6,7 @@ import { Schema } from "effect"
 import path from "node:path"
 import { ACPReplay } from "../../src/acp/replay"
 import { ACPTranslate } from "../../src/acp/translate"
+import { planUpdate } from "../../src/acp/tool"
 import {
   assistantMessage,
   childCreated,
@@ -631,6 +632,17 @@ test("projects a plugin's structured ACP plan in live updates and saved-message 
     sessionUpdate: "plan",
     ...plan,
   })
+})
+
+test.each([
+  undefined,
+  {},
+  { acp: { plan: { entries: "invalid" } } },
+  { acp: { plan: { entries: [{ content: 1, priority: "medium", status: "pending" }] } } },
+  { acp: { plan: { entries: [{ content: "task", priority: "urgent", status: "pending" }] } } },
+  { acp: { plan: { entries: [{ content: "task", priority: "medium", status: "cancelled" }] } } },
+])("ignores absent or malformed plan metadata %j", (metadata) => {
+  expect(planUpdate(metadata)).toBeUndefined()
 })
 
 test("a child plan cannot replace the root plan without child-update capabilities", () => {
