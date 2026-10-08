@@ -6,10 +6,11 @@ import type { SessionHooks } from "@opencode/plugin/effect/session"
 import { Model } from "@opencode/schema/model"
 import { AbsolutePath } from "@opencode/schema/schema"
 import { Session } from "@opencode/schema/session"
-import { Worktree } from "@opencode/schema/worktree"
 import { Effect, Schema } from "effect"
 import { FileAccess } from "../../file-access.js"
+import { Git } from "../../git.js"
 import { Permission } from "../../permission.js"
+import { Worktree } from "../../worktree.js"
 
 export const RenameInput = Schema.Struct({
   sessionID: Schema.optionalKey(Session.ID).annotate({ description: "Omit to rename the current session." }),
@@ -36,7 +37,7 @@ export const WorktreeRemoveInput = Schema.Struct({
     description: "Absolute path of the worktree to remove.",
   }),
   force: Schema.optionalKey(Schema.Boolean).annotate({
-    description: "Force removal, including uncommitted changes. Defaults to false.",
+    description: "Discard modified and untracked files. Only set this when the user has confirmed forced removal.",
   }),
 })
 
@@ -196,18 +197,22 @@ export const Plugin = {
                 agent: context.agent,
                 source: { type: "tool", messageID: context.messageID, id: context.id },
               })
-              yield* ctx.worktree.remove({
-                projectID: ctx.location.project.id,
-                directory: input.directory,
-                force: input.force ?? false,
-              })
+              yield* ctx.worktree
+                .remove({
+                  projectID: ctx.location.project.id,
+                  directory: target.absolute,
+                  force: input.force ?? false,
+                })
+                .pipe(Effect.mapError((error) => new ToolFailure({ message: removeFailure(target.absolute, error) })))
               return {
-                output: { directory: input.directory, removed: true },
-                content: `Removed worktree ${input.directory}.`,
+                output: { directory: target.absolute, removed: true },
+                content: `Removed worktree ${target.absolute}.`,
               }
             }).pipe(
-              Effect.mapError(
-                (error) => new ToolFailure({ message: `Unable to remove worktree ${input.directory}`, error }),
+              Effect.mapError((error) =>
+                error instanceof ToolFailure
+                  ? error
+                  : new ToolFailure({ message: `Unable to remove worktree ${input.directory}`, error }),
               ),
             ),
         })
@@ -278,4 +283,17 @@ export const Plugin = {
       })
       .pipe(Effect.orDie)
   }),
+}
+
+// Worktree errors carry no model-facing message, and Git's own text suggests forcing removal.
+function removeFailure(directory: string, error: unknown) {
+  if (error instanceof Worktree.DirectoryUnavailableError)
+    return `Unable to remove worktree ${directory}: the directory does not exist or is not a directory.`
+  if (error instanceof Worktree.InvalidDirectoryError)
+    return `Unable to remove ${directory}: it is not a worktree of this project. Use worktree_list to see the project's worktrees.`
+  if (error instanceof Worktree.StrategyUnavailableError)
+    return `Unable to remove worktree ${directory}: its worktree strategy ${error.strategy} is not available.`
+  if ((error instanceof Git.WorktreeError || error instanceof Worktree.OperationError) && error.forceRequired)
+    return `Unable to remove worktree ${directory}: it has modified or untracked files.`
+  return `Unable to remove worktree ${directory}.`
 }

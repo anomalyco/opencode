@@ -216,10 +216,23 @@ worktreeIt.live("creates, lists, and removes worktrees for the plugin's project"
 
     // The project checkout is not a removable worktree.
     expect(yield* call("worktree_remove", { directory: location.directory })).toMatchObject({
-      content: [{ type: "text", text: `Unable to remove worktree ${location.directory}` }],
+      content: [
+        {
+          type: "text",
+          text: `Unable to remove ${location.directory}: it is not a worktree of this project. Use worktree_list to see the project's worktrees.`,
+        },
+      ],
       metadata: { error: true },
     })
     expect(yield* Effect.promise(() => fs.stat(location.directory).then((stat) => stat.isDirectory()))).toBe(true)
+
+    // A dirty worktree is kept, and the failure leaves the choice to force removal to the model.
+    yield* Effect.promise(() => fs.writeFile(path.join(directory, "draft.txt"), "draft"))
+    expect(yield* call("worktree_remove", { directory })).toMatchObject({
+      content: [{ type: "text", text: `Unable to remove worktree ${directory}: it has modified or untracked files.` }],
+    })
+    expect(yield* Effect.promise(() => Bun.file(path.join(directory, "draft.txt")).exists())).toBe(true)
+    yield* Effect.promise(() => fs.rm(path.join(directory, "draft.txt")))
 
     // Removal requires the same approval as editing files in the worktree.
     approvals.assertions.length = 0
@@ -228,7 +241,11 @@ worktreeIt.live("creates, lists, and removes worktrees for the plugin's project"
     expect(yield* Effect.promise(() => Bun.file(path.join(directory, ".git")).exists())).toBe(true)
     approvals.denyEdit = false
 
-    expect(yield* run("worktree_remove", { directory })).toEqual({ directory, removed: true })
+    // Relative paths resolve from the session's directory for both approval and removal.
+    expect(yield* run("worktree_remove", { directory: path.relative(location.directory, directory) })).toEqual({
+      directory,
+      removed: true,
+    })
     expect(yield* Effect.promise(() => Bun.file(path.join(directory, ".git")).exists())).toBe(false)
     expect(approvals.assertions).toMatchObject([
       { action: "edit", resources: [directory], save: ["*"], sessionID: session.id },
