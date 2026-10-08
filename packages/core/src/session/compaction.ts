@@ -579,16 +579,18 @@ export const layer = Layer.effect(
       webSocket?: "session",
     ) => {
       const base = transcript(context, messages)
-      return requests.compaction({
-        session: context.session,
-        agent: context.agent.id,
-        model: context.model,
-        tools: context.tools,
-        system: base.system,
-        messages: base.messages,
-        webSocket,
-        inputTokens: { measured: budget, estimated: 0 },
-      })
+      return requests
+        .compaction({
+          session: context.session,
+          agent: context.agent.id,
+          model: context.model,
+          tools: context.tools,
+          system: base.system,
+          messages: base.messages,
+          webSocket,
+          inputTokens: { measured: budget, estimated: 0 },
+        })
+        .pipe(Effect.mapError((error): Failure => ({ error: toSessionError(error) })))
     }
 
     /** A request hook supplied the summary itself, so no model call happens. */

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { Duration, Schema } from "effect"
 import { FastCheck } from "effect/testing"
 import { ConfigNormalize } from "@opencode/core/config/normalize"
+import { ConfigCache } from "@opencode/core/config/cache"
 import { Info } from "@opencode/schema/config"
 
 const options = { errors: "all", onExcessProperty: "ignore", propertyOrder: "original" } as const
@@ -108,9 +109,11 @@ describe("ConfigNormalize", () => {
     expect(Duration.toMillis(info.warming.duration ?? Duration.zero)).toBe(1_800_000)
   })
 
-  test("preserves arbitrary JSON-round-tripped native configuration", () => {
+  test("preserves arbitrary JSON-round-tripped native configuration with valid cache rules", () => {
     FastCheck.assert(
       FastCheck.property(Schema.toArbitrary(Info)(FastCheck), (info) => {
+        // Structural schema generation can produce semantically conflicting cache rules.
+        FastCheck.pre(Object.values(info.cache ?? {}).every((rules) => ConfigCache.validate(rules) === undefined))
         const source = JSON.parse(JSON.stringify(Schema.encodeSync(Info)(info)))
         const result = normalized(source)
         expect(Schema.decodeUnknownSync(Info)(result.encoded)).toEqual(

@@ -4,12 +4,16 @@ import { LLM, ToolDefinition } from "../src/index.js"
 import { PromptCache } from "../src/prompt-cache.js"
 import { AnthropicMessages, OpenAIChat, OpenAIResponses } from "../src/protocols.js"
 import { compileRequest, LLMClient } from "../src/route/client.js"
-import { OpenAI } from "../src/providers/index.js"
+import { AmazonBedrock, AnthropicCompatible, OpenAI, OpenRouter } from "../src/providers/index.js"
 import { it, testEffect } from "./lib/effect.js"
 import { dynamicResponse } from "./lib/http.js"
 
+const bedrock = AmazonBedrock.configure({
+  credentials: { region: "us-east-1", accessKeyId: "fixture", secretAccessKey: "fixture" },
+})
+
 describe("native prompt cache options", () => {
-  it.effect("places 1h Anthropic markers on tools, system, and messages with TTL-only configuration", () =>
+  it.effect("places Anthropic TTL markers on tools, system, and the conversation tail", () =>
     Effect.gen(function* () {
       const request = yield* PromptCache.apply(
         LLM.request({
@@ -22,8 +26,7 @@ describe("native prompt cache options", () => {
         }),
         { cache_control: { type: "ephemeral", ttl: "1h" } },
       )
-      const compiled = yield* compileRequest(request)
-      expect(compiled.body).toMatchObject({
+      expect((yield* compileRequest(request)).body).toMatchObject({
         tools: [{ cache_control: { type: "ephemeral", ttl: "1h" } }],
         system: [{ cache_control: { type: "ephemeral", ttl: "1h" } }],
         messages: [{ content: [{ cache_control: { type: "ephemeral", ttl: "1h" } }] }],
@@ -31,112 +34,183 @@ describe("native prompt cache options", () => {
     }),
   )
 
-  it.effect("empty options preserve the request and 5m does not become 1h", () =>
+  it.effect("empty options preserve the request", () =>
     Effect.gen(function* () {
-      const request = LLM.request({
-        model: AnthropicMessages.route.model({ id: "claude-sonnet-4-5" }),
-        prompt: "Question",
-      })
+      const request = LLM.request({ model: OpenAIResponses.route.model({ id: "gpt-5.6" }), prompt: "Question" })
       expect(yield* PromptCache.apply(request, {})).toBe(request)
-      const configured = yield* PromptCache.apply(request, { cache_control: { type: "ephemeral", ttl: "5m" } })
-      const compiled = yield* compileRequest(configured)
-      expect(compiled.body).toMatchObject({ messages: [{ content: [{ cache_control: { type: "ephemeral" } }] }] })
-      expect(JSON.stringify(compiled.body)).not.toContain('"1h"')
+      expect((yield* compileRequest(request)).body).not.toHaveProperty("prompt_cache_options")
     }),
   )
 
-  for (const route of [OpenAIChat.route, OpenAIResponses.route]) {
-    it.effect(`sends GPT-5.6+ cache options unchanged on ${route.id}`, () =>
-      Effect.gen(function* () {
-        for (const id of [
-          "gpt-5.6",
-          "gpt-5.6-2026-08-01",
-          "gpt-5.10",
-          "gpt-6-astra",
-          "gpt-6.1-sol",
-          "deployment-alias",
-        ]) {
-          const request = LLM.request({ model: route.model({ id }), prompt: "Question" })
-          for (const options of [{}, { ttl: "30m" }, { mode: "implicit", ttl: "30m" }, { mode: "explicit" }] as const) {
-            const configured = yield* PromptCache.apply(request, { prompt_cache_options: options })
-            const compiled = yield* compileRequest(configured)
-            expect(compiled.body).toMatchObject({ prompt_cache_options: options })
-            expect(compiled.body).not.toHaveProperty("prompt_cache_retention")
-          }
-          expect((yield* compileRequest(request)).body).not.toHaveProperty("prompt_cache_options")
-          const combined = yield* PromptCache.apply(request, {
-            prompt_cache_retention: "24h",
-            prompt_cache_options: { ttl: "30m" },
-          })
-          expect((yield* compileRequest(combined)).body).toMatchObject({
-            prompt_cache_retention: "24h",
-            prompt_cache_options: { ttl: "30m" },
-          })
-        }
-      }),
-    )
-    it.effect(`sends OpenAI retention on ${route.id}`, () =>
-      Effect.gen(function* () {
-        const request = LLM.request({ model: route.model({ id: "gpt-5.4" }), prompt: "Question" })
-        const configured = yield* PromptCache.apply(request, { prompt_cache_retention: "24h" })
-        const compiled = yield* compileRequest(configured)
-        expect(compiled.body).toMatchObject({ prompt_cache_retention: "24h" })
-        expect((yield* compileRequest(request)).body).not.toHaveProperty("prompt_cache_retention")
-        // The low-level provider API remains forward compatible; config rules validate their own allowed values.
-        const future = LLM.request({
-          model: route.model({ id: "gpt-5.4" }),
-          prompt: "Question",
-          providerOptions: { promptCacheRetention: "future-retention" },
-        })
-        expect((yield* compileRequest(future)).body).toMatchObject({ prompt_cache_retention: "future-retention" })
-      }),
-    )
-  }
-
-  it.effect("rejects route mismatches, combined options, and incompatible model settings", () =>
+  it.effect("sends legacy retention through Chat Completions", () =>
     Effect.gen(function* () {
-      const anthropic = LLM.request({ model: AnthropicMessages.route.model({ id: "claude-sonnet-4-5" }) })
-      const openai = LLM.request({ model: OpenAIResponses.route.model({ id: "gpt-5.4" }) })
-      const failures = [
-        PromptCache.apply(anthropic, { prompt_cache_retention: "24h" }),
-        PromptCache.apply(openai, { cache_control: { type: "ephemeral" } }),
-        PromptCache.apply(anthropic, { cache_control: { type: "ephemeral" }, prompt_cache_retention: "24h" }),
-        PromptCache.apply(anthropic, { prompt_cache_options: { ttl: "30m" } }),
-        PromptCache.apply(anthropic, { cache_control: { type: "ephemeral" }, prompt_cache_options: {} }),
-        ...["gpt-4.1", "gpt-5", "gpt-5.5"].map((id) =>
-          PromptCache.apply(LLM.request({ model: OpenAIResponses.route.model({ id }) }), {
-            prompt_cache_options: { ttl: "30m" },
+      const request = yield* PromptCache.apply(
+        LLM.request({ model: OpenAIChat.route.model({ id: "gpt-5.4" }), prompt: "Question" }),
+        {
+          prompt_cache_retention: "24h",
+        },
+      )
+      expect((yield* compileRequest(request)).body).toMatchObject({ prompt_cache_retention: "24h" })
+    }),
+  )
+
+  it.effect("sends both independent OpenAI fields without converting their lifetimes", () =>
+    Effect.gen(function* () {
+      const request = yield* PromptCache.apply(
+        LLM.request({ model: OpenAIResponses.route.model({ id: "gpt-5.6" }), prompt: "Question" }),
+        {
+          prompt_cache_options: { mode: "implicit", ttl: "30m" },
+          prompt_cache_retention: "24h",
+        },
+      )
+      expect((yield* compileRequest(request)).body).toMatchObject({
+        prompt_cache_options: { mode: "implicit", ttl: "30m" },
+        prompt_cache_retention: "24h",
+      })
+    }),
+  )
+
+  it.effect("leaves model-specific validation to OpenAI rather than guessing from its ID", () =>
+    Effect.gen(function* () {
+      const request = yield* PromptCache.apply(
+        LLM.request({ model: OpenAIResponses.route.model({ id: "gpt-5.5" }), prompt: "Question" }),
+        {
+          prompt_cache_options: { mode: "explicit" },
+          prompt_cache_retention: "in_memory",
+        },
+      )
+      expect((yield* compileRequest(request)).body).toMatchObject({
+        prompt_cache_options: { mode: "explicit" },
+        prompt_cache_retention: "in_memory",
+      })
+    }),
+  )
+
+  it.effect("preserves future low-level provider option values and deployment aliases", () =>
+    Effect.gen(function* () {
+      const request = LLM.request({
+        model: OpenAIResponses.route.model({ id: "deployment-alias" }),
+        prompt: "Question",
+        providerOptions: {
+          promptCacheRetention: "future-retention",
+          promptCacheOptions: { mode: "future-mode", ttl: "future-ttl" },
+        },
+      })
+      expect((yield* compileRequest(request)).body).toMatchObject({
+        prompt_cache_retention: "future-retention",
+        prompt_cache_options: { mode: "future-mode", ttl: "future-ttl" },
+      })
+    }),
+  )
+
+  it.effect("uses cache markers on Anthropic-compatible endpoints", () =>
+    Effect.gen(function* () {
+      const request = yield* PromptCache.apply(
+        LLM.request({
+          model: AnthropicCompatible.configure({ baseURL: "https://example.test/v1", apiKey: "test" }).model("claude"),
+          prompt: "Question",
+        }),
+        { cache_control: { type: "ephemeral", ttl: "1h" } },
+      )
+      expect((yield* compileRequest(request)).body).toMatchObject({
+        messages: [{ content: [{ cache_control: { type: "ephemeral", ttl: "1h" } }] }],
+      })
+    }),
+  )
+
+  it.effect("uses cache markers for Anthropic through OpenRouter", () =>
+    Effect.gen(function* () {
+      const request = yield* PromptCache.apply(
+        LLM.request({
+          model: OpenRouter.configure({ apiKey: "test" }).model("anthropic/claude-sonnet-4.5"),
+          prompt: "Question",
+        }),
+        { cache_control: { type: "ephemeral", ttl: "1h" } },
+      )
+      expect((yield* compileRequest(request)).body).toMatchObject({
+        messages: [{ content: [{ cache_control: { type: "ephemeral", ttl: "1h" } }] }],
+      })
+    }),
+  )
+
+  it.effect("retains the existing Qwen placement policy on gateways", () =>
+    Effect.gen(function* () {
+      const request = yield* PromptCache.apply(
+        LLM.request({
+          model: OpenRouter.configure({ apiKey: "test" }).model("qwen/qwen3-coder"),
+          prompt: "Question",
+        }),
+        { cache_control: { type: "ephemeral", ttl: "5m" } },
+      )
+      expect(request.cache).toEqual({ system: true, messages: { tail: 1 }, ttlSeconds: 300 })
+    }),
+  )
+
+  it.effect("sends one-hour TTLs through supported Bedrock Converse models", () =>
+    Effect.gen(function* () {
+      const request = yield* PromptCache.apply(
+        LLM.request({
+          model: bedrock.model("anthropic.claude-sonnet-4-5-20250929-v1:0"),
+          prompt: "Question",
+        }),
+        { cache_control: { type: "ephemeral", ttl: "1h" } },
+      )
+      expect((yield* compileRequest(request)).body).toMatchObject({
+        messages: [{ content: [{ text: "Question" }, { cachePoint: { type: "default", ttl: "1h" } }] }],
+      })
+    }),
+  )
+
+  it.effect("rejects a Bedrock TTL that existing lowering would shorten", () =>
+    Effect.gen(function* () {
+      const request = LLM.request({
+        model: bedrock.model("anthropic.claude-3-5-sonnet-20241022-v2:0"),
+        prompt: "Question",
+      })
+      const error = yield* Effect.flip(PromptCache.apply(request, { cache_control: { type: "ephemeral", ttl: "1h" } }))
+      expect(error.reason._tag).toBe("InvalidRequest")
+      const configured = yield* PromptCache.apply(request, { cache_control: { type: "ephemeral", ttl: "5m" } })
+      expect((yield* compileRequest(configured)).body).toMatchObject({
+        messages: [{ content: [{ text: "Question" }, { cachePoint: { type: "default" } }] }],
+      })
+    }),
+  )
+
+  it.effect("rejects explicit cache controls on implicitly cached gateway models", () =>
+    Effect.gen(function* () {
+      const error = yield* Effect.flip(
+        PromptCache.apply(
+          LLM.request({
+            model: OpenRouter.configure({ apiKey: "test" }).model("openai/gpt-5.6"),
           }),
+          { cache_control: { type: "ephemeral" } },
         ),
-        PromptCache.apply(LLM.request({ model: OpenAIResponses.route.model({ id: "gpt-5.5" }) }), {
-          prompt_cache_retention: "in_memory",
+      )
+      expect(error.reason._tag).toBe("InvalidRequest")
+    }),
+  )
+
+  it.effect("rejects OpenAI controls on an Anthropic route", () =>
+    Effect.gen(function* () {
+      const error = yield* Effect.flip(
+        PromptCache.apply(LLM.request({ model: AnthropicMessages.route.model({ id: "claude" }) }), {
+          prompt_cache_options: { ttl: "30m" },
         }),
-        PromptCache.apply(LLM.request({ model: OpenAIResponses.route.model({ id: "gpt-6.1-sol" }) }), {
-          prompt_cache_retention: "in_memory",
-        }),
-      ]
-      for (const failure of failures) {
-        const result = yield* Effect.flip(failure)
-        expect(result.reason._tag).toBe("InvalidRequest")
-      }
+      )
+      expect(error.reason._tag).toBe("InvalidRequest")
     }),
   )
 })
 
-for (const scenario of [
-  { model: "gpt-5.4", options: { prompt_cache_retention: "24h" } },
-  { model: "gpt-5.6", options: { prompt_cache_options: { ttl: "30m" } } },
-  { model: "gpt-6.1-sol", options: { prompt_cache_options: { mode: "explicit", ttl: "30m" } } },
-  {
-    model: "gpt-5.6",
-    options: { prompt_cache_retention: "24h", prompt_cache_options: { mode: "implicit", ttl: "30m" } },
-  },
+for (const options of [
+  { prompt_cache_retention: "24h" },
+  { prompt_cache_options: { mode: "implicit", ttl: "30m" }, prompt_cache_retention: "24h" },
 ] as const) {
   testEffect(
     dynamicResponse(({ request, text, respond }) =>
       Effect.sync(() => {
         expect(new URL(request.url).pathname).toBe("/v1/responses/compact")
-        expect(JSON.parse(text)).toMatchObject(scenario.options)
+        expect(JSON.parse(text)).toMatchObject(options)
         return respond(
           JSON.stringify({
             object: "response.compaction",
@@ -145,11 +219,11 @@ for (const scenario of [
         )
       }),
     ),
-  ).effect(`preserves cache options on native compaction: ${scenario.model} ${JSON.stringify(scenario.options)}`, () =>
+  ).effect(`preserves native compaction cache options: ${JSON.stringify(options)}`, () =>
     Effect.gen(function* () {
       const request = yield* PromptCache.apply(
-        LLM.request({ model: OpenAI.configure({ apiKey: "test" }).responses(scenario.model), prompt: "Question" }),
-        scenario.options,
+        LLM.request({ model: OpenAI.configure({ apiKey: "test" }).responses("gpt-5.6"), prompt: "Question" }),
+        options,
       )
       yield* LLMClient.compact(request)
     }),

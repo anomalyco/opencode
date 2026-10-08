@@ -1,6 +1,8 @@
 export * as SessionModelRequest from "./model-request.js"
 
 import {
+  AIError,
+  InvalidRequestError,
   GenerationOptions,
   type GenerationOptionsFields,
   HttpOptions,
@@ -222,10 +224,10 @@ type Definitions = PluginHooks.Domains["session"]["context"]["tools"]
 
 /** Builds the model request for each session flow. Each entry runs its own plugin hook. */
 export interface Interface {
-  readonly primary: (input: Input) => Effect.Effect<Prepared<SessionContext>>
-  readonly compaction: (input: Input) => Effect.Effect<Prepared<SessionCompaction>>
-  readonly generate: (input: Input) => Effect.Effect<Prepared<SessionGenerate>>
-  readonly title: (input: Input) => Effect.Effect<Prepared<SessionTitle>>
+  readonly primary: (input: Input) => Effect.Effect<Prepared<SessionContext>, AIError>
+  readonly compaction: (input: Input) => Effect.Effect<Prepared<SessionCompaction>, AIError>
+  readonly generate: (input: Input) => Effect.Effect<Prepared<SessionGenerate>, AIError>
+  readonly title: (input: Input) => Effect.Effect<Prepared<SessionTitle>, AIError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionModelRequest") {}
@@ -305,14 +307,17 @@ export const layer = Layer.effect(
         providerOptions: Object.keys(providerOptions).length === 0 ? undefined : providerOptions,
       })
 
-      const cache = ConfigCache.resolve(yield* config.entries(), {
+      const selectedCache = ConfigCache.resolve(yield* config.entries(), {
         provider: model.ref.providerID,
         model: model.ref.id,
         agent: input.agent,
         // Fork ancestry is stored separately; it does not imply subagent execution.
         subagent: session.parentID !== undefined,
       })
-      const base = cache ? yield* PromptCache.apply(unconfigured, cache.rule.options).pipe(Effect.orDie) : unconfigured
+      if (Result.isFailure(selectedCache))
+        return yield* new AIError({ reason: new InvalidRequestError({ message: selectedCache.failure }) })
+      const cache = selectedCache.success
+      const base = cache ? yield* PromptCache.apply(unconfigured, cache.rule.options) : unconfigured
       if (cache)
         yield* Effect.logDebug("prompt cache rule selected", {
           ...scope,

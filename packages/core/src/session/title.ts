@@ -63,13 +63,24 @@ export const layer = Layer.effect(
             })
           : Effect.void,
       )
-      const prepared = yield* context.request.title({
-        session: input.session,
-        agent: input.agent.id,
-        model: input.model,
-        system: input.agent.system ? [SystemPart.make(input.agent.system)] : [],
-        messages: [Message.user(input.text)],
-      })
+      const prepared = yield* context.request
+        .title({
+          session: input.session,
+          agent: input.agent.id,
+          model: input.model,
+          system: input.agent.system ? [SystemPart.make(input.agent.system)] : [],
+          messages: [Message.user(input.text)],
+        })
+        .pipe(
+          Effect.catchTag("AI.Error", (error) =>
+            Effect.logWarning("title request configuration failed", {
+              sessionID: input.session.id,
+              model: input.model.ref,
+              error: error.message,
+            }).pipe(Effect.as(undefined)),
+          ),
+        )
+      if (!prepared) return
       if (prepared.event.result !== undefined) return prepared.event.result
       yield* llm.stream(prepared.request, prepared.options).pipe(
         Stream.runForEach((event) => {
