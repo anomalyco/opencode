@@ -316,6 +316,7 @@ export function createTimelineController(input: { session: TimelineSessionSource
       childTitle,
       showHeader,
       projection,
+      pendingInputIDs,
       timelineDetail,
       reasoningMode,
       shellToolPartsExpanded,

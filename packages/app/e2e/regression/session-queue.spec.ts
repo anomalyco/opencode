@@ -849,6 +849,7 @@ for (const delivery of ["steer", "queue"] as const) {
     const view = await openQueue(page, mock, delivery)
     const transcript = page.locator("[data-timeline-virtual-content]")
     const thinking = transcript.locator('[data-timeline-row="Thinking"]')
+    const working = transcript.locator('[data-component="session-working"]')
     await expect(transcript.getByText("A1: I will inspect the current implementation.", { exact: true })).toBeVisible()
     await expect(thinking).toHaveCount(0)
     await expect(view.input).toBeEditable()
@@ -958,16 +959,24 @@ for (const delivery of ["steer", "queue"] as const) {
     ])
     await transcript.screenshot({ path: testInfo.outputPath("pending-steer.png") })
 
-    await expect(tools.or(pending)).toHaveText([/^Used\s*2\s*Read, Grep$/, /U2: Also check the retry path\./])
+    await expect(tools.or(working).or(pending)).toHaveText([
+      /^Used\s*2\s*Read, Grep$/,
+      /^Working/,
+      /U2: Also check the retry path\./,
+    ])
     await expect(transcript.locator('[data-timeline-row="AssistantPart"]').filter({ has: tools })).toHaveAttribute(
       "data-message-id",
       userID,
     )
     await expect
       .poll(async () => {
-        const boxes = await Promise.all([tools.boundingBox(), pending.boundingBox()])
+        const boxes = await Promise.all([tools.boundingBox(), working.boundingBox(), pending.boundingBox()])
 
-        return boxes.every((box) => box !== null) && boxes[0]!.y + boxes[0]!.height <= boxes[1]!.y
+        return (
+          boxes.every((box) => box !== null) &&
+          boxes[0]!.y + boxes[0]!.height <= boxes[1]!.y &&
+          boxes[1]!.y + boxes[1]!.height <= boxes[2]!.y
+        )
       })
       .toBe(true)
 
@@ -975,6 +984,7 @@ for (const delivery of ["steer", "queue"] as const) {
     mock.emit("session.inbox.delivered", { sessionID, inboxID })
     await expect(thinking).toHaveCount(0)
     await expect(pending).toHaveCount(1)
+    await expect(pending.or(working)).toHaveText([/U2: Also check the retry path\./, /^Working/])
 
     if (colors) {
       await expect(bubble).toHaveAttribute("data-delivery-marker", "pending")

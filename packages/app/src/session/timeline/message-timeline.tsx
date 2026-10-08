@@ -402,41 +402,59 @@ function MessageTimelineView(
     />
   )
 
+  const workingBeforeRow = createMemo(() => {
+    const pending = props.data.pendingInputIDs()
+
+    if (pending.size === 0) return
+
+    return projection
+      .rows()
+      .find(
+        (row) =>
+          (Predicate.isTagged(row, "TurnGap") || Predicate.isTagged(row, "UserMessage")) &&
+          pending.has(row.userMessageID),
+      )
+  })
+
+  const WorkingInfo = () => (
+    <Show when={showWorking() || backgroundHintPresence.present()}>
+      <div
+        classList={{
+          "min-w-0 w-full max-w-full": true,
+          "md:max-w-[1000px] md:mx-auto": props.centered,
+        }}
+      >
+        <div class={`flex h-9 items-center gap-2 pt-3 text-[13px] font-[530] leading-text-compact ${turnPadding()}`}>
+          <Show when={showWorking()}>
+            <div data-component="session-working" role="status">
+              <TextShimmer text={language.t("session.timeline.working")} active />
+            </div>
+          </Show>
+          <Show when={backgroundHintPresence.present()}>
+            <div
+              ref={setBackgroundHintRef}
+              data-component="session-background-hint-row"
+              class="duration-150 motion-reduce:animate-none"
+              classList={{
+                "animate-in fade-in": backgroundHintPresence.animate() && backgroundHintPresence.show(),
+                "animate-out fade-out fill-mode-forwards":
+                  backgroundHintPresence.animate() && !backgroundHintPresence.show(),
+              }}
+            >
+              <BackgroundMoveHint onMove={props.background.move} />
+            </div>
+          </Show>
+        </div>
+      </div>
+    </Show>
+  )
+
   return (
     <VirtualizedTimeline
       workspaceSession={workspaceSession}
       bottomSpacer={
-        <Show when={showWorking() || backgroundHintPresence.present()}>
-          <div
-            classList={{
-              "min-w-0 w-full max-w-full": true,
-              "md:max-w-[1000px] md:mx-auto": props.centered,
-            }}
-          >
-            <div
-              class={`flex h-9 items-center gap-2 pt-3 text-[13px] font-[530] leading-text-compact ${turnPadding()}`}
-            >
-              <Show when={showWorking()}>
-                <div data-component="session-working" role="status">
-                  <TextShimmer text={language.t("session.timeline.working")} active />
-                </div>
-              </Show>
-              <Show when={backgroundHintPresence.present()}>
-                <div
-                  ref={setBackgroundHintRef}
-                  data-component="session-background-hint-row"
-                  class="duration-150 motion-reduce:animate-none"
-                  classList={{
-                    "animate-in fade-in": backgroundHintPresence.animate() && backgroundHintPresence.show(),
-                    "animate-out fade-out fill-mode-forwards":
-                      backgroundHintPresence.animate() && !backgroundHintPresence.show(),
-                  }}
-                >
-                  <BackgroundMoveHint onMove={props.background.move} />
-                </div>
-              </Show>
-            </div>
-          </div>
+        <Show when={!workingBeforeRow()}>
+          <WorkingInfo />
         </Show>
       }
       deferred={(row) => {
@@ -445,7 +463,14 @@ function MessageTimelineView(
 
         return content?.type === "tool" && ["edit", "write"].includes(content.name)
       }}
-      renderRow={(row, onSizeChange) => <rowRenderer.Row row={row} onSizeChange={onSizeChange} />}
+      renderRow={(row, onSizeChange) => (
+        <>
+          <Show when={row() === workingBeforeRow()}>
+            <WorkingInfo />
+          </Show>
+          <rowRenderer.Row row={row} onSizeChange={onSizeChange} />
+        </>
+      )}
       header={
         <Show when={!props.hideHeader}>
           <SessionTitleHeader>
