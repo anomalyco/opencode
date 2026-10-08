@@ -83,6 +83,9 @@ function environmentNames(provider: ModelsDev.Snapshot) {
   if (provider.info.id === Provider.ID.googleVertex) return ["GOOGLE_VERTEX_API_KEY"]
   if (provider.info.id === "cloudflare-workers-ai")
     return ["CLOUDFLARE_API_KEY", "CLOUDFLARE_WORKERS_AI_TOKEN", "CLOUDFLARE_API_TOKEN"]
+  // The host and gateway URL only fill the base URL template; only the token is a key.
+  if (provider.info.id === "databricks") return ["DATABRICKS_TOKEN"]
+  if (provider.info.id === "neon") return ["NEON_AI_GATEWAY_TOKEN"]
   return [...provider.environment]
 }
 
