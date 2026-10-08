@@ -271,7 +271,11 @@ const layer = Layer.effect(
         const order = direction === "previous" ? (requestedOrder === "asc" ? "desc" : "asc") : requestedOrder
         const sortColumn = SessionTable.time_created
         const conditions: SQL[] = []
-        if ("directory" in input) conditions.push(eq(SessionTable.directory, input.directory))
+        if ("directory" in input) {
+          const trimmed = input.directory.replace(/[\\/]+$/, "")
+          const directory = trimmed && !trimmed.endsWith(":") ? trimmed : input.directory
+          conditions.push(eq(SessionTable.directory, directory))
+        }
         if (input.workspaceID) conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
         if ("project" in input) conditions.push(eq(SessionTable.project_id, input.project))
         if (input.search) conditions.push(like(SessionTable.title, `%${input.search}%`))
