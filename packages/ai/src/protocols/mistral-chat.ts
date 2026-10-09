@@ -125,7 +125,7 @@ export type ProviderOptionsInput = {
   readonly [key: string]: unknown
 }
 
-const MistralBody = Schema.Struct({
+export const MistralBody = Schema.Struct({
   model: Schema.String,
   messages: Schema.Array(MistralMessage),
   tools: optionalArray(MistralTool),
