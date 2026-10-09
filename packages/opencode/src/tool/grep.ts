@@ -10,7 +10,7 @@ import * as Tool from "./tool"
 export const Parameters = Schema.Struct({
   pattern: Schema.String.annotate({ description: "The regex pattern to search for in file contents" }),
   path: Schema.optional(Schema.String).annotate({
-    description: "The directory to search in. Defaults to the current working directory.",
+    description: "The directory or file to search in. Defaults to the current working directory.",
   }),
   include: Schema.optional(Schema.String).annotate({
     description: 'File pattern to include in the search (e.g. "*.js", "*.{ts,tsx}")',
@@ -63,6 +63,7 @@ export const GrepTool = Tool.define(
           const result = yield* ripgrep.grep({
             cwd,
             pattern: params.pattern,
+            file: info?.type === "File" ? path.basename(search) : undefined,
             include: params.include,
             limit: 100,
           })

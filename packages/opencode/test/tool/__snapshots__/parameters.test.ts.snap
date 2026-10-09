@@ -102,7 +102,7 @@ exports[`tool parameters JSON Schema (wire shape) grep 1`] = `
       "type": "string",
     },
     "path": {
-      "description": "The directory to search in. Defaults to the current working directory.",
+      "description": "The directory or file to search in. Defaults to the current working directory.",
       "type": "string",
     },
     "pattern": {
