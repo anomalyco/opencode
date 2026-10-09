@@ -19,13 +19,43 @@ test("browser input bounds and optional fields survive the wire", () => {
   expect(() => decode({ type: "console", tabID, limit: 501 })).toThrow()
   expect(() => decode({ type: "console", tabID, limit: 0 })).toThrow()
   expect(() => decode({ type: "console", tabID, level: "verbose" })).toThrow()
-  expect(() => decode({ type: "wait", tabID, condition: "load", timeoutMs: -1 })).toThrow()
-  expect(() => decode({ type: "click", tabID: "another-tab", ref: "e1" })).toThrow()
-  expect(decode({ type: "evaluate", tabID, ref: "@e5", script: "(element) => element.id" })).toMatchObject({
-    ref: "@e5",
+  expect(() => decode({ type: "wait", tabID, load: true, timeoutMs: -1 })).toThrow()
+  expect(() => decode({ type: "wait", tabID, timeoutMs: Browser.MAX_WAIT_MS + 1 })).toThrow()
+  expect(() => decode({ type: "click", tabID: "another-tab", target: "e1" })).toThrow()
+  expect(() => decode({ type: "click", tabID, target: "" })).toThrow()
+  expect(decode({ type: "evaluate", tabID, target: "@e5", script: "(element) => element.id" })).toMatchObject({
+    target: "@e5",
   })
-  expect(() => decode({ type: "evaluate", tabID, ref: "button", script: "(element) => element.id" })).toThrow()
   expect(() => decode({ type: "network.list", tabID, resourceType: "imaginary" })).toThrow()
+})
+
+// Every element parameter takes the same locator grammar, so a guess that works for one tool works for all of them.
+test("element parameters share one locator schema", () => {
+  const locators = Browser.Operations.flatMap((operation) =>
+    Object.entries(operation.input.fields).flatMap(([name, field]) =>
+      ["target", "from", "to"].includes(name) ? [{ operation: operation.name, name, field }] : [],
+    ),
+  )
+  expect(locators.map((item) => item.operation)).toEqual(
+    expect.arrayContaining(["click", "hover", "fill", "type", "press", "scroll", "find", "read", "evaluate", "wait", "screenshot", "snapshot", "upload", "drop", "drag"]),
+  )
+  const decode = Schema.decodeUnknownSync(Browser.Action)
+  for (const target of ["@e12", "text=Save", 'role=button[name="Send"]', "#id >> nth=1"])
+    expect(decode({ type: "click", tabID, target })).toMatchObject({ target })
+})
+
+test("agent tools are the public surface; the pane's own history controls stay internal", () => {
+  const tools = Browser.Operations.filter((operation) => !operation.internal).map((operation) => operation.name)
+  expect(tools).not.toContain("back")
+  expect(tools).not.toContain("stop")
+  expect(tools).toEqual(expect.arrayContaining(["read", "type", "watch", "emulate", "storage", "handoff"]))
+})
+
+test("the server waits for long actions instead of timing them out at a fixed minute", () => {
+  expect(Browser.deadline({ type: "tabs.list" })).toBe(60_000)
+  expect(Browser.deadline({ type: "wait", tabID, timeoutMs: 110_000 })).toBe(125_000)
+  expect(Browser.deadline({ type: "watch", tabID, script: "1", durationMs: 90_000 })).toBe(105_000)
+  expect(Browser.deadline({ type: "handoff", tabID, reason: "Sign in" })).toBe(615_000)
 })
 
 test("browser files are bounded bytes, not remote filesystem paths", () => {
@@ -51,7 +81,7 @@ test("network lifecycle and RPC version are explicit", () => {
   expect(() => decode({ ...request, state: "failed" })).toThrow()
   expect(() => Schema.decodeUnknownSync(Browser.Control)({ type: "attached", connectionID: "old-client" })).toThrow()
   expect(() =>
-    Schema.decodeUnknownSync(Browser.Control)({ type: "attached", connectionID: "old-client", version: 3 }),
+    Schema.decodeUnknownSync(Browser.Control)({ type: "attached", connectionID: "old-client", version: 4 }),
   ).toThrow()
   expect(() =>
     Schema.decodeUnknownSync(Browser.Control)({ type: "attached", connectionID: "old-client", version: 2 }),

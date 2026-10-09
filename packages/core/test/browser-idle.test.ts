@@ -53,7 +53,7 @@ it.live(
       const attachment = { sessionID: session.id, connectionID: crypto.randomUUID() }
       const state = { ...attachment, state: { tabs: [], focusedTabID: null } }
       const pending = yield* rpc
-        .attach({ ...attachment, version: 4 })
+        .attach({ ...attachment, version: Browser.VERSION })
         .pipe(Effect.provide(locations.get(ref)), Effect.flip, Effect.forkScoped)
       yield* rpc.state(state).pipe(
         Effect.retry({
@@ -71,7 +71,7 @@ it.live(
       const replacement = yield* locations.contextEffect(ref)
       yield* Plugin.awaitActivation.pipe(Effect.provideContext(replacement))
       const fresh = Context.get(replacement, Rpc.Service).client(Browser.Definition)
-      const resumed = yield* fresh.attach({ ...attachment, version: 4 }).pipe(Effect.forkScoped)
+      const resumed = yield* fresh.attach({ ...attachment, version: Browser.VERSION }).pipe(Effect.forkScoped)
       yield* fresh.state(state).pipe(
         Effect.retry({
           while: (error) => "type" in error && error.type === "unavailable",

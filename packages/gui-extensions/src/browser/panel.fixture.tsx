@@ -84,6 +84,10 @@ type PaneFixtureState = {
   external: string[]
   /** Cookies the page's address can read. */
   cookies: number
+  /** The agent's handoffs, in the order they were asked. */
+  handoffs: number
+  /** How the user answered each handoff, as main heard it. */
+  answers: string[]
 }
 
 // A 16px blue square, as main reports a page icon.
@@ -139,6 +143,8 @@ export function mountBrowserPane(input: PaneHost) {
       history: { visits: [] },
       external: [],
       cookies: 3,
+      handoffs: 0,
+      answers: [],
     })
 
     // Each capture waits until the fixture releases it, so a spec can observe the pending state.
@@ -152,15 +158,19 @@ export function mountBrowserPane(input: PaneHost) {
       if (binding) listeners.forEach((listener) => listener({ binding, event }))
     }
 
-    const tabs = ["Alpha", "Beta"].map((name) => ({
-      id: Browser.TabID.make(`tab_${name === "Alpha" ? "11111111" : "22222222"}-1111-1111-1111-111111111111`),
-      title: name,
-      url: `https://${name.toLowerCase()}.example/`,
-      loading: false,
-      canGoBack: false,
-      canGoForward: false,
-      generation: 0,
-    }))
+    const tabs = ["Alpha", "Beta"].map(
+      (name): Browser.Tab => ({
+        id: Browser.TabID.make(`tab_${name === "Alpha" ? "11111111" : "22222222"}-1111-1111-1111-111111111111`),
+        title: name,
+        url: `https://${name.toLowerCase()}.example/`,
+        loading: false,
+        canGoBack: false,
+        canGoForward: false,
+        generation: 0,
+        owner: "user",
+        watched: false,
+      }),
+    )
 
     const current = () => tabs.find((tab) => tab.title === store.session) ?? tabs[0]
 
@@ -289,7 +299,7 @@ export function mountBrowserPane(input: PaneHost) {
       command: async (value) => {
         const command = value.command
         // Main refuses what it does not open before anything happens, naming why.
-        const reason = command.type === "navigate" ? refusal(command.url) : undefined
+        const reason = command.type === "navigate" && command.url ? refusal(command.url) : undefined
 
         if (reason) throw new Error(reason)
         setStore("error", undefined)
@@ -337,6 +347,9 @@ export function mountBrowserPane(input: PaneHost) {
         setStore({ cookies: 0, generation: store.generation + 1 })
         report()
       },
+      previewed: async () => undefined,
+      handoff: async (value) =>
+        setStore("answers", (items) => [...items, `${value.requestID} ${value.done ? "done" : "dismissed"}`]),
       close: async () => undefined,
       state: () => undefined,
       on: (_name, listener) => {
@@ -356,7 +369,7 @@ export function mountBrowserPane(input: PaneHost) {
       sessions: { current: session, list: () => Array.from(views.values()).filter((view) => view.key !== "Empty") },
       screen: { current: () => screen },
       layout: { narrow: () => false, stored: () => [], state: () => "visible", open() {}, close() {} },
-      links: { open() {} },
+      links: { open: () => true },
       stores: {
         history: {
           get value() {
@@ -475,11 +488,29 @@ export function mountBrowserPane(input: PaneHost) {
             <button onClick={() => emit(store.session, { type: "address", tabID: current().id })}>
               Address shortcut
             </button>
+            {/* Main focuses the handoff's tab first, which here is already the one on screen. */}
+            <button
+              onClick={() => {
+                setStore("handoffs", (count) => count + 1)
+                emit(store.session, {
+                  type: "handoff",
+                  tabID: current().id,
+                  requestID: `req_${store.handoffs}`,
+                  reason: "Sign in with the test account, then press Done.",
+                })
+              }}
+            >
+              Agent handoff
+            </button>
+            <button onClick={() => emit(store.session, { type: "handoff.end", requestID: `req_${store.handoffs}` })}>
+              End handoff
+            </button>
           </nav>
           <p>Captures: {store.captures}</p>
           <p>Zoom: {Math.round(store.zoom * 100)}</p>
           <p>Visits: {store.history.visits.map((visit) => visit.url).join(" ")}</p>
           <p>External: {store.external.join(" ")}</p>
+          <p>Handoff answers: {store.answers.join(",")}</p>
           <p>Session getter reads: {reads.directory}</p>
           <p>Picker: {store.picker[store.session] ? "on" : "off"}</p>
           <For each={tabs}>
@@ -786,6 +817,8 @@ export function mountBrowserRegion(input: RegionHost) {
       zoom: async () => undefined,
       site: async () => ({ cookies: 0 }),
       clearSite: async () => undefined,
+      previewed: async () => undefined,
+      handoff: async () => undefined,
       close: async () => undefined,
       state: () => undefined,
       on: (_name, listener) => {
@@ -820,7 +853,7 @@ export function mountBrowserRegion(input: RegionHost) {
 
       if (!binding) return
 
-      const tab = {
+      const tab: Browser.Tab = {
         id: tabID,
         url: "http://localhost:4173/",
         title: "Preview",
@@ -828,6 +861,8 @@ export function mountBrowserRegion(input: RegionHost) {
         canGoBack: false,
         canGoForward: false,
         generation: 0,
+        owner: "user",
+        watched: false,
       }
 
       listeners.forEach((listener) =>

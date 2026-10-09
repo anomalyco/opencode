@@ -145,6 +145,68 @@
   }
 }
 
+/* The agent's request that the user act in the page, between the bar and the page. In a narrow pane the actions wrap
+   under the message. */
+[data-component="browser-handoff"] {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 8px 12px;
+  border-bottom: 0.5px solid var(--v2-state-border-info);
+  background: var(--v2-state-bg-info);
+  color: var(--v2-text-text-base);
+  font-size: 13px;
+  font-weight: 440;
+  line-height: var(--line-height-compact);
+  letter-spacing: -0.04px;
+
+  [data-slot="browser-handoff-message"] {
+    display: flex;
+    flex: 1 1 12rem;
+    align-items: flex-start;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  [data-slot="browser-handoff-message"] > [data-slot="icon-svg"] {
+    flex: none;
+    color: var(--v2-state-fg-info);
+  }
+
+  [data-slot="browser-handoff-text"] {
+    display: flex;
+    flex: 1 1 0;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  [data-slot="browser-handoff-title"] {
+    font-weight: 530;
+  }
+
+  /* A long reason stops at three lines; its tooltip and screen readers keep the whole text. */
+  [data-slot="browser-handoff-reason"] {
+    display: -webkit-box;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    color: var(--v2-text-text-muted);
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+  }
+
+  [data-slot="browser-handoff-actions"] {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 8px;
+    margin-inline-start: auto;
+  }
+}
+
 /* Suggestions from the browsing history, under the address field. */
 [data-component="browser-suggestions"] {
   z-index: 60;

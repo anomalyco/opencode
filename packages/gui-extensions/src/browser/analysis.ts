@@ -1,4 +1,4 @@
-import { Schema } from "effect"
+import { Option, Schema } from "effect"
 
 const number = Schema.Finite
 
@@ -42,12 +42,12 @@ const Heap = Schema.Struct({
   strings: Schema.Array(Schema.String),
 })
 
-export function analyzeTrace(value: unknown, limit = 100) {
+export function analyzeTrace(value: Schema.Json, limit = 100) {
   const decoded = Schema.decodeUnknownOption(Trace)(value)
 
-  if (decoded._tag === "None")
+  if (Option.isNone(decoded))
     throw new Error(
-      "Selected file is not a Chromium performance trace. Use a fileID returned by browser.trace.stop for this tab; CPU profiles and heap snapshots use their own analysis tools.",
+      "Selected file is not a Chromium performance trace. Record one with browser.profile.start({tabID, kind: \"trace\"}) and browser.profile.stop({tabID}).",
     )
   const trace = decoded.value
   const events = new Map<string, { name: string; count: number; totalMs: number; maxMs: number }>()
@@ -84,12 +84,12 @@ export function analyzeTrace(value: unknown, limit = 100) {
   }
 }
 
-export function analyzeCpu(value: unknown, limit = 100) {
+export function analyzeCpu(value: Schema.Json, limit = 100) {
   const decoded = Schema.decodeUnknownOption(Cpu)(value)
 
-  if (decoded._tag === "None")
+  if (Option.isNone(decoded))
     throw new Error(
-      "Selected file is not a CPU profile. Use a fileID returned by browser.cpu.stop for this tab, not a trace or heap snapshot.",
+      "Selected file is not a CPU profile. Record one with browser.profile.start({tabID, kind: \"cpu\"}) and browser.profile.stop({tabID}).",
     )
   const profile = decoded.value
   const times = new Map<number, number>()
@@ -117,10 +117,10 @@ const malformedHeap = () =>
     "Heap snapshot layout is unsupported or incomplete. Use a complete capture from browser.heap.snapshot; if this tool produced it, report a parser/Chromium compatibility issue instead of repeatedly capturing the same heap.",
   )
 
-export function parseHeap(value: unknown) {
+export function parseHeap(value: Schema.Json) {
   const decoded = Schema.decodeUnknownOption(Heap)(value)
 
-  if (decoded._tag === "None")
+  if (Option.isNone(decoded))
     throw new Error(
       "Selected file is not a V8 heap snapshot. Use a fileID returned by browser.heap.snapshot for this tab, not a trace or CPU profile.",
     )

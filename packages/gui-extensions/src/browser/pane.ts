@@ -9,12 +9,20 @@ import type { Embeds, Persisted, ServerEndpoints, Storage, Windows } from "../sd
 import { createBrowserPage, type BrowserPage, type Shared } from "./chromium"
 import { browserFailure } from "./errors"
 import { createBrowserNetwork, type BrowserNetwork } from "./network"
+import { createPresenters } from "./presenter"
 import { destinationOrigin, fileURLWithin, refusal } from "./policy"
 import { createRefs } from "./refs"
 import type { PaneEvent } from "./ipc"
 import { createBrowserRestoreStore } from "./restore"
 
 type Target = { readonly server: string; readonly session: string; readonly restore?: Browser.State }
+
+type Answer =
+  | { readonly type: "previewed"; readonly opened: boolean; readonly reason: "queued" | "unavailable" | undefined }
+  | { readonly type: "handoff"; readonly done: boolean }
+
+/** Who asked for an action: the agent through the server, or the user through the pane's own controls. */
+type Origin = "agent" | "user"
 
 type Entry = {
   binding: string
@@ -23,6 +31,8 @@ type Entry = {
   abort: AbortController
   registered: ReturnType<typeof Promise.withResolvers<void>>
   requests: Map<string, { abort: AbortController; tabID?: Browser.TabID }>
+  /** The window's answers the agent waits for: preview acknowledgements and handoffs, by request ID. */
+  answers: Map<string, { tabID?: Browser.TabID; resolve: (value: Answer) => void }>
   report?: (event: PaneEvent) => void
   cleanup?: () => void
   pages: Map<Browser.TabID, BrowserPage>
@@ -53,6 +63,7 @@ export function createBrowserPane(input: {
   const entries = new Map<string, Entry>()
   const restore = createBrowserRestoreStore(input.storage)
   const shared: Shared = { ref: createRefs(input.refs) }
+  const presenters = createPresenters()
   // Page disposals in flight. Finishing a trace or CPU profile can hold a page open, and the pane's own disposal waits
   // for them so a replacement never starts beside old pages still recording.
   const releasing = new Set<Promise<void>>()
@@ -76,10 +87,16 @@ export function createBrowserPane(input: {
       const storageKey = `${target.server}\n${sessionID}`
       const saved = restore.load(storageKey)
 
-      const previous = target.restore ?? {
+      const previous: Browser.State = target.restore ?? {
         tabs: saved.tabs.map((tab) => ({
           ...tab,
+          // Tabs saved before tabs had owners were the user's.
+          owner: tab.owner ?? "user",
+          watched: false,
           title: "",
+          loading: false,
+          canGoBack: false,
+          canGoForward: false,
           generation: 0,
         })),
         focusedTabID: saved.focusedTabID,
@@ -92,6 +109,7 @@ export function createBrowserPane(input: {
         abort: new AbortController(),
         registered: Promise.withResolvers(),
         requests: new Map(),
+        answers: new Map(),
         pages: new Map(),
         tabs: new Map(
           previous.tabs.map((tab) => [
@@ -101,6 +119,7 @@ export function createBrowserPane(input: {
               loading: false,
               canGoBack: false,
               canGoForward: false,
+              watched: false,
               generation: tab.generation + 1,
             },
           ]),
@@ -281,7 +300,7 @@ export function createBrowserPane(input: {
               receive,
               Stream.fromQueue(outbound).pipe(Stream.runForEach((send) => send)),
               Deferred.await(connected).pipe(
-                Effect.andThen(rpc.attach({ ...attachment, version: 4 }, options)),
+                Effect.andThen(rpc.attach({ ...attachment, version: Browser.VERSION }, options)),
                 Effect.tap((result) =>
                   Effect.sync(() => {
                     if (result === "replaced") reason = "browser.pane.replaced"
@@ -341,7 +360,15 @@ export function createBrowserPane(input: {
       const reason = url === undefined ? undefined : refusal(url, { fileRoots: entry.fileRoots })
 
       if (reason) throw new Error(reason)
-      await execute(entry, { action: command, files: [] }, new AbortController().signal)
+      await execute(entry, { action: command, files: [] }, new AbortController().signal, "user")
+    },
+    /** The window opened the agent's preview, or queued it until the user returns to the session. */
+    previewed(window: number, binding: string, requestID: string, opened: boolean, reason?: "queued" | "unavailable") {
+      owned(window, binding).answers.get(requestID)?.resolve({ type: "previewed", opened, reason })
+    },
+    /** The user finished or dismissed the agent's handoff. */
+    handoff(window: number, binding: string, requestID: string, done: boolean) {
+      owned(window, binding).answers.get(requestID)?.resolve({ type: "handoff", done })
     },
     async close(window: number, binding: string) {
       const entry = owned(window, binding)
@@ -356,6 +383,7 @@ export function createBrowserPane(input: {
       disposed = true
       entries.forEach((entry) => close(entry, "browser.pane.suspended"))
       await Promise.all(releasing)
+      presenters.dispose()
       await runtime.dispose()
     },
   }
@@ -378,6 +406,7 @@ export function createBrowserPane(input: {
     entry.report = undefined
     entry.requests.forEach((request) => request.abort.abort())
     entry.requests.clear()
+    entry.answers.clear()
     const suspended = reason === "browser.pane.suspended"
 
     if (suspended) publishState(entry, reason)
@@ -469,6 +498,7 @@ export function createBrowserPane(input: {
     initialize = true,
     popupOptions?: Electron.BrowserWindowConstructorOptions,
     restore?: Browser.Tab,
+    kind: { readonly owner: Origin; readonly key?: string } = { owner: restore?.owner ?? "user", key: restore?.key },
   ) {
     if (!entry.network) throw new Error("Browser network is not ready; no tab was opened.")
     const id = restore?.id ?? Browser.TabID.make(`tab_${crypto.randomUUID()}`)
@@ -484,10 +514,29 @@ export function createBrowserPane(input: {
       initialize,
       restore,
       popupOptions,
+      owner: kind.owner,
+      key: kind.key,
+      viewport: restore?.viewport,
+      presenters,
       fileRoots: () => entry.fileRoots,
       shared,
       embeds: input.embeds,
       fail,
+      // A link the agent's tab opens in a new tab becomes another agent tab; the agent finds it in tabs.list.
+      open: (url, background) => {
+        const opened = create(entry, true, undefined, undefined, { owner: "agent" })
+
+        if (!background) focus(entry, opened.state().id)
+        void opened.ready
+          .then(() =>
+            opened.execute(
+              { action: { type: "navigate", tabID: opened.state().id, url }, files: [] },
+              new AbortController().signal,
+            ),
+          )
+          .then(() => publishState(entry))
+          .catch(() => undefined)
+      },
       publish: (error) => {
         if (entry.pages.has(id)) publishState(entry, error)
       },
@@ -528,7 +577,12 @@ export function createBrowserPane(input: {
     return page
   }
 
-  async function execute(entry: Entry, command: Browser.Command, signal: AbortSignal) {
+  async function execute(
+    entry: Entry,
+    command: Browser.Command,
+    signal: AbortSignal,
+    origin: Origin = "agent",
+  ): Promise<Browser.Result> {
     const action = command.action
 
     if (signal.aborted)
@@ -539,24 +593,78 @@ export function createBrowserPane(input: {
     if (action.type === "tabs.list") return { value: inventory(entry), files: [] }
 
     if (action.type === "preview") {
-      // The renderer owns file tabs; it resolves the path against the session's workspace.
-      report(entry, { type: "preview", path: action.path })
+      // The renderer owns file tabs; it resolves the path against the session's workspace and answers whether the
+      // preview opened now or waits for the user to return to the session.
+      const requestID = crypto.randomUUID()
 
-      return { value: { path: action.path }, files: [] }
+      const answer = await ask(entry, requestID, undefined, signal, 5_000, () =>
+        report(entry, { type: "preview", path: action.path, requestID }),
+      )
+
+      const opened = answer?.type === "previewed" ? answer : undefined
+
+      if (opened?.opened) return { value: { path: action.path, opened: true }, files: [] }
+
+      return {
+        value: {
+          path: action.path,
+          opened: false,
+          reason:
+            opened?.reason === "queued"
+              ? "The user is looking at another session; it opens when they return to this one."
+              : "No desktop window could show the preview.",
+        },
+        files: [],
+      }
     }
 
     if (action.type === "tabs.open") {
-      const page = create(entry)
+      const reused = action.key
+        ? Array.from(entry.pages.values()).find((page) => {
+            const tab = page.state()
+
+            return tab.key === action.key && tab.owner === "agent"
+          })
+        : undefined
+
+      const page = reused ?? create(entry, true, undefined, undefined, { owner: origin, key: action.key })
 
       if (action.focus !== false) focus(entry, page.state().id)
       await page.ready
-      await page.execute(
-        { action: { type: "navigate", tabID: page.state().id, url: action.url ?? "about:blank" }, files: [] },
-        signal,
-      )
-      publishState(entry)
+      const tabID = page.state().id
 
-      return { value: page.state(), files: [] }
+      if (action.viewport || action.colorScheme)
+        await page.execute(
+          {
+            action: { type: "emulate", tabID, viewport: action.viewport, colorScheme: action.colorScheme },
+            files: [],
+          },
+          signal,
+        )
+
+      // A reused tab already showing the page keeps its state.
+      const loaded =
+        reused && (action.url === undefined || reused.state().url === action.url)
+          ? { value: page.state(), files: [] }
+          : await page.execute(
+              {
+                action: {
+                  type: "navigate",
+                  tabID,
+                  url: action.url ?? "about:blank",
+                  waitUntil: action.waitUntil,
+                  timeoutMs: action.timeoutMs,
+                },
+                files: [],
+              },
+              signal,
+            )
+
+      publishState(entry)
+      const status = Schema.decodeUnknownSync(Schema.Struct({ status: Schema.optionalKey(Schema.Int) }))(loaded.value)
+      const tab = { ...page.state(), reused: reused !== undefined }
+
+      return { value: status.status === undefined ? tab : { ...tab, status: status.status }, files: [] }
     }
 
     const tab = inventory(entry).tabs.find((tab) => tab.id === action.tabID)
@@ -578,12 +686,58 @@ export function createBrowserPane(input: {
       return { value: inventory(entry), files: [] }
     }
 
+    if (action.type === "handoff") {
+      focus(entry, action.tabID)
+      const requestID = crypto.randomUUID()
+      const timeout = action.timeoutMs ?? 600_000
+
+      const answer = await ask(entry, requestID, action.tabID, signal, timeout, () =>
+        report(entry, { type: "handoff", tabID: action.tabID, requestID, reason: action.reason }),
+      )
+
+      // Timed out or cancelled: the window removes its prompt.
+      if (answer?.type !== "handoff") report(entry, { type: "handoff.end", requestID })
+      const current = inventory(entry).tabs.find((item) => item.id === action.tabID) ?? tab
+
+      if (answer?.type === "handoff" && answer.done) return { value: { tab: current, done: true }, files: [] }
+
+      return {
+        value: { tab: current, done: false, reason: answer?.type === "handoff" ? "dismissed" : "timeout" },
+        files: [],
+      }
+    }
+
     const page = entry.pages.get(action.tabID) ?? create(entry, true, undefined, tab)
     await page.ready
     const result = await page.execute(command, signal)
     publishState(entry)
 
     return result
+  }
+
+  /** Sends a question to the window and waits for its answer, the timeout, or cancellation. */
+  async function ask(
+    entry: Entry,
+    requestID: string,
+    tabID: Browser.TabID | undefined,
+    signal: AbortSignal,
+    timeoutMs: number,
+    send: () => void,
+  ) {
+    const answer = Promise.withResolvers<Answer | undefined>()
+    entry.answers.set(requestID, { tabID, resolve: answer.resolve })
+    const timer = setTimeout(() => answer.resolve(undefined), timeoutMs)
+    const cancel = () => answer.resolve(undefined)
+    signal.addEventListener("abort", cancel, { once: true })
+    send()
+
+    try {
+      return await answer.promise
+    } finally {
+      clearTimeout(timer)
+      signal.removeEventListener("abort", cancel)
+      entry.answers.delete(requestID)
+    }
   }
 
   function focus(entry: Entry, tabID: Browser.TabID) {

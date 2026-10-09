@@ -8,6 +8,9 @@ export type InspectEvent = Extract<PaneEvent, { type: "inspect" }>
 
 export type PageEvent = Extract<PaneEvent, { type: "page" }>
 
+/** The agent asking the user to act in a tab, or that request ending without the user. */
+export type HandoffEvent = Extract<PaneEvent, { type: "handoff" | "handoff.end" }>
+
 export type Zoom = "in" | "out" | "reset"
 
 export type Connection = ReturnType<typeof createConnection>
@@ -21,6 +24,10 @@ export type Registration = {
   zoom(tabID: Browser.TabID, zoom: Zoom): void
   site(tabID: Browser.TabID): Promise<{ cookies: number }>
   clearSite(tabID: Browser.TabID): Promise<void>
+  /** Answers the agent's preview: it opened, or why it did not. */
+  previewed(requestID: string, opened: boolean, reason?: "queued" | "unavailable"): void
+  /** Answers the agent's handoff: the user finished (done) or dismissed it. */
+  handoff(requestID: string, done: boolean): void
   close(): void
 }
 
@@ -52,7 +59,10 @@ export function createConnection(input: {
     close: (tabID: string) => void
   }
   focus: (tabID: Browser.TabID) => void
-  preview: (path: string) => void
+  /** The agent's preview; answer it through the current registration's `previewed` under the same request ID. */
+  preview: (path: string, requestID: string) => void
+  /** A handoff of the current registration started or ended; answer it through that registration's `handoff`. */
+  handoff: (event: HandoffEvent) => void
   inspect: (event: InspectEvent) => void
   /** A page's icon or zoom changed. */
   page: (event: PageEvent) => void
@@ -150,7 +160,9 @@ export function createConnection(input: {
 
         if (event.type === "focus") return input.focus(event.tabID)
 
-        if (event.type === "preview") return input.preview(event.path)
+        if (event.type === "preview") return input.preview(event.path, event.requestID)
+
+        if (event.type === "handoff" || event.type === "handoff.end") return input.handoff(event)
 
         if (event.type === "inspect") return input.inspect(event)
 
@@ -301,6 +313,16 @@ function open(
     },
     site: (tabID) => ready.then(() => client.site({ binding, tabID })),
     clearSite: (tabID) => ready.then(() => client.clearSite({ binding, tabID })),
+    previewed(requestID, opened, reason) {
+      if (status.closed) return
+      void ready
+        .then(() => client.previewed(reason ? { binding, requestID, opened, reason } : { binding, requestID, opened }))
+        .catch(() => undefined)
+    },
+    handoff(requestID, done) {
+      if (status.closed) return
+      void ready.then(() => client.handoff({ binding, requestID, done })).catch(() => undefined)
+    },
     close() {
       if (status.closed) return
       status.closed = true

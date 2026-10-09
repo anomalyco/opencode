@@ -1,9 +1,15 @@
 import { Browser } from "@opencode/plugin-browser/rpc"
 import type { Protocol } from "devtools-protocol"
+import { Predicate } from "effect"
 import type { Cdp } from "./cdp"
 
 type Request = {
   info: Browser.NetworkRequest
+  /** The document the request belongs to, and its order among every captured entry. */
+  generation: number
+  sequence: number
+  /** The last WebSocket frames, oldest first. */
+  frames: Browser.SocketFrame[]
   nativeID: string
   sessionID?: string
   /** Monotonic start; unknown for a WebSocket until its handshake is sent. */
@@ -24,8 +30,10 @@ const levels = ["debug", "info", "warning", "error"] as const
 // Values the model must not read; the header name still shows it was sent.
 const redacted: readonly string[] = ["cookie", "set-cookie", "authorization", "proxy-authorization"]
 
+type Message = { entry: Browser.ConsoleEntry; generation: number; sequence: number }
+
 export function createDiagnostics(cdp: Cdp) {
-  const messages: Browser.ConsoleEntry[] = []
+  const messages: Message[] = []
   const requests = new Map<string, Request>()
   // Chromium reuses one request ID across a redirect chain; every hop is retained in order.
   const hops = new Map<string, Request[]>()
@@ -35,6 +43,8 @@ export function createDiagnostics(cdp: Cdp) {
   const extra = new Map<string, { request?: Protocol.Network.Headers; response?: Wire }>()
   const scope = crypto.randomUUID()
   let sequence = 0
+  // Messages and requests outlive navigations, tagged with the document they belong to.
+  let generation = 0
   let droppedMessages = 0
   let droppedRequests = 0
 
@@ -44,16 +54,19 @@ export function createDiagnostics(cdp: Cdp) {
     timestampMs: number,
     source?: Browser.ConsoleEntry["source"],
   ) => {
-    messages.push({
-      id: `${scope}:${++sequence}`,
+    sequence++
+
+    const entry = {
+      id: `${scope}:${sequence}`,
       timestampMs,
       level,
       text: text.slice(0, 2_000),
       textTruncated: text.length > 2_000,
-      ...(source ? { source } : {}),
-    })
+    }
 
-    if (messages.length > 500) {
+    messages.push({ generation, sequence, entry: source ? { ...entry, source } : entry })
+
+    if (messages.length > 1_000) {
       messages.shift()
       droppedMessages++
     }
@@ -71,7 +84,7 @@ export function createDiagnostics(cdp: Cdp) {
             : "info",
       event.args
         .map((arg) =>
-          typeof arg.value === "string"
+          Predicate.isString(arg.value)
             ? arg.value
             : arg.value !== undefined
               ? JSON.stringify(arg.value)
@@ -118,7 +131,12 @@ export function createDiagnostics(cdp: Cdp) {
   ) => {
     const headers = trimHeaders(request.headers)
 
+    sequence++
+
     const entry: Request = {
+      generation,
+      sequence,
+      frames: [],
       nativeID,
       sessionID,
       started,
@@ -127,7 +145,7 @@ export function createDiagnostics(cdp: Cdp) {
       postDataTruncated: (request.postData?.length ?? 0) > 20_000,
       wire: { request: false, response: false },
       info: {
-        id: `${scope}:${++sequence}`,
+        id: `${scope}:${sequence}`,
         ...info,
         url: info.url.slice(0, 16_384),
         timestampMs: wallTime * 1000,
@@ -145,7 +163,7 @@ export function createDiagnostics(cdp: Cdp) {
     if (stashed?.response) responseInfo(entry, stashed.response)
     extra.delete(key)
 
-    if (requests.size > 500) {
+    if (requests.size > 1_000) {
       const first = requests.values().next().value
 
       if (first) {
@@ -281,6 +299,28 @@ export function createDiagnostics(cdp: Cdp) {
     responseInfo(request, { headers: event.response.headers, statusCode: event.response.status })
     finish(key, event.timestamp)
   })
+
+  const frame = (direction: Browser.SocketFrame["direction"]) =>
+    (
+      event: { requestId: string; timestamp: number; response: { opcode: number; payloadData: string } },
+      sessionID?: string,
+    ) => {
+      const request = latest(`${sessionID ?? ""}:${event.requestId}`)
+
+      if (!request) return
+      request.frames.push({
+        direction,
+        timestampMs: Date.now(),
+        opcode: event.response.opcode,
+        data: event.response.payloadData.slice(0, 2_000),
+        truncated: event.response.payloadData.length > 2_000,
+      })
+
+      if (request.frames.length > 50) request.frames.shift()
+    }
+
+  cdp.on("Network.webSocketFrameSent", frame("sent"))
+  cdp.on("Network.webSocketFrameReceived", frame("received"))
   cdp.on("Network.webSocketFrameError", (event, sessionID) =>
     finish(`${sessionID ?? ""}:${event.requestId}`, event.timestamp, event.errorMessage),
   )
@@ -296,15 +336,62 @@ export function createDiagnostics(cdp: Cdp) {
     finish(`${sessionID ?? ""}:${event.requestId}`, event.timestamp, event.errorText),
   )
 
+  // "navigation" (the current document), "start" (everything retained), or a cursor from an earlier result.
+  const since = (value: string | undefined) => {
+    if (value === undefined || value === "navigation") return (item: { generation: number }) => item.generation === generation
+
+    if (value === "start") return () => true
+
+    if (!/^\d+$/.test(value))
+      throw new Error(
+        'since must be "navigation", "start", or the cursor string from an earlier console or network.list result.',
+      )
+    const cursor = Number(value)
+
+    return (item: { sequence: number }) => item.sequence > cursor
+  }
+
   return {
-    clear() {
-      messages.length = 0
-      requests.clear()
+    /** A new document committed: later "navigation" reads start from here, earlier entries stay readable. */
+    navigated() {
+      generation++
       hops.clear()
       extra.clear()
-      droppedMessages = 0
-      droppedRequests = 0
     },
+    /** A cursor for entries captured from now on. */
+    mark: () => sequence,
+    /** Console errors, uncaught exceptions, and failed or erroring requests captured after a mark. */
+    errorsSince(mark: number) {
+      const logged = messages.flatMap((item) =>
+        item.sequence > mark && item.entry.level === "error" ? [item.entry.text.slice(0, 500)] : [],
+      )
+
+      const failed = Array.from(requests.values())
+        .filter(
+          (request) =>
+            request.sequence > mark &&
+            (request.info.state === "failed" ||
+              (request.info.statusCode !== undefined &&
+                request.info.statusCode >= 400 &&
+                request.info.resourceType !== "image")),
+        )
+        .map((request) =>
+          request.info.state === "failed"
+            ? `${request.info.method} ${request.info.url.slice(0, 300)} failed: ${request.info.failure}`
+            : `${request.info.method} ${request.info.url.slice(0, 300)} returned ${request.info.statusCode}`,
+        )
+
+      return [...logged, ...failed].slice(0, 20)
+    },
+    /** Requests of the current document still waiting for a response; long-lived streams do not count. */
+    pending: () =>
+      Array.from(requests.values()).filter(
+        (request) =>
+          request.generation === generation &&
+          request.info.state === "pending" &&
+          request.info.resourceType !== "websocket" &&
+          request.info.resourceType !== "eventsource",
+      ).length,
     async enable(sessionID?: string) {
       await cdp.send("Runtime.enable", {}, sessionID)
       await cdp.send("Log.enable", {}, sessionID)
@@ -315,23 +402,47 @@ export function createDiagnostics(cdp: Cdp) {
       )
     },
     console(input: Extract<Browser.Action, { type: "console" }>) {
-      const matching = messages.filter((entry) => levels.indexOf(entry.level) >= levels.indexOf(input.level ?? "info"))
+      const included = since(input.since)
+
+      const matching = messages.flatMap((item) =>
+        included(item) && levels.indexOf(item.entry.level) >= levels.indexOf(input.level ?? "debug")
+          ? [item.entry]
+          : [],
+      )
+
       const result = bounded(matching, input.limit ?? 100)
 
-      return { messages: result, truncated: matching.length > result.length, dropped: droppedMessages }
+      return {
+        messages: result,
+        cursor: String(sequence),
+        truncated: matching.length > result.length,
+        dropped: droppedMessages,
+      }
     },
     list(input: Extract<Browser.Action, { type: "network.list" }>) {
+      const included = since(input.since)
+
       const matching = Array.from(requests.values())
+        .filter((request) => included(request))
         .map((request) => request.info)
         .filter(
           (request) =>
             (!input.urlContains || request.url.includes(input.urlContains)) &&
-            (!input.resourceType || input.resourceType === request.resourceType),
+            (!input.resourceType || input.resourceType === request.resourceType) &&
+            (input.status === undefined ||
+              (input.status === "failed" && request.state === "failed") ||
+              (input.status === "pending" && request.state === "pending") ||
+              (input.status === "error" && request.statusCode !== undefined && request.statusCode >= 400)),
         )
 
       const result = bounded(matching, input.limit ?? 100)
 
-      return { requests: result, truncated: matching.length > result.length, dropped: droppedRequests }
+      return {
+        requests: result,
+        cursor: String(sequence),
+        truncated: matching.length > result.length,
+        dropped: droppedRequests,
+      }
     },
     info(id: string) {
       const request = requests.get(id)
@@ -402,6 +513,7 @@ export function createDiagnostics(cdp: Cdp) {
         headersTruncated: request.headersTruncated,
         requestBody,
         responseBody: await responseBody(),
+        frames: [...request.frames],
       }
     },
   }

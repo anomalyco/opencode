@@ -4,6 +4,10 @@ import { Browser } from "./rpc.js"
 import { Tool } from "@opencode/schema/tool"
 import { Effect } from "effect"
 
+export type Saved = { id: Browser.FileID; name: string; mime: string; bytes: number; path: string }
+
+const limit = `${Browser.MAX_FILE_BYTES / 1024 / 1024} MiB`
+
 // Files cross machines as bytes. Only this endpoint interprets its local paths.
 export const read = Effect.fn("BrowserFiles.read")((paths: readonly string[], directory: string) =>
   Effect.tryPromise({
@@ -19,7 +23,7 @@ export const read = Effect.fn("BrowserFiles.read")((paths: readonly string[], di
               throw new Error("Upload paths must name files, not directories. Select a server-local file.")
             if (stat.size > Browser.MAX_FILE_BYTES)
               throw new Error(
-                `Upload is ${stat.size} bytes; the limit is ${Browser.MAX_FILE_BYTES} bytes (5 MiB). Select a smaller file; do not retry the same upload.`,
+                `Upload is ${stat.size} bytes; the limit is ${Browser.MAX_FILE_BYTES} bytes (${limit}). Select a smaller file; do not retry the same upload.`,
               )
             return {
               id: Browser.FileID.make(`file_${crypto.randomUUID()}`),
@@ -34,7 +38,7 @@ export const read = Effect.fn("BrowserFiles.read")((paths: readonly string[], di
       )
       if (files.reduce((size, file) => size + file.data.byteLength, 0) > Browser.MAX_FILE_BYTES)
         throw new Error(
-          "The selected upload files exceed 5 MiB in total. Send fewer or smaller files; splitting them into one batch does not bypass the total limit.",
+          `The selected upload files exceed ${limit} in total. Send fewer or smaller files; splitting them into one batch does not bypass the total limit.`,
         )
       return files
     },
@@ -56,32 +60,64 @@ const types: Record<string, string> = {
   ".pdf": "application/pdf",
   ".zip": "application/zip",
   ".gz": "application/gzip",
+  ".mp4": "video/mp4",
+  ".webm": "video/webm",
+  ".mp3": "audio/mpeg",
+  ".wav": "audio/wav",
 }
 
-export const save = Effect.fn("BrowserFiles.save")((files: readonly Browser.File[]) =>
+/** Fails with a model-facing error when a path the agent named does not exist on the server. */
+export const exists = Effect.fn("BrowserFiles.exists")((input: string, directory: string) =>
   Effect.tryPromise({
     try: async () => {
-      if (files.length === 0) return []
-      if (files.reduce((size, file) => size + file.data.byteLength, 0) > Browser.MAX_FILE_BYTES)
-        throw new Error(
-          "Capture files exceed the 5 MiB total transfer limit. Use a smaller screenshot, a shorter trace/profile, or a smaller page for heap capture; do not retry the identical capture.",
-        )
-      const { mkdtemp, mkdir, writeFile } = await import("node:fs/promises")
-      const { join } = await import("node:path")
-      const { tmpdir } = await import("node:os")
-      const directory = await mkdtemp(join(tmpdir(), "opencode-browser-"))
-      return Promise.all(
-        files.map(async (file, index) => {
-          const name = captureName(file.name)
-          await mkdir(join(directory, String(index)))
-          const path = join(directory, String(index), name)
-          await writeFile(path, file.data, { flag: "wx" })
-          return { id: file.id, name: file.name, mime: file.mime, bytes: file.data.byteLength, path }
-        }),
-      )
+      const { stat } = await import("node:fs/promises")
+      const { resolve } = await import("node:path")
+      await stat(resolve(directory, input))
     },
-    catch: (error) => failure("save", error),
+    catch: (error) =>
+      new Tool.Error({
+        message: `Nothing exists at ${input} on the server, so there is nothing to show. Paths are server-local, relative to the workspace or absolute; check the path you wrote the file to.`,
+        error,
+      }),
   }),
+)
+
+/**
+ * Saves returned bytes on the server. With a destination, the single file goes to that path (parent folders are
+ * created); otherwise each file gets its own temporary directory.
+ */
+export const save = Effect.fn("BrowserFiles.save")(
+  (files: readonly Browser.File[], destination?: { path: string; directory: string }) =>
+    Effect.tryPromise({
+      try: async (): Promise<Saved[]> => {
+        if (files.length === 0) return []
+        if (files.reduce((size, file) => size + file.data.byteLength, 0) > Browser.MAX_FILE_BYTES)
+          throw new Error(
+            `Capture files exceed the ${limit} total transfer limit. Use a smaller screenshot, a shorter trace/profile, or a smaller page for heap capture; do not retry the identical capture.`,
+          )
+        const { mkdtemp, mkdir, writeFile } = await import("node:fs/promises")
+        const { dirname, join, resolve } = await import("node:path")
+        const { tmpdir } = await import("node:os")
+        if (destination) {
+          const file = files[0]!
+          const path = resolve(destination.directory, destination.path)
+          await mkdir(dirname(path), { recursive: true })
+          await writeFile(path, file.data)
+          return [{ id: file.id, name: file.name, mime: file.mime, bytes: file.data.byteLength, path }]
+        }
+        const directory = await mkdtemp(join(tmpdir(), "opencode-browser-"))
+        return Promise.all(
+          files.map(async (file, index) => {
+            const name = captureName(file.name)
+            await mkdir(join(directory, String(index)))
+            const path = join(directory, String(index), name)
+            await writeFile(path, file.data, { flag: "wx" })
+            return { id: file.id, name: file.name, mime: file.mime, bytes: file.data.byteLength, path }
+          }),
+        )
+      },
+      catch: (error) => failure("save", error),
+    }),
 )
 
 // `.`/`..` escape the per-file directory and Windows resolves device names such as CON.txt regardless of directory.
@@ -100,7 +136,7 @@ function failure(operation: "read" | "save", error: unknown) {
       : ""
   const recovery =
     operation === "save"
-      ? "The browser may have completed the capture, but no server-local export is confirmed. Check free space and write access on the server. Use browser.files.list({tabID}) and browser.files.get({tabID,fileID}) to retrieve an existing completed capture instead of repeating its browser action."
+      ? "The browser may have completed the capture, but no server-local export is confirmed. Check free space and write access on the server. Use browser.files.list({tabID}) and browser.files.get({tabID,id}) to retrieve an existing completed capture instead of repeating its browser action."
       : "Upload paths are on the server, not the desktop. Check that each path exists, is a file, and is readable on the server; correct paths or select smaller files before retrying."
   return new Tool.Error({
     message: `Cannot ${operation} browser files on the server. ${recovery} Details: ${code}${detail}`,

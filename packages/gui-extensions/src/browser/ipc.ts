@@ -25,9 +25,16 @@ export const PaneElement = Schema.Struct({
 
 export type PaneElement = typeof PaneElement.Type
 
+const request = text(128)
+
 export const PaneEvent = Schema.Union([
   Schema.Struct({ type: Schema.Literal("focus"), tabID: Browser.TabID }),
-  Schema.Struct({ type: Schema.Literal("preview"), path: text(2_048) }),
+  // The agent's browser.preview; the window answers with `previewed` under the same request ID.
+  Schema.Struct({ type: Schema.Literal("preview"), path: text(2_048), requestID: request }),
+  // The agent asks the user to act in a tab; the window answers with `handoff` under the same request ID.
+  Schema.Struct({ type: Schema.Literal("handoff"), tabID: Browser.TabID, requestID: request, reason: text(2_048) }),
+  // A handoff ended without the user: it timed out, was cancelled, or its tab closed.
+  Schema.Struct({ type: Schema.Literal("handoff.end"), requestID: request }),
   Schema.Struct({
     type: Schema.Literal("state"),
     state: Schema.NullOr(Browser.State),
@@ -90,6 +97,17 @@ export const BrowserPane = Ipc.define({
     },
     // Deletes the cookies the page's address can read and its origin's stored data, then reloads the page.
     clearSite: { input: Schema.Struct({ binding, tabID: Browser.TabID }) },
+    // The window opened the agent's preview, or names why it could not.
+    previewed: {
+      input: Schema.Struct({
+        binding,
+        requestID: request,
+        opened: Schema.Boolean,
+        reason: Schema.optionalKey(Schema.Literals(["queued", "unavailable"])),
+      }),
+    },
+    // The user finished (done) or dismissed the agent's handoff.
+    handoff: { input: Schema.Struct({ binding, requestID: request, done: Schema.Boolean }) },
     close: { input: Schema.Struct({ binding }) },
   },
   events: {
