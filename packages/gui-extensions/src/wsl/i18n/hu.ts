@@ -53,8 +53,5 @@ export default {
     "A(z) {{distro}} segédfolyamatának állapotellenőrzése {{timeout}} ms után időtúllépés miatt megszakadt",
   "error.commandTimeout": "A(z) {{command}} {{args}} parancs {{timeout}} ms után időtúllépés miatt megszakadt",
   "error.failedPort": "A port lekérése sikertelen",
-  "server.default": "Alapértelmezett",
-  "menu.default": "Beállítás alapértelmezettként",
-  "menu.defaultRemove": "Alapértelmezés eltávolítása",
   "menu.remove": "Eltávolítás",
 }

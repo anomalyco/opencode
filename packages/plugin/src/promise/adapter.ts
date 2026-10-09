@@ -3,7 +3,7 @@ import type { Rpc } from "@opencode/schema/rpc"
 import type { RpcCallOptions, RpcEventPayload } from "@opencode/client/promise/api"
 import { Effect, Schema, SchemaAST, Stream } from "effect"
 import type { Scope } from "effect"
-import { HttpApiEndpoint, HttpApiSchema } from "effect/unstable/httpapi"
+import { HttpApiEndpoint, HttpApiSchema } from "effect/http-api"
 import { define } from "../effect/plugin.js"
 import type { Plugin } from "./plugin.js"
 import type { Info } from "./tool.js"
@@ -356,6 +356,10 @@ export function fromPromise(plugin: Plugin) {
             get: adaptApiMethod(IntegrationEndpoints["integration.get"], host.integration.get),
             connect: {
               key: adaptApiMethod(IntegrationEndpoints["integration.connect.key"], host.integration.connect.key),
+              external: adaptApiMethod(
+                IntegrationEndpoints["integration.connect.external"],
+                host.integration.connect.external,
+              ),
             },
             oauth: {
               connect: adaptApiMethod(

@@ -5,10 +5,13 @@ story("keeps grouped file choices when the Used group reopens", async ({ mount }
   const group = root.locator('[data-component="collapsed-tool-group"]').filter({ hasText: "Patch" })
   const disclosure = group.getByRole("button", { name: /^Used \d+ .*Edit.*Write.*Patch$/ })
   await disclosure.click()
+
   const files = group.locator(
     '[data-timeline-part-ids="tool_family_edit,tool_family_write,tool_family_write_extra,tool_family_patch"] [data-slot="accordion-item"]',
   )
+
   await expect(files).toHaveCount(3)
+
   for (const file of await files.all()) {
     const trigger = file.locator('[data-slot="accordion-trigger"]')
     await expect(trigger).toHaveAttribute("aria-expanded", "false")
@@ -16,9 +19,11 @@ story("keeps grouped file choices when the Used group reopens", async ({ mount }
     await trigger.click()
     await expect(file.getByRole("region")).toBeVisible()
   }
+
   await disclosure.click()
   await disclosure.click()
   await expect(files).toHaveCount(3)
+
   for (const file of await files.all()) {
     await expect(file.locator('[data-slot="accordion-trigger"]')).toHaveAttribute("aria-expanded", "true")
     await expect(file.getByRole("region")).toBeVisible()
@@ -46,6 +51,7 @@ story.fail("empty writes still show a file row", async ({ mount }) => {
   const root = await mount("current-session-file-changes--file-tool-fallbacks", {
     args: { tool: "write", empty: true },
   })
+
   await root.getByRole("button", { name: "Complete file tool" }).click()
   const file = root.getByRole("button", { name: /example\.ts/ })
   await expect(file).toHaveAttribute("aria-expanded", "false")

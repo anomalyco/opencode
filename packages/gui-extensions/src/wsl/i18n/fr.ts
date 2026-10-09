@@ -52,8 +52,5 @@ export default {
     "La vérification de l'état du processus auxiliaire pour {{distro}} a dépassé le délai de {{timeout}} ms",
   "error.commandTimeout": "{{command}} {{args}} a dépassé le délai de {{timeout}} ms",
   "error.failedPort": "Impossible d'obtenir le port",
-  "server.default": "Défaut",
-  "menu.default": "Définir par défaut",
-  "menu.defaultRemove": "Ne plus utiliser par défaut",
   "menu.remove": "Supprimer",
 }

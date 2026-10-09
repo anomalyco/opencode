@@ -6,7 +6,7 @@ import { compileRequest } from "../src/route/client.js"
 import { AnthropicMessages } from "../src/protocols/anthropic-messages.js"
 import { OpenAIResponses } from "../src/protocols/openai-responses.js"
 import { Gemini } from "../src/protocols/gemini.js"
-import { GoogleVertexMessages, OpenAI } from "../src/providers.js"
+import { AmazonBedrockMantle, GoogleVertexMessages, OpenAI } from "../src/providers.js"
 import { applyEffortUpdates } from "../src/effort-updates.js"
 import { it, testEffect } from "./lib/effect.js"
 import { dynamicResponse } from "./lib/http.js"
@@ -171,6 +171,33 @@ describe("Anthropic Messages effort updates", () => {
     }),
   )
 
+  it.effect("releases a held system update next to an effort marker as one valid section", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: opus5,
+          messages: [
+            Message.user("Fix it."),
+            Message.assistant("Done."),
+            lowFromHigh,
+            Message.system("Update."),
+            Message.user("Next."),
+          ],
+          providerOptions: { effort: "low" },
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        { role: "user", content: [{ type: "text", text: "Fix it." }] },
+        { role: "assistant", content: [{ type: "text", text: "Done." }] },
+        { role: "system", content: [], output_config: { effort: "low" } },
+        { role: "user", content: [{ type: "text", text: "Next." }] },
+        { role: "system", content: [{ type: "text", text: "Update.", cache_control: undefined }] },
+      ])
+    }),
+  )
+
   it.effect("falls back to a plain top-level effort when history drifted from the current effort", () =>
     Effect.gen(function* () {
       const drifted = yield* compileRequest(
@@ -241,20 +268,69 @@ describe("Anthropic Messages effort updates", () => {
     }),
   )
 
-  it.effect("strips markers on the Vertex Anthropic route, whose protocol wrapper does not forward support", () =>
+  it.effect("strips markers when thinking is disabled or between_tools", () =>
     Effect.gen(function* () {
-      const prepared = yield* compileRequest(
+      const sonnet = anthropic("claude-sonnet-5-5")
+      const betweenTools = yield* compileRequest(
         LLM.request({
-          model: GoogleVertexMessages.configure({ accessToken: "test", location: "global", project: "test" }).model(
-            "claude-opus-5",
-          ),
+          model: sonnet,
+          messages: conversation,
+          providerOptions: { thinking: { type: "between_tools" }, effort: "low" },
+        }),
+      )
+
+      expect(systemMessages(betweenTools.body)).toHaveLength(0)
+      expect(betweenTools.body.output_config).toEqual({ effort: "low" })
+    }),
+  )
+
+  it.effect("strips markers for Opus 5.0 on Bedrock Mantle Messages while lowering Opus 5.5", () =>
+    Effect.gen(function* () {
+      const mantle = AmazonBedrockMantle.configure({ apiKey: "test", region: "us-east-1" })
+      const opus50 = yield* compileRequest(
+        LLM.request({
+          model: mantle.messages("anthropic.claude-opus-5"),
+          messages: conversation,
+          providerOptions: { effort: "low" },
+        }),
+      )
+      const opus55 = yield* compileRequest(
+        LLM.request({
+          model: mantle.messages("anthropic.claude-opus-5-5"),
           messages: conversation,
           providerOptions: { effort: "low" },
         }),
       )
 
-      expect(systemMessages(prepared.body)).toHaveLength(0)
-      expect(prepared.body.output_config).toEqual({ effort: "low" })
+      expect(systemMessages(opus50.body)).toHaveLength(0)
+      expect(opus50.body.output_config).toEqual({ effort: "low" })
+      expect(systemMessages(opus55.body)).toEqual([{ role: "system", content: [], output_config: { effort: "low" } }])
+      expect(opus55.body.output_config).toEqual({ effort: "high" })
+    }),
+  )
+
+  it.effect("lowers markers on the Vertex Anthropic route for models that support them", () =>
+    Effect.gen(function* () {
+      const vertex = GoogleVertexMessages.configure({ accessToken: "test", location: "global", project: "test" })
+      const opus5 = yield* compileRequest(
+        LLM.request({
+          model: vertex.model("claude-opus-5"),
+          messages: conversation,
+          providerOptions: { effort: "low" },
+        }),
+      )
+      const opus48 = yield* compileRequest(
+        LLM.request({
+          model: vertex.model("claude-opus-4-8"),
+          messages: conversation,
+          providerOptions: { effort: "low" },
+        }),
+      )
+
+      expect(systemMessages(opus5.body)).toEqual([{ role: "system", content: [], output_config: { effort: "low" } }])
+      expect(opus5.body.output_config).toEqual({ effort: "high" })
+      expect(systemMessages(opus48.body)).toHaveLength(0)
+      expect(opus48.body.output_config).toEqual({ effort: "low" })
     }),
   )
 })

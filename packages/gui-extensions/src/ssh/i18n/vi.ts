@@ -37,8 +37,5 @@ export default {
   "form.name": "Tên máy chủ (tùy chọn)",
   "form.namePlaceholder": "Máy chủ cục bộ",
   "form.add": "Thêm máy chủ",
-  "server.default": "Mặc định",
-  "menu.default": "Đặt làm mặc định",
-  "menu.defaultRemove": "Xóa mặc định",
   "menu.delete": "Xóa",
 }

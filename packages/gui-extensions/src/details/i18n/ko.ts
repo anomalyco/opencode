@@ -3,8 +3,6 @@ export default {
   tooltip: "요약",
   "command.toggle": "요약 전환",
   noBranch: "브랜치 없음",
-  "background.tasksRunning.one": "{{count}} 백그라운드 작업 실행 중",
-  "background.tasksRunning.other": "{{count}}개의 백그라운드 작업 실행 중",
   "move.title": "작업 공간으로 이동",
   "move.menu": "세션 이동 위치",
   "move.failed": "세션 이동 실패",

@@ -73,6 +73,7 @@ import { SessionTabs } from "./component/session-tabs"
 import { clampSessionTabsWidth, sessionTabsFitVertically, SESSION_SIDEBAR_WIDTH } from "./ui/layout"
 import { createPaneResize } from "./ui/pane-resize"
 import { PaneResizeHandle } from "./ui/pane-resize-handle"
+import { clickedLink } from "./ui/link"
 import { ThemeErrorToast } from "./component/theme-error-toast"
 import { createThemeSource, ThemeProvider, useTheme, useThemes } from "./context/theme"
 import { Home } from "./routes/home"
@@ -1331,9 +1332,11 @@ function App() {
         evt.preventDefault()
         evt.stopPropagation()
       }}
-      onMouseUp={
-        copyOnSelectEnabled() ? (event) => Selection.copyOnSelectRelease(event, renderer, toast, clipboard) : undefined
-      }
+      onMouseUp={(event) => {
+        const url = clickedLink(renderer, event)
+        if (url) return void openUrl(url).catch(toast.error)
+        if (copyOnSelectEnabled()) Selection.copyOnSelectRelease(event, renderer, toast, clipboard)
+      }}
     >
       <box
         flexGrow={1}

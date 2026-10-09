@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { Context, DateTime, Effect, Stream } from "effect"
-import { HttpClient, HttpClientResponse } from "effect/unstable/http"
+import { HttpClient, HttpClientResponse } from "effect/http"
 import {
   AbsolutePath,
   Agent,

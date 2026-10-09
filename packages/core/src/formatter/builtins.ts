@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { ChildProcess } from "effect/unstable/process"
+import { ChildProcess } from "effect/process"
 import path from "path"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Npm } from "@opencode/util/npm"

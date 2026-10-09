@@ -3,8 +3,6 @@ export default {
   tooltip: "Összegzés",
   "command.toggle": "Összegzés váltása",
   noBranch: "Nincs ág",
-  "background.tasksRunning.one": "{{count}} háttérfeladat fut",
-  "background.tasksRunning.other": "{{count}} háttérfeladatok futnak",
   "move.title": "Áthelyezés munkaterületre",
   "move.menu": "Munkamenet áthelyezése ide:",
   "move.failed": "Nem sikerült áthelyezni a munkamenetet",

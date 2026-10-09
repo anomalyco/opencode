@@ -6,7 +6,7 @@ import type {
 } from "@agentclientprotocol/sdk"
 import type { OpenCodeClient } from "@opencode/client/effect"
 import { Form } from "@opencode/schema/form"
-import { Cause, Effect, Option, Schema } from "effect"
+import { Effect, Option, Schema } from "effect"
 import type { Capabilities } from "./capabilities"
 import { ACPChild } from "./child"
 import { ACPClient } from "./client"
@@ -30,27 +30,7 @@ type Input = {
   readonly clientSessionID: string
   readonly child?: ACPChild.Session
   readonly toolCallSent: boolean
-  readonly settled: Effect.Effect<void>
 }
-
-type Outcome = Form.Answer | "cancel" | "settled"
-
-export const reply = Effect.fn("cli.acp.elicitation.reply")(function* (input: Input, cancelled: Effect.Effect<void>) {
-  yield* Effect.uninterruptibleMask((restore) =>
-    // The race starts racers in order and stops once one is done, so an earlier cancel never starts the ask.
-    restore(
-      cancelled.pipe(
-        Effect.as("cancel" as const),
-        Effect.raceFirst(input.settled.pipe(Effect.as("settled" as const))),
-        Effect.raceFirst(ask(input)),
-      ),
-    ).pipe(
-      Effect.tapCauseIf(Cause.hasDies, (cause) => Effect.logWarning("ACP elicitation failed", cause)),
-      Effect.catchCause(() => Effect.succeed("cancel" as const)),
-      Effect.flatMap((outcome) => respond(input, outcome)),
-    ),
-  )
-})
 
 export const UnshownQuestionMessage =
   "The question couldn't be shown to the user in this client. Continue without an answer: make reasonable assumptions and state them, or ask the user in your reply if you can't proceed."
@@ -103,7 +83,7 @@ function answer(form: AskedForm, response: CreateElicitationResponse): Form.Answ
   )
 }
 
-const ask = Effect.fnUntraced(function* (input: Input) {
+export const ask = Effect.fnUntraced(function* (input: Input) {
   const source = input.toolCallSent ? Schema.decodeUnknownOption(ToolSource)(input.form.metadata) : Option.none()
   const toolCallID = Option.getOrUndefined(Option.map(source, (metadata) => metadata.tool.id))
   const response = yield* input.connection.createElicitation({
@@ -116,8 +96,7 @@ const ask = Effect.fnUntraced(function* (input: Input) {
   return answer(input.form, response) ?? "cancel"
 })
 
-function respond(input: Input, outcome: Outcome) {
-  if (outcome === "settled") return Effect.void
+export function respond(input: Input, outcome: Form.Answer | "cancel") {
   if (outcome === "cancel") return cancel(input.client, input.form)
   return input.client.session.form
     .reply({ sessionID: input.form.sessionID, formID: input.form.id, answer: outcome })

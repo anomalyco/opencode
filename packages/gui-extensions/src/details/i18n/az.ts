@@ -3,8 +3,6 @@ export default {
   tooltip: "Xülasə",
   "command.toggle": "Xülasəni dəyişdirin",
   noBranch: "Branch yoxdur",
-  "background.tasksRunning.one": "{{count}} arxa plan tapşırığı işləyir",
-  "background.tasksRunning.other": "{{count}} arxa plan tapşırığı işləyir",
   "move.title": "İş sahəsinə köçür",
   "move.menu": "Sessiyanı buraya köçür",
   "move.failed": "Sessiyanı köçürmək mümkün olmadı",

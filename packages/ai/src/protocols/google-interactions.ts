@@ -33,7 +33,7 @@ const Options = Schema.Struct({
   store: lenient(Schema.Boolean),
   thinkingLevel: lenient(ThinkingLevel),
   thinkingSummaries: lenient(knownString<"auto" | "none">()),
-  serviceTier: lenient(knownString<"standard" | "flex" | "priority">()),
+  serviceTier: lenient(knownString<"standard" | "flex" | "priority" | "deferred">()),
 })
 export type OptionsInput = typeof Options.Encoded
 export type ProviderOptionsInput = OptionsInput
@@ -182,7 +182,7 @@ type StepResult = readonly [ParserState, ReadonlyArray<LLMEvent>]
 // =============================================================================
 // Request Body Construction
 // =============================================================================
-const mediaContent = Effect.fn("GoogleInteractions.mediaContent")(function* (asset: Media.Asset) {
+const mediaContent = Effect.fnUntraced(function* (asset: Media.Asset) {
   if (
     asset.kind !== "image" &&
     asset.kind !== "audio" &&
@@ -208,7 +208,7 @@ const signature = (metadata: ProviderMetadata | undefined, key: string) => {
     : undefined
 }
 
-const lowerMessages = Effect.fn("GoogleInteractions.lowerMessages")(function* (request: LLMRequest) {
+const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest) {
   const steps: InputStep[] = []
   const key = request.model.route.providerMetadataKey ?? String(request.model.provider)
   for (const message of request.messages) {
@@ -275,7 +275,7 @@ const lowerMessages = Effect.fn("GoogleInteractions.lowerMessages")(function* (r
   return steps
 })
 
-const lowerToolResult = Effect.fn("GoogleInteractions.lowerToolResult")(function* (part: ToolResultPart) {
+const lowerToolResult = Effect.fnUntraced(function* (part: ToolResultPart) {
   if (part.result.type === "json" && ProviderShared.isRecord(part.result.value)) return part.result.value
   if (part.result.type !== "content") return ProviderShared.toolResultText(part)
 
@@ -364,7 +364,7 @@ const mapUsage = (usage: RawUsage | undefined, key: string) => {
   })
 }
 
-const onStart = Effect.fn("GoogleInteractions.onStart")(function* (
+const onStart = Effect.fnUntraced(function* (
   state: ParserState,
   index: number,
   step: OutputStep,
@@ -402,7 +402,7 @@ const onStart = Effect.fn("GoogleInteractions.onStart")(function* (
   return [{ ...state, lifecycle, tools, steps: { ...state.steps, [index]: step } }, events] satisfies StepResult
 })
 
-const onDelta = Effect.fn("GoogleInteractions.onDelta")(function* (
+const onDelta = Effect.fnUntraced(function* (
   state: ParserState,
   index: number,
   delta: typeof Delta.Type,
@@ -447,7 +447,7 @@ const onDelta = Effect.fn("GoogleInteractions.onDelta")(function* (
   return yield* ProviderShared.eventError(ADAPTER, `Unsupported Interactions delta: ${delta.type}`, encodeJson(delta))
 })
 
-const onStop = Effect.fn("GoogleInteractions.onStop")(function* (state: ParserState, index: number) {
+const onStop = Effect.fnUntraced(function* (state: ParserState, index: number) {
   const step = state.steps[index]
   if (!step) return yield* ProviderShared.eventError(ADAPTER, "Interactions step.stop without step.start")
   const events: LLMEvent[] = []
@@ -465,7 +465,7 @@ const onStop = Effect.fn("GoogleInteractions.onStop")(function* (state: ParserSt
   return [{ ...state, tools: result.tools }, result.events ?? []] satisfies StepResult
 })
 
-const step = Effect.fn("GoogleInteractions.step")(function* (state: ParserState, event: Event) {
+const step = Effect.fnUntraced(function* (state: ParserState, event: Event) {
   switch (event.event_type) {
     case "step.start":
       return yield* onStart(state, event.index, event.step)

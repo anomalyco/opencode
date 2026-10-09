@@ -5,6 +5,7 @@ import type { SettingsRootTab } from "./surface"
 
 export function useSettingsDialog(defaultValue?: SettingsRootTab) {
   const settings = useSettingsSurface()
+
   return () => settings.open(defaultValue)
 }
 

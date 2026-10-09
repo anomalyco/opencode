@@ -286,9 +286,6 @@ export const dict = {
   "dialog.server.add.passwordPlaceholder": "parol",
   "dialog.server.edit.title": "Serweri redaktirläň",
   "dialog.server.menu.edit": "Redaktirläň",
-  "dialog.server.menu.default": "Dymmaklyk hökmünde düzüň",
-  "dialog.server.menu.defaultRemove": "Dymmaklygy aýyryň",
-  "dialog.server.status.default": "Bellenen",
   "dialog.project.edit.title": "Taslamany redaktirläň",
   "dialog.project.edit.icon": "Nyşan",
   "dialog.project.edit.icon.alt": "Taslamanyň nyşany",
@@ -791,7 +788,6 @@ export const dict = {
   "server.connect.button": "Birikdiriň",
   "server.connect.address.invalid": "Dogry HTTP ýa-da HTTPS serwer salgysyny giriziň.",
   "server.connect.failed": "Birikip bilmedim Serweriň salgysyny we parolyny barlaň, soňra gaýtadan synanyşyň.",
-  "server.connect.pair.description": "Baglanyş maglumatlaryňyzy almak üçin bu buýrugy kompýuteriňizde işlediň.",
   "server.connect.scan": "QR koduny skanirläň",
   "server.connect.scan.description": "Kamerany opencode pair görkezýän QR koda gönükdiriň.",
   "server.connect.scan.invalid": "Bu OpenCode jübütleme kody däl. opencode pair görkezýän kody skanirläň.",
@@ -799,7 +795,6 @@ export const dict = {
   "server.connect.camera.starting": "Kamerany açmak…",
   "server.connect.mixedContent":
     "Bu HTTP serwerine HTTPS sahypasyndan birigip bilmedim. Munuň ýerine HTTPS serwer salgysyny ulanyň.",
-  "server.connect.camera.insecure": "QR gözlemek bu sahypany HTTPS ýa-da ýerlihostda açmagy talap edýär.",
   "server.connect.camera.unavailable": "Bu brauzerde kamera ýok. Birikdiriş maglumatlaryňyzy el bilen giriziň.",
   "server.connect.camera.error":
     "Kamerany açyp bolmady Kamera girmegine rugsat beriň ýa-da baglanyşyk maglumatlaryňyzy el bilen giriziň.",

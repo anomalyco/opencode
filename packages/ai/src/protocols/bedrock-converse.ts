@@ -1,4 +1,5 @@
-import { Effect, Encoding, Schema } from "effect"
+import { Effect, Schema } from "effect"
+import { Base64 } from "effect/encoding"
 import { Route } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Protocol } from "../route/protocol.js"
@@ -285,7 +286,7 @@ const lowerToolCall = (part: ToolCallPart, normalizeID: (id: string) => string):
   },
 })
 
-const lowerToolResultContent = Effect.fn("BedrockConverse.lowerToolResultContent")(function* (
+const lowerToolResultContent = Effect.fnUntraced(function* (
   part: ToolResultPart,
   documentNames: Set<string>,
 ) {
@@ -305,7 +306,7 @@ const lowerToolResultContent = Effect.fn("BedrockConverse.lowerToolResultContent
   return content
 })
 
-const lowerToolResult = Effect.fn("BedrockConverse.lowerToolResult")(function* (
+const lowerToolResult = Effect.fnUntraced(function* (
   part: ToolResultPart,
   documentNames: Set<string>,
   normalizeID: (id: string) => string,
@@ -322,7 +323,7 @@ const lowerToolResult = Effect.fn("BedrockConverse.lowerToolResult")(function* (
 // Keep Claude and Nova tool-result images inline; put other models' images beside the result.
 const keepToolImagesInline = (id: string) => id.includes("anthropic.claude-") || id.includes("amazon.nova-")
 
-const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (
+const lowerMessages = Effect.fnUntraced(function* (
   request: LLMRequest,
   breakpoints: BedrockCache.Breakpoints,
 ) {
@@ -476,7 +477,9 @@ const MIN_THINKING_BUDGET = 1_024
 
 const isThinkingDisabled = Schema.is(
   Schema.Struct({
-    additionalModelRequestFields: Schema.Struct({ thinking: Schema.Struct({ type: Schema.Literal("disabled") }) }),
+    additionalModelRequestFields: Schema.Struct({
+      thinking: Schema.Struct({ type: Schema.Literals(["disabled", "between_tools"]) }),
+    }),
   }),
 )
 
@@ -610,7 +613,7 @@ interface ParserState {
   readonly reasoningRedactedContent: Readonly<Record<number, Uint8Array[]>>
 }
 
-const encodeRedactedContent = (chunks: ReadonlyArray<Uint8Array>) => Encoding.encodeBase64(concatBytes(chunks))
+const encodeRedactedContent = (chunks: ReadonlyArray<Uint8Array>) => Base64.encode(concatBytes(chunks))
 
 const step = (state: ParserState, event: BedrockEvent) =>
   Effect.gen(function* () {
@@ -659,7 +662,7 @@ const step = (state: ParserState, event: BedrockEvent) =>
       const events: LLMEvent[] = []
       const redactedChunk = yield* (() => {
         if (reasoning.redactedContent === undefined) return Effect.succeed(undefined)
-        return Effect.fromResult(Encoding.decodeBase64(reasoning.redactedContent)).pipe(
+        return Effect.fromResult(Base64.decode(reasoning.redactedContent)).pipe(
           Effect.mapError((cause) =>
             ProviderShared.eventError(
               ADAPTER,

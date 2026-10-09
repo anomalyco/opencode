@@ -1,6 +1,6 @@
 import type { OpenCodeEvent, SessionMessageInfo } from "@opencode/client/promise"
 import { timelinePresets } from "@opencode/session-ui/timeline/detail"
-import { expect, test, type Page } from "@playwright/test"
+import { expect, test, type Locator, type Page } from "@playwright/test"
 import { expectPath, SERVER, sessionHref } from "../utils/app"
 import { currentSession } from "../utils/mock-server"
 import { assistantMessage, session, sessionID, setupTimeline, textPart, userMessage } from "../utils/timeline"
@@ -8,17 +8,28 @@ import { expectSessionTitle } from "../utils/waits"
 import { mockWorkspace } from "../utils/workspace"
 
 const directory = "C:/OpenCode/SubagentNavigation"
+
 const projectID = "proj_subagentnavigation"
+
 const serverPort = new URL(SERVER).port
+
 const parentID = "ses_subagent_parent"
+
 const childID = "ses_subagent_child"
+
 const grandchildID = "ses_subagent_grandchild"
+
 const greatGrandchildID = "ses_subagent_great_grandchild"
+
 const parentTitle = "Parent session"
+
 const childTitle = "Subagent child session"
+
 const grandchildTitle = "Nested subagent session"
+
 const greatGrandchildTitle =
   "Deep research subagent session investigating a very long chain of agent registry failures and navigation breadcrumbs"
+
 // Child session pages derive their heading from the task part that spawned them.
 const taskDescription = "Inspect child navigation"
 
@@ -36,6 +47,32 @@ test("navigates to a subagent child session missing from the session list", asyn
   // Escape returns to the parent session.
   await page.keyboard.press("Escape")
   await Promise.all([expect(page).toHaveURL(sessionHref(parentID)), expectSessionTitle(page, parentTitle)])
+})
+
+test("keeps the parent title anchored when opening a subagent", async ({ page }) => {
+  await setup(page)
+
+  for (const direction of ["ltr", "rtl"] as const) {
+    await page.goto(sessionHref(parentID))
+    await page.evaluate((direction) => (document.documentElement.dir = direction), direction)
+    await expectSessionTitle(page, parentTitle)
+
+    const start = await titleInlineStart(page.locator("[data-session-title]").getByRole("heading", { name: parentTitle }))
+
+    await page.getByRole("button", { name: "Used 1 Agent", exact: true }).click()
+    await page.locator(`a[href="${sessionHref(childID)}"]`).click()
+    await expectSessionTitle(page, taskDescription)
+
+    const breadcrumb = page.locator('[data-slot="session-title-parent"]')
+
+    await expect(breadcrumb).toHaveText(parentTitle)
+    await expect.poll(() => titleInlineStart(breadcrumb)).toBeCloseTo(start, 0)
+    await breadcrumb.click()
+    await expectSessionTitle(page, parentTitle)
+    await expect
+      .poll(() => titleInlineStart(page.locator("[data-session-title]").getByRole("heading", { name: parentTitle })))
+      .toBeCloseTo(start, 0)
+  }
 })
 
 test("navigates from a running subagent card and hides background controls in the child", async ({ page }) => {
@@ -200,6 +237,7 @@ test("keeps the parent tab selected while a loaded child session resolves", asyn
   const parentTab = page.locator("[data-titlebar-tab-slot]", {
     has: page.locator('[data-slot="tab-title"]', { hasText: parentTitle }),
   })
+
   await page.locator(`a[href="${sessionHref(childID)}"]`).click()
   await Promise.all([requested.promise, expect(page).toHaveURL(sessionHref(childID))])
   await Promise.all([
@@ -316,6 +354,19 @@ async function setup(page: Page, events?: () => OpenCodeEvent[], nestedDepth: 0 
       }),
   )
 }
+
+function titleInlineStart(title: Locator) {
+  return title.evaluate((element) => {
+    const range = document.createRange()
+
+    range.selectNodeContents(element)
+
+    const bounds = range.getBoundingClientRect()
+
+    return document.documentElement.dir === "rtl" ? bounds.right : bounds.left
+  })
+}
+
 async function openChildFromParent(page: Page) {
   await page.goto(sessionHref(parentID))
   await expectSessionTitle(page, parentTitle)
@@ -331,6 +382,7 @@ async function openChildFromParent(page: Page) {
 function parentMessages(): SessionMessageInfo[] {
   const userID = "msg_user_0001"
   const assistantID = "msg_assistant_0001"
+
   return [
     {
       id: userID,

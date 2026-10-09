@@ -66,7 +66,7 @@ function PreparingSession(props: { sessionID: string; pending: PendingSession })
       >
         <div data-component="session-preparing" data-workspace-session class="min-h-0 flex-1 overflow-y-auto">
           <SessionIdentityHeader sessionID={props.sessionID} />
-          <div class="mx-auto w-full min-w-0 max-w-[1000px] px-4 pb-5 md:px-5">
+          <div class="mx-auto w-full min-w-0 px-4 pb-5 md:max-w-session md:px-6">
             <SessionUserMessage
               sessionID={props.sessionID}
               message={props.pending.message}
@@ -139,7 +139,7 @@ function ResolvedTargetSessionRoute() {
     >
       <Show when={directory()} fallback={<PendingSessionState sessionID={params.id} />}>
         {(value) => (
-          <LocationProvider directory={value}>
+          <LocationProvider directory={value()}>
             <SessionUIProvider directory={value()} server={server.key}>
               <TargetSessionPage />
             </SessionUIProvider>
@@ -160,7 +160,7 @@ function PendingSessionState(props: { sessionID: string }) {
 
 function SessionStatePanel(props: ParentProps) {
   return (
-    <div class="flex min-h-0 flex-1 px-2 pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]">
+    <div class="flex min-h-0 flex-1 px-[var(--shell-inline-inset,8px)] pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]">
       <SessionPanelFrame raised>{props.children}</SessionPanelFrame>
     </div>
   )

@@ -1,0 +1,111 @@
+---
+title: "Providers API"
+description: "Call the providers connected to your workspace through the Console gateway with a Console key."
+---
+
+Every [provider](/console/providers) connected to your workspace is served through the Console gateway at its own
+URL. OpenCode uses it automatically after `/connect`; call it directly to use the same providers from your own tools.
+Console adds the provider credential before forwarding, so the provider secret never leaves the workspace.
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "deepseek-chat",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+## Provider URL
+
+Copy the **Console API URL** from the provider's page under **Providers**.
+
+```text
+https://opencode.ai/inference/custom/<connection_id>
+```
+
+## Authentication
+
+Replace `<token>` with a [service account key](/console/api#service-accounts) created in Console. Console swaps it for
+the connection's credential before forwarding.
+
+```text
+Authorization: Bearer <token>
+```
+
+Console also reads the key from `x-api-key`, `api-key`, or `x-goog-api-key`, so provider SDKs work when pointed at the
+Console API URL.
+
+## Endpoints
+
+Append the provider's API path to the Console API URL. Console forwards the request to the connection's base URL and
+returns the provider response unchanged.
+
+| Format               | Path                              |
+| -------------------- | --------------------------------- |
+| Chat Completions     | `/chat/completions`               |
+| Responses API        | `/responses`                      |
+| Anthropic Compatible | `/messages`                       |
+| Google Generative AI | `/models/<model>:generateContent` |
+
+Send the model ID as it appears on the provider page. When a model has a different API ID upstream, Console rewrites it.
+Requests for models that are not enabled on the connection are rejected.
+
+### Chat Completions
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "deepseek-chat",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### Responses API
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../responses" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-5.4",
+    "input": "Say hi"
+  }'
+```
+
+### Anthropic Compatible
+
+`max_tokens` is required.
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../messages" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "claude-sonnet-4-6",
+    "max_tokens": 1024,
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### Google Generative AI
+
+The model and method are part of the path. Replace `:generateContent` with `:streamGenerateContent` to stream the
+response.
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../models/gemini-3.1-pro:generateContent" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [{ "parts": [{ "text": "Say hi" }] }]
+  }'
+```
+
+## Usage
+
+Requests count toward [budgets](/console/budgets) using the pricing set on each model. The provider
+bills you for the tokens.

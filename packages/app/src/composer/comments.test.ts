@@ -84,7 +84,9 @@ describe("comments session indexing", () => {
 
       comments.setFocus({ file: "a.ts", id: "a1" })
       comments.setActive({ file: "a.ts", id: "a1" })
+
       if (action === "replace") comments.replace([line("b.ts", "b1", 30)])
+
       if (action === "clear") comments.clear()
 
       expect(comments.list("a.ts")).toEqual([])

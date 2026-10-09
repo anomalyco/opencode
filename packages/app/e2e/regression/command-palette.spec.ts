@@ -38,6 +38,16 @@ test("home commands do not wait for session search", async ({ page }) => {
   release.resolve()
 })
 
+test("lists recent sessions before a query is entered", async ({ page }) => {
+  const { dialog } = await openCommandPalette(page, true)
+  const session = dialog.getByRole("option", { name: /Palette fixture session/ })
+  await expect(dialog.getByText("Recent sessions", { exact: true })).toBeVisible()
+  await expect(session).toHaveAttribute("aria-selected", "false")
+  await session.click()
+  await expect(dialog).toHaveCount(0)
+  await expect(page.getByRole("heading", { name: paletteSession.title, exact: true })).toBeVisible()
+})
+
 test("appends search results without resetting the selected command", async ({ page }) => {
   const { dialog, input } = await openCommandPalette(page)
   const files = Promise.withResolvers<void>()
@@ -139,11 +149,13 @@ test("navigation replaces commands without retaining disposed owners", async ({ 
   const tabs = page.locator("[data-titlebar-tab-link]")
   await tabs.filter({ hasText: paletteSession.title }).click()
   await expect(page.getByRole("heading", { name: paletteSession.title, exact: true })).toBeVisible()
+
   for (const count of [3, 4]) {
     await page.getByRole("button", { name: "New session", exact: true }).click()
     await expect(tabs).toHaveCount(count)
     await expect(editor).toBeEditable()
   }
+
   await page.setViewportSize({ width: 600, height: 800 })
   await page.locator('[data-slot="mobile-tabs-trigger"]').click()
   await expect(page.locator('[data-slot="mobile-tabs-drawer"] [data-titlebar-tab-link]')).toHaveCount(4)

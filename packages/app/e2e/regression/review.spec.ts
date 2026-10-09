@@ -833,6 +833,32 @@ test("a chosen mode the session stops offering shows as Git, and comes back when
   await expect(file).toHaveText("beta.ts")
 })
 
+test("names a single change source and keeps the review header rows at 48px", async ({ page }) => {
+  // Turn changes are offered only for Git, so another VCS offers one source.
+  await openSession(page, { name: "ReviewHeader", project: { vcs: "hg" }, vcsDiff: [fileDiff("src/alpha.ts")] })
+  await page.getByRole("button", { name: "Toggle review", exact: true }).click()
+  const panel = page.locator("#review-panel")
+  const toggle = panel.getByRole("button", { name: "Toggle file tree" })
+  const header = panel.locator('[data-slot="session-review-v2-sidebar-header"]')
+  const toolbar = panel.locator('[data-slot="session-review-v2-toolbar"]')
+
+  await expect(header.getByText("Git changes", { exact: true })).toBeVisible()
+  await expect(panel.getByRole("button", { name: "Git changes" })).toHaveCount(0)
+  await expect(toggle).toHaveAttribute("aria-expanded", "true")
+  await expect(header).toHaveCSS("height", "48px")
+  await expect(toolbar).toHaveCSS("height", "48px")
+
+  await toggle.click()
+  await expect(toggle).toHaveAttribute("aria-expanded", "false")
+  await expect(toolbar.getByText("Git changes", { exact: true })).toBeVisible()
+  await expect(toolbar).toHaveCSS("height", "48px")
+
+  await toggle.click()
+  await expect(toggle).toHaveAttribute("aria-expanded", "true")
+  await expect(header).toHaveCSS("height", "48px")
+  await expect(toolbar).toHaveCSS("height", "48px")
+})
+
 for (const direction of ["ltr", "rtl"] as const) {
   test(`review toggle stays at the header edge in ${direction}`, async ({ page }) => {
     await page.setViewportSize({ width: 1000, height: 900 })
@@ -864,13 +890,20 @@ for (const direction of ["ltr", "rtl"] as const) {
         )
       })
       .toBe(true)
-    await expect
-      .poll(async () => {
-        const box = await panel.locator('[data-slot="session-side-panel-actions"]').boundingBox()
 
-        return box ? box.y + box.height / 2 : undefined
-      })
-      .toBe(closed.y + closed.height / 2)
+    for (const control of [
+      panel.locator('[data-slot="session-side-panel-actions"]'),
+      panel.getByRole("button", { name: "Open file", exact: true }),
+    ]) {
+      await expect
+        .poll(async () => {
+          const box = await control.boundingBox()
+
+          return box ? box.y + box.height / 2 : undefined
+        })
+        .toBe(closed.y + closed.height / 2)
+    }
+
     await toggle.press("Enter")
     await expect(toggle).toHaveAttribute("aria-expanded", "false")
     await expect(toggle).toBeFocused()

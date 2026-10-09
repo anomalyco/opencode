@@ -7,15 +7,19 @@ import { Result } from "effect"
 
 export type ToolInput = Record<string, unknown>
 
+export type DiffSource = {
+  readonly toolName: string
+  readonly input: ToolInput
+  readonly metadata?: Readonly<Record<string, unknown>>
+}
+
 function toToolKind(toolName: string): ToolKind {
-  switch (toolName.toLocaleLowerCase()) {
-    case "bash":
+  switch (canonicalName(toolName)) {
     case "shell":
       return "execute"
     case "webfetch":
       return "fetch"
     case "edit":
-    case "apply_patch":
     case "patch":
     case "write":
       return "edit"
@@ -27,7 +31,6 @@ function toToolKind(toolName: string): ToolKind {
       return "search"
     case "read":
       return "read"
-    case "task":
     case "subagent":
       return "think"
     default:
@@ -36,8 +39,7 @@ function toToolKind(toolName: string): ToolKind {
 }
 
 export function toLocations(toolName: string, input: ToolInput, cwd: string): ToolCallLocation[] {
-  switch (toolName.toLocaleLowerCase()) {
-    case "bash":
+  switch (canonicalName(toolName)) {
     case "shell":
       return locationFrom(cwd, stringValue(input.workdir) ?? stringValue(input.cwd) ?? cwd)
     case "read":
@@ -45,7 +47,6 @@ export function toLocations(toolName: string, input: ToolInput, cwd: string): To
     case "write":
       return locationFrom(cwd, filePath(input))
     case "patch":
-    case "apply_patch":
       return locationFrom(
         cwd,
         ...patchHunks(input).flatMap((hunk) => [hunk.path, hunk.type === "update" ? hunk.movePath : undefined]),
@@ -71,6 +72,7 @@ export function pendingToolCall(input: {
 }): ToolCall {
   return {
     toolCallId: input.toolCallId,
+    name: input.toolName,
     title: toolTitle(input.toolName, input.state.input, input.state.title),
     kind: toToolKind(input.toolName),
     status: "pending",
@@ -105,24 +107,17 @@ export function completedToolUpdate(input: {
 }): ToolCallUpdate {
   const normalized = toolContent(input.content)
   const firstText = input.content.find((part) => part.type === "text")
-  const read = input.toolName.toLocaleLowerCase() === "read" && firstText ? readDisplayText(firstText.text) : undefined
+  const read = canonicalName(input.toolName) === "read" && firstText ? readDisplayText(firstText.text) : undefined
   const images = normalized.filter((part) => part.type === "content" && part.content.type === "image")
   const primary =
     read === undefined
       ? normalized.filter((part) => !images.includes(part))
       : [{ type: "content" as const, content: { type: "text" as const, text: read } }]
-  const oldText = stringValue(input.input.oldString)
-  const newText = stringValue(input.input.newString)
-  const path = filePath(input.input)
-  const diff: ToolCallContent[] =
-    oldText === undefined || newText === undefined || path === undefined
-      ? []
-      : [{ type: "diff", path: absolutePath(path, input.cwd), oldText, newText }]
   return {
     toolCallId: input.toolCallId,
     status: "completed",
     locations: toLocations(input.toolName, input.input, input.cwd),
-    content: [...primary, ...diff, ...images],
+    content: [...primary, ...images],
     rawOutput: {
       ...(input.metadata === undefined ? {} : { metadata: input.metadata }),
     },
@@ -173,8 +168,7 @@ function rawInput(toolName: string, input: ToolInput, cwd: string): ToolInput {
 }
 
 function isShell(toolName: string) {
-  const tool = toolName.toLocaleLowerCase()
-  return tool === "bash" || tool === "shell"
+  return canonicalName(toolName) === "shell"
 }
 
 function locationFrom(cwd: string, ...values: unknown[]): ToolCallLocation[] {
@@ -182,6 +176,17 @@ function locationFrom(cwd: string, ...values: unknown[]): ToolCallLocation[] {
     new Set(values.flatMap((value) => (typeof value === "string" && value ? [absolutePath(value, cwd)] : []))),
     (path) => ({ path }),
   )
+}
+
+const V1Aliases = new Map([
+  ["bash", "shell"],
+  ["task", "subagent"],
+  ["apply_patch", "patch"],
+])
+
+export function canonicalName(toolName: string) {
+  const name = toolName.toLocaleLowerCase()
+  return V1Aliases.get(name) ?? name
 }
 
 // Sessions migrated from V1 keep their original `filePath` tool inputs.

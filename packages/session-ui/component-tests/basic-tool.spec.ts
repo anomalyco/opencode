@@ -6,15 +6,19 @@ story("does not render completed reasoning until it is opened", async ({ mount, 
   const root = await mount("current-session-timeline-rows--conversation", {
     args: { scenario: "reasoning", mode: "compact", text: "Response after reasoning" },
   })
+
   const reasoning = root.locator('[data-timeline-part-id="msg_projection_assistant:reasoning:0"]')
   const trigger = reasoning.locator('[data-slot="collapsible-trigger"]')
   await expect(trigger).toHaveAttribute("aria-expanded", "false")
   await expect(reasoning.locator('[data-component="markdown"]')).toHaveCount(0)
+
   const cached = () =>
     page.evaluate(async (fixture) => {
       const { getCachedMarkdown } = await import(fixture)
+
       return !!getCachedMarkdown("msg_projection_assistant:reasoning:0:0:full")
     }, fixture)
+
   expect(await cached()).toBe(false)
   await trigger.click()
   await expect(

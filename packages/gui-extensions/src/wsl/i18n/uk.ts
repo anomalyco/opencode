@@ -52,8 +52,5 @@ export default {
   "error.healthTimeout": "Час очікування перевірки працездатності sidecar для {{distro}} минув через {{timeout}}мс",
   "error.commandTimeout": "Час очікування {{command}} {{args}} минув через {{timeout}}мс",
   "error.failedPort": "Не вдалося отримати порт",
-  "server.default": "За замовчуванням",
-  "menu.default": "Встановити за замовчуванням",
-  "menu.defaultRemove": "Скасувати використання за замовчуванням",
   "menu.remove": "Видалити",
 }

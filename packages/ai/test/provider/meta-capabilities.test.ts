@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect, Layer } from "effect"
-import { HttpClientRequest } from "effect/unstable/http"
+import { HttpClientRequest } from "effect/http"
 import { Image, ImageClient, LLM, LLMEvent, LLMRequest, Media, Message, ToolDefinition } from "../../src/index.js"
 import { Meta } from "../../src/providers/meta.js"
 import { MetaMessages } from "../../src/protocols/meta-messages.js"

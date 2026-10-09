@@ -3,7 +3,7 @@ import { createStore } from "solid-js/store"
 import { createQuery, keepPreviousData } from "@tanstack/solid-query"
 import { Icon } from "@opencode/ui/icon"
 import { SessionFilePanelV2, SessionFilePanelV2Empty } from "@opencode/session-ui/v2/session-file-panel-v2"
-import { SessionReviewV2Sidebar } from "@opencode/session-ui/v2/session-review-v2"
+import { SessionReviewV2Sidebar, SessionReviewV2SidebarToggle } from "@opencode/session-ui/v2/session-review-v2"
 import { getFilename } from "@opencode/util/path"
 import type { ChangeKind } from "../review/contract"
 import {
@@ -38,11 +38,12 @@ export function SessionFileBrowserTab(props: {
   mobile?: boolean
 }) {
   const ctx = useExtension()
+  const shared = useShared()
   const file = props.screen.file
   const resultsID = `session-file-browser-results-${createUniqueId()}`
-  const [store, setStore] = createStore<{ filter: string; explicitHighlight?: string }>({ filter: "" })
-  const filter = () => store.filter
-  const setFilter = (value: string) => setStore("filter", value)
+  const [store, setStore] = createStore<{ explicitHighlight?: string }>({})
+  const filter = () => shared.filter.get(props.session.key)
+  const setFilter = (value: string) => shared.filter.set(props.session.key, value)
   const setExplicitHighlight = (value: string) => setStore("explicitHighlight", value)
   const sidebarOpened = () => props.placeholder || props.state.opened()
   const query = createMemo(() => filter().trim())
@@ -104,12 +105,24 @@ export function SessionFileBrowserTab(props: {
   // unmounts the whole panel on every file-tab switch and resets sidebar scroll.
   return (
     <SessionFilePanelV2
-      toolbar={false}
+      toolbar={!props.mobile && !props.placeholder && !sidebarOpened()}
+      toolbarStart={<span class="truncate font-[530]">{title()}</span>}
+      sidebarCollapsed={!sidebarOpened()}
+      sidebarToggleGap={10}
+      sidebarToggle={
+        props.mobile ? undefined : (
+          <SessionReviewV2SidebarToggle
+            opened={sidebarOpened()}
+            disabled={props.placeholder}
+            onToggle={props.state.toggle}
+          />
+        )
+      }
       sidebar={
         <SessionReviewV2Sidebar
           open={sidebarOpened()}
           transition={props.state.transition()}
-          title={<span class="truncate">{title()}</span>}
+          title={<span class="truncate font-[530]">{title()}</span>}
           filter={filter()}
           onFilterChange={setFilter}
           onFilterKeyDown={onFilterKeyDown}

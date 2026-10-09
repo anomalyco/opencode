@@ -35,8 +35,5 @@ export default {
   "form.name": "سرور دا ناں (اختیاری)",
   "form.namePlaceholder": "Localhost",
   "form.add": "سرور شامل کرو",
-  "server.default": "طے شدہ",
-  "menu.default": "ڈیفالٹ دے طور تے سیٹ کرو",
-  "menu.defaultRemove": "ڈیفالٹ ہٹاؤ",
   "menu.delete": "مکاؤ",
 }

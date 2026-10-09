@@ -4,7 +4,7 @@ import { Project } from "@opencode/core/project"
 import { ProjectNotFoundError } from "@opencode/protocol/errors"
 import { WorktreeError } from "@opencode/protocol/groups/worktree"
 import { Effect } from "effect"
-import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
+import { HttpApiBuilder, HttpApiSchema } from "effect/http-api"
 import { Api } from "../api"
 
 export const WorktreeHandler = HttpApiBuilder.group(Api, "server.worktree", (handlers) =>

@@ -3,8 +3,6 @@ export default {
   tooltip: "خلاصہ",
   "command.toggle": "خلاصہ ٹوگل کریں۔",
   noBranch: "کوئی برانچ نہیں",
-  "background.tasksRunning.one": "پس منظر میں ⁨{{count}}⁩ کام چل رہا ہے",
-  "background.tasksRunning.other": "پس منظر میں ⁨{{count}}⁩ کام چل رہے ہیں",
   "move.title": "ورک اسپیس میں منتقل کریں",
   "move.menu": "سیشن کو یہاں منتقل کریں",
   "move.failed": "سیشن منتقل کرنے میں ناکام",

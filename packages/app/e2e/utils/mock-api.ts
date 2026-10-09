@@ -1,5 +1,5 @@
 import { Predicate, Schema, SchemaGetter } from "effect"
-import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/unstable/httpapi"
+import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api"
 import { Pty } from "@opencode/schema/pty"
 import { Worktree } from "@opencode/schema/worktree"
 
@@ -63,6 +63,12 @@ export class MockShellNotFound extends Schema.TaggedError<MockShellNotFound>()("
   message: Schema.String,
 }) {}
 
+// The server's error for an unknown PTY, or one owned by another workspace.
+export class MockPtyNotFound extends Schema.TaggedError<MockPtyNotFound>()("PtyNotFoundError", {
+  ptyID: Schema.String,
+  message: Schema.String,
+}) {}
+
 // The server's error for a request without its password.
 export class MockUnauthorized extends Schema.TaggedError<MockUnauthorized>()("UnauthorizedError", {
   message: Schema.String,
@@ -74,6 +80,8 @@ export class MockUnsupported extends Schema.TaggedError<MockUnsupported>()("Mock
 }) {}
 
 const Unsupported = MockUnsupported.pipe(HttpApiSchema.status(501))
+
+const PtyMissing = [MockNotFound.pipe(HttpApiSchema.status(404)), MockPtyNotFound.pipe(HttpApiSchema.status(404))]
 
 const Group = HttpApiGroup.make("mock")
   .add(HttpApiEndpoint.get("info", "/api/info", { success: Json }))
@@ -220,6 +228,12 @@ const Group = HttpApiGroup.make("mock")
     }),
   )
   .add(
+    HttpApiEndpoint.delete("shellRemove", "/api/shell/:id", {
+      params: { id: Schema.String },
+      success: NoContent,
+    }),
+  )
+  .add(
     HttpApiEndpoint.get("ptyList", "/api/pty", {
       success: Json,
       error: MockNotFound.pipe(HttpApiSchema.status(404)),
@@ -236,7 +250,7 @@ const Group = HttpApiGroup.make("mock")
     HttpApiEndpoint.get("ptyGet", "/api/pty/:ptyID", {
       params: PtyParams,
       success: Json,
-      error: MockNotFound.pipe(HttpApiSchema.status(404)),
+      error: PtyMissing,
     }),
   )
   .add(
@@ -244,21 +258,21 @@ const Group = HttpApiGroup.make("mock")
       params: PtyParams,
       payload: Pty.UpdateInput,
       success: Json,
-      error: MockNotFound.pipe(HttpApiSchema.status(404)),
+      error: PtyMissing,
     }),
   )
   .add(
     HttpApiEndpoint.delete("ptyRemove", "/api/pty/:ptyID", {
       params: PtyParams,
       success: NoContent,
-      error: MockNotFound.pipe(HttpApiSchema.status(404)),
+      error: PtyMissing,
     }),
   )
   .add(
     HttpApiEndpoint.post("ptyConnectToken", "/api/pty/:ptyID/connect-token", {
       params: PtyParams,
       success: Json,
-      error: MockNotFound.pipe(HttpApiSchema.status(404)),
+      error: PtyMissing,
     }),
   )
   .add(
@@ -322,6 +336,13 @@ const Group = HttpApiGroup.make("mock")
   )
   .add(
     HttpApiEndpoint.post("sessionPrompt", "/api/session/:sessionID/prompt", {
+      params: SessionParams,
+      payload: JsonPayload,
+      success: Json,
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("sessionCompact", "/api/session/:sessionID/compact", {
       params: SessionParams,
       payload: JsonPayload,
       success: Json,

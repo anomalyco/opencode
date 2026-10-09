@@ -6,6 +6,7 @@ import {
 } from "./markdown-worker-protocol"
 
 const token = (content: string): [string, string] => [content, ""]
+
 const response = (id: number, reset: boolean, stable: [string, string][], unstable: [string, string][]) => ({
   type: "highlight" as const,
   id,
@@ -26,6 +27,7 @@ test("accumulates stable worker tokens and replaces the unstable tail", () => {
     stable: [token("one\n")],
     unstable: [token("tw")],
   })
+
   const second = applyMarkdownWorkerResponse(first, {
     type: "highlight",
     id: 2,

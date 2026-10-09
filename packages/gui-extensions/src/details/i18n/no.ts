@@ -3,8 +3,6 @@ export default {
   tooltip: "Sammendrag",
   "command.toggle": "Slå sammendrag av/på",
   noBranch: "Ingen gren",
-  "background.tasksRunning.one": "{{count}} bakgrunnsoppgave kjører",
-  "background.tasksRunning.other": "{{count}} bakgrunnsoppgaver kjører",
   "move.title": "Flytt til arbeidsområdet",
   "move.menu": "Flytt økt til",
   "move.failed": "Kunne ikke flytte økten",

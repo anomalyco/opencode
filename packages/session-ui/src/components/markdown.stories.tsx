@@ -42,6 +42,7 @@ function StreamingMarkdown() {
   const [count, setCount] = createSignal(1)
   const timer = setInterval(() => setCount((value) => Math.min(value + 1, words.length)), 180)
   onCleanup(() => clearInterval(timer))
+
   return <Markdown text={words.slice(0, count()).join("")} streaming={count() < words.length} />
 }
 
@@ -72,9 +73,11 @@ function StreamingInlineCodeMarkdown() {
     "`bun te",
     "st`.",
   ]
+
   const [count, setCount] = createSignal(1)
   const timer = setInterval(() => setCount((value) => (value >= chunks.length ? 1 : value + 1)), 220)
   onCleanup(() => clearInterval(timer))
+
   return <Markdown text={chunks.slice(0, count()).join("")} streaming />
 }
 
@@ -102,16 +105,21 @@ const externalLinkChunks = [
 
 function StreamingExternalLinks() {
   const [count, setCount] = createSignal(1)
+
   const timer = setInterval(() => {
     setCount((value) => {
       if (value === externalLinkChunks.length) {
         clearInterval(timer)
+
         return value
       }
+
       return value + 1
     })
   }, 380)
+
   onCleanup(() => clearInterval(timer))
+
   return (
     <Markdown text={externalLinkChunks.slice(0, count()).join("")} streaming={count() < externalLinkChunks.length} />
   )

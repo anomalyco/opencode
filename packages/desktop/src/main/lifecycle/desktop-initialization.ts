@@ -30,6 +30,7 @@ export const layer = Layer.effect(
     yield* Effect.promise(() => app.whenReady())
     yield* prepareDesktop
     marks.init = Date.now()
+
     return Service.of({
       version: app.getVersion(),
     })

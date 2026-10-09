@@ -18,6 +18,7 @@ export async function stopVisualStabilityProbe(page: Page) {
   const result = await stopVisualProbe(page)
   const trace: VisualStabilityTrace = { markers: result.markers, samples: result.samples }
   Object.defineProperty(trace, capturedFrames, { value: result.frames })
+
   return trace
 }
 

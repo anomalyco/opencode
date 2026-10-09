@@ -56,7 +56,6 @@ export function mount(input: { server: string; route: string; direction: Directi
     return (
       <AppInterface
         servers={[server]}
-        defaultServer={ServerConnection.key(server)}
         canonicalLocalServer={ServerConnection.key(server)}
         router={(props) => <MemoryRouter {...props} history={history} />}
       >

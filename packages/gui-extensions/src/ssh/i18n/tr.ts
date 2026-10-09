@@ -37,8 +37,5 @@ export default {
   "form.name": "Sunucu adı (isteğe bağlı)",
   "form.namePlaceholder": "Localhost",
   "form.add": "Sunucu ekle",
-  "server.default": "Varsayılan",
-  "menu.default": "Varsayılan olarak ayarla",
-  "menu.defaultRemove": "Varsayılanı kaldır",
   "menu.delete": "Sil",
 }

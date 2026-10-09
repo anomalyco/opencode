@@ -285,9 +285,6 @@ export const dict = {
   "dialog.server.add.passwordPlaceholder": "parool",
   "dialog.server.edit.title": "Muuda serverit",
   "dialog.server.menu.edit": "Muuda",
-  "dialog.server.menu.default": "Määra vaikeväärtuseks",
-  "dialog.server.menu.defaultRemove": "Eemalda vaikeseade",
-  "dialog.server.status.default": "Vaikimisi",
   "dialog.project.edit.title": "Redigeeri projekti",
   "dialog.project.edit.icon": "Ikoon",
   "dialog.project.edit.icon.alt": "Projekti ikoon",
@@ -775,7 +772,6 @@ export const dict = {
   "server.connect.button": "Ühendage",
   "server.connect.address.invalid": "Sisestage kehtiv serveri aadress HTTP või HTTPS.",
   "server.connect.failed": "Ühendust ei õnnestunud luua. Kontrollige serveri aadressi ja parooli ning proovige uuesti.",
-  "server.connect.pair.description": "Ühenduse üksikasjade hankimiseks käivitage see käsk oma arvutis.",
   "server.connect.scan": "Skaneeri QR-kood",
   "server.connect.scan.description": "Suunake oma kaamera koodile QR, mida näitab opencode pair.",
   "server.connect.scan.invalid": "See ei ole OpenCode sidumiskood. Skannige koodi, mida näitab opencode pair.",
@@ -783,7 +779,6 @@ export const dict = {
   "server.connect.camera.starting": "Kaamera avamine…",
   "server.connect.mixedContent":
     "Selle HTTP serveriga ei saanud HTTPS lehelt ühendust luua. Kasutage selle asemel HTTPS serveri aadressi.",
-  "server.connect.camera.insecure": "QR skannimine nõuab selle lehe avamist HTTPS või localhost kaudu.",
   "server.connect.camera.unavailable":
     "Selle brauseri jaoks pole kaamerat saadaval. Sisestage ühenduse üksikasjad käsitsi.",
   "server.connect.camera.error":

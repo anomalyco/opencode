@@ -4,6 +4,7 @@ import { scoped } from "../native/logging"
 import { safeWindowURL } from "./state"
 
 const sampleInterval = 1000
+
 const samplePeriod = 15000
 
 export const makeUnresponsiveSampler = Effect.gen(function* () {
@@ -16,8 +17,10 @@ export const makeUnresponsiveSampler = Effect.gen(function* () {
     const samples = new Map<string, number>()
 
     const active = () => sampling && !win.isDestroyed() && !win.webContents.isDestroyed()
+
     const clearTimers = () => {
       if (sampleTimer) clearTimeout(sampleTimer)
+
       if (stopTimer) clearTimeout(stopTimer)
       sampleTimer = undefined
       stopTimer = undefined
@@ -31,11 +34,15 @@ export const makeUnresponsiveSampler = Effect.gen(function* () {
 
     const collect = async () => {
       if (!active()) return
+
       const stack = await win.webContents.mainFrame.collectJavaScriptCallStack().catch((error) => {
         runFork(scoped("window", Effect.logError("failed to collect unresponsive sample", { window: name, error })))
+
         return undefined
       })
+
       if (!active()) return
+
       if (stack) samples.set(stack, (samples.get(stack) ?? 0) + 1)
       schedule()
     }
@@ -44,10 +51,12 @@ export const makeUnresponsiveSampler = Effect.gen(function* () {
       const wasSampling = sampling
       sampling = false
       clearTimers()
+
       if (samples.size === 0) return wasSampling
 
       const entries = [...samples.entries()].sort((a, b) => b[1] - a[1])
       const total = entries.reduce((sum, entry) => sum + entry[1], 0)
+
       const message = [
         "renderer unresponsive samples",
         `Window: ${name}`,
@@ -55,8 +64,10 @@ export const makeUnresponsiveSampler = Effect.gen(function* () {
         ...entries.map((entry) => `<${entry[1]}> ${entry[0]}`),
         `Total Samples: ${total}`,
       ].join("\n")
+
       runFork(scoped("window", Effect.logError(message)))
       samples.clear()
+
       return wasSampling
     }
 

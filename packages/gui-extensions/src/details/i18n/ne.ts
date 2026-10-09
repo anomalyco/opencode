@@ -3,8 +3,6 @@ export default {
   tooltip: "सारांश",
   "command.toggle": "सारांश टगल गर्नुहोस्",
   noBranch: "कुनै शाखा छैन",
-  "background.tasksRunning.one": "{{count}} पृष्ठभूमि कार्य चलिरहेको छ",
-  "background.tasksRunning.other": "{{count}} पृष्ठभूमि कार्यहरू चलिरहेका छन्",
   "move.title": "कार्यस्थानमा सार्नुहोस्",
   "move.menu": "सत्र यहाँ सार्नुहोस्",
   "move.failed": "सत्र सार्न असफल भयो",

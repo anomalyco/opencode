@@ -12,6 +12,7 @@ benchmark("measures retained renderer memory with a large model catalog", async 
   const switches = Number(process.env.PROVIDER_MEMORY_SWITCHES ?? 10)
   const provider = fixture.provider.all[0]
   const selected = { ...provider.models["claude-opus-4-6"] }
+
   const mock = await mockOpenCodeServer(page, {
     directory: fixture.directory,
     project: fixture.project,
@@ -27,6 +28,7 @@ benchmark("measures retained renderer memory with a large model catalog", async 
             ...Object.fromEntries(
               Array.from({ length: count - 1 }, (_, index) => {
                 const id = `catalog-model-${index}`
+
                 return [
                   id,
                   {
@@ -44,6 +46,7 @@ benchmark("measures retained renderer memory with a large model catalog", async 
       ],
     },
   })
+
   await installTimelineSettings(page)
   await installStressSessionTabs(page)
   await page.goto(sessionHref(fixture.sourceID))
@@ -52,6 +55,7 @@ benchmark("measures retained renderer memory with a large model catalog", async 
   await expect(page.locator('[data-action="composer-model"]')).toContainText("Claude Opus 4.6")
   const cdp = await page.context().newCDPSession(page)
   const samples = []
+
   for (let index = 0; index <= switches; index++) {
     if (index > 0) {
       const target = index % 2 === 1
@@ -64,6 +68,7 @@ benchmark("measures retained renderer memory with a large model catalog", async 
       )
       await expect(page.locator('[data-action="composer-model"]')).toContainText("Claude Opus 4.6")
     }
+
     // GC is an explicit retained-heap measurement, not an application optimization or readiness wait.
     await cdp.send("HeapProfiler.collectGarbage")
     samples.push({
@@ -72,6 +77,7 @@ benchmark("measures retained renderer memory with a large model catalog", async 
       dom: await cdp.send("Memory.getDOMCounters"),
     })
   }
+
   expect(samples).toHaveLength(switches + 1)
   expect(samples.every((sample) => sample.heap.usedSize > 0)).toBe(true)
   selected.name = "Updated catalog model"

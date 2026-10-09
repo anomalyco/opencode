@@ -4,6 +4,7 @@ import { createComponent, render } from "solid-js/web"
 import { isStandalone, PwaRoutePersistence, restorePwaRoute } from "../src/runtime/platform/pwa"
 
 const key = "opencode.pwa.last-route"
+
 const originalUrl = window.location.href
 
 beforeEach(() => {
@@ -22,11 +23,13 @@ test("normal browser windows are not standalone", () => {
 test("detects iOS home-screen apps when the standalone media query does not match", () => {
   const descriptor = Object.getOwnPropertyDescriptor(navigator, "standalone")
   Object.defineProperty(navigator, "standalone", { configurable: true, value: true })
+
   try {
     expect(window.matchMedia("(display-mode: standalone)").matches).toBe(false)
     expect(isStandalone()).toBe(true)
   } finally {
     if (descriptor) Object.defineProperty(navigator, "standalone", descriptor)
+
     if (!descriptor) delete (navigator as Navigator & { standalone?: boolean }).standalone
   }
 })
@@ -47,6 +50,7 @@ test("restores the last PWA route including query and hash without adding histor
 
 test("preserves explicit launch routes, queries, and hashes", () => {
   localStorage.setItem(key, "/server/local/session/saved")
+
   for (const route of ["/server/local/session/linked", "/new-session?draftId=123", "/?launch=1", "/#launch"]) {
     window.history.replaceState(null, "", `http://localhost${route}`)
     restorePwaRoute()
@@ -77,6 +81,7 @@ test("persists router navigation including returning home", async () => {
   const history = createMemoryHistory()
   history.set({ value: "/new-session?draftId=123", replace: true, scroll: false })
   const dispose = render(() => createComponent(MemoryRouter, { history, root: PwaRoutePersistence }), host)
+
   try {
     expect(localStorage.getItem(key)).toBe("/new-session?draftId=123")
     history.set({ value: "/server/local/session/next#file", scroll: false })
