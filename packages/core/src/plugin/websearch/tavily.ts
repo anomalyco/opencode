@@ -33,15 +33,16 @@ export const Plugin = define<HttpClient.HttpClient | Scope.Scope>({
       id: "tavily",
       name: "Tavily",
       env: "TAVILY_API_KEY",
-      execute: (input, credential) =>
+      endpoint,
+      execute: (input, connection) =>
         Effect.gen(function* () {
-          const request = yield* HttpClientRequest.post(endpoint).pipe(
+          const request = yield* HttpClientRequest.post(connection.endpoint).pipe(
             HttpClientRequest.acceptJson,
             HttpClientRequest.setHeaders({
               "User-Agent": App.useragent(ctx.app),
               "X-Client-Name": "opencode2",
-              ...(credential?.type === "key"
-                ? { Authorization: `Bearer ${credential.key}` }
+              ...(connection.key
+                ? { Authorization: `Bearer ${connection.key}` }
                 : { "X-Tavily-Access-Mode": "keyless" }),
             }),
             HttpClientRequest.schemaBodyJson(SearchRequest)({
