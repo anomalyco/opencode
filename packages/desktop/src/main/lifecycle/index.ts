@@ -32,7 +32,11 @@ const runtime = Layer.effect(
     const windows = yield* makeMainWindows()
     const createWindow = windows.create
     const restoreWindows = windows.restore
-    const pendingDeepLinks: string[] = []
+    const initialDeepLinks = process.argv.filter((arg) => arg.startsWith("opencode://"))
+    const pendingDeepLinks = [...initialDeepLinks]
+
+    if (initialDeepLinks.length > 0)
+      runFork(Effect.logInfo("deep link received via argv", { urls: initialDeepLinks }))
     let shutdownReady = false
     const prepareToRestart = shutdown.run.pipe(Effect.ensuring(Effect.sync(() => (shutdownReady = true))))
 
