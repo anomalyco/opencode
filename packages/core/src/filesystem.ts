@@ -2,8 +2,9 @@ export * as FileSystem from "./filesystem.js"
 
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import path from "path"
-import { Context, Effect, Layer, type Option, type PlatformError, Schema, type Stream } from "effect"
+import { Context, Effect, Layer, Option, type PlatformError, Schema, Stream } from "effect"
 import { FSUtil } from "@opencode/util/fs-util"
+import { Environment } from "./environment/index.js"
 import { Location } from "./location.js"
 import { AbsolutePath, PositiveInt, RelativePath } from "./schema.js"
 import { FileSystemSearch } from "./filesystem/search.js"
@@ -110,6 +111,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Fi
 const baseLayer = Layer.effect(
   Service,
   Effect.gen(function* () {
+    const environment = yield* Environment.Service
     const fs = yield* FSUtil.Service
     const location = yield* Location.Service
     const search = yield* FileSystemSearch.Service
@@ -117,8 +119,7 @@ const baseLayer = Layer.effect(
     // realpath probe at boot consults the wrong filesystem and would block
     // construction on servers without a matching local directory. Treat the
     // configured directory as canonical; local placements keep symlink
-    // canonicalization. This skip is boot-only: resolve/read/list below still
-    // access the host filesystem per operation (tracked in #44568).
+    // canonicalization.
     const root = location.workspaceID
       ? location.directory
       : yield* fs.realPath(location.directory).pipe(
@@ -155,6 +156,51 @@ const baseLayer = Layer.effect(
     return Service.of({
       find: search.find,
       read: Effect.fn("FileSystem.read")(function* (input) {
+        if (input.path.includes("\u0000")) return yield* Effect.fail(new NotFoundError({ path: input.path }))
+        if (location.workspaceID) {
+          const absolute = path.resolve(location.directory, input.path)
+          if (!FSUtil.contains(location.directory, absolute)) {
+            return yield* Effect.fail(new NotFoundError({ path: input.path }))
+          }
+          const canonicalRoot = yield* environment.files.realPath(location.directory).pipe(
+            Effect.catchTag("Environment.NotFound", () => Effect.fail(new NotFoundError({ path: input.path }))),
+            Effect.catchTag("Environment.Failed", (cause) => Effect.die(cause)),
+          )
+          const real = yield* environment.files.realPath(absolute).pipe(
+            Effect.catchTag("Environment.NotFound", () => Effect.fail(new NotFoundError({ path: input.path }))),
+            Effect.catchTag("Environment.Failed", (cause) => Effect.die(cause)),
+          )
+          if (!FSUtil.contains(canonicalRoot, real)) {
+            return yield* Effect.fail(new NotFoundError({ path: input.path }))
+          }
+          const result = yield* environment.files.read(real, { offset: 0, length: 0 }).pipe(
+            Effect.catchTag("Environment.NotFound", () => Effect.fail(new NotFoundError({ path: input.path }))),
+            Effect.catchTag("Environment.WrongKind", () => Effect.fail(new NotFoundError({ path: input.path }))),
+            Effect.catchTag("Environment.Failed", (cause) => Effect.die(cause)),
+          )
+          if (result.info.type !== "file") return yield* Effect.fail(new NotFoundError({ path: input.path }))
+          return {
+            mime: FSUtil.mimeType(real),
+            size: result.info.size,
+            mtime: Option.some(new Date(result.info.mtimeMs)),
+            stream: (options) => {
+              const offset = options?.offset ?? 0
+              const end = Math.min(result.info.size, offset + (options?.bytesToRead ?? result.info.size))
+              // Range reads keep the workspace backend's whole-file collection limit out of the streaming path.
+              return Stream.unfold(offset, (position) => {
+                if (position >= end) return Effect.succeed(undefined)
+                return environment.files
+                  .read(real, { offset: position, length: Math.min(64 * 1024, end - position) })
+                  .pipe(
+                    Effect.orDie,
+                    Effect.map((chunk) =>
+                      chunk.bytes.length === 0 ? undefined : ([chunk.bytes, position + chunk.bytes.length] as const),
+                    ),
+                  )
+              })
+            },
+          }
+        }
         const target = yield* resolve(input.path)
         const info = yield* fs.stat(target.real).pipe(
           Effect.catchReason(
@@ -175,6 +221,25 @@ const baseLayer = Layer.effect(
       list: Effect.fn("FileSystem.list")(function* (input = {}) {
         // Navigation can leave the cwd without activating another Location.
         const directory = path.resolve(location.directory, input.path ?? ".")
+        if (location.workspaceID) {
+          const items = yield* environment.files.list(directory).pipe(
+            Effect.catchTag("Environment.WrongKind", () => Effect.die(new Error("Path is not a directory"))),
+            Effect.orDie,
+          )
+          return items
+            .flatMap((item) => {
+              if (item.type !== "file" && item.type !== "directory") return []
+              const absolute = path.join(directory, item.name)
+              const relative = path.relative(location.directory, absolute) || "."
+              return [
+                Entry.make({
+                  path: RelativePath.make(relative + (item.type === "directory" ? path.sep : "")),
+                  type: item.type,
+                }),
+              ]
+            })
+            .sort((a, b) => (a.type === b.type ? a.path.localeCompare(b.path) : a.type === "directory" ? -1 : 1))
+        }
         const info = yield* fs.stat(directory).pipe(Effect.orDie)
         if (info.type !== "Directory") return yield* Effect.die(new Error("Path is not a directory"))
         return yield* fs.readDirectoryEntries(directory).pipe(
@@ -210,5 +275,5 @@ const baseLayer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer: baseLayer,
-  deps: [FSUtil.node, Location.node, FileSystemSearch.node],
+  deps: [FSUtil.node, Location.node, FileSystemSearch.node, Environment.node],
 })
