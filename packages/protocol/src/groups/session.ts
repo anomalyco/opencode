@@ -57,6 +57,13 @@ const ParentIDFilter = Schema.Union([
   description: "Filter by parent session. Use null to return only root sessions.",
 })
 
+const BooleanFromString = Schema.Literals(["true", "false"]).pipe(
+  Schema.decodeTo(Schema.Boolean, {
+    decode: SchemaGetter.transform((value) => value === "true"),
+    encode: SchemaGetter.transform((value): "true" | "false" => (value ? "true" : "false")),
+  }),
+)
+
 const SessionsQueryFields = {
   limit: Schema.NumberFromString.pipe(Schema.decodeTo(PositiveInt), Schema.optional).annotate({
     description: "Maximum number of sessions to return. Defaults to the newest 50 sessions.",
@@ -66,6 +73,10 @@ const SessionsQueryFields = {
   }),
   search: Schema.optional(Schema.String),
   parentID: ParentIDFilter.pipe(Schema.optional),
+  archived: BooleanFromString.pipe(Schema.optional).annotate({
+    description:
+      "Filter by archive state. Use true to return only archived sessions or false to exclude them. Omit to include both.",
+  }),
 }
 
 const SessionsDirectoryQuery = Schema.Struct({
@@ -153,13 +164,6 @@ const FormCreatePayload = Schema.Struct({
   metadata: Form.Info.fields.metadata,
   fields: Form.Info.fields.fields,
 }).annotate({ identifier: "Form.CreatePayload" })
-
-const BooleanFromString = Schema.Literals(["true", "false"]).pipe(
-  Schema.decodeTo(Schema.Boolean, {
-    decode: SchemaGetter.transform((value) => value === "true"),
-    encode: SchemaGetter.transform((value): "true" | "false" => (value ? "true" : "false")),
-  }),
-)
 
 const SessionsQueryCursor = SessionsCursor.annotate({
   description: "Opaque pagination cursor returned as cursor.previous or cursor.next in the previous response.",
@@ -365,6 +369,9 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           title: Schema.String.pipe(Schema.optional),
           metadata: Session.Metadata.pipe(Schema.optional),
           permissions: Permission.Ruleset.pipe(Schema.optional),
+          archived: Schema.Boolean.pipe(Schema.optional).annotate({
+            description: "Archive the session with true or restore it with false. Repeating the current state is a no-op.",
+          }),
         }),
         success: HttpApiSchema.NoContent,
         error: SessionNotFoundError,

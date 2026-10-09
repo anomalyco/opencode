@@ -707,6 +707,14 @@ export function createData(config: CreateDataInput) {
         if (store.session.info[event.data.sessionID])
           setStore("session", "info", event.data.sessionID, "permissions", event.data.permissions)
         return
+      case "session.archived":
+        if (store.session.info[event.data.sessionID])
+          setStore("session", "info", event.data.sessionID, "time", "archived", event.created)
+        return
+      case "session.unarchived":
+        if (store.session.info[event.data.sessionID])
+          setStore("session", "info", event.data.sessionID, "time", "archived", undefined)
+        return
       case "session.moved": {
         const current = store.session.info[event.data.sessionID]
         if (current) {

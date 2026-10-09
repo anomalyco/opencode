@@ -624,6 +624,26 @@ export type SessionViewed = {
   data: { sessionID: string; idle: number }
 }
 
+export type SessionArchived = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.archived"
+  durable: { aggregateID: string; seq: number; version: 1 }
+  location?: LocationRef
+  data: { sessionID: string }
+}
+
+export type SessionUnarchived = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.unarchived"
+  durable: { aggregateID: string; seq: number; version: 1 }
+  location?: LocationRef
+  data: { sessionID: string }
+}
+
 export type SessionDeleted = {
   id: string
   created: number
@@ -2386,6 +2406,8 @@ export type SessionEventDurable =
   | SessionMetadataUpdated
   | SessionPermissions
   | SessionViewed
+  | SessionArchived
+  | SessionUnarchived
   | SessionDeleted
   | SessionForked
   | SessionInboxDelivered
@@ -2449,6 +2471,8 @@ export type V2Event =
   | SessionMetadataUpdated
   | SessionPermissions
   | SessionViewed
+  | SessionArchived
+  | SessionUnarchived
   | SessionUsageUpdated
   | SessionDeleted
   | SessionForked
@@ -2831,6 +2855,7 @@ export type SessionListInput = {
     readonly order?: "asc" | "desc" | undefined
     readonly search?: string | undefined
     readonly parentID?: string | null | undefined
+    readonly archived?: boolean | undefined
     readonly directory?: string | undefined
     readonly project?: string | undefined
     readonly subpath?: string | undefined
@@ -2841,6 +2866,7 @@ export type SessionListInput = {
     readonly order?: "asc" | "desc" | undefined
     readonly search?: string | undefined
     readonly parentID?: string | null | undefined
+    readonly archived?: boolean | undefined
     readonly directory?: string | undefined
     readonly project?: string | undefined
     readonly subpath?: string | undefined
@@ -2851,6 +2877,7 @@ export type SessionListInput = {
     readonly order?: "asc" | "desc" | undefined
     readonly search?: string | undefined
     readonly parentID?: string | null | undefined
+    readonly archived?: boolean | undefined
     readonly directory?: string | undefined
     readonly project?: string | undefined
     readonly subpath?: string | undefined
@@ -2861,16 +2888,29 @@ export type SessionListInput = {
     readonly order?: "asc" | "desc" | undefined
     readonly search?: string | undefined
     readonly parentID?: string | null | undefined
+    readonly archived?: boolean | undefined
     readonly directory?: string | undefined
     readonly project?: string | undefined
     readonly subpath?: string | undefined
     readonly cursor?: string | undefined
   }["parentID"]
+  readonly archived?: {
+    readonly limit?: number | undefined
+    readonly order?: "asc" | "desc" | undefined
+    readonly search?: string | undefined
+    readonly parentID?: string | null | undefined
+    readonly archived?: boolean | undefined
+    readonly directory?: string | undefined
+    readonly project?: string | undefined
+    readonly subpath?: string | undefined
+    readonly cursor?: string | undefined
+  }["archived"]
   readonly directory?: {
     readonly limit?: number | undefined
     readonly order?: "asc" | "desc" | undefined
     readonly search?: string | undefined
     readonly parentID?: string | null | undefined
+    readonly archived?: boolean | undefined
     readonly directory?: string | undefined
     readonly project?: string | undefined
     readonly subpath?: string | undefined
@@ -2881,6 +2921,7 @@ export type SessionListInput = {
     readonly order?: "asc" | "desc" | undefined
     readonly search?: string | undefined
     readonly parentID?: string | null | undefined
+    readonly archived?: boolean | undefined
     readonly directory?: string | undefined
     readonly project?: string | undefined
     readonly subpath?: string | undefined
@@ -2891,6 +2932,7 @@ export type SessionListInput = {
     readonly order?: "asc" | "desc" | undefined
     readonly search?: string | undefined
     readonly parentID?: string | null | undefined
+    readonly archived?: boolean | undefined
     readonly directory?: string | undefined
     readonly project?: string | undefined
     readonly subpath?: string | undefined
@@ -2901,6 +2943,7 @@ export type SessionListInput = {
     readonly order?: "asc" | "desc" | undefined
     readonly search?: string | undefined
     readonly parentID?: string | null | undefined
+    readonly archived?: boolean | undefined
     readonly directory?: string | undefined
     readonly project?: string | undefined
     readonly subpath?: string | undefined
@@ -4149,6 +4192,7 @@ export type SessionUpdateInput = {
     readonly permissions?:
       | ReadonlyArray<{ readonly action: string; readonly resource: string; readonly effect: "allow" | "deny" | "ask" }>
       | undefined
+    readonly archived?: boolean | undefined
   }["title"]
   readonly metadata?: {
     readonly title?: string | undefined
@@ -4156,6 +4200,7 @@ export type SessionUpdateInput = {
     readonly permissions?:
       | ReadonlyArray<{ readonly action: string; readonly resource: string; readonly effect: "allow" | "deny" | "ask" }>
       | undefined
+    readonly archived?: boolean | undefined
   }["metadata"]
   readonly permissions?: {
     readonly title?: string | undefined
@@ -4163,7 +4208,16 @@ export type SessionUpdateInput = {
     readonly permissions?:
       | ReadonlyArray<{ readonly action: string; readonly resource: string; readonly effect: "allow" | "deny" | "ask" }>
       | undefined
+    readonly archived?: boolean | undefined
   }["permissions"]
+  readonly archived?: {
+    readonly title?: string | undefined
+    readonly metadata?: { readonly [x: string]: JsonValue } | undefined
+    readonly permissions?:
+      | ReadonlyArray<{ readonly action: string; readonly resource: string; readonly effect: "allow" | "deny" | "ask" }>
+      | undefined
+    readonly archived?: boolean | undefined
+  }["archived"]
 }
 
 export type SessionUpdateOutput = void

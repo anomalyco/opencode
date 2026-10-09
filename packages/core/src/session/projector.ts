@@ -612,6 +612,22 @@ const layer = Layer.effectDiscard(
         .run()
         .pipe(Effect.orDie)
     })
+    yield* bus.project(SessionEvent.Archived, (event) =>
+      db
+        .update(SessionTable)
+        .set({ time_archived: event.created, time_updated: event.created })
+        .where(eq(SessionTable.id, event.data.sessionID))
+        .run()
+        .pipe(Effect.orDie),
+    )
+    yield* bus.project(SessionEvent.Unarchived, (event) =>
+      db
+        .update(SessionTable)
+        .set({ time_archived: null, time_updated: event.created })
+        .where(eq(SessionTable.id, event.data.sessionID))
+        .run()
+        .pipe(Effect.orDie),
+    )
     yield* bus.project(SessionEvent.MessageContentUpdated, (event) => run(db, event))
     yield* bus.project(SessionEvent.UsageRecorded, (event) => applyUsage(db, event.data.sessionID, event.data))
     yield* bus.project(SessionEvent.Forked, (event) => projectFork(db, event))

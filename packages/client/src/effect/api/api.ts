@@ -118,6 +118,7 @@ export type SessionListInput = {
   readonly order?: "asc" | "desc" | undefined
   readonly search?: string | undefined
   readonly parentID?: Session.ID | null | undefined
+  readonly archived?: boolean | undefined
   readonly directory?: AbsolutePath | undefined
   readonly project?: Project.ID | undefined
   readonly subpath?: RelativePath | undefined
@@ -254,6 +255,7 @@ export type SessionUpdateInput = {
   readonly title?: string | undefined
   readonly metadata?: Session.Metadata | undefined
   readonly permissions?: Permission.Ruleset | undefined
+  readonly archived?: boolean | undefined
 }
 export type SessionUpdateOutput = void
 export type SessionUpdateOperation<E = never> = (input: SessionUpdateInput) => Effect.Effect<SessionUpdateOutput, E>
@@ -569,6 +571,34 @@ export type SessionLogOutput =
               }
             | undefined
           readonly data: { readonly sessionID: Session.ID; readonly idle: number }
+        }
+      | {
+          readonly id: Event.ID
+          readonly created: number
+          readonly metadata?: { readonly [x: string]: unknown } | undefined
+          readonly type: "session.archived"
+          readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
+          readonly location?:
+            | {
+                readonly directory: AbsolutePath
+                readonly workspaceID?: (string & Brand.Brand<"Workspace.ID">) | undefined
+              }
+            | undefined
+          readonly data: { readonly sessionID: Session.ID }
+        }
+      | {
+          readonly id: Event.ID
+          readonly created: number
+          readonly metadata?: { readonly [x: string]: unknown } | undefined
+          readonly type: "session.unarchived"
+          readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
+          readonly location?:
+            | {
+                readonly directory: AbsolutePath
+                readonly workspaceID?: (string & Brand.Brand<"Workspace.ID">) | undefined
+              }
+            | undefined
+          readonly data: { readonly sessionID: Session.ID }
         }
       | {
           readonly id: Event.ID

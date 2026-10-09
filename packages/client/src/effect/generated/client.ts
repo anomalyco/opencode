@@ -368,6 +368,7 @@ const EndpointSessionList = (raw: RawClient["server.session"]) => (input?: Sessi
         order: input?.["order"],
         search: input?.["search"],
         parentID: input?.["parentID"],
+        archived: input?.["archived"],
         directory: input?.["directory"],
         project: input?.["project"],
         subpath: input?.["subpath"],
@@ -476,7 +477,12 @@ const EndpointSessionUpdate = (raw: RawClient["server.session"]) => (input: Sess
   preserveEffect<SessionUpdateOutput>()(
     raw["session.update"]({
       params: { sessionID: input["sessionID"] },
-      payload: { title: input["title"], metadata: input["metadata"], permissions: input["permissions"] },
+      payload: {
+        title: input["title"],
+        metadata: input["metadata"],
+        permissions: input["permissions"],
+        archived: input["archived"],
+      },
     }).pipe(Effect.mapError(mapClientError)),
   )
 

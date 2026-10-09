@@ -545,6 +545,7 @@ export function make(options: ClientOptions) {
               order: input?.["order"],
               search: input?.["search"],
               parentID: input?.["parentID"],
+              archived: input?.["archived"],
               directory: input?.["directory"],
               project: input?.["project"],
               subpath: input?.["subpath"],
@@ -693,7 +694,12 @@ export function make(options: ClientOptions) {
           {
             method: "PATCH",
             path: `/api/session/${encodeURIComponent(input.sessionID)}`,
-            body: { title: input["title"], metadata: input["metadata"], permissions: input["permissions"] },
+            body: {
+              title: input["title"],
+              metadata: input["metadata"],
+              permissions: input["permissions"],
+              archived: input["archived"],
+            },
             successStatus: 204,
             declaredStatuses: [400, 401, 404],
             empty: true,
