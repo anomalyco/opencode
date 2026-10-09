@@ -9,6 +9,9 @@ const turnPageLimit = 200
 // Previews clamp to a few lines; keep only enough text to fill them.
 const previewLength = 400
 
+// How long after the timeline mounts the rail loads, clear of session entry and tab switch rendering.
+const railDelay = 1000
+
 // A pointer resting this long on an unloaded turn fetches its reply; sweeping across the rail fetches nothing.
 const replyHoverDelay = 150
 
@@ -28,8 +31,8 @@ type TurnNavigatorProps = {
  * server's user-message index, and hovering an unloaded turn fetches only its latest reply. Keyboard users move
  * between turns with the previous and next message commands.
  *
- * Nothing loads or renders until a mouse first moves over the timeline, which keeps the rail off session entry and
- * tab switches. The rail then appears once it lists every turn, so it never grows under the pointer.
+ * Nothing loads or renders until shortly after the timeline mounts, which keeps the rail off session entry and tab
+ * switches. The rail then appears once it lists every turn, so it never grows under the pointer.
  */
 export function TurnNavigator(props: TurnNavigatorProps) {
   const sdk = useServerSDK()
@@ -53,13 +56,9 @@ export function TurnNavigator(props: TurnNavigatorProps) {
   }
 
   onMount(() => {
-    const timeline = root?.parentElement
-
-    if (!timeline) return
-
-    const engage = (event: PointerEvent) => {
-      if (event.pointerType !== "mouse") return
-      timeline.removeEventListener("pointermove", engage)
+    const timer = setTimeout(() => {
+      // The rail is a mouse affordance; touch-only devices never load it.
+      if (!matchMedia("(hover: hover) and (pointer: fine)").matches) return
       setState("engaged", true)
 
       if (props.complete()) return
@@ -68,10 +67,8 @@ export function TurnNavigator(props: TurnNavigatorProps) {
       void loadIndex()
         .catch(() => [])
         .then((turns) => setState("index", new Map(turns)))
-    }
-
-    timeline.addEventListener("pointermove", engage)
-    onCleanup(() => timeline.removeEventListener("pointermove", engage))
+    }, railDelay)
+    onCleanup(() => clearTimeout(timer))
   })
 
   return (

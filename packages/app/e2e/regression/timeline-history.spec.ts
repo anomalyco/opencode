@@ -99,8 +99,7 @@ test.describe("timeline history", () => {
     const navigator = page.locator('[data-component="session-turn-navigator"]')
     const turns = navigator.locator("[data-turn]")
     const preview = navigator.locator('[data-slot="session-turn-navigator-preview"]')
-    // Pointer movement over the timeline loads the index, which lists every turn without paging the transcript.
-    await timelineScroller(page).hover()
+    // The index lists every turn without paging the transcript.
     await expect(turns).toHaveCount(40)
     expect(loads).toEqual([undefined])
 
