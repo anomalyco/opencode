@@ -11,16 +11,15 @@ import { ConfigProviderOptionsV1 } from "./provider-options.js"
 import { Provider } from "../../provider.js"
 import { Model } from "../../model.js"
 
-const decodeOptions = { errors: "all", onExcessProperty: "ignore", propertyOrder: "original" } as const
+const decodeOptions = { errors: "all", onExcessProperty: "ignore" } as const
 const decodeAgent = Schema.decodeUnknownSync(Schema.fromJsonString(ConfigAgent.Info), decodeOptions)
 const encodeAgent = Schema.encodeSync(ConfigAgent.Info)
 
 function permissions(info?: ConfigPermissionV1.Info) {
-  const rules = Object.entries(info ?? {}).flatMap(([key, rule]) => {
-    if (!rule) return []
+  const rules = (info ?? []).flatMap(([key, rule]) => {
     const action = normalizeAction(key)
     if (typeof rule === "string") return [{ action, resource: "*", effect: rule }]
-    return Object.entries(rule).map(([resource, effect]) => ({ action, resource, effect }))
+    return rule.map(([resource, effect]) => ({ action, resource, effect }))
   })
   return rules.length ? rules : undefined
 }

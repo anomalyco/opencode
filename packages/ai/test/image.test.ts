@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer, Stream } from "effect"
-import { HttpClientRequest } from "effect/unstable/http"
+import { HttpClientRequest } from "effect/http"
 import { Image, ImageClient, Media } from "../src/index.js"
 import { BlackForestLabs, Fal, Google, OpenAI, Replicate, Stability, XAI, ZAI } from "../src/providers.js"
 import { it } from "./lib/effect.js"

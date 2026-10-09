@@ -1,7 +1,7 @@
 export * as WebSearchMcp from "./mcp.js"
 
 import { Duration, Effect, Schema } from "effect"
-import { HttpClient, HttpClientRequest } from "effect/unstable/http"
+import { HttpClient, HttpClientRequest } from "effect/http"
 import { collectBoundedResponseBody } from "../../tool/http-body.js"
 
 export const MAX_RESPONSE_BYTES = 256 * 1024

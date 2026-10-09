@@ -1,7 +1,7 @@
 export * as Project from "./project.js"
 
 import { Context, Effect, Layer, Schema } from "effect"
-import { ChildProcess } from "effect/unstable/process"
+import { ChildProcess } from "effect/process"
 import { and, asc, desc, eq, gte, isNull, lte, sql } from "drizzle-orm"
 import path from "path"
 import { AbsolutePath } from "./schema.js"

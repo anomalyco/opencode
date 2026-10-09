@@ -1,4 +1,5 @@
-import { Effect, Encoding } from "effect"
+import { Effect } from "effect"
+import { Base64 } from "effect/encoding"
 import { Media } from "../../media.js"
 import type { MediaProtocol } from "../../route/media-protocol.js"
 import { mergeJsonRecords, type AIError, type ProviderID } from "../../schema/index.js"
@@ -10,7 +11,7 @@ export const inlineBytes = (route: string, asset: Media.Asset): Effect.Effect<Ui
   if (asset.source.type === "bytes") return Effect.succeed(asset.source.data)
   const inline = asset.inline()
   if (!inline) return Effect.fail(ProviderShared.inlineRequired(route, asset))
-  return Effect.fromResult(Encoding.decodeBase64(inline.base64)).pipe(
+  return Effect.fromResult(Base64.decode(inline.base64)).pipe(
     Effect.mapError((cause) => ProviderShared.invalidRequest(`${route} media contains invalid base64 data`, cause)),
   )
 }
@@ -52,7 +53,7 @@ export const decodedAsset = (
   mediaType: string | undefined,
   options?: Media.AssetOptions,
 ) =>
-  Effect.fromResult(Encoding.decodeBase64(data)).pipe(
+  Effect.fromResult(Base64.decode(data)).pipe(
     Effect.mapError((cause) => invalid(`${label} contains invalid base64 data`, cause)),
     Effect.map((bytes) => Media.bytes(bytes, mediaType, options)),
   )

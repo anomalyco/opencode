@@ -48,9 +48,9 @@ describe("Config cache rules", () => {
     { options: {}, priority: 1 },
     { when: {} },
   ])("rejects malformed or misspelled rules: %j", (rule) => {
-    // Config loading normally ignores excess properties; cache rules must override that policy.
+    // The cache normalization boundary requests strict decoding.
     expect(() =>
-      Schema.decodeUnknownSync(Config.Info, { onExcessProperty: "ignore" })({ cache: { test: [rule] } }),
+      Schema.decodeUnknownSync(Config.Info, { onExcessProperty: "error" })({ cache: { test: [rule] } }),
     ).toThrow()
   })
 })

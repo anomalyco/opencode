@@ -1,5 +1,5 @@
 import { Clock, Duration, Effect, Schema, type Stream } from "effect"
-import { HttpClientResponse } from "effect/unstable/http"
+import { HttpClientResponse } from "effect/http"
 import type { Snapshot, Status } from "../generation.js"
 import { Media } from "../media.js"
 import type { AuthInput } from "./auth.js"

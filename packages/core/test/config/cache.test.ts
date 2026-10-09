@@ -66,13 +66,19 @@ describe("ConfigCache", () => {
 })
 
 describe("cache config normalization", () => {
-  test("isolates a misspelled condition without reviving lower-priority rules", () => {
+  test.each([
+    { when: { subAgent: true }, options: {} },
+    { options: { ttlSeconds: 3600 } },
+    { options: { cache_control: { type: "ephemeral", ttlSeconds: 3600 } } },
+    { options: { prompt_cache_options: { ttlSeconds: 1800 } } },
+    { options: {}, priority: 1 },
+  ])("isolates misspelled cache fields without reviving lower-priority rules: %j", (rule) => {
     const unrelated = { permission: { bash: "ask" }, agents: { research: { description: "Research" } }, providers: {} }
     const ordinary = ConfigNormalize.normalize(unrelated)
     const result = ConfigNormalize.normalize({
       ...unrelated,
       cache: {
-        anthropic: [{ when: { subAgent: true }, options: {} }],
+        anthropic: [rule],
         openai: [{ options: { prompt_cache_retention: "24h" } }],
       },
     })

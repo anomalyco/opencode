@@ -41,6 +41,11 @@
     margin-bottom: 0;
   }
 
+  /* Pretty wrapping would move settled words as each token arrives, so the growing block stays greedy until it completes. */
+  &[data-streaming] > [data-markdown-block]:last-child {
+    text-wrap-style: auto;
+  }
+
   /* Headings: Sized by level, distinguished by color and spacing */
   h1 {
     font-size: 17px;

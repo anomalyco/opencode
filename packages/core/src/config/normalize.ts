@@ -43,7 +43,7 @@ export type Result =
     }
   | { readonly type: "rejected"; readonly diagnostics: readonly Diagnostic[] }
 
-const options = { errors: "all", onExcessProperty: "ignore", propertyOrder: "original" } as const
+const options = { errors: "all", onExcessProperty: "ignore" } as const
 const unsupportedTopLevel = ["logLevel", "server", "subagent_depth", "layout"] as const
 const unsupportedExperimental = [
   "disable_paste_summary",
@@ -239,7 +239,11 @@ function normalizeCache(input: unknown, encoded: Record<string, unknown>, diagno
   }
   encoded.cache = Object.fromEntries(
     Object.entries(input).map(([provider, raw]) => {
-      const decoded = Schema.decodeUnknownResult(ConfigCache.Info.value, options)(raw)
+      // Cache rules reject unknown keys even though ordinary config fields tolerate them.
+      const decoded = Schema.decodeUnknownResult(ConfigCache.Info.value, {
+        ...options,
+        onExcessProperty: "error",
+      })(raw)
       const issue = Result.isFailure(decoded) ? decoded.failure.message : validate(decoded.success)
       if (issue)
         diagnostics.push({

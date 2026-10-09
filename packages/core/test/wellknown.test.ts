@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect, Fiber, Stream } from "effect"
-import { FetchHttpClient } from "effect/unstable/http"
+import { FetchHttpClient } from "effect/http"
 import { KV } from "@opencode/core/kv"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Bus } from "@opencode/core/bus"
