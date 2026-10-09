@@ -47,7 +47,7 @@ export const PaneEvent = Schema.Union([
   Schema.Struct({
     type: Schema.Literal("page"),
     tabID: Browser.TabID,
-    icon: Schema.optionalKey(detail(MAX_ICON_URL).check(Schema.isStartsWith("data:image/"))),
+    icon: Schema.optionalKey(detail(MAX_ICON_URL).check(Schema.isStartingWith("data:image/"))),
     zoom: Schema.Finite.check(Schema.isBetween({ minimum: 0.25, maximum: 5 })),
   }),
   // The page asked for the address field, with the platform's address shortcut.
@@ -67,7 +67,7 @@ export const BrowserPane = Ipc.define({
       input: Schema.Struct({
         binding,
         server: text(16_384),
-        session: text(256).check(Schema.isStartsWith("ses")),
+        session: text(256).check(Schema.isStartingWith("ses")),
         restore: Schema.optionalKey(Browser.State),
       }),
     },

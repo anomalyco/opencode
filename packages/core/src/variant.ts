@@ -610,6 +610,7 @@ const PROTOCOLS: Readonly<Record<string, Protocol>> = {
 
   "@opencode/ai/providers/anthropic": anthropicMessages,
   "@opencode/ai/providers/google-vertex/messages": anthropicMessages,
+  "@opencode/ai/providers/google-vertex/mistral": openaiChat,
   "@opencode/ai/providers/alibaba/messages": alibabaMessages,
   "@opencode/ai/providers/meta/messages": anthropicMessages,
   "@opencode/ai/providers/minimax/messages": minimaxMessages,

@@ -1,6 +1,6 @@
 import { Clock, Effect, FiberHandle, Option, Schema, Semaphore, Stream } from "effect"
-import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
-import { ChildProcess } from "effect/unstable/process"
+import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
+import { ChildProcess } from "effect/process"
 import path from "node:path"
 import { define } from "@opencode/plugin/effect/plugin"
 import { Form } from "@opencode/schema/form"

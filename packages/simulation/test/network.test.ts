@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { Effect, Exit } from "effect"
 import { TestClock } from "effect/testing"
-import { HttpClientRequest } from "effect/unstable/http"
+import { HttpClientRequest } from "effect/http"
 import { SimulationNetwork } from "../src/backend/network"
 
 test("keeps routes and request logs local to each network", async () => {

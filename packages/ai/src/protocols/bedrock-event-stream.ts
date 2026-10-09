@@ -1,6 +1,7 @@
 import { EventStreamCodec } from "@smithy/eventstream-codec"
 import { fromUtf8, toUtf8 } from "@smithy/util-utf8"
-import { Effect, Encoding, Stream } from "effect"
+import { Effect, Stream } from "effect"
+import { Base64 } from "effect/encoding"
 import { AIError, AIErrorReason, InvalidProviderOutputError } from "../schema/index.js"
 import { Framing } from "../route/framing.js"
 import { ProviderShared } from "./shared.js"
@@ -47,7 +48,7 @@ const consumeFrames = (route: string) => (state: FrameBufferState, input: FrameI
             route,
             classification: "incomplete-stream",
             message: `Incomplete Bedrock Converse event-stream frame: ${remaining.length} buffered bytes remain at end of stream`,
-            body: Encoding.encodeBase64(remaining),
+            body: Base64.encode(remaining),
           }),
         })
       return [state, []] as const
@@ -68,7 +69,7 @@ const consumeFrames = (route: string) => (state: FrameBufferState, input: FrameI
             `Failed to decode Bedrock Converse event-stream frame: ${
               error instanceof Error ? error.message : String(error)
             }`,
-            Encoding.encodeBase64(view.subarray(0, totalLength)),
+            Base64.encode(view.subarray(0, totalLength)),
             error,
           ),
       })

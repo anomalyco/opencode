@@ -37,7 +37,7 @@
     "@opencode/util": "workspace:*",
     "@opentui/core": "catalog:",
     "@opentui/solid": "catalog:",
-    "@opentunnel/client": "0.2.0",
+    "@opentunnel/client": "0.4.0",
     "@parcel/watcher": "2.5.1",
     "@silvia-odwyer/photon-node": "0.3.4",
     "diff": "catalog:",

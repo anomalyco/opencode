@@ -2,7 +2,7 @@ import { Plugin } from "@opencode/core/plugin"
 import { PluginUpdate } from "@opencode/core/plugin/update"
 import { InvalidRequestError, ServiceUnavailableError } from "@opencode/protocol/errors"
 import { Cause, Effect, Exit } from "effect"
-import { HttpApiBuilder } from "effect/unstable/httpapi"
+import { HttpApiBuilder } from "effect/http-api"
 import { Api } from "../api"
 import { response } from "../location"
 

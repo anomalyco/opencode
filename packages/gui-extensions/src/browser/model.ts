@@ -2,7 +2,7 @@ import { batch, createRoot, createSignal, getOwner, onCleanup } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import type { Browser } from "@opencode/plugin-browser/rpc"
-import { createKeyed, type Link, type SessionRef, type SetupContext } from "../sdk"
+import { createKeyed, type SessionRef, type SetupContext } from "../sdk"
 import { readHref } from "./comment"
 import {
   createConnection,
@@ -14,7 +14,7 @@ import {
 } from "./connection"
 import { recordable, remember, withIcon } from "./history"
 import type definition from "./index"
-import { isHtml, resolveLink, workspaceFileURL } from "./link"
+import { workspaceFileURL } from "./link"
 import { BrowserPane, type PaneEvent } from "./ipc"
 
 type Session = Pick<SessionRef, "key">
@@ -410,24 +410,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     if (current) openURL(session, workspaceFileURL(current, path))
   }
 
-  // HTML the pane can load opens as a browser tab. Palette results and comment chips name files to
-  // edit, so they keep opening file tabs.
-  const target = (link: Link) => {
-    if (link.exact || link.origin || !link.session) return
-    const view = sessions.current()
-
-    if (view?.key !== link.session.key) return
-    const current = files(view)
-
-    if (!current) return
-    const path = resolveLink(current, link.href, link.base)
-
-    if (!path || !isHtml(path) || !canOpen(view, path)) return
-
-    return { view, path }
-  }
-
-  // The agent's browser.preview tool: the link router picks the browser for HTML, the file panel otherwise. Only the
+  // The agent's browser.preview tool: the file extension opens HTML in the browser, other files in the file panel. Only the
   // session's screen resolves workspace paths, so a preview for a session that is not on screen waits for it.
   const preview = (entry: Live, path: string) => {
     const view = sessions.current()
@@ -520,12 +503,6 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
       if (item && item.id !== attachment(session)?.browser?.focusedTabID)
         command(session, { type: "tabs.focus", tabID: item.id })
-    },
-    match: (link: Link) => !!target(link),
-    openLink(link: Link) {
-      const found = target(link)
-
-      if (found) openFile(found.view, found.path)
     },
     /** The page's element picker starting, stopping, or picking an element. */
     onInspect(session: Session, listener: (event: InspectEvent) => void) {

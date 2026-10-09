@@ -45,9 +45,6 @@ export const AmazonBedrockPlugin = define({
     )
       .filter(Boolean)
       .toSorted()
-    const sources = paths
-      .map((file) => (file.startsWith(Global.Path.home + path.sep) ? `~${file.slice(Global.Path.home.length)}` : file))
-      .join(" and ")
     yield* ctx.integration.transform((editor) => {
       // models.dev advertises AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and
       // AWS_REGION alongside the bearer token. Only the bearer token is a key;
@@ -72,8 +69,8 @@ export const AmazonBedrockPlugin = define({
               type: "string",
               title: "AWS profile",
               description: profiles.length
-                ? `Found ${profiles.length} profile${profiles.length === 1 ? "" : "s"} in ${sources} on the server.`
-                : `No AWS profiles found in ${sources} on the server.`,
+                ? `Found ${profiles.length} profile${profiles.length === 1 ? "" : "s"} in your AWS configuration.`
+                : "No profiles found in your AWS configuration.",
               required: true,
               minLength: 1,
               pattern: "\\S",

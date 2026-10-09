@@ -8,7 +8,7 @@ import { ProjectID } from "./project-id.js"
 export const ID = ProjectID
 export type ID = typeof ID.Type
 
-export const Vcs = Schema.String.check(Schema.isPattern(/^[a-z][a-z0-9._-]*$/)).annotate({
+export const Vcs = Schema.String.check(Schema.isPattern(/^[a-z][a-z0-9._-]*$/u)).annotate({
   identifier: "Project.Vcs",
 })
 export const Current = Schema.Struct({

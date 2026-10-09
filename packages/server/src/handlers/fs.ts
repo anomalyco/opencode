@@ -2,8 +2,8 @@ import { FileSystem } from "@opencode/core/filesystem"
 import { RelativePath } from "@opencode/core/schema"
 import { FileNotFoundError } from "@opencode/protocol/errors"
 import { Effect, Option, Stream } from "effect"
-import { type HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
-import { HttpApiBuilder } from "effect/unstable/httpapi"
+import { type HttpServerRequest, HttpServerResponse } from "effect/http"
+import { HttpApiBuilder } from "effect/http-api"
 import { Api } from "../api"
 import { response } from "../location"
 
@@ -28,7 +28,13 @@ export const FileSystemHandler = HttpApiBuilder.group(Api, "server.fs", (handler
         response(
           Effect.gen(function* () {
             const fs = yield* FileSystem.Service
-            return yield* fs.list(ctx.query)
+            return yield* fs
+              .list(ctx.query)
+              .pipe(
+                Effect.mapError(
+                  (error) => new FileNotFoundError({ path: error.path, message: `Directory not found: ${error.path}` }),
+                ),
+              )
           }),
         ),
       )
