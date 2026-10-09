@@ -174,6 +174,8 @@ describe("ConfigProviderPlugin.Plugin", () => {
       expect(yield* integrations.get(Integration.ID.make("litellm"))).toMatchObject({
         id: "litellm",
         name: "litellm",
+        // Provider policy reads this identity to remove a denied integration from the registry.
+        metadata: { provider: "litellm" },
         methods: [{ type: "key", label: "Manually enter API Key" }],
       })
     }),

@@ -323,7 +323,9 @@ Flow:
 3. Run the terminal config policy transform over the reversed authored statements followed by the organization-managed statements.
 4. Remove providers denied by the final matching `provider.use` statement.
 
-Config reload refreshes the plugin's policy snapshot and rebuilds the catalog. A changed Console snapshot notifies the policy plugin to rebuild its catalogs and re-run the terminal transforms.
+A provider and the integration it connects through share one identity. The catalog that defines a provider records that identity on the integration it registers, and the terminal policy transform removes an integration whose statement denies its provider, so connection lists such as `/connect` cannot offer a provider that policy denies. The integration carries the identity itself because the provider and integration catalogs fold independently: a denied provider is already gone from the provider catalog by the time the integration catalog is filtered. Only marked integrations are removed there: another integration registered under its own ID, such as the OAuth integration a remote MCP server registers, stays in place and remains governed by `integration.use`.
+
+Config reload refreshes the plugin's policy snapshot and rebuilds the provider and integration catalogs. A changed Console snapshot notifies the policy plugin to rebuild its catalogs and re-run the terminal transforms.
 
 ## Legacy Migration
 

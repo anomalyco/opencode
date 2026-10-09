@@ -3,6 +3,7 @@ import { Integration } from "@opencode/schema/integration"
 import { Provider } from "@opencode/schema/provider"
 import { Effect, Stream } from "effect"
 import { Bus } from "../bus.js"
+import { markProvider } from "../integration.js"
 import { Model } from "../model.js"
 import { ModelsDev } from "../models-dev.js"
 
@@ -36,7 +37,10 @@ export const ModelsDevPlugin = define({
       for (const provider of loaded.data) {
         if (provider.environment.length === 0) continue
         const integrationID = provider.info.id
-        integrations.update(integrationID, (integration) => (integration.name = provider.info.name))
+        integrations.update(integrationID, (integration) => {
+          integration.name = provider.info.name
+          markProvider(integration, provider.info.id)
+        })
         integrations.method.update({
           integrationID,
           method: { type: "key" },

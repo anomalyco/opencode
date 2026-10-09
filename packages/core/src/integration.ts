@@ -145,6 +145,23 @@ export { Event } from "@opencode/schema/integration"
 export const Ref = Integration.Ref
 export type Ref = Integration.Ref
 
+// Provider policy reaches an integration through this metadata, because integrations and providers
+// fold separately: a denied provider is already gone from the provider catalog by the time the
+// integration catalog is filtered. The catalog that defines a provider marks the integration it
+// connects, and the policy transform reads that identity back.
+const providerKey = "provider"
+/** A registered integration as it reaches plugin transforms; the ID stays unbranded there. */
+type TaggedRef = { id: string; name: string; metadata?: Record<string, unknown> }
+/** Records the provider an integration connects, so `provider.use` policy can remove the integration. */
+export function markProvider(ref: TaggedRef, providerID: string) {
+  ref.metadata = { ...ref.metadata, [providerKey]: providerID }
+}
+/** Returns the provider an integration connects, when the catalog that registered it marked one. */
+export function providerOf(ref: TaggedRef) {
+  const provider = ref.metadata?.[providerKey]
+  return typeof provider === "string" ? provider : undefined
+}
+
 type Entry = {
   ref: Types.DeepMutable<Ref>
   methods: Types.DeepMutable<Method>[]

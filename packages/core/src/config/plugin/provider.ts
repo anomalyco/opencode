@@ -6,6 +6,7 @@ import { ConfigProvider } from "@opencode/schema/config/provider"
 import { Money } from "@opencode/schema/money"
 import { Effect } from "effect"
 import { Config } from "../../config.js"
+import { markProvider } from "../../integration.js"
 import { Model } from "../../model.js"
 import { Provider } from "../../provider.js"
 import { Variant } from "../../variant.js"
@@ -31,6 +32,7 @@ export const Plugin = define({
         }
         integrations.update(integrationID, (integration) => {
           integration.name = provider.name ?? integration.name
+          markProvider(integration, integrationID)
         })
         if (provider.env !== undefined) {
           integrations.method.update({

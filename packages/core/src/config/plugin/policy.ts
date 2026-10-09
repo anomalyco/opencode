@@ -3,6 +3,7 @@ export * as ConfigPolicyPlugin from "./policy.js"
 import { define } from "@opencode/plugin/effect/plugin"
 import { Effect, Stream } from "effect"
 import { Config } from "../../config.js"
+import { providerOf } from "../../integration.js"
 import { ManagedPolicy } from "../../managed-policy.js"
 import { State } from "../../state.js"
 import { Wildcard } from "../../util/wildcard.js"
@@ -14,7 +15,9 @@ export const Plugin = define({
     const config = yield* Config.Service
     const managed = yield* ManagedPolicy.Service
     const reload = State.batch(
-      Effect.all([ctx.provider.reload(), ctx.mcp.reload(), ctx.skill.reload()], { discard: true }),
+      Effect.all([ctx.provider.reload(), ctx.integration.reload(), ctx.mcp.reload(), ctx.skill.reload()], {
+        discard: true,
+      }),
     )
     const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, reload)
     yield* managed.changes().pipe(
@@ -31,6 +34,21 @@ export const Plugin = define({
           (policy) => policy.action === "provider.use" && Wildcard.match(record.provider.id, policy.resource),
         )
         if (policy?.effect === "deny") providers.remove(record.provider.id)
+      }
+    })
+    // A provider and the integration it connects through share one identity, so a denied provider must
+    // leave the integration registry too; otherwise connection lists such as `/connect` keep offering it.
+    // The integration carries that identity itself, because the two catalogs fold independently and a
+    // denied provider has already left the provider catalog by the time this transform runs. An
+    // integration registered under its own ID, such as the OAuth integration of a remote MCP server,
+    // carries no identity here and remains governed by `integration.use`.
+    yield* ctx.integration.transform((integrations) => {
+      const current = policies()
+      for (const integration of integrations.list()) {
+        const providerID = providerOf(integration)
+        if (providerID === undefined) continue
+        if (ManagedPolicy.decision(current, "provider.use", providerID) === "deny")
+          integrations.remove(integration.id)
       }
     })
     yield* ctx.mcp.transform((servers) => {

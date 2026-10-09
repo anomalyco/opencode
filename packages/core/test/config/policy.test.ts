@@ -5,12 +5,16 @@ import { Permission } from "@opencode/schema/permission"
 import { Config } from "@opencode/core/config"
 import { ConfigPolicyPlugin } from "@opencode/core/config/plugin/policy"
 import { Bus } from "@opencode/core/bus"
+import { Integration } from "@opencode/core/integration"
 import { ManagedPolicy } from "@opencode/core/managed-policy"
+import { ModelsDev } from "@opencode/core/models-dev"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { PluginHost } from "@opencode/core/plugin/host"
+import { ModelsDevPlugin } from "@opencode/core/plugin/models-dev"
 import { Provider } from "@opencode/core/provider"
 import { Session } from "@opencode/core/session"
+import { State } from "@opencode/core/state"
 import { Effect, Schema } from "effect"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "../plugin/fixture"
@@ -30,6 +34,24 @@ const tool = (effect: ConfigPolicy.Effect, resource: string): ConfigPolicy.Info 
   resource,
   effect,
 })
+// Two catalog providers, so a denied one has to leave the integration registry while the other stays.
+const snapshot = [
+  {
+    info: { id: Provider.ID.openai, name: "OpenAI", activation: "auto", package: "@opencode/ai/providers/openai" },
+    environment: ["OPENAI_API_KEY"],
+    models: [],
+  },
+  {
+    info: {
+      id: Provider.ID.anthropic,
+      name: "Anthropic",
+      activation: "auto",
+      package: "@opencode/ai/providers/anthropic",
+    },
+    environment: ["ANTHROPIC_API_KEY"],
+    models: [],
+  },
+] satisfies readonly ModelsDev.Snapshot[]
 
 const addPlugin = Effect.fn(function* (entries: Entry[]) {
   const plugin = yield* Plugin.Service
@@ -88,6 +110,108 @@ describe("ConfigPolicyPlugin.Plugin", () => {
       expect(yield* catalog.get(Provider.ID.anthropic)).toBeDefined()
       expect(yield* catalog.get(Provider.ID.make("company-internal"))).toBeDefined()
     }),
+  )
+
+  it.effect("removes a denied provider's integration and keeps integrations no provider owns", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Provider.Service
+      const integrations = yield* Integration.Service
+      yield* catalog.transform((catalog) => {
+        catalog.update(Provider.ID.openai, () => {})
+        catalog.update(Provider.ID.anthropic, () => {})
+      })
+      yield* integrations.transform((editor) => {
+        editor.update(Integration.ID.make("openai"), (ref) => Integration.markProvider(ref, "openai"))
+        editor.update(Integration.ID.make("anthropic"), (ref) => Integration.markProvider(ref, "anthropic"))
+        // A remote MCP server registers an OAuth integration that no provider owns.
+        editor.update(Integration.ID.make("mcp_0123456789abcdef"), () => {})
+      })
+      yield* addPlugin([document(provider("deny", "*"), provider("allow", "anthropic"))])
+
+      const ids = (yield* integrations.list()).map((integration) => integration.id)
+      expect(ids).not.toContain(Integration.ID.make("openai"))
+      expect(ids).toContain(Integration.ID.make("anthropic"))
+      expect(ids).toContain(Integration.ID.make("mcp_0123456789abcdef"))
+    }),
+  )
+
+  it.effect("removes a denied provider's integration when the catalogs fold in one batch", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Provider.Service
+      const integrations = yield* Integration.Service
+      const plugin = yield* Plugin.Service
+      const host = yield* PluginHost.make(plugin)
+      // Activation batches every registration, so both catalogs fold together and the integration
+      // catalog is rebuilt before the provider catalog. The integration must still be removed here.
+      yield* State.batch(
+        Effect.gen(function* () {
+          yield* ModelsDevPlugin.effect(host).pipe(
+            Effect.provideService(
+              ModelsDev.Service,
+              ModelsDev.Service.of({ get: () => Effect.succeed(snapshot), refresh: () => Effect.void }),
+            ),
+          )
+          yield* ConfigPolicyPlugin.Plugin.effect(host).pipe(
+            Effect.provide(Config.testLayer([document(provider("deny", "*"), provider("allow", "anthropic"))])),
+          )
+        }),
+      )
+
+      expect((yield* catalog.all()).map((entry) => entry.id)).toEqual([Provider.ID.anthropic])
+      expect((yield* integrations.list()).map((integration) => integration.id)).toEqual([Integration.ID.make("anthropic")])
+    }),
+  )
+
+  it.effect("restores an allowed provider integration after the policy changes", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Provider.Service
+      const integrations = yield* Integration.Service
+      const managed = yield* ManagedPolicy.Service
+      yield* catalog.transform((catalog) => catalog.update(Provider.ID.openai, () => {}))
+      yield* integrations.transform((editor) =>
+        editor.update(Integration.ID.make("openai"), (ref) => Integration.markProvider(ref, "openai")),
+      )
+      yield* addPlugin([])
+      expect((yield* integrations.list()).map((integration) => integration.id)).toContain(
+        Integration.ID.make("openai"),
+      )
+
+      yield* managed.set({ statements: [provider("deny", "openai")] })
+      yield* integrations.reload()
+      expect((yield* integrations.list()).map((integration) => integration.id)).not.toContain(
+        Integration.ID.make("openai"),
+      )
+
+      yield* managed.set({ statements: [provider("allow", "openai")] })
+      yield* integrations.reload()
+      expect((yield* integrations.list()).map((integration) => integration.id)).toContain(
+        Integration.ID.make("openai"),
+      )
+    }),
+  )
+
+  it.live("reloads the integration registry when policies change", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Provider.Service
+      const integrations = yield* Integration.Service
+      const bus = yield* Bus.Service
+      const test = yield* Config.Test
+      const plugin = yield* Plugin.Service
+      const host = yield* PluginHost.make(plugin)
+      const openai = Integration.ID.make("openai")
+      yield* catalog.transform((catalog) => catalog.update(Provider.ID.openai, () => {}))
+      yield* integrations.transform((editor) =>
+        editor.update(openai, (ref) => Integration.markProvider(ref, "openai")),
+      )
+      yield* ConfigPolicyPlugin.Plugin.effect(host)
+      expect((yield* integrations.list()).map((integration) => integration.id)).not.toContain(openai)
+
+      yield* test.setEntries([])
+      yield* bus.publish(Event.Updated, {})
+      yield* waitUntil(
+        integrations.list().pipe(Effect.map((list) => list.some((integration) => integration.id === openai))),
+      )
+    }).pipe(Effect.provide(Config.testLayer([document(provider("deny", "openai"))]))),
   )
 
   it.effect("prevents project policy from overriding user-global policy", () =>
