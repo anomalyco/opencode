@@ -57,9 +57,6 @@ type ZenData = Awaited<ReturnType<typeof ZenData.list>>
 type PreparedBody = Awaited<ReturnType<typeof prepareRequestBody>>
 type BillingSource = "anonymous" | "free" | "byok" | "subscription" | "lite" | "balance"
 
-// Free models whose keyless requests skip legacy checks and go straight to new inference.
-const ANONYMOUS_PROXY_MODELS = new Set(["ling-3.1-flash-free", "nemotron-3.5-lightning-free"])
-
 function resolve(text: string, params?: Record<string, string | number>) {
   if (!params) return text
   return text.replace(/\{\{(\w+)\}\}/g, (raw, key) => {
@@ -118,7 +115,8 @@ export async function handler(
           opts.modelList === "full"
             ? entry?.providers.find((provider) => provider.id === entry.byokProvider)?.model
             : undefined,
-        anonymous: opts.modelList === "full" && ANONYMOUS_PROXY_MODELS.has(model),
+        // Keyless requests for free models skip legacy checks and go straight to new inference.
+        anonymous: opts.modelList === "full" && entry?.allowAnonymous === true,
         body: (providerModel) => requestBody?.stream(providerModel ?? model, false) ?? body,
       }).catch(() => {
         void (requestBody ? requestBody.cancel() : body.cancel()).catch(() => {})
