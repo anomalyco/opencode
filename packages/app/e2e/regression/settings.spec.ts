@@ -807,6 +807,65 @@ for (const row of [
   })
 }
 
+test("providers: the connect dialog lists connected providers and manages their accounts", async ({ page }) => {
+  const accounts = [
+    { type: "credential", id: "cred_work", label: "Work", method: "key" },
+    { type: "credential", id: "cred_personal", label: "Personal", method: "key" },
+  ]
+
+  const state = { active: "cred_work" }
+  const activated: string[] = []
+
+  const { settings } = await open(page, {
+    integrations: () => [
+      {
+        id: "openai",
+        name: "OpenAI",
+        methods: [{ type: "key", label: "API key" }],
+        connections: accounts.toSorted((a, b) => Number(b.id === state.active) - Number(a.id === state.active)),
+      },
+      { id: "anthropic", name: "Anthropic", methods: [{ type: "key", label: "API key" }], connections: [] },
+    ],
+    onCredentialActivate: (credentialID) => {
+      activated.push(credentialID)
+      state.active = credentialID
+    },
+  })
+
+  await settings.getByRole("tab", { name: "Providers", exact: true }).click()
+  await settings.getByRole("button", { name: "Show more providers", exact: true }).click()
+  const dialog = page.getByRole("dialog")
+  const openai = dialog.locator('[data-provider-id="openai"]')
+  await expect(openai).toContainText("2 accounts")
+  await expect(dialog.locator('[data-provider-id="anthropic"]')).not.toContainText("account")
+  await openai.click()
+
+  await expect(page.getByRole("dialog", { name: "OpenAI", exact: true })).toBeVisible()
+  const list = dialog.getByRole("radiogroup", { name: "Connected accounts", exact: true })
+  await expect(list.getByRole("radio", { name: "Work", exact: true })).toHaveAttribute("aria-checked", "true")
+  await list.getByRole("radio", { name: "Personal", exact: true }).click()
+  await expect(list.getByRole("radio", { name: "Personal", exact: true })).toHaveAttribute("aria-checked", "true")
+  expect(activated).toEqual(["cred_personal"])
+
+  // Removing an account asks first.
+  await list.getByRole("button", { name: "More options", exact: true }).nth(1).click()
+  await page.getByRole("menuitem", { name: "Remove account…", exact: true }).click()
+  await expect(dialog.getByText("Remove Work?", { exact: true })).toBeVisible()
+
+  const removed = page.waitForRequest(
+    (request) => request.method() === "DELETE" && new URL(request.url()).pathname === "/api/credential/cred_work",
+  )
+
+  await dialog.getByRole("button", { name: "Remove", exact: true }).click()
+  await removed
+
+  // Add account opens the provider's sign-in, and Back returns to the accounts.
+  await dialog.getByRole("button", { name: "Add account", exact: true }).click()
+  await expect(dialog.getByPlaceholder("API key")).toBeVisible()
+  await dialog.getByRole("button", { name: "Navigate back", exact: true }).click()
+  await expect(list).toBeVisible()
+})
+
 test("providers: switching Console accounts keeps the list until the new workspace loads", async ({ page }) => {
   const accounts = [
     { type: "credential", id: "cred_clara", label: "Clara", method: "oauth" },

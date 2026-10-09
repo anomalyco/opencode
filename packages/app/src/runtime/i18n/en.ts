@@ -117,6 +117,11 @@ export const dict = {
   "dialog.model.unpaid.viewMoreProviders": "See 70+ more providers",
 
   "dialog.provider.viewAll": "Show more providers",
+  "dialog.provider.accounts.count.one": "{{count}} account",
+  "dialog.provider.accounts.count.other": "{{count}} accounts",
+  "dialog.provider.accounts.connected": "Connected accounts",
+  "dialog.provider.accounts.removeConfirm": "Remove {{account}}?",
+  "dialog.provider.accounts.remove": "Remove",
 
   "provider.connect.title": "Connect {{provider}}",
   "provider.connect.opencode.name": "OpenCode Console",

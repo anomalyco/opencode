@@ -43,9 +43,7 @@ export function providerFormDefaults(fields: ProviderConnectMethod["form"]) {
 
       if (actual === undefined) return false
 
-      const equal = Array.isArray(actual)
-        ? actual.some((item) => item === condition.value)
-        : actual === condition.value
+      const equal = Array.isArray(actual) ? actual.some((item) => item === condition.value) : actual === condition.value
 
       return condition.op === "eq" ? equal : !equal
     })
@@ -63,7 +61,7 @@ export function createProviderConnectionController(options: {
   directory: () => string | undefined
   onComplete: () => void
   /** Waits for the caller to start a method, even when the integration has only one. */
-  manual?: boolean
+  manual?: () => boolean
   /** Runs after the catalogs refresh; returning false keeps the dialog on a retryable error. */
   prepare?: (active: () => boolean) => Promise<boolean>
   pollInterval?: number
@@ -148,7 +146,7 @@ export function createProviderConnectionController(options: {
   )
 
   const autoIndex = createMemo(() => {
-    if (integration.loading || options.manual) return undefined
+    if (integration.loading || options.manual?.()) return undefined
 
     return methods().length === 1 ? 0 : undefined
   })
