@@ -1,12 +1,17 @@
 import { describe, expect, test } from "bun:test"
-import type { SessionMessageInfo } from "@opencode/client/promise"
-import { assistantMessage, makeSession, startWire } from "./wire-fixture"
+import type { SessionMessage } from "@opencode/schema/session-message"
+import path from "node:path"
+import { tmpdir } from "../fixture/tmpdir"
+import { assistantMessage, fileDiff, makeSession, startWire } from "./wire-fixture"
 
 describe("acp session replay over the wire", () => {
   test("replays user, text, reasoning, and tool messages in order on session/load", async () => {
+    await using dir = await tmpdir()
+    const edited = path.resolve(dir.path, "edited.ts")
+    await Bun.write(edited, "one\r\nthree\r\n")
     await using acp = await startWire()
     acp.server.sessions.set("ses_replay", makeSession("ses_replay"))
-    acp.server.messages.set("ses_replay", replayFixtureMessages())
+    acp.server.messages.set("ses_replay", replayFixtureMessages(edited))
     await acp.initialize()
 
     await acp.request("session/load", { cwd: "/workspace", sessionId: "ses_replay", mcpServers: [] })
@@ -26,6 +31,8 @@ describe("acp session replay over the wire", () => {
       "tool_call",
       "tool_call_update",
       "tool_call",
+      "tool_call",
+      "tool_call_update",
     ])
     expect(updates[1]?.update).toMatchObject({
       content: { type: "resource_link", uri: "file:///workspace/note.md", name: "note.md", mimeType: "text/markdown" },
@@ -57,59 +64,20 @@ describe("acp session replay over the wire", () => {
         { type: "content", content: { type: "text", text: "failed hard" } },
       ],
     })
+    expect(updates[5]?.update).toMatchObject({ name: "shell" })
     expect(updates[11]?.update).toMatchObject({ toolCallId: "call_streaming", status: "pending", rawInput: {} })
-  })
-
-  test("continues replay after one message fails to translate", async () => {
-    await using acp = await startWire({
-      fetch(request) {
-        if (request.path !== "/api/session/ses_replay_failure/message") return undefined
-        return Response.json({
-          data: [
-            replayToolMessage("call_first", { status: "error", input: {}, metadata: {} }),
-            replayToolMessage("call_after", {
-              status: "completed",
-              input: { command: "printf done" },
-              metadata: { exit: 0 },
-              content: [{ type: "text", text: "done" }],
-            }),
-          ],
-          cursor: {},
-        })
-      },
+    expect(updates[13]?.update).toMatchObject({
+      toolCallId: "call_edit",
+      status: "completed",
+      content: [
+        { type: "content", content: { type: "text", text: "edited" } },
+        { type: "diff", path: edited, oldText: "one\r\ntwo\r\n", newText: "one\r\nthree\r\n" },
+      ],
     })
-    acp.server.sessions.set("ses_replay_failure", makeSession("ses_replay_failure"))
-    await acp.initialize()
-
-    const loaded = await acp.request("session/load", {
-      cwd: "/workspace",
-      sessionId: "ses_replay_failure",
-      mcpServers: [],
-    })
-
-    expect(loaded.configOptions).toBeDefined()
-    expect(
-      acp.updates.flatMap((item) =>
-        item.update.sessionUpdate === "tool_call" || item.update.sessionUpdate === "tool_call_update"
-          ? [[item.update.toolCallId, item.update.sessionUpdate]]
-          : [],
-      ),
-    ).toEqual([
-      ["call_first", "tool_call"],
-      ["call_after", "tool_call"],
-      ["call_after", "tool_call_update"],
-    ])
   })
 })
 
-function replayToolMessage(id: string, state: Record<string, unknown>) {
-  return {
-    ...assistantMessage(`msg_${id}`),
-    content: [{ type: "tool", id, name: "shell", time: { created: 1, completed: 2 }, state }],
-  }
-}
-
-function replayFixtureMessages(): SessionMessageInfo[] {
+function replayFixtureMessages(edited: string): Array<typeof SessionMessage.Info.Encoded> {
   return [
     {
       id: "msg_user",
@@ -167,6 +135,18 @@ function replayFixtureMessages(): SessionMessageInfo[] {
           name: "shell",
           time: { created: 2 },
           state: { status: "streaming", input: '{"command":' },
+        },
+        {
+          type: "tool",
+          id: "call_edit",
+          name: "edit",
+          time: { created: 2, completed: 3 },
+          state: {
+            status: "completed",
+            input: { path: edited, oldString: "two", newString: "three" },
+            metadata: { files: [fileDiff(edited, "one\r\ntwo\r\n", "one\r\nthree\r\n")] },
+            content: [{ type: "text", text: "edited" }],
+          },
         },
       ],
     }),

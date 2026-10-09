@@ -14,4 +14,6 @@ export default {
   "git.description": "Sledite, pregledujte in razveljavite spremembe v tem projektu",
   loadingChanges: "Nalaganje sprememb …",
   noChanges: "Brez sprememb",
+  "settings.wrapLines.title": "Prelomi vrstice",
+  "settings.wrapLines.description": "Zavijte dolge vrstice v mobilne razlike namesto vodoravnega drsenja",
 }

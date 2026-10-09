@@ -299,9 +299,6 @@ export const dict = {
   "dialog.server.add.passwordPlaceholder": "slaptažodis",
   "dialog.server.edit.title": "Redaguoti serverį",
   "dialog.server.menu.edit": "Redaguoti",
-  "dialog.server.menu.default": "Nustatyti kaip numatytąjį",
-  "dialog.server.menu.defaultRemove": "Pašalinti numatytąjį",
-  "dialog.server.status.default": "Numatytoji",
   "dialog.project.edit.title": "Redaguoti projektą",
   "dialog.project.edit.icon": "Piktograma",
   "dialog.project.edit.icon.alt": "Projekto piktograma",
@@ -309,10 +306,6 @@ export const dict = {
   "dialog.project.edit.color.select": "Pasirinkite {{color}} spalvą",
   "dialog.project.edit.worktree.startup": "Darbo srities paleidimo scenarijus",
   "dialog.project.edit.worktree.startup.placeholder": "pvz. bandelė įdiegti",
-  "dialog.releaseNotes.action.getStarted": "Pradėkite",
-  "dialog.releaseNotes.action.next": "Kitas",
-  "dialog.releaseNotes.action.hideFuture": "Nerodykite šių dalykų ateityje",
-  "dialog.releaseNotes.media.alt": "Išleidimo peržiūra",
   "toast.permissions.autoaccept.on.title": "Automatinis leidimų priėmimas",
   "toast.permissions.autoaccept.on.description": "Leidimų prašymai bus patvirtinti automatiškai",
   "toast.permissions.autoaccept.off.title": "Sustabdė automatinį leidimų priėmimą",
@@ -731,7 +724,6 @@ export const dict = {
   "session.view.select": "Sesijos vaizdas",
   "session.background.moveRunning": "Perkelti į foną",
   "session.timeline.working": "Darbas",
-  "session.review.wrapLines": "Laužyti eilutes",
   "session.websearch.title": "Trečiosios šalies žiniatinklio paieška",
   "session.websearch.description": "Pasirinkite paieškos teikėjo agentus, kuriuos naudoja ieškodami žiniatinklyje",
   "session.websearch.provider": "Paieškos teikėjas",
@@ -791,8 +783,6 @@ export const dict = {
   "settings.timeline.category.subagents": "Subagentai",
   "settings.timeline.category.notices": "Pranešimai",
   "settings.timeline.category.tools": "Kiti įrankiai",
-  "settings.general.row.mobileDiffWrap.description":
-    "Užuot slinkus horizontaliai, apvyniokite ilgas eilutes mobiliaisiais skirtumais",
   "session.background.shell.few": "{{count}} apvalkalai",
   "session.background.subagent.few": "{{count}} subagentai",
   "settings.about.otherContributor.few": "{{count}} kiti",
@@ -812,8 +802,6 @@ export const dict = {
   "server.connect.address.invalid": "Įveskite galiojantį HTTP arba HTTPS serverio adresą.",
   "server.connect.failed":
     "Nepavyko prisijungti. Patikrinkite serverio adresą ir slaptažodį, tada bandykite dar kartą.",
-  "server.connect.pair.description":
-    "Paleiskite šią komandą savo kompiuteryje, kad gautumėte išsamią ryšio informaciją.",
   "server.connect.scan": "Nuskaitykite QR kodą",
   "server.connect.scan.description": "Nukreipkite fotoaparatą į QR kodą, rodomą opencode pair.",
   "server.connect.scan.invalid": "Tai nėra OpenCode susiejimo kodas. Nuskaitykite kodą, kurį rodo opencode pair.",
@@ -821,7 +809,6 @@ export const dict = {
   "server.connect.camera.starting": "Atidaroma kamera…",
   "server.connect.mixedContent":
     "Nepavyko prisijungti prie šio HTTP serverio iš HTTPS puslapio. Vietoj to naudokite HTTPS serverio adresą.",
-  "server.connect.camera.insecure": "Norint nuskaityti QR, reikia atidaryti šį puslapį per HTTPS arba localhost.",
   "server.connect.camera.unavailable": "Šioje naršyklėje nėra fotoaparato. Įveskite savo ryšio duomenis rankiniu būdu.",
   "server.connect.camera.error":
     "Nepavyko atidaryti fotoaparato. Suteikite prieigą prie fotoaparato arba įveskite savo ryšio duomenis rankiniu būdu.",

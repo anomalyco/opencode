@@ -298,9 +298,6 @@ export const dict = {
   "dialog.server.add.passwordPlaceholder": "lykilorð",
   "dialog.server.edit.title": "Breyta miðlara",
   "dialog.server.menu.edit": "Breyta",
-  "dialog.server.menu.default": "Stillt sem sjálfgefið",
-  "dialog.server.menu.defaultRemove": "Fjarlægja sjálfgefið",
-  "dialog.server.status.default": "Sjálfgefið",
   "dialog.project.edit.title": "Breyta verkefni",
   "dialog.project.edit.icon": "Táknmynd",
   "dialog.project.edit.icon.alt": "Verkefnistákn",
@@ -308,10 +305,6 @@ export const dict = {
   "dialog.project.edit.color.select": "Veldu {{color}} lit",
   "dialog.project.edit.worktree.startup": "Ræsingarhandrit vinnusvæðis",
   "dialog.project.edit.worktree.startup.placeholder": "t.d. bun setja upp",
-  "dialog.releaseNotes.action.getStarted": "Byrjaðu",
-  "dialog.releaseNotes.action.next": "Næst",
-  "dialog.releaseNotes.action.hideFuture": "Ekki sýna þetta í framtíðinni",
-  "dialog.releaseNotes.media.alt": "Gefa út forskoðun",
   "toast.permissions.autoaccept.on.title": "Sjálfvirkt samþykki heimilda",
   "toast.permissions.autoaccept.on.description": "Leyfibeiðnir verða sjálfkrafa samþykktar",
   "toast.permissions.autoaccept.off.title": "Hætti að samþykkja heimildir sjálfkrafa",
@@ -716,7 +709,6 @@ export const dict = {
   "session.view.select": "Fundarsýn",
   "session.background.moveRunning": "Færa í bakgrunn",
   "session.timeline.working": "Að vinna",
-  "session.review.wrapLines": "Brjóta línur",
   "session.websearch.title": "Vefleit þriðja aðila",
   "session.websearch.description": "Veldu leitarþjónustuna sem umboðsmenn nota til að leita á vefnum",
   "session.websearch.provider": "Leitaraðili",
@@ -775,8 +767,6 @@ export const dict = {
   "settings.timeline.category.subagents": "Undirfulltrúar",
   "settings.timeline.category.notices": "Tilkynningar",
   "settings.timeline.category.tools": "Önnur verkfæri",
-  "settings.general.row.mobileDiffWrap.description":
-    "Vefjið langar línur inn í farsímadiffur í stað þess að fletta lárétt",
   "provider.connect.error.unsupportedFields": "Þetta auðkenningareyðublað inniheldur óstudda reiti",
   "settings.about.writtenByNames": "Skrifað af {{names}}",
   "settings.about.illustratedByNames": "Myndskreytt af {{names}}",
@@ -789,7 +779,6 @@ export const dict = {
   "server.connect.button": "Tengdu",
   "server.connect.address.invalid": "Sláðu inn gilt HTTP eða HTTPS netfang netþjóns.",
   "server.connect.failed": "Ekki tókst að tengjast. Athugaðu netfang netþjóns og lykilorð, reyndu svo aftur.",
-  "server.connect.pair.description": "Keyrðu þessa skipun á tölvunni þinni til að fá upplýsingar um tenginguna þína.",
   "server.connect.scan": "Skanna QR kóða",
   "server.connect.scan.description": "Beindu myndavélinni þinni að QR kóðanum sem opencode pair sýnir.",
   "server.connect.scan.invalid": "Þetta er ekki OpenCode pörunarkóði. Skannaðu kóðann sem opencode pair sýnir.",
@@ -797,7 +786,6 @@ export const dict = {
   "server.connect.camera.starting": "Opnar myndavél...",
   "server.connect.mixedContent":
     "Gat ekki tengst þessum HTTP netþjóni frá HTTPS síðu. Notaðu HTTPS netþjónsfang í staðinn.",
-  "server.connect.camera.insecure": "QR skönnun krefst þess að opna þessa síðu yfir HTTPS eða á localhost.",
   "server.connect.camera.unavailable":
     "Engin myndavél er í boði fyrir þennan vafra. Sláðu inn tengiupplýsingar þínar handvirkt.",
   "server.connect.camera.error":

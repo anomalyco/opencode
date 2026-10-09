@@ -52,8 +52,5 @@ export default {
   "error.healthTimeout": "Jakelun {{distro}} sivuprosessin kuntotarkistus aikakatkaistiin {{timeout}} ms:n jälkeen",
   "error.commandTimeout": "Komento {{command}} {{args}} aikakatkaistiin {{timeout}} ms:n jälkeen",
   "error.failedPort": "Portin noutaminen epäonnistui",
-  "server.default": "Oletus",
-  "menu.default": "Aseta oletukseksi",
-  "menu.defaultRemove": "Poista oletuspalvelin",
   "menu.remove": "Poista",
 }

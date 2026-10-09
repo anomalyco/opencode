@@ -267,7 +267,6 @@ export type Resolved = Omit<Info, "attention" | "cursor" | "keybinds" | "leader"
   session: Omit<NonNullable<Info["session"]>, "new_location" | "permissions" | "tps"> & {
     new_location: "launch" | "inherit"
     permissions: "prompt" | "autoaccept"
-    terminal: boolean
     tps: boolean
   }
   tabs: {
@@ -320,8 +319,6 @@ export function resolve(
       ...input.session,
       new_location: input.session?.new_location ?? "launch",
       permissions: input.session?.permissions ?? "prompt",
-      // Persistent terminal panes need the opencode-pty daemon, which does not ship Windows binaries.
-      terminal: process.platform !== "win32",
       tps: input.session?.tps ?? true,
     },
     tabs: {

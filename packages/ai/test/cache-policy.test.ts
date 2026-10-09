@@ -145,6 +145,59 @@ describe("applyCachePolicy", () => {
     }),
   )
 
+  it.effect("Alibaba chat caches the system and conversation tail without marking tools", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: Alibaba.configure({ region: "ap-southeast-1", apiKey: "test" }).chat("qwen3.8-max"),
+          system: "You are concise.",
+          tools: [{ name: "lookup", description: "Look up a value", inputSchema: { type: "object", properties: {} } }],
+          prompt: "hi",
+        }),
+      )
+
+      expect(prepared.body).toMatchObject({
+        tools: [{ type: "function", function: { name: "lookup" } }],
+        messages: [
+          {
+            role: "system",
+            content: [{ text: "You are concise.", cache_control: { type: "ephemeral" } }],
+          },
+          { role: "user", content: [{ text: "hi", cache_control: { type: "ephemeral" } }] },
+        ],
+      })
+      expect(prepared.body.tools?.[0]?.cache_control).toBeUndefined()
+    }),
+  )
+
+  it.effect("Alibaba chat omits automatic cache markers when cache is none", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: Alibaba.configure({ region: "ap-southeast-1", apiKey: "test" }).chat("qwen3.8-max"),
+          system: "You are concise.",
+          prompt: "hi",
+          cache: "none",
+        }),
+      )
+
+      expect(JSON.stringify(prepared.body)).not.toContain("cache_control")
+    }),
+  )
+
+  it.effect("Alibaba chat does not assume non-Qwen models support cache markers", () =>
+    Effect.gen(function* () {
+      const alibaba = Alibaba.configure({ region: "ap-southeast-1", apiKey: "test" })
+      for (const modelID of ["kimi-k3", "glm-5.2", "deepseek-v4-flash-0731", "MiniMax-M2.5"]) {
+        const prepared = yield* compileRequest(
+          LLM.request({ model: alibaba.chat(modelID), system: "You are concise.", prompt: "hi" }),
+        )
+
+        expect(JSON.stringify(prepared.body)).not.toContain("cache_control")
+      }
+    }),
+  )
+
   it.effect("'auto' emits Anthropic cache markers on Anthropic-compatible routes", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(

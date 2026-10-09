@@ -34,6 +34,8 @@ const unsafeCSS = `
   --diffs-fg-number-override: var(--v2-text-text-faint);
   --diffs-fg-number-addition-override: light-dark(var(--v2-green-900), var(--v2-green-400));
   --diffs-fg-number-deletion-override: light-dark(var(--v2-red-800), var(--v2-red-500));
+  /* The app's code wrapping rules do not reach this shadow tree, and pretty is inherited from the page. */
+  text-wrap-style: auto;
 }
 
 [data-diff],

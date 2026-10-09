@@ -9,44 +9,51 @@ import {
   type JsonRpcId,
   type Stream,
 } from "@agentclientprotocol/sdk"
-import type { OpenCodeClient } from "@opencode/client/promise"
+import type { OpenCodeClient } from "@opencode/client/effect"
 import { Cause, Deferred, Effect, Ref, type Scope } from "effect"
+import { ACPCapabilities } from "./capabilities"
 import { ACPCatalog } from "./catalog"
+import { ACPClient } from "./client"
 import { ACPConnection } from "./connection"
 import { ACPError } from "./error"
-import { ACPPromise } from "./promise"
 import { ACPService } from "./service"
 import { ACPSessions } from "./sessions"
 import { ACPTurn } from "./turn"
+
+type HandlerContext<Params> = AgentHandlerContext<Params> & { readonly requestId?: JsonRpcId }
 
 // Untraced so request spans parent to the caller's span instead of a setup span that has already ended.
 export const connect = Effect.fnUntraced(function* (client: OpenCodeClient, stream: Stream) {
   const run = Effect.runPromiseWith(yield* Effect.context<Scope.Scope>())
   const catalog = yield* ACPCatalog.make(client)
-  // Requests can dispatch once the stream's read loop yields, which may be before the service below is built.
-  const ready = yield* Deferred.make<ACPService.Interface>()
+  // Requests can dispatch before the service below is built.
+  const ready = yield* Deferred.make<{
+    readonly service: ACPService.Interface
+    readonly connection: ACPConnection.Interface
+  }>()
   const handle =
     <Params, A>(
-      call: (service: ACPService.Interface, ctx: AgentHandlerContext<Params>) => Effect.Effect<A, ACPService.Failure>,
+      call: (service: ACPService.Interface, ctx: AgentHandlerContext<Params>) => Effect.Effect<A, ACPError.Failure>,
     ) =>
     (name: string) => {
       const handler = Effect.fn(name)(
-        (ctx: AgentHandlerContext<Params>) =>
-          Deferred.await(ready).pipe(Effect.flatMap((service) => call(service, ctx))),
+        function* (ctx: HandlerContext<Params>) {
+          const connected = yield* Deferred.await(ready)
+          if (ctx.requestId === undefined) return yield* call(connected.service, ctx)
+          return yield* call(connected.service, ctx).pipe(
+            Effect.provideService(ACPConnection.Responded, connected.connection.responded(ctx.requestId)),
+          )
+        },
         Effect.catchTags({
-          ACPCatalogLoadError: (error) => ACPPromise.classify(error.cause),
-          ACPCatalogNotReadyError: (error) => Effect.die(error),
+          ACPCatalogLoadError: (error) => ACPClient.classify(error.cause),
+          ACPCatalogNotReadyError: (error) =>
+            Effect.fail(new ACPError.ServiceFailureError({ safeMessage: error.message, errorName: "CatalogNotReady" })),
         }),
         Effect.mapError((error) => (error instanceof RequestError ? error : ACPError.toRequestError(error))),
         Effect.tapCauseIf(Cause.hasDies, (cause) => Effect.logError("ACP request failed", cause)),
         Effect.catchDefect((defect) => Effect.fail(ACPError.toRequestError(ACPError.fromUnknown(defect)))),
       )
-      return (ctx: AgentHandlerContext<Params> & { readonly requestId?: JsonRpcId }) => {
-        if (ctx.requestId === undefined) return run(handler(ctx))
-        return run(
-          handler(ctx).pipe(Effect.provideService(ACPConnection.Responded, acp.connection.responded(ctx.requestId))),
-        )
-      }
+      return (ctx: HandlerContext<Params>) => run(handler(ctx))
     }
   const app = agent({ name: "opencode" })
   const request = <Method extends AgentRequestMethod>(
@@ -102,8 +109,6 @@ export const connect = Effect.fnUntraced(function* (client: OpenCodeClient, stre
     "session/set_mode",
     handle((service, ctx) => service.setSessionMode(ctx.params)),
   )
-  // The SDK signal is passed through rather than interrupting the fiber: a cancelled turn still resolves with
-  // `stopReason: "cancelled"`.
   request(
     "session/prompt",
     handle((service, ctx) => service.prompt(ctx.params, ctx.signal)),
@@ -115,9 +120,12 @@ export const connect = Effect.fnUntraced(function* (client: OpenCodeClient, stre
   const acp = ACPConnection.make(app, stream)
   const connection = acp.connection
   const sessions = yield* ACPSessions.make({ client, connection, catalog })
-  const capabilities = yield* Ref.make({ childSessionUpdates: false, formElicitation: false })
+  const capabilities = yield* Ref.make(ACPCapabilities.parse(undefined))
   const turn = yield* ACPTurn.make({ client, connection, sessions, catalog, capabilities })
-  yield* Deferred.succeed(ready, ACPService.make({ client, connection, catalog, sessions, capabilities, turn }))
+  yield* Deferred.succeed(ready, {
+    service: ACPService.make({ client, connection, catalog, sessions, capabilities, turn }),
+    connection,
+  })
   return acp.agent
 })
 

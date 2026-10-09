@@ -35,8 +35,5 @@ export default {
   "form.name": "Назва сервера (необов'язково)",
   "form.namePlaceholder": "Localhost",
   "form.add": "Додати сервер",
-  "server.default": "За замовчуванням",
-  "menu.default": "Встановити за замовчуванням",
-  "menu.defaultRemove": "Скасувати використання за замовчуванням",
   "menu.delete": "Видалити",
 }

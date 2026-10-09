@@ -10,4 +10,6 @@ export default {
   "git.description": "Bu layihədə dəyişiklikləri izləyin, nəzərdən keçirin və ləğv edin",
   loadingChanges: "Dəyişikliklər yüklənir…",
   noChanges: "Dəyişiklik yoxdur",
+  "settings.wrapLines.title": "Sətirləri bük",
+  "settings.wrapLines.description": "Mobil diff-lərdə üfüqi sürüşdürmək əvəzinə uzun sətirləri bük",
 }

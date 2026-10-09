@@ -1,6 +1,12 @@
 export type JsonValue = null | boolean | number | string | Array<JsonValue> | { [key: string]: JsonValue }
 
-export type ServerInfo = { version: string; pid: number; urls: Array<string>; paths: { tmp: string } }
+export type ServerInfo = {
+  version: string
+  pid: number
+  urls: Array<string>
+  paths: { tmp: string }
+  capabilities?: { persistentPty?: boolean | undefined } | undefined
+}
 
 export type PairingCode = { code: string; expires_in: number }
 
@@ -155,14 +161,6 @@ export type SessionProviderContextProvenance = {
   endpoint: string
 }
 
-export type SessionMessageIdle = {
-  id: string
-  metadata?: { [x: string]: JsonValue }
-  time: { created: number }
-  type: "idle"
-  outcome: "succeeded" | "failed" | "interrupted"
-}
-
 export type SessionActive = { type: "running" }
 
 export type SessionInboxDelivery = "steer" | "queue"
@@ -302,6 +300,8 @@ export type CredentialOAuth = {
   metadata?: { [x: string]: JsonValue }
 }
 
+export type CredentialExternal = { type: "external"; methodID: string; metadata?: { [x: string]: JsonValue } }
+
 export type ProjectVcs = string
 
 export type ProjectIcon = { url?: string; override?: string; color?: string }
@@ -437,6 +437,8 @@ export type McpProtocol = "legacy" | "auto" | "2026-07-28"
 
 export type ConfigWorktree = { directory: string }
 
+export type ConfigModelCapabilities = { tools?: boolean; input?: Array<string>; output?: Array<string> }
+
 export type ConfigShellOption = { path: string; name: string; acceptable: boolean }
 
 export type SessionMessageLocationSwitched = {
@@ -475,14 +477,16 @@ export type ConfigModelSettings = { compaction?: ProviderCompaction } & { [x: st
 
 export type ProviderSettings = {
   timeout?: number | false
-  chunkTimeout?: number
+  headerTimeout?: number | false
+  chunkTimeout?: number | false
   compaction?: ProviderCompaction
   transport?: ProviderTransport
 } & { [x: string]: any }
 
 export type ConfigProviderSettings = {
   timeout?: number | false
-  chunkTimeout?: number
+  headerTimeout?: number | false
+  chunkTimeout?: number | false
   compaction?: ProviderCompaction
   transport?: ProviderTransport
 } & { [x: string]: JsonValue | null }
@@ -545,6 +549,15 @@ export type SessionMessageCompactionFailed = {
   error: SessionStructuredError
   cost?: MoneyUSD
   tokens?: TokenUsageInfo
+}
+
+export type SessionMessageIdle = {
+  id: string
+  metadata?: { [x: string]: JsonValue }
+  time: { created: number }
+  type: "idle"
+  outcome: "succeeded" | "failed" | "interrupted"
+  error?: SessionStructuredError
 }
 
 export type SessionProviderContext = { version: 1; provenance: SessionProviderContextProvenance; messages: JsonValue }
@@ -1467,6 +1480,8 @@ export type ModelCompatibility = {
   requireFinishReason?: boolean
   requireAssistantAfterTool?: boolean
   supportsPromptCacheKey?: boolean
+  supportsThinkingBlockBinding?: boolean
+  supportsEffortUpdates?: boolean
 }
 
 export type ModelCost = {
@@ -1480,7 +1495,7 @@ export type ConnectionCredentialInfo = {
   type: "credential"
   id: string
   label: string
-  method: "key" | "oauth"
+  method: "key" | "oauth" | "external"
   status?: ConnectionStatus
 }
 
@@ -2157,7 +2172,7 @@ export type ConfigEntry =
                 settings?: ConfigModelSettings
                 headers?: { [x: string]: string }
                 body?: { [x: string]: JsonValue }
-                capabilities?: ModelCapabilities
+                capabilities?: ConfigModelCapabilities
                 variants?: Array<{
                   id: string
                   settings?: ConfigModelSettings
@@ -2186,7 +2201,11 @@ export type ConfigEntry =
         experimental?: {
           portable_shell_scanner?: boolean
           subagent_depth?: number
-          policies?: Array<{ action: "provider.use" | "permission"; resource: string; effect: "allow" | "deny" }>
+          policies?: Array<{
+            action: "provider.use" | "tool.use" | "integration.use"
+            resource: string
+            effect: "allow" | "deny"
+          }>
         }
       }
     }
@@ -2244,7 +2263,7 @@ export type SessionMessageAssistantTool1 = {
 
 export type FormFields = [FormField, ...Array<FormField>]
 
-export type CredentialValue = CredentialOAuth | CredentialKey
+export type CredentialValue = CredentialOAuth | CredentialKey | CredentialExternal
 
 export type FormFields2 = [FormField1, ...Array<FormField1>]
 
@@ -2300,6 +2319,8 @@ export type IntegrationOAuthMethod = { id: string; type: "oauth"; label: string;
 
 export type IntegrationKeyMethod = { type: "key"; label?: string; form?: FormFields }
 
+export type IntegrationExternalMethod = { id: string; type: "external"; label: string; form?: FormFields }
+
 export type CredentialEntry = {
   id: string
   integrationID: string
@@ -2337,6 +2358,7 @@ export type IntegrationMethod =
   | IntegrationOAuthMethod
   | IntegrationCommandMethod
   | IntegrationKeyMethod
+  | IntegrationExternalMethod
   | IntegrationEnvMethod
 
 export type FormCreated = {
@@ -2520,6 +2542,14 @@ export const isInvalidRequestError = (value: unknown): value is InvalidRequestEr
 export type UnauthorizedError = { readonly _tag: "UnauthorizedError"; readonly message: string }
 export const isUnauthorizedError = (value: unknown): value is UnauthorizedError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "UnauthorizedError"
+
+export type LocationNotFoundError = {
+  readonly _tag: "LocationNotFoundError"
+  readonly location: { readonly directory: string }
+  readonly message: string
+}
+export const isLocationNotFoundError = (value: unknown): value is LocationNotFoundError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "LocationNotFoundError"
 
 export type ServiceUnavailableError = {
   readonly _tag: "ServiceUnavailableError"
@@ -2731,11 +2761,20 @@ export const isShellNotFoundError = (value: unknown): value is ShellNotFoundErro
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ShellNotFoundError"
 
 export type WorktreeError = {
+  readonly _tag: "WorktreeError"
   readonly name: "WorktreeError"
   readonly data: { readonly message: string; readonly forceRequired?: boolean | undefined }
 }
 export const isWorktreeError = (value: unknown): value is WorktreeError =>
-  typeof value === "object" && value !== null && "name" in value && value["name"] === "WorktreeError"
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "WorktreeError"
+
+export type VcsInitNotSupportedError = {
+  readonly _tag: "VcsInitNotSupportedError"
+  readonly providerID: string
+  readonly message: string
+}
+export const isVcsInitNotSupportedError = (value: unknown): value is VcsInitNotSupportedError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "VcsInitNotSupportedError"
 
 export type ServerInfoOutput = ServerInfo
 
@@ -3362,6 +3401,12 @@ export type SessionImportInput = {
           readonly time: { readonly created: number }
           readonly type: "idle"
           readonly outcome: "succeeded" | "failed" | "interrupted"
+          readonly error?: {
+            readonly type: string
+            readonly message: string
+            readonly status?: number
+            readonly response?: { readonly body: string }
+          }
         }
     >
     readonly location?: { readonly directory: string } | null
@@ -3699,6 +3744,12 @@ export type SessionImportInput = {
           readonly time: { readonly created: number }
           readonly type: "idle"
           readonly outcome: "succeeded" | "failed" | "interrupted"
+          readonly error?: {
+            readonly type: string
+            readonly message: string
+            readonly status?: number
+            readonly response?: { readonly body: string }
+          }
         }
     >
     readonly location?: { readonly directory: string } | null
@@ -4036,6 +4087,12 @@ export type SessionImportInput = {
           readonly time: { readonly created: number }
           readonly type: "idle"
           readonly outcome: "succeeded" | "failed" | "interrupted"
+          readonly error?: {
+            readonly type: string
+            readonly message: string
+            readonly status?: number
+            readonly response?: { readonly body: string }
+          }
         }
     >
     readonly location?: { readonly directory: string } | null
@@ -5657,6 +5714,28 @@ export type IntegrationConnectKeyInput = {
 
 export type IntegrationConnectKeyOutput = void
 
+export type IntegrationConnectExternalInput = {
+  readonly integrationID: { readonly integrationID: string }["integrationID"]
+  readonly location?: { readonly location?: { readonly directory?: string | undefined } | undefined }["location"]
+  readonly methodID: {
+    readonly methodID: string
+    readonly answer?: { readonly [x: string]: string | number | boolean | ReadonlyArray<string> } | undefined
+    readonly label?: string | undefined
+  }["methodID"]
+  readonly answer?: {
+    readonly methodID: string
+    readonly answer?: { readonly [x: string]: string | number | boolean | ReadonlyArray<string> } | undefined
+    readonly label?: string | undefined
+  }["answer"]
+  readonly label?: {
+    readonly methodID: string
+    readonly answer?: { readonly [x: string]: string | number | boolean | ReadonlyArray<string> } | undefined
+    readonly label?: string | undefined
+  }["label"]
+}
+
+export type IntegrationConnectExternalOutput = void
+
 export type IntegrationOauthConnectInput = {
   readonly integrationID: { readonly integrationID: string }["integrationID"]
   readonly location?: { readonly location?: { readonly directory?: string | undefined } | undefined }["location"]
@@ -5825,6 +5904,11 @@ export type CredentialCreateInput = {
             readonly [x: string]: string | number | "Infinity" | "-Infinity" | "NaN" | boolean | ReadonlyArray<string>
           }
         }
+      | {
+          readonly type: "external"
+          readonly methodID: string
+          readonly metadata?: { readonly [x: string]: JsonValue }
+        }
     readonly activate?: boolean
   }["id"]
   readonly integrationID: {
@@ -5847,6 +5931,11 @@ export type CredentialCreateInput = {
           readonly configuration?: {
             readonly [x: string]: string | number | "Infinity" | "-Infinity" | "NaN" | boolean | ReadonlyArray<string>
           }
+        }
+      | {
+          readonly type: "external"
+          readonly methodID: string
+          readonly metadata?: { readonly [x: string]: JsonValue }
         }
     readonly activate?: boolean
   }["integrationID"]
@@ -5871,6 +5960,11 @@ export type CredentialCreateInput = {
             readonly [x: string]: string | number | "Infinity" | "-Infinity" | "NaN" | boolean | ReadonlyArray<string>
           }
         }
+      | {
+          readonly type: "external"
+          readonly methodID: string
+          readonly metadata?: { readonly [x: string]: JsonValue }
+        }
     readonly activate?: boolean
   }["label"]
   readonly value: {
@@ -5894,6 +5988,11 @@ export type CredentialCreateInput = {
             readonly [x: string]: string | number | "Infinity" | "-Infinity" | "NaN" | boolean | ReadonlyArray<string>
           }
         }
+      | {
+          readonly type: "external"
+          readonly methodID: string
+          readonly metadata?: { readonly [x: string]: JsonValue }
+        }
     readonly activate?: boolean
   }["value"]
   readonly activate?: {
@@ -5916,6 +6015,11 @@ export type CredentialCreateInput = {
           readonly configuration?: {
             readonly [x: string]: string | number | "Infinity" | "-Infinity" | "NaN" | boolean | ReadonlyArray<string>
           }
+        }
+      | {
+          readonly type: "external"
+          readonly methodID: string
+          readonly metadata?: { readonly [x: string]: JsonValue }
         }
     readonly activate?: boolean
   }["activate"]
@@ -6489,6 +6593,19 @@ export type WorktreeRemoveOutput = void
 export type WorktreeRefreshInput = { readonly projectID: { readonly projectID: string }["projectID"] }
 
 export type WorktreeRefreshOutput = void
+
+export type VcsInitInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined } | undefined
+    readonly provider?: string | undefined
+  }["location"]
+  readonly provider?: {
+    readonly location?: { readonly directory?: string | undefined } | undefined
+    readonly provider?: string | undefined
+  }["provider"]
+}
+
+export type VcsInitOutput = void
 
 export type VcsGetInput = {
   readonly location?: { readonly location?: { readonly directory?: string | undefined } | undefined }["location"]

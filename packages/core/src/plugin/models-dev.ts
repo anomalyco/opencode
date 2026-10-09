@@ -3,6 +3,7 @@ import { Integration } from "@opencode/schema/integration"
 import { Provider } from "@opencode/schema/provider"
 import { Effect, Stream } from "effect"
 import { Bus } from "../bus.js"
+import { Model } from "../model.js"
 import { ModelsDev } from "../models-dev.js"
 
 // These catalog entries require inference profiles on Bedrock Runtime.
@@ -44,7 +45,8 @@ export const ModelsDevPlugin = define({
           integrationID,
           method: {
             type: "env",
-            names: environmentNames(provider),
+            // Every listed variable is treated as a key; plugins override providers that also list setup values.
+            names: [...provider.environment],
           },
         })
       }
@@ -73,18 +75,6 @@ export const ModelsDevPlugin = define({
   }),
 })
 
-function environmentNames(provider: ModelsDev.Snapshot) {
-  if (provider.info.id === Provider.ID.azure)
-    return [...provider.environment.filter((name) => name.endsWith("_API_KEY")), "AZURE_COGNITIVE_SERVICES_API_KEY"]
-  // models.dev advertises project, location, and the ADC credentials file path for
-  // Vertex. Those configure Google auth rather than carrying a key, so only the
-  // Express Mode key may become a credential; GoogleVertexPlugin handles activation.
-  if (provider.info.id === Provider.ID.googleVertex) return ["GOOGLE_VERTEX_API_KEY"]
-  if (provider.info.id === "cloudflare-workers-ai")
-    return ["CLOUDFLARE_API_KEY", "CLOUDFLARE_WORKERS_AI_TOKEN", "CLOUDFLARE_API_TOKEN"]
-  return [...provider.environment]
-}
-
 const prepared = new WeakMap<readonly ModelsDev.Snapshot[], readonly ModelsDev.Snapshot[]>()
 
 function snapshots(data: readonly ModelsDev.Snapshot[]) {
@@ -100,6 +90,7 @@ function snapshots(data: readonly ModelsDev.Snapshot[]) {
       models: provider.models.filter(
         (model) =>
           model.status !== "deprecated" &&
+          Model.supportsText(model) &&
           !(
             provider.info.id === Provider.ID.amazonBedrock &&
             BEDROCK_PROFILE_ONLY_IDS.includes(model.modelID ?? model.id)

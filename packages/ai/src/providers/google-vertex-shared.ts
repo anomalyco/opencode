@@ -43,14 +43,18 @@ export const requireProject = (value: string | undefined) => {
   })
 }
 
-export const apiKey = (input: ApiKeyOptions) => {
+export const apiKey = (input: ApiKeyOptions & { readonly project?: string; readonly location?: string }) => {
   if (input.apiKey !== undefined && (input.accessToken !== undefined || input.auth !== undefined))
     throw new ProviderConfigurationError({
       provider: id,
       message: "Google Vertex apiKey cannot be combined with accessToken or auth",
     })
   if (input.accessToken !== undefined || input.auth !== undefined) return undefined
-  return input.apiKey ?? process.env.GOOGLE_VERTEX_API_KEY
+  if (input.apiKey !== undefined) return input.apiKey
+  // Same precedence as Google's Gen AI SDK: an explicit project or location selects Google credentials,
+  // so an ambient API key cannot replace them.
+  if (input.project !== undefined || input.location !== undefined) return undefined
+  return process.env.GOOGLE_VERTEX_API_KEY
 }
 
 const adc = (project?: string) => {

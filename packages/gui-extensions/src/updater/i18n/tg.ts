@@ -25,4 +25,8 @@ export default {
   "dialog.ready.title": "Навсозӣ омода аст",
   "dialog.restart": "Оғози дубора",
   "dialog.later": "Баъдтар",
+  "releaseNotes.action.getStarted": "Оғоз кунед",
+  "releaseNotes.action.next": "Баъдӣ",
+  "releaseNotes.action.hideFuture": "Инҳоро дар оянда нишон надиҳед",
+  "releaseNotes.media.alt": "Намоиши пешнамоиш",
 }

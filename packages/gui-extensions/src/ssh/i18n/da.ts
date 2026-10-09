@@ -38,8 +38,5 @@ export default {
   "form.name": "Servernavn (valgfrit)",
   "form.namePlaceholder": "Localhost",
   "form.add": "Tilføj server",
-  "server.default": "Standard",
-  "menu.default": "Sæt som standard",
-  "menu.defaultRemove": "Fjern som standard",
   "menu.delete": "Slet",
 }

@@ -1,18 +1,19 @@
 import type { ContentBlock, ContentChunk, ResourceLink } from "@agentclientprotocol/sdk"
 import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
+import { Result } from "effect"
 
 export type PromptPart =
   | { readonly type: "text"; readonly text: string; readonly synthetic?: boolean; readonly ignored?: boolean }
   | { readonly type: "file"; readonly url: string; readonly filename?: string; readonly mime: string }
 
-export type ReplayPart = PromptPart | { readonly type: "reasoning"; readonly text: string }
+type ReplayPart = PromptPart | { readonly type: "reasoning"; readonly text: string }
 
 export function promptContentToParts(content: readonly ContentBlock[]): PromptPart[] {
   return content.flatMap(contentBlockToParts)
 }
 
-export function contentBlockToParts(block: ContentBlock): PromptPart[] {
+function contentBlockToParts(block: ContentBlock): PromptPart[] {
   switch (block.type) {
     case "text": {
       const audience = block.annotations?.audience
@@ -24,48 +25,30 @@ export function contentBlockToParts(block: ContentBlock): PromptPart[] {
       }
       return [{ type: "text", text: block.text }]
     }
-    case "image":
-      if (block.data) {
-        return [
-          {
-            type: "file",
-            url: `data:${block.mimeType};base64,${block.data}`,
-            filename: filenameFromUri(block.uri ?? undefined) ?? "image",
-            mime: block.mimeType,
-          },
-        ]
-      }
-      if (block.uri?.startsWith("data:") || block.uri?.startsWith("http://") || block.uri?.startsWith("https://")) {
-        return [
-          {
-            type: "file",
-            url: block.uri,
-            filename: filenameFromUri(block.uri) ?? "image",
-            mime: block.mimeType,
-          },
-        ]
-      }
-      return []
+    case "image": {
+      const url = block.data ? `data:${block.mimeType};base64,${block.data}` : block.uri
+      if (!url) return []
+      const filename = filenameFromUri(block.uri ?? undefined) ?? "image"
+      if (url.startsWith("data:")) return [{ type: "file", url, filename, mime: block.mimeType }]
+      return [resourceLinkToPart({ uri: url, name: filename, mimeType: block.mimeType })]
+    }
     case "resource_link":
       return [resourceLinkToPart(block)]
     case "resource":
       if ("text" in block.resource) {
-        try {
-          const parsed = new URL(block.resource.uri)
-          if (parsed.protocol === "file:") {
-            const line = parsed.hash.match(/^#L(\d+)/)?.[1]
-            const decoded = (() => {
-              try {
-                return fileURLToPath(parsed)
-              } catch {
-                return decodeURIComponent(parsed.pathname)
-              }
-            })()
-            const filepath = path.sep === "\\" ? decoded.replace(/\\/g, "/") : decoded
-            return [{ type: "text", text: `[${filepath}${line ? `:${line}` : ""}]\n${block.resource.text}` }]
-          }
-        } catch {}
-        return [{ type: "text", text: `[${block.resource.uri}]\n${block.resource.text}` }]
+        const parsed = URL.canParse(block.resource.uri) ? new URL(block.resource.uri) : undefined
+        const decoded =
+          parsed?.protocol === "file:"
+            ? Result.try(() => fileURLToPath(parsed)).pipe(
+                Result.orElse(() => Result.try(() => decodeURIComponent(parsed.pathname))),
+                Result.getOrUndefined,
+              )
+            : undefined
+        if (!parsed || decoded === undefined)
+          return [{ type: "text", text: `[${block.resource.uri}]\n${block.resource.text}` }]
+        const line = parsed.hash.match(/^#L(\d+)/)?.[1]
+        const filepath = path.sep === "\\" ? decoded.replace(/\\/g, "/") : decoded
+        return [{ type: "text", text: `[${filepath}${line ? `:${line}` : ""}]\n${block.resource.text}` }]
       }
       if (!block.resource.mimeType) return []
       return [
@@ -180,8 +163,9 @@ export function linkReference(name: string | undefined, uri: string): PromptPart
 
 function filenameFromUri(uri: string | undefined): string | undefined {
   if (!uri || uri.startsWith("data:")) return undefined
-  if (URL.canParse(uri)) return path.basename(new URL(uri).pathname) || undefined
+  if (URL.canParse(uri)) {
+    const url = new URL(uri)
+    return path.basename((url.protocol === "zed:" && url.searchParams.get("path")) || url.pathname) || undefined
+  }
   return path.basename(uri) || undefined
 }
-
-export * as ACPContent from "./content"

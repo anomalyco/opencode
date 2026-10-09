@@ -81,6 +81,7 @@ export function CurrentSessionTimelineStory(props: {
   const document = createMemo(() => props.document)
   const [revision, setRevision] = createSignal(1)
   const [activity, setActivity] = createSignal("No local action")
+
   const actions = {
     openAttachment: (file) => {
       setActivity(`Opened ${file.name ?? file.mime}`)
@@ -89,6 +90,7 @@ export function CurrentSessionTimelineStory(props: {
       setActivity(`Selected revert boundary ${input.messageID}`)
     },
   } satisfies SessionUserActions
+
   const reset = () => {
     setActivity("No local action")
     setRevision((value) => value + 1)

@@ -8,6 +8,7 @@ export type DraftStore = ReturnType<typeof createDraftStore>
 
 // Editing a large paste retires one text chunk per save, so orphans accumulate while the app runs.
 const collectInterval = 60_000
+
 // A blob stays collectable-proof for this long after its last upload or document reference. The
 // renderer reuses a cached chunk id without uploading for far less than this (see
 // draftChunkCacheTtl), so a reference it publishes always points at a retained blob.
@@ -39,11 +40,13 @@ export function createDraftStore(
   const byKey = eq(document.key, sql.placeholder("key"))
   const read = db.select({ value: document.value }).from(document).where(byKey).prepare()
   const remove = db.delete(document).where(byKey).prepare()
+
   const upsert = db
     .insert(document)
     .values({ key: sql.placeholder("key"), value: sql.placeholder("value") })
     .onConflictDoUpdate({ target: document.key, set: { value: sql.placeholder("value") } })
     .prepare()
+
   const writer = createWriteBehind<string | null>({
     delay: 500,
     onError: input.onError,
@@ -55,13 +58,16 @@ export function createDraftStore(
             remove.run({ key })
             continue
           }
+
           upsert.run({ key, value })
+
           // Referencing a blob keeps it alive; done here so a reference the renderer republished
           // from its cache is refreshed even though no upload happened.
           if (json(value))
             db.run(sql`UPDATE ${blobs} SET touched_at = ${at} WHERE ${blobs.id} IN (${referenced(value)})`)
         }
       })
+
       // Only a document rewrite can orphan a blob, so collect right after one when due.
       if (!orphans || at - collected < collectInterval) return
       collectBlobs(db, at - blobGrace)
@@ -73,6 +79,7 @@ export function createDraftStore(
   return {
     get(key: string) {
       if (writer.has(key)) return writer.get(key) ?? null
+
       return read.get({ key })?.value ?? null
     },
     // Returns the referenced blob ids this store does not hold so the renderer can upload them
@@ -87,7 +94,9 @@ export function createDraftStore(
                 id: string
               }>(sql`SELECT ref.id FROM (${referenced(value)}) AS ref WHERE ref.id NOT IN (SELECT ${blobs.id} FROM ${blobs})`)
               .map((row) => row.id)
+
       if (!strict || missing.length === 0) writer.set(key, value)
+
       return missing
     },
     putBlob(data: Uint8Array) {
@@ -98,10 +107,12 @@ export function createDraftStore(
         .onConflictDoUpdate({ target: blobs.id, set: { touched_at } })
         .run()
       orphans = true
+
       return id
     },
     getBlob(id: string): Uint8Array<ArrayBuffer> | null {
       const data = db.select({ data: blobs.data }).from(blobs).where(eq(blobs.id, id)).get()?.data
+
       // node:sqlite allocates a dedicated ArrayBuffer per BLOB column value.
       return data ? (data as Uint8Array<ArrayBuffer>) : null
     },

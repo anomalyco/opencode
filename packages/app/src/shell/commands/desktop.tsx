@@ -9,6 +9,7 @@ export function DesktopCommands() {
 
   command.register("desktop", () => {
     const commands: CommandOption[] = []
+
     if (platform.platform !== "desktop" || !platform.exportDebugLogs) return commands
     commands.push({
       id: "logs.export",
@@ -16,6 +17,7 @@ export function DesktopCommands() {
       category: language.t("command.category.settings"),
       onSelect: () => void platform.exportDebugLogs?.(),
     })
+
     return commands
   })
 

@@ -7,7 +7,7 @@ import { createAcpFixture, expectOk, initialize, newSession } from "./subprocess
 const tinyPng = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII="
 
 describe("acp prompt content subprocess", () => {
-  test("accepts embedded text resource image and file resource link prompt content", async () => {
+  test("accepts embedded text resource, inline and remote image, and file resource link prompt content", async () => {
     await using fixture = await createAcpFixture()
     await Bun.write(path.join(fixture.home, "README.md"), "# ACP content smoke\n")
     const acp = fixture.spawn()
@@ -41,6 +41,16 @@ describe("acp prompt content subprocess", () => {
       }),
     )
 
+    const remote = expectOk(
+      await acp.request<PromptResponse>("session/prompt", {
+        sessionId: session.sessionId,
+        prompt: [
+          { type: "text", text: "Use this remote image." },
+          { type: "image", mimeType: "image/png", data: "", uri: "https://example.com/remote.png" },
+        ],
+      }),
+    )
+
     const linked = expectOk(
       await acp.request<PromptResponse>("session/prompt", {
         sessionId: session.sessionId,
@@ -70,8 +80,9 @@ describe("acp prompt content subprocess", () => {
       }),
     )
 
+    expect(remote.stopReason).toBe("end_turn")
     expect(linked.stopReason).toBe("end_turn")
     expect(missing.stopReason).toBe("end_turn")
-    expect(fixture.llm.requests.length).toBeGreaterThanOrEqual(4)
+    expect(fixture.llm.requests.length).toBeGreaterThanOrEqual(5)
   }, 60_000)
 })

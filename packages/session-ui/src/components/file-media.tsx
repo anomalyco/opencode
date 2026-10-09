@@ -25,12 +25,15 @@ export type FileMediaOptions = {
 
 function mediaValue(cfg: FileMediaOptions, mode: "image" | "audio") {
   if (cfg.current !== undefined) return cfg.current
+
   if (mode === "image") return cfg.after ?? cfg.before
+
   return cfg.after ?? cfg.before
 }
 
 export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX.Element }) {
   const i18n = useI18n()
+
   const [remote, setRemote] = createStore<{
     key?: string
     loading?: boolean
@@ -38,17 +41,24 @@ export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX
     src?: string
     mime?: string
   }>({})
+
   const cfg = () => props.media
+
   const kind = createMemo(() => {
     const media = cfg()
+
     if (!media || media.mode === "off") return
+
     return mediaKindFromPath(media.path)
   })
 
   const isBinary = createMemo(() => {
     const media = cfg()
+
     if (!media || media.mode === "off") return false
+
     if (kind()) return false
+
     return isBinaryContent(media.current)
   })
 
@@ -57,27 +67,39 @@ export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX
   const deleted = createMemo(() => {
     const media = cfg()
     const k = kind()
+
     if (!media || !k) return false
+
     if (media.deleted) return true
+
     if (k === "svg") return false
+
     if (media.current !== undefined) return false
+
     return !hasMediaValue(media.after) && hasMediaValue(media.before)
   })
 
   const direct = createMemo(() => {
     const media = cfg()
     const k = kind()
+
     if (!media || (k !== "image" && k !== "audio")) return
+
     return dataUrlFromMediaValue(mediaValue(media, k), k)
   })
 
   const request = createMemo(() => {
     const media = cfg()
     const k = kind()
+
     if (!media || (k !== "image" && k !== "audio")) return
+
     if (media.current !== undefined) return
+
     if (deleted()) return
+
     if (direct()) return
+
     if (!media.path || !media.readFile) return
 
     return {
@@ -91,12 +113,15 @@ export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX
 
   createEffect(() => {
     const input = request()
+
     if (!input) {
       setRemote({ key: undefined, loading: false, error: false, src: undefined, mime: undefined })
+
       return
     }
 
     let active = true
+
     // Keep the previous media visible while re-reading the same file (e.g. a vcs
     // diff refresh); only a key change resets to the loading placeholder.
     if (untrack(() => remote.key) === input.key) setRemote({ loading: true, error: false })
@@ -105,9 +130,11 @@ export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX
       (result) => {
         if (!active) return
         const src = dataUrlFromMediaValue(result, input.kind)
+
         if (!src) {
           input.onError?.({ kind: input.kind })
           setRemote({ key: input.key, loading: false, error: true, src: undefined, mime: undefined })
+
           return
         }
 
@@ -133,39 +160,60 @@ export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX
 
   const src = createMemo(() => {
     const input = request()
+
     if (!input || remote.key !== input.key || remote.error) return direct()
+
     return direct() ?? remote.src
   })
+
   const status = createMemo(() => {
     if (direct()) return "ready" as const
     const input = request()
+
     if (!input) return "idle" as const
+
     if (remote.key !== input.key || remote.loading) return "loading" as const
+
     if (remote.error) return "error" as const
+
     if (src()) return "ready" as const
+
     return "idle" as const
   })
+
   const audioMime = createMemo(() => {
     const input = request()
+
     if (!input || remote.key !== input.key) return
+
     return remote.mime
   })
 
   const svgSource = createMemo(() => {
     const media = cfg()
+
     if (!media || kind() !== "svg") return
+
     return svgTextFromValue(media.current)
   })
+
   const svgSrc = createMemo(() => {
     const media = cfg()
+
     if (!media || kind() !== "svg") return
+
     return dataUrlFromMediaValue(media.current, "svg")
   })
+
   const svgInvalid = createMemo(() => {
     const media = cfg()
+
     if (!media || kind() !== "svg") return
+
     if (svgSource() !== undefined) return
+
     if (!hasMediaValue(media.current)) return
+
     return [media.path, media.current] as const
   })
 
@@ -191,6 +239,7 @@ export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX
           fallback={(() => {
             const media = cfg()
             const k = kind()
+
             if (!media || (k !== "image" && k !== "audio")) return props.fallback()
             const label = kindLabel(k)
 
@@ -201,6 +250,7 @@ export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX
                 </div>
               )
             }
+
             if (status() === "loading") {
               return (
                 <div class="flex min-h-40 items-center justify-center px-6 py-4 text-center text-text-weak">
@@ -208,6 +258,7 @@ export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX
                 </div>
               )
             }
+
             if (status() === "error") {
               return (
                 <div class="flex min-h-40 items-center justify-center px-6 py-4 text-center text-text-weak">
@@ -215,6 +266,7 @@ export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX
                 </div>
               )
             }
+
             return (
               <div class="flex min-h-40 items-center justify-center px-6 py-4 text-center text-text-weak">
                 {i18n.t("ui.fileMedia.state.unavailable", { kind: label })}
@@ -224,7 +276,9 @@ export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX
         >
           {(value) => {
             const k = kind()
+
             if (k !== "image" && k !== "audio") return props.fallback()
+
             if (k === "image") {
               return (
                 <div class="flex justify-center bg-background-stronger px-6 py-4">
@@ -279,7 +333,9 @@ export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX
           <div class="text-14-regular text-text-weak">
             {(() => {
               const path = cfg()?.path
+
               if (!path) return i18n.t("ui.fileMedia.binary.description.default")
+
               return i18n.t("ui.fileMedia.binary.description.path", { path })
             })()}
           </div>

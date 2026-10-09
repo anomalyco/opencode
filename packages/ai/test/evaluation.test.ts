@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
-import { HttpClientRequest } from "effect/unstable/http"
+import { HttpClientRequest } from "effect/http"
 import { Evaluation, EvaluationClient } from "../src/experimental.js"
 import { OpenCodeZen, OpenRouter, TypeSafeAI, VercelAIGateway } from "../src/providers.js"
 import { it } from "./lib/effect.js"

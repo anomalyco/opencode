@@ -25,4 +25,8 @@ export default {
   "dialog.ready.title": "Täzelenme taýýar",
   "dialog.restart": "Gaýtadan açyň",
   "dialog.later": "Soňrak",
+  "releaseNotes.action.getStarted": "Başla",
+  "releaseNotes.action.next": "Indiki",
+  "releaseNotes.action.hideFuture": "Geljekde bulary görkezmäň",
+  "releaseNotes.media.alt": "Öňünden görüş",
 }

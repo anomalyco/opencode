@@ -287,9 +287,6 @@ export const dict = {
   "dialog.server.add.passwordPlaceholder": "лозинка",
   "dialog.server.edit.title": "Уреди сервер",
   "dialog.server.menu.edit": "Уреди",
-  "dialog.server.menu.default": "Поставете како стандардно",
-  "dialog.server.menu.defaultRemove": "Отстрани стандардно",
-  "dialog.server.status.default": "Стандардно",
   "dialog.project.edit.title": "Уреди проект",
   "dialog.project.edit.icon": "Икона",
   "dialog.project.edit.icon.alt": "Икона на проектот",
@@ -297,10 +294,6 @@ export const dict = {
   "dialog.project.edit.color.select": "Изберете {{color}} боја",
   "dialog.project.edit.worktree.startup": "Скрипта за стартување на работен простор",
   "dialog.project.edit.worktree.startup.placeholder": "на пр. bun install",
-  "dialog.releaseNotes.action.getStarted": "Започнете",
-  "dialog.releaseNotes.action.next": "Следно",
-  "dialog.releaseNotes.action.hideFuture": "Не ги прикажувајте овие во иднина",
-  "dialog.releaseNotes.media.alt": "Преглед на издавање",
   "toast.permissions.autoaccept.on.title": "Автоматско прифаќање дозволи",
   "toast.permissions.autoaccept.on.description": "Барањата за дозвола ќе бидат автоматски одобрени",
   "toast.permissions.autoaccept.off.title": "Го прекина автоматското прифаќање дозволи",
@@ -716,7 +709,6 @@ export const dict = {
   "session.view.select": "Преглед на сесија",
   "session.background.moveRunning": "Премести во позадина",
   "session.timeline.working": "Работи",
-  "session.review.wrapLines": "Пренесување на редови",
   "session.websearch.title": "Веб-пребарување од трета страна",
   "session.websearch.description":
     "Изберете ги агентите на давателот на пребарување што ги користат за пребарување на интернет",
@@ -778,8 +770,6 @@ export const dict = {
   "settings.timeline.category.subagents": "Субагенси",
   "settings.timeline.category.notices": "Известувања",
   "settings.timeline.category.tools": "Други алатки",
-  "settings.general.row.mobileDiffWrap.description":
-    "Завиткајте долги линии во мобилни разлики наместо хоризонтално лизгање",
   "provider.connect.error.unsupportedFields": "Овој образец за автентикација содржи неподдржани полиња",
   "settings.about.writtenByNames": "Напишано од {{names}}",
   "settings.about.illustratedByNames": "Илустрирано од {{names}}",
@@ -802,8 +792,6 @@ export const dict = {
   "server.connect.address.invalid": "Внесете валидна HTTP или HTTPS адреса на серверот.",
   "server.connect.failed":
     "Не можеше да се поврзе. Проверете ја адресата на серверот и лозинката, потоа обидете се повторно.",
-  "server.connect.pair.description":
-    "Извршете ја оваа команда на вашиот компјутер за да ги добиете деталите за вашата конекција.",
   "server.connect.scan": "Скенирај QR код",
   "server.connect.scan.description": "Насочете ја вашата камера кон QR кодот прикажан од opencode pair.",
   "server.connect.scan.invalid": "Ова не е OpenCode паринг код. Скенирајте го кодот прикажан од opencode pair.",
@@ -811,7 +799,6 @@ export const dict = {
   "server.connect.camera.starting": "Отворање на камерата…",
   "server.connect.mixedContent":
     "Не можевте да се поврзете на овој HTTP сервер од HTTPS страница. Користете HTTPS сервер адреса наместо тоа.",
-  "server.connect.camera.insecure": "Скенирањето на QR бара отворање на оваа страница преку HTTPS или на localhost.",
   "server.connect.camera.unavailable":
     "Нема камера достапна за овој прелистувач. Внесете ги деталите за вашата конекција рачно.",
   "server.connect.camera.error":

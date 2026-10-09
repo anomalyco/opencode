@@ -14,10 +14,12 @@ import {
   statics,
 } from "@opencode/schema/schema"
 import { Event } from "@opencode/schema/event"
-import { Context, Effect, Encoding, Result, Schema, SchemaGetter, Struct } from "effect"
-import { HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
+import { Context, Effect, Result, Schema, SchemaGetter, SchemaParser, Struct } from "effect"
+import { Base64Url } from "effect/encoding"
+import { HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema, OpenApi } from "effect/http-api"
 import {
   ConflictError,
+  LocationNotFoundError,
   CommandExecutionError,
   CommandNotFoundError,
   FormAlreadySettledError,
@@ -98,12 +100,13 @@ const invalidCursor = "Invalid cursor" as const
 export const SessionsCursor = Schema.String.pipe(
   Schema.brand("SessionsCursor"),
   statics((schema) => {
-    const make = schema.make.bind(schema)
+    // Read the default constructor without caching it on the schema, so `make` can be replaced.
+    const make = SchemaParser.make(schema)
     return {
-      make: (input: typeof SessionsCursorInput.Type) => make(Encoding.encodeBase64Url(encodeSessionsCursor(input))),
+      make: (input: typeof SessionsCursorInput.Type) => make(Base64Url.encode(encodeSessionsCursor(input))),
       parse: (input: string) =>
         Effect.suspend(() => {
-          const result = Encoding.decodeBase64UrlString(input)
+          const result = Base64Url.decodeString(input)
           return Result.isFailure(result)
             ? Effect.fail(invalidCursor)
             : decodeSessionsCursor(result.success).pipe(Effect.mapError(() => invalidCursor))
@@ -170,12 +173,10 @@ export const SessionsQuery = Schema.Struct({
   cursor: SessionsQueryCursor.pipe(Schema.optional),
 }).annotate({ identifier: "SessionsQuery" })
 
-export const makeSessionGroup = <
-  I extends HttpApiMiddleware.AnyId,
-  S,
-  FormI extends HttpApiMiddleware.AnyId,
-  FormS,
->(sessionLocationMiddleware: Context.Key<I, S>, formLocationMiddleware: Context.Key<FormI, FormS>) =>
+export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI extends HttpApiMiddleware.AnyId, FormS>(
+  sessionLocationMiddleware: Context.Key<I, S>,
+  formLocationMiddleware: Context.Key<FormI, FormS>,
+) =>
   HttpApiGroup.make("server.session")
     .add(
       HttpApiEndpoint.get("session.list", "/api/session", {
@@ -562,9 +563,7 @@ export const makeSessionGroup = <
         error: [SessionNotFoundError, SessionBusyError],
       })
         .middleware(sessionLocationMiddleware)
-        .annotateMerge(
-          OpenApi.annotations({ identifier: "session.revert.commit", summary: "Commit staged revert" }),
-        ),
+        .annotateMerge(OpenApi.annotations({ identifier: "session.revert.commit", summary: "Commit staged revert" })),
     )
     .add(
       HttpApiEndpoint.get("session.context", "/api/session/:sessionID/context", {
@@ -594,7 +593,7 @@ export const makeSessionGroup = <
           }),
         }),
         success: Schema.Struct({ data: Schema.Array(FileDiff.Info) }),
-        error: [InvalidRequestError, MessageNotFoundError, SessionNotFoundError, UnknownError],
+        error: [InvalidRequestError, MessageNotFoundError, SessionNotFoundError, UnknownError, LocationNotFoundError],
       }).annotateMerge(
         OpenApi.annotations({
           identifier: "session.diff",

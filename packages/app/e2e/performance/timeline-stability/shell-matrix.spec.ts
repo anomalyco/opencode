@@ -55,6 +55,7 @@ for (const profile of profiles) {
   test(`keeps rows stable for shell ${profile.name}`, async ({ page }, testInfo) => {
     const shellID = `prt_matrix_${profiles.indexOf(profile)}_01_shell`
     const followingID = `prt_matrix_${profiles.indexOf(profile)}_02_following`
+
     const timeline = await setupTimeline(page, {
       messages: [
         userMessage(),
@@ -66,12 +67,14 @@ for (const profile of profiles) {
       cpuRate: 4,
       seedHistory: true,
     })
+
     const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
     await scroller.evaluate((element) => (element.scrollTop = element.scrollHeight))
     await waitForVisualSettle(page, [
       `[data-timeline-part-id="${renderedPartID(shellID)}"]`,
       `[data-timeline-part-id="${renderedPartID(followingID)}"]`,
     ])
+
     const regions = defineVisualRegions({
       shell: {
         selector: `[data-timeline-part-id="${renderedPartID(shellID)}"]`,
@@ -82,10 +85,13 @@ for (const profile of profiles) {
         closest: '[data-timeline-row="AssistantPart"]',
       },
     })
+
     await startVisualProbe(page, regions)
+
     for (const update of profile.updates) {
       await timeline.send(partUpdated(shell(shellID, update.state, update.output)), update.delay)
     }
+
     const trace = await stopVisualProbe<keyof typeof regions>(page)
     await reportVisualStability(
       testInfo,
@@ -113,6 +119,7 @@ for (const profile of profiles) {
 test("keeps following row stable when a collapsed shell receives 50 lines", async ({ page }, testInfo) => {
   const shellID = "prt_matrix_collapsed_01_shell"
   const followingID = "prt_matrix_collapsed_02_following"
+
   const timeline = await setupTimeline(page, {
     messages: [
       userMessage(),
@@ -124,10 +131,12 @@ test("keeps following row stable when a collapsed shell receives 50 lines", asyn
     cpuRate: 4,
     seedHistory: true,
   })
+
   await waitForVisualSettle(page, [
     `[data-timeline-part-id="${renderedPartID(shellID)}"]`,
     `[data-timeline-part-id="${renderedPartID(followingID)}"]`,
   ])
+
   const regions = defineVisualRegions({
     shell: {
       selector: `[data-timeline-part-id="${renderedPartID(shellID)}"]`,
@@ -138,6 +147,7 @@ test("keeps following row stable when a collapsed shell receives 50 lines", asyn
       closest: '[data-timeline-row="AssistantPart"]',
     },
   })
+
   await startVisualProbe(page, regions)
   await timeline.send(partUpdated(shell(shellID, "running", lines(50))), 240)
   await timeline.send(partUpdated(shell(shellID, "completed", lines(50))), 500)
@@ -166,6 +176,7 @@ test("keeps following row stable when a collapsed shell receives 50 lines", asyn
 test("keeps rows stable when a running shell becomes an error", async ({ page }, testInfo) => {
   const shellID = "prt_matrix_error_01_shell"
   const followingID = "prt_matrix_error_02_following"
+
   const timeline = await setupTimeline(page, {
     messages: [
       userMessage(),
@@ -177,10 +188,12 @@ test("keeps rows stable when a running shell becomes an error", async ({ page },
     cpuRate: 4,
     seedHistory: true,
   })
+
   await waitForVisualSettle(page, [
     `[data-timeline-part-id="${renderedPartID(shellID)}"]`,
     `[data-timeline-part-id="${renderedPartID(followingID)}"]`,
   ])
+
   const regions = defineVisualRegions({
     shell: {
       selector: `[data-timeline-part-id="${renderedPartID(shellID)}"]`,
@@ -191,6 +204,7 @@ test("keeps rows stable when a running shell becomes an error", async ({ page },
       closest: '[data-timeline-row="AssistantPart"]',
     },
   })
+
   await startVisualProbe(page, regions)
   await timeline.send(
     partUpdated({
@@ -231,14 +245,17 @@ test("keeps rows stable when a running shell becomes an error", async ({ page },
 test("keeps rows stable when later text arrives before shell output", async ({ page }, testInfo) => {
   const shellID = "prt_late_text_01_shell"
   const followingID = "prt_late_text_02_following"
+
   const timeline = await setupTimeline(page, {
     messages: [userMessage(), assistantMessage([shell(shellID, "running")], { completed: false })],
     settings: { shellToolPartsExpanded: true },
     cpuRate: 4,
     seedHistory: true,
   })
+
   const following = textPart(followingID, "Later assistant content arrived before shell output.")
   await waitForVisualSettle(page, [`[data-timeline-part-id="${renderedPartID(shellID)}"]`])
+
   const regions = defineVisualRegions({
     shell: {
       selector: `[data-timeline-part-id="${renderedPartID(shellID)}"]`,
@@ -249,6 +266,7 @@ test("keeps rows stable when later text arrives before shell output", async ({ p
       closest: '[data-timeline-row="AssistantPart"]',
     },
   })
+
   await startVisualProbe(page, regions)
   await timeline.send(partUpdated(following), 240)
   await timeline.send(partUpdated(shell(shellID, "running", lines(20))), 300)

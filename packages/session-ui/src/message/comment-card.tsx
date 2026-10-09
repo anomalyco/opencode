@@ -24,6 +24,7 @@ export function CommentCard(props: {
 
   onMount(() => {
     const element = title
+
     if (!element) return
     const sync = () => setTruncated(element.scrollWidth > element.clientWidth)
     const measure = () => requestAnimationFrame(sync)

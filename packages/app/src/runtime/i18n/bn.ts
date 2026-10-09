@@ -1,4 +1,8 @@
-export const dict: Record<string, string> = {
+import en from "./en"
+
+type Keys = keyof typeof en
+
+export const dict = {
   "desktop.menu.app": "OpenCode",
   "desktop.menu.file": "ফাইল",
   "desktop.menu.edit": "সম্পাদনা করুন",
@@ -286,9 +290,6 @@ export const dict: Record<string, string> = {
   "dialog.server.add.passwordPlaceholder": "পাসওয়ার্ড",
   "dialog.server.edit.title": "সার্ভার সম্পাদনা করুন",
   "dialog.server.menu.edit": "সম্পাদনা করুন",
-  "dialog.server.menu.default": "ডিফল্ট হিসেবে সেট করুন",
-  "dialog.server.menu.defaultRemove": "ডিফল্ট সরান",
-  "dialog.server.status.default": "ডিফল্ট",
   "dialog.project.edit.title": "প্রকল্প সম্পাদনা করুন",
   "dialog.project.edit.icon": "আইকন",
   "dialog.project.edit.icon.alt": "প্রকল্প আইকন",
@@ -296,10 +297,6 @@ export const dict: Record<string, string> = {
   "dialog.project.edit.color.select": "{{color}} রঙ নির্বাচন করুন",
   "dialog.project.edit.worktree.startup": "ওয়ার্কস্পেস স্টার্টআপ স্ক্রিপ্ট",
   "dialog.project.edit.worktree.startup.placeholder": "যেমন বান ইনস্টল",
-  "dialog.releaseNotes.action.getStarted": "শুরু করুন",
-  "dialog.releaseNotes.action.next": "পরবর্তী",
-  "dialog.releaseNotes.action.hideFuture": "ভবিষ্যতে এগুলো দেখাবেন না",
-  "dialog.releaseNotes.media.alt": "রিলিজ পূর্বরূপ",
   "toast.permissions.autoaccept.on.title": "স্বয়ংক্রিয়ভাবে গ্রহণযোগ্য অনুমতি",
   "toast.permissions.autoaccept.on.description": "অনুমতি অনুরোধ স্বয়ংক্রিয়ভাবে অনুমোদিত হবে",
   "toast.permissions.autoaccept.off.title": "স্বয়ংক্রিয়ভাবে গ্রহণযোগ্য অনুমতি বন্ধ করা হয়েছে৷",
@@ -713,7 +710,6 @@ export const dict: Record<string, string> = {
   "session.view.select": "সেশন দৃশ্য",
   "session.background.moveRunning": "ব্যাকগ্রাউন্ডে নিন",
   "session.timeline.working": "কাজ চলছে",
-  "session.review.wrapLines": "লাইন মোড়ানো",
   "session.websearch.title": "তৃতীয়-পক্ষের ওয়েব অনুসন্ধান",
   "session.websearch.description":
     "এজেন্টরা ওয়েবে অনুসন্ধানের জন্য যে অনুসন্ধান প্রদানকারী ব্যবহার করবে সেটি বেছে নিন",
@@ -774,7 +770,6 @@ export const dict: Record<string, string> = {
   "settings.timeline.category.subagents": "সাবএজেন্ট",
   "settings.timeline.category.notices": "বিজ্ঞপ্তি",
   "settings.timeline.category.tools": "অন্যান্য টুল",
-  "settings.general.row.mobileDiffWrap.description": "মোবাইল ডিফে অনুভূমিকভাবে স্ক্রল করার বদলে দীর্ঘ লাইন মোড়ান",
 
   "provider.connect.error.unsupportedFields": "এই প্রমাণীকরণ ফর্মে অসমর্থিত ফিল্ড রয়েছে",
   "settings.about.writtenByNames": "লিখেছেন {{names}}",
@@ -799,7 +794,6 @@ export const dict: Record<string, string> = {
   "server.connect.button": "সংযোগ করুন",
   "server.connect.address.invalid": "একটি বৈধ HTTP বা HTTPS সার্ভার ঠিকানা লিখুন৷",
   "server.connect.failed": "সংযোগ করা যায়নি। সার্ভার ঠিকানা এবং পাসওয়ার্ড পরীক্ষা করুন, তারপর আবার চেষ্টা করুন.",
-  "server.connect.pair.description": "আপনার সংযোগের বিবরণ পেতে আপনার কম্পিউটারে এই কমান্ডটি চালান।",
   "server.connect.scan": "QR কোড স্ক্যান করুন",
   "server.connect.scan.description": "আপনার ক্যামেরাকে ওপেনকোড পেয়ার দ্বারা দেখানো QR কোডে নির্দেশ করুন৷",
   "server.connect.scan.invalid": "এটি একটি OpenCode পেয়ারিং কোড নয়৷ ওপেনকোড পেয়ার দ্বারা দেখানো কোডটি স্ক্যান করুন।",
@@ -807,7 +801,6 @@ export const dict: Record<string, string> = {
   "server.connect.camera.starting": "ক্যামেরা খোলা হচ্ছে...",
   "server.connect.mixedContent":
     "একটি HTTPS পৃষ্ঠা থেকে এই HTTP সার্ভারের সাথে সংযোগ করা যায়নি৷ পরিবর্তে একটি HTTPS সার্ভার ঠিকানা ব্যবহার করুন৷",
-  "server.connect.camera.insecure": "QR স্ক্যান করার জন্য এই পৃষ্ঠাটি HTTPS বা লোকালহোস্টে খুলতে হবে।",
   "server.connect.camera.unavailable": "এই ব্রাউজারে কোন ক্যামেরা উপলব্ধ নেই৷ ম্যানুয়ালি আপনার সংযোগ বিশদ লিখুন.",
   "server.connect.camera.error":
     "ক্যামেরা খুলতে পারিনি। ক্যামেরা অ্যাক্সেসের অনুমতি দিন বা ম্যানুয়ালি আপনার সংযোগের বিবরণ লিখুন।",
@@ -898,4 +891,4 @@ export const dict: Record<string, string> = {
   "prompt.toast.uploading.percent": "{{percent}}%",
   "prompt.toast.uploading.cancelFile": "{{filename}}-এর আপলোড বাতিল করুন",
   "prompt.toast.uploadFailed.title": "আপলোড ব্যর্থ হয়েছে",
-}
+} satisfies Partial<Record<Keys, string>>

@@ -6,8 +6,10 @@ import { ServerConnection } from "../src/runtime/server/registry"
 
 test("SSH health is checked only with an active tunnel, and cancellation clears stale failures", async () => {
   const requests: ReturnType<typeof Promise.withResolvers<ServerHealth>>[] = []
+
   const app = createRoot((dispose) => {
     const [state, setState] = createStore<{ state: ServerConnection.Extension["state"] }>({ state: "stopped" })
+
     const connection: ServerConnection.Extension = {
       type: "extension",
       key: "ssh:fixture",
@@ -20,17 +22,21 @@ test("SSH health is checked only with an active tunnel, and cancellation clears 
         return state.state
       },
     }
+
     const health = createServerHealth(
       () => [connection],
       () => true,
       () => {
         const request = Promise.withResolvers<ServerHealth>()
         requests.push(request)
+
         return request.promise
       },
     )
+
     return { dispose, setState, health: () => health[ServerConnection.key(connection)] }
   })
+
   try {
     expect(app.health()).toBeUndefined()
     app.setState("state", "starting")
@@ -60,8 +66,10 @@ test("SSH health is checked only with an active tunnel, and cancellation clears 
 
 test("a late failure from the old endpoint cannot overwrite the new endpoint check", async () => {
   const requests: ReturnType<typeof Promise.withResolvers<ServerHealth>>[] = []
+
   const app = createRoot((dispose) => {
     const [state, setState] = createStore({ url: "http://127.0.0.1:0" })
+
     const connection: ServerConnection.Extension = {
       type: "extension",
       key: "ssh:fixture",
@@ -74,17 +82,21 @@ test("a late failure from the old endpoint cannot overwrite the new endpoint che
         return { url: state.url }
       },
     }
+
     const health = createServerHealth(
       () => [connection],
       () => true,
       () => {
         const request = Promise.withResolvers<ServerHealth>()
         requests.push(request)
+
         return request.promise
       },
     )
+
     return { dispose, setState, health: () => health[ServerConnection.key(connection)] }
   })
+
   try {
     app.setState({ url: "http://127.0.0.1:12345" })
     requests[0]?.resolve({ healthy: false })

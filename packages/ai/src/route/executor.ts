@@ -6,7 +6,7 @@ import {
   HttpClientError,
   HttpClientRequest,
   HttpClientResponse,
-} from "effect/unstable/http"
+} from "effect/http"
 import { HttpContext, HttpRateLimitDetails, AIError, TransportError } from "../schema/index.js"
 import { classifyProviderFailure, providerErrorMessage } from "../provider-error.js"
 import { Service, type HttpMiddleware, type Interface } from "./executor-service.js"
@@ -159,6 +159,15 @@ const nativeTransportFailure = (error: unknown) => {
   return failure
 }
 
+// HTTP hooks re-wrap response bodies, so a read failure can arrive as an HttpClientError caused by
+// another HttpClientError. The innermost cause carries the native failure.
+const rootCause = (error: unknown): unknown =>
+  HttpClientError.isHttpClientError(error) && "cause" in error.reason && error.reason.cause !== undefined
+    ? rootCause(error.reason.cause)
+    : error
+
+const CONNECTION_LOST = "Connection lost while reading the response"
+
 const httpError = (input: {
   readonly error: unknown
   readonly request: HttpClientRequest.HttpClientRequest
@@ -179,20 +188,21 @@ const httpError = (input: {
       }),
     })
 
-  const source =
-    HttpClientError.isHttpClientError(input.error) && "cause" in input.error.reason
-      ? (input.error.reason.cause ?? input.error)
-      : input.error
+  const source = rootCause(input.error)
   const native = nativeTransportFailure(source)
   const code = native?.code
-  const raw = native?.message ?? (input.error instanceof Error ? input.error.message : undefined)
-  const detail = raw
-  const message = code && detail && !detail.includes(code) ? `${code}: ${detail}` : detail
+  const detail =
+    code && native?.message && !native.message.includes(code) ? `${code}: ${native.message}` : native?.message
+  const message = detail ?? (input.error instanceof Error ? input.error.message : undefined)
 
   if (Cause.isTimeoutError(input.error) || Cause.isTimeoutError(source))
     return transportError({ message: message ?? "HTTP transport timed out", code: code ?? "Timeout" })
   if (!HttpClientError.isHttpClientError(input.error))
     return transportError({ message: message ?? "HTTP transport failed", code })
+  // Effect reports every response body read failure as a DecodeError, but the raw byte stream decodes
+  // nothing: provider output parsing happens later and fails as InvalidProviderOutput.
+  if (input.operation === "read" && input.error.reason._tag === "DecodeError")
+    return transportError({ message: detail ? `${CONNECTION_LOST}: ${detail}` : CONNECTION_LOST, code })
   if (input.error.reason._tag === "TransportError") {
     return transportError({
       message: message ?? input.error.reason.description ?? "HTTP transport failed",

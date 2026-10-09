@@ -52,8 +52,5 @@ export default {
   "error.healthTimeout": "การตรวจสอบสถานะ Sidecar สำหรับ {{distro}} หมดเวลาหลังจาก {{timeout}}ms",
   "error.commandTimeout": "{{command}} {{args}} หมดเวลาหลังจาก {{timeout}}ms",
   "error.failedPort": "ไม่สามารถรับพอร์ตได้",
-  "server.default": "ค่าเริ่มต้น",
-  "menu.default": "ตั้งเป็นค่าเริ่มต้น",
-  "menu.defaultRemove": "เอาค่าเริ่มต้นออก",
   "menu.remove": "ลบ",
 }

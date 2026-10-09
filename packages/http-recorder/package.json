@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "2.0.21",
+  "version": "2.0.26",
   "name": "@opencode/http-recorder",
   "description": "Record and replay Effect HTTP and WebSocket traffic with deterministic cassettes",
   "type": "module",
@@ -52,7 +52,7 @@
     "typescript": "catalog:"
   },
   "dependencies": {
-    "@effect/platform-node-shared": "4.0.0-rc.112"
+    "@effect/platform-node-shared": "4.0.0-rc.118"
   },
   "peerDependencies": {
     "effect": "catalog:"

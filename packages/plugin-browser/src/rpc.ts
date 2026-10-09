@@ -17,15 +17,15 @@ const limit = optional(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 
 const timeoutMs = optional(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 30_000 }))).annotate({
   description: "Timeout in milliseconds, 1–30000. Default 10000.",
 })
-export const TabID = Schema.String.check(Schema.isPattern(/^tab_[a-f0-9-]{36}$/))
+export const TabID = Schema.String.check(Schema.isPattern(/^tab_[a-f0-9-]{36}$/u))
   .pipe(Schema.brand("Browser.TabID"))
   .annotate({ identifier: "Browser.TabID" })
 export type TabID = typeof TabID.Type
-export const Ref = Schema.String.check(Schema.isPattern(/^@?e[1-9][0-9]*$/))
+export const Ref = Schema.String.check(Schema.isPattern(/^@?e[1-9][0-9]*$/u))
   .pipe(Schema.brand("Browser.Ref"))
   .annotate({ identifier: "Browser.Ref" })
 export type Ref = typeof Ref.Type
-export const FileID = Schema.String.check(Schema.isPattern(/^file_[a-f0-9-]{36}$/))
+export const FileID = Schema.String.check(Schema.isPattern(/^file_[a-f0-9-]{36}$/u))
   .pipe(Schema.brand("Browser.FileID"))
   .annotate({ identifier: "Browser.FileID" })
 export type FileID = typeof FileID.Type
@@ -524,7 +524,7 @@ export type Outcome = typeof Outcome.Type
 const attachment = { sessionID: Session.ID, connectionID: Schema.String }
 const request = { ...attachment, requestID: Schema.String }
 export const TunnelTarget = Schema.Struct({
-  host: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(253), Schema.isPattern(/^[a-zA-Z0-9._:%-]+$/)),
+  host: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(253), Schema.isPattern(/^[a-zA-Z0-9._:%-]+$/u)),
   port: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65_535 })),
 })
 export type TunnelTarget = typeof TunnelTarget.Type

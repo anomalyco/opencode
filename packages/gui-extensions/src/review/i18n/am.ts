@@ -10,4 +10,6 @@ export default {
   "git.description": "በዚህ ፕሮጀክት ላይ ለውጦችን ይከታተሉ፣ ይገምግሙ እና ይቀልብሱ",
   loadingChanges: "ለውጦችን በመጫን ላይ…",
   noChanges: "ምንም ለውጦች የሉም",
+  "settings.wrapLines.title": "መስመሮችን አጠፍ",
+  "settings.wrapLines.description": "በአግድም ከማሸብለል ይልቅ በሞባይል diff ውስጥ ረጅም መስመሮችን አጠፍ",
 }

@@ -996,7 +996,7 @@ describe("ShellTool", () => {
             Effect.gen(function* () {
               const sessions = yield* Session.Service
               yield* sessions.environment({ sessionID, variables: { AI_AGENT: "outer-agent" } })
-              const command = isWindows ? '[Console]::Out.Write($env:AI_AGENT)' : 'printf %s "$AI_AGENT"'
+              const command = isWindows ? "[Console]::Out.Write($env:AI_AGENT)" : 'printf %s "$AI_AGENT"'
               const settled = yield* executeTool(registry, call({ command }))
 
               expect(settled.status).toBe("completed")
@@ -1293,6 +1293,78 @@ describe("ShellTool", () => {
     }),
   )
 
+  it.live("enables portable shell scanner by default on local and dev channels with config override", () =>
+    Effect.gen(function* () {
+      if (isWindows) return
+      for (const [channel, configured, expectedPortable] of [
+        ["local", undefined, true],
+        ["dev", undefined, true],
+        ["dev", false, false],
+        ["latest", undefined, false],
+        ["latest", true, true],
+      ] as const) {
+        const channelSupervisor = makeLocationNode({
+          name: `test/shell-plugins-${channel}`,
+          layer: Layer.effectDiscard(
+            registerToolPlugin(ShellTool.Plugin, {
+              app: { name: "opencode", version: "test", channel },
+            }),
+          ),
+          deps: [
+            Config.node,
+            Environment.node,
+            FileAccess.node,
+            Permission.node,
+            Session.node,
+            Job.node,
+            Shell.node,
+            ShellSelect.node,
+            Tool.node,
+          ],
+        })
+        yield* Effect.acquireUseRelease(
+          Effect.promise(() => tmpdir()),
+          (tmp) =>
+            Effect.gen(function* () {
+              reset()
+              if (configured !== undefined)
+                yield* Effect.promise(() =>
+                  Bun.write(
+                    path.join(tmp.path, "opencode.json"),
+                    JSON.stringify({ experimental: { portable_shell_scanner: configured } }),
+                  ),
+                )
+              const settled = yield* withSession(tmp.path, (registry) =>
+                Effect.gen(function* () {
+                  const selection = yield* ShellSelect.Service
+                  yield* selection.transform((editor) => editor.configure("sh"))
+                  return yield* executeTool(
+                    registry,
+                    call({ command: 'printf hello > marker\necho "' }, `call-channel-${channel}-${String(configured)}`),
+                  )
+                }),
+              )
+              if (expectedPortable) {
+                expect(settled).toMatchObject({
+                  status: "error",
+                  error: { message: expect.stringContaining("unterminated-quote") },
+                })
+                expect(assertions).toEqual([])
+                return
+              }
+              expect(settled.status).toBe("completed")
+              expect(assertions.map((item) => item.action)).toEqual(["shell"])
+            }).pipe(
+              Effect.provide(
+                AppNodeBuilder.build(nodes, [...replacements, PluginSupervisor.node.replace(channelSupervisor)]),
+              ),
+            ),
+          (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+        )
+      }
+    }),
+  )
+
   for (const shell of ["sh", "zsh"]) {
     const test = isWindows || !Bun.which(shell) ? it.live.skip : it.live
     test(
@@ -1362,9 +1434,7 @@ describe("ShellTool", () => {
               expect(settled.status).toBe("completed")
               expect(settled.metadata).toMatchObject({ exit: 7, truncated: false })
               expect(settled.content?.[0]).toEqual({ type: "text", text: "body" })
-              expect(settled.content?.[1]).toMatchObject(
-                Expected.text(expect.stringContaining("Exited with code 7")),
-              )
+              expect(settled.content?.[1]).toMatchObject(Expected.text(expect.stringContaining("Exited with code 7")))
             }),
           ),
         )
@@ -1391,9 +1461,7 @@ describe("ShellTool", () => {
                 if (!content || content.type !== "text") throw new Error("Expected text content")
                 expect(content.text.includes("output-start")).toBe(false)
                 expect(content.text.includes("output-end")).toBe(true)
-                expect(content).toMatchObject(
-                  Expected.text(expect.stringContaining("full output saved to ")),
-                )
+                expect(content).toMatchObject(Expected.text(expect.stringContaining("full output saved to ")))
               }),
             ),
           )

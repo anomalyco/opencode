@@ -68,31 +68,44 @@ const isRecord = (value: unknown): value is Record<string, unknown> => {
 
 const isBuffer = (value: unknown): value is IBuffer => {
   if (!isRecord(value)) return false
+
   if (typeof value.length !== "number") return false
+
   if (typeof value.cursorX !== "number") return false
+
   if (typeof value.cursorY !== "number") return false
+
   if (typeof value.baseY !== "number") return false
+
   if (typeof value.viewportY !== "number") return false
+
   if (typeof value.getLine !== "function") return false
+
   if (typeof value.getNullCell !== "function") return false
+
   return true
 }
 
 const getTerminalBuffers = (value: ITerminalCore): TerminalBuffers | undefined => {
   if (!isRecord(value)) return
   const raw = value.buffer
+
   if (!isRecord(raw)) return
   const active = isBuffer(raw.active) ? raw.active : undefined
   const normal = isBuffer(raw.normal) ? raw.normal : undefined
   const alternate = isBuffer(raw.alternate) ? raw.alternate : undefined
+
   if (!active && !normal) return
+
   return { active, normal, alternate }
 }
 
 const getTerminalMode = (value: ITerminalCore, mode: number) => {
   if (!isRecord(value)) return false
   const terminal = value.wasmTerm
+
   if (!isRecord(terminal) || typeof terminal.getMode !== "function") return false
+
   return terminal.getMode(mode) === true
 }
 
@@ -209,19 +222,23 @@ abstract class BaseSerializeHandler {
 
     for (let row = startRow; row <= endRow; row++) {
       const line = this._buffer.getLine(row)
+
       if (line) {
         const startLineColumn = row === range.start.y ? startColumn : 0
         const endLineColumn = Math.min(endColumn, line.length)
 
         for (let col = startLineColumn; col < endLineColumn; col++) {
           const c = line.getCell(col)
+
           if (!c) {
             continue
           }
+
           this._nextCell(c, oldCell, row, col)
           oldCell = c
         }
       }
+
       this._rowEnd(row, row === endRow)
     }
 
@@ -251,10 +268,7 @@ class StringSerializeHandler extends BaseSerializeHandler {
   private _nullCellCount: number = 0
   private _cursorStyle: IBufferCell
   private _firstRow: number = 0
-  private _lastCursorRow: number = 0
-  private _lastCursorCol: number = 0
   private _lastContentCursorRow: number = 0
-  private _lastContentCursorCol: number = 0
 
   constructor(
     buffer: IBuffer,
@@ -274,7 +288,6 @@ class StringSerializeHandler extends BaseSerializeHandler {
     this._cursorStyle = this._buffer.getNullCell()
 
     this._lastContentCursorRow = start
-    this._lastCursorRow = start
     this._firstRow = start
   }
 
@@ -292,8 +305,6 @@ class StringSerializeHandler extends BaseSerializeHandler {
 
     if (!isLastRow && !wrapped) {
       rowSeparator = "\r\n"
-      this._lastCursorRow = row + 1
-      this._lastCursorCol = 0
     }
 
     this._allRows[this._rowIndex] = this._currentRow
@@ -318,31 +329,40 @@ class StringSerializeHandler extends BaseSerializeHandler {
           if (!!cell.isInverse() !== !!oldCell.isInverse()) {
             sgrSeq.push(cell.isInverse() ? 7 : 27)
           }
+
           if (!!cell.isBold() !== !!oldCell.isBold()) {
             sgrSeq.push(cell.isBold() ? 1 : 22)
           }
+
           if (!!cell.isUnderline() !== !!oldCell.isUnderline()) {
             sgrSeq.push(cell.isUnderline() ? 4 : 24)
           }
+
           if (!!cell.isBlink() !== !!oldCell.isBlink()) {
             sgrSeq.push(cell.isBlink() ? 5 : 25)
           }
+
           if (!!cell.isInvisible() !== !!oldCell.isInvisible()) {
             sgrSeq.push(cell.isInvisible() ? 8 : 28)
           }
+
           if (!!cell.isItalic() !== !!oldCell.isItalic()) {
             sgrSeq.push(cell.isItalic() ? 3 : 23)
           }
+
           if (!!cell.isDim() !== !!oldCell.isDim()) {
             sgrSeq.push(cell.isDim() ? 2 : 22)
           }
+
           if (!!cell.isStrikethrough() !== !!oldCell.isStrikethrough()) {
             sgrSeq.push(cell.isStrikethrough() ? 9 : 29)
           }
         }
+
         if (fgChanged) {
           const color = cell.getFgColor()
           const mode = cell.getFgColorMode()
+
           if (mode === 2 || mode === 3 || mode === -1) {
             sgrSeq.push(38, 2, (color >>> 16) & 0xff, (color >>> 8) & 0xff, color & 0xff)
           } else if (mode === 1) {
@@ -356,9 +376,11 @@ class StringSerializeHandler extends BaseSerializeHandler {
             sgrSeq.push(39)
           }
         }
+
         if (bgChanged) {
           const color = cell.getBgColor()
           const mode = cell.getBgColorMode()
+
           if (mode === 2 || mode === 3 || mode === -1) {
             sgrSeq.push(48, 2, (color >>> 16) & 0xff, (color >>> 8) & 0xff, color & 0xff)
           } else if (mode === 1) {
@@ -437,8 +459,7 @@ class StringSerializeHandler extends BaseSerializeHandler {
         this._nullCellCount = 0
       }
 
-      this._lastContentCursorRow = this._lastCursorRow = row
-      this._lastContentCursorCol = this._lastCursorCol = col
+      this._lastContentCursorRow = row
 
       this._currentRow += `\u001b[${sgrSeq.join(";")}m`
 
@@ -456,8 +477,7 @@ class StringSerializeHandler extends BaseSerializeHandler {
 
       this._currentRow += cell.getChars()
 
-      this._lastContentCursorRow = this._lastCursorRow = row
-      this._lastContentCursorCol = this._lastCursorCol = col + cell.getWidth()
+      this._lastContentCursorRow = row
     }
   }
 
@@ -466,14 +486,13 @@ class StringSerializeHandler extends BaseSerializeHandler {
 
     if (this._buffer.length - this._firstRow <= this._terminal.rows) {
       rowEnd = this._lastContentCursorRow + 1 - this._firstRow
-      this._lastCursorCol = this._lastContentCursorCol
-      this._lastCursorRow = this._lastContentCursorRow
     }
 
     let content = ""
 
     for (let i = 0; i < rowEnd; i++) {
       content += this._allRows[i]
+
       if (i + 1 < rowEnd) {
         content += this._allRowSeparators[i]
       }
@@ -488,14 +507,19 @@ class StringSerializeHandler extends BaseSerializeHandler {
 
     const line = this._buffer.getLine(this._buffer.length - this._terminal.rows + this._buffer.cursorY)
     const cell = line?.getCell(this._buffer.cursorX)
+
     const style = (() => {
       if (!cell) return this._buffer.getNullCell()
+
       if (cell.getWidth() !== 0) return cell
+
       if (this._buffer.cursorX > 0) return line?.getCell(this._buffer.cursorX - 1) ?? cell
+
       return cell
     })()
 
     const sgrSeq = this._diffStyle(style, this._cursorStyle)
+
     if (sgrSeq.length) content += `\u001b[${sgrSeq.join(";")}m`
 
     return content
@@ -577,6 +601,7 @@ export class SerializeAddon implements ITerminalAddon {
     }
 
     const activeBuffer = buffer.active ?? buffer.normal
+
     if (!activeBuffer) {
       return ""
     }
@@ -591,6 +616,7 @@ export class SerializeAddon implements ITerminalAddon {
 
     for (let row = startRow; row <= endRow; row++) {
       const line = activeBuffer.getLine(row)
+
       if (line) {
         const text = line.translateToString(options?.trimWhitespace ?? true)
         lines.push(text)
@@ -611,6 +637,7 @@ export class SerializeAddon implements ITerminalAddon {
     const maxRows = buffer.length
     const rows = this._terminal?.rows ?? 24
     const correctRows = scrollback === undefined ? maxRows : constrain(scrollback + rows, 0, maxRows)
+
     return this._serializeBufferByRange(
       buffer,
       {
@@ -628,6 +655,7 @@ export class SerializeAddon implements ITerminalAddon {
   ): string {
     const handler = new StringSerializeHandler(buffer, this._terminal!)
     const cols = this._terminal?.cols ?? 80
+
     return handler.serialize(
       {
         start: { x: 0, y: range.start },

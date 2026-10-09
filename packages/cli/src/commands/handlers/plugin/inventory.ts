@@ -1,6 +1,6 @@
 import { EOL } from "node:os"
 import { Cause, Effect, Exit } from "effect"
-import { OpenCode, type PluginInfo } from "@opencode/client"
+import { OpenCode } from "@opencode/client"
 import { Service } from "@opencode/client/effect/service"
 import { Npm } from "@opencode/util/npm"
 import { Config } from "../../../config"

@@ -1,8 +1,9 @@
 import { ImagePreview } from "@opencode/ui/image-preview"
 import { useDialog } from "@opencode/ui/context/dialog"
 import type { ReferenceInfo } from "@opencode/client/promise"
-import type { Links, SessionView } from "@opencode/gui-extensions/sdk"
+import type { Links, MountedSession } from "@opencode/gui-extensions/sdk"
 import { createComponent, createEffect, createMemo, on } from "solid-js"
+import { Predicate } from "effect"
 import type { ComposerSuggestion } from "./types"
 import { createComposerEditor, createComposerEditorState, type ComposerEditorModel } from "./editor/interaction"
 import { selectionFromLines, type SelectedLineRange, useFile } from "@/workspaces/files/model"
@@ -10,7 +11,7 @@ import { useComments } from "@/composer/comments"
 import { useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useExtensionHost } from "@/runtime/extension/host"
-import { useExtensionAttachment } from "@/runtime/extension/services"
+import { useExtensionAttachment } from "@/runtime/extension/host-apis"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { resolveBlobUrl } from "@/runtime/persistence/drafts"
@@ -30,12 +31,20 @@ export type ComposerModel = ComposerEditorModel & {
   readonly model: ComposerControls["model"]
 }
 
+const sendFailedTitle = {
+  shell: "prompt.toast.shellSendFailed.title",
+  command: "prompt.toast.commandSendFailed.title",
+  prompt: "prompt.toast.promptSendFailed.title",
+} as const
+
 export function createComposerModel(adapter: ComposerAdapter, options?: { queue?: ComposerQueue }): ComposerModel {
   const sdk = useWorkspaceLocation()
   const data = useData()
   const server = useServer()
+
   const available = () =>
     server.conn.type !== "extension" || !server.conn.managed || server.ctx.sdk.connection.status() === "connected"
+
   const files = useFile()
   const links = useExtensionHost().links
   const extensions = useExtensionAttachment()
@@ -60,43 +69,59 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
   )
   const mode = () => interaction[0].mode
   const history = createComposerHistory()
+
   const recent = createMemo(() => {
     const all = extensions.files.opened()
     const active = extensions.files.active()
+
     return active ? [active, ...all.filter((path) => path !== active)] : all
   })
+
   const attachments = createMemo(() => prompt.current().filter(isAttachment))
+
   const commentCount = createMemo(() => {
     if (mode() === "shell") return 0
+
     return prompt.context.items().filter((item) => !!item.comment?.trim()).length
   })
+
   const blank = createMemo(() => {
     const text = prompt
       .current()
       .map((part) => ("content" in part ? part.content : ""))
       .join("")
+
     return text.trim().length === 0 && attachments().length === 0 && commentCount() === 0
   })
+
   const stopping = createMemo(() => adapter.working() && blank())
+
   const placeholder = () => {
     if (mode() === "shell") return language.t("prompt.placeholder.shell", { example: "git status" })
+
     if (adapter.working() || (options?.queue?.count() ?? 0) > 0)
       return language.t("ui.promptInput.placeholder.followUp", { slash: "/", at: "@" })
+
     return language.t("ui.promptInput.placeholder.normal", { slash: "/", at: "@" })
   }
 
   const historyComments = () => {
     const byID = new Map(comments.all().map((item) => [`${item.file}\n${item.id}`, item] as const))
+
     return prompt.context.items().flatMap((item) => {
       const comment = item.comment?.trim()
+
       if (!comment || item.type !== "file") return []
       const selection = item.commentID ? byID.get(`${item.path}\n${item.commentID}`)?.selection : undefined
+
       const nextSelection =
         selection ??
         (item.selection
           ? ({ start: item.selection.startLine, end: item.selection.endLine } satisfies SelectedLineRange)
           : undefined)
+
       if (!nextSelection) return []
+
       return [
         {
           id: item.commentID ?? item.key,
@@ -110,6 +135,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
       ]
     })
   }
+
   const restoreHistoryComments = (items: PromptHistoryComment[]) => {
     comments.replace(
       items.map((item) => ({
@@ -137,6 +163,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
 
   const referenceDescription = (reference: ReferenceInfo) =>
     reference.source.type === "git" ? reference.source.repository : reference.source.path
+
   const references = createMemo(() =>
     (data.location.reference.list({ directory: sdk().directory }) ?? [])
       .filter((reference) => !reference.hidden)
@@ -157,7 +184,9 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
         },
       })),
   )
+
   const skills = createMemo(() => data.location.skill.list({ directory: sdk().directory }) ?? [])
+
   const context = createMemo<ComposerSuggestion[]>(() => [
     ...references(),
     ...skills().map((skill) => ({
@@ -192,6 +221,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
       mention: { type: "file" as const, path, content: `@${path}`, start: 0, end: 0 },
     })),
   ])
+
   const slashCommands = createMemo(() => [
     ...(data.location.command.list({ directory: sdk().directory }) ?? []).map((item) => ({
       id: `custom.${item.name}`,
@@ -211,6 +241,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
         type: "builtin" as const,
       })),
   ])
+
   const commands = createMemo<ComposerSuggestion[]>(() => [
     ...slashCommands().map((item) => ({
       id: item.id,
@@ -222,7 +253,9 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
       keybind: command.keybindParts(item.id),
     })),
   ])
+
   const variants = createMemo(() => ["default", ...adapter.controls().model.selection.variant.list()])
+
   const submission = createComposerSubmit({
     adapter,
     mode,
@@ -236,7 +269,9 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
     closePopover: () => controller.dispatch({ type: "popover.close" }),
     delivery: (alternate) => {
       const queue = options?.queue
+
       if (!queue) return "steer"
+
       return (alternate ? queue.alternate() : queue.delivery()) ?? "steer"
     },
     notify: {
@@ -245,15 +280,10 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
           title: language.t("prompt.toast.modelAgentRequired.title"),
           description: language.t("prompt.toast.modelAgentRequired.description"),
         }),
+      unqueueable: () => showToast({ title: language.t("prompt.toast.unqueueable.title") }),
       failed: (kind, error) =>
         showToast({
-          title: language.t(
-            kind === "shell"
-              ? "prompt.toast.shellSendFailed.title"
-              : kind === "command"
-                ? "prompt.toast.commandSendFailed.title"
-                : "prompt.toast.promptSendFailed.title",
-          ),
+          title: language.t(sendFailedTitle[kind]),
           description:
             kind === "command"
               ? formatServerError(error, language.t, language.t("common.requestFailed"))
@@ -267,10 +297,13 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
     },
     clientCommand: (text) => {
       const selected = parseClientSlashCommand(slashCommands(), text)
+
       if (!selected) return
+
       return () => command.trigger(selected.id, "slash", selected.input)
     },
   })
+
   const controller = createComposerEditor({
     store: prompt.store,
     state: interaction,
@@ -278,6 +311,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
       entries: (mode) => history.entries(mode).map((entry) => ({ prompt: entry.prompt, metadata: entry.comments })),
       add: (value, mode) => history.add(value, mode, mode === "shell" ? [] : historyComments()),
       capture: historyComments,
+      // SAFETY: `entries` stores each entry's comments as its metadata, and the editor restores only metadata it read there.
       restore: (metadata) => restoreHistoryComments(metadata as PromptHistoryComment[]),
     },
     commands,
@@ -301,23 +335,32 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
     },
     openContext(key) {
       const item = controller.contextItem(key)
+
       if (item?.type === "note") {
         // The extension that attached the note reveals its subject.
         const href = item.live?.href ?? item.href
+
         if (href) links.open({ href, origin: item.origin, session: extensions.current() })
+
         return
       }
+
       if (item) openComment(item, links, extensions.current(), files, comments)
     },
     onEditor(element) {
+      // SAFETY: the editor's only `setEditor` call passes its editable root, a `<div>` (`editor/editor.tsx`).
       editor = element as HTMLDivElement
+
       if (adapter.kind === "active-session") adapter.setEditor(editor)
     },
     onSuggestionSelect(item) {
       if (item.kind !== "command") return
       const selected = slashCommands().find((entry) => entry.id === item.id)
+
       if (!selected || selected.type === "custom") return
+
       if (selected.arguments) return
+
       return () => command.trigger(selected.id, "slash")
     },
     attachments: {
@@ -347,6 +390,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
       placeholder,
       get agent() {
         const agents = adapter.controls().agents
+
         return agents.visible && agents.options.length > 0
           ? {
               options: () => adapter.controls().agents.options.map((name) => ({ id: name, label: name })),
@@ -370,20 +414,25 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
         onSubmit: (submitOptions) => {
           if (!available()) return
           const queue = options?.queue
+
           if (queue?.undoing()) return
+
           // Confirming an edit re-admits the queued prompt instead of sending
           // the composer value as a new prompt. Enter keeps it queued in
           // place; the alternate action sends it as a steer.
           if (queue?.editing()) {
             queue.confirmEdit(submitOptions?.alternate ? "steer" : "queue")
+
             return
           }
+
           void submission.submit(new Event("submit"), submitOptions)
         },
         onStop: () => void submission.stop(),
       },
     },
   })
+
   Object.defineProperty(controller, "model", { get: () => adapter.controls().model })
 
   command.register("composer-editor", () => [
@@ -414,42 +463,51 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
     },
   ])
 
+  // SAFETY: the `model` getter defined on the controller above completes `ComposerModel`.
   return controller as ComposerModel
 }
 
-function composerErrorMessage(language: ReturnType<typeof useLanguage>, error: unknown) {
-  if (error && typeof error === "object" && "message" in error && typeof error.message === "string") {
-    return error.message
-  }
-  if (error && typeof error === "object" && "data" in error) {
-    const data = (error as { data?: { message?: string } }).data
-    if (data?.message) return data.message
-  }
+function composerErrorMessage(language: ReturnType<typeof useLanguage>, cause: unknown) {
+  if (Predicate.hasProperty(cause, "message") && Predicate.isString(cause.message)) return cause.message
+
+  if (
+    Predicate.hasProperty(cause, "data") &&
+    Predicate.hasProperty(cause.data, "message") &&
+    Predicate.isString(cause.data.message) &&
+    cause.data.message
+  )
+    return cause.data.message
+
   return language.t("common.requestFailed")
 }
 
 function openComment(
   item: { path: string; commentID?: string; commentOrigin?: "review" | "file" },
   links: Links,
-  session: SessionView | undefined,
+  session: MountedSession | undefined,
   files: ReturnType<typeof useFile>,
   comments: ReturnType<typeof useComments>,
 ) {
   if (!item.commentID) return
   const focus = { file: item.path, id: item.commentID }
   comments.setActive(focus)
+
   const queueFocus = (attempts = 6) => {
     requestAnimationFrame(() => {
       comments.setFocus({ ...focus })
+
       if (attempts <= 0) return
       requestAnimationFrame(() => {
         const current = comments.focus()
+
         if (current?.file === focus.file && current.id === focus.id) queueFocus(attempts - 1)
       })
     })
   }
-  // The extension that owns the comment's origin reveals it (the review diff or a file tab).
-  links.open({ href: item.path, origin: item.commentOrigin, exact: true, session })
+
+  // The extension that owns the comment's origin reveals it (the review diff or a file tab), keeping the conversation.
+  links.open({ href: item.path, origin: item.commentOrigin, exact: true, background: true, session })
+
   if (item.commentOrigin === "review") return queueFocus()
   void Promise.resolve(files.load(item.path)).finally(() => queueFocus())
 }

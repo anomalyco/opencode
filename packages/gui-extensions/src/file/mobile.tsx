@@ -1,35 +1,36 @@
 import { createMemo, For } from "solid-js"
-import { createStore } from "solid-js/store"
 import { Button } from "@opencode/ui/button"
 import { Tabs } from "@opencode/ui/tabs"
 import { getFilename } from "@opencode/util/path"
 import type { ChangeKind } from "../review/contract"
-import { Layout, useExtension, usePanel, type SessionView } from "../sdk"
+import { useExtension, usePanel, type MountedSession, type SessionScreen } from "../sdk"
 import { SessionFileBrowserTab } from "./browser"
 import { useShared } from "./context"
 import { fileTabPath, isFileTab } from "./path"
 
 const OPEN_FILE_TAB = "open-file"
 
-export default function SessionMobileFiles(props: { session: SessionView }) {
+export default function SessionMobileFiles(props: { session: MountedSession; screen: SessionScreen }) {
   const ctx = useExtension()
-  const layout = ctx.use(Layout)
+  const layout = ctx.layout
   const shared = useShared()
   const panel = usePanel()
-  const file = props.session.file
+  const file = props.screen.file
   const opened = createMemo(() => panel.open().filter(isFileTab))
   // The selected side tab when it is a file tab. A gone selection falls back to the first file tab.
   const activeFileTab = createMemo(() => opened().find((id) => shared.active(props.session, id)))
-  const [store, setStore] = createStore({ browsing: !activeFileTab() })
-  const browsing = () => store.browsing || !activeFileTab()
+  const browsing = () => shared.filter.browsing(props.session.key) || !activeFileTab()
+
   const active = createMemo(() => {
     const id = activeFileTab()
+
     return id ? fileTabPath(file, id) : undefined
   })
+
   const kinds = new Map<string, ChangeKind>()
+
   const open = (path: string) => {
     shared.open(props.session, path)
-    setStore("browsing", false)
   }
 
   return (
@@ -39,7 +40,7 @@ export default function SessionMobileFiles(props: { session: SessionView }) {
           size="small"
           variant="ghost"
           class="shrink-0 mx-2"
-          onClick={() => setStore("browsing", true)}
+          onClick={() => shared.filter.setBrowsing(props.session.key, true)}
           aria-pressed={browsing()}
         >
           {ctx.t("tree.all")}
@@ -49,6 +50,7 @@ export default function SessionMobileFiles(props: { session: SessionView }) {
           onChange={(id) => {
             // Kobalte falls back to a file tab when the browse view has no trigger.
             if (browsing()) return
+
             if (id === OPEN_FILE_TAB) return
             open(fileTabPath(file, id))
           }}
@@ -83,6 +85,7 @@ export default function SessionMobileFiles(props: { session: SessionView }) {
         <SessionFileBrowserTab
           mobile
           session={props.session}
+          screen={props.screen}
           id={activeFileTab()}
           placeholder={browsing()}
           active={active()}
@@ -92,10 +95,17 @@ export default function SessionMobileFiles(props: { session: SessionView }) {
             width: () => 240,
             transition: () => false,
             resize: () => undefined,
-            toggle: () => setStore("browsing", !browsing()),
+            toggle: () => shared.filter.setBrowsing(props.session.key, !browsing()),
           }}
           onSelect={open}
           onSelectPermanent={open}
+          filterRef={(element) => {
+            shared.filter.element = element
+
+            if (!shared.filter.pending) return
+            shared.filter.pending = false
+            queueMicrotask(() => element.focus())
+          }}
         />
       </div>
     </div>

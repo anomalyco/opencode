@@ -1,5 +1,6 @@
 export * as SessionRunner from "./index.js"
 
+import type { FileSystem } from "../../filesystem.js"
 import type { AIError } from "@opencode/ai"
 import { Context, Data, Effect } from "effect"
 import { SessionSchema } from "../schema.js"
@@ -15,6 +16,7 @@ export type RunError =
   | AgentNotFoundError
   | StepFailedError
   | Instructions.InitializationBlocked
+  | FileSystem.DirectoryNotFoundError
 
 export type Continuation = { readonly step: number }
 

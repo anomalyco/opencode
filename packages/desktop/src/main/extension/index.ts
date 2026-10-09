@@ -7,12 +7,16 @@ import { ApplicationLifecycle } from "../lifecycle"
 import { Shutdown } from "../lifecycle/shutdown"
 
 const LEVELS = { debug: "Debug", info: "Info", warn: "Warn", error: "Error" } as const
+
 import { DesktopCli } from "../service/desktop-cli"
 import { DesktopStorage } from "../storage"
 import { setAppQuitting } from "../windows"
 import { setExtensionAssets } from "../windows/protocol"
 import { extensionAsset } from "./assets"
 import type { ExtensionHost } from "./host"
+
+/** The host once it loaded, and its load while one is in flight. */
+type LoadedHost = { host?: ExtensionHost; loading?: Promise<ExtensionHost> }
 
 export interface Interface {
   /** Loads the host on first use. Main extensions activate only through `start`. */
@@ -22,7 +26,7 @@ export interface Interface {
   /** Loads the host and activates main extensions. Runs once the first window is up. */
   readonly start: Effect.Effect<void>
   /** Starts state sync for a window. Before the host loads, nothing is available yet. */
-  readonly subscribe: (remote: string, window: number) => { readonly available: boolean; readonly state?: unknown }
+  readonly subscribe: (ipc: string, window: number) => { readonly available: boolean; readonly state?: unknown }
   readonly configure: (window: number, servers: readonly ExtensionEndpoint[]) => void
 }
 
@@ -41,24 +45,27 @@ export const layer = Layer.effect(
     // Renderers subscribe and push servers while they boot, which can be before the host loads.
     const subscriptions = new Map<string, Set<number>>()
     const servers = new Map<number, readonly ExtensionEndpoint[]>()
-    const current: { host?: ExtensionHost; loading?: Promise<ExtensionHost> } = {}
+    const current: LoadedHost = {}
 
     setExtensionAssets((request, url) => extensionAsset(storage.db, request, url))
 
-    // Like the updater: flush and dispose everything first, then hand off (quitAndInstall) or relaunch.
+    // Disposes every extension but the caller (the host keeps it), then hands off (e.g. quitAndInstall) or relaunches.
     const restart = async (handoff?: () => void | Promise<void>) => {
       setAppQuitting()
       await runPromise(lifecycle.prepareToRestart)
+
       if (!handoff) {
         app.relaunch()
         app.quit()
+
         return
       }
+
       await Promise.resolve()
         .then(handoff)
-        .catch((error: unknown) => {
+        .catch((cause: unknown) => {
           setAppQuitting(false)
-          throw error
+          throw cause
         })
     }
 
@@ -79,8 +86,10 @@ export const layer = Layer.effect(
           log: (message, data) => runFork(Effect.logError(message, data)),
           write: (level, message, data) => runFork(Effect.logWithLevel(LEVELS[level])(message, data)),
         })
+
         return current.host
       })
+
       return current.loading
     }
 
@@ -91,6 +100,7 @@ export const layer = Layer.effect(
           () => undefined,
         )
     })
+
     const remove = yield* shutdown.add(stop)
     yield* Effect.addFinalizer(() => Effect.sync(remove))
 
@@ -100,17 +110,18 @@ export const layer = Layer.effect(
       start: Effect.tryPromise(() => host().then((loaded) => loaded.start())).pipe(
         Effect.catch((error) => Effect.logError("extensions failed to start", { error })),
       ),
-      subscribe(remote, window) {
-        const ids = subscriptions.get(remote) ?? new Set()
+      subscribe(ipc, window) {
+        const ids = subscriptions.get(ipc) ?? new Set()
         ids.add(window)
-        subscriptions.set(remote, ids)
-        // A booting window waits on some remotes (e.g. server sources) before its first paint, so the
+        subscriptions.set(ipc, ids)
+        // A booting window waits on some Ipcs (e.g. server sources) before its first paint, so the
         // extension that provides one starts now instead of with the deferred rest.
         void host().then(
-          (loaded) => loaded.demand(remote),
+          (loaded) => loaded.demand(ipc),
           () => undefined,
         )
-        return current.host?.snapshot(remote, window) ?? { available: false }
+
+        return current.host?.snapshot(ipc, window) ?? { available: false }
       },
       configure(window, list) {
         // Re-inserting keeps the most recent window last, which resolution prefers.

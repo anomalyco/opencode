@@ -51,8 +51,5 @@ export default {
   "error.healthTimeout": "Pemeriksaan kesehatan sidecar untuk {{distro}} kehabisan waktu setelah {{timeout}}ms",
   "error.commandTimeout": "{{command}} {{args}} kehabisan waktu setelah {{timeout}}ms",
   "error.failedPort": "Gagal mendapatkan porta",
-  "server.default": "Bawaan",
-  "menu.default": "Tetapkan sebagai bawaan",
-  "menu.defaultRemove": "Hapus bawaan",
   "menu.remove": "Hapus",
 }

@@ -9,6 +9,7 @@ import {
 } from "./machine"
 
 const command: ComposerSuggestion = { id: "review", kind: "command", label: "/review" }
+
 const file: ComposerSuggestion = { id: "src/index.ts", kind: "file", label: "index.ts", path: "src/index.ts" }
 
 function persisted(value = "", cursor = value.length): ComposerPersistedState {
@@ -136,8 +137,11 @@ test.each<{
   )
 
   if (row.popover) expect(result.state.popover).toEqual(row.popover)
+
   if (row.focus) expect(result.state.focus).toBe(row.focus)
+
   if (row.mode) expect(result.state.mode).toBe(row.mode)
+
   if (row.command) expect(result.commands).toContainEqual(row.command)
   expect(result.handled).toBe(row.handled ?? false)
 })

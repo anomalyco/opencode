@@ -32,24 +32,32 @@ test.describe("timeline history", () => {
 
     const keys = await scroller.evaluate((element) => {
       const view = element.getBoundingClientRect()
+
       return [...element.querySelectorAll<HTMLElement>("[data-timeline-part-id]")]
         .filter((row) => {
           const rect = row.getBoundingClientRect()
+
           return rect.bottom > view.top && rect.top < view.bottom
         })
         .flatMap((row) => (row.dataset.timelinePartId ? [row.dataset.timelinePartId] : []))
         .slice(0, 3)
     })
+
     expect(keys).toHaveLength(3)
+
     const positions = () =>
       scroller.evaluate((element, keys) => {
         const top = element.getBoundingClientRect().top
+
         return keys.map((key) => {
           const row = element.querySelector<HTMLElement>(`[data-timeline-part-id="${key}"]`)
+
           if (!row) return undefined
+
           return Math.round((row.getBoundingClientRect().top - top) * devicePixelRatio) / devicePixelRatio
         })
       }, keys)
+
     const before = await positions()
     const height = await scroller.evaluate((element) => element.scrollHeight)
     expect(requests.some((request) => request.before && request.phase === "end")).toBe(false)
@@ -73,6 +81,7 @@ test.describe("timeline history", () => {
         before ? new Promise<void>((resolve) => held.push(resolve)) : Promise.resolve(),
       onMessages: (request) => {
         if (request.before && request.phase === "start") loads.started++
+
         if (request.before && request.phase === "end") loads.ended++
       },
     })
@@ -90,7 +99,9 @@ test.describe("timeline history", () => {
       expect(state.errorToasts).toBe(0)
       state.parts.forEach((id) => seenParts.add(id))
       state.messages.forEach((id) => seenMessages.add(id))
+
       if (state.scrollTop <= 1 && seenParts.size === expectedParts.length) break
+
       if (held.length) {
         held.splice(0).forEach((release) => release())
         await expect.poll(() => loads.ended).toBe(loads.started)
@@ -100,11 +111,13 @@ test.describe("timeline history", () => {
             const next = (await visibleTimeline(page)).signature
             const stable = next === previous
             previous = next
+
             return stable
           })
           .toBe(true)
         continue
       }
+
       // Scroll instantly and only as far as rows the virtualizer has measured, so neither a smooth wheel
       // animation nor estimated row heights can carry a step past an unmounted row.
       await timelineScroller(page).evaluate((element, delta) => {
@@ -114,6 +127,7 @@ test.describe("timeline history", () => {
       await expect
         .poll(async () => {
           const next = await visibleTimeline(page)
+
           return held.length > 0 || (next.signature !== state.signature && next.covered)
         })
         .toBe(true)
@@ -137,6 +151,7 @@ test.describe("timeline history", () => {
       const messages = rootHistory()
       const last = messages.at(-1) as SessionMessageAssistant
       await page.addInitScript(installVisibilityProbe)
+
       const timeline = await setupTimeline(page, {
         sessionMessages: messages,
         sessionStatus: { [sessionID]: { type: "busy" } },
@@ -153,9 +168,11 @@ test.describe("timeline history", () => {
           pages.push({ before, limit })
           const end = before ? messages.findIndex((message) => message.id === before) : messages.length
           const start = Math.max(0, end - limit)
+
           return { items: messages.slice(start, end), cursor: start > 0 ? messages[start]!.id : undefined }
         },
       })
+
       await expect(page.locator(`[data-timeline-part-id="${last.id}:text:0"]`)).toBeVisible()
       await expect(page.locator(`[data-timeline-part-id="${messages.at(-2)!.id}:text:0"]`)).toBeVisible()
       await timelineScroller(page).hover()
@@ -184,6 +201,7 @@ test.describe("timeline history", () => {
         time: { ...last.time, completed: last.time.created + 15_000 },
         ...(scenario.error ? { error: scenario.error } : {}),
       }
+
       const message = messageUpdated(completed)
       const idle = status("idle")
       // Idle ends the working turn, so its last text part shows the response actions. A completed step changes
@@ -201,12 +219,15 @@ test.describe("timeline history", () => {
             }
           : { attached: [actionsSelector], visible: [spacer] },
       )
+
       for (const event of scenario.idleFirst ? [idle, message] : [message, idle]) {
         await timeline.send(event)
+
         if (event === idle) {
           await expect(page.getByRole("button", { name: "Stop" })).toHaveCount(0)
           await expect(actions).toBeAttached()
         }
+
         if (event === message && scenario.error)
           await expect(page.getByText("Interrupted", { exact: true })).toBeVisible()
         await expect(page.locator("[data-timeline-virtual-content]")).toHaveCount(1)
@@ -215,6 +236,7 @@ test.describe("timeline history", () => {
 
       await expect(page.getByRole("button", { name: "Stop" })).toHaveCount(0)
       await expect(page.locator('[data-timeline-row="bottom-spacer"]')).toBeVisible()
+
       if (scenario.error) await expect(page.getByText("Interrupted", { exact: true })).toBeVisible()
       // The DOM can settle before the sampler's next frame; `hidden` is complete once a sample has shown the final state.
       await expect.poll(() => page.evaluate(() => window.__historyRootProbe!.settled)).toBe(true)
@@ -225,12 +247,15 @@ test.describe("timeline history", () => {
   for (const shape of ["assistant-only", "mixed"] as const) {
     test(`renders the ${shape} tail before parent hydration and preserves it afterward`, async ({ page }) => {
       const session = { ...fixture.sessions[0]!, id: `ses_hydration_${shape}` }
+
       // Compact's initial 40 and the next 20 begin with an assistant; page three supplies its parent.
       const messages = Array.from({ length: 61 }, (_, index): SessionMessageInfo => {
         const id = `msg_hydration_${index}`
         const time = { created: 1700000000000 + index * 1_000 }
+
         if (index === 0 || (shape === "mixed" && index === 59))
           return { id, type: "user", time, text: `Prompt ${index}` }
+
         return {
           id,
           type: "assistant",
@@ -240,20 +265,24 @@ test.describe("timeline history", () => {
           content: [{ type: "text", text: index === 60 ? "## Hydrated tail\n\n**Ready.**" : `Answer ${index}` }],
         }
       })
+
       const gates = [21, 1].map((index) => ({
         before: messages[index]!.id,
         parent: messages[index === 21 ? 1 : 0]!.id,
         requested: Promise.withResolvers<void>(),
         release: Promise.withResolvers<void>(),
       }))
+
       const requests: (string | undefined)[] = []
       await page.setViewportSize({ width: 1440, height: 900 })
       await mockStressTimeline(page, {
         sessions: [session],
         beforeMessagesResponse: async ({ before }) => {
           requests.push(before)
+
           if (!before) return
           const gate = gates.find((gate) => gate.before === before)
+
           if (!gate) throw new Error(`Unexpected older-page boundary: ${before}`)
           gate.requested.resolve()
           await gate.release.promise
@@ -262,6 +291,7 @@ test.describe("timeline history", () => {
           expect(limit).toBe(before ? 20 : 40)
           const end = before ? messages.findIndex((message) => message.id === before) : messages.length
           const start = Math.max(0, end - limit)
+
           return { items: messages.slice(start, end), cursor: start > 0 ? messages[start]!.id : undefined }
         },
       })
@@ -269,9 +299,11 @@ test.describe("timeline history", () => {
       const markdown = tail.locator('[data-component="markdown"]')
       const content = page.locator("[data-timeline-virtual-content]", { has: tail })
       const viewport = page.locator(".scroll-view__viewport", { has: tail })
+
       const orphan = page.locator('[data-timeline-row="AssistantPart"]', {
         has: page.locator('[data-timeline-part-id="msg_hydration_58:text:0"]'),
       })
+
       const expectReadyTail = async () => {
         await expect(content).toHaveCSS("visibility", "visible")
         await expect(markdown).toHaveAttribute("data-markdown-ready", "")
@@ -291,6 +323,7 @@ test.describe("timeline history", () => {
         // This must pass while the first older response is still held.
         await expectReadyTail()
         await expect(orphan).toHaveAttribute("data-message-id", "msg_hydration_21")
+
         if (shape === "mixed")
           await expect(
             page.locator('[data-timeline-row="UserMessage"][data-message-id="msg_hydration_59"]'),
@@ -305,10 +338,13 @@ test.describe("timeline history", () => {
           await expectReadyTail()
           expect(await markdown.evaluate((element, original) => element === original, original)).toBe(true)
         }
+
         expect(requests).toEqual([undefined, ...gates.map((gate) => gate.before)])
+
         const ids = await content
           .locator("[data-timeline-part-id]")
           .evaluateAll((elements) => elements.map((element) => element.getAttribute("data-timeline-part-id")))
+
         expect(new Set(ids).size).toBe(ids.length)
       } finally {
         gates.forEach((gate) => gate.release.resolve())
@@ -342,20 +378,27 @@ function timelineScroller(page: Page) {
 function visibleTimeline(page: Page) {
   return timelineScroller(page).evaluate((scroller) => {
     const view = scroller.getBoundingClientRect()
+
     const inView = (element: Element) => {
       const rect = element.getBoundingClientRect()
+
       return rect.bottom >= view.top && rect.top <= view.bottom
     }
+
     const parts = [...scroller.querySelectorAll<HTMLElement>("[data-timeline-part-id], [data-timeline-part-ids]")]
+
     const partIDs = (element: HTMLElement) =>
       [element.dataset.timelinePartId, ...(element.dataset.timelinePartIds?.split(",") ?? [])].filter(
         (id): id is string => !!id,
       )
+
     const messages = [...scroller.querySelectorAll<HTMLElement>("[data-message-id]")]
     const messageIDs = (elements: HTMLElement[]) => [...new Set(elements.map((element) => element.dataset.messageId!))]
+
     const firstRowTop = Math.min(
       ...[...scroller.querySelectorAll("[data-timeline-key]")].map((row) => row.getBoundingClientRect().top),
     )
+
     return {
       parts: parts.flatMap(partIDs),
       visibleParts: parts.filter(inView).flatMap(partIDs),
@@ -384,12 +427,16 @@ function expectOrdered(expected: string[], actual: string[], label: string) {
 
 function partIDs(message: SessionMessageInfo) {
   if (message.type === "user") return [`${message.id}:text:0`]
+
   if (message.type !== "assistant") return []
   const ordinals = { text: 0, reasoning: 0 }
+
   return message.content.flatMap((part) => {
     if (part.type === "text" || part.type === "reasoning")
       return [`${message.id}:${part.type}:${ordinals[part.type]++}`]
+
     if (part.type === "tool") return [part.id]
+
     return []
   })
 }
@@ -398,6 +445,7 @@ function partIDs(message: SessionMessageInfo) {
 function rootHistory() {
   return Array.from({ length: 21 }, (_, index) => {
     const id = `msg_${String(index + 1001).padStart(4, "0")}_history_root_user`
+
     return [
       userMessage(undefined, { id, created: 1700000000000 + index * 2_000 }),
       assistantMessage([textPart(`prt_history_root_${index}`, `Assistant response ${index}`)], {
@@ -419,8 +467,10 @@ type ProbeFinal = { attached: string[]; visible: { selector: string; text?: stri
 function installVisibilityProbe() {
   const shown = (element: Element) => {
     const rect = element.getBoundingClientRect()
+
     return rect.width > 0 && rect.height > 0 && element.checkVisibility({ visibilityProperty: true })
   }
+
   const shows = (final: ProbeFinal) =>
     final.attached.every((selector) => document.querySelector(selector)) &&
     final.visible.every((entry) =>
@@ -428,17 +478,22 @@ function installVisibilityProbe() {
         (element) => shown(element) && (entry.text === undefined || element.textContent?.trim() === entry.text),
       ),
     )
+
   const visibleParts = () => {
     const viewport = document.querySelector("[data-timeline-virtual-content]")?.closest(".scroll-view__viewport")
     const view = viewport?.getBoundingClientRect()
+
     if (!viewport || !view) return []
+
     return [...viewport.querySelectorAll<HTMLElement>("[data-timeline-part-id]")]
       .filter((part) => {
         const rect = part.getBoundingClientRect()
+
         return rect.width > 0 && rect.height > 0 && rect.bottom > view.top && rect.top < view.bottom
       })
       .flatMap((part) => (part.dataset.timelinePartId ? [part.dataset.timelinePartId] : []))
   }
+
   const state = {
     armed: false,
     hidden: false,
@@ -449,6 +504,7 @@ function installVisibilityProbe() {
     arm() {
       state.parts = visibleParts()
       state.armed = true
+
       return state.parts
     },
     settle(final: ProbeFinal) {
@@ -456,14 +512,20 @@ function installVisibilityProbe() {
       state.settled = false
     },
   }
+
   window.__historyRootProbe = state
+
   const sample = () => {
     if (state.armed) {
       const visible = new Set(visibleParts())
+
       if (state.parts.length === 0 || state.parts.some((partID) => !visible.has(partID))) state.hidden = true
+
       if (state.final && !state.settled) state.settled = shows(state.final)
     }
+
     requestAnimationFrame(() => setTimeout(sample, 0))
   }
+
   requestAnimationFrame(() => setTimeout(sample, 0))
 }

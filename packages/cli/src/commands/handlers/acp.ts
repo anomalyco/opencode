@@ -1,8 +1,9 @@
-import { ndJsonStream } from "@agentclientprotocol/sdk"
-import { OpenCode } from "@opencode/client/promise"
+import { MessageTooLargeError, ndJsonStream } from "@agentclientprotocol/sdk"
+import { OpenCode } from "@opencode/client/effect"
 import { Service } from "@opencode/client/effect/service"
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
-import { Effect } from "effect"
+import { Effect, Option } from "effect"
+import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http"
 import { Writable } from "node:stream"
 import { ACP } from "../../acp/agent"
 import { Commands } from "../commands"
@@ -11,30 +12,50 @@ import { Standalone } from "../../services/standalone"
 
 export default Runtime.handler(
   Commands.commands.acp,
-  Effect.fn("cli.acp")(function* () {
+  Effect.fn("cli.acp")(function* (input) {
+    if (input.login) {
+      const login = yield* Effect.promise(() => import("./auth/login"))
+      return yield* login.default({
+        target: Option.none(),
+        method: Option.none(),
+        answer: [],
+        server: Option.none(),
+        standalone: false,
+      })
+    }
     process.env.OPENCODE_CLIENT = "acp"
     const endpoint = yield* Standalone.start()
-    const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) })
+    const client = yield* OpenCode.make({ baseUrl: endpoint.url }).pipe(
+      Effect.provideServiceEffect(
+        HttpClient.HttpClient,
+        HttpClient.HttpClient.pipe(
+          Effect.map(HttpClient.mapRequest(HttpClientRequest.setHeaders(Service.headers(endpoint) ?? {}))),
+        ),
+      ),
+      Effect.provide(FetchHttpClient.layer),
+    )
     const connection = yield* ACP.connect(client, ndJsonStream(Writable.toWeb(process.stdout), Bun.stdin.stream()))
-    const code = yield* Effect.raceFirst(
-      Effect.promise(() => connection.closed).pipe(Effect.as(0)),
+    const failure = yield* Effect.raceFirst(
+      Effect.promise(() => connection.closed).pipe(
+        Effect.map(() =>
+          connection.signal.reason instanceof MessageTooLargeError
+            ? `incoming message exceeded the ${connection.signal.reason.maxMessageBytes / 1024 / 1024} MiB limit`
+            : undefined,
+        ),
+      ),
       endpoint.exited.pipe(
         Effect.match({
           onSuccess: (code) => `code ${code}`,
           onFailure: (error) =>
             error.cause instanceof CrossSpawnSpawner.KilledBySignal ? `signal ${error.cause.signal}` : error.message,
         }),
-        // stdout carries ACP, so the diagnostic goes to stderr.
-        Effect.flatMap((reason) =>
-          Effect.sync(() => {
-            process.stderr.write(`opencode acp: server exited unexpectedly (${reason})\n`)
-            return 1
-          }),
-        ),
+        Effect.map((reason) => `server exited unexpectedly (${reason})`),
       ),
     )
-    // Closing the handler scope would wait for the private server's graceful shutdown; its lease pipe already
-    // ends the server once this process exits.
-    yield* Effect.sync(() => process.exit(code))
+    // Exit directly: closing the scope would wait on the server's graceful shutdown, and its lease pipe ends it anyway.
+    yield* Effect.sync(() => {
+      if (failure) process.stderr.write(`opencode acp: ${failure}\n`)
+      process.exit(failure ? 1 : 0)
+    })
   }),
 )

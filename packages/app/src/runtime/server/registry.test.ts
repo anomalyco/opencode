@@ -19,10 +19,12 @@ function serverSchema() {
 test("startup auth_token credentials override a persisted same-url server; without one the persisted password stays", () => {
   const url = "https://server.example.test"
   const decode = Schema.decodeUnknownSync(serverSchema())
+
   const override = resolveServerList({
     stored: decode({ list: [{ url }] }).list,
     props: [{ type: "http", authToken: true, http: { url, password: "secret" } }],
   })
+
   expect(override).toEqual([{ type: "http", authToken: true, http: { url, password: "secret" } }])
   expect(String(ServerConnection.key(override[0]!))).toBe(url)
 
@@ -30,6 +32,7 @@ test("startup auth_token credentials override a persisted same-url server; witho
     stored: decode({ list: [{ url, password: "saved" }] }).list,
     props: [{ type: "http", http: { url } }],
   })
+
   expect(kept).toHaveLength(1)
   expect(kept[0]?.http).toEqual({ url, password: "saved" })
   expect(kept[0]?.type === "http" ? kept[0].authToken : true).toBeUndefined()
@@ -59,6 +62,7 @@ test("keeps exact persisted server identities and prevents removing provided ser
   const stored = Schema.decodeUnknownSync(serverSchema())({
     list: ["http://localhost:4096", "http://localhost:4096/", "http://127.0.0.1:4096"],
   }).list
+
   expect(resolveServerList({ stored }).map((server) => String(ServerConnection.key(server)))).toEqual([
     "http://localhost:4096",
     "http://localhost:4096/",
@@ -71,14 +75,17 @@ test("keeps exact persisted server identities and prevents removing provided ser
 
 test("project actions update schema-derived state and follow dynamic server scopes", () => {
   const [store, setStore] = createStore(Schema.decodeUnknownSync(serverSchema())({}))
+
   const props: { server: ServerConnection.Key; canonicalLocalServer?: ServerConnection.Key } = {
     server: ServerConnection.Key.make("https://remote.example"),
   }
+
   const projects = createServerProjects({
     store,
     setStore,
     scope: () => ServerScope.fromServerKey(props.server, props.canonicalLocalServer),
   })
+
   projects.open("/remote")
   projects.collapse("/remote")
   projects.touch("/remote")

@@ -4,14 +4,18 @@ import { mockServers, type MockServerConfig } from "../utils/mock-server"
 import { expectSessionTitle } from "../utils/waits"
 
 const directoryA = "C:/server-a"
+
 const directoryB = "/home/server-b"
+
 const sessionA = session({ id: "ses_server_a", directory: directoryA, title: "Server A session" })
+
 const childA = session({
   id: "ses_server_a_child",
   directory: directoryA,
   title: "Server A child",
   parentID: sessionA.id,
 })
+
 const sessionB = session({ id: "ses_server_b", directory: directoryB, title: "Server B session" })
 
 type Reply = { origin: string; sessionID: string; permissionID: string; body: unknown }
@@ -28,10 +32,13 @@ async function setup(page: Page, input: { tabs: TabSeed[]; a?: Partial<MockServe
   const sessionGets: string[] = []
   page.on("request", (request) => {
     const url = new URL(request.url())
+
     if (url.pathname === "/api/permission/request") lists.push(url)
   })
+
   const config = (origin: string, name: string, directory: string, sessions: ReturnType<typeof session>[]) => {
     const id = name.toLowerCase().replace(" ", "-")
+
     return {
       directory,
       project: project({ id: `proj_${id}`, directory }),
@@ -47,6 +54,7 @@ async function setup(page: Page, input: { tabs: TabSeed[]; a?: Partial<MockServe
       onPermissionReply: (reply: Omit<Reply, "origin">) => replies.push({ origin, ...reply }),
     }
   }
+
   const servers = await mockServers(page, {
     [SERVER]: {
       ...config(SERVER, "Server A", directoryA, [sessionA, childA]),
@@ -56,19 +64,23 @@ async function setup(page: Page, input: { tabs: TabSeed[]; a?: Partial<MockServe
     },
     [REMOTE_SERVER]: config(REMOTE_SERVER, "Server B", directoryB, [sessionB]),
   })
+
   await seed(page, { servers: [REMOTE_SERVER], tabs: input.tabs })
+
   const listed = (origin: string, directory: string) =>
     expect
       .poll(() =>
         lists.some((url) => url.origin === origin && url.searchParams.get("location[directory]") === directory),
       )
       .toBe(true)
+
   const enableAutoAccept = async () => {
     await page.keyboard.press("Control+,")
     const autoAccept = page.getByTestId("settings-screen").locator('[data-action="settings-auto-accept-permissions"]')
     await autoAccept.locator('[data-slot="switch-control"]').click()
     await expect(autoAccept.getByRole("switch")).toBeChecked()
   }
+
   return { replies, sessionGets, transport: servers[SERVER]!.transport, listed, enableAutoAccept }
 }
 
@@ -90,6 +102,7 @@ test("settings opened from a remote session sweep every server and keep the remo
   await expect(page).toHaveURL("/settings")
   await expect(page.locator('[data-titlebar-tab][data-active="true"]')).toHaveCount(0)
   await expect(page.getByRole("dialog")).toHaveCount(0)
+  await expect(settings.getByRole("tab", { name: "Models", exact: true })).toHaveCount(0)
   await view.listed(REMOTE_SERVER, directoryB)
   await expect.poll(() => view.replies).toEqual([reply(sessionA.id, "permission-pending-a")])
 
@@ -112,6 +125,7 @@ test("settings opened from a remote session sweep every server and keep the remo
   await expect(page.locator('[data-titlebar-tab][data-active="true"]')).toContainText(sessionB.title)
   await page.keyboard.press("Control+]")
   await expect(page).toHaveURL("/settings")
+  await expect(settings.getByRole("tab", { name: "Preferences", exact: true })).toHaveAttribute("aria-selected", "true")
   await page.keyboard.press("Escape")
   await expectPath(page, sessionHref(sessionB.id, REMOTE_SERVER))
   await expectSessionTitle(page, sessionB.title)
@@ -128,6 +142,7 @@ test("auto-accept responds for an unfocused server session and its child", async
   await page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(sessionB.id, REMOTE_SERVER)}"])`).click()
   await expectSessionTitle(page, sessionB.title)
   await view.transport.waitForConnection()
+
   for (const [index, item] of [sessionA, childA].entries()) {
     await view.transport.send({
       id: `evt_permission_background_${index}`,
@@ -137,6 +152,7 @@ test("auto-accept responds for an unfocused server session and its child", async
       data: { ...pending(`permission-background-${index}`, item.id) },
     })
   }
+
   await expect
     .poll(() => view.replies)
     .toEqual([reply(sessionA.id, "permission-background-0"), reply(childA.id, "permission-background-1")])
@@ -145,6 +161,7 @@ test("auto-accept responds for an unfocused server session and its child", async
 test("auto-accept sweeps again after a reconnect and resyncs active sessions", async ({ page }) => {
   const queued: ReturnType<typeof pending>[] = []
   const failures = { next: 0 }
+
   const view = await setup(page, {
     tabs: [sessionA.id],
     a: {
@@ -152,6 +169,7 @@ test("auto-accept sweeps again after a reconnect and resyncs active sessions", a
       permissionListFailures: () => failures.next-- > 0,
     },
   })
+
   await page.goto(sessionHref(sessionA.id))
   await expectSessionTitle(page, sessionA.title)
   const first = await view.transport.waitForConnection()
@@ -177,6 +195,7 @@ test("auto-accept approves a request discovered by opening a session", async ({ 
     tabs: [sessionA.id],
     a: { sessionPermissions: { [sessionA.id]: [pending("permission-synced-a", sessionA.id)] } },
   })
+
   await page.goto(sessionHref(sessionA.id))
   await expectSessionTitle(page, sessionA.title)
   await view.enableAutoAccept()
