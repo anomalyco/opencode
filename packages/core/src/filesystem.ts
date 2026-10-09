@@ -151,13 +151,13 @@ const baseLayer = Layer.effect(
         ),
       )
       if (!FSUtil.contains(root, real)) return yield* Effect.fail(new NotFoundError({ path: input }))
-      return { absolute, real, directory: location.directory }
+      return real
     })
     return Service.of({
       find: search.find,
       read: Effect.fn("FileSystem.read")(function* (input) {
-        const target = yield* resolve(input.path)
-        const info = yield* fs.stat(target.real).pipe(
+        const real = yield* resolve(input.path)
+        const info = yield* fs.stat(real).pipe(
           Effect.catchReason(
             "PlatformError",
             "NotFound",
@@ -167,10 +167,10 @@ const baseLayer = Layer.effect(
         )
         if (info.type !== "File") return yield* Effect.fail(new NotFoundError({ path: input.path }))
         return {
-          mime: FSUtil.mimeType(target.real),
+          mime: FSUtil.mimeType(real),
           size: Number(info.size),
           mtime: info.mtime,
-          stream: (options) => fs.stream(target.real, options),
+          stream: (options) => fs.stream(real, options),
         }
       }),
       list: Effect.fn("FileSystem.list")(function* (input = {}) {
