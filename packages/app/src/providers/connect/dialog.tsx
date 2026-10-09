@@ -1233,7 +1233,7 @@ function ProviderConnection(props: {
 
   function AccountsView() {
     return (
-      <div data-component="provider-accounts" class="flex flex-col gap-5">
+      <div data-component="provider-accounts" class="flex flex-col gap-3">
         <section class="flex flex-col">
           <div class="px-3 pb-2 text-[13px] font-[440] leading-text-compact tracking-[-0.04px] text-v2-text-text-muted">
             {language.t("dialog.provider.accounts.connected")}
@@ -1287,11 +1287,9 @@ function ProviderConnection(props: {
             </For>
           </div>
         </section>
-        <div class="px-3">
-          <Button disabled={state.switching !== undefined} onClick={addAccount}>
-            {language.t("dialog.provider.accounts.add")}
-          </Button>
-        </div>
+        <Button class="self-start !px-3" disabled={state.switching !== undefined} onClick={addAccount}>
+          {language.t("dialog.provider.accounts.add")}
+        </Button>
       </div>
     )
   }
