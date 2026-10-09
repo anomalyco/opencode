@@ -42,13 +42,23 @@ export type Settings = ProviderPackage.Settings &
 
 export const baseURL = (input: GatewayURL) => {
   if (input.baseURL) return input.baseURL
-  if (!input.accountId)
-    throw new ProviderConfigurationError({
-      provider: id,
-      message: "CloudflareAIGateway.configure requires accountId unless baseURL is supplied",
-    })
-  return `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(input.accountId)}/ai/v1`
+  return `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(requireAccountId(input))}/ai/v1`
 }
+
+// Cloudflare's REST API rejects parts of the Anthropic Messages and OpenAI Responses request shapes, such as
+// system prompt blocks and `minimal` reasoning effort, so these models use the provider-native gateway endpoints.
+const passthroughURL = (input: GatewayURL & GatewayOptions, provider: "anthropic/v1" | "openai") =>
+  `https://gateway.ai.cloudflare.com/v1/${encodeURIComponent(requireAccountId(input))}/${encodeURIComponent(gatewayId(input))}/${provider}`
+
+const requireAccountId = (input: GatewayURL) => {
+  if (input.accountId) return input.accountId
+  throw new ProviderConfigurationError({
+    provider: id,
+    message: "CloudflareAIGateway.configure requires accountId unless baseURL is supplied",
+  })
+}
+
+const gatewayId = (input: GatewayOptions) => input.gatewayId?.trim() || "default"
 
 export const responsesRoute = OpenAIResponses.route.with({
   id: "cloudflare-ai-gateway-responses",
@@ -70,16 +80,12 @@ export const route = OpenAIChat.route.with({
 
 export const routes = [responsesRoute, messagesRoute, route]
 
-const auth = (input: LanguageModelOptions) => {
-  if ("auth" in input && input.auth) return input.auth
-  return Auth.optional(input.gatewayApiKey ?? ("apiKey" in input ? input.apiKey : undefined), "apiKey")
+const credential = (input: LanguageModelOptions) =>
+  Auth.optional(input.gatewayApiKey ?? ("apiKey" in input ? input.apiKey : undefined), "apiKey")
     .orElse(Auth.config(authEnvVars[0]))
     .orElse(Auth.config(authEnvVars[1]))
-    .bearer()
-}
 
 const headers = (input: LanguageModelOptions) => ({
-  ...(input.gatewayId === undefined ? {} : { "cf-aig-gateway-id": input.gatewayId.trim() || "default" }),
   ...(input.metadata === undefined
     ? {}
     : { "cf-aig-metadata": Schema.encodeSync(Schema.fromJsonString(Schema.Unknown))(input.metadata) }),
@@ -90,31 +96,42 @@ const headers = (input: LanguageModelOptions) => ({
   ...input.headers,
 })
 
-const modelID = (input: string | ModelID) => {
-  const value = String(input)
-  if (value.startsWith("workers-ai/")) return value.slice("workers-ai/".length)
-  if (value.startsWith("anthropic/")) return `anthropic/${value.slice("anthropic/".length).replaceAll(".", "-")}`
-  return value
-}
-
 export const configure = (input: LanguageModelOptions) => {
-  const defaults = {
+  const custom = "auth" in input && input.auth ? input.auth : undefined
+  const rest = {
     endpoint: { baseURL: baseURL(input) },
-    auth: auth(input),
-    headers: headers(input),
+    auth: custom ?? credential(input).bearer(),
+    headers: { "cf-aig-gateway-id": gatewayId(input), ...headers(input) },
     http: input.http,
     providerOptions: input.providerOptions,
   }
-  const responses = responsesRoute.with(defaults)
-  const messages = messagesRoute.with(defaults)
-  const chat = route.with(defaults)
+  // A custom baseURL stands in for the REST API, so every model keeps using it with gateway model IDs.
+  const native = input.baseURL === undefined
+  const passthrough = (provider: "anthropic/v1" | "openai") =>
+    native
+      ? {
+          ...rest,
+          endpoint: { baseURL: passthroughURL(input, provider) },
+          auth: custom ?? Auth.bearerHeader("cf-aig-authorization", credential(input)),
+          headers: headers(input),
+        }
+      : rest
+  const responses = responsesRoute.with(passthrough("openai"))
+  const messages = messagesRoute.with(passthrough("anthropic/v1"))
+  const chat = route.with(rest)
   return {
     id,
     model: (input: string | ModelID) => {
-      const wire = modelID(input)
-      if (String(input).startsWith("openai/")) return responses.model<OpenAIProviderOptionsInput>({ id: wire })
-      if (String(input).startsWith("anthropic/")) return messages.model<OpenAIProviderOptionsInput>({ id: wire })
-      return chat.model<OpenAIProviderOptionsInput>({ id: wire })
+      const value = String(input)
+      if (value.startsWith("openai/"))
+        return responses.model<OpenAIProviderOptionsInput>({ id: native ? value.slice("openai/".length) : value })
+      if (value.startsWith("anthropic/"))
+        return messages.model<OpenAIProviderOptionsInput>({
+          id: native ? value.slice("anthropic/".length).replaceAll(".", "-") : value,
+        })
+      if (value.startsWith("workers-ai/"))
+        return chat.model<OpenAIProviderOptionsInput>({ id: value.slice("workers-ai/".length) })
+      return chat.model<OpenAIProviderOptionsInput>({ id: value })
     },
     configure,
   }
@@ -149,8 +166,8 @@ export const model: ProviderPackage.Definition<Settings, OpenAIProviderOptionsIn
     collectLog,
     gatewayApiKey,
     gatewayId,
-    headers: headers === undefined ? undefined : { ...headers },
-    http: body === undefined ? undefined : { body: { ...body } },
+    headers,
+    http: body === undefined ? undefined : { body },
     metadata,
     providerOptions,
     skipCache,

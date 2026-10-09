@@ -25,7 +25,7 @@ import { LLMClient, RequestExecutor } from "@opencode/ai/route"
 import { compileRequest } from "@opencode/ai/route/client"
 import { expect } from "bun:test"
 import { Effect, Layer } from "effect"
-import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { HttpClientRequest, HttpClientResponse } from "effect/http"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(AISDK.locationLayer)
@@ -776,6 +776,45 @@ it.effect("sends AI SDK requests directly when no HTTP hook middleware is attach
     expect(bodies).toHaveLength(1)
     expect(typeof bodies[0]).toBe("string")
     expect(response.events.filter(LLMEvent.is.textDelta).map((event) => event.text)).toEqual(["upstream"])
+  }),
+)
+
+it.effect("fails with a retryable transport error when response headers time out", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    const customFetch = Object.assign(
+      (_input: Parameters<typeof fetch>[0], init?: RequestInit) =>
+        new Promise<Response>((_, reject) => {
+          init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true })
+        }),
+      { preconnect: fetch.preconnect },
+    )
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = createOpenAICompatible({
+        ...event.options,
+        name: String(event.options.name),
+        baseURL: String(event.options.baseURL),
+      })
+    })
+    const resolved = yield* aisdk.model(
+      model("@ai-sdk/openai-compatible", {
+        apiKey: "test",
+        baseURL: "https://example.test/v1",
+        headerTimeout: 25,
+        fetch: customFetch,
+      }),
+    )
+    const error = yield* LLMClient.generate(LLM.request({ model: resolved, prompt: "Hello" })).pipe(
+      Effect.provide(client),
+      Effect.flip,
+    )
+
+    expect(error.reason).toMatchObject({
+      _tag: "Transport",
+      operation: "request",
+      message: "Response headers timed out",
+    })
+    expect(SessionRunnerRetry.isRetryable(error)).toBeTrue()
   }),
 )
 

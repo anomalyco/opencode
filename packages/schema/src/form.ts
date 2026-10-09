@@ -5,7 +5,7 @@ import { ephemeral, inventory } from "./event.js"
 import { ascending } from "./identifier.js"
 import { NonNegativeInt, optional, statics } from "./schema.js"
 
-const IDSchema = Schema.String.check(Schema.isStartsWith("frm_")).pipe(Schema.brand("Form.ID"))
+const IDSchema = Schema.String.check(Schema.isStartingWith("frm_")).pipe(Schema.brand("Form.ID"))
 
 export const ID = IDSchema.pipe(
   statics((schema: typeof IDSchema) => ({ create: (id?: string) => schema.make(id ?? "frm_" + ascending()) })),
@@ -149,7 +149,8 @@ export type Answer = typeof Answer.Type
 export const State = Schema.Union([
   Schema.Struct({ status: Schema.Literal("pending") }),
   Schema.Struct({ status: Schema.Literal("answered"), answer: Answer }),
-  Schema.Struct({ status: Schema.Literal("cancelled") }),
+  // A message tells the asker why nobody answered, e.g. a non-interactive client.
+  Schema.Struct({ status: Schema.Literal("cancelled"), message: Schema.String.pipe(optional) }),
 ])
   .pipe(Schema.toTaggedUnion("status"))
   .annotate({ identifier: "Form.State" })

@@ -5,9 +5,11 @@ import { ImagePreview } from "@opencode/ui/image-preview"
 export function createImagePreview() {
   const dialog = useDialog()
   const i18n = useI18n()
+
   const open = (event: MouseEvent | KeyboardEvent) => {
     if (!(event.currentTarget instanceof HTMLImageElement)) return
     const src = event.currentTarget.currentSrc || event.currentTarget.getAttribute("src")
+
     if (!src) return
     const alt = event.currentTarget.alt || i18n.t("ui.imagePreview.alt")
     event.preventDefault()

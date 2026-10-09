@@ -20,6 +20,7 @@ test.each([
       PLAYWRIGHT_SERVER_PORT: "4322",
     },
   })
+
   expect(result.exitCode).toBe(0)
   const config = JSON.parse(result.stdout.toString())
   expect(config.use.baseURL).toBe("http://127.0.0.1:4321")
@@ -52,6 +53,7 @@ test.each([
     cwd: path.resolve(import.meta.dirname, ".."),
     env: { ...process.env, CI: "true", PLAYWRIGHT_BASE_URL: "http://127.0.0.1:4444" },
   })
+
   expect(result.exitCode).toBe(0)
   const config = JSON.parse(result.stdout.toString())
   expect(config.webServer).toBeUndefined()
@@ -66,6 +68,7 @@ test("Playwright rejects HTTPS targets unsupported by the API fixtures", () => {
     cwd: path.resolve(import.meta.dirname, ".."),
     env: { ...process.env, CI: "true", PLAYWRIGHT_BASE_URL: "https://e2e.example.com" },
   })
+
   expect(result.exitCode).not.toBe(0)
   expect(result.stderr.toString()).toContain("E2E fixtures require an http:// app URL")
 })

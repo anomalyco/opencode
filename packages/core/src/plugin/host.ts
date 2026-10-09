@@ -286,6 +286,13 @@ export const make = Effect.fn("PluginHost.make")(function* (
             answer: input.answer,
             label: input.label,
           }),
+        external: (input) =>
+          integration.connection.external({
+            integrationID: Integration.ID.make(input.integrationID),
+            methodID: Integration.MethodID.make(input.methodID),
+            answer: input.answer,
+            label: input.label,
+          }),
       },
       oauth: {
         connect: (input) =>
@@ -534,18 +541,27 @@ export const make = Effect.fn("PluginHost.make")(function* (
           model: input?.model,
           metadata: input?.metadata,
           permissions: input?.permissions,
-          location:
-            input?.location ?? Location.Ref.make({ directory: location.directory, workspaceID: location.workspaceID }),
+          ...(input?.parentID === undefined
+            ? {
+                location:
+                  input?.location ??
+                  Location.Ref.make({ directory: location.directory, workspaceID: location.workspaceID }),
+              }
+            : { parentID: input.parentID }),
         }),
       get: (input) => sessions.get(input.sessionID),
+      remove: (input) => sessions.remove(input.sessionID),
       switchAgent: sessions.switchAgent,
       switchModel: sessions.switchModel,
       prompt: sessions.prompt,
       generate: (input) => sessions.generate(input).pipe(Effect.map((text) => ({ text }))),
       command: (input) => sessions.command({ ...input, command: input.name }),
+      compact: sessions.compact,
       update: Effect.fn(function* (input) {
         yield* sessions.get(input.sessionID)
         if (input.title !== undefined) yield* sessions.rename({ sessionID: input.sessionID, title: input.title })
+        if (input.metadata !== undefined)
+          yield* sessions.setMetadata({ sessionID: input.sessionID, metadata: input.metadata })
         if (input.permissions !== undefined)
           yield* sessions.setPermissions({ sessionID: input.sessionID, permissions: input.permissions })
       }),
@@ -651,6 +667,12 @@ function methodImplementation(input: IntegrationMethodRegistration): Integration
     }
   }
   if (input.method.type === "command") {
+    return {
+      integrationID: Integration.ID.make(input.integrationID),
+      method: { ...input.method, id: Integration.MethodID.make(input.method.id) },
+    }
+  }
+  if (input.method.type === "external") {
     return {
       integrationID: Integration.ID.make(input.integrationID),
       method: { ...input.method, id: Integration.MethodID.make(input.method.id) },

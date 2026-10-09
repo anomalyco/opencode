@@ -15,6 +15,9 @@
   font-family: var(--font-family-sans);
   font-size: var(--font-size-base); /* 14px */
   line-height: 160%;
+  /* Shells such as the app's turn off selection for chrome; Markdown is content, so it stays selectable. */
+  -webkit-user-select: text;
+  user-select: text;
 
   [data-markdown-word] {
     display: inline;
@@ -36,6 +39,11 @@
   }
   > [data-markdown-block]:last-child > *:last-child {
     margin-bottom: 0;
+  }
+
+  /* Pretty wrapping would move settled words as each token arrives, so the growing block stays greedy until it completes. */
+  &[data-streaming] > [data-markdown-block]:last-child {
+    text-wrap-style: auto;
   }
 
   /* Headings: Sized by level, distinguished by color and spacing */
@@ -81,7 +89,7 @@
   strong,
   b {
     color: var(--v2-text-text-base);
-    font-weight: var(--font-weight-medium);
+    font-weight: var(--font-weight-bold);
   }
 
   /* Paragraphs */

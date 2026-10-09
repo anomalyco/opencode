@@ -28,7 +28,9 @@ export function SessionTimeline(props: SessionTimelineProps) {
     editToolDefaultOpen: () => props.editToolDefaultOpen ?? false,
     timelineDetail: props.timelineDetail && (() => props.timelineDetail!),
   })
+
   const [toolOpen, setToolOpen] = createStore<Record<string, boolean | undefined>>({})
+
   const renderer = createSessionTimelineRowRenderer({
     sessionID: () => props.document.sessionID,
     status: () => props.document.status,
@@ -44,11 +46,13 @@ export function SessionTimeline(props: SessionTimelineProps) {
       set: (key, open) => setToolOpen(key, open),
     },
   })
+
   const rowKeys = createMemo(() => projection.rows().map(TimelineRow.key))
 
   function Row(props: { rowKey: string }) {
     const initial = projection.rowByKey().get(props.rowKey)!
     const row = createMemo(() => projection.rowByKey().get(props.rowKey) ?? initial)
+
     return <renderer.Row row={row} />
   }
 

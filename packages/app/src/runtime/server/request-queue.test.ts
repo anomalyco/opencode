@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { createRequestQueue, isSetupRequest, isSlowRequest } from "./request-queue"
+import { createRequestQueue } from "./request-queue"
 
 function setup(input?: {
   limit?: number
@@ -11,6 +11,7 @@ function setup(input?: {
   const pending: Array<{ url: string; signal: AbortSignal; resolve: () => void }> = []
   const logs: Array<{ message: string; data: Record<string, unknown> }> = []
   let clock = 0
+
   const queue = createRequestQueue({
     limit: input?.limit ?? 2,
     slowLimit: input?.slowLimit,
@@ -29,7 +30,9 @@ function setup(input?: {
       { preconnect() {} },
     ),
   })
+
   const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
+
   return { queue, pending, logs, settle, tick: (ms: number) => (clock += ms) }
 }
 
@@ -71,37 +74,32 @@ describe("createRequestQueue", () => {
 
   test("slow endpoints hold at most their share of slots so small reads go first", async () => {
     const input = setup({ limit: 4, slowLimit: 2 })
+
     const paths = [
       "/api/vcs?location[directory]=%2Fa",
       "/api/vcs/diff?location[directory]=%2Fa",
       "/api/worktree",
       "/api/session/ses_1",
+      "/api/vcsx",
     ]
+
     const responses = paths.map((path) => input.queue.fetch(`http://server${path}`))
     await input.settle()
     const started = () => input.pending.map((item) => new URL(item.url).pathname)
-    // Two slow requests fill the slow share; the worktree read waits while the session read jumps ahead.
-    expect(started()).toEqual(["/api/vcs", "/api/vcs/diff", "/api/session/ses_1"])
-    expect(input.queue.inflight()).toBe(3)
+    // Two slow requests fill the slow share; the worktree read waits while the fast reads jump ahead.
+    expect(started()).toEqual(["/api/vcs", "/api/vcs/diff", "/api/session/ses_1", "/api/vcsx"])
+    expect(input.queue.inflight()).toBe(4)
     expect(input.queue.queued()).toBe(1)
     // A fast request finishing does not free a slow slot.
     input.pending[2]!.resolve()
     await input.settle()
-    expect(started()).toEqual(["/api/vcs", "/api/vcs/diff", "/api/session/ses_1"])
+    expect(started()).toEqual(["/api/vcs", "/api/vcs/diff", "/api/session/ses_1", "/api/vcsx"])
     input.pending[0]!.resolve()
     await input.settle()
-    expect(started()).toEqual(["/api/vcs", "/api/vcs/diff", "/api/session/ses_1", "/api/worktree"])
+    expect(started()).toEqual(["/api/vcs", "/api/vcs/diff", "/api/session/ses_1", "/api/vcsx", "/api/worktree"])
     input.pending.forEach((item) => item.resolve())
     await Promise.all(responses)
     expect(input.queue.inflight()).toBe(0)
-  })
-
-  test("classifies git and worktree endpoints as slow", () => {
-    expect(isSlowRequest("/api/vcs")).toBe(true)
-    expect(isSlowRequest("/api/vcs/branch")).toBe(true)
-    expect(isSlowRequest("/api/worktree")).toBe(true)
-    expect(isSlowRequest("/api/vcsx")).toBe(false)
-    expect(isSlowRequest("/api/session")).toBe(false)
   })
 
   test("never counts the event stream against the budget", async () => {
@@ -140,24 +138,27 @@ describe("createRequestQueue", () => {
     expect(input.queue.inflight()).toBe(0)
   })
 
-  test("worktree creation gets the setup deadline while worktree reads keep the normal one", async () => {
-    const input = setup({ limit: 4, headersTimeoutMs: 10, setupHeadersTimeoutMs: 200 })
+  test("worktree creation gets the setup deadline while other worktree requests keep the normal one", async () => {
+    const input = setup({ limit: 4, slowLimit: 4, headersTimeoutMs: 10, setupHeadersTimeoutMs: 200 })
     const create = input.queue.fetch("http://server/api/worktree?location[directory]=%2Fa", { method: "POST" })
-    const list = input.queue.fetch("http://server/api/worktree?location[directory]=%2Fa")
-    const listError = await list.catch((cause: unknown) => cause)
-    expect((listError as DOMException).name).toBe("TimeoutError")
+
+    const others = [
+      input.queue.fetch("http://server/api/worktree?location[directory]=%2Fa"),
+      input.queue.fetch("http://server/api/worktree/refresh?location[directory]=%2Fa", { method: "POST" }),
+      input.queue.fetch("http://server/api/worktree?location[directory]=%2Fa", { method: "DELETE" }),
+    ]
+
+    const errors = await Promise.all(others.map((request) => request.catch((cause: unknown) => cause)))
+    expect(errors.map((error) => (error as DOMException).name)).toEqual([
+      "TimeoutError",
+      "TimeoutError",
+      "TimeoutError",
+    ])
     // Past the normal deadline, the create is still on the wire.
     expect(input.pending[0]!.signal.aborted).toBe(false)
     input.pending[0]!.resolve()
     await expect(create).resolves.toBeInstanceOf(Response)
     expect(input.queue.inflight()).toBe(0)
-  })
-
-  test("only worktree creation counts as a setup request", () => {
-    expect(isSetupRequest("POST", "/api/worktree")).toBe(true)
-    expect(isSetupRequest("GET", "/api/worktree")).toBe(false)
-    expect(isSetupRequest("POST", "/api/worktree/refresh")).toBe(false)
-    expect(isSetupRequest("DELETE", "/api/worktree")).toBe(false)
   })
 
   test("caller aborts still reach the underlying request", async () => {
@@ -177,11 +178,13 @@ describe("createRequestQueue", () => {
     const responses = Array.from({ length: 12 }, (_, index) => input.queue.fetch(`http://server/api/${index}`))
     await input.settle()
     expect(input.queue.queued()).toBe(10)
+
     // Drain two at a time before the stall threshold elapses.
     for (let round = 0; round < 6; round++) {
       input.pending.splice(0).forEach((item) => item.resolve())
       await input.settle()
     }
+
     await Promise.all(responses)
     await new Promise((resolve) => setTimeout(resolve, 20))
     expect(input.logs).toEqual([])

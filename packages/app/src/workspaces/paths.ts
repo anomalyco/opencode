@@ -1,4 +1,4 @@
-import { pathKey } from "@/workspaces/path-key"
+import { containsDirectory, sameDirectory } from "@opencode/util/path"
 import type { WorkspaceDefaultDestination, WorkspaceLastUsed } from "@/settings/model"
 import type { SessionInfo, WorktreeDirectory } from "@opencode/client/promise"
 
@@ -30,6 +30,7 @@ export function filterWorkspaceInventory<T extends { project: { id: string } }>(
   project: string,
 ) {
   if (project === "all") return [...workspaces]
+
   return workspaces.filter((workspace) => workspace.project.id === project)
 }
 
@@ -44,8 +45,10 @@ export function mergeWorkspaceSessionInventory(server: readonly SessionInfo[], c
   const sessions = new Map(server.map((session) => [session.id, session]))
   cached.forEach((session) => {
     const current = sessions.get(session.id)
+
     if (!current || session.time.updated > current.time.updated) sessions.set(session.id, session)
   })
+
   return [...sessions.values()]
 }
 
@@ -77,32 +80,23 @@ export function inspectWorkspaceDeletion(input: {
 
 export function isWorkspaceDirectory(project: WorkspaceProject | undefined, directory: string) {
   if (!project || sameDirectory(project.worktree, directory)) return false
+
   return workspaceDirectories(project).some((workspace) => containsDirectory(workspace, directory))
 }
 
 export function isProjectDirectory(project: WorkspaceProject | undefined, directory: string) {
   if (!project) return false
+
   return [project.worktree, ...(project.sandboxes ?? [])].some((root) => containsDirectory(root, directory))
-}
-
-export function containsDirectory(parent: string, child: string) {
-  const normalize = (value: string) => {
-    const key = pathKey(value)
-    return /^[a-z]:\//i.test(key) || key.startsWith("//") ? key.toLowerCase() : key
-  }
-  const root = normalize(parent)
-  const target = normalize(child)
-  return target === root || target.startsWith(root.endsWith("/") ? root : `${root}/`)
-}
-
-export function sameDirectory(a: string, b: string) {
-  return containsDirectory(a, b) && containsDirectory(b, a)
 }
 
 export function isWorkspaceSelection(project: WorkspaceProject | undefined, selection: string) {
   if (selection === "main" || selection === "create") return true
+
   if (!project) return false
+
   if (sameDirectory(project.worktree, selection)) return true
+
   return isWorkspaceDirectory(project, selection)
 }
 
@@ -115,6 +109,8 @@ export function workspaceDefaultSelection(
   lastUsed: WorkspaceLastUsed | undefined,
 ) {
   if (setting === "local") return "main"
+
   if (setting === "new") return "create"
+
   return lastUsed === "workspace" ? "create" : "main"
 }

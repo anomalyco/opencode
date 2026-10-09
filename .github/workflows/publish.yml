@@ -25,7 +25,7 @@ on:
         required: false
         type: string
       release_notes:
-        description: "Reviewed V2 release notes for the Discord announcement (optional)"
+        description: "Reviewed V2 release notes for CHANGELOG.md and the Discord announcement (optional)"
         required: false
         type: string
 
@@ -647,6 +647,7 @@ jobs:
         env:
           OPENCODE_VERSION: ${{ needs.version.outputs.version }}
           OPENCODE_RELEASE: ${{ needs.version.outputs.release }}
+          OPENCODE_RELEASE_NOTES: ${{ (github.ref_name == 'v2' && inputs.release_notes) || '' }}
           AUR_KEY: ${{ secrets.AUR_KEY }}
           GITHUB_TOKEN: ${{ steps.committer.outputs.token }}
           GH_REPO: ${{ needs.version.outputs.repo }}

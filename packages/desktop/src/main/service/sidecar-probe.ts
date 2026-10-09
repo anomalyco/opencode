@@ -13,6 +13,7 @@ let probe: Promise<Endpoint | undefined> | undefined
 export function startSidecarProbe() {
   if (!app.isPackaged) return
   const version = bundledVersion()
+
   if (!version) return
   probe = import("@opencode/client/service")
     .then(({ Service }) => Service.discover({ version }))

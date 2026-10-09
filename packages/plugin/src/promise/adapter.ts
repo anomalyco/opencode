@@ -3,7 +3,7 @@ import type { Rpc } from "@opencode/schema/rpc"
 import type { RpcCallOptions, RpcEventPayload } from "@opencode/client/promise/api"
 import { Effect, Schema, SchemaAST, Stream } from "effect"
 import type { Scope } from "effect"
-import { HttpApiEndpoint, HttpApiSchema } from "effect/unstable/httpapi"
+import { HttpApiEndpoint, HttpApiSchema } from "effect/http-api"
 import { define } from "../effect/plugin.js"
 import type { Plugin } from "./plugin.js"
 import type { Info } from "./tool.js"
@@ -356,6 +356,10 @@ export function fromPromise(plugin: Plugin) {
             get: adaptApiMethod(IntegrationEndpoints["integration.get"], host.integration.get),
             connect: {
               key: adaptApiMethod(IntegrationEndpoints["integration.connect.key"], host.integration.connect.key),
+              external: adaptApiMethod(
+                IntegrationEndpoints["integration.connect.external"],
+                host.integration.connect.external,
+              ),
             },
             oauth: {
               connect: adaptApiMethod(
@@ -518,10 +522,12 @@ export function fromPromise(plugin: Plugin) {
                 host.vcs.transform((editor) => {
                   callback({
                     add: (definition) => {
+                      const init = definition.init?.bind(definition)
                       const base = definition.base?.bind(definition)
                       editor.add({
                         id: definition.id,
                         name: definition.name,
+                        init: init ? (input) => attempt((signal) => init(input, { signal })) : undefined,
                         info: (input) => attempt((signal) => definition.info(input, { signal })),
                         base: base ? (input) => attempt((signal) => base(input, { signal })) : undefined,
                         branches: (input) => attempt((signal) => definition.branches(input, { signal })),
@@ -581,11 +587,13 @@ export function fromPromise(plugin: Plugin) {
               ),
             create: adaptApiMethod(SessionEndpoints["session.create"], host.session.create),
             get: adaptApiMethod(SessionEndpoints["session.get"], host.session.get),
+            remove: adaptApiMethod(SessionEndpoints["session.remove"], host.session.remove),
             switchAgent: adaptApiMethod(SessionEndpoints["session.switchAgent"], host.session.switchAgent),
             switchModel: adaptApiMethod(SessionEndpoints["session.switchModel"], host.session.switchModel),
             prompt: adaptApiMethod(SessionEndpoints["session.prompt"], host.session.prompt),
             generate: adaptApiMethod(SessionEndpoints["session.generate"], host.session.generate),
             command: adaptApiMethod(SessionEndpoints["session.command"], host.session.command),
+            compact: adaptApiMethod(SessionEndpoints["session.compact"], host.session.compact),
             synthetic: adaptApiMethod(SessionEndpoints["session.synthetic"], host.session.synthetic),
             interrupt: adaptApiMethod(SessionEndpoints["session.interrupt"], host.session.interrupt),
             update: adaptApiMethod(SessionEndpoints["session.update"], host.session.update),

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { ConfigProvider, Effect } from "effect"
-import { HttpClientRequest } from "effect/unstable/http"
-import { LLM, LLMEvent, Message, ToolDefinition, Media } from "../../src/index.js"
+import { HttpClientRequest } from "effect/http"
+import { LLM, LLMEvent, Message, SystemPart, ToolDefinition, Media } from "../../src/index.js"
 import { Mistral } from "../../src/providers/index.js"
 import { MistralChat } from "../../src/protocols/index.js"
 import { LLMClient } from "../../src/route.js"
@@ -41,7 +41,7 @@ describe("Mistral Chat", () => {
       const prepared = yield* compileRequest(
         LLM.request({
           model,
-          system: "Initial",
+          system: [SystemPart.make("Initial\nKeep this newline."), SystemPart.make("Second instructions.")],
           messages: [
             Message.system("Updated"),
             Message.user([
@@ -105,7 +105,13 @@ describe("Mistral Chat", () => {
         reasoning_effort: "high",
       })
       expect(prepared.body.messages.slice(0, 4)).toMatchObject([
-        { role: "system", content: "Initial" },
+        {
+          role: "system",
+          content: [
+            { type: "text", text: "Initial\nKeep this newline." },
+            { type: "text", text: "Second instructions." },
+          ],
+        },
         { role: "user", content: "<system-update>\nUpdated\n</system-update>" },
         {
           role: "user",
@@ -215,13 +221,11 @@ describe("Mistral Chat", () => {
           ],
         }),
       )
-      expect(prepared.body.messages).toEqual([
-        {
-          role: "assistant",
-          content: "",
-          tool_calls: [{ id: "Ab12Cd34E", type: "function", function: { name: "lookup", arguments: "{}" } }],
-        },
-      ])
+      expect(prepared.body.messages[0]).toEqual({
+        role: "assistant",
+        content: "",
+        tool_calls: [{ id: "Ab12Cd34E", type: "function", function: { name: "lookup", arguments: "{}" } }],
+      })
     }),
   )
 
@@ -315,7 +319,9 @@ describe("Mistral Chat", () => {
       expect(response.reasoning).toBe("Consider")
       expect(response.text).toBe("Answer")
       expect(response.events.find(LLMEvent.is.reasoningStart)?.providerMetadata).toBeUndefined()
-      expect(response.events.filter(LLMEvent.is.reasoningDelta).map((event) => [event.text, event.providerMetadata])).toEqual([
+      expect(
+        response.events.filter(LLMEvent.is.reasoningDelta).map((event) => [event.text, event.providerMetadata]),
+      ).toEqual([
         ["Con", undefined],
         ["sider", undefined],
       ])

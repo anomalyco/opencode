@@ -1,5 +1,5 @@
 import { Cause, Context, Duration, Effect, Layer, Option, Schedule, Schema, Semaphore } from "effect"
-import { HttpClient, HttpClientRequest } from "effect/unstable/http"
+import { HttpClient, HttpClientRequest } from "effect/http"
 import { ModelsDev } from "@opencode/schema/models-dev"
 import { Money } from "@opencode/schema/money"
 import { App } from "./app.js"
@@ -24,7 +24,6 @@ type Cost = {
   readonly cache_read?: Money.USDPerMillionTokens
   readonly cache_write?: Money.USDPerMillionTokens
   readonly tiers?: readonly (Cost & { readonly tier: { readonly type: "context"; readonly size: number } })[]
-  readonly context_over_200k?: Omit<Cost, "tiers" | "context_over_200k">
 }
 
 type Modality = "text" | "audio" | "image" | "video" | "pdf"
@@ -61,7 +60,11 @@ type SourceModel = {
     >
   }
   readonly status?: CatalogModelStatus
-  readonly provider?: { readonly npm?: string; readonly api?: string }
+  readonly provider?: {
+    readonly npm?: string
+    readonly api?: string
+    readonly shape?: "responses" | "completions"
+  }
 }
 
 type SourceProvider = {
@@ -81,7 +84,13 @@ export type Snapshot = {
 
 function nativePackage(provider: SourceProvider, model?: SourceModel) {
   const npm = model?.provider?.npm ?? provider.npm
-  return AISDKNative.native(npm, { providerID: provider.id, modelID: model?.id }) ?? Provider.aisdk(npm)
+  return (
+    AISDKNative.native(npm, {
+      providerID: provider.id,
+      modelID: model?.id,
+      shape: model?.provider?.shape,
+    }) ?? Provider.aisdk(npm)
+  )
 }
 
 function normalize(input: Record<string, SourceProvider>): readonly Snapshot[] {
@@ -147,19 +156,6 @@ function cost(input: SourceModel["cost"]): Model.Info["cost"] {
         write: item.cache_write ?? Money.USDPerMillionTokens.zero,
       },
     })) ?? []),
-    ...(input?.context_over_200k
-      ? [
-          {
-            tier: { type: "context" as const, size: 200_000 },
-            input: input.context_over_200k.input,
-            output: input.context_over_200k.output,
-            cache: {
-              read: input.context_over_200k.cache_read ?? Money.USDPerMillionTokens.zero,
-              write: input.context_over_200k.cache_write ?? Money.USDPerMillionTokens.zero,
-            },
-          },
-        ]
-      : []),
   ]
 }
 
@@ -217,11 +213,12 @@ function modelInfo(
   } = {},
 ): Model.Info {
   const providerID = Provider.ID.make(provider.id)
-  const pkg = model.provider?.npm ? nativePackage(provider, model) : undefined
+  const resolved = nativePackage(provider, model)
+  const pkg = model.provider?.npm || resolved !== nativePackage(provider) ? resolved : undefined
   // Per model, so it never merges into a model that overrides to a different package.
   const settings = {
     ...(model.provider?.api ? { baseURL: model.provider.api } : {}),
-    ...(nativePackage(provider, model) === "@opencode/ai/providers/openai-compatible" ? { provider: providerID } : {}),
+    ...(resolved === "@opencode/ai/providers/openai-compatible" ? { provider: providerID } : {}),
   }
   return {
     id,

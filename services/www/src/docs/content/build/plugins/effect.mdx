@@ -3,11 +3,14 @@ title: "Effect"
 ---
 
 `@opencode/plugin/effect` is the Effect-native version of the OpenCode plugin API. Its context operations return
-Effects or Streams, callbacks return Effects, and plugin lifetime is represented by `Scope`. Install `effect` with the
-plugin package.
+Effects or Streams, callbacks return Effects, and plugin lifetime is represented by `Scope`.
+
+OpenCode provides `effect` (including exported `effect/*` subpaths) and `@opencode/plugin` at runtime when loading
+plugins and their `node_modules` dependencies. Install them as peer/dev dependencies for local type-checking and testing
+rather than bundling them into your plugin.
 
 ```sh
-bun add @opencode/plugin effect
+bun add --peer @opencode/plugin effect
 ```
 
 Export an Effect plugin from `.opencode/plugins/` to load it automatically.
@@ -547,7 +550,7 @@ Connect with a key or drive an OAuth attempt through the connected API.
 effect: (ctx) =>
   Effect.gen(function* () {
     const integration = ctx.integration
-    const token = yield* Config.redacted("GITHUB_TOKEN").pipe(Effect.orDie)
+    const token = yield* Config.Redacted("GITHUB_TOKEN").pipe(Effect.orDie)
     yield* integration.connect
       .key({ integrationID: Integration.ID.make("github"), key: Redacted.value(token) })
       .pipe(Effect.orDie)
@@ -821,6 +824,27 @@ effect: (ctx) =>
   }),
 ```
 
+Remove a temporary session with `remove`. Removal stops active execution and recursively deletes child sessions.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const created = yield* ctx.session.create({ title: "Temporary worker" }).pipe(Effect.orDie)
+    yield* ctx.session.remove({ sessionID: created.id }).pipe(Effect.orDie)
+  }),
+```
+
+Request compaction with `compact`. It returns the admitted inbox item, not a completed summary; compaction runs at
+the next step boundary by default. Pass `delivery: "queue"` to preserve queue order instead.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const created = yield* ctx.session.create({ title: "Review" }).pipe(Effect.orDie)
+    const compaction = yield* ctx.session.compact({ sessionID: created.id }).pipe(Effect.orDie)
+  }),
+```
+
 Schemas: [`Session.Info`](/api#schema-Session.Info), [`Model.Ref`](/api#schema-Model.Ref),
 [`Session.Inbox.User`](/api#schema-Session.Inbox.User),
 [`Session.Inbox.Synthetic`](/api#schema-Session.Inbox.Synthetic).
@@ -830,15 +854,19 @@ type SessionDomain = Pick<
   SessionApi<unknown>,
   | "create"
   | "get"
+  | "remove"
   | "switchAgent"
   | "switchModel"
   | "prompt"
   | "generate"
   | "command"
+  | "compact"
   | "synthetic"
   | "interrupt"
-  | "rename"
+  | "update"
+  | "move"
   | "wait"
+  | "context"
 >
 ```
 
@@ -867,7 +895,7 @@ effect: (ctx) =>
         id: Skill.ID.make("review"),
         name: Skill.Name.make("Review"),
         description: "Review the current changes",
-        location: "/workspace/.opencode/skills/review.md",
+        path: "/workspace/.opencode/skills/review/SKILL.md",
         content: "Review the current changes for correctness and missing tests.",
       }))
       const review = editor.get("review")
@@ -1061,6 +1089,11 @@ Provider callbacks receive the current location, working-copy root, canonical pr
 store. Diff callbacks also receive the selected mode, requested context, and output byte budget. Repository discovery
 continues to use OpenCode's built-in Git and Mercurial detectors.
 
+Providers can optionally implement `init(scope)` to create a repository in `scope.worktree`. Initialization selects
+the provider by ID (Git by default), not by the detected repository type. Register a provider with `init` even when
+the location has no repository yet; OpenCode checks that the directory exists and has no repository before calling
+it, then rediscovers the project. New repository formats still need discovery support beyond this callback.
+
 Schemas: [`Vcs.Info`](/api#schema-Vcs.Info), [`Vcs.FileStatus`](/api#schema-Vcs.FileStatus),
 [`FileDiff.Info`](/api#schema-FileDiff.Info).
 
@@ -1073,9 +1106,14 @@ interface VcsEditor {
   }
 }
 
-interface VcsDomain extends VcsApi<unknown> {
+interface VcsDomain extends Omit<VcsApi<unknown>, "init"> {
   readonly transform: Transform<VcsEditor>
   readonly reload: () => Effect.Effect<void>
+}
+
+interface VcsDefinition {
+  readonly init?: (scope: VcsScope) => Effect.Effect<void, unknown>
+  // Existing info, branches, status, and diff callbacks are required.
 }
 ```
 
@@ -1465,7 +1503,7 @@ type Transform<Input> = (callback: (input: Input) => void) => Effect.Effect<Regi
 ## Publish
 
 A package plugin uses the same default export as a local Effect plugin. Export the Effect implementation from the main
-entrypoint and declare both runtime dependencies.
+entrypoint and declare `effect` as a `peerDependency`.
 
 ```json title="package.json"
 {
@@ -1476,11 +1514,27 @@ entrypoint and declare both runtime dependencies.
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@opencode/plugin": "latest",
-    "effect": "4.0.0-rc.111"
+    "@opencode/plugin": "latest"
+  },
+  "peerDependencies": {
+    "effect": ">=4.0.0-rc.118"
   }
 }
 ```
+
+OpenCode redirects imports of `effect`, exported `effect/*` subpaths, and `@opencode/plugin` (including imports from
+dependencies in the plugin's `node_modules`) to the host's runtime instances so fibers, loggers, and `Schema` parsers
+share one runtime copy.
+
+- Do not bundle `effect` into the published plugin artifact. If you build with a bundler, mark `effect` and `effect/*`
+  external.
+- Plugins and their `node_modules` dependencies always execute against the host OpenCode release's `effect` instance.
+  Use `effect` APIs and module paths compatible with the OpenCode release you target; dependencies built on another
+  `effect` major (such as Effect 3) also receive the host's `effect` and are not supported.
+- Only public `effect` subpaths are provided. A plugin that imports one of Effect's private `internal` modules fails to
+  load with an error naming the path.
+- The compiled OpenCode binary does not include the Scalar and Swagger UI assets used by Effect's HTTP API docs pages;
+  serving those pages from a plugin shows a notice instead.
 
 The package entrypoint exports `Plugin.define` with an `effect` function.
 

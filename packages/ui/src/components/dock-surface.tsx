@@ -6,6 +6,7 @@ export interface DockTrayProps extends ComponentProps<"div"> {
 
 export function DockShell(props: ComponentProps<"div">) {
   const [split, rest] = splitProps(props, ["children", "class", "classList"])
+
   return (
     <div
       {...rest}
@@ -22,6 +23,7 @@ export function DockShell(props: ComponentProps<"div">) {
 
 export function DockShellForm(props: ComponentProps<"form">) {
   const [split, rest] = splitProps(props, ["children", "class", "classList"])
+
   return (
     <form
       {...rest}
@@ -38,6 +40,7 @@ export function DockShellForm(props: ComponentProps<"form">) {
 
 export function DockTray(props: DockTrayProps) {
   const [split, rest] = splitProps(props, ["attach", "children", "class", "classList"])
+
   return (
     <div
       {...rest}

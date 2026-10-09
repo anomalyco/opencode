@@ -21,9 +21,12 @@ function ToastRegion(props: ToastRegionProps) {
         element.tabIndex = hidden ? -1 : 0
       })
     }
+
     let connected = false
+
     const connect = () => {
       const regions = document.querySelectorAll(".toast-v2-region")
+
       if (!regions.length) return
       observer.disconnect()
       regions.forEach((region) => {
@@ -37,14 +40,17 @@ function ToastRegion(props: ToastRegionProps) {
       connected = true
       sync()
     }
+
     const observer = new MutationObserver(() => {
       if (!connected) connect()
       else sync()
     })
+
     observer.observe(document.body, { subtree: true, childList: true })
     queueMicrotask(connect)
     onCleanup(() => observer.disconnect())
   })
+
   return (
     <Portal>
       <Toaster
@@ -55,7 +61,7 @@ function ToastRegion(props: ToastRegionProps) {
         duration={5000}
         swipeDirections={["bottom"]}
         className={["toast-v2-region", local.className, local.class].filter(Boolean).join(" ")}
-        style={{ "--width": "320px", ...local.style } as JSX.CSSProperties}
+        style={{ "--width": "320px", ...local.style }}
         toastOptions={{
           ...local.toastOptions,
           unstyled: true,
@@ -103,6 +109,7 @@ function ToastCloseButton(props: ComponentProps<"button">) {
   const i18n = useI18n()
   const toastId = useContext(ToastContext)
   const [local, rest] = splitProps(props, ["children", "onClick"])
+
   return (
     <button
       type="button"
@@ -110,7 +117,8 @@ function ToastCloseButton(props: ComponentProps<"button">) {
       aria-label={i18n.t("ui.common.dismiss")}
       {...rest}
       onClick={(event) => {
-        if (typeof local.onClick === "function") local.onClick(event)
+        if (local.onClick instanceof Function) local.onClick(event)
+
         if (!event.defaultPrevented && toastId !== undefined) toaster.dismiss(toastId)
       }}
     >
@@ -147,7 +155,7 @@ export const toaster = {
       duration?: number
       persistent?: boolean
       /** Reactive value the toast's height depends on; sonner re-measures when it changes. */
-      resize?: () => unknown
+      resize?: () => void
     },
   ) {
     const toastId = --toastV2Id
@@ -162,10 +170,12 @@ export const toaster = {
       description: options?.resize
         ? (): JSX.Element => {
             options.resize?.()
+
             return undefined
           }
         : undefined,
     })
+
     return toastId
   },
   dismiss(toastId?: number) {
@@ -175,6 +185,7 @@ export const toaster = {
     } else {
       releaseToast(activeToastById.get(toastId))
     }
+
     return toast.dismiss(toastId)
   },
 }
@@ -188,7 +199,8 @@ export interface ToastAction {
 export interface ToastOptions {
   title?: string
   description?: string
-  icon?: JSX.Element
+  /** An element, or a render function the toast calls under its own owner, for icons created from imperative code. */
+  icon?: JSX.Element | (() => JSX.Element)
   variant?: "default" | "success" | "error" | "loading"
   duration?: number
   persistent?: boolean
@@ -203,10 +215,14 @@ interface ActiveToast {
 }
 
 const activeToastByKey = new Map<string, ActiveToast>()
+
 const activeToastById = new Map<number, ActiveToast>()
 
 export function showToast(options: ToastOptions | string) {
+  // SAFETY: `options` is declared `ToastOptions | string`; `typeof` separates the string shorthand from the object.
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- see SAFETY above
   const opts = boundToastDescription(typeof options === "string" ? { description: options } : options)
+
   const key = JSON.stringify({
     title: opts.title,
     description: opts.description,
@@ -215,6 +231,7 @@ export function showToast(options: ToastOptions | string) {
     persistent: opts.persistent,
     actions: opts.actions?.map((action) => [action.label, action.variant]),
   })
+
   const active = activeToastByKey.get(key)
   const toasts = toast.getToasts()
 
@@ -222,6 +239,7 @@ export function showToast(options: ToastOptions | string) {
     active.options = opts
     publishToast(active)
     pulseToast(active.id)
+
     return active.id
   }
 
@@ -233,6 +251,7 @@ export function showToast(options: ToastOptions | string) {
   activeToastByKey.set(key, entry)
   activeToastById.set(entry.id, entry)
   publishToast(entry)
+
   return entry.id
 }
 
@@ -241,7 +260,9 @@ function publishToast(entry: ActiveToast) {
   toast(entry.options.title ?? "", {
     id: entry.id,
     description: entry.options.description,
-    icon: entry.options.icon,
+    // SAFETY: solid-sonner inserts `icon` as a JSX child, and Solid calls a function child under the toast's render
+    // owner; solid-sonner's type omits function children.
+    icon: entry.options.icon as JSX.Element,
     action: entry.actions,
     closeButton: true,
     duration: entry.options.persistent ? Number.POSITIVE_INFINITY : entry.options.duration,
@@ -255,6 +276,7 @@ function publishToast(entry: ActiveToast) {
 
 function createToastActions(entry: ActiveToast) {
   if (!entry.options.actions?.length) return undefined
+
   return (
     <Toast.Actions>
       {/* Static map, not <For>: this JSX is created imperatively outside any Solid
@@ -268,7 +290,8 @@ function createToastActions(entry: ActiveToast) {
           data-action-variant={action.variant ?? "primary"}
           onClick={() => {
             const onClick = entry.options.actions?.[index]?.onClick
-            if (typeof onClick === "function") onClick()
+
+            if (onClick && onClick !== "dismiss") onClick()
             toaster.dismiss(entry.id)
           }}
         >
@@ -283,6 +306,7 @@ function pulseToast(toastId: number) {
   if (typeof document === "undefined" || typeof requestAnimationFrame === "undefined") return
   requestAnimationFrame(() => {
     const element = document.querySelector<HTMLElement>(`[data-testid="toast-v2-${toastId}"]`)
+
     if (!element || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return
     element.animate([{ scale: 1 }, { scale: 1.025 }, { scale: 1 }], { duration: 160, easing: "ease-out" })
   })
@@ -290,7 +314,9 @@ function pulseToast(toastId: number) {
 
 function releaseToast(entry: ActiveToast | undefined) {
   if (!entry) return
+
   if (activeToastByKey.get(entry.key) === entry) activeToastByKey.delete(entry.key)
+
   if (activeToastById.get(entry.id) === entry) activeToastById.delete(entry.id)
 }
 

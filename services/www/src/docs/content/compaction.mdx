@@ -42,13 +42,12 @@ or request compaction yourself before the automatic one.
 Request compaction at any time, even for a short history:
 
 ```sh
-curl -X POST http://localhost:4096/api/session/ses_example/compact \
-  -H 'content-type: application/json' \
-  -d '{}'
+opencode api post /api/session/ses_example/compact --data '{}'
 ```
 
-The response confirms the request was accepted; it does not wait for the
-summary. Follow `session.compaction.*` events to learn when it finishes. See the
+The `api` command discovers and authenticates with the background service. Its
+response confirms the request was accepted; it does not wait for the summary.
+Follow `session.compaction.*` events to learn when it finishes. See the
 [API reference](/api) for the full operation.
 
 | Rule | Behavior |
@@ -61,9 +60,7 @@ Pass an `id` to make an exact retry idempotent. Reusing that ID for a different
 request returns a conflict.
 
 ```sh
-curl -X POST http://localhost:4096/api/session/ses_example/compact \
-  -H 'content-type: application/json' \
-  -d '{"id":"msg_compact_once"}'
+opencode api post /api/session/ses_example/compact --data '{"id":"msg_compact_once"}'
 ```
 
 ## Settings

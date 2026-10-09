@@ -61,6 +61,11 @@ interface Input {
 const TOOLS_INTERRUPTED = { type: "aborted", message: "Tool execution interrupted" } as const
 const STEP_INTERRUPTED = { type: "aborted", message: "Step interrupted" } as const
 const RESULT_MISSING = { type: "tool.result-missing", message: "Provider did not return a tool result" } as const
+const INPUT_INCOMPLETE = {
+  type: "tool.input-incomplete",
+  message:
+    "Tool call arguments were not completed and were not executed. Re-issue the tool call with complete arguments.",
+} as const
 
 /** Captures Location-scoped dependencies without introducing another service or execution loop. */
 export const make = Effect.gen(function* () {
@@ -70,14 +75,16 @@ export const make = Effect.gen(function* () {
   const toolOutput = yield* ToolOutput.Service
 
   const attempt = Effect.fn("SessionStep.attempt")(function* (input: Input) {
-    const startSnapshot = yield* snapshots.capture()
+    // The start snapshot only has to exist before local tools run, which cannot happen before Step.Started,
+    // so it is captured while the provider request is in flight instead of delaying it.
+    const pendingStartSnapshot = yield* snapshots.capture().pipe(Effect.forkScoped)
     const publisher = createLLMEventPublisher(bus, {
       sessionID: input.sessionID,
       assistantMessageID: input.assistantMessageID,
       agent: input.agent,
       model: input.model.ref,
       providerMetadataKey: input.model.model.route.providerMetadataKey ?? input.model.model.provider,
-      snapshot: startSnapshot,
+      pendingSnapshot: Fiber.join(pendingStartSnapshot),
       started: yield* Clock.currentTimeMillis,
     })
     const toolRuns: Array<{
@@ -105,6 +112,8 @@ export const make = Effect.gen(function* () {
       Stream.runForEach((event) =>
         Effect.gen(function* () {
           if (overflowFailure || publisher.hasProviderError()) return
+          // Wait here, where cancellation still works, rather than inside the uninterruptible publish.
+          if (!publisher.hasStarted()) yield* Fiber.join(pendingStartSnapshot)
           if (
             LLMEvent.is.providerError(event) &&
             isContextOverflowFailure(event) &&
@@ -138,6 +147,9 @@ export const make = Effect.gen(function* () {
         const stream = yield* restore(providerStream).pipe(Effect.exit)
         const streamFailure = Option.getOrUndefined(Exit.findErrorOption(stream))
         const streamInterrupted = Exit.hasInterrupts(stream)
+        // Cancelled before the start snapshot existed: record nothing, as when the capture preceded the request.
+        if (streamInterrupted && !publisher.hasStarted() && !pendingStartSnapshot.pollUnsafe())
+          return yield* Effect.failCause(stream.cause)
         if (!overflowFailure && publisher.hasStarted()) yield* publisher.streamed()
         if (streamInterrupted) yield* interruptTools
         const joined = yield* restore(Fiber.awaitAll(toolRuns.map((run) => run.fiber))).pipe(Effect.exit)
@@ -216,14 +228,16 @@ export const make = Effect.gen(function* () {
         if (toolFailure) yield* publisher.failUnsettledTools(toolFailure)
         if (interrupted) yield* publisher.failAssistant(STEP_INTERRUPTED)
 
-        // All local fibers have joined; only provider-hosted results can still be missing.
+        // Parsers may leave unfinished calls without an execution event.
         if (llmError || (Exit.isSuccess(stream) && !recorded.providerFailed)) {
           const missing = yield* publisher.failUnsettledTools(RESULT_MISSING, "hosted")
           if (missing && !llmError && !recorded.finish) yield* publisher.failAssistant(RESULT_MISSING)
+          yield* publisher.failUnsettledTools(INPUT_INCOMPLETE, "uncalled")
         }
 
         const record = publisher.record()
         if (record.finish || record.failure) {
+          const startSnapshot = yield* Fiber.join(pendingStartSnapshot)
           const snapshot = yield* snapshots.capture()
           const files =
             startSnapshot && snapshot

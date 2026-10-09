@@ -1,16 +1,6 @@
-import {
-  createEffect,
-  createMemo,
-  createSignal,
-  lazy,
-  on,
-  onCleanup,
-  Show,
-  Suspense,
-  type Accessor,
-  type JSX,
-} from "solid-js"
+import { createEffect, createMemo, createSignal, on, onCleanup, Show, type Accessor, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
+import { Predicate } from "effect"
 import { createAnimatedPresence } from "@/runtime/animated-presence"
 import type { SessionUserActions } from "@opencode/session-ui/actions"
 import { Button } from "@opencode/ui/button"
@@ -20,8 +10,8 @@ import { InlineInput } from "@opencode/ui/inline-input"
 import { Keybind } from "@opencode/ui/keybind"
 import { Menu } from "@opencode/ui/menu"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
-import { SummaryPopover } from "../summary/popover"
-import { SessionContextUsage } from "@/session/timeline/session-context-usage"
+import type { BackgroundTask, MountedSession, SessionScreen } from "@opencode/gui-extensions/sdk"
+import { ExtensionSlot } from "@/runtime/extension/render"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useServer } from "@/runtime/server/current"
 import { useWorkspaceLocation } from "@/workspaces/location"
@@ -30,21 +20,24 @@ import { createSessionTimelineRowRenderer } from "@opencode/session-ui/timeline/
 import { getReadyMarkdown, preloadMarkdown } from "@opencode/session-ui/markdown-cache"
 import { createTimelineController, type TimelineController, type TimelineSessionSource } from "./controller"
 import { createTimelineVirtualizer } from "./virtualizer"
-import { containsDirectory, isWorkspaceDirectory } from "@/workspaces/paths"
+import { containsDirectory } from "@opencode/util/path"
+import { isWorkspaceDirectory } from "@/workspaces/paths"
 import { parseCommentNote, readPromptPresentation } from "@/composer/comment-note"
 import { useCommand } from "@/shell/commands/command"
 import { SessionAncestorTrail, SessionProjectMenu, SessionTitleHeader } from "../session-identity-header"
 import { SessionHeaderSpacer } from "@/session/header/session-header"
-import type { BackgroundTask } from "../summary/background"
+import { SessionRunningMenu } from "@/session/header/session-running-menu"
 
-const SessionSummaryPanel = lazy(async () => {
-  const { SessionSummaryPanel } = await import("../summary/panel")
-  return { default: SessionSummaryPanel }
-})
+type BlockingTask = { type: "shell" | "subagent"; partID: string; id?: string; label?: string }
 
 type SessionBackground = {
-  blocking: Accessor<{ type: "shell" | "subagent"; partID: string; id?: string; label?: string }[]>
-  tasks: Accessor<BackgroundTask[]>
+  blocking: Accessor<BlockingTask[]>
+  tasks: Accessor<readonly BackgroundTask[]>
+  running: {
+    sessionID: Accessor<string | undefined>
+    blocking: Accessor<BlockingTask[]>
+    tasks: Accessor<readonly BackgroundTask[]>
+  }
   move: () => Promise<void>
 }
 
@@ -74,6 +67,8 @@ type MessageTimelineProps = {
   hideHeader?: boolean
   active?: boolean
   session: TimelineSessionSource
+  view: MountedSession
+  screen: SessionScreen
   background: SessionBackground
   actions?: SessionUserActions
   scroll: { overflow: boolean; jump: boolean }
@@ -89,23 +84,23 @@ type MessageTimelineProps = {
   centered: boolean
   reserveReviewToggle: boolean
   setContentRef: (el: HTMLDivElement) => void
-  diffs: Accessor<{ additions: number; deletions: number }[] | undefined>
-  onReview: () => void
-  workspaceMoveEligible: boolean
-  onSummaryOpenChange: (open: boolean) => void
   anchor: (id: string) => string
   setRevealMessage?: (fn: (id: string, partID?: string) => void) => void
   setScrollToEnd?: (fn: () => void) => void
+  reveal?: { target: () => string | undefined; done: () => void }
   search?: JSX.Element
 }
 
 export function MessageTimeline(props: MessageTimelineProps) {
   const controller = createTimelineController({ session: props.session })
   const tail = props.pinned ? controller.data.projection.rows().at(-1) : undefined
+
   if (tail?._tag === "AssistantPart" && tail.group.type === "part") {
     const message = controller.data.projection.messageByID().get(tail.group.ref.messageID)
+
     if (message?.type === "assistant" && message.time.completed !== undefined) {
       const content = Timeline.resolveContent(message, tail.group.ref.partID)
+
       // Start the required worker job while the rest of the selected view is constructed.
       if (content?.type === "text" && content.text.trim()) {
         const preload = new AbortController()
@@ -114,6 +109,7 @@ export function MessageTimeline(props: MessageTimelineProps) {
       }
     }
   }
+
   return (
     <MessageTimelineView {...props} data={controller.data} action={controller.action} pending={controller.pending} />
   )
@@ -138,41 +134,37 @@ function MessageTimelineView(
   const childTitle = props.data.childTitle
   const projection = props.data.projection
   const sessionDirectory = createMemo(() => props.session.data.info()?.location.directory ?? sdk().directory)
+
   const project = createMemo(() => {
     const session = props.session.data.info()
     const projects = server.ctx.sync.data.project
+
     return session
       ? server.ctx.projects.detailsForSession(session)
       : projects.find((item) => containsDirectory(item.worktree, sessionDirectory()))
   })
+
   const workspaceSession = createMemo(() => isWorkspaceDirectory(project(), sessionDirectory()))
+
   const headerProject = createMemo(() => {
     const session = props.session.data.info()
+
     if (!session) return
+
     return server.ctx.projects.forSession(session)
   })
+
   createEffect(() => {
     const directory = project()?.worktree
+
     if (!directory) return
     void data.location.vcs.sync({ directory }).catch(() => undefined)
   })
-  const [workspaceSuggestionDismissed, setWorkspaceSuggestionDismissed] = createSignal(false)
-  const [summaryOpen, setSummaryOpen] = createSignal(false)
-  const setSummary = (open: boolean) => {
-    setSummaryOpen(open)
-    props.onSummaryOpenChange(open)
-  }
-  const sessionDiffs = createMemo(props.diffs)
-  createEffect(
-    on(sessionID, () => {
-      setSummary(false)
-      setWorkspaceSuggestionDismissed(false)
-    }),
-  )
-  const turnPadding = () => "px-4 md:px-5"
+  const turnPadding = () => "px-4 md:px-6"
   const showHeader = createMemo(() => !props.hideHeader && (props.data.showHeader() || workspaceSession()))
   const pinned = createMemo(() => props.pinned)
   const messageByID = projection.messageByID
+
   const virtualized = createTimelineVirtualizer({
     active: () => props.active !== false,
     sessionKey: () => `${server.key}/${props.data.sessionID()}`,
@@ -191,19 +183,29 @@ function MessageTimelineView(
     onUserScroll: props.onUserScroll,
     onHistoryScroll: props.onHistoryScroll,
     canRenderImmediately: (row, disclosure) => {
-      if (row._tag === "TurnGap" || row._tag === "TurnDivider") return true
-      if (row._tag === "Notice") {
+      if (
+        Predicate.isTagged(row, "TurnGap") ||
+        Predicate.isTagged(row, "TurnDivider") ||
+        Predicate.isTagged(row, "CompactionQueued")
+      )
+        return true
+
+      if (Predicate.isTagged(row, "Notice")) {
         const message = messageByID().get(row.messageID)
+
         return (
           (message?.type === "system" || message?.type === "synthetic") &&
           (message.description ?? message.text).length <= 1024
         )
       }
-      if (row._tag === "UserMessage") {
+
+      if (Predicate.isTagged(row, "UserMessage")) {
         const message = messageByID().get(row.userMessageID)
+
         if (message?.type !== "user" || message.text.length > 1024 || message.files?.length || message.agents?.length)
           return false
         const presentation = readPromptPresentation(message.metadata)
+
         return (
           (presentation?.displayText ?? message.text).length <= 1024 &&
           !presentation?.comments?.length &&
@@ -211,12 +213,16 @@ function MessageTimelineView(
           !parseCommentNote(message.text)
         )
       }
-      if (row._tag !== "AssistantPart" || row.group.type !== "part") return false
+
+      if (!Predicate.isTagged(row, "AssistantPart") || row.group.type !== "part") return false
       const message = messageByID().get(row.group.ref.messageID)
+
       if (message?.type !== "assistant" || message.time.completed === undefined) return false
       const content = Timeline.resolveContent(message, row.group.ref.partID)
+
       if (content?.type === "reasoning")
         return !(disclosure[row.group.ref.partID] ?? props.data.reasoningMode() === "full")
+
       return (
         content?.type === "text" &&
         content.text.length <= 1024 &&
@@ -225,14 +231,18 @@ function MessageTimelineView(
     },
     setRevealMessage: props.setRevealMessage,
     setScrollToEnd: props.setScrollToEnd,
+    reveal: props.reveal,
   })
+
   const VirtualizedTimeline = virtualized.View
+
   const [title, setTitle] = createStore({
     draft: "",
     editing: false,
     menuOpen: false,
     pendingRename: false,
   })
+
   let titleRef: HTMLInputElement | undefined
 
   createEffect(
@@ -266,12 +276,12 @@ function MessageTimelineView(
 
   const saveTitleEditor = async () => {
     if (!title.editing || props.pending.rename()) return
+
     if (await props.action.rename(title.draft)) setTitle("editing", false)
   }
 
   createEffect(() => {
     if (props.active !== false) return
-    setSummary(false)
     setTitle({ draft: "", editing: false, menuOpen: false, pendingRename: false })
   })
 
@@ -282,6 +292,7 @@ function MessageTimelineView(
     presentation: (message) => {
       const value = readPromptPresentation(message.metadata)
       const parsed = value ? undefined : parseCommentNote(message.text)
+
       return {
         displayText: value?.displayText,
         comments: value?.comments ?? (parsed ? [parsed] : []),
@@ -298,31 +309,42 @@ function MessageTimelineView(
     padding: turnPadding,
     anchor: props.anchor,
   })
+
   const backgroundHintPartID = createMemo(() => {
     const blocking = new Set(props.background.blocking().map((task) => task.partID))
+
     if (blocking.size === 0) return
+
     return projection
       .rows()
       .flatMap((row) =>
-        row._tag === "AssistantPart" ? (row.group.type === "part" ? [row.group.ref] : row.group.refs) : [],
+        Predicate.isTagged(row, "AssistantPart") ? (row.group.type === "part" ? [row.group.ref] : row.group.refs) : [],
       )
       .findLast((ref) => blocking.has(ref.partID))?.partID
   })
+
   const [backgroundHintRef, setBackgroundHintRef] = createSignal<HTMLDivElement>()
+
   const backgroundHintPresence = createAnimatedPresence(
     backgroundHintPartID,
     () => backgroundHintRef() ?? null,
     sessionID,
     1000,
   )
+
   const showWorking = createMemo(() => {
     const id = sessionID()
+
     if (!id || sessionStatus().type !== "busy") return false
+
     if (data.session.permission.list(id)?.length || data.session.form.list(id)?.length) return false
     const active = projection.activeMessageID()
+
     if (!active) return false
     const assistant = projection.assistantMessagesByParent().get(active)?.at(-1)
+
     if (assistant?.retry) return false
+
     // Pending steers still project under the previous response until delivery.
     // Its error must not hide feedback for a newly submitted prompt.
     if (
@@ -331,6 +353,7 @@ function MessageTimelineView(
     )
       return false
     const content = assistant?.content.at(-1)
+
     if (
       assistant?.time.completed === undefined &&
       assistant?.time.streamed === undefined &&
@@ -339,24 +362,46 @@ function MessageTimelineView(
     )
       return false
     const background = new Set(props.background.tasks().map((task) => task.id))
+
     return !projection.rows().some((row) => {
       if (row.userMessageID !== active) return false
-      if (row._tag === "Thinking") return true
-      if (row._tag === "Notice") {
+
+      if (Predicate.isTagged(row, "Thinking")) return true
+
+      if (Predicate.isTagged(row, "Notice")) {
         const message = messageByID().get(row.messageID)
+
         return message?.type === "compaction" && message.status === "running"
       }
-      // Used groups keep the fallback regardless of disclosure state.
-      if (row._tag !== "AssistantPart" || row.group.type === "context") return false
+
+      // Used and read groups keep the fallback, so each new read does not swap Working out for its short call.
+      if (!Predicate.isTagged(row, "AssistantPart") || row.group.type === "context" || row.group.type === "read")
+        return false
+
       return (row.group.type === "part" ? [row.group.ref] : row.group.refs).some((ref) => {
         const content = Timeline.resolveContent(messageByID().get(ref.messageID), ref.partID)
+
         if (content?.type !== "tool") return false
+
         if (content.state.status === "streaming" || content.state.status === "running") return true
         const taskID = content.state.metadata?.[content.name === "subagent" ? "sessionID" : "shellID"]
-        return background.has(content.id) || (typeof taskID === "string" && background.has(taskID))
+
+        return background.has(content.id) || (Predicate.isString(taskID) && background.has(taskID))
       })
     })
   })
+
+  const runningMenu = (title?: string) => (
+    <SessionRunningMenu
+      sessionID={sessionID()}
+      owner={props.background.running.sessionID()}
+      blocking={props.background.running.blocking()}
+      tasks={props.background.running.tasks()}
+      onReveal={virtualized.revealPart}
+      title={title}
+    />
+  )
+
   return (
     <VirtualizedTimeline
       workspaceSession={workspaceSession}
@@ -365,7 +410,7 @@ function MessageTimelineView(
           <div
             classList={{
               "min-w-0 w-full max-w-full": true,
-              "md:max-w-[1000px] md:mx-auto": props.centered,
+              "md:max-w-session md:mx-auto": props.centered,
             }}
           >
             <div
@@ -395,8 +440,9 @@ function MessageTimelineView(
         </Show>
       }
       deferred={(row) => {
-        if (row._tag !== "AssistantPart" || row.group.type !== "part") return false
+        if (!Predicate.isTagged(row, "AssistantPart") || row.group.type !== "part") return false
         const content = Timeline.resolveContent(messageByID().get(row.group.ref.messageID), row.group.ref.partID)
+
         return content?.type === "tool" && ["edit", "write"].includes(content.name)
       }}
       renderRow={(row, onSizeChange) => <rowRenderer.Row row={row} onSizeChange={onSizeChange} />}
@@ -421,7 +467,8 @@ function MessageTimelineView(
                       />
                     )}
                   </Show>
-                  <Show when={childTitle() || title.editing}>
+                  <Show when={parentID()}>{runningMenu(childTitle())}</Show>
+                  <Show when={!parentID() && (childTitle() || title.editing)}>
                     <Show
                       when={title.editing}
                       fallback={
@@ -452,12 +499,16 @@ function MessageTimelineView(
                         onInput={(event) => setTitle("draft", event.currentTarget.value)}
                         onKeyDown={(event) => {
                           event.stopPropagation()
+
                           if (event.isComposing || event.keyCode === 229) return
+
                           if (event.key === "Enter") {
                             event.preventDefault()
                             void saveTitleEditor()
+
                             return
                           }
+
                           if (event.key === "Escape") {
                             event.preventDefault()
                             closeTitleEditor()
@@ -467,6 +518,7 @@ function MessageTimelineView(
                       />
                     </Show>
                   </Show>
+                  <Show when={!parentID()}>{runningMenu()}</Show>
                   <Show when={!parentID() && sessionID()} keyed>
                     {(id) => (
                       <Menu
@@ -523,36 +575,23 @@ function MessageTimelineView(
                 </div>
               </div>
               <Show when={sessionID()} keyed>
-                {(id) => (
+                {(_id) => (
                   <div class="shrink-0 flex items-center gap-2">
                     {props.search}
-                    <SessionContextUsage placement="bottom" />
-                    <Show when={!parentID() && project()}>
-                      {(project) => (
-                        <SummaryPopover active={props.active} open={summaryOpen()} onOpenChange={setSummary}>
-                          <Suspense>
-                            <SessionSummaryPanel
-                              shown={summaryOpen()}
-                              project={project()}
-                              directory={sessionDirectory()}
-                              local={!workspaceSession()}
-                              branch={data.location.vcs.info({ directory: sdk().directory })?.branch.current}
-                              baseBranch={data.location.vcs.info({ directory: project().worktree })?.branch.current}
-                              diffs={sessionDiffs()}
-                              sessionID={id}
-                              moveEligible={props.workspaceMoveEligible}
-                              moveDismissed={workspaceSuggestionDismissed()}
-                              onMoveDismiss={() => setWorkspaceSuggestionDismissed(true)}
-                              onReview={() => {
-                                setSummary(false)
-                                props.onReview()
-                              }}
-                              backgroundTasks={props.background.tasks()}
-                            />
-                          </Suspense>
-                        </SummaryPopover>
-                      )}
-                    </Show>
+                    <ExtensionSlot
+                      at="session.header"
+                      input={{
+                        get session() {
+                          return props.view
+                        },
+                        get screen() {
+                          return props.screen
+                        },
+                        get active() {
+                          return props.active !== false
+                        },
+                      }}
+                    />
                     <SessionHeaderSpacer visible={props.reserveReviewToggle} />
                   </div>
                 )}

@@ -8,7 +8,9 @@ const segmenter =
 
 function first(value: string) {
   if (!value) return ""
+
   if (!segmenter) return Array.from(value)[0] ?? ""
+
   return segmenter.segment(value)[Symbol.iterator]().next().value?.segment ?? Array.from(value)[0] ?? ""
 }
 
@@ -33,7 +35,9 @@ export function Avatar(props: AvatarProps) {
     "classList",
     "style",
   ])
+
   const src = split.src // did this so i can zero it out to test fallback
+
   return (
     <div
       {...rest}

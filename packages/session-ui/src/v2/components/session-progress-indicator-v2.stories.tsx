@@ -60,6 +60,7 @@ function StressGrid() {
     columns: Math.max(1, Math.floor((window.innerWidth + 4) / 20)),
     rows: Math.max(1, Math.floor((window.innerHeight + 4) / 20)),
   })
+
   const [grid, setGrid] = createSignal(measure())
   const resize = () => setGrid(measure())
   onMount(() => window.addEventListener("resize", resize))

@@ -37,7 +37,7 @@ export type Settings = ProviderPackage.Settings &
 const route = Route.make({
   id: "google-vertex-messages",
   provider: id,
-  providerMetadataKey: "anthropic",
+  providerMetadataKey: "vertex",
   protocol: Protocol.make({
     id: AnthropicMessages.protocol.id,
     body: {
@@ -54,6 +54,7 @@ const route = Route.make({
         ),
     },
     stream: AnthropicMessages.protocol.stream,
+    supportsEffortUpdates: AnthropicMessages.protocol.supportsEffortUpdates,
   }),
   endpoint: Endpoint.path(({ request }) => `/${request.model.id}:streamRawPredict`),
   auth: Auth.none,
@@ -112,8 +113,8 @@ export const model: ProviderPackage.Definition<Settings, AnthropicMessages.Provi
   return configure({
     accessToken,
     baseURL,
-    headers: headers === undefined ? undefined : { ...headers },
-    http: body === undefined ? undefined : { body: { ...body } },
+    headers,
+    http: body === undefined ? undefined : { body },
     location,
     project,
     providerOptions,

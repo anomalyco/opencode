@@ -20,7 +20,7 @@ import { Money } from "./money.js"
 import { Snapshot } from "./snapshot.js"
 import { TokenUsage } from "./token-usage.js"
 
-export const ID = Schema.String.check(Schema.isStartsWith("msg_")).pipe(
+export const ID = Schema.String.check(Schema.isStartingWith("msg_")).pipe(
   Schema.brand("Session.Message.ID"),
   statics((schema) => ({
     create: () => schema.make("msg_" + ascending()),
@@ -290,6 +290,7 @@ export const Idle = Schema.Struct({
   ...Base,
   type: Schema.tag("idle"),
   outcome: Schema.Literals(["succeeded", "failed", "interrupted"]),
+  error: SessionError.Error.pipe(optional),
 }).annotate({ identifier: "Session.Message.Idle" })
 
 export const Info = Schema.Union([

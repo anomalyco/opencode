@@ -5,6 +5,7 @@ import { createData } from "@opencode/client/solid"
 
 test("publishes an initial message page, its index, and its cursor together", async () => {
   const observed: { ids: string[]; more: boolean; text: string | undefined }[] = []
+
   const api = OpenCode.make({
     baseUrl: "http://opencode.local",
     fetch: async () =>
@@ -13,12 +14,14 @@ test("publishes an initial message page, its index, and its cursor together", as
         cursor: { next: "older" },
       }),
   })
+
   const setup = createRoot((dispose) => {
     const data = createData({
       api: () => api,
       directory: "/project",
       event: { on: () => () => {}, listen: () => () => {} },
     })
+
     createComputed(() => {
       const message = data.session.message.get("ses_page", "msg_page")
       observed.push({
@@ -27,8 +30,10 @@ test("publishes an initial message page, its index, and its cursor together", as
         text: message?.type === "user" ? message.text : undefined,
       })
     })
+
     return { data, dispose }
   })
+
   try {
     await setup.data.session.message.sync("ses_page")
     expect(observed).toEqual([

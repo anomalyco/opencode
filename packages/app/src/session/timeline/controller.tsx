@@ -4,6 +4,7 @@ import { Button } from "@opencode/ui/button"
 import { useNavigate } from "@solidjs/router"
 import { createEffect, createMemo, on } from "solid-js"
 import { createStore } from "solid-js/store"
+import { Option, Predicate, Schema } from "effect"
 import { notifySessionTabsRemoved } from "@/shell/titlebar/session-events"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -11,7 +12,7 @@ import { useSettings } from "@/settings/model"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useTabs } from "@/shell/tabs/tabs"
 import type { SessionModel } from "@/session/model"
-import { removedSessionIDs } from "@/session/session-domain"
+import { sessionTreeIDs } from "@/session/requests/session-request-tree"
 import { useServerSDK } from "@/runtime/server/client"
 import { sessionHref } from "@/shell/routes/session"
 import { sessionTitle } from "@/session/title"
@@ -25,18 +26,27 @@ import { getSessionMessageHandoff } from "@/session/handoff"
 import type { ReasoningMode } from "@opencode/session-ui/timeline/projection"
 
 const emptyMessages: SessionMessageInfo[] = []
+
+const decodeErrorData = Schema.decodeUnknownOption(Schema.Struct({ data: Schema.Struct({ message: Schema.String }) }))
+
 const taskDescription = (message: SessionMessageInfo, sessionID: string): string | undefined => {
   if (message.type !== "assistant") return
+
   const tool = message.content.findLast((item) => {
     if (item.type !== "tool" || (item.name !== "task" && item.name !== "subagent")) return false
+
     const metadata =
       item.state.status === "running" || item.state.status === "completed" ? item.state.metadata : undefined
+
     return metadata?.sessionId === sessionID || metadata?.sessionID === sessionID
   })
+
   if (tool?.type !== "tool") return
-  const input = typeof tool.state.input === "string" ? undefined : tool.state.input
+  const input = Predicate.isString(tool.state.input) ? undefined : tool.state.input
   const value = input?.description
-  if (typeof value === "string" && value) return value
+
+  if (Predicate.isString(value) && value) return value
+
   return undefined
 }
 
@@ -57,44 +67,63 @@ export function createTimelineController(input: { session: TimelineSessionSource
   const dialog = useDialog()
   const language = useLanguage()
   const platform = usePlatform()
+
   const handedOffMessages = createMemo(() =>
     applyTimelineMessageHandoff(
       input.session.history.messages(),
       getSessionMessageHandoff(input.session.identity.sessionKey()),
     ),
   )
+
   const projectedMessages = createMemo(() => {
     const id = input.session.identity.sessionID()
+
     return visibleTimelineMessages(
       handedOffMessages(),
       id ? data.session.pending.list(id) : [],
       input.session.data.info()?.revert?.messageID,
     )
   })
-  const pendingUserMessageIDs = createMemo(() => {
+
+  const pendingInputIDs = createMemo(() => {
     const id = input.session.identity.sessionID()
+
     return new Set(
       (id ? data.session.pending.list(id) : []).flatMap((item) =>
-        item.type === "user" && item.delivery === "steer" ? [item.id] : [],
+        (item.type === "user" && item.delivery === "steer") || item.type === "synthetic" ? [item.id] : [],
       ),
     )
   })
+
+  const queuedCompactionIDs = createMemo(() => {
+    const id = input.session.identity.sessionID()
+
+    return (id ? data.session.pending.list(id) : []).flatMap((item) => (item.type === "compaction" ? [item.id] : []))
+  })
+
   const titleValue = createMemo(() => input.session.data.info()?.title)
   const titleLabel = createMemo(() => sessionTitle(titleValue()) ?? language.t("session.tab.session"))
+
   const parentMessages = createMemo(() => {
     const id = input.session.data.parentID()
+
     return id ? data.session.message.list(id) : emptyMessages
   })
+
   const parentTitle = createMemo(
     () => sessionTitle(input.session.data.parent()?.title) ?? language.t("session.tab.session"),
   )
+
   const childTaskDescription = createMemo(() => {
     const id = input.session.identity.sessionID()
+
     if (!id) return undefined
+
     return parentMessages()
       .map((message) => taskDescription(message, id))
       .findLast((value): value is string => !!value)
   })
+
   const childTitle = createMemo(() => {
     return timelineChildTitle({
       parentID: input.session.data.parentID(),
@@ -103,9 +132,12 @@ export function createTimelineController(input: { session: TimelineSessionSource
       fallback: language.t("session.tab.session"),
     })
   })
+
   const showHeader = createMemo(() => !!input.session.identity.sessionID())
+
   const timelineDetail = createMemo(() => {
     const detail = settings.general.timelineDetail()
+
     return {
       shell: { ...detail.shell },
       edit: { ...detail.edit },
@@ -115,14 +147,17 @@ export function createTimelineController(input: { session: TimelineSessionSource
       tools: { ...detail.tools },
     }
   })
+
   const reasoningMode = (): ReasoningMode =>
     timelineDetail().thinking.placement === "hidden"
       ? "hidden"
       : timelineDetail().thinking.details === "expanded"
         ? "full"
         : "compact"
+
   const shellToolPartsExpanded = () => timelineDetail().shell.details === "expanded"
   const editToolPartsExpanded = () => timelineDetail().edit.details === "expanded"
+
   const projection = createTimelineProjection({
     sessionMessages: projectedMessages,
     status: input.session.data.status,
@@ -130,48 +165,63 @@ export function createTimelineController(input: { session: TimelineSessionSource
     shellToolDefaultOpen: shellToolPartsExpanded,
     editToolDefaultOpen: editToolPartsExpanded,
     timelineDetail,
-    pendingUserMessageIDs,
+    pendingInputIDs,
+    queuedCompactionIDs,
   })
+
   const [pending, setPending] = createStore({ rename: false })
 
-  const errorMessage = (error: unknown) => {
-    if (error && typeof error === "object" && "data" in error) {
-      const data = error.data
-      if (data && typeof data === "object" && "message" in data && typeof data.message === "string") return data.message
-    }
-    if (error instanceof Error) return error.message
-    return language.t("common.requestFailed")
-  }
+  const errorMessage = (cause: unknown) =>
+    Option.match(decodeErrorData(cause), {
+      onSome: (error) => error.data.message,
+      onNone: () => (cause instanceof Error ? cause.message : language.t("common.requestFailed")),
+    })
+
   const rename = async (title: string) => {
     const id = input.session.identity.sessionID()
+
     if (!id || pending.rename) return false
     const next = title.trim()
+
     if (!next || next === (titleLabel() ?? "")) return true
     setPending("rename", true)
+
     const success = await serverSDK.api.session
       .update({ sessionID: id, title: next })
       .then(() => true)
       .catch((error) => {
         showToast({ title: language.t("common.requestFailed"), description: errorMessage(error) })
+
         return false
       })
+
     setPending("rename", false)
+
     if (!success) return false
     const current = data.session.get(id)
+
     if (current) data.session.remember({ ...current, title: next })
+
     return true
   }
+
   const href = (id: string) => sessionHref(server.key, id)
+
   const navigateAfterRemoval = (id: string, parent?: string, next?: string) => {
     if (input.session.identity.params.id !== id) return
+
     if (parent) return navigate(href(parent))
+
     if (next) return navigate(href(next))
+
     return tabs.newDraft({ server: server.key, directory: sdk().directory })
   }
+
   const exportSession = async (id: string) => {
     try {
       const data = await fetchSessionExport({ sessionID: id, api: serverSDK.api })
       const filename = sessionExportFilename(data.info)
+
       if (!(await saveSessionExport(filename, data, platform))) return
       showToast({
         variant: "success",
@@ -187,23 +237,29 @@ export function createTimelineController(input: { session: TimelineSessionSource
       })
     }
   }
+
   const remove = async (id: string) => {
     const session = data.session.get(id)
+
     if (!session) return false
     const sessions = data.session.list().filter((item) => !item.parentID && !item.time?.archived)
     const index = sessions.findIndex((item) => item.id === id)
     const next = index === -1 ? undefined : (sessions[index + 1] ?? sessions[index - 1])
-    const removed = removedSessionIDs(data.session.list(), id)
+    const removed = sessionTreeIDs(data.session.list(), id)
+
     const success = await data.session
       .remove(id)
       .then(() => true)
       .catch((error) => {
         showToast({ title: language.t("session.delete.failed.title"), description: errorMessage(error) })
+
         return false
       })
+
     if (!success) return false
     void navigateAfterRemoval(id, session.parentID, next?.id)
-    notifySessionTabsRemoved({ server: server.key, directory: sdk().directory, sessionIDs: [...removed] })
+    notifySessionTabsRemoved({ server: server.key, directory: sdk().directory, sessionIDs: removed })
+
     return true
   }
 
@@ -211,10 +267,12 @@ export function createTimelineController(input: { session: TimelineSessionSource
     const name = createMemo(
       () => sessionTitle(data.session.get(props.sessionID)?.title) ?? language.t("session.tab.session"),
     )
+
     const confirm = async () => {
       await remove(props.sessionID)
       dialog.close()
     }
+
     return (
       <Dialog fit>
         <DialogHeader hideClose>
@@ -272,6 +330,7 @@ export function createTimelineController(input: { session: TimelineSessionSource
       showDelete: (id: string) => dialog.show(() => <DeleteDialog sessionID={id} />),
       navigateParent: () => {
         const id = input.session.data.parentID()
+
         if (id) navigate(href(id))
       },
     },

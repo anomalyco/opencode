@@ -208,7 +208,7 @@ const eventImage = (frame: string, label: string, data: string, format: string, 
     info: info(format, size),
   })
 
-const onEvent = Effect.fn("OpenAIImages.onEvent")(function* (state: State, frame: string) {
+const onEvent = Effect.fnUntraced(function* (state: State, frame: string) {
   const event = yield* decodeEvent(frame)
   const format = event.output_format
   if ("partial_image_index" in event) {
@@ -229,7 +229,7 @@ const onEvent = Effect.fn("OpenAIImages.onEvent")(function* (state: State, frame
   ] as const
 })
 
-const onDocument = Effect.fn("OpenAIImages.onDocument")(function* (frame: Exclude<Frame, string>) {
+const onDocument = Effect.fnUntraced(function* (frame: Exclude<Frame, string>) {
   const invalid = (message: string, cause?: unknown) => route.frameError(message, frame.document, cause)
   const decoded = yield* decodeDocument(frame.document).pipe(
     Effect.mapError((cause) => invalid(`${route.name} returned an invalid response`, cause)),

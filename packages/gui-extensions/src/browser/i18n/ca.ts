@@ -1,0 +1,13 @@
+export default {
+  "command.open": "Obre el navegador",
+  "command.reload": "Torna a carregar la pàgina del navegador",
+  "tab.title": "Navegador",
+  "address.label": "Adreça del navegador",
+  "action.stop": "Atureu-vos",
+  replaced: "El control del navegador s'ha mogut a una altra finestra d'escriptori.",
+  unsupported: "Aquesta aplicació d'escriptori no admet el panell del navegador.",
+  suspended: "Navegador suspès. Interacciona amb aquesta sessió per tornar a connectar.",
+  "failed.title": "No es pot accedir a l’URL",
+  "failed.description": "Comproveu l’URL i la connexió i torneu-ho a provar.",
+  "action.reload": "Torna a carregar",
+}

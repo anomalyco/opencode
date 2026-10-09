@@ -44,6 +44,7 @@ export type ServerInfoOutput = {
   readonly pid: number
   readonly urls: ReadonlyArray<string>
   readonly paths: { readonly tmp: string }
+  readonly capabilities?: { readonly persistentPty?: boolean | undefined } | undefined
 }
 export type ServerInfoOperation<E = never> = () => Effect.Effect<ServerInfoOutput, E>
 
@@ -198,6 +199,7 @@ export type SessionStatsOperation<E = never> = (input?: SessionStatsInput) => Ef
 
 export type SessionCreateInput = {
   readonly id?: Session.ID | undefined
+  readonly parentID?: Session.ID | undefined
   readonly title?: string | undefined
   readonly agent?: Agent.ID | undefined
   readonly model?: Model.Ref | undefined
@@ -1414,7 +1416,11 @@ export type SessionFormReplyOperation<E = never> = (
   input: SessionFormReplyInput,
 ) => Effect.Effect<SessionFormReplyOutput, E>
 
-export type SessionFormCancelInput = { readonly sessionID: string; readonly formID: Form.ID }
+export type SessionFormCancelInput = {
+  readonly sessionID: string
+  readonly formID: Form.ID
+  readonly message?: string | undefined
+}
 export type SessionFormCancelOutput = void
 export type SessionFormCancelOperation<E = never> = (
   input: SessionFormCancelInput,
@@ -1591,6 +1597,18 @@ export type IntegrationConnectKeyOperation<E = never> = (
   input: IntegrationConnectKeyInput,
 ) => Effect.Effect<IntegrationConnectKeyOutput, E>
 
+export type IntegrationConnectExternalInput = {
+  readonly integrationID: Integration.ID
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly methodID: Integration.MethodID
+  readonly answer?: Form.Answer | undefined
+  readonly label?: string | undefined
+}
+export type IntegrationConnectExternalOutput = void
+export type IntegrationConnectExternalOperation<E = never> = (
+  input: IntegrationConnectExternalInput,
+) => Effect.Effect<IntegrationConnectExternalOutput, E>
+
 export type IntegrationOauthConnectInput = {
   readonly integrationID: Integration.ID
   readonly location?: { readonly directory?: string | undefined } | undefined
@@ -1681,7 +1699,10 @@ export interface IntegrationApi<E = never> {
   readonly list: IntegrationListOperation<E>
   readonly get: IntegrationGetOperation<E>
   readonly wellknown: { readonly add: IntegrationWellknownAddOperation<E> }
-  readonly connect: { readonly key: IntegrationConnectKeyOperation<E> }
+  readonly connect: {
+    readonly key: IntegrationConnectKeyOperation<E>
+    readonly external: IntegrationConnectExternalOperation<E>
+  }
   readonly oauth: {
     readonly connect: IntegrationOauthConnectOperation<E>
     readonly status: IntegrationOauthStatusOperation<E>
@@ -2265,6 +2286,13 @@ export interface WorktreeApi<E = never> {
   readonly refresh: WorktreeRefreshOperation<E>
 }
 
+export type VcsInitInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly provider?: string | undefined
+}
+export type VcsInitOutput = void
+export type VcsInitOperation<E = never> = (input?: VcsInitInput) => Effect.Effect<VcsInitOutput, E>
+
 export type VcsGetInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
 export type VcsGetOutput = { readonly location: Location.PublicRef; readonly data: Vcs.Info }
 export type VcsGetOperation<E = never> = (input?: VcsGetInput) => Effect.Effect<VcsGetOutput, E>
@@ -2295,6 +2323,7 @@ export type VcsDiffOutput = { readonly location: Location.PublicRef; readonly da
 export type VcsDiffOperation<E = never> = (input: VcsDiffInput) => Effect.Effect<VcsDiffOutput, E>
 
 export interface VcsApi<E = never> {
+  readonly init: VcsInitOperation<E>
   readonly get: VcsGetOperation<E>
   readonly base: VcsBaseOperation<E>
   readonly status: VcsStatusOperation<E>

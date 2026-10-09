@@ -14,6 +14,7 @@ import type { SessionDocument } from "../document"
 import type { SessionUserPresentation } from "../timeline/session-timeline"
 
 export const CURRENT_SESSION_ID = "session_current_story"
+
 export const STORY_TIME = 1_735_689_600_000
 
 export const STORY_MODEL = {
@@ -1137,6 +1138,7 @@ const largeMessages = Array.from({ length: 16 }, (_, index) => {
   const offset = 110_000 + index * 5_000
   const userID = `msg_user_large_${String(index + 1).padStart(2, "0")}`
   const assistantID = `msg_assistant_large_${String(index + 1).padStart(2, "0")}`
+
   const context =
     index % 4 === 0
       ? [
@@ -1150,6 +1152,7 @@ const largeMessages = Array.from({ length: 16 }, (_, index) => {
           }),
         ]
       : []
+
   return [
     user(userID, `Complete deterministic Session UI checkpoint ${index + 1}.`, offset),
     assistant({

@@ -28,6 +28,16 @@ export type Compatibility = Model.Compatibility
 export const Capabilities = Model.Capabilities
 export type Capabilities = Model.Capabilities
 
+/** Merges partial config capabilities onto a base model's capabilities, defaulting unset fields. */
+export const mergeCapabilities = (config: Partial<Capabilities>, base: Capabilities | undefined) => {
+  const fallback = base ?? Capabilities.default()
+  return {
+    tools: config.tools ?? fallback.tools,
+    input: [...(config.input ?? fallback.input)],
+    output: [...(config.output ?? fallback.output)],
+  }
+}
+
 export const Cost = Model.Cost
 
 export const Ref = Model.Ref
@@ -251,7 +261,7 @@ const layer = Layer.effect(
         const value = yield* read()
         const requested = value.data.defaultModel
         const model = requested && value.byProvider.get(requested.providerID)?.get(requested.modelID)
-        return model?.enabled ? model : value.available[0]
+        return model?.enabled ? model : value.available.find(supportsText)
       }),
       small: Effect.fn("Model.small")(function* (providerID) {
         const value = yield* read()
@@ -271,6 +281,13 @@ const layer = Layer.effect(
 )
 
 export const node = makeLocationNode({ service: Service, layer, deps: [Provider.node, Bus.node, Location.node] })
+
+export function supportsText(model: Pick<Info, "capabilities">) {
+  return (
+    (model.capabilities.input.length === 0 || model.capabilities.input.some((item) => item.startsWith("text"))) &&
+    (model.capabilities.output.length === 0 || model.capabilities.output.some((item) => item.startsWith("text")))
+  )
+}
 
 export function compatibility(input: unknown): Compatibility | undefined {
   if (typeof input === "string") return { reasoningField: input }

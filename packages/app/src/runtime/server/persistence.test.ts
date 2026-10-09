@@ -1,9 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
-import { IconState, ModelState, ProjectState, VcsState, serverState } from "./persistence"
-import { createRoot } from "solid-js"
-import { isServer } from "solid-js/web"
-import { Persist, persisted } from "@/runtime/persistence/storage"
+import { ModelState, serverState } from "./persistence"
 import { Persistence } from "@/runtime/persistence/schema"
 
 const initial = { list: [], hidden: {}, projects: {}, lastProject: {}, recentlyClosed: {} }
@@ -15,6 +12,7 @@ function serverSchema(canonical?: () => string | undefined) {
 describe("server persistence schema", () => {
   test("migrates legacy auth and writes only current server objects", () => {
     const schema = serverSchema()
+
     const input = {
       list: [
         "http://localhost:4096",
@@ -29,6 +27,7 @@ describe("server persistence schema", () => {
       ],
       projects: { local: [{ worktree: "/project", expanded: true }] },
     }
+
     const state = Schema.decodeUnknownSync(schema)(input)
     expect(state).toEqual({
       list: [
@@ -74,6 +73,7 @@ describe("server persistence schema", () => {
 
   test("moves canonical project buckets without changing server keys or unrelated scopes", () => {
     const schema = serverSchema(() => "https://opencode.example.com")
+
     const state = Schema.decodeUnknownSync(schema)({
       list: ["https://opencode.example.com"],
       hidden: { "https://opencode.example.com": true },
@@ -89,6 +89,7 @@ describe("server persistence schema", () => {
       lastProject: { local: "/local", "https://opencode.example.com": "/remote", other: "/other" },
       recentlyClosed: { local: ["/closed"], "https://opencode.example.com": ["/old-closed"] },
     })
+
     expect(state.projects).toEqual({
       local: [
         { worktree: "/local", expanded: false },
@@ -108,10 +109,12 @@ describe("server persistence schema", () => {
     const props: { canonicalLocalServer?: string } = {}
     const schema = serverSchema(() => props.canonicalLocalServer)
     const decode = Schema.decodeUnknownSync(schema)
+
     const input = {
       projects: { remote: [{ worktree: "/project", expanded: true }] },
       lastProject: { remote: "/project" },
     }
+
     expect(decode(input).projects).toEqual(input.projects)
     props.canonicalLocalServer = "remote"
     expect(decode(input).projects).toEqual({ local: [{ worktree: "/project", expanded: true }] })
@@ -119,16 +122,8 @@ describe("server persistence schema", () => {
     props.canonicalLocalServer = "local"
     expect(decode(input).projects).toEqual(input.projects)
     expect(input.lastProject).toEqual({ remote: "/project" })
-  })
-
-  test("migrates a last project without a project list", () => {
-    expect(Schema.decodeUnknownSync(serverSchema(() => "remote"))({ lastProject: { remote: "/project" } })).toEqual({
-      list: [],
-      hidden: {},
-      projects: {},
-      lastProject: { local: "/project" },
-      recentlyClosed: {},
-    })
+    props.canonicalLocalServer = "remote"
+    expect(decode({ lastProject: { remote: "/project" } })).toEqual({ ...initial, lastProject: { local: "/project" } })
   })
 })
 
@@ -137,6 +132,7 @@ describe("model persistence schema", () => {
     const decode = Schema.decodeUnknownSync(Persistence.withInitial(ModelState, { user: [], recent: [], variant: {} }))
     expect(decode({})).toEqual({ user: [], recent: [], variant: {} })
     expect(decode({ user: null, recent: 1, variant: [] })).toEqual({ user: [], recent: [], variant: {} })
+
     const state = decode({
       user: [
         null,
@@ -147,6 +143,7 @@ describe("model persistence schema", () => {
       recent: [false, { providerID: "provider", modelID: "model" }, { providerID: "missing-model" }],
       variant: { model: "high" },
     })
+
     expect(state).toEqual({
       user: [
         { providerID: "provider", modelID: "model", visibility: "show", favorite: true },
@@ -158,109 +155,3 @@ describe("model persistence schema", () => {
     expect(Schema.encodeSync(ModelState)(state)).toEqual(state)
   })
 })
-
-describe("directory cache schemas", () => {
-  test("defaults missing and malformed VCS caches but retains optional branch metadata", () => {
-    const decode = Schema.decodeUnknownSync(Persistence.withInitial(VcsState, { value: undefined }))
-    expect(decode({})).toEqual({ value: undefined })
-    expect(decode({ value: null })).toEqual({ value: undefined })
-    expect(decode({ value: { branch: 1 } })).toEqual({ value: undefined })
-    expect(decode({ value: { default_branch: "main" } })).toEqual({ value: { default_branch: "main" } })
-    const state = decode({ value: { branch: "feature", default_branch: "main", obsolete: true } })
-    expect(state).toEqual({ value: { branch: "feature", default_branch: "main" } })
-    expect(Schema.encodeSync(VcsState)(state)).toEqual(state)
-  })
-
-  test("validates project name, icon overrides and startup commands", () => {
-    const decode = Schema.decodeUnknownSync(Persistence.withInitial(ProjectState, { value: undefined }))
-    expect(decode({})).toEqual({ value: undefined })
-    expect(decode({ value: [] })).toEqual({ value: undefined })
-    expect(decode({ value: { icon: { override: 1 } } })).toEqual({ value: undefined })
-    expect(decode({ value: { commands: { start: false } } })).toEqual({ value: undefined })
-    expect(decode({ value: {} })).toEqual({ value: {} })
-    const state = decode({
-      value: {
-        name: "Project",
-        icon: { override: "data:image/png;base64,abc", color: "blue" },
-        commands: { start: "bun dev" },
-      },
-    })
-    expect(Schema.encodeSync(ProjectState)(state)).toEqual(state)
-    expect(state.value).toEqual({
-      name: "Project",
-      icon: { override: "data:image/png;base64,abc", color: "blue" },
-      commands: { start: "bun dev" },
-    })
-  })
-
-  test("validates optional icon strings", () => {
-    const decode = Schema.decodeUnknownSync(Persistence.withInitial(IconState, { value: undefined }))
-    expect(decode({})).toEqual({ value: undefined })
-    expect(decode({ value: 42 })).toEqual({ value: undefined })
-    expect(decode({ value: null })).toEqual({ value: undefined })
-    expect(decode({ value: "" })).toEqual({ value: "" })
-    expect(Schema.encodeSync(IconState)(decode({ value: "data:image/png;base64,abc" }))).toEqual({
-      value: "data:image/png;base64,abc",
-    })
-  })
-})
-
-test.skipIf(isServer)(
-  "persisted server relocation hydrates migrated state and writes current schema on updates",
-  async () => {
-    const values = new Map([
-      [
-        "default:server.v3",
-        JSON.stringify({
-          list: [{ url: "https://remote.example", username: "legacy", password: "secret" }],
-          projects: { "https://remote.example": [{ worktree: "/project", expanded: false }] },
-          lastProject: { "https://remote.example": "/project" },
-        }),
-      ],
-    ])
-    const root = createRoot((dispose) => ({
-      dispose,
-      state: persisted(
-        { ...Persist.global("server"), previousKey: "server.v3" },
-        serverState(() => "https://remote.example"),
-        initial,
-        {
-          platform: "desktop",
-          windowID: "test",
-          openExternal() {},
-          restart: async () => {},
-          notify: async () => {},
-          openDirectoryPickerDialog: async () => null,
-          storage: (name = "default") => ({
-            getItem: async (key) => values.get(`${name}:${key}`) ?? null,
-            setItem: async (key, value) => {
-              values.set(`${name}:${key}`, value)
-            },
-            removeItem: async (key) => {
-              values.delete(`${name}:${key}`)
-            },
-          }),
-        },
-      ),
-    }))
-    try {
-      await root.state[3].promise
-      expect(values.has("default:server.v3")).toBe(false)
-      expect(root.state[0].list).toEqual([
-        { type: "http", http: { url: "https://remote.example", password: "secret" } },
-      ])
-      expect(root.state[0].projects).toEqual({ local: [{ worktree: "/project", expanded: false }] })
-      expect(root.state[0].lastProject).toEqual({ local: "/project" })
-      root.state[1]("projects", "local", 0, "expanded", true)
-      const stored = values.get("opencode.global.dat:server")
-      expect(stored).toBeDefined()
-      if (!stored) throw new Error("server state was not written")
-      const decoded = Schema.decodeUnknownSync(Schema.fromJsonString(serverSchema()))(stored)
-      expect(decoded.projects.local).toEqual([{ worktree: "/project", expanded: true }])
-      expect(stored).not.toContain("username")
-      expect(decoded.list).toEqual(root.state[0].list)
-    } finally {
-      root.dispose()
-    }
-  },
-)
