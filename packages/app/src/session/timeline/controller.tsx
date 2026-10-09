@@ -87,13 +87,24 @@ export function createTimelineController(input: { session: TimelineSessionSource
     ),
   )
 
+  // Inputs that wait behind the active turn. A starting steer opens the next turn instead, so the turn before it
+  // stays finished, as it will once the steer is delivered.
   const pendingInputIDs = createMemo(() => {
     const id = input.session.identity.sessionID()
 
+    if (!id) return new Set<string>()
+
     return new Set(
-      (id ? data.session.pending.list(id) : []).flatMap((item) =>
-        (item.type === "user" && item.delivery === "steer") || item.type === "synthetic" ? [item.id] : [],
-      ),
+      data.session.pending
+        .list(id)
+        .flatMap((item) =>
+          (item.type === "user" &&
+            item.delivery === "steer" &&
+            data.session.pending.status(id, item.id) !== "starting") ||
+          item.type === "synthetic"
+            ? [item.id]
+            : [],
+        ),
     )
   })
 
