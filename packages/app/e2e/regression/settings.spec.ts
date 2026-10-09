@@ -836,15 +836,20 @@ test("providers: the connect dialog lists connected providers and manages their 
   await settings.getByRole("button", { name: "Show more providers", exact: true }).click()
   const dialog = page.getByRole("dialog")
   const openai = dialog.locator('[data-provider-id="openai"]')
-  await expect(openai).toContainText("2 accounts")
-  await expect(dialog.locator('[data-provider-id="anthropic"]')).not.toContainText("account")
+  const count = openai.locator('[data-component="tag"]')
+  await expect(count).toHaveText("2")
+  await expect(count).toHaveAttribute("aria-label", "2 accounts")
+  await expect(dialog.locator('[data-provider-id="anthropic"]').locator('[data-component="tag"]')).toHaveCount(0)
   await openai.click()
 
   await expect(page.getByRole("dialog", { name: "OpenAI", exact: true })).toBeVisible()
   const list = dialog.getByRole("radiogroup", { name: "Connected accounts", exact: true })
   await expect(list.getByRole("radio", { name: "Work", exact: true })).toHaveAttribute("aria-checked", "true")
+  // Rows keep their order when the active account changes.
+  await expect(list.getByRole("radio")).toHaveText(["Personal", "Work"])
   await list.getByRole("radio", { name: "Personal", exact: true }).click()
   await expect(list.getByRole("radio", { name: "Personal", exact: true })).toHaveAttribute("aria-checked", "true")
+  await expect(list.getByRole("radio")).toHaveText(["Personal", "Work"])
   expect(activated).toEqual(["cred_personal"])
 
   // Removing an account asks first.

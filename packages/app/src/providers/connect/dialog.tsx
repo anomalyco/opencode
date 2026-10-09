@@ -269,13 +269,9 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
 
   const rows = createMemo(() => [...popular(), ...other()])
 
-  const accountSummary = (provider: { id: string }) => {
-    const accounts = providerAccounts(integrations.list().find((integration) => integration.id === provider.id))
+  const accountCount = (provider: { id: string }) =>
+    providerAccounts(integrations.list().find((integration) => integration.id === provider.id)).length
 
-    if (accounts.length === 0) return
-
-    return language.plural("dialog.provider.accounts.count", accounts.length, { count: accounts.length })
-  }
   let picker: HTMLDivElement | undefined
   let search: HTMLInputElement | undefined
 
@@ -352,14 +348,18 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
                       >
                         <ProviderModelIcon provider={provider} class="shrink-0 text-v2-icon-icon-base" />
                         <span class="min-w-0 truncate font-[530] text-v2-text-text-base">{provider.name}</span>
-                        <Show when={accountSummary(provider)}>
-                          {(summary) => (
-                            <span class="flex h-4 shrink-0 items-center rounded-xs border-[0.5px] border-v2-border-border-base bg-v2-background-bg-layer-03 px-1 text-[11px] font-[530] leading-none tracking-[0.05px] text-v2-text-text-muted">
-                              {summary()}
-                            </span>
-                          )}
+                        <Show when={accountCount(provider) > 0}>
+                          <Badge
+                            variant="subtle"
+                            class="shrink-0"
+                            aria-label={language.plural("dialog.provider.accounts.count", accountCount(provider), {
+                              count: accountCount(provider),
+                            })}
+                          >
+                            {accountCount(provider)}
+                          </Badge>
                         </Show>
-                        <Show when={CONSOLE_PROVIDERS.has(provider.id) && !accountSummary(provider)}>
+                        <Show when={CONSOLE_PROVIDERS.has(provider.id) && accountCount(provider) === 0}>
                           <span class="min-w-0 truncate font-[440] text-v2-text-text-muted">
                             {language.t(
                               provider.id === "opencode"
@@ -445,6 +445,8 @@ function ProviderConnection(props: {
     adding: boolean
     confirming?: string
     switching?: string
+    // The account being activated, checked right away instead of after the refresh.
+    activating?: string
   }>({
     adding: false,
     copied: false,
@@ -457,8 +459,14 @@ function ProviderConnection(props: {
     collapsed: {},
   })
 
-  // Go keeps its own accounts even though it signs in through the Console.
-  const accounts = () => providerAccounts(integrations.list().find((integration) => integration.id === props.provider))
+  // Go keeps its own accounts even though it signs in through the Console. The server lists the active
+  // account first; the dialog sorts by name so rows stay put when the active account changes.
+  const serverAccounts = () =>
+    providerAccounts(integrations.list().find((integration) => integration.id === props.provider))
+
+  const accounts = () => serverAccounts().toSorted((a, b) => a.label.localeCompare(b.label) || a.id.localeCompare(b.id))
+
+  const activeAccount = () => state.activating ?? serverAccounts()[0]?.id
 
   const showAccounts = () => !!props.accounts && !state.adding && accounts().length > 0
 
@@ -1184,8 +1192,8 @@ function ProviderConnection(props: {
   }
 
   const activateAccount = async (account: ProviderAccount) => {
-    if (accounts()[0]?.id === account.id || state.switching) return
-    setState({ switching: account.id, confirming: undefined })
+    if (activeAccount() === account.id || state.switching) return
+    setState({ switching: account.id, activating: account.id, confirming: undefined })
     await sdk.api.credential
       .activate({ credentialID: account.id })
       .then(refreshAccounts)
@@ -1198,7 +1206,7 @@ function ProviderConnection(props: {
         }),
       )
       .catch(accountError)
-      .finally(() => setState("switching", undefined))
+      .finally(() => setState({ switching: undefined, activating: undefined }))
   }
 
   const removeAccount = async (account: ProviderAccount) => {
@@ -1226,24 +1234,13 @@ function ProviderConnection(props: {
   function AccountsView() {
     return (
       <div data-component="provider-accounts" class="flex flex-col gap-5">
-        <div class="px-3">
-          <Button
-            size="large"
-            class="!px-3"
-            variant="contrast"
-            disabled={state.switching !== undefined}
-            onClick={addAccount}
-          >
-            {language.t("dialog.provider.accounts.add")}
-          </Button>
-        </div>
         <section class="flex flex-col">
           <div class="px-3 pb-2 text-[13px] font-[440] leading-text-compact tracking-[-0.04px] text-v2-text-text-muted">
             {language.t("dialog.provider.accounts.connected")}
           </div>
           <div role="radiogroup" aria-label={language.t("dialog.provider.accounts.connected")} class="flex flex-col">
             <For each={accounts()}>
-              {(account, index) => (
+              {(account) => (
                 <Show
                   when={state.confirming !== account.id}
                   fallback={
@@ -1264,16 +1261,13 @@ function ProviderConnection(props: {
                     <button
                       type="button"
                       role="radio"
-                      aria-checked={index() === 0}
+                      aria-checked={activeAccount() === account.id}
                       class="flex min-h-9 min-w-0 flex-1 items-center gap-2 px-3 text-left text-[13px] leading-5 tracking-[-0.04px] focus-visible:outline-none"
                       disabled={state.switching !== undefined}
                       onClick={() => void activateAccount(account)}
                     >
                       <span class="min-w-0 truncate font-[440] text-v2-text-text-base">{account.label}</span>
-                      <Show when={state.switching === account.id}>
-                        <Spinner class="size-4 shrink-0 text-v2-icon-icon-muted" />
-                      </Show>
-                      <Show when={index() === 0 && state.switching !== account.id}>
+                      <Show when={activeAccount() === account.id}>
                         <Icon name="check" size="small" class="shrink-0 text-v2-icon-icon-base" />
                       </Show>
                     </button>
@@ -1293,6 +1287,11 @@ function ProviderConnection(props: {
             </For>
           </div>
         </section>
+        <div class="px-3">
+          <Button disabled={state.switching !== undefined} onClick={addAccount}>
+            {language.t("dialog.provider.accounts.add")}
+          </Button>
+        </div>
       </div>
     )
   }
