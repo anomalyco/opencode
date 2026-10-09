@@ -603,43 +603,6 @@ test("renders a footer for a pre-output retry assistant after replay", () => {
   expect(reduceSessionRows([message])).toEqual([{ type: "assistant-footer", messageID: "assistant-retry" }])
 })
 
-test("shows a persisted execution failure once, after the prompt that caused it", () => {
-  const user: SessionMessageInfo = { type: "user", id: "user", text: "Go", time: { created: 1 } }
-  const failed: SessionMessageInfo = {
-    type: "idle",
-    id: "idle",
-    outcome: "failed",
-    error: { type: "provider.no-route", message: "Model unavailable: opencode/gpt-5.2" },
-    time: { created: 3 },
-  }
-  const clean: SessionMessageAssistant = { ...assistant("assistant", []), finish: "stop" }
-  const errored = { ...clean, error: { type: "provider.quota", message: "Insufficient account funds" } }
-
-  expect(reduceSessionRows([user, failed])).toEqual([
-    { type: "message", messageID: "user" },
-    { type: "message", messageID: "idle" },
-  ])
-  expect(reduceSessionRows([user, clean, failed])).toEqual([
-    { type: "message", messageID: "user" },
-    { type: "assistant-footer", messageID: "assistant" },
-    { type: "message", messageID: "idle" },
-  ])
-  expect(reduceSessionRows([user, errored, failed])).toEqual([
-    { type: "message", messageID: "user" },
-    { type: "assistant-footer", messageID: "assistant" },
-  ])
-  const interrupted = { ...clean, error: { type: "aborted", message: "Step interrupted" } }
-  const exhausted = {
-    ...failed,
-    error: { type: "aborted", message: "Execution was interrupted repeatedly and will not be resumed automatically." },
-  }
-  expect(reduceSessionRows([user, interrupted, exhausted]).at(-1)).toEqual({ type: "message", messageID: "idle" })
-  expect(reduceSessionRows([user, failed], new Set(["user"]))).toEqual([
-    { type: "message", messageID: "user" },
-    { type: "message", messageID: "idle" },
-  ])
-})
-
 test("places a running compaction barrier before every queued user message", () => {
   const queued = (id: string, text: string, created: number): SessionMessageInfo => ({
     type: "user",

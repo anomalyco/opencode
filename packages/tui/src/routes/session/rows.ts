@@ -370,35 +370,17 @@ export function reduceSessionRows(
     })
     usage.previousTurnCache = { read: last.tokens.cache.read, model: last.model }
   }
-  // A failure before promotion leaves its prompt queued, so keep the failure after that prompt.
-  const tail = messages.at(-1)
-  const period = messages.slice(messages.slice(0, -1).findLastIndex((message) => message.type === "idle") + 1, -1)
-  const deferred =
-    tail?.type === "idle" &&
-    tail.outcome === "failed" &&
-    period.some(isInput) &&
-    !period.some((message) => message.type === "assistant")
-      ? tail
-      : undefined
-  // The last step or compaction may already show the failure that ended the busy period.
-  let failureShown = false
   const entries = [
-    ...messages.filter((message) => !pending.has(message.id) && message !== deferred),
+    ...messages.filter((message) => !pending.has(message.id)),
     ...pendingCompactions,
     ...messages.filter(isInput),
-    ...(deferred ? [deferred] : []),
   ].reduce<ProjectionEntry[]>((rows, message) => {
     if (message.type !== "assistant") {
       if (message.type === "idle") {
         flushTurn(rows)
-        if (message.outcome === "failed" && message.error && !failureShown)
-          rows.push({ entry: { type: "message", messageID: message.id }, path: [], closesPrevious: true })
-        failureShown = false
         return rows
       }
       if (message.type === "synthetic" && !message.description?.trim()) return rows
-      if (message.type === "compaction" && message.status !== "running")
-        failureShown = message.status === "failed" && message.error.type !== "aborted"
       if (message.type === "compaction" && message.status === "completed" && usage) usage.previousTurnCache = undefined
       rows.push({
         entry: { type: "message", messageID: message.id },
@@ -408,7 +390,6 @@ export function reduceSessionRows(
       return rows
     }
     usage?.steps.push(message)
-    failureShown = !!message.error && message.error.type !== "aborted"
     const ordinals = { text: 0, reasoning: 0 }
     message.content.forEach((part) => {
       const partID = part.type === "tool" ? part.id : `${part.type}:${ordinals[part.type]++}`
