@@ -73,11 +73,7 @@ export const GoogleVertexPlugin = define({
       .filter((name) => name.startsWith("config_"))
       .toSorted((a, b) => Number(b === active) - Number(a === active) || a.localeCompare(b))
     const contents = yield* Effect.forEach(configs, (name) => read(path.join(gcloud, "configurations", name)))
-    const adcPath = path.join(gcloud, "application_default_credentials.json")
-    const adcFile = yield* read(adcPath)
-    if (adcFile && !process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-      process.env.GOOGLE_APPLICATION_CREDENTIALS = adcPath
-    }
+    const adcFile = yield* read(path.join(gcloud, "application_default_credentials.json"))
     const configured = (yield* configuredSettings(Provider.ID.googleVertex)) ?? {}
     const projects = Array.from(
       new Set(

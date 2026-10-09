@@ -81,9 +81,6 @@ const adc = (project?: string) => {
   const loadClient = () => {
     if (client) return client
     const keyFilename = resolveCredentialsFile()
-    if (keyFilename && !process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-      process.env.GOOGLE_APPLICATION_CREDENTIALS = keyFilename
-    }
     client = import("google-auth-library").then(({ GoogleAuth }) =>
       new GoogleAuth({
         projectId: project,
