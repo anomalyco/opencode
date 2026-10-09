@@ -36,7 +36,7 @@ export const Plugin = define({
     const shell = yield* ShellSelect.Service
     const sessions = yield* Session.Service
     const agents = yield* Agent.Service
-    const subagents = yield* SubagentJob.make
+    const subagents = yield* SubagentJob.Service
     const load = Effect.fn("ConfigCommandPlugin.load")(function* () {
       return yield* Effect.forEach(yield* config.entries(), loadEntry).pipe(Effect.map((documents) => documents.flat()))
     })
