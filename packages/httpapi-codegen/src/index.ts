@@ -457,24 +457,24 @@ function effectTypeReferences(input: ReadonlyArray<EffectTypeReference>) {
   const asts = new Map<SchemaAST.AST, ResolvedEffectTypeReference>()
   const brands = new Map<string, ResolvedEffectTypeReference>()
   for (const reference of input) {
-    const document = SchemaRepresentation.toCodeDocument(
-      SchemaRepresentation.toRepresentations([codegenAst(Schema.toType(reference.schema).ast)]),
-    )
+    const branded = brandAst(reference.schema)
+    const projected = SchemaAST.toType(branded)
+    const document = toCodeDocument(SchemaRepresentation.toRepresentations([codegenAst(projected)]))
     const name = document.codes[0]?.Type
     const type =
       name === undefined
         ? undefined
         : (document.references.nonRecursives.find((item) => item.$ref === name)?.code.Type ?? name)
-    const value = { name: reference.name, import: reference.import, ast: reference.schema.ast, type }
+    const value = { name: reference.name, import: reference.import, ast: branded, type }
     if (type?.includes("Brand.Brand<") && !brands.has(type)) brands.set(type, value)
-    if (SchemaAST.resolveIdentifier(reference.schema.ast) !== undefined || type?.includes("Brand.Brand<")) {
-      asts.set(reference.schema.ast, value)
-      asts.set(Schema.toType(reference.schema).ast, value)
+    if (SchemaAST.resolveIdentifier(branded) !== undefined || type?.includes("Brand.Brand<")) {
+      asts.set(branded, value)
+      asts.set(projected, value)
     }
     if (name === undefined || !/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name)) continue
     const previous = names.get(name)
     if (previous !== undefined) {
-      if (previous.ast !== reference.schema.ast) {
+      if (previous.ast !== branded) {
         throw new GenerationError({ reason: `Conflicting Effect type reference: ${name}` })
       }
       continue
@@ -485,15 +485,14 @@ function effectTypeReferences(input: ReadonlyArray<EffectTypeReference>) {
 }
 
 function effectType(schema: Schema.Top, references: ReturnType<typeof effectTypeReferences>, imports: Set<string>) {
-  const projected = Schema.toType(schema)
-  const direct = references.asts.get(schema.ast) ?? references.asts.get(projected.ast)
+  const branded = brandAst(schema)
+  const projected = SchemaAST.toType(branded)
+  const direct = references.asts.get(branded) ?? references.asts.get(projected)
   if (direct !== undefined) {
     imports.add(direct.import)
     return direct.name
   }
-  const document = SchemaRepresentation.toCodeDocument(
-    SchemaRepresentation.toRepresentations([codegenAst(projected.ast)]),
-  )
+  const document = toCodeDocument(SchemaRepresentation.toRepresentations([codegenAst(projected)]))
   const source = new Map(document.references.nonRecursives.map((reference) => [reference.$ref, reference.code.Type]))
   const expand = (type: string, seen = new Set<string>()): string => {
     for (const [name, value] of source) {
@@ -538,8 +537,8 @@ function effectInputSchema(endpoint: Endpoint, field: InputField): Schema.Top | 
           ? endpoint.headers
           : endpoint.payloads[0]
   if (schema === undefined) return undefined
-  if (isOpaquePayload(endpoint) && field.source === "payload") return schema
-  const ast = Schema.toType(schema).ast
+  if (isOpaquePayload(endpoint) && field.source === "payload") return Schema.make<Schema.Top>(brandAst(schema))
+  const ast = SchemaAST.toType(brandAst(schema))
   if (!SchemaAST.isObjects(ast)) return undefined
   const property = ast.propertySignatures.find((property) => property.name === field.name)
   return property === undefined ? undefined : Schema.make<Schema.Top>(property.type)
@@ -550,10 +549,12 @@ function effectOutputSchema(endpoint: Endpoint): Schema.Top | undefined {
   if (HttpApiSchema.isNoContent(schema.ast)) return undefined
   if (isStreamSchema(schema)) {
     if (schema._tag === "StreamUint8Array") return Schema.Uint8Array
-    return schema.sseMode === "data" ? streamDataSchema(schema) : Schema.make<Schema.Top>(schema.events.ast)
+    const events = Schema.make<Schema.Top>(brandAst(Schema.make<Schema.Top>(schema.events.ast, schema.events)))
+    return schema.sseMode === "data" ? Schema.make<Schema.Top>(streamDataAst(Schema.toType(events).ast)) : events
   }
-  if (!endpoint.unwrapData) return schema
-  const ast = Schema.toType(schema).ast
+  const branded = Schema.make<Schema.Top>(brandAst(schema))
+  if (!endpoint.unwrapData) return branded
+  const ast = Schema.toType(branded).ast
   if (!SchemaAST.isObjects(ast)) return undefined
   const data = ast.propertySignatures.find((property) => property.name === "data")
   return data === undefined ? undefined : Schema.make<Schema.Top>(data.type)
@@ -588,7 +589,8 @@ function assertPromiseEndpoint(endpoint: Endpoint) {
   const payloadEncoding =
     payload === undefined
       ? undefined
-      : (resolveHttpApiEncoding(payload.ast)?._tag ?? (HttpMethod.hasBody(endpoint.endpoint.method) ? "Json" : "FormUrlEncoded"))
+      : (resolveHttpApiEncoding(payload.ast)?._tag ??
+        (HttpMethod.hasBody(endpoint.endpoint.method) ? "Json" : "FormUrlEncoded"))
   if (payloadEncoding !== undefined && payloadEncoding !== "Json" && payloadEncoding !== "Uint8Array") {
     throw new GenerationError({ reason: `Unsupported Promise payload encoding: ${name}` })
   }
@@ -1253,7 +1255,7 @@ function normalizePromiseClientContent(content: string, groups: ReadonlyArray<Gr
           'if (descriptor.body !== undefined && !headers.has("content-type"))\n      headers.set("content-type", descriptor.binaryBody ? "application/octet-stream" : "application/json")',
         ),
         "body: descriptor.body === undefined ? undefined : JSON.stringify(descriptor.body),",
-        "body:\n          descriptor.body === undefined\n            ? undefined\n            : descriptor.binaryBody\n              ? (descriptor.body as RequestInit[\"body\"])\n              : JSON.stringify(descriptor.body),",
+        'body:\n          descriptor.body === undefined\n            ? undefined\n            : descriptor.binaryBody\n              ? (descriptor.body as RequestInit["body"])\n              : JSON.stringify(descriptor.body),',
       )
     : binaryReady
   return usesWildcard
@@ -1927,9 +1929,9 @@ function renderSchemas(slots: ReadonlyArray<Slot>) {
       tagged.fields.map(([name, schema]) => ({ name: `Class${classIndex}${name}`, schema })),
     ),
   ]
-  const document = SchemaRepresentation.toCodeDocument(
+  const document = toCodeDocument(
     SchemaRepresentation.toRepresentations(
-      codegenAsts(expanded.map((slot) => slot.schema.ast)) as [SchemaAST.AST, ...Array<SchemaAST.AST>],
+      codegenAsts(expanded.map((slot) => brandAst(slot.schema))) as [SchemaAST.AST, ...Array<SchemaAST.AST>],
     ),
   )
   const artifacts = document.artifacts.flatMap((artifact) => {
@@ -1981,4 +1983,454 @@ function renderClient(groups: ReadonlyArray<Group>) {
     return [`...adaptGroup${groupTypeName(group)}(${raw})`]
   })
   return `// Generated by @opencode/httpapi-codegen. Do not edit.\nimport { Effect } from "effect"\nimport { HttpApi, HttpApiClient } from "effect/http-api"\n${imports}\n\nconst Api = ${api}\nconst adaptClient = (raw: HttpApiClient.ForApi<typeof Api>) => ({ ${fields.join(", ")} })\n\nexport const make = (options?: { readonly baseUrl?: URL | string }) =>\n  HttpApiClient.make(Api, options).pipe(Effect.map(adaptClient))\n`
+}
+
+const BRANDS_SYMBOL = Symbol("brands")
+const resolveBrands = SchemaAST.resolveAt<ReadonlyArray<string>>(BRANDS_SYMBOL as unknown as string)
+
+function getBrands(ast: SchemaAST.AST): ReadonlyArray<string> {
+  return resolveBrands(ast) ?? []
+}
+
+function addBrands(ast: SchemaAST.AST, brands: ReadonlyArray<string>): SchemaAST.AST {
+  if (brands.length === 0) return ast
+  const existing = getBrands(ast)
+  const missing = brands.filter((brand) => !existing.includes(brand))
+  if (missing.length === 0) return ast
+  return Schema.make<Schema.Top>(ast).annotate({
+    [BRANDS_SYMBOL]: [...existing, ...missing],
+  } as Schema.Annotations.Annotations).ast
+}
+
+function collectAnnotationBrands(annotations: Schema.Annotations.Annotations | undefined): ReadonlyArray<string> {
+  const value = (annotations as Record<symbol, unknown> | undefined)?.[BRANDS_SYMBOL]
+  return Array.isArray(value) ? value : []
+}
+
+function collectCheckBrands(check: SchemaRepresentation.Check): ReadonlyArray<string> {
+  const own = collectAnnotationBrands(check.annotations)
+  if (check._tag === "FilterGroup" && check.annotations?.toCode === undefined) {
+    return [...own, ...check.checks.flatMap(collectCheckBrands)]
+  }
+  return own
+}
+
+function toCodeDocument(document: SchemaRepresentation.MultiDocument): SchemaRepresentation.CodeDocument {
+  const rewrite = (
+    rep: SchemaRepresentation.Representation,
+    includeTypeBrands = true,
+  ): SchemaRepresentation.Representation => {
+    if (rep._tag === "Reference") return rep
+    const mapped = mapRepresentationChildren(rep, rewrite)
+    const nodeBrands = collectAnnotationBrands(mapped.annotations)
+    const checkBrands = mapped.checks.flatMap(collectCheckBrands)
+    const allBrands = [...nodeBrands, ...checkBrands]
+    if (allBrands.length === 0) return mapped
+    return {
+      _tag: "Declaration",
+      typeParameters: [mapped],
+      checks: [],
+      annotations: {
+        toCode: ({ typeParameters }: { readonly typeParameters: ReadonlyArray<SchemaRepresentation.Code> }) => ({
+          runtime: `${typeParameters[0].runtime}.pipe(${allBrands.map((brand) => `Schema.brand(${JSON.stringify(brand)})`).join(", ")})`,
+          Type: includeTypeBrands
+            ? `(${typeParameters[0].Type})${allBrands.map((brand) => ` & Brand.Brand<${JSON.stringify(brand)}>`).join("")}`
+            : typeParameters[0].Type,
+          ...(includeTypeBrands ? { importDeclarations: ['import type * as Brand from "effect/Brand"'] } : {}),
+        }),
+      },
+    }
+  }
+  const [first, ...rest] = document.representations.map((rep) => rewrite(rep, true))
+  return SchemaRepresentation.toCodeDocument({
+    representations: [first, ...rest],
+    references: Object.fromEntries(Object.entries(document.references).map(([key, rep]) => [key, rewrite(rep, true)])),
+  })
+}
+
+function mapRepresentationChildren(
+  rep: Exclude<SchemaRepresentation.Representation, SchemaRepresentation.Reference>,
+  rewrite: (
+    rep: SchemaRepresentation.Representation,
+    includeTypeBrands?: boolean,
+  ) => SchemaRepresentation.Representation,
+): Exclude<SchemaRepresentation.Representation, SchemaRepresentation.Reference> {
+  switch (rep._tag) {
+    case "Declaration":
+      return { ...rep, typeParameters: rep.typeParameters.map((tp) => rewrite(tp, true)) }
+    case "Suspend":
+      return { ...rep, thunk: rewrite(rep.thunk, true) }
+    case "TemplateLiteral":
+      return { ...rep, parts: rep.parts.map((part) => rewrite(part, false)) }
+    case "Arrays":
+      return {
+        ...rep,
+        elements: rep.elements.map((el) => ({ ...el, type: rewrite(el.type, true) })),
+        rest: rep.rest.map((r) => rewrite(r, true)),
+      }
+    case "Objects":
+      return {
+        ...rep,
+        propertySignatures: rep.propertySignatures.map((ps) => ({ ...ps, type: rewrite(ps.type, true) })),
+        indexSignatures: rep.indexSignatures.map((is) => ({
+          ...is,
+          parameter: rewrite(is.parameter, true),
+          type: rewrite(is.type, true),
+        })),
+      }
+    case "Union":
+      return { ...rep, types: rep.types.map((t) => rewrite(t, true)) }
+    default:
+      return rep
+  }
+}
+
+const brandAstCache = new WeakMap<object, SchemaAST.AST>()
+
+function brandAst(schema: Schema.Top): SchemaAST.AST {
+  const cached = brandAstCache.get(schema)
+  if (cached !== undefined) return cached
+  const record = schema as unknown as Record<string, unknown>
+  if (typeof record.identifier === "string" && Schema.isSchema(record.schema)) {
+    const inner = brandAst(record.schema)
+    const synced = syncBrandStructure(schema.ast, inner)
+    const branded = addBrands(synced, [...getBrands(inner), record.identifier])
+    brandAstCache.set(schema, branded)
+    return branded
+  }
+  const projected = projectBrandSchema(record, schema.ast)
+  brandAstCache.set(schema, projected)
+  return projected
+}
+
+function flattenUnionBrandMembers(members: ReadonlyArray<Schema.Top>): ReadonlyArray<SchemaAST.AST> {
+  return members.flatMap((member) => {
+    const ast = brandAst(member)
+    if (
+      SchemaAST.isUnion(ast) &&
+      ast.checks === undefined &&
+      ast.annotations === undefined &&
+      ast.encoding === undefined &&
+      ast.context === undefined
+    ) {
+      return ast.types
+    }
+    return [ast]
+  })
+}
+
+function projectBrandSchema(record: Record<string, unknown>, ast: SchemaAST.AST): SchemaAST.AST {
+  if (Schema.isSchema(record.to) && Schema.isSchema(record.from)) {
+    return syncBrandStructure(ast, brandAst(record.to))
+  }
+  if (Schema.isSchema(record.schema) && Array.isArray(record.records) && SchemaAST.isObjects(ast)) {
+    const base = brandAst(record.schema)
+    const records = record.records.filter(Schema.isSchema).map(brandAst)
+    if (SchemaAST.isObjects(base)) {
+      const nextIndex = records.filter(SchemaAST.isObjects).flatMap((item) => item.indexSignatures)
+      if (
+        base.propertySignatures.every((ps, i) => ps === ast.propertySignatures[i]) &&
+        nextIndex.every((is, i) => is === ast.indexSignatures[i])
+      ) {
+        return ast
+      }
+      return new SchemaAST.Objects(
+        base.propertySignatures,
+        nextIndex,
+        ast.annotations,
+        ast.checks,
+        ast.encoding,
+        ast.context,
+        ast.encodingChecks,
+      )
+    }
+  }
+  if (Schema.isSchema(record.schema) && Array.isArray(record.rest) && SchemaAST.isArrays(ast)) {
+    const base = brandAst(record.schema)
+    const rest = record.rest.filter(Schema.isSchema).map(brandAst)
+    if (SchemaAST.isArrays(base)) {
+      if (base.elements.every((el, i) => el === ast.elements[i]) && rest.every((r, i) => r === ast.rest[i])) {
+        return ast
+      }
+      return new SchemaAST.Arrays(
+        ast.isMutable,
+        base.elements,
+        rest,
+        ast.annotations,
+        ast.checks,
+        ast.encoding,
+        ast.context,
+        ast.encodingChecks,
+      )
+    }
+  }
+  if (Schema.isSchema(record.schema)) {
+    return syncBrandStructure(ast, brandAst(record.schema))
+  }
+  if (typeof record.fields === "object" && record.fields !== null) {
+    const fields = record.fields as Record<PropertyKey, unknown>
+    if (SchemaAST.isObjects(ast)) {
+      let changed = false
+      const props = ast.propertySignatures.map((ps) => {
+        const fieldSchema = fields[ps.name]
+        if (!Schema.isSchema(fieldSchema)) return ps
+        const nextType = syncBrandStructure(ps.type, brandAst(fieldSchema))
+        if (nextType === ps.type) return ps
+        changed = true
+        return new SchemaAST.PropertySignature(ps.name, nextType)
+      })
+      return changed
+        ? new SchemaAST.Objects(
+            props,
+            ast.indexSignatures,
+            ast.annotations,
+            ast.checks,
+            ast.encoding,
+            ast.context,
+            ast.encodingChecks,
+          )
+        : ast
+    }
+    if (
+      SchemaAST.isDeclaration(ast) &&
+      ast.typeParameters[0] !== undefined &&
+      SchemaAST.isObjects(ast.typeParameters[0])
+    ) {
+      const obj = ast.typeParameters[0]
+      let changed = false
+      const props = obj.propertySignatures.map((ps) => {
+        const fieldSchema = fields[ps.name]
+        if (!Schema.isSchema(fieldSchema)) return ps
+        const nextType = syncBrandStructure(ps.type, brandAst(fieldSchema))
+        if (nextType === ps.type) return ps
+        changed = true
+        return new SchemaAST.PropertySignature(ps.name, nextType)
+      })
+      if (!changed) return ast
+      const nextObj = new SchemaAST.Objects(
+        props,
+        obj.indexSignatures,
+        obj.annotations,
+        obj.checks,
+        obj.encoding,
+        obj.context,
+        obj.encodingChecks,
+      )
+      return new SchemaAST.Declaration(
+        [nextObj, ...ast.typeParameters.slice(1)],
+        ast.run,
+        ast.annotations,
+        ast.checks,
+        ast.encoding,
+        ast.context,
+        ast.encodingChecks,
+        ast.encodingRun,
+      )
+    }
+  }
+  if (Array.isArray(record.members) && SchemaAST.isUnion(ast)) {
+    const members = record.members.filter(Schema.isSchema)
+    const memberAsts = members.length === ast.types.length ? members.map(brandAst) : flattenUnionBrandMembers(members)
+    let changed = false
+    const nextTypes = ast.types.map((type, index) => {
+      if (!memberAsts[index]) return type
+      const next = syncBrandStructure(type, memberAsts[index])
+      if (next !== type) changed = true
+      return next
+    })
+    return changed
+      ? new SchemaAST.Union(
+          nextTypes,
+          ast.options,
+          ast.annotations,
+          ast.checks,
+          ast.encoding,
+          ast.context,
+          ast.encodingChecks,
+        )
+      : ast
+  }
+  if (
+    Schema.isSchema(record.key) &&
+    Schema.isSchema(record.value) &&
+    SchemaAST.isObjects(ast) &&
+    ast.indexSignatures.length === 1
+  ) {
+    const index = ast.indexSignatures[0]
+    const nextParam = syncBrandStructure(index.parameter, brandAst(record.key))
+    const nextType = syncBrandStructure(index.type, brandAst(record.value))
+    if (nextParam === index.parameter && nextType === index.type) return ast
+    return new SchemaAST.Objects(
+      ast.propertySignatures,
+      [new SchemaAST.IndexSignature(nextParam, nextType)],
+      ast.annotations,
+      ast.checks,
+      ast.encoding,
+      ast.context,
+      ast.encodingChecks,
+    )
+  }
+  if (Schema.isSchema(record.value) && SchemaAST.isArrays(ast)) {
+    const element = brandAst(record.value)
+    let changed = false
+    const nextElements = ast.elements.map((item) => {
+      const next = syncBrandStructure(item, element)
+      if (next !== item) changed = true
+      return next
+    })
+    const nextRest = ast.rest.map((item) => {
+      const next = syncBrandStructure(item, element)
+      if (next !== item) changed = true
+      return next
+    })
+    return changed
+      ? new SchemaAST.Arrays(
+          ast.isMutable,
+          nextElements,
+          nextRest,
+          ast.annotations,
+          ast.checks,
+          ast.encoding,
+          ast.context,
+          ast.encodingChecks,
+        )
+      : ast
+  }
+  if (Array.isArray(record.elements) && SchemaAST.isArrays(ast)) {
+    const elements = record.elements
+    let changed = false
+    const nextElements = ast.elements.map((item, index) => {
+      if (!Schema.isSchema(elements[index])) return item
+      const next = syncBrandStructure(item, brandAst(elements[index]))
+      if (next !== item) changed = true
+      return next
+    })
+    return changed
+      ? new SchemaAST.Arrays(
+          ast.isMutable,
+          nextElements,
+          ast.rest,
+          ast.annotations,
+          ast.checks,
+          ast.encoding,
+          ast.context,
+          ast.encodingChecks,
+        )
+      : ast
+  }
+  return ast
+}
+
+function syncBrandStructure(target: SchemaAST.AST, source: SchemaAST.AST): SchemaAST.AST {
+  if (target === source) return target
+  let out = target
+  const sourceType = SchemaAST.toType(source)
+  if (SchemaAST.isObjects(out) && SchemaAST.isObjects(sourceType)) {
+    let changed = false
+    const props = out.propertySignatures.map((ps, index) => {
+      const sps =
+        sourceType.propertySignatures.find((item) => item.name === ps.name) ?? sourceType.propertySignatures[index]
+      if (!sps) return ps
+      const nextType = syncBrandStructure(ps.type, sps.type)
+      if (nextType === ps.type) return ps
+      changed = true
+      return new SchemaAST.PropertySignature(ps.name, nextType)
+    })
+    const indexes = out.indexSignatures.map((is, index) => {
+      const sis = sourceType.indexSignatures[index]
+      if (!sis) return is
+      const nextParam = syncBrandStructure(is.parameter, sis.parameter)
+      const nextType = syncBrandStructure(is.type, sis.type)
+      if (nextParam === is.parameter && nextType === is.type) return is
+      changed = true
+      return new SchemaAST.IndexSignature(nextParam, nextType)
+    })
+    if (changed) {
+      out = new SchemaAST.Objects(
+        props,
+        indexes,
+        out.annotations,
+        out.checks,
+        out.encoding,
+        out.context,
+        out.encodingChecks,
+      )
+    }
+  } else if (SchemaAST.isDeclaration(out) && SchemaAST.isDeclaration(sourceType)) {
+    let changed = false
+    const nextParams = out.typeParameters.map((tp, index) => {
+      if (!sourceType.typeParameters[index]) return tp
+      const next = syncBrandStructure(tp, sourceType.typeParameters[index])
+      if (next !== tp) changed = true
+      return next
+    })
+    if (changed) {
+      out = new SchemaAST.Declaration(
+        nextParams,
+        out.run,
+        out.annotations,
+        out.checks,
+        out.encoding,
+        out.context,
+        out.encodingChecks,
+        out.encodingRun,
+      )
+    }
+  } else if (SchemaAST.isUnion(out) && SchemaAST.isUnion(sourceType)) {
+    const sourceTypes =
+      out.types.length === sourceType.types.length
+        ? sourceType.types
+        : sourceType.types.flatMap((item) =>
+            SchemaAST.isUnion(item) && item.checks === undefined && item.annotations === undefined
+              ? item.types
+              : [item],
+          )
+    let changed = false
+    const nextTypes = out.types.map((type, index) => {
+      if (!sourceTypes[index]) return type
+      const next = syncBrandStructure(type, sourceTypes[index])
+      if (next !== type) changed = true
+      return next
+    })
+    if (changed) {
+      out = new SchemaAST.Union(
+        nextTypes,
+        out.options,
+        out.annotations,
+        out.checks,
+        out.encoding,
+        out.context,
+        out.encodingChecks,
+      )
+    }
+  } else if (SchemaAST.isArrays(out) && SchemaAST.isArrays(sourceType)) {
+    let changed = false
+    const nextElements = out.elements.map((item, index) => {
+      if (!sourceType.elements[index]) return item
+      const next = syncBrandStructure(item, sourceType.elements[index])
+      if (next !== item) changed = true
+      return next
+    })
+    const nextRest = out.rest.map((item, index) => {
+      if (!sourceType.rest[index]) return item
+      const next = syncBrandStructure(item, sourceType.rest[index])
+      if (next !== item) changed = true
+      return next
+    })
+    if (changed) {
+      out = new SchemaAST.Arrays(
+        out.isMutable,
+        nextElements,
+        nextRest,
+        out.annotations,
+        out.checks,
+        out.encoding,
+        out.context,
+        out.encodingChecks,
+      )
+    }
+  }
+  const brands = getBrands(sourceType)
+  if (brands.length > 0) out = addBrands(out, brands)
+  return out
 }

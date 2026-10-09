@@ -471,6 +471,15 @@ export type V2EventServerConnected = {
   data: {}
 }
 
+export type SessionMessageModelSelected = {
+  id: string
+  metadata?: { [x: string]: JsonValue }
+  time: { created: number }
+  type: "model-switched"
+  model: ModelRef
+  previous?: ModelRef
+}
+
 export type ModelSettings = { compaction?: ProviderCompaction } & { [x: string]: any }
 
 export type ConfigModelSettings = { compaction?: ProviderCompaction } & { [x: string]: JsonValue | null }
@@ -495,23 +504,14 @@ export type PermissionRule = { action: string; resource: string; effect: Permiss
 
 export type PluginInfo = { id?: string; source: PluginSource; features: PluginFeatures; state: PluginState }
 
+export type SessionStatsModelUsage = { model: ModelRef; steps: number; tokens: TokenUsageInfo; cost: MoneyUSD }
+
 export type SessionRevert = { messageID: string; partID?: string; snapshot?: string; files?: Array<FileDiffInfo> }
 
 export type SessionStatsTools =
   | { mode: "none" }
   | { mode: "summary"; totals: SessionStatsToolTotals }
   | { mode: "detail"; totals: SessionStatsToolTotals; usage: Array<SessionStatsToolUsage> }
-
-export type SessionStatsModelUsage = { model: ModelRef; steps: number; tokens: TokenUsageInfo; cost: MoneyUSD }
-
-export type SessionMessageModelSelected = {
-  id: string
-  metadata?: { [x: string]: JsonValue }
-  time: { created: number }
-  type: "model-switched"
-  model: ModelRef
-  previous?: ModelRef
-}
 
 export type PromptFileAttachment = {
   data: PromptBase64
@@ -604,6 +604,16 @@ export type SessionModelSelected = {
   data: { sessionID: string; model: ModelRef; previous?: ModelRef }
 }
 
+export type SessionMoved = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.moved"
+  durable: { aggregateID: string; seq: number; version: 1 }
+  location?: LocationRef
+  data: { sessionID: string; location: LocationRef; projectID: string; subpath?: string }
+}
+
 export type SessionRenamed = {
   id: string
   created: number
@@ -612,6 +622,16 @@ export type SessionRenamed = {
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
   data: { sessionID: string; title: string }
+}
+
+export type SessionMetadataUpdated = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.metadata.updated"
+  durable: { aggregateID: string; seq: number; version: 1 }
+  location?: LocationRef
+  data: { sessionID: string; metadata: SessionMetadata }
 }
 
 export type SessionViewed = {
@@ -643,6 +663,8 @@ export type SessionInboxDelivered = {
   location?: LocationRef
   data: { sessionID: string; inboxID: string }
 }
+
+export type SessionInboxMovePayload1 = { location: LocationRef; projectID: string; subpath?: string }
 
 export type SessionInboxCancelled = {
   id: string
@@ -1233,28 +1255,6 @@ export type McpResourcesChanged = {
   type: "mcp.resources.changed"
   location?: LocationRef
   data: { server: string }
-}
-
-export type SessionMoved = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "session.moved"
-  durable: { aggregateID: string; seq: number; version: 1 }
-  location?: LocationRef
-  data: { sessionID: string; location: LocationRef; projectID: string; subpath?: string }
-}
-
-export type SessionInboxMovePayload1 = { location: LocationRef; projectID: string; subpath?: string }
-
-export type SessionMetadataUpdated = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "session.metadata.updated"
-  durable: { aggregateID: string; seq: number; version: 1 }
-  location?: LocationRef
-  data: { sessionID: string; metadata: SessionMetadata }
 }
 
 export type SessionShellStarted = {
@@ -1986,16 +1986,6 @@ export type AgentInfo = {
   permissions: PermissionRuleset
 }
 
-export type SessionPermissions = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "session.permissions"
-  durable: { aggregateID: string; seq: number; version: 1 }
-  location?: LocationRef
-  data: { sessionID: string; permissions: PermissionRuleset }
-}
-
 export type SessionInfo = {
   id: string
   parentID?: string
@@ -2036,6 +2026,16 @@ export type SessionCreated = {
     permissions?: PermissionRuleset
     version: string
   }
+}
+
+export type SessionPermissions = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.permissions"
+  durable: { aggregateID: string; seq: number; version: 1 }
+  location?: LocationRef
+  data: { sessionID: string; permissions: PermissionRuleset }
 }
 
 export type ConfigEntry =

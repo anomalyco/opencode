@@ -4,14 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { Effect, FileSystem, Schema, SchemaAST, SchemaGetter } from "effect"
-import {
-  HttpApi,
-  HttpApiEndpoint,
-  HttpApiGroup,
-  HttpApiMiddleware,
-  HttpApiSchema,
-  OpenApi,
-} from "effect/http-api"
+import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema, OpenApi } from "effect/http-api"
 import { format } from "prettier"
 import {
   compile as compileContract,
@@ -187,6 +180,47 @@ describe("HttpApiCodegen.generate", () => {
     const source = output.files[0]?.content
     expect(source).toContain('readonly "original": Message.State')
     expect(source).toContain('readonly "different": ({ readonly [x: string]: number })')
+  })
+
+  test("preserves referenced and inline branded Effect types across optional and nested shapes", () => {
+    const SessionID = Schema.String.check(Schema.isStartingWith("ses_")).pipe(Schema.brand("Session.ID"))
+    const AgentID = Schema.String.pipe(Schema.brand("Agent.ID"))
+    const Cursor = Schema.String.pipe(Schema.brand("SessionsCursor")).annotate({ description: "Cursor" })
+    const Cost = Schema.Finite.pipe(Schema.brand("Money.USD"), Schema.annotate({ identifier: "Money.USD" }))
+    const output = emitEffectShape(
+      compileContract(
+        api(
+          HttpApiEndpoint.get("list", "/session/:sessionID", {
+            params: { sessionID: SessionID },
+            query: Schema.Struct({
+              agent: AgentID.pipe(Schema.optional),
+              cursor: Cursor.pipe(Schema.optional),
+            }),
+            success: Schema.Struct({
+              data: Schema.Struct({
+                active: Schema.Record(SessionID, Schema.Struct({ cost: Cost })),
+                agents: Schema.Array(AgentID),
+              }),
+            }),
+          }),
+        ),
+      ),
+      {
+        typeReferences: [
+          { schema: SessionID, name: "Session.ID", import: 'import type { Session } from "@example/schema/session"' },
+          { schema: AgentID, name: "Agent.ID", import: 'import type { Agent } from "@example/schema/agent"' },
+        ],
+      },
+    )
+    const source = output.files[0]?.content
+    expect(source).toContain('import type { Session } from "@example/schema/session"')
+    expect(source).toContain('import type { Agent } from "@example/schema/agent"')
+    expect(source).toContain('import type { Brand } from "effect"')
+    expect(source).toContain('readonly "sessionID": Session.ID')
+    expect(source).toContain('readonly "agent"?: Agent.ID | undefined')
+    expect(source).toContain('readonly "cursor"?: (string) & Brand.Brand<"SessionsCursor"> | undefined')
+    expect(source).toContain('readonly [x: Session.ID]: { readonly "cost": ((number) & Brand.Brand<"Money.USD">) }')
+    expect(source).toContain('readonly "agents": ReadonlyArray<Agent.ID>')
   })
 
   test("allows composed Effect outputs to use an authoritative named type", () => {
@@ -1477,9 +1511,7 @@ describe("HttpApiCodegen.generate", () => {
     class Attempt extends Schema.Class<Attempt>("Attempt")({
       count: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
     }) {}
-    const output = emitPromise(
-      compileContract(api(HttpApiEndpoint.get("get", "/session", { success: Attempt }))),
-    )
+    const output = emitPromise(compileContract(api(HttpApiEndpoint.get("get", "/session", { success: Attempt }))))
     const types = output.files.find((file) => file.path === "types.ts")?.content
 
     expect(types).toContain('export type Attempt = { readonly "count": number }')
