@@ -11,6 +11,7 @@ export type {
   CommandApi,
   ConfigApi,
   EventApi,
+  FormatterApi,
   IntegrationApi,
   ModelApi,
   PluginApi,
@@ -30,6 +31,7 @@ export { Event } from "@opencode/schema/event"
 export { EventLog } from "@opencode/schema/event-log"
 export { FileSystem } from "@opencode/schema/filesystem"
 export { Form } from "@opencode/schema/form"
+export { Formatter } from "@opencode/schema/formatter"
 export { Integration } from "@opencode/schema/integration"
 export { Location } from "@opencode/schema/location"
 export { Model } from "@opencode/schema/model"

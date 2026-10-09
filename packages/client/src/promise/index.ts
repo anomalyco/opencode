@@ -7,6 +7,7 @@ export type {
   CommandApi,
   ConfigApi,
   EventApi,
+  FormatterApi,
   IntegrationApi,
   ModelApi,
   PluginApi,

@@ -9,6 +9,7 @@ import { FileSystemHandler } from "./handlers/fs"
 import { FormHandler } from "./handlers/form"
 import { CommandHandler } from "./handlers/command"
 import { SkillHandler } from "./handlers/skill"
+import { FormatterHandler } from "./handlers/formatter"
 import { RpcHandler } from "./handlers/rpc"
 import { EventHandler } from "./handlers/event"
 import { AgentHandler } from "./handlers/agent"
@@ -53,6 +54,7 @@ export const handlers = Layer.mergeAll(
   FileSystemHandler,
   CommandHandler,
   SkillHandler,
+  FormatterHandler,
   RpcHandler,
   EventHandler.pipe(Layer.provide(EventFeed.layer)),
   PtyHandler,

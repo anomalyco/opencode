@@ -9363,6 +9363,102 @@
         "summary": "List skills"
       }
     },
+    "/api/formatter": {
+      "get": {
+        "tags": ["formatter"],
+        "operationId": "formatter.status",
+        "parameters": [
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "location": {
+                      "$ref": "#/components/schemas/Location.PublicRef"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Formatter.Status"
+                      }
+                    }
+                  },
+                  "required": ["location", "data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "LocationNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Retrieve configured formatters and whether each is enabled for the location.",
+        "summary": "Get formatter status"
+      }
+    },
     "/api/rpc/{rpcID}/{method}": {
       "post": {
         "tags": ["rpc"],
@@ -15518,6 +15614,26 @@
         "required": ["_tag", "id", "message"],
         "additionalProperties": false
       },
+      "Formatter.Status": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "extensions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Whether the formatter resolved a runnable command for the current location."
+          }
+        },
+        "required": ["name", "extensions", "enabled"],
+        "additionalProperties": false
+      },
       "GenerateTextResponse": {
         "type": "object",
         "properties": {
@@ -20444,6 +20560,10 @@
     {
       "name": "skill",
       "description": "Experimental skill routes."
+    },
+    {
+      "name": "formatter",
+      "description": "Formatter routes."
     },
     {
       "name": "rpc",

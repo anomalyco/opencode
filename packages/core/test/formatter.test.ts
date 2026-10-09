@@ -198,6 +198,50 @@ describe("Formatter", () => {
     ),
   )
 
+  it.live("status() is empty when formatters are disabled", () =>
+    withFormatter(false, (formatter) =>
+      Effect.gen(function* () {
+        expect(yield* formatter.status()).toEqual([])
+      }),
+    ),
+  )
+
+  it.live("status() lists built-in formatters when formatter is true", () =>
+    withFormatter(true, (formatter) =>
+      Effect.gen(function* () {
+        const statuses = yield* formatter.status()
+        expect(statuses.find((item) => item.name === "gofmt")?.extensions).toEqual([".go"])
+        expect(statuses.find((item) => item.name === "prettier")?.extensions).toContain(".ts")
+      }),
+    ),
+  )
+
+  it.live("status() reports configured formatters and omits disabled ones", () =>
+    withFormatter(
+      {
+        custom: { command: [process.execPath, "-e", "process.exit(0)", "$FILE"], extensions: [".custom"] },
+        missing: { extensions: [".missing"] },
+        gofmt: { disabled: true },
+      },
+      (formatter) =>
+        Effect.gen(function* () {
+          const statuses = yield* formatter.status()
+          expect(statuses.find((item) => item.name === "custom")).toEqual({
+            name: "custom",
+            extensions: [".custom"],
+            enabled: true,
+          })
+          expect(statuses.find((item) => item.name === "missing")).toEqual({
+            name: "missing",
+            extensions: [".missing"],
+            enabled: false,
+          })
+          expect(statuses.find((item) => item.name === "gofmt")).toBeUndefined()
+          expect(statuses.find((item) => item.name === "mix")).toBeDefined()
+        }),
+    ),
+  )
+
   it.live("does not run formatters marked as disabled in config", () =>
     withFormatter(
       {

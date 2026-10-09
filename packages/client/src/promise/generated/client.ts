@@ -189,6 +189,8 @@ import type {
   CommandListOutput,
   SkillListInput,
   SkillListOutput,
+  FormatterStatusInput,
+  FormatterStatusOutput,
   RpcCallInput,
   RpcCallOutput,
   EventSubscribeOutput,
@@ -1678,6 +1680,20 @@ export function make(options: ClientOptions) {
           {
             method: "GET",
             path: `/api/skill`,
+            query: { location: input?.["location"] },
+            successStatus: 200,
+            declaredStatuses: [400, 401, 404],
+            empty: false,
+          },
+          requestOptions,
+        ),
+    },
+    formatter: {
+      status: (input?: FormatterStatusInput, requestOptions?: RequestOptions) =>
+        request<FormatterStatusOutput>(
+          {
+            method: "GET",
+            path: `/api/formatter`,
             query: { location: input?.["location"] },
             successStatus: 200,
             declaredStatuses: [400, 401, 404],

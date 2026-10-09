@@ -30,6 +30,7 @@ import type { Credential } from "@opencode/schema/credential"
 import type { PermissionSaved } from "@opencode/schema/permission-saved"
 import type { FileSystem } from "@opencode/schema/filesystem"
 import type { Command } from "@opencode/schema/command"
+import type { Formatter } from "@opencode/schema/formatter"
 import type { OpenCodeEvent } from "@opencode/protocol/groups/event"
 import type { Pty } from "@opencode/schema/pty"
 import type { PtyTicket } from "@opencode/schema/pty-ticket"
@@ -1932,6 +1933,19 @@ export interface SkillApi<E = never> {
   readonly list: SkillListOperation<E>
 }
 
+export type FormatterStatusInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
+export type FormatterStatusOutput = {
+  readonly location: Location.PublicRef
+  readonly data: ReadonlyArray<Formatter.Status>
+}
+export type FormatterStatusOperation<E = never> = (
+  input?: FormatterStatusInput,
+) => Effect.Effect<FormatterStatusOutput, E>
+
+export interface FormatterApi<E = never> {
+  readonly status: FormatterStatusOperation<E>
+}
+
 export type RpcCallInput = {
   readonly rpcID: string
   readonly method: string
@@ -2423,6 +2437,7 @@ export interface AppApi<E = never> {
   readonly file: FileApi<E>
   readonly command: CommandApi<E>
   readonly skill: SkillApi<E>
+  readonly formatter: FormatterApi<E>
   readonly rpc: RpcApi<E>
   readonly event: EventApi<E>
   readonly pty: PtyApi<E>

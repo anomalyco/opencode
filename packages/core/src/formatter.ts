@@ -5,6 +5,7 @@ import { ChildProcess } from "effect/process"
 import path from "path"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { AppProcess } from "@opencode/util/process"
+import { Formatter } from "@opencode/schema/formatter"
 import { Location } from "./location.js"
 import type { Info } from "./formatter/builtins.js"
 import { State } from "./state.js"
@@ -18,7 +19,11 @@ export type Editor = {
   remove: (name: string) => void
 }
 
+export const Status = Formatter.Status
+export type Status = Formatter.Status
+
 export interface Interface extends State.Transformable<Editor> {
+  readonly status: () => Effect.Effect<Status[]>
   readonly file: (filepath: string) => Effect.Effect<boolean>
 }
 
@@ -51,6 +56,18 @@ const layer = Layer.effect(
       const result = yield* formatter.enabled
       if (result !== false) commands.set(formatter, result)
       return result
+    })
+
+    const status = Effect.fn("Formatter.status")(function* () {
+      return yield* Effect.forEach(state.get().formatters, (formatter) =>
+        command(formatter).pipe(
+          Effect.map((enabled) => ({
+            name: formatter.name,
+            extensions: [...formatter.extensions],
+            enabled: enabled !== false,
+          })),
+        ),
+      )
     })
 
     const file = Effect.fn("Formatter.file")(function* (filepath: string) {
@@ -93,7 +110,7 @@ const layer = Layer.effect(
       return false
     })
 
-    return Service.of({ transform: state.transform, reload: state.reload, file })
+    return Service.of({ transform: state.transform, reload: state.reload, status, file })
   }),
 )
 

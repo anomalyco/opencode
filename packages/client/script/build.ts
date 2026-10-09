@@ -10,6 +10,7 @@ import { EventLog } from "@opencode/schema/event-log"
 import { FileDiff } from "@opencode/schema/file-diff"
 import { FileSystem } from "@opencode/schema/filesystem"
 import { Form } from "@opencode/schema/form"
+import { Formatter } from "@opencode/schema/formatter"
 import { InstructionEntry } from "@opencode/schema/instruction-entry"
 import { Integration } from "@opencode/schema/integration"
 import { Location } from "@opencode/schema/location"
@@ -50,6 +51,7 @@ const effectTypeReferences = [
   ...namespaceTypes("FileDiff", "@opencode/schema/file-diff", FileDiff),
   ...namespaceTypes("FileSystem", "@opencode/schema/filesystem", FileSystem),
   ...namespaceTypes("Form", "@opencode/schema/form", Form),
+  ...namespaceTypes("Formatter", "@opencode/schema/formatter", Formatter),
   ...namespaceTypes("InstructionEntry", "@opencode/schema/instruction-entry", InstructionEntry),
   ...namespaceTypes("Integration", "@opencode/schema/integration", Integration),
   typeReference("Location.PublicRef", "@opencode/schema/location", Location.PublicRef),
