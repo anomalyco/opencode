@@ -60,7 +60,7 @@ export const model: ProviderPackage.Definition<Settings, CohereChat.ProviderOpti
     apiKey,
     baseURL,
     headers,
-    http: body === undefined ? undefined : { body: { ...body } },
+    http: body === undefined ? undefined : { body },
     providerOptions,
   }).model(modelID)
 export * as Cohere from "./cohere.js"

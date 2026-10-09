@@ -305,6 +305,11 @@
   text-decoration: underline;
 }
 
+.settings-notices-scroll {
+  min-height: 0;
+  flex: 1;
+}
+
 .settings-notices {
   display: flex;
   flex-direction: column;

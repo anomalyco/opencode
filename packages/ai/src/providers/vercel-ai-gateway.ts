@@ -374,7 +374,7 @@ function fromSettings({ apiKey, baseURL, headers, body, ...providerOptions }: Se
     apiKey,
     baseURL,
     headers,
-    http: body === undefined ? undefined : { body: { ...body } },
+    http: body === undefined ? undefined : { body },
     providerOptions,
   })
 }

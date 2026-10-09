@@ -1930,7 +1930,7 @@ ToolRegistry.register({
                 when={running()}
                 fallback={
                   <span data-component="task-tool-icon">
-                    <Icon name="subagent" size="small" />
+                    <Icon name="subagent" size="normal" />
                   </span>
                 }
               >
@@ -1976,7 +1976,7 @@ ToolRegistry.register({
           data-component="task-tool-delegating"
           class="flex h-9 w-fit max-w-full items-center gap-2 rounded-[8px] bg-v2-background-bg-layer-02 p-2.5 text-[13px] font-[530] leading-text-compact tracking-[-0.04px]"
         >
-          <Icon name="subagent" size="small" class="shrink-0 text-v2-icon-icon-faint" />
+          <Icon name="subagent" size="normal" class="shrink-0 text-v2-icon-icon-faint" />
           <TextShimmer text={i18n.t("ui.tool.agent.delegating")} class="min-w-0 truncate" />
         </div>
       </Show>

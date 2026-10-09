@@ -16,7 +16,8 @@ const ListQuery = Schema.Struct({
 const WriteQuery = Schema.Struct({
   ...LocationQuery.fields,
   path: Schema.String.annotate({
-    description: "An absolute path or a path relative to the requested location. Missing parent directories are created.",
+    description:
+      "An absolute path or a path relative to the requested location. Missing parent directories are created.",
   }),
 })
 
@@ -48,6 +49,7 @@ export const FileSystemGroup = HttpApiGroup.make("server.fs")
     HttpApiEndpoint.get("fs.list", "/api/fs/list", {
       query: ListQuery,
       success: Location.response(Schema.Array(FileSystem.Entry)),
+      error: FileNotFoundError,
     })
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(

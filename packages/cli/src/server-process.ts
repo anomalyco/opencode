@@ -175,12 +175,13 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
         }),
       )
       if (server === undefined) return
-      if (serviceOptions !== undefined && config.remote === true && server.address._tag === "TcpAddress") {
+      if (serviceOptions !== undefined && config.remote !== undefined && server.address._tag === "TcpAddress") {
         const bound = server.address.hostname
         // A wildcard bind also listens on loopback, which is all the tunnel needs to reach.
         const host = bound === "0.0.0.0" || bound === "::" ? "127.0.0.1" : bound.includes(":") ? `[${bound}]` : bound
         yield* Effect.forkScoped(
           RemoteTunnel.run({
+            route: config.remote.route,
             target: `${host}:${server.address.port}`,
             onURL: (url) => {
               remote.urls = url === undefined ? [] : [url]

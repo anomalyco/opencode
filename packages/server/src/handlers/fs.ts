@@ -28,7 +28,13 @@ export const FileSystemHandler = HttpApiBuilder.group(Api, "server.fs", (handler
         response(
           Effect.gen(function* () {
             const fs = yield* FileSystem.Service
-            return yield* fs.list(ctx.query)
+            return yield* fs
+              .list(ctx.query)
+              .pipe(
+                Effect.mapError(
+                  (error) => new FileNotFoundError({ path: error.path, message: `Directory not found: ${error.path}` }),
+                ),
+              )
           }),
         ),
       )

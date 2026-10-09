@@ -159,8 +159,8 @@ const config = ({
   const common = {
     apiKey,
     apiVersion,
-    headers: headers === undefined ? undefined : { ...headers },
-    http: body === undefined ? undefined : { body: { ...body } },
+    headers,
+    http: body === undefined ? undefined : { body },
     providerOptions,
     queryParams: queryParams === undefined ? undefined : { ...queryParams },
     useDeploymentBasedUrls,
