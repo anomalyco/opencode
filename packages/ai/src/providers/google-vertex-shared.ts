@@ -21,12 +21,12 @@ export const project = (value?: string) =>
   process.env.GCP_PROJECT ??
   process.env.GCLOUD_PROJECT
 
-export const location = (value: string | undefined, fallback: string) =>
+export const location = (value: string | undefined) =>
   value ??
   process.env.GOOGLE_VERTEX_LOCATION ??
   process.env.GOOGLE_CLOUD_LOCATION ??
   process.env.VERTEX_LOCATION ??
-  fallback
+  "global"
 
 export const host = (location: string) => {
   if (location === "global") return "aiplatform.googleapis.com"
