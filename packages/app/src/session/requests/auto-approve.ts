@@ -3,6 +3,7 @@ import type { PermissionRequest } from "@opencode/client/promise"
 import type { Data } from "@opencode/client/solid"
 import type { ServerSDK } from "@/runtime/server/client"
 import { useSettings } from "@/settings/model"
+import { permissionLocations } from "./passive"
 
 const respondedLimit = 1000
 
@@ -15,7 +16,17 @@ const retryDelayMs = 1000
 // settings store, so it applies to every session, tab, and server at once.
 export function createPermissionAutoApprover(input: { sdk: ServerSDK; data: Data }) {
   const enabled = useSettings().permissions.autoApprove
-  const state = { disposed: false, generation: 0, responded: new Set<string>() }
+  const state = {
+    disposed: false,
+    generation: 0,
+    responded: new Set<string>(),
+    inflight: new Map<string, { generation: number }>(),
+  }
+  const current = (generation: number) =>
+    !state.disposed &&
+    generation === state.generation &&
+    enabled() &&
+    input.sdk.connection.status() === "connected"
 
   const unsubscribe = input.sdk.event.on("permission.asked", (event) => {
     if (enabled()) approve(event.data)
@@ -30,8 +41,8 @@ export function createPermissionAutoApprover(input: { sdk: ServerSDK; data: Data
   // disconnected, and requests may already be pending before the setting turns
   // on, so sweep on every connect while the setting is on.
   createEffect(() => {
-    if (!enabled() || input.sdk.connection.status() !== "connected") return
     const generation = ++state.generation
+    if (!enabled() || input.sdk.connection.status() !== "connected") return
     void sweepWithRetry(generation, 0)
   })
 
@@ -51,24 +62,31 @@ export function createPermissionAutoApprover(input: { sdk: ServerSDK; data: Data
   // to recover them, so retry it a bounded number of times. A newer sweep
   // supersedes scheduled retries.
   async function sweepWithRetry(generation: number, attempt: number) {
-    const complete = await sweep()
+    const complete = await sweep(generation)
 
     if (complete || attempt >= retryLimit) return
-    setTimeout(() => {
-      if (state.disposed || !enabled() || generation !== state.generation) return
-      void sweepWithRetry(generation, attempt + 1)
-    }, retryDelayMs * (attempt + 1))
+    setTimeout(
+      () => {
+        if (!current(generation)) return
+        void sweepWithRetry(generation, attempt + 1)
+      },
+      retryDelayMs * (attempt + 1),
+    )
   }
 
-  async function sweep() {
-    const inventory = await sweepLocations()
+  async function sweep(generation: number) {
+    const inventory = await permissionLocations({
+      ...input,
+      current: () => current(generation),
+    })
+    if (!current(generation)) return true
 
     const listed = await Promise.all(
       inventory.locations.map((location) =>
         input.sdk.api.permission.request
-          .list({ location: { directory: location.directory } })
+          .list({ location })
           .then((pending) => {
-            if (!state.disposed) pending.data.forEach((request) => approve(request))
+            if (current(generation)) pending.data.forEach((request) => approve(request))
 
             return true
           })
@@ -79,64 +97,33 @@ export function createPermissionAutoApprover(input: { sdk: ServerSDK; data: Data
     return inventory.complete && listed.every(Boolean)
   }
 
-  // Active sessions are the primary inventory: session.active is server-wide,
-  // so it covers sessions no tab has loaded, and a request blocking a tool
-  // call always belongs to one (Permission.assert clears its entry when the
-  // awaiting fiber dies). Locally known sessions are swept too because the
-  // external session.permission.create API can park a request on an idle
-  // session. A detached request on a session this client never loaded is the
-  // one case that stays uncovered.
-  async function sweepLocations() {
-    const active = await input.sdk.api.session.active().catch(() => undefined)
-    const ids = Object.keys(active ?? {})
-
-    // Resync every active session rather than trusting cached info: another
-    // client may have moved one while this client was disconnected, and the
-    // cached location would list permissions from the old location. A failed
-    // resync falls back to the cached location and marks the sweep incomplete.
-    const synced = await Promise.all(
-      ids.map((id) => {
-        input.data.session.invalidate(id)
-
-        return input.data.session.sync(id).then(
-          () => true,
-          () => false,
-        )
-      }),
+  function approve(permission: PermissionRequest, attempt = 0, generation = state.generation) {
+    // A failed reply must not replay a request from an old connection. The
+    // fresh sweep revalidates pending requests after a reconnect.
+    if (
+      !current(generation) ||
+      state.responded.has(permission.id) ||
+      state.inflight.get(permission.id)?.generation === generation
     )
-
-    const locations = [
-      ...ids.flatMap((id) => {
-        const location = input.data.session.get(id)?.location
-
-        return location ? [location] : []
-      }),
-      ...input.data.session.list().map((session) => session.location),
-    ]
-
-    return {
-      locations: [
-        ...new Map(locations.map((item) => [item.directory, item])).values(),
-      ],
-      complete: active !== undefined && synced.every(Boolean),
-    }
-  }
-
-  function approve(permission: PermissionRequest, attempt = 0) {
-    // enabled() guards the retry timer path: the user may disable the setting
-    // between a failed reply and its scheduled retry.
-    if (state.disposed || !enabled() || state.responded.has(permission.id)) return
-    remember(permission.id)
+      return
+    const attemptState = { generation }
+    state.inflight.set(permission.id, attemptState)
     input.sdk.api.permission
       .reply({ sessionID: permission.sessionID, requestID: permission.id, decision: "once" })
+      .then(() => {
+        if (state.inflight.get(permission.id) !== attemptState) return
+        state.inflight.delete(permission.id)
+        remember(permission.id)
+      })
       .catch(() => {
         // A reply failure leaves the request pending but invisible (the UI
         // hides prompts while auto-approve is on), so retry a bounded number
         // of times. Later sweeps retry it after that.
-        state.responded.delete(permission.id)
+        if (state.inflight.get(permission.id) !== attemptState) return
+        state.inflight.delete(permission.id)
 
-        if (state.disposed || attempt >= retryLimit) return
-        setTimeout(() => approve(permission, attempt + 1), retryDelayMs * (attempt + 1))
+        if (!current(generation) || attempt >= retryLimit) return
+        setTimeout(() => approve(permission, attempt + 1, generation), retryDelayMs * (attempt + 1))
       })
   }
 

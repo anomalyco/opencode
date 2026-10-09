@@ -18,6 +18,7 @@ import { base64Encode } from "@opencode/util/encode"
 import { showToast } from "@/shell/notifications/toast"
 import { adjacentTabKey, mergeVisibleTabOrder } from "./tab-order"
 import type { SessionInfo } from "@opencode/client/promise"
+import { syncInactiveSession } from "@/session/requests/passive"
 
 function SessionTabSlot(props: {
   tab: SessionTab
@@ -142,20 +143,17 @@ function SessionTabEntry(props: {
 
     if (!ctx || !value || props.active || ctx.sdk.connection.status() !== "connected") return
 
-    const timer = window.setTimeout(
-      () =>
-        void Promise.allSettled([
-          ctx.data.session.sync(value.id, { children: true }),
-          // The selected timeline loads the transcript; inactive tabs need attention, metadata, and the inbox,
-          // whose waiting work keeps the tab busy.
-          ctx.data.session.permission.sync(value.id),
-          ctx.data.session.form.sync(value.id),
-          ctx.data.session.pending.sync(value.id),
-        ]),
-      300 + props.index * 50,
-    )
-
-    onCleanup(() => window.clearTimeout(timer))
+    let disposed = false
+    const current = () => !disposed && ctx.sdk.connection.status() === "connected"
+    const sync = () => {
+      if (!current()) return
+      void syncInactiveSession({ sdk: ctx.sdk, data: ctx.data, id: value.id, current }).catch(() => undefined)
+    }
+    const timer = window.setTimeout(sync, 300 + props.index * 50)
+    onCleanup(() => {
+      disposed = true
+      window.clearTimeout(timer)
+    })
   })
 
   createEffect(() => {

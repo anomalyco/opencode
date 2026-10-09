@@ -1,7 +1,7 @@
 import { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { ServiceUnavailableError } from "@opencode/protocol/errors"
-import { Cause, Effect } from "effect"
+import { Cause, Effect, RcMap } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { Api } from "../api"
 
@@ -9,6 +9,7 @@ export const LocationHandler = HttpApiBuilder.group(Api, "server.location", (han
   Effect.gen(function* () {
     const locations = yield* LocationServiceMap.Service
     return handlers
+      .handle("location.list", () => RcMap.keys(locations.rcMap).pipe(Effect.map((refs) => Array.from(refs))))
       .handle(
         "location.get",
         Effect.fn(function* () {

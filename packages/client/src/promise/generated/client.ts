@@ -3,6 +3,7 @@ import type {
   ServerPairOutput,
   ServerConnectInput,
   ServerConnectOutput,
+  LocationListOutput,
   LocationGetInput,
   LocationGetOutput,
   LocationReloadOutput,
@@ -444,6 +445,17 @@ export function make(options: ClientOptions) {
         ),
     },
     location: {
+      list: (requestOptions?: RequestOptions) =>
+        request<LocationListOutput>(
+          {
+            method: "GET",
+            path: `/api/location/loaded`,
+            successStatus: 200,
+            declaredStatuses: [400, 401],
+            empty: false,
+          },
+          requestOptions,
+        ),
       get: (input?: LocationGetInput, requestOptions?: RequestOptions) =>
         request<LocationGetOutput>(
           {

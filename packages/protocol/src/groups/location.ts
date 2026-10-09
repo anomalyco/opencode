@@ -33,6 +33,17 @@ export const makeLocationGroup = <LocationId extends HttpApiMiddleware.AnyId, Lo
 ) =>
   HttpApiGroup.make("server.location")
     .add(
+      HttpApiEndpoint.get("location.list", "/api/location/loaded", {
+        success: Schema.Array(Location.Ref),
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "location.list",
+          summary: "List loaded locations",
+          description: "List exact loaded location identities without acquiring or starting a location.",
+        }),
+      ),
+    )
+    .add(
       HttpApiEndpoint.get("location.get", "/api/location", {
         query: LocationQuery,
         success: Location.PublicInfo,

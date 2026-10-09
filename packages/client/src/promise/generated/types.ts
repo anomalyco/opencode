@@ -12,6 +12,8 @@ export type PairingCode = { code: string; expires_in: number }
 
 export type PairingSession = { token: string }
 
+export type LocationRef = { directory: string; workspaceID?: string }
+
 export type LocationPublicInfo = { directory: string; project: { id: string; directory: string; canonical: string } }
 
 export type LocationPublicRef = { directory: string }
@@ -172,8 +174,6 @@ export type SessionInboxCompactionPayload = {}
 export type InstructionEntryKey = string
 
 export type SessionGenerateResponse = { data: { text: string } }
-
-export type LocationRef = { directory: string; workspaceID?: string }
 
 export type SessionInboxSyntheticPayload1 = { text: string; description?: string; metadata?: { [x: string]: any } }
 
@@ -441,6 +441,8 @@ export type ConfigModelCapabilities = { tools?: boolean; input?: Array<string>; 
 
 export type ConfigShellOption = { path: string; name: string; acceptable: boolean }
 
+export type SessionInboxMovePayload1 = { location: LocationRef; projectID: string; subpath?: string }
+
 export type SessionMessageLocationSwitched = {
   id: string
   metadata?: { [x: string]: JsonValue }
@@ -602,6 +604,16 @@ export type SessionModelSelected = {
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
   data: { sessionID: string; model: ModelRef; previous?: ModelRef }
+}
+
+export type SessionMoved = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.moved"
+  durable: { aggregateID: string; seq: number; version: 1 }
+  location?: LocationRef
+  data: { sessionID: string; location: LocationRef; projectID: string; subpath?: string }
 }
 
 export type SessionRenamed = {
@@ -1234,18 +1246,6 @@ export type McpResourcesChanged = {
   location?: LocationRef
   data: { server: string }
 }
-
-export type SessionMoved = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "session.moved"
-  durable: { aggregateID: string; seq: number; version: 1 }
-  location?: LocationRef
-  data: { sessionID: string; location: LocationRef; projectID: string; subpath?: string }
-}
-
-export type SessionInboxMovePayload1 = { location: LocationRef; projectID: string; subpath?: string }
 
 export type SessionMetadataUpdated = {
   id: string
@@ -2783,6 +2783,8 @@ export type ServerPairOutput = PairingCode
 export type ServerConnectInput = { readonly code: { readonly code: string }["code"] }
 
 export type ServerConnectOutput = PairingSession
+
+export type LocationListOutput = Array<LocationRef>
 
 export type LocationGetInput = {
   readonly location?: { readonly location?: { readonly directory?: string | undefined } | undefined }["location"]
