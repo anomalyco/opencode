@@ -9,6 +9,7 @@ import { SessionRevert } from "./revert"
 import { Session } from "./session"
 import { Agent } from "../agent/agent"
 import { Provider } from "@/provider/provider"
+import { Todo } from "./todo"
 
 import { type Tool as AITool, tool, jsonSchema } from "ai"
 import type { JSONSchema7 } from "@ai-sdk/provider"
@@ -141,6 +142,7 @@ const layer = Layer.effect(
     const flags = yield* RuntimeFlags.Service
     const database = yield* Database.Service
     const { db } = database
+    const todo = yield* Todo.Service
     const ops = Effect.fn("SessionPrompt.ops")(function* () {
       return {
         cancel: (sessionID: SessionID) => cancel(sessionID),
@@ -1269,6 +1271,21 @@ const layer = Layer.effect(
             ]
             const format = lastUser.format ?? { type: "text" as const }
             if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
+
+            const activeTodos = yield* todo.get(sessionID)
+            if (activeTodos.length > 0 && activeTodos.some((t) => t.status !== "completed")) {
+              const pendingCount = activeTodos.filter((t) => t.status !== "completed").length
+              const todoSummary = activeTodos
+                .map((t) => `- [${t.status === "completed" ? "x" : t.status === "in_progress" ? "/" : " "}] ${t.content}`)
+                .join("\n")
+              system.push(
+                `<system-reminder>\n` +
+                `Active tasks for this session (${pendingCount} incomplete):\n` +
+                `${todoSummary}\n` +
+                `When you finish a task, immediately call the 'todowrite' tool to update its status to 'completed'.\n` +
+                `</system-reminder>`,
+              )
+            }
             const result = yield* handle.process({
               user: lastUser,
               agent,
@@ -1625,6 +1642,7 @@ export const node = LayerNode.make({
     EventV2Bridge.node,
     RuntimeFlags.node,
     Database.node,
+    Todo.node,
   ],
 })
 

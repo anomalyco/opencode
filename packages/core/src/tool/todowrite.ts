@@ -12,7 +12,10 @@ import { Tools } from "./tools"
 export const name = "todowrite"
 
 export const Input = Schema.Struct({
-  todos: Schema.Array(SessionTodo.Info).annotate({ description: "The updated todo list" }),
+  todos: Schema.Array(SessionTodo.Info).annotate({
+    description:
+      "The complete, updated list of todos. Valid statuses: 'pending', 'in_progress', 'completed', 'cancelled'. Mark items 'completed' as soon as work finishes.",
+  }),
 })
 
 export const Output = Schema.Struct({
@@ -32,7 +35,11 @@ const layer = Layer.effectDiscard(
       .register({
         [name]: Tool.make({
           description:
-            "Create and maintain a structured task list for the current coding session. Use it to track progress during multi-step work and keep todo statuses current.",
+            "Create and maintain a structured task list for the current coding session. " +
+            "Allowed statuses: 'pending', 'in_progress' (only one at a time), 'completed', 'cancelled'. " +
+            "Update this tool in real time: mark a task 'in_progress' before starting, and mark it 'completed' " +
+            "immediately after the action, command, edits, or verification complete. " +
+            "Never leave finished work marked as pending or in_progress.",
           input: Input,
           output: Output,
           toModelOutput: ({ output }) => [{ type: "text", text: toModelOutput(output) }],

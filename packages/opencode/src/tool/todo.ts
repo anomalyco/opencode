@@ -4,7 +4,10 @@ import DESCRIPTION_WRITE from "./todowrite.txt"
 import { Todo } from "../session/todo"
 
 export const Parameters = Schema.Struct({
-  todos: Schema.mutable(Schema.Array(Todo.Info)).annotate({ description: "The updated todo list" }),
+  todos: Schema.mutable(Schema.Array(Todo.Info)).annotate({
+    description:
+      "The complete, updated list of todos. Mark items 'in_progress' when starting and 'completed' immediately upon finishing.",
+  }),
 })
 
 type Metadata = {
