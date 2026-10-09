@@ -54,7 +54,6 @@ export const SettingsProviders: Component<{
     connecting: false,
     credentialID: undefined as string | undefined,
     renaming: undefined as string | undefined,
-    // The connected list from before an account change, shown until the refreshed catalog settles.
     held: undefined as ProviderItem[] | undefined,
   })
 
@@ -301,7 +300,7 @@ export const SettingsProviders: Component<{
     }
   }
 
-  // Only a Console sign-in loads workspace providers; a Zen API key on the same integration never does.
+  // A Zen API key shares the Console integration but has no workspace to wait for.
   const settleAfterAccountChange = (provider: ProviderItem) =>
     (provider.integrationID ?? provider.id) === CONSOLE_INTEGRATION &&
     activeProviderAccount(integration(provider))?.method === "oauth"

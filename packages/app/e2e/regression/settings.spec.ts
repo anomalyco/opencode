@@ -790,7 +790,6 @@ for (const row of [
     await expect(intro.getByRole("button", { name: "Use API key", exact: true })).toBeVisible()
     expect((await container.boundingBox())?.height).toBe(512)
 
-    // The intro keeps its size while the sign-in starts, then the browser opens with the code.
     const popup = page.waitForEvent("popup")
     await intro.getByRole("button", { name: "Continue in the browser", exact: true }).click()
     await start.arrived
@@ -857,7 +856,6 @@ test("providers: the connect dialog lists connected providers and manages their 
   await expect(list.getByRole("radio")).toHaveText(["Personal", "Work"])
   expect(activated).toEqual(["cred_personal"])
 
-  // Renaming edits the name in place; Enter saves it.
   await list.getByRole("button", { name: "Personal options", exact: true }).click()
   await page.getByRole("menuitem", { name: "Rename account", exact: true }).click()
   const name = list.getByRole("textbox", { name: "Account name", exact: true })
@@ -868,7 +866,6 @@ test("providers: the connect dialog lists connected providers and manages their 
   await expect(list.getByRole("radio")).toHaveText(["Home", "Work"])
   await expect(list.getByRole("radio", { name: "Home", exact: true })).toHaveAttribute("aria-checked", "true")
 
-  // Escape cancels the rename without closing the dialog.
   await list.getByRole("button", { name: "Home options", exact: true }).click()
   await page.getByRole("menuitem", { name: "Rename account", exact: true }).click()
   await name.fill("Ignored")
@@ -876,7 +873,6 @@ test("providers: the connect dialog lists connected providers and manages their 
   await expect(list.getByRole("radio")).toHaveText(["Home", "Work"])
   await expect(page.getByRole("dialog", { name: "OpenAI", exact: true })).toBeVisible()
 
-  // Removing an account asks first.
   await list.getByRole("button", { name: "Work options", exact: true }).click()
   await page.getByRole("menuitem", { name: "Remove account", exact: true }).click()
   await expect(dialog.getByText("Remove Work?", { exact: true })).toBeVisible()
@@ -888,7 +884,6 @@ test("providers: the connect dialog lists connected providers and manages their 
   await dialog.getByRole("button", { name: "Remove", exact: true }).click()
   await removed
 
-  // Add account opens the provider's sign-in, and Back returns to the accounts.
   await dialog.getByRole("button", { name: "Add another account", exact: true }).click()
   await expect(dialog.getByPlaceholder("API key")).toBeVisible()
   await dialog.getByRole("button", { name: "Navigate back", exact: true }).click()
@@ -930,7 +925,6 @@ test("providers: adding a Go account uses a Go key, and a lone sign-in starts on
   await expect(dialog.getByPlaceholder("API key")).toBeVisible()
   expect(attempts).toEqual([])
 
-  // Back from that key form returns straight to Go's accounts.
   await dialog.getByRole("button", { name: "Navigate back", exact: true }).click()
   await expect(dialog.getByRole("radio", { name: "Go key", exact: true })).toBeVisible()
   await dialog.getByRole("button", { name: "Navigate back", exact: true }).click()
@@ -968,7 +962,6 @@ test("providers: renames the active account inline from its menu", async ({ page
   await expect(trigger).toHaveText("Team")
   expect(other.label).toBe("Personal")
 
-  // Escape keeps the current name.
   await trigger.click()
   await page.getByRole("menuitem", { name: "Rename account", exact: true }).click()
   await name.fill("Ignored")

@@ -62,7 +62,7 @@ export function createProviderConnectionController(options: {
   keyProvider?: () => string
   directory: () => string | undefined
   onComplete: () => void
-  /** Waits for the caller to start a method, even when the integration has only one. */
+  /** Skips auto-selecting a lone method; the caller starts it. */
   manual?: () => boolean
   /** Runs after the catalogs refresh; returning false keeps the dialog on a retryable error. */
   prepare?: (active: () => boolean) => Promise<boolean>

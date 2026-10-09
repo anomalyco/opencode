@@ -92,7 +92,6 @@ export const DialogConnectProvider: Component<{
     modelProvider?: { id: string; name: string }
     authorization: boolean
     chatgptWelcome: boolean
-    // Set when the provider was picked from this dialog's list, rather than opened directly.
     picked: boolean
   }>({
     completed: false,
@@ -240,7 +239,6 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
   const featured = ["opencode-go", "opencode", "anthropic", "openai", "google", "openrouter", "vercel"]
   const custom = () => ({ id: CUSTOM_ID, name: language.t("dialog.provider.custom.label") })
 
-  // Like the TUI, connected providers stay listed; picking one opens its accounts.
   const all = createMemo(() => {
     language.locale()
     const query = store.filter.trim().toLowerCase()
@@ -415,7 +413,6 @@ function ProviderConnection(props: {
   onConnected?: (methodID?: string) => void
   onFirstConnection: (provider: { id: string; name: string }) => void
   onAuthorization: (authorization: boolean) => void
-  /** Opens on the provider's connected accounts when it has any, like the TUI. */
   accounts?: boolean
 }) {
   const dialog = useDialog()
@@ -446,11 +443,9 @@ function ProviderConnection(props: {
     selectedModel: string
     collapsed: Record<string, boolean>
     adding: boolean
-    // Add account picked the method itself, so Back returns straight to the accounts.
     direct: boolean
     confirming?: string
     switching?: string
-    // The account being activated, checked right away instead of after the refresh.
     activating?: string
     renaming?: string
   }>({
@@ -466,8 +461,7 @@ function ProviderConnection(props: {
     collapsed: {},
   })
 
-  // Go keeps its own accounts even though it signs in through the Console. The server lists the active
-  // account first; the dialog sorts by name so rows stay put when the active account changes.
+  // Sorted by name so rows stay put when the server moves the active account first.
   const serverAccounts = () =>
     providerAccounts(integrations.list().find((integration) => integration.id === props.provider))
 
@@ -483,8 +477,6 @@ function ProviderConnection(props: {
     // exactly as before; only the sign-in is shared with the Console.
     keyProvider: () => props.provider,
     directory,
-    // Console starts from its own intro, and the accounts step waits for Add account.
-    // Once the accounts step owns the flow, Add account starts the method itself.
     manual: () => isConsole || (!!props.accounts && accounts().length > 0),
     prepare: isConsole ? prepareConsoleCatalog : undefined,
     pollInterval: isConsole ? 500 : undefined,
@@ -672,7 +664,6 @@ function ProviderConnection(props: {
   const keyIndex = () => controller.methods().findIndex((method) => method.type === "key")
   const oauthIndex = () => controller.methods().findIndex((method) => method.type === "oauth")
 
-  // The device code owns the dialog from the moment the server returns it until the catalogs are loaded.
   const consoleSignIn = () =>
     isConsole &&
     !state.noModels &&
@@ -680,7 +671,6 @@ function ProviderConnection(props: {
     controller.auth.state() !== "error" &&
     controller.authorization()?.mode === "auto"
 
-  // The intro stays up while the sign-in starts, so its button carries the progress.
   const consoleStarting = () => controller.currentMethod()?.type === "oauth" && controller.auth.state() === "pending"
 
   const consoleIntro = () =>
@@ -921,7 +911,6 @@ function ProviderConnection(props: {
   }
 
   function goBack() {
-    // A method Add account chose directly has no intro or method list behind it.
     if (
       props.accounts &&
       state.adding &&
@@ -934,7 +923,6 @@ function ProviderConnection(props: {
       return
     }
 
-    // Console steps return to its intro; it has no method list to go back to.
     if ((isConsole || controller.methods().length > 1) && controller.methodIndex() !== undefined) {
       controller.auth.reset()
 
@@ -1201,14 +1189,9 @@ function ProviderConnection(props: {
   const addAccount = () => {
     setState({ adding: true, direct: false, confirming: undefined })
 
-    // Go's accounts are its own keys; the Console sign-in would add the account to OpenCode Console instead.
+    // Go signs in through the Console, which would add a Console account, so Go adds a key instead.
     const index =
-      props.provider === "opencode-go"
-        ? keyIndex()
-        : // A provider with one method has nothing to choose; Console shows its intro instead.
-          !isConsole && controller.methods().length === 1
-          ? 0
-          : -1
+      props.provider === "opencode-go" ? keyIndex() : !isConsole && controller.methods().length === 1 ? 0 : -1
 
     if (index === -1) return
     setState("direct", true)

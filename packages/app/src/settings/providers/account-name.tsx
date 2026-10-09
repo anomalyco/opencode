@@ -3,7 +3,6 @@ import { onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/runtime/i18n/language"
 
-/** Edits an account label in place, styled like the session title editor: Enter saves, Escape or leaving cancels. */
 export function AccountNameInput(props: {
   value: string
   class?: string
@@ -43,7 +42,6 @@ export function AccountNameInput(props: {
       class={`field-sizing-content rounded-[6px] px-1 py-1 ${props.class ?? ""}`}
       style={{ "--inline-input-shadow": "none", "text-align": "start" }}
       onInput={(event) => setStore("draft", event.currentTarget.value)}
-      // Escape cancels the rename instead of closing an enclosing dialog.
       data-owns-escape
       onKeyDown={(event) => {
         event.stopPropagation()
