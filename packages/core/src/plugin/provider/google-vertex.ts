@@ -1,6 +1,27 @@
 import { Effect } from "effect"
 import { define } from "../internal"
 import { ProviderV2 } from "../../provider"
+import fs from "fs"
+import os from "os"
+import path from "path"
+
+function expandHome(filepath: string) {
+  if (filepath === "~") return os.homedir()
+  if (filepath.startsWith("~/")) return path.join(os.homedir(), filepath.slice(2))
+  return filepath
+}
+
+function resolveGoogleCredentials(options: Record<string, any> = {}) {
+  if (options.keyFilename) return options.keyFilename
+  if (options.googleAuthOptions?.keyFilename) return options.googleAuthOptions.keyFilename
+  if (process.env.GOOGLE_APPLICATION_CREDENTIALS) return process.env.GOOGLE_APPLICATION_CREDENTIALS
+  const cloudsdkConfig = process.env.CLOUDSDK_CONFIG
+  if (cloudsdkConfig) {
+    const candidate = path.join(expandHome(cloudsdkConfig), "application_default_credentials.json")
+    if (fs.existsSync(candidate)) return candidate
+  }
+  return undefined
+}
 
 function resolveProject(options: Record<string, any>) {
   // models.dev advertises GOOGLE_VERTEX_PROJECT for Vertex, while Google SDKs
@@ -38,12 +59,16 @@ function replaceVertexVars(value: string, project: string | undefined, location:
     .replaceAll("${GOOGLE_VERTEX_ENDPOINT}", vertexEndpoint(location))
 }
 
-function authFetch(fetchWithRuntimeOptions?: unknown) {
+function authFetch(fetchWithRuntimeOptions?: unknown, credentials?: string) {
   // Native Vertex SDKs handle ADC internally. OpenAI-compatible Vertex endpoints
   // do not, so inject a Google access token into their fetch path.
   return async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
     const { GoogleAuth } = await import("google-auth-library")
-    const auth = new GoogleAuth({ scopes: ["https://www.googleapis.com/auth/cloud-platform"] })
+    const resolvedKey = credentials ?? resolveGoogleCredentials()
+    const auth = new GoogleAuth({
+      scopes: ["https://www.googleapis.com/auth/cloud-platform"],
+      ...(resolvedKey ? { keyFilename: resolvedKey } : {}),
+    })
     const client = await auth.getClient()
     const token = await client.getAccessToken()
     const headers = new Headers(init?.headers)
@@ -71,6 +96,7 @@ export const GoogleVertexPlugin = define({
             continue
           const project = resolveProject(item.provider.request.body)
           const location = String(resolveLocation(item.provider.request.body))
+          const credentials = resolveGoogleCredentials(item.provider.request.body)
           evt.provider.update(item.provider.id, (provider) => {
             if (project) provider.request.body.project = project
             provider.request.body.location = location
@@ -78,7 +104,7 @@ export const GoogleVertexPlugin = define({
               provider.api.url = replaceVertexVars(provider.api.url, project, location)
             }
             if (provider.api.type === "aisdk" && provider.api.package.includes("@ai-sdk/openai-compatible")) {
-              provider.request.body.fetch = authFetch(provider.request.body.fetch)
+              provider.request.body.fetch = authFetch(provider.request.body.fetch, credentials)
             }
           })
         }
@@ -87,17 +113,27 @@ export const GoogleVertexPlugin = define({
     yield* ctx.aisdk.sdk(
       Effect.fn(function* (evt) {
         if (evt.model.providerID === ProviderV2.ID.googleVertex && evt.package.includes("@ai-sdk/openai-compatible")) {
-          evt.options.fetch = authFetch(evt.options.fetch)
+          const credentials = resolveGoogleCredentials(evt.options)
+          evt.options.fetch = authFetch(evt.options.fetch, credentials)
           return
         }
         if (evt.package !== "@ai-sdk/google-vertex") return
         const mod = yield* Effect.promise(() => import("@ai-sdk/google-vertex"))
         const project = resolveProject(evt.options)
         const location = resolveLocation(evt.options)
+        const credentials = resolveGoogleCredentials(evt.options)
         const options = { ...evt.options }
         delete options.fetch
+        const googleAuthOptions = {
+          ...(credentials ? { keyFilename: credentials } : {}),
+          ...options.googleAuthOptions,
+        }
+        if (credentials && !process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+          process.env.GOOGLE_APPLICATION_CREDENTIALS = credentials
+        }
         evt.sdk = mod.createVertex({
           ...options,
+          ...(Object.keys(googleAuthOptions).length ? { googleAuthOptions } : {}),
           project,
           location,
         })
@@ -149,8 +185,17 @@ export const GoogleVertexAnthropicPlugin = define({
           typeof evt.options.location === "string"
             ? evt.options.location
             : (process.env.GOOGLE_CLOUD_LOCATION ?? process.env.VERTEX_LOCATION ?? "global")
+        const credentials = resolveGoogleCredentials(evt.options)
+        const googleAuthOptions = {
+          ...(credentials ? { keyFilename: credentials } : {}),
+          ...evt.options.googleAuthOptions,
+        }
+        if (credentials && !process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+          process.env.GOOGLE_APPLICATION_CREDENTIALS = credentials
+        }
         evt.sdk = mod.createVertexAnthropic({
           ...evt.options,
+          ...(Object.keys(googleAuthOptions).length ? { googleAuthOptions } : {}),
           project,
           location,
           // Continental multi-regions (eu, us) require Regional Endpoint Platform

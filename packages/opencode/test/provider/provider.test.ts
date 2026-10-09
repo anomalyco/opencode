@@ -1,4 +1,6 @@
 import { afterEach, expect, test } from "bun:test"
+import fs from "fs"
+import os from "os"
 import { mkdir, unlink } from "fs/promises"
 import path from "path"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -1859,6 +1861,26 @@ it.instance(
       },
     },
   },
+)
+
+it.instance(
+  "Google Vertex: resolves credentials from CLOUDSDK_CONFIG",
+  Effect.gen(function* () {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "cloudsdk-provider-test-"))
+    const credPath = path.join(tempDir, "application_default_credentials.json")
+    fs.writeFileSync(credPath, JSON.stringify({ type: "authorized_user" }))
+
+    try {
+      yield* set("CLOUDSDK_CONFIG", tempDir)
+      yield* set("GOOGLE_CLOUD_PROJECT", "test-project")
+      const providers = yield* list
+      const vertex = providers[ProviderV2.ID.googleVertex]
+      expect(vertex).toBeDefined()
+      expect(vertex.options.googleAuthOptions?.keyFilename).toBe(credPath)
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true })
+    }
+  }),
 )
 
 it.instance("Google Vertex: uses REP endpoint for Claude continental multi-regions", () =>

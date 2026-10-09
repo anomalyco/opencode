@@ -10,6 +10,9 @@ import { GoogleVertexAnthropicPlugin, GoogleVertexPlugin } from "@opencode-ai/co
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
+import fs from "fs"
+import os from "os"
+import path from "path"
 
 const it = testEffect(PluginTestLayer)
 
@@ -259,6 +262,49 @@ describe("GoogleVertexAnthropicPlugin", () => {
       })
       expect(calls).toEqual([])
       expect(result.language).toBeUndefined()
+    }),
+  )
+
+  it.effect("resolves credentials from CLOUDSDK_CONFIG when application_default_credentials.json exists", () =>
+    Effect.gen(function* () {
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "cloudsdk-anthropic-test-"))
+      const credPath = path.join(tempDir, "application_default_credentials.json")
+      fs.writeFileSync(credPath, JSON.stringify({ type: "authorized_user" }))
+
+      yield* Effect.acquireUseRelease(
+        Effect.void,
+        () =>
+          withEnv(
+            {
+              GOOGLE_CLOUD_PROJECT: "project",
+              GOOGLE_APPLICATION_CREDENTIALS: undefined,
+              CLOUDSDK_CONFIG: tempDir,
+            },
+            () =>
+              Effect.gen(function* () {
+                const plugin = yield* PluginV2.Service
+                const aisdk = yield* AISDK.Service
+                yield* addPlugin(GoogleVertexAnthropicPlugin)
+                const result = yield* aisdk.runSDK({
+                  model: ModelV2.Info.make({
+                    ...ModelV2.Info.empty(
+                      ProviderV2.ID.make("google-vertex-anthropic"),
+                      ModelV2.ID.make("claude-sonnet-4-5"),
+                    ),
+                    api: { id: ModelV2.ID.make("claude-sonnet-4-5"), type: "aisdk", package: "test-provider" },
+                  }),
+                  package: "@ai-sdk/google-vertex/anthropic",
+                  options: { name: "google-vertex-anthropic" },
+                })
+                expect(result.sdk).toBeDefined()
+                expect(process.env.GOOGLE_APPLICATION_CREDENTIALS).toBe(credPath)
+              }),
+          ),
+        () =>
+          Effect.sync(() => {
+            fs.rmSync(tempDir, { recursive: true, force: true })
+          }),
+      )
     }),
   )
 })

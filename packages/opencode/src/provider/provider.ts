@@ -1,4 +1,5 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import fs from "fs"
 import os from "os"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import fuzzysort from "fuzzysort"
@@ -137,6 +138,25 @@ function googleVertexEndpoint(location: string) {
   if (location === "global") return "aiplatform.googleapis.com"
   if (location === "eu" || location === "us") return `aiplatform.${location}.rep.googleapis.com`
   return `${location}-aiplatform.googleapis.com`
+}
+
+function expandHome(filepath: string) {
+  if (filepath === "~") return os.homedir()
+  if (filepath.startsWith("~/")) return path.join(os.homedir(), filepath.slice(2))
+  return filepath
+}
+
+function resolveGoogleCredentials(env: Record<string, string | undefined>, options?: Record<string, any>) {
+  if (options?.keyFilename) return options.keyFilename
+  if (options?.googleAuthOptions?.keyFilename) return options.googleAuthOptions.keyFilename
+  if (env["GOOGLE_APPLICATION_CREDENTIALS"]) return env["GOOGLE_APPLICATION_CREDENTIALS"]
+  if (process.env.GOOGLE_APPLICATION_CREDENTIALS) return process.env.GOOGLE_APPLICATION_CREDENTIALS
+  const cloudsdkConfig = env["CLOUDSDK_CONFIG"] ?? process.env.CLOUDSDK_CONFIG
+  if (cloudsdkConfig) {
+    const candidate = path.join(expandHome(cloudsdkConfig), "application_default_credentials.json")
+    if (fs.existsSync(candidate)) return candidate
+  }
+  return undefined
 }
 
 type BundledSDK = {
@@ -562,6 +582,10 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
 
       const autoload = Boolean(project)
       if (!autoload) return { autoload: false }
+      const credentials = resolveGoogleCredentials(env, provider.options)
+      if (credentials && !process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+        process.env.GOOGLE_APPLICATION_CREDENTIALS = credentials
+      }
       return {
         autoload: true,
         vars(_options: Record<string, any>) {
@@ -574,9 +598,13 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         options: {
           project,
           location,
+          ...(credentials ? { googleAuthOptions: { keyFilename: credentials } } : {}),
           fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
             const { GoogleAuth } = await import("google-auth-library")
-            const auth = new GoogleAuth({ scopes: ["https://www.googleapis.com/auth/cloud-platform"] })
+            const auth = new GoogleAuth({
+              scopes: ["https://www.googleapis.com/auth/cloud-platform"],
+              ...(credentials ? { keyFilename: credentials } : {}),
+            })
             const client = await auth.getClient()
             const token = await client.getAccessToken()
 
@@ -599,12 +627,17 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       const autoload = Boolean(project)
       if (!autoload) return { autoload: false }
       const baseURL = googleVertexAnthropicBaseURL(project, location)
+      const credentials = resolveGoogleCredentials(env)
+      if (credentials && !process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+        process.env.GOOGLE_APPLICATION_CREDENTIALS = credentials
+      }
       return {
         autoload: true,
         options: {
           project,
           location,
           ...(baseURL && { baseURL }),
+          ...(credentials ? { googleAuthOptions: { keyFilename: credentials } } : {}),
         },
         async getModel(sdk: any, modelID) {
           const id = String(modelID).trim()
@@ -1801,6 +1834,19 @@ const layer = Layer.effect(
 
         if (model.providerID === "google-vertex" && !model.api.npm.includes("@ai-sdk/openai-compatible")) {
           delete options.fetch
+        }
+
+        if (
+          (model.providerID === "google-vertex" || model.providerID === "google-vertex-anthropic") &&
+          !options["googleAuthOptions"]?.keyFilename
+        ) {
+          const credentials = resolveGoogleCredentials(envs, options)
+          if (credentials) {
+            options["googleAuthOptions"] = {
+              keyFilename: credentials,
+              ...options["googleAuthOptions"],
+            }
+          }
         }
 
         if (model.api.npm.includes("@ai-sdk/openai-compatible") && options["includeUsage"] !== false) {

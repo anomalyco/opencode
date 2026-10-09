@@ -10,6 +10,9 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import type { LanguageModelV3 } from "@ai-sdk/provider"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
+import fs from "fs"
+import os from "os"
+import path from "path"
 
 const vertexOptions: Record<string, any>[] = []
 const googleAuthOptions: Record<string, any>[] = []
@@ -383,5 +386,126 @@ describe("GoogleVertexPlugin", () => {
       })
       expect(calls).toEqual(["languageModel:gemini-2.5-pro"])
     }),
+  )
+
+  it.effect("resolves credentials from CLOUDSDK_CONFIG when application_default_credentials.json exists", () =>
+    Effect.gen(function* () {
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "cloudsdk-test-"))
+      const credPath = path.join(tempDir, "application_default_credentials.json")
+      fs.writeFileSync(credPath, JSON.stringify({ type: "authorized_user" }))
+
+      yield* Effect.acquireUseRelease(
+        Effect.void,
+        () =>
+          withEnv(
+            {
+              GOOGLE_CLOUD_PROJECT: "env-project",
+              GOOGLE_APPLICATION_CREDENTIALS: undefined,
+              CLOUDSDK_CONFIG: tempDir,
+            },
+            () =>
+              Effect.gen(function* () {
+                vertexOptions.length = 0
+                const plugin = yield* PluginV2.Service
+                const aisdk = yield* AISDK.Service
+                yield* addPlugin()
+                yield* aisdk.runSDK({
+                  model: ModelV2.Info.make({
+                    ...ModelV2.Info.empty(ProviderV2.ID.make("google-vertex"), ModelV2.ID.make("gemini")),
+                    api: {
+                      id: ModelV2.ID.make("gemini"),
+                      type: "aisdk",
+                      package: "@ai-sdk/google-vertex",
+                    },
+                  }),
+                  package: "@ai-sdk/google-vertex",
+                  options: { name: "google-vertex" },
+                })
+                expect(vertexOptions).toHaveLength(1)
+                expect(vertexOptions[0].googleAuthOptions?.keyFilename).toBe(credPath)
+              }),
+          ),
+        () =>
+          Effect.sync(() => {
+            fs.rmSync(tempDir, { recursive: true, force: true })
+          }),
+      )
+    }),
+  )
+
+  it.effect("prefers GOOGLE_APPLICATION_CREDENTIALS over CLOUDSDK_CONFIG", () =>
+    Effect.gen(function* () {
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "cloudsdk-test-"))
+      const credPath = path.join(tempDir, "application_default_credentials.json")
+      fs.writeFileSync(credPath, JSON.stringify({ type: "authorized_user" }))
+
+      yield* Effect.acquireUseRelease(
+        Effect.void,
+        () =>
+          withEnv(
+            {
+              GOOGLE_CLOUD_PROJECT: "env-project",
+              GOOGLE_APPLICATION_CREDENTIALS: "explicit-creds.json",
+              CLOUDSDK_CONFIG: tempDir,
+            },
+            () =>
+              Effect.gen(function* () {
+                vertexOptions.length = 0
+                const plugin = yield* PluginV2.Service
+                const aisdk = yield* AISDK.Service
+                yield* addPlugin()
+                yield* aisdk.runSDK({
+                  model: ModelV2.Info.make({
+                    ...ModelV2.Info.empty(ProviderV2.ID.make("google-vertex"), ModelV2.ID.make("gemini")),
+                    api: {
+                      id: ModelV2.ID.make("gemini"),
+                      type: "aisdk",
+                      package: "@ai-sdk/google-vertex",
+                    },
+                  }),
+                  package: "@ai-sdk/google-vertex",
+                  options: { name: "google-vertex" },
+                })
+                expect(vertexOptions).toHaveLength(1)
+                expect(vertexOptions[0].googleAuthOptions?.keyFilename).toBe("explicit-creds.json")
+              }),
+          ),
+        () =>
+          Effect.sync(() => {
+            fs.rmSync(tempDir, { recursive: true, force: true })
+          }),
+      )
+    }),
+  )
+
+  it.effect("does not set keyFilename when application_default_credentials.json in CLOUDSDK_CONFIG does not exist", () =>
+    withEnv(
+      {
+        GOOGLE_CLOUD_PROJECT: "env-project",
+        GOOGLE_APPLICATION_CREDENTIALS: undefined,
+        CLOUDSDK_CONFIG: path.join(os.tmpdir(), "nonexistent-cloudsdk-" + Date.now()),
+      },
+      () =>
+        Effect.gen(function* () {
+          vertexOptions.length = 0
+          const plugin = yield* PluginV2.Service
+          const aisdk = yield* AISDK.Service
+          yield* addPlugin()
+          yield* aisdk.runSDK({
+            model: ModelV2.Info.make({
+              ...ModelV2.Info.empty(ProviderV2.ID.make("google-vertex"), ModelV2.ID.make("gemini")),
+              api: {
+                id: ModelV2.ID.make("gemini"),
+                type: "aisdk",
+                package: "@ai-sdk/google-vertex",
+              },
+            }),
+            package: "@ai-sdk/google-vertex",
+            options: { name: "google-vertex" },
+          })
+          expect(vertexOptions).toHaveLength(1)
+          expect(vertexOptions[0].googleAuthOptions?.keyFilename).toBeUndefined()
+        }),
+    ),
   )
 })
