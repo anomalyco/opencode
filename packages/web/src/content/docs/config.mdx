@@ -44,7 +44,7 @@ For example, if your global config sets `autoupdate: true` and your project conf
 Config sources are loaded in this order (later sources override earlier ones):
 
 1. **Remote config** (from `.well-known/opencode`) - organizational defaults
-2. **Global config** (`~/.config/opencode/opencode.json`) - user preferences
+2. **Global config** (`~/.config/opencode/opencode.json`, or `$XDG_CONFIG_HOME/opencode/opencode.json` when `XDG_CONFIG_HOME` is set) - user preferences
 3. **Custom config** (`OPENCODE_CONFIG` env var) - custom overrides
 4. **Project config** (`opencode.json` in project) - project-specific settings
 5. **`.opencode` directories** - agents, commands, plugins
@@ -99,6 +99,16 @@ You can enable specific servers in your local config:
 ### Global
 
 Place your global OpenCode config in `~/.config/opencode/opencode.json`. Use global config for user-wide server/runtime preferences like providers, models, and permissions.
+
+:::note[XDG_CONFIG_HOME]
+The global directory follows the XDG Base Directory spec. If the `XDG_CONFIG_HOME` environment variable is set, OpenCode reads global files from `$XDG_CONFIG_HOME/opencode/` instead of `~/.config/opencode/`. This applies to the desktop app as well, and to global `AGENTS.md` and the `agents/`, `commands/`, `plugins/`, `skills/`, and `themes/` subdirectories, not only to config files.
+
+```bash
+XDG_CONFIG_HOME=/path/to/config opencode
+```
+
+To point OpenCode at a directory regardless of the environment, use [`OPENCODE_CONFIG_DIR`](#custom-directory).
+:::
 
 For TUI-specific settings, use `~/.config/opencode/tui.json`.
 
