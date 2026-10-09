@@ -2,6 +2,7 @@ import { Button } from "@opencode/ui/button"
 import { Badge } from "@opencode/ui/badge"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { Icon } from "@opencode/ui/icon"
+import { IconButton } from "@opencode/ui/icon-button"
 import { Menu } from "@opencode/ui/menu"
 import { OpenCodeLogo } from "@/providers/opencode-logo"
 import { showToast } from "@/shell/notifications/toast"
@@ -405,91 +406,75 @@ export const SettingsProviders: Component<{
     const name = () => menuProps.name
 
     return (
-      <Menu placement="bottom-end" gutter={6}>
-        <Menu.Trigger
-          as={Button}
-          size="normal"
-          variant="ghost-muted"
-          class="settings-provider-account-trigger"
-          aria-label={language.t("settings.providers.account.manage", { provider: name() })}
-        >
-          <span>{active()?.label}</span>
-          <Icon name="chevron-down" size="small" />
-        </Menu.Trigger>
-        <Menu.Portal>
-          <Menu.Content
-            class="settings-provider-account-menu"
-            onEscapeKeyDown={(event) => event.stopPropagation()}
-            onCloseAutoFocus={(event) => state.renaming && event.preventDefault()}
+      <div class="settings-provider-account-actions">
+        <Menu placement="bottom-end" gutter={6}>
+          <Menu.Trigger
+            as={Button}
+            size="normal"
+            variant="ghost-muted"
+            class="settings-provider-account-trigger"
+            aria-label={language.t("settings.providers.account.manage", { provider: name() })}
           >
-            <Menu.Group>
-              <Menu.GroupLabel>{language.t("settings.providers.account.group")}</Menu.GroupLabel>
-              <Menu.RadioGroup
-                class="settings-provider-account-list"
-                value={active()?.id}
-                onChange={(credentialID) => {
-                  const account = accounts().find((item) => item.id === credentialID)
+            <span>{active()?.label}</span>
+            <Icon name="chevron-down" size="small" />
+          </Menu.Trigger>
+          <Menu.Portal>
+            <Menu.Content class="settings-provider-account-menu" onEscapeKeyDown={(event) => event.stopPropagation()}>
+              <Menu.Group>
+                <Menu.GroupLabel>{language.t("settings.providers.account.group")}</Menu.GroupLabel>
+                <Menu.RadioGroup
+                  class="settings-provider-account-list"
+                  value={active()?.id}
+                  onChange={(credentialID) => {
+                    const account = accounts().find((item) => item.id === credentialID)
 
-                  if (account) void activate(menuProps.provider, name(), account)
-                }}
-              >
-                <For each={accounts()}>
-                  {(account) => (
-                    <Menu.RadioItem value={account.id} closeOnSelect disabled={state.credentialID !== undefined}>
-                      <span class="settings-provider-account-label">{account.label}</span>
-                    </Menu.RadioItem>
-                  )}
-                </For>
-              </Menu.RadioGroup>
-            </Menu.Group>
-            <Menu.Separator />
-            <Menu.Item disabled={state.credentialID !== undefined} onSelect={() => connect(menuProps.provider.id)}>
-              {language.t("settings.providers.account.add")}
-            </Menu.Item>
-            <Menu.Item
-              disabled={state.credentialID !== undefined || !active()}
-              onSelect={() => setState("renaming", active()?.id)}
-            >
-              {language.t("settings.providers.account.rename")}
-            </Menu.Item>
-            <Show
-              when={accounts().length > 1}
-              fallback={
-                <Menu.Item
-                  disabled={state.credentialID !== undefined || accounts().length === 0}
-                  onSelect={() => {
-                    const account = accounts()[0]
-
-                    if (account) void remove(menuProps.provider, name(), account)
+                    if (account) void activate(menuProps.provider, name(), account)
                   }}
                 >
-                  {language.t("settings.providers.account.remove")}
-                </Menu.Item>
-              }
-            >
-              <Menu.Sub placement="left-start">
-                <Menu.SubTrigger disabled={state.credentialID !== undefined || accounts().length === 0}>
-                  {language.t("settings.providers.account.remove")}
-                </Menu.SubTrigger>
-                <Menu.SubContent class="settings-provider-account-submenu">
                   <For each={accounts()}>
                     {(account) => (
-                      <Menu.Item
-                        badge={
-                          account.id === active()?.id ? language.t("settings.providers.account.active") : undefined
-                        }
-                        onSelect={() => void remove(menuProps.provider, name(), account)}
-                      >
+                      <Menu.RadioItem value={account.id} closeOnSelect disabled={state.credentialID !== undefined}>
                         <span class="settings-provider-account-label">{account.label}</span>
-                      </Menu.Item>
+                      </Menu.RadioItem>
                     )}
                   </For>
-                </Menu.SubContent>
-              </Menu.Sub>
-            </Show>
-          </Menu.Content>
-        </Menu.Portal>
-      </Menu>
+                </Menu.RadioGroup>
+              </Menu.Group>
+              <Menu.Separator />
+              <Menu.Item disabled={state.credentialID !== undefined} onSelect={() => connect(menuProps.provider.id)}>
+                <Icon name="plus" size="small" class="shrink-0" />
+                {language.t("settings.providers.account.add")}
+              </Menu.Item>
+            </Menu.Content>
+          </Menu.Portal>
+        </Menu>
+        <Menu placement="bottom-end" gutter={6}>
+          <Menu.Trigger
+            as={IconButton}
+            variant="ghost-muted"
+            size="large"
+            icon={<Icon name="outline-dots" />}
+            disabled={state.credentialID !== undefined || !active()}
+            aria-label={language.t("dialog.provider.accounts.options", { account: active()?.label ?? "" })}
+          />
+          <Menu.Portal>
+            <Menu.Content onCloseAutoFocus={(event) => state.renaming && event.preventDefault()}>
+              <Menu.Item onSelect={() => setState("renaming", active()?.id)}>
+                {language.t("common.rename")}
+              </Menu.Item>
+              <Menu.Item
+                onSelect={() => {
+                  const account = active()
+
+                  if (account) void remove(menuProps.provider, name(), account)
+                }}
+              >
+                {language.t("dialog.provider.accounts.remove")}
+              </Menu.Item>
+            </Menu.Content>
+          </Menu.Portal>
+        </Menu>
+      </div>
     )
   }
 

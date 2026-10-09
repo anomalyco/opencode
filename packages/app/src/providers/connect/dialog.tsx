@@ -1316,10 +1316,10 @@ function ProviderConnection(props: {
                         <Menu.Portal>
                           <Menu.Content onCloseAutoFocus={(event) => state.renaming && event.preventDefault()}>
                             <Menu.Item onSelect={() => setState({ renaming: account.id, confirming: undefined })}>
-                              {language.t("settings.providers.account.rename")}
+                              {language.t("common.rename")}
                             </Menu.Item>
                             <Menu.Item onSelect={() => setState({ confirming: account.id, renaming: undefined })}>
-                              {language.t("settings.providers.account.remove")}
+                              {language.t("dialog.provider.accounts.remove")}
                             </Menu.Item>
                           </Menu.Content>
                         </Menu.Portal>

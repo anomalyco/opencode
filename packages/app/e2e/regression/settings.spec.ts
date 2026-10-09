@@ -857,7 +857,7 @@ test("providers: the connect dialog lists connected providers and manages their 
   expect(activated).toEqual(["cred_personal"])
 
   await list.getByRole("button", { name: "Personal options", exact: true }).click()
-  await page.getByRole("menuitem", { name: "Rename account", exact: true }).click()
+  await page.getByRole("menuitem", { name: "Rename", exact: true }).click()
   const name = list.getByRole("textbox", { name: "Account name", exact: true })
   await expect(name).toBeFocused()
   await expect(name).toHaveValue("Personal")
@@ -867,14 +867,14 @@ test("providers: the connect dialog lists connected providers and manages their 
   await expect(list.getByRole("radio", { name: "Home", exact: true })).toHaveAttribute("aria-checked", "true")
 
   await list.getByRole("button", { name: "Home options", exact: true }).click()
-  await page.getByRole("menuitem", { name: "Rename account", exact: true }).click()
+  await page.getByRole("menuitem", { name: "Rename", exact: true }).click()
   await name.fill("Ignored")
   await name.press("Escape")
   await expect(list.getByRole("radio")).toHaveText(["Home", "Work"])
   await expect(page.getByRole("dialog", { name: "OpenAI", exact: true })).toBeVisible()
 
   await list.getByRole("button", { name: "Work options", exact: true }).click()
-  await page.getByRole("menuitem", { name: "Remove account", exact: true }).click()
+  await page.getByRole("menuitem", { name: "Remove", exact: true }).click()
   await expect(dialog.getByText("Remove Work?", { exact: true })).toBeVisible()
 
   const removed = page.waitForRequest(
@@ -936,37 +936,64 @@ test("providers: adding a Go account uses a Go key, and a lone sign-in starts on
   expect(attempts).toEqual(["github-copilot"])
 })
 
-test("providers: renames the active account inline from its menu", async ({ page }) => {
+test("providers: the account options rename and remove the active account", async ({ page }) => {
   const account = { type: "credential", id: "cred_work", label: "Work", method: "key" }
   const other = { type: "credential", id: "cred_personal", label: "Personal", method: "key" }
+  const removed: string[] = []
 
   const { settings } = await open(page, {
     provider: { all: [{ id: "openai", name: "OpenAI", models: {} }], connected: ["openai"], default: {} },
     integrations: () => [
-      { id: "openai", name: "OpenAI", methods: [{ type: "key", label: "API key" }], connections: [account, other] },
+      {
+        id: "openai",
+        name: "OpenAI",
+        methods: [{ type: "key", label: "API key" }],
+        connections: [account, other].filter((item) => !removed.includes(item.id)),
+      },
     ],
-    onCredentialUpdate: (_, body) => {
-      account.label = String(Object(body).label)
+    onCredentialUpdate: (credentialID, body) => {
+      const target = [account, other].find((item) => item.id === credentialID)
+
+      if (target) target.label = String(Object(body).label)
     },
+  })
+
+  page.on("request", (request) => {
+    const path = new URL(request.url()).pathname
+
+    if (request.method() === "DELETE" && path.startsWith("/api/credential/")) removed.push(path.split("/").at(-1)!)
   })
 
   await settings.getByRole("tab", { name: "Providers", exact: true }).click()
   const trigger = settings.getByRole("button", { name: "Manage OpenAI accounts", exact: true })
   await expect(trigger).toHaveText("Work")
+
   await trigger.click()
-  await page.getByRole("menuitem", { name: "Rename account", exact: true }).click()
+  await expect(page.getByRole("menuitemradio", { name: "Work", exact: true })).toHaveAttribute("aria-checked", "true")
+  await expect(page.getByRole("menuitem", { name: "Add account", exact: true })).toBeVisible()
+  await page.keyboard.press("Escape")
+
+  const options = settings.getByRole("button", { name: "Work options", exact: true })
+  await expect(options).toHaveCSS("height", "28px")
+  await options.click()
+  await page.getByRole("menuitem", { name: "Rename", exact: true }).click()
   const name = settings.getByRole("textbox", { name: "Account name", exact: true })
   await expect(name).toBeFocused()
+  await expect(name).toHaveValue("Work")
   await name.fill("Team")
   await name.press("Enter")
   await expect(trigger).toHaveText("Team")
   expect(other.label).toBe("Personal")
 
-  await trigger.click()
-  await page.getByRole("menuitem", { name: "Rename account", exact: true }).click()
+  await settings.getByRole("button", { name: "Team options", exact: true }).click()
+  await page.getByRole("menuitem", { name: "Rename", exact: true }).click()
   await name.fill("Ignored")
   await name.press("Escape")
   await expect(trigger).toHaveText("Team")
+
+  await settings.getByRole("button", { name: "Team options", exact: true }).click()
+  await page.getByRole("menuitem", { name: "Remove", exact: true }).click()
+  await expect.poll(() => removed).toEqual(["cred_work"])
 })
 
 test("providers: switching to a Zen API key does not wait for a Console workspace", async ({ page }) => {
