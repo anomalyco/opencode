@@ -75,15 +75,24 @@ describe("SessionStore", () => {
     }),
   )
 
-  it.effect("persists new Windows drive and UNC directories without trailing separators", () =>
+  it.effect("persists new drive and UNC directories across separator formats", () =>
     Effect.gen(function* () {
-      if (process.platform !== "win32") return
       const bus = yield* seedSessions([])
       const database = yield* Database.Service
       const store = yield* SessionStore.Service
       const cases = [
-        { id: "ses_new_drive", written: "C:\\project\\", stored: "C:/project" },
-        { id: "ses_new_unc", written: "\\\\server\\share\\project\\", stored: "//server/share/project" },
+        { id: "ses_new_drive", written: "C:/project/", stored: "C:/project" },
+        { id: "ses_new_unc", written: "//server/share/project/", stored: "//server/share/project" },
+        ...(process.platform === "win32"
+          ? [
+              { id: "ses_new_drive_backslash", written: "C:\\project\\", stored: "C:/project" },
+              {
+                id: "ses_new_unc_backslash",
+                written: "\\\\server\\share\\project\\",
+                stored: "//server/share/project",
+              },
+            ]
+          : []),
       ]
       yield* Effect.forEach(cases, (entry) =>
         Effect.gen(function* () {
