@@ -3,6 +3,7 @@ import { Effect, Exit, Scope } from "effect"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Location } from "@opencode-ai/core/location"
+import { PermissionV2 } from "@opencode-ai/core/permission"
 import { AgentPlugin } from "@opencode-ai/core/plugin/agent"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { location } from "./fixture/location"
@@ -124,8 +125,40 @@ describe("AgentV2", () => {
         "title",
       ])
       for (const item of agents) {
+        // plan is the deliberate exception: it requires confirmation for shell instead of
+        // silently falling through to the `* -> allow` default. Everything else must not
+        // gain an ambient non-deny bash rule.
+        if (String(item.id) === "plan") continue
         expect(item.permissions.some((rule) => rule.action === "bash" && rule.effect !== "deny")).toBe(false)
       }
+    }),
+  )
+
+  it.effect("plan asks before bash while build keeps bash allowed by default", () =>
+    Effect.gen(function* () {
+      const agent = yield* AgentV2.Service
+      yield* AgentPlugin.Plugin.effect(
+        host({
+          agent: agentHost(agent),
+        }),
+      ).pipe(
+        Effect.provideService(
+          Location.Service,
+          Location.Service.of(location({ directory: AbsolutePath.make("/project") })),
+        ),
+      )
+
+      const plan = yield* agent.get(AgentV2.ID.make("plan"))
+      const build = yield* agent.get(AgentV2.ID.make("build"))
+      expect(plan).toBeDefined()
+      expect(build).toBeDefined()
+
+      // Plan must not let shell commands run without approval (issue #53955).
+      expect(PermissionV2.evaluate("bash", "*", plan!.permissions)).toMatchObject({ effect: "ask" })
+      // Build falls through to the `* -> allow` default, so it must stay allowed.
+      expect(PermissionV2.evaluate("bash", "*", build!.permissions)).toMatchObject({ effect: "allow" })
+      // Plan still hard-blocks the file-edit tools.
+      expect(PermissionV2.evaluate("edit", "*", plan!.permissions)).toMatchObject({ effect: "deny" })
     }),
   )
 })

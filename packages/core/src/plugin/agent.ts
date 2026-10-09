@@ -140,6 +140,10 @@ export const Plugin = define({
             { action: "external_directory", resource: path.join(Global.Path.data, "plans", "*"), effect: "allow" },
             { action: "edit", resource: "*", effect: "deny" },
             { action: "edit", resource: path.join(".opencode", "plans", "*.md"), effect: "allow" },
+            // Plan blocks the file-edit tools outright, but shell has no rule of its own
+            // and would fall through to the `* -> allow` default. Require confirmation so
+            // read-only exploration still works while destructive commands must be approved.
+            { action: "bash", resource: "*", effect: "ask" },
             {
               action: "edit",
               resource: path.relative(worktree, path.join(Global.Path.data, "plans", "*.md")),
