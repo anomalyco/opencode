@@ -247,6 +247,19 @@ describe("FileSystem", () => {
     ),
   )
 
+  it.live("reports paths through a file as not found", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(() => fs.writeFile(path.join(directory, "file.txt"), "text"))
+        const filesystem = yield* FileSystem.Service
+        const list = yield* Effect.flip(filesystem.list({ path: "file.txt/child" }))
+        expect(list).toBeInstanceOf(FileSystem.NotFoundError)
+        const read = yield* Effect.flip(filesystem.read({ path: RelativePath.make("file.txt/child") }))
+        expect(read).toBeInstanceOf(FileSystem.NotFoundError)
+      }).pipe(provide(directory)),
+    ),
+  )
+
   it.live("allows listing through an external symlink without allowing file reads", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
