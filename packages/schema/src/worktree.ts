@@ -64,6 +64,8 @@ const Resolved = durable({
     projectID: Project.ID,
     directory: AbsolutePath,
     previous: Project.ID,
+    // Markerless projects own only their exact directory, not its descendants.
+    exact: optional(Schema.Boolean),
     adopted: optional(Schema.Array(Project.ID)),
   },
 })
@@ -75,6 +77,7 @@ export function adopt(
   event: {
     readonly projectID: string
     readonly directory: string
+    readonly exact?: boolean
     readonly previous: string
     readonly adopted?: ReadonlyArray<string>
   },
@@ -101,7 +104,7 @@ export function adopt(
   const windows = /^\/[a-z]:/i.test(root)
   const key = windows ? directory.toLowerCase() : directory
   const parent = windows ? root.toLowerCase() : root
-  if (key !== parent && !key.startsWith(parent + "/")) return
+  if (key !== parent && (event.exact || !key.startsWith(parent + "/"))) return
   return {
     projectID: event.projectID,
     subpath: key === parent ? undefined : directory.slice(root.length + 1),

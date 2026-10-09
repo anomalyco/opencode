@@ -103,6 +103,56 @@ function withTmp<A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>) {
 }
 
 describe("Session.create", () => {
+  projectIt.live("adopts legacy global sessions only in the exact markerless directory", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const db = (yield* Database.Service).db
+        const projects = yield* Project.Service
+        const session = yield* Session.Service
+        const root = AbsolutePath.make(directory)
+        // Reproduce an already-upgraded installation: the directory project exists,
+        // but imported V1 sessions still belong to global.
+        const existing = { id: Project.ID.make(Hash.fast(`directory:${root}`)) }
+        yield* db.insert(ProjectTable).values({ id: existing.id, worktree: root, sandboxes: [] }).run()
+        yield* db
+          .insert(ProjectTable)
+          .values({ id: Project.ID.global, worktree: AbsolutePath.make("/"), sandboxes: [] })
+          .run()
+        const rows = [
+          root,
+          AbsolutePath.make(path.join(directory, "child")),
+          AbsolutePath.make(directory + "-sibling"),
+        ].map((directory) => ({
+          id: Session.ID.create(),
+          project_id: Project.ID.global,
+          directory,
+          slug: "legacy",
+          title: "Legacy session",
+          version: "1.18.35",
+          time_created: 1,
+          time_updated: 2,
+        }))
+        yield* db.insert(SessionTable).values(rows).run()
+        const resolved = yield* projects.resolve(root)
+        yield* projects.resolve(root)
+        expect(resolved.id).toBe(existing.id)
+        const restored = yield* session.get(rows[0]!.id)
+        expect(restored).toMatchObject({
+          projectID: resolved.id,
+          location: { directory: root },
+          time: { created: DateTime.makeUnsafe(1), updated: DateTime.makeUnsafe(2) },
+        })
+        expect(
+          (yield* session.list({ project: resolved.id, subpath: RelativePath.make("") })).data.map((entry) => entry.id),
+        ).toContain(rows[0]!.id)
+        const announcements = yield* db.select().from(EventTable).where(eq(EventTable.aggregate_id, resolved.id)).all()
+        expect(announcements).toHaveLength(1)
+        expect(announcements[0]?.data).toMatchObject({ exact: true, directory: root })
+        for (const row of rows.slice(1)) expect((yield* session.get(row.id)).projectID).toBe(Project.ID.global)
+      }),
+    ),
+  )
+
   liveIt.live("preserves the project canonical directory when creating a session in another clone", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
