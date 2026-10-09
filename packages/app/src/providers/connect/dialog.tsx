@@ -88,10 +88,12 @@ export const DialogConnectProvider: Component<{
     completed: boolean
     modelProvider?: { id: string; name: string }
     authorization: boolean
+    consoleSignIn: boolean
     chatgptWelcome: boolean
   }>({
     completed: false,
     authorization: false,
+    consoleSignIn: false,
     chatgptWelcome: false,
   })
 
@@ -137,11 +139,11 @@ export const DialogConnectProvider: Component<{
               onConnected={(methodID) => {
                 props.onConnected?.(provider)
 
-                if (provider === "openai" && methodID === "chatgpt-token-sharing")
-                  setState("chatgptWelcome", true)
+                if (provider === "openai" && methodID === "chatgpt-token-sharing") setState("chatgptWelcome", true)
               }}
               onFirstConnection={(provider) => setState("modelProvider", provider)}
               onAuthorization={(authorization) => setState("authorization", authorization)}
+              onConsoleSignIn={(active) => setState("consoleSignIn", active)}
             />
           )}
         </Match>
@@ -158,7 +160,7 @@ export const DialogConnectProvider: Component<{
       containerClass={
         state.modelProvider
           ? "!h-[min(calc(100vh_-_16px),560px)] !w-[min(calc(100vw_-_16px),640px)]"
-          : consoleSelected() && state.authorization
+          : consoleSelected() && (state.consoleSignIn || state.authorization)
             ? "!h-auto !max-h-[min(calc(100vh_-_16px),560px)] !w-[min(calc(100vw_-_16px),640px)]"
             : "!h-[min(calc(100vh_-_16px),512px)] !w-[min(calc(100vw_-_16px),640px)]"
       }
@@ -177,7 +179,8 @@ export const DialogConnectProvider: Component<{
       }}
       class="[font-family:var(--v2-font-family-sans)] [&_[data-slot=dialog-header]]:!px-5 [&_[data-slot=dialog-header-title]]:!text-[15px] [&_[data-slot=dialog-header-title]]:!tracking-[-0.13px]"
       classList={{
-        "[&_[data-slot=dialog-header]]:!pt-4 [&_[data-slot=dialog-header]]:!pb-3": consoleSelected() && !state.modelProvider,
+        "[&_[data-slot=dialog-header]]:!pt-4 [&_[data-slot=dialog-header]]:!pb-3":
+          consoleSelected() && !state.modelProvider,
         "[&_[data-slot=dialog-header]]:!pt-5": !!state.modelProvider,
       }}
     >
@@ -409,6 +412,8 @@ function ProviderConnection(props: {
   onConnected?: (methodID?: string) => void
   onFirstConnection: (provider: { id: string; name: string }) => void
   onAuthorization: (authorization: boolean) => void
+  /** Sizes the dialog to the sign-in content from its first frame instead of resizing when the code arrives. */
+  onConsoleSignIn: (active: boolean) => void
 }) {
   const dialog = useDialog()
   const params = useParams()
@@ -467,9 +472,7 @@ function ProviderConnection(props: {
       props.onConnected?.(method?.type === "oauth" ? method.id : undefined)
       // The picker only lists the newest model per family by default, which hides most of
       // what a new connection just unlocked. Show everything the connected integration offers.
-      global.models.show(
-        connectionModels().map((model) => ({ providerID: model.providerID, modelID: model.id })),
-      )
+      global.models.show(connectionModels().map((model) => ({ providerID: model.providerID, modelID: model.id })))
 
       if (state.catalogPending) {
         setState("noModels", true)
@@ -593,7 +596,9 @@ function ProviderConnection(props: {
   })
   createEffect(() => {
     const current = controller.auth.state()
-    props.onAuthorization(controller.authorization() !== undefined && (current === "waiting" || current === "refreshing"))
+    props.onAuthorization(
+      controller.authorization() !== undefined && (current === "waiting" || current === "refreshing"),
+    )
   })
 
   const provider = createMemo(() => ({
@@ -653,6 +658,8 @@ function ProviderConnection(props: {
     controller.currentMethod()?.type !== "key" &&
     controller.auth.state() !== "error" &&
     (controller.busy() || controller.authorization()?.mode === "auto")
+
+  createEffect(() => props.onConsoleSignIn(consoleSignIn()))
 
   function AuthFormView() {
     const defaults = providerFormDefaults(controller.currentMethod()?.form)

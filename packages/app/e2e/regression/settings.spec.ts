@@ -773,13 +773,24 @@ test("providers: Console sign-in shows the device code before opening the browse
     onIntegrationOAuth: () => ({ url }),
   })
 
+  const start = await holdRoute(page, (url) => url.pathname === "/api/integration/opencode/connect/oauth", {
+    method: "POST",
+  })
+
   await settings.getByRole("tab", { name: "Providers", exact: true }).click()
   await settings
     .locator("div", { hasText: /^OpenCode Console/ })
     .getByRole("button", { name: "Connect" })
     .click()
   const dialog = page.getByRole("dialog")
+  const container = page.locator('[data-slot="dialog-container"]')
+  await start.arrived
+  await expect(dialog.getByRole("status").filter({ hasText: "Authorization in progress…" })).toBeVisible()
+  // The dialog keeps the size it opened with when the device code replaces the progress row.
+  const pending = await container.boundingBox()
+  start.release()
   await expect(dialog.getByRole("group", { name: "Device code: ABCD-EFGH", exact: true })).toBeVisible()
+  expect((await container.boundingBox())?.height).toBe(pending?.height)
   const proceed = dialog.getByRole("button", { name: "Continue in the browser", exact: true })
   await expect(proceed).toBeEnabled()
   await expect(dialog.getByText("Waiting for confirmation…")).toHaveCount(0)
