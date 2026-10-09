@@ -15,13 +15,19 @@ const location = { directory: process.cwd() }
 
 export default Runtime.handler(
   Commands.commands.mcp.commands.auth,
-  Effect.fn("cli.mcp.auth")((input) => authenticate(Option.getOrUndefined(input.name)).pipe(handlePromptErrors)),
+  Effect.fn("cli.mcp.auth")((input) => authenticate(input).pipe(handlePromptErrors)),
 )
 
-const authenticate = Effect.fn("cli.mcp.auth.run")(function* (name?: string) {
+const authenticate = Effect.fn("cli.mcp.auth.run")(function* (
+  input: Runtime.Input<typeof Commands.commands.mcp.commands.auth>,
+) {
+  const name = Option.getOrUndefined(input.name)
   if (!name) yield* requireInteractive("Pass an MCP server name when running without an interactive terminal")
   intro("Authenticate an MCP server")
-  const { endpoint } = yield* ServerConnection.resolve()
+  const { endpoint } = yield* ServerConnection.resolve({
+    server: Option.getOrUndefined(input.server),
+    standalone: input.standalone,
+  })
   const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) })
   const integrations = yield* loadIntegrations(client)
   const servers = yield* request((signal) => client.mcp.list({ location }, { signal }))
