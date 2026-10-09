@@ -1,5 +1,5 @@
 import type { OpenCodeClient } from "@opencode/client"
-import type { GenerateApi, PluginApi } from "@opencode/client/promise/api"
+import type { PluginApi } from "@opencode/client/promise/api"
 import type { Location } from "@opencode/schema/location"
 import type { PluginOptions } from "../options.js"
 import type { App } from "../app.js"
@@ -7,6 +7,7 @@ import type { AgentDomain } from "./agent.js"
 import type { AISDKDomain } from "./aisdk.js"
 import type { CommandDomain } from "./command.js"
 import type { EventDomain } from "./event.js"
+import type { GenerateDomain } from "./generate.js"
 import type { IntegrationDomain } from "./integration.js"
 import type { MCPDomain } from "./mcp.js"
 import type { ModelDomain } from "./model.js"
@@ -37,7 +38,7 @@ export interface Context {
   readonly integration: IntegrationDomain
   readonly mcp: MCPDomain
   readonly model: ModelDomain
-  readonly generate: GenerateApi
+  readonly generate: GenerateDomain
   readonly permission: PermissionDomain
   readonly plugin: Pick<PluginApi, "list">
   readonly provider: ProviderDomain

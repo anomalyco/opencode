@@ -720,6 +720,24 @@ const review = await ctx.generate.text({
 })
 ```
 
+Stateless native HTTP calls use `ctx.generate.hook`, not session hooks. Request and response events carry
+the selected `model` and a `requestID` shared across the call's HTTP requests, but no session or agent.
+Provider scoping and registration order work like session HTTP hooks; clone a body before reading it.
+
+```ts
+await ctx.generate.hook(
+  "http.request",
+  (event) => {
+    event.request.headers.set("x-company-request", event.requestID)
+  },
+  { providerID: "anthropic" },
+)
+
+await ctx.generate.hook("http.response", (event) => {
+  event.response.headers.set("x-company-request", event.requestID)
+})
+```
+
 ### Permissions
 
 Inspect or resolve pending permission requests.

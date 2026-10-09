@@ -1,12 +1,15 @@
 export * as Generate from "./generate.js"
 
 import { LLM, LLMClient, AIError } from "@opencode/ai"
+import type { StreamOptions } from "@opencode/ai/route"
 import { SessionID } from "@opencode/schema/session-id"
-import { Context, Effect, Layer, Schema } from "effect"
+import { Context, Effect, Layer, Schema, Stream } from "effect"
+import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { llmClient } from "./effect/app-node-platform.js"
 import { ModelResolver } from "./model-resolver.js"
 import { Model } from "./model.js"
+import { PluginHooks } from "./plugin/hooks.js"
 
 export interface TextInput {
   readonly prompt: string
@@ -35,6 +38,7 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const llm = yield* LLMClient.Service
     const resolver = yield* ModelResolver.Service
+    const hooks = yield* PluginHooks.Service
 
     const runText = Effect.fn("Generate.text")(function* (input: TextInput) {
       const resolved = yield* resolver.resolve(input.model).pipe(
@@ -61,14 +65,48 @@ export const layer = Layer.effect(
             ? `Model unavailable: ${input.model.providerID}/${input.model.id}`
             : "No model specified and no supported model is available",
         })
+      const requestID = SessionID.create()
+      const scope = { requestID, model: resolved.ref }
+      const hasHttpHooks =
+        (yield* hooks.has("generate", "http.request", resolved.ref.providerID)) ||
+        (yield* hooks.has("generate", "http.response", resolved.ref.providerID))
+      const http: StreamOptions["http"] = hasHttpHooks
+        ? (request, handler) =>
+            Effect.gen(function* () {
+              const before = yield* hooks.trigger("generate", "http.request", {
+                ...scope,
+                request: yield* HttpClientRequest.toWeb(request),
+              })
+              let sent = HttpClientRequest.fromWeb(before.request)
+              if (before.request.body)
+                sent = HttpClientRequest.bodyUint8Array(
+                  sent,
+                  new Uint8Array(yield* Effect.promise(() => before.request.clone().arrayBuffer())),
+                  before.request.headers.get("content-type") ?? undefined,
+                )
+              const response = yield* handler(sent)
+              const after = yield* hooks.trigger("generate", "http.response", {
+                ...scope,
+                request: before.request,
+                response: new Response(
+                  [204, 205, 304].includes(response.status)
+                    ? null
+                    : yield* Stream.toReadableStreamEffect(response.stream),
+                  { status: response.status, headers: response.headers },
+                ),
+              })
+              return HttpClientResponse.fromWeb(sent, after.response)
+            }).pipe(Effect.mapError((cause) => (cause instanceof Error ? cause : new Error(String(cause)))))
+        : undefined
       const response = yield* llm
         .generate(
           LLM.request({
             model: resolved.model,
             prompt: input.prompt,
             // Gateways require session attribution even for a stateless call; no Session is stored.
-            http: { headers: { "x-opencode-session": SessionID.create() } },
+            http: { headers: { "x-opencode-session": requestID } },
           }),
+          http ? { http } : undefined,
         )
         .pipe(
           Effect.mapError(
@@ -100,5 +138,5 @@ export const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [ModelResolver.node, llmClient],
+  deps: [ModelResolver.node, llmClient, PluginHooks.node],
 })

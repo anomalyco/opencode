@@ -337,6 +337,10 @@ export function fromPromise(plugin: Plugin) {
             },
           },
           generate: {
+            hook: (name, callback, options) =>
+              register(
+                host.generate.hook(name, (event) => Effect.promise(() => Promise.resolve(callback(event))), options),
+              ),
             text: adaptApiMethod(GenerateEndpoints["generate.text"], host.generate.text),
           },
           model: {

@@ -269,6 +269,7 @@ export const make = Effect.fn("PluginHost.make")(function* (
       },
     },
     generate: {
+      hook: (name, callback, options) => hooks.register("generate", name, callback, options),
       text: (input) => generate.text(input).pipe(Effect.map((text) => ({ text }))),
     },
     integration: {
