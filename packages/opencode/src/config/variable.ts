@@ -1,5 +1,6 @@
 export * as ConfigVariable from "./variable"
 
+import { visit } from "jsonc-parser"
 import path from "path"
 import os from "os"
 import { Filesystem } from "@/util/filesystem"
@@ -45,14 +46,16 @@ export async function substitute(input: SubstituteInput) {
   let out = ""
   let cursor = 0
 
+  const comments: { offset: number; length: number }[] = []
+  visit(text, { onComment: (offset, length) => comments.push({ offset, length }) })
+
   for (const match of fileMatches) {
     const token = match[0]
     const index = match.index
     out += text.slice(cursor, index)
 
-    const lineStart = text.lastIndexOf("\n", index - 1) + 1
-    const prefix = text.slice(lineStart, index).trimStart()
-    if (prefix.startsWith("//")) {
+    const inComment = comments.some((comment) => index >= comment.offset && index < comment.offset + comment.length)
+    if (inComment) {
       out += token
       cursor = index + token.length
       continue
