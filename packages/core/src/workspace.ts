@@ -7,6 +7,8 @@ import { Clock, Context, Deferred, Duration, Effect, Exit, FiberSet, Layer, Ref,
 import { systemError } from "effect/PlatformError"
 import { make } from "effect/process/ChildProcessSpawner"
 import type { EnvironmentDriver } from "./environment/driver.js"
+import { execDefaults } from "./environment/exec-defaults.js"
+import { Failed, type Files, type FilesImpl } from "./environment/files.js"
 import { Database } from "./database/database.js"
 import { KeyedMutex } from "./effect/keyed-mutex.js"
 import { WorkspaceDriver } from "./workspace/driver.js"
@@ -60,6 +62,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Wo
 interface Connection {
   readonly driver: WorkspaceDriver.Interface
   readonly environment: EnvironmentDriver.Driver
+  readonly files: Files
   readonly saveBinding: (binding: WorkspaceDriver.Binding) => Effect.Effect<void>
   readonly lastActivity: Ref.Ref<number>
   readonly active: Ref.Ref<number>
@@ -166,6 +169,10 @@ const layer = (options: Options) =>
         const connection: Connection = {
           driver,
           environment,
+          files: {
+            ...execDefaults(environment.spawner),
+            ...environment.overrides,
+          },
           saveBinding: persistBinding,
           lastActivity: yield* Ref.make(now),
           active: yield* Ref.make(0),
@@ -252,41 +259,62 @@ const layer = (options: Options) =>
         }),
         provision,
         connect: Effect.fn("Workspace.connect")(function* (workspaceID) {
-          const spawner = make((command) =>
-            Effect.acquireRelease(
-              // A live connection implies the binding is already persisted, so skip the provision hop.
-              Effect.suspend(() => (connections.has(workspaceID) ? Effect.void : provision(workspaceID))).pipe(
-                Effect.andThen(
-                  locks.withLock(workspaceID)(
-                    Effect.gen(function* () {
-                      const connection = yield* open(workspaceID)
-                      yield* Ref.set(connection.lastActivity, yield* Clock.currentTimeMillis)
-                      yield* Ref.update(connection.active, (active) => active + 1)
-                      return connection
-                    }),
-                  ),
-                ),
-                Effect.mapError((cause) =>
-                  systemError({
-                    _tag: "Unknown",
-                    module: "Workspace",
-                    method: "spawn",
-                    description: `Failed to wake workspace ${workspaceID}`,
-                    cause,
+          const acquire = Effect.acquireRelease(
+            // A live connection implies the binding is already persisted, so skip the provision hop.
+            Effect.suspend(() => (connections.has(workspaceID) ? Effect.void : provision(workspaceID))).pipe(
+              Effect.andThen(
+                locks.withLock(workspaceID)(
+                  Effect.gen(function* () {
+                    const connection = yield* open(workspaceID)
+                    yield* Ref.set(connection.lastActivity, yield* Clock.currentTimeMillis)
+                    yield* Ref.update(connection.active, (active) => active + 1)
+                    return connection
                   }),
                 ),
               ),
-              (connection) =>
-                locks.withLock(workspaceID)(
-                  Effect.gen(function* () {
-                    yield* Ref.update(connection.active, (active) => active - 1)
-                    yield* Ref.set(connection.lastActivity, yield* Clock.currentTimeMillis)
-                  }),
-                ),
-            ).pipe(Effect.flatMap((connection) => connection.environment.spawner.spawn(command))),
+            ),
+            (connection) =>
+              locks.withLock(workspaceID)(
+                Effect.gen(function* () {
+                  yield* Ref.update(connection.active, (active) => active - 1)
+                  yield* Ref.set(connection.lastActivity, yield* Clock.currentTimeMillis)
+                }),
+              ),
           )
-          // Overrides are connection-bound; per-spawn routing is required before any driver ships them, so they are deliberately omitted.
-          return { spawner }
+          const spawner = make((command) =>
+            acquire.pipe(
+              Effect.mapError((cause) =>
+                systemError({
+                  _tag: "Unknown",
+                  module: "Workspace",
+                  method: "spawn",
+                  description: `Failed to wake workspace ${workspaceID}`,
+                  cause,
+                }),
+              ),
+              Effect.flatMap((connection) => connection.environment.spawner.spawn(command)),
+            ),
+          )
+          const withFiles = <A, E>(
+            path: string,
+            use: (files: Files) => Effect.Effect<A, E>,
+          ): Effect.Effect<A, E | Failed> =>
+            Effect.scoped(
+              acquire.pipe(
+                Effect.mapError((cause) => new Failed({ path, cause })),
+                Effect.flatMap((connection) => use(connection.files)),
+              ),
+            )
+          const overrides: FilesImpl = {
+            read: (path, range) => withFiles(path, (files) => files.read(path, range)),
+            write: (path, bytes) => withFiles(path, (files) => files.write(path, bytes)),
+            stat: (path) => withFiles(path, (files) => files.stat(path)),
+            list: (path) => withFiles(path, (files) => files.list(path)),
+            remove: (path) => withFiles(path, (files) => files.remove(path)),
+            move: (from, to) => withFiles(from, (files) => files.move(from, to)),
+            mkdir: (path) => withFiles(path, (files) => files.mkdir(path)),
+          }
+          return { spawner, overrides }
         }),
         destroy: Effect.fn("Workspace.destroy")(function* (workspaceID) {
           // Settling the shared attempt cancels its racing provision body and fails
