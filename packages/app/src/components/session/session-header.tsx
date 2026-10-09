@@ -237,6 +237,10 @@ export function SessionHeader() {
   const v2ActionsState = createMemo<SessionHeaderV2ActionsState>(() => ({
     statusVisible: status(),
     statusLabel: language.t("status.popover.trigger"),
+    terminalLabel: language.t("command.terminal.toggle"),
+    terminalKeybind: command.keybindParts("terminal.toggle"),
+    terminalOpened: view().terminal.opened(),
+    onTerminalToggle: toggleTerminal,
     reviewLabel: language.t("command.review.toggle"),
     reviewKeybind: reviewTooltipKeybind(command),
     reviewVisible: isDesktop(),
@@ -519,6 +523,10 @@ export function SessionHeader() {
 type SessionHeaderV2ActionsState = {
   statusVisible: boolean
   statusLabel: string
+  terminalLabel: string
+  terminalKeybind: string[]
+  terminalOpened: boolean
+  onTerminalToggle: () => void
   reviewLabel: string
   reviewKeybind: string[]
   reviewVisible: boolean
@@ -536,6 +544,31 @@ function SessionHeaderV2Actions(props: { state: SessionHeaderV2ActionsState }) {
           <StatusPopoverV2 />
         </Tooltip>
       </Show>
+      <TooltipV2
+        class="shrink-0"
+        placement="bottom"
+        value={
+          <>
+            {props.state.terminalLabel}
+            <Show when={props.state.terminalKeybind.length > 0}>
+              <KeybindV2 keys={props.state.terminalKeybind} variant="neutral" />
+            </Show>
+          </>
+        }
+      >
+        <IconButtonV2
+          type="button"
+          variant="ghost-muted"
+          size="large"
+          class="!w-9 shrink-0"
+          state={props.state.terminalOpened ? "pressed" : undefined}
+          onClick={props.state.onTerminalToggle}
+          aria-label={props.state.terminalLabel}
+          aria-expanded={props.state.terminalOpened}
+          aria-controls="terminal-panel"
+          icon={<IconV2 name="terminal" />}
+        />
+      </TooltipV2>
       <Show when={props.state.reviewVisible}>
         <TooltipV2
           class="shrink-0"
