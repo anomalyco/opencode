@@ -4,7 +4,7 @@ import { PromptInput } from "@opencode/schema/prompt-input"
 import { SessionInbox } from "@opencode/schema/session-inbox"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { Schema } from "effect"
-import { provider } from "../utils/app"
+import { holdRoute, provider } from "../utils/app"
 import type { MockServerConfig } from "../utils/mock-server"
 import { openSession } from "../utils/workspace"
 
@@ -221,6 +221,27 @@ test("follow-up preference controls Enter while Mod+Enter uses the alternate del
   await view.input.press("ControlOrMeta+Enter")
   await expect.poll(() => mock.prompts.map((prompt) => prompt.delivery)).toEqual(["queue", "steer"])
   await expect(view.input).toHaveText("")
+})
+
+test("a steer shows in the timeline as the composer clears, before its selection commits", async ({ page }) => {
+  const mock = createQueueMock([])
+  const view = await openQueue(page, mock, "steer")
+  const commit = await holdRoute(page, (url) => url.pathname === `/api/session/${sessionID}/model`, { method: "POST" })
+
+  const prompt = page.locator('[data-timeline-virtual-content] [data-timeline-row="UserMessage"]', {
+    hasText: "steer while the model commits",
+  })
+
+  await view.input.fill("steer while the model commits")
+  await view.input.press("Enter")
+  await commit.arrived
+  await expect(view.input).toHaveText("")
+  await expect(prompt).toBeVisible()
+  expect(mock.prompts).toEqual([])
+
+  commit.release()
+  await expect.poll(() => mock.prompts.map((item) => item.text)).toEqual(["steer while the model commits"])
+  await expect(prompt).toHaveCount(1)
 })
 
 test("dragging reorders queued prompts", async ({ page }) => {

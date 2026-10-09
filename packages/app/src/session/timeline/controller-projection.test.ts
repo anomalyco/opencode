@@ -197,7 +197,7 @@ describe("visibleTimelineMessages", () => {
 })
 
 describe("applyTimelineMessageHandoff", () => {
-  const handoff = {
+  const message = {
     id: "msg_image",
     type: "user",
     text: "",
@@ -212,21 +212,81 @@ describe("applyTimelineMessageHandoff", () => {
     time: { created: 1 },
   } satisfies SessionMessageInfo
 
+  const selection = { agent: "plan", model: { id: "next", providerID: "provider", variant: "high" } }
+  const handoff = { message, selection }
+  const switched = { agent: "plan", model: selection.model }
+
   test("shows a promoted image-only prompt before client admission", () => {
-    expect(applyTimelineMessageHandoff([], handoff)).toEqual([handoff])
+    expect(applyTimelineMessageHandoff([], handoff, switched)).toEqual([message])
   })
 
   test("adds attachments to the client's optimistic row", () => {
-    const optimistic = { id: handoff.id, type: "user", text: "", time: { created: 2 } } satisfies SessionMessageInfo
-    expect(applyTimelineMessageHandoff([optimistic], handoff)).toEqual([{ ...optimistic, files: handoff.files }])
+    const optimistic = { id: message.id, type: "user", text: "", time: { created: 2 } } satisfies SessionMessageInfo
+    expect(applyTimelineMessageHandoff([optimistic], handoff, switched)).toEqual([
+      { ...optimistic, files: message.files },
+    ])
   })
 
   test("keeps the durable attachment payload", () => {
     const durable = {
-      ...handoff,
+      ...message,
       files: [{ data: "YQ==", mime: "image/png", source: { type: "inline" } }],
     } satisfies SessionMessageInfo
 
-    expect(applyTimelineMessageHandoff([durable], handoff)).toEqual([durable])
+    const source = [durable]
+
+    expect(applyTimelineMessageHandoff(source, handoff, switched)).toBe(source)
+  })
+
+  const agent = {
+    id: "msg_image_agent",
+    type: "agent-switched",
+    agent: "plan",
+    previous: "build",
+    time: { created: 1 },
+  } satisfies SessionMessageInfo
+
+  const model = {
+    id: "msg_image_model",
+    type: "model-switched",
+    model: selection.model,
+    time: { created: 1 },
+  } satisfies SessionMessageInfo
+
+  // The session takes each switch from its echo, which also lands the durable notice.
+  test.each([
+    {
+      name: "both switches pending",
+      session: { agent: "build", model: { id: "old", providerID: "provider" } },
+      notices: [agent, model],
+    },
+    {
+      name: "only a variant change",
+      session: { agent: "plan", model: { ...selection.model, variant: undefined } },
+      notices: [model],
+    },
+    {
+      name: "the agent echoed",
+      session: { agent: "plan", model: { id: "old", providerID: "provider" } },
+      notices: [model],
+    },
+    { name: "both echoed", session: switched, notices: [] },
+  ])("projects the prompt's switches ahead of it: $name", (row) => {
+    expect(applyTimelineMessageHandoff(messages.slice(0, 2), handoff, row.session)).toEqual([
+      ...messages.slice(0, 2),
+      ...row.notices,
+      message,
+    ])
+  })
+
+  test("projects pending switches ahead of the client's optimistic row", () => {
+    const optimistic = { ...message, files: [] } satisfies SessionMessageInfo
+    const session = { agent: "build", model: selection.model }
+
+    expect(applyTimelineMessageHandoff([messages[0], optimistic], handoff, session)).toEqual([
+      messages[0],
+      agent,
+      message,
+    ])
   })
 })

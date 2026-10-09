@@ -3,10 +3,12 @@ import type { ActiveComposerAdapter, ComposerControls } from "@/composer/adapter
 import { useComposerState } from "@/composer/persistence"
 import { useData } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
+import { createSessionMessageHandoff } from "@/session/handoff"
 import { useWorkspaceLocation } from "@/workspaces/location"
 
 export function createActiveComposerAdapter(input: {
   sessionID: string
+  sessionKey: Accessor<string>
   controls: Accessor<ComposerControls>
   submitted: () => void
   setEditor: (element: HTMLDivElement) => void
@@ -31,6 +33,7 @@ export function createActiveComposerAdapter(input: {
     session: () => ({
       id,
       directory: location().directory,
+      handoff: createSessionMessageHandoff(input.sessionKey(), id, server.event),
       api: server.api.session,
       data,
       current: () => data.session.get(id),

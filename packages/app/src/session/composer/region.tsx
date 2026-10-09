@@ -250,7 +250,15 @@ export function createActiveSessionRegion(input: {
   const active = createMemo(
     on(
       () => (input.visible() ? input.session.identity.sessionID() : undefined),
-      (sessionID) => (sessionID ? createSessionComposerController({ sessionID, controls, dock }) : undefined),
+      (sessionID) =>
+        sessionID
+          ? createSessionComposerController({
+              sessionID,
+              sessionKey: input.session.identity.sessionKey,
+              controls,
+              dock,
+            })
+          : undefined,
     ),
   )
 

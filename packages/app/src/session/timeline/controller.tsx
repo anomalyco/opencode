@@ -68,22 +68,24 @@ export function createTimelineController(input: { session: TimelineSessionSource
   const language = useLanguage()
   const platform = usePlatform()
 
-  const handedOffMessages = createMemo(() =>
-    applyTimelineMessageHandoff(
-      input.session.history.messages(),
-      getSessionMessageHandoff(input.session.identity.sessionKey()),
-    ),
-  )
-
-  const projectedMessages = createMemo(() => {
+  const visibleMessages = createMemo(() => {
     const id = input.session.identity.sessionID()
 
     return visibleTimelineMessages(
-      handedOffMessages(),
+      input.session.history.messages(),
       id ? data.session.pending.list(id) : [],
       input.session.data.info()?.revert?.messageID,
     )
   })
+
+  // A handoff projects after visibility: its prompt commits any staged revert, so the boundary does not hide it.
+  const projectedMessages = createMemo(() =>
+    applyTimelineMessageHandoff(
+      visibleMessages(),
+      getSessionMessageHandoff(input.session.identity.sessionKey()),
+      input.session.data.info(),
+    ),
+  )
 
   const pendingInputIDs = createMemo(() => {
     const id = input.session.identity.sessionID()

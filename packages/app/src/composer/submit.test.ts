@@ -1,8 +1,14 @@
 import { describe, expect, test } from "bun:test"
 import type { ModelSelection } from "@/providers/models/selection"
-import type { SessionMessageUser } from "@opencode/client/promise"
+import type { SessionMessageHandoff } from "@/session/handoff"
 import { Skill } from "@opencode/schema/skill"
-import type { ActiveComposerAdapter, ComposerControls, ComposerSession, NewSessionComposerAdapter } from "./adapter"
+import type {
+  ActiveComposerAdapter,
+  ComposerControls,
+  ComposerDelivery,
+  ComposerSession,
+  NewSessionComposerAdapter,
+} from "./adapter"
 import { createMemoryComposerState, type Prompt } from "./state"
 import { createComposerSubmit } from "./submit"
 import type { ComposerStateTarget } from "./submission-state"
@@ -75,12 +81,14 @@ function submitInput(
   commands: () => readonly { name: string }[] | undefined = () => [],
   history: string[] = [],
   clientCommand?: (text: string) => (() => void | Promise<void>) | undefined,
+  delivery: ComposerDelivery = "steer",
 ) {
   return createComposerSubmit({
     adapter,
     mode: () => mode,
     commands,
     clientCommand,
+    delivery: () => delivery,
     editor: () => undefined,
     queueScroll() {},
     addToHistory: (prompt) =>
@@ -110,7 +118,7 @@ function session(input: {
   return {
     id: "session-1",
     directory: "C:/repo",
-    handoff: input.handoff,
+    handoff: input.handoff ?? { set() {}, clear() {} },
     current: input.current ?? (() => undefined),
     admitted: input.admitted ?? (() => false),
     api: {
@@ -228,6 +236,42 @@ describe("Composer submission", () => {
     expect(state.current()).toEqual([{ type: "text", content: "", start: 0, end: 0 }])
     expect(state.context.items()).toEqual([])
   })
+
+  test.each(["steer", "queue"] as const)(
+    "shows a %s in the session as the composer clears, before its selection commits",
+    async (delivery) => {
+      const state = createMemoryComposerState({ prompt: "ship it" }).capture()
+      const committed = Promise.withResolvers<void>()
+      const handoffs: SessionMessageHandoff[] = []
+      const statuses: ("idle" | "running")[] = []
+
+      const target = session({
+        calls: [],
+        statuses,
+        handoff: { set: (handoff) => handoffs.push(handoff), clear() {} },
+        switchModel: async () => committed.promise,
+      })
+
+      await submitInput(active(state, target), undefined, "normal", undefined, undefined, undefined, delivery).submit(
+        new Event("submit"),
+      )
+
+      expect(state.current()).toEqual([{ type: "text", content: "", start: 0, end: 0 }])
+      expect(statuses).toEqual(["running"])
+      // A queued prompt shows in the queue once admitted, not in the transcript.
+      expect(handoffs).toMatchObject(
+        delivery === "steer"
+          ? [
+              {
+                message: { type: "user", text: "ship it" },
+                selection: { agent: "build", model: { id: "model-1", providerID: "provider-1", variant: "balanced" } },
+              },
+            ]
+          : [],
+      )
+      committed.resolve()
+    },
+  )
 
   test("applies the captured agent and model before a custom command without passing over its overrides", async () => {
     const state = createMemoryComposerState({ prompt: "/review changes" }).capture()
@@ -461,7 +505,7 @@ describe("Composer submission", () => {
     ]
 
     draft.set(prompt)
-    const handedOff = Promise.withResolvers<SessionMessageUser>()
+    const handedOff = Promise.withResolvers<SessionMessageHandoff>()
     const admitted = Promise.withResolvers<void>()
     const cleanup = Promise.withResolvers<void>()
 
@@ -481,7 +525,7 @@ describe("Composer submission", () => {
     await submitted
     expect(draft.current()).toEqual([{ type: "text", content: "", start: 0, end: 0 }])
 
-    expect(await handedOff.promise).toMatchObject({
+    expect((await handedOff.promise).message).toMatchObject({
       type: "user",
       text: "",
       files: [
