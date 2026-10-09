@@ -70,6 +70,7 @@ import { directoryRecentValue } from "../../prompt/directory-completion"
 import { useWorkingDirectoryActions } from "../../ui/working-directory-actions"
 import { truncateFilePath } from "../../ui/file-path"
 import { PromptMetadataRow } from "./metadata"
+import type { PromptSuggestion } from "@opencode/plugin/tui/context"
 
 export type PromptProps = {
   sessionID?: string
@@ -91,6 +92,7 @@ export type PromptRef = {
   mode: "normal" | "shell"
   setMode(mode: "normal" | "shell"): void
   set(prompt: PromptInfo): void
+  suggest(input: PromptSuggestion): () => void
   reset(): void
   blur(): void
   focus(): void
@@ -367,6 +369,34 @@ export function Prompt(props: PromptProps) {
     extmarkToPart: new Map(),
     interrupt: 0,
   })
+  const [suggestion, setSuggestion] = createSignal<PromptSuggestion>()
+  const canSuggest = createMemo(
+    () =>
+      props.sessionID !== undefined &&
+      props.visible !== false &&
+      !disabled() &&
+      status() === "idle" &&
+      dialog.stack.length === 0 &&
+      store.mode === "normal" &&
+      !auto()?.visible &&
+      store.prompt.text.length === 0 &&
+      !store.prompt.files?.length &&
+      !store.prompt.agents?.length &&
+      !store.prompt.skills?.length &&
+      store.prompt.pasted.length === 0,
+  )
+  createEffect(() => {
+    if (!canSuggest() || suggestion()?.sessionID !== props.sessionID) setSuggestion(undefined)
+  })
+  createEffect(() => {
+    suggestion()
+    const target = inputTarget()
+    if (!target) return
+    // OpenTUI repaints placeholder changes but does not remeasure their wrapped height.
+    target.getLayoutNode().markDirty()
+    renderer.requestRender()
+  })
+  const suggestionKey = Keymap.useShortcut("prompt.suggestion.accept")
   let disposed = false
   let pasteQueue = Promise.resolve()
 
@@ -686,10 +716,20 @@ export function Prompt(props: PromptProps) {
       setStore("mode", mode)
     },
     set(prompt) {
+      setSuggestion(undefined)
       input.setText(prompt.text)
       setStore("prompt", prompt)
       restoreExtmarksFromPrompt(prompt)
       input.gotoBufferEnd()
+    },
+    suggest(value) {
+      if (disposed || value.sessionID !== props.sessionID || !value.text.trim() || !canSuggest() || !input?.focused)
+        return () => {}
+      const offered = { ...value }
+      setSuggestion(offered)
+      return () => {
+        if (!disposed && suggestion() === offered) setSuggestion(undefined)
+      }
     },
     reset() {
       resetComposer()
@@ -700,6 +740,7 @@ export function Prompt(props: PromptProps) {
   }
 
   function resetComposer() {
+    setSuggestion(undefined)
     input.extmarks.clear()
     setStore("prompt", emptyPrompt())
     setStore("extmarkToPart", new Map())
@@ -954,6 +995,32 @@ export function Prompt(props: PromptProps) {
       bindings: ["prompt.clear"],
     }
   })
+
+  Keymap.createLayer(() => ({
+    target: inputTarget,
+    priority: 2,
+    enabled: inputTarget() !== undefined && canSuggest() && suggestion() !== undefined,
+    commands: [
+      {
+        id: "prompt.suggestion.accept",
+        title: "Accept prompt suggestion",
+        group: "Prompt",
+        run() {
+          const value = suggestion()
+          if (!value || !canSuggest() || !input.focused || input.plainText.length > 0) return false
+          setSuggestion(undefined)
+          input.insertText(value.text)
+          input.gotoBufferEnd()
+        },
+      },
+      {
+        id: "prompt.suggestion.dismiss",
+        title: "Dismiss prompt suggestion",
+        group: "Prompt",
+        run: () => setSuggestion(undefined),
+      },
+    ],
+  }))
 
   Keymap.createLayer(() => {
     return {
@@ -1590,6 +1657,8 @@ export function Prompt(props: PromptProps) {
   })
 
   const placeholderText = createMemo(() => {
+    const offered = suggestion()
+    if (offered) return offered.text
     const value = (() => {
       if (store.mode === "shell") {
         if (!shell().length) return undefined
@@ -1751,6 +1820,7 @@ export function Prompt(props: PromptProps) {
               maxHeight={maxHeight()}
               cursorStyle={config.cursor}
               onContentChange={() => {
+                setSuggestion(undefined)
                 const value = input.plainText
                 setStore("prompt", "text", value)
                 auto()?.onInput(value)
@@ -1843,6 +1913,11 @@ export function Prompt(props: PromptProps) {
                 modelAlpha={modelMetaAlpha()}
                 variantAlpha={variantMetaAlpha()}
               />
+              <Show when={suggestion() && suggestionKey()}>
+                <text fg={theme.text.muted} flexShrink={0}>
+                  {suggestionKey()} to accept
+                </text>
+              </Show>
             </box>
           </box>
         </box>
