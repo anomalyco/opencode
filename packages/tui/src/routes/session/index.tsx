@@ -624,7 +624,7 @@ export function Session(props: {
   const dialog = useDialog()
   const renderer = useRenderer()
   const runPendingAction = createSingleFlight<string>()
-  const mutatePending = async (action: PendingAction, inboxID: string, failureLabel?: string) => {
+  const mutatePending = async (action: PendingAction, inboxID: string) => {
     const result = await runPendingAction(inboxID, async () => {
       const request =
         action === "steer"
@@ -637,7 +637,7 @@ export function Session(props: {
         (error) => error,
       )
       if (!error) return true
-      const label = failureLabel ?? (action === "cancel" ? "delete" : action)
+      const label = action === "cancel" ? "delete" : action
       toast.show({ title: `Failed to ${label} pending prompt`, message: errorMessage(error), variant: "error" })
       return false
     })
@@ -679,13 +679,31 @@ export function Session(props: {
                 toast.show({ message: "Leave shell mode before undoing a queued prompt", variant: "error" })
                 return
               }
-              void mutatePending("cancel", queued.id, "undo").then((undone) => {
-                if (!undone) return
-                target.setMode("normal")
-                target.set(appendPrompt(target.current, { ...projectedPromptInput(queued.payload), pasted: [] }))
-                dialog.clear()
-                target.focus()
-              })
+              void runPendingAction(queued.id, () =>
+                data.session.input.withdraw({ sessionID: route.sessionID, inboxID: queued.id }),
+              ).then(
+                (outcome) => {
+                  if (!outcome) return
+                  if (outcome === "delivered") {
+                    toast.show({
+                      message: "Prompt was already sent. Use /undo to take it back",
+                      variant: "warning",
+                    })
+                    return
+                  }
+                  target.setMode("normal")
+                  target.set(appendPrompt(target.current, { ...projectedPromptInput(queued.payload), pasted: [] }))
+                  dialog.clear()
+                  target.focus()
+                },
+                (error) => {
+                  toast.show({
+                    title: "Failed to undo pending prompt",
+                    message: errorMessage(error),
+                    variant: "error",
+                  })
+                },
+              )
             },
           },
         ]}
@@ -999,21 +1017,11 @@ export function Session(props: {
           dialog.clear()
           return
         }
-        const sessionID = route.sessionID
         const target = prompt()
-        void (async () => {
-          if (pendingDeliveries().has(message.id)) {
-            if (!(await mutatePending("cancel", message.id))) return
-          } else {
-            await client.api.session.interrupt({ sessionID })
-            await client.api.session.wait({ sessionID })
-            await client.api.session.revert.stage({ sessionID, messageID: message.id })
-          }
-          target?.set({
-            ...projectedPromptInput(message),
-            pasted: [],
-          })
-        })().catch((error) => toast.show({ message: errorMessage(error), variant: "error", duration: 5000 }))
+        void data.session
+          .undo({ sessionID: route.sessionID, messageID: message.id })
+          .then(() => target?.set({ ...projectedPromptInput(message), pasted: [] }))
+          .catch((error) => toast.show({ message: errorMessage(error), variant: "error", duration: 5000 }))
         dialog.clear()
       },
     },

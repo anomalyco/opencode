@@ -44,6 +44,7 @@ import { SessionMessage } from "@opencode/schema/session-message"
 import {
   isFormAlreadySettledError,
   isFormNotFoundError,
+  isMessageNotFoundError,
   isPermissionNotFoundError,
   type SessionPromptInput,
 } from "../promise"
@@ -340,9 +341,10 @@ export function createData(config: CreateDataInput) {
   // to exist server-side instead of failing with "not found".
   const creating = new Map<string, Promise<unknown>>()
 
-  // Per-session send chain: prompts and compactions must be admitted in
-  // submission order. Each waits for the previous POST to settle, so one
-  // failure does not block the next.
+  // Per-session send chain. Admissions, withdrawals, and undos run in
+  // submission order, so a cancel cannot overtake the prompt it targets. Each
+  // waits for the previous request to settle, so one failure does not block
+  // the next.
   const sending = new Map<string, Promise<unknown>>()
   const messageLoads = new Map<string, Promise<unknown>>()
   const compacting = new Map<string, { id: string; observed: Set<string>; request: Promise<SessionInboxCompaction> }>()
@@ -359,7 +361,7 @@ export function createData(config: CreateDataInput) {
   }
 
   // Capture creation before settlement clears its entry, so dependent RPCs still see a failed create.
-  function sendAdmission<Value>(sessionID: string, send: () => Promise<Value>, gate?: Promise<unknown>) {
+  function sendInOrder<Value>(sessionID: string, send: () => Promise<Value>, gate?: Promise<unknown>) {
     const created = creating.get(sessionID)
     const previous = sending.get(sessionID)
     const request = Promise.resolve()
@@ -371,6 +373,20 @@ export function createData(config: CreateDataInput) {
       request.catch(() => undefined),
     )
     return request
+  }
+
+  // Cancellation is idempotent, so only the projected message shows whether delivery won.
+  async function withdrawInput(sessionID: string, inboxID: string) {
+    await api().session.inbox.cancel({ sessionID, inboxID })
+    return api()
+      .session.message.get({ sessionID, messageID: inboxID })
+      .then(
+        () => "delivered" as const,
+        (error: unknown) => {
+          if (isMessageNotFoundError(error)) return "withdrawn" as const
+          throw error
+        },
+      )
   }
 
   // Upsert an admitted inbox item into pending and (for user and synthetic
@@ -1403,6 +1419,9 @@ export function createData(config: CreateDataInput) {
             store.session.pending[sessionID]?.some((item) => item.id === inboxID && item.type !== "compaction") ?? false
           )
         },
+        withdraw(input: { sessionID: string; inboxID: string }) {
+          return sendInOrder(input.sessionID, () => withdrawInput(input.sessionID, input.inboxID))
+        },
       },
       pending: {
         list(sessionID: string) {
@@ -1544,7 +1563,7 @@ export function createData(config: CreateDataInput) {
         // speculative row on an echo, and remember consumed IDs until the POST
         // settles so its older response cannot resurrect a queued row.
         const observed = new Set<string>()
-        const request = sendAdmission(input.sessionID, async () => {
+        const request = sendInOrder(input.sessionID, async () => {
           if (input.model) await api().session.switchModel({ sessionID: input.sessionID, model: input.model })
           return api().session.compact({ sessionID: input.sessionID, id })
         })
@@ -1598,7 +1617,7 @@ export function createData(config: CreateDataInput) {
             },
           })
         }
-        return sendAdmission(
+        return sendInOrder(
           request.sessionID,
           async () => {
             await prepare?.()
@@ -1610,6 +1629,19 @@ export function createData(config: CreateDataInput) {
           // acknowledged: anything else is server state.
           if (fresh && outbox.delete(id)) retractLocal(request.sessionID, id)
           throw error
+        })
+      },
+      // A loaded message that is no longer pending has left the inbox, so only a pending or unloaded one
+      // needs the server to decide.
+      undo(input: { sessionID: string; messageID: string }) {
+        return sendInOrder(input.sessionID, async () => {
+          const delivered =
+            !result.session.input.has(input.sessionID, input.messageID) &&
+            result.session.message.get(input.sessionID, input.messageID) !== undefined
+          if (!delivered && (await withdrawInput(input.sessionID, input.messageID)) === "withdrawn") return
+          await api().session.interrupt({ sessionID: input.sessionID })
+          await api().session.wait({ sessionID: input.sessionID })
+          await api().session.revert.stage({ sessionID: input.sessionID, messageID: input.messageID })
         })
       },
       sync(sessionID: string, options?: { children?: boolean }) {
