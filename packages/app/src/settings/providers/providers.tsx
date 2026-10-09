@@ -301,7 +301,12 @@ export const SettingsProviders: Component<{
     }
   }
 
-  const isConsoleAccount = (provider: ProviderItem) => (provider.integrationID ?? provider.id) === CONSOLE_INTEGRATION
+  // Only a Console sign-in loads workspace providers; a Zen API key on the same integration never does.
+  const settleAfterAccountChange = (provider: ProviderItem) =>
+    (provider.integrationID ?? provider.id) === CONSOLE_INTEGRATION &&
+    activeProviderAccount(integration(provider))?.method === "oauth"
+      ? settleConsoleCatalog()
+      : undefined
 
   const accountError = (error: unknown) => {
     const message = error instanceof Error ? error.message : String(error)
@@ -314,7 +319,7 @@ export const SettingsProviders: Component<{
     await serverSdk.api.credential
       .activate({ credentialID: account.id })
       .then(refreshAccounts)
-      .then(() => (isConsoleAccount(provider) ? settleConsoleCatalog() : undefined))
+      .then(() => settleAfterAccountChange(provider))
       .then(() =>
         showToast({
           variant: "success",
@@ -333,7 +338,7 @@ export const SettingsProviders: Component<{
     await serverSdk.api.credential
       .remove({ credentialID: account.id })
       .then(refreshAccounts)
-      .then(() => (isConsoleAccount(provider) && !final ? settleConsoleCatalog() : undefined))
+      .then(() => (final ? undefined : settleAfterAccountChange(provider)))
       .then(() =>
         showToast({
           variant: "success",
@@ -521,7 +526,9 @@ export const SettingsProviders: Component<{
                             <ProviderModelIcon provider={item} class="settings-provider-icon shrink-0" />
 
                             <div class="settings-provider-main">
-                              <span class="settings-provider-name truncate">{item.name}</span>
+                              <span class="settings-provider-name truncate">
+                                {item.name}
+                              </span>
                               <Badge>{type(item)}</Badge>
                             </div>
                           </div>
@@ -646,7 +653,9 @@ export const SettingsProviders: Component<{
 
                     <div class="settings-provider-copy">
                       <div class="settings-provider-main">
-                        <span class="settings-provider-name">{item.name}</span>
+                        <span class="settings-provider-name">
+                          {item.name}
+                        </span>
                         <Show when={item.id === "opencode" || item.id === "opencode-go"}>
                           <Badge>{language.t("dialog.provider.tag.recommended")}</Badge>
                         </Show>
