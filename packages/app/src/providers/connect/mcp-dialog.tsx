@@ -9,6 +9,7 @@ import { useMcpToggle } from "@/providers/connect/mcp"
 
 const statusLabels = {
   connected: "mcp.status.connected",
+  idle: "mcp.status.idle",
   failed: "mcp.status.failed",
   needs_auth: "mcp.status.needs_auth",
   disabled: "mcp.status.disabled",
@@ -27,7 +28,7 @@ export const DialogSelectMcp: Component = () => {
 
   const toggle = useMcpToggle(() => sdk().directory)
 
-  const enabledCount = createMemo(() => items().filter((i) => i.status === "connected").length)
+  const enabledCount = createMemo(() => items().filter((i) => i.status === "connected" || i.status === "idle").length)
   const totalCount = createMemo(() => items().length)
 
   return (
@@ -73,7 +74,7 @@ export const DialogSelectMcp: Component = () => {
               if (s?.status === "failed") return s.error
             }
 
-            const enabled = () => status() === "connected"
+            const enabled = () => status() === "connected" || status() === "idle"
 
             return (
               <div class="w-full flex items-center justify-between gap-x-3">

@@ -371,6 +371,23 @@ function resourceMcpLayer(
 const connect = (server: string, config: typeof ConfigMCP.Server.Type, directory: string) =>
   McpClient.connect(server, config, directory).pipe(Effect.provide(hostEnvironmentLayer))
 
+const countedEnvironment = (counts: { spawned: number; closed: number }) =>
+  Layer.effect(
+    Environment.Service,
+    Effect.gen(function* () {
+      const host = yield* Environment.Service
+      return Environment.Service.of({
+        ...host,
+        spawner: ChildProcessSpawner.make((command) =>
+          Effect.acquireRelease(
+            host.spawner.spawn(command).pipe(Effect.tap(() => Effect.sync(() => counts.spawned++))),
+            () => Effect.sync(() => counts.closed++),
+          ),
+        ),
+      })
+    }),
+  ).pipe(Layer.provide(hostEnvironmentLayer))
+
 // Reads no longer wait for startup, so tests that assert on a connected server settle it first.
 const settled = (service: Mcp.Interface, name = "resources") =>
   Effect.gen(function* () {
@@ -380,6 +397,7 @@ const settled = (service: Mcp.Interface, name = "resources") =>
   }).pipe(Effect.retry({ times: 200, schedule: Schedule.spaced("10 millis") }))
 
 const mcp = Layer.mock(Mcp.Service, {
+  start: () => Effect.void,
   tools: () =>
     Effect.succeed([
       {
@@ -498,6 +516,585 @@ const mcp = Layer.mock(Mcp.Service, {
       } satisfies Mcp.ToolResult
     }),
 })
+
+testEffect(Layer.empty).effect("does not spawn MCP for an unused location or its config updates", () =>
+  Effect.gen(function* () {
+    const spawns: string[] = []
+    const environment = Layer.succeed(
+      Environment.Service,
+      Environment.Service.of({
+        files: Environment.makeFiles(Environment.makeMemoryDriver()),
+        spawner: ChildProcessSpawner.make((command) => {
+          spawns.push(ChildProcess.isStandardCommand(command) ? command.command : "pipeline")
+          return EnvironmentUnavailable.spawner.spawn(command)
+        }),
+      }),
+    )
+    yield* Effect.gen(function* () {
+      const service = yield* Mcp.Service
+      yield* drain
+      yield* TestClock.adjust("1 hour")
+      expect(spawns).toEqual([])
+      yield* service.transform((editor) =>
+        editor.update("resources", (config) => {
+          if (config.type === "local") config.command = ["replacement"]
+        }),
+      )
+      yield* drain
+      expect(spawns).toEqual([])
+      expect(yield* service.tools()).toEqual([])
+      expect(yield* service.prompts()).toEqual([])
+      yield* service.disconnect("resources")
+      yield* service.start()
+      expect(spawns).toEqual([])
+    }).pipe(
+      Effect.provide(
+        resourceMcpLayer(new ConfigMCP.Local({ type: "local", command: ["unused"] }), undefined, undefined, {
+          environment,
+        }),
+      ),
+    )
+    expect(spawns).toEqual([])
+  }),
+)
+
+testEffect(Layer.empty).effect(
+  "releases discovery-only MCP scopes, caches metadata, and reacquires for real work",
+  () =>
+    Effect.gen(function* () {
+      const counts = { spawned: 0, closed: 0 }
+      const environment = countedEnvironment(counts)
+      yield* Effect.gen(function* () {
+        const service = yield* Mcp.Service
+        yield* Effect.all(
+          Array.from({ length: 12 }, () => service.start()),
+          { concurrency: "unbounded" },
+        )
+        expect(counts).toEqual({ spawned: 1, closed: 0 })
+        const prompts = yield* service.prompts()
+        yield* TestClock.adjust("61 seconds")
+        yield* drain
+        expect(counts).toEqual({ spawned: 1, closed: 1 })
+        // Historical GUI metadata polling must neither lose commands nor respawn the server.
+        yield* service.start()
+        yield* service.servers()
+        expect(yield* service.prompts()).toEqual(prompts)
+        expect(counts).toEqual({ spawned: 1, closed: 1 })
+        const results = yield* Effect.all(
+          Array.from({ length: 12 }, () =>
+            service.prompt({ server: "resources", name: "first", args: { topic: "active" } }),
+          ),
+          { concurrency: "unbounded" },
+        )
+        expect(results[0]).toMatchObject({ messages: [{ content: { type: "text", text: "active" } }] })
+        expect(counts).toEqual({ spawned: 2, closed: 1 })
+        yield* TestClock.adjust("24 hours")
+        expect(counts).toEqual({ spawned: 2, closed: 1 })
+      }).pipe(
+        Effect.provide(
+          resourceMcpLayer(
+            new ConfigMCP.Local({
+              type: "local",
+              command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-prompts.ts")],
+            }),
+            undefined,
+            undefined,
+            { environment },
+          ),
+        ),
+      )
+      expect(counts).toEqual({ spawned: 2, closed: 2 })
+    }),
+)
+
+testEffect(Layer.empty).effect("shares lazy MCP startup, retains active connections, and closes recreated scopes", () =>
+  Effect.gen(function* () {
+    const counts = { spawned: 0, closed: 0 }
+    const environment = countedEnvironment(counts)
+    for (const iteration of [1, 2]) {
+      const root = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(root, Exit.void))
+      const context = yield* Layer.buildWithScope(
+        resourceMcpLayer(
+          new ConfigMCP.Local({
+            type: "local",
+            command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-prompts.ts")],
+          }),
+          undefined,
+          undefined,
+          { environment },
+        ),
+        root,
+      )
+      const service = Context.get(context, Mcp.Service)
+      expect(counts.spawned).toBe(iteration - 1)
+      yield* Effect.all(
+        Array.from({ length: 12 }, () => service.start()),
+        { concurrency: "unbounded" },
+      )
+      expect(counts.spawned).toBe(iteration)
+      expect(
+        yield* service.prompt({ server: "resources", name: "first", args: { topic: "still alive" } }),
+      ).toMatchObject({
+        messages: [{ content: { type: "text", text: "still alive" } }],
+      })
+      yield* TestClock.adjust("24 hours")
+      expect(counts.closed).toBe(iteration - 1)
+      yield* service.start()
+      expect(counts.spawned).toBe(iteration)
+      yield* Scope.close(root, Exit.void)
+      expect(counts.closed).toBe(iteration)
+    }
+  }),
+)
+
+testEffect(Layer.empty).effect(
+  "idle cleanup waits for concurrent MCP discovery borrowers and preserves cached catalogs",
+  () =>
+    Effect.gen(function* () {
+      const entered = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      let closes = 0
+      const server = yield* resourceServer({
+        respond: async (request) => {
+          if (request.method === "DELETE") closes++
+          if (request.method !== "POST") return undefined
+          const body = await request.clone().json()
+          if (typeof body !== "object" || body === null || !("method" in body) || body.method !== "resources/list")
+            return undefined
+          await Effect.runPromise(Deferred.succeed(entered, undefined))
+          await Effect.runPromise(Deferred.await(release))
+          return undefined
+        },
+      })
+      server.state.resources = [{ name: "Readme", uri: "docs://readme" }]
+      yield* Effect.gen(function* () {
+        const service = yield* Mcp.Service
+        yield* service.start()
+        const readers = yield* Effect.all(
+          Array.from({ length: 12 }, () => service.resourceCatalog()),
+          {
+            concurrency: "unbounded",
+          },
+        ).pipe(Effect.forkChild)
+        yield* Deferred.await(entered)
+        yield* TestClock.adjust("2 minutes")
+        expect(closes).toBe(0)
+        expect((yield* service.servers())[0]?.status.status).toBe("connected")
+        yield* Deferred.succeed(release, undefined)
+        const catalogs = yield* Fiber.join(readers)
+        expect(closes).toBe(1)
+        yield* TestClock.adjust("61 seconds")
+        yield* drain
+        expect(closes).toBe(1)
+        expect((yield* service.servers())[0]?.status.status).toBe("idle")
+        expect(yield* service.resourceCatalog()).toEqual(catalogs[0])
+        expect(yield* service.resources({ server: "resources" })).toEqual(catalogs[0])
+        expect(server.state.initializations).toBe(1)
+      }).pipe(
+        Effect.provide(
+          resourceMcpLayer(
+            new ConfigMCP.Remote({
+              type: "remote",
+              url: server.url,
+              oauth: false,
+              timeout: { catalog: 300_000 },
+            }),
+          ),
+        ),
+      )
+    }),
+)
+
+testEffect(Layer.empty).effect("recovered discovery records expiry while a long metadata borrower is active", () =>
+  Effect.gen(function* () {
+    const entered = yield* Deferred.make<void>()
+    const release = yield* Deferred.make<void>()
+    let closes = 0
+    let recovered = false
+    let obsoleteSession: string | undefined
+    const server = yield* resourceServer({
+      respond: async (request) => {
+        if (request.method === "DELETE") closes++
+        if (!recovered || request.method !== "POST" || request.headers.get("mcp-session-id") === obsoleteSession)
+          return undefined
+        const body = await request.clone().json()
+        if (typeof body !== "object" || body === null || !("method" in body) || body.method !== "resources/list")
+          return undefined
+        await Effect.runPromise(Deferred.succeed(entered, undefined))
+        await Effect.runPromise(Deferred.await(release))
+        return undefined
+      },
+    })
+    yield* Effect.gen(function* () {
+      const service = yield* Mcp.Service
+      yield* service.start()
+      obsoleteSession = server.state.sessions.at(-1)
+      yield* Effect.promise(server.restart)
+      // The obsolete session first returns 400, then a recovered connection's listing blocks.
+      recovered = true
+      const reader = yield* service.resourceCatalog().pipe(Effect.forkChild)
+      yield* Deferred.await(entered)
+      yield* advance(() => server.state.initializations === 2)
+      yield* TestClock.adjust("90 seconds")
+      expect(closes).toBe(0)
+      yield* Deferred.succeed(release, undefined)
+      yield* Fiber.join(reader)
+      yield* drain
+      expect(closes).toBe(1)
+      expect((yield* service.servers())[0]?.status.status).toBe("idle")
+    }).pipe(
+      Effect.provide(
+        resourceMcpLayer(
+          new ConfigMCP.Remote({
+            type: "remote",
+            url: server.url,
+            oauth: false,
+            timeout: { catalog: 300_000 },
+          }),
+        ),
+      ),
+    )
+  }),
+)
+
+testEffect(Layer.empty).effect("metadata polling cannot renew a discovery-only MCP retention window", () =>
+  Effect.gen(function* () {
+    let closes = 0
+    const server = yield* resourceServer({
+      respond: (request) => {
+        if (request.method === "DELETE") closes++
+        return undefined
+      },
+    })
+    server.state.resources = [{ name: "Readme", uri: "docs://readme" }]
+    yield* Effect.gen(function* () {
+      const service = yield* Mcp.Service
+      yield* service.start()
+      for (const _ of [1, 2, 3]) {
+        yield* TestClock.adjust("15 seconds")
+        expect((yield* service.resourceCatalog()).resources[0]?.uri).toBe("docs://readme")
+        expect(closes).toBe(0)
+      }
+      yield* TestClock.adjust("16 seconds")
+      yield* drain
+      expect(closes).toBe(1)
+      expect((yield* service.servers())[0]?.status.status).toBe("idle")
+      expect((yield* service.resourceCatalog()).resources[0]?.uri).toBe("docs://readme")
+      expect(server.state.initializations).toBe(1)
+    }).pipe(Effect.provide(resourceMcpLayer(server.url)))
+  }),
+)
+
+for (const use of ["tool", "failed tool", "resource", "connect"] as const) {
+  testEffect(Layer.empty).effect(`retains MCP state after ${use} work finishes`, () =>
+    Effect.gen(function* () {
+      const counts = { spawned: 0, closed: 0 }
+      yield* Effect.gen(function* () {
+        const service = yield* Mcp.Service
+        yield* service.start()
+        yield* service.resourceCatalog()
+        const before = use === "tool" ? yield* service.callTool({ server: "resources", name: "state" }) : undefined
+        if (use === "failed tool") yield* service.callTool({ server: "resources", name: "fail" }).pipe(Effect.exit)
+        if (use === "resource") yield* service.readResource({ server: "resources", uri: "state://pid" })
+        if (use === "connect") yield* service.connect("resources")
+        const expected = use === "connect" ? { spawned: 2, closed: 1 } : { spawned: 1, closed: 0 }
+        expect(counts).toEqual(expected)
+        yield* TestClock.adjust("24 hours")
+        expect(counts).toEqual(expected)
+        expect((yield* service.servers())[0]?.status.status).toBe("connected")
+        if (before) {
+          const after = yield* service.callTool({ server: "resources", name: "state" })
+          const first = before.content[0]
+          const second = after.content[0]
+          if (first?.type !== "text" || second?.type !== "text") return yield* Effect.die("Missing fixture state")
+          expect(JSON.parse(second.text)).toEqual({ ...JSON.parse(first.text), calls: 2 })
+        }
+      }).pipe(
+        Effect.provide(
+          resourceMcpLayer(
+            new ConfigMCP.Local({
+              type: "local",
+              command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-retention.ts")],
+            }),
+            undefined,
+            undefined,
+            { environment: countedEnvironment(counts) },
+          ),
+        ),
+      )
+      expect(counts.closed).toBe(counts.spawned)
+    }),
+  )
+}
+
+testEffect(Layer.empty).effect("protects a pending MCP elicitation and retained state after tool cancellation", () =>
+  Effect.gen(function* () {
+    const counts = { spawned: 0, closed: 0 }
+    const created = yield* Deferred.make<Form.Info>()
+    yield* Effect.gen(function* () {
+      const service = yield* Mcp.Service
+      const forms = yield* Form.Service
+      yield* service.start()
+      const request = yield* service.callTool({ server: "resources", name: "confirm" }).pipe(Effect.forkChild)
+      const form = yield* Deferred.await(created).pipe(
+        Effect.raceFirst(Fiber.join(request).pipe(Effect.andThen(Effect.die("tool completed without elicitation")))),
+      )
+      yield* TestClock.adjust("2 minutes")
+      expect(counts.closed).toBe(0)
+      yield* forms.reply({ id: form.id, answer: { proceed: true } })
+      yield* Fiber.join(request)
+      const next = yield* service.callTool({ server: "resources", name: "confirm" }).pipe(Effect.forkChild)
+      yield* drain
+      yield* Fiber.interrupt(next)
+      yield* TestClock.adjust("2 minutes")
+      expect(counts).toEqual({ spawned: 1, closed: 0 })
+      const result = yield* service.callTool({ server: "resources", name: "state" })
+      expect(result.content[0]).toMatchObject({ type: "text" })
+      expect(counts).toEqual({ spawned: 1, closed: 0 })
+    }).pipe(
+      Effect.provide(
+        resourceMcpLayer(
+          new ConfigMCP.Local({
+            type: "local",
+            command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-retention.ts")],
+          }),
+          (form) => Deferred.succeed(created, form).pipe(Effect.asVoid),
+          undefined,
+          { environment: countedEnvironment(counts) },
+        ),
+      ),
+    )
+    expect(counts).toEqual({ spawned: 1, closed: 1 })
+  }),
+)
+
+testEffect(Layer.empty).effect("discovery elicitation promotes its connection without taking the startup lock", () =>
+  Effect.gen(function* () {
+    const counts = { spawned: 0, closed: 0 }
+    const created = yield* Deferred.make<Form.Info>()
+    yield* Effect.gen(function* () {
+      const service = yield* Mcp.Service
+      const forms = yield* Form.Service
+      const startup = yield* service.start().pipe(Effect.forkChild)
+      const form = yield* Deferred.await(created)
+      yield* TestClock.adjust("2 minutes")
+      expect(counts).toEqual({ spawned: 1, closed: 0 })
+      yield* forms.reply({ id: form.id, answer: { elicitation: true } })
+      yield* Fiber.join(startup)
+      yield* TestClock.adjust("2 minutes")
+      expect(counts).toEqual({ spawned: 1, closed: 0 })
+    }).pipe(
+      Effect.provide(
+        resourceMcpLayer(
+          new ConfigMCP.Local({
+            type: "local",
+            command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-retention.ts"), "--elicit-discovery"],
+          }),
+          (form) => Deferred.succeed(created, form).pipe(Effect.asVoid),
+          undefined,
+          { environment: countedEnvironment(counts) },
+        ),
+      ),
+    )
+    expect(counts).toEqual({ spawned: 1, closed: 1 })
+  }),
+)
+
+testEffect(Layer.empty).effect(
+  "does not cache a catalog response invalidated by an in-flight resources notification",
+  () =>
+    Effect.gen(function* () {
+      const entered = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      const published: string[] = []
+      let blocked = false
+      const initial = [{ name: "Before", uri: "docs://before" }]
+      const server = yield* resourceServer({
+        listChanged: true,
+        respond: async (request) => {
+          if (request.method !== "POST") return undefined
+          const body = await request.clone().json()
+          if (
+            typeof body !== "object" ||
+            body === null ||
+            !("method" in body) ||
+            body.method !== "resources/list" ||
+            blocked
+          )
+            return undefined
+          blocked = true
+          const resources = structuredClone(initial)
+          await Effect.runPromise(Deferred.succeed(entered, undefined))
+          await Effect.runPromise(Deferred.await(release))
+          return Response.json({ jsonrpc: "2.0", id: "id" in body ? body.id : undefined, result: { resources } })
+        },
+      })
+      server.state.resources = initial
+      yield* Effect.gen(function* () {
+        const service = yield* Mcp.Service
+        yield* service.start()
+        const reader = yield* service.resourceCatalog().pipe(Effect.forkChild)
+        yield* Deferred.await(entered)
+        server.state.resources = [{ name: "After", uri: "docs://after" }]
+        yield* Effect.promise(server.sendResourceListChanged)
+        yield* advance(() => published.filter((type) => type === McpEvent.ResourcesChanged.type).length === 2)
+        yield* Deferred.succeed(release, undefined)
+        expect((yield* Fiber.join(reader)).resources[0]?.uri).toBe("docs://before")
+        yield* TestClock.adjust("61 seconds")
+        yield* drain
+        // Reset the fixture's single-session transport before the next genuine connection.
+        yield* Effect.promise(server.restart)
+        expect((yield* service.resourceCatalog()).resources[0]?.uri).toBe("docs://after")
+        expect(server.state.initializations).toBe(2)
+      }).pipe(Effect.provide(resourceMcpLayer(server.url, undefined, undefined, { published })))
+    }),
+)
+
+testEffect(Layer.empty).effect("disconnecting an idle MCP invalidates discovery without reacquiring", () =>
+  Effect.gen(function* () {
+    const counts = { spawned: 0, closed: 0 }
+    yield* Effect.gen(function* () {
+      const service = yield* Mcp.Service
+      yield* service.start()
+      expect((yield* service.tools()).length).toBeGreaterThan(0)
+      yield* TestClock.adjust("61 seconds")
+      yield* drain
+      yield* service.disconnect("resources")
+      expect(yield* service.tools()).toEqual([])
+      expect(yield* service.prompts()).toEqual([])
+      expect(yield* service.instructions()).toEqual([])
+      yield* service.start()
+      expect((yield* service.servers())[0]?.status.status).toBe("disabled")
+      expect(counts).toEqual({ spawned: 1, closed: 1 })
+    }).pipe(
+      Effect.provide(
+        resourceMcpLayer(
+          new ConfigMCP.Local({
+            type: "local",
+            command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-retention.ts")],
+          }),
+          undefined,
+          undefined,
+          { environment: countedEnvironment(counts) },
+        ),
+      ),
+    )
+  }),
+)
+
+testEffect(Layer.empty).effect("cancelled MCP reacquisition leaves no borrower or retained connection", () =>
+  Effect.gen(function* () {
+    const entered = yield* Deferred.make<void>()
+    const release = yield* Deferred.make<void>()
+    const counts = { spawned: 0, closed: 0 }
+    const environment = Layer.effect(
+      Environment.Service,
+      Effect.gen(function* () {
+        const host = yield* Environment.Service
+        return Environment.Service.of({
+          ...host,
+          spawner: ChildProcessSpawner.make((command) =>
+            Effect.gen(function* () {
+              if (counts.spawned === 1) {
+                yield* Deferred.succeed(entered, undefined)
+                yield* Deferred.await(release)
+              }
+              return yield* host.spawner.spawn(command)
+            }),
+          ),
+        })
+      }),
+    ).pipe(Layer.provide(countedEnvironment(counts)))
+    yield* Effect.gen(function* () {
+      const service = yield* Mcp.Service
+      yield* service.start()
+      yield* TestClock.adjust("61 seconds")
+      yield* drain
+      expect(counts).toEqual({ spawned: 1, closed: 1 })
+      const waiter = yield* service.callTool({ server: "resources", name: "state" }).pipe(Effect.forkChild)
+      yield* Deferred.await(entered)
+      const cancelled = yield* Fiber.interrupt(waiter).pipe(Effect.forkChild)
+      const reader = yield* service.resourceCatalog().pipe(Effect.forkChild)
+      yield* Deferred.succeed(release, undefined)
+      yield* Fiber.join(cancelled)
+      yield* Fiber.join(reader)
+      expect(counts).toEqual({ spawned: 2, closed: 1 })
+      yield* TestClock.adjust("61 seconds")
+      yield* drain
+      expect(counts).toEqual({ spawned: 2, closed: 2 })
+      expect((yield* service.servers())[0]?.status.status).toBe("idle")
+    }).pipe(
+      Effect.provide(
+        resourceMcpLayer(
+          new ConfigMCP.Local({
+            type: "local",
+            command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-retention.ts")],
+          }),
+          undefined,
+          undefined,
+          { environment },
+        ),
+      ),
+    )
+  }),
+)
+
+testEffect(Layer.empty).effect("lazy MCP tool discovery survives a cancelled subagent waiter", () =>
+  Effect.gen(function* () {
+    const entered = yield* Deferred.make<void>()
+    const release = yield* Deferred.make<void>()
+    const counts = { starts: 0, reads: 0 }
+    yield* Effect.gen(function* () {
+      const registration = yield* McpTool.Service
+      yield* drain
+      expect(counts.starts).toBe(0)
+      const first = yield* registration.flush.pipe(Effect.forkChild)
+      yield* Deferred.await(entered)
+      yield* Fiber.interrupt(first)
+      const second = yield* registration.flush.pipe(Effect.forkChild)
+      yield* Deferred.succeed(release, undefined)
+      yield* Fiber.join(second)
+      yield* registration.flush
+      expect(counts).toEqual({ starts: 1, reads: 1 })
+    }).pipe(
+      Effect.provide(
+        AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node, Bus.node]), [
+          Mcp.node.replace(
+            Layer.mock(Mcp.Service, {
+              start: () =>
+                Effect.gen(function* () {
+                  counts.starts++
+                  yield* Deferred.succeed(entered, undefined)
+                  yield* Deferred.await(release)
+                }),
+              tools: () =>
+                Effect.sync(() => {
+                  counts.reads++
+                  return []
+                }),
+            }),
+          ),
+          Permission.node.replace(Layer.mock(Permission.Service, { assert: () => Effect.void })),
+          Image.node.replace(imagePassthrough),
+        ]),
+      ),
+    )
+  }),
+)
+
+testEffect(Layer.empty).live("discovers resources on the first dormant MCP catalog request", () =>
+  Effect.gen(function* () {
+    const server = yield* resourceServer()
+    server.state.resources = [{ name: "Readme", uri: "docs://readme" }]
+    yield* Effect.gen(function* () {
+      const service = yield* Mcp.Service
+      expect(server.state.initializations).toBe(0)
+      expect((yield* service.resourceCatalog()).resources).toMatchObject([{ name: "Readme", uri: "docs://readme" }])
+      expect(server.state.initializations).toBe(1)
+    }).pipe(Effect.provide(resourceMcpLayer(server.url)))
+  }),
+)
 const permissions = Layer.mock(Permission.Service, {
   assert: (input) =>
     Effect.gen(function* () {
@@ -1728,9 +2325,7 @@ testEffect(resourceMcpLayer(new ConfigMCP.Local({ type: "local", command: ["unus
               command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-output-schema.ts")],
             })
           })
-          expect((yield* service.servers()).find((server) => server.name === "dynamic")?.status.status).toBe(
-            "connected",
-          )
+          expect((yield* settled(service, "dynamic"))?.status).toBe("connected")
           expect(yield* service.tools()).toHaveLength(2)
 
           yield* service.transform((editor) => editor.update("dynamic", (server) => (server.codemode = false)))
@@ -1972,6 +2567,7 @@ testEffect(Layer.empty).live("keeps MCP config snapshots stable during an in-fli
 
     yield* Effect.gen(function* () {
       const service = yield* Mcp.Service
+      yield* service.start()
       const replacing = yield* service
         .transform((editor) => editor.update("resources", (config) => (config.disabled = false)))
         .pipe(Effect.forkScoped({ startImmediately: true }))
@@ -2024,6 +2620,62 @@ const shutdownIt = testEffect(
     ],
   ),
 )
+shutdownIt.effect("credential changes retry an activated needs-auth MCP without waking idle metadata connections", () =>
+  Effect.gen(function* () {
+    let authorized = false
+    const server = yield* resourceServer({
+      respond: (request) => {
+        const url = new URL(request.url)
+        if (url.pathname.includes(".well-known/oauth-protected-resource"))
+          return Response.json({
+            resource: url.origin,
+            authorization_servers: [url.origin],
+          })
+        if (url.pathname.includes(".well-known/oauth-authorization-server"))
+          return Response.json({
+            issuer: url.origin,
+            authorization_endpoint: url.origin + "/authorize",
+            token_endpoint: url.origin + "/token",
+            response_types_supported: ["code"],
+            grant_types_supported: ["authorization_code"],
+            code_challenge_methods_supported: ["S256"],
+          })
+        if (!authorized)
+          return new Response(null, {
+            status: 401,
+            headers: {
+              "www-authenticate": `Bearer resource_metadata="${url.origin}/.well-known/oauth-protected-resource"`,
+            },
+          })
+      },
+    })
+    yield* Effect.gen(function* () {
+      const service = yield* Mcp.Service
+      const bus = yield* Bus.Service
+      yield* service.transform((editor) =>
+        editor.set("fixture", { type: "remote", url: server.url, oauth: { client_id: "fixture-client" } }),
+      )
+      yield* service.start()
+      const info = (yield* service.servers())[0]
+      expect(info?.status.status).toBe("needs_auth")
+      if (!info?.integrationID) return yield* Effect.die("Missing fixture integration")
+      authorized = true
+      yield* bus.publish(Credential.Event.Switched, { integrationID: info.integrationID, credentialID: null })
+      yield* advance(() => server.state.initializations >= 2)
+      yield* drain
+      expect((yield* service.servers())[0]?.status.status).toBe("connected")
+      yield* TestClock.adjust("61 seconds")
+      yield* drain
+      expect((yield* service.servers())[0]?.status.status).toBe("idle")
+      const initializations = server.state.initializations
+      yield* bus.publish(Credential.Event.Switched, { integrationID: info.integrationID, credentialID: null })
+      yield* drain
+      expect((yield* service.servers())[0]?.status.status).toBe("idle")
+      expect(server.state.initializations).toBe(initializations)
+    }).pipe(Effect.provide(Mcp.layer()))
+  }),
+)
+
 shutdownIt.effect("discards in-flight and queued MCP notifications after its layer closes", () =>
   Effect.gen(function* () {
     const bus = yield* Bus.Service
@@ -2257,6 +2909,7 @@ testEffect(Layer.empty).live("preserves plugin transforms through MCP catalog up
           AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node, Bus.node]), [
             Mcp.node.replace(
               Layer.mock(Mcp.Service, {
+                start: () => Effect.void,
                 tools: () => Ref.get(catalog),
                 callTool: (input) =>
                   Effect.succeed({
@@ -2299,6 +2952,7 @@ testEffect(Layer.empty).effect("coalesces queued MCP tool notifications after in
       AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node, Bus.node]), [
         Mcp.node.replace(
           Layer.mock(Mcp.Service, {
+            start: () => Effect.void,
             tools: () =>
               Effect.sync(() => [
                 {

@@ -69,6 +69,11 @@ export type ServerConfig = typeof ServerConfig.Type
 const Connected = Schema.Struct({ status: Schema.Literal("connected") }).annotate({
   identifier: "Mcp.Status.Connected",
 })
+const Idle = Schema.Struct({ status: Schema.Literal("idle") }).annotate({
+  identifier: "Mcp.Status.Idle",
+  description:
+    "Enabled and successfully discovered; the metadata-only connection was released. Use reconnects transparently.",
+})
 const Pending = Schema.Struct({ status: Schema.Literal("pending") }).annotate({
   identifier: "Mcp.Status.Pending",
 })
@@ -83,7 +88,7 @@ const NeedsAuth = Schema.Struct({ status: Schema.Literal("needs_auth"), error: S
 })
 
 export type Status = typeof Status.Type
-export const Status = Schema.Union([Connected, Pending, Disabled, Failed, NeedsAuth]).pipe(
+export const Status = Schema.Union([Connected, Idle, Pending, Disabled, Failed, NeedsAuth]).pipe(
   Schema.toTaggedUnion("status"),
 )
 

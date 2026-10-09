@@ -40,7 +40,7 @@ export const SettingsExtensions: Component<{
   const mcps = createMemo<McpRowItem[]>(() => {
     return (mcpList.latest ?? []).map((server) => ({
       name: server.name,
-      enabled: server.status.status === "connected",
+      enabled: server.status.status === "connected" || server.status.status === "idle",
     }))
   })
 
