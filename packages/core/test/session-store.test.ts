@@ -162,11 +162,10 @@ describe("SessionStore", () => {
         version: "test",
       })
       const database = yield* Database.Service
-      const written = yield* database.db
-        .select({ directory: SessionTable.directory })
-        .from(SessionTable)
-        .where(sql`${SessionTable.id} = 'ses_directory_slash'`)
-        .get()
+      // Assert the persisted value, not the custom column's fromDriver projection.
+      const written = yield* database.db.get<{ directory: string }>(
+        sql`SELECT directory FROM ${SessionTable} WHERE id = 'ses_directory_slash'`,
+      )
       expect(written?.directory).toBe("/project")
 
       // Keep the newly written row intact: legacy data must be a separate session.
@@ -208,16 +207,11 @@ describe("SessionStore", () => {
             slug: "store-test",
             version: "test",
           })
-          const row = yield* database.db
-            .select({ directory: SessionTable.directory })
-            .from(SessionTable)
-            .where(sql`${SessionTable.id} = ${entry.id}`)
-            .get()
-          expect(row?.directory).toBe(
-            process.platform === "win32" && (entry.expected.startsWith("C:") || entry.expected.startsWith("//"))
-              ? entry.expected.replaceAll("/", "\\")
-              : entry.expected,
+          // Check the driver value: fromDriver would mask incorrect Windows separators.
+          const row = yield* database.db.get<{ directory: string }>(
+            sql`SELECT directory FROM ${SessionTable} WHERE id = ${entry.id}`,
           )
+          expect(row?.directory).toBe(entry.expected)
           const found = yield* store.list({ directory: AbsolutePath.make(entry.query) })
           expect(found.map((item) => String(item.id))).toContain(entry.id)
           if (process.platform === "win32" && entry.expected !== "/") {
