@@ -201,35 +201,7 @@ const scanLegacy = Effect.fnUntraced(function* (command: string, shell: string, 
               })
               return result
             }
-            const executable = node.childForFieldName("name")
-            if (!executable || executable.text === "") {
-              result.commands.push({ resource })
-              return result
-            }
-            if (
-              !Array.from({ length: node.childCount }, (_, index) => node.child(index)).some(
-                (child) =>
-                  child?.type === "variable_assignment" ||
-                  (child?.type === "ERROR" && child.descendantsOfType("variable_assignment").length > 0),
-              )
-            ) {
-              result.commands.push({ resource, save: `${prefix(tokens).join(" ")} *` })
-              return result
-            }
-            if (crossesStatementBoundary(span, executable.startIndex)) {
-              result.commands.push({ resource })
-              return result
-            }
-            const save = proposal(
-              resource.slice(
-                0,
-                Math.max(
-                  0,
-                  executable.startIndex - (span.startIndex + (span.text.length - span.text.trimStart().length)),
-                ),
-              ),
-              tokens,
-            )
+            const save = savedPrefix(span, node, resource, tokens)
             result.commands.push({ resource, ...(save !== undefined ? { save } : {}) })
             return result
           },
@@ -329,16 +301,37 @@ export const scanPortable = Effect.fnUntraced(function* (command: string, shell:
   return output
 })
 
-// Grammar recovery can glue statements together; quoted assignment/redirect contents are not boundaries.
+// Grammar recovery can glue statements together; quoted assignment, redirect and here-string contents are not boundaries.
 function crossesStatementBoundary(span: Node, end: number) {
   let start = span.startIndex
-  for (const child of span.descendantsOfType(["variable_assignment", "file_redirect"])) {
+  for (const child of span.descendantsOfType(["variable_assignment", "file_redirect", "herestring_redirect"])) {
     if (!child) continue
     if (child.startIndex >= end) continue
     if (/[;&|\r\n]/.test(span.text.slice(start - span.startIndex, child.startIndex - span.startIndex))) return true
     start = Math.max(start, child.endIndex)
   }
   return /[;&|\r\n]/.test(span.text.slice(start - span.startIndex, end - span.startIndex))
+}
+
+// The reusable approval keeps the literal source before the executable. Without assignments that source is the
+// bare command; with them a statement boundary ends the head, and a head Wildcard cannot match is left unsaved.
+function savedPrefix(span: Node, node: Node, resource: string, tokens: string[]) {
+  const executable = node.childForFieldName("name")
+  if (!executable || executable.text === "") return undefined
+  const assigned = Array.from({ length: node.childCount }, (_, index) => node.child(index)).some(
+    (child) =>
+      child?.type === "variable_assignment" ||
+      (child?.type === "ERROR" && child.descendantsOfType("variable_assignment").length > 0),
+  )
+  if (!assigned) return `${prefix(tokens).join(" ")} *`
+  if (crossesStatementBoundary(span, executable.startIndex)) return undefined
+  return proposal(
+    resource.slice(
+      0,
+      Math.max(0, executable.startIndex - (span.startIndex + (span.text.length - span.text.trimStart().length))),
+    ),
+    tokens,
+  )
 }
 
 function parts(node: Node) {

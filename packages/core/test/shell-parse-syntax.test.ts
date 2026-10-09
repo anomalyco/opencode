@@ -29,10 +29,26 @@ describe("native shell syntax compatibility", () => {
     const legacy = await Effect.runPromise(ShellParse.scan(command, "pwsh", "/workspace"))
     const native = await Effect.runPromise(ShellParse.scan(command, "pwsh", "/workspace", { portable: true }))
     expect(native.commands.map((item) => item.resource)).toEqual(legacy.commands.map((item) => item.resource))
+    expect(
+      native.commands.map((item) => item.save),
+      command,
+    ).toEqual(native.commands.map(() => expect.any(String)))
     for (const item of native.commands) {
       if (item.save === undefined) continue
       expect(Wildcard.match(item.resource, item.save), item.resource).toBe(true)
     }
+  })
+
+  test("PowerShell saved approvals keep an exact prefix and stay inside it", async () => {
+    const command = "Write-Output 'a;b'"
+    for (const portable of [false, true]) {
+      expect(
+        (await Effect.runPromise(ShellParse.scan(command, "pwsh", "/workspace", { portable }))).commands,
+        portable ? "portable" : "Tree-sitter",
+      ).toEqual([{ resource: command, save: "Write-Output *" }])
+    }
+    expect(Wildcard.match("Write-Output 'a;b' again", "Write-Output *")).toBe(true)
+    expect(Wildcard.match("Write-Warning 'a;b'", "Write-Output *")).toBe(false)
   })
 
   for (const shell of ["bash", "zsh"]) {

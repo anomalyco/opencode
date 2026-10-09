@@ -182,6 +182,75 @@ describe("ShellParse", () => {
   })
 
   test.each([
+    ["A=x <<<';' printf ok", "A=x <<<';' printf *"],
+    ["A=x <<<'&' printf ok", "A=x <<<'&' printf *"],
+    ["A=x <<<'&&' printf ok", "A=x <<<'&&' printf *"],
+    ["A=x <<<'||' printf ok", "A=x <<<'||' printf *"],
+    ["A=x <<<'|' printf ok", "A=x <<<'|' printf *"],
+    ["A=x <<<';' >out printf ok", "A=x <<<';' >out printf *"],
+    ["A=x <<<';' printf ok >out", "A=x <<<';' printf *"],
+    ["FOO=你好 <<<';' printf ok", "FOO=你好 <<<';' printf *"],
+    ["A=x <<<';你好' printf ok", "A=x <<<';你好' printf *"],
+  ] as const)("preserves a here-string whose quoted content only looks like a separator: %s", async (command, save) => {
+    for (const portable of [false, true]) {
+      const scanner = portable ? "portable" : "Tree-sitter"
+      const result = await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace", { portable }))
+      expect(result.directories, scanner).toEqual([])
+      expect(result.commands, scanner).toEqual([{ resource: command, save }])
+    }
+  })
+
+  test.each([
+    ["A=x <<<';' printf ok; git status", "A=x <<<';' printf ok", "A=x <<<';' printf *"],
+    ["A=x <<<';' printf ok && git status", "A=x <<<';' printf ok", "A=x <<<';' printf *"],
+  ] as const)(
+    "keeps a quoted here-string separator out of the head without covering the next statement: %s",
+    async (command, resource, save) => {
+      for (const portable of [false, true]) {
+        expect(
+          (await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace", { portable }))).commands,
+          portable ? "portable" : "Tree-sitter",
+        ).toEqual([
+          { resource, save },
+          { resource: "git status", save: "git status *" },
+        ])
+      }
+    },
+  )
+
+  test.each([["A=x <<<$'a\\nb' printf ok"], ["FOO=a\\b <<<';' printf ok"]] as const)(
+    "omits a here-string head Wildcard cannot represent literally: %s",
+    async (command) => {
+      for (const portable of [false, true]) {
+        const scanner = portable ? "portable" : "Tree-sitter"
+        const result = await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace", { portable }))
+        expect(result.commands, scanner).toEqual([{ resource: command }])
+      }
+    },
+  )
+
+  test("keeps a safe sibling when the here-string head is not representable", async () => {
+    for (const portable of [false, true]) {
+      expect(
+        (
+          await Effect.runPromise(
+            ShellParse.scan("FOO=a\\b <<<';' printf ok && printf hello", "/bin/bash", "/workspace", { portable }),
+          )
+        ).commands,
+        portable ? "portable" : "Tree-sitter",
+      ).toEqual([{ resource: "FOO=a\\b <<<';' printf ok" }, { resource: "printf hello", save: "printf *" }])
+    }
+  })
+
+  test("keeps the inherited heredoc resource divergence unchanged", async () => {
+    const command = "A=x <<EOF printf ok\ntext\nEOF"
+    expect((await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace"))).commands).toEqual([])
+    expect(
+      (await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace", { portable: true }))).commands,
+    ).toEqual([{ resource: command, save: "A=x <<EOF printf *" }])
+  })
+
+  test.each([
     [
       "echo 😀; FOO=你好 git status",
       [

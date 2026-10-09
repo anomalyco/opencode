@@ -621,6 +621,72 @@ describe("ShellTool scanner permissions", () => {
   }
 })
 
+describe("ShellTool bash here-string approvals", () => {
+  const test = isWindows || !Bun.which("bash") ? permissionIt.live.skip : permissionIt.live
+  for (const portable of [false, true]) {
+    test(`${portable ? "native" : "legacy"}: a quoted here-string separator persists scoped approval and preserves raw deny`, () =>
+      withScanner(
+        portable,
+        (registry, fixture) =>
+          Effect.gen(function* () {
+            const saved = yield* PermissionSaved.Service
+            const marker = path.join(fixture.active, "marker")
+            const command = "A=x <<<';' printf hello > marker"
+            const first = yield* runPermissionCommand(registry, command, marker, ["always"])
+            expect(first.exit).toMatchObject({
+              _tag: "Success",
+              value: { status: "completed", metadata: { exit: 0 } },
+            })
+            expect(yield* Effect.promise(() => Bun.file(marker).text())).toBe("hello")
+
+            expect(first.requests).toMatchObject([
+              { action: "shell", resources: [command], save: ["A=x <<<';' printf *"] },
+            ])
+            expect((yield* saved.list()).map((item) => item.resource)).toEqual(["A=x <<<';' printf *"])
+
+            for (const [approved, output] of [
+              [command, "hello"],
+              ["A=x <<<';' printf bye > marker", "bye"],
+            ]) {
+              yield* Effect.promise(() => fs.rm(marker, { force: true }))
+              const repeat = yield* runPermissionCommand(registry, approved, marker, [])
+              expect(repeat.requests, approved).toEqual([])
+              expect(repeat.exit, approved).toMatchObject({
+                _tag: "Success",
+                value: { status: "completed", metadata: { exit: 0 } },
+              })
+              expect(yield* Effect.promise(() => Bun.file(marker).text()), approved).toBe(output)
+            }
+
+            yield* Effect.promise(() => fs.rm(marker, { force: true }))
+            for (const negative of ["A=y <<<';' printf hello > marker", "printf hello > marker"]) {
+              const result = yield* runPermissionCommand(registry, negative, marker, ["reject"])
+              expect(result.requests, negative).toHaveLength(1)
+              expect(result.requests[0]?.resources, negative).toEqual([negative])
+              expect(Exit.isFailure(result.exit), negative).toBe(true)
+              expect(yield* Effect.promise(() => Bun.file(marker).exists()), negative).toBe(false)
+            }
+
+            const agents = yield* Agent.Service
+            yield* agents.transform((editor) =>
+              editor.update(toolIdentity.agent, (agent) => {
+                agent.permissions = [{ action: "shell", resource: command, effect: "deny" }]
+              }),
+            )
+            yield* Effect.promise(() => fs.rm(marker, { force: true }))
+            const denied = yield* runPermissionCommand(registry, command, marker, [])
+            expect(denied.requests).toEqual([])
+            expect(denied.exit).toMatchObject({
+              _tag: "Success",
+              value: { status: "error", error: { message: expect.stringContaining("Permission denied: shell") } },
+            })
+            expect(yield* Effect.promise(() => Bun.file(marker).exists())).toBe(false)
+          }),
+        "bash",
+      ))
+  }
+})
+
 describe("ShellTool conditional process substitution", () => {
   const test = isWindows || !Bun.which("bash") ? permissionIt.live.skip : permissionIt.live
   for (const portable of [false, true]) {
