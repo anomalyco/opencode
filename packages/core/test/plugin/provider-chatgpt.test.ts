@@ -2,8 +2,9 @@ import { Money } from "@opencode/schema/money"
 import { Agent } from "@opencode/schema/agent"
 import { Session } from "@opencode/core/session"
 import { OpenAIResponses } from "@opencode/ai/protocols/openai-responses"
-import { AIError, HttpContext, RateLimitError } from "@opencode/ai"
+import { AIError, HttpContext, LLM, Message, RateLimitError } from "@opencode/ai"
 import { classifyProviderFailure } from "@opencode/ai/provider-error"
+import { compileRequest } from "@opencode/ai/route/client"
 import { describe, expect } from "bun:test"
 // import { DateTime, Deferred, Effect, Schedule } from "effect"
 import { DateTime, Effect, Schedule } from "effect"
@@ -1050,6 +1051,85 @@ describe("ChatGPTPlugin", () => {
         expect(yield* resolve(baseID)).toEqual({ type: "summary" })
         expect(yield* resolve(modelID)).toEqual({ type: "native" })
         expect(yield* resolve(variantID, Model.VariantID.make("high"))).toEqual({ type: "native" })
+      }).pipe(Effect.provide(ModelResolver.layer)),
+    )
+  }
+
+  for (const connection of ["chatgpt", "key"] as const) {
+    it.effect(`${connection} sends mid-session reasoning effort switches in a form its backend accepts`, () =>
+      Effect.gen(function* () {
+        const catalog = yield* Provider.Service
+        const models = yield* Model.Service
+        const credentials = yield* Credential.Service
+        const modelID = Model.ID.make("gpt-6.1-sol")
+        yield* catalog.transform((editor) => {
+          editor.update(Provider.ID.openai, (provider) => {
+            provider.package = "@opencode/ai/providers/openai"
+          })
+          editor.models.update(Provider.ID.openai, modelID, (model) => {
+            model.variants = ["high", "max"].map((effort) => ({
+              id: Model.VariantID.make(effort),
+              settings: { reasoningEffort: effort },
+            }))
+          })
+        })
+        yield* credentials.create({
+          integrationID: Integration.ID.make("openai"),
+          value:
+            connection === "chatgpt"
+              ? Credential.OAuth.make({
+                  type: "oauth",
+                  methodID: Integration.MethodID.make("chatgpt-token-sharing"),
+                  access: "chatgpt-token",
+                  refresh: "refresh",
+                  expires: Date.now() + 60_000,
+                  metadata: { clientID: "oaiapp_issued" },
+                })
+              : Credential.Key.make({ type: "key", key: "sk-test" }),
+        })
+        yield* addPlugin()
+        yield* addLegacyPlugin()
+        const resolver = yield* ModelResolver.Service
+        const model = required(yield* models.get(Provider.ID.openai, modelID))
+        const body = (variant: string, messages: ReadonlyArray<Message>) =>
+          resolver.resolveModel(model, Model.VariantID.make(variant)).pipe(
+            Effect.flatMap((resolved) => compileRequest(LLM.request({ model: resolved.model, messages }))),
+            Effect.map((compiled) => compiled.body),
+          )
+        const switched = [
+          Message.user("a"),
+          Message.assistant("b"),
+          Message.effort({ effort: "max", previous: "high" }),
+          Message.user("c"),
+        ]
+        const switchedBack = [
+          ...switched,
+          Message.assistant("d"),
+          Message.effort({ effort: "high", previous: "max" }),
+          Message.user("e"),
+        ]
+        const user = (text: string) => ({ role: "user", content: [{ type: "input_text", text }] })
+        const assistant = (text: string) => ({ role: "assistant", content: [{ type: "output_text", text }] })
+        const update = (effort: string) => ({ type: "configuration_update", reasoning: { effort } })
+
+        expect([yield* body("max", switched), yield* body("high", switchedBack)]).toMatchObject(
+          {
+            chatgpt: [
+              { reasoning: { effort: "max" }, input: [user("a"), assistant("b"), user("c")] },
+              {
+                reasoning: { effort: "high" },
+                input: [user("a"), assistant("b"), user("c"), assistant("d"), user("e")],
+              },
+            ],
+            key: [
+              { reasoning: { effort: "high" }, input: [user("a"), assistant("b"), update("max"), user("c")] },
+              {
+                reasoning: { effort: "high" },
+                input: [user("a"), assistant("b"), update("max"), user("c"), assistant("d"), update("high"), user("e")],
+              },
+            ],
+          }[connection],
+        )
       }).pipe(Effect.provide(ModelResolver.layer)),
     )
   }
