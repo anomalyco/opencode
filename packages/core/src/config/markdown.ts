@@ -33,6 +33,12 @@ export function sanitize(content: string) {
     if (!entry) return [line]
     const value = entry[2].trim()
     if (value === "" || value === ">" || value === "|" || value.startsWith('"') || value.startsWith("'")) return [line]
+    // A value that opens a flow collection and then keeps going — `description: [Team] does a
+    // thing` — is read as that collection followed by trailing text, which no parser accepts, so
+    // the whole file parses as nothing and an agent defined in it disappears. Quote the value back
+    // into one plain string. A bare `[a, b]` stays a list, and an unterminated `[unclosed` stays a
+    // syntax error: both have readings a reader could reasonably have meant.
+    if (/^[[{].*[\]}](?=\s*\S)/.test(value)) return [`${entry[1]}: '${value.replaceAll("'", "''")}'`]
     if (!value.includes(":")) return [line]
     return [`${entry[1]}: |-`, `  ${value}`]
   })

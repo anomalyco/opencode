@@ -470,6 +470,14 @@ Use native v2 fields.`,
             )
             await fs.writeFile(path.join(tmp.path, "agents", "disabled.md"), "---\ndisabled: true\n---\nDisabled")
             await fs.writeFile(path.join(tmp.path, "agents", "empty.md"), "")
+            await fs.writeFile(
+              path.join(tmp.path, "agents", "bracketed.md"),
+              `---
+description: [Team] unquoted description
+mode: subagent
+---
+Reply with exactly: OK`,
+            )
             await fs.writeFile(path.join(tmp.path, "modes", "plan.md"), "Make a plan.")
           })
           const agents = yield* Agent.Service
@@ -493,6 +501,12 @@ Use native v2 fields.`,
             permissions: [...defaultPermissions, { action: "edit", resource: "*", effect: "deny" }],
           })
           expect(yield* agents.get(Agent.ID.make("team/helper"))).toMatchObject({ system: "Help the team." })
+          // A value opening with `[` is read as a flow sequence, which used to drop the agent here.
+          expect(yield* agents.get(Agent.ID.make("bracketed"))).toMatchObject({
+            description: "[Team] unquoted description",
+            mode: "subagent",
+            system: "Reply with exactly: OK",
+          })
           expect(yield* agents.get(Agent.ID.make("native"))).toMatchObject({
             system: "Use native v2 fields.",
             request: { headers: { "x-agent": "native" }, body: { effort: "high" } },
