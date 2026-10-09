@@ -43,10 +43,10 @@
       "packages/stats/*"
     ],
     "catalog": {
-      "@effect/opentelemetry": "4.0.0-rc.118",
-      "@effect/platform-node": "4.0.0-rc.118",
-      "@effect/platform-node-shared": "4.0.0-rc.118",
-      "@effect/sql-sqlite-bun": "4.0.0-rc.118",
+      "@effect/opentelemetry": "4.0.1",
+      "@effect/platform-node": "4.0.1",
+      "@effect/platform-node-shared": "4.0.1",
+      "@effect/sql-sqlite-bun": "4.0.1",
       "@npmcli/arborist": "9.4.0",
       "@types/bun": "1.4.0",
       "@types/cross-spawn": "6.0.6",
@@ -80,7 +80,7 @@
       "dompurify": "3.4.14",
       "drizzle-kit": "1.0.0-rc.5-ab785fc",
       "drizzle-orm": "1.0.0-rc.5-169397b",
-      "effect": "4.0.0-rc.118",
+      "effect": "4.0.1",
       "fast-check": "4.9.0",
       "ai": "6.0.168",
       "cross-spawn": "7.0.6",
