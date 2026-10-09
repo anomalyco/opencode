@@ -1033,15 +1033,27 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   event.on("installation.update-available", async (evt) => {
     console.log("installation.update-available", evt)
     const version = evt.properties.version
+    if (Number.parseInt(version.replace(/^v/, ""), 10) >= 2) {
+      if (kv.get("v2_notice_version") === version) return
+      kv.set("v2_notice_version", version)
+      toast.show({
+        variant: "warning",
+        title: "OpenCode v2 is available",
+        message: `v${version} is not compatible with v1, so OpenCode won't install it. Migration guide:\nhttps://opencode.ai/v2/docs/migrate-v1`,
+        duration: 15000,
+      })
+      return
+    }
 
     const skipped = kv.get("skipped_version")
-    if (skipped && !isVersionGreater(version, skipped)) return
+    // Earlier releases also stored skipped 2.x versions here. Those must not hide 1.x updates.
+    if (skipped && Number.parseInt(skipped, 10) < 2 && !isVersionGreater(version, skipped)) return
 
     const choice = await DialogConfirm.show(
       dialog,
       `Update Available`,
       `A new release v${version} is available. Would you like to update now?`,
-      "skip",
+      { cancelLabel: "skip", initial: "cancel" },
     )
 
     if (choice === false) {
