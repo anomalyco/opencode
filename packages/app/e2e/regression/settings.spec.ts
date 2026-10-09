@@ -804,6 +804,70 @@ test("providers: Console sign-in shows the device code before opening the browse
   await expect(dialog.getByRole("button", { name: "Copy sign-in link", exact: true })).toBeVisible()
 })
 
+test("providers: switching Console accounts keeps the list until the new workspace loads", async ({ page }) => {
+  const accounts = [
+    { type: "credential", id: "cred_clara", label: "Clara", method: "oauth" },
+    { type: "credential", id: "cred_anomaly", label: "Anomaly", method: "oauth" },
+  ]
+
+  // The server loads the new workspace's providers a few catalog reads after the switch.
+  const state = { active: "cred_clara", pendingReads: 0 }
+  const workspace = () => accounts.find((account) => account.id === state.active)!.label
+
+  const catalog = () => {
+    if (state.pendingReads > 0) {
+      state.pendingReads--
+
+      return {
+        all: [{ id: "opencode", name: "OpenCode", models: { free: { id: "free", name: "Free", cost: { input: 0 } } } }],
+        connected: ["opencode"],
+        default: {},
+      }
+    }
+
+    return {
+      all: [
+        { id: "opencode", integrationID: "opencode", name: `${workspace()} / OpenCode`, models: {} },
+        { id: "console-google", integrationID: "opencode", name: `${workspace()} / Google`, models: {} },
+      ],
+      connected: ["opencode", "console-google"],
+      default: {},
+    }
+  }
+
+  const { settings } = await open(page, {
+    provider: catalog,
+    integrations: () => [
+      {
+        id: "opencode",
+        name: "OpenCode Console",
+        methods: [{ id: "device", type: "oauth", label: "OpenCode Console account" }],
+        connections: accounts.toSorted((a, b) => Number(b.id === state.active) - Number(a.id === state.active)),
+      },
+    ],
+    onCredentialActivate: (credentialID) => {
+      state.active = credentialID
+      state.pendingReads = 2
+    },
+  })
+
+  await settings.getByRole("tab", { name: "Providers", exact: true }).click()
+  const connected = settings.locator('[data-component="connected-providers-section"]')
+  const trigger = connected.getByRole("button", { name: "Manage OpenCode Console accounts", exact: true })
+  await expect(trigger).toHaveText("Clara")
+  await connected.evaluate((element) => {
+    new MutationObserver(() => {
+      if (element.textContent?.includes("No connected providers")) element.dataset.flashed = ""
+    }).observe(element, { childList: true, subtree: true, characterData: true })
+  })
+
+  await trigger.click()
+  await page.getByRole("menuitemradio", { name: "Anomaly", exact: true }).click()
+  await expect(page.getByText("OpenCode Console account switched")).toBeVisible()
+  await expect(trigger).toHaveText("Anomaly")
+  await expect(connected).not.toHaveAttribute("data-flashed")
+})
+
 test("the add server dialog keeps focus above fullscreen settings", async ({ page }) => {
   await mockRemoteServer(page, { directory: "/remote/settings-demo" })
   const { settings } = await open(page)

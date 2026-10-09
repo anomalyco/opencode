@@ -52,6 +52,8 @@ export const SettingsProviders: Component<{
     consoleExpanded: false,
     connecting: false,
     credentialID: undefined as string | undefined,
+    // The connected list from before an account change, shown until the refreshed catalog settles.
+    held: undefined as ProviderItem[] | undefined,
   })
 
   const updateDisconnecting = (ids: string[], status: "removing" | "removed" | "absent" | undefined) =>
@@ -104,6 +106,7 @@ export const SettingsProviders: Component<{
   }
 
   const available = createMemo(() => {
+    if (state.held) return state.held
     const connected = providers.connected()
     const managedConsole = consoleProviderGroup(connected)
 
@@ -282,6 +285,22 @@ export const SettingsProviders: Component<{
     ])
   }
 
+  // The server loads a Console workspace's providers after the credential changes, so the first
+  // refresh can still show only the free catalog. Poll briefly before showing the new account.
+  const settleConsoleCatalog = async () => {
+    const location = props.directory ? { directory: props.directory } : undefined
+    const deadline = Date.now() + 10_000
+
+    while (!consoleProviderGroup(providers.connected()) && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 250))
+      data.location.provider.invalidate(location)
+      data.location.model.invalidate(location)
+      await Promise.all([data.location.provider.sync(location), data.location.model.sync(location)])
+    }
+  }
+
+  const isConsoleAccount = (provider: ProviderItem) => (provider.integrationID ?? provider.id) === CONSOLE_INTEGRATION
+
   const accountError = (error: unknown) => {
     const message = error instanceof Error ? error.message : String(error)
     showToast({ title: language.t("common.requestFailed"), description: message })
@@ -289,10 +308,11 @@ export const SettingsProviders: Component<{
 
   const activate = async (provider: ProviderItem, providerName: string, account: ProviderAccount) => {
     if (activeProviderAccount(integration(provider))?.id === account.id) return
-    setState("credentialID", account.id)
+    setState({ credentialID: account.id, held: available() })
     await serverSdk.api.credential
       .activate({ credentialID: account.id })
       .then(refreshAccounts)
+      .then(() => (isConsoleAccount(provider) ? settleConsoleCatalog() : undefined))
       .then(() =>
         showToast({
           variant: "success",
@@ -302,15 +322,16 @@ export const SettingsProviders: Component<{
         }),
       )
       .catch(accountError)
-      .finally(() => setState("credentialID", undefined))
+      .finally(() => setState({ credentialID: undefined, held: undefined }))
   }
 
   const remove = async (provider: ProviderItem, providerName: string, account: ProviderAccount) => {
     const final = providerAccounts(integration(provider)).length === 1
-    setState("credentialID", account.id)
+    setState({ credentialID: account.id, held: available() })
     await serverSdk.api.credential
       .remove({ credentialID: account.id })
       .then(refreshAccounts)
+      .then(() => (isConsoleAccount(provider) && !final ? settleConsoleCatalog() : undefined))
       .then(() =>
         showToast({
           variant: "success",
@@ -328,7 +349,7 @@ export const SettingsProviders: Component<{
         }),
       )
       .catch(accountError)
-      .finally(() => setState("credentialID", undefined))
+      .finally(() => setState({ credentialID: undefined, held: undefined }))
   }
 
   function AccountMenu(menuProps: { provider: ProviderItem; name?: string }) {
@@ -429,9 +450,7 @@ export const SettingsProviders: Component<{
                             <ProviderModelIcon provider={item} class="settings-provider-icon shrink-0" />
 
                             <div class="settings-provider-main">
-                              <span class="settings-provider-name truncate">
-                                {item.name}
-                              </span>
+                              <span class="settings-provider-name truncate">{item.name}</span>
                               <Badge>{type(item)}</Badge>
                             </div>
                           </div>
@@ -556,9 +575,7 @@ export const SettingsProviders: Component<{
 
                     <div class="settings-provider-copy">
                       <div class="settings-provider-main">
-                        <span class="settings-provider-name">
-                          {item.name}
-                        </span>
+                        <span class="settings-provider-name">{item.name}</span>
                         <Show when={item.id === "opencode" || item.id === "opencode-go"}>
                           <Badge>{language.t("dialog.provider.tag.recommended")}</Badge>
                         </Show>

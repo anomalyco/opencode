@@ -44,7 +44,9 @@ export type MockFileContent =
 export interface MockServerConfig {
   server?: string
   provider: Resolvable<MockProviderCatalog>
-  integrations?: unknown[]
+  integrations?: Resolvable<unknown[]>
+  // Runs on POST /api/credential/:id/activate; the fixture swaps its integrations and catalog to the new account.
+  onCredentialActivate?: (credentialID: string) => void
   onConnectKey?: (input: { integrationID: string; body: unknown }) => void
   // Terminal shells the settings offer (`/api/config/shell`).
   shells?: unknown[]
@@ -843,19 +845,20 @@ function mockHandlers(
         model: () => Effect.succeed({ location: location(config), data: currentModels(resolve(config.provider)) }),
         modelDefault: () =>
           Effect.succeed({ location: location(config), data: currentDefaultModel(resolve(config.provider)) }),
-        integrationList: () => Effect.succeed({ location: location(config), data: config.integrations ?? [] }),
+        integrationList: () =>
+          Effect.sync(() => ({ location: location(config), data: resolve(config.integrations ?? []) })),
         integrationGet: (ctx) =>
-          Effect.succeed({
+          Effect.sync(() => ({
             location: location(config),
-            data: config.integrations
-              ?.filter(Predicate.isObject)
+            data: resolve(config.integrations ?? [])
+              .filter(Predicate.isObject)
               .find((integration) => integration.id === ctx.params.integrationID) ?? {
               id: ctx.params.integrationID,
               name: ctx.params.integrationID,
               methods: [{ type: "key", label: "API key" }],
               connections: [],
             },
-          }),
+          })),
         integrationConnect: (ctx) =>
           Effect.sync(() => config.onConnectKey?.({ integrationID: ctx.params.integrationID, body: ctx.payload })).pipe(
             Effect.andThen(noContent),
@@ -895,6 +898,8 @@ function mockHandlers(
               data: { status: "pending", time: { created, expires: created + 600_000 } },
             })
           }),
+        credentialActivate: (ctx) =>
+          Effect.sync(() => config.onCredentialActivate?.(ctx.params.credentialID)).pipe(Effect.andThen(noContent)),
         credentialRemove: () => noContent,
         command: (ctx) =>
           Effect.sync(() => ({
