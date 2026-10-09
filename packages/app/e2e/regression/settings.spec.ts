@@ -830,6 +830,11 @@ test("providers: the connect dialog lists connected providers and manages their 
       activated.push(credentialID)
       state.active = credentialID
     },
+    onCredentialUpdate: (credentialID, body) => {
+      const account = accounts.find((item) => item.id === credentialID)
+
+      if (account) account.label = String(Object(body).label)
+    },
   })
 
   await settings.getByRole("tab", { name: "Providers", exact: true }).click()
@@ -852,8 +857,20 @@ test("providers: the connect dialog lists connected providers and manages their 
   await expect(list.getByRole("radio")).toHaveText(["Personal", "Work"])
   expect(activated).toEqual(["cred_personal"])
 
+  // Renaming edits the name in place; Enter saves it.
+  await list.getByRole("button", { name: "Personal options", exact: true }).click()
+  await page.getByRole("menuitem", { name: "Rename account…", exact: true }).click()
+  const name = list.getByRole("textbox", { name: "Account name", exact: true })
+  await expect(name).toBeFocused()
+  await expect(name).toHaveValue("Personal")
+  await name.fill("Home")
+  await name.press("Enter")
+  await expect(list.getByRole("radio")).toHaveText(["Home", "Work"])
+  await expect(list.getByRole("radio", { name: "Home", exact: true })).toHaveAttribute("aria-checked", "true")
+
   // Removing an account asks first.
-  await list.getByRole("button", { name: "Remove Work", exact: true }).click()
+  await list.getByRole("button", { name: "Work options", exact: true }).click()
+  await page.getByRole("menuitem", { name: "Remove account…", exact: true }).click()
   await expect(dialog.getByText("Remove Work?", { exact: true })).toBeVisible()
 
   const removed = page.waitForRequest(
@@ -868,6 +885,38 @@ test("providers: the connect dialog lists connected providers and manages their 
   await expect(dialog.getByPlaceholder("API key")).toBeVisible()
   await dialog.getByRole("button", { name: "Navigate back", exact: true }).click()
   await expect(list).toBeVisible()
+})
+
+test("providers: renames the only account inline from its menu", async ({ page }) => {
+  const account = { type: "credential", id: "cred_work", label: "Work", method: "key" }
+
+  const { settings } = await open(page, {
+    provider: { all: [{ id: "openai", name: "OpenAI", models: {} }], connected: ["openai"], default: {} },
+    integrations: () => [
+      { id: "openai", name: "OpenAI", methods: [{ type: "key", label: "API key" }], connections: [account] },
+    ],
+    onCredentialUpdate: (_, body) => {
+      account.label = String(Object(body).label)
+    },
+  })
+
+  await settings.getByRole("tab", { name: "Providers", exact: true }).click()
+  const trigger = settings.getByRole("button", { name: "Manage OpenAI accounts", exact: true })
+  await expect(trigger).toHaveText("Work")
+  await trigger.click()
+  await page.getByRole("menuitem", { name: "Rename account…", exact: true }).click()
+  const name = settings.getByRole("textbox", { name: "Account name", exact: true })
+  await expect(name).toBeFocused()
+  await name.fill("Personal")
+  await name.press("Enter")
+  await expect(trigger).toHaveText("Personal")
+
+  // Escape keeps the current name.
+  await trigger.click()
+  await page.getByRole("menuitem", { name: "Rename account…", exact: true }).click()
+  await name.fill("Ignored")
+  await name.press("Escape")
+  await expect(trigger).toHaveText("Personal")
 })
 
 test("providers: switching Console accounts keeps the list until the new workspace loads", async ({ page }) => {

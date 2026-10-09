@@ -18,6 +18,7 @@ import { DialogConnectProvider, useProviderConnectController } from "@/providers
 import { ProviderModelIcon } from "@/providers/models/provider-group"
 import { SettingsList } from "@/settings/list"
 import { activeProviderAccount, providerAccounts, type ProviderAccount } from "./accounts"
+import { AccountNameInput } from "./account-name"
 import "@/settings/settings.css"
 
 type ProviderSource = "env" | "api" | "account" | "config" | "custom"
@@ -52,6 +53,7 @@ export const SettingsProviders: Component<{
     consoleExpanded: false,
     connecting: false,
     credentialID: undefined as string | undefined,
+    renaming: undefined as string | undefined,
     // The connected list from before an account change, shown until the refreshed catalog settles.
     held: undefined as ProviderItem[] | undefined,
   })
@@ -352,10 +354,51 @@ export const SettingsProviders: Component<{
       .finally(() => setState({ credentialID: undefined, held: undefined }))
   }
 
+  const rename = (account: ProviderAccount, label: string) =>
+    serverSdk.api.credential
+      .update({ credentialID: account.id, label })
+      .then(refreshAccounts)
+      .then(() => true)
+      .catch((error: unknown) => {
+        accountError(error)
+
+        return false
+      })
+
   function AccountMenu(menuProps: { provider: ProviderItem; name?: string }) {
     const accounts = () => providerAccounts(integration(menuProps.provider))
     const active = () => activeProviderAccount(integration(menuProps.provider))
     const name = () => menuProps.name ?? menuProps.provider.name
+    const renaming = () => accounts().find((account) => account.id === state.renaming)
+
+    return (
+      <Show
+        when={renaming()}
+        fallback={
+          <AccountMenuTrigger provider={menuProps.provider} name={name()} accounts={accounts()} active={active()} />
+        }
+      >
+        {(account) => (
+          <AccountNameInput
+            value={account().label}
+            class="settings-provider-account-input"
+            onSave={(label) => rename(account(), label)}
+            onClose={() => setState("renaming", undefined)}
+          />
+        )}
+      </Show>
+    )
+  }
+
+  function AccountMenuTrigger(menuProps: {
+    provider: ProviderItem
+    name: string
+    accounts: ProviderAccount[]
+    active: ProviderAccount | undefined
+  }) {
+    const accounts = () => menuProps.accounts
+    const active = () => menuProps.active
+    const name = () => menuProps.name
 
     return (
       <Menu placement="bottom-end" gutter={6}>
@@ -370,7 +413,11 @@ export const SettingsProviders: Component<{
           <Icon name="chevron-down" size="small" />
         </Menu.Trigger>
         <Menu.Portal>
-          <Menu.Content class="settings-provider-account-menu" onEscapeKeyDown={(event) => event.stopPropagation()}>
+          <Menu.Content
+            class="settings-provider-account-menu"
+            onEscapeKeyDown={(event) => event.stopPropagation()}
+            onCloseAutoFocus={(event) => state.renaming && event.preventDefault()}
+          >
             <Menu.Group>
               <Menu.GroupLabel>{language.t("settings.providers.account.group")}</Menu.GroupLabel>
               <Menu.RadioGroup
@@ -395,6 +442,32 @@ export const SettingsProviders: Component<{
             <Menu.Item disabled={state.credentialID !== undefined} onSelect={() => connect(menuProps.provider.id)}>
               {language.t("settings.providers.account.add")}
             </Menu.Item>
+            <Show
+              when={accounts().length > 1}
+              fallback={
+                <Menu.Item
+                  disabled={state.credentialID !== undefined || accounts().length === 0}
+                  onSelect={() => setState("renaming", accounts()[0]?.id)}
+                >
+                  {language.t("settings.providers.account.rename")}
+                </Menu.Item>
+              }
+            >
+              <Menu.Sub placement="left-start">
+                <Menu.SubTrigger disabled={state.credentialID !== undefined}>
+                  {language.t("settings.providers.account.rename")}
+                </Menu.SubTrigger>
+                <Menu.SubContent class="settings-provider-account-submenu">
+                  <For each={accounts()}>
+                    {(account) => (
+                      <Menu.Item onSelect={() => setState("renaming", account.id)}>
+                        <span class="settings-provider-account-label">{account.label}</span>
+                      </Menu.Item>
+                    )}
+                  </For>
+                </Menu.SubContent>
+              </Menu.Sub>
+            </Show>
             <Show
               when={accounts().length > 1}
               fallback={

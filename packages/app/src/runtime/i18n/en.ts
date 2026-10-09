@@ -123,7 +123,7 @@ export const dict = {
   "dialog.provider.accounts.connected": "Connected accounts",
   "dialog.provider.accounts.removeConfirm": "Remove {{account}}?",
   "dialog.provider.accounts.remove": "Remove",
-  "dialog.provider.accounts.removeLabel": "Remove {{account}}",
+  "dialog.provider.accounts.options": "{{account}} options",
 
   "provider.connect.title": "Connect {{provider}}",
   "provider.connect.opencode.name": "OpenCode Console",
@@ -916,6 +916,8 @@ export const dict = {
   "settings.providers.account.manage": "Manage {{provider}} accounts",
   "settings.providers.account.group": "Accounts",
   "settings.providers.account.add": "Add account",
+  "settings.providers.account.rename": "Rename account…",
+  "settings.providers.account.name": "Account name",
   "settings.providers.account.remove": "Remove account…",
   "settings.providers.account.removeSingle": "Remove account",
   "settings.providers.account.active": "Active",

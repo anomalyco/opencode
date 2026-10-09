@@ -53,6 +53,9 @@ import { ConsoleAuthorization } from "./console"
 import { DialogChatGPTPlanWelcome } from "./chatgpt-welcome"
 import { authServerName, RemoteAuthNotice } from "./remote"
 import { providerAccounts, type ProviderAccount } from "@/settings/providers/accounts"
+import { AccountNameInput } from "@/settings/providers/account-name"
+import { IconButton } from "@opencode/ui/icon-button"
+import { Menu } from "@opencode/ui/menu"
 import "./models.css"
 
 const CUSTOM_ID = "_custom"
@@ -447,6 +450,7 @@ function ProviderConnection(props: {
     switching?: string
     // The account being activated, checked right away instead of after the refresh.
     activating?: string
+    renaming?: string
   }>({
     adding: false,
     copied: false,
@@ -1209,6 +1213,17 @@ function ProviderConnection(props: {
       .finally(() => setState({ switching: undefined, activating: undefined }))
   }
 
+  const renameAccount = (account: ProviderAccount, label: string) =>
+    sdk.api.credential
+      .update({ credentialID: account.id, label })
+      .then(refreshAccounts)
+      .then(() => true)
+      .catch((error: unknown) => {
+        accountError(error)
+
+        return false
+      })
+
   const removeAccount = async (account: ProviderAccount) => {
     const final = accounts().length === 1
     setState({ switching: account.id, confirming: undefined })
@@ -1258,28 +1273,54 @@ function ProviderConnection(props: {
                   }
                 >
                   <div class="group relative flex min-h-9 items-center rounded-md hover:bg-v2-overlay-simple-overlay-hover focus-within:bg-v2-overlay-simple-overlay-hover">
-                    <button
-                      type="button"
-                      role="radio"
-                      aria-checked={activeAccount() === account.id}
-                      class="flex min-h-9 min-w-0 flex-1 items-center gap-2 px-3 text-left text-[13px] leading-5 tracking-[-0.04px] focus-visible:outline-none"
-                      disabled={state.switching !== undefined}
-                      onClick={() => void activateAccount(account)}
+                    <Show
+                      when={state.renaming !== account.id}
+                      fallback={
+                        <div class="flex min-h-9 min-w-0 flex-1 items-center px-3">
+                          <AccountNameInput
+                            value={account.label}
+                            class="-mx-1 h-7 w-full px-1 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base"
+                            onSave={(label) => renameAccount(account, label)}
+                            onClose={() => setState("renaming", undefined)}
+                          />
+                        </div>
+                      }
                     >
-                      <span class="min-w-0 truncate font-[440] text-v2-text-text-base">{account.label}</span>
-                      <Show when={activeAccount() === account.id}>
-                        <Icon name="check" size="small" class="shrink-0 text-v2-icon-icon-base" />
-                      </Show>
-                    </button>
-                    <div class="flex shrink-0 items-center pe-1.5">
-                      <Button
-                        variant="ghost-muted"
+                      <button
+                        type="button"
+                        role="radio"
+                        aria-checked={activeAccount() === account.id}
+                        class="flex min-h-9 min-w-0 flex-1 items-center gap-2 px-3 text-left text-[13px] leading-5 tracking-[-0.04px] focus-visible:outline-none"
                         disabled={state.switching !== undefined}
-                        aria-label={language.t("dialog.provider.accounts.removeLabel", { account: account.label })}
-                        onClick={() => setState("confirming", account.id)}
+                        onClick={() => void activateAccount(account)}
                       >
-                        {language.t("dialog.provider.accounts.remove")}
-                      </Button>
+                        <span class="min-w-0 truncate font-[440] text-v2-text-text-base">{account.label}</span>
+                        <Show when={activeAccount() === account.id}>
+                          <Icon name="check" size="small" class="shrink-0 text-v2-icon-icon-base" />
+                        </Show>
+                      </button>
+                    </Show>
+                    <div class="flex shrink-0 items-center pe-1.5">
+                      <Menu gutter={4} modal={false} placement="bottom-end">
+                        <Menu.Trigger
+                          as={IconButton}
+                          variant="ghost-muted"
+                          size="small"
+                          icon={<Icon name="outline-dots" />}
+                          disabled={state.switching !== undefined}
+                          aria-label={language.t("dialog.provider.accounts.options", { account: account.label })}
+                        />
+                        <Menu.Portal>
+                          <Menu.Content onCloseAutoFocus={(event) => state.renaming && event.preventDefault()}>
+                            <Menu.Item onSelect={() => setState({ renaming: account.id, confirming: undefined })}>
+                              {language.t("settings.providers.account.rename")}
+                            </Menu.Item>
+                            <Menu.Item onSelect={() => setState({ confirming: account.id, renaming: undefined })}>
+                              {language.t("settings.providers.account.remove")}
+                            </Menu.Item>
+                          </Menu.Content>
+                        </Menu.Portal>
+                      </Menu>
                     </div>
                   </div>
                 </Show>
