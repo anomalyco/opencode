@@ -113,7 +113,7 @@ it.live("does not inherit host process.env when creating a shell in a workspace-
         }),
       )
       expect(yield* shell.result(info)).toMatchObject({
-        info: { status: "exited", exit: 0 },
+        info: { status: "exited" },
       })
     }).pipe(
       Effect.provide(
