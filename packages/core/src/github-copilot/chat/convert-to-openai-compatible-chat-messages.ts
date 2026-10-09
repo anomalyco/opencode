@@ -82,10 +82,12 @@ export function convertToOpenAICompatibleChatMessages(prompt: LanguageModelV3Pro
 
         for (const part of content) {
           const partMetadata = getOpenAIMetadata(part)
-          // Check for reasoningOpaque on any part (may be attached to text/tool-call)
+          // reasoningOpaque may be attached to any part. Interleaved thinking yields one per
+          // reasoning segment; like the Copilot VS Code client, replay the latest opaque value
+          // with the concatenated reasoning text.
           const partOpaque = (part.providerOptions as { copilot?: { reasoningOpaque?: string } })?.copilot
             ?.reasoningOpaque
-          if (partOpaque && !reasoningOpaque) {
+          if (partOpaque) {
             reasoningOpaque = partOpaque
           }
 
@@ -95,7 +97,7 @@ export function convertToOpenAICompatibleChatMessages(prompt: LanguageModelV3Pro
               break
             }
             case "reasoning": {
-              if (part.text) reasoningText = part.text
+              if (part.text) reasoningText = (reasoningText ?? "") + part.text
               break
             }
             case "tool-call": {
