@@ -63,6 +63,7 @@ import NewLayout from "@/pages/layout-new"
 import { ErrorPage } from "./pages/error"
 import { useCheckServerHealth } from "./utils/server-health"
 import { legacySessionHref, legacySessionServer, requireServerKey, sessionHref } from "./utils/session-route"
+import { SessionDeepLinks } from "./pages/layout/session-deep-link"
 import { createSessionLineage } from "@/pages/session/session-lineage"
 
 import { SessionPage, SessionRouteErrorBoundary, TargetSessionRouteContent } from "@/pages/session"
@@ -593,6 +594,7 @@ export function AppInterface(props: {
                     <PermissionProvider>
                       <NotificationProvider>
                         <ServerShell>
+                          <SessionDeepLinks />
                           <Show when={useSettings().general.newLayoutDesigns()} fallback={routerProps.children}>
                             <NewAppLayout serverScoped={props.serverScoped}>{routerProps.children}</NewAppLayout>
                           </Show>

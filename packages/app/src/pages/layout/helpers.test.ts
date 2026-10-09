@@ -5,6 +5,7 @@ import {
   drainPendingDeepLinks,
   parseDeepLink,
   parseNewSessionDeepLink,
+  parseSessionDeepLink,
 } from "./deep-links"
 import { type Session } from "@opencode-ai/sdk/v2/client"
 import {
@@ -98,6 +99,27 @@ describe("layout deep links", () => {
       "opencode://new-session?directory=/c&prompt=ship%20it",
     ])
     expect(result).toEqual([{ directory: "/a" }, { directory: "/c", prompt: "ship it" }])
+  })
+
+  test("parses a session deep link", () => {
+    expect(parseSessionDeepLink("opencode://session/ses_01ABCDEF")).toBe("ses_01ABCDEF")
+    expect(parseSessionDeepLink("opencode://session/has%20space")).toBe("has space")
+    expect(parseSessionDeepLink(`opencode://session/${"a".repeat(256)}`)).toBe("a".repeat(256))
+  })
+
+  test("ignores malformed session deep links", () => {
+    expect(parseSessionDeepLink("opencode://session/../evil")).toBeUndefined()
+    expect(parseSessionDeepLink("opencode://session/%2e%2e/evil")).toBeUndefined()
+    expect(parseSessionDeepLink("opencode://session/foo/bar")).toBeUndefined()
+    expect(parseSessionDeepLink("opencode://session/ses_01?x=1")).toBeUndefined()
+    expect(parseSessionDeepLink("opencode://session/ses_01#frag")).toBeUndefined()
+    expect(parseSessionDeepLink("opencode://user:pass@session/ses_01")).toBeUndefined()
+    expect(parseSessionDeepLink(`opencode://session/${"a".repeat(257)}`)).toBeUndefined()
+    expect(parseSessionDeepLink("opencode://session/abc%01def")).toBeUndefined()
+    expect(parseSessionDeepLink("opencode://session/abc%2fdef")).toBeUndefined()
+    expect(parseSessionDeepLink("opencode://bogus/session/x")).toBeUndefined()
+    expect(parseSessionDeepLink("opencode://console/authorized?window=window-a")).toBeUndefined()
+    expect(parseSessionDeepLink("opencode://open-project?directory=/tmp/demo")).toBeUndefined()
   })
 
   test("drains global deep links once", () => {

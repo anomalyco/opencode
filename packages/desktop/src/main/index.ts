@@ -148,6 +148,11 @@ const main = Effect.gen(function* () {
   initializeOldLayoutEligibility(app.getPath("userData"))
   logger = initLogging()
   initCrashReporter()
+  const initialDeepLinks = process.argv.filter((arg) => arg.startsWith("opencode://"))
+  if (initialDeepLinks.length > 0) {
+    pendingDeepLinks.push(...initialDeepLinks)
+    logger.log("deep link received via argv", { urls: initialDeepLinks })
+  }
 
   const wslServers = createWslServersController(
     app.getVersion(),

@@ -36,6 +36,31 @@ export const collectOpenProjectDeepLinks = (urls: string[]) =>
 export const collectNewSessionDeepLinks = (urls: string[]) =>
   urls.map(parseNewSessionDeepLink).filter((link): link is { directory: string; prompt?: string } => !!link)
 
+const sessionControl = /[\u0000-\u001f\u007f]/
+const sessionLink = /^opencode:\/\/session\/([^/?#]+)$/i
+
+export const parseSessionDeepLink = (input: string) => {
+  const url = parseUrl(input)
+  if (!url) return
+  if (url.protocol !== "opencode:" || url.hostname !== "session") return
+  if (url.username || url.password || url.port || url.search || url.hash) return
+  const raw = sessionLink.exec(input)?.[1]
+  if (!raw) return
+  let id: string
+  try {
+    id = decodeURIComponent(raw)
+  } catch {
+    return
+  }
+  if (!id || id.length > 256 || id === "." || id === "..") return
+  if (id.includes("/") || id.includes("\\") || sessionControl.test(id)) return
+  if (url.pathname !== `/${raw}`) return
+  return id
+}
+
+export const collectSessionDeepLinks = (urls: string[]) =>
+  urls.map(parseSessionDeepLink).filter((id): id is string => !!id)
+
 type OpenCodeWindow = Window & {
   __OPENCODE__?: {
     deepLinks?: string[]
