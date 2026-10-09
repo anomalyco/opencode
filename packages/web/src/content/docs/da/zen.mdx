@@ -92,9 +92,11 @@ Du kan også få adgang til vores modeller gennem følgende API-endpoints.
 | Claude Opus 4.7                 | claude-opus-4-7                 | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
 | Claude Opus 4.6                 | claude-opus-4-6                 | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
 | Claude Opus 4.5                 | claude-opus-4-5                 | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
+| Claude Sonnet 5.5               | claude-sonnet-5-5               | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
 | Claude Sonnet 5                 | claude-sonnet-5                 | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
 | Claude Sonnet 4.6               | claude-sonnet-4-6               | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
 | Claude Sonnet 4.5               | claude-sonnet-4-5               | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
+| Claude Haiku 5.5                | claude-haiku-5-5                | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
 | Claude Haiku 4.5                | claude-haiku-4-5                | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
 | Gemini 3.8 Flash                | gemini-3.8-flash                | `https://opencode.ai/zen/v1/models/gemini-3.8-flash`      | `@ai-sdk/google`            |
 | Gemini 3.7 Flash                | gemini-3.7-flash                | `https://opencode.ai/zen/v1/models/gemini-3.7-flash`      | `@ai-sdk/google`            |
@@ -137,8 +139,8 @@ Du kan også få adgang til vores modeller gennem følgende API-endpoints.
 | Big Pickle                      | big-pickle                      | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | Space Bunny Free                | space-bunny-free                | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | LongCat 2.5 Preview Free        | longcat-2.5-preview-free        | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Step 5 Preview Free             | step-5-preview-free             | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | Exo Free                        | exo-free                        | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
-| Fledge Alpha Free               | fledge-alpha-free               | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | MiMo-V2.6-Flash Free            | mimo-v2.6-flash-free            | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | MiMo-V2.5 Free                  | mimo-v2.5-free                  | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | Ling 3.1 Flash Free             | ling-3.1-flash-free             | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
@@ -226,8 +228,8 @@ Vi understøtter en pay-as-you-go-model. Nedenfor er priserne **pr. 1M tokens**.
 | Big Pickle                        | Free            | Free            | Free            | -            |
 | Space Bunny Free                  | Free            | Free            | Free            | -            |
 | LongCat 2.5 Preview Free          | Free            | Free            | Free            | -            |
+| Step 5 Preview Free               | Free            | Free            | Free            | -            |
 | Exo Free                          | Free            | Free            | Free            | -            |
-| Fledge Alpha Free                 | Free            | Free            | Free            | -            |
 | MiMo-V2.6-Flash Free              | Free            | Free            | Free            | -            |
 | MiMo-V2.5 Free                    | Free            | Free            | Free            | -            |
 | Ling 3.1 Flash Free               | Free            | Free            | Free            | -            |
@@ -268,10 +270,13 @@ Vi understøtter en pay-as-you-go-model. Nedenfor er priserne **pr. 1M tokens**.
 | Claude Opus 4.7                   | $5.00           | $25.00          | $0.50           | $6.25        |
 | Claude Opus 4.6                   | $5.00           | $25.00          | $0.50           | $6.25        |
 | Claude Opus 4.5                   | $5.00           | $25.00          | $0.50           | $6.25        |
+| Claude Sonnet 5.5                 | $2.00           | $10.00          | $0.20           | $2.50        |
 | Claude Sonnet 5                   | $2.00           | $10.00          | $0.20           | $2.50        |
 | Claude Sonnet 4.6                 | $3.00           | $15.00          | $0.30           | $3.75        |
 | Claude Sonnet 4.5 (≤ 200K tokens) | $3.00           | $15.00          | $0.30           | $3.75        |
 | Claude Sonnet 4.5 (> 200K tokens) | $6.00           | $22.50          | $0.60           | $7.50        |
+| Claude Haiku 5.5 (≤ 100K tokens)  | $0.10           | $0.50           | $0.01           | $0.125       |
+| Claude Haiku 5.5 (> 100K tokens)  | $0.50           | $2.50           | $0.05           | $0.625       |
 | Claude Haiku 4.5                  | $1.00           | $5.00           | $0.10           | $1.25        |
 | Gemini 3.8 Flash                  | $1.50           | $7.50           | $0.15           | -            |
 | Gemini 3.7 Flash                  | $1.50           | $7.50           | $0.15           | -            |
@@ -335,7 +340,6 @@ Kreditkortgebyrer videregives til kostpris (4.4% + $0.30 pr. transaktion); vi op
 De gratis modeller:
 
 - Exo Free er tilgængelig på OpenCode i en begrænset periode. Teamet bruger denne tid til at indsamle feedback og forbedre modellen.
-- Fledge Alpha Free er tilgængelig på OpenCode i en begrænset periode. Teamet bruger denne tid til at indsamle feedback og forbedre modellen.
 - MiMo-V2.6-Flash Free er tilgængelig på OpenCode i en begrænset periode. Teamet bruger denne tid til at indsamle feedback og forbedre modellen.
 - MiMo-V2.5 Free er tilgængelig på OpenCode i en begrænset periode. Teamet bruger denne tid til at indsamle feedback og forbedre modellen.
 - Ling 3.1 Flash Free er tilgængelig på OpenCode i en begrænset periode. Teamet bruger denne tid til at indsamle feedback og forbedre modellen.
@@ -345,6 +349,7 @@ De gratis modeller:
 - Big Pickle er en stealth-model, som er gratis på OpenCode i en begrænset periode. Teamet bruger denne tid til at indsamle feedback og forbedre modellen.
 - Space Bunny Free er en stealth-model, som er gratis på OpenCode i en begrænset periode. Udbyderen følger en nul-opbevaringspolitik og bruger ikke dine data til at træne modeller.
 - LongCat 2.5 Preview Free er gratis på OpenCode i en begrænset periode. Udbyderen følger en nul-opbevaringspolitik og bruger ikke dine data til at træne modeller.
+- Step 5 Preview Free er gratis på OpenCode i en begrænset periode. Udbyderen følger en nul-opbevaringspolitik og bruger ikke dine data til at træne modeller.
 - Muse Spark 1.3 Contributor Free er tilgængelig på OpenCode i en begrænset periode. Teamet bruger denne tid til at indsamle feedback og forbedre modellen.
 - Jev 1.13 Free er tilgængelig på OpenCode i en begrænset periode.
 
@@ -402,7 +407,6 @@ Alle vores modeller hostes i US og EU. Vores udbydere følger en nul-opbevarings
 
 - Big Pickle: I den gratis periode kan indsamlede data blive brugt til at forbedre modellen.
 - Exo Free: I den gratis periode kan indsamlede data blive brugt til at forbedre modellen.
-- Fledge Alpha Free: I den gratis periode kan indsamlede data blive brugt til at forbedre modellen.
 - MiMo-V2.6-Flash Free: I den gratis periode kan indsamlede data blive brugt til at forbedre modellen.
 - MiMo-V2.5 Free: I den gratis periode kan indsamlede data blive brugt til at forbedre modellen.
 - Ling 3.1 Flash Free: I den gratis periode kan indsamlede data blive brugt til at forbedre modellen.

@@ -265,6 +265,7 @@ export const dict = {
     "Tous les modèles Zen sont hébergés aux États-Unis. Les fournisseurs suivent une politique de rétention zéro et n'utilisent pas vos données pour l'entraînement des modèles, avec les",
   "zen.privacy.exceptionsLink": "exceptions suivantes",
 
+  "go.promo.step5": "Step 5 Preview Free, un nouveau modèle, est disponible gratuitement pour une durée limitée.",
   "go.title": "OpenCode Go | Modèles de code à faible coût pour tous",
   "go.meta.description":
     "Go coûte 10 $/mois, avec des limites d'utilisation généreuses et un accès fiable aux principaux modèles de codage.",
@@ -831,6 +832,15 @@ export const dict = {
   "enterprise.form.email.placeholder": "jeff@amazon.com",
   "enterprise.form.phone.label": "Téléphone",
   "enterprise.form.phone.placeholder": "+1 234 567 8900",
+  "enterprise.form.inferenceSpend.label":
+    "Quelles sont les dépenses mensuelles actuelles de votre entreprise en inférence (USD) ?",
+  "enterprise.form.inferenceSpend.placeholder": "Sélectionnez une tranche (facultatif)",
+  "enterprise.form.inferenceSpend.none": "Aucune dépense pour l'instant",
+  "enterprise.form.inferenceSpend.under1k": "Moins de $1K",
+  "enterprise.form.inferenceSpend.1kTo10k": "$1K–$10K",
+  "enterprise.form.inferenceSpend.10kTo50k": "$10K–$50K",
+  "enterprise.form.inferenceSpend.50kTo100k": "$50K–$100K",
+  "enterprise.form.inferenceSpend.over100k": "$100K ou plus",
   "enterprise.form.message.label": "Quel problème essayez-vous de résoudre ?",
   "enterprise.form.message.placeholder": "Nous avons besoin d'aide pour...",
   "enterprise.form.send": "Envoyer",
@@ -839,6 +849,7 @@ export const dict = {
   "enterprise.form.success.submitted": "Formulaire soumis avec succès.",
   "enterprise.form.error.allFieldsRequired": "Tous les champs sont requis.",
   "enterprise.form.error.invalidEmailFormat": "Format d'e-mail invalide.",
+  "enterprise.form.error.invalidInferenceSpend": "Sélectionnez une tranche de dépenses d'inférence valide.",
   "enterprise.form.error.internalServer": "Erreur interne du serveur.",
   "enterprise.faq.title": "FAQ",
   "enterprise.faq.q1": "Qu'est-ce que OpenCode Enterprise ?",
