@@ -240,8 +240,8 @@ describe("FileSystem", () => {
         yield* Effect.promise(() => fs.writeFile(path.join(directory, "outside.txt"), "outside"))
         yield* Effect.gen(function* () {
           const filesystem = yield* FileSystem.Service
-          const result = yield* filesystem.read({ path: RelativePath.make("../outside.txt") }).pipe(Effect.exit)
-          expect(Exit.isFailure(result)).toBe(true)
+          const escape = yield* Effect.flip(filesystem.read({ path: RelativePath.make("../outside.txt") }))
+          expect(escape).toBeInstanceOf(FileSystem.NotFoundError)
         }).pipe(provide(current))
       }),
     ),
@@ -266,8 +266,8 @@ describe("FileSystem", () => {
           expect(entries.map((entry) => ({ path: entry.path, type: entry.type }))).toEqual([
             { path: RelativePath.make(path.join("link", "file.txt")), type: "file" },
           ])
-          const result = yield* filesystem.read({ path: RelativePath.make("link/file.txt") }).pipe(Effect.exit)
-          expect(Exit.isFailure(result)).toBe(true)
+          const read = yield* Effect.flip(filesystem.read({ path: RelativePath.make("link/file.txt") }))
+          expect(read).toBeInstanceOf(FileSystem.NotFoundError)
         }).pipe(provide(current))
       }),
     ),
