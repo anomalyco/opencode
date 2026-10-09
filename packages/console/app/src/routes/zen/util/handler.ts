@@ -115,6 +115,8 @@ export async function handler(
           opts.modelList === "full"
             ? entry?.providers.find((provider) => provider.id === entry.byokProvider)?.model
             : undefined,
+        // Keyless requests for free models skip legacy checks and go straight to new inference.
+        anonymous: opts.modelList === "full" && entry?.allowAnonymous === true,
         body: (providerModel) => requestBody?.stream(providerModel ?? model, false) ?? body,
       }).catch(() => {
         void (requestBody ? requestBody.cancel() : body.cancel()).catch(() => {})
