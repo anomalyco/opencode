@@ -3,7 +3,6 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
-  "go.promo.spaceBunny": "Space Bunny Free, um novo modelo anônimo, está disponível por tempo limitado",
   "go.referral.ended.label": "Aviso",
   "go.referral.ended":
     "O programa de indicação foi encerrado. Links de indicação não geram mais crédito para você nem para quem os compartilhou.",
@@ -264,6 +263,7 @@ export const dict = {
     "Todos os modelos Zen são hospedados nos EUA. Os provedores seguem uma política de retenção zero e não usam seus dados para treinamento de modelo, com as",
   "zen.privacy.exceptionsLink": "seguintes exceções",
 
+  "go.promo.step5": "Step 5 Preview Free, um novo modelo, está disponível gratuitamente por tempo limitado.",
   "go.title": "OpenCode Go | Modelos de codificação de baixo custo para todos",
   "go.meta.description":
     "O Go custa $10/mês, com limites generosos de uso e acesso confiável aos principais modelos de codificação.",
@@ -824,6 +824,14 @@ export const dict = {
   "enterprise.form.email.placeholder": "jeff@amazon.com",
   "enterprise.form.phone.label": "Telefone",
   "enterprise.form.phone.placeholder": "+1 234 567 8900",
+  "enterprise.form.inferenceSpend.label": "Qual é o gasto mensal atual da sua empresa com inferência (USD)?",
+  "enterprise.form.inferenceSpend.placeholder": "Selecione uma faixa (opcional)",
+  "enterprise.form.inferenceSpend.none": "Ainda não gastamos",
+  "enterprise.form.inferenceSpend.under1k": "Menos de $1K",
+  "enterprise.form.inferenceSpend.1kTo10k": "$1K–$10K",
+  "enterprise.form.inferenceSpend.10kTo50k": "$10K–$50K",
+  "enterprise.form.inferenceSpend.50kTo100k": "$50K–$100K",
+  "enterprise.form.inferenceSpend.over100k": "$100K ou mais",
   "enterprise.form.message.label": "Qual problema você está tentando resolver?",
   "enterprise.form.message.placeholder": "Precisamos de ajuda com...",
   "enterprise.form.send": "Enviar",
@@ -832,6 +840,7 @@ export const dict = {
   "enterprise.form.success.submitted": "Formulário enviado com sucesso.",
   "enterprise.form.error.allFieldsRequired": "Todos os campos são obrigatórios.",
   "enterprise.form.error.invalidEmailFormat": "Formato de e-mail inválido.",
+  "enterprise.form.error.invalidInferenceSpend": "Selecione uma faixa de gasto com inferência válida.",
   "enterprise.form.error.internalServer": "Erro interno do servidor.",
   "enterprise.faq.title": "FAQ",
   "enterprise.faq.q1": "O que é OpenCode Enterprise?",
