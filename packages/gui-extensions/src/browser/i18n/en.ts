@@ -7,7 +7,7 @@ export default {
   "address.placeholder": "Enter URL",
   inspect: "Select an element to comment on",
   "inspect.active": "Click an element in the page to comment on it. Press Escape to cancel.",
-  "inspect.pageShortcut": "While the page has focus",
+  "inspect.pageShortcut": "Page shortcut",
   "action.stop": "Stop",
   replaced: "Browser control moved to another desktop window.",
   unsupported: "This desktop app does not support the browser pane.",
