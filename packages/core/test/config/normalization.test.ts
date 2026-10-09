@@ -1,10 +1,9 @@
 import { describe, expect, test } from "bun:test"
-import { Duration, Schema } from "effect"
-import { FastCheck } from "effect/testing"
+import { Arbitrary, Duration, Effect, Schema } from "effect"
 import { ConfigNormalize } from "@opencode/core/config/normalize"
 import { Info } from "@opencode/schema/config"
 
-const options = { errors: "all", onExcessProperty: "ignore", propertyOrder: "original" } as const
+const options = { errors: "all", onExcessProperty: "ignore" } as const
 
 function normalized(input: unknown) {
   const result = ConfigNormalize.normalize(input)
@@ -49,6 +48,35 @@ function withoutEmptyCompatibilityContainers(input: Record<string, unknown>) {
 }
 
 describe("ConfigNormalize", () => {
+  test("accepts tool.use without losing statement order", () => {
+    const policies = [
+      { action: "tool.use", effect: "deny", resource: "shell:*" },
+      { action: "tool.use", effect: "allow", resource: "shell:git *" },
+      { action: "tool.use", effect: "deny", resource: "shell:git push *" },
+    ] as const
+    const result = normalized({ experimental: { policies } })
+    expect(result.diagnostics).toEqual([])
+    expect(Schema.decodeUnknownSync(Info)(result.encoded).experimental?.policies).toEqual(policies)
+  })
+
+  test("drops unsupported policy actions without losing supported policies", () => {
+    const supported = { action: "tool.use", effect: "deny", resource: "shell:*" } as const
+    const result = normalized({
+      experimental: {
+        policies: [
+          { action: "permission", effect: "allow", resource: "*" },
+          supported,
+          { action: "future.use", effect: "deny", resource: "*" },
+        ],
+      },
+    })
+    expect(Schema.decodeUnknownSync(Info)(result.encoded).experimental?.policies).toEqual([supported])
+    expect(result.diagnostics.map((diagnostic) => diagnostic.path)).toEqual([
+      ["experimental", "policies", "0"],
+      ["experimental", "policies", "2"],
+    ])
+  })
+
   test("rejects every non-object root with one root diagnostic", () => {
     for (const input of [null, [], "config", true, 1]) {
       expect(ConfigNormalize.normalize(input)).toEqual({
@@ -80,16 +108,21 @@ describe("ConfigNormalize", () => {
   })
 
   test("preserves arbitrary JSON-round-tripped native configuration", () => {
-    FastCheck.assert(
-      FastCheck.property(Schema.toArbitrary(Info)(FastCheck), (info) => {
-        const source = JSON.parse(JSON.stringify(Schema.encodeSync(Info)(info)))
-        const result = normalized(source)
-        expect(Schema.decodeUnknownSync(Info)(result.encoded)).toEqual(
-          Schema.decodeUnknownSync(Info)(withoutEmptyCompatibilityContainers(source)),
-        )
-      }),
-      { numRuns: 100 },
+    const result = Effect.runSync(
+      Arbitrary.checkEffect(
+        Arbitrary.schema(Info),
+        (info) => {
+          const source = JSON.parse(JSON.stringify(Schema.encodeSync(Info)(info)))
+          const result = normalized(source)
+          expect(Schema.decodeUnknownSync(Info)(result.encoded)).toEqual(
+            Schema.decodeUnknownSync(Info)(withoutEmptyCompatibilityContainers(source)),
+          )
+          return true
+        },
+        { runs: 100 },
+      ),
     )
+    expect(Arbitrary.formatCheckFailure(result)).toBeUndefined()
   })
 
   test("merges named maps by entry and gives valid native entries precedence", () => {
@@ -260,6 +293,25 @@ describe("ConfigNormalize", () => {
       { action: "subagent", resource: "*", effect: "allow" },
       { action: "native", resource: "*", effect: "deny" },
     ])
+  })
+
+  test.each(["agent", "mode"])("preserves legacy %s permission source order", (key) => {
+    const build = {
+      tools: { write: false, read: true },
+      permission: { "*": "allow", bash: "ask", custom: "deny", edit: "allow" },
+    }
+    // An agent's permission overrides its tools in place, like Object.assign.
+    expect(normalized({ [key]: { build } }).encoded.agents).toMatchObject({
+      build: {
+        permissions: [
+          { action: "edit", resource: "*", effect: "allow" },
+          { action: "read", resource: "*", effect: "allow" },
+          { action: "*", resource: "*", effect: "allow" },
+          { action: "shell", resource: "*", effect: "ask" },
+          { action: "custom", resource: "*", effect: "deny" },
+        ],
+      },
+    })
   })
 
   test("redacts permission resource keys from invalid diagnostics", () => {
@@ -543,7 +595,14 @@ describe("ConfigNormalize", () => {
       },
     })
     expect(result.encoded.providers).not.toHaveProperty(["gateway", "models", "bedrock", "settings", "reasoningConfig"])
-    expect(result.encoded.providers).not.toHaveProperty(["gateway", "models", "both", "settings", "thinking", "blockBinding"])
+    expect(result.encoded.providers).not.toHaveProperty([
+      "gateway",
+      "models",
+      "both",
+      "settings",
+      "thinking",
+      "blockBinding",
+    ])
     expect(result.encoded.providers).not.toHaveProperty([
       "gateway",
       "models",

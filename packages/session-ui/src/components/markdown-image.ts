@@ -1,3 +1,4 @@
+import { isLineRangeHash, parsePathLineSuffix } from "@opencode/util/path"
 import type { ReadMarkdownImage } from "../context/markdown"
 
 export function localImagePath(source: string) {
@@ -22,14 +23,31 @@ export function localImagePath(source: string) {
 
 /**
  * A link is local when it names a file on disk instead of a web resource. Fragment-only and
- * query-only hrefs stay in-page; mailto and other schemes stay external.
+ * query-only hrefs stay in-page; mailto and other schemes stay external. Line-range fragments
+ * such as `#L42` and `#L42-L58` stay attached so the file viewer can select the target lines.
  */
 export function localLinkPath(href: string) {
   const value = href.trim()
 
   if (!value || value.startsWith("#") || value.startsWith("?")) return
 
-  return localImagePath(value.split(/[?#]/, 1)[0] ?? "")
+  const hashIndex = value.indexOf("#")
+  const hash = hashIndex === -1 ? "" : value.slice(hashIndex)
+  const target = (value.split(/[?#]/, 1)[0] ?? "").replace(/\\|%5c/gi, "/")
+  // `app.tsx:42` is a file and line, not a URL scheme. The `.` or `/` keeps `tel:5551234` external.
+  const cited = parsePathLineSuffix(target)
+  const line = cited.path !== target && /[./]/.test(cited.path) ? cited : undefined
+  const base = localImagePath(line?.path ?? target)
+
+  if (!base) return
+
+  if (line?.selection) {
+    const range = line.selection.end === line.selection.start ? "" : `-L${line.selection.end}`
+
+    return `${base}#L${line.selection.start}${range}`
+  }
+
+  return `${base}${isLineRangeHash(hash) ? hash : ""}`
 }
 
 function decodePath(value: string) {

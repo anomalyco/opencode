@@ -3,7 +3,7 @@ import type { Context } from "@opencode/plugin/effect/plugin"
 import { define } from "@opencode/plugin/effect/plugin"
 // import { Deferred, Duration, Effect, Option, Schema, Semaphore, Stream } from "effect"
 import { Deferred, Effect, Option, Schema, Semaphore, Stream } from "effect"
-import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import type { Server, ServerResponse } from "node:http"
 import { App } from "../../app.js"
 import { Credential } from "../../credential.js"
@@ -13,6 +13,7 @@ import { Integration } from "../../integration.js"
 import { Model } from "../../model.js"
 import { OauthCallbackPage } from "../../oauth/page.js"
 import { Provider } from "../../provider.js"
+import { SessionAffinity } from "../../session/affinity.js"
 import type { PluginInternal } from "../internal.js"
 
 // First-time sign-in registers a user-owned client; OpenAI returns its issued client ID on the callback.
@@ -264,6 +265,21 @@ export const ChatGPTPlugin = define({
         }),
       { providerID },
     )
+    yield* ctx.session.hook(
+      "model.request",
+      (evt) =>
+        Effect.gen(function* () {
+          if (!chatgpt) return
+          const session = yield* ctx.session
+            .get({ sessionID: evt.sessionID })
+            .pipe(Effect.orElseSucceed(() => undefined))
+          // Mirror the Codex client's session headers: ChatGPT derives prompt-cache affinity from session-id.
+          evt.headers["session-id"] = session ? SessionAffinity.get(session) : evt.sessionID
+          evt.headers["thread-id"] = evt.sessionID
+          evt.headers["x-client-request-id"] = evt.sessionID
+        }),
+      { providerID },
+    )
     yield* ctx.provider.transform((providers) => {
       const item = providers.get(providerID)
       if (!item) return
@@ -290,6 +306,7 @@ export const ChatGPTPlugin = define({
       for (const model of models.list(providerID)) {
         models.update(model.providerID, model.id, (draft) => {
           if (!chatgpt) return
+          draft.compatibility = { ...draft.compatibility, supportsEffortUpdates: false }
           // Token sharing does not support native /responses/compact.
           draft.settings = { ...draft.settings, compaction: { type: "summary" } }
           if (Schema.is(Schema.Struct({ mode: Schema.Literal("pro") }))(draft.body?.reasoning)) {

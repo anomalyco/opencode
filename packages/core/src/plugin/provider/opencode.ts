@@ -1,8 +1,8 @@
-import { Duration, Effect, Equal, Option, Schema, Scope, Semaphore, Stream } from "effect"
+import { Duration, Effect, Equal, Option, Schema, SchemaGetter, Scope, Semaphore, Stream } from "effect"
 import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect/integration"
 import { define } from "@opencode/plugin/effect/plugin"
 import type { SessionHttpResponse } from "@opencode/plugin/effect/session"
-import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { App } from "../../app.js"
 import { Bus } from "../../bus.js"
 import { Credential } from "../../credential.js"
@@ -36,7 +36,20 @@ const RemoteResponse = Schema.Struct({
   }).pipe(Schema.optional),
   // Organization policy compiled for the authenticated caller; omitted when there is none.
   experimental: Schema.Struct({
-    policies: Schema.Array(ConfigPolicy.Info).pipe(Schema.optional),
+    policies: Schema.Array(Schema.Unknown).pipe(
+      Schema.decodeTo(Schema.Unknown, {
+        // Filter only unsupported actions. Malformed supported statements still fail validation.
+        decode: SchemaGetter.transform((policies) =>
+          policies.filter((policy) => {
+            const action = Schema.decodeUnknownOption(Schema.Struct({ action: Schema.String }))(policy)
+            return Option.isNone(action) || Schema.is(ConfigPolicy.Info.fields.action)(action.value.action)
+          }),
+        ),
+        encode: SchemaGetter.passthrough({ strict: false }),
+      }),
+      Schema.decodeTo(Schema.Array(ConfigPolicy.Info)),
+      Schema.optional,
+    ),
   }).pipe(Schema.optional),
 })
 const Device = Schema.Struct({
@@ -462,11 +475,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Manag
 
     // Console config can change independently of local credential activity, so re-fetch
     // periodically and only rebuild the catalog and search providers when the snapshot differs.
-    yield* Effect.sleep(Duration.minutes(1)).pipe(
-      Effect.andThen(check()),
-      Effect.forever,
-      Effect.forkScoped,
-    )
+    yield* Effect.sleep(Duration.minutes(1)).pipe(Effect.andThen(check()), Effect.forever, Effect.forkScoped)
   }),
 })
 

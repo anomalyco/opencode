@@ -77,10 +77,13 @@ export function credentialConnections(integration: IntegrationInfo) {
   )
 }
 
+// A count keeps several long labels from squeezing the integration name off the row.
 export function connectionSummary(integration: IntegrationInfo) {
-  return integration.connections
-    .map((connection) => (connection.type === "credential" ? connection.label : `$${connection.name}`))
-    .join(", ")
+  const connections = integration.connections
+  if (connections.length > 1) return `${connections.length} connections`
+  const connection = connections[0]
+  if (!connection) return ""
+  return connection.type === "credential" ? connection.label : `$${connection.name}`
 }
 
 export function DialogIntegration(
@@ -309,7 +312,60 @@ function openMethod(
     ))
     return
   }
+  if (method.type === "external") {
+    void beginExternal(integration, method, location, dialog, onConnected)
+    return
+  }
   void beginOAuth(integration, method, location, dialog, onConnected)
+}
+
+async function beginExternal(
+  integration: IntegrationInfo,
+  method: Extract<ConnectMethod, { type: "external" }>,
+  location: LocationRef,
+  dialog: ReturnType<typeof useDialog>,
+  onConnected?: OnIntegrationConnected,
+) {
+  const answer = method.form ? await formAnswer(dialog, method.label, method.form) : undefined
+  if (answer === null) return
+  dialog.replace(() => (
+    <ExternalStarting
+      integration={integration}
+      method={method}
+      location={location}
+      answer={answer}
+      onConnected={onConnected}
+    />
+  ))
+}
+
+function ExternalStarting(props: {
+  integration: IntegrationInfo
+  method: Extract<ConnectMethod, { type: "external" }>
+  location: LocationRef
+  answer?: FormAnswer
+  onConnected?: OnIntegrationConnected
+}) {
+  const data = useData()
+  const dialog = useDialog()
+  const client = useClient()
+  const toast = useToast()
+
+  onMount(() => {
+    void client.api.integration.connect
+      .external({
+        integrationID: props.integration.id,
+        location: locationQuery(props.location),
+        methodID: props.method.id,
+        ...(props.answer ? { answer: props.answer } : {}),
+      })
+      .then(() => connected(props.integration, props.location, data, dialog, toast, props.onConnected))
+      .catch((cause) => {
+        toast.show({ variant: "error", message: errorMessage(cause) })
+        dialog.clear()
+      })
+  })
+  return <OAuthView title={props.method.label} message="Connecting…" />
 }
 
 async function beginKey(
@@ -958,9 +1014,9 @@ function StringChoiceField(props: {
               </text>
               <Show when={row.description}>
                 {(description) => (
-                  <text paddingLeft={3} fg={theme.text.muted}>
-                    {description()}
-                  </text>
+                  <box paddingLeft={3}>
+                    <text fg={theme.text.muted}>{description()}</text>
+                  </box>
                 )}
               </Show>
             </box>

@@ -667,6 +667,7 @@ export function mountBrowserRegion(input: RegionHost) {
       get: () => undefined,
       missing: () => false,
       sync: async () => undefined,
+      exists: async () => true,
       search: async () => [],
     }
 

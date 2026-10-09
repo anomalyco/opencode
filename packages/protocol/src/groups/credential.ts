@@ -1,6 +1,6 @@
 import { Credential } from "@opencode/schema/credential"
 import { Schema } from "effect"
-import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
+import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/http-api"
 import { ConflictError } from "../errors.js"
 
 export const CredentialGroup = HttpApiGroup.make("server.credential")

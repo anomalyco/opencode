@@ -110,7 +110,14 @@ export function createTimelineVirtualizer(input: Input) {
       { defer: true },
     ),
   )
-  const [rendering, setRendering] = createStore({ initialTail: coldBottomMount, scrollAdjustment: 0 })
+
+  const [rendering, setRendering] = createStore<{
+    initialTail: boolean
+    scrollAdjustment: number
+    /** A revealed tool whose top edge stays put until the user scrolls. */
+    anchor?: { key: string; partID: string }
+  }>({ initialTail: coldBottomMount, scrollAdjustment: 0 })
+
   const rows = input.projection.rows
   const rowByKey = input.projection.rowByKey
 
@@ -137,6 +144,7 @@ export function createTimelineVirtualizer(input: Input) {
     const id = input.projection.activeMessageID()
     const active = id ? (input.projection.messageLastRowIndex().get(id) ?? -1) : -1
     const initialTail = rendering.initialTail && input.pinned()
+    const anchored = rendering.anchor ? rowKeys().indexOf(rendering.anchor.key) : -1
 
     return (range: Range) => {
       // Batch a bounded cheap suffix, but stop before unknown/large content.
@@ -164,7 +172,7 @@ export function createTimelineVirtualizer(input: Input) {
         : defaultRangeExtractor({ ...range, overscan: 2 })
 
       return filterVirtualIndexes(
-        [...new Set([...indexes, ...(active < 0 ? [] : [active])])].sort((a, b) => a - b),
+        [...new Set([...indexes, ...[active, anchored].filter((index) => index >= 0)])].sort((a, b) => a - b),
         range.count,
       )
     }
@@ -336,6 +344,7 @@ export function createTimelineVirtualizer(input: Input) {
         })
       })
       batchingColdSizes = false
+      pinAnchor()
 
       if (coldPending) pinColdBottom()
       settleColdBottom()
@@ -403,19 +412,60 @@ export function createTimelineVirtualizer(input: Input) {
 
     const key = found.group.key
 
-    setToolOpen(
-      found.group.type === "context"
-        ? { [`context:${key}`]: true, [`${key}:tool:${found.partID}`]: true }
-        : { [key]: true },
-    )
-    input.onUnpin()
     prepareNavigation()
-    virtualizer.scrollToIndex(found.index, { align: "center" })
+    // Opening the group and anchoring its row render the tool synchronously, wherever the row is.
+    batch(() => {
+      setToolOpen(
+        found.group.type === "context"
+          ? { [`context:${key}`]: true, [`${key}:tool:${found.partID}`]: true }
+          : { [key]: true },
+      )
+      setRendering("anchor", { key: TimelineRow.key(rows()[found.index]!), partID: found.partID })
+    })
+    // Until its ResizeObserver delivers, the opened row keeps its collapsed size, so the timeline may not scroll yet
+    // (and cannot unpin) or ends above the tool. Commit the real size first.
+    const opened = virtualContent?.querySelector<HTMLElement>(`[data-index="${found.index}"]`)
+
+    if (opened) resizeItem(found.index, opened.offsetHeight)
+    input.onUnpin()
+    pinAnchor()
 
     return true
   }
 
+  // Puts the anchored tool's top edge at its scroll margin, just below the headers that stick above it. Its own
+  // growth extends downward, so only size changes at or above its row can move it; each of those calls this again.
+  function pinAnchor() {
+    const anchor = rendering.anchor
+    const root = listRoot()
+
+    if (!anchor || !root) return
+    const element = virtualContent?.querySelector<HTMLElement>(`[data-timeline-part-id="${CSS.escape(anchor.partID)}"]`)
+
+    // Following the end is a different position to hold.
+    if (!element || !active() || input.pinned()) return releaseAnchor()
+
+    const offset = Math.min(
+      root.scrollHeight - root.clientHeight,
+      Math.max(
+        0,
+        root.scrollTop +
+          element.getBoundingClientRect().top -
+          root.getBoundingClientRect().top -
+          parseFloat(getComputedStyle(element).scrollMarginTop),
+      ),
+    )
+
+    if (Math.abs(offset - root.scrollTop) > 1) virtualizer.scrollToOffset(offset)
+  }
+
+  function releaseAnchor() {
+    if (rendering.anchor) setRendering("anchor", undefined)
+  }
+
   function prepareNavigation() {
+    releaseAnchor()
+
     if (touchStart === undefined) touchScrolling = false
     flushTouchAdjustment()
   }
@@ -600,6 +650,7 @@ export function createTimelineVirtualizer(input: Input) {
   // Upward input is the one intent geometry cannot recover: nudging up while still a pixel from
   // the end must stop following, even though the resulting position still looks like the end.
   const handleListWheel = (event: WheelEvent & { currentTarget: HTMLDivElement }) => {
+    releaseAnchor()
     input.onUserScroll(event.target)
 
     if (event.deltaY < 0) input.onUnpin()
@@ -607,6 +658,7 @@ export function createTimelineVirtualizer(input: Input) {
 
   const handleListTouchStart = (event: TouchEvent) => {
     clearTouchTarget()
+    releaseAnchor()
     input.onUserScroll(event.target)
     touchScrolling = true
     touchStart = event.touches[0]?.clientY
@@ -663,6 +715,7 @@ export function createTimelineVirtualizer(input: Input) {
   // Drag-selecting past the edge and dragging the scrollbar both scroll without a wheel or key,
   // so a held pointer is what separates those from the virtualizer's own measurement adjustments.
   const handleListPointerDown = (event: PointerEvent & { currentTarget: HTMLDivElement }) => {
+    releaseAnchor()
     input.onUserScroll(event.target)
     pointerHeld = true
   }
@@ -688,6 +741,7 @@ export function createTimelineVirtualizer(input: Input) {
     if (!isScrollKeyTarget(event.target, key)) return
 
     if (scrollKeyOwner(event.currentTarget, event.target, key) !== event.currentTarget) return
+    releaseAnchor()
     input.onUserScroll(event.currentTarget)
 
     if (upwardKeys.has(key)) input.onUnpin()
@@ -706,7 +760,8 @@ export function createTimelineVirtualizer(input: Input) {
     const atEnd = maxScroll - scrollTop <= endEpsilon
     const arrived = scrollTop > previousTop + endEpsilon || maxScroll < previousMaxScroll
 
-    if (maxScroll <= 1 || (atEnd && arrived)) input.onPin()
+    // An anchor holds its tool even when reaching it lands at the end; only the user's own scroll lets it go.
+    if (maxScroll <= 1 || (atEnd && arrived && !rendering.anchor)) input.onPin()
     else if ((pointerHeld || touchScrolling) && scrollTop < previousTop - endEpsilon) input.onUnpin()
     settleColdBottom()
     input.onScheduleScrollState(root)

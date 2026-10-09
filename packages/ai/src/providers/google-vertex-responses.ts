@@ -84,8 +84,8 @@ export const model: ProviderPackage.Definition<Settings, OpenResponsesProviderOp
   return configure({
     accessToken,
     baseURL,
-    headers: headers === undefined ? undefined : { ...headers },
-    http: body === undefined ? undefined : { body: { ...body } },
+    headers,
+    http: body === undefined ? undefined : { body },
     location,
     project,
     providerOptions,

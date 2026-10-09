@@ -1,5 +1,5 @@
 import { Context, type Effect } from "effect"
-import type { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import type { HttpClientRequest, HttpClientResponse } from "effect/http"
 import type { AIError } from "../schema/errors.js"
 
 // The service tag lives in its own leaf module so `Media.Asset` (imported by the schema layer) can require the

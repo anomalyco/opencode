@@ -16,7 +16,7 @@ const initial = { enabled: true, label: "default" }
 
 const Stored = Persistence.migrate(
   Current,
-  Schema.Struct({ oldLabel: Schema.optional(Schema.String), label: Schema.optional(Schema.String) }).pipe(
+  Persistence.legacy({ oldLabel: Schema.optional(Schema.String), label: Schema.optional(Schema.String) }).pipe(
     Schema.decode({
       decode: SchemaGetter.transform((value) =>
         value.oldLabel === undefined ? value : { ...value, label: value.oldLabel },
@@ -83,6 +83,18 @@ describe("schema-backed persistence", () => {
       setState("enabled", false)
       flushPersisted()
       expect(JSON.parse(localStorage.getItem(key)!)).toEqual({ enabled: false, label: "saved" })
+      dispose()
+    })
+  })
+
+  test("keeps valid current fields that the migration reader does not name", () => {
+    const target = Persist.global("schema-unnamed-field")
+    const key = `${target.storage}:${target.key}`
+    localStorage.setItem(key, JSON.stringify({ enabled: false, label: "kept" }))
+    createRoot((dispose) => {
+      const [state] = persisted(target, Stored, initial, web)
+      expect(state).toEqual({ enabled: false, label: "kept" })
+      expect(JSON.parse(localStorage.getItem(key)!)).toEqual({ enabled: false, label: "kept" })
       dispose()
     })
   })

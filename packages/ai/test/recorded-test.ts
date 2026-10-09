@@ -1,7 +1,7 @@
 import { HttpRecorder } from "@opencode/http-recorder"
 import { NodeSocket } from "@effect/platform-node"
 import { Layer } from "effect"
-import { Socket } from "effect/unstable/socket"
+import { Socket } from "effect/socket"
 import * as path from "node:path"
 import { fileURLToPath } from "node:url"
 import { LLMClient, RequestExecutor } from "../src/route.js"
