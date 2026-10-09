@@ -750,6 +750,49 @@ for (const row of [
   })
 }
 
+test("providers: Console sign-in shows the device code before opening the browser", async ({ page, context }) => {
+  const url = "https://auth.example.test/device?user_code=ABCD-EFGH"
+  await context.route("https://auth.example.test/**", (route) => route.fulfill({ body: "Sign in" }))
+  const popups: string[] = []
+
+  page.on("popup", (popup) => popups.push(popup.url()))
+
+  const { settings } = await open(page, {
+    provider: NO_PROVIDER,
+    integrations: [
+      {
+        id: "opencode",
+        name: "OpenCode Console",
+        methods: [
+          { id: "device", type: "oauth", label: "OpenCode Console account" },
+          { type: "key", label: "API key (service account)" },
+        ],
+        connections: [],
+      },
+    ],
+    onIntegrationOAuth: () => ({ url }),
+  })
+
+  await settings.getByRole("tab", { name: "Providers", exact: true }).click()
+  await settings
+    .locator("div", { hasText: /^OpenCode Console/ })
+    .getByRole("button", { name: "Connect" })
+    .click()
+  const dialog = page.getByRole("dialog")
+  await expect(dialog.getByRole("group", { name: "Device code: ABCD-EFGH", exact: true })).toBeVisible()
+  const proceed = dialog.getByRole("button", { name: "Continue in the browser", exact: true })
+  await expect(proceed).toBeEnabled()
+  await expect(dialog.getByText("Waiting for confirmation…")).toHaveCount(0)
+  expect(popups).toEqual([])
+
+  const popup = page.waitForEvent("popup")
+  await proceed.click()
+  await expect(await popup).toHaveURL(url)
+  await expect(proceed).toHaveCount(0)
+  await expect(dialog.getByRole("status").filter({ hasText: "Waiting for confirmation…" })).toBeVisible()
+  await expect(dialog.getByRole("button", { name: "Copy sign-in link", exact: true })).toBeVisible()
+})
+
 test("the add server dialog keeps focus above fullscreen settings", async ({ page }) => {
   await mockRemoteServer(page, { directory: "/remote/settings-demo" })
   const { settings } = await open(page)

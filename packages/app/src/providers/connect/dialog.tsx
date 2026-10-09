@@ -1382,6 +1382,7 @@ function ProviderConnection(props: {
               <div class="px-3">
                 <ConsoleAuthorization
                   code={code()}
+                  browserOpened={controller.browserOpened()}
                   browserFailed={controller.browserFailed()}
                   copied={state.copied}
                   copyFailed={state.copyFailed}
