@@ -91,6 +91,21 @@ type Streamed = {
 }
 
 const NOTHING_TO_COMPACT: Failure = { error: { type: "compaction.unavailable", message: "Nothing to compact yet" } }
+const TRUNCATED: Failure = {
+  error: { type: "compaction.failed", message: "Compaction summary reached the output token limit" },
+}
+/** The summary through the latest reply did not fit, so it is asked again over the older part alone. */
+const NO_ROOM: Failure = {
+  error: {
+    type: "compaction.failed",
+    message: "The conversation through the latest reply leaves no room for a summary",
+  },
+}
+/**
+ * The least room left for the summary before it is asked through the latest reply rather than the older part. A
+ * summary takes a few thousand tokens; with less room a cut-off reply and a second request become likely.
+ */
+const REPLY_ROOM_MIN = 8_000
 /** After each "too long" rejection, the next attempt aims at this share of the first rejected request's size. */
 const SHRINK_STEPS = [0.7, 0.5, 0.35]
 // The least of the window kept free for the last reply before compaction and for the summary itself.
@@ -228,9 +243,15 @@ export const layer = Layer.effect(
         trigger.reason === "overflow" ? Math.min(cap, Math.floor(estimateContext(context) * SHRINK_STEPS[0])) : cap
 
       const selected = model === context.model ? trigger : { ...trigger, context: { ...context, model } }
+      // Only the session's own model has the conversation cached, and an overflow has just rejected all of it.
+      const cached =
+        trigger.reason !== "overflow" &&
+        model.ref.providerID === context.model.ref.providerID &&
+        model.ref.id === context.model.ref.id &&
+        model.ref.variant === context.model.ref.variant
       const compaction = native
         ? compactNatively(selected, budget, settings.keep)
-        : summarize(selected, budget, settings.keep)
+        : summarize(selected, budget, settings.keep, cached)
       return yield* compaction.pipe(
         Effect.matchEffect({
           onSuccess: (result) => publish(selected, result),
@@ -258,6 +279,11 @@ export const layer = Layer.effect(
      *
      *   [system][S1 + "E9 E10"][E11 … E18][prompt]    plus one nudge if the reply skips the template
      *
+     * When the newest part was already sent, the request instead runs through the latest reply, so it extends the
+     * session's last request and reuses its cached prefix: `[system][S1 + "E9 E10"][E11 … E19][prompt]`. Caches that
+     * only keep entries at breakpoints (Anthropic) or recurrent-state checkpoints (hybrid attention models) miss on
+     * the shorter older part. It falls back to the older part when the longer request leaves no room for the summary.
+     *
      * Later requests open with the checkpoint as one user message:
      *
      *   <conversation-checkpoint>
@@ -273,6 +299,7 @@ export const layer = Layer.effect(
       trigger: Trigger,
       budget: number,
       keep: number,
+      cached: boolean,
     ): Effect.fn.Return<Result, Failure> {
       const context = trigger.context
       const split = splitConversation(context.messages, keep)
@@ -282,18 +309,17 @@ export const layer = Layer.effect(
       const prompt = buildPrompt(previous !== undefined, previous?.summary.includes(LEGACY_HEADING) ?? false)
       const headings = SUMMARY_TEMPLATE.split("\n").filter((line) => line.startsWith("##"))
       const filled = (text: string) => text.split("\n").some((line) => headings.includes(line.trim()))
-      const prepared = yield* prepare(context, split.older, budget)
 
       // Hooks saw the request without the summary prompt, so it is appended here. A reply that ignores the
       // template gets one reminder before it counts as a failure.
-      const send = (request: LLMRequest) =>
+      const send = (options: StreamOptions) => (request: LLMRequest) =>
         Effect.gen(function* () {
           const prompted = LLMRequest.update(request, { messages: [...request.messages, Message.user(prompt)] })
-          const reply = yield* stream(context, prompted, prepared.options)
+          const reply = yield* stream(context, prompted, options)
           if (filled(reply.text)) return { ...reply, recent: split.recent }
 
           const nudged = LLMRequest.update(prompted, { messages: [...prompted.messages, Message.user(NUDGE)] })
-          const retry = yield* stream(context, nudged, prepared.options)
+          const retry = yield* stream(context, nudged, options)
           if (filled(retry.text)) return { ...retry, recent: split.recent }
           return yield* Effect.fail<Failure>({
             error: {
@@ -306,7 +332,32 @@ export const layer = Layer.effect(
         })
 
       const overhead = Token.estimate(prompt) + Token.estimate(NUDGE)
-      return yield* deliver(trigger, prepared, split.recent, budget - overhead, send)
+      // Both requests below share one retry allowance.
+      const policy = yield* SessionRunnerRetry.policy(context.session.id)
+      yield* start(trigger, split.recent)
+
+      const replied = context.messages.findLastIndex((message) => message.type === "assistant") + 1
+      const size = estimateContext(context) + overhead
+      const { context: window, input } = context.model.limit
+      const fits = (window <= 0 || window - size >= REPLY_ROOM_MIN) && (!input || size <= input)
+      if (cached && replied > split.older.length && fits) {
+        const extended = yield* prepare(context, context.messages.slice(0, replied), Math.max(size, budget))
+        const attempt = yield* deliver(trigger, extended, split.recent, Number.POSITIVE_INFINITY, policy, (request) =>
+          send(extended.options)(request).pipe(
+            Effect.catchIf(
+              (cause) =>
+                cause === TRUNCATED ||
+                (cause instanceof AIError && (isContextOverflowFailure(cause) || isPayloadTooLarge(cause))),
+              () => Effect.fail(NO_ROOM),
+            ),
+          ),
+        ).pipe(Effect.result)
+        if (Result.isSuccess(attempt)) return attempt.success
+        if (attempt.failure !== NO_ROOM) return yield* Effect.fail(attempt.failure)
+      }
+
+      const prepared = yield* prepare(context, split.older, budget)
+      return yield* deliver(trigger, prepared, split.recent, budget - overhead, policy, send(prepared.options))
     })
 
     /**
@@ -368,8 +419,19 @@ export const layer = Layer.effect(
         return unsupported(`Native compaction is not supported for ${request.model.provider}/${request.model.route.id}`)
       }
 
-      return yield* deliver(trigger, prepared, "", budget, send)
+      yield* start(trigger, "")
+      return yield* deliver(trigger, prepared, "", budget, yield* SessionRunnerRetry.policy(context.session.id), send)
     })
+
+    // The runner opened the manual compaction's message when it delivered the `/compact` item.
+    const start = (trigger: Trigger, recent: string) =>
+      trigger.reason === "manual"
+        ? Effect.void
+        : bus.publish(SessionEvent.Compaction.Started, {
+            sessionID: trigger.context.session.id,
+            reason: "auto",
+            recent,
+          })
 
     /**
      * Sends the request as-is if it is estimated to fit `target`, and as text otherwise (see `flattenAndDropOldest`).
@@ -386,16 +448,12 @@ export const layer = Layer.effect(
       prepared: Prepared,
       recent: string,
       target: number,
+      policy: Effect.Success<ReturnType<typeof SessionRunnerRetry.policy>>,
       send: (request: LLMRequest) => Effect.Effect<Result, AIError | Failure>,
     ): Effect.fn.Return<Result, Failure> {
       const context = trigger.context
-      // The runner opened the manual compaction's message when it delivered the `/compact` item.
-      if (trigger.reason !== "manual") {
-        yield* bus.publish(SessionEvent.Compaction.Started, { sessionID: context.session.id, reason: "auto", recent })
-      }
       if (prepared.event.result) return yield* fromHook(context, prepared.event.result, recent)
 
-      const policy = yield* SessionRunnerRetry.policy(context.session.id)
       let rejections = 0
       let rejected: number | undefined
       let asText = false
@@ -425,7 +483,7 @@ export const layer = Layer.effect(
         const cause = attempt.failure
         if (!(cause instanceof AIError)) return yield* Effect.fail(cause)
         const error = toSessionError(cause)
-        const tooLarge = cause.reason._tag === "InvalidRequest" && cause.reason.classification === "payload-too-large"
+        const tooLarge = isPayloadTooLarge(cause)
 
         if (tooLarge && request === prepared.request) {
           asText = true
@@ -550,10 +608,7 @@ export const layer = Layer.effect(
                   new AIError({ reason: new UnknownProviderError({ message: "Compaction generation failed" }) }),
                 )
               case "length":
-                return unusable({
-                  type: "compaction.failed",
-                  message: "Compaction summary reached the output token limit",
-                })
+                return Effect.fail(TRUNCATED)
               case "content-filter":
                 return unusable(contentFilterError("Compaction summary was blocked by the provider", event.reason))
               default:
@@ -921,6 +976,10 @@ const hasMeasuredPrompt = (message: SessionMessage.Info, model: SessionContext.L
   !message.error &&
   message.tokens !== undefined &&
   message.tokens.input + message.tokens.cache.read + message.tokens.cache.write > 0
+
+/** A rejection of the request's bytes, which inline media almost always accounts for, rather than its tokens. */
+const isPayloadTooLarge = (cause: AIError) =>
+  cause.reason._tag === "InvalidRequest" && cause.reason.classification === "payload-too-large"
 
 const estimateRequest = (request: Pick<LLMRequest, "system" | "tools" | "messages">) =>
   request.system.reduce((sum, part) => sum + Token.estimate(part.text), 0) +

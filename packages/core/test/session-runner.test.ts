@@ -2592,6 +2592,129 @@ describe("SessionRunnerLLM", () => {
     }
   }
 
+  for (const route of [OpenAIChat.route, OpenAIResponses.route, AnthropicMessages.route]) {
+    for (const reason of ["manual", "auto"] as const) {
+      scenario(
+        `preserves the session request prefix when the retained exchange was sent (${reason}, ${route.id})`,
+        function* (s) {
+          s.currentModel = LanguageModel.make({
+            id: route === AnthropicMessages.route ? "claude-sonnet-4-6" : "gpt-5",
+            provider: route === AnthropicMessages.route ? "anthropic" : "openai",
+            route,
+          })
+          yield* s.llm.push(TestLLM.text("First answer", "sent-first"))
+          yield* s.runPrompt("First question")
+          if (reason === "manual") {
+            yield* s.llm.push(
+              TestLLM.text("Second answer", "sent-second"),
+              TestLLM.text("## Objective\n- Checkpoint summary", "sent-summary"),
+            )
+            yield* s.runPrompt("Second question")
+            yield* s.session.compact({ sessionID })
+            yield* s.resume
+          }
+          if (reason === "auto") {
+            // The tool step fills the window, so the next step compacts while the exchange is still open.
+            yield* s.llm.push(
+              TestLLM.complete(
+                {
+                  reason: { normalized: "tool-calls" },
+                  usage: { inputTokens: 185_000, nonCachedInputTokens: 185_000 },
+                },
+                LLMEvent.toolCall({ id: "call-sent", name: "echo", input: { text: "sent tool output" } }),
+              ),
+              TestLLM.text("## Objective\n- Checkpoint summary", "sent-summary"),
+              TestLLM.text("Continued", "sent-continued"),
+            )
+            yield* s.runPrompt("Second question")
+          }
+
+          // The retained exchange stays verbatim beside the summary, but the request still extends the last one sent.
+          expect((yield* s.messages).find((message) => message.type === "compaction")).toMatchObject({
+            status: "completed",
+            recent: expect.stringContaining("[User]: Second question"),
+          })
+          const normal = s.requests[1]
+          const compact = s.requests[2]
+          expect(compact.messages.slice(0, normal.messages.length)).toEqual([...normal.messages])
+          expect(compact.messages.at(-1)).toMatchObject({
+            role: "user",
+            content: [{ type: "text", text: SessionCompaction.buildPrompt(false) }],
+          })
+          // Compare wire content without the cache breakpoints that move to the new final message.
+          const before = yield* compileRequest(LLMRequest.update(normal, { cache: "none" }))
+          const after = yield* compileRequest(LLMRequest.update(compact, { cache: "none" }))
+          const key = route === OpenAIResponses.route ? "input" : "messages"
+          const input = Schema.decodeUnknownSync(Schema.Array(Schema.Unknown))
+          const prefix = input(before.body[key])
+          expect(input(after.body[key]).slice(0, prefix.length)).toEqual([...prefix])
+        },
+      )
+    }
+  }
+
+  for (const configured of ["session", "other"] as const) {
+    scenario(
+      `summarizes through the latest reply only with the session model (${configured} configured)`,
+      function* (s) {
+        const agents = yield* Agent.Service
+        yield* agents.transform((editor) =>
+          editor.update(Agent.ID.make("compaction"), (agent) => {
+            agent.model = Model.Ref.make({
+              id: Model.ID.make(configured === "session" ? "fake-model" : "replacement"),
+              providerID: Provider.ID.make("fake"),
+            })
+          }),
+        )
+        yield* s.llm.push(
+          TestLLM.text("First answer", "configured-first"),
+          TestLLM.text("Second answer", "configured-second"),
+          TestLLM.text("## Objective\n- Checkpoint summary", "configured-summary"),
+        )
+        yield* s.runPrompt("First question")
+        yield* s.runPrompt("Second question")
+        yield* s.session.compact({ sessionID })
+        yield* s.resume
+
+        // A resolved copy of the session model still has the conversation cached; another model does not.
+        expect(s.requests).toHaveLength(3)
+        expect(userTexts(s.requests[2]).includes("Second question")).toBe(configured === "session")
+      },
+    )
+  }
+
+  scenario("bounds compaction network retries across the fallback to the older part", function* (s) {
+    yield* s.llm.push(TestLLM.text("First answer", "fallback-first"), TestLLM.text("Second answer", "fallback-second"))
+    yield* s.runPrompt("First question")
+    yield* s.runPrompt("Second question")
+    s.requests.length = 0
+    const hooks = yield* PluginHooks.Service
+    const attempts: number[] = []
+    yield* hooks.register("session", "retry", (event) =>
+      Effect.sync(() => {
+        attempts.push(event.attempt)
+        event.decision = { retry: true, delay: 0 }
+      }),
+    )
+    const overflow = Stream.fail(
+      new AIError({ reason: new InvalidRequestError({ message: "Too long", classification: "context-overflow" }) }),
+    )
+    yield* s.llm.push(Stream.fail(providerUnavailable()), overflow)
+    yield* s.llm.always(Stream.fail(providerUnavailable()))
+    const compaction = yield* s.session.compact({ sessionID })
+    yield* s.resume
+
+    // The request through the latest reply fails once, then overflows; the older part gets only the retries left.
+    expect(attempts).toEqual(RETRY_ATTEMPTS)
+    expect(s.requests).toHaveLength(RETRY_ATTEMPTS.length + 2)
+    expect(userTexts(s.requests[1])).toContain("Second question")
+    expect(userTexts(s.requests[2])).not.toContain("Second question")
+    expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({
+      status: "failed",
+      error: { type: "provider.transport", message: "Provider unavailable" },
+    })
+  })
+
   for (const response of ["tools", "reasoning", "invalid text"] as const) {
     for (const summary of [true, false]) {
       scenario(
@@ -2829,17 +2952,20 @@ describe("SessionRunnerLLM", () => {
       Stream.fail(
         new AIError({ reason: new InvalidRequestError({ message: "Too long", classification: "context-overflow" }) }),
       )
-    yield* s.llm.push(overflow(), overflow(), overflow(), overflow())
+    yield* s.llm.push(overflow(), overflow(), overflow(), overflow(), overflow())
     const compaction = yield* s.session.compact({ sessionID })
     yield* s.resume
 
-    expect(s.requests).toHaveLength(4)
-    expect(userTexts(s.requests[2])[0].length).toBeLessThan(userTexts(s.requests[1])[0].length)
+    // The request through the latest reply overflows first, then the older part alone shrinks.
+    expect(s.requests).toHaveLength(5)
+    expect(userTexts(s.requests[0])).toContain(`Request 7: ${filler}`)
+    expect(userTexts(s.requests[1])).not.toContain(`Request 7: ${filler}`)
     expect(userTexts(s.requests[3])[0].length).toBeLessThan(userTexts(s.requests[2])[0].length)
+    expect(userTexts(s.requests[4])[0].length).toBeLessThan(userTexts(s.requests[3])[0].length)
     expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({ status: "failed" })
     yield* s.llm.push(TestLLM.text("Continued", "continued"))
     yield* s.runPrompt("Continue")
-    expect(userTexts(s.requests[4])).toContain(`Request 0: ${filler}`)
+    expect(userTexts(s.requests[5])).toContain(`Request 0: ${filler}`)
   })
 
   scenario("resends compaction as text after payload too large, then shrinks later rejections", function* (s) {
@@ -2859,19 +2985,25 @@ describe("SessionRunnerLLM", () => {
     )
     s.currentModel = unknownContextModel
     s.requests.length = 0
-    yield* s.llm.push(...Array.from({ length: 5 }, () => Stream.fail(payloadTooLarge())))
+    yield* s.llm.push(...Array.from({ length: 6 }, () => Stream.fail(payloadTooLarge())))
     const compaction = yield* s.session.compact({ sessionID })
     yield* s.resume
 
-    // The first rejection resends everything as text, which carries no media; later ones shrink like "too long".
-    expect(s.requests).toHaveLength(5)
-    expect(s.requests[0]?.messages.some((message) => message.content.some((part) => part.type === "media"))).toBeTrue()
-    expect(s.requests[1]?.messages.every((message) => message.role === "user")).toBeTrue()
-    expect(userTexts(s.requests[1])[0]).toContain("[image/png omitted]")
-    expect(userTexts(s.requests[1])[0]).not.toMatch(/older exchanges? omitted/)
-    expect(userTexts(s.requests[2])[0].length).toBeLessThan(userTexts(s.requests[1])[0].length)
+    // The request through the latest reply is rejected first and falls back to the older part. Its first rejection
+    // resends everything as text, which carries no media; later ones shrink like "too long".
+    expect(s.requests).toHaveLength(6)
+    const media = (request: LLMRequest | undefined) =>
+      request?.messages.some((message) => message.content.some((part) => part.type === "media"))
+    expect(media(s.requests[0])).toBeTrue()
+    expect(userTexts(s.requests[0])).toContain(`Request 6: ${filler}`)
+    expect(media(s.requests[1])).toBeTrue()
+    expect(userTexts(s.requests[1])).not.toContain(`Request 6: ${filler}`)
+    expect(s.requests[2]?.messages.every((message) => message.role === "user")).toBeTrue()
+    expect(userTexts(s.requests[2])[0]).toContain("[image/png omitted]")
+    expect(userTexts(s.requests[2])[0]).not.toMatch(/older exchanges? omitted/)
     expect(userTexts(s.requests[3])[0].length).toBeLessThan(userTexts(s.requests[2])[0].length)
     expect(userTexts(s.requests[4])[0].length).toBeLessThan(userTexts(s.requests[3])[0].length)
+    expect(userTexts(s.requests[5])[0].length).toBeLessThan(userTexts(s.requests[4])[0].length)
     expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({ status: "failed" })
   })
 
