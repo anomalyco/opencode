@@ -23,7 +23,7 @@ export const WriteInput = Schema.Struct({
 export type WriteInput = typeof WriteInput.Type
 
 export class NotFoundError extends Schema.TaggedError<NotFoundError>()("FileSystem.NotFoundError", {
-  path: RelativePath,
+  path: Schema.String,
 }) {}
 
 export class DirectoryNotFoundError extends Schema.TaggedError<DirectoryNotFoundError>()(
@@ -139,33 +139,21 @@ const baseLayer = Layer.effect(
           }),
         )
     const resolve = Effect.fnUntraced(function* (input: RelativePath) {
-      if (input.includes("\u0000")) return yield* Effect.fail(new NotFoundError({ path: input }))
+      const missing = new NotFoundError({ path: input })
+      if (input.includes("\u0000")) return yield* missing
       const absolute = path.resolve(location.directory, input)
-      if (!FSUtil.contains(location.directory, absolute)) return yield* Effect.fail(new NotFoundError({ path: input }))
-      const real = yield* fs.realPath(absolute).pipe(
-        Effect.catchReason(
-          "PlatformError",
-          "NotFound",
-          () => Effect.fail(new NotFoundError({ path: input })),
-          (_, error) => Effect.die(error),
-        ),
-      )
-      if (!FSUtil.contains(root, real)) return yield* Effect.fail(new NotFoundError({ path: input }))
+      if (!FSUtil.contains(location.directory, absolute)) return yield* missing
+      const real = yield* fs.realPath(absolute).pipe(Effect.catch(notFound(missing)))
+      if (!FSUtil.contains(root, real)) return yield* missing
       return real
     })
     return Service.of({
       find: search.find,
       read: Effect.fn("FileSystem.read")(function* (input) {
         const real = yield* resolve(input.path)
-        const info = yield* fs.stat(real).pipe(
-          Effect.catchReason(
-            "PlatformError",
-            "NotFound",
-            () => Effect.fail(new NotFoundError({ path: input.path })),
-            (_, error) => Effect.die(error),
-          ),
-        )
-        if (info.type !== "File") return yield* Effect.fail(new NotFoundError({ path: input.path }))
+        const missing = new NotFoundError({ path: input.path })
+        const info = yield* fs.stat(real).pipe(Effect.catch(notFound(missing)))
+        if (info.type !== "File") return yield* missing
         return {
           mime: FSUtil.mimeType(real),
           size: Number(info.size),
@@ -176,15 +164,8 @@ const baseLayer = Layer.effect(
       list: Effect.fn("FileSystem.list")(function* (input = {}) {
         // Navigation can leave the cwd without activating another Location.
         const directory = path.resolve(location.directory, input.path ?? ".")
-        const missing = new NotFoundError({ path: RelativePath.make(input.path ?? ".") })
-        const info = yield* fs.stat(directory).pipe(
-          Effect.catchReason(
-            "PlatformError",
-            "NotFound",
-            () => Effect.fail(missing),
-            (_, error) => Effect.die(error),
-          ),
-        )
+        const missing = new NotFoundError({ path: input.path ?? "." })
+        const info = yield* fs.stat(directory).pipe(Effect.catch(notFound(missing)))
         if (info.type !== "Directory") return yield* missing
         const entries = yield* Effect.forEach(
           yield* fs.readDirectoryEntries(directory).pipe(Effect.orDie),
@@ -225,3 +206,9 @@ export const node = makeLocationNode({
   layer: baseLayer,
   deps: [FSUtil.node, Location.node, FileSystemSearch.node],
 })
+
+// A path through a file (ENOTDIR) or a symlink loop (ELOOP) fails as BadResource, not NotFound.
+function notFound(missing: NotFoundError) {
+  return (error: PlatformError.PlatformError) =>
+    error.reason._tag === "NotFound" || error.reason._tag === "BadResource" ? Effect.fail(missing) : Effect.die(error)
+}
