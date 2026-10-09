@@ -446,6 +446,8 @@ function ProviderConnection(props: {
     selectedModel: string
     collapsed: Record<string, boolean>
     adding: boolean
+    // Add account picked the method itself, so Back returns straight to the accounts.
+    direct: boolean
     confirming?: string
     switching?: string
     // The account being activated, checked right away instead of after the refresh.
@@ -453,6 +455,7 @@ function ProviderConnection(props: {
     renaming?: string
   }>({
     adding: false,
+    direct: false,
     copied: false,
     copyFailed: false,
     models: false,
@@ -481,7 +484,8 @@ function ProviderConnection(props: {
     keyProvider: () => props.provider,
     directory,
     // Console starts from its own intro, and the accounts step waits for Add account.
-    manual: () => isConsole || showAccounts(),
+    // Once the accounts step owns the flow, Add account starts the method itself.
+    manual: () => isConsole || (!!props.accounts && accounts().length > 0),
     prepare: isConsole ? prepareConsoleCatalog : undefined,
     pollInterval: isConsole ? 500 : undefined,
     onComplete: () => {
@@ -917,16 +921,22 @@ function ProviderConnection(props: {
   }
 
   function goBack() {
-    // Console steps return to its intro; it has no method list to go back to.
-    if ((isConsole || controller.methods().length > 1) && controller.methodIndex() !== undefined) {
+    // A method Add account chose directly has no intro or method list behind it.
+    if (
+      props.accounts &&
+      state.adding &&
+      accounts().length > 0 &&
+      (state.direct || controller.methodIndex() === undefined)
+    ) {
       controller.auth.reset()
+      setState({ adding: false, direct: false })
 
       return
     }
 
-    if (props.accounts && state.adding && accounts().length > 0) {
+    // Console steps return to its intro; it has no method list to go back to.
+    if ((isConsole || controller.methods().length > 1) && controller.methodIndex() !== undefined) {
       controller.auth.reset()
-      setState("adding", false)
 
       return
     }
@@ -1189,10 +1199,20 @@ function ProviderConnection(props: {
     })
 
   const addAccount = () => {
-    setState({ adding: true, confirming: undefined })
+    setState({ adding: true, direct: false, confirming: undefined })
 
-    // A provider with one method has nothing to choose; Console shows its intro instead.
-    if (!isConsole && controller.methods().length === 1) void controller.auth.select(0)
+    // Go's accounts are its own keys; the Console sign-in would add the account to OpenCode Console instead.
+    const index =
+      props.provider === "opencode-go"
+        ? keyIndex()
+        : // A provider with one method has nothing to choose; Console shows its intro instead.
+          !isConsole && controller.methods().length === 1
+          ? 0
+          : -1
+
+    if (index === -1) return
+    setState("direct", true)
+    void controller.auth.select(index)
   }
 
   const activateAccount = async (account: ProviderAccount) => {

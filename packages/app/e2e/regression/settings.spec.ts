@@ -868,6 +868,14 @@ test("providers: the connect dialog lists connected providers and manages their 
   await expect(list.getByRole("radio")).toHaveText(["Home", "Work"])
   await expect(list.getByRole("radio", { name: "Home", exact: true })).toHaveAttribute("aria-checked", "true")
 
+  // Escape cancels the rename without closing the dialog.
+  await list.getByRole("button", { name: "Home options", exact: true }).click()
+  await page.getByRole("menuitem", { name: "Rename account", exact: true }).click()
+  await name.fill("Ignored")
+  await name.press("Escape")
+  await expect(list.getByRole("radio")).toHaveText(["Home", "Work"])
+  await expect(page.getByRole("dialog", { name: "OpenAI", exact: true })).toBeVisible()
+
   // Removing an account asks first.
   await list.getByRole("button", { name: "Work options", exact: true }).click()
   await page.getByRole("menuitem", { name: "Remove account", exact: true }).click()
@@ -885,6 +893,53 @@ test("providers: the connect dialog lists connected providers and manages their 
   await expect(dialog.getByPlaceholder("API key")).toBeVisible()
   await dialog.getByRole("button", { name: "Navigate back", exact: true }).click()
   await expect(list).toBeVisible()
+})
+
+test("providers: adding a Go account uses a Go key, and a lone sign-in starts once", async ({ page, context }) => {
+  await context.route("https://auth.example.test/**", (route) => route.fulfill({ body: "Sign in" }))
+  const attempts: string[] = []
+
+  const { settings } = await open(page, {
+    integrations: [
+      ...consoleIntegrations.filter((integration) => integration.id !== "opencode-go"),
+      {
+        id: "opencode-go",
+        name: "OpenCode Go",
+        methods: [{ type: "key" }],
+        connections: [{ type: "credential", id: "cred_go", label: "Go key", method: "key" }],
+      },
+      {
+        id: "github-copilot",
+        name: "GitHub Copilot",
+        methods: [{ id: "device", type: "oauth", label: "GitHub" }],
+        connections: [{ type: "credential", id: "cred_gh", label: "Octocat", method: "oauth" }],
+      },
+    ],
+    onIntegrationOAuth: (input) => {
+      attempts.push(input.integrationID)
+
+      return { url: "https://auth.example.test/device?user_code=GH12-3456" }
+    },
+  })
+
+  await settings.getByRole("tab", { name: "Providers", exact: true }).click()
+  await settings.getByRole("button", { name: "Show more providers", exact: true }).click()
+  const dialog = page.getByRole("dialog")
+  await dialog.locator('[data-provider-id="opencode-go"]').click()
+  await dialog.getByRole("button", { name: "Add another account", exact: true }).click()
+  await expect(dialog.getByPlaceholder("API key")).toBeVisible()
+  expect(attempts).toEqual([])
+
+  // Back from that key form returns straight to Go's accounts.
+  await dialog.getByRole("button", { name: "Navigate back", exact: true }).click()
+  await expect(dialog.getByRole("radio", { name: "Go key", exact: true })).toBeVisible()
+  await dialog.getByRole("button", { name: "Navigate back", exact: true }).click()
+  await dialog.locator('[data-provider-id="github-copilot"]').click()
+  const popup = page.waitForEvent("popup")
+  await dialog.getByRole("button", { name: "Add another account", exact: true }).click()
+  await popup
+  await expect.poll(() => attempts).toEqual(["github-copilot"])
+  expect(attempts).toEqual(["github-copilot"])
 })
 
 test("providers: renames the active account inline from its menu", async ({ page }) => {
@@ -919,6 +974,66 @@ test("providers: renames the active account inline from its menu", async ({ page
   await name.fill("Ignored")
   await name.press("Escape")
   await expect(trigger).toHaveText("Team")
+})
+
+test("providers: switching to a Zen API key does not wait for a Console workspace", async ({ page }) => {
+  const accounts = [
+    { type: "credential", id: "cred_console", label: "Anomaly", method: "oauth" },
+    { type: "credential", id: "cred_zen", label: "Zen key", method: "key" },
+  ]
+
+  const state = { active: "cred_console" }
+
+  const { settings } = await open(page, {
+    provider: () =>
+      state.active === "cred_console"
+        ? {
+            all: [
+              { id: "opencode", integrationID: "opencode", name: "Anomaly / OpenCode", models: {} },
+              { id: "console-google", integrationID: "opencode", name: "Anomaly / Google", models: {} },
+            ],
+            connected: ["opencode", "console-google"],
+            default: {},
+          }
+        : {
+            all: [
+              {
+                id: "opencode",
+                name: "OpenCode Zen",
+                models: { paid: { id: "paid", name: "Paid", cost: { input: 3 } } },
+              },
+            ],
+            connected: ["opencode"],
+            default: {},
+          },
+    integrations: () => [
+      {
+        id: "opencode",
+        name: "OpenCode Console",
+        methods: [{ id: "device", type: "oauth", label: "OpenCode Console account" }],
+        connections: accounts.toSorted((a, b) => Number(b.id === state.active) - Number(a.id === state.active)),
+      },
+    ],
+    onCredentialActivate: (credentialID) => {
+      state.active = credentialID
+    },
+  })
+
+  await settings.getByRole("tab", { name: "Providers", exact: true }).click()
+  const trigger = settings.getByRole("button", { name: "Manage OpenCode Console accounts", exact: true })
+  await expect(trigger).toHaveText("Anomaly")
+  await trigger.click()
+
+  const catalogReads: string[] = []
+
+  page.on("request", (request) => {
+    if (request.method() === "GET" && new URL(request.url()).pathname === "/api/provider")
+      catalogReads.push(request.url())
+  })
+  await page.getByRole("menuitemradio", { name: "Zen key", exact: true }).click()
+  await expect(page.getByText("OpenCode Console account switched")).toBeVisible()
+  // One refresh after the switch; a Console workspace poll would keep reading the catalog.
+  expect(catalogReads).toHaveLength(1)
 })
 
 test("providers: switching Console accounts keeps the list until the new workspace loads", async ({ page }) => {
