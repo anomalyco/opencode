@@ -1,10 +1,29 @@
 import type { AnyAuthClient } from "google-auth-library"
 import { Effect, Redacted } from "effect"
+import fs from "node:fs"
+import os from "node:os"
+import path from "node:path"
 import { Auth, MissingCredentialError } from "../route/auth.js"
 import { ProviderConfigurationError, ProviderID } from "../schema/index.js"
 
 const SCOPE = "https://www.googleapis.com/auth/cloud-platform"
 const id = ProviderID.make("google-vertex")
+
+function expandHome(filepath: string) {
+  if (filepath === "~") return os.homedir()
+  if (filepath.startsWith("~/")) return path.join(os.homedir(), filepath.slice(2))
+  return filepath
+}
+
+export const resolveCredentialsFile = () => {
+  if (process.env.GOOGLE_APPLICATION_CREDENTIALS) return process.env.GOOGLE_APPLICATION_CREDENTIALS
+  const cloudsdkConfig = process.env.CLOUDSDK_CONFIG
+  if (cloudsdkConfig) {
+    const candidate = path.join(expandHome(cloudsdkConfig), "application_default_credentials.json")
+    if (fs.existsSync(candidate)) return candidate
+  }
+  return undefined
+}
 
 export type OAuthOptions =
   | { readonly accessToken?: string; readonly auth?: never }
@@ -61,8 +80,16 @@ const adc = (project?: string) => {
   let client: Promise<AnyAuthClient> | undefined
   const loadClient = () => {
     if (client) return client
+    const keyFilename = resolveCredentialsFile()
+    if (keyFilename && !process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+      process.env.GOOGLE_APPLICATION_CREDENTIALS = keyFilename
+    }
     client = import("google-auth-library").then(({ GoogleAuth }) =>
-      new GoogleAuth({ projectId: project, scopes: [SCOPE] }).getClient(),
+      new GoogleAuth({
+        projectId: project,
+        scopes: [SCOPE],
+        ...(keyFilename ? { keyFilename } : {}),
+      }).getClient(),
     )
     return client
   }

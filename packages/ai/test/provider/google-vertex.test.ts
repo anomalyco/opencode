@@ -1,8 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { HttpClientRequest } from "effect/http"
+import fs from "node:fs"
+import os from "node:os"
+import path from "node:path"
 import { LanguageModel, LLM, Message, ToolCallPart } from "../../src/index.js"
 import { GoogleVertex, GoogleVertexChat, GoogleVertexMessages, GoogleVertexResponses } from "../../src/providers.js"
+import { GoogleVertexShared } from "../../src/providers/google-vertex-shared.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import { it } from "../lib/effect.js"
@@ -493,5 +497,28 @@ describe("Google Vertex providers", () => {
         message: "Google Vertex tuned models do not support Express Mode API keys",
       }),
     )
+  })
+
+  test("resolves credentials file from CLOUDSDK_CONFIG when present", () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "cloudsdk-ai-test-"))
+    const credPath = path.join(tempDir, "application_default_credentials.json")
+    fs.writeFileSync(credPath, JSON.stringify({ type: "authorized_user" }))
+
+    const origCred = process.env.GOOGLE_APPLICATION_CREDENTIALS
+    const origConfig = process.env.CLOUDSDK_CONFIG
+    try {
+      delete process.env.GOOGLE_APPLICATION_CREDENTIALS
+      process.env.CLOUDSDK_CONFIG = tempDir
+      expect(GoogleVertexShared.resolveCredentialsFile()).toBe(credPath)
+
+      process.env.GOOGLE_APPLICATION_CREDENTIALS = "explicit.json"
+      expect(GoogleVertexShared.resolveCredentialsFile()).toBe("explicit.json")
+    } finally {
+      if (origCred !== undefined) process.env.GOOGLE_APPLICATION_CREDENTIALS = origCred
+      else delete process.env.GOOGLE_APPLICATION_CREDENTIALS
+      if (origConfig !== undefined) process.env.CLOUDSDK_CONFIG = origConfig
+      else delete process.env.CLOUDSDK_CONFIG
+      fs.rmSync(tempDir, { recursive: true, force: true })
+    }
   })
 })

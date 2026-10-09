@@ -1,5 +1,8 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
+import fs from "node:fs"
+import os from "node:os"
+import path from "node:path"
 import { Model } from "@opencode/core/model"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHost } from "@opencode/core/plugin/host"
@@ -142,6 +145,46 @@ describe("GoogleVertexPlugin", () => {
         }),
     ),
   )
+
+  it.effect("enables the provider and sets GOOGLE_APPLICATION_CREDENTIALS when project is in CLOUDSDK_CONFIG ADC", () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "cloudsdk-v2-test-"))
+    const credPath = path.join(tempDir, "application_default_credentials.json")
+    fs.writeFileSync(credPath, JSON.stringify({ quota_project_id: "cloudsdk-project" }))
+
+    return Effect.acquireUseRelease(
+      Effect.void,
+      () =>
+        withEnv(
+          {
+            GOOGLE_VERTEX_PROJECT: undefined,
+            GOOGLE_CLOUD_PROJECT: undefined,
+            GCP_PROJECT: undefined,
+            GCLOUD_PROJECT: undefined,
+            GOOGLE_APPLICATION_CREDENTIALS: undefined,
+            CLOUDSDK_CONFIG: tempDir,
+          },
+          () =>
+            Effect.gen(function* () {
+              const catalog = yield* Provider.Service
+              yield* catalog.transform((catalog) =>
+                catalog.update(Provider.ID.make("google-vertex"), (provider) => {
+                  provider.package = "@opencode/ai/providers/google-vertex"
+                }),
+              )
+              yield* addPlugin()
+
+              const provider = required(yield* catalog.get(Provider.ID.make("google-vertex")))
+              expect(provider.activation).toBe("enabled")
+              expect(provider.settings?.project).toBe("cloudsdk-project")
+              expect(process.env.GOOGLE_APPLICATION_CREDENTIALS).toBe(credPath)
+            }),
+        ),
+      () =>
+        Effect.sync(() => {
+          fs.rmSync(tempDir, { recursive: true, force: true })
+        }),
+    )
+  })
 
   it.effect("resolves the advertised GOOGLE_VERTEX_PROJECT env for provider updates and SDKs", () =>
     withEnv(
