@@ -167,7 +167,8 @@ function TurnRail(props: TurnNavigatorProps & { index?: Map<string, string>; roo
   return (
     <Show when={turns().length > 1}>
       <div
-        class="flex max-h-full min-h-0 cursor-pointer flex-col py-1 pointer-events-auto"
+        // Hovering the rail widens it and doubles every tick; ticks size from per-state widths times the rail scale.
+        class="flex max-h-full min-h-0 w-5 cursor-pointer flex-col py-1 pointer-events-auto transition-[width] duration-150 [--rail-faint:var(--v2-icon-icon-faint)] [--rail-scale:1] hover:w-9 hover:[--rail-faint:var(--v2-icon-icon-muted)] hover:[--rail-scale:2] motion-reduce:transition-none"
         onPointerMove={hover}
         onPointerLeave={() => setState("hover", undefined)}
         onClick={(event) => {
@@ -181,9 +182,9 @@ function TurnRail(props: TurnNavigatorProps & { index?: Map<string, string>; roo
             <div
               data-turn={id}
               data-state={hovered(id) ? "hovered" : active(id) ? "active" : undefined}
-              class="group flex h-2 min-h-0 w-5 shrink items-center ps-1"
+              class="flex h-2 min-h-0 w-full shrink items-center ps-1 [--tick-color:var(--rail-faint)] [--tick-width:8px] data-[state=active]:[--tick-color:var(--v2-icon-icon-base)] data-[state=active]:[--tick-width:12px] data-[state=hovered]:[--tick-color:var(--v2-text-text-base)] data-[state=hovered]:[--tick-width:14px]"
             >
-              <span class="block h-0.5 w-2 rounded-full bg-v2-icon-icon-faint transition-[width,background-color] duration-150 motion-reduce:transition-none group-data-[state=active]:w-3 group-data-[state=active]:bg-v2-icon-icon-base group-data-[state=hovered]:w-3.5 group-data-[state=hovered]:bg-v2-text-text-base" />
+              <span class="block h-0.5 w-[calc(var(--tick-width)*var(--rail-scale))] rounded-full bg-(--tick-color) transition-[width,background-color] duration-150 motion-reduce:transition-none" />
             </div>
           )}
         </For>
@@ -192,7 +193,7 @@ function TurnRail(props: TurnNavigatorProps & { index?: Map<string, string>; roo
         {(item) => (
           <div
             data-slot="session-turn-navigator-preview"
-            class="absolute start-6 w-[320px] max-w-[calc(100vw-4rem)] -translate-y-1/2 rounded-lg bg-v2-background-bg-base px-3 py-2"
+            class="absolute start-11 w-[320px] max-w-[calc(100vw-4rem)] -translate-y-1/2 rounded-lg bg-v2-background-bg-base px-3 py-2"
             style={{ top: `${item().top}px`, "box-shadow": "var(--v2-elevation-raised)" }}
           >
             <p class="line-clamp-2 text-[13px] font-[530] leading-text-compact text-v2-text-text-base">
