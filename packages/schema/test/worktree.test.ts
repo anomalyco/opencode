@@ -43,3 +43,20 @@ test("strategy failures can request force confirmation without Core or Git depen
     Schema.encodeSync(Worktree.OperationError)(new Worktree.OperationError({ message: "Failed" })),
   ).not.toHaveProperty("forceRequired")
 })
+
+test("exact directory adoption does not claim descendants or sibling projects", () => {
+  const event = { projectID: "directory-project", previous: "global", directory: "/home/user", exact: true }
+  expect(Worktree.adopt({ projectID: "global", directory: "/home/user" }, event)).toEqual({
+    projectID: "directory-project",
+    subpath: undefined,
+  })
+  expect(Worktree.adopt({ projectID: "global", directory: "/home/user/child" }, event)).toBeUndefined()
+  expect(Worktree.adopt({ projectID: "global", directory: "/home/user-other" }, event)).toBeUndefined()
+  expect(
+    Worktree.adopt({ projectID: "global", directory: "/home/user", workspaceID: "workspace" }, event),
+  ).toBeUndefined()
+  expect(Worktree.adopt({ projectID: "other", directory: "/home/user" }, event)).toBeUndefined()
+  expect(
+    Worktree.adopt({ projectID: "global", directory: "/home/user/child" }, { ...event, exact: undefined }),
+  ).toEqual({ projectID: "directory-project", subpath: "child" })
+})

@@ -517,10 +517,12 @@ const layer = Layer.effectDiscard(
               isNull(SessionTable.workspace_id),
               or(
                 event.data.adopted?.length ? inArray(SessionTable.project_id, event.data.adopted) : undefined,
-                and(
-                  gte(SessionTable.directory, event.data.directory),
-                  lte(SessionTable.directory, AbsolutePath.make(event.data.directory + "\uffff")),
-                ),
+                event.data.exact
+                  ? eq(SessionTable.directory, event.data.directory)
+                  : and(
+                      gte(SessionTable.directory, event.data.directory),
+                      lte(SessionTable.directory, AbsolutePath.make(event.data.directory + "\uffff")),
+                    ),
               ),
             ),
           )

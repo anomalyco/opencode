@@ -128,7 +128,6 @@ const layer = Layer.effect(
           .pipe(Effect.orDie)
         if (row) yield* bus.publish(ProjectSchema.Event.Updated, fromRow(row))
       }
-      if (!project.vcs) return project
       const directories: Array<{ projectID: ID; directory: AbsolutePath; strategy?: string }> = [
         { projectID: project.id, directory: project.canonical },
       ]
@@ -136,7 +135,7 @@ const layer = Layer.effect(
         directories.push({
           projectID: project.id,
           directory: project.directory,
-          strategy: project.vcs.type === "git" ? "git" : undefined,
+          strategy: project.vcs?.type === "git" ? "git" : undefined,
         })
       // A missing directory row means this directory's resolution is a new durable
       // fact. The row insert commits atomically with the event, so a crash between
@@ -185,6 +184,7 @@ const layer = Layer.effect(
               projectID: item.projectID,
               directory: item.directory,
               previous: project.previous ?? ID.global,
+              ...(!project.vcs ? { exact: true } : {}),
               ...(adopted.length ? { adopted: adopted.map((candidate) => candidate.id) } : {}),
             },
             {
