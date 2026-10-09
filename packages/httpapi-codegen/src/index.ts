@@ -340,6 +340,8 @@ export function emitPromise(
   options?: {
     readonly outputTypes?: Readonly<Record<string, { readonly name: string; readonly import: string }>>
     readonly mutableOutputs?: boolean
+    readonly brandReferences?: ReadonlyArray<EffectTypeReference>
+    readonly brandInputs?: boolean
   },
 ): Output {
   const groups = contract.groups
@@ -349,7 +351,16 @@ export function emitPromise(
   return {
     operations: promiseOperations(groups),
     files: [
-      { path: "types.ts", content: renderPromiseTypes(groups, options?.outputTypes, options?.mutableOutputs ?? false) },
+      {
+        path: "types.ts",
+        content: renderPromiseTypes(
+          groups,
+          options?.outputTypes,
+          options?.mutableOutputs ?? false,
+          options?.brandReferences ?? [],
+          options?.brandInputs ?? true,
+        ),
+      },
       {
         path: "client-error.ts",
         content: `export type ClientErrorReason = "Transport" | "UnexpectedStatus" | "UnsupportedContentType" | "MalformedResponse" | "SseEventTooLarge"\n\nexport class ClientError extends Error {\n  override readonly name = "ClientError"\n  constructor(readonly reason: ClientErrorReason, options?: ErrorOptions & { readonly detail?: string | null }) {\n    const detail = options?.detail ?? (options?.cause instanceof Error ? options.cause.message : undefined)\n    super(detail ? \`\${reason}: \${detail}\` : reason, options)\n  }\n}\n`,
@@ -588,7 +599,8 @@ function assertPromiseEndpoint(endpoint: Endpoint) {
   const payloadEncoding =
     payload === undefined
       ? undefined
-      : (resolveHttpApiEncoding(payload.ast)?._tag ?? (HttpMethod.hasBody(endpoint.endpoint.method) ? "Json" : "FormUrlEncoded"))
+      : (resolveHttpApiEncoding(payload.ast)?._tag ??
+        (HttpMethod.hasBody(endpoint.endpoint.method) ? "Json" : "FormUrlEncoded"))
   if (payloadEncoding !== undefined && payloadEncoding !== "Json" && payloadEncoding !== "Uint8Array") {
     throw new GenerationError({ reason: `Unsupported Promise payload encoding: ${name}` })
   }
@@ -809,15 +821,28 @@ function renderPromiseTypes(
   groups: ReadonlyArray<Group>,
   outputTypes?: Readonly<Record<string, { readonly name: string; readonly import: string }>>,
   mutableOutputs = false,
+  brandReferences: ReadonlyArray<EffectTypeReference> = [],
+  brandInputs = true,
 ) {
+  const references = effectTypeReferences(brandReferences)
+  const brandImports = new Set<string>()
+  const renderBrands = (type: string, enabled = true) => {
+    for (const [brand, reference] of references.brands) {
+      if (!enabled) continue
+      if (!type.includes(brand)) continue
+      brandImports.add(reference.import)
+      type = type.replaceAll(brand, reference.name)
+    }
+    return type.replaceAll(/ & Brand\.Brand<"[^"]+">/g, "")
+  }
   const types = new Map<SchemaAST.AST, string>()
-  const typeOf = (schema: Schema.Top, decoded = false) => {
+  const typeOf = (schema: Schema.Top, decoded = false, branded = true) => {
     const projected = decoded ? Schema.toType(schema) : Schema.toEncoded(schema)
     const cached = types.get(projected.ast)
-    if (cached !== undefined) return cached
+    if (cached !== undefined) return renderBrands(cached, branded)
     const type = structuralType(projected)
     types.set(projected.ast, type)
-    return type
+    return renderBrands(type, branded)
   }
   const outputMarkers = new Map<SchemaAST.AST, string>()
   const outputSchemas: Array<Schema.Top> = []
@@ -862,7 +887,7 @@ function renderPromiseTypes(
             const schema = schemas[field.source]
             if (schema === undefined)
               throw new GenerationError({ reason: `Missing input schema: ${prefix}.${field.name}` })
-            return `readonly ${JSON.stringify(field.name)}${field.optional ? "?" : ""}: ${isOpaquePayload(endpoint) && field.source === "payload" ? typeOf(schema) : `(${typeOf(schema, field.source === "query")})[${JSON.stringify(field.name)}]`}`
+            return `readonly ${JSON.stringify(field.name)}${field.optional ? "?" : ""}: ${isOpaquePayload(endpoint) && field.source === "payload" ? typeOf(schema, false, brandInputs) : `(${typeOf(schema, field.source === "query", brandInputs)})[${JSON.stringify(field.name)}]`}`
           })
           .join("; ")
         const successSchema = endpoint.successes[0]
@@ -885,6 +910,7 @@ function renderPromiseTypes(
   const reservedNames = new Set([
     "ClientError",
     "JsonValue",
+    ...brandReferences.map((reference) => reference.name.split(".")[0]),
     ...errors.keys(),
     ...groups.flatMap((group) =>
       group.endpoints.flatMap((endpoint) => {
@@ -894,7 +920,7 @@ function renderPromiseTypes(
     ),
     ...Object.values(outputTypes ?? {}).map((output) => output.name),
   ])
-  const rendered = structuralTypes(outputSchemas, mutableOutputs, reservedNames)
+  const rendered = structuralTypes(outputSchemas, mutableOutputs, reservedNames, renderBrands)
   const resolve = (source: string) =>
     rendered.types.reduce((result, type, index) => result.replaceAll(`__PROMISE_TYPE_${index}__`, type), source)
   const resolvedErrors = errorTypes.map(resolve)
@@ -904,7 +930,9 @@ function renderPromiseTypes(
   )
     ? `export type JsonValue = null | boolean | number | string | ${mutableOutputs ? "Array<JsonValue> | { [key: string]: JsonValue }" : "ReadonlyArray<JsonValue> | { readonly [key: string]: JsonValue }"}`
     : ""
-  const imports = [...new Set(Object.values(outputTypes ?? {}).map((override) => override.import))]
+  const imports = [
+    ...new Set([...brandImports, ...Object.values(outputTypes ?? {}).map((override) => override.import)]),
+  ]
   return [...imports, json, ...rendered.definitions, ...resolvedErrors, resolvedOperations].filter(Boolean).join("\n\n")
 }
 
@@ -1043,7 +1071,12 @@ function identifierPart(value: string) {
   return /^[A-Za-z_$]/.test(identifier) ? identifier : `_${identifier}`
 }
 
-function structuralTypes(schemas: ReadonlyArray<Schema.Top>, mutable: boolean, reservedNames: ReadonlySet<string>) {
+function structuralTypes(
+  schemas: ReadonlyArray<Schema.Top>,
+  mutable: boolean,
+  reservedNames: ReadonlySet<string>,
+  renderBrands: (type: string) => string,
+) {
   if (schemas.length === 0) return { types: [], definitions: [] }
   const representations = SchemaRepresentation.toRepresentations(
     promiseTypeAsts(schemas) as [SchemaAST.AST, ...Array<SchemaAST.AST>],
@@ -1097,8 +1130,7 @@ function structuralTypes(schemas: ReadonlyArray<Schema.Top>, mutable: boolean, r
       const pattern = `(?<![A-Za-z0-9_$.'"])${reference.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![A-Za-z0-9_$.'"])`
       type = type.replace(new RegExp(pattern, "g"), name)
     }
-    const output = type
-      .replaceAll(/ & Brand\.Brand<"[^"]+">/g, "")
+    const output = renderBrands(type)
       .replaceAll("Schema.Json", "JsonValue")
       .replaceAll(/(?<!["'])\bunknown\b(?!["'])/g, "any")
     return mutable ? mutableType(preserveStringSuggestions(output)) : preserveStringSuggestions(output)
@@ -1160,11 +1192,7 @@ function structuralType(schema: Schema.Top) {
     }
     return type
   }
-  return preserveStringSuggestions(
-    expand(document.codes[0].Type)
-      .replaceAll(/ & Brand\.Brand<"[^"]+">/g, "")
-      .replaceAll("Schema.Json", "JsonValue"),
-  )
+  return preserveStringSuggestions(expand(document.codes[0].Type).replaceAll("Schema.Json", "JsonValue"))
 }
 
 function promiseTypeAst(schema: Schema.Top) {
@@ -1253,7 +1281,7 @@ function normalizePromiseClientContent(content: string, groups: ReadonlyArray<Gr
           'if (descriptor.body !== undefined && !headers.has("content-type"))\n      headers.set("content-type", descriptor.binaryBody ? "application/octet-stream" : "application/json")',
         ),
         "body: descriptor.body === undefined ? undefined : JSON.stringify(descriptor.body),",
-        "body:\n          descriptor.body === undefined\n            ? undefined\n            : descriptor.binaryBody\n              ? (descriptor.body as RequestInit[\"body\"])\n              : JSON.stringify(descriptor.body),",
+        'body:\n          descriptor.body === undefined\n            ? undefined\n            : descriptor.binaryBody\n              ? (descriptor.body as RequestInit["body"])\n              : JSON.stringify(descriptor.body),',
       )
     : binaryReady
   return usesWildcard

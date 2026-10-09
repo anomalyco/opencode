@@ -672,6 +672,74 @@ describe("HttpApiCodegen.generate", () => {
     expect(types).not.toContain("Brand")
   })
 
+  test("retains referenced ID brands in Promise inputs, nested outputs and records", () => {
+    const ID = Schema.String.pipe(Schema.brand("SessionID"))
+    const Other = Schema.String.pipe(Schema.brand("MessageID"))
+    const output = emitPromise(
+      compileContract(
+        api(
+          HttpApiEndpoint.get("get", "/session/:sessionID", {
+            params: { sessionID: ID },
+            success: Schema.Struct({
+              data: Schema.Struct({
+                id: ID,
+                message: Schema.Struct({ id: Other }),
+                sessions: Schema.Record(ID, Schema.Struct({ id: ID })),
+                time: Schema.Number,
+              }).annotate({ identifier: "Session" }),
+            }),
+          }),
+        ),
+      ),
+      {
+        brandReferences: [
+          { schema: ID, name: "Session.ID", import: 'import type { Session } from "./schema"' },
+          { schema: Other, name: "Message.ID", import: 'import type { Message } from "./schema"' },
+        ],
+        mutableOutputs: true,
+      },
+    )
+    const types = output.files.find((file) => file.path === "types.ts")?.content
+    expect(types).toContain('readonly "sessionID": Session.ID')
+    expect(types).toContain('import type { Session } from "./schema"')
+    expect(types).toContain('import type { Message } from "./schema"')
+    expect(types).toContain("export type Session2 =")
+    expect(types).not.toContain("export type Session =")
+    expect(types).toContain('"id": Session.ID')
+    expect(types).toContain('"id": Message.ID')
+    expect(types).toContain("[x: Session.ID]")
+    expect(types).toContain('"time": number')
+    expect(types).not.toContain("Brand.Brand")
+  })
+
+  test("stages output brands without branding inputs that share an error schema", () => {
+    const ID = Schema.String.pipe(Schema.brand("SessionID"))
+    const Shared = Schema.Struct({ sessionID: ID })
+    class Missing extends Schema.TaggedError<Missing>()("Missing", { detail: Shared }, { httpApiStatus: 404 }) {}
+    const output = emitPromise(
+      compileContract(
+        api(
+          HttpApiEndpoint.post("create", "/session", {
+            payload: Shared,
+            error: Missing,
+            success: Schema.Struct({ data: Schema.Struct({ id: ID, sessions: Schema.Record(ID, Shared) }) }),
+          }),
+        ),
+      ),
+      {
+        brandReferences: [{ schema: ID, name: "Session.ID", import: 'import type { Session } from "./schema"' }],
+        brandInputs: false,
+      },
+    )
+    const types = output.files.find((file) => file.path === "types.ts")?.content
+    expect(types).toContain(
+      'export type SessionCreateInput = { readonly "sessionID": ({ readonly "sessionID": string })["sessionID"] }',
+    )
+    expect(types).toContain('readonly "detail": { readonly "sessionID": Session.ID }')
+    expect(types).toContain('readonly "id": Session.ID')
+    expect(types).toContain('[x: Session.ID]: { readonly "sessionID": Session.ID }')
+  })
+
   test("preserves suggestions for open string unions in Promise wire types", () => {
     const Field = Schema.Union([Schema.Literals(["reasoning", "reasoning_content"]), Schema.String]).annotate({
       identifier: "Field",
