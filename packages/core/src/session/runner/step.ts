@@ -62,11 +62,6 @@ interface Input {
 const TOOLS_INTERRUPTED = { type: "aborted", message: "Tool execution interrupted" } as const
 const STEP_INTERRUPTED = { type: "aborted", message: "Step interrupted" } as const
 const RESULT_MISSING = { type: "tool.result-missing", message: "Provider did not return a tool result" } as const
-const INPUT_INCOMPLETE = {
-  type: "tool.input-incomplete",
-  message:
-    "Tool call arguments were not completed and were not executed. Re-issue the tool call with complete arguments.",
-} as const
 
 /** Captures Location-scoped dependencies without introducing another service or execution loop. */
 export const make = Effect.gen(function* () {
@@ -226,7 +221,7 @@ export const make = Effect.gen(function* () {
         if (llmError || (Exit.isSuccess(stream) && !recorded.providerFailed)) {
           const missing = yield* publisher.failUnsettledTools(RESULT_MISSING, "hosted")
           if (missing && !llmError && !recorded.finish) yield* publisher.failAssistant(RESULT_MISSING)
-          yield* publisher.failUnsettledTools(INPUT_INCOMPLETE, "uncalled")
+          yield* publisher.failIncompleteTools()
         }
 
         const record = publisher.record()
@@ -275,13 +270,9 @@ export const make = Effect.gen(function* () {
         if (tools.interrupted && tools.failure) return yield* Effect.failCause(tools.failure)
         if (tools.interrupted && Exit.isFailure(joined)) return yield* Effect.failCause(joined.cause)
         if (record.failure) return yield* new StepFailedError({ error: record.failure })
-        if (record.finish?.finish === "length")
-          return Outcome.OutputLimit({
-            needsContinuation: input.prepared.request.toolChoice?.type !== "none" && record.needsContinuation,
-          })
-        return Outcome.Completed({
-          needsContinuation: input.prepared.request.toolChoice?.type !== "none" && record.needsContinuation,
-        })
+        const needsContinuation = input.prepared.request.toolChoice?.type !== "none" && record.needsContinuation
+        if (record.finish?.finish === "length") return Outcome.OutputLimit({ needsContinuation })
+        return Outcome.Completed({ needsContinuation })
       }),
     )
   }, Effect.scoped)

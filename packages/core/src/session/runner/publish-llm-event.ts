@@ -28,6 +28,32 @@ type Input = {
 const asRecord = (value: unknown): Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : { value }
 
+const INPUT_EXCERPT_LIMIT = 2048
+
+type InputExcerpt = {
+  readonly text: string
+  readonly length: number
+}
+
+type InputFailureReason = "malformed" | "length" | "incomplete"
+
+const INPUT_FAILURES = {
+  malformed: {
+    type: "tool.input-json",
+    message:
+      "The tool input could not be parsed as JSON, so the call was not executed. Reissue the call with valid JSON arguments.",
+  },
+  length: {
+    type: "tool.input-incomplete",
+    message:
+      "The tool call was not executed because the output token limit (stop reason: length) was reached before you could complete the arguments. Break large payloads into smaller tool calls and reissue the call with complete arguments.",
+  },
+  incomplete: {
+    type: "tool.input-incomplete",
+    message: "Tool call arguments were not completed and were not executed. Reissue the call with complete arguments.",
+  },
+} satisfies Record<InputFailureReason, SessionError.Error>
+
 /** Immutable fold of the durable facts a step's writer has recorded so far. */
 export interface StepRecord {
   /** The model produced visible output this attempt, which bars transparent retries and overflow recovery. */
@@ -83,7 +109,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     settled: boolean
     providerExecuted: boolean
     progress?: Tool.Metadata
-    input?: { readonly excerpt: string; readonly length: number }
+    input?: InputExcerpt
     malformed?: boolean
   }
   const tools = new Map<string, ToolState>()
@@ -256,7 +282,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     Effect.gen(function* () {
       const tool = tools.get(id)
       if (!tool) return yield* Effect.die(new Error(`Tool input end before start: ${id}`))
-      tool.input = { excerpt: value.slice(0, 2048), length: value.length }
+      tool.input = inputExcerpt(value)
       yield* bus.publish(SessionEvent.Tool.Input.Ended, {
         sessionID: input.sessionID,
         assistantMessageID,
@@ -327,16 +353,19 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     if (tool.name !== event.name)
       return yield* Effect.die(new Error(`Tool input name changed for ${event.id}: ${tool.name} -> ${event.name}`))
     if (toolInput.has(event.id)) yield* endToolInput(event, event.raw)
-    tool.input = { excerpt: event.raw.slice(0, 2048), length: event.raw.length }
+    tool.input = inputExcerpt(event.raw)
     tool.malformed = true
   })
+
+  const failToolInput = (id: string, tool: ToolState, reason: Exclude<InputFailureReason, "length">) =>
+    failTool(id, inputFailure(tool.input, stepSettlement?.finish === "length" ? "length" : reason))
 
   const flush = Effect.fn("SessionRunner.flush")(function* () {
     yield* flushFragments()
     // The finish reason distinguishes invalid JSON from arguments cut off by the output limit.
     for (const [id, tool] of tools) {
       if (!tool.malformed || tool.settled) continue
-      yield* failTool(id, inputFailure(tool.input, stepSettlement?.finish === "length" ? "length" : "malformed"))
+      yield* failToolInput(id, tool, "malformed")
     }
   })
 
@@ -363,15 +392,16 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     for (const [id, tool] of tools) {
       if (tool.settled || (mode === "hosted" && !tool.providerExecuted) || (mode === "uncalled" && tool.called))
         continue
-      failed =
-        (yield* failTool(
-          id,
-          mode === "uncalled" && error.type === "tool.input-incomplete"
-            ? inputFailure(tool.input, stepSettlement?.finish === "length" ? "length" : "incomplete")
-            : error,
-        )) || failed
+      if (yield* failTool(id, error)) failed = true
     }
     return failed
+  })
+
+  const failIncompleteTools = Effect.fn("SessionRunner.failIncompleteTools")(function* () {
+    for (const [id, tool] of tools) {
+      if (tool.called || tool.settled) continue
+      yield* failToolInput(id, tool, "incomplete")
+    }
   })
 
   const failAssistant = Effect.fnUntraced(function* (error: SessionError.Error) {
@@ -610,6 +640,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     failTool,
     publishStepFailure,
     failUnsettledTools,
+    failIncompleteTools,
     hasProviderError: () => providerFailed,
     hasStarted: () => stepStarted,
     /** Immutable snapshot of everything recorded for this step so far. */
@@ -628,21 +659,16 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
   }
 }
 
-function inputFailure(
-  input: { readonly excerpt: string; readonly length: number } | undefined,
-  reason: "malformed" | "length" | "incomplete",
-) {
-  const message =
-    reason === "length"
-      ? "The tool call was not executed because the output token limit (stop reason: length) was reached before you could complete the arguments. Break large payloads into smaller tool calls and reissue the call with complete arguments."
-      : reason === "malformed"
-        ? "The tool input could not be parsed as JSON, so the call was not executed. Reissue the call with valid JSON arguments."
-        : "Tool call arguments were not completed and were not executed. Reissue the call with complete arguments."
+function inputExcerpt(value: string): InputExcerpt {
+  return { text: value.slice(0, INPUT_EXCERPT_LIMIT), length: value.length }
+}
+
+function inputFailure(input: InputExcerpt | undefined, reason: InputFailureReason) {
+  const failure = INPUT_FAILURES[reason]
+  if (!input) return failure
+  const truncated = input.length > input.text.length ? "\n[truncated]" : ""
   return {
-    type: reason === "malformed" ? "tool.input-json" : "tool.input-incomplete",
-    message:
-      input === undefined
-        ? message
-        : `${message}\n\nInput excerpt (first ${input.excerpt.length} of ${input.length} characters):\n${input.excerpt}${input.length > input.excerpt.length ? "\n[truncated]" : ""}`,
+    ...failure,
+    message: `${failure.message}\n\nInput excerpt (first ${input.text.length} of ${input.length} characters):\n${input.text}${truncated}`,
   }
 }

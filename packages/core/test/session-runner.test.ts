@@ -5545,15 +5545,20 @@ describe("SessionRunnerLLM", () => {
     scenario(`continues ${type} after an output token limit`, function* (s) {
       const nudge =
         "Your last response hit the output token limit (stop reason: length). Do not apologize, recap, or repeat yourself. Break the remaining work into smaller pieces."
+      const partial =
+        type === "text"
+          ? [
+              LLMEvent.textStart({ id: "partial" }),
+              LLMEvent.textDelta({ id: "partial", text: "Partial" }),
+              LLMEvent.textEnd({ id: "partial" }),
+            ]
+          : [
+              LLMEvent.reasoningStart({ id: "partial" }),
+              LLMEvent.reasoningDelta({ id: "partial", text: "Partial" }),
+              LLMEvent.reasoningEnd({ id: "partial" }),
+            ]
       yield* s.llm.push(
-        TestLLM.complete(
-          { reason: { normalized: "length" } },
-          type === "text" ? LLMEvent.textStart({ id: "partial" }) : LLMEvent.reasoningStart({ id: "partial" }),
-          type === "text"
-            ? LLMEvent.textDelta({ id: "partial", text: "Partial" })
-            : LLMEvent.reasoningDelta({ id: "partial", text: "Partial" }),
-          type === "text" ? LLMEvent.textEnd({ id: "partial" }) : LLMEvent.reasoningEnd({ id: "partial" }),
-        ),
+        TestLLM.complete({ reason: { normalized: "length" } }, ...partial),
         TestLLM.text("Finished", "finished"),
       )
 
@@ -5582,50 +5587,50 @@ describe("SessionRunnerLLM", () => {
 
   for (const tools of ["hosted", "unfinished"] as const) {
     scenario(`caps output token limit continuations and resets for new input (${tools})`, function* (s) {
+      const toolEvents =
+        tools === "hosted"
+          ? [
+              hostedCall("hosted-search", "Search"),
+              LLMEvent.toolResult({
+                id: "hosted-search",
+                name: "web_search",
+                providerExecuted: true,
+                result: { type: "json", value: [] },
+              }),
+            ]
+          : [
+              LLMEvent.toolInputStart({ id: "call-incomplete", name: "echo" }),
+              LLMEvent.toolInputDelta({ id: "call-incomplete", name: "echo", text: '{"text":"partial' }),
+            ]
       const truncated = () =>
         TestLLM.complete(
           { reason: { normalized: "length" } },
-          ...(tools === "hosted"
-            ? [
-                hostedCall("hosted-search", "Search"),
-                LLMEvent.toolResult({
-                  id: "hosted-search",
-                  name: "web_search",
-                  providerExecuted: true,
-                  result: { type: "json", value: [] },
-                }),
-              ]
-            : [
-                LLMEvent.toolInputStart({ id: "call-incomplete", name: "echo" }),
-                LLMEvent.toolInputDelta({ id: "call-incomplete", name: "echo", text: '{"text":"partial' }),
-              ]),
+          ...toolEvents,
           LLMEvent.textStart({ id: "partial" }),
           LLMEvent.textDelta({ id: "partial", text: "Partial" }),
           LLMEvent.textEnd({ id: "partial" }),
         )
+      const syntheticCount = s.context.pipe(
+        Effect.map((messages) => messages.filter((message) => message.type === "synthetic").length),
+      )
+      const expectedNudges = (count: number) => (tools === "hosted" ? count : 0)
       yield* s.llm.push(...Array.from({ length: 3 }, truncated))
 
       expect(yield* s.runPrompt("Keep going").pipe(Effect.flip)).toMatchObject({ error: { type: "output-limit" } })
       expect(s.requests).toHaveLength(3)
-      expect((yield* s.context).filter((message) => message.type === "synthetic")).toHaveLength(
-        tools === "hosted" ? 2 : 0,
-      )
+      expect(yield* syntheticCount).toBe(expectedNudges(2))
       expect(s.executions).toEqual([])
 
       yield* replaySessionProjection(sessionID)
       yield* s.llm.push(truncated())
       expect(yield* s.resume.pipe(Effect.flip)).toMatchObject({ error: { type: "output-limit" } })
       expect(s.requests).toHaveLength(4)
-      expect((yield* s.context).filter((message) => message.type === "synthetic")).toHaveLength(
-        tools === "hosted" ? 2 : 0,
-      )
+      expect(yield* syntheticCount).toBe(expectedNudges(2))
 
       yield* s.llm.push(truncated(), TestLLM.text("Finished", "finished"))
       yield* s.runPrompt("Try a new response")
       expect(s.requests).toHaveLength(6)
-      expect((yield* s.context).filter((message) => message.type === "synthetic")).toHaveLength(
-        tools === "hosted" ? 3 : 0,
-      )
+      expect(yield* syntheticCount).toBe(expectedNudges(3))
     })
   }
 
@@ -6156,11 +6161,17 @@ describe("SessionRunnerLLM", () => {
     scenario(`continues malformed local tool input with a bounded excerpt (${finish})`, function* (s) {
       const marker = "raw-malformed-marker"
       const raw = `{"text":"${marker}${"x".repeat(3000)}omitted-marker`
-      const message = `${
+      const guidance =
         finish === "length"
           ? "The tool call was not executed because the output token limit (stop reason: length) was reached before you could complete the arguments. Break large payloads into smaller tool calls and reissue the call with complete arguments."
           : "The tool input could not be parsed as JSON, so the call was not executed. Reissue the call with valid JSON arguments."
-      }\n\nInput excerpt (first 2048 of ${raw.length} characters):\n${raw.slice(0, 2048)}\n[truncated]`
+      const message = [
+        guidance,
+        "",
+        `Input excerpt (first 2048 of ${raw.length} characters):`,
+        raw.slice(0, 2048),
+        "[truncated]",
+      ].join("\n")
       yield* s.llm.push(
         TestLLM.complete(
           { reason: { normalized: finish } },

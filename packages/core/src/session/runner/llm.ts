@@ -288,7 +288,7 @@ const layer = Layer.effect(
             assistantMessageID = SessionMessage.ID.create()
           }),
           OutputLimit: Effect.fn("SessionRunner.continueOutputLimit")(function* (outcome) {
-            // Include the current response; only new user input or a different finish reason breaks the streak.
+            // The current response is included. User input or any other finish breaks the streak.
             const rows = yield* db
               .select()
               .from(SessionMessageTable)
@@ -303,10 +303,10 @@ const layer = Layer.effect(
               .all()
               .pipe(Effect.orDie)
             const recent = yield* Effect.forEach(rows, SessionHistory.decodeMessageRow)
-            if (
+            const exhausted =
               recent.length === 3 &&
               recent.every((message) => message.type === "assistant" && message.finish === "length")
-            )
+            if (exhausted)
               return yield* new StepFailedError({
                 error: {
                   type: "output-limit",
@@ -314,10 +314,7 @@ const layer = Layer.effect(
                 },
               })
             if (outcome.needsContinuation) return true
-            yield* bus.publish(SessionEvent.Synthetic, {
-              sessionID,
-              text: CONTINUE_AFTER_OUTPUT_LIMIT,
-            })
+            yield* bus.publish(SessionEvent.Synthetic, { sessionID, text: CONTINUE_AFTER_OUTPUT_LIMIT })
             assistantMessageID = SessionMessage.ID.create()
           }),
           Compacted: Effect.fnUntraced(function* () {
