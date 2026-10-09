@@ -134,6 +134,27 @@ test("a session in a worktree subfolder names its worktree and lists cached work
   list.release()
 })
 
+test("a subagent shows its details but cannot move to another worktree", async ({ page }) => {
+  const root = "C:/OpenCode/SmokeWorktrees"
+
+  await mockStressTimeline(page, {
+    sessions: fixture.sessions.map((item) =>
+      item.id === fixture.targetID
+        ? { ...item, parentID: fixture.sourceID, directory: `${root}/feature` }
+        : { ...item },
+    ),
+    worktrees: [{ directory: fixture.directory }, { directory: `${root}/feature`, strategy: "git" }],
+  })
+  await page.goto(sessionHref(fixture.targetID))
+
+  const summary = page.getByRole("dialog", { name: "Session details", exact: true })
+
+  await page.getByRole("button", { name: "Session details", exact: true }).click()
+  await expect(summary.getByText("feature", { exact: true })).toBeVisible()
+  await expect(summary.getByRole("button", { name: "feature", exact: true })).toHaveCount(0)
+  await expect(summary.getByRole("button", { name: "Extensions", exact: true })).toBeVisible()
+})
+
 test("the details follow the routed session when it moves to another worktree", async ({ page }) => {
   const root = "C:/OpenCode/SmokeWorktrees"
 
@@ -194,6 +215,7 @@ for (const direction of ["ltr", "rtl"] as const) {
     )
 
     const composer = page.locator('[data-component="session-composer-dock"] > div')
+    const timeline = page.locator('[data-slot="session-timeline-scroll"]')
     const summary = page.getByRole("dialog", { name: "Session details", exact: true })
     await expect(row).toBeInViewport()
     const before = { row: (await row.boundingBox())!, composer: (await composer.boundingBox())! }
@@ -208,12 +230,13 @@ for (const direction of ["ltr", "rtl"] as const) {
         return Math.max(Math.abs(message.x - before.row.x), Math.abs(input.x - before.composer.x))
       })
       .toBeLessThan(1)
+    // The capped session column can end before the panel, so the overlay is measured against the whole timeline.
     await expect
       .poll(async () => {
-        const message = (await row.boundingBox())!
+        const view = (await timeline.boundingBox())!
         const details = (await summary.boundingBox())!
 
-        return Math.min(message.x + message.width, details.x + details.width) - Math.max(message.x, details.x)
+        return Math.min(view.x + view.width, details.x + details.width) - Math.max(view.x, details.x)
       })
       .toBeGreaterThan(0)
     const text = summary.getByText(branch, { exact: true })

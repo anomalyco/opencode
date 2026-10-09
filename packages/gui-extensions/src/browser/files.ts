@@ -8,6 +8,7 @@ export type BrowserFiles = ReturnType<typeof createBrowserFiles>
 
 export function createBrowserFiles(source: () => readonly string[]) {
   const directory = path.join(tmpdir(), `opencode-browser-client-${crypto.randomUUID()}`)
+
   const files = new Map<
     Browser.FileID,
     {
@@ -20,8 +21,10 @@ export function createBrowserFiles(source: () => readonly string[]) {
       resources: readonly string[]
     }
   >()
+
   // Captures, uploads, and heap snapshots sit in the shared temp directory; keep them owner-only.
   const ready = mkdir(directory, { recursive: true, mode: 0o700 })
+
   return {
     directory,
     ready,
@@ -31,6 +34,7 @@ export function createBrowserFiles(source: () => readonly string[]) {
       const target = path.join(directory, id)
       // setSavePath must run during Electron's synchronous will-download callback.
       mkdirSync(target, { recursive: true, mode: 0o700 })
+
       const file = {
         id,
         name: name.slice(0, 2_048),
@@ -49,7 +53,9 @@ export function createBrowserFiles(source: () => readonly string[]) {
         ),
         resources: [...new Set(resources)].sort(),
       }
+
       files.set(id, file)
+
       return file
     },
     async save(name: string, mime: string, data: Uint8Array, resources = source()) {
@@ -68,30 +74,37 @@ export function createBrowserFiles(source: () => readonly string[]) {
       })
       file.bytes = data.byteLength
       file.state = "completed"
+
       return file.id
     },
     get(id: Browser.FileID) {
       const file = files.get(id)
+
       if (!file)
         throw new Error(
           "File ID is not retained in this tab. Call browser.files.list({tabID}) and use an exact returned fileID from the same tab, not a server path or request ID.",
         )
+
       if (file.state === "pending")
         throw new Error(
           "File is still being downloaded or captured. Check browser.files.list({tabID}) again and wait for state completed; do not start a duplicate download.",
         )
+
       if (file.state === "failed")
         throw new Error(
           "The download or capture failed, so this file cannot be read. Inspect browser.console and browser.network.list for the cause before deciding to start it again.",
         )
+
       return file
     },
     async transfer(id: Browser.FileID, authorized?: readonly string[]): Promise<Browser.File> {
       const file = this.get(id)
+
       if (authorized && file.resources.some((url) => !authorized.includes(url)))
         throw new Error(
           "Capture source changed before export. Inspect the tab and request the file again to check its source permissions; no bytes were exported.",
         )
+
       if (
         (
           await stat(file.path).catch((error: unknown) => {
@@ -102,9 +115,11 @@ export function createBrowserFiles(source: () => readonly string[]) {
         throw new Error(
           "File exceeds the 5 MiB transfer limit. Choose a smaller completed file; repeating browser.files.get for this file will not help.",
         )
+
       const data = await readFile(file.path).catch((error: unknown) => {
         throw unavailableFile(error)
       })
+
       return { id, name: file.name, mime: file.mime, data: new Uint8Array(data) }
     },
     dispose: () => ready.then(() => rm(directory, { recursive: true, force: true })),

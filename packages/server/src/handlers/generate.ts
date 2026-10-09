@@ -6,7 +6,7 @@ import { AbsolutePath } from "@opencode/core/schema"
 import { InvalidRequestError, ServiceUnavailableError } from "@opencode/protocol/errors"
 import { Global } from "@opencode/util/global"
 import { Effect } from "effect"
-import { HttpApiBuilder } from "effect/unstable/httpapi"
+import { HttpApiBuilder } from "effect/http-api"
 import { Api } from "../api"
 import { locationErrors } from "../location"
 

@@ -131,16 +131,16 @@ export const layoutSchema = Persistence.struct({
 
 export const layoutPersistence = Persistence.migrate(
   layoutSchema,
-  Schema.Struct({
+  Persistence.legacy({
     sidebar: Persistence.optional(
-      Schema.Struct({
+      Persistence.legacy({
         workspaces: Persistence.optional(Schema.Union([Schema.Boolean, Schema.Record(Schema.String, Schema.Boolean)])),
         workspacesDefault: Persistence.optional(Schema.Boolean),
       }),
     ),
-    review: Persistence.optional(Schema.Struct({ panelOpened: Persistence.optional(Schema.Boolean) })),
+    review: Persistence.optional(Persistence.legacy({ panelOpened: Persistence.optional(Schema.Boolean) })),
     fileTree: Persistence.optional(
-      Schema.Struct({
+      Persistence.legacy({
         opened: Persistence.optional(Schema.Boolean),
         width: Persistence.optional(Schema.Finite),
         tab: Persistence.optional(Schema.Literals(["changes", "all"])),
@@ -213,6 +213,9 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     const [ephemeral, setEphemeral] = createStore<{ sessionTabPreview: Record<string, string | undefined> }>({
       sessionTabPreview: {},
     })
+
+    // Opening Home with its shortcut focuses session search, so typing filters immediately.
+    let homeSearchFocus = false
 
     // Names of other session-scoped stores, e.g. extension storage, so pruning drops them with the layout state.
     const [scoped, setScoped, , scopedReady] = persisted(
@@ -354,6 +357,17 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         selection: createMemo(() => store.home.selection),
         setSelection(selection: HomeProjectSelection) {
           setStore("home", "selection", reconcile(selection))
+        },
+        searchFocus: {
+          request() {
+            homeSearchFocus = true
+          },
+          take() {
+            const requested = homeSearchFocus
+            homeSearchFocus = false
+
+            return requested
+          },
         },
       },
       sessionState: {

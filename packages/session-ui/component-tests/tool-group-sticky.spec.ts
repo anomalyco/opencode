@@ -4,9 +4,11 @@ story("keeps the open Used header below the session title while scrolling", asyn
   const root = await mount("current-tool-group--sticky-header", { args: { height: "720" } })
   const scroller = root.locator('[data-story="sticky-header-scroll"]')
   const header = root.getByRole("button", { name: "Used 37 Write, Shell, Grep, Edit", exact: true })
+
   const top = (locator: typeof header) =>
     locator.evaluate((node) => {
       const scroller = node.closest('[data-story="sticky-header-scroll"]')!
+
       return node.getBoundingClientRect().top - scroller.getBoundingClientRect().top
     })
 

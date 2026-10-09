@@ -26,10 +26,18 @@ import { parseCommentNote, readPromptPresentation } from "@/composer/comment-not
 import { useCommand } from "@/shell/commands/command"
 import { SessionAncestorTrail, SessionProjectMenu, SessionTitleHeader } from "../session-identity-header"
 import { SessionHeaderSpacer } from "@/session/header/session-header"
+import { SessionRunningMenu } from "@/session/header/session-running-menu"
+
+type BlockingTask = { type: "shell" | "subagent"; partID: string; id?: string; label?: string }
 
 type SessionBackground = {
-  blocking: Accessor<{ type: "shell" | "subagent"; partID: string; id?: string; label?: string }[]>
+  blocking: Accessor<BlockingTask[]>
   tasks: Accessor<readonly BackgroundTask[]>
+  running: {
+    sessionID: Accessor<string | undefined>
+    blocking: Accessor<BlockingTask[]>
+    tasks: Accessor<readonly BackgroundTask[]>
+  }
   move: () => Promise<void>
 }
 
@@ -79,6 +87,7 @@ type MessageTimelineProps = {
   anchor: (id: string) => string
   setRevealMessage?: (fn: (id: string, partID?: string) => void) => void
   setScrollToEnd?: (fn: () => void) => void
+  reveal?: { target: () => string | undefined; done: () => void }
   search?: JSX.Element
 }
 
@@ -151,7 +160,7 @@ function MessageTimelineView(
     if (!directory) return
     void data.location.vcs.sync({ directory }).catch(() => undefined)
   })
-  const turnPadding = () => "px-4 md:px-5"
+  const turnPadding = () => "px-4 md:px-6"
   const showHeader = createMemo(() => !props.hideHeader && (props.data.showHeader() || workspaceSession()))
   const pinned = createMemo(() => props.pinned)
   const messageByID = projection.messageByID
@@ -174,7 +183,12 @@ function MessageTimelineView(
     onUserScroll: props.onUserScroll,
     onHistoryScroll: props.onHistoryScroll,
     canRenderImmediately: (row, disclosure) => {
-      if (Predicate.isTagged(row, "TurnGap") || Predicate.isTagged(row, "TurnDivider")) return true
+      if (
+        Predicate.isTagged(row, "TurnGap") ||
+        Predicate.isTagged(row, "TurnDivider") ||
+        Predicate.isTagged(row, "CompactionQueued")
+      )
+        return true
 
       if (Predicate.isTagged(row, "Notice")) {
         const message = messageByID().get(row.messageID)
@@ -217,6 +231,7 @@ function MessageTimelineView(
     },
     setRevealMessage: props.setRevealMessage,
     setScrollToEnd: props.setScrollToEnd,
+    reveal: props.reveal,
   })
 
   const VirtualizedTimeline = virtualized.View
@@ -359,8 +374,9 @@ function MessageTimelineView(
         return message?.type === "compaction" && message.status === "running"
       }
 
-      // Used groups keep the fallback regardless of disclosure state.
-      if (!Predicate.isTagged(row, "AssistantPart") || row.group.type === "context") return false
+      // Used and read groups keep the fallback, so each new read does not swap Working out for its short call.
+      if (!Predicate.isTagged(row, "AssistantPart") || row.group.type === "context" || row.group.type === "read")
+        return false
 
       return (row.group.type === "part" ? [row.group.ref] : row.group.refs).some((ref) => {
         const content = Timeline.resolveContent(messageByID().get(ref.messageID), ref.partID)
@@ -375,6 +391,17 @@ function MessageTimelineView(
     })
   })
 
+  const runningMenu = (title?: string) => (
+    <SessionRunningMenu
+      sessionID={sessionID()}
+      owner={props.background.running.sessionID()}
+      blocking={props.background.running.blocking()}
+      tasks={props.background.running.tasks()}
+      onReveal={virtualized.revealPart}
+      title={title}
+    />
+  )
+
   return (
     <VirtualizedTimeline
       workspaceSession={workspaceSession}
@@ -383,7 +410,7 @@ function MessageTimelineView(
           <div
             classList={{
               "min-w-0 w-full max-w-full": true,
-              "md:max-w-[1000px] md:mx-auto": props.centered,
+              "md:max-w-session md:mx-auto": props.centered,
             }}
           >
             <div
@@ -440,7 +467,8 @@ function MessageTimelineView(
                       />
                     )}
                   </Show>
-                  <Show when={childTitle() || title.editing}>
+                  <Show when={parentID()}>{runningMenu(childTitle())}</Show>
+                  <Show when={!parentID() && (childTitle() || title.editing)}>
                     <Show
                       when={title.editing}
                       fallback={
@@ -490,6 +518,7 @@ function MessageTimelineView(
                       />
                     </Show>
                   </Show>
+                  <Show when={!parentID()}>{runningMenu()}</Show>
                   <Show when={!parentID() && sessionID()} keyed>
                     {(id) => (
                       <Menu

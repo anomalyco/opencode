@@ -12,6 +12,7 @@ export interface SwitchProps extends ParentProps<ComponentProps<typeof Root>> {
 
 export function Switch(props: SwitchProps) {
   const [local, others] = splitProps(props, ["children", "class", "appearance", "hideLabel", "description"])
+
   return (
     <Root {...others} class={local.class} data-component="switch" data-appearance={local.appearance ?? "compact"}>
       <Input data-slot="switch-input" />

@@ -4,7 +4,9 @@ import { base64Encode, checksum } from "@opencode/util/encode"
 
 // The mocked default server. Production builds connect to their own origin, so CI points this at the app.
 export const SERVER = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
+
 export const REMOTE_SERVER = "http://127.0.0.1:4097"
+
 export const T0 = 1700000000000
 
 export function sessionHref(sessionID: string, server = SERVER) {
@@ -23,6 +25,7 @@ export function tabKey(sessionID: string, server = SERVER) {
 // A default-server workspace storage key, as the app writes it for a forward-slash directory without a trailing slash.
 export function workspaceKey(directory: string, key: string) {
   const head = directory.slice(0, 12).replace(/[^a-zA-Z0-9._-]/g, "-")
+
   return `opencode.workspace.${head}.${checksum(directory) ?? "0"}.dat:workspace:${key}`
 }
 
@@ -59,19 +62,26 @@ export async function seed(page: Page, input: SeedInput) {
   await page.addInitScript(
     ({ marker, entries }) => {
       if (window.top !== window) return
+
       if (sessionStorage.getItem(marker)) return
       sessionStorage.setItem(marker, "1")
+
       const plain = (value: unknown): value is Record<string, unknown> =>
         !!value && typeof value === "object" && !Array.isArray(value)
+
       entries.forEach(([key, value, merge]) => {
         const current: unknown = merge ? JSON.parse(localStorage.getItem(key) ?? "null") : undefined
+
         if (!plain(current)) return localStorage.setItem(key, value)
         const next: Record<string, unknown> = JSON.parse(value)
+
         const merged = Object.entries({ ...current, ...next }).map(([field, item]) => {
           const before = current[field]
           const after = next[field]
+
           return [field, plain(before) && plain(after) ? { ...before, ...after } : item]
         })
+
         localStorage.setItem(key, JSON.stringify(Object.fromEntries(merged)))
       })
     },
@@ -91,6 +101,7 @@ function storageEntries(input: SeedInput): [string, string, boolean][] {
     ...(input.projects ? { projects: input.projects } : {}),
     ...(input.lastProject ? { lastProject: input.lastProject } : {}),
   }
+
   const values: Record<string, unknown> = {
     ...(Object.keys(server).length ? { "opencode.global.dat:server": server } : {}),
     ...(input.tabs ? { "opencode.window.browser.dat:tabs": input.tabs.map(tabEntry) } : {}),
@@ -106,6 +117,7 @@ function storageEntries(input: SeedInput): [string, string, boolean][] {
     ...(input.theme ? { "opencode-theme-id": input.theme.id, "opencode-color-scheme": input.theme.scheme } : {}),
     ...input.storage,
   }
+
   return Object.entries(values).map(([key, value]) => [
     key,
     typeof value === "string" ? value : JSON.stringify(value),
@@ -115,12 +127,15 @@ function storageEntries(input: SeedInput): [string, string, boolean][] {
 
 function tabEntry(tab: TabSeed) {
   if (typeof tab === "string") return { type: "session", server: SERVER, sessionId: tab }
+
   if ("session" in tab) return { type: "session", server: tab.server ?? SERVER, sessionId: tab.session }
+
   return { type: "draft", draftID: tab.draft, server: tab.server ?? SERVER, directory: tab.directory }
 }
 
 export function project(input: { id: string; directory: string; name?: string } & Record<string, unknown>) {
   const { directory, ...rest } = input
+
   return {
     worktree: directory,
     canonical: directory,
@@ -139,6 +154,7 @@ export function session(
   >,
 ) {
   const { created = T0, ...rest } = input
+
   return {
     slug: input.id,
     title: input.id,
@@ -153,6 +169,7 @@ export type ModelSeed = { id: string; name: string } & Record<string, unknown>
 // A connected `opencode` provider whose first model is the default.
 export function provider(...models: ModelSeed[]) {
   const all = models.length ? models : [{ id: "test", name: "Test" }]
+
   return {
     all: [
       {
@@ -172,13 +189,16 @@ export const NO_PROVIDER = { all: [], connected: [], default: {} }
 export function pageMessagesFrom(messages: Record<string, SessionMessageInfo[]>) {
   return (sessionID: string, limit: number, before?: string) => {
     const items = messages[sessionID] ?? []
+
     const end = before
       ? Math.max(
           0,
           items.findIndex((message) => message.id === before),
         )
       : items.length
+
     const start = Math.max(0, end - limit)
+
     return { items: items.slice(start, end), cursor: start > 0 ? items[start]!.id : undefined }
   }
 }
@@ -194,11 +214,13 @@ export async function holdRoute(
   const requests: Request[] = []
   await page.route(url, async (route) => {
     const method = route.request().method()
+
     if (method === "OPTIONS" || (options.method && method !== options.method)) return route.fallback()
     requests.push(route.request())
     arrived.resolve(route.request())
     await released.promise
     await route.fallback().catch(() => undefined)
   })
+
   return { requests, arrived: arrived.promise, release: () => released.resolve() }
 }

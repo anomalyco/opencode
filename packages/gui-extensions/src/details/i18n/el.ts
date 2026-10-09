@@ -3,8 +3,6 @@ export default {
   tooltip: "Περίληψη",
   "command.toggle": "Εναλλαγή περίληψης",
   noBranch: "Χωρίς κλάδο",
-  "background.tasksRunning.one": "Εκτέλεση εργασίας παρασκηνίου {{count}}",
-  "background.tasksRunning.other": "Εκτελούνται εργασίες παρασκηνίου {{count}}",
   "move.title": "Μετακίνηση σε χώρο εργασίας",
   "move.menu": "Μετακίνηση συνεδρίας σε",
   "move.failed": "Αποτυχία μετακίνησης συνεδρίας",

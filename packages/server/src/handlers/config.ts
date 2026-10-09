@@ -1,7 +1,7 @@
 import { Config } from "@opencode/core/config"
 import { ShellSelect } from "@opencode/core/shell/select"
 import { Effect } from "effect"
-import { HttpApiBuilder } from "effect/unstable/httpapi"
+import { HttpApiBuilder } from "effect/http-api"
 import { Api } from "../api"
 
 export const ConfigHandler = HttpApiBuilder.group(Api, "server.config", (handlers) =>

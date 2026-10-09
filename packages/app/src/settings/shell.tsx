@@ -248,13 +248,7 @@ function RootSettings() {
   const ordered = createMemo(() => {
     const order = new Map(list().map((server, index) => [ServerConnection.key(server), index]))
 
-    return inventory().toSorted((a, b) => {
-      const preferred = Number(b.key === servers.defaults.key()) - Number(a.key === servers.defaults.key())
-
-      if (preferred) return preferred
-
-      return (order.get(a.key) ?? list().length) - (order.get(b.key) ?? list().length)
-    })
+    return inventory().toSorted((a, b) => (order.get(a.key) ?? list().length) - (order.get(b.key) ?? list().length))
   })
 
   const sourceServer = createMemo(() => {

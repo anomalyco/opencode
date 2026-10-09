@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Layer } from "effect"
-import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/unstable/http"
+import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNodePlatform } from "@opencode/util/effect/app-node-platform"
 import { it, refuseNetwork } from "./lib/effect"

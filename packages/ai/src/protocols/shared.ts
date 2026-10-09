@@ -1,6 +1,6 @@
 import { Tool } from "@opencode/schema/tool"
 import { Effect, Option, Schema } from "effect"
-import { Headers, HttpClientRequest } from "effect/unstable/http"
+import { Headers, HttpClientRequest } from "effect/http"
 import { Media } from "../media.js"
 import {
   InvalidProviderOutputError,
@@ -154,7 +154,7 @@ export const wrapSystemUpdate = (parts: ReadonlyArray<{ readonly text: string }>
  * raw retrieved, tool, or web content into privileged updates: keep untrusted
  * data in ordinary user/tool messages instead.
  */
-export const systemUpdateText = Effect.fn("ProviderShared.systemUpdateText")(function* (
+export const systemUpdateText = Effect.fnUntraced(function* (
   route: string,
   message: LLMRequest["messages"][number],
 ) {
@@ -167,7 +167,7 @@ export const systemUpdateText = Effect.fn("ProviderShared.systemUpdateText")(fun
 })
 
 /** Lower an unsupported privileged update into visible, in-order user text. */
-export const wrappedSystemUpdate = Effect.fn("ProviderShared.wrappedSystemUpdate")(function* (
+export const wrappedSystemUpdate = Effect.fnUntraced(function* (
   route: string,
   message: LLMRequest["messages"][number],
 ) {

@@ -3,8 +3,6 @@ export default {
   tooltip: "Samandráttur",
   "command.toggle": "Skifta samandrátt",
   noBranch: "Eingin grein",
-  "background.tasksRunning.one": "{{count}} bakgrundsuppgáva í gongd",
-  "background.tasksRunning.other": "{{count}} bakgrundsuppgávur í gongd",
   "move.title": "Flyt til workspace",
   "move.menu": "Flyt setu til",
   "move.failed": "Tað eydnaðist ikki at flyta setuna",

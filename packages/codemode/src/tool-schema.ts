@@ -9,11 +9,27 @@ export const identifierSegment = /^[A-Za-z_$][A-Za-z0-9_$]*$/
 
 const renderKey = (name: string): string => (identifierSegment.test(name) ? name : JSON.stringify(name))
 
+const definitionName = (ref: string): string | undefined => {
+  const tokens = JsonPointer.parseUriFragment(ref)
+  return tokens?.length === 2 && (tokens[0] === "$defs" || tokens[0] === "definitions") ? tokens[1] : undefined
+}
+
+// Effect encodes an unchecked `number` as `number | "Infinity" | "-Infinity" | "NaN"`, and older generators emit one
+// singleton enum per value. Rendering them as plain `number` only narrows what the model is told to send.
 const effectNumberSentinel = (schema: JsonSchema) =>
   schema.type === "string" &&
   Array.isArray(schema.enum) &&
-  schema.enum.length === 1 &&
-  (schema.enum[0] === "NaN" || schema.enum[0] === "Infinity" || schema.enum[0] === "-Infinity")
+  schema.enum.length > 0 &&
+  schema.enum.every((value) => value === "NaN" || value === "Infinity" || value === "-Infinity")
+
+// Effect emits `{ not: { type: "null" } }` only for a struct with no properties or index signatures. With nothing but
+// annotations beside it, it is TypeScript's `{}`. Mirrors `emptyInputJsonSchema` in `@opencode/ai`, which this
+// standalone package cannot import.
+const annotationKeywords = new Set(["title", "description", "default", "examples", "readOnly", "writeOnly"])
+const isEffectEmptyStruct = (schema: JsonSchema) =>
+  schema.not?.type === "null" &&
+  Object.keys(schema.not).length === 1 &&
+  Object.keys(schema).every((key) => key === "not" || annotationKeywords.has(key))
 
 const intersection = (members: ReadonlyArray<string>): string => {
   const concrete = members.filter((member) => member !== "unknown")
@@ -38,8 +54,7 @@ const hasUnresolvedRef = (
   if (visited.has(schema)) return false
   const nextVisited = new Set([...visited, schema])
   if (schema.$ref !== undefined) {
-    const segment = schema.$ref.match(/^#\/(?:\$defs|definitions)\/([^/]+)$/)?.[1]
-    const name = segment === undefined ? undefined : JsonPointer.unescapeToken(segment)
+    const name = definitionName(schema.$ref)
     if (name === undefined || definitions[name] === undefined || seen.has(name)) return true
     if (hasUnresolvedRef(definitions[name], definitions, new Set([...seen, name]), nextVisited)) return true
   }
@@ -130,8 +145,7 @@ const renderSchema = (
       ? ctx
       : { ...ctx, definitions: { ...ctx.definitions, ...(schema.definitions ?? {}), ...(schema.$defs ?? {}) } }
   if (schema.$ref) {
-    const segment = schema.$ref.match(/^#\/(?:\$defs|definitions)\/([^/]+)$/)?.[1]
-    const name = segment === undefined ? undefined : JsonPointer.unescapeToken(segment)
+    const name = definitionName(schema.$ref)
     if (!name || !nested.definitions[name] || seen.has(name)) return "unknown"
     return intersection([
       renderSchema(nested.definitions[name], nested, depth, new Set([...seen, name])),
@@ -147,6 +161,7 @@ const renderSchema = (
       alternatives.every((item) => item.type === "number" || effectNumberSentinel(item))
     )
       return "number"
+    // Older Effect releases emitted this pair for an empty struct, and raw schemas from their generators still can.
     if (
       alternatives.length === 2 &&
       alternatives[0]?.type === "object" &&
@@ -197,17 +212,19 @@ const renderSchema = (
     if (indexType !== undefined) lines.push(`${pad}[key: string]: ${indexType},`)
     return `{\n${lines.join("\n")}\n${"  ".repeat(depth)}}`
   }
+  if (isEffectEmptyStruct(schema)) return "{}"
   return "unknown"
 }
 
 export const toTypeScript = (schema: Schema.Top, decoded = false, pretty = false): string => {
   try {
-    const visible = decoded ? Schema.toType(schema) : schema
-    const document = Schema.toJsonSchemaDocument(visible) as {
+    const document = Schema.toJsonSchemaDocument(decoded ? Schema.toType(schema) : schema, {
+      onExcessProperty: "error",
+    }) as {
       readonly schema: JsonSchema
-      readonly definitions?: Readonly<Record<string, JsonSchema>>
+      readonly definitions: Readonly<Record<string, JsonSchema>>
     }
-    return renderSchema(document.schema, { definitions: document.definitions ?? {}, pretty })
+    return renderSchema(document.schema, { definitions: document.definitions, pretty })
   } catch {
     return "unknown"
   }
@@ -230,20 +247,18 @@ export type InputProperty = {
 export const inputProperties = <R>(tool: Tool<R>): Array<InputProperty> => {
   try {
     const document = isEffectSchema(tool.input)
-      ? (Schema.toJsonSchemaDocument(tool.input) as {
+      ? (Schema.toJsonSchemaDocument(tool.input, { onExcessProperty: "error" }) as {
           readonly schema: JsonSchema
-          readonly definitions?: Readonly<Record<string, JsonSchema>>
+          readonly definitions: Readonly<Record<string, JsonSchema>>
         })
       : {
           schema: tool.input,
           definitions: { ...(tool.input.definitions ?? {}), ...(tool.input.$defs ?? {}) },
         }
-    const definitions = document.definitions ?? {}
     let schema = document.schema
     if (schema.$ref !== undefined) {
-      const segment = schema.$ref.match(/^#\/(?:\$defs|definitions)\/([^/]+)$/)?.[1]
-      const name = segment === undefined ? undefined : JsonPointer.unescapeToken(segment)
-      const resolved = name === undefined ? undefined : definitions[name]
+      const name = definitionName(schema.$ref)
+      const resolved = name === undefined ? undefined : document.definitions[name]
       if (resolved === undefined) return []
       schema = resolved
     }
@@ -261,10 +276,14 @@ export const inputProperties = <R>(tool: Tool<R>): Array<InputProperty> => {
 export const inputTypeScript = <R>(tool: Tool<R>, pretty = false): string =>
   isEffectSchema(tool.input) ? toTypeScript(tool.input, false, pretty) : jsonSchemaToTypeScript(tool.input, pretty)
 
-// Empty object schemas render as `{}` in compact form; anything with properties,
-// an index signature, or union members renders differently, so equality is a
-// conservative emptiness test for both Effect and JSON Schema inputs.
-export const isEmptyInput = <R>(tool: Tool<R>): boolean => inputTypeScript(tool) === "{}"
+// Effect inputs are empty only when their encoded root is Effect's empty-struct marker, which records and checked
+// structs never are. Raw JSON Schema inputs keep the `{}` rendering check, which treats `{ type: "object" }` as empty.
+export const isEmptyInput = <R>(tool: Tool<R>): boolean =>
+  isEffectSchema(tool.input)
+    ? isEffectEmptyStruct(
+        Schema.toJsonSchemaDocument(tool.input, { referencePolicy: () => undefined }).schema as JsonSchema,
+      )
+    : inputTypeScript(tool) === "{}"
 
 export const outputTypeScript = <R>(tool: Tool<R>, pretty = false): string =>
   tool.output === undefined

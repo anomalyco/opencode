@@ -13,10 +13,13 @@ export function SessionErrorFallback(props: { error: unknown; sessionID?: string
   const activeServer = useServer()
   const server = useServers()
   const tabs = useTabs()
+
   const displayServer = createMemo(() => {
     const conn = server.list.find((item) => ServerConnection.key(item) === props.serverKey)
+
     return conn ? serverName(conn) : props.serverKey
   })
+
   const closeSession = () => {
     if (!props.sessionID) return
     tabs.removeSessionTab({ server: activeServer.key, sessionId: props.sessionID })
@@ -69,5 +72,6 @@ export function SessionErrorFallback(props: { error: unknown; sessionID?: string
 
 function isCurrentSessionNotFoundError(error: unknown, sessionID: string | undefined) {
   if (!sessionID) return false
+
   return isSessionNotFoundError(error, sessionID) || isLocalSessionNotFoundError(error, sessionID)
 }

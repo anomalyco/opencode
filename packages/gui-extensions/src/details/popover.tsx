@@ -22,7 +22,6 @@ export function DetailsHeader(props: {
   // Cached timelines stay mounted while hidden; routing away from the session closes its details.
   const [open, setOpen] = createVisitState(false)
   const [store, setStore] = createStore({ dismissed: false })
-  const child = createMemo(() => !!props.session.server.data.session.get(props.session.id)?.parentID)
   const project = createMemo(() => props.session.project)
 
   // Review is optional: the changes row offers it only while the review extension is active.
@@ -49,7 +48,7 @@ export function DetailsHeader(props: {
   )
 
   return (
-    <Show when={!child() && project()}>
+    <Show when={project()}>
       {(project) => (
         <DetailsPopover active={props.active} open={open()} onOpenChange={setOpen}>
           <Suspense>

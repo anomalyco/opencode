@@ -28,6 +28,7 @@ type Active = {
 }
 
 const Context = createContext<ReturnType<typeof init>>()
+
 // Lets the dialog rendered in a layer opt out of closing on a backdrop click.
 const LayerContext = createContext<{ setBackdropDismiss: (value: boolean) => void }>()
 
@@ -70,6 +71,7 @@ function init() {
       current.id,
       setTimeout(() => {
         closing.delete(current.id)
+
         if (closing.size === 0) lock.value = false
         setExiting((ids) => new Set([...ids].filter((id) => id !== current.id)))
         setStack((items) => items.filter((item) => item.id !== current.id))
@@ -84,6 +86,7 @@ function init() {
   /** Programmatic close. Without an id it closes the top dialog, one at a time; with an id it never waits. */
   const close = (id?: string) => {
     const current = id ? stack().find((item) => item.id === id) : stack().at(-1)
+
     if (!current || closing.has(current.id) || (!id && lock.value)) return
     closing.set(current.id, undefined)
     lock.value = true
@@ -93,6 +96,7 @@ function init() {
   /** Escape, a backdrop click, or Kobalte dismissing: only the top dialog, and one per exit animation. */
   const dismiss = (id?: string) => {
     const current = stack().at(-1)
+
     if (!current || (id && current.id !== id) || closing.has(current.id) || lock.value) return
     closing.set(current.id, undefined)
     lock.value = true
@@ -116,12 +120,14 @@ function init() {
     // A deferred open (e.g. from a focus callback) must not mount after the provider is gone.
     if (state.disposed) return
     const id = key ?? Math.random().toString(36).slice(2)
+
     // The layer follows the dialog's current place in the stack, so a new top dialog always renders above.
     const layer = () =>
       Math.max(
         0,
         stack().findIndex((item) => item.id === id),
       )
+
     const zIndex = () => String(50 + layer() * 10)
     let dispose: (() => void) | undefined
     let setClosing: ((closing: boolean) => void) | undefined
@@ -133,6 +139,7 @@ function init() {
         const [closing, setClosingSignal] = createSignal(false)
         const [backdropDismiss, setBackdropDismiss] = createSignal(true)
         setClosing = setClosingSignal
+
         return (
           <Kobalte
             modal={stack().findLast((item) => !exiting().has(item.id))?.id === id}
@@ -193,6 +200,7 @@ function init() {
     push,
   }
 }
+
 /** Runs a dialog callback so its throw is reported without stopping the caller's cleanup. */
 function isolate(fn: () => void) {
   try {
@@ -204,6 +212,7 @@ function isolate(fn: () => void) {
 
 export function DialogProvider(props: ParentProps) {
   const ctx = init()
+
   return (
     <Context.Provider value={ctx}>
       {props.children}
@@ -221,6 +230,7 @@ export function useDialog() {
   if (!owner) {
     throw new Error("useDialog must be used within a DialogProvider")
   }
+
   if (!ctx) {
     throw new Error("useDialog must be used within a DialogProvider")
   }
@@ -235,6 +245,7 @@ export function useDialog() {
      */
     show(element: DialogElement, onClose?: () => void, id?: string, signal?: AbortSignal) {
       const base = ctx.stack().at(-1)?.owner ?? owner
+
       return startTransition(() => {
         if (signal?.aborted) return isolate(() => onClose?.())
         ctx.show(element, base, onClose, id)
@@ -242,6 +253,7 @@ export function useDialog() {
     },
     push(element: DialogElement, onClose?: () => void, id?: string, signal?: AbortSignal) {
       const base = ctx.stack().at(-1)?.owner ?? owner
+
       return startTransition(() => {
         if (signal?.aborted) return isolate(() => onClose?.())
         ctx.push(element, base, onClose, id)

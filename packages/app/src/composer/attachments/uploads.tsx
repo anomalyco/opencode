@@ -26,6 +26,7 @@ export const uploads = {
   ): Promise<T | undefined> {
     const controller = new AbortController()
     setState("items", (items) => [...items, { ...input, loaded: 0, cancel: () => controller.abort() }])
+
     try {
       return await work(
         (loaded) => setState("items", (item) => item.id === input.id, "loaded", loaded),
@@ -46,36 +47,44 @@ export const uploads = {
 export function UploadToastHost() {
   const language = useLanguage()
   let active: { id: number; dispose: () => void } | undefined
+
   const dismiss = () => {
     if (!active) return
     toaster.dismiss(active.id)
     active.dispose()
     active = undefined
   }
+
   createEffect(
     on(
       () => state.items.length > 0,
       (uploading) => {
         if (!uploading) return dismiss()
+
         if (active) return
+
         const id = toaster.show(
           (props) =>
             createRoot((dispose) => {
               active = { id: props.toastId, dispose }
+
               return <UploadToast toastId={props.toastId} language={language} />
             }),
           { persistent: true, resize: () => state.items.length },
         )
+
         active ??= { id, dispose: () => {} }
       },
     ),
   )
   onCleanup(dismiss)
+
   return null
 }
 
 function UploadToast(props: { toastId: number; language: ReturnType<typeof useLanguage> }) {
   const percent = (item: Upload) => (item.size === 0 ? 100 : Math.floor((item.loaded / item.size) * 100))
+
   return (
     <Toast toastId={props.toastId}>
       <Toast.Content>

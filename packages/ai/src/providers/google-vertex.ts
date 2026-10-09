@@ -91,7 +91,7 @@ const configuredRoute = (input: Config, modelID: string | ModelID) => {
       provider: id,
       message: "Google Vertex tuned models do not support Express Mode API keys",
     })
-  const location = GoogleVertexShared.location(inputLocation, "us-central1")
+  const location = GoogleVertexShared.location(inputLocation, "global")
   const project = GoogleVertexShared.project(inputProject)
   const endpoint =
     baseURL ??
@@ -130,8 +130,8 @@ export const model: ProviderPackage.Definition<Settings, GeminiProviderOptionsIn
   return configure({
     ...(apiKey === undefined ? { accessToken: accessToken } : { apiKey: apiKey }),
     baseURL,
-    headers: headers === undefined ? undefined : { ...headers },
-    http: body === undefined ? undefined : { body: { ...body } },
+    headers,
+    http: body === undefined ? undefined : { body },
     location,
     project,
     providerOptions,

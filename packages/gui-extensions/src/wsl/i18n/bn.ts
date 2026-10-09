@@ -51,8 +51,5 @@ export default {
   "error.healthTimeout": "{{distro}} স্বাস্থ্য পরীক্ষার জন্য সাইডকার {{timeout}}ms পরে সময় শেষ হয়েছে",
   "error.commandTimeout": "{{command}} {{args}} {{timeout}}ms পরে সময় শেষ হয়েছে",
   "error.failedPort": "পোর্ট পেতে ব্যর্থ",
-  "server.default": "ডিফল্ট",
-  "menu.default": "ডিফল্ট হিসেবে সেট করুন",
-  "menu.defaultRemove": "ডিফল্ট সরান",
   "menu.remove": "সরান",
 }

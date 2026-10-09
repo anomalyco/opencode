@@ -52,8 +52,5 @@ export default {
   "error.healthTimeout": "⁨{{distro}}⁩ کے سائیڈ کار کی صحت کی جانچ ⁨{{timeout}}⁩ms کے بعد مقررہ وقت سے تجاوز کر گئی",
   "error.commandTimeout": "⁨{{command}}⁩ ⁨{{args}}⁩ نے ⁨{{timeout}}⁩ms کے بعد مقررہ وقت سے تجاوز کر دیا",
   "error.failedPort": "پورٹ حاصل نہیں ہو سکی",
-  "server.default": "طے شدہ",
-  "menu.default": "بطور ڈیفالٹ سیٹ کریں۔",
-  "menu.defaultRemove": "ڈیفالٹ کو ہٹا دیں۔",
   "menu.remove": "ہٹا دیں۔",
 }

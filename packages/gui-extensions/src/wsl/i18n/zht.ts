@@ -48,8 +48,5 @@ export default {
   "error.healthTimeout": "{{distro}} 的 Sidecar 健全狀態檢查在 {{timeout}}ms 後逾時",
   "error.commandTimeout": "{{command}} {{args}} 在 {{timeout}}ms 後逾時",
   "error.failedPort": "無法取得連接埠",
-  "server.default": "預設",
-  "menu.default": "設為預設",
-  "menu.defaultRemove": "取消預設",
   "menu.remove": "移除",
 }

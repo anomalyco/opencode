@@ -11,7 +11,7 @@ import {
   HttpApiMiddleware,
   HttpApiSchema,
   OpenApi,
-} from "effect/unstable/httpapi"
+} from "effect/http-api"
 import { format } from "prettier"
 import {
   compile as compileContract,
@@ -1471,6 +1471,19 @@ describe("HttpApiCodegen.generate", () => {
     expect(() => compile(api(HttpApiEndpoint.get("get", "/session", { success: Positive })))).toThrow(
       "Unportable schema: session.get.success",
     )
+  })
+
+  test("emits schema classes with native arbitrary constraints structurally", () => {
+    class Attempt extends Schema.Class<Attempt>("Attempt")({
+      count: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    }) {}
+    const output = emitPromise(
+      compileContract(api(HttpApiEndpoint.get("get", "/session", { success: Attempt }))),
+    )
+    const types = output.files.find((file) => file.path === "types.ts")?.content
+
+    expect(types).toContain('export type Attempt = { readonly "count": number }')
+    expect(types).toContain("export type SessionGetOutput = Attempt")
   })
 
   test("rejects spoofed and aborted validation checks", () => {

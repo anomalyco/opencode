@@ -106,6 +106,41 @@ for await (const event of ai.llm.stream(ai.llm.request(input))) {
 await ai.dispose()
 ```
 
+## Venice AI
+
+`Venice` provides native Chat Completions with streaming tools and reasoning. `model` and `chat`
+select the same API; credentials default to `VENICE_API_KEY`.
+
+```ts
+import { LLM } from "@opencode/ai"
+import { Venice } from "@opencode/ai/providers"
+import { Effect } from "effect"
+
+const program = Effect.gen(function* () {
+  const response = yield* LLM.generate({
+    model: Venice.configure({ apiKey: process.env.VENICE_API_KEY }).chat("qwen3-6-27b"),
+    prompt: "Explain this design.",
+    providerOptions: {
+      reasoningEffort: "high",
+      veniceParameters: { includeVeniceSystemPrompt: false },
+    },
+  })
+  console.log(response.text)
+})
+```
+
+Effort lowers to `reasoning.effort`; `reasoning.enabled` and `reasoning.summary` are also available.
+Supported effort levels and toggles depend on the selected model. Omitted controls preserve its defaults.
+Venice's added system prompt is disabled by default, matching the previous OpenCode Venice SDK behavior.
+
+Replay complete `response.message` values to retain signed/encrypted reasoning and Gemini thought
+signatures, including per-tool signatures. Venice's encrypted scalar trailers are excluded from visible
+reasoning but retained in provider metadata for replay. Cache affinity uses `promptCacheKey`, and cache-write
+usage reads Venice's `cache_creation_input_tokens` field.
+
+The native package entrypoint is `@opencode/ai/providers/venice`. Image generation, embeddings, Responses, and
+client-side E2EE are not implemented by this provider.
+
 ## Experimental evaluation
 
 Evaluation models compare shared state with typed choice, score, and boolean questions. The API is
@@ -1248,7 +1283,7 @@ const gateway = CloudflareAIGateway.configure({
 }).model("workers-ai/@cf/meta/llama-3.1-8b-instruct")
 ```
 
-Included LLM providers: OpenAI, Anthropic, Google (Gemini), Google Vertex, Amazon Bedrock, Azure OpenAI, Baseten, Cerebras, Cohere, Cloudflare AI Gateway, Cloudflare Workers AI, DeepInfra, DeepSeek, Fireworks, Groq, Mistral, OpenRouter, TogetherAI, and xAI. Z.ai currently exposes image generation. Generic Chat Completions, Responses, and Anthropic Messages-compatible entrypoints support custom endpoints.
+Included LLM providers: OpenAI, Anthropic, Google (Gemini), Google Vertex, Amazon Bedrock, Azure OpenAI, Baseten, Cerebras, Cohere, Cloudflare AI Gateway, Cloudflare Workers AI, DeepInfra, DeepSeek, Fireworks, Groq, Mistral, OpenRouter, TogetherAI, Vercel AI Gateway, and xAI. Z.ai currently exposes image generation. Generic Chat Completions, Responses, and Anthropic Messages-compatible entrypoints support custom endpoints.
 
 Each named provider owns its module, endpoint, authentication, and route setup. Providers with the same wire format compose the shared protocol directly:
 

@@ -15,6 +15,7 @@ import { ResizeHandle } from "@opencode/ui/resize-handle"
 import { Slot, type BackgroundTask, type MountedSession, type SessionScreen } from "@opencode/gui-extensions/sdk"
 import { MessageTimeline } from "@/session/timeline/message-timeline"
 import { ComposerDropzone } from "@/composer/dropzone"
+import { useSettings } from "@/settings/model"
 import type { SessionModel } from "@/session/model"
 import { SESSION_PANEL_WIDTH_MIN } from "@/session/session-panel-width"
 import { SessionPanelFrame } from "@/session/session-frame"
@@ -34,6 +35,7 @@ import { TimelineSearchBar } from "./timeline/search-bar"
 import { ActiveSessionComposerRegion, createActiveSessionRegion } from "./composer/region"
 import { SessionIdentityHeader } from "./session-identity-header"
 import { SessionReviewToggle } from "./header/session-header-actions"
+import { SessionRunningMenu } from "./header/session-running-menu"
 import { createAnimatedPresence } from "@/runtime/animated-presence"
 import { createTimelineCache } from "./timeline/cache"
 
@@ -63,7 +65,9 @@ function SessionScreenContent(props: {
   const session = props.session
   const host = useExtensionHost()
   const attachment = useExtensionAttachment()
+  const settings = useSettings()
   const isDesktop = session.isDesktop
+  const bottomMobileTabs = () => settings.general.mobileTitlebarPosition() === "bottom"
   const sidebar = createPanelSidebar()
 
   const region = createRegion({
@@ -260,6 +264,7 @@ function SessionScreenContent(props: {
           setContentRef={timeline.view.setContentRef}
           anchor={timeline.view.anchor}
           setRevealMessage={timeline.view.setRevealMessage}
+          reveal={timeline.view.reveal}
           setScrollToEnd={timeline.view.setScrollToEnd}
           search={
             <Show when={active()}>
@@ -272,6 +277,23 @@ function SessionScreenContent(props: {
     () => conversationVisible() && messagesReady(),
   )
 
+  const mobileTabs = () => (
+    <Show when={session.identity.sessionKey()} keyed>
+      {(_key) => (
+        <MobileViewTabs
+          bottom={bottomMobileTabs()}
+          screen={props.screen}
+          views={mobile}
+          region={region}
+          current={mobileView()}
+          session={props.view()}
+          sidebar={sidebar}
+          onSelect={selectMobile}
+        />
+      )}
+    </Show>
+  )
+
   const sessionPanelContent = () => (
     <>
       <ComposerDropzone
@@ -279,21 +301,7 @@ function SessionScreenContent(props: {
         input={composer.drop.input()}
         identity={session.layout.tabKey}
       />
-      <Show when={!isDesktop() && !!session.identity.params.id}>
-        <Show when={session.identity.sessionKey()} keyed>
-          {(_key) => (
-            <MobileViewTabs
-              screen={props.screen}
-              views={mobile}
-              region={region}
-              current={mobileView()}
-              session={props.view()}
-              sidebar={sidebar}
-              onSelect={selectMobile}
-            />
-          )}
-        </Show>
-      </Show>
+      <Show when={!isDesktop() && !!session.identity.params.id && !bottomMobileTabs()}>{mobileTabs()}</Show>
       {/* Surface query errors without suspending session metadata while messages load. */}
       <Show when={timeline.resource.error}>
         {(error) => {
@@ -332,7 +340,15 @@ function SessionScreenContent(props: {
           </Match>
           <Match when={session.identity.params.id}>
             <Show when={isDesktop() && !messagesReady()}>
-              <SessionIdentityHeader sessionID={session.identity.params.id ?? ""} session={session.data.info()} />
+              <SessionIdentityHeader sessionID={session.identity.params.id ?? ""} session={session.data.info()}>
+                <SessionRunningMenu
+                  sessionID={session.identity.params.id}
+                  owner={composer.requests.background.running.sessionID()}
+                  blocking={composer.requests.background.running.blocking()}
+                  tasks={composer.requests.background.running.tasks()}
+                  title={session.data.parentID() ? session.data.info()?.title : undefined}
+                />
+              </SessionIdentityHeader>
             </Show>
             <Show when={messagesReady() && session.identity.params.id}>{timelineView()}</Show>
           </Match>
@@ -340,14 +356,17 @@ function SessionScreenContent(props: {
       </div>
 
       <Show when={composer.active()} keyed>
-        {(model) => <ActiveSessionComposerRegion model={model} suggestionBoundary={timeline.scroller} />}
+        {(model) => (
+          <ActiveSessionComposerRegion session={session} model={model} suggestionBoundary={timeline.scroller} />
+        )}
       </Show>
+      <Show when={!isDesktop() && !!session.identity.params.id && bottomMobileTabs()}>{mobileTabs()}</Show>
     </>
   )
 
   return (
     <>
-      <div class="flex-1 min-h-0 flex flex-col gap-2 px-2 pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]">
+      <div class="flex-1 min-h-0 flex flex-col gap-2 px-[var(--shell-inline-inset,8px)] pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]">
         <div ref={screen.panel.ref} class="relative flex-1 min-h-0 flex flex-col md:flex-row gap-2">
           {/* Keep the control outside panel animations; a side dock's 52px header includes a 1px divider. */}
           <Show when={isDesktop() && messagesReady() && session.identity.params.id}>
@@ -435,10 +454,13 @@ function SessionScreenContent(props: {
                   style={{ height: sideVisible() ? screen.side.region.height() : "100%" }}
                 >
                   <Show when={store.sideRegionPresent}>
+                    {/* A closed region stays mounted at zero height while the side dock is open. Once its close
+                        animation is over, hide it, or its frame's shadow draws a flat line over the dock's top edge. */}
                     <div
                       data-slot="session-side-region-presence"
                       data-opened={sideMotion().animateRegion ? sideMotion().region : undefined}
                       class="absolute inset-0"
+                      classList={{ invisible: !screen.side.region.open() && !sideMotion().animateRegion }}
                       onAnimationEnd={(event) => {
                         if (event.currentTarget !== event.target) return
 

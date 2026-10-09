@@ -1,9 +1,10 @@
 import { createMemo, createSignal, getOwner, lazy, onCleanup, runWithOwner, Show, Suspense } from "solid-js"
-import { Icon } from "@opencode/ui/icon"
 import { Command, createKeyed, LinkHandler, MenuItem, onIdle, Panel, Style, type PanelTab, type Setup } from "../sdk"
 import { Browser } from "./contract"
 import type definition from "./index"
 import type { Model } from "./model"
+import { PageIcon } from "./page-icon"
+import barStyles from "./bar.css?inline"
 import commentStyles from "./comment.css?inline"
 import tabStyles from "./tabs.css?inline"
 
@@ -32,6 +33,7 @@ const setup: Setup<typeof definition> = (ctx) => {
   // Tab trigger styles render with the strip, before the pane chunk loads.
   ctx.add(Style, tabStyles)
   ctx.add(Style, commentStyles)
+  ctx.add(Style, barStyles)
   // Everything here serves a mounted session, so the attachment model and the pane's protocol
   // schemas load when the first session opens instead of at startup.
   const opened = createMemo((seen: boolean) => seen || !!sessions.current(), false)
@@ -67,6 +69,25 @@ const setup: Setup<typeof definition> = (ctx) => {
     }
   })
 
+  // The system browser's address shortcut. While the page has focus, the page claims it and main forwards it; here it
+  // covers focus elsewhere in the pane. Ctrl+L focuses the composer outside the pane on Windows and Linux.
+  ctx.add(Command, (): Command | undefined => {
+    const pane = model()?.pane()
+
+    if (!pane) return undefined
+
+    return {
+      id: "address",
+      title: ctx.t("command.address"),
+      group: ctx.t("command.category.view"),
+      bind: "mod+l",
+      scope: "#browser-panel",
+      editable: true,
+      enabled: pane.visible(),
+      run: pane.focusAddress,
+    }
+  })
+
   // Ctrl+Shift+C copies in the terminal, so only the focused page claims it, as in Chromium.
   ctx.add(Command, (): Command | undefined => {
     const pane = model()?.pane()
@@ -99,11 +120,7 @@ const setup: Setup<typeof definition> = (ctx) => {
     }
   })
 
-  ctx.add(LinkHandler, {
-    priority: 10,
-    match: (link) => !!model()?.match(link),
-    open: (link) => model()?.openLink(link),
-  })
+  // Workspace HTML links reach the pane through the file extension, which resolves the path first.
   // A composer chip for a comment on a picked element.
   ctx.add(LinkHandler, {
     priority: 10,
@@ -120,8 +137,10 @@ const setup: Setup<typeof definition> = (ctx) => {
     const text = () => {
       const tab = model()?.tab({ key: session }, id)
 
-      return !tab?.url || tab.url === "about:blank" ? ctx.t("tab.title") : tab.title || tab.url
+      return !tab?.url || tab.url === "about:blank" ? ctx.t("tab.new") : tab.title || tab.url
     }
+
+    const icon = () => model()?.page({ key: session }, id)?.icon
 
     return {
       id,
@@ -130,7 +149,7 @@ const setup: Setup<typeof definition> = (ctx) => {
       },
       label: () => (
         <div class="flex items-center gap-1.5">
-          <Icon name="globe" size="small" />
+          <PageIcon icon={icon()} />
           <span class="max-w-40 truncate">{text()}</span>
         </div>
       ),

@@ -51,8 +51,5 @@ export default {
   "error.healthTimeout": "{{distro}} සෞඛ්‍ය පරීක්‍ෂාව සඳහා සයිඩ්කාර් {{timeout}}ms ට පසුව කල් ඉකුත් විය",
   "error.commandTimeout": "{{command}} {{args}} {{timeout}}msට පසුව කාලය අවසන් විය",
   "error.failedPort": "වරාය ලබා ගැනීමට අසමත් විය",
-  "server.default": "පෙරනිමිය",
-  "menu.default": "පෙරනිමිය ලෙස සකසන්න",
-  "menu.defaultRemove": "පෙරනිමිය ඉවත් කරන්න",
   "menu.remove": "ඉවත් කරන්න",
 }

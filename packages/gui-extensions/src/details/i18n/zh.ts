@@ -3,8 +3,6 @@ export default {
   tooltip: "摘要",
   "command.toggle": "切换摘要",
   noBranch: "无分支",
-  "background.tasksRunning.one": "{{count}}个后台任务正在运行",
-  "background.tasksRunning.other": "{{count}}个后台任务正在运行",
   "move.title": "移至工作区",
   "move.menu": "将会话移至",
   "move.failed": "移动会话失败",

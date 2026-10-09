@@ -1,6 +1,5 @@
 import { RequestError } from "@agentclientprotocol/sdk"
 import { Schema } from "effect"
-import type { ACPCatalog } from "./catalog"
 
 export class SessionNotFoundError extends Schema.TaggedError<SessionNotFoundError>()("ACPSessionNotFoundError", {
   sessionId: Schema.String,
@@ -56,6 +55,20 @@ export class ServerUnavailableError extends Schema.TaggedError<ServerUnavailable
   {},
 ) {}
 
+export class CatalogNotReadyError extends Schema.TaggedError<CatalogNotReadyError>()("ACPCatalogNotReadyError", {
+  reason: Schema.Literals(["models", "agents"]),
+}) {
+  override get message() {
+    return this.reason === "models" ? "No models are available" : "No primary agents are available"
+  }
+}
+
+export class CatalogLoadError extends Schema.TaggedError<CatalogLoadError>()("ACPCatalogLoadError", {
+  cause: Schema.Defect(),
+}) {}
+
+export type CatalogError = CatalogNotReadyError | CatalogLoadError
+
 export type Error =
   | SessionNotFoundError
   | SessionDirectoryMismatchError
@@ -70,7 +83,7 @@ export type Error =
   | ServiceFailureError
   | ServerUnavailableError
 
-export type Failure = Error | RequestError | ACPCatalog.Error
+export type Failure = Error | RequestError | CatalogError
 
 export function toRequestError(error: Error): RequestError {
   switch (error._tag) {

@@ -1,4 +1,4 @@
-import { createComponent, createContext, useContext, type Accessor, type Component } from "solid-js"
+import { createComponent, createContext, useContext, type Accessor, type Component, type JSX } from "solid-js"
 import type { Context, SetupContext } from "./context"
 import type { Definition } from "./core"
 
@@ -96,7 +96,7 @@ export interface PanelFrame {
   readonly reserve: Accessor<boolean>
   /** Plays size animations; false while the user drags a region edge. */
   readonly animate: Accessor<boolean>
-  /** One inner sidebar preference shared by every side panel, toggled from the tab strip. */
+  /** One inner sidebar preference shared by every side panel; a panel with a sidebar renders its own toggle. */
   readonly sidebar: PanelSidebar
   /** This extension's tab ids stored in the session's side strip (the ids `list` receives as `open`). */
   readonly open: Accessor<readonly string[]>
@@ -126,6 +126,15 @@ export function usePanel() {
 export const DrawerContext = createContext<{
   /** Closes the drawer. */
   readonly close: () => void
+  /** Shows content in place of the drawer's view, with a back control. */
+  readonly open: (view: {
+    /** The drawer's title while the content shows. */
+    readonly title: string
+    /** The content to show. */
+    readonly content: JSX.Element
+    /** The element that receives focus when the back control returns to the drawer's view. */
+    readonly trigger: HTMLElement
+  }) => void
 }>()
 
 /**

@@ -3,8 +3,6 @@ export default {
   tooltip: "摘要",
   "command.toggle": "切換摘要",
   noBranch: "沒有分支",
-  "background.tasksRunning.one": "{{count}}個後臺任務正在執行",
-  "background.tasksRunning.other": "{{count}}個後臺任務正在執行",
   "move.title": "移至工作區",
   "move.menu": "將工作階段移至",
   "move.failed": "移動工作階段失敗",

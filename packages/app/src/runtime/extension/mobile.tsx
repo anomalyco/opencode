@@ -2,10 +2,7 @@ import { createMemo, For, lazy, Show, Suspense, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Tabs } from "@opencode/ui/tabs"
 import { Icon } from "@opencode/ui/icon"
-import { IconButton } from "@opencode/ui/icon-button"
-import { Menu } from "@opencode/ui/menu"
 import {
-  DrawerContext,
   Panel,
   type PanelSidebar,
   type PanelTab,
@@ -57,7 +54,7 @@ export function createMobileViews() {
 
 export type MobileViews = ReturnType<typeof createMobileViews>
 
-/** The narrow-screen view switcher: the conversation, each panel's view, and an overflow menu. */
+/** The narrow-screen view switcher: the conversation, each tab view, and a More drawer with the other views. */
 export function MobileViewTabs(props: {
   views: MobileViews
   region: Region
@@ -65,34 +62,38 @@ export function MobileViewTabs(props: {
   session: MountedSession
   screen: SessionScreen
   sidebar: PanelSidebar
+  bottom?: boolean
   onSelect: (key: string) => void
 }): JSX.Element {
   const language = useLanguage()
 
   const [store, setStore] = createStore<{
-    menu: boolean
-    drawer: string | undefined
-    last: string | undefined
+    open: boolean
     loaded: boolean
-    pending: string | undefined
+    drawer: string | undefined
   }>({
-    menu: false,
-    drawer: undefined,
-    // Keeps the last drawer's content mounted while it animates closed.
-    last: undefined,
+    open: false,
     loaded: false,
-    pending: undefined,
+    drawer: undefined,
   })
 
-  const drawer = createMemo(() => (store.last ? props.views.find(store.last) : undefined))
+  const drawer = createMemo(() => (store.drawer ? props.views.find(store.drawer) : undefined))
+
+  const tab = createMemo(() =>
+    props.current === "session" || props.views.tabs().some((entry) => entry.key === props.current)
+      ? props.current
+      : "more",
+  )
+
   let trigger: HTMLButtonElement | undefined
 
   return (
     <div
-      class="relative flex shrink-0 items-center before:pointer-events-none before:absolute before:inset-x-0 before:bottom-0 before:h-px before:bg-v2-border-border-base before:content-['']"
+      class="relative flex shrink-0 items-center before:pointer-events-none before:absolute before:inset-x-0 before:h-px before:bg-v2-border-border-base before:content-['']"
+      classList={{ "before:top-0": props.bottom, "before:bottom-0": !props.bottom }}
       data-slot="session-mobile-view-navigation"
     >
-      <Tabs value={props.current} variant="line" class="!h-auto min-w-0 flex-1" data-slot="session-mobile-view-tabs">
+      <Tabs value={tab()} variant="line" class="!h-auto min-w-0 flex-1" data-slot="session-mobile-view-tabs">
         <Tabs.List aria-label={language.t("session.view.select")} class="!h-9 !gap-0 !px-0 before:!hidden">
           <Tabs.Trigger
             value="session"
@@ -114,73 +115,88 @@ export function MobileViewTabs(props: {
               </Tabs.Trigger>
             )}
           </For>
+          <Show when={props.views.menu().length}>
+            <Tabs.Trigger
+              value="more"
+              ref={(element: HTMLButtonElement) => {
+                trigger = element
+              }}
+              class="min-w-0 flex-1"
+              classes={{ button: "w-full justify-center" }}
+              aria-haspopup="dialog"
+              aria-expanded={store.open}
+              onClick={() => setStore({ open: true, loaded: true, drawer: undefined })}
+            >
+              {language.t("session.tab.more")}
+            </Tabs.Trigger>
+          </Show>
         </Tabs.List>
       </Tabs>
-      <Menu
-        appearance="standard"
-        modal={false}
-        placement="bottom-end"
-        gutter={4}
-        open={store.menu}
-        onOpenChange={(open) => setStore("menu", open)}
-      >
-        <Menu.Trigger
-          as={IconButton}
-          ref={(element: HTMLButtonElement) => {
-            trigger = element
-          }}
-          icon={<Icon name="menu" />}
-          variant="ghost-muted"
-          size="normal"
-          class="mx-1.5 shrink-0"
-          state={props.views.menu().some((entry) => entry.key === props.current) || store.menu ? "pressed" : undefined}
-          aria-label={language.t("common.moreOptions")}
-        />
-        <Menu.Portal>
-          <Menu.Content
-            onCloseAutoFocus={(event) => {
-              if (!store.pending) return
-              event.preventDefault()
-              setStore({ drawer: store.pending, last: store.pending, loaded: true, pending: undefined })
-            }}
-          >
-            <For each={props.views.menu()}>
-              {(entry) => (
-                <Menu.Item
-                  onSelect={() => {
-                    if (entry.mobile.kind === "menu") return props.onSelect(entry.key)
-                    setStore({ pending: entry.key, menu: false })
-                  }}
-                >
-                  {entry.mobile.title}
-                </Menu.Item>
-              )}
-            </For>
-          </Menu.Content>
-        </Menu.Portal>
-      </Menu>
       <Show when={store.loaded}>
         <Suspense>
           <MobilePanelDrawer
-            title={drawer()?.mobile.title ?? ""}
-            open={!!store.drawer}
-            onOpenChange={(open) => {
-              if (!open) setStore("drawer", undefined)
-            }}
+            title={drawer()?.mobile.title ?? language.t("common.moreOptions")}
+            hideHeader
+            open={store.open}
+            onOpenChange={(open) => setStore("open", open)}
             returnFocus={() => trigger}
           >
-            <Show when={drawer()} keyed>
+            <Show
+              when={drawer()}
+              keyed
+              fallback={
+                <div
+                  data-slot="session-mobile-view-options"
+                  class="flex flex-col gap-0.5 rounded-[6px] bg-v2-background-bg-base p-0.5 shadow-[var(--v2-elevation-raised)] [[data-color-scheme=dark]_&]:bg-v2-background-bg-layer-01"
+                >
+                  <For each={props.views.menu().filter((entry) => entry.mobile.kind === "menu")}>
+                    {(entry) => (
+                      <button
+                        type="button"
+                        class="flex min-h-11 w-full items-center gap-2 rounded-[4px] py-1 ps-3 pe-2 text-start text-[13px] font-[440] leading-[var(--line-height-base)] text-v2-text-text-base hover:bg-[var(--v2-overlay-simple-overlay-hover)] focus-visible:outline-none focus-visible:bg-[var(--v2-overlay-simple-overlay-hover)] aria-pressed:bg-[var(--v2-overlay-simple-overlay-pressed)]"
+                        aria-pressed={props.current === entry.key}
+                        onClick={() => {
+                          props.onSelect(entry.key)
+                          setStore("open", false)
+                        }}
+                      >
+                        <Show when={entry.mobile.icon}>
+                          {(icon) => <Icon name={icon()} class="shrink-0 text-v2-icon-icon-muted" />}
+                        </Show>
+                        <span class="min-w-0 flex-1 truncate">{entry.mobile.title}</span>
+                        <Show when={props.current === entry.key}>
+                          <Icon name="check" class="ms-1 shrink-0 text-v2-icon-icon-muted" />
+                        </Show>
+                      </button>
+                    )}
+                  </For>
+                  <For each={props.views.menu().filter((entry) => entry.mobile.kind === "drawer")}>
+                    {(entry) => (
+                      <button
+                        type="button"
+                        class="flex min-h-11 w-full items-center gap-2 rounded-[4px] py-1 ps-3 pe-2 text-start text-[13px] font-[440] leading-[var(--line-height-base)] text-v2-text-text-base hover:bg-[var(--v2-overlay-simple-overlay-hover)] focus-visible:outline-none focus-visible:bg-[var(--v2-overlay-simple-overlay-hover)]"
+                        onClick={() => setStore("drawer", entry.key)}
+                      >
+                        <Show when={entry.mobile.icon}>
+                          {(icon) => <Icon name={icon()} class="shrink-0 text-v2-icon-icon-muted" />}
+                        </Show>
+                        <span class="min-w-0 flex-1 truncate">{entry.mobile.title}</span>
+                        <Icon name="chevron-right" class="ms-1 shrink-0 text-v2-icon-icon-muted" />
+                      </button>
+                    )}
+                  </For>
+                </div>
+              }
+            >
               {(entry) => (
-                <DrawerContext.Provider value={{ close: () => setStore("drawer", undefined) }}>
-                  <MobilePanel
-                    entry={entry}
-                    view={props.session}
-                    screen={props.screen}
-                    sidebar={props.sidebar}
-                    visible={store.drawer === entry.key}
-                    open={() => props.region.openFor(entry.extension)}
-                  />
-                </DrawerContext.Provider>
+                <MobilePanel
+                  entry={entry}
+                  view={props.session}
+                  screen={props.screen}
+                  sidebar={props.sidebar}
+                  visible={store.open}
+                  open={() => props.region.openFor(entry.extension)}
+                />
               )}
             </Show>
           </MobilePanelDrawer>

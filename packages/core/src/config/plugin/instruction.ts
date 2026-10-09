@@ -3,6 +3,7 @@ export * as ConfigInstructionPlugin from "./instruction.js"
 import { define } from "@opencode/plugin/effect/plugin"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
+import { sameDirectory } from "@opencode/util/path"
 import { dirname, join } from "path"
 import { Effect, PubSub, Semaphore, Stream } from "effect"
 import { Watcher } from "../../filesystem/watcher.js"
@@ -133,7 +134,10 @@ export const Plugin = define({
   }),
 })
 
+// `start` keeps the client's spelling while `stop` may come from git, so a Windows drive
+// letter can differ only in case (`c:\repo` vs `C:\repo`). Compare the way FSUtil.contains
+// admitted `start` beneath `stop`, or the walk passes `stop` and recurses at the drive root.
 function ancestorDirectories(start: string, stop: string): string[] {
-  if (start === stop) return [start]
+  if (sameDirectory(start, stop)) return [start]
   return [start, ...ancestorDirectories(dirname(start), stop)]
 }

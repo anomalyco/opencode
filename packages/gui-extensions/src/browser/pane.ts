@@ -4,12 +4,12 @@ import { OpenCode } from "@opencode/client/effect"
 import { SessionID } from "@opencode/schema/session-id"
 import electron, { type BrowserWindow } from "electron"
 import { Deferred, Effect, ManagedRuntime, Queue, Schedule, Schema, Stream } from "effect"
-import { HttpClient, HttpClientRequest } from "effect/unstable/http"
+import { HttpClient, HttpClientRequest } from "effect/http"
 import type { Embeds, Persisted, ServerEndpoints, Storage, Windows } from "../sdk/main"
 import { createBrowserPage, type BrowserPage, type Shared } from "./chromium"
 import { browserFailure } from "./errors"
 import { createBrowserNetwork, type BrowserNetwork } from "./network"
-import { destinationOrigin, fileURLWithin } from "./policy"
+import { destinationOrigin, fileURLWithin, refusal } from "./policy"
 import { createRefs } from "./refs"
 import type { PaneEvent } from "./ipc"
 import { createBrowserRestoreStore } from "./restore"
@@ -325,8 +325,22 @@ export function createBrowserPane(input: {
     async highlight(window: number, binding: string, tabID: Browser.TabID, ref?: Browser.Ref) {
       await owned(window, binding).pages.get(tabID)?.highlight(ref)
     },
+    zoom(window: number, binding: string, tabID: Browser.TabID, direction: "in" | "out" | "reset") {
+      owned(window, binding).pages.get(tabID)?.zoom(direction)
+    },
+    async site(window: number, binding: string, tabID: Browser.TabID) {
+      return (await owned(window, binding).pages.get(tabID)?.site()) ?? { cookies: 0 }
+    },
+    async clearSite(window: number, binding: string, tabID: Browser.TabID) {
+      await owned(window, binding).pages.get(tabID)?.clearSite()
+    },
     async command(window: number, binding: string, command: Browser.Action) {
       const entry = owned(window, binding)
+      const url = command.type === "navigate" || command.type === "tabs.open" ? command.url : undefined
+      // The window explains a refused address by its code; the agent's commands get main's own message instead.
+      const reason = url === undefined ? undefined : refusal(url, { fileRoots: entry.fileRoots })
+
+      if (reason) throw new Error(reason)
       await execute(entry, { action: command, files: [] }, new AbortController().signal)
     },
     async close(window: number, binding: string) {
@@ -480,9 +494,22 @@ export function createBrowserPane(input: {
       inspect: (event) => {
         if (entry.pages.has(id)) report(entry, { type: "inspect", tabID: id, ...event })
       },
-      popup: (popupOptions) => {
+      // Icons and zoom are local to this desktop, but wait behind the states reported before them, so the window files
+      // a new page's icon under that page's URL.
+      detail: (value) => {
+        if (entry.pages.has(id)) report(entry, { type: "page", tabID: id, ...value })
+      },
+      zoomed: () => entry.pages.forEach((page) => page.detail()),
+      address: () => {
+        if (!entry.pages.has(id) || entry.win.isDestroyed()) return
+        // The page held keyboard focus; the app's address field needs it back.
+        entry.win.webContents.focus()
+        publish(entry, { type: "address", tabID: id })
+      },
+      popup: (popupOptions, background) => {
         const popup = create(entry, false, popupOptions)
-        focus(entry, popup.state().id)
+
+        if (!background) focus(entry, popup.state().id)
 
         return popup.contents
       },

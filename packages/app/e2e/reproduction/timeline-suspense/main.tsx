@@ -4,9 +4,13 @@ import { createVirtualizer, observeElementOffset, observeElementRect } from "@ta
 import { observeElementOffsetReconnectAware } from "../../../src/session/timeline/observe-element-offset"
 
 const rowCount = 2_000
+
 const rowHeight = 40
+
 const parameters = new URLSearchParams(location.search)
+
 const resourceMode = parameters.get("resource") === "guard" ? "guard" : "baseline"
+
 const reconnectMode = parameters.get("reconnect") === "candidate" ? "candidate" : "baseline"
 
 type MutationEvent = {
@@ -73,6 +77,7 @@ declare global {
 function App() {
   const [refresh, setRefresh] = createSignal(false)
   let resolveResource: (() => void) | undefined
+
   const [resource] = createResource(
     refresh,
     (version) =>
@@ -100,6 +105,7 @@ function App() {
     let ignoredDetachedZeroRects = 0
     const offsetCallbackSources: "observer"[] = []
     const mutationEvents: MutationEvent[] = []
+
     const virtualizer = createVirtualizer<HTMLDivElement, HTMLDivElement>({
       count: rowCount,
       getScrollElement: () => viewport ?? null,
@@ -109,11 +115,14 @@ function App() {
       observeElementRect: (instance, callback) =>
         observeElementRect(instance, (rect) => {
           rectObserverCallbacks++
+
           // A fixed 600px viewport has no usable geometry while detached. Keep the last connected rect.
           if (!instance.scrollElement?.isConnected && rect.height === 0) {
             ignoredDetachedZeroRects++
+
             return
           }
+
           callback(rect)
         }),
       observeElementOffset: (instance, callback) => {
@@ -122,7 +131,9 @@ function App() {
           offsetCallbackSources.push("observer")
           callback(offset, isScrolling)
         }
+
         if (reconnectMode === "candidate") return observeElementOffsetReconnectAware(instance, deliver)
+
         return observeElementOffset(instance, deliver)
       },
     })
@@ -132,17 +143,22 @@ function App() {
         await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
       }
     }
+
     const mountedRows = () => [...(surface?.querySelectorAll<HTMLElement>("[data-row-index]") ?? [])]
+
     const snapshot = (): Snapshot => {
       const rows = mountedRows()
       const view = viewport?.getBoundingClientRect()
+
       const visibleRows =
         viewport?.isConnected && view
           ? rows.filter((row) => {
               const rect = row.getBoundingClientRect()
+
               return rect.bottom > view.top && rect.top < view.bottom
             }).length
           : 0
+
       return {
         mode: { resource: resourceMode, reconnect: reconnectMode },
         operation: {
@@ -189,6 +205,7 @@ function App() {
     onMount(() => {
       if (!route || !viewport || !surface) throw new Error("Timeline fixture did not mount")
       const routeRoot = route.parentElement
+
       if (!routeRoot) throw new Error("Timeline route root did not mount")
       initialRoute = route
       initialViewport = viewport
@@ -197,10 +214,12 @@ function App() {
         domScrollEvents++
         lastScrollTrusted = event.isTrusted
       })
+
       const countFrames = () => {
         browserFrame++
         requestAnimationFrame(countFrames)
       }
+
       requestAnimationFrame(countFrames)
       new MutationObserver((records) => {
         const callbackTime = performance.now()
@@ -239,6 +258,7 @@ function App() {
           await frames(2)
           initialRows = mountedRows()
           phase = "prepared"
+
           return snapshot()
         },
         trigger: () => {

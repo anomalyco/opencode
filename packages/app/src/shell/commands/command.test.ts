@@ -14,11 +14,13 @@ import {
 
 test("command catalog persistence validates metadata and omits executable fields", () => {
   const decode = Schema.decodeUnknownSync(CommandCatalog)
+
   const catalog = decode({
     open: { title: "Open", keybind: "mod+o", hidden: false, onSelect: "invalid" },
     shell: { title: "Terminal", section: "terminal" },
     stale: { title: "Stale", section: "removed" },
   })
+
   expect(catalog).toEqual({
     open: { title: "Open", keybind: "mod+o", hidden: false },
     shell: { title: "Terminal", section: "terminal" },
@@ -38,6 +40,7 @@ test("commandPaletteOptions keeps visible enabled commands", () => {
     { id: "hidden", title: "Hidden", hidden: true },
     { id: "disabled", title: "Disabled", disabled: true },
   ]
+
   expect(commandPaletteOptions(options).map((option) => option.id)).toEqual(["settings.open", "session.undo"])
 })
 

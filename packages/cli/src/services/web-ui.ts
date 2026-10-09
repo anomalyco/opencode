@@ -1,13 +1,16 @@
 import { FSUtil } from "@opencode/util/fs-util"
 import { Effect, FileSystem } from "effect"
-import { HttpServerError, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
+import { HttpServerError, HttpServerRequest, HttpServerResponse } from "effect/http"
 import { createHash } from "node:crypto"
-import { load, type AssetMap } from "../app-assets"
+import { load, type AssetMap, type BrotliMap } from "../app-assets"
 
-export const handler = Effect.fn("cli.web-ui.handler")(function* (options?: { readonly assets?: AssetMap }) {
+export const handler = Effect.fn("cli.web-ui.handler")(function* (options?: {
+  readonly assets?: AssetMap
+  readonly brotli?: BrotliMap
+}) {
   const fileSystem = yield* FileSystem.FileSystem
   const assets = options?.assets
-    ? Effect.succeed(options.assets)
+    ? Effect.succeed({ files: options.assets, brotli: options.brotli })
     : yield* Effect.cached(load().pipe(Effect.provideService(FileSystem.FileSystem, fileSystem)))
   return <E, R>(api: Effect.Effect<HttpServerResponse.HttpServerResponse, E, R>) =>
     Effect.gen(function* () {
@@ -23,13 +26,21 @@ export const handler = Effect.fn("cli.web-ui.handler")(function* (options?: { re
         return yield* api.pipe(
           Effect.catchIf(isRouteNotFound, () => Effect.succeed(HttpServerResponse.empty({ status: 404 }))),
         )
-      return yield* assets.pipe(Effect.flatMap((files) => serveUI(request, url, files)))
+      return yield* assets.pipe(Effect.flatMap((loaded) => serveUI(request, url, loaded.files, loaded.brotli)))
     })
 })
 
-function serveUI(request: HttpServerRequest.HttpServerRequest, url: URL, assets: AssetMap) {
+function serveUI(
+  request: HttpServerRequest.HttpServerRequest,
+  url: URL,
+  assets: AssetMap,
+  brotli: BrotliMap | undefined,
+) {
   const key = url.pathname.replace(/^\//, "")
-  const requested = assets[key]
+  // A browser that takes brotli gets the embedded bytes as they are, so the server decompresses nothing. The HTML stays
+  // decoded, because its CSP hashes the inline theme script.
+  const encoded = key !== "index.html" && acceptsBrotli(request.headers["accept-encoding"]) ? brotli?.[key] : undefined
+  const requested = encoded ?? assets[key]
   if ((key.startsWith("_assets/") || key.startsWith("icons/")) && requested === undefined)
     return Effect.succeed(HttpServerResponse.empty({ status: 404, headers: { "cache-control": "no-store" } }))
   const name = requested !== undefined ? key : "index.html"
@@ -46,6 +57,8 @@ function serveUI(request: HttpServerRequest.HttpServerRequest, url: URL, assets:
       ? cspForHtml(typeof file === "string" ? file : Buffer.from(file).toString())
       : csp(),
     "x-content-type-options": "nosniff",
+    ...(!html && brotli?.[name] !== undefined ? { vary: "accept-encoding" } : {}),
+    ...(encoded ? { "content-encoding": "br" } : {}),
   }
   return Effect.succeed(
     request.method === "HEAD"
@@ -54,12 +67,21 @@ function serveUI(request: HttpServerRequest.HttpServerRequest, url: URL, assets:
   )
 }
 
+function acceptsBrotli(header: string | undefined) {
+  return (header ?? "").split(",").some((entry) => {
+    const parts = entry.split(";").map((part) => part.trim().toLowerCase())
+    return parts[0] === "br" && !parts.slice(1).some((part) => /^q=0(?:\.0*)?$/.test(part))
+  })
+}
+
 function isRouteNotFound(error: unknown) {
   return error instanceof HttpServerError.HttpServerError && error.reason._tag === "RouteNotFound"
 }
 
+// qr-scanner decodes in a worker it creates from a blob: URL whenever the browser has no BarcodeDetector (Safari, desktop
+// Chrome on Windows and Linux). Without worker-src that worker falls under script-src 'self' and never starts.
 function csp(hash = "") {
-  return `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'${hash ? ` 'sha256-${hash}'` : ""}; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob:; font-src 'self' data:; media-src 'self' data:; connect-src * data: blob:`
+  return `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'${hash ? ` 'sha256-${hash}'` : ""}; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob:; font-src 'self' data:; media-src 'self' data:; connect-src * data: blob:; worker-src 'self' blob:`
 }
 
 function cspForHtml(body: string) {

@@ -12,6 +12,8 @@ import { DataProvider as DataProviderBase, useData } from "../../../src/context/
 import { Keymap } from "../../../src/context/keymap"
 import { LocationProvider, useLocation } from "../../../src/context/location"
 import { RouteProvider } from "../../../src/context/route"
+import { TuiAppProvider } from "../../../src/context/runtime"
+import { StorageProvider } from "../../../src/context/storage"
 import { ThemeProvider } from "../../../src/context/theme"
 import { Composer } from "../../../src/routes/session/composer"
 import { DialogProvider } from "../../../src/ui/dialog"
@@ -20,7 +22,7 @@ import { createSessionRows, type SessionRow } from "../../../src/routes/session/
 import { groupRefs } from "../../../src/routes/session/grouping/session"
 import { unwrap } from "solid-js/store"
 import { createApi, createEventStream, createFetch, directory, json, worktree } from "../../fixture/tui-client"
-import { emptyThemeSource } from "../../fixture/fixture"
+import { emptyThemeSource, tmpdir } from "../../fixture/fixture"
 import { TestTuiContexts } from "../../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 
@@ -2230,6 +2232,7 @@ test("keeps shell state scoped to location", async () => {
     })
   }, events)
   let data!: ReturnType<typeof useData>
+  await using state = await tmpdir()
 
   function Probe() {
     data = useData()
@@ -2249,14 +2252,18 @@ test("keeps shell state scoped to location", async () => {
   }
 
   const app = await testRender(() => (
-    <TestTuiContexts>
-      <ClientProvider api={createApi(calls.fetch)}>
-        <ProjectProvider>
-          <DataProvider>
-            <Probe />
-          </DataProvider>
-        </ProjectProvider>
-      </ClientProvider>
+    <TestTuiContexts paths={{ state: state.path }}>
+      <TuiAppProvider value={{ name: "test", version: "test", channel: "test" }}>
+        <StorageProvider>
+          <ClientProvider api={createApi(calls.fetch)}>
+            <ProjectProvider>
+              <DataProvider>
+                <Probe />
+              </DataProvider>
+            </ProjectProvider>
+          </ClientProvider>
+        </StorageProvider>
+      </TuiAppProvider>
     </TestTuiContexts>
   ))
   app.renderer.start()

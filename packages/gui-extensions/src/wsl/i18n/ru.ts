@@ -52,8 +52,5 @@ export default {
   "error.healthTimeout": "Истекло время ожидания проверки работоспособности Sidecar для {{distro}} ({{timeout}} мс)",
   "error.commandTimeout": "Истекло время ожидания выполнения {{command}} {{args}} ({{timeout}} мс)",
   "error.failedPort": "Не удалось получить порт",
-  "server.default": "По умолч.",
-  "menu.default": "Сделать по умолчанию",
-  "menu.defaultRemove": "Отменить выбор по умолчанию",
   "menu.remove": "Удалить",
 }

@@ -11,16 +11,15 @@ import { ConfigProviderOptionsV1 } from "./provider-options.js"
 import { Provider } from "../../provider.js"
 import { Model } from "../../model.js"
 
-const decodeOptions = { errors: "all", onExcessProperty: "ignore", propertyOrder: "original" } as const
+const decodeOptions = { errors: "all", onExcessProperty: "ignore" } as const
 const decodeAgent = Schema.decodeUnknownSync(Schema.fromJsonString(ConfigAgent.Info), decodeOptions)
 const encodeAgent = Schema.encodeSync(ConfigAgent.Info)
 
 function permissions(info?: ConfigPermissionV1.Info) {
-  const rules = Object.entries(info ?? {}).flatMap(([key, rule]) => {
-    if (!rule) return []
+  const rules = (info ?? []).flatMap(([key, rule]) => {
     const action = normalizeAction(key)
     if (typeof rule === "string") return [{ action, resource: "*", effect: rule }]
-    return Object.entries(rule).map(([resource, effect]) => ({ action, resource, effect }))
+    return rule.map(([resource, effect]) => ({ action, resource, effect }))
   })
   return rules.length ? rules : undefined
 }
@@ -168,7 +167,26 @@ export function providerID(input: string) {
 }
 
 function migrateModel(info: typeof ConfigProviderV1.Model.Type) {
-  const settings = info.options && ConfigProviderOptionsV1.model(info.options)
+  const disableThinkingBlockBinding =
+    info.options?.thinking?.blockBinding === false || info.options?.reasoningConfig?.blockBinding === false
+  const options = info.options && { ...info.options }
+
+  // Move the legacy opt-out to compatibility without mutating the input.
+  if (options && disableThinkingBlockBinding) {
+    for (const key of ["thinking", "reasoningConfig"]) {
+      if (options[key]?.blockBinding !== false) continue
+
+      const { blockBinding, ...rest } = options[key]
+      if (Object.keys(rest).length) {
+        options[key] = rest
+        continue
+      }
+      delete options[key]
+    }
+  }
+
+  const settings = options && ConfigProviderOptionsV1.model(options)
+  const compatibility = Model.compatibility(info.interleaved)
   const costs = info.cost && [
     {
       input: info.cost.input,
@@ -199,7 +217,9 @@ function migrateModel(info: typeof ConfigProviderV1.Model.Type) {
     modelID: info.id,
     family: info.family,
     name: info.name,
-    compatibility: Model.compatibility(info.interleaved),
+    compatibility: disableThinkingBlockBinding
+      ? { ...compatibility, supportsThinkingBlockBinding: false }
+      : compatibility,
     package: info.provider?.npm ? Provider.aisdk(info.provider.npm) : undefined,
     settings: info.provider?.api ? { ...settings, baseURL: info.provider.api } : settings,
     capabilities,

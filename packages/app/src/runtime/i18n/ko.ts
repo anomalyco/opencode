@@ -218,9 +218,6 @@ export const dict = {
   "dialog.server.add.password": "비밀번호 (선택 사항)",
   "dialog.server.edit.title": "서버 편집",
   "dialog.server.menu.edit": "편집",
-  "dialog.server.menu.default": "기본값으로 설정",
-  "dialog.server.menu.defaultRemove": "기본값 제거",
-  "dialog.server.status.default": "기본값",
   "dialog.project.edit.title": "프로젝트 편집",
   "dialog.project.edit.icon": "아이콘",
   "dialog.project.edit.icon.alt": "프로젝트 아이콘",
@@ -803,7 +800,6 @@ export const dict = {
   "server.connect.button": "연결",
   "server.connect.address.invalid": "유효한 HTTP 또는 HTTPS 서버 주소를 입력하세요.",
   "server.connect.failed": "연결할 수 없습니다. 서버 주소와 비밀번호를 확인한 후 다시 시도하세요.",
-  "server.connect.pair.description": "컴퓨터에서 이 명령어를 실행하여 연결 세부 정보를 확인하세요.",
   "server.connect.scan": "QR 코드 스캔",
   "server.connect.scan.description": "opencode pair에서 표시된 QR 코드를 카메라로 가리키세요.",
   "server.connect.scan.invalid":
@@ -812,7 +808,6 @@ export const dict = {
   "server.connect.camera.starting": "카메라 열기…",
   "server.connect.mixedContent":
     "HTTPS 페이지에서 이 HTTP 서버에 연결할 수 없습니다. 대신 HTTPS 서버 주소를 사용하세요.",
-  "server.connect.camera.insecure": "QR 스캔을 위해서는 HTTPS를 통해 이 페이지를 열거나 로컬호스트에서 열어야 합니다.",
   "server.connect.camera.unavailable":
     "이 브라우저에서 사용할 수 있는 카메라가 없습니다. 연결 세부 정보를 수동으로 입력하세요.",
   "server.connect.camera.error":

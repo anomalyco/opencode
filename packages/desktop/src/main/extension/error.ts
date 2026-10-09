@@ -12,5 +12,6 @@ export class ExtensionError extends Error {
 
 export function extensionFailure(error: unknown): ExtensionFailure {
   if (error instanceof ExtensionError) return { code: error.code, message: error.message }
+
   return { code: "failed", message: error instanceof Error ? error.message : String(error) }
 }

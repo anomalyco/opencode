@@ -39,9 +39,7 @@ describe("provider error classification", () => {
     ]
 
     expect(failures).toEqual(
-      failures.map((failure) =>
-        expect.objectContaining({ _tag: "InvalidRequest", classification: "payload-too-large" }),
-      ),
+      failures.map(() => expect.objectContaining({ _tag: "InvalidRequest", classification: "payload-too-large" })),
     )
   })
 

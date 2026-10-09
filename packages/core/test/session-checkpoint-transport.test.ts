@@ -6,7 +6,7 @@ import { SessionModelTransport } from "../src/session/model-transport"
 import { WebSocketConstructor } from "../src/effect/websocket-constructor"
 import { Session } from "@opencode/schema/session"
 import { Effect, Layer, Schema } from "effect"
-import { FetchHttpClient } from "effect/unstable/http"
+import { FetchHttpClient } from "effect/http"
 import { testEffect } from "./lib/effect"
 import { makeWebSocketServer } from "./lib/websocket-server"
 

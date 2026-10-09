@@ -73,6 +73,8 @@ export function ExtensionLinks(props: ParentProps<{ session: MountedSession }>) 
     <MarkdownProvider
       readImage={markdown?.readImage}
       openLocalFile={(href) => void host.links.open({ href, session: props.session })}
+      // Untracked: markdown calls this inside its render effect, which must not follow the routed session.
+      localFileExists={(href) => untrack(() => host.links.exists({ href, session: props.session }))}
     >
       {props.children}
     </MarkdownProvider>

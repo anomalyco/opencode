@@ -12,6 +12,7 @@ export function ExtensionServerRow(props: { server: ServerConnection.Key; contro
   const servers = useExtensionServers()
   // The entry changes with every state update; its row follows the extension's state on its own.
   const source = untrack(() => servers.entry(props.server))
+
   const row: ServerRow = {
     key: props.server,
     health: () => props.controller.collection.health()[props.server],
@@ -22,14 +23,11 @@ export function ExtensionServerRow(props: { server: ServerConnection.Key; contro
         authenticationRequired={indicator.auth}
       />
     ),
-    default: {
-      available: () => props.controller.defaults.available(),
-      current: () => props.controller.defaults.key() === props.server,
-      set: (value) => void props.controller.defaults.set(value ? props.server : null),
-    },
     remove: () => props.controller.connection.remove(props.server),
     Items: () => <ServerRowItems server={props.server} />,
   }
+
   if (!source) return null
+
   return <Contribution extension={source.extension}>{() => untrack(() => source.entry.row?.(row))}</Contribution>
 }

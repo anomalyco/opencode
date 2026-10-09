@@ -49,8 +49,5 @@ export default {
   "error.healthTimeout": "תם הזמן שהוקצב לבדיקת התקינות של שרת העזר עבור {{distro}} לאחר {{timeout}} אלפיות השנייה",
   "error.commandTimeout": "תם הזמן הקצוב של {{command}} {{args}} לאחר {{timeout}}ms",
   "error.failedPort": "לא ניתן להקצות יציאה",
-  "server.default": "ברירת מחדל",
-  "menu.default": "הגדר כברירת מחדל",
-  "menu.defaultRemove": "הסר את ברירת המחדל",
   "menu.remove": "הסרה",
 }

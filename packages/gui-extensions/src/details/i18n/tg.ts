@@ -3,8 +3,6 @@ export default {
   tooltip: "Хулоса",
   "command.toggle": "Гузаронидани хулоса",
   noBranch: "Шоха нест",
-  "background.tasksRunning.one": "{{count}} вазифаи заминавӣ иҷро шуда истодааст",
-  "background.tasksRunning.other": "{{count}} вазифаи заминавӣ иҷро шуда истодаанд",
   "move.title": "Ба фазои корӣ гузаронед",
   "move.menu": "Сессияро гузаронед ба",
   "move.failed": "Гузаронидани сессия муяссар нашуд",

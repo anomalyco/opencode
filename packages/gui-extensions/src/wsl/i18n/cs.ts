@@ -52,8 +52,5 @@ export default {
   "error.healthTimeout": "Postranní vozík pro {{distro}} kontrolu stavu vypršel po {{timeout}}ms",
   "error.commandTimeout": "{{command}} {{args}} vypršel po {{timeout}}ms",
   "error.failedPort": "Nepodařilo se získat port",
-  "server.default": "Výchozí",
-  "menu.default": "Nastavit jako výchozí",
-  "menu.defaultRemove": "Odebrat výchozí",
   "menu.remove": "Odebrat",
 }

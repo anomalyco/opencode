@@ -1,6 +1,6 @@
 {
   "name": "@opencode/ui",
-  "version": "2.0.22",
+  "version": "2.0.26",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -109,6 +109,7 @@
     "vite-plugin-solid": "catalog:"
   },
   "dependencies": {
+    "@kitlangton/solid-motion": "0.2.2",
     "@kobalte/core": "catalog:",
     "@pierre/diffs": "catalog:",
     "@solid-primitives/event-listener": "catalog:",

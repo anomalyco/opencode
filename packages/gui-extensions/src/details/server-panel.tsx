@@ -7,6 +7,7 @@ import { Tooltip } from "@opencode/ui/tooltip"
 import { getDirectory } from "@opencode/util/path"
 import { useMutation } from "@tanstack/solid-query"
 import {
+  children,
   createMemo,
   createResource,
   createSignal,
@@ -19,7 +20,7 @@ import {
   type JSX,
 } from "solid-js"
 import { createStore } from "solid-js/store"
-import { createKeyed, useExtension, type MountedSession } from "../sdk"
+import { createKeyed, useDrawer, useExtension, type MountedSession } from "../sdk"
 import { configuredLsps } from "./configured-lsp"
 
 const services = [
@@ -437,22 +438,50 @@ function ServiceCatalog(props: ServiceMenuProps) {
   )
 }
 
-function ServicePopover(
-  props: ServiceMenuProps & {
-    loading: boolean
-    ready: boolean
-    empty: boolean
-    error: unknown
-    retry: () => void
-    children: JSX.Element
-  },
-) {
+type ServiceBodyProps = {
+  loading: boolean
+  ready: boolean
+  error: unknown
+  retry: () => void
+  children: JSX.Element
+}
+
+function ServicePopover(props: ServiceMenuProps & ServiceBodyProps & { empty: boolean }) {
   const ctx = useExtension()
   const locale = ctx.locale
+  const drawer = useDrawer()
 
   const placement = createMemo(() =>
     props.mobile ? "top-end" : locale.direction() === "rtl" ? "right-start" : "left-start",
   )
+
+  // In a narrow-screen drawer the service list replaces the drawer's view instead of opening a popover over it.
+  if (props.mobile && drawer) {
+    const content = children(() => (
+      <div
+        class="session-summary-card session-service-drawer"
+        data-service={props.service.type}
+        aria-busy={props.loading}
+      >
+        <ServiceBody {...props} />
+      </div>
+    ))
+
+    return (
+      <button
+        type="button"
+        class="session-summary-row"
+        onClick={(event) => {
+          if (!props.loading) void props.retry()
+          drawer.open({ title: ctx.t(props.service.label), content: content(), trigger: event.currentTarget })
+        }}
+      >
+        <Icon name={props.service.icon} class="shrink-0 text-v2-icon-icon-muted" />
+        <span class="session-summary-label">{ctx.t(props.service.label)}</span>
+        <Icon name="chevron-right" class="session-summary-menu-indicator shrink-0 text-v2-icon-icon-muted" />
+      </button>
+    )
+  }
 
   return (
     <Popover
@@ -480,31 +509,39 @@ function ServicePopover(
           aria-busy={props.loading}
           aria-label={ctx.t(props.service.label)}
         >
-          <Show
-            when={props.ready || !props.loading}
-            fallback={
-              <div class="session-service-message" role="status">
-                {ctx.t("common.loading")}
-              </div>
-            }
-          >
-            <Show
-              when={!props.error}
-              fallback={
-                <div class="session-service-message" role="alert">
-                  <p>{ctx.t("common.requestFailed")}</p>
-                  <button type="button" class="session-summary-row" onClick={() => props.retry()}>
-                    {ctx.t("retry")}
-                  </button>
-                </div>
-              }
-            >
-              {props.children}
-            </Show>
-          </Show>
+          <ServiceBody {...props} />
         </Popover.Content>
       </Popover.Portal>
     </Popover>
+  )
+}
+
+function ServiceBody(props: ServiceBodyProps) {
+  const ctx = useExtension()
+
+  return (
+    <Show
+      when={props.ready || !props.loading}
+      fallback={
+        <div class="session-service-message" role="status">
+          {ctx.t("common.loading")}
+        </div>
+      }
+    >
+      <Show
+        when={!props.error}
+        fallback={
+          <div class="session-service-message" role="alert">
+            <p>{ctx.t("common.requestFailed")}</p>
+            <button type="button" class="session-summary-row" onClick={() => props.retry()}>
+              {ctx.t("retry")}
+            </button>
+          </div>
+        }
+      >
+        {props.children}
+      </Show>
+    </Show>
   )
 }
 

@@ -1,4 +1,5 @@
-import { Effect, Encoding, Schema } from "effect"
+import { Effect, Schema } from "effect"
+import { Base64 } from "effect/encoding"
 import { Protocol } from "../route/protocol.js"
 import { LLMEvent, LLMRequest, Message, ToolResultPart } from "../schema/index.js"
 import { OpenResponses } from "./open-responses.js"
@@ -95,7 +96,7 @@ const HOSTED_TOOLS = {
   image_generation_call: {
     name: "image_generation",
     input: () => ({}),
-    result: Effect.fn("MetaResponses.imageResult")(function* (raw: ResponsesHostedTools.Item) {
+    result: Effect.fnUntraced(function* (raw: ResponsesHostedTools.Item) {
       const item = yield* Schema.decodeUnknownEffect(ImageItem)(raw).pipe(
         Effect.mapError((cause) =>
           ProviderShared.eventError(
@@ -113,7 +114,7 @@ const HOSTED_TOOLS = {
           "Meta returned an image without data",
           ProviderShared.encodeJson(raw),
         )
-      const data = yield* Effect.fromResult(Encoding.decodeBase64(item.result)).pipe(
+      const data = yield* Effect.fromResult(Base64.decode(item.result)).pipe(
         Effect.mapError((cause) =>
           ProviderShared.eventError(
             ADAPTER,
@@ -136,7 +137,7 @@ const HOSTED_TOOLS = {
   },
 } satisfies ResponsesHostedTools.Definitions
 
-const onEvent = Effect.fn("MetaResponses.onEvent")(function* (
+const onEvent = Effect.fnUntraced(function* (
   state: OpenResponses.ParserState,
   input: OpenResponses.Event,
 ) {
@@ -173,7 +174,7 @@ const onEvent = Effect.fn("MetaResponses.onEvent")(function* (
   ] satisfies OpenResponses.StepResult
 })
 
-const step = Effect.fn("MetaResponses.step")(function* (state: ParserState, input: OpenResponses.Event) {
+const step = Effect.fnUntraced(function* (state: ParserState, input: OpenResponses.Event) {
   const completedItems = new Set(state.completedItems)
   const event = OpenResponses.normalize(state, input)
   if (event.type === "response.output_item.done" && event.item && completedItems.has(event.item.id))

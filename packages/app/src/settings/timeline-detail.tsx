@@ -21,16 +21,22 @@ const presets = timelinePresets.toReversed()
 export function TimelineDetailControl(props: { value: TimelineDetail; onChange: (value: TimelineDetail) => void }) {
   const language = useLanguage()
   const id = createUniqueId()
+
   const [visiblePlacements, setVisiblePlacements] = createStore<
     Partial<Record<TimelineCategory, Exclude<TimelinePlacement, "hidden">>>
   >({})
+
   const preset = createMemo(() => timelinePreset(props.value))
+
   const position = () => {
     const current = preset()
+
     return current ? presets.indexOf(current) : 2
   }
+
   const label = () => {
     const current = preset()
+
     return current ? language.t(`settings.timeline.preset.${current.id}`) : language.t("settings.timeline.custom")
   }
 
@@ -122,6 +128,7 @@ export function TimelineDetailControl(props: { value: TimelineDetail; onChange: 
                           aria-pressed={props.value[category].placement !== "hidden"}
                           onClick={() => {
                             const placement = props.value[category].placement
+
                             if (placement !== "hidden") setVisiblePlacements(category, placement)
                             props.onChange({
                               ...props.value,

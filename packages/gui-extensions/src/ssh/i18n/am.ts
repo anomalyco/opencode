@@ -32,8 +32,5 @@ export default {
   "form.name": "የአገልጋይ ስም (አማራጭ)",
   "form.namePlaceholder": "Localhost",
   "form.add": "አገልጋይ አክል",
-  "server.default": "ነባሪ",
-  "menu.default": "ነባሪ አዘጋጅ",
-  "menu.defaultRemove": "ነባሪውን አስወግድ",
   "menu.delete": "ሰርዝ",
 }

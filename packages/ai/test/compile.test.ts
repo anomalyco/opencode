@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Ref, Schema } from "effect"
-import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { HttpClientRequest, HttpClientResponse } from "effect/http"
 import {
   LLM,
   LLMRequest,
