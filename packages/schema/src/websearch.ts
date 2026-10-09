@@ -1,10 +1,11 @@
 export * as WebSearch from "./websearch.js"
 
+import { brand } from "./brand.js"
 import { Schema } from "effect"
 import { ephemeral, inventory } from "./event.js"
 import { optional } from "./schema.js"
 
-export const ID = Schema.String.pipe(Schema.brand("WebSearch.ID"))
+export const ID = Schema.String.pipe(brand("WebSearch.ID"))
 export type ID = typeof ID.Type
 
 export interface Provider extends Schema.Schema.Type<typeof Provider> {}

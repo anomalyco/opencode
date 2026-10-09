@@ -1,5 +1,6 @@
 export * as Permission from "./permission.js"
 
+import { brand } from "./brand.js"
 import { Schema } from "effect"
 import { optional } from "./schema.js"
 import { ephemeral, inventory } from "./event.js"
@@ -8,7 +9,7 @@ import { SessionID } from "./session-id.js"
 import { statics } from "./schema.js"
 
 export const ID = Schema.String.check(Schema.isStartingWith("per")).pipe(
-  Schema.brand("Permission.ID"),
+  brand("Permission.ID"),
   statics((schema) => ({ create: (id?: string) => schema.make(id ?? "per_" + ascending()) })),
 )
 export type ID = typeof ID.Type

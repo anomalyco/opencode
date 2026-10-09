@@ -1,5 +1,6 @@
 export * as Event from "./event.js"
 
+import { brand } from "./brand.js"
 import { Schema, SchemaTransformation } from "effect"
 import { optional } from "./schema.js"
 import { ascending } from "./identifier.js"
@@ -7,7 +8,7 @@ import { Location } from "./location.js"
 import { statics } from "./schema.js"
 
 export const ID = Schema.String.check(Schema.isStartingWith("evt_")).pipe(
-  Schema.brand("Event.ID"),
+  brand("Event.ID"),
   statics((schema) => ({ create: () => schema.make("evt_" + ascending()) })),
 )
 export type ID = typeof ID.Type
@@ -17,11 +18,11 @@ export type ID = typeof ID.Type
  * event envelope and synced markers;
  * `after` cursors accept only values that came from those sources.
  */
-export const Seq = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).pipe(Schema.brand("Event.Seq"))
+export const Seq = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).pipe(brand("Event.Seq"))
 export type Seq = typeof Seq.Type
 
 /** Durable schema version of one event type, from the event definition that committed it. */
-export const Version = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)).pipe(Schema.brand("Event.Version"))
+export const Version = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)).pipe(brand("Event.Version"))
 export type Version = typeof Version.Type
 
 const DurableEnvelope = Schema.Struct({ aggregateID: Schema.String, seq: Seq, version: Version })

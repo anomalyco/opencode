@@ -195,7 +195,7 @@
         "solid-js": "catalog:",
       },
       "peerDependencies": {
-        "effect": "4.0.1",
+        "effect": "catalog:",
         "solid-js": ">=1.9.0",
       },
       "optionalPeers": [
@@ -558,7 +558,7 @@
       "name": "@opencode/http-recorder",
       "version": "2.0.26",
       "dependencies": {
-        "@effect/platform-node-shared": "4.0.1",
+        "@effect/platform-node-shared": "catalog:",
       },
       "devDependencies": {
         "@effect/platform-node": "catalog:",
@@ -577,6 +577,7 @@
       "name": "@opencode/httpapi-codegen",
       "version": "2.0.26",
       "dependencies": {
+        "@opencode/schema": "workspace:*",
         "effect": "catalog:",
         "prettier": "3.6.2",
       },

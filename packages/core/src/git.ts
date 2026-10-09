@@ -1,5 +1,6 @@
 export * as Git from "./git.js"
 
+import { brand } from "@opencode/schema/brand"
 import path from "path"
 import { Cause, Context, Effect, Exit, Layer, Option, Schedule, Schema } from "effect"
 import { ChildProcess } from "effect/process"
@@ -39,7 +40,7 @@ const snapshotConfig = `[core]
 	threads = true
 `
 
-export const TreeID = Schema.String.pipe(Schema.brand("Git.TreeID"))
+export const TreeID = Schema.String.pipe(brand("Git.TreeID"))
 export type TreeID = typeof TreeID.Type
 
 const temporaryIndexPrefix = "index.opencode-"

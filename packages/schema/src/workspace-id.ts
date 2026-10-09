@@ -1,9 +1,10 @@
+import { brand } from "./brand.js"
 import { Schema } from "effect"
 import { ascending } from "./identifier.js"
 import { statics } from "./schema.js"
 
 export const WorkspaceID = Schema.String.check(Schema.isStartingWith("wrk")).pipe(
-  Schema.brand("Workspace.ID"),
+  brand("Workspace.ID"),
   statics((schema) => {
     const create = () => schema.make("wrk_" + ascending())
     return {

@@ -1,5 +1,6 @@
 export * as Integration from "./integration.js"
 
+import { brand } from "./brand.js"
 import { Schema } from "effect"
 import { optional } from "./schema.js"
 import { ephemeral, inventory } from "./event.js"
@@ -81,7 +82,7 @@ export const Info = Schema.Struct({
 export interface Info extends Schema.Schema.Type<typeof Info> {}
 
 export const AttemptID = Schema.String.pipe(
-  Schema.brand("Integration.AttemptID"),
+  brand("Integration.AttemptID"),
   statics((schema) => ({ create: () => schema.make("con_" + ascending()) })),
 )
 export type AttemptID = typeof AttemptID.Type

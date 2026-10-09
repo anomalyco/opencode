@@ -54,8 +54,8 @@ const layer = Layer.effect(
             location: Location.Ref.make({ directory: location.directory, workspaceID: location.workspaceID }),
           },
         )
-      }).pipe(Effect.ensuring(Deferred.succeed(done, undefined)), Effect.uninterruptible)
-    })
+      }).pipe(Effect.ensuring(Deferred.succeed(done, undefined)))
+    }).pipe(Effect.uninterruptible)
     return Service.of({
       isClosed: () => closed,
       shutdown,

@@ -1,3 +1,4 @@
+import { brand } from "@opencode/schema/brand"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { SessionInbox } from "@opencode/schema/session-inbox"
 import { PromptInput } from "@opencode/schema/prompt-input"
@@ -98,7 +99,7 @@ const decodeSessionsCursor = Schema.decodeUnknownEffect(SessionsCursorJson)
 const invalidCursor = "Invalid cursor" as const
 
 export const SessionsCursor = Schema.String.pipe(
-  Schema.brand("SessionsCursor"),
+  brand("SessionsCursor"),
   statics((schema) => {
     // Read the default constructor without caching it on the schema, so `make` can be replaced.
     const make = SchemaParser.make(schema)

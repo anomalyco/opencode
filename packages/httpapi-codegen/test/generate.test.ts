@@ -1,3 +1,4 @@
+import { brand } from "@opencode/schema/brand"
 import { describe, expect, test } from "bun:test"
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
@@ -183,10 +184,10 @@ describe("HttpApiCodegen.generate", () => {
   })
 
   test("preserves referenced and inline branded Effect types across optional and nested shapes", () => {
-    const SessionID = Schema.String.check(Schema.isStartingWith("ses_")).pipe(Schema.brand("Session.ID"))
-    const AgentID = Schema.String.pipe(Schema.brand("Agent.ID"))
-    const Cursor = Schema.String.pipe(Schema.brand("SessionsCursor")).annotate({ description: "Cursor" })
-    const Cost = Schema.Finite.pipe(Schema.brand("Money.USD"), Schema.annotate({ identifier: "Money.USD" }))
+    const SessionID = Schema.String.check(Schema.isStartingWith("ses_")).pipe(brand("Session.ID"))
+    const AgentID = Schema.String.pipe(brand("Agent.ID"))
+    const Cursor = Schema.String.pipe(brand("SessionsCursor")).annotate({ description: "Cursor" })
+    const Cost = Schema.Finite.pipe(brand("Money.USD"), Schema.annotate({ identifier: "Money.USD" }))
     const output = emitEffectShape(
       compileContract(
         api(
@@ -694,8 +695,8 @@ describe("HttpApiCodegen.generate", () => {
       compileContract(
         api(
           HttpApiEndpoint.get("get", "/session/:sessionID", {
-            params: { sessionID: Schema.String.pipe(Schema.brand("SessionID")) },
-            success: Schema.Struct({ data: Schema.String.pipe(Schema.brand("SessionID")) }),
+            params: { sessionID: Schema.String.pipe(brand("SessionID")) },
+            success: Schema.Struct({ data: Schema.String.pipe(brand("SessionID")) }),
           }),
         ),
       ),
