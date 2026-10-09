@@ -1,28 +1,29 @@
-import type { AnyAuthClient } from "google-auth-library"
+import type { AnyAuthClient, GoogleAuthOptions } from "google-auth-library"
 import { Effect, Redacted } from "effect"
-import fs from "node:fs"
-import os from "node:os"
-import path from "node:path"
 import { Auth, MissingCredentialError } from "../route/auth.js"
 import { ProviderConfigurationError, ProviderID } from "../schema/index.js"
 
 const SCOPE = "https://www.googleapis.com/auth/cloud-platform"
 const id = ProviderID.make("google-vertex")
 
-function expandHome(filepath: string) {
-  if (filepath === "~") return os.homedir()
-  if (filepath.startsWith("~/")) return path.join(os.homedir(), filepath.slice(2))
-  return filepath
-}
-
-export const resolveCredentialsFile = () => {
-  if (process.env.GOOGLE_APPLICATION_CREDENTIALS) return process.env.GOOGLE_APPLICATION_CREDENTIALS
-  const cloudsdkConfig = process.env.CLOUDSDK_CONFIG
-  if (cloudsdkConfig) {
-    const candidate = path.join(expandHome(cloudsdkConfig), "application_default_credentials.json")
-    if (fs.existsSync(candidate)) return candidate
+export const loadADCClient = async (project?: string) => {
+  const { GoogleAuth } = await import("google-auth-library")
+  // Override only the well-known-file lookup: keyFilename bypasses ADC's quota-project
+  // preparation. Keep explicit credentials and metadata fallback in Google's ADC chain.
+  class CloudSDKAuth extends GoogleAuth {
+    override async _tryGetApplicationCredentialsFromWellKnownFile(options?: GoogleAuthOptions["clientOptions"]) {
+      const config = process.env.CLOUDSDK_CONFIG
+      if (!config) return super._tryGetApplicationCredentialsFromWellKnownFile(options)
+      const { existsSync } = await import("node:fs")
+      const { homedir } = await import("node:os")
+      const { join } = await import("node:path")
+      const directory = config === "~" ? homedir() : config.startsWith("~/") ? join(homedir(), config.slice(2)) : config
+      const file = join(directory, "application_default_credentials.json")
+      if (!existsSync(file)) return null
+      return this._getApplicationCredentialsFromFilePath(file, options)
+    }
   }
-  return undefined
+  return new CloudSDKAuth({ projectId: project, scopes: [SCOPE] }).getClient()
 }
 
 export type OAuthOptions =
@@ -80,14 +81,7 @@ const adc = (project?: string) => {
   let client: Promise<AnyAuthClient> | undefined
   const loadClient = () => {
     if (client) return client
-    const keyFilename = resolveCredentialsFile()
-    client = import("google-auth-library").then(({ GoogleAuth }) =>
-      new GoogleAuth({
-        projectId: project,
-        scopes: [SCOPE],
-        ...(keyFilename ? { keyFilename } : {}),
-      }).getClient(),
-    )
+    client = loadADCClient(project)
     return client
   }
   return Auth.effect(

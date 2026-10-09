@@ -59,9 +59,11 @@ export const GoogleVertexPlugin = define({
     // Same lookup as gcloud itself. Only project IDs are read; nothing here contacts Google.
     const gcloud =
       (process.env.CLOUDSDK_CONFIG
-        ? process.env.CLOUDSDK_CONFIG.startsWith("~/")
-          ? path.join(Global.Path.home, process.env.CLOUDSDK_CONFIG.slice(2))
-          : process.env.CLOUDSDK_CONFIG
+        ? process.env.CLOUDSDK_CONFIG === "~"
+          ? Global.Path.home
+          : process.env.CLOUDSDK_CONFIG.startsWith("~/")
+            ? path.join(Global.Path.home, process.env.CLOUDSDK_CONFIG.slice(2))
+            : process.env.CLOUDSDK_CONFIG
         : undefined) ??
       (process.platform === "win32" && process.env.APPDATA
         ? path.join(process.env.APPDATA, "gcloud")
