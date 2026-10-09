@@ -330,13 +330,27 @@ export function make(options: ClientOptions) {
     }
   }
 
+  const isTransportRetryable = (cause: unknown) => {
+    if (!(cause instanceof Error)) return false
+    const msg = cause.message
+    return msg.includes("socket") || msg.includes("ECONNRESET") || msg.includes("closed unexpectedly")
+  }
+
+  const delay = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
   const execute = async (descriptor: RequestDescriptor, requestOptions?: RequestOptions) => {
-    try {
-      const prepared = prepare(descriptor, requestOptions)
-      return await fetch(prepared.url, prepared.init)
-    } catch (cause) {
-      throw new ClientError("Transport", { cause })
+    const prepared = prepare(descriptor, requestOptions)
+    let lastError: unknown
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        return await fetch(prepared.url, prepared.init)
+      } catch (cause) {
+        lastError = cause
+        if (!isTransportRetryable(cause) || attempt === 2) break
+        await delay(100 * (attempt + 1))
+      }
     }
+    throw new ClientError("Transport", { cause: lastError })
   }
 
   const responseError = async (response: Response, descriptor: RequestDescriptor): Promise<never> => {
