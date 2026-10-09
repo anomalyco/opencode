@@ -4,7 +4,10 @@ import { FetchHttpClient } from "effect/http"
 import { KV } from "@opencode/core/kv"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Bus } from "@opencode/core/bus"
+import { Location } from "@opencode/core/location"
+import { AbsolutePath } from "@opencode/core/schema"
 import { WellKnown } from "@opencode/core/wellknown"
+import { location } from "./fixture/location"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(FetchHttpClient.layer)
@@ -106,11 +109,18 @@ serviceIt.live("refreshes changed manifests", () =>
         yield* wellknown.add(server.url.origin)
         expect(yield* wellknown.refresh()).toBe(false)
 
+        const a = Location.Service.of(location({ directory: AbsolutePath.make("/fixture/a") }))
+        const b = Location.Service.of(location({ directory: AbsolutePath.make("/fixture/b") }))
         const changed = yield* bus
           .subscribe(WellKnown.Event.Updated)
-          .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
+          .pipe(
+            Stream.take(1),
+            Stream.runCollect,
+            Effect.provideService(Location.Service, b),
+            Effect.forkScoped({ startImmediately: true }),
+          )
         update()
-        expect(yield* wellknown.refresh()).toBe(true)
+        expect(yield* wellknown.refresh().pipe(Effect.provideService(Location.Service, a))).toBe(true)
         expect(yield* Fiber.join(changed)).toHaveLength(1)
         expect(wellknown.snapshot()[0]?.manifest.auth?.command).toEqual(["second"])
       }),
