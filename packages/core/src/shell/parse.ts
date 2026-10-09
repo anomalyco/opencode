@@ -6,6 +6,7 @@ import os from "os"
 import path from "path"
 import type { Node } from "web-tree-sitter"
 import { shellParserWasm } from "#shell-parser-wasm"
+import type { ShellScan } from "./scan.js"
 import { ShellSelect } from "./select.js"
 import { lazy } from "../util/lazy.js"
 import { Wildcard } from "../util/wildcard.js"
@@ -215,8 +216,7 @@ export const scanPortable = Effect.fnUntraced(function* (command: string, shell:
   const result = powershell
     ? ShellScan.scanPowerShell(command)
     : ShellScan.scan(command, name === "bash" || name === "zsh" ? name : "posix")
-  if (result.kind === "opaque")
-    return yield* Effect.fail(new Error(`Portable shell scanner cannot analyze command: ${result.reason}`))
+  if (result.kind === "opaque") return yield* Effect.fail(new Error(opaqueMessage(result.reason)))
 
   const output: Result = { commands: [], directories: [] }
   for (const item of result.commands) {
@@ -285,6 +285,24 @@ export const scanPortable = Effect.fnUntraced(function* (command: string, shell:
   }
   return output
 })
+
+// The command never runs, so tell the agent how to rewrite it.
+const OPAQUE_HINTS: Record<ShellScan.OpaqueReason, string> = {
+  "command-substitution":
+    'A command substitution or nested expansion is incomplete or cannot be checked. Inside double quotes, the shell runs text between backticks as a command. For literal backticks, such as Markdown code spans, use single quotes, escape each backtick as \\`, or write the text to a file and pass "$(cat file)".',
+  "compound-command": "A compound command such as if, for, case, or a group is incomplete or malformed.",
+  "dynamic-command-name": "The command name is computed at runtime. Use a literal command name.",
+  "dynamic-execution": "Part of the command is evaluated as code at runtime. Run the intended commands directly.",
+  heredoc: "A heredoc is missing its closing delimiter or overlaps other syntax.",
+  "invalid-redirect": "A redirection is missing its target or is not allowed here.",
+  "invalid-structure": "The command is incomplete, malformed, or too large to check.",
+  "unterminated-escape": "The command ends with an incomplete escape.",
+  "unterminated-quote": "A quote is not closed.",
+}
+
+export function opaqueMessage(reason: ShellScan.OpaqueReason) {
+  return `Command was not run: the shell permission scanner cannot analyze it (${reason}). ${OPAQUE_HINTS[reason]} Rewrite the command and try again.`
+}
 
 function parts(node: Node) {
   return Array.from({ length: node.childCount }).flatMap((_, index): Part[] => {
