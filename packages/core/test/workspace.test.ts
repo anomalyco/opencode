@@ -1,15 +1,16 @@
 import { beforeEach, expect } from "bun:test"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Database } from "@opencode/core/database/database"
-import { makeMemoryDriver } from "@opencode/core/environment/index"
+import { Failed, makeFiles, makeMemoryDriver, NotFound } from "@opencode/core/environment/index"
 import { Workspace } from "@opencode/core/workspace"
 import { WorkspaceDriver } from "@opencode/core/workspace/driver"
 import { WorkspaceTable } from "@opencode/core/workspace/sql"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { eq } from "drizzle-orm"
-import { Deferred, Effect, Fiber } from "effect"
+import { Deferred, Effect, Fiber, Sink, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { ChildProcess } from "effect/unstable/process"
+import { ExitCode, make as makeSpawner, makeHandle, ProcessId } from "effect/unstable/process/ChildProcessSpawner"
 import { testEffect } from "./lib/effect"
 
 const calls: Array<{ readonly operation: string; readonly binding?: WorkspaceDriver.Binding | null }> = []
@@ -17,16 +18,17 @@ const memory = makeMemoryDriver()
 let failConnect = false
 let create: WorkspaceDriver.Interface["create"] = ({ workspaceID }) =>
   Effect.succeed({ binding: { workspaceID, generation: 0 } })
+let connectDriver: WorkspaceDriver.Interface["connect"] = () => Effect.succeed(memory)
 
 const driver = WorkspaceDriver.make({
   create: (input) => {
     calls.push({ operation: "create" })
     return create(input)
   },
-  connect: ({ binding }) => {
-    calls.push({ operation: "connect", binding })
+  connect: (input) => {
+    calls.push({ operation: "connect", binding: input.binding })
     if (failConnect) return Effect.fail(new WorkspaceDriver.Error({ message: "wake failed" }))
-    return Effect.succeed(memory)
+    return connectDriver(input)
   },
   suspendForIdle: ({ binding, saveBinding }) => {
     calls.push({ operation: "suspendForIdle", binding })
@@ -49,6 +51,7 @@ beforeEach(() => {
   calls.splice(0)
   failConnect = false
   create = ({ workspaceID }) => Effect.succeed({ binding: { workspaceID, generation: 0 } })
+  connectDriver = () => Effect.succeed(memory)
 })
 
 const gateCreate = Effect.fnUntraced(function* () {
@@ -379,5 +382,162 @@ it.effect("surfaces wake failures through the spawn error channel", () =>
         description: `Failed to wake workspace ${created.id}`,
       },
     })
+  }),
+)
+
+it.effect("routes file overrides through the workspace connection without spawning processes", () =>
+  Effect.gen(function* () {
+    const workspace = yield* Workspace.Service
+    const workspaceID = yield* workspace.create({ provider: "fake" })
+    const files = makeFiles(yield* workspace.connect(workspaceID))
+
+    expect(calls).toEqual([])
+    const root = `/override-${workspaceID}`
+    const payload = new TextEncoder().encode("hello workspace")
+
+    yield* files.mkdir(root)
+    expect(calls.map((call) => call.operation)).toEqual(["create", "connect"])
+
+    yield* files.write(`${root}/note.txt`, payload)
+    expect(yield* files.stat(`${root}/note.txt`)).toMatchObject({
+      type: "file",
+      size: payload.byteLength,
+    })
+    expect((yield* files.read(`${root}/note.txt`, { offset: 0, length: 5 })).bytes).toEqual(
+      new TextEncoder().encode("hello"),
+    )
+    expect(yield* files.list(root)).toEqual([{ name: "note.txt", type: "file" }])
+
+    yield* files.move(`${root}/note.txt`, `${root}/renamed.txt`)
+    expect(yield* files.list(root)).toEqual([{ name: "renamed.txt", type: "file" }])
+
+    yield* files.remove(root)
+    expect(yield* files.stat(root).pipe(Effect.flip)).toEqual(new NotFound({ path: root }))
+    expect(calls.map((call) => call.operation)).toEqual(["create", "connect"])
+  }),
+)
+
+it.effect("falls back to execDefaults over the connection spawner for unprovided overrides", () =>
+  Effect.gen(function* () {
+    const spawned: string[] = []
+    const written: Array<{ readonly path: string; readonly size: number }> = []
+    const spawner = makeSpawner((command) =>
+      Effect.sync(() => {
+        if (command._tag === "StandardCommand") {
+          spawned.push(command.args.at(3) ?? command.command)
+        }
+        return makeHandle({
+          pid: ProcessId(1),
+          exitCode: Effect.succeed(ExitCode(0)),
+          isRunning: Effect.succeed(false),
+          kill: () => Effect.void,
+          stdin: Sink.drain,
+          stdout: Stream.empty,
+          stderr: Stream.empty,
+          all: Stream.empty,
+          getInputFd: () => Sink.drain,
+          getOutputFd: () => Stream.empty,
+          unref: Effect.succeed(Effect.void),
+        })
+      }),
+    )
+    connectDriver = () =>
+      Effect.succeed({
+        spawner,
+        overrides: {
+          write: (path, bytes) =>
+            Effect.sync(() => {
+              written.push({ path, size: bytes.byteLength })
+            }),
+        },
+      })
+
+    const workspace = yield* Workspace.Service
+    const workspaceID = yield* workspace.create({ provider: "fake" })
+    const files = makeFiles(yield* workspace.connect(workspaceID))
+
+    yield* files.write("/workspace/direct.txt", new Uint8Array([1, 2, 3]))
+    expect(written).toEqual([{ path: "/workspace/direct.txt", size: 3 }])
+    expect(spawned).toEqual([])
+    expect(calls.map((call) => call.operation)).toEqual(["create", "connect"])
+
+    yield* files.mkdir("/workspace/sub")
+    yield* files.remove("/workspace/direct.txt")
+    expect(spawned).toEqual(["/workspace/sub", "/workspace/direct.txt"])
+    expect(calls.map((call) => call.operation)).toEqual(["create", "connect"])
+  }),
+)
+
+it.effect("tracks active operations and lastActivity across file overrides", () =>
+  Effect.gen(function* () {
+    const started = yield* Deferred.make<void>()
+    const release = yield* Deferred.make<void>()
+    connectDriver = () =>
+      Effect.succeed({
+        spawner: memory.spawner,
+        overrides: {
+          ...memory.overrides,
+          read: (path) =>
+            Deferred.succeed(started, undefined).pipe(
+              Effect.andThen(Deferred.await(release)),
+              Effect.as({
+                info: { type: "file" as const, size: 2, mtimeMs: 0 },
+                bytes: new Uint8Array([1, 2]),
+              }),
+            ),
+        },
+      })
+
+    const workspace = yield* Workspace.Service
+    const workspaceID = yield* workspace.create({ provider: "fake" })
+    const files = makeFiles(yield* workspace.connect(workspaceID))
+
+    const reading = yield* files.read("/workspace/in-flight.txt").pipe(Effect.forkScoped({ startImmediately: true }))
+    yield* Deferred.await(started)
+
+    yield* TestClock.adjust("6 minutes")
+    expect(calls.map((call) => call.operation)).toEqual(["create", "connect"])
+
+    yield* Deferred.succeed(release, undefined)
+    expect((yield* Fiber.join(reading)).bytes).toEqual(new Uint8Array([1, 2]))
+
+    yield* TestClock.adjust("4 minutes")
+    expect(calls.map((call) => call.operation)).toEqual(["create", "connect"])
+
+    yield* TestClock.adjust("2 minutes")
+    expect(calls.map((call) => call.operation)).toEqual(["create", "connect", "suspendForIdle"])
+
+    const stored = yield* Database.Service.use(({ db }) =>
+      db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, workspaceID)).get(),
+    ).pipe(Effect.orDie)
+    expect(stored?.last_used_at).toBe(6 * 60 * 1000)
+  }),
+)
+
+it.effect("surfaces wake failures during file overrides as Environment.Failed", () =>
+  Effect.gen(function* () {
+    const workspace = yield* Workspace.Service
+    const created = yield* workspace.provision(yield* workspace.create({ provider: "fake" }))
+    const files = makeFiles(yield* workspace.connect(created.id))
+    yield* files.mkdir("/warm")
+
+    yield* TestClock.adjust("6 minutes")
+    failConnect = true
+
+    const readError = yield* files.read("/target.txt").pipe(Effect.flip)
+    expect(readError).toEqual(
+      new Failed({
+        path: "/target.txt",
+        cause: new WorkspaceDriver.Error({ message: "wake failed" }),
+      }),
+    )
+
+    const moveError = yield* files.move("/from.txt", "/to.txt").pipe(Effect.flip)
+    expect(moveError).toEqual(
+      new Failed({
+        path: "/from.txt",
+        cause: new WorkspaceDriver.Error({ message: "wake failed" }),
+      }),
+    )
   }),
 )
