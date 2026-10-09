@@ -249,6 +249,7 @@ export const dict = {
   "zen.privacy.beforeExceptions": "所有 Zen 模型均在美國託管。供應商遵循零留存政策，不會將你的資料用於模型訓練，並且有",
   "zen.privacy.exceptionsLink": "以下例外情況",
 
+  "go.promo.step5": "新模型 Step 5 Preview Free 限時免費開放。",
   "go.title": "OpenCode Go | 低成本全民編碼模型",
   "go.meta.description": "Go 每月 $10，提供充裕的使用限額，並可穩定存取領先的編碼模型。",
   "go.hero.title": "低成本全民編碼模型",

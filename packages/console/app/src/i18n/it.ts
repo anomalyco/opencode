@@ -261,6 +261,7 @@ export const dict = {
     "Tutti i modelli Zen sono ospitati negli Stati Uniti. I provider seguono una policy di zero-retention e non usano i tuoi dati per l'addestramento dei modelli, con le",
   "zen.privacy.exceptionsLink": "seguenti eccezioni",
 
+  "go.promo.step5": "Step 5 Preview Free, un nuovo modello, è disponibile gratuitamente per un periodo limitato.",
   "go.title": "OpenCode Go | Modelli di coding a basso costo per tutti",
   "go.meta.description":
     "Go costa $10/mese, con limiti di utilizzo generosi e un accesso affidabile ai principali modelli di coding.",

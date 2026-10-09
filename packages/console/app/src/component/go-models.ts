@@ -10,15 +10,15 @@ export const goModels = [
   { id: "kimi-k2.7-code", name: "Kimi K2.7 Code", requests: 1350, allowance: 60, featured: true },
   { id: "hy4-preview", name: "Hy4 preview", requests: 1350, allowance: 30 },
   { id: "gpt-5.6-luna", name: "GPT 5.6 Luna", requests: 2050, allowance: 15 },
-  { id: "space-bunny", name: "Space Bunny", requests: 3130, allowance: 30, featured: true, fresh: true },
+  { id: "space-bunny", name: "Space Bunny", requests: 3130, allowance: 30, featured: true },
   { id: "minimax-m3", name: "MiniMax M3", requests: 3200, allowance: 60, featured: true },
-  { id: "mimo-v2.6-pro", name: "MiMo-V2.6-Pro", requests: 3250, allowance: 15, fresh: true },
+  { id: "mimo-v2.6-pro", name: "MiMo-V2.6-Pro", requests: 3250, allowance: 15 },
   { id: "mimo-v2.5-pro", name: "MiMo-V2.5-Pro", requests: 3250, allowance: 15 },
   { id: "minimax-m2.7", name: "MiniMax M2.7", requests: 3400, allowance: 60 },
   { id: "claude-haiku-5-5", name: "Claude Haiku 5.5", requests: 3850, allowance: 15, featured: true, fresh: true },
   { id: "deepseek-v4-flash-vision-exp", name: "DeepSeek V4 Flash Vision Exp", requests: 6500, allowance: 15 },
   { id: "qwen3.7-plus", name: "Qwen3.7 Plus", requests: 4300, allowance: 60, featured: true },
-  { id: "gpt-6-luna", name: "GPT 6 Luna", requests: 4230, allowance: 15, featured: true, fresh: true },
+  { id: "gpt-6-luna", name: "GPT 6 Luna", requests: 4230, allowance: 15, featured: true },
   { id: "hy3", name: "Hy3", requests: 4300, allowance: 60 },
   { id: "qwen3.8-flash", name: "Qwen3.8 Flash", requests: 5400, allowance: 30 },
   { id: "glm-5.3-flash", name: "GLM-5.3-Flash", requests: 6320, allowance: 60, featured: true },
@@ -28,7 +28,6 @@ export const goModels = [
     requests: 26000,
     allowance: 60,
     featured: true,
-    fresh: true,
   },
   { id: "longcat-2.0", name: "LongCat-2.0", requests: 11400, allowance: 60 },
   { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash", requests: 13000, allowance: 30 },
@@ -38,7 +37,6 @@ export const goModels = [
     requests: 30100,
     allowance: 60,
     featured: true,
-    fresh: true,
   },
   { id: "mimo-v2.5", name: "MiMo-V2.5", requests: 30100, allowance: 60 },
   {
@@ -59,6 +57,14 @@ export const goModels = [
   {
     id: "longcat-2.5-preview-free",
     name: "LongCat 2.5 Preview Free",
+    requests: Infinity,
+    allowance: Infinity,
+    featured: true,
+    limitedTime: true,
+  },
+  {
+    id: "step-5-preview-free",
+    name: "Step 5 Preview Free",
     requests: Infinity,
     allowance: Infinity,
     featured: true,
@@ -99,6 +105,7 @@ const plusLimits: Record<string, [number, number]> = {
   "muse-spark-1.3-contributor": [90600, 120],
   "muse-spark-1.2-contributor": [90600, 120],
   "longcat-2.5-preview-free": [Infinity, Infinity],
+  "step-5-preview-free": [Infinity, Infinity],
 }
 
 export const goPlanModels = goModels.map((model) => ({

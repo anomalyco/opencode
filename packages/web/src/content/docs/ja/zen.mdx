@@ -83,6 +83,7 @@ OpenCode Zen は、OpenCode のほかのプロバイダーと同じように動�
 | Claude Opus 4.7                 | claude-opus-4-7                 | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
 | Claude Opus 4.6                 | claude-opus-4-6                 | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
 | Claude Opus 4.5                 | claude-opus-4-5                 | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
+| Claude Sonnet 5.5               | claude-sonnet-5-5               | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
 | Claude Sonnet 5                 | claude-sonnet-5                 | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
 | Claude Sonnet 4.6               | claude-sonnet-4-6               | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
 | Claude Sonnet 4.5               | claude-sonnet-4-5               | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
@@ -129,8 +130,8 @@ OpenCode Zen は、OpenCode のほかのプロバイダーと同じように動�
 | Big Pickle                      | big-pickle                      | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | Space Bunny Free                | space-bunny-free                | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | LongCat 2.5 Preview Free        | longcat-2.5-preview-free        | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Step 5 Preview Free             | step-5-preview-free             | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | Exo Free                        | exo-free                        | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
-| Fledge Alpha Free               | fledge-alpha-free               | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | MiMo-V2.6-Flash Free            | mimo-v2.6-flash-free            | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | MiMo-V2.5 Free                  | mimo-v2.5-free                  | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | Ling 3.1 Flash Free             | ling-3.1-flash-free             | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
@@ -216,8 +217,8 @@ curl https://opencode.ai/zen/v1/systemone \
 | Big Pickle                        | Free            | Free            | Free            | -            |
 | Space Bunny Free                  | Free            | Free            | Free            | -            |
 | LongCat 2.5 Preview Free          | Free            | Free            | Free            | -            |
+| Step 5 Preview Free               | Free            | Free            | Free            | -            |
 | Exo Free                          | Free            | Free            | Free            | -            |
-| Fledge Alpha Free                 | Free            | Free            | Free            | -            |
 | MiMo-V2.6-Flash Free              | Free            | Free            | Free            | -            |
 | MiMo-V2.5 Free                    | Free            | Free            | Free            | -            |
 | Ling 3.1 Flash Free               | Free            | Free            | Free            | -            |
@@ -258,6 +259,7 @@ curl https://opencode.ai/zen/v1/systemone \
 | Claude Opus 4.7                   | $5.00           | $25.00          | $0.50           | $6.25        |
 | Claude Opus 4.6                   | $5.00           | $25.00          | $0.50           | $6.25        |
 | Claude Opus 4.5                   | $5.00           | $25.00          | $0.50           | $6.25        |
+| Claude Sonnet 5.5                 | $2.00           | $10.00          | $0.20           | $2.50        |
 | Claude Sonnet 5                   | $2.00           | $10.00          | $0.20           | $2.50        |
 | Claude Sonnet 4.6                 | $3.00           | $15.00          | $0.30           | $3.75        |
 | Claude Sonnet 4.5 (≤ 200K tokens) | $3.00           | $15.00          | $0.30           | $3.75        |
@@ -327,7 +329,6 @@ curl https://opencode.ai/zen/v1/systemone \
 無料モデル:
 
 - Exo Free は期間限定で OpenCode で利用できます。チームはこの期間中にフィードバックを集め、モデルを改善しています。
-- Fledge Alpha Free は期間限定で OpenCode で利用できます。チームはこの期間中にフィードバックを集め、モデルを改善しています。
 - MiMo-V2.6-Flash Free は期間限定で OpenCode で利用できます。チームはこの期間中にフィードバックを集め、モデルを改善しています。
 - MiMo-V2.5 Free は期間限定で OpenCode で利用できます。チームはこの期間中にフィードバックを集め、モデルを改善しています。
 - Ling 3.1 Flash Free は期間限定で OpenCode で利用できます。チームはこの期間中にフィードバックを集め、モデルを改善しています。
@@ -337,6 +338,7 @@ curl https://opencode.ai/zen/v1/systemone \
 - Big Pickle はステルスモデルで、期間限定で OpenCode で無料提供されています。チームはこの期間中にフィードバックを集め、モデルを改善しています。
 - Space Bunny Free はステルスモデルで、期間限定で OpenCode で無料提供されています。プロバイダーはゼロ保持ポリシーに従い、データをモデルのトレーニングに使用しません。
 - LongCat 2.5 Preview Free は期間限定で OpenCode で無料提供されています。プロバイダーはゼロ保持ポリシーに従い、データをモデルのトレーニングに使用しません。
+- Step 5 Preview Free は期間限定で OpenCode で無料提供されています。プロバイダーはゼロ保持ポリシーに従い、データをモデルのトレーニングに使用しません。
 - Muse Spark 1.3 Contributor Free は期間限定で OpenCode で利用できます。チームはこの期間を活用してフィードバックを収集し、モデルを改善しています。
 - Jev 1.13 Free は期間限定で OpenCode で利用できます。
 
@@ -391,7 +393,6 @@ curl https://opencode.ai/zen/v1/systemone \
 
 - Big Pickle: 無料提供期間中、収集されたデータがモデル改善に使われる場合があります。
 - Exo Free: 無料提供期間中、収集されたデータがモデル改善に使われる場合があります。
-- Fledge Alpha Free: 無料提供期間中、収集されたデータがモデル改善に使われる場合があります。
 - MiMo-V2.6-Flash Free: 無料提供期間中、収集されたデータがモデル改善に使われる場合があります。
 - MiMo-V2.5 Free: 無料提供期間中、収集されたデータがモデル改善に使われる場合があります。
 - Ling 3.1 Flash Free: 無料提供期間中、収集されたデータがモデル改善に使われる場合があります。
