@@ -1533,16 +1533,6 @@ function isSafeOutputPath(path: string) {
   return path !== manifestName && !isAbsolute(path) && path !== "." && path !== ".." && !/[\\/]/.test(path)
 }
 
-export function generate<Id extends string, Groups extends HttpApiGroup.Constraint>(
-  api: HttpApi.HttpApi<Id, Groups>,
-  options: { readonly directory: string },
-): Effect.Effect<void, GenerationError | PlatformError.PlatformError, FileSystem.FileSystem> {
-  return Effect.try({
-    try: () => emitEffect(compile(api)),
-    catch: (error) => (error instanceof GenerationError ? error : new GenerationError({ reason: String(error) })),
-  }).pipe(Effect.flatMap((output) => write(output, options.directory)))
-}
-
 function isFlattenableStruct(schema: Schema.Top) {
   const ast = Schema.toType(schema).ast
   return SchemaAST.isObjects(ast) && ast.indexSignatures.length === 0
