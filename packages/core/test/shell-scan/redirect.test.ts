@@ -113,12 +113,18 @@ describe("Bash redirect resource oracle", () => {
       legacy.commands.map((command) => command.resource),
     )
     expect(result.commands[1]?.rawWords).toEqual(["cat"])
-    expect(legacy.commands[1]).toEqual({ resource: "cat", save: "cat *" })
+    expect(legacy.commands).toEqual([
+      { resource: "pwd", save: "pwd *" },
+      { resource: "cat", save: "cat *" },
+    ])
     const native = await Effect.runPromise(ShellParse.scanPortable(source, "/bin/bash", "/workspace"))
     expect(native).toEqual(legacy)
-    expect(
-      native.commands.every((command) => command.save === undefined || Wildcard.match(command.resource, command.save)),
-    ).toBe(true)
+    for (const command of native.commands) {
+      // Both pipeline commands must propose a usable approval, so an omitted proposal fails here.
+      expect(typeof command.save, command.resource).toBe("string")
+      if (command.save !== undefined)
+        expect(Wildcard.match(command.resource, command.save), command.resource).toBe(true)
+    }
   })
 
   test.each(["cat\\\n", "cat \\\n", "cat\\\n\\\n", "cat\\\n;", "cat >out\\\n", "cat >out \\\n"])(

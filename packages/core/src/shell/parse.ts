@@ -313,8 +313,9 @@ function crossesStatementBoundary(span: Node, end: number) {
   return /[;&|\r\n]/.test(span.text.slice(start - span.startIndex, end - span.startIndex))
 }
 
-// The reusable approval keeps the literal source before the executable. Without assignments that source is the
-// bare command; with them a statement boundary ends the head, and a head Wildcard cannot match is left unsaved.
+// The reusable approval keeps the literal source before the executable. Only an assignment-prefixed command
+// preserves that head verbatim; without assignments the proposal stays the inherited bare-command
+// normalization, so leading redirects remain resource text that no proposal covers.
 function savedPrefix(span: Node, node: Node, resource: string, tokens: string[]) {
   const executable = node.childForFieldName("name")
   if (!executable || executable.text === "") return undefined

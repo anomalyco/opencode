@@ -204,7 +204,7 @@ describe("ShellParse", () => {
     ["A=x <<<';' printf ok; git status", "A=x <<<';' printf ok", "A=x <<<';' printf *"],
     ["A=x <<<';' printf ok && git status", "A=x <<<';' printf ok", "A=x <<<';' printf *"],
   ] as const)(
-    "keeps a quoted here-string separator out of the head without covering the next statement: %s",
+    "keeps quoted here-string content in the head while leaving the next statement outside the grant: %s",
     async (command, resource, save) => {
       for (const portable of [false, true]) {
         expect(

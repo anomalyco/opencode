@@ -28,14 +28,13 @@ describe("native shell syntax compatibility", () => {
   ])("PowerShell scriptblock callers preserve permission resources and usable approvals: %s", async (command) => {
     const legacy = await Effect.runPromise(ShellParse.scan(command, "pwsh", "/workspace"))
     const native = await Effect.runPromise(ShellParse.scan(command, "pwsh", "/workspace", { portable: true }))
+    expect(native.commands.length, command).toBeGreaterThan(0)
     expect(native.commands.map((item) => item.resource)).toEqual(legacy.commands.map((item) => item.resource))
-    expect(
-      native.commands.map((item) => item.save),
-      command,
-    ).toEqual(native.commands.map(() => expect.any(String)))
     for (const item of native.commands) {
-      if (item.save === undefined) continue
-      expect(Wildcard.match(item.resource, item.save), item.resource).toBe(true)
+      // Every scriptblock command must reach a usable approval, so a missing proposal fails here.
+      expect(typeof item.save, item.resource).toBe("string")
+      // Absence already failed above; this only narrows the type for the matcher.
+      if (item.save !== undefined) expect(Wildcard.match(item.resource, item.save), item.resource).toBe(true)
     }
   })
 
