@@ -3,7 +3,7 @@ import { onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/runtime/i18n/language"
 
-/** Edits an account label in place: Enter saves, Escape or leaving the field cancels. */
+/** Edits an account label in place, styled like the session title editor: Enter saves, Escape or leaving cancels. */
 export function AccountNameInput(props: {
   value: string
   class?: string
@@ -40,8 +40,8 @@ export function AccountNameInput(props: {
       dir="auto"
       value={store.draft}
       disabled={store.saving}
-      class={props.class}
-      style={{ "--inline-input-shadow": "0 0 0 1px var(--v2-border-border-focus)" }}
+      class={`field-sizing-content rounded-[6px] px-1 py-1 ${props.class ?? ""}`}
+      style={{ "--inline-input-shadow": "none", "text-align": "start" }}
       onInput={(event) => setStore("draft", event.currentTarget.value)}
       onKeyDown={(event) => {
         event.stopPropagation()

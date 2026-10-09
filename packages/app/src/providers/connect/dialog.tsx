@@ -1279,7 +1279,7 @@ function ProviderConnection(props: {
                         <div class="flex min-h-9 min-w-0 flex-1 items-center px-3">
                           <AccountNameInput
                             value={account.label}
-                            class="-mx-1 h-7 w-full px-1 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base"
+                            class="-ms-1 max-w-full text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base"
                             onSave={(label) => renameAccount(account, label)}
                             onClose={() => setState("renaming", undefined)}
                           />

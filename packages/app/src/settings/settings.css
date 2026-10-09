@@ -1050,15 +1050,11 @@
 }
 
 .settings-provider-account-input {
-  flex-shrink: 0;
-  width: min(180px, 45%);
-  height: 28px;
-  padding: 0 8px;
+  max-width: min(240px, 45%);
   font-size: 13px;
   font-weight: 440;
   line-height: 20px;
   color: var(--v2-text-text-base);
-  text-align: start;
 }
 
 .settings-provider-account-menu[data-component="menu-v2-content"] {
