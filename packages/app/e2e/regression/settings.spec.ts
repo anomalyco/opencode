@@ -859,7 +859,7 @@ test("providers: the connect dialog lists connected providers and manages their 
 
   // Renaming edits the name in place; Enter saves it.
   await list.getByRole("button", { name: "Personal options", exact: true }).click()
-  await page.getByRole("menuitem", { name: "Rename account…", exact: true }).click()
+  await page.getByRole("menuitem", { name: "Rename account", exact: true }).click()
   const name = list.getByRole("textbox", { name: "Account name", exact: true })
   await expect(name).toBeFocused()
   await expect(name).toHaveValue("Personal")
@@ -905,7 +905,7 @@ test("providers: renames the active account inline from its menu", async ({ page
   const trigger = settings.getByRole("button", { name: "Manage OpenAI accounts", exact: true })
   await expect(trigger).toHaveText("Work")
   await trigger.click()
-  await page.getByRole("menuitem", { name: "Rename account…", exact: true }).click()
+  await page.getByRole("menuitem", { name: "Rename account", exact: true }).click()
   const name = settings.getByRole("textbox", { name: "Account name", exact: true })
   await expect(name).toBeFocused()
   await name.fill("Team")
@@ -915,7 +915,7 @@ test("providers: renames the active account inline from its menu", async ({ page
 
   // Escape keeps the current name.
   await trigger.click()
-  await page.getByRole("menuitem", { name: "Rename account…", exact: true }).click()
+  await page.getByRole("menuitem", { name: "Rename account", exact: true }).click()
   await name.fill("Ignored")
   await name.press("Escape")
   await expect(trigger).toHaveText("Team")
