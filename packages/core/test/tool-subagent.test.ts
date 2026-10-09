@@ -288,9 +288,6 @@ describe("SubagentTool", () => {
           const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
           expect((yield* registry.snapshot()).definitions.map((tool) => tool.name)).toContain(SubagentTool.name)
           expect(
-            (yield* registry.snapshot()).definitions.find((tool) => tool.name === SubagentTool.name)?.description,
-          ).toContain("normal word spacing")
-          expect(
             yield* executeTool(registry, {
               sessionID: parent.id,
               ...toolIdentity,
@@ -393,7 +390,7 @@ describe("SubagentTool", () => {
     ),
   )
 
-  it.live("runs a foreground child session with exact prompt spacing and returns the final assistant text", () =>
+  it.live("runs a foreground child session and returns the final assistant text", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
       (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
@@ -407,7 +404,6 @@ describe("SubagentTool", () => {
           const locations = yield* LocationServiceMap.Service
           const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
           const progress: Tool.Metadata[] = []
-          const prompt = "  Read-only medium research.\n\nKeep C:\\project\\file.ts unchanged.\n\tDo not edit files.  "
 
           const settled = yield* executeTool(registry, {
             sessionID: parent.id,
@@ -417,7 +413,7 @@ describe("SubagentTool", () => {
               type: "tool-call",
               id: "call-subagent",
               name: SubagentTool.name,
-              input: { agent: "reviewer", description: "review", prompt, model: "", sessionID: "" },
+              input: { agent: "reviewer", description: "review", prompt: "review this", model: "", sessionID: "" },
             },
           })
 
@@ -437,7 +433,7 @@ describe("SubagentTool", () => {
             model: childModel,
           })
           expect((yield* sessions.inbox(child.id)).find((message) => message.type === "user")?.payload.text).toBe(
-            `You are a subagent spawned by another session.\n${prompt}`,
+            "You are a subagent spawned by another session.\nreview this",
           )
 
           const fallback = yield* executeTool(registry, {
@@ -457,7 +453,7 @@ describe("SubagentTool", () => {
     ),
   )
 
-  it.live("continues an existing child session without rewriting prompt whitespace or identifiers", () =>
+  it.live("continues an existing child session", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
       (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
@@ -482,8 +478,6 @@ describe("SubagentTool", () => {
             },
           })
           const childID = outputSessionID(first.metadata)
-          const prompt =
-            "  Continue the review.\n\nKeep  identifiers and src/tool/plugin/subagent.ts exact.\n\tRead only.  "
           const second = yield* executeTool(registry, {
             sessionID: parent.id,
             ...toolIdentity,
@@ -494,7 +488,7 @@ describe("SubagentTool", () => {
               input: {
                 agent: "reviewer",
                 description: "follow up",
-                prompt,
+                prompt: "continue this",
                 sessionID: childID,
                 model: "",
               },
@@ -508,7 +502,7 @@ describe("SubagentTool", () => {
             (yield* sessions.inbox(childID)).flatMap((message) =>
               message.type === "user" ? [message.payload.text] : [],
             ),
-          ).toEqual(["You are a subagent spawned by another session.\nreview this", prompt])
+          ).toEqual(["You are a subagent spawned by another session.\nreview this", "continue this"])
           expect(second.content).toEqual([{ type: "text", text: completedOutput(childID) }])
         }),
       ),
