@@ -58,6 +58,7 @@ function SelectorStory(props: { plan: boolean }) {
             {models.find((model) => model.id === current())?.name}
           </Button>
         )}
+        all={() => models}
         models={(search) => models.filter((model) => model.name.toLowerCase().includes(search.toLowerCase()))}
         groups={(items) => [{ category: "openai", items }]}
         current={`openai:${current()}`}

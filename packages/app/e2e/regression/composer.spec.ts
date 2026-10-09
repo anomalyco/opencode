@@ -292,6 +292,57 @@ for (const row of [
   })
 }
 
+test("marks a Console provider with its workspace only when it is also connected directly", async ({ page }) => {
+  const model = (id: string, name: string) => ({ [id]: { id, name, limit: { context: 200_000 } } })
+
+  const managed = (id: string, canonical: string, name: string, models: ReturnType<typeof model>) => ({
+    id,
+    canonical,
+    integrationID: "opencode",
+    name: `Anomaly / ${name}`,
+    models,
+  })
+
+  await openSession(page, {
+    name: "ComposerConsoleProviders",
+    provider: {
+      all: [
+        managed("opencode", "opencode", "OpenCode", model("console-model", "Console Model")),
+        managed("console-google", "google", "Google", model("managed-gemini", "Managed Gemini")),
+        managed("console-openai", "openai", "OpenAI", model("managed-gpt", "Managed GPT")),
+        { id: "google", canonical: "google", name: "Google", models: model("direct-gemini", "Direct Gemini") },
+      ],
+      connected: ["opencode", "console-google", "console-openai", "google"],
+      default: { providerID: "opencode", modelID: "console-model" },
+    },
+    seed: {
+      storage: {
+        "opencode.global.dat:model": {
+          user: [
+            ["opencode", "console-model"],
+            ["console-google", "managed-gemini"],
+            ["console-openai", "managed-gpt"],
+            ["google", "direct-gemini"],
+          ].map(([providerID, modelID]) => ({ providerID, modelID, visibility: "show" })),
+          recent: [],
+          variant: {},
+        },
+      },
+    },
+  })
+
+  await page.locator('[data-component="composer"] [data-action="composer-model"]').click()
+  const menu = page.getByRole("menu")
+  await expect(menu.getByRole("menuitemradio", { name: "Direct Gemini", exact: true })).toBeVisible()
+  const headings = menu.locator('[data-slot="menu-v2-group-label"]')
+  await expect(headings).toHaveCount(4)
+  await expect(headings.filter({ hasText: /^GoogleAnomaly$/ })).toHaveCount(1)
+  await expect(headings.filter({ hasText: /^Google$/ })).toHaveCount(1)
+  await expect(headings.filter({ hasText: /^OpenAI$/ })).toHaveCount(1)
+  await expect(headings.filter({ hasText: /^OpenCode$/ })).toHaveCount(1)
+  await expect(menu.getByText(/Anomaly \//)).toHaveCount(0)
+})
+
 test("shows thinking on hover or a non-default selection while preserving keyboard access", async ({ page }) => {
   const { editor: input } = await openSession(page, {
     name: "ComposerThinking",

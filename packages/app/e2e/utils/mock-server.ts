@@ -1398,6 +1398,8 @@ function currentProviders(catalog: MockProviderCatalog) {
     .map((provider) => ({
       id: provider.id,
       name: provider.name,
+      canonical: provider.canonical,
+      integrationID: provider.integrationID,
       package: provider.id,
       activation: connected.has(provider.id) ? "enabled" : "auto",
     }))
@@ -1529,7 +1531,14 @@ const decodePromptPayload = Schema.decodeUnknownOption(
   }),
 )
 
-const decodeProvider = Schema.decodeUnknownOption(Schema.Struct({ id: Schema.String, name: Schema.String }))
+const decodeProvider = Schema.decodeUnknownOption(
+  Schema.Struct({
+    id: Schema.String,
+    name: Schema.String,
+    canonical: lenient(Schema.String),
+    integrationID: lenient(Schema.String),
+  }),
+)
 
 const decodeModelProvider = Schema.decodeUnknownOption(
   Schema.Struct({ id: Schema.String, models: Schema.Record(Schema.String, Schema.Unknown) }),
