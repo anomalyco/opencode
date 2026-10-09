@@ -306,6 +306,7 @@ export const ChatGPTPlugin = define({
       for (const model of models.list(providerID)) {
         models.update(model.providerID, model.id, (draft) => {
           if (!chatgpt) return
+          draft.compatibility = { ...draft.compatibility, supportsEffortUpdates: false }
           // Token sharing does not support native /responses/compact.
           draft.settings = { ...draft.settings, compaction: { type: "summary" } }
           if (Schema.is(Schema.Struct({ mode: Schema.Literal("pro") }))(draft.body?.reasoning)) {
