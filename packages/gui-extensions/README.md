@@ -220,7 +220,7 @@ SDK icon fields use `IconName` from `@opencode/ui/icons/catalog`, a dependency-f
 | [`Panel`](src/sdk/registries.ts)        | window  | Tabs in the session's side region, or the dock                                              |
 | [`SettingsPage`](src/sdk/registries.ts) | window  | A settings page, a section on a host page, or rows in a host section                        |
 | [`Server`](src/sdk/registries.ts)       | window  | A source of servers, such as SSH hosts                                                      |
-| [`LinkHandler`](src/sdk/registries.ts)  | window  | Opens local links, such as file paths in messages                                           |
+| [`LinkHandler`](src/sdk/registries.ts)  | window  | Opens local links, such as file paths in messages, and says whether their target exists     |
 | [`TitlebarItem`](src/sdk/registries.ts) | window  | A titlebar pill, or the dev channel badge as a toggle                                       |
 | [`Slot`](src/sdk/registries.ts)         | window  | Content for `window.bottom`, `session.header`, `session.panel.end`, `session.panel.sidebar` |
 | [`Style`](src/sdk/registries.ts)        | window  | CSS imported with `?inline`                                                                 |
@@ -237,7 +237,7 @@ SDK icon fields use `IconName` from `@opencode/ui/icons/catalog`, a dependency-f
 | `ctx.system`                 | `System`                                                       | Clipboard, saving files, `openExternal`                           |
 | `ctx.desktop`                | `Desktop \| undefined`                                         | Desktop-only: reveal, launch, installed, zoom, forceFocus         |
 | `ctx.dialogs`                | `Dialogs`                                                      | `open` returns a handle to close; a dialog closes with its owner  |
-| `ctx.links`                  | `Links`                                                        | Routes a local link to the best `LinkHandler`                     |
+| `ctx.links`                  | `Links`                                                        | Opens a local link, or checks it exists, with the best handler    |
 | `ctx.embeds`                 | `Embeds`                                                       | Shows a web page the main entry created                           |
 | `ctx.build`                  | `Build`                                                        | Version, channel, platform, packaged                              |
 | `ctx.locale`                 | `Locale`                                                       | Locale and writing direction                                      |

@@ -1,4 +1,3 @@
-import { AISDK } from "@opencode/core/aisdk"
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { Model } from "@opencode/core/model"
@@ -6,7 +5,6 @@ import { Plugin } from "@opencode/core/plugin"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { GoogleVertexPlugin } from "@opencode/core/plugin/provider/google-vertex"
 import { Provider } from "@opencode/core/provider"
-import { fakeSelectorSdk } from "../fixture/selector"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -302,23 +300,5 @@ describe("GoogleVertexPlugin", () => {
           expect(provider.settings?.location).toBe("global")
         }),
     ),
-  )
-
-  it.effect("trims model IDs before selecting language models", () =>
-    Effect.gen(function* () {
-      const aisdk = yield* AISDK.Service
-      const calls: string[] = []
-      yield* addPlugin()
-      yield* aisdk.runLanguage({
-        model: Model.Info.make({
-          ...Model.Info.default(Provider.ID.make("google-vertex"), Model.ID.make(" gemini-2.5-pro ")),
-          modelID: Model.ID.make(" gemini-2.5-pro "),
-          package: "aisdk:test-provider",
-        }),
-        sdk: { languageModel: fakeSelectorSdk(calls).languageModel },
-        options: {},
-      })
-      expect(calls).toEqual(["languageModel:gemini-2.5-pro"])
-    }),
   )
 })

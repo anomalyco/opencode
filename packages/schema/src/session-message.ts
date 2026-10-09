@@ -290,6 +290,7 @@ export const Idle = Schema.Struct({
   ...Base,
   type: Schema.tag("idle"),
   outcome: Schema.Literals(["succeeded", "failed", "interrupted"]),
+  error: SessionError.Error.pipe(optional),
 }).annotate({ identifier: "Session.Message.Idle" })
 
 export const Info = Schema.Union([

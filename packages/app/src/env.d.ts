@@ -28,5 +28,10 @@ export declare module "solid-js" {
     interface Directives {
       sortable: true
     }
+
+    // The Element Timing attribute, which Solid's DOM types do not list.
+    interface ImgHTMLAttributes<T> {
+      elementtiming?: string
+    }
   }
 }
