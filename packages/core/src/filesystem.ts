@@ -186,24 +186,28 @@ const baseLayer = Layer.effect(
           ),
         )
         if (info.type !== "Directory") return yield* missing
-        return yield* fs.readDirectoryEntries(directory).pipe(
-          Effect.orDie,
-          Effect.map((items) =>
-            items
-              .flatMap((item) => {
-                if (item.type !== "file" && item.type !== "directory") return []
-                const absolute = path.join(directory, item.name)
-                const relative = path.relative(location.directory, absolute) || "."
-                return [
-                  Entry.make({
-                    path: RelativePath.make(relative + (item.type === "directory" ? path.sep : "")),
-                    type: item.type,
-                  }),
-                ]
-              })
-              .sort((a, b) => (a.type === b.type ? a.path.localeCompare(b.path) : a.type === "directory" ? -1 : 1)),
-          ),
+        const entries = yield* Effect.forEach(
+          yield* fs.readDirectoryEntries(directory).pipe(Effect.orDie),
+          Effect.fnUntraced(function* (item) {
+            const absolute = path.join(directory, item.name)
+            const type =
+              item.type === "symlink"
+                ? yield* fs.stat(absolute).pipe(
+                    Effect.map((target) =>
+                      target.type === "Directory" ? "directory" : target.type === "File" ? "file" : undefined,
+                    ),
+                    Effect.orElseSucceed(() => undefined),
+                  )
+                : item.type
+            if (type !== "file" && type !== "directory") return []
+            const relative = path.relative(location.directory, absolute) || "."
+            return [Entry.make({ path: RelativePath.make(relative + (type === "directory" ? path.sep : "")), type })]
+          }),
+          { concurrency: "unbounded" },
         )
+        return entries
+          .flat()
+          .sort((a, b) => (a.type === b.type ? a.path.localeCompare(b.path) : a.type === "directory" ? -1 : 1))
       }),
       // Unlike read, write reaches outside the location so clients can stage files in the
       // server tmp directory, which the model is already told to prefer and permitted to access.
