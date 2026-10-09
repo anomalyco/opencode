@@ -1305,7 +1305,11 @@
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
+}
+
+.provider-model-group[data-expanded]:not(:last-child) {
+  margin-block-end: 4px;
 }
 
 .settings-models-console-groups {
