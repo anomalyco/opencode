@@ -1,6 +1,6 @@
 import { createMemo, createSignal, Match, Show, Switch } from "solid-js"
 import { useLanguage } from "../../context/language"
-import { RGBA, TextAttributes } from "@opentui/core"
+import { RGBA, TextAttributes, type MouseEvent } from "@opentui/core"
 import type { JSX } from "@opentui/solid"
 import type {
   SessionMessageAssistant,
@@ -218,7 +218,7 @@ export function InlineToolRow(props: {
   children: JSX.Element
   onMouseOver?: () => void
   onMouseOut?: () => void
-  onMouseUp?: () => void
+  onMouseUp?: (event: MouseEvent) => void
 }) {
   return (
     <box paddingLeft={3} onMouseOver={props.onMouseOver} onMouseOut={props.onMouseOut} onMouseUp={props.onMouseUp}>

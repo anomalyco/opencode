@@ -48,6 +48,18 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
   canvas.width = canvas.height = 1
   const paint = canvas.getContext("2d", { willReadFrequently: true })
 
+  // Let the browser resolve colors, including custom themes using color formats
+  // that Electron's color parser cannot read.
+  const resolve = (color: string) => {
+    if (!paint) return undefined
+    paint.clearRect(0, 0, 1, 1)
+    paint.fillStyle = color
+    paint.fillRect(0, 0, 1, 1)
+    const data = paint.getImageData(0, 0, 1, 1).data
+
+    return [data[0], data[1], data[2], data[3]] as const
+  }
+
   const hide = () => {
     if (placed) props.bridge.embed(placed)
     placed = undefined
@@ -135,20 +147,16 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
       props.background ??
       getComputedStyle(element.closest(".bg-v2-background-bg-deep") ?? document.documentElement).backgroundColor
 
-    const next = `${id}:${visible}:${left}:${top}:${right}:${bottom}:${color}:${window.devicePixelRatio}`
+    const ring = props.radius ? cardRing(element) : undefined
+    const viewport = { width: Math.round(window.innerWidth * zoom), height: Math.round(window.innerHeight * zoom) }
+
+    const next = `${id}:${visible}:${left}:${top}:${right}:${bottom}:${viewport.width}:${viewport.height}:${color}:${ring?.color}:${ring?.width}:${window.devicePixelRatio}`
 
     if (next === layout) return
     layout = next
 
-    // Let the browser resolve the color, including custom themes using color formats
-    // that Electron's color parser cannot read.
-    if (paint) {
-      paint.clearRect(0, 0, 1, 1)
-      paint.fillStyle = color
-      paint.fillRect(0, 0, 1, 1)
-    }
-
-    const rgba = paint?.getImageData(0, 0, 1, 1).data
+    const background = resolve(color)
+    const border = ring && resolve(ring.color)
 
     if (placed !== id) hide()
     placed = id
@@ -156,10 +164,16 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
     const box = {
       visible,
       bounds: { x: left, y: top, width: Math.max(0, right - left), height: Math.max(0, bottom - top) },
+      viewport,
       radius: Math.round((props.radius ?? 0) * zoom),
     }
 
-    props.bridge.embed(id, rgba ? { ...box, background: [rgba[0], rgba[1], rgba[2], rgba[3]] as const } : box)
+    const backed = background ? { ...box, background } : box
+
+    props.bridge.embed(
+      id,
+      ring && border && border[3] > 0 ? { ...backed, border: { color: border, width: ring.width * zoom } } : backed,
+    )
   }
 
   const tick = () => {
@@ -240,4 +254,24 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
       {props.children}
     </div>
   )
+}
+
+// The hairline ring (a zero-offset, zero-blur, spread-only shadow) of the nearest card around the box.
+// The corner masks sit where it curves, so they redraw it.
+function cardRing(element: HTMLElement) {
+  for (let node = element.parentElement; node; node = node.parentElement) {
+    const shadow = getComputedStyle(node).boxShadow
+
+    if (shadow === "none") continue
+
+    return shadow
+      .split(/,(?![^(]*\))/)
+      .map((layer) => layer.trim().match(/^(.+?)\s+(-?[\d.]+)px\s+(-?[\d.]+)px\s+([\d.]+)px\s+([\d.]+)px$/))
+      .flatMap((match) =>
+        match && +match[2] === 0 && +match[3] === 0 && +match[4] === 0 && +match[5] > 0
+          ? [{ color: match[1], width: +match[5] }]
+          : [],
+      )
+      .at(0)
+  }
 }
