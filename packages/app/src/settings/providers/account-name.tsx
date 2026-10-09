@@ -43,6 +43,8 @@ export function AccountNameInput(props: {
       class={`field-sizing-content rounded-[6px] px-1 py-1 ${props.class ?? ""}`}
       style={{ "--inline-input-shadow": "none", "text-align": "start" }}
       onInput={(event) => setStore("draft", event.currentTarget.value)}
+      // Escape cancels the rename instead of closing an enclosing dialog.
+      data-owns-escape
       onKeyDown={(event) => {
         event.stopPropagation()
 
