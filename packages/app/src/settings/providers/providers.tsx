@@ -442,32 +442,12 @@ export const SettingsProviders: Component<{
             <Menu.Item disabled={state.credentialID !== undefined} onSelect={() => connect(menuProps.provider.id)}>
               {language.t("settings.providers.account.add")}
             </Menu.Item>
-            <Show
-              when={accounts().length > 1}
-              fallback={
-                <Menu.Item
-                  disabled={state.credentialID !== undefined || accounts().length === 0}
-                  onSelect={() => setState("renaming", accounts()[0]?.id)}
-                >
-                  {language.t("settings.providers.account.rename")}
-                </Menu.Item>
-              }
+            <Menu.Item
+              disabled={state.credentialID !== undefined || !active()}
+              onSelect={() => setState("renaming", active()?.id)}
             >
-              <Menu.Sub placement="left-start">
-                <Menu.SubTrigger disabled={state.credentialID !== undefined}>
-                  {language.t("settings.providers.account.rename")}
-                </Menu.SubTrigger>
-                <Menu.SubContent class="settings-provider-account-submenu">
-                  <For each={accounts()}>
-                    {(account) => (
-                      <Menu.Item onSelect={() => setState("renaming", account.id)}>
-                        <span class="settings-provider-account-label">{account.label}</span>
-                      </Menu.Item>
-                    )}
-                  </For>
-                </Menu.SubContent>
-              </Menu.Sub>
-            </Show>
+              {language.t("settings.providers.account.rename")}
+            </Menu.Item>
             <Show
               when={accounts().length > 1}
               fallback={
@@ -479,7 +459,7 @@ export const SettingsProviders: Component<{
                     if (account) void remove(menuProps.provider, name(), account)
                   }}
                 >
-                  {language.t("settings.providers.account.removeSingle")}
+                  {language.t("settings.providers.account.remove")}
                 </Menu.Item>
               }
             >
