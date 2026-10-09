@@ -86,7 +86,7 @@
 }
 
 [data-titlebar-tab-list] {
-  gap: 6px;
+  gap: 5px;
 }
 
 [data-titlebar-tab-list][data-orientation="vertical"] {
