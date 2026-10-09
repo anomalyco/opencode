@@ -107,6 +107,8 @@ export interface MockServerConfig {
   // Starts an OAuth attempt (POST .../connect/oauth) and returns its authorization URL; the attempt then stays pending.
   // Without it, OAuth connects answer 501 MockUnsupported.
   onIntegrationOAuth?: (input: { integrationID: string; directory: string; body: unknown }) => { url: string }
+  // Answers status polls for an OAuth attempt; without it every attempt stays pending.
+  onIntegrationOAuthStatus?: (attemptID: string) => "pending" | "complete"
   plugins?: Resolvable<unknown[]>
   skills?: Resolvable<unknown[]>
   // Replaces the `/api/worktree` inventory, which defaults to the directory plus project sandboxes.
@@ -897,7 +899,10 @@ function mockHandlers(
 
             return Effect.succeed({
               location: location(config, requestDirectory(config, ctx.request)),
-              data: { status: "pending", time: { created, expires: created + 600_000 } },
+              data: {
+                status: config.onIntegrationOAuthStatus?.(ctx.params.attemptID) ?? "pending",
+                time: { created, expires: created + 600_000 },
+              },
             })
           }),
         credentialActivate: (ctx) =>

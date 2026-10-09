@@ -52,7 +52,6 @@ export const SettingsProviders: Component<{
   const [state, setState] = createStore({
     disconnecting: {} as Record<string, "removing" | "removed" | "absent" | undefined>,
     consoleExpanded: false,
-    connecting: false,
     credentialID: undefined as string | undefined,
     renaming: undefined as string | undefined,
     held: undefined as ProviderItem[] | undefined,
@@ -73,7 +72,9 @@ export const SettingsProviders: Component<{
   }
 
   const connect = (provider?: string) => {
-    setState("connecting", true)
+    // The list stays as it was while the dialog connects, so a new sign-in that briefly drops the
+    // Console workspace providers from the catalog can't flash rows behind the dialog.
+    setState("held", available())
     providerConnect.select(provider)
     void dialog.show(
       () => (
@@ -92,18 +93,9 @@ export const SettingsProviders: Component<{
           }}
         />
       ),
-      () => {
-        setState("connecting", false)
-        const location = props.directory ? { directory: props.directory } : undefined
-        data.location.integration.invalidate(location)
-        data.location.provider.invalidate(location)
-        data.location.model.invalidate(location)
-        void Promise.all([
-          data.location.integration.sync(location),
-          data.location.provider.sync(location),
-          data.location.model.sync(location),
-        ]).catch(() => undefined)
-      },
+      () => void refreshAccounts()
+          .catch(() => undefined)
+          .finally(() => setState("held", undefined)),
     )
   }
 
@@ -117,21 +109,13 @@ export const SettingsProviders: Component<{
       .find((item) => item.id === CONSOLE_INTEGRATION)
       ?.connections.some((connection) => connection.type === "credential" || connection.type === "env")
 
-    // Hides the free `opencode` row while a new Console grant is still loading its workspace providers.
-    const consoleTransition =
-      state.connecting &&
-      CONSOLE_PROVIDERS.has(providerConnect.selected() ?? "") &&
-      consoleConnected &&
-      managedConsole === undefined
-
     return connected
       .filter(
         (provider) =>
           provider.id !== "opencode" ||
-          (!consoleTransition &&
-            (managedConsole !== undefined ||
-              consoleConnected ||
-              Object.values(provider.models).some((model) => model.cost.input > 0))),
+          managedConsole !== undefined ||
+          consoleConnected ||
+          Object.values(provider.models).some((model) => model.cost.input > 0),
       )
       .toSorted((a, b) => Number(b.id === "opencode-go") - Number(a.id === "opencode-go"))
   })

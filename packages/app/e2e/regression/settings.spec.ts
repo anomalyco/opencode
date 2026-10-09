@@ -1056,6 +1056,88 @@ test("providers: switching to a Zen API key does not wait for a Console workspac
   expect(catalogReads).toHaveLength(1)
 })
 
+test("providers: connecting OpenCode Go keeps the Console row in place", async ({ page, context }) => {
+  await context.route("https://auth.example.test/**", (route) => route.fulfill({ body: "Sign in" }))
+
+  // After the sign-in the server reloads the workspace, briefly serving only the free catalog.
+  const state = { authorized: false, pendingReads: 0 }
+
+  const workspace = {
+    all: [
+      { id: "opencode", integrationID: "opencode", name: "Anomaly / OpenCode", models: {} },
+      { id: "console-google", integrationID: "opencode", name: "Anomaly / Google", models: {} },
+    ],
+    connected: ["opencode", "console-google"],
+    default: {},
+  }
+
+  const catalog = () => {
+    if (state.pendingReads > 0) {
+      state.pendingReads--
+
+      return { all: [{ id: "opencode", name: "OpenCode", models: {} }], connected: ["opencode"], default: {} }
+    }
+
+    if (!state.authorized) return workspace
+
+    return {
+      all: [...workspace.all, { id: "opencode-go", integrationID: "opencode-go", name: "OpenCode Go", models: {} }],
+      connected: [...workspace.connected, "opencode-go"],
+      default: {},
+    }
+  }
+
+  const { settings } = await open(page, {
+    provider: catalog,
+    integrations: () => [
+      {
+        id: "opencode",
+        name: "OpenCode Console",
+        methods: [{ id: "device", type: "oauth", label: "OpenCode Console account" }],
+        connections: [{ type: "credential", id: "cred_console", label: "Anomaly", method: "oauth" }],
+      },
+      {
+        id: "opencode-go",
+        name: "OpenCode Go",
+        methods: [{ type: "key" }],
+        connections: state.authorized ? [{ type: "credential", id: "cred_go", label: "Anomaly", method: "oauth" }] : [],
+      },
+    ],
+    onIntegrationOAuth: () => ({ url: "https://auth.example.test/device?user_code=GOGO-1234" }),
+    onIntegrationOAuthStatus: () => {
+      if (!state.authorized) {
+        state.authorized = true
+        state.pendingReads = 3
+      }
+
+      return "complete"
+    },
+  })
+
+  await settings.getByRole("tab", { name: "Providers", exact: true }).click()
+  const connected = settings.locator('[data-component="connected-providers-section"]')
+  await expect(connected.getByText("OpenCode Console", { exact: true })).toBeVisible()
+  await connected.evaluate((element) => {
+    new MutationObserver(() => {
+      if (!element.textContent?.includes("OpenCode Console")) element.dataset.flashed = ""
+    }).observe(element, { childList: true, subtree: true, characterData: true })
+  })
+
+  await settings
+    .locator(".settings-provider-row", { hasText: "OpenCode Go" })
+    .getByRole("button", { name: "Connect", exact: true })
+    .click()
+  const popup = page.waitForEvent("popup")
+  await page.getByRole("button", { name: "Continue in the browser", exact: true }).click()
+  await popup
+  await expect(page.getByText("OpenCode Go connected", { exact: true })).toBeVisible()
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+
+  await expect(connected.getByText("OpenCode Go", { exact: true })).toBeVisible()
+  await expect(connected.getByText("OpenCode Console", { exact: true })).toBeVisible()
+  await expect(connected).not.toHaveAttribute("data-flashed")
+})
+
 test("providers: switching Console accounts keeps the list until the new workspace loads", async ({ page }) => {
   const accounts = [
     { type: "credential", id: "cred_clara", label: "Clara", method: "oauth" },
