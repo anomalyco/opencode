@@ -154,28 +154,6 @@ export function sshArgs(target: ReturnType<typeof parseTarget>) {
   ]
 }
 
-export function tunnelArgs(
-  target: ReturnType<typeof parseTarget>,
-  localPort: number,
-  remote: { host: string; port: number },
-) {
-  // A multiplexed `ssh -N` may exit after handing forwarding to its master.
-  // Keep a session open on stdin instead; the scoped process owns that pipe.
-  return [
-    "-o",
-    "ControlMaster=no",
-    "-o",
-    "ControlPersist=no",
-    ...sshArgs(target),
-    "-o",
-    "ExitOnForwardFailure=yes",
-    "-L",
-    `127.0.0.1:${localPort}:${remote.host}:${remote.port}`,
-    target.host,
-    "sh -c 'exec cat >/dev/null'",
-  ]
-}
-
 export const runSsh = Effect.fn("Ssh.run")(function* (input: {
   args: string[]
   env?: NodeJS.ProcessEnv

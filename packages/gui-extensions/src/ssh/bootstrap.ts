@@ -1,6 +1,6 @@
 import { Effect, Option, Schema } from "effect"
 import { HttpClient } from "effect/unstable/http"
-import { parseTarget, quote, runSsh, sshArgs, SshFailure } from "./command"
+import { SshFailure } from "./command"
 import { RemoteCli } from "./remote-cli"
 
 // Use commands supported by released V2 CLIs. The registration is the service's
@@ -74,22 +74,14 @@ function connectionAddress(address: string, password: string) {
 }
 
 export const bootstrap = Effect.fn("Ssh.bootstrap")(function* (input: {
-  target: ReturnType<typeof parseTarget>
+  run: (script: string, stdin?: Uint8Array) => Effect.Effect<string, SshFailure>
   version: string
   development?: boolean
-  env: NodeJS.ProcessEnv
   replace?: boolean
   stage: (stage: "checking" | "downloading" | "uploading" | "starting") => Effect.Effect<void>
 }) {
-  const run = (script: string) =>
-    runSsh({
-      args: [...sshArgs(input.target), input.target.host, "sh -l -s"],
-      env: input.env,
-      stdin: script,
-    })
-
   yield* input.stage("checking")
-  const registered = parseRegistration(yield* run(discoverScript))
+  const registered = parseRegistration(yield* input.run(discoverScript))
 
   if (registered && (input.development || registered.version === input.version)) {
     yield* input.stage("starting")
@@ -102,7 +94,7 @@ export const bootstrap = Effect.fn("Ssh.bootstrap")(function* (input: {
 
   if (registered && !input.replace) return yield* Effect.fail(new SshFailure("version", registered.version))
   const destination = yield* Effect.try({ try: () => binaryPath(input.version), catch: SshFailure.from })
-  const existing = yield* run(RemoteCli.versionScript(`"${destination}"`))
+  const existing = yield* input.run(RemoteCli.versionScript(`"${destination}"`))
   const staged = RemoteCli.parseVersion(existing) === input.version
 
   // Source worktree versions are unpublished. Use the installer's beta channel
@@ -113,7 +105,7 @@ export const bootstrap = Effect.fn("Ssh.bootstrap")(function* (input: {
   const setup = { version, directory: `.opencode/desktop-ssh/${version}` }
 
   if (!staged) {
-    const output = yield* run(RemoteCli.probeScript).pipe(Effect.mapError(() => new SshFailure("platform")))
+    const output = yield* input.run(RemoteCli.probeScript).pipe(Effect.mapError(() => new SshFailure("platform")))
 
     const target = output
       .split(/\r?\n/)
@@ -122,7 +114,7 @@ export const bootstrap = Effect.fn("Ssh.bootstrap")(function* (input: {
 
     const url = yield* Effect.try({ try: () => RemoteCli.archiveUrl(target ?? "", version), catch: SshFailure.from })
     yield* input.stage("downloading")
-    yield* run(RemoteCli.installScript({ ...setup, source: { type: "download", url } })).pipe(
+    yield* input.run(RemoteCli.installScript({ ...setup, source: { type: "download", url } })).pipe(
       Effect.catch(
         Effect.fnUntraced(function* (error) {
           yield* input.stage("uploading")
@@ -138,23 +130,16 @@ export const bootstrap = Effect.fn("Ssh.bootstrap")(function* (input: {
             )
           const archive = new Uint8Array(yield* response.arrayBuffer.pipe(Effect.mapError(SshFailure.from)))
 
-          // The upload uses stdin; the script itself must be the remote command.
-          return yield* runSsh({
-            args: [
-              ...sshArgs(input.target),
-              input.target.host,
-              `sh -c ${quote(RemoteCli.installScript({ ...setup, source: { type: "archive" } }))}`,
-            ],
-            env: input.env,
-            stdin: archive,
-          }).pipe(Effect.mapError(() => new SshFailure("install", error.message)))
+          return yield* input
+            .run(RemoteCli.installScript({ ...setup, source: { type: "archive" } }), archive)
+            .pipe(Effect.mapError(() => new SshFailure("install", error.message)))
         }),
       ),
     )
   }
 
   yield* input.stage("starting")
-  const registration = parseRegistration(yield* run(startScript(version, input.replace)))
+  const registration = parseRegistration(yield* input.run(startScript(version, input.replace)))
 
   if (!registration) return yield* Effect.fail(new SshFailure("service"))
 

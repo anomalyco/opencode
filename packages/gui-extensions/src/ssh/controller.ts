@@ -10,17 +10,17 @@ import {
   Path,
   Predicate,
   PubSub,
-  Ref,
   Schedule,
   Scope,
   Stream,
 } from "effect"
 import { HttpClient } from "effect/unstable/http"
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
+import { ChildProcessSpawner } from "effect/unstable/process"
 import type { SshConfig, SshHttp, SshItem, SshStart, SshState } from "./contract"
 import { createAskpass } from "./askpass"
 import { bootstrap } from "./bootstrap"
-import { parseTarget, quote, runSsh, sshArgs, sshExecutable, tunnelArgs, SshFailure } from "./command"
+import { parseTarget, quote, runSsh, sshArgs, SshFailure } from "./command"
+import { forward, openSession } from "./session"
 
 type Connection = {
   owner?: number
@@ -92,7 +92,6 @@ export const createSshController = Effect.fn("Ssh.controller")(function* (input:
   const connect = Effect.fn("Ssh.connect")(function* (config: SshConfig, connection: Connection, replace = false) {
     const target = yield* Effect.try({ try: () => parseTarget(config.target), catch: SshFailure.from })
     const directory = yield* fs.makeTempDirectoryScoped({ prefix: "oc-ssh-" })
-    const control = path.join(directory, "s")
 
     const helper =
       input.command && input.command.length > 1 && process.platform !== "win32"
@@ -103,15 +102,6 @@ export const createSshController = Effect.fn("Ssh.controller")(function* (input:
       yield* fs.writeFileString(helper, `#!/bin/sh\nexec ${input.command?.map(quote).join(" ")} "$@"\n`, {
         mode: 0o700,
       })
-
-    if (process.platform !== "win32") {
-      target.args.unshift("-o", "ControlMaster=auto", "-o", "ControlPersist=60", "-o", `ControlPath=${control}`)
-      // Close only our local SSH master. The remote OpenCode service owns its
-      // own lifetime and must survive disconnect, failure, and app shutdown.
-      yield* Effect.addFinalizer(() =>
-        run({ args: ["-o", `ControlPath=${control}`, "-O", "exit", target.host], timeout: 2000 }).pipe(Effect.ignore),
-      )
-    }
 
     const authentication = yield* Deferred.make<void>()
 
@@ -154,56 +144,28 @@ export const createSshController = Effect.fn("Ssh.controller")(function* (input:
           destination: `${fields.get("user") ?? ""}@${fields.get("hostname")}:${fields.get("port") ?? "22"}`,
         })
 
+      const socks = yield* freePort
+
+      const session = yield* openSession({ target, env: askpass.env, socks }).pipe(
+        Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+      )
+
       const remote = yield* bootstrap({
-        target,
+        run: session.run,
         version: input.version,
         development: input.development,
-        env: askpass.env,
         replace,
         stage: (stage) => update(config.id, { stage, prompt: undefined }),
-      }).pipe(
-        Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
-        Effect.provideService(HttpClient.HttpClient, httpClient),
-      )
+      }).pipe(Effect.provideService(HttpClient.HttpClient, httpClient))
 
-      const port = yield* freePort
-      const http = { url: `http://127.0.0.1:${port}`, password: remote.password }
-
-      const tunnel = yield* spawner.spawn(
-        ChildProcess.make(sshExecutable(), tunnelArgs(target, port, remote), {
-          env: askpass.env,
-          extendEnv: true,
-          windowsHide: true,
-          stdin: "pipe",
-          stdout: "ignore",
-          killSignal: "SIGTERM",
-          forceKillAfter: "2 seconds",
-        }),
-      )
-
-      const detail = yield* Ref.make("")
-
-      const stderr = yield* tunnel.stderr.pipe(
-        Stream.decodeText(),
-        Stream.runForEach((text) => Ref.update(detail, (tail) => (tail + text).slice(-8192))),
-        Effect.forkScoped,
-      )
-
-      const closed = Effect.gen(function* () {
-        const exitCode = yield* tunnel.exitCode
-        yield* Fiber.join(stderr)
-
-        return yield* Effect.fail(
-          new SshFailure("connection", (yield* Ref.get(detail)) || JSON.stringify({ exitCode })),
-        )
-      })
+      const http = { url: `http://127.0.0.1:${yield* forward(socks, remote)}`, password: remote.password }
 
       yield* waitReady(http, () => items.get(config.id)?.stage === "authentication").pipe(
         Effect.provideService(HttpClient.HttpClient, httpClient),
         Effect.catch(() =>
-          Ref.get(detail).pipe(Effect.flatMap((detail) => Effect.fail(new SshFailure("service", detail)))),
+          session.detail.pipe(Effect.flatMap((detail) => Effect.fail(new SshFailure("service", detail)))),
         ),
-        Effect.raceFirst(closed),
+        Effect.raceFirst(session.closed),
       )
       const saved = new Map(configs).set(config.id, config)
       yield* input.save([...saved.values()])
@@ -211,7 +173,7 @@ export const createSshController = Effect.fn("Ssh.controller")(function* (input:
       failures.delete(config.id)
       yield* update(config.id, { http, stage: "ready", saved: true, detail: "", prompt: undefined, error: undefined })
       yield* Deferred.succeed(connection.ready, http)
-      yield* closed
+      yield* session.closed
     }).pipe(
       Effect.raceFirst(askpass.closed),
       Effect.raceFirst(Deferred.await(authentication).pipe(Effect.andThen(Effect.interrupt))),

@@ -1,10 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import { PlatformError } from "effect"
-import { parseTarget, quote, sshArgs, tunnelArgs, commandFailureDetail, SshFailure } from "./command"
+import { parseTarget, quote, sshArgs, commandFailureDetail, SshFailure } from "./command"
 
 describe("SSH connection commands", () => {
   test("classifies a missing SSH executable from the platform error", () => {
+    // SAFETY: `systemError` takes the reason's tag as data; it has no constructor per tag.
     const error = PlatformError.systemError({
+      // oxlint-disable-next-line anti-slop-effect/no-manual-tagged-construction -- see SAFETY above
       _tag: "NotFound",
       module: "ChildProcessSpawner",
       method: "spawn",
@@ -12,20 +14,6 @@ describe("SSH connection commands", () => {
     })
 
     expect(SshFailure.from(error).code).toBe("ssh-missing")
-  })
-  test("forwarding overrides bootstrap persistence before reusing the control socket", () => {
-    const args = tunnelArgs(
-      {
-        host: "devbox",
-        args: ["-o", "ControlMaster=auto", "-o", "ControlPersist=60", "-o", "ControlPath=/test/socket"],
-      },
-      1234,
-      { host: "127.0.0.1", port: 5678 },
-    )
-
-    expect(args.slice(0, 4)).toEqual(["-o", "ControlMaster=no", "-o", "ControlPersist=no"])
-    expect(args).toContain("ControlPath=/test/socket")
-    expect(args.slice(-4)).toEqual(["-L", "127.0.0.1:1234:127.0.0.1:5678", "devbox", "sh -c 'exec cat >/dev/null'"])
   })
   test("retains CLI stdout failures without exposing private connection details", () => {
     expect(
