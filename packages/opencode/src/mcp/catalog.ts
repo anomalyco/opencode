@@ -1,4 +1,5 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
+import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js"
 import {
   CallToolResultSchema,
   ListToolsResultSchema,
@@ -39,7 +40,12 @@ export function defs(client: Client, timeout?: number) {
   return listTools(client, timeout ?? DEFAULT_TIMEOUT).pipe(Effect.catch(() => Effect.void))
 }
 
-export function convertTool(mcpTool: MCPToolDef, client: Client, timeout?: number): Tool {
+export function convertTool(
+  mcpTool: MCPToolDef,
+  client: Client,
+  timeout?: number,
+  onAuthFailure?: (error: unknown) => Promise<void> | void,
+): Tool {
   const inputSchema: JSONSchema7 = {
     ...(mcpTool.inputSchema as JSONSchema7),
     type: "object",
@@ -51,35 +57,49 @@ export function convertTool(mcpTool: MCPToolDef, client: Client, timeout?: numbe
     description: mcpTool.description ?? "",
     inputSchema: jsonSchema(inputSchema),
     execute: async (args: unknown, options) => {
-      const result = await client.callTool(
-        {
-          name: mcpTool.name,
-          arguments: (args || {}) as Record<string, unknown>,
-        },
-        CallToolResultSchema,
-        {
-          resetTimeoutOnProgress: true,
-          signal: options.abortSignal,
-          timeout,
-          // The MCP SDK only sends a progress token when this hook is present, enabling timeout resets.
-          onprogress: () => {},
-        },
-      )
-      if (result.isError)
-        throw new Error(
-          result.content
-            .flatMap((item) => (item.type === "text" ? [item.text] : []))
-            .filter((text) => text.trim())
-            .join("\n\n") || "MCP tool returned an error",
+      try {
+        const result = await client.callTool(
+          {
+            name: mcpTool.name,
+            arguments: (args || {}) as Record<string, unknown>,
+          },
+          CallToolResultSchema,
+          {
+            resetTimeoutOnProgress: true,
+            signal: options.abortSignal,
+            timeout,
+            // The MCP SDK only sends a progress token when this hook is present, enabling timeout resets.
+            onprogress: () => {},
+          },
         )
-      if (result.content.length > 0 || result.structuredContent === undefined || result.structuredContent === null)
-        return result
-      return {
-        ...result,
-        content: [{ type: "text" as const, text: JSON.stringify(result.structuredContent) }],
+        if (result.isError)
+          throw new Error(
+            result.content
+              .flatMap((item) => (item.type === "text" ? [item.text] : []))
+              .filter((text) => text.trim())
+              .join("\n\n") || "MCP tool returned an error",
+          )
+        if (result.content.length > 0 || result.structuredContent === undefined || result.structuredContent === null)
+          return result
+        return {
+          ...result,
+          content: [{ type: "text" as const, text: JSON.stringify(result.structuredContent) }],
+        }
+      } catch (error) {
+        // Let the owning MCP service mark the server needs_auth (and stop surfacing its
+        // tools) so a rejected token does not turn every call into a silent 401 loop.
+        if (isAuthFailure(error)) await onAuthFailure?.(error)
+        throw error
       }
     },
   })
+}
+
+function isAuthFailure(error: unknown) {
+  return (
+    error instanceof UnauthorizedError ||
+    (error instanceof Error && /401|unauthoriz|not authenticated/i.test(error.message))
+  )
 }
 
 export function fetch<T extends { name: string }>(

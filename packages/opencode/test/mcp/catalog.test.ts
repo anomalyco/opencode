@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
+import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js"
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js"
 import { Server } from "@modelcontextprotocol/sdk/server/index.js"
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js"
@@ -47,6 +48,54 @@ describe("McpCatalog.convertTool", () => {
       structuredContent,
       content: [{ type: "text", text: JSON.stringify(structuredContent) }],
     })
+  })
+
+  test("notifies onAuthFailure and rethrows when the server rejects with 401", async () => {
+    const client = {
+      callTool: async () => {
+        throw new UnauthorizedError("Server returned 401 after re-authentication (HTTP 401)")
+      },
+    } as unknown as Client
+
+    let notified = 0
+    const converted = McpCatalog.convertTool(mcpTool(), client, undefined, () => {
+      notified += 1
+    })
+
+    await expect(converted.execute?.({}, options)).rejects.toThrow("401")
+    expect(notified).toBe(1)
+  })
+
+  test("notifies onAuthFailure for a plain error carrying a 401 message", async () => {
+    const client = {
+      callTool: async () => {
+        throw new Error("HTTP 401 Unauthorized")
+      },
+    } as unknown as Client
+
+    let notified = 0
+    const converted = McpCatalog.convertTool(mcpTool(), client, undefined, () => {
+      notified += 1
+    })
+
+    await expect(converted.execute?.({}, options)).rejects.toThrow("401")
+    expect(notified).toBe(1)
+  })
+
+  test("does not notify onAuthFailure for non-auth errors", async () => {
+    const client = {
+      callTool: async () => {
+        throw new Error("boom")
+      },
+    } as unknown as Client
+
+    let notified = 0
+    const converted = McpCatalog.convertTool(mcpTool(), client, undefined, () => {
+      notified += 1
+    })
+
+    await expect(converted.execute?.({}, options)).rejects.toThrow("boom")
+    expect(notified).toBe(0)
   })
 })
 

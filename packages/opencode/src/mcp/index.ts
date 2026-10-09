@@ -155,6 +155,8 @@ export interface ServerInstructions {
 
 /** An MCP tool in its native shape; consumers adapt it to their own tool format. */
 export interface McpTool {
+  /** The MCP server this tool belongs to. */
+  readonly name: string
   /** Shared cached definition; consumers must copy rather than mutate it. */
   readonly def: MCPToolDef
   readonly client: MCPClient
@@ -186,6 +188,7 @@ export interface Interface {
   readonly startAuth: (
     mcpName: string,
   ) => Effect.Effect<{ authorizationUrl: string; oauthState: string }, NotFoundError>
+  readonly markNeedsAuth: (name: string) => Effect.Effect<void>
   readonly authenticate: (
     mcpName: string,
     onAuthorization?: (authorizationUrl: string) => void,
@@ -658,6 +661,14 @@ const layer = Layer.effect(
       s.status[name] = { status: "disabled" }
     })
 
+    const markNeedsAuth = Effect.fn("MCP.markNeedsAuth")(function* (name: string) {
+      const s = yield* InstanceState.get(state)
+      if (!s.clients[name]) return
+      yield* closeClient(s, name)
+      s.status[name] = { status: "needs_auth" }
+      yield* events.publish(ToolsChanged, { server: name }).pipe(Effect.ignore)
+    })
+
     function requestTimeout(s: State, name: string, configured: McpEntry | undefined, fallback?: number) {
       const staticTimeout = configured && isMcpConfigured(configured) ? configured.timeout : undefined
       return s.config[name]?.timeout ?? staticTimeout ?? fallback
@@ -681,7 +692,7 @@ const layer = Layer.effect(
         }
         const timeout = requestTimeout(s, clientName, mcpConfig, defaultTimeout)
         for (const def of listed) {
-          result[McpCatalog.toolName(clientName, def.name)] = { def, client, timeout }
+          result[McpCatalog.toolName(clientName, def.name)] = { name: clientName, def, client, timeout }
         }
       }
       return result
@@ -983,6 +994,7 @@ const layer = Layer.effect(
       getPrompt,
       readResource,
       startAuth,
+      markNeedsAuth,
       authenticate,
       finishAuth,
       removeAuth,
