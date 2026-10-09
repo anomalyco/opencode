@@ -6,6 +6,7 @@ import { useRoute } from "../../context/route"
 import { useClipboard } from "../../context/clipboard"
 import type { PromptInfo } from "../../component/prompt/history"
 import { stripPromptPartIDs as strip } from "../../prompt/part"
+import { messageText } from "../../util/message-text"
 
 export function DialogMessage(props: {
   messageID: string
@@ -62,12 +63,7 @@ export function DialogMessage(props: {
             if (!msg) return
 
             const parts = sync.data.part[msg.id]
-            const text = parts.reduce((agg, part) => {
-              if (part.type === "text" && !part.synthetic) {
-                agg += part.text
-              }
-              return agg
-            }, "")
+            const text = messageText(parts)
 
             await clipboard.write?.(text)
             dialog.clear()

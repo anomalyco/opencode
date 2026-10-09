@@ -2208,6 +2208,28 @@ noLLMServer.instance(
   { config: cfg },
 )
 
+noLLMServer.instance(
+  "preserves prompt whitespace through resolution and persistence",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({})
+      const text =
+        "  Read-only medium research.\n\nDo not read .env or .pen files.\n\tKeep C:\\project\\file.ts exact.  "
+      const parts = yield* prompt.resolvePromptParts(text)
+      expect(parts).toEqual([{ type: "text", text }])
+
+      const message = yield* prompt.prompt({ sessionID: session.id, parts, noReply: true })
+      const stored = yield* MessageV2.get({ sessionID: session.id, messageID: message.info.id })
+      expect(stored.parts.flatMap((part) => (part.type === "text" && !part.synthetic ? [part.text] : []))).toEqual([
+        text,
+      ])
+      yield* sessions.remove(session.id)
+    }),
+  { config: cfg },
+)
+
 // Special characters in filenames
 
 noLLMServer.instance(

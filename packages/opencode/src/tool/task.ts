@@ -42,7 +42,9 @@ const BACKGROUND_UPDATED = [
 
 const BaseParameterFields = {
   description: Schema.String.annotate({ description: "A short (3-5 words) description of the task" }),
-  prompt: Schema.String.annotate({ description: "The task for the agent to perform" }),
+  prompt: Schema.String.annotate({
+    description: "The task for the agent to perform, written in clear prose with normal word spacing",
+  }),
   subagent_type: Schema.String.annotate({ description: "The type of specialized agent to use for this task" }),
   task_id: Schema.optional(Schema.String).annotate({
     description:

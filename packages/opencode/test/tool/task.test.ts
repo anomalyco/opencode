@@ -183,6 +183,8 @@ describe("tool.task", () => {
         const second = yield* get()
 
         expect(first).toBe(second)
+        expect(first).toContain("normal word spacing")
+        expect(first).toContain("Do not concatenate words or remove whitespace to save tokens")
 
         const alpha = first.indexOf("- alpha: Alpha agent")
         const explore = first.indexOf("- explore:")
@@ -281,6 +283,33 @@ describe("tool.task", () => {
       expect(result.output).toContain(`<task id="${child.id}" state="completed">`)
       expect(seen?.sessionID).toBe(child.id)
       expect(seen?.variant).toBe("xhigh")
+    }),
+  )
+
+  it.instance("execute preserves prompt word spacing, newlines, tabs and literal paths", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const prompt =
+        "  Read-only medium research.\n\nDo not read .env or .pen files.\n\tKeep C:\\project\\file.ts and getMyInstructorClasses exact.  "
+      let seen: SessionPrompt.PromptInput | undefined
+
+      yield* def.execute(
+        { description: "check prompt spacing", prompt, subagent_type: "general" },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps: stubOps({ onPrompt: (input) => (seen = input) }) },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      expect(seen?.parts).toEqual([{ type: "text", text: prompt }])
     }),
   )
 

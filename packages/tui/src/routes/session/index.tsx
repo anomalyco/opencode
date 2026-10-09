@@ -68,6 +68,7 @@ import { QuestionPrompt } from "./question"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
 import * as Model from "../../util/model"
 import { formatTranscript } from "../../util/transcript"
+import { messageText } from "../../util/message-text"
 import { sessionEpilogue } from "../../util/presentation"
 import { setPreLayoutSiblingMargin } from "../../util/layout"
 import { useTuiConfig } from "../../config"
@@ -1370,17 +1371,7 @@ function UserMessage(props: {
 }) {
   const ctx = use()
   const local = useLocal()
-  const text = createMemo(() => {
-    const texts = props.parts
-      .map((x) => {
-        if (x.type === "text" && !x.synthetic) {
-          return x.text
-        }
-        return null
-      })
-      .filter(Boolean)
-    return texts.join("\n\n")
-  })
+  const text = createMemo(() => messageText(props.parts))
   const files = createMemo(() => props.parts.flatMap((x) => (x.type === "file" ? [x] : [])))
   const { theme } = useTheme()
   const [hover, setHover] = createSignal(false)
