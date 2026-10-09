@@ -8,12 +8,17 @@ const id = ProviderID.make("google-vertex")
 
 export const loadADCClient = async (project?: string) => {
   const { GoogleAuth } = await import("google-auth-library")
+  // google-auth-library 10.5.0 ignores CLOUDSDK_CONFIG during ADC file discovery.
+  // Fix this in shipped AI code: a repository-level Bun dependency patch would not
+  // reach npm or Bun consumers of the published @opencode/ai package.
   // Override only the well-known-file lookup: keyFilename bypasses ADC's quota-project
   // preparation. Keep explicit credentials and metadata fallback in Google's ADC chain.
   class CloudSDKAuth extends GoogleAuth {
     override async _tryGetApplicationCredentialsFromWellKnownFile(options?: GoogleAuthOptions["clientOptions"]) {
       const config = process.env.CLOUDSDK_CONFIG
       if (!config) return super._tryGetApplicationCredentialsFromWellKnownFile(options)
+      // Keep local filesystem helpers lazy for explicitly authenticated Worker callers;
+      // this ADC-file lookup itself requires a Node-compatible filesystem.
       const { existsSync } = await import("node:fs")
       const { homedir } = await import("node:os")
       const { join } = await import("node:path")
