@@ -202,6 +202,13 @@ export interface Files {
     },
   ): Promise<void>
   /**
+   * Whether a file exists, checked by listing its directory without reading the file.
+   *
+   * @param path - A workspace-relative or absolute path.
+   * @returns False when the file is missing or its directory cannot be listed.
+   */
+  exists(path: string): Promise<boolean>
+  /**
    * Searches the workspace by fuzzy path.
    *
    * @param query - The search text.
@@ -1037,6 +1044,14 @@ export interface Links {
    * @returns False when no handler matches.
    */
   open(link: Link): boolean
+  /**
+   * Whether a link's target exists, so text that names it can be styled as a link. Asks the LinkHandler `open` would
+   * use. Untracked: calling it inside an effect does not subscribe that effect.
+   *
+   * @param link - The candidate link.
+   * @returns False when no handler matches, the handler has no `exists`, or the target does not exist.
+   */
+  exists(link: Link): boolean | Promise<boolean>
 }
 
 /** One dialog `Dialogs.open` opened. */

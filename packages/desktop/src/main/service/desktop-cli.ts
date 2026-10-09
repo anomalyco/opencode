@@ -57,12 +57,14 @@ const make = Effect.fn("DesktopCli.resolve")(function* () {
   const cli = development
     ? {
         version,
+        // Bun's transpiler cache key includes the define table, and the dev version changes on every
+        // run. Reading it from the inherited environment keeps the define fixed and the cache warm.
         command: [
           "bun",
           "run",
           "--cwd",
           development,
-          `--define=OPENCODE_VERSION=${JSON.stringify(version)}`,
+          "--define=OPENCODE_VERSION=process.env.OPENCODE_VERSION",
           "src/index.ts",
         ],
         binary: undefined,

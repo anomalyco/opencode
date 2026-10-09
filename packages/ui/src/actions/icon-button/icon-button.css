@@ -1,12 +1,8 @@
 @import "../submit.css";
 
-* {
+[data-component="icon-button-v2"] {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  text-rendering: geometricPrecision;
-}
-
-[data-component="icon-button-v2"] {
   display: inline-flex;
   align-items: center;
   justify-content: center;

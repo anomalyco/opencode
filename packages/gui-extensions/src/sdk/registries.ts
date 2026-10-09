@@ -507,6 +507,15 @@ export interface LinkHandler {
    * @param link - A link `match` accepted.
    */
   open(link: Link): void
+  /**
+   * Whether the link's target exists. Omit it and `Links.exists` answers false, so text never looks like a link this
+   * handler opens. Must never read file contents or show an error: it runs for every candidate path a message renders.
+   * Resolve false on failure.
+   *
+   * @param link - A link `match` accepted.
+   * @returns Whether the target exists, now or once checked.
+   */
+  exists?(link: Link): boolean | Promise<boolean>
 }
 
 /** A titlebar pill, or the dev channel badge as a toggle. */

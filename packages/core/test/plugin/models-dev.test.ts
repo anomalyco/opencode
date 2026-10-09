@@ -903,7 +903,7 @@ describe("ModelsDevPlugin", () => {
       expect(yield* providers.get(Provider.ID.make("google-vertex-anthropic"))).toBeUndefined()
       expect(yield* integrations.get(Integration.ID.make("azure"))).toBeDefined()
       expect(yield* integrations.get(Integration.ID.make("azure"))).toMatchObject({
-        methods: [{ type: "key" }, { type: "env", names: ["AZURE_API_KEY", "AZURE_COGNITIVE_SERVICES_API_KEY"] }],
+        methods: [{ type: "key" }, { type: "env", names: ["AZURE_RESOURCE_NAME", "AZURE_API_KEY"] }],
       })
       expect(yield* integrations.get(Integration.ID.make("google-vertex"))).toBeDefined()
       expect(yield* integrations.get(Integration.ID.make("azure-cognitive-services"))).toBeUndefined()
@@ -913,7 +913,7 @@ describe("ModelsDevPlugin", () => {
     }),
   )
 
-  it.effect("advertises only credential-bearing environment variables", () =>
+  it.effect("registers every listed environment variable for provider plugins to narrow", () =>
     Effect.gen(function* () {
       const integrations = yield* Integration.Service
       const providers = yield* Provider.Service
@@ -955,29 +955,15 @@ describe("ModelsDevPlugin", () => {
         ),
       )
 
-      // Vertex authenticates through ADC; project, location, and the credentials
-      // file path are configuration, not API keys.
       expect(yield* integrations.get(Integration.ID.make("google-vertex"))).toMatchObject({
-        methods: [{ type: "key" }, { type: "env", names: ["GOOGLE_VERTEX_API_KEY"] }],
-      })
-      expect(yield* integrations.get(Integration.ID.make("cloudflare-workers-ai"))).toMatchObject({
         methods: [
           { type: "key" },
-          {
-            type: "env",
-            names: ["CLOUDFLARE_API_KEY", "CLOUDFLARE_WORKERS_AI_TOKEN", "CLOUDFLARE_API_TOKEN"],
-          },
+          { type: "env", names: ["GOOGLE_VERTEX_PROJECT", "GOOGLE_VERTEX_LOCATION", "GOOGLE_APPLICATION_CREDENTIALS"] },
         ],
       })
-      yield* withEnv({ CLOUDFLARE_ACCOUNT_ID: "account", CLOUDFLARE_API_KEY: "token" }, () =>
-        integrations.connection
-          .active(Integration.ID.make("cloudflare-workers-ai"))
-          .pipe(
-            Effect.tap((connection) =>
-              Effect.sync(() => expect(connection).toEqual({ type: "env", name: "CLOUDFLARE_API_KEY" })),
-            ),
-          ),
-      )
+      expect(yield* integrations.get(Integration.ID.make("cloudflare-workers-ai"))).toMatchObject({
+        methods: [{ type: "key" }, { type: "env", names: ["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_KEY"] }],
+      })
     }),
   )
 

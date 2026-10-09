@@ -7,6 +7,7 @@ import { Script } from "@opencode/script"
 import { createSolidTransformPlugin } from "@opentui/solid/bun-plugin"
 import type { BunPlugin } from "bun"
 import pkg from "../package.json"
+import { discoverPluginRuntimeSpecifiers, pluginRuntimeLoaderCode } from "@opencode/plugin/runtime-modules"
 import { buildAppArchive } from "./app-assets"
 import { verifyArtifact, verifySimulationGraph } from "./verify-artifact"
 import { resolveOpencodePty } from "./opencode-pty"
@@ -82,6 +83,30 @@ export default () => readFileSync(archive)`,
     }))
   },
 }
+const pluginRuntimeEntries = discoverPluginRuntimeSpecifiers()
+const pluginRuntimeModulesSource = [
+  "export const resolveHostPackageRoots = () => []",
+  "const modules = {",
+  ...[...pluginRuntimeEntries.keys()].map(
+    (specifier) => `  ${JSON.stringify(specifier)}: ${pluginRuntimeLoaderCode(specifier, pluginRuntimeEntries)},`,
+  ),
+  "}",
+  "export const loadRuntimeModules = () => modules",
+].join("\n")
+const pluginRuntimePlugin: BunPlugin = {
+  name: "opencode-plugin-runtime",
+  setup(build) {
+    build.onLoad({ filter: /plugin[/\\]src[/\\]runtime-modules\.ts$/ }, () => ({
+      contents: pluginRuntimeModulesSource,
+      loader: "ts",
+    }))
+    build.onLoad({ filter: /[/\\]internal[/\\]httpApi(?:Scalar|Swagger)\.js$/ }, () => ({
+      contents:
+        'export const css = ""; export const javascript = \'document.body.textContent = "Scalar/Swagger UI assets are not bundled in OpenCode"\'',
+      loader: "js",
+    }))
+  },
+}
 
 for (const item of targets) {
   const opencodePty = await resolveOpencodePty({
@@ -128,7 +153,14 @@ export default { path: file, version: ${JSON.stringify(opencodePty.version)}, sh
   const result = await Bun.build({
     entrypoints: ["./src/index.ts"],
     tsconfig: "./tsconfig.json",
-    plugins: [appAssetsPlugin, solidPlugin, parcelWatcherPlugin, opencodePtyPlugin, simulationGraphPlugin],
+    plugins: [
+      appAssetsPlugin,
+      solidPlugin,
+      parcelWatcherPlugin,
+      opencodePtyPlugin,
+      pluginRuntimePlugin,
+      simulationGraphPlugin,
+    ],
     external: ["node-gyp"],
     format: "esm",
     minify: true,

@@ -79,6 +79,17 @@ const openaiChat: Protocol = (_, support) => {
   return efforts(support.values ?? EFFORTS, (effort) => ({ settings: { reasoningEffort: effort } }))
 }
 
+// Vertex MaaS models switch thinking through the chat template. DeepSeek names the flag `thinking`; the
+// others (GLM, Gemma) use `enable_thinking`.
+const vertexChat: Protocol = (model, support) => {
+  if (support.type !== "toggle") return openaiChat(model, support)
+  const key = modelID(model).toLowerCase().includes("deepseek") ? "thinking" : "enable_thinking"
+  return toggle(
+    { body: { chat_template_kwargs: { [key]: false } } },
+    { body: { chat_template_kwargs: { [key]: true } } },
+  )
+}
+
 const openaiResponses: Protocol = (_, support) => {
   if (support.type !== "effort") return []
   return efforts(support.values ?? ["none", "minimal", ...EFFORTS, "xhigh"], responsesEffort)
@@ -576,7 +587,7 @@ const PROTOCOLS: Readonly<Record<string, Protocol>> = {
 
   "@opencode/ai/providers/openai-compatible": openaiCompatible,
   "@opencode/ai/providers/azure/chat": openaiChat,
-  "@opencode/ai/providers/google-vertex/chat": openaiChat,
+  "@opencode/ai/providers/google-vertex/chat": vertexChat,
   "@opencode/ai/providers/alibaba/chat": alibabaChat,
   "@opencode/ai/providers/baseten": basetenChat,
   "@opencode/ai/providers/cerebras": openaiChat,
@@ -599,6 +610,7 @@ const PROTOCOLS: Readonly<Record<string, Protocol>> = {
 
   "@opencode/ai/providers/anthropic": anthropicMessages,
   "@opencode/ai/providers/google-vertex/messages": anthropicMessages,
+  "@opencode/ai/providers/google-vertex/mistral": openaiChat,
   "@opencode/ai/providers/alibaba/messages": alibabaMessages,
   "@opencode/ai/providers/meta/messages": anthropicMessages,
   "@opencode/ai/providers/minimax/messages": minimaxMessages,

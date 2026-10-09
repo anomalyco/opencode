@@ -179,6 +179,21 @@ describe("visibleTimelineMessages", () => {
     ])
     expect(visibleTimelineMessages(messages, [], "msg_0")).toEqual([])
   })
+
+  test("keeps a pre-promotion failed idle marker after the pending input that triggered it", () => {
+    const failed = [
+      { id: "msg_3", type: "user", text: "queued", time: { created: 3 } },
+      {
+        id: "msg_idle",
+        type: "idle",
+        outcome: "failed",
+        error: { type: "unknown", message: 'Agent not found: "build"' },
+        time: { created: 4 },
+      },
+    ] satisfies SessionMessageInfo[]
+
+    expect(visibleTimelineMessages(failed, [steer]).map((message) => message.id)).toEqual(["msg_3", "msg_idle"])
+  })
 })
 
 describe("applyTimelineMessageHandoff", () => {

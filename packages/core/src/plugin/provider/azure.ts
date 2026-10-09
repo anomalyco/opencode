@@ -1,8 +1,11 @@
 import { Clock, Effect, FiberHandle, Option, Schema, Semaphore, Stream } from "effect"
-import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
-import { ChildProcess } from "effect/unstable/process"
+import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
+import { ChildProcess } from "effect/process"
+import path from "node:path"
 import { define } from "@opencode/plugin/effect/plugin"
 import { Form } from "@opencode/schema/form"
+import { FSUtil } from "@opencode/util/fs-util"
+import { Global } from "@opencode/util/global"
 import { AppProcess } from "@opencode/util/process"
 import { App } from "../../app.js"
 import { Bus } from "../../bus.js"
@@ -49,8 +52,18 @@ const decodeManagementDeployment = Schema.decodeUnknownOption(
     }),
   }),
 )
-const ResourceQuery = Schema.Struct({ query: Schema.String })
+const ResourceQuery = Schema.Struct({
+  query: Schema.String,
+  options: Schema.optional(Schema.Struct({ $top: Schema.Number })),
+})
 const Resources = Schema.Struct({ data: Schema.Array(Schema.Struct({ id: Schema.NonEmptyString })) })
+const ResourceListing = Schema.Struct({ data: Schema.Array(Schema.Unknown) })
+const decodeProfile = Schema.decodeUnknownOption(
+  Schema.fromJsonString(Schema.Struct({ subscriptions: Schema.NonEmptyArray(Schema.Unknown) })),
+)
+const decodeResourceListing = Schema.decodeUnknownOption(
+  Schema.Struct({ resourceName: Schema.NonEmptyString, resourceGroup: Schema.String, location: Schema.String }),
+)
 
 type Deployment = { readonly name: string; readonly model: string }
 
@@ -65,6 +78,7 @@ export function make(
     effect: Effect.fn(function* (ctx) {
       const configured = yield* configuredSettings(Provider.ID.azure)
       const processes = yield* AppProcess.Service
+      const fs = yield* FSUtil.Service
       const bus = yield* Bus.Service
       const credentials = yield* Credential.Service
       const providers = yield* Provider.Service
@@ -118,61 +132,64 @@ export function make(
         )
 
       const available = Boolean(which("az"))
-      const form = () =>
-        iife(() => {
-          if (resolveResourceName(configured) || typeof configured?.baseURL === "string") return
-          return Form.Fields.make([
-            {
-              type: "string",
-              key: "resourceName",
-              title: "Enter Azure Resource Name",
-              placeholder: "e.g. my-models",
-              required: true,
-            },
-          ])
-        })
+      const configuredResource = Boolean(resolveResourceName(configured) || typeof configured?.baseURL === "string")
+      // Undefined until the Azure CLI answers; a failed lookup leaves the form to manual entry.
+      const listing: { resources?: readonly Form.Option[] } = {}
 
       yield* ctx.integration.transform((editor) => {
+        // The retired azure-cognitive-services provider's env var still connects Azure.
         editor.method.update({
           integrationID: Provider.ID.azure,
-          method: { type: "key", label: "API key", form: form() },
+          method: { type: "env", names: ["AZURE_API_KEY", "AZURE_COGNITIVE_SERVICES_API_KEY"] },
+        })
+        editor.method.update({
+          integrationID: Provider.ID.azure,
+          method: {
+            type: "key",
+            label: "API key",
+            form: configuredResource
+              ? undefined
+              : Form.Fields.make([
+                  {
+                    type: "string",
+                    key: "resourceName",
+                    title: "Enter Azure Resource Name",
+                    placeholder: "e.g. my-models",
+                    required: true,
+                  },
+                ]),
+          },
         })
         if (!available) return
         editor.method.update({
           integrationID: Provider.ID.azure,
           method: {
             id: methodID,
-            type: "oauth",
+            type: "external",
             label: "Microsoft Entra ID (Azure CLI)",
-            form: form(),
+            form: configuredResource
+              ? undefined
+              : Form.Fields.make([
+                  {
+                    type: "string",
+                    key: "resourceName",
+                    title: "Azure resource",
+                    placeholder: "e.g. my-models",
+                    required: true,
+                    pattern: resourcePattern.source,
+                    // Resources are listed once at startup, so one created later is typed in. Without a list the field
+                    // is a plain text input.
+                    ...iife(() => {
+                      if (!listing.resources) return { description: "Requests use your `az login` session." }
+                      if (listing.resources.length === 0)
+                        return {
+                          description: "No Azure OpenAI or AI Services resources found for your `az login` account.",
+                        }
+                      return { custom: true, options: listing.resources }
+                    }),
+                  },
+                ]),
           },
-          authorize: (answer) =>
-            Effect.succeed({
-              mode: "auto" as const,
-              url: "",
-              instructions: "Sign in with `az login` before continuing.",
-              callback: Effect.gen(function* () {
-                const resourceName =
-                  (typeof answer.resourceName === "string" ? answer.resourceName.trim() : "") ||
-                  resolveResourceName(configured)
-                if (!resourceName) return yield* Effect.fail(new Error("Azure resource name is required"))
-                const current = yield* token(cognitiveScope)
-                return Credential.OAuth.make({
-                  type: "oauth",
-                  methodID,
-                  access: current.access,
-                  refresh: "azure-cli",
-                  expires: current.expires,
-                  metadata: { resourceName },
-                })
-              }),
-            }),
-          refresh: (credential) =>
-            token(cognitiveScope).pipe(
-              Effect.map((current) =>
-                Credential.OAuth.make({ ...credential, access: current.access, expires: current.expires }),
-              ),
-            ),
         })
       })
 
@@ -235,7 +252,7 @@ export function make(
 
       const resourceDeployments = Effect.fn("AzurePlugin.resourceDeployments")(function* (
         url: string,
-        credential: Credential.Key | Credential.OAuth,
+        credential: Credential.Key | Credential.External,
       ) {
         return yield* http
           .execute(
@@ -244,7 +261,7 @@ export function make(
               HttpClientRequest.setHeader("User-Agent", App.useragent(ctx.app)),
               credential.type === "key"
                 ? HttpClientRequest.setHeader("api-key", credential.key)
-                : HttpClientRequest.bearerToken(credential.access),
+                : HttpClientRequest.bearerToken((yield* token(cognitiveScope)).access),
             ),
           )
           .pipe(
@@ -266,8 +283,8 @@ export function make(
       // data-plane version 2022-12-01 has it; later versions dropped `/deployments` and keep `/models`, which lists
       // models the resource can deploy rather than its deployments.
       // https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/data-plane/OpenAIAuthoring/stable/2022-12-01/azureopenai.json
-      const deployments = (url: string, resource: string, credential: Credential.Key | Credential.OAuth) =>
-        credential.type === "oauth"
+      const deployments = (url: string, resource: string, credential: Credential.Key | Credential.External) =>
+        credential.type === "external"
           ? managementDeployments(resource).pipe(Effect.catch(() => resourceDeployments(url, credential)))
           : resourceDeployments(url, credential)
 
@@ -310,8 +327,8 @@ export function make(
           .pipe(Effect.orElseSucceed(() => undefined))
         if (
           !credential ||
-          credential.type === "external" ||
-          (credential.type === "oauth" && credential.methodID !== methodID)
+          credential.type === "oauth" ||
+          (credential.type === "external" && credential.methodID !== methodID)
         )
           return
         const found = yield* deployments(url, name, credential).pipe(
@@ -353,6 +370,43 @@ export function make(
           : resolveResourceName(provider.settings, loaded.resource)
 
       Object.assign(loaded, yield* load())
+
+      // Lists the resources the Azure CLI account can reach in the background, so the connect form can offer them
+      // without startup waiting on Azure. The CLI's profile shows a signed-in account without running the CLI.
+      // https://learn.microsoft.com/cli/azure/azure-cli-configuration#cli-configuration-file
+      const listResources = Effect.fn("AzurePlugin.listResources")(function* () {
+        const profile = yield* fs.readFileStringSafe(
+          path.join(process.env.AZURE_CONFIG_DIR ?? path.join(Global.Path.home, ".azure"), "azureProfile.json"),
+        )
+        // The Azure CLI writes the profile with a byte order mark.
+        if (Option.isNone(decodeProfile(profile?.replace(/^\uFEFF/, "")))) return
+        const response = yield* HttpClientRequest.post(
+          `${endpoints.management}/providers/Microsoft.ResourceGraph/resources?api-version=2022-10-01`,
+        ).pipe(
+          HttpClientRequest.schemaBodyJson(ResourceQuery)({ query: resourceListQuery, options: { $top: 1000 } }),
+          Effect.flatMap(management),
+          Effect.flatMap(HttpClientResponse.schemaBodyJson(ResourceListing)),
+          Effect.timeout("10 seconds"),
+        )
+        listing.resources = response.data.flatMap((raw): Form.Option[] => {
+          const item = Option.getOrUndefined(decodeResourceListing(raw))
+          if (!item || !resourcePattern.test(item.resourceName)) return []
+          return [
+            {
+              value: item.resourceName,
+              label: item.resourceName,
+              description: `${item.resourceGroup} · ${item.location}`,
+            },
+          ]
+        })
+        yield* ctx.integration.reload()
+      })
+      if (available && !configuredResource)
+        yield* listResources().pipe(
+          Effect.catch((cause) => Effect.logDebug("failed to list Azure resources", { cause })),
+          Effect.forkScoped,
+        )
+
       yield* ctx.provider.transform((evt) => {
         for (const item of evt.list()) {
           if (
@@ -432,7 +486,7 @@ export function make(
         const credential = connection
           ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.orElseSucceed(() => undefined))
           : undefined
-        if (credential?.type !== "oauth" || credential.methodID !== methodID) return
+        if (credential?.type !== "external" || credential.methodID !== methodID) return
         const target = new URL(url)
         const scope =
           target.hostname.endsWith(".services.ai.azure.com") && !target.pathname.startsWith("/models")
@@ -493,11 +547,22 @@ function credentialResource(credential: Credential.Value | undefined) {
   const resource =
     credential?.type === "key"
       ? (credential.configuration?.resourceName ?? credential.metadata?.resourceName)
-      : credential?.methodID === methodID
+      : credential?.type === "external" && credential.methodID === methodID
         ? credential.metadata?.resourceName
         : undefined
   return typeof resource === "string" && resource.trim() !== "" ? resource : undefined
 }
+
+// Entra ID authentication requires a custom subdomain, which is the resource name every endpoint uses.
+// https://learn.microsoft.com/azure/ai-services/cognitive-services-custom-subdomains
+const resourceListQuery = [
+  "resources",
+  "| where type =~ 'microsoft.cognitiveservices/accounts' and kind in~ ('AIServices', 'OpenAI')",
+  "| extend resourceName = tostring(properties.customSubDomainName)",
+  "| where isnotempty(resourceName)",
+  "| project resourceName, resourceGroup, location",
+  "| order by resourceName asc",
+].join(" ")
 
 function resourceQuery(resource: string) {
   return [

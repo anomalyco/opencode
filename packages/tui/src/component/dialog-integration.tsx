@@ -77,10 +77,13 @@ export function credentialConnections(integration: IntegrationInfo) {
   )
 }
 
+// A count keeps several long labels from squeezing the integration name off the row.
 export function connectionSummary(integration: IntegrationInfo) {
-  return integration.connections
-    .map((connection) => (connection.type === "credential" ? connection.label : `$${connection.name}`))
-    .join(", ")
+  const connections = integration.connections
+  if (connections.length > 1) return `${connections.length} connections`
+  const connection = connections[0]
+  if (!connection) return ""
+  return connection.type === "credential" ? connection.label : `$${connection.name}`
 }
 
 export function DialogIntegration(
@@ -1011,9 +1014,9 @@ function StringChoiceField(props: {
               </text>
               <Show when={row.description}>
                 {(description) => (
-                  <text paddingLeft={3} fg={theme.text.muted}>
-                    {description()}
-                  </text>
+                  <box paddingLeft={3}>
+                    <text fg={theme.text.muted}>{description()}</text>
+                  </box>
                 )}
               </Show>
             </box>

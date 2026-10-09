@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect"
-import { Headers, HttpClientRequest } from "effect/unstable/http"
+import { Headers, HttpClientRequest } from "effect/http"
 import {
   EvaluationAnswer,
   EvaluationInput,
@@ -374,7 +374,7 @@ function fromSettings({ apiKey, baseURL, headers, body, ...providerOptions }: Se
     apiKey,
     baseURL,
     headers,
-    http: body === undefined ? undefined : { body: { ...body } },
+    http: body === undefined ? undefined : { body },
     providerOptions,
   })
 }
