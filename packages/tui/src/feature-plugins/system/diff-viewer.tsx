@@ -835,7 +835,9 @@ export function DiffViewerContent(props: {
           id="diff-source-header"
           paddingLeft={2}
           paddingRight={2}
-          height={1}
+          paddingTop={1}
+          paddingBottom={1}
+          height={3}
           flexShrink={0}
           flexDirection="row"
           gap={1}
@@ -1114,7 +1116,7 @@ export function DiffViewerContent(props: {
         {(panel) => <DiffViewerFooter context={props.context} panel={panel()} onHelp={openHelpDialog} />}
       </Show>
       <Show when={!showFileTree() && !docked()}>
-        <box position="absolute" top={0} right={0} width={1} height={1}>
+        <box position="absolute" top={1} right={0} width={1} height={1}>
           <HelpShortcut compact />
         </box>
       </Show>
