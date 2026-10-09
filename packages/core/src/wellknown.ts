@@ -60,11 +60,14 @@ export const Event = {
   Updated: Bus.ephemeral({ type: "wellknown.updated", schema: {} }),
 }
 
+const requestTimeout = "15 seconds"
+
 export const inspect = Effect.fn("WellKnown.inspect")(function* (origin: string) {
   const url = `${origin.replace(/\/+$/, "")}/.well-known/opencode`
   const http = HttpClient.filterStatusOk(yield* HttpClient.HttpClient)
   return yield* http.execute(HttpClientRequest.get(url).pipe(HttpClientRequest.acceptJson)).pipe(
     Effect.flatMap(HttpClientResponse.schemaBodyJson(Manifest)),
+    Effect.timeout(requestTimeout),
     Effect.mapError((cause) => new Error(`Failed to load wellknown manifest from ${url}`, { cause })),
   )
 })
@@ -92,6 +95,7 @@ const resolveEntry = Effect.fnUntraced(function* (entry: Entry, variables: Reado
     .execute(HttpClientRequest.get(url).pipe(HttpClientRequest.acceptJson, HttpClientRequest.setHeaders(headers)))
     .pipe(
       Effect.flatMap(HttpClientResponse.schemaBodyJson(Config)),
+      Effect.timeout(requestTimeout),
       Effect.mapError((cause) => new Error(`Failed to load wellknown remote config from ${url}`, { cause })),
     )
   if (Schema.is(Config)(remote.config)) return [...configs, remote.config]
@@ -155,7 +159,7 @@ const layer = Layer.effect(
         const changed = !isDeepStrictEqual(Ref.getUnsafe(cache), next)
         if (!changed) return false
         yield* Ref.set(cache, next)
-        yield* bus.publish(Event.Updated, {})
+        yield* bus.publish(Event.Updated, {}, { global: true })
         return true
       },
       (effect) => lock.withPermit(effect),
@@ -174,7 +178,7 @@ const layer = Layer.effect(
           const origins = Schema.is(Sources)(sources) ? sources : []
           yield* kv.set(sourcesKey, Array.from(new Set([...origins, origin])))
           yield* Ref.update(cache, (current) => new Map(current).set(origin, entry))
-          yield* bus.publish(Event.Updated, {})
+          yield* bus.publish(Event.Updated, {}, { global: true })
           return entry
         },
         (effect, _value) => lock.withPermit(effect),
@@ -195,7 +199,7 @@ const layer = Layer.effect(
             next.delete(origin)
             return next
           })
-          yield* bus.publish(Event.Updated, {})
+          yield* bus.publish(Event.Updated, {}, { global: true })
         },
         (effect, _value) => lock.withPermit(effect),
       ),
