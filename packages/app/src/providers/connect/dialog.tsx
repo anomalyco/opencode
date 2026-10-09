@@ -53,8 +53,6 @@ import { ConsoleAuthorization } from "./console"
 import { DialogChatGPTPlanWelcome } from "./chatgpt-welcome"
 import { authServerName, RemoteAuthNotice } from "./remote"
 import { providerAccounts, type ProviderAccount } from "@/settings/providers/accounts"
-import { IconButton } from "@opencode/ui/icon-button"
-import { Menu } from "@opencode/ui/menu"
 import "./models.css"
 
 const CUSTOM_ID = "_custom"
@@ -276,8 +274,6 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
 
     if (accounts.length === 0) return
 
-    if (accounts.length === 1) return accounts[0].label
-
     return language.plural("dialog.provider.accounts.count", accounts.length, { count: accounts.length })
   }
   let picker: HTMLDivElement | undefined
@@ -358,10 +354,9 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
                         <span class="min-w-0 truncate font-[530] text-v2-text-text-base">{provider.name}</span>
                         <Show when={accountSummary(provider)}>
                           {(summary) => (
-                            <>
-                              <span class="min-w-0 truncate font-[440] text-v2-text-text-muted">{summary()}</span>
-                              <Icon name="check" size="small" class="ml-auto shrink-0 text-v2-icon-icon-base" />
-                            </>
+                            <span class="flex h-4 shrink-0 items-center rounded-xs border-[0.5px] border-v2-border-border-base bg-v2-background-bg-layer-03 px-1 text-[11px] font-[530] leading-none tracking-[0.05px] text-v2-text-text-muted">
+                              {summary()}
+                            </span>
                           )}
                         </Show>
                         <Show when={CONSOLE_PROVIDERS.has(provider.id) && !accountSummary(provider)}>
@@ -1230,16 +1225,18 @@ function ProviderConnection(props: {
 
   function AccountsView() {
     return (
-      <div data-component="provider-accounts" class="flex flex-col gap-4">
-        <button
-          type="button"
-          class="flex h-9 w-full items-center gap-2 rounded-md px-3 text-left text-[13px] font-[530] leading-5 tracking-[-0.04px] text-v2-text-text-base hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
-          disabled={state.switching !== undefined}
-          onClick={addAccount}
-        >
-          <Icon name="plus" size="small" class="shrink-0 text-v2-icon-icon-base" />
-          {language.t("settings.providers.account.add")}
-        </button>
+      <div data-component="provider-accounts" class="flex flex-col gap-5">
+        <div class="px-3">
+          <Button
+            size="large"
+            class="!px-3"
+            variant="contrast"
+            disabled={state.switching !== undefined}
+            onClick={addAccount}
+          >
+            {language.t("dialog.provider.accounts.add")}
+          </Button>
+        </div>
         <section class="flex flex-col">
           <div class="px-3 pb-2 text-[13px] font-[440] leading-text-compact tracking-[-0.04px] text-v2-text-text-muted">
             {language.t("dialog.provider.accounts.connected")}
@@ -1280,24 +1277,15 @@ function ProviderConnection(props: {
                         <Icon name="check" size="small" class="shrink-0 text-v2-icon-icon-base" />
                       </Show>
                     </button>
-                    <div class="shrink-0 pe-1.5">
-                      <Menu gutter={4} modal={false} placement="bottom-end">
-                        <Menu.Trigger
-                          as={IconButton}
-                          variant="ghost-muted"
-                          size="small"
-                          icon={<Icon name="outline-dots" />}
-                          disabled={state.switching !== undefined}
-                          aria-label={language.t("common.moreOptions")}
-                        />
-                        <Menu.Portal>
-                          <Menu.Content>
-                            <Menu.Item onSelect={() => setState("confirming", account.id)}>
-                              {language.t("settings.providers.account.remove")}
-                            </Menu.Item>
-                          </Menu.Content>
-                        </Menu.Portal>
-                      </Menu>
+                    <div class="flex shrink-0 items-center pe-1.5">
+                      <Button
+                        variant="ghost-muted"
+                        disabled={state.switching !== undefined}
+                        aria-label={language.t("dialog.provider.accounts.removeLabel", { account: account.label })}
+                        onClick={() => setState("confirming", account.id)}
+                      >
+                        {language.t("dialog.provider.accounts.remove")}
+                      </Button>
                     </div>
                   </div>
                 </Show>

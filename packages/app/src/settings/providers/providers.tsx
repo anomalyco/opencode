@@ -395,23 +395,41 @@ export const SettingsProviders: Component<{
             <Menu.Item disabled={state.credentialID !== undefined} onSelect={() => connect(menuProps.provider.id)}>
               {language.t("settings.providers.account.add")}
             </Menu.Item>
-            <Menu.Sub placement="left-start">
-              <Menu.SubTrigger disabled={state.credentialID !== undefined || accounts().length === 0}>
-                {language.t("settings.providers.account.remove")}
-              </Menu.SubTrigger>
-              <Menu.SubContent class="settings-provider-account-submenu">
-                <For each={accounts()}>
-                  {(account) => (
-                    <Menu.Item
-                      badge={account.id === active()?.id ? language.t("settings.providers.account.active") : undefined}
-                      onSelect={() => void remove(menuProps.provider, name(), account)}
-                    >
-                      <span class="settings-provider-account-label">{account.label}</span>
-                    </Menu.Item>
-                  )}
-                </For>
-              </Menu.SubContent>
-            </Menu.Sub>
+            <Show
+              when={accounts().length > 1}
+              fallback={
+                <Menu.Item
+                  disabled={state.credentialID !== undefined || accounts().length === 0}
+                  onSelect={() => {
+                    const account = accounts()[0]
+
+                    if (account) void remove(menuProps.provider, name(), account)
+                  }}
+                >
+                  {language.t("settings.providers.account.removeSingle")}
+                </Menu.Item>
+              }
+            >
+              <Menu.Sub placement="left-start">
+                <Menu.SubTrigger disabled={state.credentialID !== undefined || accounts().length === 0}>
+                  {language.t("settings.providers.account.remove")}
+                </Menu.SubTrigger>
+                <Menu.SubContent class="settings-provider-account-submenu">
+                  <For each={accounts()}>
+                    {(account) => (
+                      <Menu.Item
+                        badge={
+                          account.id === active()?.id ? language.t("settings.providers.account.active") : undefined
+                        }
+                        onSelect={() => void remove(menuProps.provider, name(), account)}
+                      >
+                        <span class="settings-provider-account-label">{account.label}</span>
+                      </Menu.Item>
+                    )}
+                  </For>
+                </Menu.SubContent>
+              </Menu.Sub>
+            </Show>
           </Menu.Content>
         </Menu.Portal>
       </Menu>

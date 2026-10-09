@@ -848,8 +848,7 @@ test("providers: the connect dialog lists connected providers and manages their 
   expect(activated).toEqual(["cred_personal"])
 
   // Removing an account asks first.
-  await list.getByRole("button", { name: "More options", exact: true }).nth(1).click()
-  await page.getByRole("menuitem", { name: "Remove account…", exact: true }).click()
+  await list.getByRole("button", { name: "Remove Work", exact: true }).click()
   await expect(dialog.getByText("Remove Work?", { exact: true })).toBeVisible()
 
   const removed = page.waitForRequest(
@@ -860,7 +859,7 @@ test("providers: the connect dialog lists connected providers and manages their 
   await removed
 
   // Add account opens the provider's sign-in, and Back returns to the accounts.
-  await dialog.getByRole("button", { name: "Add account", exact: true }).click()
+  await dialog.getByRole("button", { name: "Add another account", exact: true }).click()
   await expect(dialog.getByPlaceholder("API key")).toBeVisible()
   await dialog.getByRole("button", { name: "Navigate back", exact: true }).click()
   await expect(list).toBeVisible()
