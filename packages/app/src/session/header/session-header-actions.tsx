@@ -7,6 +7,47 @@ import { useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useSessionLayout } from "@/session/session-layout"
 
+export function SessionTerminalToggle() {
+  const command = useCommand()
+  const language = useLanguage()
+  const { view } = useSessionLayout()
+  const keybind = command.keybindParts("terminal.toggle")
+  const label = language.t("desktop.menu.toggleTerminal")
+
+  return (
+    <Tooltip
+      class="shrink-0"
+      placement="bottom"
+      value={
+        <>
+          {label}
+          <Show when={keybind.length > 0}>
+            <Keybind keys={keybind} variant="neutral" />
+          </Show>
+        </>
+      }
+    >
+      <IconButton
+        type="button"
+        variant="ghost-muted"
+        size="large"
+        class="shrink-0"
+        style={{
+          // This fixed control sits above moving panel contents.
+          "--v2-overlay-simple-overlay-hover": "var(--v2-background-bg-layer-01)",
+          "--v2-overlay-simple-overlay-pressed": "var(--v2-background-bg-layer-02)",
+        }}
+        state={view().dock.opened() ? "pressed" : undefined}
+        onClick={() => command.trigger("terminal.toggle")}
+        aria-label={label}
+        aria-expanded={view().dock.opened()}
+        aria-controls="terminal-panel"
+        icon={<Icon name="terminal" />}
+      />
+    </Tooltip>
+  )
+}
+
 export function SessionReviewToggle() {
   const command = useCommand()
   const language = useLanguage()

@@ -34,7 +34,7 @@ import { createTimelineSearchController } from "./timeline/search-controller"
 import { TimelineSearchBar } from "./timeline/search-bar"
 import { ActiveSessionComposerRegion, createActiveSessionRegion } from "./composer/region"
 import { SessionIdentityHeader } from "./session-identity-header"
-import { SessionReviewToggle } from "./header/session-header-actions"
+import { SessionReviewToggle, SessionTerminalToggle } from "./header/session-header-actions"
 import { SessionRunningMenu } from "./header/session-running-menu"
 import { createAnimatedPresence } from "@/runtime/animated-presence"
 import { createTimelineCache } from "./timeline/cache"
@@ -371,12 +371,13 @@ function SessionScreenContent(props: {
           {/* Keep the control outside panel animations; a side dock's 52px header includes a 1px divider. */}
           <Show when={isDesktop() && messagesReady() && session.identity.params.id}>
             <div
-              class="absolute end-3 top-0 z-30 flex items-center"
+              class="absolute end-3 top-0 z-30 flex items-center gap-2"
               classList={{ "h-[51px]": sideDockVisible(), "h-12": !sideDockVisible() }}
               data-slot="session-review-toggle"
               onPointerDown={hideTimelineScrollbar}
               onClick={hideTimelineScrollbar}
             >
+              <SessionTerminalToggle />
               <SessionReviewToggle />
             </div>
           </Show>
