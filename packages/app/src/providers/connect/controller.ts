@@ -43,7 +43,9 @@ export function providerFormDefaults(fields: ProviderConnectMethod["form"]) {
 
       if (actual === undefined) return false
 
-      const equal = Array.isArray(actual) ? actual.some((item) => item === condition.value) : actual === condition.value
+      const equal = Array.isArray(actual)
+        ? actual.some((item) => item === condition.value)
+        : actual === condition.value
 
       return condition.op === "eq" ? equal : !equal
     })
@@ -60,8 +62,8 @@ export function createProviderConnectionController(options: {
   keyProvider?: () => string
   directory: () => string | undefined
   onComplete: () => void
-  /** Picks the method to start without asking when the integration exposes several. */
-  autoSelect?: (methods: ProviderConnectMethod[]) => number | undefined
+  /** Waits for the caller to start a method, even when the integration has only one. */
+  manual?: boolean
   /** Runs after the catalogs refresh; returning false keeps the dialog on a retryable error. */
   prepare?: (active: () => boolean) => Promise<boolean>
   pollInterval?: number
@@ -125,14 +127,12 @@ export function createProviderConnectionController(options: {
     error?: string
     auto: boolean
     connected: boolean
-    browserOpened: boolean
     browserFailed: boolean
     statusFailed: boolean
   }>({
     auto: false,
     // The credential is stored; a retry only needs to reload the catalogs.
     connected: false,
-    browserOpened: false,
     browserFailed: false,
     // The attempt is still open on the server; a retry resumes polling it.
     statusFailed: false,
@@ -148,12 +148,9 @@ export function createProviderConnectionController(options: {
   )
 
   const autoIndex = createMemo(() => {
-    if (integration.loading) return undefined
-    const values = methods()
+    if (integration.loading || options.manual) return undefined
 
-    if (values.length === 1) return 0
-
-    return options.autoSelect?.(values)
+    return methods().length === 1 ? 0 : undefined
   })
 
   type Action =
@@ -175,7 +172,6 @@ export function createProviderConnectionController(options: {
           draft.state = undefined
           draft.error = undefined
           draft.connected = false
-          draft.browserOpened = false
           draft.browserFailed = false
           draft.statusFailed = false
 
@@ -208,7 +204,6 @@ export function createProviderConnectionController(options: {
           draft.state = "waiting"
           draft.authorization = action.authorization
           draft.error = undefined
-          draft.browserOpened = false
 
           return
         }
@@ -335,7 +330,6 @@ export function createProviderConnectionController(options: {
 
     if (!url) return
     const generation = polling.generation
-    setStore("browserOpened", true)
 
     const opened = await Promise.resolve()
       .then(() => {
@@ -450,11 +444,9 @@ export function createProviderConnectionController(options: {
 
     polling.attempt = result.authorization
     dispatch({ type: "auth.waiting", authorization: result.authorization })
-
     // Same as `opencode auth login`: hand the user straight to the browser instead of
-    // asking them to click a link and retype a code. Console shows its device code first
-    // and opens the browser only when the user continues.
-    if (!isConsole()) void open()
+    // asking them to click a link and retype a code.
+    void open()
 
     if (result.authorization.mode === "auto") void poll(result.authorization, generation)
   }
@@ -535,7 +527,6 @@ export function createProviderConnectionController(options: {
     currentMethod,
     methodIndex: () => store.methodIndex,
     authorization: () => store.authorization,
-    browserOpened: () => store.browserOpened,
     browserFailed: () => store.browserFailed,
     // True while nothing useful can be shown yet: the integration is loading, a method is
     // about to be picked automatically, the authorization request is in flight, or an external

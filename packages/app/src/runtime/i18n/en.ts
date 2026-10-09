@@ -121,8 +121,13 @@ export const dict = {
   "provider.connect.title": "Connect {{provider}}",
   "provider.connect.opencode.name": "OpenCode Console",
   "provider.connect.opencode.freeName": "OpenCode Free",
+  "provider.connect.opencode.errorTitle": "Connect to OpenCode",
   "provider.connect.console.title": "Connecting to OpenCode Console",
   "provider.connect.console.titleGo": "Connecting to OpenCode Go",
+  "provider.connect.console.intro": "Sign in with your OpenCode Console account to use the available models.",
+  "provider.connect.console.continue": "Continue in the browser",
+  "provider.connect.console.retry": "Try again",
+  "provider.connect.console.serviceKeyDescription": "Connect using a service-account API key from OpenCode Console.",
   "provider.connect.console.instructions":
     "Continue in your browser. Confirm the code shown there matches the one below.",
   "provider.connect.console.deviceCode": "Device code",
@@ -158,7 +163,7 @@ export const dict = {
     "Your account is connected, but this Console workspace has no available models. Check its setup in Console, then refresh.",
   "provider.connect.console.modelsLoading": "Your models are still loading. Refresh to check again.",
   "provider.connect.console.refresh": "Refresh models",
-  "provider.connect.console.continue": "Continue in the browser",
+  "provider.connect.console.openingBrowser": "Opening browser…",
   "provider.connect.console.serviceAccount": "Service account?",
   "provider.connect.console.useApiKey": "Use API key",
   "provider.connect.remote.title": "Connecting on “{{server}}”",
@@ -191,9 +196,6 @@ export const dict = {
     "Your browser opens so you can sign in to {{provider}}. Paste the authorization code it gives you below.",
   "provider.connect.oauth.openBrowser": "Open browser",
   "provider.connect.oauth.expired": "Authorization expired",
-  "provider.connect.console.apiKey.description":
-    "Paste an API key for a service account. You create service accounts in the OpenCode Console under Keys.",
-  "provider.connect.console.apiKey.link": "Open the Console",
   "provider.connect.toast.connected.title": "{{provider}} connected",
   "provider.connect.toast.connected.description": "{{provider}} models are now available to use.",
 

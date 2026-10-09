@@ -6,7 +6,6 @@ import { useLanguage } from "@/runtime/i18n/language"
 export function ConsoleAuthorization(props: {
   /** Undefined until the server returns the sign-in attempt. */
   code: string | undefined
-  browserOpened: boolean
   browserFailed: boolean
   copied: boolean
   copyFailed: boolean
@@ -31,7 +30,7 @@ export function ConsoleAuthorization(props: {
           when={props.code}
           fallback={
             <p role="status" class="flex h-12 items-center">
-              <TextShimmer text={language.t("provider.connect.status.inProgress")} active />
+              <TextShimmer text={language.t("provider.connect.console.openingBrowser")} active />
             </p>
           }
         >
@@ -58,43 +57,26 @@ export function ConsoleAuthorization(props: {
                   )}
                 </For>
               </div>
-              <Show when={props.browserOpened}>
-                <p role="status">
-                  <TextShimmer text={language.t("provider.connect.console.waiting")} active />
-                </p>
-              </Show>
+              <p role="status">
+                <TextShimmer text={language.t("provider.connect.console.waiting")} active />
+              </p>
             </>
           )}
         </Show>
       </div>
-      <Show
-        when={props.browserOpened}
-        fallback={
-          <Button
-            size="large"
-            variant="contrast"
-            class="self-start !px-3"
-            disabled={!props.code}
-            onClick={props.onOpen}
-          >
-            {language.t("provider.connect.console.continue")}
+      <div data-component="console-browser-fallback" class="flex min-h-7 flex-wrap items-center gap-x-3 gap-y-1">
+        <span class="text-v2-text-text-faint">{language.t("provider.connect.console.browserHint")}</span>
+        <Button variant="ghost-muted" disabled={!props.code} onClick={props.onCopy}>
+          {language.t(props.copied ? "provider.connect.console.linkCopied" : "provider.connect.console.copyLink")}
+        </Button>
+        <Show when={props.browserFailed || props.copyFailed}>
+          <Button variant="ghost" onClick={props.onOpen}>
+            {language.t("provider.connect.console.openAgain")}
           </Button>
-        }
-      >
-        <div data-component="console-browser-fallback" class="flex min-h-7 flex-wrap items-center gap-x-3 gap-y-1">
-          <span class="text-v2-text-text-faint">{language.t("provider.connect.console.browserHint")}</span>
-          <Button variant="ghost-muted" onClick={props.onCopy}>
-            {language.t(props.copied ? "provider.connect.console.linkCopied" : "provider.connect.console.copyLink")}
-          </Button>
-          <Show when={props.browserFailed || props.copyFailed}>
-            <Button variant="ghost" onClick={props.onOpen}>
-              {language.t("provider.connect.console.openAgain")}
-            </Button>
-          </Show>
-        </div>
-        <Show when={props.copyFailed}>
-          <p role="alert">{language.t("provider.connect.console.copyFailed")}</p>
         </Show>
+      </div>
+      <Show when={props.copyFailed}>
+        <p role="alert">{language.t("provider.connect.console.copyFailed")}</p>
       </Show>
     </div>
   )

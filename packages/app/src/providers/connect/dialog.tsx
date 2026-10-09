@@ -4,6 +4,7 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import { Icon } from "@opencode/ui/icon"
 import { List } from "@opencode/ui/list"
 import { RadioGroup, RadioItem } from "@opencode/ui/radio"
+import { Loader } from "@opencode/ui/loader"
 import { Spinner } from "@opencode/ui/spinner"
 import { TextField } from "@opencode/ui/text-field"
 import { DialogBody, DialogHeader, DialogTitle, Dialog } from "@opencode/ui/dialog"
@@ -23,7 +24,6 @@ import {
 } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useParams } from "@solidjs/router"
-import { ExternalLink } from "@/runtime/platform/external-link"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useServerSDK } from "@/runtime/server/client"
@@ -88,12 +88,10 @@ export const DialogConnectProvider: Component<{
     completed: boolean
     modelProvider?: { id: string; name: string }
     authorization: boolean
-    consoleSignIn: boolean
     chatgptWelcome: boolean
   }>({
     completed: false,
     authorization: false,
-    consoleSignIn: false,
     chatgptWelcome: false,
   })
 
@@ -139,11 +137,11 @@ export const DialogConnectProvider: Component<{
               onConnected={(methodID) => {
                 props.onConnected?.(provider)
 
-                if (provider === "openai" && methodID === "chatgpt-token-sharing") setState("chatgptWelcome", true)
+                if (provider === "openai" && methodID === "chatgpt-token-sharing")
+                  setState("chatgptWelcome", true)
               }}
               onFirstConnection={(provider) => setState("modelProvider", provider)}
               onAuthorization={(authorization) => setState("authorization", authorization)}
-              onConsoleSignIn={(active) => setState("consoleSignIn", active)}
             />
           )}
         </Match>
@@ -160,7 +158,7 @@ export const DialogConnectProvider: Component<{
       containerClass={
         state.modelProvider
           ? "!h-[min(calc(100vh_-_16px),560px)] !w-[min(calc(100vw_-_16px),640px)]"
-          : consoleSelected() && (state.consoleSignIn || state.authorization)
+          : consoleSelected() && state.authorization
             ? "!h-auto !max-h-[min(calc(100vh_-_16px),560px)] !w-[min(calc(100vw_-_16px),640px)]"
             : "!h-[min(calc(100vh_-_16px),512px)] !w-[min(calc(100vw_-_16px),640px)]"
       }
@@ -179,8 +177,7 @@ export const DialogConnectProvider: Component<{
       }}
       class="[font-family:var(--v2-font-family-sans)] [&_[data-slot=dialog-header]]:!px-5 [&_[data-slot=dialog-header-title]]:!text-[15px] [&_[data-slot=dialog-header-title]]:!tracking-[-0.13px]"
       classList={{
-        "[&_[data-slot=dialog-header]]:!pt-4 [&_[data-slot=dialog-header]]:!pb-3":
-          consoleSelected() && !state.modelProvider,
+        "[&_[data-slot=dialog-header]]:!pt-4 [&_[data-slot=dialog-header]]:!pb-3": consoleSelected() && !state.modelProvider,
         "[&_[data-slot=dialog-header]]:!pt-5": !!state.modelProvider,
       }}
     >
@@ -412,8 +409,6 @@ function ProviderConnection(props: {
   onConnected?: (methodID?: string) => void
   onFirstConnection: (provider: { id: string; name: string }) => void
   onAuthorization: (authorization: boolean) => void
-  /** Sizes the dialog to the sign-in content from its first frame instead of resizing when the code arrives. */
-  onConsoleSignIn: (active: boolean) => void
 }) {
   const dialog = useDialog()
   const params = useParams()
@@ -459,12 +454,8 @@ function ProviderConnection(props: {
     // exactly as before; only the sign-in is shared with the Console.
     keyProvider: () => props.provider,
     directory,
-    autoSelect: (methods) => {
-      if (!isConsole) return undefined
-      const index = methods.findIndex((method) => method.type === "oauth")
-
-      return index === -1 ? undefined : index
-    },
+    // Console starts from its own intro, even when the account sign-in is its only method.
+    manual: isConsole,
     prepare: isConsole ? prepareConsoleCatalog : undefined,
     pollInterval: isConsole ? 500 : undefined,
     onComplete: () => {
@@ -472,7 +463,9 @@ function ProviderConnection(props: {
       props.onConnected?.(method?.type === "oauth" ? method.id : undefined)
       // The picker only lists the newest model per family by default, which hides most of
       // what a new connection just unlocked. Show everything the connected integration offers.
-      global.models.show(connectionModels().map((model) => ({ providerID: model.providerID, modelID: model.id })))
+      global.models.show(
+        connectionModels().map((model) => ({ providerID: model.providerID, modelID: model.id })),
+      )
 
       if (state.catalogPending) {
         setState("noModels", true)
@@ -596,9 +589,7 @@ function ProviderConnection(props: {
   })
   createEffect(() => {
     const current = controller.auth.state()
-    props.onAuthorization(
-      controller.authorization() !== undefined && (current === "waiting" || current === "refreshing"),
-    )
+    props.onAuthorization(controller.authorization() !== undefined && (current === "waiting" || current === "refreshing"))
   })
 
   const provider = createMemo(() => ({
@@ -651,15 +642,19 @@ function ProviderConnection(props: {
   const keyIndex = () => controller.methods().findIndex((method) => method.type === "key")
   const oauthIndex = () => controller.methods().findIndex((method) => method.type === "oauth")
 
-  // The Console device flow owns the dialog from the first frame until the catalogs are loaded.
+  // The device code owns the dialog from the moment the server returns it until the catalogs are loaded.
   const consoleSignIn = () =>
     isConsole &&
     !state.noModels &&
-    controller.currentMethod()?.type !== "key" &&
+    controller.currentMethod()?.type === "oauth" &&
     controller.auth.state() !== "error" &&
-    (controller.busy() || controller.authorization()?.mode === "auto")
+    controller.authorization()?.mode === "auto"
 
-  createEffect(() => props.onConsoleSignIn(consoleSignIn()))
+  // The intro stays up while the sign-in starts, so its button carries the progress.
+  const consoleStarting = () => controller.currentMethod()?.type === "oauth" && controller.auth.state() === "pending"
+
+  const consoleIntro = () =>
+    isConsole && !controller.loading() && (controller.methodIndex() === undefined || consoleStarting())
 
   function AuthFormView() {
     const defaults = providerFormDefaults(controller.currentMethod()?.form)
@@ -896,15 +891,8 @@ function ProviderConnection(props: {
   }
 
   function goBack() {
-    // The API key path for the Console is an escape hatch below the sign-in flow, so
-    // "back" returns to the sign-in rather than leaving the provider.
-    if (isConsole && controller.currentMethod()?.type === "key" && oauthIndex() !== -1) {
-      void controller.auth.select(oauthIndex())
-
-      return
-    }
-
-    if (!isConsole && controller.methods().length > 1 && controller.methodIndex() !== undefined) {
+    // Console steps return to its intro; it has no method list to go back to.
+    if ((isConsole || controller.methods().length > 1) && controller.methodIndex() !== undefined) {
       controller.auth.reset()
 
       return
@@ -959,7 +947,7 @@ function ProviderConnection(props: {
 
   function ErrorRow() {
     return (
-      <div class="flex flex-col items-start gap-3">
+      <div class="flex flex-col items-start" classList={{ "gap-3": !isConsole, "gap-4": isConsole }}>
         <div class="flex items-start gap-2 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base">
           <Icon name="circle-ban-sign" size="small" class="mt-0.5 shrink-0 text-v2-state-fg-danger" />
           <span role="alert">
@@ -968,8 +956,8 @@ function ProviderConnection(props: {
               : language.t("provider.connect.status.failed", { error: controller.auth.error() ?? "" })}
           </span>
         </div>
-        <Button variant="neutral" onClick={() => void controller.auth.retry()}>
-          {language.t("common.retry")}
+        <Button variant={isConsole ? undefined : "neutral"} onClick={() => void controller.auth.retry()}>
+          {language.t(isConsole ? "provider.connect.console.retry" : "common.retry")}
         </Button>
       </div>
     )
@@ -1008,21 +996,15 @@ function ProviderConnection(props: {
     }
 
     return (
-      <div class="flex flex-col gap-5 px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted">
-        <Show
-          when={isConsole}
-          fallback={language.t("provider.connect.apiKey.description", { provider: provider().name })}
-        >
-          <div>
-            {language.t("provider.connect.console.apiKey.description")}{" "}
-            <ExternalLink
-              href="https://opencode.ai/console"
-              class="text-v2-text-text-base focus-visible:rounded-xs focus-visible:outline-2 focus-visible:outline-v2-border-border-focus"
-            >
-              {language.t("provider.connect.console.apiKey.link")}
-            </ExternalLink>
-          </div>
-        </Show>
+      <div
+        class="flex flex-col gap-5 px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted"
+        classList={{ "pb-1": isConsole }}
+      >
+        <p>
+          {isConsole
+            ? language.t("provider.connect.console.serviceKeyDescription")
+            : language.t("provider.connect.apiKey.description", { provider: provider().name })}
+        </p>
         <form onSubmit={handleSubmit} class="flex flex-col items-start gap-5 self-stretch">
           <label class="flex w-full flex-col gap-2 font-[530] leading-4 text-v2-text-text-base">
             {language.t("provider.connect.apiKey.label", { provider: provider().name })}
@@ -1047,7 +1029,12 @@ function ProviderConnection(props: {
               </div>
             )}
           </Show>
-          <Button type="submit" variant="contrast" data-action="provider-connect-submit">
+          <Button
+            type="submit"
+            variant="contrast"
+            class={isConsole ? "!px-3" : undefined}
+            data-action="provider-connect-submit"
+          >
             {language.t("common.continue")}
           </Button>
         </form>
@@ -1150,18 +1137,41 @@ function ProviderConnection(props: {
     )
   }
 
-  // Deliberately quiet: most people should never need a key, so this stays small and at the bottom.
-  function ConsoleApiKeySwitch() {
+  function ConsoleIntro() {
     return (
-      <div data-component="console-service-account" class="flex h-7 items-center gap-1 px-3 pt-5 text-[13px]">
-        <span class="text-v2-text-text-faint">{language.t("provider.connect.console.serviceAccount")}</span>
+      <div class="flex flex-col items-start gap-5 px-3">
+        <p class="text-[13px] leading-5 text-v2-text-text-muted">{language.t("provider.connect.console.intro")}</p>
         <Button
-          variant="ghost-muted"
-          data-action="provider-connect-api-key"
-          onClick={() => void controller.auth.select(keyIndex())}
+          size="large"
+          class="!px-3"
+          variant="contrast"
+          disabled={oauthIndex() === -1 || consoleStarting()}
+          aria-busy={consoleStarting()}
+          onClick={() => void controller.auth.select(oauthIndex())}
         >
-          {language.t("provider.connect.console.useApiKey")}
+          <Show when={consoleStarting()}>
+            <span class="absolute inset-0 flex items-center justify-center gap-1.5">
+              <Loader />
+              <span>{language.t("provider.connect.console.openingBrowser")}</span>
+            </span>
+          </Show>
+          <span aria-hidden={consoleStarting() ? "true" : undefined} classList={{ "opacity-0": consoleStarting() }}>
+            {language.t("provider.connect.console.continue")}
+          </span>
         </Button>
+        <Show when={keyIndex() !== -1}>
+          <div data-component="console-service-account" class="flex h-7 items-center gap-1 text-[13px]">
+            <span class="text-v2-text-text-faint">{language.t("provider.connect.console.serviceAccount")}</span>
+            <Button
+              variant="ghost-muted"
+              data-action="provider-connect-api-key"
+              disabled={consoleStarting()}
+              onClick={() => void controller.auth.select(keyIndex())}
+            >
+              {language.t("provider.connect.console.useApiKey")}
+            </Button>
+          </div>
+        </Show>
       </div>
     )
   }
@@ -1359,6 +1369,9 @@ function ProviderConnection(props: {
           <div class="text-[15px] font-[530] leading-5 tracking-[-0.13px] text-v2-text-text-base">
             <DialogTitle>
               <Switch>
+                <Match when={isConsole && controller.auth.state() === "error"}>
+                  {language.t("provider.connect.opencode.errorTitle")}
+                </Match>
                 <Match when={consoleSignIn()}>
                   {language.t(
                     props.provider === "opencode-go"
@@ -1372,6 +1385,9 @@ function ProviderConnection(props: {
                   }
                 >
                   {language.t("provider.connect.title.anthropicProMax")}
+                </Match>
+                <Match when={props.provider === "opencode"}>
+                  {language.t("provider.connect.title", { provider: language.t("provider.connect.opencode.name") })}
                 </Match>
                 <Match when={true}>{language.t("provider.connect.title", { provider: provider().name })}</Match>
               </Switch>
@@ -1395,7 +1411,6 @@ function ProviderConnection(props: {
               <div class="px-3">
                 <ConsoleAuthorization
                   code={code()}
-                  browserOpened={controller.browserOpened()}
                   browserFailed={controller.browserFailed()}
                   copied={state.copied}
                   copyFailed={state.copyFailed}
@@ -1403,6 +1418,9 @@ function ProviderConnection(props: {
                   onOpen={() => void controller.auth.open()}
                 />
               </div>
+            </Match>
+            <Match when={consoleIntro()}>
+              <ConsoleIntro />
             </Match>
             <Match when={controller.busy()}>
               <div class="px-3">
@@ -1430,17 +1448,6 @@ function ProviderConnection(props: {
               <OAuthAutoView />
             </Match>
           </Switch>
-          <Show
-            when={
-              isConsole &&
-              !controller.loading() &&
-              !state.noModels &&
-              controller.currentMethod()?.type !== "key" &&
-              keyIndex() !== -1
-            }
-          >
-            <ConsoleApiKeySwitch />
-          </Show>
         </div>
       </div>
     </Show>

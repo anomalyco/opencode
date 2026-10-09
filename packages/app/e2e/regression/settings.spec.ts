@@ -750,82 +750,62 @@ for (const row of [
   })
 }
 
-test("providers: Console sign-in shows the device code before opening the browser", async ({ page, context }) => {
-  const url = "https://auth.example.test/device?user_code=ABCD-EFGH"
-  await context.route("https://auth.example.test/**", (route) => route.fulfill({ body: "Sign in" }))
-  const popups: string[] = []
-
-  page.on("popup", (popup) => popups.push(popup.url()))
-
-  const { settings } = await open(page, {
-    provider: NO_PROVIDER,
-    integrations: [
-      {
-        id: "opencode",
-        name: "OpenCode Console",
-        methods: [
-          { id: "device", type: "oauth", label: "OpenCode Console account" },
-          { type: "key", label: "API key (service account)" },
-        ],
-        connections: [],
-      },
+const consoleIntegrations = [
+  {
+    id: "opencode",
+    name: "OpenCode Console",
+    methods: [
+      { id: "device", type: "oauth", label: "OpenCode Console account" },
+      { type: "key", label: "API key (service account)" },
     ],
-    onIntegrationOAuth: () => ({ url }),
+    connections: [],
+  },
+  { id: "opencode-go", name: "OpenCode Go", methods: [{ type: "key" }], connections: [] },
+]
+
+for (const row of [
+  { provider: "OpenCode Console", connect: "Connect OpenCode Console", signIn: "Connecting to OpenCode Console" },
+  { provider: "OpenCode Go", connect: "Connect OpenCode Go", signIn: "Connecting to OpenCode Go" },
+]) {
+  test(`providers: ${row.provider} signs in from the Console intro`, async ({ page, context }) => {
+    const url = "https://auth.example.test/device?user_code=ABCD-EFGH"
+    await context.route("https://auth.example.test/**", (route) => route.fulfill({ body: "Sign in" }))
+    const { settings } = await open(page, { integrations: consoleIntegrations, onIntegrationOAuth: () => ({ url }) })
+
+    // Registered after the mock server so it sees the sign-in request first.
+    const start = await holdRoute(page, (url) => url.pathname === "/api/integration/opencode/connect/oauth", {
+      method: "POST",
+    })
+
+    await settings.getByRole("tab", { name: "Providers", exact: true }).click()
+    await settings
+      .locator(".settings-provider-row", { hasText: row.provider })
+      .getByRole("button", { name: "Connect", exact: true })
+      .click()
+    const intro = page.getByRole("dialog", { name: row.connect, exact: true })
+    const container = page.locator('[data-slot="dialog-container"]')
+    await expect(
+      intro.getByText("Sign in with your OpenCode Console account to use the available models."),
+    ).toBeVisible()
+    await expect(intro.getByRole("button", { name: "Use API key", exact: true })).toBeVisible()
+    expect((await container.boundingBox())?.height).toBe(512)
+
+    // The intro keeps its size while the sign-in starts, then the browser opens with the code.
+    const popup = page.waitForEvent("popup")
+    await intro.getByRole("button", { name: "Continue in the browser", exact: true }).click()
+    await start.arrived
+    await expect(intro.getByRole("button", { name: "Opening browser…", exact: true })).toBeDisabled()
+    expect((await container.boundingBox())?.height).toBe(512)
+    start.release()
+    await expect(await popup).toHaveURL(url)
+
+    const signIn = page.getByRole("dialog", { name: row.signIn, exact: true })
+    await expect(signIn.getByRole("group", { name: "Device code: ABCD-EFGH", exact: true })).toBeVisible()
+    await expect(signIn.getByRole("button", { name: "Copy sign-in link", exact: true })).toBeVisible()
+    await expect(signIn.getByRole("button", { name: "Use API key", exact: true })).toHaveCount(0)
+    await expect.poll(async () => (await container.boundingBox())?.height).toBeLessThan(512)
   })
-
-  const start = await holdRoute(page, (url) => url.pathname === "/api/integration/opencode/connect/oauth", {
-    method: "POST",
-  })
-
-  await settings.getByRole("tab", { name: "Providers", exact: true }).click()
-  await settings
-    .locator(".settings-provider-row", { hasText: "OpenCode Console" })
-    .getByRole("button", { name: "Connect", exact: true })
-    .click()
-  const dialog = page.getByRole("dialog")
-  const container = page.locator('[data-slot="dialog-container"]')
-  await start.arrived
-  await expect(dialog.getByRole("status").filter({ hasText: "Authorization in progress…" })).toBeVisible()
-  // The dialog keeps the size it opened with when the device code replaces the progress row.
-  const pending = await container.boundingBox()
-  start.release()
-  await expect(dialog.getByRole("group", { name: "Device code: ABCD-EFGH", exact: true })).toBeVisible()
-  expect((await container.boundingBox())?.height).toBe(pending?.height)
-  const proceed = dialog.getByRole("button", { name: "Continue in the browser", exact: true })
-  await expect(proceed).toBeEnabled()
-  await expect(dialog.getByText("Waiting for confirmation…")).toHaveCount(0)
-  expect(popups).toEqual([])
-
-  const popup = page.waitForEvent("popup")
-  await proceed.click()
-  await expect(await popup).toHaveURL(url)
-  await expect(proceed).toHaveCount(0)
-  await expect(dialog.getByRole("status").filter({ hasText: "Waiting for confirmation…" })).toBeVisible()
-  await expect(dialog.getByRole("button", { name: "Copy sign-in link", exact: true })).toBeVisible()
-})
-
-test("providers: OpenCode Go signs in through Console under its own name", async ({ page }) => {
-  const { settings } = await open(page, {
-    integrations: [
-      {
-        id: "opencode",
-        name: "OpenCode Console",
-        methods: [{ id: "device", type: "oauth", label: "OpenCode Console account" }],
-        connections: [],
-      },
-      { id: "opencode-go", name: "OpenCode Go", methods: [{ type: "key" }], connections: [] },
-    ],
-    onIntegrationOAuth: () => ({ url: "https://auth.example.test/device?user_code=WXYZ-1234" }),
-  })
-
-  await settings.getByRole("tab", { name: "Providers", exact: true }).click()
-  await settings
-    .locator(".settings-provider-row", { hasText: "OpenCode Go" })
-    .getByRole("button", { name: "Connect", exact: true })
-    .click()
-  const dialog = page.getByRole("dialog", { name: "Connecting to OpenCode Go", exact: true })
-  await expect(dialog.getByRole("group", { name: "Device code: WXYZ-1234", exact: true })).toBeVisible()
-})
+}
 
 test("providers: switching Console accounts keeps the list until the new workspace loads", async ({ page }) => {
   const accounts = [
