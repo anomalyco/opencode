@@ -1287,7 +1287,7 @@ function ProviderConnection(props: {
             </For>
           </div>
         </section>
-        <Button class="self-start !px-3" disabled={state.switching !== undefined} onClick={addAccount}>
+        <Button class="-mt-1 ms-2.5 self-start !px-3" disabled={state.switching !== undefined} onClick={addAccount}>
           {language.t("dialog.provider.accounts.add")}
         </Button>
       </div>
