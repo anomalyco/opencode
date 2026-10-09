@@ -23,6 +23,7 @@ import {
   formatCatalogLabName,
   isKnownCatalogLab,
   type ModelCatalogEntry,
+  type ModelCatalogSpecs,
 } from "../model-catalog"
 import { SectionHeading } from "../section-heading"
 import { setStatsPageCacheHeaders } from "../stats-cache"
@@ -203,7 +204,7 @@ export default function StatsModel() {
                   labName={labName()}
                   formerName={formerName()}
                 />
-                <ModelOverview catalog={catalogEntry() ?? null} />
+                <ModelOverview specs={catalogEntry() ?? page()?.catalog.stealthSpecs ?? null} />
                 <ModelMomentumSection data={stats() ?? null} />
                 <ModelUsageSection data={stats() ?? null} />
                 <ModelUniqueUsersSection data={stats() ?? null} />
@@ -441,30 +442,30 @@ function ChevronDownIcon() {
   )
 }
 
-function ModelOverview(props: { catalog: ModelCatalogEntry | null }) {
+function ModelOverview(props: { specs: ModelCatalogSpecs | null }) {
   const i18n = useI18n()
   const language = useLanguage()
   const specs = createMemo(() => [
     {
       label: i18n.t("model.context"),
-      value: formatCatalogLimit(props.catalog?.limit?.context, i18n.t("home.unknown")),
+      value: formatCatalogLimit(props.specs?.limit?.context, i18n.t("home.unknown")),
     },
     {
       label: i18n.t("model.output"),
-      value: formatCatalogLimit(props.catalog?.limit?.output, i18n.t("home.unknown")),
+      value: formatCatalogLimit(props.specs?.limit?.output, i18n.t("home.unknown")),
     },
     {
       label: i18n.t("model.knowledge"),
-      value: formatCatalogMonth(props.catalog?.knowledge, language.tag(language.locale()), i18n.t("home.unknown")),
+      value: formatCatalogMonth(props.specs?.knowledge, language.tag(language.locale()), i18n.t("home.unknown")),
     },
     {
       label: i18n.t("model.release"),
-      value: formatCatalogMonth(props.catalog?.releaseDate, language.tag(language.locale()), i18n.t("home.unknown")),
+      value: formatCatalogMonth(props.specs?.releaseDate, language.tag(language.locale()), i18n.t("home.unknown")),
     },
     {
       label: i18n.t("model.inputs"),
       value: formatCatalogModalities(
-        props.catalog?.modalities.input ?? [],
+        props.specs?.modalities.input ?? [],
         language.tag(language.locale()),
         i18n.t("home.unknown"),
       ),

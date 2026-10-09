@@ -3,7 +3,6 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
-  "go.promo.spaceBunny": "全新匿名模型 Space Bunny Free 限时上线",
   "go.referral.ended.label": "警告",
   "go.referral.ended": "推荐计划已结束。推荐链接不再为你或分享链接的人提供额度。",
   "go.graph.bonus": "{{count}} 倍用量",
@@ -251,6 +250,7 @@ export const dict = {
   "zen.privacy.beforeExceptions": "所有 Zen 模型均托管在美国。提供商遵循零留存政策，不使用您的数据进行模型训练，",
   "zen.privacy.exceptionsLink": "以下例外情况除外",
 
+  "go.promo.step5": "新模型 Step 5 Preview Free 限时免费开放。",
   "go.title": "OpenCode Go | 人人可用的低成本编程模型",
   "go.meta.description": "Go 每月 $10，提供充裕的使用限额，并可可靠访问领先的编程模型。",
   "go.hero.title": "人人可用的低成本编程模型",
@@ -787,6 +787,14 @@ export const dict = {
   "enterprise.form.email.placeholder": "jeff@amazon.com",
   "enterprise.form.phone.label": "电话号码",
   "enterprise.form.phone.placeholder": "+1 234 567 8900",
+  "enterprise.form.inferenceSpend.label": "贵公司目前每月的 AI 推理支出是多少（美元）？",
+  "enterprise.form.inferenceSpend.placeholder": "选择范围（可选）",
+  "enterprise.form.inferenceSpend.none": "尚无支出",
+  "enterprise.form.inferenceSpend.under1k": "低于 $1K",
+  "enterprise.form.inferenceSpend.1kTo10k": "$1K–$10K",
+  "enterprise.form.inferenceSpend.10kTo50k": "$10K–$50K",
+  "enterprise.form.inferenceSpend.50kTo100k": "$50K–$100K",
+  "enterprise.form.inferenceSpend.over100k": "$100K 及以上",
   "enterprise.form.message.label": "您想解决什么问题？",
   "enterprise.form.message.placeholder": "我们需要帮助...",
   "enterprise.form.send": "发送",
@@ -795,6 +803,7 @@ export const dict = {
   "enterprise.form.success.submitted": "表单提交成功。",
   "enterprise.form.error.allFieldsRequired": "所有字段均为必填项。",
   "enterprise.form.error.invalidEmailFormat": "邮箱格式无效。",
+  "enterprise.form.error.invalidInferenceSpend": "请选择有效的推理支出范围。",
   "enterprise.form.error.internalServer": "内部服务器错误。",
   "enterprise.faq.title": "常见问题",
   "enterprise.faq.q1": "什么是 OpenCode 企业版？",

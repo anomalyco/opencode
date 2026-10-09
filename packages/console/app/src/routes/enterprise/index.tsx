@@ -1,12 +1,13 @@
 import "./index.css"
 import { Title, Meta } from "@solidjs/meta"
-import { createSignal, Show } from "solid-js"
+import { createSignal, For, Show } from "solid-js"
 import { Header } from "~/component/header"
 import { Footer } from "~/component/footer"
 import { Legal } from "~/component/legal"
 import { Faq } from "~/component/faq"
 import { useI18n } from "~/context/i18n"
 import { LocaleLinks } from "~/component/locale-links"
+import { inferenceSpendOptions } from "~/lib/inference-spend"
 
 export default function Enterprise() {
   const i18n = useI18n()
@@ -16,6 +17,7 @@ export default function Enterprise() {
     company: "",
     email: "",
     phone: "",
+    inferenceSpend: "",
     alias: "",
     message: "",
   })
@@ -24,7 +26,7 @@ export default function Enterprise() {
   const [error, setError] = createSignal("")
 
   const handleInputChange = (field: string) => (e: Event) => {
-    const target = e.target as HTMLInputElement | HTMLTextAreaElement
+    const target = e.target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
     setFormData((prev) => ({ ...prev, [field]: target.value }))
   }
 
@@ -51,6 +53,7 @@ export default function Enterprise() {
           company: "",
           email: "",
           phone: "",
+          inferenceSpend: "",
           alias: "",
           message: "",
         })
@@ -230,6 +233,22 @@ export default function Enterprise() {
                         onInput={handleInputChange("phone")}
                         placeholder={i18n.t("enterprise.form.phone.placeholder")}
                       />
+                    </div>
+
+                    <div data-component="form-group">
+                      <label for="inference-spend">
+                        <bdi dir="auto">{i18n.t("enterprise.form.inferenceSpend.label")}</bdi>
+                      </label>
+                      <select
+                        id="inference-spend"
+                        value={formData().inferenceSpend}
+                        onChange={handleInputChange("inferenceSpend")}
+                      >
+                        <option value="">{i18n.t("enterprise.form.inferenceSpend.placeholder")}</option>
+                        <For each={inferenceSpendOptions}>
+                          {(option) => <option value={option.value}>{i18n.t(option.key)}</option>}
+                        </For>
+                      </select>
                     </div>
 
                     <div data-component="form-group">
