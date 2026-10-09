@@ -779,8 +779,8 @@ test("providers: Console sign-in shows the device code before opening the browse
 
   await settings.getByRole("tab", { name: "Providers", exact: true }).click()
   await settings
-    .locator("div", { hasText: /^OpenCode Console/ })
-    .getByRole("button", { name: "Connect" })
+    .locator(".settings-provider-row", { hasText: "OpenCode Console" })
+    .getByRole("button", { name: "Connect", exact: true })
     .click()
   const dialog = page.getByRole("dialog")
   const container = page.locator('[data-slot="dialog-container"]')
@@ -802,6 +802,29 @@ test("providers: Console sign-in shows the device code before opening the browse
   await expect(proceed).toHaveCount(0)
   await expect(dialog.getByRole("status").filter({ hasText: "Waiting for confirmation…" })).toBeVisible()
   await expect(dialog.getByRole("button", { name: "Copy sign-in link", exact: true })).toBeVisible()
+})
+
+test("providers: OpenCode Go signs in through Console under its own name", async ({ page }) => {
+  const { settings } = await open(page, {
+    integrations: [
+      {
+        id: "opencode",
+        name: "OpenCode Console",
+        methods: [{ id: "device", type: "oauth", label: "OpenCode Console account" }],
+        connections: [],
+      },
+      { id: "opencode-go", name: "OpenCode Go", methods: [{ type: "key" }], connections: [] },
+    ],
+    onIntegrationOAuth: () => ({ url: "https://auth.example.test/device?user_code=WXYZ-1234" }),
+  })
+
+  await settings.getByRole("tab", { name: "Providers", exact: true }).click()
+  await settings
+    .locator(".settings-provider-row", { hasText: "OpenCode Go" })
+    .getByRole("button", { name: "Connect", exact: true })
+    .click()
+  const dialog = page.getByRole("dialog", { name: "Connecting to OpenCode Go", exact: true })
+  await expect(dialog.getByRole("group", { name: "Device code: WXYZ-1234", exact: true })).toBeVisible()
 })
 
 test("providers: switching Console accounts keeps the list until the new workspace loads", async ({ page }) => {

@@ -1359,7 +1359,13 @@ function ProviderConnection(props: {
           <div class="text-[15px] font-[530] leading-5 tracking-[-0.13px] text-v2-text-text-base">
             <DialogTitle>
               <Switch>
-                <Match when={consoleSignIn()}>{language.t("provider.connect.console.title")}</Match>
+                <Match when={consoleSignIn()}>
+                  {language.t(
+                    props.provider === "opencode-go"
+                      ? "provider.connect.console.titleGo"
+                      : "provider.connect.console.title",
+                  )}
+                </Match>
                 <Match
                   when={
                     props.provider === "anthropic" && controller.currentMethod()?.label?.toLowerCase().includes("max")

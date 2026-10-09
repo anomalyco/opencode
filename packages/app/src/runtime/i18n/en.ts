@@ -122,6 +122,7 @@ export const dict = {
   "provider.connect.opencode.name": "OpenCode Console",
   "provider.connect.opencode.freeName": "OpenCode Free",
   "provider.connect.console.title": "Connecting to OpenCode Console",
+  "provider.connect.console.titleGo": "Connecting to OpenCode Go",
   "provider.connect.console.instructions":
     "Continue in your browser. Confirm the code shown there matches the one below.",
   "provider.connect.console.deviceCode": "Device code",
