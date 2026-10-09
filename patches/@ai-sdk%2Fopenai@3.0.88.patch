@@ -1,7 +1,60 @@
+diff --git a/dist/index.d.mts b/dist/index.d.mts
+index 779b17d7d44b5ee58de033756d1156571b73eb70..4119876028932550c32ed0ed68db8f46bbdef74b 100644
+--- a/dist/index.d.mts
++++ b/dist/index.d.mts
+@@ -14,7 +14,7 @@ declare const openaiLanguageModelChatOptions: _ai_sdk_provider_utils.LazySchema<
+     store?: boolean | undefined;
+     metadata?: Record<string, string> | undefined;
+     prediction?: Record<string, any> | undefined;
+-    serviceTier?: "default" | "auto" | "flex" | "priority" | undefined;
++    serviceTier?: "default" | "auto" | "flex" | "priority" | "ultrafast" | undefined;
+     strictJsonSchema?: boolean | undefined;
+     textVerbosity?: "low" | "medium" | "high" | undefined;
+     promptCacheKey?: string | undefined;
+@@ -1089,7 +1089,7 @@ declare const openaiLanguageModelResponsesOptionsSchema: _ai_sdk_provider_utils.
+     reasoningContext?: "auto" | "current_turn" | "all_turns" | undefined;
+     reasoningSummary?: string | null | undefined;
+     safetyIdentifier?: string | null | undefined;
+-    serviceTier?: "default" | "auto" | "flex" | "priority" | null | undefined;
++    serviceTier?: "default" | "auto" | "flex" | "priority" | "ultrafast" | null | undefined;
+     store?: boolean | null | undefined;
+     passThroughUnsupportedFiles?: boolean | undefined;
+     strictJsonSchema?: boolean | null | undefined;
+diff --git a/dist/index.d.ts b/dist/index.d.ts
+index 779b17d7d44b5ee58de033756d1156571b73eb70..4119876028932550c32ed0ed68db8f46bbdef74b 100644
+--- a/dist/index.d.ts
++++ b/dist/index.d.ts
+@@ -14,7 +14,7 @@ declare const openaiLanguageModelChatOptions: _ai_sdk_provider_utils.LazySchema<
+     store?: boolean | undefined;
+     metadata?: Record<string, string> | undefined;
+     prediction?: Record<string, any> | undefined;
+-    serviceTier?: "default" | "auto" | "flex" | "priority" | undefined;
++    serviceTier?: "default" | "auto" | "flex" | "priority" | "ultrafast" | undefined;
+     strictJsonSchema?: boolean | undefined;
+     textVerbosity?: "low" | "medium" | "high" | undefined;
+     promptCacheKey?: string | undefined;
+@@ -1089,7 +1089,7 @@ declare const openaiLanguageModelResponsesOptionsSchema: _ai_sdk_provider_utils.
+     reasoningContext?: "auto" | "current_turn" | "all_turns" | undefined;
+     reasoningSummary?: string | null | undefined;
+     safetyIdentifier?: string | null | undefined;
+-    serviceTier?: "default" | "auto" | "flex" | "priority" | null | undefined;
++    serviceTier?: "default" | "auto" | "flex" | "priority" | "ultrafast" | null | undefined;
+     store?: boolean | null | undefined;
+     passThroughUnsupportedFiles?: boolean | undefined;
+     strictJsonSchema?: boolean | null | undefined;
 diff --git a/dist/index.js b/dist/index.js
-index 5fc82d7ca0f5fba1da3b24c15bb714f51b5aa178..e1a3e2c97774af3a5688c7052bd9a07d692fcc8f 100644
+index 5fc82d7ca0f5fba1da3b24c15bb714f51b5aa178..16aa13f852706e88ae1e80617e6b22f1919584ef 100644
 --- a/dist/index.js
 +++ b/dist/index.js
+@@ -743,7 +743,7 @@ var openaiLanguageModelChatOptions = (0, import_provider_utils4.lazySchema)(
+        *
+        * @default 'auto'
+        */
+-      serviceTier: import_v43.z.enum(["auto", "flex", "priority", "default"]).optional(),
++      serviceTier: import_v43.z.enum(["auto", "flex", "priority", "ultrafast", "default"]).optional(),
+       /**
+        * Whether to use strict JSON schema validation.
+        *
 @@ -1035,22 +1035,6 @@ var OpenAIChatLanguageModel = class {
          });
        }
@@ -25,6 +78,15 @@ index 5fc82d7ca0f5fba1da3b24c15bb714f51b5aa178..e1a3e2c97774af3a5688c7052bd9a07d
      const {
        tools: openaiTools2,
        toolChoice: openaiToolChoice,
+@@ -4798,7 +4782,7 @@ var openaiLanguageModelResponsesOptionsSchema = (0, import_provider_utils28.lazy
+        *
+        * Defaults to 'auto'.
+        */
+-      serviceTier: import_v423.z.enum(["auto", "flex", "priority", "default"]).nullish(),
++      serviceTier: import_v423.z.enum(["auto", "flex", "priority", "ultrafast", "default"]).nullish(),
+       /**
+        * Whether to store the generation. Defaults to `true`.
+        */
 @@ -5454,22 +5438,6 @@ var OpenAIResponsesLanguageModel = class {
          });
        }
@@ -49,9 +111,18 @@ index 5fc82d7ca0f5fba1da3b24c15bb714f51b5aa178..e1a3e2c97774af3a5688c7052bd9a07d
        (tool) => tool.type === "provider" && tool.id === "openai.shell"
      )) == null ? void 0 : _i.args) == null ? void 0 : _j.environment) == null ? void 0 : _k.type;
 diff --git a/dist/index.mjs b/dist/index.mjs
-index 589c4f76955bee692b8af36ea1d9a15121695d4a..6838ea0a362c8fe774527bb1126b8031ebfd3fab 100644
+index 589c4f76955bee692b8af36ea1d9a15121695d4a..7c471df4d4c01e0fd4a68b6a0774b07263443e37 100644
 --- a/dist/index.mjs
 +++ b/dist/index.mjs
+@@ -737,7 +737,7 @@ var openaiLanguageModelChatOptions = lazySchema2(
+        *
+        * @default 'auto'
+        */
+-      serviceTier: z3.enum(["auto", "flex", "priority", "default"]).optional(),
++      serviceTier: z3.enum(["auto", "flex", "priority", "ultrafast", "default"]).optional(),
+       /**
+        * Whether to use strict JSON schema validation.
+        *
 @@ -1031,22 +1031,6 @@ var OpenAIChatLanguageModel = class {
          });
        }
@@ -75,6 +146,15 @@ index 589c4f76955bee692b8af36ea1d9a15121695d4a..6838ea0a362c8fe774527bb1126b8031
      const {
        tools: openaiTools2,
        toolChoice: openaiToolChoice,
+@@ -4899,7 +4883,7 @@ var openaiLanguageModelResponsesOptionsSchema = lazySchema21(
+        *
+        * Defaults to 'auto'.
+        */
+-      serviceTier: z23.enum(["auto", "flex", "priority", "default"]).nullish(),
++      serviceTier: z23.enum(["auto", "flex", "priority", "ultrafast", "default"]).nullish(),
+       /**
+        * Whether to store the generation. Defaults to `true`.
+        */
 @@ -5557,22 +5541,6 @@ var OpenAIResponsesLanguageModel = class {
          });
        }
@@ -98,10 +178,45 @@ index 589c4f76955bee692b8af36ea1d9a15121695d4a..6838ea0a362c8fe774527bb1126b8031
      const shellToolEnvType = (_k = (_j = (_i = tools == null ? void 0 : tools.find(
        (tool) => tool.type === "provider" && tool.id === "openai.shell"
      )) == null ? void 0 : _i.args) == null ? void 0 : _j.environment) == null ? void 0 : _k.type;
+diff --git a/dist/internal/index.d.mts b/dist/internal/index.d.mts
+index 07fcd092f1ffdbecc13557a05e851ab6756a19da..cdd551dd47a45e44694aa8eb8a18e99afa130979 100644
+--- a/dist/internal/index.d.mts
++++ b/dist/internal/index.d.mts
+@@ -13,7 +13,7 @@ declare const openaiLanguageModelChatOptions: _ai_sdk_provider_utils.LazySchema<
+     store?: boolean | undefined;
+     metadata?: Record<string, string> | undefined;
+     prediction?: Record<string, any> | undefined;
+-    serviceTier?: "default" | "auto" | "flex" | "priority" | undefined;
++    serviceTier?: "default" | "auto" | "flex" | "priority" | "ultrafast" | undefined;
+     strictJsonSchema?: boolean | undefined;
+     textVerbosity?: "low" | "medium" | "high" | undefined;
+     promptCacheKey?: string | undefined;
+diff --git a/dist/internal/index.d.ts b/dist/internal/index.d.ts
+index 07fcd092f1ffdbecc13557a05e851ab6756a19da..cdd551dd47a45e44694aa8eb8a18e99afa130979 100644
+--- a/dist/internal/index.d.ts
++++ b/dist/internal/index.d.ts
+@@ -13,7 +13,7 @@ declare const openaiLanguageModelChatOptions: _ai_sdk_provider_utils.LazySchema<
+     store?: boolean | undefined;
+     metadata?: Record<string, string> | undefined;
+     prediction?: Record<string, any> | undefined;
+-    serviceTier?: "default" | "auto" | "flex" | "priority" | undefined;
++    serviceTier?: "default" | "auto" | "flex" | "priority" | "ultrafast" | undefined;
+     strictJsonSchema?: boolean | undefined;
+     textVerbosity?: "low" | "medium" | "high" | undefined;
+     promptCacheKey?: string | undefined;
 diff --git a/dist/internal/index.js b/dist/internal/index.js
-index ad78b5df9359509091f4b8a1751dc34c03c74e32..ed92f56d8fe9c1442f741ef8d42d592ce9b28643 100644
+index ad78b5df9359509091f4b8a1751dc34c03c74e32..47fd0fd7be7200fa7683d24e6b2c806d6d07ed68 100644
 --- a/dist/internal/index.js
 +++ b/dist/internal/index.js
+@@ -778,7 +778,7 @@ var openaiLanguageModelChatOptions = (0, import_provider_utils4.lazySchema)(
+        *
+        * @default 'auto'
+        */
+-      serviceTier: import_v43.z.enum(["auto", "flex", "priority", "default"]).optional(),
++      serviceTier: import_v43.z.enum(["auto", "flex", "priority", "ultrafast", "default"]).optional(),
+       /**
+        * Whether to use strict JSON schema validation.
+        *
 @@ -1070,22 +1070,6 @@ var OpenAIChatLanguageModel = class {
          });
        }
@@ -125,6 +240,15 @@ index ad78b5df9359509091f4b8a1751dc34c03c74e32..ed92f56d8fe9c1442f741ef8d42d592c
      const {
        tools: openaiTools,
        toolChoice: openaiToolChoice,
+@@ -4747,7 +4731,7 @@ var openaiLanguageModelResponsesOptionsSchema = (0, import_provider_utils26.lazy
+        *
+        * Defaults to 'auto'.
+        */
+-      serviceTier: import_v419.z.enum(["auto", "flex", "priority", "default"]).nullish(),
++      serviceTier: import_v419.z.enum(["auto", "flex", "priority", "ultrafast", "default"]).nullish(),
+       /**
+        * Whether to store the generation. Defaults to `true`.
+        */
 @@ -5724,22 +5708,6 @@ var OpenAIResponsesLanguageModel = class {
          });
        }
@@ -149,9 +273,18 @@ index ad78b5df9359509091f4b8a1751dc34c03c74e32..ed92f56d8fe9c1442f741ef8d42d592c
        (tool) => tool.type === "provider" && tool.id === "openai.shell"
      )) == null ? void 0 : _i.args) == null ? void 0 : _j.environment) == null ? void 0 : _k.type;
 diff --git a/dist/internal/index.mjs b/dist/internal/index.mjs
-index db7d6741c9ea615d577ea07722b469c144066268..f6b41b2832d2c8392072e0ecc1612e9e18b1b48e 100644
+index db7d6741c9ea615d577ea07722b469c144066268..877f6e24381c0333e7b8575b834bb2c7de32c28f 100644
 --- a/dist/internal/index.mjs
 +++ b/dist/internal/index.mjs
+@@ -729,7 +729,7 @@ var openaiLanguageModelChatOptions = lazySchema2(
+        *
+        * @default 'auto'
+        */
+-      serviceTier: z3.enum(["auto", "flex", "priority", "default"]).optional(),
++      serviceTier: z3.enum(["auto", "flex", "priority", "ultrafast", "default"]).optional(),
+       /**
+        * Whether to use strict JSON schema validation.
+        *
 @@ -1023,22 +1023,6 @@ var OpenAIChatLanguageModel = class {
          });
        }
@@ -175,6 +308,15 @@ index db7d6741c9ea615d577ea07722b469c144066268..f6b41b2832d2c8392072e0ecc1612e9e
      const {
        tools: openaiTools,
        toolChoice: openaiToolChoice,
+@@ -4795,7 +4779,7 @@ var openaiLanguageModelResponsesOptionsSchema = lazySchema17(
+        *
+        * Defaults to 'auto'.
+        */
+-      serviceTier: z19.enum(["auto", "flex", "priority", "default"]).nullish(),
++      serviceTier: z19.enum(["auto", "flex", "priority", "ultrafast", "default"]).nullish(),
+       /**
+        * Whether to store the generation. Defaults to `true`.
+        */
 @@ -5802,22 +5786,6 @@ var OpenAIResponsesLanguageModel = class {
          });
        }
@@ -237,6 +379,19 @@ index 009a58deea236c2be03adc5cd03f98ed9050fd7b..a606675d82fc72a0bab8d52ac9986610
      const {
        tools: openaiTools,
        toolChoice: openaiToolChoice,
+diff --git a/src/chat/openai-chat-options.ts b/src/chat/openai-chat-options.ts
+index 8203350fc89d3d26f055b1391665e4757e8d48ac..7027cf28d4841dfcc72f08bce1f70027378765f2 100644
+--- a/src/chat/openai-chat-options.ts
++++ b/src/chat/openai-chat-options.ts
+@@ -142,7 +142,7 @@ export const openaiLanguageModelChatOptions = lazySchema(() =>
+        *
+        * @default 'auto'
+        */
+-      serviceTier: z.enum(['auto', 'flex', 'priority', 'default']).optional(),
++      serviceTier: z.enum(['auto', 'flex', 'priority', 'ultrafast', 'default']).optional(),
+
+       /**
+        * Whether to use strict JSON schema validation.
 diff --git a/src/responses/openai-responses-language-model.ts b/src/responses/openai-responses-language-model.ts
 index 926e7ec713480353b969901f19c5d1d8cc883dab..ed457ce8f07a60ed48c47a3cbf11b2a7c6cf6415 100644
 --- a/src/responses/openai-responses-language-model.ts
@@ -278,3 +433,16 @@ index 926e7ec713480353b969901f19c5d1d8cc883dab..ed457ce8f07a60ed48c47a3cbf11b2a7
      const shellToolEnvType = (
        tools?.find(
          tool => tool.type === 'provider' && tool.id === 'openai.shell',
+diff --git a/src/responses/openai-responses-options.ts b/src/responses/openai-responses-options.ts
+index 2fec2c4cc8a2236daa8e3a9807c79a983c49d273..c895ea8d546cb7260c0ecfa62c8be94df0716786 100644
+--- a/src/responses/openai-responses-options.ts
++++ b/src/responses/openai-responses-options.ts
+@@ -296,7 +296,7 @@ export const openaiLanguageModelResponsesOptionsSchema = lazySchema(() =>
+        *
+        * Defaults to 'auto'.
+        */
+-      serviceTier: z.enum(['auto', 'flex', 'priority', 'default']).nullish(),
++      serviceTier: z.enum(['auto', 'flex', 'priority', 'ultrafast', 'default']).nullish(),
+
+       /**
+        * Whether to store the generation. Defaults to `true`.
