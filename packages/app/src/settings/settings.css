@@ -1323,9 +1323,11 @@
 }
 
 .provider-model-group-header {
+  position: relative;
   display: flex;
   min-width: 0;
   align-items: center;
+  border-radius: 8px;
 }
 
 .provider-model-group-trigger {
@@ -1349,8 +1351,12 @@
   outline-offset: -2px;
 }
 
+.provider-model-group-header:has(:focus-visible) {
+  background-color: var(--v2-background-bg-layer-02);
+}
+
 @media (hover: hover) {
-  .provider-model-group-trigger:not(:disabled):hover {
+  .provider-model-group-header:hover {
     background-color: var(--v2-background-bg-layer-02);
   }
 }
@@ -1393,7 +1399,7 @@
 
 .provider-model-group-actions {
   position: relative;
-  z-index: 1;
+  z-index: 2;
   display: flex;
   flex-shrink: 0;
   align-items: center;
@@ -1413,24 +1419,24 @@
   border-top: 0.5px solid var(--v2-border-border-base);
 }
 
-.provider-model-group:has(.provider-model-group-trigger:focus-visible)
+.provider-model-group:has(.provider-model-group-header :focus-visible)
   .provider-model-group-models
   > [data-component="settings-list"] {
   border-top-color: transparent;
 }
 
-.provider-model-group:has(.provider-model-group-trigger:focus-visible) {
+.provider-model-group:has(.provider-model-group-header :focus-visible) {
   outline: 0.5px solid var(--v2-border-border-muted);
   outline-offset: -0.5px;
 }
 
 @media (hover: hover) {
-  .provider-model-group:has(.provider-model-group-trigger:hover) {
+  .provider-model-group:has(.provider-model-group-header:hover) {
     outline: 0.5px solid var(--v2-border-border-muted);
     outline-offset: -0.5px;
   }
 
-  .provider-model-group:has(.provider-model-group-trigger:hover)
+  .provider-model-group:has(.provider-model-group-header:hover)
     .provider-model-group-models
     > [data-component="settings-list"] {
     border-top-color: transparent;
