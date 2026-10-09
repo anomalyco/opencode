@@ -176,6 +176,9 @@ export const Info = Schema.Struct({
       permissions: Schema.optional(Schema.Literals(["prompt", "autoaccept"])).annotate({
         description: "Prompt for permission requests or accept them automatically",
       }),
+      hide_subagents_in_child_sessions: Schema.optional(Schema.Boolean).annotate({
+        description: "Hide the Subagents composer card while viewing a subagent (child) session",
+      }),
     }),
   ).annotate({ description: "Session transcript presentation settings" }),
   tabs: Schema.optional(
@@ -264,10 +267,14 @@ export type Resolved = Omit<Info, "attention" | "cursor" | "keybinds" | "leader"
     style: "block" | "underline" | "line" | "default"
     blinking: boolean
   }
-  session: Omit<NonNullable<Info["session"]>, "new_location" | "permissions" | "tps"> & {
+  session: Omit<
+    NonNullable<Info["session"]>,
+    "new_location" | "permissions" | "tps" | "hide_subagents_in_child_sessions"
+  > & {
     new_location: "launch" | "inherit"
     permissions: "prompt" | "autoaccept"
     tps: boolean
+    hide_subagents_in_child_sessions: boolean
   }
   tabs: {
     mode: "auto" | "on" | "off"
@@ -320,6 +327,7 @@ export function resolve(
       new_location: input.session?.new_location ?? "launch",
       permissions: input.session?.permissions ?? "prompt",
       tps: input.session?.tps ?? true,
+      hide_subagents_in_child_sessions: input.session?.hide_subagents_in_child_sessions ?? false,
     },
     tabs: {
       ...input.tabs,

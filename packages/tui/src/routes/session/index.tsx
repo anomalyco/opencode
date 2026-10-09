@@ -170,6 +170,7 @@ export function Session(props: {
   const theme = useTheme()
   const promptRef = usePromptRef()
   const session = createMemo(() => data.session.get(route.sessionID))
+  const hideSubagents = createMemo(() => !!session()?.parentID && config.session.hide_subagents_in_child_sessions)
   const messages = () => data.session.message.list(route.sessionID)
   const messageIndexes = createMemo(() => new Map(messages().map((message, index) => [message.id, index])))
   const legacy = createMemo(() => legacyTurns(messages()))
@@ -1275,6 +1276,7 @@ export function Session(props: {
       title: "Toggle subagent picker",
       id: "session.child.first",
       group: "Session",
+      enabled: !hideSubagents(),
       run: () => {
         if (composer.open || session()?.parentID) setComposer("open", false)
         else setComposer({ open: true, tab: "subagents" })
@@ -1478,8 +1480,9 @@ export function Session(props: {
               <Slot path="session.composer.top" input={{ sessionID: route.sessionID }} />
               <Composer
                 sessionID={route.sessionID}
-                open={composer.open || (!!session()?.parentID && forms().length === 0)}
-                defaultTab={composer.tab ?? (session()?.parentID ? "subagents" : undefined)}
+                open={composer.open || (!!session()?.parentID && !hideSubagents() && forms().length === 0)}
+                hideSubagents={hideSubagents()}
+                defaultTab={composer.tab ?? (session()?.parentID && !hideSubagents() ? "subagents" : undefined)}
                 onClose={() => {
                   const parent = session()?.parentID
                   if (parent) {

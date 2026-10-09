@@ -129,6 +129,15 @@ export const settings: Setting[] = [
     keywords: ["approve", "accept", "permission requests"],
   },
   {
+    title: "Hide subagents in child sessions",
+    category: "Session",
+    path: ["session", "hide_subagents_in_child_sessions"],
+    default: false,
+    values: [false, true],
+    labels: ["off", "on"],
+    keywords: ["subagent", "child session", "composer", "hide"],
+  },
+  {
     title: "Mode",
     category: "Tabs",
     path: ["tabs", "mode"],
