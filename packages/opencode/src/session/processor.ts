@@ -627,7 +627,15 @@ const layer = Layer.effect(
             return
           }
           ctx.needsCompaction = true
-          yield* events.publish(Session.Event.Error, { sessionID: ctx.sessionID, error })
+          // Auto-compaction recovers a provider overflow, so the raw provider error
+          // must not reach clients as a session error: they would surface a model
+          // error instead of the compaction notice. Only a failed compaction summary
+          // (the session is too large to compact) is a real, user-facing error.
+          if (ctx.assistantMessage.summary) {
+            ctx.assistantMessage.error = error
+            ctx.assistantMessage.finish = "error"
+            yield* events.publish(Session.Event.Error, { sessionID: ctx.sessionID, error })
+          }
           return
         }
         ctx.assistantMessage.error = error

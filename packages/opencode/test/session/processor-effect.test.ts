@@ -767,6 +767,7 @@ it.live("session.processor effect tests compact on structured context overflow",
     ({ dir, llm }) =>
       Effect.gen(function* () {
         const { processors, session, provider } = yield* boot()
+        const events = yield* EventV2Bridge.Service
 
         yield* llm.error(400, { type: "error", error: { code: "context_length_exceeded" } })
 
@@ -774,6 +775,13 @@ it.live("session.processor effect tests compact on structured context overflow",
         const parent = yield* user(chat.id, "compact json")
         const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
         const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const errs: string[] = []
+        const off = yield* events.listen((evt) => {
+          if (evt.type !== Session.Event.Error.type) return Effect.void
+          const data = evt.data as typeof Session.Event.Error.data.Type
+          if (data.sessionID === chat.id && data.error) errs.push(data.error.name)
+          return Effect.void
+        })
         const handle = yield* processors.create({
           assistantMessage: msg,
           sessionID: chat.id,
@@ -796,10 +804,71 @@ it.live("session.processor effect tests compact on structured context overflow",
           messages: [{ role: "user", content: "compact json" }],
           tools: {},
         })
+        yield* off
 
         expect(value).toBe("compact")
         expect(yield* llm.calls).toBe(1)
         expect(handle.message.error).toBeUndefined()
+        // Auto-compaction recovers the overflow, so clients must see the compaction
+        // notice instead of a raw provider error.
+        expect(errs).toEqual([])
+      }),
+    { config: (url) => providerCfg(url) },
+  ),
+)
+
+it.live("session.processor effect tests surface session errors when the compaction summary overflows", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+        const events = yield* EventV2Bridge.Service
+
+        yield* llm.error(400, { type: "error", error: { code: "context_length_exceeded" } })
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "compact json")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        msg.summary = true
+        yield* session.updateMessage(msg)
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const errs: string[] = []
+        const off = yield* events.listen((evt) => {
+          if (evt.type !== Session.Event.Error.type) return Effect.void
+          const data = evt.data as typeof Session.Event.Error.data.Type
+          if (data.sessionID === chat.id && data.error) errs.push(data.error.name)
+          return Effect.void
+        })
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies SessionV1.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "compact json" }],
+          tools: {},
+        })
+        yield* off
+
+        // The summary itself overflowed: compaction cannot recover, so the error
+        // must remain visible to the user.
+        expect(value).toBe("compact")
+        expect(errs).toContain("ContextOverflowError")
+        expect(handle.message.error?.name).toBe("ContextOverflowError")
+        expect(handle.message.finish).toBe("error")
       }),
     { config: (url) => providerCfg(url) },
   ),
