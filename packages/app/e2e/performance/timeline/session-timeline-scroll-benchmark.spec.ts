@@ -87,9 +87,9 @@ async function runTimelineScrollBenchmark(page: Page, options: { waitForColdSett
  * timeline, and the net movement is returned as-is: the cold tail pin can legitimately drag the
  * view back down.
  *
- * Assigns `scrollTop` rather than wheeling: a wheel burst makes this app navigate, which destroys
- * the execution context mid-measurement. The assignment still fires a real scroll event, so the
- * settle path under measurement runs unchanged.
+ * Assigns `scrollTop` rather than wheeling, matching the fixture's own `scrollToBottom`. The
+ * assignment still fires a real scroll event, so the settle path under measurement runs unchanged,
+ * and each step lands deterministically instead of depending on wheel delivery.
  */
 async function wheelThrough(scroller: Locator, steps: number, delta: number) {
   const start = await scroller.evaluate((element) => element.scrollTop)
