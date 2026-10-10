@@ -40,9 +40,8 @@
   opacity: 0;
 }
 
-/* Only opacity is animated (so it composites on the compositor), and the
-   animation is scoped to [data-active="true"] so that turning active off
-   removes it immediately and the opacity transition above can fade out. */
+/* Pulse the overlay opacity while active (compositable), with the peak colour
+   as the highlight over the base copy. */
 [data-component="text-shimmer"][data-active="true"] [data-slot="text-shimmer-char-shimmer"] {
   animation-name: text-shimmer-pulse;
   animation-duration: var(--text-shimmer-duration);
@@ -53,6 +52,17 @@
   will-change: opacity;
 }
 
+/* Fade the overlay out when the state ends. A CSS transition can't run when it
+   is what removes a running animation, so fade explicitly during the swap
+   window (the component keeps data-run="true" for --text-shimmer-swap after
+   active turns false). */
+[data-component="text-shimmer"][data-active="false"] [data-slot="text-shimmer-char-shimmer"][data-run="true"] {
+  animation-name: text-shimmer-fade;
+  animation-duration: var(--text-shimmer-swap);
+  animation-timing-function: ease-out;
+  animation-fill-mode: both;
+}
+
 @keyframes text-shimmer-pulse {
   0%,
   100% {
@@ -61,6 +71,16 @@
 
   50% {
     opacity: 1;
+  }
+}
+
+@keyframes text-shimmer-fade {
+  0% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
   }
 }
 
