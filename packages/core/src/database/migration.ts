@@ -5,6 +5,7 @@ import { Effect } from "effect"
 import { supportsForeignKeyToggle } from "#sqlite"
 import type { EffectDrizzleSqlite } from "./drizzle.js"
 import { migrations } from "./migration.gen.js"
+import legacyCredentials from "./migration/20260805200742_import_legacy_credentials.js"
 import schema from "./schema.gen.js"
 import { Global } from "@opencode/util/global"
 
@@ -34,6 +35,9 @@ export function apply(db: Database) {
     yield* db.transaction((tx) =>
       Effect.gen(function* () {
         yield* schema.up(tx)
+        // Bootstrap records migrations without replaying them, but legacy
+        // credentials live outside the schema and would otherwise be skipped.
+        yield* legacyCredentials.up(tx)
         yield* tx.run(
           sql`CREATE TABLE ${sql.identifier("migration")} (id TEXT PRIMARY KEY, time_completed INTEGER NOT NULL)`,
         )
