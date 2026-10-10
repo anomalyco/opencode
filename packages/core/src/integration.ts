@@ -61,6 +61,7 @@ export type OAuthAuthorization = {
   readonly url: string
   readonly instructions: string
   readonly expiresAt?: number
+  readonly device?: boolean
 } & (
   | {
       readonly mode: "auto"
@@ -630,6 +631,7 @@ const layer = Layer.effect(
         url: authorization.url,
         instructions: authorization.instructions,
         mode: authorization.mode,
+        device: authorization.device === true,
         time,
       })
     })

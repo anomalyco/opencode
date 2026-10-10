@@ -21,6 +21,7 @@
     "./mini/tool": "./src/mini/tool.public.ts",
     "./model-preference": "./src/model-preference.ts",
     "./util/form": "./src/util/form.ts",
+    "./util/qr": "./src/util/qr.ts",
     "./logo": "./src/logo.ts",
     "./component/spinner": "./src/component/spinner.tsx",
     "./component/register-spinner": "./src/component/register-spinner.ts"
@@ -75,6 +76,7 @@
   "devDependencies": {
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
-    "@typescript/native-preview": "catalog:"
+    "@typescript/native-preview": "catalog:",
+    "jsqr": "1.4.0"
   }
 }

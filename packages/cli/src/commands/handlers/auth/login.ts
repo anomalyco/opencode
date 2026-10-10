@@ -1,6 +1,7 @@
 import { intro, log, outro, select, spinner, text } from "@clack/prompts"
 import { Effect, Option } from "effect"
 import type { FormAnswer, IntegrationInfo, OpenCodeClient } from "@opencode/client"
+import { renderAuthQr } from "@opencode/tui/util/qr"
 import { Commands } from "../../commands"
 import { Runtime } from "../../../framework/runtime"
 import { selectIntegration, type IntegrationChoice } from "../../../ui/integration-picker"
@@ -193,7 +194,17 @@ export const oauthLogin = Effect.fn("cli.auth.login.oauth")(function* (
   )
   progress.stop("Authorization started")
   log.info(attempt.instructions)
-  log.info(attempt.url)
+  const qr = renderAuthQr(attempt.url, {
+    device: attempt.device,
+    tty: process.stdout.isTTY === true,
+    columns: process.stdout.columns,
+    contrast: true,
+  })
+  if (!qr || !attempt.instructions.includes(attempt.url)) log.info(attempt.url)
+  if (qr) {
+    log.info("Mobile sign-in")
+    process.stdout.write(`${qr}\n`)
+  }
   if (process.stdin.isTTY && process.stdout.isTTY) yield* openUrl(attempt.url)
 
   if (attempt.mode === "code") {

@@ -97,6 +97,8 @@ export class Attempt extends Schema.Class<Attempt>("Integration.Attempt")({
   url: Schema.String,
   instructions: Schema.String,
   mode: Schema.Literals(["auto", "code"]),
+  // Older servers omit this. A missing value is not a device flow.
+  device: Schema.optionalKey(Schema.Boolean),
   time: AttemptTime,
 }) {}
 

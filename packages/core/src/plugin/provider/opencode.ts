@@ -135,6 +135,7 @@ function oauth(http: HttpClient.HttpClient) {
         })
         return {
           mode: "auto" as const,
+          device: true,
           url: verification.href,
           instructions: `Enter code: ${device.user_code}`,
           callback: poll(http, server, device.device_code, Duration.seconds(device.interval)),

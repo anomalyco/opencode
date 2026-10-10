@@ -1,7 +1,7 @@
 import { TextAttributes } from "@opentui/core"
 import { useTerminalDimensions } from "@opentui/solid"
 import { createMemo, createResource, createSignal, For, Show } from "solid-js"
-import { renderUnicodeCompact } from "uqr"
+import { renderQr } from "../util/qr"
 import { useClient } from "../context/client"
 import { useTheme } from "../context/theme"
 import { useDialog } from "../ui/dialog"
@@ -79,7 +79,7 @@ export function DialogPair() {
           alignItems={horizontal() ? "flex-end" : "center"}
         >
           <Show when={value.links[0]}>
-            {(url) => <text fg={theme.text.base}>{renderUnicodeCompact(url(), { border: 1 })}</text>}
+            {(url) => <text fg={theme.text.base}>{renderQr(url(), { border: 1 })}</text>}
           </Show>
         </box>
       </box>

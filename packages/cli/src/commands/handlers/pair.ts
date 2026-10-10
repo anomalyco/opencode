@@ -2,7 +2,7 @@ import { EOL } from "os"
 import { Effect, Option, Schedule } from "effect"
 import { Service } from "@opencode/client/effect/service"
 import { OpenCode } from "@opencode/client/promise"
-import { renderUnicodeCompact } from "uqr"
+import { renderQr } from "@opencode/tui/util/qr"
 import { Commands } from "../commands"
 import { Runtime } from "../../framework/runtime"
 import { RemoteTunnel } from "../../services/remote-tunnel"
@@ -37,7 +37,7 @@ export default Runtime.handler(
           ? [
               "",
               // uqr separates rows with "\n" on every platform, so splitting on EOL ("\r\n" on Windows) indents only the first row.
-              renderUnicodeCompact(JSON.stringify({ code: pairing.code, urls: remote }), {
+              renderQr(JSON.stringify({ code: pairing.code, urls: remote }), {
                 border: 2,
               })
                 .split("\n")
