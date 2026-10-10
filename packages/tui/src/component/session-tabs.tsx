@@ -44,7 +44,8 @@ import { tint } from "../theme/color"
 import { SESSION_SIDEBAR_WIDTH, SESSION_TABS_COMPACT_BREAKPOINT } from "../ui/layout"
 import { projectName } from "../util/project"
 import { stringWidth } from "../util/string-width"
-import { marqueeCycleWidth, marqueeOverflows, marqueeTextParts } from "../util/marquee"
+import { marqueeOverflows, marqueeTextParts } from "../util/marquee"
+import { createMarquee } from "../ui/marquee"
 import { useDialog } from "../ui/dialog"
 import { useToast } from "../ui/toast"
 import { DialogSessionRename } from "./dialog-session-rename"
@@ -76,8 +77,6 @@ export type TabUnreadMarker = keyof typeof TAB_UNREAD_MARKERS
 const FADE_WIDTH = 4
 // The add button renders as " + " at the end of the strip, so the tab layout leaves it room.
 const ADD_TAB_WIDTH = 3
-const MARQUEE_DELAY = 600
-const MARQUEE_INTERVAL = 80
 const CONTEXT_MENU_WIDTH = 20
 const MIDDLE_MOUSE_BUTTON = 1
 const RIGHT_MOUSE_BUTTON = 2
@@ -274,64 +273,6 @@ function heldSessionTabLayout(hold: MouseCloseHold, tabs: readonly SessionTab[])
     start,
     total: widths.reduce((sum, width) => sum + width, 0),
   }
-}
-
-export function createMarquee(animations: () => boolean) {
-  const [offset, setOffset] = createSignal(0)
-  const [active, setActive] = createSignal<string>()
-  const leading = createAnimatable({ opacity: 0 }, { enabled: animations, transition: tween({ duration: 0.25 }) })
-  let delay: ReturnType<typeof setTimeout> | undefined
-  let interval: ReturnType<typeof setInterval> | undefined
-  let cycleWidth = 0
-
-  const clear = () => {
-    if (delay) clearTimeout(delay)
-    if (interval) clearInterval(interval)
-    delay = undefined
-    interval = undefined
-  }
-  const scroll = () => {
-    interval = setInterval(
-      () =>
-        setOffset((value) => {
-          if (value + 1 < cycleWidth) return value + 1
-          clear()
-          leading.animate({ opacity: 0 })
-          return 0
-        }),
-      MARQUEE_INTERVAL,
-    )
-  }
-  const enter = (sessionID: string, title: string, width: number) => {
-    if (!marqueeOverflows(title, width)) {
-      reset()
-      return
-    }
-    if (active() === sessionID) return
-    clear()
-    cycleWidth = marqueeCycleWidth(title)
-    setActive(sessionID)
-    setOffset(0)
-    leading.jump({ opacity: 0 })
-    delay = setTimeout(() => {
-      setOffset(1)
-      leading.animate({ opacity: 1 })
-      scroll()
-    }, MARQUEE_DELAY)
-  }
-  const leave = (sessionID: string) => {
-    if (active() !== sessionID) return
-    reset()
-  }
-  const reset = () => {
-    clear()
-    setActive(undefined)
-    setOffset(0)
-    leading.jump({ opacity: 0 })
-  }
-  onCleanup(clear)
-
-  return { offset, active, enter, leave, reset, leading: () => leading.value().opacity }
 }
 
 export function createTabMarquee(animations: () => boolean) {

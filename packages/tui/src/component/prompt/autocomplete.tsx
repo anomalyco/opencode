@@ -3,7 +3,7 @@ import { pathToFileURL } from "node:url"
 import fuzzysort from "fuzzysort"
 import path from "path"
 import { firstBy } from "remeda"
-import { createMemo, createResource, createEffect, onMount, onCleanup, Index, Show, createSignal } from "solid-js"
+import { createMemo, createResource, createEffect, onMount, onCleanup, Index, Show, createSignal, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useEditorContext } from "../../context/editor"
 import { useClient } from "../../context/client"
@@ -23,6 +23,8 @@ import { displayCharAt, mentionTriggerIndex, slashTriggerIndex } from "../../pro
 import type { FileSystemEntry } from "@opencode/client"
 import { Skill } from "@opencode/schema/skill"
 import { stringWidth } from "../../util/string-width"
+import { marqueeText } from "../../util/marquee"
+import { createMarquee } from "../../ui/marquee"
 import { parseFileLineRange, stripFileLineRange } from "../../prompt/parse"
 import { moveSelection, reconcileSelectionWindow, revealSelectionOffset } from "../../ui/select-controller"
 import { directoryAutocomplete, slashArgumentAutocomplete } from "../../prompt/directory-completion"
@@ -847,6 +849,24 @@ export function Autocomplete(props: {
     agent: "agent",
     reference: "reference",
   }
+  // Border and padding take two cells on each side.
+  const displayWidth = (option: AutocompleteOption) =>
+    Math.max(1, position().width - 4 - (option.kind ? stringWidth(labels[option.kind]) + 2 : 0))
+  const descriptionText = (option: AutocompleteOption) => option.description?.replace(/\s+/g, " ").trim() ?? ""
+  // The description follows the display text and a single space.
+  const descriptionWidth = (option: AutocompleteOption) =>
+    displayWidth(option) - stringWidth(Locale.truncateMiddle(option.display, displayWidth(option))) - 1
+
+  // A selected description too long for its row scrolls once, like a hovered session tab title.
+  const marquee = createMarquee(() => config.animations ?? true)
+  createEffect(() => {
+    const option = store.visible ? options()[store.selected] : undefined
+    const text = option && !confirming() ? descriptionText(option) : ""
+    untrack(() => {
+      if (!option || !text || descriptionWidth(option) <= 0) return marquee.reset()
+      marquee.enter(option.display, text, descriptionWidth(option))
+    })
+  })
 
   return (
     <box
@@ -884,10 +904,11 @@ export function Autocomplete(props: {
               const kind = option().kind
               return kind ? labels[kind] : undefined
             }
-            const contentWidth = () => {
-              const text = label()
-              return Math.max(1, position().width - 4 - (text ? stringWidth(text) + 2 : 0))
-            }
+            const contentWidth = () => displayWidth(option())
+            const description = () =>
+              index === store.selected && marquee.active() === option().display
+                ? marqueeText(descriptionText(option()), descriptionWidth(option()), marquee.offset())
+                : descriptionText(option())
             const confirmingAction = () => {
               const action = destructive()
               return action !== undefined && action.id === confirming()
@@ -931,7 +952,7 @@ export function Autocomplete(props: {
                     flexShrink={1}
                     minWidth={0}
                   >
-                    {" " + option().description?.replace(/\s+/g, " ").trim()}
+                    {" " + description()}
                   </text>
                 </Show>
                 <Show when={!confirmingAction() && label()}>
