@@ -86,7 +86,17 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     progress?: Tool.Metadata
   }
   const tools = new Map<string, ToolState>()
-  const failureSnapshot = (tool: { readonly progress?: Tool.Metadata }, metadata?: Tool.Metadata) => {
+  const failureSnapshot = (
+    tool: { readonly name: string; readonly progress?: Tool.Metadata },
+    metadata?: Tool.Metadata,
+  ) => {
+    if (tool.name === "execute" && typeof tool.progress?.interruptedOutput === "string") {
+      const { interruptedOutput, ...progress } = tool.progress
+      return {
+        content: [{ type: "text", text: interruptedOutput }] as const,
+        metadata: { ...progress, ...metadata },
+      }
+    }
     if (tool.progress === undefined) return metadata === undefined ? {} : { metadata }
     if (metadata === undefined) return { metadata: tool.progress }
     return { metadata: { ...tool.progress, ...metadata } }

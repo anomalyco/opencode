@@ -5131,6 +5131,92 @@ describe("SessionRunnerLLM", () => {
     expect(messageRoles(s.requests[0])).toEqual(["user", "assistant", "tool"])
   })
 
+  for (const large of [false, true])
+    scenario(
+      `preserves completed Code Mode results and logs across interruption and replay (${large ? "bounded" : "small"})`,
+      function* (s) {
+        const count = large ? 6 : 1
+        const result = "FIRST_RESULT_42" + (large ? "🙂".repeat(3000) : "")
+        const log = "LOG_MARKER" + (large ? "中".repeat(5000) : "")
+        const registry = yield* Tool.Service
+        const waiting = yield* Deferred.make<void>()
+        const calls: string[] = []
+        yield* transformTools(registry, {
+          first: {
+            name: "first",
+            description: "Return a completed result",
+            input: Schema.Struct({}),
+            output: Schema.String,
+            execute: () =>
+              Effect.sync(() => {
+                calls.push("first")
+                return { output: result }
+              }),
+          },
+          second: {
+            name: "second",
+            description: "Wait until interrupted",
+            input: Schema.Struct({}),
+            output: Schema.String,
+            execute: () =>
+              Effect.sync(() => calls.push("second")).pipe(
+                Effect.andThen(Deferred.succeed(waiting, undefined)),
+                Effect.andThen(Effect.never),
+              ),
+          },
+        })
+        yield* s.admit("Run the script")
+        yield* s.llm.push(
+          TestLLM.tool("call-execute", "execute", {
+            code: `for (let i = 0; i < ${count}; i++) await tools.first({}); console.log(${JSON.stringify(log)}); await tools.second({})`,
+          }),
+        )
+        const run = yield* s.resume.pipe(Effect.forkChild)
+        yield* Deferred.await(waiting)
+        yield* s.session.interrupt(sessionID)
+        expect(Exit.hasInterrupts(yield* Fiber.await(run))).toBe(true)
+        const context = yield* s.context
+        expect(context).toMatchObject([
+          Expected.user("Run the script"),
+          Expected.assistant({ error: { type: "aborted" } }, [
+            Expected.failedTool(
+              { id: "call-execute" },
+              {
+                error: { type: "aborted", message: "Tool execution interrupted" },
+                content: [{ type: "text" }],
+                metadata: {
+                  toolCalls: [
+                    ...Array.from({ length: count }, () => ({ tool: "first", status: "completed" })),
+                    { tool: "second", status: "error" },
+                  ],
+                },
+              },
+            ),
+          ]),
+        ])
+        const tool = requireAssistant(context).content.find((part) => part.type === "tool")
+        if (!tool || tool.state.status !== "error") throw new Error("Expected an interrupted execute call")
+        const text = tool.state.content?.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n") ?? ""
+        expect(text).toContain("FIRST_RESULT_42")
+        expect(text).toContain("LOG_MARKER")
+        expect(Buffer.byteLength(text)).toBeLessThanOrEqual(16 * 1024 + 64)
+        expect(text).not.toContain("�")
+        if (large) expect(text).toContain("[truncated]")
+        expect(tool.state.metadata).not.toHaveProperty("interruptedOutput")
+        yield* replaySessionProjection(sessionID)
+        expect(yield* s.context).toEqual(context)
+        s.requests.length = 0
+        yield* s.admit("Use the completed result")
+        yield* s.llm.push(TestLLM.text("Recovered", "text-recovered-execute"))
+        yield* s.resume
+        const request = JSON.stringify(s.requests[0].messages)
+        expect(request).toContain("FIRST_RESULT_42")
+        expect(request).toContain("LOG_MARKER")
+        expect(request).toContain("Tool execution interrupted")
+        expect(calls).toEqual([...Array<string>(count).fill("first"), "second"])
+      },
+    )
+
   scenario("interrupts a blocked step without local tool execution", function* (s) {
     yield* s.admit("Interrupt provider")
     const stream = yield* s.llm.gate

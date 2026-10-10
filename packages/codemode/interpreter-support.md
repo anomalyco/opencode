@@ -33,6 +33,8 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] The global `search(...)` built-in: synchronous tool discovery that counts as an admitted tool call and is
       shadowable by program declarations like other globals.
 - [x] Cooperative timeout, an optional total tool-call limit, output bounding, and unrestricted tool-call concurrency.
+- [x] The host's `execution.interrupted` hook receives captured logs after interrupted calls finish cleanup.
+      Interruption still propagates; hosts own any persistence and delivery of partial results.
 - [x] The timeout fires between interpreter steps, so one built-in is bounded in what it may build: strings up to
       2^24 characters (`repeat`, `pad*`, `concat`, `join`, `+`, template literals, `JSON.stringify`), arrays up to
       10,000,000 elements (`Array(n)`, `length =`, `Array.from`, `split`, `matchAll`, `concat`, `flat`; below the JS
