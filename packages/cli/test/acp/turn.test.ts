@@ -7,6 +7,7 @@ import {
   durableEvent,
   ephemeralEvent,
   permissionAsked,
+  rpcError,
   startSession,
   succeeded,
   textDelta,
@@ -161,6 +162,38 @@ describe("acp turn events over the wire", () => {
       { sessionID: acp.sessionId, formID: "frm_question", message: ACPElicitation.UnshownQuestionMessage },
     ])
     expect(acp.elicitations).toEqual([])
+  })
+})
+
+describe("acp mid-turn steering over the wire", () => {
+  const steer = (acp: Awaited<ReturnType<typeof startSession>>, text = "redirect") =>
+    acp.requestExt("_session/steering", { sessionId: acp.sessionId, prompt: [{ type: "text", text }] })
+
+  test("an idle session asks for a prompt and submits nothing", async () => {
+    await using acp = await startSession()
+
+    expect(await steer(acp)).toEqual({ outcome: "promptRequired", reason: "noRunningTurn" })
+    expect(acp.server.submissions).toEqual([])
+  })
+
+  test("a running session takes the steer as a steering prompt", async () => {
+    await using acp = await startSession()
+    acp.server.active.add(acp.sessionId)
+
+    expect(await steer(acp)).toEqual({ outcome: "injected" })
+    expect(acp.server.prompts).toEqual([expect.objectContaining({ text: "redirect", delivery: "steer", resume: false })])
+  })
+
+  test("rejects an unknown session and malformed params", async () => {
+    await using acp = await startSession()
+
+    expect(await rpcError(acp.requestExt("_session/steering", { sessionId: "ses_missing", prompt: [] }))).toMatchObject({
+      code: -32602,
+    })
+    expect(await rpcError(acp.requestExt("_session/steering", { sessionId: acp.sessionId }))).toMatchObject({
+      code: -32602,
+    })
+    expect(acp.server.submissions).toEqual([])
   })
 })
 
