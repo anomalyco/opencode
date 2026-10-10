@@ -163,6 +163,32 @@ export const WithRadio = {
   },
 }
 
+export const LongList = {
+  render: () => {
+    const [agent, setAgent] = createSignal("ehealthwares-marketing")
+    const agents = Array.from({ length: 32 }, (_, index) => `agent-${index + 1}`)
+
+    return (
+      <div style={{ display: "flex", "align-items": "flex-end", height: "320px" }}>
+        <Menu gutter={6} defaultOpen>
+          <Menu.Trigger as={Button}>{agent()}</Menu.Trigger>
+          <Menu.Portal>
+            <Menu.Content style={{ "min-width": "220px" }}>
+              <Menu.RadioGroup value={agent()} onChange={setAgent}>
+                {agents.map((id) => (
+                  <Menu.RadioItem value={id} class="capitalize">
+                    {id}
+                  </Menu.RadioItem>
+                ))}
+              </Menu.RadioGroup>
+            </Menu.Content>
+          </Menu.Portal>
+        </Menu>
+      </div>
+    )
+  },
+}
+
 export const WithSubmenu = {
   render: () => (
     <Menu gutter={6}>

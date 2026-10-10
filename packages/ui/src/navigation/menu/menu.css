@@ -26,6 +26,13 @@
   transform-origin: var(--kb-menu-content-transform-origin);
   animation: menu-v2-in 120ms ease-out;
 
+  /* Clamp long panels (many agents, models, commands) to the height corvu's
+     popper reports as available, so the list scrolls instead of rendering
+     past the window edge where it gets clipped and unreachable. */
+  max-height: var(--kb-popper-content-available-height);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+
   &:focus-visible {
     outline: none;
   }
