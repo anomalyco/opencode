@@ -1,8 +1,12 @@
 import { define } from "@opencode/plugin/effect/plugin"
 import type { Entry } from "@opencode/schema/config"
-import { Duration, Effect, Schedule, type Schema, Semaphore, Stream } from "effect"
+import { Duration, Effect, Option, Schedule, type Schema, Semaphore, Stream } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
+import { shellParserWasm } from "#shell-parser-wasm"
 import { Config } from "../../config.js"
+import { Environment } from "../../environment/index.js"
+import { EnvironmentUnavailable } from "../../environment/unavailable.js"
+import { Location } from "../../location.js"
 import { Model } from "../../model.js"
 import type { PluginInternal } from "../internal.js"
 import { foldSettings } from "./configured.js"
@@ -31,13 +35,22 @@ export function createLocalProviderPlugin<Discovered>(input: {
   const discoveryLock = Semaphore.makeUnsafe(1)
   const suffix = input.stripPathSuffix ?? /\/v1$/
 
-  return function make(origin = input.origin, interval: Duration.Input = "30 seconds") {
+  return function make(origin?: string, interval: Duration.Input = "30 seconds") {
     return define({
       id: input.id,
       effect: Effect.fn(function* (ctx) {
         const http = HttpClient.filterStatusOk(yield* HttpClient.HttpClient)
         const config = yield* Config.Service
-        const source = { current: configured(yield* config.entries(), input.providerID, origin, suffix) }
+        const environment = yield* Effect.serviceOption(Environment.Service)
+        const location = yield* Effect.serviceOption(Location.Service)
+        const defaultOrigin =
+          origin ??
+          (shellParserWasm.bash === "" ||
+          (Option.isSome(location) && location.value.workspaceID !== undefined) ||
+          (Option.isSome(environment) && environment.value.spawner === EnvironmentUnavailable.spawner)
+            ? undefined
+            : input.origin)
+        const source = { current: configured(yield* config.entries(), input.providerID, defaultOrigin, suffix) }
         const loaded = { models: [] as readonly Discovered[], hash: "[]" }
 
         yield* ctx.integration.transform((integrations) => {
@@ -115,7 +128,7 @@ export function createLocalProviderPlugin<Discovered>(input: {
         // Keep the last successful inventory through transient outages instead of flickering model availability.
         yield* refresh().pipe(Effect.ignore, Effect.repeat(Schedule.spaced(interval)), Effect.forkScoped)
         const reload = Effect.fn("LocalProviderPlugin.reload")(function* () {
-          const next = configured(yield* config.entries(), input.providerID, origin, suffix)
+          const next = configured(yield* config.entries(), input.providerID, defaultOrigin, suffix)
           if (
             next.baseURL === source.current.baseURL &&
             next.apiKey === source.current.apiKey &&
@@ -172,10 +185,14 @@ function createClient(
   }
 }
 
-function configured(entries: readonly Entry[], providerID: string, origin: string, suffix: RegExp) {
+function configured(entries: readonly Entry[], providerID: string, origin: string | undefined, suffix: RegExp) {
   const settings = foldSettings(entries, providerID, undefined)
   const baseURL = (
-    typeof settings?.baseURL === "string" ? settings.baseURL : `${origin.replace(/\/+$/, "")}/v1`
+    typeof settings?.baseURL === "string"
+      ? settings.baseURL
+      : origin !== undefined
+        ? `${origin.replace(/\/+$/, "")}/v1`
+        : ""
   ).replace(/\/+$/, "")
   const apiKey = typeof settings?.apiKey === "string" ? settings.apiKey : undefined
   if (!URL.canParse(baseURL)) return { baseURL, apiKey }

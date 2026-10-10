@@ -165,9 +165,10 @@ export const scan = Effect.fnUntraced(function* (
   command: string,
   shell: string,
   cwd: string,
-  options?: { portable?: boolean },
+  options?: { portable?: boolean; wasm?: typeof shellParserWasm },
 ) {
-  if (options?.portable) return yield* scanPortable(command, shell, cwd)
+  if (options?.portable || (options?.wasm ?? shellParserWasm).bash === "")
+    return yield* scanPortable(command, shell, cwd)
   return yield* scanLegacy(command, shell, cwd)
 })
 

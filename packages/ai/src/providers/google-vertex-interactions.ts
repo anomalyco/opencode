@@ -57,7 +57,7 @@ const configuredRoute = (input: Config) => {
     ...rest
   } = input
   const apiKey = GoogleVertexShared.apiKey(input)
-  const location = GoogleVertexShared.location(inputLocation, "global")
+  const location = GoogleVertexShared.location(inputLocation)
   const project = GoogleVertexShared.project(inputProject)
   return route.with({
     ...rest,

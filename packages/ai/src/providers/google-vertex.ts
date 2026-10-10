@@ -91,7 +91,7 @@ const configuredRoute = (input: Config, modelID: string | ModelID) => {
       provider: id,
       message: "Google Vertex tuned models do not support Express Mode API keys",
     })
-  const location = GoogleVertexShared.location(inputLocation, "global")
+  const location = GoogleVertexShared.location(inputLocation)
   const project = GoogleVertexShared.project(inputProject)
   const endpoint =
     baseURL ??
