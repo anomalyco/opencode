@@ -33,9 +33,9 @@ function run(target) {
 const envPath = process.env.OPENCODE_BIN_PATH
 const scriptDir = path.dirname(fs.realpathSync(__filename))
 const command = path.basename(__filename).replace(/\.cjs$/, "")
-const nodeBuild = command === "opencode-node"
+const nodeBuild = command === "opencode-node" || command === "opencode2-node"
 const sourceCommand = nodeBuild ? "opencode2-node" : "opencode"
-const cached = path.join(scriptDir, `.${command}`)
+const cached = path.join(scriptDir, `.${sourceCommand}`)
 const platform = { darwin: "darwin", linux: "linux", win32: "windows" }[os.platform()] || os.platform()
 const arch = { x64: "x64", arm64: "arm64", arm: "arm" }[os.arch()] || os.arch()
 const base = `@opencode/cli${nodeBuild ? "-node" : ""}-` + platform + "-" + arch
@@ -109,6 +109,13 @@ const names = (() => {
 })()
 
 function findBinary(startDir) {
+  for (const name of names) {
+    try {
+      const pkgPath = require.resolve(`${name}/package.json`, { paths: [startDir] })
+      const candidate = path.join(path.dirname(pkgPath), "bin", binary)
+      if (fs.existsSync(candidate)) return candidate
+    } catch {}
+  }
   let current = startDir
   for (;;) {
     const modules = path.join(current, "node_modules")
