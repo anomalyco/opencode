@@ -1,7 +1,7 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { DateTime, Deferred, Effect, Fiber, Layer, Option, PubSub, Schema, Stream } from "effect"
+import { DateTime, Deferred, Effect, Fiber, Layer, Logger, Option, PubSub, Schema, Stream } from "effect"
 import { advance, drain } from "../lib/clock"
 import { Directory, Document, Event, Info } from "@opencode/schema/config"
 import { Session } from "@opencode/core/session"
@@ -247,6 +247,41 @@ Review files`,
       ),
     ),
   )
+
+  it.live("warns when a command file has an unresolvable model", () => {
+    const warnings: unknown[] = []
+    const logger = Logger.map(Logger.formatStructured, (entry) => {
+      if (Array.isArray(entry.message) && entry.message[0] === "command file skipped") warnings.push(entry.message[1])
+    })
+    return Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const bad = path.join(tmp.path, "commands", "bad.md")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(path.dirname(bad), { recursive: true })
+            await fs.writeFile(bad, "---\nmodel: opus\n---\nSay hello")
+            await fs.writeFile(path.join(tmp.path, "commands", "good.md"), "Say hi")
+          })
+          const command = yield* Command.Service
+          yield* ConfigCommandPlugin.Plugin.effect(
+            host({
+              command: {
+                list: () => Effect.die("unused command.list"),
+                transform: command.transform,
+                reload: command.reload,
+              },
+            }),
+          ).pipe(
+            Effect.provide(Config.testLayer([new Directory({ type: "directory", path: AbsolutePath.make(tmp.path) })])),
+          )
+
+          expect((yield* command.list()).map((item) => item.name)).toEqual(["good"])
+          expect(warnings).toEqual([{ filepath: bad, error: expect.stringContaining("model") }])
+        }),
+      ),
+      Effect.provide(Logger.layer([logger])),
+    )
+  })
 
   for (const testCase of sourceCases()) {
     it.effect(`rebuilds commands when a source file is ${testCase.name}`, () =>
