@@ -75,6 +75,11 @@ const unavailable = (server: ServerName, status: Status) => {
   }
 }
 
+// A rejected token surfaces as the SDK's UnauthorizedError, but mcp/client.ts flattens SDK errors into a
+// plain Error whose message still carries the HTTP status, so match on the message text.
+const isAuthFailure = (error: unknown) =>
+  error instanceof Error && /401|unauthoriz|not authenticated/i.test(error.message)
+
 type ServerEntry = {
   readonly config: Mcp.ServerConfig
   status: Status
@@ -678,6 +683,22 @@ export const layer = (options?: Options) =>
           const result = yield* recovering(target.name, target.entry, target.entry.client, (connection) =>
             connection.callTool({ name: input.name, args: input.args, sessionID: input.sessionID }),
           ).pipe(
+            Effect.catchIf(isAuthFailure, (error) =>
+              // The server keeps rejecting every refreshed token, so mark it needs_auth and pull its tools
+              // rather than letting each call turn into another 401 (and another refresh).
+              Effect.gen(function* () {
+                yield* stopServer(target.name, target.entry)
+                target.entry.status = { status: "needs_auth", error: error.message }
+                yield* bus.publish(McpEvent.StatusChanged, { server: target.name })
+                return yield* Effect.fail(
+                  new ToolCallError({
+                    server: target.name,
+                    tool: input.name,
+                    message: `MCP tool "${input.name}" on server "${target.name}" requires authentication: ${error.message}`,
+                  }),
+                )
+              }),
+            ),
             Effect.mapError(
               (error) =>
                 new ToolCallError({
