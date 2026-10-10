@@ -981,6 +981,7 @@ describe("ModelResolver", () => {
       const packages = [
         ["@opencode/ai/providers/google-vertex", "accessToken"],
         ["@opencode/ai/providers/google-vertex/gemini", "accessToken"],
+        ["@opencode/ai/providers/google-vertex/interactions", "accessToken"],
         ["@opencode/ai/providers/google-vertex/chat", "accessToken"],
         ["@opencode/ai/providers/google-vertex/responses", "accessToken"],
         ["@opencode/ai/providers/google-vertex/messages", "accessToken"],

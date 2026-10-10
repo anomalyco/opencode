@@ -22,6 +22,7 @@ import { TokenUsage } from "./token-usage.js"
 
 export const ID = Schema.String.check(Schema.isStartingWith("msg_")).pipe(
   Schema.brand("Session.Message.ID"),
+  Schema.annotate({ identifier: "Session.Message.ID" }),
   statics((schema) => ({
     create: () => schema.make("msg_" + ascending()),
     fromEvent: (eventID: Event.ID) => schema.make(eventID.replace(/^evt_/, "msg_")),

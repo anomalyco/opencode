@@ -281,11 +281,21 @@ const mapClientError = <E>(error: E) =>
 
 const preserveEffect =
   <A>() =>
-  <E, R>(effect: Effect.Effect<A, E, R>) =>
+  <Actual extends A, E, R>(
+    effect: Effect.Effect<Actual, E, R> &
+      ([A] extends [Actual]
+        ? unknown
+        : { readonly __generatedOutputWiderThanContract: [expected: Actual, generated: A] }),
+  ): Effect.Effect<A, E, R> =>
     effect
 const preserveStream =
   <A>() =>
-  <E, R>(stream: Stream.Stream<A, E, R>) =>
+  <Actual extends A, E, R>(
+    stream: Stream.Stream<Actual, E, R> &
+      ([A] extends [Actual]
+        ? unknown
+        : { readonly __generatedOutputWiderThanContract: [expected: Actual, generated: A] }),
+  ): Stream.Stream<A, E, R> =>
     stream
 
 const EndpointServerInfo = (raw: RawClient["server.server"]) => () =>
