@@ -29,7 +29,7 @@ sf org assign permset --name Console_Account_Sync --target-org opencode
 ```
 
 The application integration uses the existing SST Salesforce credentials. Set the
-same `CONSOLE_CRM_TOKEN` on the SST website and Console API/jobs. The SST website
+same `CONSOLE_CRM_TOKEN` on the SST website and Console API. The SST website
 links `CONSOLE_CRM_LOOKUP_URL` to the stage's private Console account lookup.
 
 For local development, run `bun run dev:enterprise` in `packages/console/app` with
