@@ -31,11 +31,11 @@ valid credentials.
 
 Each statement has three fields:
 
-| Field      | Values                       | Meaning                                              |
-| ---------- | ---------------------------- | ---------------------------------------------------- |
-| `action`   | `provider.use`, `permission` | The operation being controlled                       |
-| `resource` | string or wildcard pattern   | What the statement applies to; depends on the action |
-| `effect`   | `allow`, `deny`              | The decision when this statement matches             |
+| Field      | Values                                      | Meaning                                              |
+| ---------- | ------------------------------------------- | ---------------------------------------------------- |
+| `action`   | `provider.use`, `tool.use`, `integration.use` | The operation being controlled                       |
+| `resource` | string or wildcard pattern                  | What the statement applies to; depends on the action |
+| `effect`   | `allow`, `deny`                              | The decision when this statement matches             |
 
 Statements that fail validation are dropped with a warning in the server log and
 the rest of the list still applies. Check the log after editing a `deny`.
@@ -108,16 +108,16 @@ lists. V1 files still load; see
 
 ## Permissions
 
-`permission` statements hard-deny a [permission](/permissions) check. The resource is
+`tool.use` statements hard-deny a [permission](/permissions) check. The resource is
 `<action>:<value>`, matched against every resource the tool checks.
 
 ```jsonc
 {
   "experimental": {
     "policies": [
-      { "action": "permission", "resource": "shell:git push *", "effect": "deny" },
-      { "action": "permission", "resource": "edit:*.env", "effect": "deny" },
-      { "action": "permission", "resource": "webfetch:*", "effect": "deny" },
+      { "action": "tool.use", "resource": "shell:git push *", "effect": "deny" },
+      { "action": "tool.use", "resource": "edit:*.env", "effect": "deny" },
+      { "action": "tool.use", "resource": "webfetch:*", "effect": "deny" },
     ],
   },
 }
@@ -136,15 +136,15 @@ applies after agent rules and saved approvals, so it overrides an `ask` and an
 | `github_delete_repository:*` | One MCP tool                                |
 | `*`                          | Everything not already denied               |
 
-A `permission` statement with `allow` never grants access. It only lifts an earlier
+A `tool.use` statement with `allow` never grants access. It only lifts an earlier
 broader `deny`, after which the agent's own rules decide.
 
 ```jsonc
 {
   "experimental": {
     "policies": [
-      { "action": "permission", "resource": "shell:*", "effect": "deny" },
-      { "action": "permission", "resource": "shell:git status *", "effect": "allow" },
+      { "action": "tool.use", "resource": "shell:*", "effect": "deny" },
+      { "action": "tool.use", "resource": "shell:git status *", "effect": "allow" },
     ],
   },
 }
