@@ -1,7 +1,7 @@
-import { expect, test, type Page } from "@playwright/test"
-import { expectPath, holdRoute, NO_PROVIDER, project, REMOTE_SERVER, seed, sessionHref } from "../utils/app"
-import { mockOpenCodeServer } from "../utils/mock-server"
-import { fixture, mockStressTimeline } from "../utils/session-fixture"
+import { expect, test, type Browser, type Page } from "@playwright/test"
+import { expectPath, holdRoute, NO_PROVIDER, project, REMOTE_SERVER, seed, session, sessionHref } from "../utils/app"
+import { mockOpenCodeServer, mockSharedServer, type MockServerConfig } from "../utils/mock-server"
+import { fixture, mockStressTimeline, pageMessages } from "../utils/session-fixture"
 import { mockRemoteServer } from "../utils/workspace"
 import { APP_READY_TIMEOUT, expectAppVisible } from "../utils/waits"
 
@@ -341,4 +341,298 @@ test("the project menu path arrow has a glyph when the page has an older icon sp
     .poll(() => arrow.locator("svg").evaluate((element: SVGSVGElement) => element.getBBox().width))
     .toBeGreaterThan(0)
   await expect(page.locator("#opencode-v2-icon-sprite")).toHaveCount(1)
+})
+
+// Two isolated browser contexts on one server: A opened the fixture project, B is a fresh browser with empty storage.
+const betaDirectory = "/srv/beta"
+
+const betaName = "beta-project"
+
+const betaProject = project({ id: "proj_beta", directory: betaDirectory, name: betaName })
+
+const projectRow = (page: Page, name: string) =>
+  page.locator('[data-component="home-project-row"]').filter({ hasText: name })
+
+async function sharedClients(browser: Browser, baseURL: string | undefined, input: Partial<MockServerConfig> = {}) {
+  const contexts = await Promise.all([0, 1].map(() => browser.newContext({ baseURL, serviceWorkers: "block" })))
+  const [a, b] = await Promise.all(contexts.map((context) => context.newPage()))
+
+  const sessions = [
+    ...fixture.sessions.map((item) => ({ ...item })),
+    session({ id: "ses_beta", directory: betaDirectory, projectID: betaProject.id, title: "Beta plan" }),
+  ]
+
+  const server = await mockSharedServer([a, b], {
+    sessions,
+    provider: fixture.provider,
+    directory: fixture.directory,
+    project: fixture.project,
+    projects: [{ ...fixture.project, canonical: fixture.directory }, betaProject],
+    pageMessages,
+    fileList: () => [],
+    eventRetry: 20,
+    ...input,
+  })
+
+  await seed(a, {
+    projects: { local: [{ worktree: fixture.directory, expanded: true }] },
+    lastProject: { local: fixture.directory },
+  })
+
+  return { a, b, sessions, server, close: () => Promise.all(contexts.map((context) => context.close())) }
+}
+
+async function expectDiscovered(page: Page) {
+  await expect(projectRow(page, fixture.project.name)).toBeVisible()
+  await expect(projectRow(page, betaName)).toBeVisible()
+  await expect(row(page, fixture.expected.targetTitle)).toBeVisible()
+  await expect(row(page, "Beta plan")).toBeVisible()
+}
+
+test("a fresh browser discovers the server's projects and sessions after reload and cleared storage", async ({
+  browser,
+  baseURL,
+}) => {
+  const { a, b, close } = await sharedClients(browser, baseURL)
+  await b.goto("/")
+  await expectDiscovered(b)
+  // Discovery reads the server; it does not copy the inventory into this browser's own project list.
+  const stored = await b.evaluate(() => localStorage.getItem("opencode.global.dat:server"))
+  expect(JSON.parse(stored ?? "{}").projects?.local ?? []).toEqual([])
+
+  await b.reload()
+  await expectDiscovered(b)
+  await b.evaluate(() => localStorage.clear())
+  await b.reload()
+  await expectDiscovered(b)
+
+  // Closing a discovered project is this browser's preference: it stays hidden here and listed elsewhere.
+  await projectRow(b, betaName).locator("..").getByRole("button", { name: "More options", exact: true }).click()
+  await b.getByRole("menuitem", { name: "Close", exact: true }).click()
+  await expect(projectRow(b, betaName)).toHaveCount(0)
+  await b.reload()
+  await expect(projectRow(b, fixture.project.name)).toBeVisible()
+  await expect(projectRow(b, betaName)).toHaveCount(0)
+  await a.goto("/")
+  await expect(projectRow(a, betaName)).toBeVisible()
+  await close()
+})
+
+test("a session created in one browser appears in another, which opens the same conversation", async ({
+  browser,
+  baseURL,
+}) => {
+  const { a, b, close } = await sharedClients(browser, baseURL, { createdSessionTitle: "Created in browser A" })
+  await Promise.all([a.goto("/"), b.goto("/")])
+  await expectDiscovered(b)
+  await expect(row(b, "Created in browser A")).toHaveCount(0)
+
+  await projectRow(a, fixture.project.name).hover()
+  await a
+    .locator('[data-home-project-row-container], [data-component="home-project-row"]')
+    .filter({ hasText: fixture.project.name })
+    .locator("..")
+    .locator('[data-action="home-project-new-session"]')
+    .click()
+  const editor = a.locator('[data-component="composer-editor"]')
+  await editor.fill("Plan the shared rollout")
+  await a.locator('[data-action="composer-submit"]').click()
+  await expect(a).toHaveURL(/\/session\/ses_[^/]+$/)
+  const createdID = new URL(a.url()).pathname.split("/").at(-1)!
+
+  // B learns about the session from the server, without its URL.
+  const created = b.locator(`[data-component="home-session-row-container"][data-session-id="${createdID}"]`)
+  await expect(created).toContainText("Created in browser A")
+
+  // Both browsers open the same stored conversation.
+  for (const page of [a, b]) {
+    await page.goto("/")
+    await row(page, fixture.expected.targetTitle).click()
+    await expect(page).toHaveURL(new RegExp(`/session/${fixture.targetID}$`))
+    await expect(
+      page.locator(`[data-timeline-row="UserMessage"][data-message-id="${fixture.expected.targetMessageIDs.at(-1)}"]`),
+    ).toBeVisible()
+  }
+
+  await close()
+})
+
+test("renames and deletes in one browser reach another browser's Home", async ({ browser, baseURL }) => {
+  const { a, b, close } = await sharedClients(browser, baseURL)
+  await Promise.all([a.goto("/"), b.goto("/")])
+  await expect(row(b, fixture.expected.targetTitle)).toBeVisible()
+
+  await row(a, fixture.expected.targetTitle).click({ button: "right" })
+  await a.getByRole("menuitem", { name: "Rename" }).click()
+  const title = a.locator('[data-component="home-session-rename"]')
+  await title.fill("Renamed in browser A")
+  await title.press("Enter")
+  await expect(row(b, "Renamed in browser A")).toBeVisible()
+  await expect(row(b, fixture.expected.targetTitle)).toHaveCount(0)
+
+  await row(a, "Renamed in browser A").click({ button: "right" })
+  await a.getByRole("menuitem", { name: "Delete…" }).click()
+  await a.getByRole("dialog").getByRole("button", { name: "Delete session" }).click()
+  await expect(row(a, "Renamed in browser A")).toHaveCount(0)
+  await expect(row(b, "Renamed in browser A")).toHaveCount(0)
+  await expect(row(b, "Beta plan")).toBeVisible()
+  await close()
+})
+
+test("a project the server registers while a browser is open appears there", async ({ browser, baseURL }) => {
+  const delta = project({ id: "proj_delta", directory: "/srv/delta", name: "delta-project" })
+  const projects: unknown[] = [{ ...fixture.project, canonical: fixture.directory }, betaProject]
+  const { b, sessions, server, close } = await sharedClients(browser, baseURL, { projects: () => projects })
+  await b.goto("/")
+  await expectDiscovered(b)
+  await expect(projectRow(b, "delta-project")).toHaveCount(0)
+
+  // Another client's first session in a new directory registers it; the server announces it with project.updated.
+  // The real server lists the new project and publishes session.created for the session; it sends no project.updated.
+  projects.push(delta)
+  const created = session({ id: "ses_delta", directory: "/srv/delta", projectID: delta.id, title: "Delta plan" })
+  sessions.push(created)
+  server.publish([
+    {
+      id: "evt_session_delta",
+      created: Date.now(),
+      type: "session.created",
+      location: { directory: "/srv/delta" },
+      durable: { aggregateID: created.id, seq: 1, version: 1 },
+      data: {
+        sessionID: created.id,
+        projectID: delta.id,
+        location: { directory: "/srv/delta" },
+        slug: "delta-plan",
+        title: created.title,
+        version: "local",
+      },
+    },
+  ])
+  await expect(projectRow(b, "delta-project")).toBeVisible()
+  await expect(row(b, "Delta plan")).toBeVisible()
+  await close()
+})
+
+test("a session deleted in one browser leaves another browser's Home", async ({ browser, baseURL }) => {
+  const { a, b, close } = await sharedClients(browser, baseURL)
+  await Promise.all([a.goto("/"), b.goto("/")])
+  // B knows this row only from its fetched session index.
+  await expect(row(b, fixture.expected.sourceTitle)).toBeVisible()
+
+  await row(a, fixture.expected.sourceTitle).click({ button: "right" })
+  await a.getByRole("menuitem", { name: "Delete…" }).click()
+  await a.getByRole("dialog").getByRole("button", { name: "Delete session" }).click()
+  await expect(row(a, fixture.expected.sourceTitle)).toHaveCount(0)
+  await expect(row(b, fixture.expected.sourceTitle)).toHaveCount(0)
+  await expect(row(b, "Beta plan")).toBeVisible()
+  await close()
+})
+
+test("a browser reconnecting to the server lists sessions created while it was offline", async ({
+  browser,
+  baseURL,
+}) => {
+  const { b, sessions, server, close } = await sharedClients(browser, baseURL)
+  await b.goto("/")
+  await expectDiscovered(b)
+  const before = (await server.transports[1]!.connections()).length
+
+  // Another client created this while B's stream was down, so B never receives its event.
+  sessions.push(
+    session({ id: "ses_offline", directory: betaDirectory, projectID: betaProject.id, title: "Made offline" }),
+  )
+  await server.transports[1]!.disconnect()
+  await server.transports[1]!.waitForConnection({ after: before })
+  await expect(row(b, "Made offline")).toBeVisible()
+  await close()
+})
+
+test("projects, sessions, and worktrees stay with their own server and project", async ({ browser, baseURL }) => {
+  const { b, close } = await sharedClients(browser, baseURL)
+  const remoteDirectory = "/remote/gamma"
+  await mockOpenCodeServer(b, {
+    server: REMOTE_SERVER,
+    directory: remoteDirectory,
+    project: project({ id: "proj_gamma", directory: remoteDirectory, name: "gamma-remote" }),
+    provider: NO_PROVIDER,
+    sessions: [session({ id: "ses_gamma", directory: remoteDirectory, projectID: "proj_gamma", title: "Gamma plan" })],
+    pageMessages: () => ({ items: [] }),
+    fileList: () => [],
+  })
+  await seed(b, { servers: [{ url: REMOTE_SERVER, name: "Remote" }] })
+  await b.goto("/")
+  await expectDiscovered(b)
+  // Each server lists only its own projects, under its own row, and the focused server only its own sessions.
+  await expect(b.locator("[data-home-row]")).toHaveText([
+    /127\.0\.0\.1:4096/,
+    new RegExp(betaName),
+    new RegExp(fixture.project.name),
+    /Remote/,
+    /gamma-remote/,
+  ])
+  await expect(row(b, "Gamma plan")).toHaveCount(0)
+  await b
+    .locator("[data-home-row]")
+    .filter({ hasText: "Remote" })
+    .getByRole("button", { name: /Remote/ })
+    .click()
+  await expect(row(b, "Gamma plan")).toBeVisible()
+  await expect(row(b, "Beta plan")).toHaveCount(0)
+  await b.locator("[data-home-row]").filter({ hasText: "4096" }).getByRole("button", { name: /4096/ }).click()
+  await expect(row(b, "Beta plan")).toBeVisible()
+
+  // Selecting a project scopes the sessions to its directories.
+  await projectRow(b, betaName).click()
+  await expect(row(b, "Beta plan")).toBeVisible()
+  await expect(row(b, fixture.expected.targetTitle)).toHaveCount(0)
+  await projectRow(b, fixture.project.name).click()
+  await expect(row(b, fixture.expected.targetTitle)).toBeVisible()
+  await expect(row(b, "Beta plan")).toHaveCount(0)
+  await close()
+})
+
+test("a failed project or session fetch does not erase projects, sessions, or the selection", async ({
+  browser,
+  baseURL,
+}) => {
+  const { a, close } = await sharedClients(browser, baseURL)
+  await a.goto("/")
+  await expectDiscovered(a)
+  await projectRow(a, betaName).click()
+  await expect(projectRow(a, betaName)).toHaveAttribute("data-selected", "")
+
+  // The server inventory answers after storage loads; the restored selection must wait for it.
+  const projects = await holdRoute(a, (url) => url.pathname === "/api/project")
+  await a.reload()
+  await projects.arrived
+  // Until the server answers, the opened project shows its folder name.
+  await expect(projectRow(a, "SmokeProject")).toBeVisible()
+  await expect(projectRow(a, betaName)).toHaveCount(0)
+  projects.release()
+  await expect(projectRow(a, betaName)).toHaveAttribute("data-selected", "")
+  await a.unroute((url) => url.pathname === "/api/project")
+
+  const fail = (url: URL) => url.pathname === "/api/project" || url.pathname === "/api/session"
+  await a.route(fail, (route) =>
+    route.request().method() === "GET"
+      ? route.fulfill({ status: 500, json: { name: "UnknownError", data: { message: "offline" } } })
+      : route.fallback(),
+  )
+  const failed = a.waitForResponse((response) => fail(new URL(response.url())) && response.status() === 500)
+  await a.reload()
+  await failed
+  // The project this browser opened stays listed, and its stored list is not overwritten.
+  await expect(projectRow(a, "SmokeProject")).toBeVisible()
+  const stored = await a.evaluate(() => localStorage.getItem("opencode.global.dat:server"))
+  expect(JSON.parse(stored ?? "{}").projects.local).toEqual([{ worktree: fixture.directory, expanded: true }])
+
+  await a.unroute(fail)
+  await a.reload()
+  // The selection survived the failure, so the list is scoped to the selected project again.
+  await expect(projectRow(a, fixture.project.name)).toBeVisible()
+  await expect(projectRow(a, betaName)).toHaveAttribute("data-selected", "")
+  await expect(row(a, "Beta plan")).toBeVisible()
+  await expect(row(a, fixture.expected.targetTitle)).toHaveCount(0)
+  await close()
 })

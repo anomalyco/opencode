@@ -19,7 +19,7 @@ import { formatServerError } from "./errors"
 import { useSettings } from "@/settings/model"
 import { timelinePreset } from "@opencode/session-ui/timeline/detail"
 import type { SessionInfo } from "@opencode/client/promise"
-import { resolveProjectForSession, resolveSessionDetailsProject } from "@/shell/layout/helpers"
+import { discoverServerProjects, resolveProjectForSession, resolveSessionDetailsProject } from "@/shell/layout/helpers"
 
 export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext({
   name: "Global",
@@ -222,10 +222,18 @@ function createServerController(
     return base
   }
 
-  const projectsList = createMemo(() => projects.list().map(enrich))
+  // Projects this browser opened, in its own order. Local state is a preference store, not the inventory.
+  const openedList = createMemo(() => projects.list().map(enrich))
+
+  // Opened projects, then the server's other projects so a fresh browser discovers them. Discovered entries skip
+  // `enrich`: it pins a persisted child store per directory, and their metadata already comes from the server.
+  const projectsList = createMemo(() => [
+    ...openedList(),
+    ...discoverServerProjects({ opened: openedList(), closed: projects.closed(), known: sync.data.project }),
+  ])
 
   const forSession = (session: SessionInfo) => {
-    const project = resolveProjectForSession(session, projectsList(), sync.data.project)
+    const project = resolveProjectForSession(session, openedList(), sync.data.project)
 
     if (!project) return
 
@@ -233,7 +241,7 @@ function createServerController(
   }
 
   const detailsForSession = (session: SessionInfo) =>
-    resolveSessionDetailsProject(session, projectsList(), sync.data.project)
+    resolveSessionDetailsProject(session, openedList(), sync.data.project)
 
   const recentlyClosedList = createMemo(() => {
     const known = new Set(sync.data.project.map((project) => pathKey(project.worktree)))
@@ -256,6 +264,8 @@ function createServerController(
     projects: {
       ...projects,
       list: projectsList,
+      /** Only the projects this browser opened; `list` also includes the server's other projects. */
+      opened: openedList,
       forSession,
       detailsForSession,
       resolve: enrich,

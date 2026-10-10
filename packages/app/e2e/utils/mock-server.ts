@@ -134,6 +134,10 @@ export interface MockServerConfig {
   pty?: { prefix?: string; initial?: { id: string; title: string; directory?: string; cwd?: string }[] }
   // Answers 500 InvalidDirectory when a request names a directory this server does not own.
   strictDirectory?: boolean
+  // Publishes events here instead of on this page's stream: `mockSharedServer` sends them to every client.
+  broadcast?: (events: OpenCodeEvent[]) => void
+  // Publishes session.created, session.renamed, and session.deleted like the real server; deleting removes the session.
+  sessionEvents?: boolean
   // Answers 401 UnauthorizedError unless a request carries this password; a function may change it mid-test.
   password?: Resolvable<string>
   // Serves GET /auth/connect/:code: `code` redeems once for `token` (send it as the password); others answer 401.
@@ -346,7 +350,7 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     page.on("close", () => clearInterval(timer))
   }
 
-  const transport = createMockServerHandler(config, emit)
+  const transport = createMockServerHandler(config, config.broadcast ?? emit)
   page.on("close", () => void transport.dispose())
 
   await page.route("**/api/**", async (route) => {
@@ -487,6 +491,51 @@ export async function mockServers(page: Page, servers: Record<string, Omit<MockS
       }),
     ),
   )
+}
+
+// One server shared by several pages, such as two browser contexts: they read and change the same projects and sessions,
+// and everything the server publishes reaches every page's event stream. A page whose stream is down misses those
+// events, like a client of a real server.
+export async function mockSharedServer(
+  pages: Page[],
+  config: Omit<MockServerConfig, "events" | "broadcast" | "sessionEvents">,
+) {
+  const server = config.server ?? SERVER
+
+  const transports = await Promise.all(
+    pages.map((page) => installSseTransport(page, { server, retry: config.eventRetry, keepalive: config.keepalive })),
+  )
+
+  const publish = (events: OpenCodeEvent[]) =>
+    transports.forEach((transport, index) => {
+      if (pages[index]?.isClosed()) return
+      void transport.burst(events).catch(() => undefined)
+    })
+
+  const shared: MockServerConfig = { ...config, server, sessionEvents: true, broadcast: publish }
+  await Promise.all(pages.map((page) => mockOpenCodeServer(page, shared)))
+
+  return { transports, publish }
+}
+
+type SessionEventType = "session.created" | "session.renamed" | "session.deleted"
+
+function sessionEvent(
+  type: SessionEventType,
+  sessionID: string,
+  location: { directory?: string },
+  data: Partial<ReturnType<typeof currentSession>> & { slug?: string },
+  version = 1,
+) {
+  // SAFETY: the mock's session model supplies the fields the server's durable session event for `type` publishes.
+  return {
+    id: `evt_${type}_${sessionID}_${Date.now()}`,
+    created: Date.now(),
+    type,
+    durable: { aggregateID: sessionID, seq: Date.now(), version },
+    location,
+    data: { sessionID, ...data },
+  } as OpenCodeEvent
 }
 
 // `emit` publishes the events a real server sends after a mutation (without a page, nothing is published).
@@ -811,6 +860,17 @@ function mockHandlers(
 
           config.sessions.push(created)
 
+          if (config.sessionEvents)
+            state.emit([
+              sessionEvent("session.created", created.id, created.location, {
+                projectID: created.projectID,
+                location: created.location,
+                slug: created.id,
+                title: created.title,
+                parentID: fields?.parentID,
+              }),
+            ])
+
           return HttpServerResponse.jsonUnsafe({ data: created })
         }),
       )
@@ -933,9 +993,21 @@ function mockHandlers(
         configShells: () => Effect.succeed(config.shells ?? []),
         configUpdate: () => noContent,
         websearchProviders: () => Effect.succeed({ location: location(config), data: [] }),
-        worktreeList: () =>
+        worktreeList: (ctx) =>
           Effect.sync(() => {
             if (config.worktrees) return resolve(config.worktrees)
+            const seed = projectSeed(config)
+
+            // Another project of a multi-project inventory owns only its own directory.
+            if (seed?.id && ctx.query.projectID !== seed.id) {
+              const other = resolve(config.projects ?? [])
+                .filter(Predicate.isObject)
+                .find((project) => project.id === ctx.query.projectID)
+
+              const directory = other?.canonical ?? other?.worktree
+
+              return directory ? [{ directory }] : []
+            }
 
             return [
               { directory: config.directory },
@@ -1183,7 +1255,19 @@ function mockHandlers(
               ? Effect.succeed({ data: currentSession(session, config.directory) })
               : Effect.fail(new MockNotFound({ message: "Session not found" }))
           }),
-        sessionRemove: () => noContent,
+        sessionRemove: (ctx) => {
+          if (!config.sessionEvents) return noContent
+          const index = config.sessions.findIndex((item) => item.id === ctx.params.sessionID)
+
+          if (index === -1) return noContent
+          const [removed] = config.sessions.splice(index, 1)
+
+          return Effect.sync(() =>
+            state.emit([
+              sessionEvent("session.deleted", removed.id, currentSession(removed, config.directory).location, {}, 2),
+            ]),
+          ).pipe(Effect.andThen(noContent))
+        },
         sessionShell: () => noContent,
         sessionForm: (ctx) =>
           Effect.succeed({
@@ -1301,6 +1385,13 @@ function mockHandlers(
             const session = config.sessions.find((item) => item.id === ctx.params.sessionID)
 
             if (session && title !== undefined) session.title = title
+
+            if (session && title !== undefined && config.sessionEvents)
+              state.emit([
+                sessionEvent("session.renamed", session.id, currentSession(session, config.directory).location, {
+                  title,
+                }),
+              ])
           }).pipe(Effect.andThen(noContent)),
         sessionCommand: (ctx) => {
           const recordCommand = config.onCommand
