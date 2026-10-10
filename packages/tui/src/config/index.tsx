@@ -354,14 +354,25 @@ export function ConfigProvider(props: {
     return info
   }
   let reload = Promise.resolve()
-  const watcher = host?.path
-    ? watch(path.dirname(host.path), () => {
+  let watcher: ReturnType<typeof watch> | undefined
+  const file = host?.path
+  if (file) {
+    try {
+      watcher = watch(path.dirname(file), () => {
         reload = reload
           .then(() => host.get())
           .then(apply)
           .catch(() => {})
       })
-    : undefined
+      watcher.on("error", (error) => {
+        watcher?.close()
+        watcher = undefined
+        console.error("CLI config watcher failed; live-reload disabled", { file, error })
+      })
+    } catch (error) {
+      console.error("Failed to watch CLI config; live-reload disabled", { file, error })
+    }
+  }
   onCleanup(() => watcher?.close())
   return (
     <ConfigContext.Provider value={{ data: config, path: host?.path, update }}>{props.children}</ConfigContext.Provider>
