@@ -3,6 +3,8 @@ import context from "./context"
 import contextRenderer from "./context/renderer"
 import btw from "./btw"
 import btwRenderer from "./btw/renderer"
+import sideChat from "./side-chat"
+import sideChatRenderer from "./side-chat/renderer"
 import debug from "./debug"
 import debugRenderer from "./debug/renderer"
 import terminal from "./terminal"
@@ -38,6 +40,7 @@ const eager = (setup: Awaited<ReturnType<NonNullable<Definition["renderer"]>>>["
 export const builtins = Extension.compose(
   { ...context, renderer: eager(contextRenderer) },
   { ...btw, renderer: eager(btwRenderer) },
+  { ...sideChat, renderer: eager(sideChatRenderer) },
   { ...debug, renderer: eager(debugRenderer) },
   { ...terminal, renderer: eager(terminalRenderer) },
   { ...file, renderer: eager(fileRenderer) },

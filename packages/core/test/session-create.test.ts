@@ -607,6 +607,27 @@ describe("Session.create", () => {
     }),
   )
 
+  it.effect("links a child fork to its source and deletes it with the source", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const bus = yield* Bus.Service
+      const { db } = yield* Database.Service
+      const parent = yield* session.create({ location, title: "Parent" })
+      yield* session.prompt({ sessionID: parent.id, text: "First", resume: false })
+      yield* SessionInbox.promote(db, bus, parent.id, "steer")
+
+      const child = yield* session.fork({ sessionID: parent.id, child: true })
+
+      expect(child).toMatchObject({ parentID: parent.id, fork: { sessionID: parent.id } })
+      expect((yield* session.context(child.id)).map((message) => message.type)).toEqual(["user"])
+      expect((yield* session.list({ parentID: parent.id })).data.map((item) => item.id)).toEqual([child.id])
+      expect((yield* session.list({ parentID: null })).data.map((item) => item.id)).not.toContain(child.id)
+
+      yield* session.remove(parent.id)
+      expect(yield* session.get(child.id).pipe(Effect.flip)).toMatchObject({ _tag: "Session.NotFoundError" })
+    }),
+  )
+
   it.effect("keeps a fork untitled when its parent is untitled", () =>
     Effect.gen(function* () {
       const session = yield* Session.Service

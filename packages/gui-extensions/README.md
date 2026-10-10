@@ -613,6 +613,7 @@ export default setup
 export const builtins = Extension.compose(
   context,
   btw,
+  sideChat,
   debug,
   terminal,
   file,
@@ -639,6 +640,7 @@ The window list adds each window entry, loaded with the app:
 export const builtins = Extension.compose(
   { ...context, renderer: eager(contextRenderer) },
   { ...btw, renderer: eager(btwRenderer) },
+  { ...sideChat, renderer: eager(sideChatRenderer) },
   { ...debug, renderer: eager(debugRenderer) },
   { ...terminal, renderer: eager(terminalRenderer) },
   { ...file, renderer: eager(fileRenderer) },

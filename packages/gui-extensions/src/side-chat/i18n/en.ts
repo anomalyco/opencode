@@ -1,0 +1,16 @@
+export default {
+  "command.title": "New side chat",
+  "command.description": "Ask in a separate chat that branches from this conversation",
+  "tab.title": "Side chat {{number}}",
+  "empty.hint": "Ask about this conversation without adding to it. Nothing here reaches the main chat.",
+  "empty.session": "Send a message in the main chat before starting a side chat",
+  "composer.placeholder": "Ask a side question…",
+  "composer.send": "Send",
+  "composer.stop": "Stop",
+  "start.failed": "Couldn’t start a side chat",
+  "quote.action": "Quote in main chat",
+  "quote.label": "Side chat {{number}}",
+  "quote.subject": "side chat {{number}}",
+  loading: "Loading side chat",
+  "send.failed": "Couldn’t send that message",
+}
