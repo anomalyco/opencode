@@ -3,7 +3,6 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
-  "go.promo.spaceBunny": "新しい匿名モデル Space Bunny Free が期間限定で利用可能です",
   "go.referral.ended.label": "警告",
   "go.referral.ended":
     "紹介プログラムは終了しました。紹介リンクを使っても、あなたや共有した人にクレジットは付与されません。",
@@ -261,6 +260,7 @@ export const dict = {
     "すべてのZenモデルは米国でホストされています。プロバイダーはゼロ保持ポリシーに従い、モデルのトレーニングにデータを使用しません（",
   "zen.privacy.exceptionsLink": "以下の例外",
 
+  "go.promo.step5": "新モデル Step 5 Preview Free を期間限定で無料提供中です。",
   "go.title": "OpenCode Go | すべての人のための低価格なコーディングモデル",
   "go.meta.description":
     "Goは月額$10で、主要なコーディングモデルへのゆとりある利用上限と安定したアクセスを提供します。",
@@ -819,6 +819,14 @@ export const dict = {
   "enterprise.form.email.placeholder": "jeff@amazon.com",
   "enterprise.form.phone.label": "電話番号",
   "enterprise.form.phone.placeholder": "+1 234 567 8900",
+  "enterprise.form.inferenceSpend.label": "貴社の現在の月間 AI 推論費用（USD）はどのくらいですか？",
+  "enterprise.form.inferenceSpend.placeholder": "範囲を選択（任意）",
+  "enterprise.form.inferenceSpend.none": "まだ費用は発生していない",
+  "enterprise.form.inferenceSpend.under1k": "$1K 未満",
+  "enterprise.form.inferenceSpend.1kTo10k": "$1K–$10K",
+  "enterprise.form.inferenceSpend.10kTo50k": "$10K–$50K",
+  "enterprise.form.inferenceSpend.50kTo100k": "$50K–$100K",
+  "enterprise.form.inferenceSpend.over100k": "$100K 以上",
   "enterprise.form.message.label": "どのような課題を解決したいですか？",
   "enterprise.form.message.placeholder": "これについて支援が必要です...",
   "enterprise.form.send": "送信",
@@ -827,6 +835,7 @@ export const dict = {
   "enterprise.form.success.submitted": "フォームが正常に送信されました。",
   "enterprise.form.error.allFieldsRequired": "すべての項目は必須です。",
   "enterprise.form.error.invalidEmailFormat": "無効なメール形式です。",
+  "enterprise.form.error.invalidInferenceSpend": "有効な推論費用の範囲を選択してください。",
   "enterprise.form.error.internalServer": "内部サーバーエラー。",
   "enterprise.faq.title": "FAQ",
   "enterprise.faq.q1": "OpenCode Enterpriseとは？",
