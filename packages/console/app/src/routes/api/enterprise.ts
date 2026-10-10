@@ -97,7 +97,10 @@ export async function handleEnterpriseRequest(
       return Response.json({ error: dict["enterprise.form.error.invalidInferenceSpend"] }, { status: 400 })
     }
 
-    const account = await (options.accountLookup ?? lookupConsoleAccount)(body.email)
+    const account = await (options.accountLookup ?? lookupConsoleAccount)(body.email).catch((err) => {
+      console.error("Failed to look up Console account:", err)
+      return undefined
+    })
 
     const emailContent = `
 ${body.message}<br><br>

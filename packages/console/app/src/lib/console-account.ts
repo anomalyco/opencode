@@ -14,7 +14,7 @@ export async function lookupConsoleAccount(email: string): Promise<ConsoleAccoun
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${Resource.CONSOLE_CRM_TOKEN.value}` },
     body: JSON.stringify({ email }),
-    signal: AbortSignal.timeout(8000),
+    signal: AbortSignal.timeout(3000),
   })
   if (!response.ok) throw new Error(`Console account lookup failed (${response.status})`)
   const result = z.object({ account: consoleAccountSchema.nullable() }).parse(await response.json())
