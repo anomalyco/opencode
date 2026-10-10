@@ -12,6 +12,7 @@ import type { LayerNode } from "@opencode/util/effect/layer-node"
 import { Context, Effect, Layer, ManagedRuntime, Scope } from "effect"
 import { HttpEffect, HttpRouter, HttpServer, HttpServerRequest } from "effect/http"
 import { context, layer, type LogOptions } from "../logging"
+import pkg from "../../package.json"
 import { OwnedFetch } from "./fetch"
 import { SdkInstances } from "./instances"
 
@@ -37,7 +38,11 @@ export const create = Effect.fn("EmbeddedHost.create")(function* <R = never>(
     createEmbeddedRoutes(
       {
         ...server,
-        app: { ...server.app, name: server.app?.name ?? "sdk" },
+        app: {
+          name: server.app?.name ?? "sdk",
+          version: server.app?.version ?? pkg.version,
+          channel: server.app?.channel ?? "latest",
+        },
         database: { path: ":memory:", ...server.database },
       },
       workspaceProviders
