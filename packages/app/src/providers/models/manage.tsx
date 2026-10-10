@@ -35,9 +35,7 @@ export const DialogManageModels: Component = () => {
     providerList(providerID).every((x) => local.model.visible({ modelID: x.id, providerID: x.provider.id }))
 
   const setProviderVisibility = (providerID: string, checked: boolean) => {
-    providerList(providerID).forEach((x) => {
-      local.model.setVisibility({ modelID: x.id, providerID: x.provider.id }, checked)
-    })
+    local.model.setProviderVisibility(providerID, checked)
   }
 
   const setModelVisibility = (item: ModelItem, checked: boolean) => {

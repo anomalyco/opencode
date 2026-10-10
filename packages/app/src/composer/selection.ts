@@ -133,6 +133,7 @@ export function createComposerModelSelection(input: {
     },
     visible: models.visible,
     setVisibility: models.setVisibility,
+    setProviderVisibility: models.setProviderVisibility,
     variant: {
       configured() {
         const item = input.agent()
