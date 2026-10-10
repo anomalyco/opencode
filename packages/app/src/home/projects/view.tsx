@@ -456,7 +456,7 @@ function HomeServerRow(props: {
         <div
           data-slot="home-row-actions"
           class={`
-          hover-reveal absolute bottom-0 right-1 top-0 flex items-center gap-1 rounded-r-[6px] pl-2
+          hover-reveal absolute bottom-0 end-1 top-0 flex items-center gap-1 rounded-e-[6px] ps-2
           group-hover/server:opacity-100 focus-within:opacity-100 data-[menu=true]:opacity-100
         `}
           data-menu={props.contextMenuOpen(contextMenuID())}
@@ -740,7 +740,7 @@ function HomeProjectRow(
       <div
         data-slot="home-row-actions"
         class={`
-          hover-reveal absolute bottom-0 right-1 top-0 flex items-center gap-1 rounded-r-[6px] pl-2
+          hover-reveal absolute bottom-0 end-1 top-0 flex items-center gap-1 rounded-e-[6px] ps-2
           group-hover/project:opacity-100 focus-within:opacity-100 data-[menu=true]:opacity-100
         `}
         data-menu={props.contextMenuOpen(contextMenuID())}

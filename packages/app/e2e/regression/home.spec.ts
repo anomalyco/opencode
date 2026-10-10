@@ -4,6 +4,7 @@ import { mockOpenCodeServer } from "../utils/mock-server"
 import { fixture, mockStressTimeline } from "../utils/session-fixture"
 import { mockRemoteServer } from "../utils/workspace"
 import { APP_READY_TIMEOUT, expectAppVisible } from "../utils/waits"
+import { openWithDirection } from "../utils/direction"
 
 test.use({ serviceWorkers: "block" })
 
@@ -131,6 +132,52 @@ test("Home and the directory picker load without newer browser APIs", async ({ p
   await dialog.getByRole("button", { name: "Cancel", exact: true }).click()
   await expect(dialog).toBeHidden()
   await expect(target).toBeVisible()
+})
+
+test("Home row actions stay at the logical end without covering the leading icon", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await mockRemoteServer(page, { name: "Remote" })
+  await openHome(page)
+
+  for (const direction of ["ltr", "rtl"] as const) {
+    await openWithDirection(page, "/", direction)
+    await expect(page.locator("html")).toHaveAttribute("dir", direction)
+
+    for (const target of [
+      {
+        row: page.locator("[data-home-row]").filter({ has: page.getByText("Remote", { exact: true }) }),
+        leading: '[data-action="home-server-collapse"]',
+      },
+      {
+        row: page.locator("[data-home-row]").filter({
+          has: page.locator('[data-component="home-project-row"]').filter({ hasText: fixture.project.name }),
+        }),
+        leading: '[data-component="project-avatar-v2"]',
+      },
+    ]) {
+      await expect(target.row.locator(":scope > button")).toBeEnabled()
+      await target.row.hover()
+      await expect(target.row.locator('[data-slot="home-row-actions"]')).toHaveCSS("opacity", "1")
+      await expect
+        .poll(() =>
+          target.row.evaluate((element, selector) => {
+            const actions = element.querySelector('[data-slot="home-row-actions"]')
+            const leading = element.querySelector(selector)
+
+            if (!actions || !leading) throw new Error("Missing Home row actions or leading icon")
+            const row = element.getBoundingClientRect()
+            const action = actions.getBoundingClientRect()
+            const icon = leading.getBoundingClientRect()
+
+            return {
+              inset: getComputedStyle(element).direction === "rtl" ? action.left - row.left : row.right - action.right,
+              overlap: Math.max(0, Math.min(icon.right, action.right) - Math.max(icon.left, action.left)),
+            }
+          }, target.leading),
+        )
+        .toEqual({ inset: 4, overlap: 0 })
+    }
+  }
 })
 
 test("adding a project to a signed-out server re-pairs it, then continues at the paired address", async ({ page }) => {
