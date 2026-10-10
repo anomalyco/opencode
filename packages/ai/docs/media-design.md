@@ -243,11 +243,14 @@ name→id resolution. Multi-speaker (Gemini `speechConfig.multiSpeakerVoiceConfi
 asset's media type rather than sniffing, because headerless PCM can look like an MPEG frame sync. Headerless PCM
 always carries `info.encoding`, `info.sampleRate`, and `info.channels`; its media type is the provider's declaration
 (Gemini `audio/L16;codec=pcm;rate=24000`, Deepgram's `content-type`) or `audio/pcm`. Gemini's asset follows the
-provider's declared type: WAV for Gemini 3.8 TTS `generate`, headerless PCM otherwise. The route never wraps PCM as WAV,
-so `pcm` is the only explicit `format` it accepts, and not on Gemini 3.8 `generate`. Every `format` value a route cannot
-produce (unknown to it, a container on Cartesia SSE, WAV on an ElevenLabs stream, anything but `pcm` on Gemini, `pcm` on
-Gemini 3.8 `generate`) fails the same way as an unsupported field: `UnsupportedOperation` with
-`operation: "media.format"`.
+provider's declared type (WAV, L16, mu-law, or A-law), and a response that mixes types across parts or differs from the
+requested `format` fails typed. Gemini 3.8 TTS defaults to WAV for `generate` and L16 when streaming, and selects its
+encoding through `generationConfig.responseFormat.audio`: `pcm` lowers to `AUDIO_L16` and `wav` to `AUDIO_WAV`
+(`generate` only), while mu-law, A-law, and `sampleRate` go through `providerOptions`. Earlier Gemini TTS models always
+return L16 and reject `responseFormat`, so `pcm` is the only explicit `format` they accept; the route never wraps PCM
+as WAV. Every `format` value a route cannot produce (unknown to it, a container on Cartesia SSE, WAV on an ElevenLabs
+or Gemini stream, anything but `pcm` or `wav` on Gemini 3.8, anything but `pcm` on earlier Gemini) fails the same way
+as an unsupported field: `UnsupportedOperation` with `operation: "media.format"`.
 
 **Timestamps.** `timestamps: true` on the request asks for alignment. ElevenLabs selects the `with-timestamps`
 endpoints (character-level, NDJSON when streaming); Cartesia sets `add_timestamps` on `/tts/sse` (word-level; a
@@ -258,7 +261,7 @@ Common-field lowering per provider:
 | Provider | `voice` | `speed` | `language` | `instructions` | `timestamps` | Usage |
 |---|---|---|---|---|---|---|
 | OpenAI | `voice` (name or `{ id }`) | `speed` | unsupported | `instructions` | unsupported | `tokens` from SSE `speech.audio.done` only |
-| Gemini | `prebuiltVoiceConfig.voiceName` | unsupported | `speechConfig.languageCode` | unsupported (direct in text) | unsupported | `tokens` from `usageMetadata` |
+| Gemini | 3.8: `voiceConfig.voice` (name or `voice_…` id); earlier: `prebuiltVoiceConfig.voiceName` | unsupported | `speechConfig.languageCode` | 3.8: part `speechMetadata.style`; earlier: unsupported (direct in text) | unsupported | `tokens` from `usageMetadata` |
 | ElevenLabs | path voice id (required) | `voice_settings.speed` | `language_code` | unsupported | `with-timestamps` | `credits` from `character-cost` header |
 | Cartesia | `voice` (required) | `generation_config.speed` | `language` | unsupported | `add_timestamps` | none |
 | Deepgram | unsupported (voice is the model) | `speed` query | unsupported | unsupported | unsupported | `characters` from `dg-char-count` header |
