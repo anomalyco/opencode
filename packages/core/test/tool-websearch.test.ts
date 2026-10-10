@@ -4,6 +4,7 @@ import type { HttpClientError } from "effect/http"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Permission } from "@opencode/core/permission"
+import { FileAccess } from "@opencode/core/file-access"
 import { KV } from "@opencode/core/kv"
 import { Form } from "@opencode/core/form"
 import { WebSearch } from "@opencode/core/websearch"
@@ -15,7 +16,7 @@ import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Image } from "@opencode/core/image"
 import { testEffect } from "./lib/effect"
 import { imagePassthrough } from "./lib/image"
-import { permissionLayer } from "./lib/permission"
+import { fileAccessUnavailable, permissionLayer } from "./lib/permission"
 import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "./lib/tool"
 import { webSearchHost } from "./plugin/host"
 import { TestWebSearch } from "./lib/websearch"
@@ -91,6 +92,7 @@ const setup = Effect.gen(function* () {
         }),
       ),
       Image.node.replace(imagePassthrough),
+      FileAccess.node.replace(fileAccessUnavailable),
     ]),
   )
   return Object.assign(fixture, { websearch, kv, registry: Context.get(context, Tool.Service) })

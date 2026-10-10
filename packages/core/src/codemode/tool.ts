@@ -1,6 +1,6 @@
 export * as CodeModeTool from "./tool.js"
 
-import { CodeMode, Namespace, Tool, toolError } from "@opencode/codemode"
+import { CodeMode, Extension, Namespace, Tool, toolError } from "@opencode/codemode"
 import type {
   Content,
   Context,
@@ -14,6 +14,7 @@ import { Effect, Ref, Schema, Semaphore } from "effect"
 import { definition, normalizedName } from "../tool/runtime.js"
 import { CodeModeCatalog } from "./catalog.js"
 import { CodeModeWeb } from "./web.js"
+import type { FileAccess } from "../file-access.js"
 
 const ExecuteFile = Schema.Struct({
   data: Schema.String,
@@ -61,7 +62,7 @@ export type Inventory = {
 // Invariant model-facing guidance; the changing tool catalog is delivered through Instructions.
 const description = [
   "Run JavaScript in a confined Code Mode runtime to script tool calls and HTTP requests and compose their results.",
-  "`fetch` is available for HTTP requests. Imports, direct filesystem access, and timers are unavailable; all other external access goes through `tools`.",
+  "`fetch` is available for HTTP requests and permission-checked file reads. Imports and timers are unavailable; all other external access goes through `tools`.",
   "Within `{ code }`, the only callable tools are those explicitly listed in the Code Mode catalog instructions or returned by the `search` function. Inside `{ code }`, ignore tools shown outside the Code Mode catalog. They are not available in the Code Mode runtime.",
   'Call tools through `tools` using only exact paths and signatures from the catalog. Do not infer or normalize tool names; preserve bracket notation such as `tools.<namespace>["tool-name"](input)`.',
   "Prefer an explicit `return`; if omitted, the final top-level expression becomes the result.",
@@ -70,6 +71,7 @@ const description = [
 
 export const create = (
   inventory: Inventory,
+  access: Pick<FileAccess.Interface, "authorizeRead">,
   executeTool: (name: string, tool: Info, input: unknown, context: Context) => Effect.Effect<Result, Error>,
 ) => {
   return {
@@ -79,6 +81,7 @@ export const create = (
     output: ExecuteOutput,
     execute: ({ code }, context) =>
       Effect.gen(function* () {
+        const signal = yield* Effect.abortSignal
         const callIndex = yield* Ref.make(0)
         const files = yield* Ref.make<Array<CollectedFiles>>([])
         const calls = yield* Ref.make<Array<ExecuteCall>>([])
@@ -105,6 +108,7 @@ export const create = (
               return text === "" ? null : text
             }),
           progressHooks(record),
+          [CodeModeWeb.extension(access, context, signal)],
         ).execute(code)
         const toolCalls = yield* Ref.get(calls)
         const collected = (yield* Ref.get(files))
@@ -135,7 +139,7 @@ export const create = (
           content,
           metadata,
         }
-      }),
+      }).pipe(Effect.scoped),
   } satisfies Info
 }
 
@@ -222,6 +226,7 @@ function runtime(
   inventory: Inventory,
   executeTool: (name: string, tool: Info, input: unknown) => Effect.Effect<unknown, unknown>,
   hooks?: CodeMode.Hooks,
+  extensions: ReadonlyArray<Extension.Extension> = [],
 ) {
   // A path may carry namespace metadata, a callable tool, child tools, or all three.
   const root: ToolNode = { children: new Map() }
@@ -236,7 +241,7 @@ function runtime(
     })
   }
   const tools = renderTools(root)
-  return CodeMode.make<typeof tools>({ tools, extensions: [CodeModeWeb.extension], hooks })
+  return CodeMode.make<typeof tools>({ tools, extensions, hooks })
 }
 
 function getNode<T>(root: Node<T>, path: string) {

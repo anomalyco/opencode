@@ -30,6 +30,7 @@ import { Mcp } from "@opencode/core/mcp/index"
 import { McpClient } from "@opencode/core/mcp/client"
 import { McpStdio } from "@opencode/core/mcp/stdio"
 import { Permission } from "@opencode/core/permission"
+import { FileAccess } from "@opencode/core/file-access"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { State } from "@opencode/core/state"
@@ -60,6 +61,7 @@ import { advance, drain } from "./lib/clock"
 import { testEffect } from "./lib/effect"
 import { registerIntegrationPolicy } from "./fixture/policy"
 import { imagePassthrough } from "./lib/image"
+import { fileAccessUnavailable } from "./lib/permission"
 import { location } from "./fixture/location"
 import { tmpdirScoped } from "./fixture/tmpdir"
 import { hostEnvironmentLayer, recordingEnvironmentLayer } from "./fixture/environment"
@@ -513,6 +515,7 @@ const it = testEffect(
     Permission.node.replace(permissions),
     Bus.node.replace(events),
     Image.node.replace(imagePassthrough),
+    FileAccess.node.replace(fileAccessUnavailable),
   ]),
 )
 
@@ -2269,6 +2272,7 @@ testEffect(Layer.empty).live("preserves plugin transforms through MCP catalog up
             ),
             Permission.node.replace(Layer.mock(Permission.Service, { assert: () => Effect.void })),
             Image.node.replace(imagePassthrough),
+            FileAccess.node.replace(fileAccessUnavailable),
           ]),
         ),
       ),
@@ -2312,6 +2316,7 @@ testEffect(Layer.empty).effect("coalesces queued MCP tool notifications after in
         ),
         Permission.node.replace(Layer.mock(Permission.Service, { assert: () => Effect.void })),
         Image.node.replace(imagePassthrough),
+        FileAccess.node.replace(fileAccessUnavailable),
       ]),
     ),
   )

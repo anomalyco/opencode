@@ -5,6 +5,7 @@ import { Effect, Layer } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Permission } from "@opencode/core/permission"
+import { FileAccess } from "@opencode/core/file-access"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { Skill } from "@opencode/core/skill"
@@ -16,7 +17,7 @@ import { tmpdir } from "./fixture/tmpdir"
 import { Image } from "@opencode/core/image"
 import { it } from "./lib/effect"
 import { imagePassthrough } from "./lib/image"
-import { permissionLayer } from "./lib/permission"
+import { fileAccessUnavailable, permissionLayer } from "./lib/permission"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { FSUtil } from "@opencode/util/fs-util"
 import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "./lib/tool"
@@ -62,6 +63,7 @@ describe("SkillTool", () => {
           Config.node.replace(Config.testLayer()),
           Permission.node.replace(permissionLayer({ assert: () => Effect.die("Blocked skill reached authorization") })),
           Image.node.replace(imagePassthrough),
+          FileAccess.node.replace(fileAccessUnavailable),
         ]),
       ),
     ),
@@ -116,6 +118,7 @@ describe("SkillTool", () => {
             Permission.node.replace(permission),
             Skill.node.replace(skills),
             Image.node.replace(imagePassthrough),
+            FileAccess.node.replace(fileAccessUnavailable),
           ])
 
           return yield* Effect.gen(function* () {

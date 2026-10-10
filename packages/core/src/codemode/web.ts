@@ -1,6 +1,9 @@
 export * as CodeModeWeb from "./web.js"
 
 import { Extension } from "@opencode/codemode"
+import { Effect } from "effect"
+import { fileURLToPath, pathToFileURL } from "node:url"
+import type { FileAccess } from "../file-access.js"
 
 const TIMEOUT_MS = 30_000
 
@@ -10,12 +13,24 @@ type Init = {
   readonly body?: string | Uint8Array<ArrayBuffer> | URLSearchParams
 }
 
-const fetch = async (input: string | URL, init: Init = {}) => {
-  const response = await globalThis.fetch(input, {
+const fetch = async (
+  input: string | URL,
+  init: Init,
+  access: Pick<FileAccess.Interface, "authorizeRead">,
+  context: FileAccess.Invocation,
+  signal: AbortSignal,
+) => {
+  const url = new URL(input)
+  const target =
+    url.protocol === "file:"
+      ? pathToFileURL((await Effect.runPromise(access.authorizeRead(fileURLToPath(url), context), { signal })).absolute)
+      : url
+  signal.throwIfAborted()
+  const response = await globalThis.fetch(target, {
     method: init.method,
     headers: init.headers,
     body: init.body,
-    signal: AbortSignal.timeout(TIMEOUT_MS),
+    signal: AbortSignal.any([signal, AbortSignal.timeout(TIMEOUT_MS)]),
   })
   const bytes = await response.bytes()
   const headers = Object.fromEntries(response.headers)
@@ -37,7 +52,15 @@ const fetch = async (input: string | URL, init: Init = {}) => {
   }
 }
 
-export const extension = Extension.make({ name: "web", globals: { fetch } })
+export const extension = (
+  access: Pick<FileAccess.Interface, "authorizeRead">,
+  context: FileAccess.Invocation,
+  signal: AbortSignal,
+) =>
+  Extension.make({
+    name: "web",
+    globals: { fetch: (input: string | URL, init: Init = {}) => fetch(input, init, access, context, signal) },
+  })
 
 /** What to show for a fetch call: its method and URL. */
 export const display = (args: ReadonlyArray<unknown>) => {
