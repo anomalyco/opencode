@@ -1,6 +1,7 @@
 import { expect, type Page } from "@playwright/test"
 import { NO_PROVIDER, project, sessionHref } from "./app"
 import { mockOpenCodeServer } from "./mock-server"
+import { openWithDirection } from "./direction"
 import { APP_READY_TIMEOUT } from "./waits"
 
 export const paletteSession = {
@@ -25,7 +26,7 @@ export function captureConsoleWarnings(page: Page) {
   return warnings
 }
 
-export async function openCommandPalette(page: Page, home = false) {
+export async function openCommandPalette(page: Page, home = false, direction?: "ltr" | "rtl") {
   const mock = await mockOpenCodeServer(page, {
     directory: paletteSession.directory,
     project: project({ id: paletteSession.projectID, directory: paletteSession.directory, name: "command-palette" }),
@@ -35,7 +36,8 @@ export async function openCommandPalette(page: Page, home = false) {
     findFiles: () => [],
   })
 
-  await page.goto(home ? "/" : sessionHref(paletteSession.id))
+  const route = home ? "/" : sessionHref(paletteSession.id)
+  await (direction ? openWithDirection(page, route, direction) : page.goto(route))
 
   if (home) {
     await expect(

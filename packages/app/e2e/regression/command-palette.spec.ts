@@ -3,6 +3,29 @@ import { captureConsoleWarnings, openCommandPalette, paletteSession } from "../u
 
 test.use({ serviceWorkers: "block", permissions: ["clipboard-read", "clipboard-write"] })
 
+for (const direction of ["ltr", "rtl"] as const) {
+  test(`mirrors palette search spacing in ${direction}`, async ({ page }) => {
+    const { dialog } = await openCommandPalette(page, true, direction)
+    const field = dialog.locator('[data-component="text-input-v2"]')
+    await expect(field).toHaveCSS("direction", direction)
+    await expect
+      .poll(() =>
+        field.evaluate((element) => {
+          const field = element.getBoundingClientRect()
+          const icon = element.querySelector('[data-slot="text-input-v2-leading-icon"] svg')!.getBoundingClientRect()
+          const input = element.querySelector("input")!.getBoundingClientRect()
+          const rtl = getComputedStyle(element).direction === "rtl"
+
+          return {
+            inset: rtl ? field.right - icon.right : icon.left - field.left,
+            gap: rtl ? icon.left - input.right : input.left - icon.right,
+          }
+        }),
+      )
+      .toEqual({ inset: 12, gap: 8 })
+  })
+}
+
 test("copies the session ID while file and session searches are still pending", async ({ page }) => {
   const warnings = captureConsoleWarnings(page)
   const { dialog, input } = await openCommandPalette(page)

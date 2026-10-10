@@ -58,7 +58,7 @@
 }
 
 .command-palette-search [data-component="text-input-v2"] [data-slot="text-input-v2-leading-icon"] {
-  padding-left: 12px;
+  padding-inline-start: 12px;
 }
 
 .command-palette-search [data-component="text-input-v2"] [data-slot="text-input-v2-input"] {
