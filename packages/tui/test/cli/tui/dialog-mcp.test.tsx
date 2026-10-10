@@ -34,6 +34,35 @@ test.each(["enter", "space"])("starts OAuth with %s for an MCP server requiring 
   }
 })
 
+test.each(["enter", "space"])("returns to the selected MCP server after OAuth started with %s", async (key) => {
+  const fixture = await renderMcp({ servers: ["linear", "notion"] })
+
+  try {
+    await fixture.app.waitForFrame((frame) => frame.includes("notion"))
+    fixture.app.mockInput.pressArrow("down")
+    if (key === "enter") fixture.app.mockInput.pressEnter()
+    else fixture.app.mockInput.pressKey(" ")
+    await fixture.app.waitForFrame((frame) => frame.includes("Authorize notion"))
+
+    fixture.complete("notion")
+    await fixture.app.waitForFrame((frame) => frame.includes("MCP servers") && frame.includes("Connected ✓"))
+    expect(fixture.app.captureCharFrame()).toContain("disconnect")
+
+    fixture.app.mockInput.pressArrow("up")
+    fixture.app.mockInput.pressEnter()
+    await fixture.app.waitForFrame((frame) => frame.includes("Authorize linear"))
+    fixture.complete("linear")
+    await fixture.app.waitForFrame((frame) => frame.includes("MCP servers") && !frame.includes("Sign in required"))
+
+    expect(fixture.oauth).toBe(2)
+    expect(fixture.connect).toBe(0)
+    fixture.app.mockInput.pressEscape()
+    await fixture.app.waitForFrame((frame) => !frame.includes("MCP servers"))
+  } finally {
+    fixture.app.renderer.destroy()
+  }
+})
+
 test("opens an investigation draft for a failed MCP server at its originating location", async () => {
   const location = { directory: "/projects/example", workspaceID: "workspace_example" }
   const fixture = await renderMcp({ failed: true, location })
@@ -61,8 +90,14 @@ test("opens an investigation draft for a failed MCP server at its originating lo
   }
 })
 
-async function renderMcp(options?: { failed?: boolean; location?: { directory: string; workspaceID?: string } }) {
+async function renderMcp(options?: {
+  failed?: boolean
+  location?: { directory: string; workspaceID?: string }
+  servers?: string[]
+}) {
   const events = createEventStream()
+  const servers = options?.servers ?? ["linear"]
+  const connected = new Set<string>()
   let oauth = 0
   let connect = 0
   let route!: ReturnType<typeof useRoute>
@@ -75,43 +110,42 @@ async function renderMcp(options?: { failed?: boolean; location?: { directory: s
     if (url.pathname === "/api/mcp")
       return json({
         location,
-        data: [
-          {
-            name: "linear",
-            status: options?.failed
-              ? { status: "failed", error: "MCP error -32000: Connection closed" }
+        data: servers.map((name) => ({
+          name,
+          status: options?.failed
+            ? { status: "failed", error: "MCP error -32000: Connection closed" }
+            : connected.has(name)
+              ? { status: "connected" }
               : { status: "needs_auth", error: "Authentication required" },
-            integrationID: "mcp_linear",
-          },
-        ],
+          integrationID: `mcp_${name}`,
+        })),
       })
     if (url.pathname === "/api/integration")
       return json({
         location,
-        data: [
-          {
-            id: "mcp_linear",
-            name: "linear",
-            methods: [{ type: "oauth", id: "mcp_linear", label: "linear" }],
-            connections: [],
-          },
-        ],
+        data: servers.map((name) => ({
+          id: `mcp_${name}`,
+          name,
+          methods: [{ type: "oauth", id: `mcp_${name}`, label: name }],
+          connections: [],
+        })),
       })
-    if (url.pathname === "/api/integration/mcp_linear/connect/oauth" && request.method === "POST") {
+    const name = servers.find((name) => url.pathname.startsWith(`/api/integration/mcp_${name}/`))
+    if (name && url.pathname === `/api/integration/mcp_${name}/connect/oauth` && request.method === "POST") {
       oauth++
       return json({
         location,
         data: {
-          attemptID: "attempt_linear",
+          attemptID: `attempt_${name}`,
           mode: "auto",
-          url: "https://linear.example.com/oauth",
-          instructions: "Authorize linear in your browser.",
+          url: `https://${name}.example.com/oauth`,
+          instructions: `Authorize ${name} in your browser.`,
         },
       })
     }
-    if (url.pathname === "/api/integration/mcp_linear/connect/oauth/attempt_linear") {
+    if (name && url.pathname === `/api/integration/mcp_${name}/connect/oauth/attempt_${name}`) {
       if (request.method === "DELETE") return new Response(null, { status: 204 })
-      return json({ location, data: { status: "pending" } })
+      return json({ location, data: { status: connected.has(name) ? "complete" : "pending" } })
     }
     if (url.pathname === "/api/experimental/mcp/linear/connect" && request.method === "POST") {
       connect++
@@ -164,6 +198,16 @@ async function renderMcp(options?: { failed?: boolean; location?: { directory: s
   app.renderer.start()
   return {
     app,
+    complete(name: string) {
+      connected.add(name)
+      events.emit({
+        id: `evt_${name}_connected`,
+        created: 1,
+        type: "mcp.status.changed",
+        location: options?.location ?? { directory: process.cwd() },
+        data: { server: name },
+      })
+    },
     get route() {
       return route
     },
