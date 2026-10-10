@@ -484,6 +484,84 @@ describe("ConfigProviderPlugin.Plugin", () => {
     }),
   )
 
+  it.effect("applies provider compatibility to every model unless the model overrides it", () =>
+    Effect.gen(function* () {
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
+      const providerID = Provider.ID.make("custom")
+      yield* providers.transform((editor) => {
+        editor.models.update(providerID, Model.ID.make("catalog"), (model) => {
+          model.compatibility = { requireFinishReason: true }
+        })
+        editor.models.update(Provider.ID.make("other"), Model.ID.make("catalog"), () => {})
+      })
+
+      yield* addPlugin([
+        new Document({
+          type: "document",
+          info: decode({
+            providers: {
+              custom: {
+                compatibility: { supportsPromptCacheKey: true },
+                models: {
+                  inherited: {},
+                  overridden: { compatibility: { supportsPromptCacheKey: false } },
+                },
+              },
+            },
+          }),
+        }),
+      ])
+
+      expect((yield* models.get(providerID, Model.ID.make("catalog")))?.compatibility).toEqual({
+        requireFinishReason: true,
+        supportsPromptCacheKey: true,
+      })
+      expect((yield* models.get(providerID, Model.ID.make("inherited")))?.compatibility).toEqual({
+        supportsPromptCacheKey: true,
+      })
+      expect((yield* models.get(providerID, Model.ID.make("overridden")))?.compatibility).toEqual({
+        supportsPromptCacheKey: false,
+      })
+      expect((yield* models.get(Provider.ID.make("other"), Model.ID.make("catalog")))?.compatibility).toBeUndefined()
+    }),
+  )
+
+  it.effect("maps migrated v1 setCacheKey onto provider models", () =>
+    Effect.gen(function* () {
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
+      yield* providers.transform((editor) => {
+        editor.models.update(Provider.ID.make("enabled"), Model.ID.make("catalog"), () => {})
+        editor.models.update(Provider.ID.make("disabled"), Model.ID.make("catalog"), (model) => {
+          model.compatibility = { supportsPromptCacheKey: true }
+        })
+        editor.models.update(Provider.ID.make("unset"), Model.ID.make("catalog"), () => {})
+      })
+      const result = ConfigNormalize.normalize({
+        provider: {
+          enabled: { options: { setCacheKey: true }, models: { chat: {} } },
+          disabled: { options: { setCacheKey: false } },
+          unset: { options: { baseURL: "https://unset.example/v1" } },
+        },
+      })
+      if (result.type !== "normalized") throw new Error("Expected normalized config")
+      expect(result.diagnostics).toEqual([])
+
+      yield* addPlugin([new Document({ type: "document", info: decode(result.encoded) })])
+
+      const compatibility = (providerID: string, modelID: string) =>
+        models
+          .get(Provider.ID.make(providerID), Model.ID.make(modelID))
+          .pipe(Effect.map((model) => model?.compatibility?.supportsPromptCacheKey))
+      expect(yield* compatibility("enabled", "catalog")).toBe(true)
+      expect(yield* compatibility("enabled", "chat")).toBe(true)
+      expect(yield* compatibility("disabled", "catalog")).toBe(false)
+      expect(yield* compatibility("unset", "catalog")).toBeUndefined()
+      expect((yield* providers.get(Provider.ID.make("enabled")))?.settings).not.toHaveProperty("setCacheKey")
+    }),
+  )
+
   it.effect("generates variants after rewriting a configured model package", () =>
     Effect.gen(function* () {
       const models = yield* Model.Service

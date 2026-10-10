@@ -24,6 +24,19 @@ describe("ConfigProviderOptionsV1", () => {
     })
   })
 
+  test("lowers setCacheKey to prompt cache key compatibility", () => {
+    expect(ConfigProviderOptionsV1.provider({ apiKey: "secret", setCacheKey: true })).toEqual({
+      settings: { apiKey: "secret" },
+      headers: undefined,
+      body: undefined,
+      compatibility: { supportsPromptCacheKey: true },
+    })
+    expect(ConfigProviderOptionsV1.provider({ setCacheKey: false }).compatibility).toEqual({
+      supportsPromptCacheKey: false,
+    })
+    expect(ConfigProviderOptionsV1.provider({ apiKey: "secret" }).compatibility).toBeUndefined()
+  })
+
   test("keeps model and variant options unchanged", () => {
     expect(
       ConfigProviderOptionsV1.model({

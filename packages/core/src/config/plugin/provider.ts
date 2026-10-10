@@ -99,6 +99,13 @@ export const Plugin = define({
       if (configuredDefault !== undefined) models.default.set(configuredDefault.providerID, configuredDefault.model)
       for (const [item, definition] of sources.models) {
         const providerID = definition.providerID
+        if (item.compatibility !== undefined)
+          for (const model of models.list(providerID)) {
+            if (Object.hasOwn(item.models ?? {}, model.id)) continue
+            models.update(providerID, model.id, (draft) => {
+              draft.compatibility = { ...draft.compatibility, ...item.compatibility }
+            })
+          }
         for (const [id, config] of Object.entries(item.models ?? {})) {
           const source = definition.models.get(id)
           const inherit = source?.inherit || !models.get(providerID, id)
@@ -111,6 +118,8 @@ export const Plugin = define({
             if (config.family !== undefined) model.family = config.family
             if (config.name !== undefined) model.name = config.name
             if (config.modelID !== undefined) model.modelID = config.modelID
+            if (item.compatibility !== undefined)
+              model.compatibility = { ...model.compatibility, ...item.compatibility }
             if (config.compatibility !== undefined)
               model.compatibility = { ...model.compatibility, ...config.compatibility }
             if (config.package !== undefined) model.package = config.package
