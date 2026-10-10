@@ -318,6 +318,10 @@ describe("OllamaPlugin", () => {
             yield* config.setEntries([configuration({ baseURL, apiKey: "secret" }), configuration({ apiKey: null })])
             yield* bus.publish(Event.Updated, {})
             yield* eventually(providers.get(providerID), (provider) => provider?.settings?.apiKey === "")
+            yield* eventually(
+              Effect.sync(() => requests),
+              (items) => items.some((item) => item.authorization === null && item.path === "/proxy/api/show"),
+            )
             expect(requests).toContainEqual({ authorization: null, method: "GET", path: "/proxy/api/tags" })
             expect(requests).toContainEqual({ authorization: null, method: "POST", path: "/proxy/api/show" })
 
@@ -326,6 +330,11 @@ describe("OllamaPlugin", () => {
             yield* config.setEntries([configuration({ baseURL: apiBaseURL, apiKey: "api-secret" })])
             yield* bus.publish(Event.Updated, {})
             yield* eventually(providers.get(providerID), (provider) => provider?.settings?.baseURL === apiBaseURL)
+            yield* eventually(
+              Effect.sync(() => requests),
+              (items) =>
+                items.some((item) => item.authorization === "Bearer api-secret" && item.path === "/proxy/api/show"),
+            )
             expect(requests).toContainEqual({
               authorization: "Bearer api-secret",
               method: "GET",
