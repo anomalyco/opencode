@@ -4,7 +4,7 @@ export type { Context, Metadata, Namespace, Options, Result } from "@opencode/sc
 
 import { ToolDefinition, type ToolCall } from "@opencode/ai"
 import { Tool } from "@opencode/schema/tool"
-import { Context, Effect, Layer, Result, Schema, SchemaIssue, Types } from "effect"
+import { Context, Duration, Effect, Layer, Option, Result, Schema, SchemaIssue, Types } from "effect"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import type { Agent } from "./agent.js"
 import { CodeModeCatalog } from "./codemode/catalog.js"
@@ -64,6 +64,35 @@ export interface Snapshot {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Tool") {}
 
+/** Shared absolute execution deadline for tools without their own timeout policy. */
+export const DEFAULT_TOOL_TIMEOUT_MS = 5 * 60 * 1000
+
+// executeTool is the single boundary every tool execution crosses, including
+// nested Code Mode calls, so the deadline lives here instead of in each tool.
+// Timeout interrupts the leaf fiber and fails with an ordinary Tool.Error, so
+// the runner's FiberSet join always terminates and an interrupted leaf can
+// never complete late and overwrite the recorded outcome. Permission approval
+// waits inside leaf execution are bounded by this deadline too.
+const withDeadline = <A, E, R>(
+  effect: Effect.Effect<A, E, R>,
+  name: string,
+  configured: number | false | undefined,
+): Effect.Effect<A, E | Tool.Error, R> => {
+  if (configured === false) return effect
+  const limit =
+    configured === undefined || !Number.isFinite(configured) || configured <= 0
+      ? DEFAULT_TOOL_TIMEOUT_MS
+      : configured
+  return effect.pipe(
+    Effect.timeoutOption(Duration.millis(limit)),
+    Effect.flatMap((settled) =>
+      Option.isSome(settled)
+        ? Effect.succeed(settled.value)
+        : Effect.fail(new Tool.Error({ message: `Tool "${name}" timed out after ${limit}ms` })),
+    ),
+  )
+}
+
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -116,7 +145,7 @@ const layer = Layer.effect(
       input: unknown,
       context: Tool.Context,
     ) {
-      const execution = yield* execute(tool, input, context).pipe(
+      const execution = yield* withDeadline(execute(tool, input, context), name, tool.options?.timeoutMs).pipe(
         Effect.map((value) => ({ value })),
         Effect.catchTag("Tool.Error", (failure) => Effect.succeed({ failure })),
       )
