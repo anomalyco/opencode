@@ -6,6 +6,7 @@ import {
   LLMClient,
   LLMEvent,
   isContextOverflowFailure,
+  isPayloadTooLargeFailure,
   type ProviderErrorEvent,
   type ToolCall,
 } from "@opencode/ai"
@@ -55,7 +56,7 @@ interface Input {
   ) => Effect.Effect<{ readonly retry: false } | SessionRunnerRetry.Decision>
   readonly recoverContinuation: boolean
   /** The runner owns compaction policy; the attempt invokes it only before durable output. */
-  readonly recoverOverflow: Effect.Effect<boolean>
+  readonly recoverOverflow: (reason: "overflow" | "payload") => Effect.Effect<boolean>
 }
 
 const TOOLS_INTERRUPTED = { type: "aborted", message: "Tool execution interrupted" } as const
@@ -66,6 +67,9 @@ const INPUT_INCOMPLETE = {
   message:
     "Tool call arguments were not completed and were not executed. Re-issue the tool call with complete arguments.",
 } as const
+
+const isRequestOverflowFailure = (failure: unknown) =>
+  isContextOverflowFailure(failure) || isPayloadTooLargeFailure(failure)
 
 /** Captures Location-scoped dependencies without introducing another service or execution loop. */
 export const make = Effect.gen(function* () {
@@ -116,7 +120,7 @@ export const make = Effect.gen(function* () {
           if (!publisher.hasStarted()) yield* Fiber.join(pendingStartSnapshot)
           if (
             LLMEvent.is.providerError(event) &&
-            isContextOverflowFailure(event) &&
+            isRequestOverflowFailure(event) &&
             !publisher.record().outputStarted
           ) {
             overflowFailure = event
@@ -159,12 +163,13 @@ export const make = Effect.gen(function* () {
         const overflow = overflowFailure ?? streamFailure
         if (
           !publisher.record().outputStarted &&
-          isContextOverflowFailure(overflow) &&
-          (yield* restore(input.recoverOverflow))
+          isRequestOverflowFailure(overflow) &&
+          (yield* restore(input.recoverOverflow(isPayloadTooLargeFailure(overflow) ? "payload" : "overflow")))
         ) {
-          yield* Effect.logWarning("provider rejected the request as too long; compacting", {
+          yield* Effect.logWarning("provider rejected the request size; compacted before retrying", {
             sessionID: input.sessionID,
             model: input.model.ref,
+            reason: isPayloadTooLargeFailure(overflow) ? "payload" : "overflow",
             message: overflow?.message,
           })
           return Outcome.Compacted()
@@ -191,7 +196,7 @@ export const make = Effect.gen(function* () {
         )
           return Outcome.RecoverFull()
         const retry =
-          llmFailure && llmError && !isContextOverflowFailure(llmFailure)
+          llmFailure && llmError && !isRequestOverflowFailure(llmFailure)
             ? yield* restore(
                 input.retry(
                   llmFailure,

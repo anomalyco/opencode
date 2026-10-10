@@ -3277,6 +3277,107 @@ describe("SessionRunnerLLM", () => {
     expect(yield* s.context).toMatchObject([{ type: "compaction" }, { type: "assistant", finish: "stop" }])
   })
 
+  for (const raw of [false, true]) {
+    scenario(`recovers once after a ${raw ? "raw" : "streamed"} payload-too-large rejection`, function* (s) {
+      yield* setupOverflowRecovery(s)
+      yield* s.llm.push(
+        raw
+          ? Stream.fail(payloadTooLarge())
+          : [LLMEvent.providerError({ message: "Too large", classification: "payload-too-large" })],
+        TestLLM.text("## Objective\n- Recover payload", "text-summary"),
+        TestLLM.text("Recovered", "text-final"),
+      )
+      yield* s.runPrompt("Continue")
+
+      expect(s.requests).toHaveLength(3)
+      expect(yield* s.context).toMatchObject([
+        { type: "compaction", summary: "## Objective\n- Recover payload" },
+        { type: "assistant", finish: "stop" },
+      ])
+      expect(yield* recordedEventTypes(sessionID)).not.toContain("session.step.failed.1")
+      yield* replaySessionProjection(sessionID)
+      expect(yield* s.context).toMatchObject([{ type: "compaction" }, { type: "assistant", finish: "stop" }])
+    })
+  }
+
+  scenario("omits inline media from the first payload recovery compaction and preserves stored history", function* (s) {
+    const image = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+    yield* s.session.prompt({
+      sessionID,
+      text: "Inspect the screenshot",
+      files: [{ uri: `data:image/png;base64,${image}` }],
+      resume: false,
+    })
+    yield* s.llm.push(TestLLM.text("The screenshot shows a button", "inspection"))
+    yield* s.resume
+    s.requests.length = 0
+    yield* s.llm.push(
+      Stream.fail(payloadTooLarge()),
+      TestLLM.text("## Objective\n- Inspect the button", "summary"),
+      TestLLM.text("Recovered", "recovered"),
+    )
+    yield* s.runPrompt("Continue")
+
+    expect(s.requests).toHaveLength(3)
+    expect(s.requests[0]?.messages.some((m) => m.content.some((p) => p.type === "media"))).toBeTrue()
+    expect(s.requests[1]?.messages.every((m) => m.content.every((p) => p.type === "text"))).toBeTrue()
+    expect(JSON.stringify(s.requests[1])).not.toContain(image)
+    expect(JSON.stringify(s.requests[1])).toContain("The screenshot shows a button")
+    expect(JSON.stringify(yield* s.messages)).toContain(image)
+  })
+
+  scenario("does not recover payload rejection with automatic compaction disabled", function* (s) {
+    yield* setupOverflowRecovery(s)
+    const compaction = yield* SessionCompaction.Service
+    yield* compaction.transform((editor) => editor.configure({ auto: false }))
+    yield* s.llm.push(Stream.fail(payloadTooLarge()))
+    expect((yield* s.runPrompt("Continue").pipe(Effect.flip)).message).toBe("Too large")
+    expect(s.requests).toHaveLength(1)
+    expect(yield* s.context).not.toContainEqual(expect.objectContaining({ type: "compaction" }))
+  })
+
+  scenario("stops after a second payload rejection instead of compacting forever", function* (s) {
+    yield* setupOverflowRecovery(s)
+    yield* s.llm.push(
+      Stream.fail(payloadTooLarge()),
+      TestLLM.text("## Objective\n- Recover once", "summary"),
+      Stream.fail(payloadTooLarge()),
+    )
+    expect((yield* s.runPrompt("Continue").pipe(Effect.flip)).message).toBe("Too large")
+    expect(s.requests).toHaveLength(3)
+    expect(yield* s.context).toMatchObject([
+      { type: "compaction", status: "completed" },
+      { type: "assistant", finish: "error", error: { message: "Too large" } },
+    ])
+  })
+
+  scenario("does not recover payload rejection after durable output", function* (s) {
+    yield* setupOverflowRecovery(s)
+    yield* s.llm.push([
+      LLMEvent.textStart({ id: "partial" }),
+      LLMEvent.textDelta({ id: "partial", text: "Partial" }),
+      LLMEvent.textEnd({ id: "partial" }),
+      LLMEvent.providerError({ message: "Too large", classification: "payload-too-large" }),
+    ])
+    expect((yield* s.runPrompt("Continue").pipe(Effect.flip)).message).toBe("Too large")
+    expect(s.requests).toHaveLength(1)
+    expect(yield* s.context).not.toContainEqual(expect.objectContaining({ type: "compaction" }))
+  })
+
+  scenario("preserves the payload error when recovery compaction fails", function* (s) {
+    yield* setupOverflowRecovery(s)
+    yield* s.llm.push(Stream.fail(payloadTooLarge()), [LLMEvent.providerError({ message: "Summary unavailable" })])
+    expect((yield* s.runPrompt("Continue").pipe(Effect.flip)).message).toBe("Too large")
+    expect(s.requests).toHaveLength(2)
+    expect(yield* s.context).toContainEqual(
+      expect.objectContaining({
+        type: "compaction",
+        status: "failed",
+        error: { type: "provider.error", message: "Summary unavailable" },
+      }),
+    )
+  })
+
   scenario("refreshes preparation after overflow compaction without promoting new input", function* (s) {
     yield* setupOverflowRecovery(s)
 

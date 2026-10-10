@@ -74,6 +74,11 @@ export const isContextOverflowFailure = (failure: unknown) =>
     ? failure.reason._tag === "InvalidRequest" && failure.reason.classification === "context-overflow"
     : Schema.is(ProviderErrorEvent)(failure) && failure.classification === "context-overflow"
 
+export const isPayloadTooLargeFailure = (failure: unknown) =>
+  failure instanceof AIError
+    ? failure.reason._tag === "InvalidRequest" && failure.reason.classification === "payload-too-large"
+    : Schema.is(ProviderErrorEvent)(failure) && failure.classification === "payload-too-large"
+
 /**
  * Whether a failed call may succeed when sent again: rate limits, provider-side failures, transport failures that did
  * not deliver an accepted write, and unrecognized failures. Callers decide which calls are safe to repeat.
