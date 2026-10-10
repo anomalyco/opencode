@@ -13446,7 +13446,7 @@
             "$ref": "#/components/schemas/Agent.ID"
           },
           "name": {
-            "$ref": "#/components/schemas/Agent.Name"
+            "type": "string"
           },
           "model": {
             "$ref": "#/components/schemas/Model.Ref"
@@ -13480,9 +13480,6 @@
         },
         "required": ["id", "name", "request", "mode", "hidden", "permissions"],
         "additionalProperties": false
-      },
-      "Agent.Name": {
-        "type": "string"
       },
       "AgentNotFoundErrorEncoded": {
         "type": "object",
@@ -14196,10 +14193,10 @@
         "type": "object",
         "properties": {
           "modelID": {
-            "$ref": "#/components/schemas/Model.ID"
+            "type": "string"
           },
           "family": {
-            "$ref": "#/components/schemas/Model.Family"
+            "type": "string"
           },
           "name": {
             "type": "string"
@@ -14231,7 +14228,7 @@
               "type": "object",
               "properties": {
                 "id": {
-                  "$ref": "#/components/schemas/Model.VariantID"
+                  "type": "string"
                 },
                 "settings": {
                   "$ref": "#/components/schemas/Config.Model.Settings"
@@ -16675,20 +16672,14 @@
         "required": ["input", "output", "cache"],
         "additionalProperties": false
       },
-      "Model.Family": {
-        "type": "string"
-      },
-      "Model.ID": {
-        "type": "string"
-      },
       "Model.Info": {
         "type": "object",
         "properties": {
           "id": {
-            "$ref": "#/components/schemas/Model.ID"
+            "type": "string"
           },
           "modelID": {
-            "$ref": "#/components/schemas/Model.ID"
+            "type": "string"
           },
           "providerID": {
             "$ref": "#/components/schemas/Provider.ID"
@@ -16697,7 +16688,7 @@
             "$ref": "#/components/schemas/Provider.ID"
           },
           "family": {
-            "$ref": "#/components/schemas/Model.Family"
+            "type": "string"
           },
           "name": {
             "type": "string"
@@ -16803,13 +16794,13 @@
         "type": "object",
         "properties": {
           "id": {
-            "$ref": "#/components/schemas/Model.ID"
+            "type": "string"
           },
           "providerID": {
             "$ref": "#/components/schemas/Provider.ID"
           },
           "variant": {
-            "$ref": "#/components/schemas/Model.VariantID"
+            "type": "string"
           }
         },
         "required": ["id", "providerID"],
@@ -16833,7 +16824,7 @@
         "type": "object",
         "properties": {
           "id": {
-            "$ref": "#/components/schemas/Model.VariantID"
+            "type": "string"
           },
           "settings": {
             "$ref": "#/components/schemas/Model.Settings"
@@ -16850,9 +16841,6 @@
         },
         "required": ["id"],
         "additionalProperties": false
-      },
-      "Model.VariantID": {
-        "type": "string"
       },
       "Money.USD": {
         "type": "number"
@@ -17327,14 +17315,11 @@
         },
         "additionalProperties": false
       },
-      "Plugin.ID": {
-        "type": "string"
-      },
       "Plugin.Info": {
         "type": "object",
         "properties": {
           "id": {
-            "$ref": "#/components/schemas/Plugin.ID"
+            "type": "string"
           },
           "source": {
             "$ref": "#/components/schemas/Plugin.Source"

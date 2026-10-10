@@ -18,13 +18,7 @@ export type ProjectID = string
 
 export type AgentID = string
 
-export type AgentName = string
-
-export type ModelID = string
-
 export type ProviderID = string
-
-export type ModelVariantID = string
 
 export type ProviderCompaction = { type: "summary" } | { type: "native" }
 
@@ -33,8 +27,6 @@ export type ProviderTransport = "http" | "websocket"
 export type AgentColor = string
 
 export type PermissionEffect = "allow" | "deny" | "ask"
-
-export type PluginID = string
 
 export type PluginSource =
   | { type: "builtin" }
@@ -167,8 +159,6 @@ export type FormOption = { value: string; label: string; description?: string }
 export type FormExternalField = { key: string; type: "external"; url: string; title?: string; description?: string }
 
 export type FormValue = string | number | "Infinity" | "-Infinity" | "NaN" | boolean | Array<string>
-
-export type ModelFamily = string
 
 export type ModelReasoningField = "reasoning" | "reasoning_content" | "reasoning_text" | (string & {})
 
@@ -323,6 +313,8 @@ export type LocationPublicInfo = {
   project: { id: ProjectID; directory: AbsolutePath; canonical: AbsolutePath }
 }
 
+export type ModelRef = { id: string; providerID: ProviderID; variant?: string }
+
 export type SessionProviderContextProvenance = {
   providerID: ProviderID
   provider: string
@@ -331,8 +323,6 @@ export type SessionProviderContextProvenance = {
   protocol: string
   endpoint: string
 }
-
-export type ModelRef = { id: ModelID; providerID: ProviderID; variant?: ModelVariantID }
 
 export type ModelSettings = { compaction?: ProviderCompaction } & { [x: string]: any }
 
@@ -356,7 +346,7 @@ export type ConfigProviderSettings = {
 
 export type PermissionRule = { action: string; resource: string; effect: PermissionEffect }
 
-export type PluginInfo = { id?: PluginID; source: PluginSource; features: PluginFeatures; state: PluginState }
+export type PluginInfo = { id?: string; source: PluginSource; features: PluginFeatures; state: PluginState }
 
 export type SessionForkBoundary =
   | { type: "before"; messageID: SessionMessageID }
@@ -871,8 +861,6 @@ export type ReferenceSource = ReferenceLocalSource | ReferenceGitSource
 
 export type WorktreeList = Array<WorktreeDirectory>
 
-export type SessionProviderContext = { version: 1; provenance: SessionProviderContextProvenance; messages: JsonValue }
-
 export type SessionStatsModelUsage = { model: ModelRef; steps: number; tokens: TokenUsageInfo; cost: MoneyUSD }
 
 export type SessionMessageModelSelected = {
@@ -884,8 +872,10 @@ export type SessionMessageModelSelected = {
   previous?: ModelRef
 }
 
+export type SessionProviderContext = { version: 1; provenance: SessionProviderContextProvenance; messages: JsonValue }
+
 export type ModelVariant = {
-  id: ModelVariantID
+  id: string
   settings?: ModelSettings
   headers?: { [x: string]: string }
   body?: { [x: string]: any }
@@ -1992,6 +1982,21 @@ export type ReferenceInfo = {
   source: ReferenceSource
 }
 
+export type SessionStatsInfo = {
+  range: { from: number; to: number }
+  sessions: number
+  subagents: number
+  prompts: number
+  steps: number
+  tokens: TokenUsageInfo
+  cost: MoneyUSD
+  tools: SessionStatsTools
+  activeDays: number
+  streak: number
+  activity: Array<SessionStatsActivity>
+  models: Array<SessionStatsModelUsage>
+}
+
 export type SessionMessageCompactionCompleted = {
   type: "compaction"
   id: SessionMessageID
@@ -2028,27 +2033,12 @@ export type SessionCompactionEnded = {
   }
 }
 
-export type SessionStatsInfo = {
-  range: { from: number; to: number }
-  sessions: number
-  subagents: number
-  prompts: number
-  steps: number
-  tokens: TokenUsageInfo
-  cost: MoneyUSD
-  tools: SessionStatsTools
-  activeDays: number
-  streak: number
-  activity: Array<SessionStatsActivity>
-  models: Array<SessionStatsModelUsage>
-}
-
 export type ModelInfo = {
-  id: ModelID
-  modelID: ModelID
+  id: string
+  modelID: string
   providerID: ProviderID
   canonical?: ProviderID
-  family?: ModelFamily
+  family?: string
   name: string
   compatibility?: ModelCompatibility
   package?: string
@@ -2066,7 +2056,7 @@ export type ModelInfo = {
 
 export type AgentInfo = {
   id: AgentID
-  name: AgentName
+  name: string
   model?: ModelRef
   request: ProviderRequest
   system?: string
@@ -2256,8 +2246,8 @@ export type ConfigEntry =
             body?: { [x: string]: JsonValue }
             models?: {
               [x: string]: {
-                modelID?: ModelID
-                family?: ModelFamily
+                modelID?: string
+                family?: string
                 name?: string
                 compatibility?: ModelCompatibility
                 package?: string
@@ -2266,7 +2256,7 @@ export type ConfigEntry =
                 body?: { [x: string]: JsonValue }
                 capabilities?: ConfigModelCapabilities
                 variants?: Array<{
-                  id: ModelVariantID
+                  id: string
                   settings?: ConfigModelSettings
                   headers?: { [x: string]: string }
                   body?: { [x: string]: JsonValue }

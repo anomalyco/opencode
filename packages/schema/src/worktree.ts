@@ -5,11 +5,7 @@ import { durable, ephemeral, inventory } from "./event.js"
 import { AbsolutePath, optional } from "./schema.js"
 import { Project } from "./project.js"
 
-export const StrategyID = Schema.Trim.pipe(
-  Schema.check(Schema.isNonEmpty()),
-  Schema.brand("Worktree.StrategyID"),
-  Schema.annotate({ identifier: "Worktree.StrategyID" }),
-)
+export const StrategyID = Schema.Trim.pipe(Schema.check(Schema.isNonEmpty()), Schema.brand("Worktree.StrategyID"))
 export type StrategyID = typeof StrategyID.Type
 
 export const CreateInput = Schema.Struct({

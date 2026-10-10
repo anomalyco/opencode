@@ -456,19 +456,18 @@ function effectTypeReferences(input: ReadonlyArray<EffectTypeReference>) {
   const names = new Map<string, ResolvedEffectTypeReference>()
   const asts = new Map<SchemaAST.AST, ResolvedEffectTypeReference>()
   for (const reference of input) {
+    if (SchemaAST.resolveIdentifier(reference.schema.ast) === undefined) continue
+    const projected = Schema.toType(reference.schema)
     const document = SchemaRepresentation.toCodeDocument(
-      SchemaRepresentation.toRepresentations([codegenAst(Schema.toType(reference.schema).ast)]),
+      SchemaRepresentation.toRepresentations([codegenAst(projected.ast)]),
     )
     const name = document.codes[0]?.Type
-    const nonRecursive =
-      name === undefined ? undefined : document.references.nonRecursives.find((item) => item.$ref === name)
-    const type = nonRecursive?.code.Type
+    const type =
+      name === undefined ? undefined : document.references.nonRecursives.find((item) => item.$ref === name)?.code.Type
     const value = { name: reference.name, import: reference.import, ast: reference.schema.ast, type }
-    if (SchemaAST.resolveIdentifier(reference.schema.ast) !== undefined) {
-      asts.set(reference.schema.ast, value)
-      asts.set(Schema.toType(reference.schema).ast, value)
-    }
-    if (name === undefined || nonRecursive === undefined || !/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name)) continue
+    asts.set(reference.schema.ast, value)
+    asts.set(projected.ast, value)
+    if (name === undefined || type === undefined || !/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name)) continue
     const previous = names.get(name)
     if (previous !== undefined) {
       if (previous.ast !== reference.schema.ast) {
@@ -1041,13 +1040,7 @@ function structuralTypes(schemas: ReadonlyArray<Schema.Top>, mutable: boolean, r
     promiseTypeAsts(schemas) as [SchemaAST.AST, ...Array<SchemaAST.AST>],
   )
   const document = SchemaRepresentation.toCodeDocument(representations)
-  if (
-    document.artifacts.some(
-      (artifact) =>
-        artifact._tag !== "Import" || artifact.importDeclaration !== 'import type * as Brand from "effect/Brand"',
-    ) ||
-    Object.keys(document.references.recursives).length > 0
-  ) {
+  if (document.artifacts.length > 0 || Object.keys(document.references.recursives).length > 0) {
     throw new GenerationError({ reason: "Referenced Promise types are not implemented" })
   }
   const anonymous = new Set(
@@ -1090,7 +1083,6 @@ function structuralTypes(schemas: ReadonlyArray<Schema.Top>, mutable: boolean, r
       type = type.replace(new RegExp(pattern, "g"), name)
     }
     const output = type
-      .replaceAll(/ & Brand\.Brand<"[^"]+">/g, "")
       .replaceAll("Schema.Json", "JsonValue")
       .replaceAll(/(?<!["'])\bunknown\b(?!["'])/g, "any")
     return mutable ? mutableType(preserveStringSuggestions(output)) : preserveStringSuggestions(output)
@@ -1129,13 +1121,7 @@ function uniqueTypeName(seed: string, used: ReadonlySet<string>, suffix = 1): st
 
 function structuralType(schema: Schema.Top) {
   const document = SchemaRepresentation.toCodeDocument(SchemaRepresentation.toRepresentations([promiseTypeAst(schema)]))
-  if (
-    document.artifacts.some(
-      (artifact) =>
-        artifact._tag !== "Import" || artifact.importDeclaration !== 'import type * as Brand from "effect/Brand"',
-    ) ||
-    Object.keys(document.references.recursives).length > 0
-  ) {
+  if (document.artifacts.length > 0 || Object.keys(document.references.recursives).length > 0) {
     throw new GenerationError({ reason: "Referenced Promise types are not implemented" })
   }
   const references = new Map(
@@ -1154,7 +1140,6 @@ function structuralType(schema: Schema.Top) {
   }
   return preserveStringSuggestions(
     expand(document.codes[0].Type)
-      .replaceAll(/ & Brand\.Brand<"[^"]+">/g, "")
       .replaceAll("Schema.Json", "JsonValue"),
   )
 }

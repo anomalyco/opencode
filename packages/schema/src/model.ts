@@ -6,16 +6,13 @@ import { Provider } from "./provider.js"
 import { Money } from "./money.js"
 import { ephemeral, inventory } from "./event.js"
 
-export const ID = Schema.String.pipe(Schema.brand("Model.ID"), Schema.annotate({ identifier: "Model.ID" }))
+export const ID = Schema.String.pipe(Schema.brand("Model.ID"))
 export type ID = typeof ID.Type
 
 const Updated = ephemeral({ type: "model.updated", schema: {} })
 export const Event = { Updated, Definitions: inventory(Updated) }
 
-export const VariantID = Schema.String.pipe(
-  Schema.brand("Model.VariantID"),
-  Schema.annotate({ identifier: "Model.VariantID" }),
-)
+export const VariantID = Schema.String.pipe(Schema.brand("Model.VariantID"))
 export type VariantID = typeof VariantID.Type
 
 export const Ref = Schema.Struct({
@@ -45,7 +42,7 @@ export const Ref = Schema.Struct({
   )
 export interface Ref extends Schema.Schema.Type<typeof Ref> {}
 
-export const Family = Schema.String.pipe(Schema.brand("Model.Family"), Schema.annotate({ identifier: "Model.Family" }))
+export const Family = Schema.String.pipe(Schema.brand("Model.Family"))
 export type Family = typeof Family.Type
 
 export type ReasoningField = "reasoning" | "reasoning_content" | "reasoning_text" | (string & {})
