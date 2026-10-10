@@ -178,6 +178,164 @@ test("service config manages environment variables", async () => {
   }
 })
 
+test.each([undefined, "inherited"])(
+  "managed service loads configured environment for local MCP servers (%s)",
+  async (inherited) => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-mcp-env-"))
+    const config = path.join(root, "config", ServiceConfig.filename())
+    const registration = path.join(root, "state", "opencode", ServiceConfig.filename())
+    const output = path.join(root, "mcp-env.json")
+    await fs.mkdir(path.dirname(config), { recursive: true })
+    await fs.writeFile(
+      config,
+      JSON.stringify({ env: { OPENCODE_SERVICE_ENV_TEST: "configured", OPENCODE_SERVICE_ENV_EMPTY_TEST: "" } }),
+    )
+    await fs.writeFile(
+      path.join(root, "config", "opencode.json"),
+      JSON.stringify({
+        mcp: {
+          servers: {
+            env: {
+              type: "local",
+              command: [process.execPath, path.join(import.meta.dir, "fixture", "mcp-env.cjs"), output],
+              environment: { SUBSTITUTED_SERVICE_ENV: "{env:OPENCODE_SERVICE_ENV_TEST}" },
+            },
+          },
+        },
+      }),
+    )
+    const owner = Bun.spawn(
+      [process.execPath, path.join(import.meta.dir, "../src/index.ts"), "serve", "--service", "--port", "0"],
+      {
+        env: isolatedEnv(root, {
+          OPENCODE_SERVICE_ENV_TEST: inherited,
+          OPENCODE_SERVICE_ENV_EMPTY_TEST: "inherited",
+          OPENCODE_SERVICE_ENV_INHERITED_TEST: "inherited",
+        }),
+        stderr: "pipe",
+        stdout: "ignore",
+      },
+    )
+    try {
+      const info = await waitForInfo(registration)
+      const url = new URL("/api/mcp", info.url)
+      url.searchParams.set("location[directory]", root)
+      const response = await Effect.runPromise(
+        Effect.promise(() =>
+          fetch(url, { headers: { authorization: "Basic " + btoa(`opencode:${info.password}`) } }),
+        ).pipe(
+          Effect.repeat({ while: (response) => response.status === 503, schedule: Schedule.spaced("25 millis") }),
+          Effect.timeout("5 seconds"),
+        ),
+      )
+      expect(response.status).toBe(200)
+      await Effect.runPromise(
+        Effect.promise(() => Bun.file(output).exists()).pipe(
+          Effect.repeat({ while: (exists) => !exists, schedule: Schedule.spaced("25 millis") }),
+          Effect.timeout("5 seconds"),
+        ),
+      )
+      expect(await Bun.file(output).json()).toEqual({
+        configured: "configured",
+        substituted: "configured",
+        empty: "",
+        inherited: "inherited",
+      })
+    } finally {
+      owner.kill("SIGTERM")
+      await owner.exited
+      await fs.rm(root, { recursive: true, force: true })
+    }
+  },
+  30_000,
+)
+
+test("managed service uses saved API keys for custom providers", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-provider-env-"))
+  const registration = path.join(root, "state", "opencode", ServiceConfig.filename())
+  const authorization: (string | null)[] = []
+  const provider = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch(request) {
+      authorization.push(request.headers.get("authorization"))
+      if (request.headers.get("authorization") !== "Bearer service-test-key")
+        return Response.json({ error: { message: "Missing API key" } }, { status: 401 })
+      return new Response(
+        `data: ${JSON.stringify({
+          id: "completion",
+          object: "chat.completion.chunk",
+          created: 1,
+          model: "chat",
+          choices: [{ index: 0, delta: { content: "OK" }, finish_reason: "stop" }],
+        })}\n\ndata: [DONE]\n\n`,
+        { headers: { "content-type": "text/event-stream" } },
+      )
+    },
+  })
+  await fs.mkdir(path.join(root, "config"), { recursive: true })
+  await fs.writeFile(
+    path.join(root, "config", ServiceConfig.filename()),
+    JSON.stringify({ env: { OPENCODE_SERVICE_PROVIDER_API_KEY: "service-test-key" } }),
+  )
+  await fs.writeFile(
+    path.join(root, "config", "opencode.json"),
+    JSON.stringify({
+      providers: {
+        "env-test": {
+          package: "@opencode/ai/providers/openai-compatible",
+          env: ["OPENCODE_SERVICE_PROVIDER_API_KEY"],
+          settings: { baseURL: provider.url.href },
+          models: { chat: {} },
+        },
+      },
+    }),
+  )
+  const owner = Bun.spawn(
+    [process.execPath, path.join(import.meta.dir, "../src/index.ts"), "serve", "--service", "--port", "0"],
+    {
+      env: isolatedEnv(root, { OPENCODE_SERVICE_PROVIDER_API_KEY: undefined }),
+      stderr: "pipe",
+      stdout: "ignore",
+    },
+  )
+  try {
+    const info = await waitForInfo(registration)
+    const models = new URL("/api/model", info.url)
+    models.searchParams.set("location[directory]", path.join(root, "config"))
+    await Effect.runPromise(
+      Effect.promise(async () => {
+        const response = await fetch(models, {
+          headers: { authorization: "Basic " + btoa(`opencode:${info.password}`) },
+        })
+        const body = await response.json()
+        return body.data?.some(
+          (model: { providerID: string; id: string }) => model.providerID === "env-test" && model.id === "chat",
+        )
+      }).pipe(
+        Effect.repeat({ while: (ready) => !ready, schedule: Schedule.spaced("25 millis") }),
+        Effect.timeout("5 seconds"),
+      ),
+    )
+    const response = await fetch(new URL("/api/experimental/generate", info.url), {
+      method: "POST",
+      headers: {
+        authorization: "Basic " + btoa(`opencode:${info.password}`),
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ prompt: "Return OK", model: { providerID: "env-test", id: "chat" } }),
+    })
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ data: { text: "OK" } })
+    expect(authorization).toEqual(["Bearer service-test-key"])
+  } finally {
+    owner.kill("SIGTERM")
+    await owner.exited
+    provider.stop(true)
+    await fs.rm(root, { recursive: true, force: true })
+  }
+}, 30_000)
+
 test("service filenames share release channels and identify preview channels", () => {
   expect(ServiceConfig.filename("latest")).toBe("service.json")
   expect(ServiceConfig.filename("dev")).toBe("service.json")
