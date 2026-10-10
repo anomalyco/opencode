@@ -12,6 +12,7 @@ export function expandTheme<Definition extends ModeDefinition>(definition: Defin
     ...definition,
     ...expandTokens(definition),
     ...(definition["@dialog"] ? { "@dialog": expandTokens(definition["@dialog"]) } : {}),
+    ...(definition["@palette"] ? { "@palette": expandTokens(definition["@palette"]) } : {}),
   }
 }
 
