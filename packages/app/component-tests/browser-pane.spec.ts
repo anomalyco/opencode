@@ -69,19 +69,34 @@ story("hides the native view immediately while the pane stays mounted", async ({
 story("keeps a still of the page under floating content that covers it", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   const still = root.locator("#browser-panel img")
+  const native = root.getByTestId("native-Alpha")
   await root.getByRole("button", { name: "Hold capture", exact: true }).click()
   await root.getByRole("button", { name: "Toggle popover", exact: true }).click()
   await expect(root.getByText("Captures: 1", { exact: true })).toBeVisible()
   // The native page stays up until its still is ready, so the pane never shows blank.
-  await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
+  await expect(native).toHaveAttribute("data-visible", "true")
   await expect(still).toHaveCount(0)
 
+  // Main hides the native page at once, so the pane hides it only after a frame has presented the still.
+  const order = await native.evaluateHandle((element) => {
+    const events: string[] = []
+    new PerformanceObserver((list) => {
+      if (list.getEntries().length > 0) events.push("still presented")
+    }).observe({ type: "element" })
+    new MutationObserver(() => {
+      if (element.getAttribute("data-visible") === "false") events.push("page hidden")
+    }).observe(element, { attributeFilter: ["data-visible"] })
+
+    return events
+  })
+
   await root.getByRole("button", { name: "Release capture", exact: true }).click()
-  await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "false")
+  await expect(native).toHaveAttribute("data-visible", "false")
   await expect(still).toBeVisible()
+  expect(await order.jsonValue()).toEqual(["still presented", "page hidden"])
 
   await root.getByRole("button", { name: "Toggle popover", exact: true }).click()
-  await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
+  await expect(native).toHaveAttribute("data-visible", "true")
   await expect(still).toHaveCount(0)
   await expect(root.getByText("Captures: 1", { exact: true })).toBeVisible()
 })

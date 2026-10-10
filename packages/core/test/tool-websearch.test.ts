@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Context, Effect, Layer } from "effect"
-import type { HttpClientError } from "effect/unstable/http"
+import type { HttpClientError } from "effect/http"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Permission } from "@opencode/core/permission"

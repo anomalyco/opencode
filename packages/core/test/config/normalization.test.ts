@@ -1,10 +1,9 @@
 import { describe, expect, test } from "bun:test"
-import { Duration, Schema } from "effect"
-import { FastCheck } from "effect/testing"
+import { Arbitrary, Duration, Effect, Schema } from "effect"
 import { ConfigNormalize } from "@opencode/core/config/normalize"
 import { Info } from "@opencode/schema/config"
 
-const options = { errors: "all", onExcessProperty: "ignore", propertyOrder: "original" } as const
+const options = { errors: "all", onExcessProperty: "ignore" } as const
 
 function normalized(input: unknown) {
   const result = ConfigNormalize.normalize(input)
@@ -109,16 +108,21 @@ describe("ConfigNormalize", () => {
   })
 
   test("preserves arbitrary JSON-round-tripped native configuration", () => {
-    FastCheck.assert(
-      FastCheck.property(Schema.toArbitrary(Info)(FastCheck), (info) => {
-        const source = JSON.parse(JSON.stringify(Schema.encodeSync(Info)(info)))
-        const result = normalized(source)
-        expect(Schema.decodeUnknownSync(Info)(result.encoded)).toEqual(
-          Schema.decodeUnknownSync(Info)(withoutEmptyCompatibilityContainers(source)),
-        )
-      }),
-      { numRuns: 100 },
+    const result = Effect.runSync(
+      Arbitrary.checkEffect(
+        Arbitrary.schema(Info),
+        (info) => {
+          const source = JSON.parse(JSON.stringify(Schema.encodeSync(Info)(info)))
+          const result = normalized(source)
+          expect(Schema.decodeUnknownSync(Info)(result.encoded)).toEqual(
+            Schema.decodeUnknownSync(Info)(withoutEmptyCompatibilityContainers(source)),
+          )
+          return true
+        },
+        { runs: 100 },
+      ),
     )
+    expect(Arbitrary.formatCheckFailure(result)).toBeUndefined()
   })
 
   test("merges named maps by entry and gives valid native entries precedence", () => {
@@ -289,6 +293,25 @@ describe("ConfigNormalize", () => {
       { action: "subagent", resource: "*", effect: "allow" },
       { action: "native", resource: "*", effect: "deny" },
     ])
+  })
+
+  test.each(["agent", "mode"])("preserves legacy %s permission source order", (key) => {
+    const build = {
+      tools: { write: false, read: true },
+      permission: { "*": "allow", bash: "ask", custom: "deny", edit: "allow" },
+    }
+    // An agent's permission overrides its tools in place, like Object.assign.
+    expect(normalized({ [key]: { build } }).encoded.agents).toMatchObject({
+      build: {
+        permissions: [
+          { action: "edit", resource: "*", effect: "allow" },
+          { action: "read", resource: "*", effect: "allow" },
+          { action: "*", resource: "*", effect: "allow" },
+          { action: "shell", resource: "*", effect: "ask" },
+          { action: "custom", resource: "*", effect: "deny" },
+        ],
+      },
+    })
   })
 
   test("redacts permission resource keys from invalid diagnostics", () => {

@@ -32,6 +32,11 @@ Anthropic Messages, Gemini, Bedrock Converse, and any OpenAI-compatible deployme
 `Google.configure({ apiKey }).interactions(modelID)` selects the Interactions API; `.model(modelID)` still selects
 GenerateContent. The package entrypoint is `@opencode/ai/providers/google/interactions`.
 
+For Vertex AI, use `GoogleVertexInteractions.configure({ project, location: "global" }).model(modelID)` or
+`@opencode/ai/providers/google-vertex/interactions`. It uses Application Default Credentials by default, accepts
+an explicit `accessToken` or `auth` override, and supports Express mode with `apiKey`. Vertex metadata and raw usage
+live under `providerMetadata.vertex`. The default is still full-history replay with `store: false`.
+
 ```ts
 const model = Google.configure({ apiKey }).interactions("gemini-3.8-flash")
 const response = yield* LLM.generate({
@@ -1316,13 +1321,14 @@ APIs have separate entrypoints:
 - `@opencode/ai/providers/openai-compatible/responses`
 - `@opencode/ai/providers/anthropic-compatible`
 - `@opencode/ai/providers/google-vertex/gemini`
+- `@opencode/ai/providers/google-vertex/interactions`
 - `@opencode/ai/providers/google-vertex/chat`
 - `@opencode/ai/providers/google-vertex/responses`
 - `@opencode/ai/providers/google-vertex/messages`
 
 OpenAI Responses has one semantic route and uses HTTP by default. Advanced callers may supply a per-call WebSocket channel executor through `StreamOptions`; transport policy does not change provider settings, model identity, or route identity. The provider-neutral Open Responses implementation owns the reusable WebSocket request and event contract, while each provider opts in with its own handshake and connection policy. Azure follows the same Chat/Responses split at `providers/azure/chat` and `providers/azure/responses`. Generic OpenAI-compatible Chat remains at `providers/openai-compatible`; the Responses adapter at `providers/openai-compatible/responses` uses the provider-neutral Open Responses protocol. OpenAI Responses extends that baseline with OpenAI tools, event variants, metadata, and defaults. Generic Anthropic Messages-compatible providers use `providers/anthropic-compatible`, which the named Anthropic provider composes. Google Gemini and Amazon Bedrock expose their single native API through their existing provider paths.
 
-Vertex Gemini, Vertex Chat, Vertex Responses, and Vertex Messages are separate API entrypoints. All accept `project`, `location`, and an optional `accessToken`; when no explicit token or auth override is supplied they lazily use Google Application Default Credentials. Vertex Gemini instead selects express mode when `apiKey` or `GOOGLE_VERTEX_API_KEY` is present. Vertex Chat targets MaaS models through the OpenAI-compatible Chat Completions endpoint, while Vertex Responses targets Grok models and defaults `store` to `false` as required by Vertex. `providers/google-vertex` remains the default alias for `providers/google-vertex/gemini`.
+Vertex Gemini, Vertex Interactions, Vertex Chat, Vertex Responses, and Vertex Messages are separate API entrypoints. All accept `project`, `location`, and an optional `accessToken`; when no explicit token or auth override is supplied they lazily use Google Application Default Credentials. Vertex Gemini and Interactions instead select express mode when `apiKey` or `GOOGLE_VERTEX_API_KEY` is present (explicit `project` or `location` selects ADC over an ambient key). Vertex Chat targets MaaS models through the OpenAI-compatible Chat Completions endpoint, while Vertex Responses targets Grok models and defaults `store` to `false` as required by Vertex. `providers/google-vertex` remains the default alias for `providers/google-vertex/gemini`.
 
 Tuned Vertex Gemini deployments use model ids shaped like `endpoints/1234567890` and require OAuth or ADC; Vertex express-mode API keys support publisher models only.
 

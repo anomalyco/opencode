@@ -37,7 +37,12 @@ import {
 import { inlineCodeKind } from "./markdown-inline-code-kind"
 import { renderMermaidSvg } from "./markdown-mermaid"
 import { createMarkdownRenderer } from "./markdown-solid"
-import { useMarkdown, type OpenMarkdownLocalFile, type ReadMarkdownImage } from "../context/markdown"
+import {
+  useMarkdown,
+  type OpenMarkdownLocalFile,
+  type ReadMarkdownImage,
+  type MarkdownLocalFileExists,
+} from "../context/markdown"
 import { createMarkdownImages } from "./markdown-image"
 import { createImagePreview } from "./image-preview"
 import { markSessionLinks, setupSessionLinks } from "./markdown-session-links"
@@ -100,7 +105,9 @@ async function code(text: string, language: string | undefined, key: string, com
     )
       console.error("Markdown highlighting worker failed", error)
 
-    return { language: language ?? "text", generation: 0, stable: [], unstable: [[text, ""] as MarkdownToken] }
+    const fallbackToken: MarkdownToken = [text, ""]
+
+    return { language: language ?? "text", generation: 0, stable: [], unstable: [fallbackToken] }
   }
 }
 
@@ -149,6 +156,7 @@ function createCopyButton(labels: CopyLabels) {
   }, host)
 
   state.dispose = dispose
+  // SAFETY: `render` runs its function synchronously, so both setters are assigned before this line.
   copyButtonState.set(host, state as CopyButtonState)
 
   return host
@@ -372,15 +380,35 @@ function setupExternalLinkFavicons(root: HTMLDivElement) {
   return () => root.removeEventListener("load", loaded, true)
 }
 
-function markInlineCode(root: HTMLDivElement) {
-  const codeNodes = Array.from(root.querySelectorAll(":not(pre) > code"))
+// A path becomes a link once `localFileExists` says the file exists. A streaming block skips the check: its last code
+// span may still be half written, and the block renders again once it completes.
+function markInlineCode(
+  source: HTMLDivElement,
+  target: HTMLDivElement,
+  live: boolean,
+  localFileExists?: MarkdownLocalFileExists,
+) {
+  const checked = new Set<string>()
 
-  for (const code of codeNodes) {
-    if (!(code instanceof HTMLElement)) continue
+  for (const code of source.querySelectorAll<HTMLElement>(":not(pre) > code")) {
     delete code.dataset.inlineCodeKind
-    const kind = inlineCodeKind(code.textContent ?? "")
+    const text = (code.textContent ?? "").trim()
+    const kind = inlineCodeKind(text)
 
-    if (kind) code.dataset.inlineCodeKind = kind
+    if (kind === "url") code.dataset.inlineCodeKind = kind
+
+    // Code inside a link already goes where the link does.
+    if (kind !== "path" || live || !localFileExists || code.closest("a") || checked.has(text)) continue
+
+    checked.add(text)
+    void Promise.resolve(localFileExists(text))
+      .then((exists) => {
+        if (!exists) return
+        target.querySelectorAll<HTMLElement>(":not(pre) > code").forEach((node) => {
+          if (!node.closest("a") && (node.textContent ?? "").trim() === text) node.dataset.inlineCodeKind = "path"
+        })
+      })
+      .catch(() => undefined)
   }
 }
 
@@ -728,7 +756,9 @@ export function Markdown(
     })
     activeCodeKeys.clear()
     nextCodeKeys.forEach((key) => activeCodeKeys.add(key))
-    content.forEach((block, index) => updateBlock(container, index, block, labels, !!markdown?.openSession))
+    content.forEach((block, index) =>
+      updateBlock(container, index, block, labels, !!markdown?.openSession, markdown?.localFileExists),
+    )
 
     while (container.children.length > content.length) {
       const child = container.lastElementChild
@@ -787,6 +817,7 @@ export function Markdown(
   return (
     <div
       data-component="markdown"
+      data-streaming={local.streaming ? "" : undefined}
       dir="auto"
       classList={{
         ...local.classList,
@@ -821,6 +852,8 @@ function pendingBlocks(
     if (block.mode !== "code")
       return { key, mode: block.mode, raw: block.raw, hash: String(block.raw.length), html: fallback(block.src) }
 
+    const fallbackToken: MarkdownToken = [block.src, ""]
+
     return {
       key,
       mode: block.mode,
@@ -830,7 +863,7 @@ function pendingBlocks(
       complete: !!block.complete,
       stable: [],
       generation: 0,
-      unstable: [[block.src, ""] as MarkdownToken],
+      unstable: [fallbackToken],
     }
   })
 }
@@ -845,6 +878,7 @@ function updateBlock(
   block: RenderedBlock,
   labels: CopyLabels,
   sessionLinks: boolean,
+  localFileExists?: MarkdownLocalFileExists,
 ) {
   const current = container.children[index]
 
@@ -859,12 +893,21 @@ function updateBlock(
       ? current
       : undefined
 
-  if (existing?.dataset.markdownHash === block.hash) return
+  if (existing?.dataset.markdownHash === block.hash) {
+    // A block that finishes streaming keeps its DOM and the user's selection; only its file paths get checked now.
+    if (existing.dataset.markdownMode === "live" && block.mode !== "live") {
+      existing.dataset.markdownMode = block.mode
+      markInlineCode(existing, existing, false, localFileExists)
+    }
+
+    return
+  }
 
   const next = existing ?? document.createElement("div")
   next.dataset.markdownBlock = ""
   next.dataset.markdownKey = block.key
   next.dataset.markdownHash = block.hash
+  next.dataset.markdownMode = block.mode
   next.style.display = "contents"
   const rendered = renderedMarkdown.get(next)
   // Keep live renderers in control of their DOM, including after completion.
@@ -872,7 +915,7 @@ function updateBlock(
 
   if (source === next) disposeCopyButtons(next)
   source.innerHTML = block.html
-  markInlineCode(source)
+  markInlineCode(source, next, block.mode === "live", localFileExists)
   markCodeLinks(source)
 
   if (sessionLinks) markSessionLinks(source)

@@ -320,7 +320,6 @@ it.live("discovers exported specifiers from the resolved tree even when dist/ ex
   Effect.gen(function* () {
     const directory = yield* tmpdirScoped()
     const consumerDir = path.join(directory.path, "consumer")
-    const jitFixtureDir = path.join(directory.path, "jit-fixture")
     const asyncModPath = path.join(directory.path, "async-mod.ts")
 
     yield* Effect.promise(() =>
@@ -341,8 +340,6 @@ it.live("discovers exported specifiers from the resolved tree even when dist/ ex
         "consumer/node_modules/@opencode/plugin/dist/promise/index.js": "export const root = 'dist'",
         "consumer/node_modules/@opencode/plugin/dist/effect/index.js": "export const index = 'dist'",
         "consumer/node_modules/@opencode/plugin/dist/effect/plugin.js": "export const leaf = 'dist'",
-        "jit-fixture/SchemaJITCompiler.js": "export const enable = () => 'fn'",
-        "jit-fixture/enable.js": "export {}",
         "async-mod.ts": "await new Promise((r) => setTimeout(r, 20)); export const nonce = Math.random()",
       }),
     )
@@ -353,13 +350,17 @@ it.live("discovers exported specifiers from the resolved tree even when dist/ ex
     expect(discovered.get("@opencode/plugin/effect/plugin")?.replaceAll("\\", "/")).toEndWith("src/effect/plugin.ts")
     expect(discovered.has("@opencode/plugin/unexported")).toBe(false)
 
-    const hostDiscovered = new Map(discoverPluginRuntimeSpecifiers())
-    hostDiscovered.set("effect/schema/SchemaJITCompiler", path.join(jitFixtureDir, "SchemaJITCompiler.js"))
-    hostDiscovered.set("effect/schema/SchemaJITCompiler/enable", path.join(jitFixtureDir, "enable.js"))
+    const hostDiscovered = discoverPluginRuntimeSpecifiers()
+    expect(hostDiscovered.has("effect/schema/SchemaJITCompiler")).toBe(true)
+    expect(hostDiscovered.has("effect/schema/SchemaJITCompiler/enable")).toBe(true)
     expect(pluginRuntimeLoaderCode("effect/Option", hostDiscovered)).toBe('() => require("effect")["Option"]')
     expect(pluginRuntimeLoaderCode("effect/testing", hostDiscovered)).toBe('() => require("effect/testing")')
-    expect(pluginRuntimeLoaderCode("effect/unstable/http/MultipartParser/HeadersParser", hostDiscovered)).toBe(
-      '() => require("effect/unstable/http/MultipartParser/HeadersParser")',
+    expect(hostDiscovered.has("effect/http/MultipartParser/HeadersParser")).toBe(true)
+    expect(pluginRuntimeLoaderCode("effect/http/MultipartParser/HeadersParser", hostDiscovered)).toBe(
+      '() => require("effect/http/MultipartParser/HeadersParser")',
+    )
+    expect(pluginRuntimeLoaderCode("effect/schema/SchemaJITCompiler", hostDiscovered)).toBe(
+      '() => require("effect/schema")["SchemaJITCompiler"]',
     )
     expect(pluginRuntimeLoaderCode("effect/schema/SchemaJITCompiler/enable", hostDiscovered)).toBe(
       '() => require("effect/schema/SchemaJITCompiler/enable")',

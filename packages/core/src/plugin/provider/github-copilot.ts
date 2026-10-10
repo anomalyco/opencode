@@ -331,13 +331,13 @@ export const GithubCopilotPlugin = define({
           return
         }
         const id = evt.model.modelID ?? evt.model.id
-        // Copilot serves Grok, Gemini, and MAI Code only on /responses; advertised
-        // endpoint metadata above wins whenever the live model list provides it.
+        // Copilot serves Grok and MAI Code only on /responses, and Gemini only on
+        // /chat/completions; advertised endpoint metadata above wins whenever the
+        // live model list provides it.
         const gpt = /^gpt-(\d+)/.exec(id)
         const responses =
           (gpt !== null && Number(gpt[1]) >= 5 && !id.startsWith("gpt-5-mini")) ||
           id.startsWith("grok-") ||
-          id.startsWith("gemini-") ||
           id.startsWith("mai-code-")
         evt.language = responses ? evt.sdk.responses(id) : evt.sdk.chat(id)
       }),

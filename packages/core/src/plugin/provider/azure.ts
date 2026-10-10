@@ -1,6 +1,6 @@
 import { Clock, Effect, FiberHandle, Option, Schema, Semaphore, Stream } from "effect"
-import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
-import { ChildProcess } from "effect/unstable/process"
+import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
+import { ChildProcess } from "effect/process"
 import path from "node:path"
 import { define } from "@opencode/plugin/effect/plugin"
 import { Form } from "@opencode/schema/form"
@@ -137,6 +137,11 @@ export function make(
       const listing: { resources?: readonly Form.Option[] } = {}
 
       yield* ctx.integration.transform((editor) => {
+        // The retired azure-cognitive-services provider's env var still connects Azure.
+        editor.method.update({
+          integrationID: Provider.ID.azure,
+          method: { type: "env", names: ["AZURE_API_KEY", "AZURE_COGNITIVE_SERVICES_API_KEY"] },
+        })
         editor.method.update({
           integrationID: Provider.ID.azure,
           method: {

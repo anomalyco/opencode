@@ -9,7 +9,8 @@ import { AppProcess } from "@opencode/util/process"
 import { randomBytes, randomUUID } from "node:crypto"
 import { Effect, Option, Redacted, Schema } from "effect"
 import { PersistentPty } from "@opencode/schema/persistent-pty"
-import { HttpServer } from "effect/unstable/http"
+import { HttpServer } from "effect/http"
+import { NetAddress } from "effect/net"
 import { Env } from "./env"
 import { ServiceConfig } from "./services/service-config"
 import { RetainedImage } from "./services/retained-image"
@@ -173,13 +174,17 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
         }),
       )
       if (server === undefined) return
-      if (serviceOptions !== undefined && config.remote === true && server.address._tag === "TcpAddress") {
-        const bound = server.address.hostname
+      if (serviceOptions !== undefined && config.remote !== undefined && NetAddress.isInetAddress(server.address)) {
+        const bound = NetAddress.formatIp(server.address.address)
         // A wildcard bind also listens on loopback, which is all the tunnel needs to reach.
-        const host = bound === "0.0.0.0" || bound === "::" ? "127.0.0.1" : bound.includes(":") ? `[${bound}]` : bound
+        const target =
+          bound === "0.0.0.0" || bound === "::"
+            ? `127.0.0.1:${server.address.port}`
+            : NetAddress.formatInet(server.address)
         yield* Effect.forkScoped(
           RemoteTunnel.run({
-            target: `${host}:${server.address.port}`,
+            route: config.remote.route,
+            target,
             onURL: (url) => {
               remote.urls = url === undefined ? [] : [url]
             },
