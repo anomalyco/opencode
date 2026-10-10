@@ -89,6 +89,47 @@ export interface CallToolResult {
   readonly content: ReadonlyArray<CallToolContent>
 }
 
+/** One file of a served skill, as the listing describes it. */
+export interface ServerSkillFile {
+  readonly uri: string
+  readonly digest: string
+  readonly size: number
+}
+
+/** A skill published by a server under the SEP-2640 extension. */
+export interface ServerSkill {
+  readonly uri: string
+  readonly name: string
+  // Mutable so a present description is assigned rather than spread in behind an empty object.
+  description?: string
+  readonly files: ReadonlyArray<ServerSkillFile>
+}
+
+const SkillFile = Schema.Struct({
+  uri: Schema.String,
+  digest: Schema.String,
+  size: Schema.Number,
+})
+
+// The extension's `skills/list` result. `resources: "dynamic"` marks a skill whose content is
+// generated per read, so it publishes no digests; such a skill cannot be verified and is dropped
+// rather than trusted. `name` falls back to the URI's final path segment, which the SEP guarantees
+// equals the frontmatter name, so a server that omits `description` still yields a usable entry.
+const SkillsListResult = Schema.toStandardSchemaV1(
+  Schema.Struct({
+    skills: Schema.Array(
+      Schema.Struct({
+        uri: Schema.String,
+        frontmatter: Schema.Struct({
+          name: Schema.optional(Schema.String),
+          description: Schema.optional(Schema.String),
+        }),
+        resources: Schema.Union([Schema.Array(SkillFile), Schema.Literal("dynamic")]),
+      }),
+    ),
+  }),
+)
+
 export type ElicitationFormParams = ElicitRequestFormParams
 export type ElicitationParams = ElicitRequestParams
 export type ElicitationResult = ElicitResult
@@ -121,6 +162,11 @@ export interface Connection {
   readonly resourceTemplates: () => Effect.Effect<ResourceTemplateType[], Error>
   /** Resolves to undefined when the server does not advertise resources. */
   readonly readResource: (input: { readonly uri: string }) => Effect.Effect<ReadResourceResult | undefined, Error>
+  /**
+   * Lists the skills published under the SEP-2640 extension. A server that does not implement it
+   * rejects the unknown method; that is the common case and resolves to an empty list.
+   */
+  readonly skills: () => Effect.Effect<ServerSkill[], Error>
   readonly prompt: (input: {
     readonly name: string
     readonly args?: Record<string, string>
@@ -345,6 +391,18 @@ export const connect = Effect.fnUntraced(function* (
           client.readResource({ uri: input.uri }, { signal, timeout: execution }),
         )
       },
+      // No capability gate: the skills extension is an extension method rather than a base
+      // capability, so a server that does not serve skills has nothing to advertise. It answers
+      // with an unknown-method error, which `toSkills` turns into an empty list.
+      skills: () =>
+        request("list MCP skills", (signal) =>
+          client.request({ method: "skills/list", params: {} }, SkillsListResult, { signal, timeout: catalog.timeout }),
+        ).pipe(
+          Effect.map(toSkills),
+          // SAFETY: the empty literal already satisfies ReadonlyArray<ServerSkill>; the assertion
+          // only names the element type the recovery branch already produces.
+          Effect.catchCause(() => Effect.succeed([] as ServerSkill[])),
+        ),
       prompt: (input) =>
         request("get MCP prompt", (signal) =>
           client.getPrompt({ name: input.name, arguments: input.args ?? {} }, { signal, timeout: execution }),
@@ -388,6 +446,33 @@ export const connect = Effect.fnUntraced(function* (
     })
   return yield* new ConnectError({ server, message: explain(error) })
 })
+
+// A server publishes each skill's files as an array of `{uri, digest, size}` triples, or the string
+// "dynamic" when the content is generated per read. A dynamic skill cannot be verified, so it is
+// dropped rather than trusted. The SEP also requires the listing to account for the skill's own
+// SKILL.md; a set that omits it cannot be resolved into content, and the extension treats an
+// incomplete set as a change to the skill. `name` falls back to the URI's last segment, which the
+// SEP guarantees equals the frontmatter name.
+function toSkills(result: {
+  readonly skills: ReadonlyArray<{
+    readonly uri: string
+    readonly frontmatter: { readonly name?: string | undefined; readonly description?: string | undefined }
+    readonly resources: "dynamic" | ReadonlyArray<ServerSkillFile>
+  }>
+}): ServerSkill[] {
+  return result.skills.flatMap((skill) => {
+    if (skill.resources === "dynamic") return []
+
+    const name = skill.frontmatter.name ?? skill.uri.split("/").filter(Boolean).at(-1)
+    if (name === undefined) return []
+    if (!skill.resources.some((file) => file.uri === skill.uri)) return []
+
+    const parsed: ServerSkill = { uri: skill.uri, name, files: skill.resources }
+    if (skill.frontmatter.description !== undefined) parsed.description = skill.frontmatter.description
+
+    return [parsed]
+  })
+}
 
 // Absent config is legacy: the SDK sends the plain initialize handshake with no discover probe.
 function negotiation(protocol: ConfigMCP.Protocol | undefined): VersionNegotiationOptions | undefined {

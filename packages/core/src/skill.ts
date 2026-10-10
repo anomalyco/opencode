@@ -18,6 +18,9 @@ export type UrlSource = Skill.UrlSource
 export const EmbeddedSource = Skill.EmbeddedSource
 export type EmbeddedSource = Skill.EmbeddedSource
 
+export const McpOrigin = Skill.McpOrigin
+export type McpOrigin = Skill.McpOrigin
+
 export const Source = Skill.Source
 export type Source = Skill.Source
 
@@ -34,6 +37,21 @@ export const available = (skills: ReadonlyArray<Info>, permissions: Permission.R
   skills.filter((skill) => Permission.evaluate("skill", skill.id, permissions).effect !== "deny")
 
 export const toModelOutput = (skill: Info, files: ReadonlyArray<string>) => {
+  if (skill.origin?.type === "mcp")
+    return [
+      `<skill_content name="${skill.name}">`,
+      `# Skill: ${skill.name}`,
+      "",
+      skill.content.trim(),
+      "",
+      `This skill is served by the MCP server "${skill.origin.server}". Its supporting files are MCP resources rather than files on disk.`,
+      "Read one with the MCP resource tool using its URI; the list below is the complete set this skill published.",
+      "",
+      "<skill_files>",
+      ...files.map((file) => `<file>${file}</file>`),
+      "</skill_files>",
+      "</skill_content>",
+    ].join("\n")
   const directory = path.dirname(skill.path)
   return [
     `<skill_content name="${skill.name}">`,
@@ -53,6 +71,9 @@ export const toModelOutput = (skill: Info, files: ReadonlyArray<string>) => {
 }
 
 export const prepare = Effect.fn("Skill.prepare")(function* (fs: FSUtil.Interface, skill: Info) {
+  // A served skill's supporting files are already resolved to resource URIs, and its `path` is a
+  // placeholder with no directory behind it, so neither the scan nor a base directory applies.
+  if (skill.origin?.type === "mcp") return { directory: undefined, output: toModelOutput(skill, skill.origin.files) }
   const directory = path.dirname(skill.path)
   const files =
     path.basename(skill.path) === "SKILL.md"
