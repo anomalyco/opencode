@@ -10,7 +10,12 @@ import { EventLog } from "@opencode/schema/event-log"
 import { FileDiff } from "@opencode/schema/file-diff"
 import { FileSystem } from "@opencode/schema/filesystem"
 import { Form } from "@opencode/schema/form"
+import { SessionsCursor } from "@opencode/protocol/groups/session"
+import { Instruction } from "@opencode/schema/instruction"
 import { InstructionEntry } from "@opencode/schema/instruction-entry"
+import { Money } from "@opencode/schema/money"
+import { Snapshot } from "@opencode/schema/snapshot"
+import { Workspace } from "@opencode/schema/workspace"
 import { Integration } from "@opencode/schema/integration"
 import { Location } from "@opencode/schema/location"
 import { Mcp } from "@opencode/schema/mcp"
@@ -50,7 +55,12 @@ const effectTypeReferences = [
   ...namespaceTypes("FileDiff", "@opencode/schema/file-diff", FileDiff),
   ...namespaceTypes("FileSystem", "@opencode/schema/filesystem", FileSystem),
   ...namespaceTypes("Form", "@opencode/schema/form", Form),
+  ...namespaceTypes("Instruction", "@opencode/schema/instruction", Instruction),
   ...namespaceTypes("InstructionEntry", "@opencode/schema/instruction-entry", InstructionEntry),
+  ...namespaceTypes("Money", "@opencode/schema/money", Money),
+  ...namespaceTypes("Snapshot", "@opencode/schema/snapshot", Snapshot),
+  ...namespaceTypes("Workspace", "@opencode/schema/workspace", Workspace),
+  typeReference("SessionsCursor", "@opencode/protocol/groups/session", SessionsCursor),
   ...namespaceTypes("Integration", "@opencode/schema/integration", Integration),
   typeReference("Location.PublicRef", "@opencode/schema/location", Location.PublicRef),
   typeReference("Location.PublicInfo", "@opencode/schema/location", Location.PublicInfo),

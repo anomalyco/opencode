@@ -1,6 +1,5 @@
 export * as Credential from "./credential.js"
 
-import { brand } from "./brand.js"
 import { Schema } from "effect"
 import { optional } from "./schema.js"
 import { ephemeral, inventory } from "./event.js"
@@ -10,7 +9,8 @@ import { NonNegativeInt, statics } from "./schema.js"
 import { Form } from "./form.js"
 
 export const ID = Schema.String.pipe(
-  brand("Credential.ID"),
+  Schema.brand("Credential.ID"),
+  Schema.annotate({ identifier: "Credential.ID" }),
   statics((schema) => ({ create: () => schema.make("cred_" + ascending()) })),
 )
 export type ID = typeof ID.Type

@@ -1,10 +1,9 @@
-import { brand } from "@opencode/schema/brand"
 import { describe, expect, test } from "bun:test"
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
-import { Effect, FileSystem, Schema, SchemaAST, SchemaGetter } from "effect"
+import { type Brand, Effect, FileSystem, Schema, SchemaAST, SchemaGetter, Stream } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema, OpenApi } from "effect/http-api"
 import { format } from "prettier"
 import {
@@ -183,11 +182,17 @@ describe("HttpApiCodegen.generate", () => {
     expect(source).toContain('readonly "different": ({ readonly [x: string]: number })')
   })
 
-  test("preserves referenced and inline branded Effect types across optional and nested shapes", () => {
-    const SessionID = Schema.String.check(Schema.isStartingWith("ses_")).pipe(brand("Session.ID"))
-    const AgentID = Schema.String.pipe(brand("Agent.ID"))
-    const Cursor = Schema.String.pipe(brand("SessionsCursor")).annotate({ description: "Cursor" })
-    const Cost = Schema.Finite.pipe(brand("Money.USD"), Schema.annotate({ identifier: "Money.USD" }))
+  test("preserves referenced branded Effect types across optional, record, and re-annotated shapes", () => {
+    const SessionID = Schema.String.check(Schema.isStartingWith("ses_")).pipe(
+      Schema.brand("Session.ID"),
+      Schema.annotate({ identifier: "Session.ID" }),
+    )
+    const AgentID = Schema.String.pipe(Schema.brand("Agent.ID"), Schema.annotate({ identifier: "Agent.ID" }))
+    const Cursor = Schema.String.pipe(
+      Schema.brand("SessionsCursor"),
+      Schema.annotate({ identifier: "SessionsCursor" }),
+    ).annotate({ description: "Cursor" })
+    const Cost = Schema.Finite.pipe(Schema.brand("Money.USD"), Schema.annotate({ identifier: "Money.USD" }))
     const output = emitEffectShape(
       compileContract(
         api(
@@ -210,17 +215,25 @@ describe("HttpApiCodegen.generate", () => {
         typeReferences: [
           { schema: SessionID, name: "Session.ID", import: 'import type { Session } from "@example/schema/session"' },
           { schema: AgentID, name: "Agent.ID", import: 'import type { Agent } from "@example/schema/agent"' },
+          {
+            schema: Cursor,
+            name: "SessionsCursor",
+            import: 'import type { SessionsCursor } from "@example/protocol/session"',
+          },
+          { schema: Cost, name: "Money.USD", import: 'import type { Money } from "@example/schema/money"' },
         ],
       },
     )
     const source = output.files[0]?.content
+
     expect(source).toContain('import type { Session } from "@example/schema/session"')
     expect(source).toContain('import type { Agent } from "@example/schema/agent"')
-    expect(source).toContain('import type { Brand } from "effect"')
+    expect(source).toContain('import type { SessionsCursor } from "@example/protocol/session"')
+    expect(source).toContain('import type { Money } from "@example/schema/money"')
     expect(source).toContain('readonly "sessionID": Session.ID')
     expect(source).toContain('readonly "agent"?: Agent.ID | undefined')
-    expect(source).toContain('readonly "cursor"?: (string) & Brand.Brand<"SessionsCursor"> | undefined')
-    expect(source).toContain('readonly [x: Session.ID]: { readonly "cost": ((number) & Brand.Brand<"Money.USD">) }')
+    expect(source).toContain('readonly "cursor"?: SessionsCursor | undefined')
+    expect(source).toContain('readonly [x: Session.ID]: { readonly "cost": Money.USD }')
     expect(source).toContain('readonly "agents": ReadonlyArray<Agent.ID>')
   })
 
@@ -288,7 +301,7 @@ describe("HttpApiCodegen.generate", () => {
     ).toThrow("Generated Effect adapter collides with imported endpoint: EndpointSessionGet")
   })
 
-  test("exposes an imported Effect client through its generated shape", () => {
+  test("exposes an imported Effect client through its generated shape and rejects widened outputs", () => {
     const output = emitEffectImported(
       compileContract(api(HttpApiEndpoint.get("get", "/session", { success: Schema.String }))),
       { module: "@example/api", api: "Api", shapeModule: "../api" },
@@ -297,6 +310,37 @@ describe("HttpApiCodegen.generate", () => {
 
     expect(source).toContain('import type { SessionGetOutput } from "../api"')
     expect(source).toContain("preserveEffect<SessionGetOutput>()")
+    expect(source).toContain("__generatedOutputWiderThanContract")
+
+    type BrandedID = string & Brand.Brand<"Session.ID">
+    const preserveEffect =
+      <A>() =>
+      <Actual extends A, E, R>(
+        effect: Effect.Effect<Actual, E, R> &
+          ([A] extends [Actual]
+            ? unknown
+            : { readonly __generatedOutputWiderThanContract: [expected: Actual, generated: A] }),
+      ): Effect.Effect<A, E, R> =>
+        effect
+    const preserveStream =
+      <A>() =>
+      <Actual extends A, E, R>(
+        stream: Stream.Stream<Actual, E, R> &
+          ([A] extends [Actual]
+            ? unknown
+            : { readonly __generatedOutputWiderThanContract: [expected: Actual, generated: A] }),
+      ): Stream.Stream<A, E, R> =>
+        stream
+
+    const brandedEffect = Effect.succeed("ses_1" as BrandedID)
+    const brandedStream = Stream.make("ses_1" as BrandedID)
+
+    preserveEffect<BrandedID>()(brandedEffect)
+    preserveStream<BrandedID>()(brandedStream)
+    // @ts-expect-error Generated output cannot widen a branded contract output to plain string.
+    preserveEffect<string>()(brandedEffect)
+    // @ts-expect-error Generated stream output cannot widen a branded contract output to plain string.
+    preserveStream<string>()(brandedStream)
   })
 
   test("projects imported endpoint constants into a generated API", () => {
@@ -695,8 +739,8 @@ describe("HttpApiCodegen.generate", () => {
       compileContract(
         api(
           HttpApiEndpoint.get("get", "/session/:sessionID", {
-            params: { sessionID: Schema.String.pipe(brand("SessionID")) },
-            success: Schema.Struct({ data: Schema.String.pipe(brand("SessionID")) }),
+            params: { sessionID: Schema.String.pipe(Schema.brand("SessionID")) },
+            success: Schema.Struct({ data: Schema.String.pipe(Schema.brand("SessionID")) }),
           }),
         ),
       ),

@@ -1,6 +1,5 @@
 export * as SessionV1 from "./session.js"
 
-import { brand } from "./../brand.js"
 import { Effect, Schema, Types } from "effect"
 import { durable, ephemeral, inventory } from "../event.js"
 import { Project } from "../project.js"
@@ -16,13 +15,13 @@ import { FileDiff } from "../file-diff.js"
 const Timestamp = Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0))
 
 export const MessageID = Schema.String.check(Schema.isStartingWith("msg")).pipe(
-  brand("SessionV1.MessageID"),
+  Schema.brand("SessionV1.MessageID"),
   statics((schema) => ({ ascending: (id?: string) => schema.make(id ?? "msg_" + ascending()) })),
 )
 export type MessageID = typeof MessageID.Type
 
 export const PartID = Schema.String.check(Schema.isStartingWith("prt")).pipe(
-  brand("SessionV1.PartID"),
+  Schema.brand("SessionV1.PartID"),
   statics((schema) => ({ ascending: (id?: string) => schema.make(id ?? "prt_" + ascending()) })),
 )
 export type PartID = typeof PartID.Type

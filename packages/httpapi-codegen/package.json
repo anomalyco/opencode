@@ -12,7 +12,6 @@
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
-    "@opencode/schema": "workspace:*",
     "effect": "catalog:",
     "prettier": "3.6.2"
   },

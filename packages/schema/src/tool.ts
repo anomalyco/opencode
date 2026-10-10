@@ -1,6 +1,5 @@
 export * as Tool from "./tool.js"
 
-import { brand } from "./brand.js"
 import { Effect, JsonSchema, Schema } from "effect"
 import type { StandardSchemaV1 } from "@standard-schema/spec"
 import type { Agent } from "./agent.js"
@@ -9,7 +8,7 @@ import type { SessionMessage } from "./session-message.js"
 
 export type Metadata = Readonly<Record<string, any>>
 
-export const CallID = Schema.String.pipe(brand("Tool.CallID"))
+export const CallID = Schema.String.pipe(Schema.brand("Tool.CallID"), Schema.annotate({ identifier: "Tool.CallID" }))
 export type CallID = typeof CallID.Type
 
 export interface Context {

@@ -1,6 +1,5 @@
 export * as Mcp from "./index.js"
 
-import { brand } from "@opencode/schema/brand"
 import { Mcp } from "@opencode/schema/mcp"
 import { McpEvent } from "@opencode/schema/mcp-event"
 import { ephemeral } from "@opencode/schema/event"
@@ -20,7 +19,7 @@ import { waitForAbort } from "@opencode/util/process"
 import { State } from "../state.js"
 import type { McpClient } from "./client.js"
 
-export const ServerName = Schema.String.pipe(brand("MCP.ServerName"))
+export const ServerName = Schema.String.pipe(Schema.brand("MCP.ServerName"))
 export type ServerName = typeof ServerName.Type
 export const PromptsChanged = ephemeral({ type: "mcp.prompts.changed", schema: { server: Schema.String } })
 

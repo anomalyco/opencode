@@ -374,7 +374,7 @@
             "name": "agentID",
             "in": "path",
             "schema": {
-              "type": "string"
+              "$ref": "#/components/schemas/Agent.ID"
             },
             "required": true
           },
@@ -855,8 +855,7 @@
                 {
                   "anyOf": [
                     {
-                      "type": "string",
-                      "pattern": "^ses"
+                      "$ref": "#/components/schemas/Session.ID"
                     },
                     {
                       "type": "string",
@@ -878,7 +877,7 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "$ref": "#/components/schemas/AbsolutePath"
                 },
                 {
                   "type": "null"
@@ -893,7 +892,7 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "$ref": "#/components/schemas/Project.ID"
                 },
                 {
                   "type": "null"
@@ -908,7 +907,7 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "$ref": "#/components/schemas/RelativePath"
                 },
                 {
                   "type": "null"
@@ -923,8 +922,7 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string",
-                  "description": "Opaque pagination cursor returned as cursor.previous or cursor.next in the previous response."
+                  "$ref": "#/components/schemas/SessionsCursor"
                 },
                 {
                   "type": "null"
@@ -1042,8 +1040,7 @@
                   "id": {
                     "anyOf": [
                       {
-                        "type": "string",
-                        "pattern": "^ses"
+                        "$ref": "#/components/schemas/Session.ID"
                       },
                       {
                         "type": "null"
@@ -1053,8 +1050,7 @@
                   "parentID": {
                     "anyOf": [
                       {
-                        "type": "string",
-                        "pattern": "^ses"
+                        "$ref": "#/components/schemas/Session.ID"
                       },
                       {
                         "type": "null"
@@ -1074,7 +1070,7 @@
                   "agent": {
                     "anyOf": [
                       {
-                        "type": "string"
+                        "$ref": "#/components/schemas/Agent.ID"
                       },
                       {
                         "type": "null"
@@ -1171,7 +1167,7 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "$ref": "#/components/schemas/Project.ID"
                 },
                 {
                   "type": "null"
@@ -1367,8 +1363,7 @@
             "name": "sessionID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^ses"
+              "$ref": "#/components/schemas/Session.ID"
             },
             "required": true
           },
@@ -1517,8 +1512,7 @@
             "name": "sessionID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^ses"
+              "$ref": "#/components/schemas/Session.ID"
             },
             "required": true
           }
@@ -1584,8 +1578,7 @@
             "name": "sessionID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^ses"
+              "$ref": "#/components/schemas/Session.ID"
             },
             "required": true
           }
@@ -1637,8 +1630,7 @@
             "name": "sessionID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^ses"
+              "$ref": "#/components/schemas/Session.ID"
             },
             "required": true
           }
@@ -1742,8 +1734,7 @@
             "name": "sessionID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^ses"
+              "$ref": "#/components/schemas/Session.ID"
             },
             "required": true
           }
@@ -1819,8 +1810,7 @@
                   "before": {
                     "anyOf": [
                       {
-                        "type": "string",
-                        "pattern": "^msg_"
+                        "$ref": "#/components/schemas/Session.Message.ID"
                       },
                       {
                         "type": "null"
@@ -1845,8 +1835,7 @@
             "name": "sessionID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^ses"
+              "$ref": "#/components/schemas/Session.ID"
             },
             "required": true
           }
@@ -1903,7 +1892,7 @@
                 "type": "object",
                 "properties": {
                   "agent": {
-                    "type": "string"
+                    "$ref": "#/components/schemas/Agent.ID"
                   }
                 },
                 "required": ["agent"],
@@ -1924,8 +1913,7 @@
             "name": "sessionID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^ses"
+              "$ref": "#/components/schemas/Session.ID"
             },
             "required": true
           }
@@ -2003,8 +1991,7 @@
             "name": "sessionID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^ses"
+              "$ref": "#/components/schemas/Session.ID"
             },
             "required": true
           }
@@ -2054,7 +2041,7 @@
                 "type": "object",
                 "properties": {
                   "directory": {
-                    "type": "string"
+                    "$ref": "#/components/schemas/AbsolutePath"
                   },
                   "delivery": {
                     "anyOf": [
@@ -2085,8 +2072,7 @@
             "name": "sessionID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^ses"
+              "$ref": "#/components/schemas/Session.ID"
             },
             "required": true
           }
@@ -2169,8 +2155,7 @@
                   "id": {
                     "anyOf": [
                       {
-                        "type": "string",
-                        "pattern": "^msg_"
+                        "$ref": "#/components/schemas/Session.Message.ID"
                       },
                       {
                         "type": "null"
@@ -2240,8 +2225,7 @@
             "name": "sessionID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^ses"
+              "$ref": "#/components/schemas/Session.ID"
             },
             "required": true
           }
@@ -2363,8 +2347,7 @@
             "name": "sessionID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^ses"
+              "$ref": "#/components/schemas/Session.ID"
             },
             "required": true
           }
@@ -2424,7 +2407,7 @@
                 "type": "object",
                 "properties": {
                   "id": {
-                    "type": "string"
+                    "$ref": "#/components/schemas/Skill.ID"
                   },
                   "resume": {
                     "anyOf": [
@@ -2455,8 +2438,7 @@
             "name": "sessionID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^ses"
+              "$ref": "#/components/schemas/Session.ID"
             },
             "required": true
           }
@@ -2539,8 +2521,7 @@
                   "id": {
                     "anyOf": [
                       {
-                        "type": "string",
-                        "pattern": "^msg_"
+                        "$ref": "#/components/schemas/Session.Message.ID"
                       },
                       {
                         "type": "null"
@@ -2602,8 +2583,7 @@
             "name": "sessionID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^ses"
+              "$ref": "#/components/schemas/Session.ID"
             },
             "required": true
           }
@@ -2662,8 +2642,7 @@
                   "id": {
                     "anyOf": [
                       {
-                        "type": "string",
-                        "pattern": "^msg_"
+                        "$ref": "#/components/schemas/Session.Message.ID"
                       },
                       {
                         "type": "null"
@@ -2692,8 +2671,7 @@
             "name": "sessionID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^ses"
+              "$ref": "#/components/schemas/Session.ID"
             },
             "required": true
           }
@@ -2776,8 +2754,7 @@
                   "id": {
                     "anyOf": [
                       {
-                        "type": "string",
-                        "pattern": "^msg_"
+                        "$ref": "#/components/schemas/Session.Message.ID"
                       },
                       {
                         "type": "null"
@@ -2812,8 +2789,7 @@
             "name": "sessionID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^ses"
+              "$ref": "#/components/schemas/Session.ID"
             },
             "required": true
           }
@@ -2884,8 +2860,7 @@
             "name": "sessionID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^ses"
+              "$ref": "#/components/schemas/Session.ID"
             },
             "required": true
           }
@@ -2979,8 +2954,7 @@
                 "type": "object",
                 "properties": {
                   "messageID": {
-                    "type": "string",
-                    "pattern": "^msg_"
+                    "$ref": "#/components/schemas/Session.Message.ID"
                   },
                   "files": {
                     "anyOf": [
@@ -3011,8 +2985,7 @@
             "name": "sessionID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^ses"
+              "$ref": "#/components/schemas/Session.ID"
             },
             "required": true
           }
@@ -3092,8 +3065,7 @@
             "name": "sessionID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^ses"
+              "$ref": "#/components/schemas/Session.ID"
             },
             "required": true
           }
@@ -3163,8 +3135,7 @@
             "name": "sessionID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^ses"
+              "$ref": "#/components/schemas/Session.ID"
             },
             "required": true
           }
@@ -3245,8 +3216,7 @@
             "name": "sessionID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^ses"
+              "$ref": "#/components/schemas/Session.ID"
             },
             "required": true
           },
@@ -3256,8 +3226,7 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string",
-                  "pattern": "^msg_"
+                  "$ref": "#/components/schemas/Session.Message.ID"
                 },
                 {
                   "type": "null"
@@ -3273,8 +3242,7 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string",
-                  "pattern": "^msg_"
+                  "$ref": "#/components/schemas/Session.Message.ID"
                 },
                 {
                   "type": "null"
@@ -3387,8 +3355,7 @@
             "name": "sessionID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^ses"
+              "$ref": "#/components/schemas/Session.ID"
             },
             "required": true
           }
@@ -3459,8 +3426,7 @@
             "name": "sessionID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^ses"
+              "$ref": "#/components/schemas/Session.ID"
             },
             "required": true
           },
@@ -3468,8 +3434,7 @@
             "name": "inboxID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^msg_"
+              "$ref": "#/components/schemas/Session.Message.ID"
             },
             "required": true
           }
@@ -3521,8 +3486,7 @@
             "name": "sessionID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^ses"
+              "$ref": "#/components/schemas/Session.ID"
             },
             "required": true
           },
@@ -3530,8 +3494,7 @@
             "name": "inboxID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^msg_"
+              "$ref": "#/components/schemas/Session.Message.ID"
             },
             "required": true
           }
@@ -3612,8 +3575,7 @@
             "name": "sessionID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^ses"
+              "$ref": "#/components/schemas/Session.ID"
             },
             "required": true
           }
@@ -3691,8 +3653,7 @@
             "name": "sessionID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^ses"
+              "$ref": "#/components/schemas/Session.ID"
             },
             "required": true
           },
@@ -3784,8 +3745,7 @@
             "name": "sessionID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^ses"
+              "$ref": "#/components/schemas/Session.ID"
             },
             "required": true
           },
@@ -3854,8 +3814,7 @@
             "name": "sessionID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^ses"
+              "$ref": "#/components/schemas/Session.ID"
             },
             "required": true
           }
@@ -3950,8 +3909,7 @@
             "name": "sessionID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^ses"
+              "$ref": "#/components/schemas/Session.ID"
             },
             "required": true
           },
@@ -3961,7 +3919,7 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "$ref": "#/components/schemas/Event.SeqEncoded"
                 },
                 {
                   "type": "null"
@@ -4124,8 +4082,7 @@
             "name": "sessionID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^ses"
+              "$ref": "#/components/schemas/Session.ID"
             },
             "required": true
           },
@@ -4209,8 +4166,7 @@
             "name": "sessionID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^ses"
+              "$ref": "#/components/schemas/Session.ID"
             },
             "required": true
           }
@@ -4271,8 +4227,7 @@
             "name": "sessionID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^ses"
+              "$ref": "#/components/schemas/Session.ID"
             },
             "required": true
           },
@@ -4280,8 +4235,7 @@
             "name": "messageID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^msg_"
+              "$ref": "#/components/schemas/Session.Message.ID"
             },
             "required": true
           }
@@ -4535,8 +4489,7 @@
             "name": "formID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^frm_"
+              "$ref": "#/components/schemas/Form.ID"
             },
             "required": true
           }
@@ -4620,8 +4573,7 @@
             "name": "formID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^frm_"
+              "$ref": "#/components/schemas/Form.ID"
             },
             "required": true
           },
@@ -4718,8 +4670,7 @@
             "name": "formID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^frm_"
+              "$ref": "#/components/schemas/Form.ID"
             },
             "required": true
           }
@@ -4810,8 +4761,7 @@
             "name": "sessionID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^ses"
+              "$ref": "#/components/schemas/Session.ID"
             },
             "required": true
           }
@@ -4885,8 +4835,7 @@
             "name": "sessionID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^ses"
+              "$ref": "#/components/schemas/Session.ID"
             },
             "required": true
           }
@@ -4957,8 +4906,7 @@
             "name": "sessionID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^ses"
+              "$ref": "#/components/schemas/Session.ID"
             },
             "required": true
           },
@@ -5524,7 +5472,7 @@
             "name": "providerID",
             "in": "path",
             "schema": {
-              "type": "string"
+              "$ref": "#/components/schemas/Provider.ID"
             },
             "required": true
           },
@@ -5738,7 +5686,7 @@
             "name": "integrationID",
             "in": "path",
             "schema": {
-              "type": "string"
+              "$ref": "#/components/schemas/Integration.ID"
             },
             "required": true
           },
@@ -5939,7 +5887,7 @@
             "name": "integrationID",
             "in": "path",
             "schema": {
-              "type": "string"
+              "$ref": "#/components/schemas/Integration.ID"
             },
             "required": true
           },
@@ -6067,7 +6015,7 @@
             "name": "integrationID",
             "in": "path",
             "schema": {
-              "type": "string"
+              "$ref": "#/components/schemas/Integration.ID"
             },
             "required": true
           },
@@ -6154,7 +6102,7 @@
                 "type": "object",
                 "properties": {
                   "methodID": {
-                    "type": "string"
+                    "$ref": "#/components/schemas/Integration.MethodID"
                   },
                   "answer": {
                     "anyOf": [
@@ -6195,7 +6143,7 @@
             "name": "integrationID",
             "in": "path",
             "schema": {
-              "type": "string"
+              "$ref": "#/components/schemas/Integration.ID"
             },
             "required": true
           },
@@ -6292,7 +6240,7 @@
                 "type": "object",
                 "properties": {
                   "methodID": {
-                    "type": "string"
+                    "$ref": "#/components/schemas/Integration.MethodID"
                   },
                   "answer": {
                     "anyOf": [
@@ -6333,7 +6281,7 @@
             "name": "integrationID",
             "in": "path",
             "schema": {
-              "type": "string"
+              "$ref": "#/components/schemas/Integration.ID"
             },
             "required": true
           },
@@ -6341,7 +6289,7 @@
             "name": "attemptID",
             "in": "path",
             "schema": {
-              "type": "string"
+              "$ref": "#/components/schemas/Integration.AttemptID"
             },
             "required": true
           },
@@ -6450,7 +6398,7 @@
             "name": "integrationID",
             "in": "path",
             "schema": {
-              "type": "string"
+              "$ref": "#/components/schemas/Integration.ID"
             },
             "required": true
           },
@@ -6458,7 +6406,7 @@
             "name": "attemptID",
             "in": "path",
             "schema": {
-              "type": "string"
+              "$ref": "#/components/schemas/Integration.AttemptID"
             },
             "required": true
           },
@@ -6542,7 +6490,7 @@
             "name": "integrationID",
             "in": "path",
             "schema": {
-              "type": "string"
+              "$ref": "#/components/schemas/Integration.ID"
             },
             "required": true
           },
@@ -6550,7 +6498,7 @@
             "name": "attemptID",
             "in": "path",
             "schema": {
-              "type": "string"
+              "$ref": "#/components/schemas/Integration.AttemptID"
             },
             "required": true
           },
@@ -6667,7 +6615,7 @@
             "name": "integrationID",
             "in": "path",
             "schema": {
-              "type": "string"
+              "$ref": "#/components/schemas/Integration.ID"
             },
             "required": true
           },
@@ -6774,7 +6722,7 @@
                 "type": "object",
                 "properties": {
                   "methodID": {
-                    "type": "string"
+                    "$ref": "#/components/schemas/Integration.MethodID"
                   },
                   "label": {
                     "anyOf": [
@@ -6805,7 +6753,7 @@
             "name": "integrationID",
             "in": "path",
             "schema": {
-              "type": "string"
+              "$ref": "#/components/schemas/Integration.ID"
             },
             "required": true
           },
@@ -6813,7 +6761,7 @@
             "name": "attemptID",
             "in": "path",
             "schema": {
-              "type": "string"
+              "$ref": "#/components/schemas/Integration.AttemptID"
             },
             "required": true
           },
@@ -6922,7 +6870,7 @@
             "name": "integrationID",
             "in": "path",
             "schema": {
-              "type": "string"
+              "$ref": "#/components/schemas/Integration.ID"
             },
             "required": true
           },
@@ -6930,7 +6878,7 @@
             "name": "attemptID",
             "in": "path",
             "schema": {
-              "type": "string"
+              "$ref": "#/components/schemas/Integration.AttemptID"
             },
             "required": true
           },
@@ -7701,7 +7649,7 @@
             "name": "credentialID",
             "in": "path",
             "schema": {
-              "type": "string"
+              "$ref": "#/components/schemas/Credential.ID"
             },
             "required": true
           }
@@ -7760,7 +7708,7 @@
             "name": "credentialID",
             "in": "path",
             "schema": {
-              "type": "string"
+              "$ref": "#/components/schemas/Credential.ID"
             },
             "required": true
           }
@@ -7804,7 +7752,7 @@
             "name": "credentialID",
             "in": "path",
             "schema": {
-              "type": "string"
+              "$ref": "#/components/schemas/Credential.ID"
             },
             "required": true
           }
@@ -7903,7 +7851,7 @@
             "name": "projectID",
             "in": "path",
             "schema": {
-              "type": "string"
+              "$ref": "#/components/schemas/Project.ID"
             },
             "required": true
           }
@@ -7967,7 +7915,7 @@
                 "type": "object",
                 "properties": {
                   "canonical": {
-                    "type": "string"
+                    "$ref": "#/components/schemas/AbsolutePath"
                   },
                   "name": {
                     "type": "string"
@@ -8190,7 +8138,7 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string"
+                  "$ref": "#/components/schemas/Project.ID"
                 },
                 {
                   "type": "null"
@@ -8266,7 +8214,7 @@
             "name": "id",
             "in": "path",
             "schema": {
-              "type": "string"
+              "$ref": "#/components/schemas/PermissionSaved.ID"
             },
             "required": true
           }
@@ -8320,8 +8268,7 @@
             "name": "sessionID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^ses"
+              "$ref": "#/components/schemas/Session.ID"
             },
             "required": true
           }
@@ -8339,8 +8286,7 @@
                       "type": "object",
                       "properties": {
                         "id": {
-                          "type": "string",
-                          "pattern": "^per"
+                          "$ref": "#/components/schemas/Permission.ID"
                         },
                         "effect": {
                           "$ref": "#/components/schemas/Permission.Effect"
@@ -8405,8 +8351,7 @@
                   "id": {
                     "anyOf": [
                       {
-                        "type": "string",
-                        "pattern": "^per"
+                        "$ref": "#/components/schemas/Permission.ID"
                       },
                       {
                         "type": "null"
@@ -8437,7 +8382,7 @@
                   "agent": {
                     "anyOf": [
                       {
-                        "type": "string"
+                        "$ref": "#/components/schemas/Agent.ID"
                       },
                       {
                         "type": "null"
@@ -8461,8 +8406,7 @@
             "name": "sessionID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^ses"
+              "$ref": "#/components/schemas/Session.ID"
             },
             "required": true
           }
@@ -8540,8 +8484,7 @@
             "name": "sessionID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^ses"
+              "$ref": "#/components/schemas/Session.ID"
             },
             "required": true
           },
@@ -8549,8 +8492,7 @@
             "name": "requestID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^per"
+              "$ref": "#/components/schemas/Permission.ID"
             },
             "required": true
           }
@@ -8628,8 +8570,7 @@
             "name": "sessionID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^ses"
+              "$ref": "#/components/schemas/Session.ID"
             },
             "required": true
           },
@@ -8637,8 +8578,7 @@
             "name": "requestID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^per"
+              "$ref": "#/components/schemas/Permission.ID"
             },
             "required": true
           }
@@ -9842,8 +9782,7 @@
             "name": "ptyID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^pty"
+              "$ref": "#/components/schemas/Pty.ID"
             },
             "required": true
           },
@@ -9949,8 +9888,7 @@
             "name": "ptyID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^pty"
+              "$ref": "#/components/schemas/Pty.ID"
             },
             "required": true
           },
@@ -10087,8 +10025,7 @@
             "name": "ptyID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^pty"
+              "$ref": "#/components/schemas/Pty.ID"
             },
             "required": true
           },
@@ -10179,8 +10116,7 @@
             "name": "ptyID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^pty"
+              "$ref": "#/components/schemas/Pty.ID"
             },
             "required": true
           },
@@ -10313,8 +10249,7 @@
             "name": "ptyID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^pty"
+              "$ref": "#/components/schemas/Pty.ID"
             },
             "required": true
           },
@@ -10414,8 +10349,7 @@
             "name": "sessionID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^ses"
+              "$ref": "#/components/schemas/Session.ID"
             },
             "required": true
           },
@@ -10505,8 +10439,7 @@
             "name": "sessionID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^ses"
+              "$ref": "#/components/schemas/Session.ID"
             },
             "required": true
           }
@@ -10573,8 +10506,7 @@
             "name": "sessionID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^ses"
+              "$ref": "#/components/schemas/Session.ID"
             },
             "required": true
           }
@@ -10757,8 +10689,7 @@
             "name": "ptyID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^pty"
+              "$ref": "#/components/schemas/Pty.ID"
             },
             "required": true
           }
@@ -10832,8 +10763,7 @@
             "name": "ptyID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^pty"
+              "$ref": "#/components/schemas/Pty.ID"
             },
             "required": true
           }
@@ -10917,8 +10847,7 @@
             "name": "ptyID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^pty"
+              "$ref": "#/components/schemas/Pty.ID"
             },
             "required": true
           }
@@ -10980,8 +10909,7 @@
             "name": "ptyID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^pty"
+              "$ref": "#/components/schemas/Pty.ID"
             },
             "required": true
           }
@@ -11057,8 +10985,7 @@
             "name": "ptyID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^pty"
+              "$ref": "#/components/schemas/Pty.ID"
             },
             "required": true
           },
@@ -11159,8 +11086,7 @@
             "name": "ptyID",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^pty"
+              "$ref": "#/components/schemas/Pty.ID"
             },
             "required": true
           },
@@ -11498,8 +11424,7 @@
             "name": "id",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^sh_"
+              "$ref": "#/components/schemas/Shell.ID"
             },
             "required": true
           },
@@ -11605,8 +11530,7 @@
             "name": "id",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^sh_"
+              "$ref": "#/components/schemas/Shell.ID"
             },
             "required": true
           },
@@ -11690,8 +11614,7 @@
             "name": "id",
             "in": "path",
             "schema": {
-              "type": "string",
-              "pattern": "^sh_"
+              "$ref": "#/components/schemas/Shell.ID"
             },
             "required": true
           },
@@ -11931,7 +11854,7 @@
             "name": "projectID",
             "in": "query",
             "schema": {
-              "type": "string"
+              "$ref": "#/components/schemas/Project.ID"
             },
             "required": true
           }
@@ -12167,7 +12090,7 @@
                 "type": "object",
                 "properties": {
                   "projectID": {
-                    "type": "string"
+                    "$ref": "#/components/schemas/Project.ID"
                   }
                 },
                 "required": ["projectID"],
@@ -13296,7 +13219,7 @@
                     "type": "string"
                   },
                   "providerID": {
-                    "type": "string"
+                    "$ref": "#/components/schemas/WebSearch.ID"
                   }
                 },
                 "required": ["query"],
@@ -13507,17 +13430,23 @@
   },
   "components": {
     "schemas": {
+      "AbsolutePath": {
+        "type": "string"
+      },
       "Agent.Color": {
+        "type": "string"
+      },
+      "Agent.ID": {
         "type": "string"
       },
       "Agent.Info": {
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "$ref": "#/components/schemas/Agent.ID"
           },
           "name": {
-            "type": "string"
+            "$ref": "#/components/schemas/Agent.Name"
           },
           "model": {
             "$ref": "#/components/schemas/Model.Ref"
@@ -13551,6 +13480,9 @@
         },
         "required": ["id", "name", "request", "mode", "hidden", "permissions"],
         "additionalProperties": false
+      },
+      "Agent.Name": {
+        "type": "string"
       },
       "AgentNotFoundErrorEncoded": {
         "type": "object",
@@ -13749,7 +13681,7 @@
             "enum": ["directory"]
           },
           "path": {
-            "type": "string"
+            "$ref": "#/components/schemas/AbsolutePath"
           }
         },
         "required": ["type", "path"],
@@ -13763,7 +13695,7 @@
             "enum": ["document"]
           },
           "path": {
-            "type": "string"
+            "$ref": "#/components/schemas/AbsolutePath"
           },
           "info": {
             "$ref": "#/components/schemas/Config.InfoEncoded"
@@ -14264,10 +14196,10 @@
         "type": "object",
         "properties": {
           "modelID": {
-            "type": "string"
+            "$ref": "#/components/schemas/Model.ID"
           },
           "family": {
-            "type": "string"
+            "$ref": "#/components/schemas/Model.Family"
           },
           "name": {
             "type": "string"
@@ -14299,7 +14231,7 @@
               "type": "object",
               "properties": {
                 "id": {
-                  "type": "string"
+                  "$ref": "#/components/schemas/Model.VariantID"
                 },
                 "settings": {
                   "$ref": "#/components/schemas/Config.Model.Settings"
@@ -14443,7 +14375,7 @@
         "type": "object",
         "properties": {
           "canonical": {
-            "type": "string"
+            "$ref": "#/components/schemas/Provider.ID"
           },
           "name": {
             "type": "string"
@@ -14565,7 +14497,7 @@
                 "description": "Reuse a randomly selected provider until it is rate limited, then switch to another available provider."
               },
               {
-                "type": "string"
+                "$ref": "#/components/schemas/WebSearch.ID"
               }
             ]
           }
@@ -14605,7 +14537,7 @@
             "enum": ["credential"]
           },
           "id": {
-            "type": "string"
+            "$ref": "#/components/schemas/Credential.ID"
           },
           "label": {
             "type": "string"
@@ -14673,10 +14605,10 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "$ref": "#/components/schemas/Credential.ID"
           },
           "integrationID": {
-            "type": "string"
+            "$ref": "#/components/schemas/Integration.ID"
           },
           "label": {
             "type": "string"
@@ -14695,10 +14627,10 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "$ref": "#/components/schemas/Credential.ID"
           },
           "integrationID": {
-            "type": "string"
+            "$ref": "#/components/schemas/Integration.ID"
           },
           "label": {
             "type": "string"
@@ -14721,7 +14653,7 @@
             "enum": ["external"]
           },
           "methodID": {
-            "type": "string"
+            "$ref": "#/components/schemas/Integration.MethodID"
           },
           "metadata": {
             "type": "object"
@@ -14729,6 +14661,9 @@
         },
         "required": ["type", "methodID"],
         "additionalProperties": false
+      },
+      "Credential.ID": {
+        "type": "string"
       },
       "Credential.Key": {
         "type": "object",
@@ -14758,7 +14693,7 @@
             "enum": ["oauth"]
           },
           "methodID": {
-            "type": "string"
+            "$ref": "#/components/schemas/Integration.MethodID"
           },
           "refresh": {
             "type": "string"
@@ -14789,6 +14724,9 @@
             "$ref": "#/components/schemas/Credential.External"
           }
         ]
+      },
+      "Event.SeqEncoded": {
+        "type": "string"
       },
       "FileDiff.Info": {
         "type": "object",
@@ -14836,7 +14774,7 @@
         "type": "object",
         "properties": {
           "path": {
-            "type": "string"
+            "$ref": "#/components/schemas/RelativePath"
           },
           "type": {
             "type": "string",
@@ -14850,7 +14788,7 @@
         "type": "object",
         "properties": {
           "path": {
-            "type": "string"
+            "$ref": "#/components/schemas/AbsolutePath"
           }
         },
         "required": ["path"],
@@ -14923,8 +14861,7 @@
           "id": {
             "anyOf": [
               {
-                "type": "string",
-                "pattern": "^frm_"
+                "$ref": "#/components/schemas/Form.ID"
               },
               {
                 "type": "null"
@@ -14948,8 +14885,7 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "pattern": "^frm_"
+            "$ref": "#/components/schemas/Form.ID"
           },
           "sessionID": {
             "type": "string"
@@ -15063,12 +14999,15 @@
           "$ref": "#/components/schemas/Form.Field"
         }
       },
+      "Form.ID": {
+        "type": "string",
+        "pattern": "^frm_"
+      },
       "Form.Info": {
         "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "pattern": "^frm_"
+            "$ref": "#/components/schemas/Form.ID"
           },
           "sessionID": {
             "type": "string"
@@ -15577,7 +15516,7 @@
         "type": "object",
         "properties": {
           "attemptID": {
-            "type": "string"
+            "$ref": "#/components/schemas/Integration.AttemptID"
           },
           "url": {
             "type": "string"
@@ -15621,6 +15560,9 @@
         },
         "required": ["attemptID", "url", "instructions", "mode", "time"],
         "additionalProperties": false
+      },
+      "Integration.AttemptID": {
+        "type": "string"
       },
       "Integration.AttemptStatus": {
         "anyOf": [
@@ -15793,7 +15735,7 @@
         "type": "object",
         "properties": {
           "attemptID": {
-            "type": "string"
+            "$ref": "#/components/schemas/Integration.AttemptID"
           },
           "time": {
             "type": "object",
@@ -16002,7 +15944,7 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "$ref": "#/components/schemas/Integration.MethodID"
           },
           "type": {
             "type": "string",
@@ -16042,7 +15984,7 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "$ref": "#/components/schemas/Integration.MethodID"
           },
           "type": {
             "type": "string",
@@ -16058,11 +16000,14 @@
         "required": ["id", "type", "label"],
         "additionalProperties": false
       },
+      "Integration.ID": {
+        "type": "string"
+      },
       "Integration.Info": {
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "$ref": "#/components/schemas/Integration.ID"
           },
           "name": {
             "type": "string"
@@ -16122,11 +16067,14 @@
           }
         ]
       },
+      "Integration.MethodID": {
+        "type": "string"
+      },
       "Integration.OAuthMethod": {
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "$ref": "#/components/schemas/Integration.MethodID"
           },
           "type": {
             "type": "string",
@@ -16251,19 +16199,19 @@
         "type": "object",
         "properties": {
           "directory": {
-            "type": "string"
+            "$ref": "#/components/schemas/AbsolutePath"
           },
           "project": {
             "type": "object",
             "properties": {
               "id": {
-                "type": "string"
+                "$ref": "#/components/schemas/Project.ID"
               },
               "directory": {
-                "type": "string"
+                "$ref": "#/components/schemas/AbsolutePath"
               },
               "canonical": {
-                "type": "string"
+                "$ref": "#/components/schemas/AbsolutePath"
               }
             },
             "required": ["id", "directory", "canonical"],
@@ -16277,7 +16225,7 @@
         "type": "object",
         "properties": {
           "directory": {
-            "type": "string"
+            "$ref": "#/components/schemas/AbsolutePath"
           }
         },
         "required": ["directory"],
@@ -16531,7 +16479,7 @@
             ]
           },
           "integrationID": {
-            "type": "string"
+            "$ref": "#/components/schemas/Integration.ID"
           }
         },
         "required": ["name", "status"],
@@ -16727,23 +16675,29 @@
         "required": ["input", "output", "cache"],
         "additionalProperties": false
       },
+      "Model.Family": {
+        "type": "string"
+      },
+      "Model.ID": {
+        "type": "string"
+      },
       "Model.Info": {
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "$ref": "#/components/schemas/Model.ID"
           },
           "modelID": {
-            "type": "string"
+            "$ref": "#/components/schemas/Model.ID"
           },
           "providerID": {
-            "type": "string"
+            "$ref": "#/components/schemas/Provider.ID"
           },
           "canonical": {
-            "type": "string"
+            "$ref": "#/components/schemas/Provider.ID"
           },
           "family": {
-            "type": "string"
+            "$ref": "#/components/schemas/Model.Family"
           },
           "name": {
             "type": "string"
@@ -16849,13 +16803,13 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "$ref": "#/components/schemas/Model.ID"
           },
           "providerID": {
-            "type": "string"
+            "$ref": "#/components/schemas/Provider.ID"
           },
           "variant": {
-            "type": "string"
+            "$ref": "#/components/schemas/Model.VariantID"
           }
         },
         "required": ["id", "providerID"],
@@ -16879,7 +16833,7 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "$ref": "#/components/schemas/Model.VariantID"
           },
           "settings": {
             "$ref": "#/components/schemas/Model.Settings"
@@ -16896,6 +16850,9 @@
         },
         "required": ["id"],
         "additionalProperties": false
+      },
+      "Model.VariantID": {
+        "type": "string"
       },
       "Money.USD": {
         "type": "number"
@@ -16930,6 +16887,10 @@
         "type": "string",
         "enum": ["allow", "deny", "ask"]
       },
+      "Permission.ID": {
+        "type": "string",
+        "pattern": "^per"
+      },
       "Permission.Reply": {
         "type": "string",
         "enum": ["once", "always", "reject"]
@@ -16938,12 +16899,10 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "pattern": "^per"
+            "$ref": "#/components/schemas/Permission.ID"
           },
           "sessionID": {
-            "type": "string",
-            "pattern": "^ses"
+            "$ref": "#/components/schemas/Session.ID"
           },
           "action": {
             "type": "string"
@@ -17033,14 +16992,17 @@
         "required": ["_tag", "requestID", "message"],
         "additionalProperties": false
       },
+      "PermissionSaved.ID": {
+        "type": "string"
+      },
       "PermissionSaved.Info": {
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "$ref": "#/components/schemas/PermissionSaved.ID"
           },
           "projectID": {
-            "type": "string"
+            "$ref": "#/components/schemas/Project.ID"
           },
           "action": {
             "type": "string"
@@ -17139,8 +17101,7 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "pattern": "^pty"
+            "$ref": "#/components/schemas/Pty.ID"
           },
           "title": {
             "type": "string"
@@ -17170,8 +17131,7 @@
             "minimum": 0
           },
           "sessionID": {
-            "type": "string",
-            "pattern": "^ses"
+            "$ref": "#/components/schemas/Session.ID"
           },
           "foregroundProcess": {
             "anyOf": [
@@ -17236,8 +17196,7 @@
         "type": "object",
         "properties": {
           "ptyID": {
-            "type": "string",
-            "pattern": "^pty"
+            "$ref": "#/components/schemas/Pty.ID"
           },
           "title": {
             "type": "string"
@@ -17368,11 +17327,14 @@
         },
         "additionalProperties": false
       },
+      "Plugin.ID": {
+        "type": "string"
+      },
       "Plugin.Info": {
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "$ref": "#/components/schemas/Plugin.ID"
           },
           "source": {
             "$ref": "#/components/schemas/Plugin.Source"
@@ -17488,10 +17450,10 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "$ref": "#/components/schemas/Project.ID"
           },
           "canonical": {
-            "type": "string"
+            "$ref": "#/components/schemas/AbsolutePath"
           },
           "vcs": {
             "$ref": "#/components/schemas/Project.Vcs"
@@ -17527,6 +17489,9 @@
           }
         },
         "additionalProperties": false
+      },
+      "Project.ID": {
+        "type": "string"
       },
       "Project.Icon": {
         "type": "object",
@@ -17674,10 +17639,10 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "$ref": "#/components/schemas/Skill.ID"
           },
           "name": {
-            "type": "string"
+            "$ref": "#/components/schemas/Skill.Name"
           },
           "text": {
             "type": "string"
@@ -17712,7 +17677,7 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "$ref": "#/components/schemas/Skill.ID"
           },
           "mention": {
             "$ref": "#/components/schemas/Prompt.Mention"
@@ -17747,17 +17712,20 @@
           }
         ]
       },
+      "Provider.ID": {
+        "type": "string"
+      },
       "Provider.Info": {
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "$ref": "#/components/schemas/Provider.ID"
           },
           "canonical": {
-            "type": "string"
+            "$ref": "#/components/schemas/Provider.ID"
           },
           "integrationID": {
-            "type": "string"
+            "$ref": "#/components/schemas/Integration.ID"
           },
           "name": {
             "type": "string"
@@ -17879,8 +17847,7 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "pattern": "^pty"
+            "$ref": "#/components/schemas/Pty.ID"
           },
           "title": {
             "type": "string"
@@ -17912,6 +17879,10 @@
         },
         "required": ["id", "title", "command", "args", "cwd", "status", "pid"],
         "additionalProperties": false
+      },
+      "Pty.ID": {
+        "type": "string",
+        "pattern": "^pty"
       },
       "PtyNotFoundErrorEncoded": {
         "type": "object",
@@ -17968,7 +17939,7 @@
             "type": "string"
           },
           "path": {
-            "type": "string"
+            "$ref": "#/components/schemas/AbsolutePath"
           },
           "description": {
             "type": "string"
@@ -17991,7 +17962,7 @@
             "enum": ["local"]
           },
           "path": {
-            "type": "string"
+            "$ref": "#/components/schemas/AbsolutePath"
           }
         },
         "required": ["type", "path"],
@@ -18006,6 +17977,9 @@
             "$ref": "#/components/schemas/Reference.GitSource"
           }
         ]
+      },
+      "RelativePath": {
+        "type": "string"
       },
       "Rpc.Input": {
         "type": "object",
@@ -18159,8 +18133,7 @@
                 "enum": ["before"]
               },
               "messageID": {
-                "type": "string",
-                "pattern": "^msg_"
+                "$ref": "#/components/schemas/Session.Message.ID"
               }
             },
             "required": ["type", "messageID"],
@@ -18174,8 +18147,7 @@
                 "enum": ["through"]
               },
               "messageID": {
-                "type": "string",
-                "pattern": "^msg_"
+                "$ref": "#/components/schemas/Session.Message.ID"
               }
             },
             "required": ["type", "messageID"],
@@ -18183,16 +18155,18 @@
           }
         ]
       },
+      "Session.ID": {
+        "type": "string",
+        "pattern": "^ses"
+      },
       "Session.Inbox.Compaction": {
         "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "pattern": "^msg_"
+            "$ref": "#/components/schemas/Session.Message.ID"
           },
           "sessionID": {
-            "type": "string",
-            "pattern": "^ses"
+            "$ref": "#/components/schemas/Session.ID"
           },
           "time": {
             "type": "object",
@@ -18247,12 +18221,10 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "pattern": "^msg_"
+            "$ref": "#/components/schemas/Session.Message.ID"
           },
           "sessionID": {
-            "type": "string",
-            "pattern": "^ses"
+            "$ref": "#/components/schemas/Session.ID"
           },
           "time": {
             "type": "object",
@@ -18282,10 +18254,10 @@
         "type": "object",
         "properties": {
           "projectID": {
-            "type": "string"
+            "$ref": "#/components/schemas/Project.ID"
           },
           "subpath": {
-            "type": "string"
+            "$ref": "#/components/schemas/RelativePath"
           },
           "location": {
             "$ref": "#/components/schemas/Location.PublicRef"
@@ -18298,12 +18270,10 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "pattern": "^msg_"
+            "$ref": "#/components/schemas/Session.Message.ID"
           },
           "sessionID": {
-            "type": "string",
-            "pattern": "^ses"
+            "$ref": "#/components/schemas/Session.ID"
           },
           "time": {
             "type": "object",
@@ -18349,12 +18319,10 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "pattern": "^msg_"
+            "$ref": "#/components/schemas/Session.Message.ID"
           },
           "sessionID": {
-            "type": "string",
-            "pattern": "^ses"
+            "$ref": "#/components/schemas/Session.ID"
           },
           "time": {
             "type": "object",
@@ -18415,19 +18383,16 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "pattern": "^ses"
+            "$ref": "#/components/schemas/Session.ID"
           },
           "parentID": {
-            "type": "string",
-            "pattern": "^ses"
+            "$ref": "#/components/schemas/Session.ID"
           },
           "fork": {
             "type": "object",
             "properties": {
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
+                "$ref": "#/components/schemas/Session.ID"
               },
               "boundary": {
                 "$ref": "#/components/schemas/Session.ForkBoundary"
@@ -18437,10 +18402,10 @@
             "additionalProperties": false
           },
           "projectID": {
-            "type": "string"
+            "$ref": "#/components/schemas/Project.ID"
           },
           "agent": {
-            "type": "string"
+            "$ref": "#/components/schemas/Agent.ID"
           },
           "model": {
             "$ref": "#/components/schemas/Model.Ref"
@@ -18481,7 +18446,7 @@
             "type": "string"
           },
           "subpath": {
-            "type": "string"
+            "$ref": "#/components/schemas/RelativePath"
           },
           "metadata": {
             "$ref": "#/components/schemas/Session.Metadata"
@@ -18503,8 +18468,7 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "pattern": "^msg_"
+            "$ref": "#/components/schemas/Session.Message.ID"
           },
           "metadata": {
             "type": "object"
@@ -18524,10 +18488,10 @@
             "enum": ["agent-switched"]
           },
           "agent": {
-            "type": "string"
+            "$ref": "#/components/schemas/Agent.ID"
           },
           "previous": {
-            "type": "string"
+            "$ref": "#/components/schemas/Agent.ID"
           }
         },
         "required": ["id", "time", "type", "agent"],
@@ -18537,8 +18501,7 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "pattern": "^msg_"
+            "$ref": "#/components/schemas/Session.Message.ID"
           },
           "metadata": {
             "type": "object"
@@ -18564,7 +18527,7 @@
             "enum": ["assistant"]
           },
           "agent": {
-            "type": "string"
+            "$ref": "#/components/schemas/Agent.ID"
           },
           "model": {
             "$ref": "#/components/schemas/Model.Ref"
@@ -18589,15 +18552,15 @@
             "type": "object",
             "properties": {
               "start": {
-                "type": "string"
+                "$ref": "#/components/schemas/Snapshot.ID"
               },
               "end": {
-                "type": "string"
+                "$ref": "#/components/schemas/Snapshot.ID"
               },
               "files": {
                 "type": "array",
                 "items": {
-                  "type": "string"
+                  "$ref": "#/components/schemas/RelativePath"
                 }
               }
             },
@@ -18772,8 +18735,7 @@
             "enum": ["compaction"]
           },
           "id": {
-            "type": "string",
-            "pattern": "^msg_"
+            "$ref": "#/components/schemas/Session.Message.ID"
           },
           "metadata": {
             "type": "object"
@@ -18829,8 +18791,7 @@
             "enum": ["compaction"]
           },
           "id": {
-            "type": "string",
-            "pattern": "^msg_"
+            "$ref": "#/components/schemas/Session.Message.ID"
           },
           "metadata": {
             "type": "object"
@@ -18874,8 +18835,7 @@
             "enum": ["compaction"]
           },
           "id": {
-            "type": "string",
-            "pattern": "^msg_"
+            "$ref": "#/components/schemas/Session.Message.ID"
           },
           "metadata": {
             "type": "object"
@@ -18908,12 +18868,15 @@
         "required": ["type", "id", "time", "status", "reason", "summary", "recent"],
         "additionalProperties": false
       },
+      "Session.Message.ID": {
+        "type": "string",
+        "pattern": "^msg_"
+      },
       "Session.Message.Idle": {
         "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "pattern": "^msg_"
+            "$ref": "#/components/schemas/Session.Message.ID"
           },
           "metadata": {
             "type": "object"
@@ -18984,8 +18947,7 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "pattern": "^msg_"
+            "$ref": "#/components/schemas/Session.Message.ID"
           },
           "metadata": {
             "type": "object"
@@ -19005,10 +18967,10 @@
             "enum": ["location-switched"]
           },
           "projectID": {
-            "type": "string"
+            "$ref": "#/components/schemas/Project.ID"
           },
           "subpath": {
-            "type": "string"
+            "$ref": "#/components/schemas/RelativePath"
           },
           "location": {
             "$ref": "#/components/schemas/Location.PublicRef"
@@ -19022,10 +18984,10 @@
                     "$ref": "#/components/schemas/Location.PublicRef"
                   },
                   "projectID": {
-                    "type": "string"
+                    "$ref": "#/components/schemas/Project.ID"
                   },
                   "subpath": {
-                    "type": "string"
+                    "$ref": "#/components/schemas/RelativePath"
                   }
                 },
                 "required": ["location"],
@@ -19044,8 +19006,7 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "pattern": "^msg_"
+            "$ref": "#/components/schemas/Session.Message.ID"
           },
           "metadata": {
             "type": "object"
@@ -19096,8 +19057,7 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "pattern": "^msg_"
+            "$ref": "#/components/schemas/Session.Message.ID"
           },
           "metadata": {
             "type": "object"
@@ -19120,8 +19080,7 @@
             "enum": ["shell"]
           },
           "shellID": {
-            "type": "string",
-            "pattern": "^sh_"
+            "$ref": "#/components/schemas/Shell.ID"
           },
           "command": {
             "type": "string"
@@ -19170,8 +19129,7 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "pattern": "^msg_"
+            "$ref": "#/components/schemas/Session.Message.ID"
           },
           "metadata": {
             "type": "object"
@@ -19191,10 +19149,10 @@
             "enum": ["skill"]
           },
           "skill": {
-            "type": "string"
+            "$ref": "#/components/schemas/Skill.ID"
           },
           "name": {
-            "type": "string"
+            "$ref": "#/components/schemas/Skill.Name"
           },
           "text": {
             "type": "string"
@@ -19207,8 +19165,7 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "pattern": "^msg_"
+            "$ref": "#/components/schemas/Session.Message.ID"
           },
           "metadata": {
             "type": "object"
@@ -19241,8 +19198,7 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "pattern": "^msg_"
+            "$ref": "#/components/schemas/Session.Message.ID"
           },
           "metadata": {
             "type": "object"
@@ -19367,8 +19323,7 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "pattern": "^msg_"
+            "$ref": "#/components/schemas/Session.Message.ID"
           },
           "metadata": {
             "type": "object"
@@ -19434,7 +19389,7 @@
         "type": "object",
         "properties": {
           "providerID": {
-            "type": "string"
+            "$ref": "#/components/schemas/Provider.ID"
           },
           "provider": {
             "type": "string"
@@ -19459,14 +19414,13 @@
         "type": "object",
         "properties": {
           "messageID": {
-            "type": "string",
-            "pattern": "^msg_"
+            "$ref": "#/components/schemas/Session.Message.ID"
           },
           "partID": {
             "type": "string"
           },
           "snapshot": {
-            "type": "string"
+            "$ref": "#/components/schemas/Snapshot.ID"
           },
           "files": {
             "type": "array",
@@ -19851,6 +19805,10 @@
         "required": ["info", "messages"],
         "additionalProperties": false
       },
+      "SessionsCursor": {
+        "type": "string",
+        "description": "Opaque pagination cursor returned as cursor.previous or cursor.next in the previous response."
+      },
       "SessionsResponse": {
         "type": "object",
         "properties": {
@@ -19866,7 +19824,7 @@
               "previous": {
                 "anyOf": [
                   {
-                    "type": "string"
+                    "$ref": "#/components/schemas/SessionsCursor"
                   },
                   {
                     "type": "null"
@@ -19876,7 +19834,7 @@
               "next": {
                 "anyOf": [
                   {
-                    "type": "string"
+                    "$ref": "#/components/schemas/SessionsCursor"
                   },
                   {
                     "type": "null"
@@ -19890,12 +19848,15 @@
         "required": ["data", "cursor"],
         "additionalProperties": false
       },
+      "Shell.ID": {
+        "type": "string",
+        "pattern": "^sh_"
+      },
       "Shell.Info": {
         "type": "object",
         "properties": {
           "id": {
-            "type": "string",
-            "pattern": "^sh_"
+            "$ref": "#/components/schemas/Shell.ID"
           },
           "status": {
             "type": "string",
@@ -19961,14 +19922,17 @@
         "required": ["_tag", "id", "message"],
         "additionalProperties": false
       },
+      "Skill.ID": {
+        "type": "string"
+      },
       "Skill.Info": {
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "$ref": "#/components/schemas/Skill.ID"
           },
           "name": {
-            "type": "string"
+            "$ref": "#/components/schemas/Skill.Name"
           },
           "description": {
             "type": "string"
@@ -19977,7 +19941,7 @@
             "type": "boolean"
           },
           "path": {
-            "type": "string"
+            "$ref": "#/components/schemas/AbsolutePath"
           },
           "content": {
             "type": "string"
@@ -19985,6 +19949,9 @@
         },
         "required": ["id", "name", "path", "content"],
         "additionalProperties": false
+      },
+      "Skill.Name": {
+        "type": "string"
       },
       "SkillNotFoundErrorEncoded": {
         "type": "object",
@@ -19994,7 +19961,7 @@
             "enum": ["SkillNotFoundError"]
           },
           "skill": {
-            "type": "string"
+            "$ref": "#/components/schemas/Skill.ID"
           },
           "message": {
             "type": "string"
@@ -20002,6 +19969,9 @@
         },
         "required": ["_tag", "skill", "message"],
         "additionalProperties": false
+      },
+      "Snapshot.ID": {
+        "type": "string"
       },
       "TokenUsage.Info": {
         "type": "object",
@@ -20216,11 +20186,14 @@
         "required": ["_tag", "providerID", "message"],
         "additionalProperties": false
       },
+      "WebSearch.ID": {
+        "type": "string"
+      },
       "WebSearch.Provider": {
         "type": "object",
         "properties": {
           "id": {
-            "type": "string"
+            "$ref": "#/components/schemas/WebSearch.ID"
           },
           "name": {
             "type": "string"
@@ -20233,7 +20206,7 @@
         "type": "object",
         "properties": {
           "providerID": {
-            "type": "string"
+            "$ref": "#/components/schemas/WebSearch.ID"
           },
           "results": {
             "type": "array",
@@ -20274,16 +20247,16 @@
         "type": "object",
         "properties": {
           "projectID": {
-            "type": "string"
+            "$ref": "#/components/schemas/Project.ID"
           },
           "from": {
-            "type": "string"
+            "$ref": "#/components/schemas/AbsolutePath"
           },
           "branch": {
             "type": "string"
           },
           "directory": {
-            "type": "string"
+            "$ref": "#/components/schemas/AbsolutePath"
           },
           "name": {
             "type": "string"
@@ -20296,7 +20269,7 @@
         "type": "object",
         "properties": {
           "directory": {
-            "type": "string"
+            "$ref": "#/components/schemas/AbsolutePath"
           },
           "strategy": {
             "type": "string"
@@ -20309,7 +20282,7 @@
         "type": "object",
         "properties": {
           "directory": {
-            "type": "string"
+            "$ref": "#/components/schemas/AbsolutePath"
           }
         },
         "required": ["directory"],
@@ -20325,10 +20298,10 @@
         "type": "object",
         "properties": {
           "projectID": {
-            "type": "string"
+            "$ref": "#/components/schemas/Project.ID"
           },
           "directory": {
-            "type": "string"
+            "$ref": "#/components/schemas/AbsolutePath"
           },
           "force": {
             "type": "boolean"

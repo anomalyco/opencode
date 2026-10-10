@@ -1,4 +1,3 @@
-import { brand } from "@opencode/schema/brand"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { SessionInbox } from "@opencode/schema/session-inbox"
 import { PromptInput } from "@opencode/schema/prompt-input"
@@ -99,7 +98,11 @@ const decodeSessionsCursor = Schema.decodeUnknownEffect(SessionsCursorJson)
 const invalidCursor = "Invalid cursor" as const
 
 export const SessionsCursor = Schema.String.pipe(
-  brand("SessionsCursor"),
+  Schema.brand("SessionsCursor"),
+  Schema.annotate({
+    identifier: "SessionsCursor",
+    description: "Opaque pagination cursor returned as cursor.previous or cursor.next in the previous response.",
+  }),
   statics((schema) => {
     // Read the default constructor without caching it on the schema, so `make` can be replaced.
     const make = SchemaParser.make(schema)
@@ -162,16 +165,12 @@ const BooleanFromString = Schema.Literals(["true", "false"]).pipe(
   }),
 )
 
-const SessionsQueryCursor = SessionsCursor.annotate({
-  description: "Opaque pagination cursor returned as cursor.previous or cursor.next in the previous response.",
-})
-
 export const SessionsQuery = Schema.Struct({
   ...SessionsQueryFields,
   directory: AbsolutePath.pipe(Schema.optional),
   project: Project.ID.pipe(Schema.optional),
   subpath: RelativePath.pipe(Schema.optional),
-  cursor: SessionsQueryCursor.pipe(Schema.optional),
+  cursor: SessionsCursor.pipe(Schema.optional),
 }).annotate({ identifier: "SessionsQuery" })
 
 export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI extends HttpApiMiddleware.AnyId, FormS>(
