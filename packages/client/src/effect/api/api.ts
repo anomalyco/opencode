@@ -1663,8 +1663,9 @@ export interface CredentialApi<E = never> {
   readonly remove: CredentialRemoveOperation<E>
 }
 
+export type ProjectListInput = { readonly archived?: boolean | undefined }
 export type ProjectListOutput = ReadonlyArray<Project.Info>
-export type ProjectListOperation<E = never> = () => Effect.Effect<ProjectListOutput, E>
+export type ProjectListOperation<E = never> = (input?: ProjectListInput) => Effect.Effect<ProjectListOutput, E>
 
 export type ProjectUpdateInput = {
   readonly projectID: Project.ID

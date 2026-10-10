@@ -57,6 +57,7 @@ const applicationServiceNodes = [
   httpClient,
   Job.node,
   Project.node,
+  Project.sweepNode,
   Worktree.node,
   Session.node,
   Instance.node,

@@ -7791,7 +7791,24 @@
       "get": {
         "tags": ["project"],
         "operationId": "project.list",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "archived",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": ["true", "false"]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false
+          }
+        ],
         "security": [],
         "responses": {
           "200": {
@@ -7838,7 +7855,7 @@
             }
           }
         },
-        "description": "List known projects.",
+        "description": "List known projects. Archived projects are excluded unless archived=true.",
         "summary": "List projects"
       }
     },
@@ -17505,6 +17522,10 @@
             "minimum": 0
           },
           "active": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "archived": {
             "type": "integer",
             "minimum": 0
           }
