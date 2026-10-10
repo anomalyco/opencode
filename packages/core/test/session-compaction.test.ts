@@ -33,6 +33,8 @@ import { asc, eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 
 let requests: LLMRequest[] = []
+/** Finish reasons for the next replies; each reply after these stops normally. */
+let finishes: Array<"length"> = []
 const model = LanguageModel.make({
   id: "summary-model",
   provider: "test",
@@ -51,11 +53,12 @@ const cost = [
 const client = Layer.mock(LLMClient.Service)({
   stream: (request: LLMRequest) => {
     requests.push(request)
+    const normalized = finishes.shift() ?? "stop"
     return Stream.make(
       LLMEvent.textDelta({ id: "summary", text: "## Objective\n- manual summary" }),
       LLMEvent.stepFinish({
         index: 0,
-        reason: { normalized: "stop" },
+        reason: { normalized },
         usage: {
           inputTokens: 15,
           outputTokens: 6,
@@ -66,7 +69,7 @@ const client = Layer.mock(LLMClient.Service)({
         },
       }),
       LLMEvent.finish({
-        reason: { normalized: "stop" },
+        reason: { normalized },
       }),
     )
   },
@@ -492,6 +495,108 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
         .pipe(Effect.orDie),
     ).toEqual([
       { type: Bus.versionedType(SessionEvent.Compaction.Started.type, 1) },
+      { type: Bus.versionedType(SessionEvent.UsageRecorded.type, 1) },
+      { type: Bus.versionedType(SessionEvent.Compaction.Ended.type, 1) },
+    ])
+  }),
+)
+
+it.effect("summary runs through the latest reply and falls back to the older part when it does not fit", () =>
+  Effect.gen(function* () {
+    const store = yield* SessionStore.Service
+    const compaction = yield* SessionCompaction.Service
+    const db = (yield* Database.Service).db
+    const user = (text: string) =>
+      SessionMessage.User.make({
+        id: SessionMessage.ID.create(),
+        type: "user",
+        text,
+        time: { created: DateTime.makeUnsafe(0) },
+      })
+    const assistant = (text: string, input = 0) =>
+      Schema.decodeUnknownSync(SessionMessage.Assistant)({
+        id: SessionMessage.ID.create(),
+        type: "assistant",
+        agent: Agent.defaultID,
+        model: { id: "summary-model", providerID: "test" },
+        content: [{ type: "text", text }],
+        tokens: { input, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        time: { created: 0, completed: 0 },
+      })
+    const compact = (id: string, input?: number, limit?: { context: number; input?: number; output: number }) =>
+      Effect.gen(function* () {
+        requests = []
+        const session = yield* insertSession(Session.ID.make(id))
+        const conversation = [
+          user("First question"),
+          assistant("First answer"),
+          user("Second question"),
+          assistant("Second answer", input),
+        ]
+        if (limit) {
+          const context = { ...loaded(session, conversation), model: { ...resolved, limit } }
+          expect(yield* compaction.compact({ reason: "auto", context })).toEqual({ status: "completed" })
+        } else expect(yield* compactManually(session, conversation)).toEqual({ status: "completed" })
+        // The newest exchange is kept verbatim beside the summary either way.
+        expect((yield* store.context(session.id))[0]).toMatchObject({
+          type: "compaction",
+          recent: "[User]: Second question\n\n[Assistant]: Second answer",
+        })
+        return requests.map((request) => JSON.stringify(request.messages))
+      })
+
+    // The newest exchange was already sent, so the summary request runs through its reply.
+    const extended = yield* compact("ses_reply_extended")
+    expect(extended).toHaveLength(1)
+    expect(extended[0]).toContain("Second answer")
+    expect(requests[0]?.generation).toEqual(GenerationOptions.make({ maxTokens: 20_000 }))
+
+    // A summary cut at the output limit is asked again over the older part, which leaves the most room.
+    finishes = ["length"]
+    const truncated = yield* compact("ses_reply_truncated")
+    expect(truncated).toHaveLength(2)
+    expect(truncated[0]).toContain("Second answer")
+    expect(truncated[1]).toContain("First answer")
+    expect(truncated[1]).not.toContain("Second question")
+
+    // Too little of the window is left after the latest reply, so only the older part is sent.
+    const crowded = yield* compact("ses_reply_crowded", 195_000)
+    expect(crowded).toHaveLength(1)
+    expect(crowded[0]).not.toContain("Second question")
+
+    // The window has room, but the conversation is over the model's input limit.
+    const overInput = yield* compact("ses_reply_over_input", 120_000, {
+      context: 400_000,
+      input: 100_000,
+      output: 32_000,
+    })
+    expect(overInput).toHaveLength(1)
+    expect(overInput[0]).not.toContain("Second question")
+
+    // An automatic compaction that falls back opens one message and bills both requests to it.
+    finishes = ["length"]
+    const automatic = yield* compact("ses_reply_auto", 185_000, { context: 200_000, output: 32_000 })
+    expect(automatic).toHaveLength(2)
+    expect(automatic[0]).toContain("Second answer")
+    expect(automatic[1]).not.toContain("Second question")
+    expect((yield* store.context(Session.ID.make("ses_reply_auto")))[0]).toMatchObject({
+      type: "compaction",
+      reason: "auto",
+      status: "completed",
+      cost: 0.0000466,
+      tokens: { input: 20, output: 8, reasoning: 4, cache: { read: 6, write: 4 } },
+    })
+    expect(
+      yield* db
+        .select({ type: EventTable.type })
+        .from(EventTable)
+        .where(eq(EventTable.aggregate_id, Session.ID.make("ses_reply_auto")))
+        .orderBy(asc(EventTable.seq))
+        .all()
+        .pipe(Effect.orDie),
+    ).toEqual([
+      { type: Bus.versionedType(SessionEvent.Compaction.Started.type, 1) },
+      { type: Bus.versionedType(SessionEvent.UsageRecorded.type, 1) },
       { type: Bus.versionedType(SessionEvent.UsageRecorded.type, 1) },
       { type: Bus.versionedType(SessionEvent.Compaction.Ended.type, 1) },
     ])
