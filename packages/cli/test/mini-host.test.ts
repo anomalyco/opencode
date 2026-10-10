@@ -156,19 +156,27 @@ describe("Mini CLI host", () => {
     expect(typeof input.startup.now()).toBe("number")
   })
 
+  test("reads the full TUI shared recent model preferences", async () => {
+    await using directory = await tmpdir()
+    const input = host({ stdin: stream(true), cleanup() {} }, directory.path)
+    await Bun.write(path.join(directory.path, "model.json"), JSON.stringify({ recent: [model] }))
+    expect(await input.preferences.recentModels()).toEqual([model])
+  })
+
   test("delegates model variant preferences", async () => {
     await using directory = await tmpdir()
     const input = host({ stdin: stream(true), cleanup() {} }, directory.path)
     const file = path.join(directory.path, "model.json")
 
     await input.preferences.saveVariant(model, "high")
-    expect(await input.preferences.resolveVariant(model)).toBe("high")
+    expect(await input.preferences.variant(model)).toBe("high")
 
+    // The explicit reset stays readable so it can outrank a configured variant.
     await input.preferences.saveVariant(model, "default")
-    expect(await input.preferences.resolveVariant(model)).toBeUndefined()
+    expect(await input.preferences.variant(model)).toBe("default")
 
     await Bun.write(file, "{")
     await input.preferences.saveVariant(model, "high")
-    expect(await input.preferences.resolveVariant(model)).toBe("high")
+    expect(await input.preferences.variant(model)).toBe("high")
   })
 })
