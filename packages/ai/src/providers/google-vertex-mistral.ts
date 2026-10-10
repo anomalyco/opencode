@@ -63,8 +63,7 @@ const configuredRoute = (input: Config) => {
     project: inputProject,
     ...rest
   } = input
-  // Mistral is served from regional endpoints only; the global endpoint returns 404.
-  const location = GoogleVertexShared.location(inputLocation, "us-central1")
+  const location = GoogleVertexShared.location(inputLocation)
   const project = GoogleVertexShared.project(inputProject)
   return route.with({
     ...rest,

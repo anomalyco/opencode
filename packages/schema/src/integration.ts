@@ -82,6 +82,7 @@ export interface Info extends Schema.Schema.Type<typeof Info> {}
 
 export const AttemptID = Schema.String.pipe(
   Schema.brand("Integration.AttemptID"),
+  Schema.annotate({ identifier: "Integration.AttemptID" }),
   statics((schema) => ({ create: () => schema.make("con_" + ascending()) })),
 )
 export type AttemptID = typeof AttemptID.Type

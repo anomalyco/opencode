@@ -256,17 +256,17 @@ const layer = () =>
         before?: (input: ShellCreateBefore) => Effect.Effect<void, E, R>,
       ) {
         const sessionID = input.metadata?.sessionID
-        const sessionEnvironment =
-          location.workspaceID === undefined && Schema.is(SessionSchema.ID)(sessionID)
-            ? yield* environments.get(sessionID)
-            : undefined
+        const baseEnv =
+          location.workspaceID !== undefined
+            ? undefined
+            : ((Schema.is(SessionSchema.ID)(sessionID) ? yield* environments.get(sessionID) : undefined) ?? process.env)
         const invocation: ShellCreateBefore = {
           command: input.command,
           cwd: input.cwd ?? location.directory,
           timeout: input.timeout ?? 0,
           shell: input.shell ?? (yield* shell.resolve({ priority: "config" })),
           env: {
-            ...(sessionEnvironment ?? process.env),
+            ...baseEnv,
             TERM: "xterm-256color",
             OPENCODE_TERMINAL: "1",
           },
