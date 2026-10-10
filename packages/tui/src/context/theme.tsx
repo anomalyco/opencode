@@ -178,7 +178,8 @@ const themeContext = createSimpleContext({
       if (palette) setSystemTheme(generateSystem(palette, store.mode))
     }
     if (palette) {
-      const mode = store.lock ?? terminalMode(palette) ?? store.mode
+      // The cached palette can predate a terminal light/dark switch, so the live answer wins when it exists.
+      const mode = store.lock ?? renderer.themeMode ?? terminalMode(palette) ?? store.mode
       if (store.mode !== mode) setStore("mode", mode)
       applyPalette()
     } else setSystemTheme(undefined)
