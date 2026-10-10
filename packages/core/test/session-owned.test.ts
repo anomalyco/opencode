@@ -1013,11 +1013,13 @@ describe("SessionInbox command contracts", () => {
         }),
       )
       yield* admission.steer(input)
-      expect(yield* admission.steer(input).pipe(Effect.flip)).toBeInstanceOf(SessionInbox.LifecycleConflict)
+      // Repeating the current delivery is an idempotent no-op that records no event.
+      yield* admission.steer(input)
       yield* admission.queue(input)
-      expect(yield* admission.queue(input).pipe(Effect.flip)).toBeInstanceOf(SessionInbox.LifecycleConflict)
+      yield* admission.queue(input)
       yield* admission.cancel(input)
       expect(yield* admission.cancel(input).pipe(Effect.flip)).toBeInstanceOf(SessionInbox.LifecycleConflict)
+      expect(yield* admission.steer(input).pipe(Effect.flip)).toBeInstanceOf(SessionInbox.LifecycleConflict)
       expect(yield* SessionInbox.list(fixture.db, sessionID)).toEqual([])
       expect(
         (yield* fixture.db

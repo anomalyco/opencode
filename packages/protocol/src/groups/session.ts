@@ -640,7 +640,8 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
         OpenApi.annotations({
           identifier: "session.inbox.update",
           summary: "Update inbox item",
-          description: "Change a pending inbox item's delivery mode. Steering wakes session execution.",
+          description:
+            "Change a pending inbox item's delivery mode. Requesting its current mode is a no-op. Steering wakes session execution, including for an item that is already steering.",
         }),
       ),
     )
@@ -752,16 +753,14 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           }),
         }).annotate({ identifier: "SessionInterruptResponse" }),
         error: SessionNotFoundError,
-      })
-        .middleware(sessionLocationMiddleware)
-        .annotateMerge(
-          OpenApi.annotations({
-            identifier: "session.interrupt",
-            summary: "Interrupt session execution",
-            description:
-              "Interrupt active execution owned by this OpenCode process. Returns interrupted=true when an active execution was interrupted and false for the idle no-op. When resume=true, execution resumes pending steering input and next-in-line control items (manual compaction, moves) while queued prompts remain parked.",
-          }),
-        ),
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "session.interrupt",
+          summary: "Interrupt session execution",
+          description:
+            "Interrupt active execution owned by this OpenCode process. Returns interrupted=true when an active execution was interrupted and false for the idle no-op. When resume=true, execution resumes pending steering input and next-in-line control items (manual compaction, moves) while queued prompts remain parked.",
+        }),
+      ),
     )
     .add(
       HttpApiEndpoint.post("session.background", "/api/session/:sessionID/background", {

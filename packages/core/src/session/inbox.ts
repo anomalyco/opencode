@@ -237,27 +237,25 @@ export const make = Effect.fn("SessionInbox.make")(function* () {
     ),
   )
 
-  const steer = Effect.fn("SessionInbox.steer")((input: PendingRef) =>
+  // Requesting the delivery a pending item already has is a no-op rather than a conflict, so
+  // re-steering a stranded steer succeeds and its caller can wake the Session.
+  const changeDelivery = (input: PendingRef, delivery: Delivery) =>
     publishMutation(
       input,
-      bus.publish(SessionEvent.InboxDeliveryChanged, {
-        sessionID: input.sessionID,
-        inboxID: input.id,
-        delivery: "steer",
+      Effect.gen(function* () {
+        const pending = yield* find(db, input.id)
+        if (pending?.sessionID === input.sessionID && pending.delivery === delivery) return
+        yield* bus.publish(SessionEvent.InboxDeliveryChanged, {
+          sessionID: input.sessionID,
+          inboxID: input.id,
+          delivery,
+        })
       }),
-    ),
-  )
+    )
 
-  const queue = Effect.fn("SessionInbox.queue")((input: PendingRef) =>
-    publishMutation(
-      input,
-      bus.publish(SessionEvent.InboxDeliveryChanged, {
-        sessionID: input.sessionID,
-        inboxID: input.id,
-        delivery: "queue",
-      }),
-    ),
-  )
+  const steer = Effect.fn("SessionInbox.steer")((input: PendingRef) => changeDelivery(input, "steer"))
+
+  const queue = Effect.fn("SessionInbox.queue")((input: PendingRef) => changeDelivery(input, "queue"))
 
   return {
     list: (sessionID: SessionSchema.ID) => list(db, sessionID),

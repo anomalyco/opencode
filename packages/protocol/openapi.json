@@ -3545,7 +3545,7 @@
             }
           }
         },
-        "description": "Change a pending inbox item's delivery mode. Steering wakes session execution.",
+        "description": "Change a pending inbox item's delivery mode. Requesting its current mode is a no-op. Steering wakes session execution, including for an item that is already steering.",
         "summary": "Update inbox item",
         "requestBody": {
           "content": {
@@ -4136,18 +4136,11 @@
             }
           },
           "404": {
-            "description": "SessionNotFoundError | LocationNotFoundError",
+            "description": "SessionNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
                 }
               }
             }

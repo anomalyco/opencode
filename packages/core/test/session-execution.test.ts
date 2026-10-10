@@ -20,7 +20,7 @@ import { SessionEvent } from "@opencode/core/session/event"
 import { SessionInbox } from "@opencode/core/session/inbox"
 import { SessionMessage } from "@opencode/core/session/message"
 import { SessionRunner } from "@opencode/core/session/runner/index"
-import { SessionInboxTable, SessionTable } from "@opencode/core/session/sql"
+import { SessionInboxTable, SessionMessageTable, SessionTable } from "@opencode/core/session/sql"
 import { SessionStore } from "@opencode/core/session/store"
 import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, LayerMap, Scope } from "effect"
 import { eq } from "drizzle-orm"
@@ -1122,6 +1122,92 @@ describe("SessionExecution interrupt continuation", () => {
         { force: true, promotable: "input" },
         { force: false, promotable: "steer" },
       ])
+    }),
+  )
+
+  it.effect("delivers pending steers after an interrupt with continue and keeps queued prompts", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+      const sessionID = Session.ID.make("ses_continue_delivers")
+      yield* seedSessions(database, [sessionID])
+      yield* seedInbox(database, sessionID, ["steer", "queue"])
+      const [steer, queued] = yield* SessionInbox.list(database.db, sessionID)
+
+      const draining = yield* Deferred.make<void>()
+      let drains = 0
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(scope, (input) =>
+        Effect.suspend(() => {
+          if (drains++ > 0) return SessionInbox.promote(database.db, bus, input.sessionID, input.promotable ?? "input")
+          return Deferred.succeed(draining, undefined).pipe(Effect.andThen(Effect.never))
+        }).pipe(Effect.asVoid),
+      )
+      const execution = Context.get(context, SessionExecution.Service)
+      yield* execution.resume(sessionID).pipe(Effect.forkScoped)
+      yield* Deferred.await(draining)
+
+      expect(yield* execution.interrupt(sessionID, { resume: true })).toBeTrue()
+      yield* execution.awaitIdle(sessionID)
+
+      expect(drains).toBe(2)
+      expect(yield* SessionInbox.list(database.db, sessionID)).toMatchObject([{ id: queued.id, delivery: "queue" }])
+      expect(
+        yield* database.db
+          .select({ id: SessionMessageTable.id })
+          .from(SessionMessageTable)
+          .where(eq(SessionMessageTable.type, "user"))
+          .all()
+          .pipe(Effect.orDie),
+      ).toEqual([{ id: steer.id }])
+    }),
+  )
+
+  it.effect("delivers a steer stranded by an interrupt once it is steered again", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+      const inbox = yield* SessionInbox.Service
+      const sessionID = Session.ID.make("ses_restranded_steer")
+      yield* seedSessions(database, [sessionID])
+      yield* seedInbox(database, sessionID, ["steer"])
+      const [steer] = yield* SessionInbox.list(database.db, sessionID)
+
+      const draining = yield* Deferred.make<void>()
+      let drains = 0
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(scope, (input) =>
+        Effect.suspend(() => {
+          if (drains++ > 0) return SessionInbox.promote(database.db, bus, input.sessionID, input.promotable ?? "input")
+          return Deferred.succeed(draining, undefined).pipe(Effect.andThen(Effect.never))
+        }).pipe(Effect.asVoid),
+      )
+      const execution = Context.get(context, SessionExecution.Service)
+      yield* execution.resume(sessionID).pipe(Effect.forkScoped)
+      yield* Deferred.await(draining)
+
+      // Without continue, the interrupt claims the wake and the steer stays pending.
+      yield* execution.interrupt(sessionID)
+      yield* execution.awaitIdle(sessionID)
+      expect(yield* SessionInbox.list(database.db, sessionID)).toMatchObject([{ id: steer.id, delivery: "steer" }])
+
+      // Session.steerInbox: steering an already-steering item succeeds, then wakes execution.
+      yield* inbox.steer({ id: steer.id, sessionID })
+      yield* execution.wake(sessionID)
+      yield* execution.awaitIdle(sessionID)
+
+      expect(drains).toBe(2)
+      expect(yield* SessionInbox.list(database.db, sessionID)).toEqual([])
+      expect(
+        yield* database.db
+          .select({ id: SessionMessageTable.id })
+          .from(SessionMessageTable)
+          .where(eq(SessionMessageTable.type, "user"))
+          .all()
+          .pipe(Effect.orDie),
+      ).toEqual([{ id: steer.id }])
     }),
   )
 

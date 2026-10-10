@@ -238,7 +238,10 @@ export const make = Effect.gen(function* () {
         const record = publisher.record()
         if (record.finish || record.failure) {
           const startSnapshot = yield* Fiber.join(pendingStartSnapshot)
-          const snapshot = yield* snapshots.capture()
+          // An interrupted step that ran no local tools has no file changes of its own, so it ends at
+          // its start snapshot rather than holding the interrupt for another worktree capture.
+          const unchanged = interrupted && toolRuns.length === 0
+          const snapshot = unchanged ? startSnapshot : yield* snapshots.capture()
           const files =
             startSnapshot && snapshot
               ? startSnapshot === snapshot

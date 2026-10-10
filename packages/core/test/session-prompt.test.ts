@@ -1203,11 +1203,12 @@ describe("Session.inbox", () => {
       expect(wakeCalls).toEqual([])
       expect(yield* eventCount(Bus.versionedType(SessionEvent.InboxDeliveryChanged.type, 1))).toBe(2)
 
-      expect(yield* session.steerInbox({ sessionID, inboxID: alreadySteered.id }).pipe(Effect.flip)).toMatchObject({
-        _tag: "Session.InboxConflictError",
-        sessionID,
-        inboxID: alreadySteered.id,
-      })
+      // Re-steering an item that is already steering records nothing but still wakes execution.
+      yield* session.steerInbox({ sessionID, inboxID: alreadySteered.id })
+      expect(wakeCalls).toEqual([sessionID])
+      expect(yield* eventCount(Bus.versionedType(SessionEvent.InboxDeliveryChanged.type, 1))).toBe(2)
+
+      wakeCalls.length = 0
       yield* session.cancelInbox({ sessionID, inboxID: alreadySteered.id })
       expect(wakeCalls).toEqual([])
       expect(yield* eventCount(Bus.versionedType(SessionEvent.InboxDeliveryChanged.type, 1))).toBe(2)
