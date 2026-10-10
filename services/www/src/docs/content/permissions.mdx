@@ -188,7 +188,10 @@ Enable the experimental portable shell scanner with:
 
 The portable scanner replaces the default tree-sitter scanner; tree-sitter is
 not a fallback or second opinion. A command the portable scanner cannot analyze
-returns a scanner error, not a permission denial.
+is not run. It returns a scanner error, not a permission denial, that names the
+reason and how to rewrite the command. Commands inside `$(...)` or backticks,
+including within double quotes, are checked as separate shell resources, so
+`"$(cat notes.md)"` checks both the outer command and `cat notes.md`.
 
 The flag changes only parser selection. Existing permission rules, saved
 approval patterns, and best-effort directory inference still apply. There is no
