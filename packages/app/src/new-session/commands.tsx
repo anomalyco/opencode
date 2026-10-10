@@ -2,9 +2,11 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import { useSettingsCommand } from "@/settings/command"
 import { useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
+import type { DraftMcpControls } from "./mcp"
 
 export function useNewSessionCommands(input: {
   restoreFocus: () => void
+  mcp: Pick<DraftMcpControls, "directory" | "controls">
   project: {
     empty: () => boolean
     open: () => void
@@ -45,7 +47,7 @@ export function useNewSessionCommands(input: {
       slash: "mcp",
       onSelect: async () => {
         const { DialogSelectMcp } = await import("@/providers/connect/mcp-dialog")
-        void dialog.show(() => <DialogSelectMcp />)
+        void dialog.show(() => <DialogSelectMcp directory={input.mcp.directory()} controls={input.mcp.controls} />)
       },
     },
     {
