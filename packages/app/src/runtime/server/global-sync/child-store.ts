@@ -152,6 +152,15 @@ export function createChildStoreManager(input: {
     const stores = Object.keys(children)
 
     if (stores.length === 0) return
+    const now = Date.now()
+
+    // A store is only evictable when the count is over the cap or it has been idle
+    // past the TTL; otherwise the scan below cannot produce a candidate.
+    if (
+      stores.length <= MAX_DIR_STORES &&
+      !stores.some((directory) => now - (lifecycle.get(directory)?.lastAccessAt ?? 0) >= DIR_IDLE_TTL_MS)
+    )
+      return
 
     const list = pickDirectoriesToEvict({
       stores,
@@ -159,7 +168,7 @@ export function createChildStoreManager(input: {
       pins: new Set(stores.filter(pinned)),
       max: MAX_DIR_STORES,
       ttl: DIR_IDLE_TTL_MS,
-      now: Date.now(),
+      now,
     }).filter((directory) => directory !== skip)
 
     if (list.length === 0) return
