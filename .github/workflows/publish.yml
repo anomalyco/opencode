@@ -5,7 +5,7 @@ on:
   push:
     branches:
       - ci
-      - dev
+      - v1
       - beta
       - fix/npm-native-binary-install
       - snapshot-*
@@ -30,6 +30,10 @@ permissions:
   id-token: write
   contents: write
   packages: write
+
+env:
+  # V1 previews keep the dev channel so existing opencode-ai@dev installs keep upgrading and their data path.
+  OPENCODE_CHANNEL: ${{ (github.ref_name == 'v1' && !inputs.bump && !inputs.version && 'dev') || '' }}
 
 jobs:
   version:

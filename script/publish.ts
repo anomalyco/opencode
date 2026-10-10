@@ -59,10 +59,10 @@ if (Script.release && !Script.preview) {
   await $`git push origin refs/tags/${tag} --force-with-lease --no-verify`
   await new Promise((resolve) => setTimeout(resolve, 5_000))
   await $`git fetch origin`
-  await $`git checkout -B dev origin/dev`
+  await $`git checkout -B v1 origin/v1`
   await prepareReleaseFiles()
   await $`git commit -am "sync release versions for ${tag}"`
-  await $`git push origin HEAD:dev --no-verify`
+  await $`git push origin HEAD:v1 --no-verify`
 }
 
 if (Script.release) {

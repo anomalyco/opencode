@@ -2,9 +2,9 @@ name: typecheck
 
 on:
   push:
-    branches: [dev]
+    branches: [v1]
   pull_request:
-    branches: [dev]
+    branches: [v1]
   workflow_dispatch:
 
 jobs:

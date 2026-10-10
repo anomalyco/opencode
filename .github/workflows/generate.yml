@@ -3,7 +3,7 @@ name: generate
 on:
   push:
     branches:
-      - dev
+      - v1
 
 jobs:
   generate:

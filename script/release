@@ -2,4 +2,4 @@
 
 BUMP_TYPE=${1:-patch}
 
-gh workflow run publish.yml -f bump="$BUMP_TYPE"
+gh workflow run publish.yml --ref v1 -f bump="$BUMP_TYPE"
