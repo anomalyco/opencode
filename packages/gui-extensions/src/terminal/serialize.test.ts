@@ -10,6 +10,7 @@ afterEach(() => {
   for (const term of terminals) {
     term.dispose()
   }
+
   terminals.length = 0
   document.body.innerHTML = ""
 })
@@ -49,9 +50,11 @@ describe("SerializeAddon", () => {
     const restored = createTerminal(20, 5)
     await writeAndWait(restored.term, serialized)
     expect(restored.term.getScrollbackLength()).toBe(3)
+
     for (let row = 0; row < 8; row++) {
       expect(restored.term.buffer.normal.getLine(row)?.translateToString(true)).toBe(`line ${22 + row}`)
     }
+
     expect([restored.term.buffer.normal.cursorX, restored.term.buffer.normal.cursorY]).toEqual([2, 2])
   })
 
@@ -109,5 +112,6 @@ async function roundTrip(
   const serialized = source.addon.serialize(options)
   const restored = createTerminal(source.term.cols, source.term.rows).term
   await writeAndWait(restored, serialized)
+
   return { serialized, restored }
 }

@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect } from "effect"
-import { HttpServer, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
+import { HttpServer, HttpServerRequest, HttpServerResponse } from "effect/http"
 import { it } from "../../core/test/lib/effect"
 import { ServerProcess } from "../src/process"
 
@@ -236,3 +236,26 @@ async function readUntil(reader: ReadableStreamDefaultReader<Uint8Array>, expect
     if (new TextDecoder().decode(next.value).includes(expected)) return
   }
 }
+
+it.live("server info lists remote URLs alongside local addresses while they are available", () =>
+  Effect.gen(function* () {
+    const remote = { urls: ["https://example.opentunnel.xyz"] as ReadonlyArray<string> }
+    const server = yield* ServerProcess.start<never, never>(
+      { hostname: "127.0.0.1", port: 0, password: "secret", database: { path: ":memory:" } },
+      undefined,
+      undefined,
+      () => remote.urls,
+    )
+    const base = HttpServer.formatAddress(server.address)
+    const info = () =>
+      Effect.promise(() =>
+        fetch(new URL("/api/info", base), { headers: { authorization: `Basic ${btoa("opencode:secret")}` } }).then(
+          (response) => response.json() as Promise<{ urls: ReadonlyArray<string> }>,
+        ),
+      )
+
+    expect((yield* info()).urls).toEqual([base, "https://example.opentunnel.xyz"])
+    remote.urls = []
+    expect((yield* info()).urls).toEqual([base])
+  }),
+)

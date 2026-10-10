@@ -6,6 +6,7 @@ import { Effect, FileSystem, Option, Schema } from "effect"
 import { randomBytes } from "crypto"
 import path from "path"
 import { selfCommand } from "../util/process"
+import { RemoteTunnel } from "./remote-tunnel"
 
 // The CLI's service configuration file, plus the Service.EnsureOptions binding that
 // points the client package's service operations at this CLI: which
@@ -13,6 +14,9 @@ import { selfCommand } from "../util/process"
 
 export const Info = Schema.Struct({
   disabled: Schema.optional(Schema.Boolean),
+  // Present when remote access is on. The route is generated, never user-set: the secret subdomain the service is
+  // served on.
+  remote: Schema.optional(Schema.Struct({ route: Schema.String })),
   hostname: Schema.optional(Schema.String),
   port: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1), Schema.isLessThanOrEqualTo(65_535))),
   password: Schema.optional(Schema.String),
@@ -21,10 +25,14 @@ export const Info = Schema.Struct({
 })
 export type Info = typeof Info.Type
 
-const keys = ["disabled", "hostname", "port", "password", "cors", "env"] as const
+const keys = ["disabled", "remote", "hostname", "port", "password", "cors", "env"] as const
 type Key = (typeof keys)[number]
 
 const decodeInfo = Schema.decodeUnknownEffect(Schema.fromJsonString(Info))
+// Earlier builds stored remote access as a boolean.
+const decodeLegacy = Schema.decodeUnknownOption(
+  Schema.fromJsonString(Schema.Struct({ ...Info.fields, remote: Schema.Boolean })),
+)
 const decodeRegistration = Schema.decodeUnknownEffect(Schema.fromJsonString(Service.Info))
 
 export function filename(channel = OPENCODE_CHANNEL) {
@@ -81,6 +89,7 @@ export const migrateConfig = Effect.fnUntraced(function* (legacy: string, file: 
 function configKey(key: string): Key {
   if (
     key === "disabled" ||
+    key === "remote" ||
     key === "hostname" ||
     key === "port" ||
     key === "password" ||
@@ -127,11 +136,23 @@ export const options = Effect.fnUntraced(function* (input: { readonly checkVersi
 export const read = Effect.fn("cli.service-config.read")(function* () {
   const { fs, configFile, legacyConfigFile } = yield* paths
   if (legacyConfigFile) yield* migrateConfig(legacyConfigFile, configFile)
-  return yield* fs.readFileString(configFile).pipe(
-    Effect.flatMap(decodeInfo),
-    Effect.orElseSucceed(() => ({}) as Info),
-  )
+  const text = yield* fs.readFileString(configFile).pipe(Effect.option)
+  if (Option.isNone(text)) return {} as Info
+  const info = yield* decodeInfo(text.value).pipe(Effect.option)
+  if (Option.isSome(info)) return info.value
+  const legacy = decodeLegacy(text.value)
+  if (Option.isNone(legacy)) return {} as Info
+  // Repair the file in place so every reader sees the same route.
+  const { remote: enabled, ...rest } = legacy.value
+  const repaired: Info = enabled ? { ...rest, remote: { route: route() } } : rest
+  yield* write(repaired)
+  return repaired
 })
+
+// 64 random bits as 16 hex characters, a valid DNS label.
+function route() {
+  return randomBytes(8).toString("hex")
+}
 
 const write = Effect.fn("cli.service-config.write")(function* (value: Info) {
   const { fs, configFile } = yield* paths
@@ -152,16 +173,29 @@ export const password = Effect.fn("cli.service-config.password")(function* (valu
   return next
 })
 
+// Turns remote access on and returns its route, created once and kept so the remote URL survives restarts.
+export const remote = Effect.fn("cli.service-config.remote")(function* () {
+  const existing = yield* read()
+  if (existing.remote) return existing.remote.route
+  const next = route()
+  yield* write({ ...existing, remote: { route: next } })
+  return next
+})
+
 export const get = Effect.fn("cli.service-config.get")(function* (key?: string, name?: string) {
   if (key === undefined) {
     const { password: _password, ...safe } = yield* read()
-    return JSON.stringify(safe, null, 2)
+    // The route is as sensitive as the password: it is the unguessable half of the remote address.
+    return JSON.stringify(safe.remote === undefined ? safe : { ...safe, remote: {} }, null, 2)
   }
   const selected = configKey(key)
   if (selected !== "env" && name !== undefined) throw new Error(`Usage: opencode service get ${selected}`)
   switch (selected) {
     case "disabled": {
       return String((yield* read()).disabled ?? false)
+    }
+    case "remote": {
+      return String((yield* read()).remote !== undefined)
     }
     case "hostname": {
       return (yield* read()).hostname ?? ""
@@ -193,6 +227,20 @@ export const set = Effect.fn("cli.service-config.set")(function* (key: string, v
       if (value !== "true" && value !== "false") throw new Error("Disabled must be true or false")
       if (value === "true") yield* Service.stop(yield* options())
       yield* write({ ...(yield* read()), disabled: value === "true" })
+      return
+    }
+    case "remote": {
+      if (value !== "true" && value !== "false") throw new Error("Remote must be true or false")
+      // A tunnel that cannot be created leaves remote access off instead of a service that keeps retrying.
+      if (value === "true") yield* RemoteTunnel.ensure()
+      yield* Service.stop(yield* options())
+      if (value === "true") {
+        yield* remote()
+        return
+      }
+      // Disabling forgets the address, so enabling again issues a new unguessable one.
+      const { remote: _remote, ...next } = yield* read()
+      yield* write(next)
       return
     }
     case "hostname": {
@@ -241,6 +289,12 @@ export const unset = Effect.fn("cli.service-config.unset")(function* (key: strin
   switch (selected) {
     case "disabled": {
       const { disabled: _disabled, ...next } = yield* read()
+      yield* write(next)
+      return
+    }
+    case "remote": {
+      yield* Service.stop(yield* options())
+      const { remote: _remote, ...next } = yield* read()
       yield* write(next)
       return
     }

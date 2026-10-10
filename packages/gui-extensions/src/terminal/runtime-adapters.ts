@@ -25,7 +25,10 @@ export const setOptionIfSupported = (value: unknown, key: string, next: unknown)
 export const getHoveredLinkText = (value: unknown) => {
   if (!isRecord(value)) return
   const link = value.currentHoveredLink
+
   if (!isRecord(link)) return
+
   if (typeof link.text !== "string") return
+
   return link.text
 }

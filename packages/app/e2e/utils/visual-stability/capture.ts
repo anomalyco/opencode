@@ -13,6 +13,7 @@ export async function startVisualCapture(page: Page, startedAtEpoch: number) {
   if (process.env.OPENCODE_STABILITY_CAPTURE !== "1") return
   const session = await page.context().newCDPSession(page)
   await session.send("Page.enable")
+
   const recording: VisualCapture = {
     session,
     frames: [],
@@ -20,6 +21,7 @@ export async function startVisualCapture(page: Page, startedAtEpoch: number) {
     running: true,
     capture: Promise.resolve(),
   }
+
   recording.capture = (async () => {
     try {
       while (recording.running && recording.frames.length < 900) {
@@ -29,6 +31,7 @@ export async function startVisualCapture(page: Page, startedAtEpoch: number) {
           captureBeyondViewport: false,
           optimizeForSpeed: true,
         })
+
         recording.frames.push({ at: Date.now() - recording.startedAtEpoch, data: frame.data })
         await new Promise((resolve) => setTimeout(resolve, 50))
       }
@@ -36,16 +39,19 @@ export async function startVisualCapture(page: Page, startedAtEpoch: number) {
       recording.running = false
     }
   })()
+
   return recording
 }
 
 export async function stopVisualCapture(recording: VisualCapture | undefined) {
   if (!recording) return []
   recording.running = false
+
   try {
     await recording.capture
   } finally {
     await recording.session.detach().catch(() => undefined)
   }
+
   return recording.frames
 }

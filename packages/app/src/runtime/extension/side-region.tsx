@@ -146,7 +146,12 @@ export function SideRegion(props: {
                           props.region.select(value)
                       }}
                     >
-                      <div class="session-review-v2-tabs-bar sticky top-0 shrink-0 flex items-center">
+                      {/* Tabs and actions share the review toggle's row: the session header's 48px, or the 51px
+                          above a side dock's divider. */}
+                      <div
+                        class="session-review-v2-tabs-bar sticky top-0 shrink-0 flex items-center"
+                        style={{ "--tabs-bar-height": props.stacked ? "51px" : "48px" }}
+                      >
                         <Tabs.List
                           ref={(el: HTMLDivElement) => {
                             tabList = el
@@ -189,8 +194,7 @@ export function SideRegion(props: {
                         </Tabs.List>
                         <div
                           data-slot="session-side-panel-actions"
-                          class="session-review-v2-open-in-app-slot self-start shrink-0 flex items-center gap-2 pe-3"
-                          classList={{ "h-[51px]": props.stacked, "h-12": !props.stacked }}
+                          class="session-review-v2-open-in-app-slot h-[var(--tabs-bar-height)] shrink-0 flex items-center gap-2 pe-3"
                           onPointerDown={(event) => event.stopPropagation()}
                           onClick={(event) => event.stopPropagation()}
                         >

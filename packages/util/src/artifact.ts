@@ -10,7 +10,16 @@ export type ArtifactKind =
   | "mermaid"
   | "table"
   | "font"
+  | "document"
+  | "spreadsheet"
+  | "presentation"
   | "text"
+
+const officeKinds = new Map<string, ArtifactKind>([
+  ["application/vnd.openxmlformats-officedocument.wordprocessingml.document", "document"],
+  ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "spreadsheet"],
+  ["application/vnd.openxmlformats-officedocument.presentationml.presentation", "presentation"],
+])
 
 const mimes = new Map([
   ["png", "image/png"],
@@ -54,6 +63,9 @@ const mimes = new Map([
   ["otf", "font/otf"],
   ["woff", "font/woff"],
   ["woff2", "font/woff2"],
+  ["docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
+  ["xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"],
+  ["pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"],
 ])
 
 function artifactExtension(path: string) {
@@ -79,5 +91,5 @@ export function artifactKind(path: string): ArtifactKind {
   if (mime.startsWith("image/")) return "image"
   if (mime.startsWith("audio/")) return "audio"
   if (mime.startsWith("font/")) return "font"
-  return "video"
+  return officeKinds.get(mime) ?? "video"
 }

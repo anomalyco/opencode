@@ -28,6 +28,7 @@ import { MobileDrawer, MobileDrawerContent, MobileDrawerLabel, MobileDrawerTrigg
 import { sessionTabTitle } from "./tab-title"
 import { SessionTabAvatar } from "@/shell/layout/session-tab-avatar"
 import { SessionProgressIndicatorV2 } from "@opencode/session-ui/v2/session-progress-indicator-v2"
+import { RecentlyClosedTabsMenu } from "./recently-closed-tabs-menu"
 import { useSettingsDialog } from "@/settings/command"
 import { rootSession } from "@/shell/routes/session"
 import { TitlebarItem } from "@opencode/gui-extensions/sdk"
@@ -48,6 +49,10 @@ const windowsControlsBaseWidth = 138 // 3 native Windows caption buttons at 46px
 const macTrafficLightsBaseWidth = 68
 
 const macTrafficLightsTopClearance = 28
+
+// iOS blurs page content just below the status bar in Home Screen web apps, so with a top safe area the phone
+// titlebar row stays 16px clear of it, as ChatGPT's phone header does. Without one, 8px matches the content gap below.
+const mobileTopClearance = "max(8px, min(16px, env(safe-area-inset-top, 0px) * 1000))"
 
 export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
   const platform = usePlatform()
@@ -152,15 +157,13 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
             ? bottom()
               ? "calc(28px + max(8px, var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))))"
               : mobileTop()
-                ? "calc(28px + 16px + env(safe-area-inset-top, 0px))"
+                ? `calc(28px + ${mobileTopClearance} + env(safe-area-inset-top, 0px))`
                 : "calc(28px + max(8px, env(safe-area-inset-top, 0px)))"
             : undefined,
-        // iOS blurs page content just below the status bar in Home Screen web apps, so keep the phone titlebar row
-        // 16px clear of the safe area, as ChatGPT's phone header does.
         "padding-top": bottom()
           ? "0px"
           : mobileTop()
-            ? "calc(16px + env(safe-area-inset-top, 0px))"
+            ? `calc(${mobileTopClearance} + env(safe-area-inset-top, 0px))`
             : "env(safe-area-inset-top, 0px)",
         "padding-bottom": bottom() ? "var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))" : "0px",
         "min-height": minHeight(),
@@ -449,7 +452,10 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                 category: language.t("command.category.view"),
                 keybind: windows() ? "alt+home" : "mod+b",
                 hidden: true,
-                onSelect: toggleHome,
+                onSelect: () => {
+                  if (layout.route().type !== "home") layout.home.searchFocus.request()
+                  toggleHome()
+                },
               },
             ])
 
@@ -690,25 +696,15 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                           }}
                           onReorder={(keys) => tabsStoreActions.reorder(keys)}
                         />
-                        <Tooltip
-                          placement="bottom"
-                          value={
+                        <RecentlyClosedTabsMenu
+                          onNewTab={openNewTab}
+                          tooltip={
                             <>
                               {language.t("command.session.new")}
                               <Keybind keys={command.keybindParts("tab.new")} variant="neutral" />
                             </>
                           }
-                        >
-                          <IconButton
-                            type="button"
-                            variant="ghost-muted"
-                            size="large"
-                            class="shrink-0"
-                            icon={<Icon name="plus" />}
-                            onClick={openNewTab}
-                            aria-label={language.t("command.session.new")}
-                          />
-                        </Tooltip>
+                        />
                       </>
                     }
                   >
@@ -730,23 +726,11 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                               <ChannelIndicator sidebar />
                             </Show>
                             {homeButton(true)}
-                            <button
-                              type="button"
-                              data-titlebar-tab-action
-                              data-action="vertical-tabs-new-session"
-                              class="group flex h-7 w-full shrink-0 items-center gap-1.5 rounded-[6px] ps-1.5 pe-2 text-[13px] leading-4 text-v2-text-text-faint hover:text-v2-text-text-base"
-                              onClick={openNewTab}
-                              aria-label={language.t("command.session.new")}
-                            >
-                              <Icon name="edit" class="shrink-0" />
-                              <span class="min-w-0 truncate">{language.t("command.session.new")}</span>
-                              <span
-                                class="ms-auto hidden min-w-0 truncate text-v2-text-text-faint group-hover:block group-focus-visible:block"
-                                aria-hidden="true"
-                              >
-                                <bdi dir="ltr">{command.keybind("tab.new")}</bdi>
-                              </span>
-                            </button>
+                            <RecentlyClosedTabsMenu
+                              vertical
+                              onNewTab={openNewTab}
+                              keybind={command.keybind("tab.new")}
+                            />
                             <div class="h-4 w-full shrink-0" aria-hidden="true" />
                             <div class="flex min-h-0 flex-1 flex-col gap-1">
                               <TitlebarTabStrip

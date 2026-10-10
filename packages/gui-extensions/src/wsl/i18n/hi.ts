@@ -52,8 +52,5 @@ export default {
   "error.healthTimeout": "{{distro}} के Sidecar की स्वास्थ्य जाँच {{timeout}}ms के बाद समय-सीमा पार कर गई",
   "error.commandTimeout": "{{command}} {{args}} ने {{timeout}}ms के बाद समय-सीमा पार कर दी",
   "error.failedPort": "पोर्ट प्राप्त नहीं किया जा सका",
-  "server.default": "डिफ़ॉल्ट",
-  "menu.default": "डिफाल्ट के रूप में सेट",
-  "menu.defaultRemove": "डिफ़ॉल्ट हटाएँ",
   "menu.remove": "निकालना",
 }

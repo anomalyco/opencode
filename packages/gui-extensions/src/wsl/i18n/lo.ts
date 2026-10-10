@@ -49,8 +49,5 @@ export default {
   "error.healthTimeout": "Sidecar ສໍາລັບການກວດສອບສຸຂະພາບ {{distro}} ໝົດເວລາຫຼັງຈາກ {{timeout}}ms",
   "error.commandTimeout": "{{command}} {{args}} ໝົດເວລາຫຼັງຈາກ {{timeout}}ms",
   "error.failedPort": "ລົ້ມເຫລວໃນການເອົາພອດ",
-  "server.default": "ຄ່າເລີ່ມຕົ້ນ",
-  "menu.default": "ຕັ້ງເປັນຄ່າເລີ່ມຕົ້ນ",
-  "menu.defaultRemove": "ເອົາຄ່າເລີ່ມຕົ້ນ",
   "menu.remove": "ລຶບ",
 }

@@ -1,6 +1,7 @@
 import type {
   ModelRef,
   SessionMessageAssistant,
+  SessionMessageIdle,
   SessionMessageInfo,
   SessionMessageShell,
   SessionMessageUser,
@@ -23,7 +24,15 @@ export type ReasoningMode = "hidden" | "compact" | "full"
 
 type Notice = Exclude<SessionMessageInfo, { type: "user" | "assistant" | "shell" | "idle" }>
 
-type Entry = { type: "assistant"; message: SessionMessageAssistant } | { type: "notice"; message: Notice }
+type FailedIdle = SessionMessageIdle & {
+  outcome: "failed"
+  error: NonNullable<SessionMessageIdle["error"]>
+}
+
+type Entry =
+  | { type: "assistant"; message: SessionMessageAssistant }
+  | { type: "notice"; message: Notice }
+  | { type: "idle"; message: FailedIdle }
 
 type Content = SessionMessageAssistant["content"][number]
 
@@ -264,6 +273,34 @@ export namespace Timeline {
         return
       }
 
+      if (isFailedIdle(message)) {
+        const last = current?.entries.at(-1)
+
+        if (
+          last?.type === "notice" &&
+          last.message.type === "compaction" &&
+          last.message.status === "failed" &&
+          !isInterrupted(last.message.error)
+        )
+          return
+
+        const lastStep = current?.entries.findLast((entry) => entry.type === "assistant" || entry.type === "idle")
+
+        if (lastStep?.type === "assistant" && lastStep.message.error && !isInterrupted(lastStep.message.error)) return
+
+        if (current && !current.shell) {
+          current.entries.push({ type: "idle", message })
+
+          return
+        }
+
+        const turn: Turn = { id: message.id, time: message.time, entries: [{ type: "idle", message }] }
+        turns.push(turn)
+        current = turn
+
+        return
+      }
+
       if (message.type !== "assistant") return
       const existing = current?.user ? current : undefined
 
@@ -285,7 +322,9 @@ export namespace Timeline {
       current = turn
     })
 
-    const activeMessageID = turns.findLast((turn) => !pendingInputIDs?.has(turn.id))?.id ?? turns.at(-1)?.id
+    const activeMessageID =
+      turns.findLast((turn) => !pendingInputIDs?.has(turn.id) || turn.entries.some((entry) => entry.type === "idle"))
+        ?.id ?? turns.at(-1)?.id
 
     const visibleNotice = (message: Notice) =>
       !detail || detail.notices.placement !== "hidden" || timelineNoticeRequired(message)
@@ -299,7 +338,8 @@ export namespace Timeline {
           return turn.entries.some((entry) =>
             entry.type === "notice"
               ? visibleNotice(entry.message)
-              : !!entry.message.error ||
+              : entry.type === "idle" ||
+                !!entry.message.error ||
                 !!entry.message.retry ||
                 entry.message.content.some((content) => isRenderable(content, showReasoning, detail)),
           )
@@ -394,6 +434,7 @@ export namespace Timeline {
     const rows: TimelineRow.TimelineRow[] = []
     const assistantMessages = entries.flatMap((entry) => (entry.type === "assistant" ? [entry.message] : []))
     const lastAssistant = assistantMessages.at(-1)
+    const lastStep = entries.findLast((entry) => entry.type === "assistant" || entry.type === "idle")
     const previousUserMessage = index > 0
     const compaction = entries.some((entry) => entry.type === "notice" && entry.message.type === "compaction")
     const lastContent = lastAssistant?.content.at(-1)
@@ -401,6 +442,7 @@ export namespace Timeline {
     const working =
       isActive &&
       status.type === "busy" &&
+      lastStep?.type === "assistant" &&
       lastAssistant?.time.completed === undefined &&
       !lastAssistant?.error &&
       !lastAssistant?.retry
@@ -482,6 +524,8 @@ export namespace Timeline {
           }),
         )
 
+      if (lastStep?.type !== "assistant") return
+
       if (isActive && lastAssistant?.retry) rows.push(new TimelineRow.Retry({ userMessageID: turnID }))
       else if (lastAssistant?.error && !isInterrupted(lastAssistant.error))
         rows.push(
@@ -494,6 +538,19 @@ export namespace Timeline {
       switch (entry.type) {
         case "assistant":
           assistantSegment.push(entry.message)
+
+          return
+        case "idle":
+          appendAssistantSegment(assistantSegment)
+          assistantSegment = []
+
+          if (entry === lastStep)
+            rows.push(
+              new TimelineRow.Error({
+                userMessageID: turnID,
+                text: unwrapErrorMessage(entry.message.error.message),
+              }),
+            )
 
           return
         case "notice":
@@ -533,6 +590,10 @@ function isInterrupted(error: SessionMessageAssistant["error"]) {
   return error?.type.toLowerCase().includes("abort") || error?.type.toLowerCase().includes("interrupt")
 }
 
+function isFailedIdle(message: SessionMessageInfo): message is FailedIdle {
+  return message.type === "idle" && message.outcome === "failed" && !!message.error
+}
+
 function shellFailed(message: SessionMessageShell) {
   return (
     message.status === "timeout" || (message.status === "exited" && message.exit !== undefined && message.exit !== 0)
@@ -550,7 +611,10 @@ function groupMessages(rows: TimelineRow.TimelineRow[], detail: TimelineDetail, 
         ? new TimelineRow.AssistantPart({
             userMessageID: row.userMessageID,
             previousAssistantPart: Predicate.isTagged(previous, "AssistantPart"),
-            spacing: Predicate.isTagged(previous, "AssistantPart") ? "tool" : undefined,
+            spacing:
+              Predicate.isTagged(previous, "AssistantPart") || Predicate.isTagged(previous, "Error")
+                ? "tool"
+                : undefined,
             group: {
               type: "context",
               key: `message:${row.messageID}`,
@@ -866,39 +930,32 @@ function toolGroupType(
 
 export function reasoningHeading(text: string): string | undefined {
   const markdown = text.replace(/\r\n?/g, "\n")
-  const html = markdown.match(/<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/i)
+  const html = lastHeading(markdown, /<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/gi, (value) => value.replace(/<[^>]+>/g, " "))
+  const atx = lastHeading(markdown, /^\s{0,3}#{1,6}[ \t]+(.+?)(?:[ \t]+#+[ \t]*)?$/gm)
+  const setext = lastHeading(markdown, /^([^\n]+)\n(?:=+|-+)\s*$/gm)
+  const strong = lastHeading(markdown, /^\s*(?:\*\*((?:(?!\*\*).)+)\*\*|__((?:(?!__).)+)__)\s*$/gm)
 
-  if (html?.[1]) {
-    const value = cleanHeading(html[1].replace(/<[^>]+>/g, " "))
+  const latest = [html, atx, strong].reduce<HeadingMatch | undefined>(
+    (best, current) => (!best || (current && current.index >= best.index) ? current : best),
+    undefined,
+  )
 
-    if (value) return value
-  }
+  return (latest ?? setext)?.value
+}
 
-  const atx = markdown.match(/^\s{0,3}#{1,6}[ \t]+(.+?)(?:[ \t]+#+[ \t]*)?$/m)
+type HeadingMatch = { index: number; value: string }
 
-  if (atx?.[1]) {
-    const value = cleanHeading(atx[1])
+function lastHeading(
+  markdown: string,
+  pattern: RegExp,
+  transform?: (value: string) => string,
+): HeadingMatch | undefined {
+  return Array.from(markdown.matchAll(pattern)).reduce<HeadingMatch | undefined>((best, match) => {
+    const raw = match[1] ?? match[2] ?? ""
+    const value = cleanHeading(transform ? transform(raw) : raw)
 
-    if (value) return value
-  }
-
-  const setext = markdown.match(/^([^\n]+)\n(?:=+|-+)\s*$/m)
-
-  if (setext?.[1]) {
-    const value = cleanHeading(setext[1])
-
-    if (value) return value
-  }
-
-  const strong = markdown.match(/^\s*(?:\*\*|__)(.+?)(?:\*\*|__)\s*$/m)
-
-  if (strong?.[1]) {
-    const value = cleanHeading(strong[1])
-
-    if (value) return value
-  }
-
-  return undefined
+    return value ? { index: match.index, value } : best
+  }, undefined)
 }
 
 function cleanHeading(value: string) {

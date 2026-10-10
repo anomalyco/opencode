@@ -416,24 +416,26 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
 
         if (!tab) return
 
-        if (tab.type === "session") updateClosed((stack) => pushClosedTab(stack, tab, index))
+        if (tab.type === "session") updateClosed((stack) => pushClosedTab(stack, tab, index, info[tabKey(tab)]))
         removeTab(index)
       },
-      reopenClosedTab() {
+      reopenClosedTab(target?: SessionTab, options?: { append?: boolean }) {
         if (!closedReady()) {
-          void closedReady.promise?.then(() => actions.reopenClosedTab())
+          void closedReady.promise?.then(() => actions.reopenClosedTab(target, options))
 
           return
         }
 
-        const result = takeClosedTab(closed, store)
+        const result = takeClosedTab(closed, store, target)
 
         if (result.stack.length === closed.length) return
         setClosed(() => result.stack)
         const entry = result.entry
 
         if (!entry) return
-        const index = Math.min(entry.index, store.length)
+        const index = options?.append ? store.length : Math.min(entry.index, store.length)
+
+        if (entry.info) setInfo(tabKey(entry.tab), entry.info)
         void startTransition(() => {
           setStore(
             produce((tabs) => {
@@ -532,12 +534,23 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
 
         for (const key of removed) removeInfo(key)
       },
-      rememberSessionInfo(tab: SessionTab, session: SessionInfo) {
+      rememberSessionInfo(tab: SessionTab, session: SessionInfo, prompted: boolean) {
         const key = tabKey(tab)
-        const next = { title: session.title, directory: session.location.directory }
         const current = info[key]
 
-        if (current && current.title === next.title && current.directory === next.directory) return
+        const next = {
+          title: session.title,
+          directory: session.location.directory,
+          prompted: current?.prompted === true || prompted,
+        }
+
+        if (
+          current &&
+          current.title === next.title &&
+          current.directory === next.directory &&
+          current.prompted === next.prompted
+        )
+          return
         console.debug("[tabs] update persisted session info", { key, sessionID: session.id, current, next })
         setInfo(key, next)
       },
@@ -626,6 +639,6 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       },
     }
 
-    return { ...actions, store, info, ready, infoReady, recentReady, regionsReady }
+    return { ...actions, store, info, closed, ready, infoReady, recentReady, closedReady, regionsReady }
   },
 })

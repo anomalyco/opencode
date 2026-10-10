@@ -37,8 +37,5 @@ export default {
   "form.name": "Servera nosaukums (nav obligāti)",
   "form.namePlaceholder": "Localhost",
   "form.add": "Pievienot serveri",
-  "server.default": "Noklusējuma",
-  "menu.default": "Iestatīt kā noklusējumu",
-  "menu.defaultRemove": "Noņemt noklusējumu",
   "menu.delete": "Dzēst",
 }

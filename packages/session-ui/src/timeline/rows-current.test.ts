@@ -1304,4 +1304,108 @@ describe("current session timeline rows", () => {
       ["UserMessage", "AssistantPart", "Notice", "AssistantPart"],
     )
   })
+
+  test("surfaces failed idle errors when no assistant step owns the failure", () => {
+    const preStep = [
+      { id: "msg_user", type: "user", text: "prompt", time: { created: 1 } },
+      {
+        id: "msg_idle",
+        type: "idle",
+        outcome: "failed",
+        error: { type: "provider.no-route", message: "Model unavailable: opencode/gpt-5.2" },
+        time: { created: 2 },
+      },
+      {
+        id: "msg_model",
+        type: "model-switched",
+        model: { id: "next", providerID: "provider" },
+        time: { created: 3 },
+      },
+    ] satisfies SessionMessageInfo[]
+
+    const preStepRows = Timeline.constructSessionMessageRows(preStep, true, { type: "idle" }).rows
+    expect(preStepRows.map((row) => row._tag)).toEqual(["UserMessage", "Error", "Notice"])
+    expect(preStepRows[1]).toEqual(
+      new TimelineRow.Error({ userMessageID: "msg_user", text: "Model unavailable: opencode/gpt-5.2" }),
+    )
+
+    const betweenSteps = [
+      { id: "msg_user", type: "user", text: "prompt", time: { created: 1 } },
+      {
+        id: "msg_assistant",
+        type: "assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+        content: [storyTool("tool_read", "read", "completed", {})],
+        finish: "tool-calls",
+        time: { created: 2, completed: 3 },
+      },
+      {
+        id: "msg_idle",
+        type: "idle",
+        outcome: "failed",
+        error: { type: "unknown", message: "Failed to execute statement" },
+        time: { created: 4 },
+      },
+    ] satisfies SessionMessageInfo[]
+
+    expect(
+      Timeline.constructSessionMessageRows(betweenSteps, true, { type: "idle" }).rows.map((row) => row._tag),
+    ).toEqual(["UserMessage", "AssistantPart", "Error"])
+
+    const duplicate = [
+      { id: "msg_user", type: "user", text: "prompt", time: { created: 1 } },
+      {
+        id: "msg_assistant",
+        type: "assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+        content: [],
+        finish: "error",
+        error: { type: "provider.auth", message: "Your organization does not have access to this model." },
+        time: { created: 2, completed: 3 },
+      },
+      {
+        id: "msg_idle",
+        type: "idle",
+        outcome: "failed",
+        error: { type: "provider.auth", message: "Your organization does not have access to this model." },
+        time: { created: 4 },
+      },
+    ] satisfies SessionMessageInfo[]
+
+    expect(Timeline.constructSessionMessageRows(duplicate, true, { type: "idle" }).rows.map((row) => row._tag)).toEqual(
+      ["UserMessage", "Error"],
+    )
+
+    const exhausted = [
+      { id: "msg_user", type: "user", text: "prompt", time: { created: 1 } },
+      {
+        id: "msg_assistant",
+        type: "assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+        content: [],
+        error: { type: "aborted", message: "Step interrupted" },
+        time: { created: 2, completed: 3 },
+      },
+      {
+        id: "msg_idle",
+        type: "idle",
+        outcome: "failed",
+        error: {
+          type: "aborted",
+          message: "Execution was interrupted repeatedly and will not be resumed automatically.",
+        },
+        time: { created: 4 },
+      },
+    ] satisfies SessionMessageInfo[]
+
+    expect(Timeline.constructSessionMessageRows(exhausted, true, { type: "idle" }).rows.at(-1)).toEqual(
+      new TimelineRow.Error({
+        userMessageID: "msg_user",
+        text: "Execution was interrupted repeatedly and will not be resumed automatically.",
+      }),
+    )
+  })
 })

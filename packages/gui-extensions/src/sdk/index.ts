@@ -1,6 +1,6 @@
 export * from "./core"
 
-export * from "./points"
+export * from "./registries"
 
 export * from "./host-apis"
 

@@ -16,6 +16,7 @@ describe("TerminalState", () => {
         { title: "no-id" },
       ],
     })
+
     expect(decoded).toEqual({
       active: "one",
       all: [

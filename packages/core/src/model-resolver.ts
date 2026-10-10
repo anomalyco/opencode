@@ -198,7 +198,7 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
   credential?: Credential.Value,
   dependencies?: Dependencies,
 ) {
-  const resolved = prepareRuntimeModel(model, credential)
+  const resolved = prepareRuntimeModel(model)
   const configuration = credential?.type === "key" ? credential.configuration : undefined
   const configured = { ...resolved.settings, ...credential?.metadata, ...configuration }
   if (Provider.isAISDK(resolved.package)) {
@@ -207,7 +207,7 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
     const settings = yield* prepareProviderSettings(
       resolved,
       Provider.mergeOverlay(resolved.settings, {
-        ...nativeCredentialSettings(resolved.package ?? "", credential),
+        ...nativeCredentialSettings(resolved, resolved.package ?? "", credential),
         ...credential?.metadata,
         ...configuration,
       }) ?? {},
@@ -225,7 +225,7 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
   const settings = {
     ...(credential ? Struct.omit(mapped, ["accessToken", "apiKey", "authToken"]) : mapped),
     ...(resolved.canonical === undefined ? {} : { provider: resolved.canonical }),
-    ...nativeCredentialSettings(specifier, credential),
+    ...nativeCredentialSettings(resolved, specifier, credential),
     headers: resolved.headers,
     body: resolved.body,
   }
@@ -256,15 +256,9 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
   })
 })
 
-function prepareRuntimeModel(model: RuntimeInfo, credential: Credential.Value | undefined) {
-  if (model.settings?.apiKey !== "" && (credential?.type !== "key" || credential.metadata === undefined)) return model
-  return {
-    ...model,
-    ...(model.settings?.apiKey === "" ? { settings: Struct.omit(model.settings, ["apiKey"]) } : {}),
-    ...(credential?.type === "key" && credential.metadata !== undefined
-      ? { body: Provider.mergeOverlay(model.body, credential.metadata) }
-      : {}),
-  }
+function prepareRuntimeModel(model: RuntimeInfo) {
+  if (model.settings?.apiKey !== "") return model
+  return { ...model, settings: Struct.omit(model.settings, ["apiKey"]) }
 }
 
 function validateProviderVariables(
@@ -288,7 +282,10 @@ function prepareProviderSettings(
   )
 }
 
-function prepareProviderURL(model: RuntimeInfo, baseURL: string): Effect.Effect<string, UnresolvedProviderVariablesError> {
+function prepareProviderURL(
+  model: RuntimeInfo,
+  baseURL: string,
+): Effect.Effect<string, UnresolvedProviderVariablesError> {
   if (!baseURL.includes("${")) return Effect.succeed(baseURL)
   const prepared = baseURL.replace(/\$\{([^}]+)\}/g, (placeholder, name: string) => process.env[name] ?? placeholder)
   const failure = unresolvedProviderVariables(model, prepared)
@@ -305,17 +302,27 @@ function unresolvedProviderVariables(model: RuntimeInfo, baseURL: string) {
   })
 }
 
-const nativeCredentialSettings = (specifier: string, credential: Credential.Value | undefined) => {
+const nativeCredentialSettings = (model: RuntimeInfo, specifier: string, credential: Credential.Value | undefined) => {
   if (!credential) return {}
   if (credential.type === "key") return { apiKey: credential.key }
+  if (credential.type === "oauth") return tokenSettings(specifier, credential.access)
+  // The saved profile reaches the package through metadata; SigV4 keeps an ambient bearer token from taking over.
+  if (specifier.startsWith("@opencode/ai/providers/amazon-bedrock")) return { auth: "sigv4" }
+  // The Azure plugin's request hooks replace this with an Entra ID token from the Azure CLI; it only gets the
+  // request past the package's own credential check.
+  if (model.providerID === Provider.ID.azure) return tokenSettings(specifier, "azure-cli")
+  return {}
+}
+
+const tokenSettings = (specifier: string, token: string) => {
   if (specifier === "@opencode/ai/providers/anthropic" || specifier === "@opencode/ai/providers/anthropic-compatible")
-    return { authToken: credential.access }
+    return { authToken: token }
   if (
     specifier === "@opencode/ai/providers/google-vertex" ||
     specifier.startsWith("@opencode/ai/providers/google-vertex/")
   )
-    return { accessToken: credential.access }
-  return { apiKey: credential.access }
+    return { accessToken: token }
+  return { apiKey: token }
 }
 
 const unsupported = (model: RuntimeInfo) =>
@@ -408,7 +415,9 @@ export const layer = Layer.effect(
                 Effect.flatMap((model) =>
                   model && hasPackage(model)
                     ? Effect.succeed(model)
-                    : Effect.map(models.available(), (models) => models.find(hasPackage)),
+                    : Effect.map(models.available(), (models) =>
+                        models.find((model) => hasPackage(model) && Model.supportsText(model)),
+                      ),
                 ),
               )
         if (!selected) return undefined
@@ -457,6 +466,7 @@ function usesAPIKeyAuth(packageName: string | undefined) {
     name === "@opencode/ai/providers/groq" ||
     name === "@opencode/ai/providers/mistral" ||
     name === "@opencode/ai/providers/togetherai" ||
+    name === "@opencode/ai/providers/vercel-ai-gateway" ||
     name === "@opencode/ai/providers/xai" ||
     name === "@opencode/ai/providers/openrouter" ||
     name === "@opencode/ai/providers/azure" ||

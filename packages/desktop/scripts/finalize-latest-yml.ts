@@ -4,12 +4,15 @@ import { $ } from "bun"
 import path from "path"
 
 const dir = process.env.LATEST_YML_DIR!
+
 if (!dir) throw new Error("LATEST_YML_DIR is required")
 
 const repo = process.env.GH_REPO
+
 if (!repo) throw new Error("GH_REPO is required")
 
 const version = process.env.OPENCODE_VERSION
+
 if (!version) throw new Error("OPENCODE_VERSION is required")
 
 type FileEntry = {
@@ -39,6 +42,7 @@ function parse(content: string): LatestYml {
 
   for (const line of lines) {
     const indented = line.startsWith("    ") || line.startsWith("  -")
+
     if (line.startsWith("version:")) version = line.slice("version:".length).trim()
     else if (line.startsWith("releaseDate:"))
       releaseDate = line.slice("releaseDate:".length).trim().replace(/^'|'$/g, "")
@@ -53,6 +57,7 @@ function parse(content: string): LatestYml {
       current.blockMapSize = Number(line.trim().slice("blockMapSize:".length).trim())
     else if (!indented && current) flush()
   }
+
   flush()
 
   return { version, files, releaseDate }
@@ -60,19 +65,25 @@ function parse(content: string): LatestYml {
 
 function serialize(data: LatestYml) {
   const lines = [`version: ${data.version}`, "files:"]
+
   for (const file of data.files) {
     lines.push(`  - url: ${file.url}`)
     lines.push(`    sha512: ${file.sha512}`)
     lines.push(`    size: ${file.size}`)
+
     if (file.blockMapSize) lines.push(`    blockMapSize: ${file.blockMapSize}`)
   }
+
   lines.push(`releaseDate: '${data.releaseDate}'`)
+
   return lines.join("\n") + "\n"
 }
 
 async function read(subdir: string, filename: string): Promise<LatestYml | undefined> {
   const file = Bun.file(path.join(dir, subdir, filename))
+
   if (!(await file.exists())) return undefined
+
   return parse(await file.text())
 }
 
@@ -80,7 +91,9 @@ const output: Record<string, string> = {}
 
 // Windows: merge arm64 + x64 into single file
 const winX64 = await read("latest-yml-x86_64-pc-windows-msvc", "latest.yml")
+
 const winArm64 = await read("latest-yml-aarch64-pc-windows-msvc", "latest.yml")
+
 if (winX64 || winArm64) {
   const base = winArm64 ?? winX64!
   output["latest.yml"] = serialize({
@@ -92,15 +105,19 @@ if (winX64 || winArm64) {
 
 // Linux x64: pass through
 const linuxX64 = await read("latest-yml-x86_64-unknown-linux-gnu", "latest-linux.yml")
+
 if (linuxX64) output["latest-linux.yml"] = serialize(linuxX64)
 
 // Linux arm64: pass through
 const linuxArm64 = await read("latest-yml-aarch64-unknown-linux-gnu", "latest-linux-arm64.yml")
+
 if (linuxArm64) output["latest-linux-arm64.yml"] = serialize(linuxArm64)
 
 // macOS: merge arm64 + x64 into single file
 const macX64 = await read("latest-yml-x86_64-apple-darwin", "latest-mac.yml")
+
 const macArm64 = await read("latest-yml-aarch64-apple-darwin", "latest-mac.yml")
+
 if (macX64 || macArm64) {
   const base = macArm64 ?? macX64!
   output["latest-mac.yml"] = serialize({
@@ -112,6 +129,7 @@ if (macX64 || macArm64) {
 
 // Upload to release
 const tag = `v${version}`
+
 const tmp = process.env.RUNNER_TEMP ?? "/tmp"
 
 for (const [filename, content] of Object.entries(output)) {

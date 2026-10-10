@@ -160,7 +160,7 @@ function MessageTimelineView(
     if (!directory) return
     void data.location.vcs.sync({ directory }).catch(() => undefined)
   })
-  const turnPadding = () => "px-4 md:px-5"
+  const turnPadding = () => "px-4 md:px-6"
   const showHeader = createMemo(() => !props.hideHeader && (props.data.showHeader() || workspaceSession()))
   const pinned = createMemo(() => props.pinned)
   const messageByID = projection.messageByID
@@ -391,6 +391,17 @@ function MessageTimelineView(
     })
   })
 
+  const runningMenu = (title?: string) => (
+    <SessionRunningMenu
+      sessionID={sessionID()}
+      owner={props.background.running.sessionID()}
+      blocking={props.background.running.blocking()}
+      tasks={props.background.running.tasks()}
+      onReveal={virtualized.revealPart}
+      title={title}
+    />
+  )
+
   return (
     <VirtualizedTimeline
       workspaceSession={workspaceSession}
@@ -399,7 +410,7 @@ function MessageTimelineView(
           <div
             classList={{
               "min-w-0 w-full max-w-full": true,
-              "md:max-w-[1000px] md:mx-auto": props.centered,
+              "md:max-w-session md:mx-auto": props.centered,
             }}
           >
             <div
@@ -456,7 +467,8 @@ function MessageTimelineView(
                       />
                     )}
                   </Show>
-                  <Show when={childTitle() || title.editing}>
+                  <Show when={parentID()}>{runningMenu(childTitle())}</Show>
+                  <Show when={!parentID() && (childTitle() || title.editing)}>
                     <Show
                       when={title.editing}
                       fallback={
@@ -506,6 +518,7 @@ function MessageTimelineView(
                       />
                     </Show>
                   </Show>
+                  <Show when={!parentID()}>{runningMenu()}</Show>
                   <Show when={!parentID() && sessionID()} keyed>
                     {(id) => (
                       <Menu
@@ -559,13 +572,6 @@ function MessageTimelineView(
                       </Menu>
                     )}
                   </Show>
-                  <SessionRunningMenu
-                    sessionID={sessionID()}
-                    owner={props.background.running.sessionID()}
-                    blocking={props.background.running.blocking()}
-                    tasks={props.background.running.tasks()}
-                    onReveal={virtualized.revealPart}
-                  />
                 </div>
               </div>
               <Show when={sessionID()} keyed>

@@ -35,8 +35,5 @@ export default {
   "form.name": "Nafn netþjóns (valfrjálst)",
   "form.namePlaceholder": "Localhost",
   "form.add": "Bæta við netþjóni",
-  "server.default": "Sjálfgefið",
-  "menu.default": "Stillt sem sjálfgefið",
-  "menu.defaultRemove": "Fjarlægja sjálfgefið",
   "menu.delete": "Eyða",
 }

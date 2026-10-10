@@ -7,6 +7,7 @@ import { ACPClient } from "./client"
 import { ACPCompaction } from "./compaction"
 import type { ACPConnection } from "./connection"
 import { partsToContentChunks } from "./content"
+import { ACPPermission } from "./permission"
 import type { Attached } from "./sessions"
 import { ACPTranslate } from "./translate"
 import { completedToolUpdate, errorToolUpdate, pendingToolCall, runningToolUpdate } from "./tool"
@@ -29,7 +30,10 @@ export function history(
     Stream.runForEach((message) =>
       Effect.forEach(
         updates(message, attached.cwd, capabilities),
-        (update) => connection.sessionUpdate({ sessionId: attached.id, update }),
+        (update) =>
+          ACPPermission.withCompletedDiffs(update, completedSource(message, update), attached.cwd).pipe(
+            Effect.flatMap((enriched) => connection.sessionUpdate({ sessionId: attached.id, update: enriched })),
+          ),
         { discard: true },
       ),
     ),
@@ -122,6 +126,13 @@ export function updates(message: SessionMessage.Info, cwd: string, capabilities:
         return [call]
     }
   })
+}
+
+function completedSource(message: SessionMessage.Info, update: SessionUpdate) {
+  if (message.type !== "assistant" || update.sessionUpdate !== "tool_call_update") return undefined
+  const part = message.content.find((item) => item.type === "tool" && item.id === update.toolCallId)
+  if (part?.type !== "tool" || part.state.status !== "completed") return undefined
+  return { toolName: part.name, input: part.state.input, metadata: part.state.metadata }
 }
 
 export * as ACPReplay from "./replay"

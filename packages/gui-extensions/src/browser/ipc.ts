@@ -8,6 +8,9 @@ const detail = (maximum: number) => Schema.String.check(Schema.isMaxLength(maxim
 
 const binding = text(128)
 
+/** The longest page icon data URL main reports: a 32px PNG is a few kilobytes; larger icons are dropped. */
+export const MAX_ICON_URL = 24_576
+
 /** An element the user picked in the page. The ref stays valid for browser tools until the page navigates. */
 export const PaneElement = Schema.Struct({
   ref: Browser.Ref,
@@ -39,6 +42,16 @@ export const PaneEvent = Schema.Union([
     active: Schema.Boolean,
     element: Schema.optionalKey(PaneElement),
   }),
+  // Details only this desktop shows, kept out of the server's tab state: the page's icon as a data URL, and its zoom
+  // factor, 1 at 100%.
+  Schema.Struct({
+    type: Schema.Literal("page"),
+    tabID: Browser.TabID,
+    icon: Schema.optionalKey(detail(MAX_ICON_URL).check(Schema.isStartingWith("data:image/"))),
+    zoom: Schema.Finite.check(Schema.isBetween({ minimum: 0.25, maximum: 5 })),
+  }),
+  // The page asked for the address field, with the platform's address shortcut.
+  Schema.Struct({ type: Schema.Literal("address"), tabID: Browser.TabID }),
 ])
 
 export type PaneEvent = typeof PaneEvent.Type
@@ -54,7 +67,7 @@ export const BrowserPane = Ipc.define({
       input: Schema.Struct({
         binding,
         server: text(16_384),
-        session: text(256).check(Schema.isStartsWith("ses")),
+        session: text(256).check(Schema.isStartingWith("ses")),
         restore: Schema.optionalKey(Browser.State),
       }),
     },
@@ -65,6 +78,18 @@ export const BrowserPane = Ipc.define({
     inspect: { input: Schema.Struct({ binding, tabID: Browser.TabID, enabled: Schema.Boolean }) },
     // Highlights a picked element briefly, or clears any highlight when ref is omitted.
     highlight: { input: Schema.Struct({ binding, tabID: Browser.TabID, ref: Schema.optionalKey(Browser.Ref) }) },
+    // Zooms the page one step in or out, or back to 100%; the page reports its new zoom as a page event.
+    zoom: {
+      input: Schema.Struct({ binding, tabID: Browser.TabID, zoom: Schema.Literals(["in", "out", "reset"]) }),
+    },
+    // The site data the page's address can read in this desktop's browser: its cookie count. Zero for a page that is
+    // not a web page.
+    site: {
+      input: Schema.Struct({ binding, tabID: Browser.TabID }),
+      output: Schema.Struct({ cookies: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)) }),
+    },
+    // Deletes the cookies the page's address can read and its origin's stored data, then reloads the page.
+    clearSite: { input: Schema.Struct({ binding, tabID: Browser.TabID }) },
     close: { input: Schema.Struct({ binding }) },
   },
   events: {

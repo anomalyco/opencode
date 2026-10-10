@@ -139,16 +139,24 @@
   }
 }
 
-.session-service-menu .session-summary-row,
-.session-service-menu .session-service-row,
-.session-service-menu .session-service-config,
-.session-service-menu [data-component="switch"].session-mcp-row {
+:is(.session-service-menu, .session-service-drawer) .session-summary-row,
+:is(.session-service-menu, .session-service-drawer) .session-service-row,
+:is(.session-service-menu, .session-service-drawer) .session-service-config,
+:is(.session-service-menu, .session-service-drawer) [data-component="switch"].session-mcp-row {
   font-size: inherit;
   line-height: inherit;
 }
 
-.session-service-menu > :is(.session-service-row, .session-mcp-row) + :is(.session-service-row, .session-mcp-row) {
+:is(.session-service-menu, .session-service-drawer)
+  > :is(.session-service-row, .session-mcp-row)
+  + :is(.session-service-row, .session-mcp-row) {
   margin-block-start: 2px;
+}
+
+.session-service-drawer {
+  color: var(--v2-text-text-base);
+  font-size: 13px;
+  line-height: var(--line-height-compact);
 }
 
 .session-service-title {
@@ -184,7 +192,7 @@
   color: var(--v2-text-text-faint);
   overflow-wrap: anywhere;
 }
-.session-service-menu > .session-service-footer {
+:is(.session-service-menu, .session-service-drawer) > .session-service-footer {
   padding-block-start: 6px;
 }
 .session-service-config-separator {

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Money } from "@opencode/schema/money"
 import { Effect, Fiber, Layer, Ref, Scope, Stream } from "effect"
-import { HttpClient, HttpClientResponse } from "effect/unstable/http"
+import { HttpClient, HttpClientResponse } from "effect/http"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNodePlatform } from "@opencode/util/effect/app-node-platform"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -255,6 +255,23 @@ describe("ModelsDev Service", () => {
           api: "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/ai/v1",
           models: {},
         },
+        azure: {
+          id: "azure",
+          name: "Azure",
+          env: ["AZURE_RESOURCE_NAME", "AZURE_API_KEY"],
+          npm: "@ai-sdk/azure",
+          models: {
+            "gpt-5": {
+              ...fixture.acme.models["acme-1"],
+              id: "gpt-5",
+            },
+            "custom-chat": {
+              ...fixture.acme.models["acme-1"],
+              id: "custom-chat",
+              provider: { shape: "completions" },
+            },
+          },
+        },
       })
       const state = yield* Ref.make(initialState)
       const result = yield* provided(
@@ -266,6 +283,11 @@ describe("ModelsDev Service", () => {
       expect(result[0]?.models[0]?.package).toBe("@opencode/ai/providers/openai")
       expect(result[1]?.info.package).toBe("@opencode/ai/providers/cloudflare-workers-ai")
       expect(result[1]?.info.settings).toBeUndefined()
+      expect(result[2]?.info.package).toBe("@opencode/ai/providers/azure/responses")
+      expect(result[2]?.models.find((model) => model.id === "gpt-5")?.package).toBeUndefined()
+      expect(result[2]?.models.find((model) => model.id === "custom-chat")?.package).toBe(
+        "@opencode/ai/providers/azure/chat",
+      )
     }),
   )
 

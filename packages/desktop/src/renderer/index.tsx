@@ -11,10 +11,13 @@ import { requireRendererRoot } from "./startup/root"
 import { desktopVersion, initializeSentry } from "./startup/sentry"
 
 const root = requireRendererRoot()
+
 const version = desktopVersion()
 
 startDesktopMenu(api)
+
 startDeepLinks(api)
 
 render(() => <DesktopApp api={api} version={version} />, root)
+
 void initializeSentry(version)

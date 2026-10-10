@@ -6,7 +6,7 @@ import { Auth } from "../route/auth.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Framing } from "../route/framing.js"
 import { Protocol } from "../route/protocol.js"
-import { Headers } from "effect/unstable/http"
+import { Headers } from "effect/http"
 import { HttpTransport } from "../route/transport/index.js"
 import {
   AIError,
@@ -285,7 +285,7 @@ const AnthropicThinkingEnabled = Schema.Struct({
   ...AnthropicThinkingFields,
 })
 const AnthropicThinkingAdaptive = Schema.Struct({ type: Schema.tag("adaptive"), ...AnthropicThinkingFields })
-const AnthropicThinkingDisabled = Schema.Struct({ type: Schema.tag("disabled") })
+const AnthropicThinkingDisabled = Schema.Struct({ type: Schema.Literals(["disabled", "between_tools"]) })
 const AnthropicThinking = Schema.Union([AnthropicThinkingEnabled, AnthropicThinkingAdaptive, AnthropicThinkingDisabled])
 type AnthropicThinking = typeof AnthropicThinking.Type
 
@@ -422,57 +422,74 @@ const AnthropicUsage = Schema.StructWithRest(
 )
 type AnthropicUsage = Schema.Schema.Type<typeof AnthropicUsage>
 
-const AnthropicStreamBlock = Schema.Struct({
-  type: Schema.String,
-  id: Schema.optional(Schema.String),
-  name: Schema.optional(Schema.String),
-  text: Schema.optional(Schema.String),
-  thinking: Schema.optional(Schema.String),
-  signature: Schema.optional(Schema.String),
-  // redacted_thinking blocks arrive whole in content_block_start with the
-  // encrypted payload in `data`; there is no streaming delta sequence.
-  data: Schema.optional(Schema.String),
-  input: Schema.optional(Schema.Unknown),
-  // *_tool_result blocks arrive whole as content_block_start (no streaming
-  // delta) with the structured payload in `content` and the originating
-  // server_tool_use id in `tool_use_id`.
-  tool_use_id: Schema.optional(Schema.String),
-  content: Schema.optional(Schema.Unknown),
-})
+const AnthropicStreamBlock = Schema.StructWithRest(
+  Schema.Struct({
+    type: Schema.String,
+    id: Schema.optional(Schema.String),
+    name: Schema.optional(Schema.String),
+    text: Schema.optional(Schema.String),
+    thinking: Schema.optional(Schema.String),
+    signature: Schema.optional(Schema.String),
+    // redacted_thinking blocks arrive whole in content_block_start with the
+    // encrypted payload in `data`; there is no streaming delta sequence.
+    data: Schema.optional(Schema.String),
+    input: Schema.optional(Schema.Unknown),
+    // *_tool_result blocks arrive whole as content_block_start (no streaming
+    // delta) with the structured payload in `content` and the originating
+    // server_tool_use id in `tool_use_id`.
+    tool_use_id: Schema.optional(Schema.String),
+    content: Schema.optional(Schema.Unknown),
+  }),
+  [JsonObject],
+)
 type AnthropicStreamBlock = Schema.Schema.Type<typeof AnthropicStreamBlock>
 const decodeAnthropicStreamBlock = Schema.decodeUnknownOption(AnthropicStreamBlock)
 
-const AnthropicStreamDelta = Schema.Struct({
-  content: optionalNull(Schema.String),
-  type: Schema.optional(Schema.String),
-  text: Schema.optional(Schema.String),
-  thinking: Schema.optional(Schema.String),
-  partial_json: Schema.optional(Schema.String),
-  signature: Schema.optional(Schema.String),
-  stop_reason: optionalNull(Schema.String),
-  stop_sequence: optionalNull(Schema.String),
-  stop_details: optionalNull(
-    Schema.Struct({ category: optionalNull(Schema.String), explanation: optionalNull(Schema.String) }),
-  ),
-})
+const AnthropicStreamDelta = Schema.StructWithRest(
+  Schema.Struct({
+    content: optionalNull(Schema.String),
+    type: Schema.optional(Schema.String),
+    text: Schema.optional(Schema.String),
+    thinking: Schema.optional(Schema.String),
+    partial_json: Schema.optional(Schema.String),
+    signature: Schema.optional(Schema.String),
+    stop_reason: optionalNull(Schema.String),
+    stop_sequence: optionalNull(Schema.String),
+    stop_details: optionalNull(
+      Schema.StructWithRest(
+        Schema.Struct({ category: optionalNull(Schema.String), explanation: optionalNull(Schema.String) }),
+        [JsonObject],
+      ),
+    ),
+  }),
+  [JsonObject],
+)
 type AnthropicStreamDelta = Schema.Schema.Type<typeof AnthropicStreamDelta>
 const decodeAnthropicStreamDelta = Schema.decodeUnknownOption(AnthropicStreamDelta)
 
-const AnthropicEvent = Schema.Struct({
-  type: Schema.String,
-  index: Schema.optional(Schema.Number),
-  message: Schema.optional(Schema.Struct({ usage: Schema.optional(AnthropicUsage) })),
-  content_block: Schema.optional(Schema.Unknown),
-  delta: Schema.optional(Schema.Unknown),
-  usage: Schema.optional(AnthropicUsage),
-  // `type` and `message` are both required per Anthropic's spec, but
-  // OpenAI-compatible proxies and gateway translations occasionally drop one
-  // or the other; mark them optional so a partial payload still parses and
-  // the parser can fall back to whichever field is populated.
-  error: Schema.optional(
-    Schema.Struct({ type: Schema.optional(Schema.String), message: Schema.optional(Schema.String) }),
-  ),
-})
+const AnthropicEvent = Schema.StructWithRest(
+  Schema.Struct({
+    type: Schema.String,
+    index: Schema.optional(Schema.Number),
+    message: Schema.optional(
+      Schema.StructWithRest(Schema.Struct({ usage: Schema.optional(AnthropicUsage) }), [JsonObject]),
+    ),
+    content_block: Schema.optional(Schema.Unknown),
+    delta: Schema.optional(Schema.Unknown),
+    usage: Schema.optional(AnthropicUsage),
+    // `type` and `message` are both required per Anthropic's spec, but
+    // OpenAI-compatible proxies and gateway translations occasionally drop one
+    // or the other; mark them optional so a partial payload still parses and
+    // the parser can fall back to whichever field is populated.
+    error: Schema.optional(
+      Schema.StructWithRest(
+        Schema.Struct({ type: Schema.optional(Schema.String), message: Schema.optional(Schema.String) }),
+        [JsonObject],
+      ),
+    ),
+  }),
+  [JsonObject],
+)
 type AnthropicEvent = Schema.Schema.Type<typeof AnthropicEvent>
 
 interface ParserState {
@@ -984,18 +1001,21 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, breakpoi
 // TODO: Move per-model capability heuristics (`supportsEffortUpdates`, `supportsNativeSystemUpdates`,
 // `supportsThinkingBlockBinding`) into explicit model/provider `compatibility` metadata so the protocol
 // only reads `request.model.compatibility`.
+const isThinkingOff = Schema.is(AnthropicThinkingDisabled)
+
 // Per-turn effort started with Claude Opus 5 and every Claude 5.1 model; later versions of any family inherit it.
-const supportsEffortUpdates = (model: LLMRequest["model"]) => {
-  const override = model.compatibility?.supportsEffortUpdates
+const supportsEffortUpdates = (request: LLMRequest) => {
+  if (isThinkingOff(request.providerOptions?.thinking)) return false
+  const override = request.model.compatibility?.supportsEffortUpdates
   if (override !== undefined) return override
-  const version = claudeVersion(model.id)
+  const version = claudeVersion(request.model.id)
   if (version === undefined) return false
   if (version.family === "opus" && version.major >= 5) return true
   return version.major > 5 || (version.major === 5 && version.minor >= 1)
 }
 
 const applyThinkingBindingDefault = (model: LLMRequest["model"], thinking: AnthropicThinking | undefined) => {
-  if (thinking?.type === "disabled") return thinking
+  if (isThinkingOff(thinking)) return thinking
   if (!supportsThinkingBlockBinding(model)) return thinking
   return {
     ...(thinking ?? { type: "adaptive" as const }),
@@ -1590,7 +1610,7 @@ export const protocol = Protocol.make({
     }),
     step,
   },
-  supportsEffortUpdates: (request) => supportsEffortUpdates(request.model),
+  supportsEffortUpdates,
 })
 
 export const transport = <
@@ -1636,7 +1656,7 @@ function requiredBetaHeaders(body: Pick<AnthropicMessagesBody, "messages" | "con
     betas.push("mid-conversation-output-config-2026-07-01")
 
   const thinking = body.thinking
-  if (thinking && thinking.type !== "disabled" && thinking.block_binding) betas.push(THINKING_BINDING_BETA)
+  if (thinking && !isThinkingOff(thinking) && thinking.block_binding) betas.push(THINKING_BINDING_BETA)
   return betas
 }
 

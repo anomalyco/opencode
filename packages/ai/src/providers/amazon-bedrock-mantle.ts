@@ -65,8 +65,8 @@ const messagesRoute = Route.make({
     ...AnthropicMessages.protocol,
     // Mantle rejects mid-conversation `output_config` on Opus 5.0; support starts at 5.1+.
     supportsEffortUpdates: (request) => {
-      const override = request.model.compatibility?.supportsEffortUpdates
-      if (override !== undefined) return override
+      if (!(AnthropicMessages.protocol.supportsEffortUpdates?.(request) ?? false)) return false
+      if (request.model.compatibility?.supportsEffortUpdates !== undefined) return true
       const version = claudeVersion(request.model.id)
       return version !== undefined && (version.major > 5 || (version.major === 5 && version.minor >= 1))
     },
@@ -164,8 +164,8 @@ const fromSettings = ({
     baseURL,
     credentials,
     generation: topP === undefined ? undefined : { topP },
-    headers: headers === undefined ? undefined : { ...headers },
-    http: body === undefined ? undefined : { body: { ...body } },
+    headers,
+    http: body === undefined ? undefined : { body },
     profile,
     providerOptions,
     region,

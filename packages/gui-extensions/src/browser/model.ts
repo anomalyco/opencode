@@ -2,11 +2,19 @@ import { batch, createRoot, createSignal, getOwner, onCleanup } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import type { Browser } from "@opencode/plugin-browser/rpc"
-import { createKeyed, type Link, type SessionRef, type SetupContext } from "../sdk"
+import { createKeyed, type SessionRef, type SetupContext } from "../sdk"
 import { readHref } from "./comment"
-import { createConnection, unavailable, type Connection, type InspectEvent, type Registration } from "./connection"
+import {
+  createConnection,
+  unavailable,
+  type Connection,
+  type InspectEvent,
+  type Registration,
+  type Zoom,
+} from "./connection"
+import { recordable, remember, withIcon } from "./history"
 import type definition from "./index"
-import { isHtml, resolveLink, workspaceFileURL } from "./link"
+import { workspaceFileURL } from "./link"
 import { BrowserPane, type PaneEvent } from "./ipc"
 
 type Session = Pick<SessionRef, "key">
@@ -37,7 +45,12 @@ type ModelState = {
   /** Servers whose plugin lacks the browser RPC; sessions on them stop retrying. */
   unsupported: Record<string, true | undefined>
   errors: Record<string, string | undefined>
+  /** Each session's page icons and zoom by tab, as this desktop reports them. */
+  pages: Record<string, Record<string, PageDetail | undefined> | undefined>
 }
+
+/** A page's icon as a data URL, and its zoom factor, 1 at 100%. */
+type PageDetail = { icon?: string; zoom: number }
 
 /** A mounted pane; the newest one answers the reload and inspect commands. */
 type PaneHandle = {
@@ -47,6 +60,8 @@ type PaneHandle = {
   inspectable: () => boolean
   /** Turns the element picker on or off. */
   inspect: () => void
+  /** Focuses the address field and selects its text. */
+  focusAddress: () => void
 }
 
 export type Model = ReturnType<typeof createModel>
@@ -68,12 +83,50 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   }
 
   const owner = getOwner()
-  const [state, setState] = createStore<ModelState>({ attachments: {}, unsupported: {}, errors: {} })
+  const history = ctx.stores.history
+  const [state, setState] = createStore<ModelState>({ attachments: {}, unsupported: {}, errors: {}, pages: {} })
   const [panes, setPanes] = createSignal<readonly PaneHandle[]>([])
   const live = new Map<string, Live>()
   const listeners = new Map<string, (event: PaneEvent) => void>()
   const inspectors = new Map<string, Set<(event: InspectEvent) => void>>()
+  const addressed = new Map<string, Set<(tabID: Browser.TabID) => void>>()
+  // Sessions where the user just opened a tab; its pane focuses the address field once the blank page shows.
+  const opening = new Set<string>()
+  // Each tab's last recorded page, so a state that repeats it does not write the history again.
+  const recorded = new Map<string, string>()
   const key = (tabID: string) => `${ctx.id}:${tabID}`
+
+  // Main names why it moved control elsewhere or refused an address; any other failure is a failed request.
+  const describe = (error: string) => {
+    if (error === "browser.pane.replaced") return ctx.t("replaced")
+
+    if (error === "browser.address.credentials") return ctx.t("refused.credentials")
+
+    if (error === "browser.address.workspace") return ctx.t("refused.workspace")
+
+    if (error === "browser.address.web") return ctx.t("refused.web")
+
+    return ctx.t("common.requestFailed")
+  }
+
+  // Pages the user or the agent opened, once loaded: only a tab whose page exists has a real URL and title, as a
+  // restored tab's saved URL carries no title until it loads again. Only the desktop's own reports count: a restored
+  // tab's embed arrives before its page loads, with the saved URL as if it had.
+  const record = (session: string, next: { browser: Browser.State | null; embeds: Readonly<Record<string, string>> }) =>
+    next.browser?.tabs.forEach((tab) => {
+      if (tab.loading || tab.loadError || !next.embeds[tab.id] || !recordable(tab.url)) return
+      const page = `${tab.url}\n${tab.title}`
+
+      if (recorded.get(`${session}\n${tab.id}`) === page) return
+      recorded.set(`${session}\n${tab.id}`, page)
+      history.set({
+        visits: remember(
+          history.value.visits,
+          { url: tab.url, title: tab.title },
+          state.pages[session]?.[tab.id]?.icon,
+        ),
+      })
+    })
 
   // The SDK removes the listener when the Ipc's generation ends.
   createKeyed(pane, (current) => current.on("event", (value) => listeners.get(value.binding)?.(value.event)))
@@ -100,7 +153,14 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   const close = (id: string) => {
     live.get(id)?.dispose()
     live.delete(id)
-    setState("attachments", id, undefined)
+    opening.delete(id)
+    Array.from(recorded.keys())
+      .filter((item) => item.startsWith(`${id}\n`))
+      .forEach((item) => recorded.delete(item))
+    batch(() => {
+      setState("attachments", id, undefined)
+      setState("pages", id, undefined)
+    })
   }
 
   const attach = (ref: SessionRef) => {
@@ -137,7 +197,18 @@ export function createModel(ctx: SetupContext<typeof definition>) {
         },
         preview: (path) => preview(entry, path),
         inspect: (event) => inspectors.get(id)?.forEach((listener) => listener(event)),
-        change: (next, mirror) => {
+        page: (event) => {
+          setState("pages", id, (pages) => ({
+            ...pages,
+            [event.tabID]: event.icon ? { icon: event.icon, zoom: event.zoom } : { zoom: event.zoom },
+          }))
+          const url = tab({ key: id }, event.tabID)?.url
+          const visits = url && event.icon ? withIcon(history.value.visits, url, event.icon) : undefined
+
+          if (visits) history.set({ visits })
+        },
+        address: (tabID) => addressed.get(id)?.forEach((listener) => listener(tabID)),
+        change: (next, mirror, native) => {
           if (next.error === "browser.pane.unsupported") {
             setState("unsupported", ref.server.id, true)
 
@@ -159,14 +230,11 @@ export function createModel(ctx: SetupContext<typeof definition>) {
                 browser: next.browser,
                 embeds: next.embeds,
                 suspended: next.suspended,
-                error:
-                  next.error === "browser.pane.replaced"
-                    ? ctx.t("replaced")
-                    : next.error
-                      ? ctx.t("common.requestFailed")
-                      : undefined,
+                error: next.error ? describe(next.error) : undefined,
               }),
             )
+
+            if (native) record(id, next)
 
             // After the store: closing a strip tab asks this model whether the desktop still has it.
             if (ref.location) return mirror()
@@ -303,9 +371,11 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       if (state.attachments[id]) setState("attachments", id, "error", undefined)
     })
 
-    // An unreachable pane is suspended, not a failed request.
+    // An unreachable pane is suspended, not a failed request. A tab that never opened has no address field to focus.
     const failed = (cause: unknown) => {
-      if (!unavailable(cause)) setState("errors", id, ctx.t("common.requestFailed"))
+      if (action.type === "tabs.open") opening.delete(id)
+
+      if (!unavailable(cause)) setState("errors", id, describe(cause instanceof Error ? cause.message : ""))
     }
 
     const connection = live.get(id)?.connection
@@ -340,24 +410,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     if (current) openURL(session, workspaceFileURL(current, path))
   }
 
-  // HTML the pane can load opens as a browser tab. Palette results and comment chips name files to
-  // edit, so they keep opening file tabs.
-  const target = (link: Link) => {
-    if (link.exact || link.origin || !link.session) return
-    const view = sessions.current()
-
-    if (view?.key !== link.session.key) return
-    const current = files(view)
-
-    if (!current) return
-    const path = resolveLink(current, link.href, link.base)
-
-    if (!path || !isHtml(path) || !canOpen(view, path)) return
-
-    return { view, path }
-  }
-
-  // The agent's browser.preview tool: the link router picks the browser for HTML, the file panel otherwise. Only the
+  // The agent's browser.preview tool: the file extension opens HTML in the browser, other files in the file panel. Only the
   // session's screen resolves workspace paths, so a preview for a session that is not on screen waits for it.
   const preview = (entry: Live, path: string) => {
     const view = sessions.current()
@@ -379,8 +432,40 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     openURL,
     command,
     tab,
+    /** Opens a blank tab for the user, whose pane then focuses the address field. */
     open(session: SessionRef) {
-      if (available(session)) command(session, { type: "tabs.open" })
+      if (!available(session)) return
+      opening.add(session.key)
+      command(session, { type: "tabs.open" })
+    },
+    /** Whether the user just opened a tab in this session; true once, for the pane that focuses its address. */
+    opened: (session: Session) => opening.delete(session.key),
+    /** A page's icon and zoom, once this desktop reported them. */
+    page: (session: Session, tabID: string) => state.pages[session.key]?.[tabID],
+    zoom(session: Session, tabID: Browser.TabID, zoom: Zoom) {
+      live.get(session.key)?.connection.zoom(tabID, zoom)
+    },
+    /** The page's cookie count; undefined while the pane cannot answer. */
+    site: (session: Session, tabID: Browser.TabID) => live.get(session.key)?.connection.site(tabID),
+    /** Deletes the page's cookies and stored data, and reloads it. */
+    clearSite: (session: Session, tabID: Browser.TabID) => live.get(session.key)?.connection.clearSite(tabID),
+    /** Pages the browser showed, newest first. */
+    visits: () => history.value.visits,
+    clearHistory: () => {
+      recorded.clear()
+      history.set({ visits: [] })
+    },
+    /** The page asking for the address field with its shortcut. */
+    onAddress(session: Session, listener: (tabID: Browser.TabID) => void) {
+      const set = addressed.get(session.key) ?? new Set()
+      set.add(listener)
+      addressed.set(session.key, set)
+
+      return () => {
+        set.delete(listener)
+
+        if (!set.size) addressed.delete(session.key)
+      }
     },
     pending,
     /**
@@ -418,12 +503,6 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
       if (item && item.id !== attachment(session)?.browser?.focusedTabID)
         command(session, { type: "tabs.focus", tabID: item.id })
-    },
-    match: (link: Link) => !!target(link),
-    openLink(link: Link) {
-      const found = target(link)
-
-      if (found) openFile(found.view, found.path)
     },
     /** The page's element picker starting, stopping, or picking an element. */
     onInspect(session: Session, listener: (event: InspectEvent) => void) {

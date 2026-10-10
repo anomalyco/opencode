@@ -19,8 +19,6 @@ export function HomeProjects(props: {
       serverHealth={props.projects.server.health}
       projectsForServer={props.projects.server.projects}
       collapsed={props.projects.server.collapsed}
-      canDefaultServer={props.projects.server.canDefault()}
-      defaultServerKey={props.projects.server.defaultKey()}
       canRevealProject={props.projects.project.canReveal}
       unseenCount={props.projects.project.unseenCount}
       onWheel={props.scroll.viewport.containWheel}
@@ -29,7 +27,6 @@ export function HomeProjects(props: {
       onAuthenticateServer={props.projects.server.authenticate}
       onToggleCollapsed={props.projects.server.toggleCollapsed}
       onEditServer={props.projects.server.edit}
-      onSetDefaultServer={props.projects.server.setDefault}
       canRemoveServer={props.projects.server.canRemove}
       onRemoveServer={props.projects.server.remove}
       canHideServer={props.projects.server.canHide}

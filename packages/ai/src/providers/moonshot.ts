@@ -142,7 +142,7 @@ export const model: ProviderPackage.Definition<Settings, ChatOptionsInput>["mode
     apiKey,
     baseURL,
     headers,
-    http: body === undefined ? undefined : { body: { ...body } },
+    http: body === undefined ? undefined : { body },
     providerOptions,
   }).model(modelID)
 

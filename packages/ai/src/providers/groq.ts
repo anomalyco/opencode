@@ -110,8 +110,8 @@ export const model: ProviderPackage.Definition<Settings, ProviderOptions>["model
   configure({
     apiKey,
     baseURL,
-    headers: headers === undefined ? undefined : { ...headers },
-    http: body === undefined ? undefined : { body: { ...body } },
+    headers,
+    http: body === undefined ? undefined : { body },
     providerOptions,
   }).model(modelID)
 

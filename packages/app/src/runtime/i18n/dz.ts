@@ -298,9 +298,6 @@ export const dict = {
   "dialog.server.add.passwordPlaceholder": "གསང༌ཨང",
   "dialog.server.edit.title": "སར་བར་ཞུན་དག་འབད།",
   "dialog.server.menu.edit": "ཞུན༌དག",
-  "dialog.server.menu.default": "སྔོན་སྒྲིག་སྦེ་གཞི་སྒྲིག་འབད།",
-  "dialog.server.menu.defaultRemove": "སྔོན་སྒྲིག་རྩ་བསྐྲད་གཏང་།",
-  "dialog.server.status.default": "འཐུས་ཤོར",
   "dialog.project.edit.title": "ཞུན་དག་ལས་གཞི།",
   "dialog.project.edit.icon": "ངོས་དཔར།",
   "dialog.project.edit.icon.alt": "ལས་འགུལ་ངོས་དཔར།",
@@ -797,8 +794,6 @@ export const dict = {
   "server.connect.button": "མཐུད།",
   "server.connect.address.invalid": "ནུས་ཅན་ HTTP ཡང་ན་ HTTPS སར་བར་ཁ་བྱང་ཅིག་བཙུགས།",
   "server.connect.failed": "མཐུད་མ་ཚུགས། སར་བར་ཁ་བྱང་དང་ཆོག་ཡིག་ཞིབ་དཔྱད་འབད་ཞིནམ་ལས་ ལོག་སྟེ་འབད་རྩོལ་བསྐྱེད།",
-  "server.connect.pair.description":
-    "ཁྱོད་རའི་མཐུད་ལམ་རྒྱས་བཤད་ཚུ་ཐོབ་ནིའི་དོན་ལུ་ ཁྱོད་རའི་གློག་རིག་གུ་བརྡ་བཀོད་འདི་གཡོག་བཀོལ།",
   "server.connect.scan": "QR གསང་གྲངས་པར་བཤུས་",
   "server.connect.scan.description": "ཁྱོད་རའི་པར་ཆས་འདི་ opencode pair གིས་སྟོན་མི་ QR གསང་ཡིག་ལུ་སྟོན་དགོ།",
   "server.connect.scan.invalid":
@@ -807,7 +802,6 @@ export const dict = {
   "server.connect.camera.starting": "པར་ཆས་ཁ་ཕྱེ་དོ...",
   "server.connect.mixedContent":
     "HTTPS ཤོག་ལེབ་ཅིག་ལས་ HTTP སར་བར་འདི་ལུ་མཐུད་མ་ཚུགས། དེ་གི་ཚབ་ལུ་ HTTPS སར་བར་ཁ་བྱང་ཅིག་ལག་ལེན་འཐབ།",
-  "server.connect.camera.insecure": "QR པར་ལེན་འབད་ནི་ལུ་ ཤོག་ལེབ་འདི་ HTTPS ཡང་ན་ localhost གུ་ཁ་ཕྱེ་དགོཔ་ཨིན།",
   "server.connect.camera.unavailable": "བརྡ་འཚོལ་འདི་ལུ་པར་ཆས་མེད། ཁྱོད་རའི་མཐུད་ལམ་རྒྱས་བཤད་ཚུ་ལག་ཐོག་ལས་བཙུགས།",
   "server.connect.camera.error":
     "པར་ཆས་ཁ་ཕྱེ་མ་ཚུགས། པར་ཆས་འཛུལ་སྤྱོད་འབད་བཅུགཔ་ ཡང་ན་ ཁྱོད་རའི་མཐུད་ལམ་རྒྱས་བཤད་ཚུ་ལག་ཐོག་ལས་བཙུགས།",

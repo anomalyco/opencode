@@ -7,6 +7,7 @@ import { openDatabase } from "./database"
 import { createStateStore } from "./state"
 
 const roots: string[] = []
+
 // Bun's node:sqlite shim keeps prepared statements alive after close(), which pins the WAL files
 // on Windows. Node (and so Electron) finalizes them; tolerate the leftover here only.
 afterEach(() =>
@@ -15,8 +16,10 @@ afterEach(() =>
 
 const open = () => {
   const database = openDatabase(":memory:")
+
   return { db: database.db, store: createStateStore(database.db) }
 }
+
 const rows = (db: ReturnType<typeof openDatabase>["db"]) =>
   db.all<{ name: string; key: string; value: string }>(sql`SELECT name, key, value FROM state ORDER BY name, key`)
 

@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test"
 import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
-import { Effect } from "effect"
+import { Effect, Exit } from "effect"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Git } from "@opencode/core/git"
 import { AbsolutePath, RelativePath } from "@opencode/core/schema"
@@ -235,6 +235,58 @@ describe("Git trees", () => {
     }),
   )
 
+  it.live(
+    "diffs a path selection longer than any platform command line",
+    () =>
+      Effect.gen(function* () {
+        const root = yield* Effect.acquireRelease(
+          Effect.promise(() => tmpdir()),
+          (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+        )
+        yield* Effect.promise(async () => {
+          await initRepo(root.path)
+          await fs.mkdir(path.join(root.path, "dir", "nested"), { recursive: true })
+          await Bun.write(path.join(root.path, "changed.txt"), "before\n")
+          await Bun.write(path.join(root.path, "removed.txt"), "removed\n")
+          await Bun.write(path.join(root.path, "dir", "nested", "file.txt"), "before\n")
+        })
+        const git = yield* Git.Service
+        const repository = yield* git.repo.discover(AbsolutePath.make(root.path))
+        if (!repository) throw new Error("Repository not found")
+        const before = yield* git.tree.capture({ repository, scopes: [RelativePath.make(".")] })
+        yield* Effect.promise(async () => {
+          await Bun.write(path.join(root.path, "changed.txt"), "after\n")
+          await fs.rm(path.join(root.path, "removed.txt"))
+          await Bun.write(path.join(root.path, "dir", "nested", "file.txt"), "after\n")
+          await Bun.write(path.join(root.path, "first.txt"), "first\n")
+          await Bun.write(path.join(root.path, "last.txt"), "last\n")
+          await Bun.write(path.join(root.path, "unselected.txt"), "unselected\n")
+        })
+        const after = yield* git.tree.capture({ repository, scopes: [RelativePath.make(".")] })
+        const missing = Array.from({ length: 30_000 }, (_, index) =>
+          RelativePath.make(`missing/${String(index).padStart(6, "0")}/${"x".repeat(80)}.txt`),
+        )
+        const paths = ["first.txt", "changed.txt", "removed.txt", "dir", ...missing, "last.txt"].map((file) =>
+          RelativePath.make(file),
+        )
+
+        const diffs = yield* git.tree.diff({ repository, from: before, to: after, paths })
+        expect(diffs.map((item) => [item.file, item.status, item.additions, item.deletions])).toEqual([
+          ["changed.txt", "modified", 1, 1],
+          ["dir/nested/file.txt", "modified", 1, 1],
+          ["first.txt", "added", 1, 0],
+          ["last.txt", "added", 1, 0],
+          ["removed.txt", "deleted", 0, 1],
+        ])
+        expect(diffs[0]?.patch).toContain("-before\n+after\n")
+        expect(diffs[2]?.patch).toContain("+first\n")
+        expect(diffs[4]?.patch).toContain("-removed\n")
+        expect(yield* git.tree.diff({ repository, from: before, to: after, paths: missing })).toEqual([])
+        expect(yield* git.tree.write(repository)).toBe(after)
+      }),
+    { timeout: 60_000 },
+  )
+
   it.live("captures, compares, previews, and restores scoped trees", () =>
     Effect.gen(function* () {
       const root = yield* Effect.acquireRelease(
@@ -296,3 +348,214 @@ describe("Git trees", () => {
     }),
   )
 })
+
+describe("Git objects", () => {
+  it.live(
+    "packs loose objects and combines packs without losing or delegating any object",
+    () =>
+      Effect.gen(function* () {
+        const root = yield* Effect.acquireRelease(
+          Effect.promise(() => tmpdir()),
+          (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+        )
+        const project = path.join(root.path, "project")
+        yield* Effect.promise(async () => {
+          await fs.mkdir(project)
+          await initRepo(project)
+          await Bun.write(path.join(project, "seed.txt"), "seed\n")
+          await $`git add . && git commit -q -m initial`.cwd(project).quiet()
+        })
+        const git = yield* Git.Service
+        const source = yield* git.repo.discover(AbsolutePath.make(project))
+        if (!source) throw new Error("Repository not found")
+        const repository = yield* git.repo.create({
+          worktree: source.worktree,
+          gitDirectory: AbsolutePath.make(path.join(root.path, "storage")),
+          seed: source,
+        })
+        const capture = () => git.tree.capture({ repository, scopes: [RelativePath.make(".")], ignores: source })
+        const trees = [yield* capture()]
+        // Enough distinct content to cross the loose-object threshold.
+        yield* Effect.promise(() =>
+          Promise.all(
+            Array.from({ length: 2100 }, (_, index) =>
+              Bun.write(path.join(project, `gen/d${index % 20}/f${index}.txt`), `${index}\n`),
+            ),
+          ),
+        )
+        trees.push(yield* capture())
+        const objects = path.join(repository.gitDirectory, "objects")
+        const alternates = path.join(objects, "info", "alternates")
+        // Objects stored in the snapshot repository itself, excluding anything borrowed through alternates.
+        const everything = () =>
+          Effect.promise(async () => {
+            const borrowed = await fs.readFile(alternates, "utf8")
+            await fs.rm(alternates)
+            const listed =
+              await $`git --git-dir ${repository.gitDirectory} cat-file --batch-all-objects ${"--batch-check=%(objectname)"}`.text()
+            await fs.writeFile(alternates, borrowed)
+            return listed.split("\n").filter(Boolean).toSorted()
+          })
+        const loose = () => Effect.promise(() => looseObjectIDs(objects))
+        const before = yield* everything()
+        expect((yield* loose()).length).toBeGreaterThan(2048)
+
+        yield* git.objects.pack(repository)
+        expect(yield* loose()).toEqual([])
+        expect(yield* everything()).toEqual(before)
+
+        for (let batch = 0; batch < 16; batch++) {
+          yield* Effect.promise(() => Bun.write(path.join(project, `batch-${batch}.txt`), `${batch}\n`))
+          trees.push(yield* capture())
+          yield* Effect.promise(async () => {
+            const list = await looseObjectIDs(objects)
+            await $`git --git-dir ${repository.gitDirectory} pack-objects -q ${path.join(objects, "pack", "pack")} < ${Buffer.from(list.join("\n") + "\n")}`.quiet()
+            await $`git --git-dir ${repository.gitDirectory} prune-packed`.quiet()
+          })
+        }
+        const packs = () =>
+          Effect.promise(async () =>
+            (await fs.readdir(path.join(objects, "pack"))).filter((file) => file.endsWith(".pack")),
+          )
+        expect((yield* packs()).length).toBeGreaterThanOrEqual(16)
+        const merged = yield* everything()
+
+        yield* git.objects.pack(repository)
+        expect((yield* packs()).length).toBe(1)
+        expect(yield* everything()).toEqual(merged)
+
+        expect((yield* git.tree.files({ repository, from: trees[0]!, to: trees.at(-1)! })).length).toBe(2100 + 16)
+      }),
+    { timeout: 60_000 },
+  )
+})
+
+describe("Git capture", () => {
+  it.live("applies both the store's own and the source's ignore rules and never splits the index", () =>
+    Effect.gen(function* () {
+      const root = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+      )
+      const project = path.join(root.path, "project")
+      yield* Effect.promise(async () => {
+        await fs.mkdir(project)
+        await initRepo(project)
+        await Bun.write(path.join(project, "tracked.bin"), "small\n")
+        await $`git add . && git commit -q -m initial`.cwd(project).quiet()
+        await Bun.write(path.join(project, ".git", "info", "exclude"), "source-ignored/\n")
+      })
+      const git = yield* Git.Service
+      const source = yield* git.repo.discover(AbsolutePath.make(project))
+      if (!source) throw new Error("Repository not found")
+      const storage = AbsolutePath.make(path.join(root.path, "storage"))
+      const repository = yield* git.repo.create({ worktree: source.worktree, gitDirectory: storage, seed: source })
+      yield* Effect.promise(async () => {
+        // Rules an init template left in the store keep applying, and a split index would lose entries.
+        await Bun.write(path.join(storage, "info", "exclude"), "store-ignored/\n")
+        await $`git --git-dir ${storage} config core.splitIndex true`.quiet()
+      })
+      const capture = () => git.tree.capture({ repository, scopes: [RelativePath.make(".")], ignores: source })
+      const before = yield* capture()
+      yield* Effect.promise(async () => {
+        await Bun.write(path.join(project, "tracked.bin"), "changed\n")
+        await Bun.write(path.join(project, "store-ignored", "a.txt"), "a\n")
+        await Bun.write(path.join(project, "source-ignored", "b.txt"), "b\n")
+        await Bun.write(path.join(project, "kept.txt"), "kept\n")
+      })
+      const after = yield* capture()
+      expect(yield* git.tree.files({ repository, from: before, to: after })).toEqual([
+        RelativePath.make("kept.txt"),
+        RelativePath.make("tracked.bin"),
+      ])
+      expect(yield* capture()).toBe(after)
+      expect(yield* Effect.promise(() => fs.readFile(path.join(storage, "info", "exclude"), "utf8"))).toStartWith(
+        "store-ignored/\n",
+      )
+    }),
+  )
+})
+
+describe("Git capture recovery", () => {
+  const setup = Effect.gen(function* () {
+    const root = yield* Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+    )
+    const project = path.join(root.path, "project")
+    yield* Effect.promise(async () => {
+      await fs.mkdir(project)
+      await initRepo(project)
+      await Bun.write(path.join(project, "a.txt"), "a\n")
+      await Bun.write(path.join(project, "b.txt"), "b\n")
+      await $`git add . && git commit -q -m initial`.cwd(project).quiet()
+    })
+    const git = yield* Git.Service
+    const source = yield* git.repo.discover(AbsolutePath.make(project))
+    if (!source) throw new Error("Repository not found")
+    const repository = yield* git.repo.create({
+      worktree: source.worktree,
+      gitDirectory: AbsolutePath.make(path.join(root.path, "storage")),
+      seed: source,
+    })
+    const capture = () => git.tree.capture({ repository, scopes: [RelativePath.make(".")], ignores: source })
+    return { root, project, repository, capture }
+  })
+
+  it.live("sweeps abandoned temporary indexes by their creation time, not their mtime", () =>
+    Effect.gen(function* () {
+      const { repository, capture } = yield* setup
+      const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000
+      const live = path.join(repository.gitDirectory, `index.opencode-${Date.now()}-1-live`)
+      const abandoned = path.join(repository.gitDirectory, `index.opencode-${twoHoursAgo}-1-abandoned`)
+      yield* Effect.promise(async () => {
+        await Bun.write(live, "")
+        await Bun.write(abandoned, "")
+        // A hard link to an index nobody wrote for hours carries that old mtime while in use.
+        await fs.utimes(live, new Date(twoHoursAgo), new Date(twoHoursAgo))
+      })
+      yield* capture()
+      expect(yield* Effect.promise(() => Bun.file(live).exists())).toBe(true)
+      expect(yield* Effect.promise(() => Bun.file(abandoned).exists())).toBe(false)
+    }),
+  )
+
+  it.live("records a tracked file replaced by an embedded repository as a gitlink", () =>
+    Effect.gen(function* () {
+      const { project, repository, capture } = yield* setup
+      yield* capture()
+      yield* Effect.promise(async () => {
+        await fs.rm(path.join(project, "a.txt"))
+        await Bun.write(path.join(project, "a.txt", "inner.txt"), "inner\n")
+        await initRepo(path.join(project, "a.txt"))
+        await $`git add . && git commit -q -m inner`.cwd(path.join(project, "a.txt")).quiet()
+      })
+      const tree = yield* capture()
+      const entry = yield* Effect.promise(() =>
+        $`git --git-dir ${repository.gitDirectory} ls-tree ${tree} a.txt`.text(),
+      )
+      expect(entry).toStartWith("160000 commit ")
+    }),
+  )
+
+  it.live("keeps the index when Git cannot even start", () =>
+    Effect.gen(function* () {
+      const { root, project, repository, capture } = yield* setup
+      const before = yield* capture()
+      const moved = path.join(root.path, "moved")
+      yield* Effect.promise(() => fs.rename(project, moved))
+      expect(Exit.isFailure(yield* capture().pipe(Effect.exit))).toBe(true)
+      yield* Effect.promise(() => fs.rename(moved, project))
+      expect(yield* Effect.promise(() => Bun.file(path.join(repository.gitDirectory, "index")).exists())).toBe(true)
+      expect(yield* capture()).toBe(before)
+    }),
+  )
+})
+
+async function looseObjectIDs(objects: string) {
+  const prefixes = (await fs.readdir(objects)).filter((entry) => /^[0-9a-f]{2}$/.test(entry))
+  const listed = await Promise.all(
+    prefixes.map(async (prefix) => (await fs.readdir(path.join(objects, prefix))).map((entry) => prefix + entry)),
+  )
+  return listed.flat()
+}

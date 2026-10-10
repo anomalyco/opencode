@@ -36,8 +36,5 @@ export default {
   "form.name": "ឈ្មោះម៉ាស៊ីនមេ (ជាជម្រើស)",
   "form.namePlaceholder": "Localhost",
   "form.add": "បន្ថែមម៉ាស៊ីនមេ",
-  "server.default": "លំនាំដើម",
-  "menu.default": "កំណត់ជាលំនាំដើម",
-  "menu.defaultRemove": "លុបលំនាំដើមចេញ",
   "menu.delete": "លុប",
 }

@@ -26,11 +26,13 @@ export const ProjectOptions: Component<{
   const platform = usePlatform()
   const revealProject = useRevealProject()
   const context = () => global.ensureServerCtx(props.server)
+
   const unseen = () =>
     [props.project.worktree, ...(props.project.sandboxes ?? [])].reduce(
       (total, directory) => total + context().notification.project.unseenCount(directory),
       0,
     )
+
   const clearNotifications = () => {
     const notification = context().notification
     const directories = [props.project.worktree, ...(props.project.sandboxes ?? [])]
@@ -38,6 +40,7 @@ export const ProjectOptions: Component<{
       .filter((directory) => notification.project.unseenCount(directory) > 0)
       .forEach((directory) => notification.project.markViewed(directory))
   }
+
   const close = () => {
     context().projects.close(props.project.worktree)
     props.onClose?.()

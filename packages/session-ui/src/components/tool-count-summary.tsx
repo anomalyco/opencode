@@ -24,6 +24,7 @@ export function AnimatedCountList(props: { items: CountItem[]; fallback?: string
         {(item, index) => {
           const visible = createMemo(() => item().count > 0)
           const position = createMemo(() => active().indexOf(index))
+
           return (
             <>
               <span data-slot="tool-count-summary-prefix" data-active={visible() && position() > 0 ? "true" : "false"}>

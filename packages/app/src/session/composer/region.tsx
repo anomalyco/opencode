@@ -195,14 +195,10 @@ export function createActiveSessionRegion(input: {
   }
 
   const pendingSteer: NonNullable<SessionUserActions["pending"]> = {
-    steer: (messageID) => {
+    status: (messageID) => {
       const sessionID = input.session.identity.params.id
 
-      if (!sessionID) return false
-
-      return data.session.pending
-        .list(sessionID)
-        .some((item) => item.id === messageID && item.type === "user" && item.delivery === "steer")
+      return sessionID ? data.session.pending.status(sessionID, messageID) : undefined
     },
     queue: ({ sessionID, messageID }) =>
       server.api.session.inbox

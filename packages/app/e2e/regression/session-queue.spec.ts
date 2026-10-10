@@ -737,15 +737,30 @@ test("/compact runs with the composer model and shows a queued compaction, as in
   expect(models).toMatchObject([{ model: { id: "queue-model", providerID: "opencode" } }])
 })
 
-for (const action of ["Move to queue", "Delete"] as const) {
-  test(`${action} on a pending steer replaces Revert, as in the TUI`, async ({ page }) => {
-    const mock = createQueueMock(["U2: Also check the retry path."])
+for (const [action, status] of [
+  ["Move to queue", "steering"],
+  ["Delete", "steering"],
+  ["Move to queue", "starting"],
+  ["Delete", "starting"],
+] as const) {
+  test(`${action} on a ${status} pending steer replaces Revert, as in the TUI`, async ({ page }) => {
+    // A steer waits behind work only once the running execution delivered input; before that it is starting.
+    const delivered: SessionMessageInfo[] =
+      status === "steering"
+        ? [{ id: "msg_queue_delivered", type: "user", text: "First prompt", time: { created: 1 } }]
+        : []
+
+    const mock = createQueueMock(["U2: Also check the retry path."], delivered)
     const inboxID = mock.rows[0].id
     mock.rows[0].delivery = "steer"
     const view = await openQueue(page, mock)
     const pending = userRow(page, inboxID)
 
     await expect(pending).toContainText("U2: Also check the retry path.")
+    const message = pending.locator('[data-component="user-message"]')
+
+    if (status === "steering") await expect(message).toHaveAttribute("data-pending", "true")
+    else await expect(message).not.toHaveAttribute("data-pending")
     await pending.hover()
     await expect(pending.getByRole("button", { name: "Revert message" })).toHaveCount(0)
     await pending.getByRole("button", { name: action }).click()
@@ -859,6 +874,45 @@ for (const delivery of ["steer", "queue"] as const) {
     await expect(pending).toContainText(followUp)
     await expect(thinking).toHaveCount(0)
 
+    const bubble = pending.locator('[data-slot="user-message-text"]')
+
+    const colors =
+      delivery === "steer"
+        ? {
+            delivered: await userRow(page, userID)
+              .locator('[data-slot="user-message-text"]')
+              .evaluate((element) => ({
+                background: getComputedStyle(element).backgroundColor,
+                text: getComputedStyle(element).color,
+              })),
+            pending: await bubble.evaluate((element) => {
+              const probe = document.createElement("span")
+              probe.style.backgroundColor = "var(--v2-background-bg-layer-02)"
+              probe.style.color = "var(--v2-text-text-base)"
+              element.appendChild(probe)
+
+              const colors = {
+                background: getComputedStyle(probe).backgroundColor,
+                text: getComputedStyle(probe).color,
+              }
+
+              probe.remove()
+
+              return colors
+            }),
+          }
+        : undefined
+
+    if (colors) {
+      await expect(bubble).toHaveCSS("background-color", colors.pending.background)
+      await expect(bubble).toHaveCSS("color", colors.pending.text)
+      await pending.hover()
+      await expect(pending.locator('[data-slot="user-message-meta"]')).toHaveText(
+        /^Pending\s*·\s*Build\s*·\s*Queue Model$/,
+      )
+      await bubble.evaluate((element) => (element.dataset.deliveryMarker = "pending"))
+    }
+
     // The next assistant step still belongs to U1: U2 has been admitted, not delivered.
     mock.emit("session.step.started", {
       sessionID,
@@ -921,6 +975,18 @@ for (const delivery of ["steer", "queue"] as const) {
     mock.emit("session.inbox.delivered", { sessionID, inboxID })
     await expect(thinking).toHaveCount(0)
     await expect(pending).toHaveCount(1)
+
+    if (colors) {
+      await expect(bubble).toHaveAttribute("data-delivery-marker", "pending")
+      await expect(pending.locator('[data-slot="user-message-meta"]')).toHaveText(/^Build\s*·\s*Queue Model$/)
+      await expect(bubble).toHaveCSS("background-color", colors.delivered.background)
+      await expect(bubble).toHaveCSS("color", colors.delivered.text)
+      await expect(bubble).toHaveCSS("transition-property", "background-color, color")
+      await transcript.screenshot({ path: testInfo.outputPath("delivered-steer.png") })
+      await page.emulateMedia({ reducedMotion: "reduce" })
+      await expect(bubble).toHaveCSS("transition-duration", "0s")
+    }
+
     await expect(transcript.locator('[data-timeline-row="UserMessage"]')).toHaveCount(2)
     await expect(transcript.locator('[data-timeline-row="AssistantPart"]').filter({ has: tools })).toHaveAttribute(
       "data-message-id",

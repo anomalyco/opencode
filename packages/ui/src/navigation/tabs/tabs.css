@@ -568,11 +568,6 @@
       color: var(--v2-text-text-base);
     }
 
-    .tab-fileicon-color,
-    .tab-fileicon-mono {
-      margin-inline-start: -2px;
-    }
-
     .italic {
       font-style: italic !important;
       font-variation-settings: "slnt" -10 !important;
@@ -600,27 +595,15 @@
   flex: 1 1 0;
   min-width: 0;
   width: auto;
+  height: var(--tabs-bar-height);
+  padding-inline-end: 0;
   border-bottom: none;
 }
 
+/* The end gap lives inside the sticky "+" box. Sticky offsets respect the strip's padding, so padding there
+   would leave a gap after the "+" where scrolled tabs show through. */
 :root body #review-panel [data-component="tabs"] .session-review-v2-tabs-bar [data-slot="tabs-list"] > .sticky {
-  padding-inline-end: 0;
-
-  [data-component="icon-button-v2"] {
-    position: relative;
-
-    &::after {
-      content: "";
-      position: absolute;
-      inset-inline-start: 100%;
-      top: 50%;
-      transform: translateY(-50%);
-      width: 20px;
-      height: 28px;
-      background-color: var(--v2-background-bg-base);
-      pointer-events: none;
-    }
-  }
+  padding-inline-end: 12px;
 }
 
 :root

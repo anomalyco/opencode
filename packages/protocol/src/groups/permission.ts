@@ -5,7 +5,7 @@ import { PermissionSaved } from "@opencode/schema/permission-saved"
 import { Project } from "@opencode/schema/project"
 import { Session } from "@opencode/schema/session"
 import { Context, Schema } from "effect"
-import { HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
+import { HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema, OpenApi } from "effect/http-api"
 import { LocationNotFoundError, PermissionNotFoundError, SessionNotFoundError } from "../errors.js"
 import { LocationQuery, locationQueryOpenApi } from "./location.js"
 

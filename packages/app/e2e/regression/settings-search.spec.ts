@@ -21,7 +21,9 @@ async function open(page: Page, input: { count?: number; seed?: SeedInput } = {}
             name: `OpenCode ${String(index).padStart(2, "0")}`,
           }),
         )
+
   await page.route("https://api.github.com/**", (route) => route.fulfill({ json: [] }))
+
   const { settings } = await openSettings(page, {
     name: "OpenCode",
     directory,
@@ -34,17 +36,20 @@ async function open(page: Page, input: { count?: number; seed?: SeedInput } = {}
       ...input.seed,
     },
   })
+
   const view = {
     settings,
     search: settings.getByRole("combobox", { name: "Search", exact: true }),
     results: settings.getByRole("listbox", { name: "Settings results", exact: true }),
     viewport: settings.locator(".settings-search-scroll > .scroll-view__viewport"),
   }
+
   // Readiness includes the server-backed project inventory, not just the settings shell.
   if (input.count === 0) return view
   await view.search.fill("OpenCode")
   await expect(view.results.getByRole("option")).toHaveCount(input.count ?? (input.seed?.servers ? 2 : 1))
   await view.search.clear()
+
   return view
 }
 
@@ -118,8 +123,10 @@ test("a long empty-state query keeps its closing quote beside the ellipsis while
   await view.search.fill(query)
   const status = view.settings.getByRole("status")
   const quoted = status.locator("bdi")
+
   const fits = () =>
     quoted.evaluate((element) => element.getBoundingClientRect().width <= element.parentElement!.clientWidth)
+
   await expect(status).toHaveAccessibleName(`No results for "${query}"`)
   await expect(quoted).toHaveText(/^".+…"$/)
   await expect.poll(fits).toBe(true)
@@ -135,10 +142,12 @@ test("a long empty-state query keeps its closing quote beside the ellipsis while
 
 test("the search input tracks overflow through typing, caret moves, resizing, and clearing", async ({ page }) => {
   const view = await open(page)
+
   const overflow = async (start: string, end: string) => {
     await expect(view.search).toHaveAttribute("data-overflow-start", start)
     await expect(view.search).toHaveAttribute("data-overflow-end", end)
   }
+
   await view.search.fill("zzzz ".repeat(30))
   await view.search.press("End")
   await overflow("true", "false")
@@ -182,16 +191,19 @@ test("a search result reveal highlights once and cleans up after it finishes", a
     ),
   )
   await expect(view.settings.locator("[data-search-target]")).toHaveCount(0)
+
   for (const tab of ["MCPs", "Skills"]) {
     await view.settings.getByRole("tab", { name: tab, exact: true }).click()
     await expect(view.settings.getByRole("tab", { name: tab, exact: true })).toHaveAttribute("aria-selected", "true")
   }
+
   await expect(view.settings.locator("[data-search-target]")).toHaveCount(0)
   await expect(view.settings).toHaveAttribute("data-search-flashes", "1")
 })
 
 test("Models and Shortcuts leave focus on navigation until the user types", async ({ page }) => {
   const view = await open(page)
+
   for (const entry of [
     { tab: "Models", search: "Search models" },
     { tab: "Shortcuts", search: "Search shortcuts" },
@@ -199,6 +211,7 @@ test("Models and Shortcuts leave focus on navigation until the user types", asyn
     await view.settings.getByRole("tab", { name: entry.tab, exact: true }).click()
     await expect(view.settings.getByRole("searchbox", { name: entry.search, exact: true })).not.toBeFocused()
   }
+
   const search = view.settings.getByRole("searchbox", { name: "Search shortcuts", exact: true })
   await page.keyboard.press("p")
   await expect(search).toBeFocused()
@@ -240,6 +253,7 @@ for (const count of [0, 7, 8]) {
     await view.settings.getByRole("tab", { name: "Projects", exact: true }).click()
     const search = view.settings.getByRole("searchbox", { name: "Search projects", exact: true })
     const projects = view.settings.getByRole("button", { name: /^OpenCode / })
+
     if (count === 0) {
       await expect(view.settings.getByText("No projects yet", { exact: true })).toBeVisible()
       await view.settings.getByRole("button", { name: "Add project", exact: true }).click()
@@ -247,13 +261,18 @@ for (const count of [0, 7, 8]) {
       await expect(picker).toBeVisible()
       await picker.getByRole("button", { name: "Cancel", exact: true }).click()
       await expect(picker).toBeHidden()
+
       return
     }
+
     await expect(projects).toHaveCount(count)
+
     if (count === 7) {
       await expect(search).toHaveCount(0)
+
       return
     }
+
     await search.fill("  CODE 06  ")
     await expect(projects).toHaveCount(1)
     await expect(projects).toHaveAccessibleName("OpenCode 06")
@@ -269,6 +288,7 @@ for (const count of [0, 7, 8]) {
 
 test("all indexed client controls resolve to visible production controls", async ({ page }) => {
   const view = await open(page)
+
   for (const entry of clientSettings.filter((entry) => entry.target && !entry.available)) {
     await view.search.fill(en[entry.label as keyof typeof en])
     const result = view.results.locator(`[data-setting-target="${entry.target}"]`)
@@ -324,6 +344,7 @@ test("multi-server results navigate to the named server and keep the query on re
     sessions: [],
     pageMessages: () => ({ items: [] }),
   })
+
   const view = await open(page, {
     seed: {
       servers: [{ url: REMOTE_SERVER, name: "Build server" }],
@@ -333,6 +354,7 @@ test("multi-server results navigate to the named server and keep the query on re
       },
     },
   })
+
   await view.search.fill("MCPs")
   await expect(view.results.getByRole("option")).toHaveCount(2)
   await view.results.getByRole("option", { name: "MCPs, Build server, Extensions", exact: true }).click()

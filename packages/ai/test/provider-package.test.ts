@@ -451,6 +451,29 @@ describe("provider package entrypoints", () => {
     })
   })
 
+  test("maps Vertex Interactions package settings onto the shared protocol", async () => {
+    const GoogleVertexInteractions = await import("@opencode/ai/providers/google-vertex/interactions")
+    const selected = GoogleVertexInteractions.model("gemini-3.8-flash", {
+      accessToken: "fixture",
+      project: "vertex-project",
+      location: "global",
+      headers: { "x-application": "opencode" },
+      body: { generation_config: { temperature: 0.5 } },
+      thinkingLevel: "low",
+      store: false,
+    })
+    expect(selected.route.id).toBe("google-vertex-interactions")
+    expect(selected.route.protocol).toBe("google-interactions")
+    expect(selected.route.endpoint).toMatchObject({
+      baseURL: "https://aiplatform.googleapis.com/v1beta1/projects/vertex-project/locations/global",
+      path: "/interactions",
+      query: { alt: "sse" },
+    })
+    expect(selected.route.defaults.headers).toEqual({ "x-application": "opencode" })
+    expect(selected.route.defaults.http?.body).toEqual({ generation_config: { temperature: 0.5 } })
+    expect(selected.route.defaults.providerOptions).toEqual({ thinkingLevel: "low", store: false })
+  })
+
   test("rejects conflicting Vertex auth settings at runtime", async () => {
     const GoogleVertex = await import("@opencode/ai/providers/google-vertex")
     const GoogleVertexChat = await import("@opencode/ai/providers/google-vertex/chat")

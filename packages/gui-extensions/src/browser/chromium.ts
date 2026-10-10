@@ -6,9 +6,18 @@ import type { Embeds } from "../sdk/main"
 import { createCdp, abortError, waitFor } from "./cdp"
 import { createBrowserFiles } from "./files"
 import { createDiagnostics } from "./diagnostics"
+import { loadIcon } from "./icon"
 import { createProfiling, type Recording } from "./profiling"
 import type { BrowserNetwork } from "./network"
-import { allowedDestination, destinationOrigin, fileURLWithin, localFileURL, normalizeURL, type Policy } from "./policy"
+import {
+  allowedDestination,
+  destinationOrigin,
+  fileURLWithin,
+  localFileURL,
+  normalizeURL,
+  refusal,
+  type Policy,
+} from "./policy"
 import type { PaneElement } from "./ipc"
 
 type Element = { backendID: number; frameID: string; sessionID?: string }
@@ -75,6 +84,41 @@ const pickedHighlight = { ...inspectHighlight, showInfo: false, showStyles: fals
 // next hideHighlight would put its hover tool back.
 const inspectOff = { mode: "none", highlightConfig: inspectHighlight }
 
+// Chromium's zoom presets, so a step lands where it would in the system browser.
+const zoomSteps = [0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5]
+
+/** A page's icon as a data URL, and its zoom factor, 1 at 100%. */
+export type PageDetail = { icon?: string; zoom: number }
+
+/** The zoom a key press asks for: the system browser's zoom keys, with the platform's modifier already checked. */
+function zoomKey(input: Electron.Input) {
+  if (input.key === "=" || input.key === "+" || input.code === "NumpadAdd") return "in"
+
+  if (input.key === "-" || input.code === "NumpadSubtract") return "out"
+
+  if (input.key === "0") return "reset"
+}
+
+/**
+ * The address a cookie is removed by: its domain without the leading dot, its path, and its scheme. An IPv6 host
+ * needs its brackets in a URL.
+ */
+function cookieURL(cookie: Electron.Cookie) {
+  const domain = (cookie.domain ?? "").replace(/^\./, "")
+  const host = domain.includes(":") && !domain.startsWith("[") ? `[${domain}]` : domain
+
+  return `${cookie.secure ? "https" : "http"}://${host}${cookie.path ?? "/"}`
+}
+
+/** The next preset in the direction, or 100%; the current factor at either end. */
+function zoomStep(current: number, direction: "in" | "out" | "reset") {
+  if (direction === "reset") return 1
+
+  if (direction === "in") return zoomSteps.find((step) => step > current + 0.001) ?? current
+
+  return zoomSteps.findLast((step) => step < current - 0.001) ?? current
+}
+
 export type BrowserPage = ReturnType<typeof createBrowserPage>
 
 export function createBrowserPage(
@@ -86,8 +130,15 @@ export function createBrowserPage(
     publish: (error?: string) => void
     /** Reports the element picker starting, stopping, or picking an element. */
     inspect?: (event: { active: boolean; element?: PaneElement }) => void
+    /** Reports the page's icon or zoom changing. */
+    detail?: (detail: PageDetail) => void
+    /** The page's zoom changed, which Chromium applies to every page of the same origin in the partition. */
+    zoomed?: () => void
+    /** The user pressed the address shortcut while the page had focus. */
+    address?: () => void
     fail: () => void
-    popup: (options: Electron.BrowserWindowConstructorOptions) => WebContents
+    /** Adopts a page the document opened; a background one leaves the current tab selected. */
+    popup: (options: Electron.BrowserWindowConstructorOptions, background: boolean) => WebContents
     initialize?: boolean
     restore?: Browser.Tab
     popupOptions?: Electron.BrowserWindowConstructorOptions
@@ -148,16 +199,57 @@ export function createBrowserPage(
       return
     }
 
-    const step =
-      input.key === "=" || input.key === "+" || input.code === "NumpadAdd"
-        ? 0.5
-        : input.key === "-" || input.code === "NumpadSubtract"
-          ? -0.5
-          : 0
+    // The system browser's address shortcut. The app's own focus moves to the address field.
+    if (!input.shift && input.code === "KeyL") {
+      event.preventDefault()
+      options.address?.()
 
-    if (!step && input.key !== "0") return
+      return
+    }
+
+    const direction = zoomKey(input)
+
+    if (!direction) return
     event.preventDefault()
-    contents.setZoomLevel(input.key === "0" ? 0 : contents.getZoomLevel() + step)
+    zoom(direction)
+  })
+  // Ctrl or Cmd with the mouse wheel; Electron leaves applying it to the app.
+  contents.on("zoom-changed", (_event, direction) => zoom(direction))
+
+  const zoom = (direction: "in" | "out" | "reset") => {
+    const current = contents.getZoomFactor()
+    const next = zoomStep(current, direction)
+
+    if (next === current) return
+    contents.setZoomFactor(next)
+    options.zoomed?.()
+  }
+
+  let icon: string | undefined
+  // Bumped by every icon change, so a slow fetch for an earlier icon cannot replace a later one.
+  let iconRequest = 0
+  let reported = ""
+
+  const detail = () => {
+    if (closed) return
+    // Chromium's factor for the outermost presets can land a rounding error outside them.
+    const next: PageDetail = { zoom: Math.min(5, Math.max(0.25, contents.getZoomFactor())) }
+
+    if (icon) next.icon = icon
+    const key = `${next.zoom}:${next.icon ?? ""}`
+
+    if (key === reported) return
+    reported = key
+    options.detail?.(next)
+  }
+
+  contents.on("page-favicon-updated", (_event, favicons) => {
+    const request = ++iconRequest
+    void loadIcon(favicons, options.network).then((value) => {
+      if (closed || request !== iconRequest) return
+      icon = value
+      detail()
+    })
   })
   const cdp = createCdp(contents)
   const documents = new Map<string, string>()
@@ -192,6 +284,8 @@ export function createBrowserPage(
     revision++
   })
   let closed = false
+  // The committed document's origin; its icon stays while navigations remain on it.
+  let origin = ""
   // Whether the native surface holds a real document worth showing. Chromium keeps the
   // previous document painted until the next one renders, so a shown page stays shown
   // through later navigations; blank and failed documents hide until a real one is ready.
@@ -243,9 +337,22 @@ export function createBrowserPage(
     // error statuses are real documents from the user's server and stay visible.
     if (status === 502) failure = { url, message: `${status} ${statusText}`.trim().slice(0, 2_048) }
 
+    // Another site's icon arrives with its document; the same site keeps its icon meanwhile, as tabs do. Files and blank
+    // pages have no shared origin, so each keeps none.
+    const next = destinationOrigin(url) ?? url
+
+    if (next !== origin) {
+      icon = undefined
+      iconRequest++
+    }
+
+    origin = next
+
     // A blank or failed document paints at commit; a real one waits for dom-ready.
     if (url === "about:blank" || failure) settle()
     publish()
+    // After the state that names the new URL. Chromium keeps a zoom per origin, so a new site may have its own.
+    detail()
   })
   contents.on("did-fail-load", (_event, code, description, url, isMainFrame) => {
     // Cancelled navigation and failed subframes do not replace the current page.
@@ -282,12 +389,14 @@ export function createBrowserPage(
 
     if (!event.isMainFrame && fileURLWithin(event.url, policy.fileRoots ?? [])) return
     event.preventDefault()
-    options.publish("ERR_BLOCKED_BY_CLIENT")
+    // The same reason a typed address gets, so a blocked link and a blocked address read alike.
+    options.publish(refusal(event.url, policy) ?? "ERR_BLOCKED_BY_CLIENT")
   }
 
   contents.on("will-frame-navigate", guard)
   contents.on("will-redirect", guard)
-  contents.setWindowOpenHandler(({ url }) =>
+  // Links opened with Cmd or Ctrl arrive as background tabs, and stay behind the current one as in the system browser.
+  contents.setWindowOpenHandler(({ url, disposition }) =>
     url === "about:blank" || destinationOrigin(url)
       ? {
           action: "allow",
@@ -305,7 +414,7 @@ export function createBrowserPage(
               partition: options.partition,
             },
           },
-          createWindow: (popupOptions) => options.popup(popupOptions),
+          createWindow: (popupOptions) => options.popup(popupOptions, disposition === "background-tab"),
         }
       : { action: "deny" },
   )
@@ -453,6 +562,39 @@ export function createBrowserPage(
       if (closed) return
       await highlightPicked(ref).catch(() => undefined)
     },
+    zoom(direction: "in" | "out" | "reset") {
+      if (!closed) zoom(direction)
+    },
+    async site() {
+      const url = contents.getURL()
+
+      if (closed || !destinationOrigin(url)) return { cookies: 0 }
+
+      return { cookies: (await contents.session.cookies.get({ url })).length }
+    },
+    /**
+     * Deletes what the page's site stored: the cookies its address can read, and its origin's storage. Resolves once
+     * the page reloaded without them, so a count read next includes what the reload set again.
+     */
+    async clearSite() {
+      const url = contents.getURL()
+      const origin = destinationOrigin(url)
+
+      if (closed || !origin) return
+      const cookies = await contents.session.cookies.get({ url })
+      await Promise.all(cookies.map((cookie) => contents.session.cookies.remove(cookieURL(cookie), cookie.name)))
+      await contents.session.clearStorageData({
+        origin,
+        storages: ["localstorage", "indexdb", "serviceworkers", "cachestorage", "filesystem", "shadercache"],
+      })
+
+      if (closed) return
+      contents.reload()
+      // A slow page still cleared; the count then reads what it set so far.
+      await waitFor(() => closed || !contents.isLoading(), new AbortController().signal, 30_000).catch(() => undefined)
+    },
+    /** Reports the page's icon and zoom when either changed since the last report. */
+    detail,
     async execute(command: Browser.Command, signal: AbortSignal): Promise<Browser.Result> {
       await ready
       abortError(signal)

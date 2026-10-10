@@ -53,8 +53,5 @@ export default {
     "Времето за изчакване на допълнителната кола за {{distro}} проверка на здравето изтече след {{timeout}}ms",
   "error.commandTimeout": "{{command}} {{args}} времето за изчакване изтече след {{timeout}}ms",
   "error.failedPort": "Неуспешно получаване на порт",
-  "server.default": "По подразбиране",
-  "menu.default": "Задайте по подразбиране",
-  "menu.defaultRemove": "Премахване на подразбиране",
   "menu.remove": "Премахване",
 }

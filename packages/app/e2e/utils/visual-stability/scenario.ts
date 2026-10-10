@@ -16,5 +16,6 @@ export async function runVisualStabilityScenario<const Regions extends Record<st
   await input.run()
   const result = await stopVisualProbe<Extract<keyof Regions, string>>(input.page)
   await reportVisualStability(input.testInfo, input.name, result, input.plan)
+
   return result
 }

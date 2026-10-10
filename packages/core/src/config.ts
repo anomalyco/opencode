@@ -99,7 +99,7 @@ export const layer = (options?: Options) =>
       const wellknown = yield* WellKnown.Service
       const reloadLock = Semaphore.makeUnsafe(1)
       const updateLock = Semaphore.makeUnsafe(1)
-      const decodeOptions = { errors: "all", onExcessProperty: "ignore", propertyOrder: "original" } as const
+      const decodeOptions = { errors: "all", onExcessProperty: "ignore" } as const
       const decodeInfo = Schema.decodeUnknownOption(Info, decodeOptions)
       const parseInfo = Effect.fn("Config.parseInfo")(function* (text: string, source: string) {
         const errors: ParseError[] = []
@@ -144,19 +144,19 @@ export const layer = (options?: Options) =>
 
       const loadWellknownEntry = Effect.fnUntraced(function* (entry: WellKnown.Entry) {
         const auth = entry.manifest.auth
-        if (!auth) return []
         const credential = (yield* credentials.list(entry.integrationID)).at(-1)
-        if (!credential || credential.value.type !== "key") return []
-        const variables = { [auth.env]: credential.value.key }
-        const configs = yield* wellknown
-          .resolve(entry, variables)
-          .pipe(
-            Effect.catch(() =>
-              Effect.logWarning("failed to load wellknown config", { source: entry.origin }).pipe(
-                Effect.as([] as const),
-              ),
+        const variables = auth && credential?.value.type === "key" ? { [auth.env]: credential.value.key } : undefined
+        // A failed refresh, including a missing credential, keeps the last resolved config so remote providers
+        // and allowlists do not disappear; only removing the source clears it.
+        const configs = yield* (
+          variables ? wellknown.resolve(entry, variables) : Effect.fail(new Error("No usable wellknown credential"))
+        ).pipe(
+          Effect.catch((error) =>
+            Effect.logWarning("failed to load wellknown config", { source: entry.origin, error }).pipe(
+              Effect.andThen(wellknown.cached(entry.origin)),
             ),
-          )
+          ),
+        )
         return yield* Effect.forEach(configs, (config) =>
           ConfigVariable.substitute({
             type: "virtual",
@@ -330,7 +330,8 @@ export const layer = (options?: Options) =>
         function* (patch: Patch) {
           const directory = initial.global ?? AbsolutePath.make(globalService.config)
           const candidates = ConfigDiscovery.names.map((name) => path.join(directory, name))
-          const filepath = (yield* Effect.filter(candidates, fs.isFile)).at(-1) ?? path.join(directory, "opencode.jsonc")
+          const filepath =
+            (yield* Effect.filter(candidates, fs.isFile)).at(-1) ?? path.join(directory, "opencode.jsonc")
           const text = (yield* fs.readFileStringSafe(filepath)) ?? "{}\n"
           const updated = yield* Effect.try({
             try: () =>

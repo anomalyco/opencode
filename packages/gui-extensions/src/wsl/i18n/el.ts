@@ -52,8 +52,5 @@ export default {
   "error.healthTimeout": "Το πλευρικό καρότσι για έλεγχο υγείας {{distro}} έληξε μετά από {{timeout}}ms",
   "error.commandTimeout": "{{command}} {{args}} έληξε μετά από {{timeout}}ms",
   "error.failedPort": "Αποτυχία λήψης θύρας",
-  "server.default": "Προεπιλογή",
-  "menu.default": "Ορισμός ως προεπιλογή",
-  "menu.defaultRemove": "Κατάργηση προεπιλογής",
   "menu.remove": "Αφαίρεση",
 }

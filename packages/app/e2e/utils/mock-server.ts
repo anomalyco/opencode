@@ -3,14 +3,15 @@ import type { OpenCodeEvent, SessionMessageInfo } from "@opencode/client/promise
 import { Permission } from "@opencode/schema/permission"
 import { Worktree } from "@opencode/schema/worktree"
 import { Duration, Effect, Layer, Option, Predicate, Schema } from "effect"
-import { HttpRouter, HttpServer, HttpServerResponse } from "effect/unstable/http"
-import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
+import { HttpRouter, HttpServer, HttpServerResponse } from "effect/http"
+import { HttpApiBuilder, HttpApiSchema } from "effect/http-api"
 import { SERVER } from "./app"
 import {
   MockApi,
   MockBadRequest,
   MockInternal,
   MockNotFound,
+  MockPtyNotFound,
   MockShellNotFound,
   MockUnauthorized,
   MockUnsupported,
@@ -135,6 +136,8 @@ export interface MockServerConfig {
   strictDirectory?: boolean
   // Answers 401 UnauthorizedError unless a request carries this password; a function may change it mid-test.
   password?: Resolvable<string>
+  // Serves GET /auth/connect/:code: `code` redeems once for `token` (send it as the password); others answer 401.
+  pairing?: { code: string; token: string }
 }
 
 export type MockPtyInfo = {
@@ -147,7 +150,14 @@ export type MockPtyInfo = {
   pid: number
 }
 
-export type MockPtySocket = { id: string; url: URL; input: string[]; closed: boolean; send(data: string): void }
+export type MockPtySocket = {
+  id: string
+  url: URL
+  input: string[]
+  closed: boolean
+  send(data: string): void
+  close(code: number, reason: string): Promise<void>
+}
 
 export type MockPty = {
   list: MockPtyInfo[]
@@ -401,6 +411,29 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     })
   })
 
+  if (config.pairing) {
+    const pairing = { ...config.pairing, redeemed: false }
+
+    await page.route(`${server}/auth/connect/*`, (route) => {
+      if (route.request().method() === "OPTIONS") return route.fulfill({ status: 204, headers: corsHeaders })
+      const code = decodeURIComponent(new URL(route.request().url()).pathname.split("/").at(-1) ?? "")
+
+      if (code !== pairing.code || pairing.redeemed) {
+        return route.fulfill({
+          status: 401,
+          headers: corsHeaders,
+          json: Schema.encodeSync(MockUnauthorized)(
+            new MockUnauthorized({ message: "Pairing link expired or already used" }),
+          ),
+        })
+      }
+
+      pairing.redeemed = true
+
+      return route.fulfill({ headers: corsHeaders, json: { token: pairing.token } })
+    })
+  }
+
   if (config.pty) {
     const host = new URL(server).host
     await page.routeWebSocket(
@@ -422,6 +455,7 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
           input: [],
           closed: false,
           send: (data) => ws.send(data),
+          close: (code, reason) => ws.close({ code, reason }),
         }
 
         ws.onMessage((message) => socket.input.push(message.toString()))
@@ -672,7 +706,9 @@ function mockHandlers(
           const directory = requestDirectory(config, request)
           const found = state.pty.find(id, directory)
 
-          return found ? Effect.succeed(found) : Effect.fail(new MockNotFound({ message: "PTY not found" }))
+          return found
+            ? Effect.succeed(found)
+            : Effect.fail(new MockPtyNotFound({ ptyID: id, message: `PTY not found: ${id}` }))
         }),
       ),
     )

@@ -20,6 +20,7 @@ test("keeps a successful removal applied until its event arrives", async () => {
 
 test("rolls back a failed removal", async () => {
   const release = Promise.withResolvers<void>()
+
   const mutation = createSessionMutations(async () => {
     await release.promise
     throw new Error("offline")

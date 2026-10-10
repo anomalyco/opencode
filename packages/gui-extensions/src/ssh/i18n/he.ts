@@ -32,8 +32,5 @@ export default {
   "form.name": "שם שרת (אופציונלי)",
   "form.namePlaceholder": "מארח מקומי",
   "form.add": "הוסף שרת",
-  "server.default": "ברירת מחדל",
-  "menu.default": "הגדר כברירת מחדל",
-  "menu.defaultRemove": "הסר את ברירת המחדל",
   "menu.delete": "מחק",
 }

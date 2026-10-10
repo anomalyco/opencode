@@ -122,38 +122,49 @@ export function createLineCommentAnnotationRenderer<T, C, D>(props: {
 
     const dispose = renderSolid(() => {
       const active = current()
+
       if (active.kind === "comment") {
         const view = createMemo(() => {
           const next = current()
+
           if (next.kind !== "comment") return props.renderComment(active.comment)
+
           return props.renderComment(next.comment)
         })
+
         return props.commentElement(view)
       }
 
       const view = createMemo(() => {
         const next = current()
+
         if (next.kind !== "draft") return props.renderDraft(active.range)
+
         return props.renderDraft(next.range)
       })
+
       return props.draftElement(view)
     }, host)
 
     const node = { host, dispose, setMeta: setCurrent }
     nodes.set(meta.key, node)
+
     return node
   }
 
   const render = <A extends { metadata: LineCommentAnnotationMeta<T> }>(annotation: A) => {
     const meta = annotation.metadata
     const node = nodes.get(meta.key) ?? mount(meta)
+
     if (!node) return
     node.setMeta(meta)
+
     return node.host
   }
 
   const reconcile = <A extends { metadata: LineCommentAnnotationMeta<T> }>(annotations: A[]) => {
     const next = new Set(annotations.map((annotation) => annotation.metadata.key))
+
     for (const [key, node] of nodes) {
       if (next.has(key)) continue
       node.dispose()
@@ -223,22 +234,26 @@ export function createLineCommentState<T>(props: LineCommentStateProps<T>) {
     draft: "",
     editing: null as T | null,
   })
+
   const draft = () => state.draft
   const setDraft = (value: string) => setState("draft", value)
   const editing = () => state.editing
   const setEditing = (value: T | null) => setState("editing", typeof value === "function" ? () => value : value)
 
   const toRange = (range: SelectedLineRange | null) => (range ? cloneSelectedLineRange(range) : null)
+
   const setSelected = (range: SelectedLineRange | null) => {
     const next = toRange(range)
     props.setSelected(next)
     props.syncSelected?.(toRange(next))
+
     return next
   }
 
   const setCommenting = (range: SelectedLineRange | null) => {
     const next = toRange(range)
     props.setCommenting(next)
+
     return next
   }
 
@@ -292,9 +307,12 @@ export function createLineCommentState<T>(props: LineCommentStateProps<T>) {
 
   const hoverComment = (range: SelectedLineRange) => {
     const next = toRange(range)
+
     if (!next) return
+
     if (props.hoverSelected) {
       props.hoverSelected(next)
+
       return
     }
 
@@ -376,6 +394,7 @@ export function createLineCommentController<T extends LineCommentShape>(
     draftElement: lineCommentDraftElement,
     renderComment: (comment) => {
       const edit = () => note.openEditor(comment.id, comment.selection, comment.comment)
+
       const remove = () => {
         note.reset()
         props.onDelete?.(comment)
@@ -443,6 +462,7 @@ export function createLineCommentController<T extends LineCommentShape>(
     label: props.label,
     getSelectedRange: () => {
       if (note.opened()) return null
+
       return props.getHoverSelectedRange?.() ?? note.selected()
     },
     onOpenDraft: note.openDraft,
@@ -452,6 +472,7 @@ export function createLineCommentController<T extends LineCommentShape>(
     if (!range) {
       note.select(null)
       note.cancelDraft()
+
       return
     }
 
@@ -462,6 +483,7 @@ export function createLineCommentController<T extends LineCommentShape>(
     if (!range) {
       if (props.clearSelectionOnSelectionEndNull) note.select(null)
       note.cancelDraft()
+
       return
     }
 
@@ -494,6 +516,7 @@ export function createLineCommentAnnotations<T>(
       () => {
         const list = props.comments().map((comment) => {
           const range = props.getCommentSelection(comment)
+
           return {
             side: props.getSide(range),
             lineNumber: line(range),
@@ -506,6 +529,7 @@ export function createLineCommentAnnotations<T>(
         })
 
         const range = props.draftRange()
+
         if (!range) return list
 
         return [
@@ -531,6 +555,7 @@ export function createLineCommentAnnotations<T>(
     () => {
       const list = props.comments().map((comment) => {
         const range = props.getCommentSelection(comment)
+
         const entry: LineCommentAnnotation<T> = {
           lineNumber: line(range),
           metadata: {
@@ -544,6 +569,7 @@ export function createLineCommentAnnotations<T>(
       })
 
       const range = props.draftRange()
+
       if (!range) return list
 
       const draft: LineCommentAnnotation<T> = {
@@ -570,8 +596,10 @@ type AnnotationListItem = {
 
 function sameAnnotationLists(previous: AnnotationListItem[], next: AnnotationListItem[]) {
   if (previous.length !== next.length) return false
+
   return previous.every((item, index) => {
     const other = next[index]!
+
     return (
       item.lineNumber === other.lineNumber &&
       item.side === other.side &&
@@ -621,8 +649,10 @@ export function createLineCommentGutterRenderer(props: {
       getHoveredLine,
       onSelect: (hovered) => {
         const current = props.getSelectedRange()
+
         if (current && lineInSelectedRange(current, hovered.lineNumber, hovered.side)) {
           props.onOpenDraft(cloneSelectedLineRange(current))
+
           return
         }
 
@@ -630,6 +660,7 @@ export function createLineCommentGutterRenderer(props: {
           start: hovered.lineNumber,
           end: hovered.lineNumber,
         }
+
         if (hovered.side) range.side = hovered.side
         props.onOpenDraft(range)
       },

@@ -298,9 +298,6 @@ export const dict = {
   "dialog.server.add.passwordPlaceholder": "lozinka",
   "dialog.server.edit.title": "Uredi poslužitelj",
   "dialog.server.menu.edit": "Uredi",
-  "dialog.server.menu.default": "Postavi kao zadano",
-  "dialog.server.menu.defaultRemove": "Ukloni zadano",
-  "dialog.server.status.default": "Zadano",
   "dialog.project.edit.title": "Uredi projekt",
   "dialog.project.edit.icon": "Ikona",
   "dialog.project.edit.icon.alt": "Ikona projekta",
@@ -805,7 +802,6 @@ export const dict = {
   "server.connect.button": "Poveži se",
   "server.connect.address.invalid": "Unesite ispravnu HTTP ili HTTPS adresu poslužitelja.",
   "server.connect.failed": "Povezivanje nije uspjelo. Provjerite adresu poslužitelja i lozinku, pa pokušajte ponovno.",
-  "server.connect.pair.description": "Pokrenite ovu naredbu na računalu da biste dobili podatke za povezivanje.",
   "server.connect.scan": "Skeniraj QR kod",
   "server.connect.scan.description": "Usmjerite kameru prema QR kodu koji prikazuje opencode pair.",
   "server.connect.scan.invalid": "Ovo nije OpenCode kod za uparivanje. Skenirajte kod koji prikazuje opencode pair.",
@@ -813,8 +809,6 @@ export const dict = {
   "server.connect.camera.starting": "Otvaranje kamere…",
   "server.connect.mixedContent":
     "Nije se moguće povezati s ovim HTTP poslužiteljem s HTTPS stranice. Umjesto toga koristite HTTPS adresu poslužitelja.",
-  "server.connect.camera.insecure":
-    "Za skeniranje QR koda ovu stranicu morate otvoriti putem HTTPS-a ili na localračunalu domaćinu.",
   "server.connect.camera.unavailable": "Ovom pregledniku nije dostupna kamera. Ručno unesite podatke za povezivanje.",
   "server.connect.camera.error":
     "Kameru nije bilo moguće otvoriti. Dozvolite pristup kameri ili ručno unesite podatke za povezivanje.",
