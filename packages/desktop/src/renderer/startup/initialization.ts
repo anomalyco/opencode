@@ -21,6 +21,15 @@ export function createSidecarResolver(input: {
 }) {
   return async (signal: AbortSignal) => {
     if (signal.aborted) throw signal.reason
+    const current = input.current()
+    if (current?.url) {
+      try {
+        const res = await fetch(`${current.url}/api/info`, { signal: AbortSignal.timeout(2_000) })
+        if (res.ok) {
+          return sidecarHttp(current)
+        }
+      } catch {}
+    }
     const next = await input.api.reconnectService()
 
     if (signal.aborted) throw signal.reason

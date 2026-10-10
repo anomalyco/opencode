@@ -8,7 +8,7 @@ export function openDatabase(filename: string) {
   const native = new DatabaseSync(filename)
   // WAL keeps readers off the writer. NORMAL fsyncs at checkpoints only, which survives an app
   // crash but not power loss; the right trade for UI state and far cheaper on Windows.
-  native.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA temp_store=MEMORY")
+  native.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA temp_store=MEMORY; PRAGMA busy_timeout=30000")
   const db = drizzle({ client: native })
   migrate(db)
 
