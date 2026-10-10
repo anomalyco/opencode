@@ -88,6 +88,25 @@ const setup: Setup<typeof definition> = (ctx) => {
     }
   })
 
+  // Blank pages have no focused native view, so the app must claim close inside the pane too.
+  ctx.add(Command, (): Command | undefined => {
+    const pane = model()?.pane()
+
+    if (!pane) return undefined
+
+    return {
+      id: "close",
+      title: ctx.t("command.close"),
+      group: ctx.t("command.category.view"),
+      bind: "mod+w",
+      scope: "#browser-panel",
+      hidden: true,
+      editable: true,
+      enabled: pane.visible(),
+      run: pane.close,
+    }
+  })
+
   // Ctrl+Shift+C copies in the terminal, so only the focused page claims it, as in Chromium.
   ctx.add(Command, (): Command | undefined => {
     const pane = model()?.pane()

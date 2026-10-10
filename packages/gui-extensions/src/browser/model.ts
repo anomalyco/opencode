@@ -57,6 +57,8 @@ type PaneHandle = {
   visible: () => boolean
   address: () => string
   reload: () => void
+  /** Closes the selected browser tab, including a blank page. */
+  close: () => void
   inspectable: () => boolean
   /** Turns the element picker on or off. */
   inspect: () => void
