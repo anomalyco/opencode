@@ -1,7 +1,7 @@
 import { readJson, writeJsonAtomic } from "./util/persistence"
 import { isRecord } from "./util/record"
+import { safeWatch } from "./util/watch"
 import { Flock } from "@opencode/util/flock"
-import { watch } from "node:fs"
 import path from "node:path"
 
 export type ModelPreferenceModel = {
@@ -103,7 +103,7 @@ function patch(value: Partial<ModelPreference>) {
 export function createModelPreferenceRepository(filePath: string) {
   let pending = Promise.resolve()
   let revision = 0
-  let watcher: ReturnType<typeof watch> | undefined
+  let watcher: ReturnType<typeof safeWatch> | undefined
   let reload: ReturnType<typeof setTimeout> | undefined
   const listeners = new Set<(value: ModelPreference) => void>()
   const read = () =>
@@ -152,14 +152,14 @@ export function createModelPreferenceRepository(filePath: string) {
       listeners.add(listener)
       void refresh()
       if (!watcher) {
-        watcher = watch(path.dirname(filePath), (_event, filename) => {
+        watcher = safeWatch(path.dirname(filePath), (_event, filename) => {
           const changed = filename?.toString()
           const name = path.basename(filePath)
           if (changed !== undefined && changed !== name && !changed.startsWith(name + ".")) return
           clearTimeout(reload)
           reload = setTimeout(() => void refresh(), 50)
         })
-        watcher.on("error", () => {
+        watcher?.on("error", () => {
           watcher?.close()
           watcher = undefined
         })
