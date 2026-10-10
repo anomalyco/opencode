@@ -3,6 +3,7 @@ import { Effect, FileSystem } from "effect"
 import { HttpServerError, HttpServerRequest, HttpServerResponse } from "effect/http"
 import { createHash } from "node:crypto"
 import { load, type AssetMap, type BrotliMap } from "../app-assets"
+import { OPENCODE_VERSION } from "../version"
 
 export const handler = Effect.fn("cli.web-ui.handler")(function* (options?: {
   readonly assets?: AssetMap
@@ -49,23 +50,31 @@ function serveUI(
   if (request.method !== "GET" && request.method !== "HEAD")
     return Effect.succeed(HttpServerResponse.empty({ status: 405 }))
   const html = name === "index.html"
-  const revalidate = html || name === "sw.js" || name === "registerSW.js"
+  const etag = `"${createHash("sha256").update(file).digest("hex").slice(0, 32)}"`
   const headers = {
     "content-type": FSUtil.mimeType(name),
-    "cache-control": revalidate ? "no-cache" : "public, max-age=31536000, immutable",
+    // Vite emits content-hashed bundles as `_assets/<name>-<hash>.<ext>`; only those can be cached
+    // forever. Everything else — index.html, sw.js, icons, the manifest, fonts, and unhashed files
+    // that happen to live under `_assets/` — keeps the same URL across releases and must revalidate.
+    "cache-control": HASHED_ASSET.test(name) ? "public, max-age=31536000, immutable" : "no-cache",
     "content-security-policy": html
       ? cspForHtml(typeof file === "string" ? file : Buffer.from(file).toString())
       : csp(),
     "x-content-type-options": "nosniff",
+    "x-opencode-version": OPENCODE_VERSION,
+    etag,
     ...(!html && brotli?.[name] !== undefined ? { vary: "accept-encoding" } : {}),
     ...(encoded ? { "content-encoding": "br" } : {}),
   }
+  if (request.headers["if-none-match"] === etag) return Effect.succeed(HttpServerResponse.empty({ status: 304, headers }))
   return Effect.succeed(
     request.method === "HEAD"
       ? HttpServerResponse.empty({ status: 200, headers })
       : HttpServerResponse.raw(file, { headers, contentType: headers["content-type"] }),
   )
 }
+
+const HASHED_ASSET = /^_assets\/[^/]+-[0-9A-Za-z_-]{8}\.[0-9a-z]+$/
 
 function acceptsBrotli(header: string | undefined) {
   return (header ?? "").split(",").some((entry) => {

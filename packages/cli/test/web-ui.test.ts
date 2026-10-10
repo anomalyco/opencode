@@ -136,12 +136,12 @@ describe("web UI", () => {
 
   test("falls back from API routes to assets and the SPA index", async () => {
     const index = path.join(root, "index.html")
-    const asset = path.join(root, "app.js")
+    const asset = path.join(root, "app-Ab1cD2e3.js")
     await writeFile(index, "<html><body>embedded</body></html>")
     await writeFile(asset, "console.log('embedded')")
     const assets = {
       "index.html": await Bun.file(index).text(),
-      "_assets/app.js": await Bun.file(asset).text(),
+      "_assets/app-Ab1cD2e3.js": await Bun.file(asset).text(),
       "sw.js": "service worker",
       "registerSW.js": "registration",
       "font.woff2": new Uint8Array([0, 1, 2, 255]),
@@ -195,7 +195,7 @@ describe("web UI", () => {
             }),
           )
 
-          const script = yield* Effect.promise(() => fetch(`${origin}/_assets/app.js`))
+          const script = yield* Effect.promise(() => fetch(`${origin}/_assets/app-Ab1cD2e3.js`))
           expect(yield* Effect.promise(() => script.text())).toBe("console.log('embedded')")
           expect(script.headers.get("content-type")).toContain("javascript")
           expect(script.headers.get("cache-control")).toBe("public, max-age=31536000, immutable")
@@ -208,6 +208,7 @@ describe("web UI", () => {
 
           const font = yield* Effect.promise(() => fetch(`${origin}/font.woff2`))
           expect(font.headers.get("content-type")).toBe("font/woff2")
+          expect(font.headers.get("cache-control")).toBe("no-cache")
           expect(new Uint8Array(yield* Effect.promise(() => font.arrayBuffer()))).toEqual(
             new Uint8Array([0, 1, 2, 255]),
           )
@@ -225,6 +226,55 @@ describe("web UI", () => {
           const legacy = yield* Effect.promise(() => fetch(`${origin}/assets/missing.js`))
           expect(legacy.status).toBe(200)
           expect(yield* Effect.promise(() => legacy.text())).toContain("embedded")
+        }),
+      ).pipe(Effect.provide(NodeFileSystem.layer)),
+    )
+  })
+
+  test("revalidates every unhashed file with an etag while hashed assets stay immutable", async () => {
+    const assets = {
+      "index.html": "<html><body>embedded</body></html>",
+      "_assets/app-Ab1cD2e3.js": "console.log('embedded')",
+      "_assets/unhashed.js": "console.log('unhashed')",
+      "icons/icon.svg": "<svg></svg>",
+      "site.webmanifest": "{}",
+      "font.woff2": new Uint8Array([0, 1, 2, 255]),
+      "sw.js": "service worker",
+    }
+
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const transform = yield* WebUi.handler({ assets })
+          const http = yield* NodeHttpServer.make(createServer, { host: "127.0.0.1", port: 0 })
+          yield* http.serve(transform(Effect.succeed(HttpServerResponse.empty({ status: 404 }))))
+          const origin = HttpServer.formatAddress(http.address)
+          const get = (pathname: string, headers?: Record<string, string>) =>
+            Effect.promise(() => fetch(`${origin}${pathname}`, { headers }))
+
+          for (const [pathname, cache] of [
+            ["/_assets/app-Ab1cD2e3.js", "public, max-age=31536000, immutable"],
+            ["/_assets/unhashed.js", "no-cache"],
+            ["/icons/icon.svg", "no-cache"],
+            ["/site.webmanifest", "no-cache"],
+            ["/font.woff2", "no-cache"],
+            ["/sw.js", "no-cache"],
+            ["/", "no-cache"],
+          ] as const) {
+            const response = yield* get(pathname)
+            expect(response.headers.get("cache-control")).toBe(cache)
+            expect(response.headers.get("etag")).toMatch(/^"[0-9a-f]{32}"$/)
+            expect(response.headers.get("x-opencode-version")).toBeTruthy()
+            yield* Effect.promise(() => response.arrayBuffer())
+          }
+
+          const page = yield* get("/")
+          const etag = page.headers.get("etag")!
+          const revalidated = yield* get("/", { "if-none-match": etag })
+          expect(revalidated.status).toBe(304)
+          expect(revalidated.headers.get("etag")).toBe(etag)
+          expect(revalidated.headers.get("cache-control")).toBe("no-cache")
+          expect(yield* Effect.promise(() => revalidated.text())).toBe("")
         }),
       ).pipe(Effect.provide(NodeFileSystem.layer)),
     )
