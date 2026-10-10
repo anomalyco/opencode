@@ -37,6 +37,18 @@ export function useNewSessionCommands(input: {
       onSelect: input.restoreFocus,
     },
     {
+      id: "mcp.toggle",
+      title: language.t("command.mcp.toggle"),
+      description: language.t("command.mcp.toggle.description"),
+      category: language.t("command.category.mcp"),
+      keybind: "mod+;",
+      slash: "mcp",
+      onSelect: async () => {
+        const { DialogSelectMcp } = await import("@/providers/connect/mcp-dialog")
+        void dialog.show(() => <DialogSelectMcp />)
+      },
+    },
+    {
       id: "project.select",
       title: language.t("session.new.project.search"),
       category: language.t("command.category.project"),
