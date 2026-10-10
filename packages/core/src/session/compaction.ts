@@ -718,15 +718,14 @@ const recentStart = (
   keep: number,
   previous: SessionMessage.CompactionCompleted | undefined,
 ) => {
-  // Drop the oldest entries until the rest fit the allowance, but always keep the newest one.
-  const dropped = Math.min(
-    oldestToDrop(entries, (entry) => Token.estimate(entry.text), keep),
-    entries.length - 1,
-  )
+  // Include the separators between entries and the estimate's per-entry rounding.
+  const dropped = oldestToDrop(entries, (entry) => Token.estimate(entry.text) + 1, keep)
 
-  // Start at a user message so an assistant's tool calls and results stay together.
-  const userBoundary = entries.findLastIndex((entry, index) => index <= dropped && entry.message.type === "user")
+  // Keep whole exchanges within the allowance. An oversized latest exchange must be summarized;
+  // retaining it verbatim can leave even the completed checkpoint larger than the model's window.
+  const userBoundary = entries.findIndex((entry, index) => index >= dropped && entry.message.type === "user")
   if (userBoundary > 0) return userBoundary
+  if (dropped > 0) return entries.length
 
   // Everything fits. Keep only the latest exchange so there is an older part left to summarize.
   const latestUser = entries.findLastIndex((entry) => entry.message.type === "user")
