@@ -1,5 +1,8 @@
 import { createMemo, For, Match, Show, Switch, type Accessor, type JSX } from "solid-js"
 import { Option, Schema } from "effect"
+import type { SessionMessageAssistantTool } from "@opencode/client/promise"
+import { ToolElapsed } from "./tool-elapsed"
+import { animate, type AnimationPlaybackControls } from "motion"
 import { useI18n } from "@opencode/ui/context/i18n"
 import { Collapsible } from "@opencode/ui/collapsible"
 import type { IconProps } from "@opencode/ui/icon"
@@ -25,6 +28,7 @@ export interface BasicToolProps {
   children?: JSX.Element
   /** Declare known content without constructing lazy JSX to test its presence. */
   hasContent?: boolean
+  time?: SessionMessageAssistantTool["time"]
   status?: string
   hideDetails?: boolean
   defaultOpen?: boolean
@@ -145,6 +149,7 @@ export function BasicTool(props: BasicToolProps) {
             </Match>
             <Match when={true}>{triggerElement()}</Match>
           </Switch>
+          <ToolElapsed time={props.time} running={props.status === "running"} />
         </div>
       </div>
       <Show when={hasChildren() && !props.hideDetails && disclosure.canToggle()}>
@@ -240,13 +245,20 @@ function args(input: GenericToolInput | undefined) {
     .slice(0, 3)
 }
 
-export function GenericTool(props: { tool: string; status?: string; hideDetails?: boolean; input?: GenericToolInput }) {
+export function GenericTool(props: {
+  tool: string
+  time?: SessionMessageAssistantTool["time"]
+  status?: string
+  hideDetails?: boolean
+  input?: GenericToolInput
+}) {
   const i18n = useI18n()
 
   return (
     <BasicTool
       icon="mcp"
       status={props.status}
+      time={props.time}
       trigger={{
         title: i18n.t("ui.basicTool.called", { tool: props.tool }),
         subtitle: label(props.input),

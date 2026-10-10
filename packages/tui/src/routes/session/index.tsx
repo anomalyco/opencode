@@ -12,6 +12,7 @@ import {
   Switch,
   type Accessor,
 } from "solid-js"
+import { createToolElapsed } from "./tool-elapsed"
 import path from "node:path"
 import { EOL, tmpdir } from "node:os"
 import { mkdir, writeFile } from "node:fs/promises"
@@ -2833,6 +2834,14 @@ function InlineTool(props: {
   const renderer = useRenderer()
   const [hover, setHover] = createSignal(false)
   const [errorExpanded, setErrorExpanded] = createSignal(false)
+  const elapsed = createToolElapsed(
+    () => props.part?.time,
+    () => props.part?.state.status === "running",
+  )
+  const elapsedText = createMemo(() => {
+    const value = elapsed()
+    return value === undefined ? undefined : Locale.duration(value)
+  })
   const permission = useToolPermission(() => props.part)
 
   const error = createMemo(() =>
@@ -2866,6 +2875,7 @@ function InlineTool(props: {
       denied={Boolean(denied())}
       error={error()}
       errorExpanded={errorExpanded()}
+      elapsed={elapsedText()}
       complete={props.complete}
       pending={props.pending}
       spinner={props.spinner}
@@ -2919,6 +2929,14 @@ function BlockTool(props: BlockToolProps) {
   const error = createMemo(() =>
     stripAnsi(props.error ?? (props.part?.state.status === "error" ? props.part.state.error.message : "")),
   )
+  const elapsed = createToolElapsed(
+    () => props.part?.time,
+    () => props.part?.state.status === "running",
+  )
+  const elapsedText = createMemo(() => {
+    const value = elapsed()
+    return value === undefined ? undefined : Locale.duration(value)
+  })
   const permission = useToolPermission(() => props.part)
   return (
     <box
@@ -2947,15 +2965,15 @@ function BlockTool(props: BlockToolProps) {
               <Show
                 when={props.spinner}
                 fallback={
-                  <text
-                    fg={permission() ? theme.text.feedback.warning.base : (props.headerColor ?? theme.text.muted)}
-                  >
+                  <text fg={permission() ? theme.text.feedback.warning.base : (props.headerColor ?? theme.text.muted)}>
                     {title()}
+                    <Show when={elapsedText()}>{(value) => <span>{` · ${value()}`}</span>}</Show>
                   </text>
                 }
               >
                 <Spinner color={permission() ? theme.text.feedback.warning.base : theme.text.muted}>
                   {title().replace(/^# /, "")}
+                  <Show when={elapsedText()}>{(value) => <span>{` · ${value()}`}</span>}</Show>
                 </Spinner>
               </Show>
             )}
@@ -2981,9 +2999,17 @@ function BlockTool(props: BlockToolProps) {
             </Show>
             <FilePath
               value={path().value}
-              maxWidth={Math.max(2, ctx.width - 6 - stringWidth(path().label) - (props.spinner ? 2 : 0))}
+              maxWidth={Math.max(
+                2,
+                ctx.width -
+                  6 -
+                  stringWidth(path().label) -
+                  (props.spinner ? 2 : 0) -
+                  (elapsedText() ? stringWidth(elapsedText() ?? "") + 3 : 0),
+              )}
               fg={permission() ? theme.text.feedback.warning.base : (props.headerColor ?? theme.text.muted)}
             />
+            <Show when={elapsedText()}>{(value) => <text fg={theme.text.muted}>· {value()}</text>}</Show>
           </box>
         )}
       </Show>
