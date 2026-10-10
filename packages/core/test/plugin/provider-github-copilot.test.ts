@@ -391,6 +391,42 @@ describe("GithubCopilotPlugin", () => {
     }),
   )
 
+  it.effect("routes models.dev fallback Claude models to Anthropic Messages", () =>
+    Effect.gen(function* () {
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
+      yield* providers.transform((editor) => {
+        editor.update(Provider.ID.githubCopilot, (provider) => {
+          provider.activation = "enabled"
+        })
+        editor.models.update(Provider.ID.githubCopilot, Model.ID.make("claude-opus-5.5"), (model) => {
+          model.package = "@opencode/ai/providers/openai-compatible"
+          model.limit = { context: 200_000, output: 64_000 }
+          model.variants = [
+            { id: Model.VariantID.make("low"), settings: { reasoningEffort: "low" } },
+            { id: Model.VariantID.make("max"), settings: { reasoningEffort: "max" } },
+            { id: Model.VariantID.make("fast"), settings: { speed: "fast" } },
+          ]
+        })
+      })
+      yield* addPlugin()
+      const fallback = required(yield* models.get(Provider.ID.githubCopilot, Model.ID.make("claude-opus-5.5")))
+      expect(fallback.package).toBe("@opencode/ai/providers/anthropic")
+      expect(fallback.settings?.baseURL).toBe("https://api.githubcopilot.com/v1")
+      expect(fallback.variants).toEqual([
+        { id: Model.VariantID.make("fast"), settings: { speed: "fast" } },
+        {
+          id: Model.VariantID.make("low"),
+          settings: { thinking: { type: "adaptive", display: "summarized" }, effort: "low" },
+        },
+        {
+          id: Model.VariantID.make("max"),
+          settings: { thinking: { type: "adaptive", display: "summarized" }, effort: "max" },
+        },
+      ])
+    }),
+  )
+
   it.effect("selects languageModel when responses and chat are absent", () =>
     Effect.gen(function* () {
       const aisdk = yield* AISDK.Service

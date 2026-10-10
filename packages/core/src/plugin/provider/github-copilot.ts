@@ -12,6 +12,7 @@ import { Agent } from "../../agent.js"
 import { define } from "@opencode/plugin/effect/plugin"
 import { Provider } from "../../provider.js"
 import { SessionAffinity } from "../../session/affinity.js"
+import { Variant } from "../../variant.js"
 import type { PluginInternal } from "../internal.js"
 
 const clientID = "Ov23li8tweQw6odWQebz"
@@ -228,6 +229,22 @@ export const GithubCopilotPlugin = define({
       }
       for (const id of item.models.keys()) {
         evt.models.update(item.provider.id, id, (model) => {
+          // Without the live model list there is no advertised /v1/messages endpoint, but Claude
+          // still needs it: over chat completions each thinking tool turn adds another
+          // reasoning_opaque, which the Copilot chat model rejects.
+          if ((model.modelID ?? model.id).startsWith("claude-")) {
+            const efforts = model.variants.flatMap((variant) =>
+              typeof variant.settings?.reasoningEffort === "string" ? [variant.settings.reasoningEffort] : [],
+            )
+            model.package = "@opencode/ai/providers/anthropic"
+            model.settings = Provider.mergeOverlay(model.settings, { baseURL: `${loaded.baseURL ?? baseURL()}/v1` })
+            // Catalog variants were spelled for chat completions; Messages ignores reasoningEffort.
+            model.variants = [
+              ...model.variants.filter((variant) => typeof variant.settings?.reasoningEffort !== "string"),
+              ...Variant.resolve(model, efforts.length ? [{ type: "effort", values: efforts }] : undefined),
+            ]
+            return
+          }
           model.package = Provider.aisdk("@ai-sdk/github-copilot")
           if (loaded.baseURL) model.settings = Provider.mergeOverlay(model.settings, { baseURL: loaded.baseURL })
         })
