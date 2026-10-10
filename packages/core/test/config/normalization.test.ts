@@ -575,6 +575,69 @@ describe("ConfigNormalize", () => {
     ).toEqual({ policies: [{ action: "provider.use", resource: "*", effect: "deny" }] })
   })
 
+  test("migrates legacy provider whitelist and blacklist to model overrides", () => {
+    const result = normalized({
+      provider: {
+        allowed: { whitelist: ["first", "second"], blacklist: ["second"], models: { first: { name: "First" } } },
+        blocked: { blacklist: ["third"] },
+      },
+    })
+    expect(result.encoded.providers).toEqual({
+      allowed: {
+        models: {
+          "*": { disabled: true },
+          first: { name: "First", disabled: false },
+          second: { disabled: true },
+        },
+      },
+      blocked: { models: { third: { disabled: true } } },
+    })
+    expect(result.diagnostics).toEqual([])
+  })
+
+  test("keeps legacy Google Vertex Anthropic filters off Gemini models", () => {
+    const result = normalized({
+      provider: {
+        "google-vertex-anthropic": {
+          whitelist: ["claude"],
+          blacklist: ["claude", "missing"],
+          models: { claude: { name: "Claude" } },
+        },
+      },
+    })
+    expect(result.encoded.providers).toEqual({
+      "google-vertex": {
+        models: {
+          claude: { name: "Claude", package: "aisdk:@ai-sdk/google-vertex/anthropic", disabled: true },
+          missing: { disabled: true },
+        },
+      },
+    })
+    expect(result.diagnostics).toEqual([
+      {
+        kind: "unsupported",
+        path: ["provider", "google-vertex-anthropic", "whitelist"],
+        message: "omitted unsupported legacy setting",
+      },
+    ])
+  })
+
+  test("reports settings other than disabled on the model wildcard without changing them", () => {
+    const result = normalized({
+      providers: { custom: { models: { "*": { disabled: true, name: "All" }, first: { name: "First" } } } },
+    })
+    expect(result.encoded.providers).toEqual({
+      custom: { models: { "*": { disabled: true, name: "All" }, first: { name: "First" } } },
+    })
+    expect(result.diagnostics).toEqual([
+      {
+        kind: "unsupported",
+        path: ["providers", "custom", "models", "*", "name"],
+        message: "ignored setting not supported on the model wildcard",
+      },
+    ])
+  })
+
   test("reports unsupported legacy settings without including their values", () => {
     const secret = "do-not-log-this-value"
     const result = normalized({
@@ -599,7 +662,6 @@ describe("ConfigNormalize", () => {
       ["logLevel"],
       ["agent", "reviewer", "name"],
       ["provider", "custom", "id"],
-      ["provider", "custom", "whitelist"],
       ["provider", "custom", "models", "model", "release_date"],
       ["provider", "custom", "models", "model", "status"],
       ["provider", "custom", "models", "model", "interleaved"],

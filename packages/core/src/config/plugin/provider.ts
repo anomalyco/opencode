@@ -61,8 +61,10 @@ export const Plugin = define({
         const { current, source, changed } = overlayProvider(providers, providerID, item)
         const definitions = new Map<string, { readonly inherit: boolean; readonly base?: Model.Info }>()
         for (const [id, config] of Object.entries(item.models ?? {})) {
+          if (id === ConfigProvider.ModelWildcard) continue
           const base = source?.models.get(config.modelID ?? id) ?? source?.models.get(id)
           const inherit = changed || !current?.models.has(id)
+          if (!base && !current?.models.has(id) && isToggleOnly(config)) continue
           // Bind the source at this point in the provider fold. Later source edits/removal
           // and its credential availability must not change an already-defined alias.
           definitions.set(id, { inherit, base: base && structuredClone(base) })
@@ -84,7 +86,7 @@ export const Plugin = define({
       }
       for (const [item, definition] of next) {
         for (const [id, config] of Object.entries(item.models ?? {})) {
-          if (config.limit === undefined) continue
+          if (id === ConfigProvider.ModelWildcard || config.limit === undefined) continue
           providers.models.update(definition.providerID, id, (model) => {
             model.limit = { ...model.limit, ...config.limit }
           })
@@ -99,10 +101,23 @@ export const Plugin = define({
     yield* ctx.model.transform((models) => {
       const configuredDefault = sources.defaultModel
       if (configuredDefault !== undefined) models.default.set(configuredDefault.providerID, configuredDefault.model)
+      const fallbacks = new Map<string, { wildcard: boolean; models: Map<string, boolean> }>()
       for (const [item, definition] of sources.models) {
         const providerID = definition.providerID
+        const wildcard = item.models?.[ConfigProvider.ModelWildcard]
+        if (wildcard?.disabled !== undefined) {
+          fallbacks.set(providerID, { wildcard: wildcard.disabled, models: new Map() })
+          for (const model of models.list(providerID))
+            models.update(providerID, model.id, (draft) => {
+              draft.enabled = !wildcard.disabled
+            })
+        }
         for (const [id, config] of Object.entries(item.models ?? {})) {
+          if (id === ConfigProvider.ModelWildcard) continue
+          const fallback = fallbacks.get(providerID)
+          if (config.disabled !== undefined) fallback?.models.set(id, config.disabled)
           const source = definition.models.get(id)
+          if (!source?.base && !models.get(providerID, id) && isToggleOnly(config)) continue
           const inherit = source?.inherit || !models.get(providerID, id)
           overlay(
             models,
@@ -113,6 +128,13 @@ export const Plugin = define({
             config,
             inherit && source?.base ? { base: source.base } : undefined,
           )
+          // An entry without `disabled` keeps the latest `disabled` set for its ID since the provider's last `"*"`,
+          // in this or an earlier document, and otherwise follows that `"*"`.
+          const disabled = fallback && (fallback.models.get(id) ?? fallback.wildcard)
+          if (config.disabled === undefined && disabled !== undefined)
+            models.update(providerID, id, (model) => {
+              model.enabled = !disabled
+            })
           // Inherited variants are spelled for the base model's package, so a package override needs fresh ones.
           // A base without variants has no reasoning support to respell.
           const repackaged =
@@ -138,6 +160,13 @@ export const Plugin = define({
   }),
 })
 
+function isToggleOnly(config: { readonly disabled?: boolean }) {
+  return (
+    config.disabled !== undefined &&
+    Object.entries(config).every(([key, value]) => key === "disabled" || value === undefined)
+  )
+}
+
 // Integration documents are left out: their providers authenticate with the integration's connection, so they add no
 // integration or method, and the integration's own plugin applies them earlier in the provider chain (`integrate`).
 function configuredProviders(entries: readonly Entry[]) {
@@ -157,6 +186,7 @@ export function integrate(providers: ProviderEditor, document: ConfigIntegration
     // An integration lists the models it routes: each starts again from the catalog and takes the provider's
     // package and URL. Its models are complete here, so later model transforms and config apply on top.
     for (const [id, config] of Object.entries(item.models ?? {})) {
+      if (id === ConfigProvider.ModelWildcard) continue
       overlay(providers.models, providers.get(providerID)?.provider.package, item, providerID, id, config, {
         base: source?.models.get(config.modelID ?? id) ?? source?.models.get(id),
       })

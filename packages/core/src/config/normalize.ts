@@ -50,7 +50,7 @@ const unsupportedExperimental = [
   "primary_tools",
   "continue_loop_on_deny",
 ] as const
-const unsupportedProvider = ["id", "whitelist", "blacklist"] as const
+const unsupportedProvider = ["id"] as const
 const unsupportedModel = ["release_date", "attachment", "reasoning", "temperature", "experimental"] as const
 const LegacyAutoupdate = Schema.Literals([true, false, "notify"])
 
@@ -175,6 +175,7 @@ export function normalize(input: unknown): Result {
     isRecord(input.provider) || isRecord(input.providers),
     diagnostics,
   )
+  diagnoseModelWildcardSettings(encoded.providers, diagnostics)
 
   const toolRules = migrateTools(input.tools, diagnostics)
   const permissionRules = migratePermissions(input.permission, diagnostics)
@@ -605,6 +606,8 @@ function migrateProviders(value: unknown, diagnostics: Diagnostic[]) {
   const candidates = Object.entries(value).flatMap(([name, raw]) => {
     const path = ["provider", name]
     diagnoseProviderUnsupported(raw, path, diagnostics)
+    if (name === "google-vertex-anthropic" && isRecord(raw))
+      unsupportedIfPresent(raw, "whitelist", [...path, "whitelist"], diagnostics)
     if (invalidProviderOverlays(raw, path, diagnostics)) return []
     const provider = decodeValue(ConfigProviderV1.Info, raw, path, diagnostics)
     if (provider === undefined) return []
@@ -636,6 +639,23 @@ function invalidProviderOverlays(value: unknown, path: string[], diagnostics: Di
   if (headersInvalid) invalid([...path, "options", "headers"], diagnostics)
   if (bodyInvalid) invalid([...path, "options", "body"], diagnostics)
   return headersInvalid || bodyInvalid
+}
+
+function diagnoseModelWildcardSettings(value: unknown, diagnostics: Diagnostic[]) {
+  if (!isRecord(value)) return
+  Object.entries(value).forEach(([name, provider]) => {
+    if (!isRecord(provider) || !isRecord(provider.models)) return
+    const wildcard = provider.models[ConfigProvider.ModelWildcard]
+    if (!isRecord(wildcard)) return
+    Object.keys(wildcard).forEach((key) => {
+      if (key === "disabled") return
+      diagnostics.push({
+        kind: "unsupported",
+        path: ["providers", name, "models", ConfigProvider.ModelWildcard, key],
+        message: "ignored setting not supported on the model wildcard",
+      })
+    })
+  })
 }
 
 function diagnoseProviderUnsupported(value: unknown, path: string[], diagnostics: Diagnostic[]) {

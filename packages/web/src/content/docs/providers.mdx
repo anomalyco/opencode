@@ -82,6 +82,8 @@ Both options take an array of model IDs — the same IDs shown in the `/models` 
 - `whitelist` keeps only the listed models and hides the rest.
 - You can combine them: `whitelist` narrows the set, then `blacklist` removes entries from it.
 
+In the `providers` format, the same is expressed with model overrides: `"*": { "disabled": true }` disables every model of the provider, and explicit entries such as `"claude-sonnet-4-20250514": { "disabled": false }` re-enable individual models.
+
 ---
 
 ## OpenCode Zen
