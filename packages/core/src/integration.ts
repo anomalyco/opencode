@@ -23,6 +23,7 @@ import { Credential } from "./credential.js"
 import { State } from "./state.js"
 import { Bus } from "./bus.js"
 import { IntegrationConnection } from "./integration/connection.js"
+import { CredentialRefresh } from "./credential/refresh.js"
 import { AppProcess } from "@opencode/util/process"
 import { ChildProcess } from "effect/process"
 import { Form } from "./form.js"
@@ -305,6 +306,7 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const credentials = yield* Credential.Service
+    const refreshes = yield* CredentialRefresh.Service
     const bus = yield* Bus.Service
     const processes = yield* AppProcess.Service
     const scope = yield* Scope.Scope
@@ -728,16 +730,26 @@ const layer = Layer.effect(
           const credential = yield* credentials.get(connection.id)
           if (!credential) return undefined
           if (credential.value.type !== "oauth") return credential.value
-          const implementation = state
-            .get()
-            .integrations.get(credential.integrationID)
-            ?.implementations.get(credential.value.methodID)
-          if (!implementation?.refresh) return credential.value
-          const now = yield* Clock.currentTimeMillis
-          if (credential.value.expires > now + Duration.toMillis(Duration.minutes(5))) return credential.value
-          const value = yield* authorize(implementation.refresh(credential.value))
-          yield* credentials.update(credential.id, { value })
-          return value
+          return yield* authorize(
+            refreshes.run(
+              credential.id,
+              Effect.gen(function* () {
+                // Another Location may have refreshed while this caller was reading the credential.
+                const current = yield* credentials.get(credential.id)
+                if (!current || current.value.type !== "oauth") return undefined
+                const implementation = state
+                  .get()
+                  .integrations.get(current.integrationID)
+                  ?.implementations.get(current.value.methodID)
+                if (!implementation?.refresh) return current.value
+                const now = yield* Clock.currentTimeMillis
+                if (current.value.expires > now + Duration.toMillis(Duration.minutes(5))) return current.value
+                const value = yield* implementation.refresh(current.value).pipe(Effect.timeout("30 seconds"))
+                yield* credentials.update(current.id, { value })
+                return value
+              }),
+            ),
+          )
         }),
         key: Effect.fn("Integration.connection.key")(function* (input) {
           const method = state
@@ -882,5 +894,5 @@ const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Credential.node, Bus.node, AppProcess.node],
+  deps: [Credential.node, CredentialRefresh.node, Bus.node, AppProcess.node],
 })

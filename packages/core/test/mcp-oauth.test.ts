@@ -1,11 +1,12 @@
 import { afterAll, describe, expect, test } from "bun:test"
-import { auth, refreshAuthorization } from "@modelcontextprotocol/client"
+import { auth, refreshAuthorization, StreamableHTTPClientTransport } from "@modelcontextprotocol/client"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
 import { Credential } from "@opencode/core/credential"
+import { CredentialRefresh } from "@opencode/core/credential/refresh"
 import { Integration } from "@opencode/core/integration"
 import { McpClient } from "@opencode/core/mcp/client"
 import { McpOAuth } from "@opencode/core/mcp/oauth"
-import { Cause, Effect, Exit } from "effect"
+import { Cause, Effect, Exit, ManagedRuntime, Schema } from "effect"
 import { hostEnvironmentLayer } from "./fixture/environment"
 
 const authServer = Bun.serve({ port: 0, fetch: () => new Response(null, { status: 404 }) })
@@ -13,6 +14,8 @@ afterAll(() => authServer.stop(true))
 
 const integrationID = Integration.ID.make("mcp_test")
 const methodID = Integration.MethodID.make("oauth")
+const refreshRuntime = ManagedRuntime.make(CredentialRefresh.layer)
+afterAll(() => refreshRuntime.dispose())
 
 const remote = (url: string) => new ConfigMCP.Remote({ type: "remote", url, oauth: { client_id: "client" } })
 
@@ -53,7 +56,7 @@ const memoryCredentials = (initial: Credential.Info[]) => {
 }
 
 const connectProvider = (config: typeof ConfigMCP.Remote.Type, store: ReturnType<typeof memoryCredentials>) =>
-  Effect.runPromise(
+  refreshRuntime.runPromise(
     McpOAuth.connectProvider({ config, integrationID }).pipe(Effect.provideService(Credential.Service, store.service)),
   )
 
@@ -166,10 +169,7 @@ describe("MCP OAuth", () => {
       fetch(request) {
         if (request.method !== "POST" || new URL(request.url).pathname !== "/token")
           return new Response(null, { status: 404 })
-        return Response.json(
-          { error: "invalid_client", error_description: "bad_client_secret" },
-          { status: 400 },
-        )
+        return Response.json({ error: "invalid_client", error_description: "bad_client_secret" }, { status: 400 })
       },
     })
 
@@ -193,6 +193,108 @@ describe("MCP OAuth", () => {
     expect(result.page).toContain("bad_client_secret")
     expect(result.exit._tag).toBe("Failure")
   })
+
+  for (const late of [false, true]) {
+    test(`coordinates separate MCP clients when the second 401 is ${late ? "late" : "overlapping"}`, async () => {
+      const secondArrived = Promise.withResolvers<void>()
+      const secondRecovering = Promise.withResolvers<void>()
+      const releaseSecond = Promise.withResolvers<void>()
+      const saving = Promise.withResolvers<void>()
+      const releaseSave = Promise.withResolvers<void>()
+      let oldRequests = 0
+      let refreshes = 0
+      const server = Bun.serve({
+        port: 0,
+        async fetch(request) {
+          const url = new URL(request.url)
+          if (url.pathname === "/token") {
+            refreshes++
+            expect(new URLSearchParams(await request.text()).get("refresh_token")).toBe("old-refresh")
+            return Response.json({
+              access_token: "new-access",
+              refresh_token: "new-refresh",
+              token_type: "Bearer",
+              expires_in: 3600,
+            })
+          }
+          if (request.method !== "POST" || url.pathname !== "/") return new Response(null, { status: 404 })
+          if (request.headers.get("authorization") === "Bearer old-access") {
+            oldRequests++
+            if (oldRequests === 2) {
+              secondArrived.resolve()
+              await releaseSecond.promise
+            }
+            return new Response(null, { status: 401 })
+          }
+          expect(request.headers.get("authorization")).toBe("Bearer new-access")
+          const message = Schema.decodeUnknownSync(Schema.Struct({ id: Schema.Number }))(await request.json())
+          return Response.json({ jsonrpc: "2.0", id: message.id, result: {} })
+        },
+      })
+      const initial = memoryCredentials([
+        credential({ access: "old-access", refresh: "old-refresh", url: server.url.href }),
+      ])
+      const store = {
+        ...initial,
+        service: Credential.Service.of({
+          ...initial.service,
+          update: (id, updates) =>
+            Effect.gen(function* () {
+              if (updates.value?.type === "oauth" && updates.value.access === "new-access") {
+                saving.resolve()
+                yield* Effect.promise(() => releaseSave.promise)
+              }
+              yield* initial.service.update(id, updates)
+            }),
+        }),
+      }
+      const first = new StreamableHTTPClientTransport(server.url, {
+        authProvider: await connectProvider(remote(server.url.href), store),
+      })
+      const secondProvider = await connectProvider(remote(server.url.href), store)
+      const second = new StreamableHTTPClientTransport(server.url, {
+        authProvider: {
+          ...secondProvider,
+          onUnauthorized: (context) => {
+            const recovery = secondProvider.onUnauthorized?.(context)
+            secondRecovering.resolve()
+            return Promise.resolve(recovery)
+          },
+        },
+      })
+      try {
+        await first.start()
+        await second.start()
+        const a = first.send({ jsonrpc: "2.0", id: 1, method: "ping" })
+        await saving.promise
+        const b = second.send({ jsonrpc: "2.0", id: 2, method: "ping" })
+        await secondArrived.promise
+        if (late) {
+          releaseSave.resolve()
+          await a
+          releaseSecond.resolve()
+        }
+        if (!late) {
+          releaseSecond.resolve()
+          await secondRecovering.promise
+          releaseSave.resolve()
+        }
+        await Promise.all([a, b])
+        expect(refreshes).toBe(1)
+        expect(oldRequests).toBe(2)
+        expect(store.rows.get(Credential.ID.make("cred_test"))?.value).toMatchObject({
+          access: "new-access",
+          refresh: "new-refresh",
+        })
+      } finally {
+        releaseSave.resolve()
+        releaseSecond.resolve()
+        await first.close()
+        await second.close()
+        server.stop(true)
+      }
+    })
+  }
 
   test("refreshes tokens loaded from a persisted credential", async () => {
     const tokenRequests: URLSearchParams[] = []

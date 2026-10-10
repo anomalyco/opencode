@@ -1,7 +1,16 @@
 diff --git a/dist/index.cjs b/dist/index.cjs
-index 635f1c0134274c89e7efbcae2adf3d9ecba575ee..5eaa7b451c8c7e12e51f61c2a835ff6f7a8ea0ae 100644
+index 635f1c0134274c89e7efbcae2adf3d9ecba575ee..084dbd1eb8aaeb3bbf19ed8de125dbd9075763a8 100644
 --- a/dist/index.cjs
 +++ b/dist/index.cjs
+@@ -275,7 +275,7 @@ function adaptOAuthProvider(provider, extraAuthOptions) {
+ 		token: async () => {
+ 			return (await provider.tokens())?.access_token;
+ 		},
+-		onUnauthorized: async (ctx) => handleOAuthUnauthorized(provider, ctx, extraAuthOptions)
++		onUnauthorized: provider.onUnauthorized ?? ((ctx) => handleOAuthUnauthorized(provider, ctx, extraAuthOptions))
+ 	};
+ }
+ var UnauthorizedError = class extends Error {
 @@ -977,7 +977,6 @@ async function discoverMetadataWithFallback(serverUrl, wellKnownType, fetchFn, o
  	else {
  		const wellKnownPath = buildWellKnownPath(wellKnownType, issuer.pathname);
@@ -18,10 +27,93 @@ index 635f1c0134274c89e7efbcae2adf3d9ecba575ee..5eaa7b451c8c7e12e51f61c2a835ff6f
  	if (resource) authorizationUrl.searchParams.set("resource", resource.href);
  	return {
  		authorizationUrl,
+@@ -4853,7 +4851,8 @@ var SSEClientTransport = class {
+ 							await this._authProvider.onUnauthorized({
+ 								response,
+ 								serverUrl: this._url,
+-								fetchFn: this._fetchWithInit
++								fetchFn: this._fetchWithInit,
++								token: headers.get("authorization")?.replace(/^Bearer /i, "")
+ 							});
+ 						} catch (error) {
+ 							throw markAuthSeamEscape(error);
+@@ -5108,7 +5107,8 @@ var StreamableHTTPClientTransport = class {
+ 							await this._authProvider.onUnauthorized({
+ 								response,
+ 								serverUrl: this._url,
+-								fetchFn: this._fetchWithInit
++								fetchFn: this._fetchWithInit,
++								token: headers.get("authorization")?.replace(/^Bearer /i, "")
+ 							});
+ 						} catch (error) {
+ 							throw markAuthSeamEscape(error);
+@@ -5345,7 +5345,8 @@ var StreamableHTTPClientTransport = class {
+ 							await this._authProvider.onUnauthorized({
+ 								response,
+ 								serverUrl: this._url,
+-								fetchFn: this._fetchWithInit
++								fetchFn: this._fetchWithInit,
++								token: headers.get("authorization")?.replace(/^Bearer /i, "")
+ 							});
+ 						} catch (error) {
+ 							throw markAuthSeamEscape(error);
+diff --git a/dist/index.d.cts b/dist/index.d.cts
+index 2d74180d5402a97f7460305726d8dc7da6105dcf..2474cbc7fd544a4d24600813153dacaa36eecb7d 100644
+--- a/dist/index.d.cts
++++ b/dist/index.d.cts
+@@ -160,6 +160,8 @@ type AddClientAuthentication = (headers: Headers, params: URLSearchParams, url:
+  * responds with 401. Provides everything needed to refresh credentials.
+  */
+ interface UnauthorizedContext {
++  /** Bearer token used by the rejected request, when supplied by the transport. */
++  token?: string;
+   /** The 401 response — inspect `WWW-Authenticate` for resource metadata, scope, etc. */
+   response: Response;
+   /** The MCP server URL, for passing to {@linkcode auth} or discovery helpers. */
+@@ -226,6 +228,8 @@ interface OAuthClientInformationContext {
+  * No changes are needed to existing implementations.
+  */
+ interface OAuthClientProvider {
++  /** Override transport 401 recovery while retaining the SDK's other OAuth flows. */
++  onUnauthorized?: AuthProvider['onUnauthorized'];
+   /**
+    * The URL to redirect the user agent to after authorization.
+    * Return `undefined` for non-interactive flows that don't require user interaction
+diff --git a/dist/index.d.mts b/dist/index.d.mts
+index d54447a08f0aa9876dacfe37f50ec1a48a77c132..566e9b9311ce31f9233d49b377606d3fd791cf4d 100644
+--- a/dist/index.d.mts
++++ b/dist/index.d.mts
+@@ -160,6 +160,8 @@ type AddClientAuthentication = (headers: Headers, params: URLSearchParams, url:
+  * responds with 401. Provides everything needed to refresh credentials.
+  */
+ interface UnauthorizedContext {
++  /** Bearer token used by the rejected request, when supplied by the transport. */
++  token?: string;
+   /** The 401 response — inspect `WWW-Authenticate` for resource metadata, scope, etc. */
+   response: Response;
+   /** The MCP server URL, for passing to {@linkcode auth} or discovery helpers. */
+@@ -226,6 +228,8 @@ interface OAuthClientInformationContext {
+  * No changes are needed to existing implementations.
+  */
+ interface OAuthClientProvider {
++  /** Override transport 401 recovery while retaining the SDK's other OAuth flows. */
++  onUnauthorized?: AuthProvider['onUnauthorized'];
+   /**
+    * The URL to redirect the user agent to after authorization.
+    * Return `undefined` for non-interactive flows that don't require user interaction
 diff --git a/dist/index.mjs b/dist/index.mjs
-index f02ce3ca394e826fc27c9848dbe9a214bf6ba7a9..73a93a066c3540e131fa0770a74b4a7e8d9343a0 100644
+index f02ce3ca394e826fc27c9848dbe9a214bf6ba7a9..66b706a1bc48bb7b6efff4c260f16d630f83ca91 100644
 --- a/dist/index.mjs
 +++ b/dist/index.mjs
+@@ -272,7 +272,7 @@ function adaptOAuthProvider(provider, extraAuthOptions) {
+ 		token: async () => {
+ 			return (await provider.tokens())?.access_token;
+ 		},
+-		onUnauthorized: async (ctx) => handleOAuthUnauthorized(provider, ctx, extraAuthOptions)
++		onUnauthorized: provider.onUnauthorized ?? ((ctx) => handleOAuthUnauthorized(provider, ctx, extraAuthOptions))
+ 	};
+ }
+ var UnauthorizedError = class extends Error {
 @@ -974,7 +974,6 @@ async function discoverMetadataWithFallback(serverUrl, wellKnownType, fetchFn, o
  	else {
  		const wellKnownPath = buildWellKnownPath(wellKnownType, issuer.pathname);
@@ -38,3 +130,33 @@ index f02ce3ca394e826fc27c9848dbe9a214bf6ba7a9..73a93a066c3540e131fa0770a74b4a7e
  	if (resource) authorizationUrl.searchParams.set("resource", resource.href);
  	return {
  		authorizationUrl,
+@@ -4850,7 +4848,8 @@ var SSEClientTransport = class {
+ 							await this._authProvider.onUnauthorized({
+ 								response,
+ 								serverUrl: this._url,
+-								fetchFn: this._fetchWithInit
++								fetchFn: this._fetchWithInit,
++								token: headers.get("authorization")?.replace(/^Bearer /i, "")
+ 							});
+ 						} catch (error) {
+ 							throw markAuthSeamEscape(error);
+@@ -5105,7 +5104,8 @@ var StreamableHTTPClientTransport = class {
+ 							await this._authProvider.onUnauthorized({
+ 								response,
+ 								serverUrl: this._url,
+-								fetchFn: this._fetchWithInit
++								fetchFn: this._fetchWithInit,
++								token: headers.get("authorization")?.replace(/^Bearer /i, "")
+ 							});
+ 						} catch (error) {
+ 							throw markAuthSeamEscape(error);
+@@ -5342,7 +5342,8 @@ var StreamableHTTPClientTransport = class {
+ 							await this._authProvider.onUnauthorized({
+ 								response,
+ 								serverUrl: this._url,
+-								fetchFn: this._fetchWithInit
++								fetchFn: this._fetchWithInit,
++								token: headers.get("authorization")?.replace(/^Bearer /i, "")
+ 							});
+ 						} catch (error) {
+ 							throw markAuthSeamEscape(error);

@@ -20,6 +20,7 @@ import { Cause, Deferred, Effect } from "effect"
 import type { ServerResponse } from "node:http"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
 import { Credential } from "../credential.js"
+import { CredentialRefresh } from "../credential/refresh.js"
 import { OauthCallbackPage } from "../oauth/page.js"
 import type { Integration } from "../integration.js"
 import { ErrorSummary } from "../util/error-summary.js"
@@ -274,6 +275,7 @@ export const connectProvider = Effect.fnUntraced(function* (input: {
   readonly integrationID: Integration.ID
 }) {
   const credentials = yield* Credential.Service
+  const refreshes = yield* CredentialRefresh.Service
   const run = Effect.runPromiseWith(yield* Effect.context())
   const found = (yield* credentials.list(input.integrationID)).at(-1)
   if (!found || found.value.type !== "oauth") return provider({ config: input.config, store: memoryStore() })
@@ -285,7 +287,7 @@ export const connectProvider = Effect.fnUntraced(function* (input: {
   }
   // Refresh tokens rotate and the row is shared across connections: only drop it while it still holds ours.
   let presented = found.value.refresh
-  return provider({
+  const oauthProvider = provider({
     config: input.config,
     invalidate: async (scope) => {
       if (scope === "verifier" || scope === "discovery") return
@@ -325,6 +327,38 @@ export const connectProvider = Effect.fnUntraced(function* (input: {
       saveCodeVerifier: async () => {},
     },
   })
+  return {
+    ...oauthProvider,
+    onUnauthorized: (context) =>
+      run(
+        refreshes.run(
+          id,
+          Effect.gen(function* () {
+            const current = yield* Effect.promise(read)
+            // A late 401 refers to the request's old token, not necessarily the stored token.
+            if (current && current.access !== context.token) return current
+            const challenge = extractWWWAuthenticateParams(context.response)
+            const result = yield* Effect.tryPromise({
+              try: () =>
+                auth(oauthProvider, {
+                  serverUrl: context.serverUrl,
+                  resourceMetadataUrl: challenge.resourceMetadataUrl,
+                  scope: challenge.scope,
+                  fetchFn: (url, init) =>
+                    context.fetchFn(url, {
+                      ...init,
+                      // Bound OAuth network work without interrupting persistence after token rotation.
+                      signal: AbortSignal.timeout(30_000),
+                    }),
+                }),
+              catch: (error) => error,
+            })
+            if (result !== "AUTHORIZED") return yield* Effect.fail(new UnauthorizedError())
+            return yield* Effect.promise(read)
+          }),
+        ).pipe(Effect.asVoid),
+      ),
+  } satisfies OAuthClientProvider
 })
 
 export const authorize = (input: {
