@@ -257,6 +257,14 @@ describe("plan plugin mutations", () => {
     }),
   )
 
+  it.effect("requires confirmation before the plan agent runs shell commands", () =>
+    Effect.gen(function* () {
+      const { planAgent } = yield* run()
+      expect(Permission.evaluate("shell", "*", planAgent.permissions).effect).toBe("ask")
+      expect(Permission.evaluate("shell", "/workspace", planAgent.permissions).effect).toBe("ask")
+    }),
+  )
+
   it.effect("allows external directories without asking", () =>
     Effect.gen(function* () {
       const { planAgent } = yield* run()

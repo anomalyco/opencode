@@ -38,6 +38,9 @@ export const Plugin = define({
         item.permissions.push({ action: "question", resource: "*", effect: "allow" })
         item.permissions.push({ action: "edit", resource: "*", effect: "deny" })
         item.permissions.push({ action: "edit", resource: path.join(directory, "*"), effect: "allow" })
+        // Plan is read-only: never let a shell command (e.g. a script written to work around the edit
+        // deny) run without explicit confirmation, even though the default is ask.
+        item.permissions.push({ action: "shell", resource: "*", effect: "ask" })
       })
     })
 
