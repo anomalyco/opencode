@@ -1,9 +1,11 @@
 export * as InstructionState from "./instruction-state.js"
 
-import { eq, inArray, sql } from "drizzle-orm"
+import { and, asc, eq, gt, inArray, lt, sql } from "drizzle-orm"
 import { Effect, Option, Schema } from "effect"
+import { Event } from "@opencode/schema/event"
 import type { Database } from "../database/database.js"
 import type { Bus } from "../bus.js"
+import { EventTable } from "../event/sql.js"
 import { Instructions } from "../instructions/index.js"
 import { SessionEvent } from "./event.js"
 import { SessionSchema } from "./schema.js"
@@ -147,6 +149,54 @@ export const advanceEpoch = Effect.fn("InstructionState.advanceEpoch")(function*
       epoch_start: epochStart,
       through_seq: epochStart,
       initial_values: sql`${InstructionStateTable.current_values}`,
+    })
+    .where(eq(InstructionStateTable.session_id, sessionID))
+    .run()
+    .pipe(Effect.orDie)
+})
+
+/**
+ * Rewinds the fold to a revert boundary, where history from `boundarySeq` onward was deleted.
+ * Updates before the boundary still exist in history, so the epoch baseline and those updates are
+ * kept. Clearing the state instead would re-observe live sources into a new baseline, which moves
+ * every update since the epoch start into the system prompt and shifts the prompt-cache prefix for
+ * the whole conversation.
+ */
+export const truncate = Effect.fn("InstructionState.truncate")(function* (
+  db: DatabaseService,
+  sessionID: SessionSchema.ID,
+  boundarySeq: number,
+) {
+  const state = yield* find(db, sessionID)
+  // No update was removed, so the fold still matches the surviving history.
+  if (!state || state.through_seq < boundarySeq) return
+  // The baseline itself was removed, so there is no earlier epoch to fall back on.
+  if (state.epoch_start >= boundarySeq) return yield* reset(db, sessionID)
+  const updates = yield* db
+    .select({ seq: EventTable.seq, data: EventTable.data })
+    .from(EventTable)
+    .where(
+      and(
+        eq(EventTable.aggregate_id, sessionID),
+        eq(
+          EventTable.type,
+          Event.versionedType(SessionEvent.InstructionsUpdated.type, SessionEvent.InstructionsUpdated.durable.version),
+        ),
+        gt(EventTable.seq, state.epoch_start),
+        lt(EventTable.seq, boundarySeq),
+      ),
+    )
+    .orderBy(asc(EventTable.seq))
+    .all()
+    .pipe(Effect.orDie)
+  yield* db
+    .update(InstructionStateTable)
+    .set({
+      through_seq: updates.at(-1)?.seq ?? state.epoch_start,
+      current_values: updates.reduce(
+        (values, update) => Instructions.applyHashDelta(values, update.data.delta as Instructions.Delta),
+        state.initial_values,
+      ),
     })
     .where(eq(InstructionStateTable.session_id, sessionID))
     .run()

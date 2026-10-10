@@ -1738,6 +1738,54 @@ describe("SessionRunnerLLM", () => {
     expect(yield* s.messages).toHaveLength(3)
   })
 
+  scenario("keeps the system prompt stable across a committed revert", function* (s) {
+    yield* s.runPrompt("First")
+    // Changed after the baseline, so it is delivered as a chronological update, not in `system`.
+    s.systemBaseline = "Changed context"
+    yield* s.runPrompt("Second")
+    const third = yield* s.runPrompt("Third")
+    const before = s.requests.at(-1)?.system.map((part) => part.text)
+    expect(before).toEqual([defaultSystem, fakeIdentity, "Initial context"])
+
+    // Revert only the last message. Everything earlier, including the baseline, is untouched.
+    yield* s.bus.publish(SessionEvent.RevertEvent.Committed, { sessionID, to: third.id })
+    yield* s.runPrompt("Fourth")
+
+    // Any change here shifts the prompt-cache prefix for the entire conversation.
+    expect(s.requests.at(-1)?.system.map((part) => part.text)).toEqual(before)
+  })
+
+  scenario("keeps the baseline and refolds the surviving updates after a committed revert", function* (s) {
+    yield* s.runPrompt("First")
+    s.systemBaseline = "Changed context"
+    const second = yield* s.runPrompt("Second")
+    s.systemBaseline = "Latest context"
+    yield* s.runPrompt("Third")
+    const baseline = [defaultSystem, fakeIdentity, "Initial context"]
+    const state = () =>
+      s.db.select().from(InstructionStateTable).where(eq(InstructionStateTable.session_id, sessionID)).get()
+    const before = yield* state()
+
+    // Deletes "Second", "Third", and the "Latest context" update, which sits after the boundary.
+    yield* s.bus.publish(SessionEvent.RevertEvent.Committed, { sessionID, to: second.id })
+    const after = yield* state()
+    expect(after?.initial_values).toEqual(before?.initial_values)
+    expect(after?.current_values).toEqual({
+      ...before?.current_values,
+      "test/context": Instructions.hash("Changed context"),
+    })
+    expect(after?.through_seq).toBeLessThan(before?.through_seq ?? 0)
+
+    // The surviving update stays in history and the removed one is re-delivered chronologically.
+    yield* s.runPrompt("Fourth")
+    const request = s.requests.at(-1)
+    expect(request?.system.map((part) => part.text)).toEqual(baseline)
+    expect(request?.messages.filter((message) => message.role === "system")).toEqual([
+      Message.system("Changed context"),
+      Message.system("Latest context"),
+    ])
+  })
+
   scenario("uses the selected model family prompt when the agent does not override it", function* (s) {
     s.currentModel = LanguageModel.make({ id: "gpt-5", provider: "openai", route: OpenAIChat.route })
     yield* s.admit("First")
