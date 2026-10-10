@@ -1,5 +1,24 @@
 import { expect, story } from "../../storybook/playwright/story"
 
+for (const width of [840, 320]) {
+  story(`aligns the single shell with its group at ${width}px`, async ({ mount, page }) => {
+    await page.setViewportSize({ width, height: 480 })
+    const root = await mount("current-session-terminal-work--terminal-commands", { args: { scenario: "collapsed" } })
+    const group = root.locator('[data-component="collapsed-tool-group"]')
+    const header = group.locator('[data-component="context-tool-group-trigger"]')
+    const trigger = group.getByRole("button", { name: "Used 1 Shell", exact: true })
+    await trigger.click()
+    await expect(trigger).toHaveAttribute("aria-expanded", "true")
+    const shell = group.locator('[data-slot="context-tool-group-item"] [data-slot="basic-tool-tool-title"]').first()
+    await expect(shell).toContainText("Shell")
+    const positions = await Promise.all(
+      [header, shell].map((item) => item.evaluate((node) => node.getBoundingClientRect().left)),
+    )
+    expect(positions[1]).toBe(positions[0])
+    expect(await group.evaluate((node) => node.scrollWidth <= node.clientWidth)).toBe(true)
+  })
+}
+
 for (const reasoningDefaultOpen of [false, true]) {
   story(
     `keeps ordered thoughts and tool-only counts with reasoning ${reasoningDefaultOpen ? "expanded" : "collapsed"}`,
