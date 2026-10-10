@@ -1832,7 +1832,7 @@ export function Prompt(props: PromptProps) {
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1} justifyContent="space-between">
               <PromptMetadataRow
                 mode={store.mode}
-                agent={agentLabel()}
+                agent={store.mode === "shell" || local.agent.list().length > 1 ? agentLabel() : undefined}
                 auto={local.permission.mode === "autoaccept"}
                 model={promptDisplay().modelLabel}
                 provider={promptDisplay().providerLabel}

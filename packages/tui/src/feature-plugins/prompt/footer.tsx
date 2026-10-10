@@ -48,6 +48,12 @@ export function PromptFooter(props: {
   })
   const live = createMemo(() => Boolean(subagents() || shells()))
   const shortcut = (id: string) => props.context.keymap.shortcuts(id)[0]
+  const canSwitchAgent = createMemo(
+    () =>
+      (props.context.data.location.agent.list(props.context.location) ?? []).filter(
+        (agent) => agent.mode !== "subagent" && !agent.hidden,
+      ).length > 1,
+  )
   const layout = createMemo(() => {
     const command = shortcut("command.palette.show")
     if (status().length === 0) return { usage: false, shortcuts: dimensions().width >= 44 }
@@ -92,7 +98,7 @@ export function PromptFooter(props: {
               </Show>
             </box>
           </Match>
-          <Match when={props.showDetails && layout().shortcuts}>
+          <Match when={props.showDetails && layout().shortcuts && canSwitchAgent()}>
             <text fg={props.context.theme.text.base} flexShrink={0}>
               {shortcut("agent.cycle")} <span style={{ fg: props.context.theme.text.muted }}>agents</span>
             </text>
