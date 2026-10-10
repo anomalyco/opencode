@@ -19,7 +19,7 @@ import { Locale } from "../../util/locale"
 import type { PromptInfo, PromptPartRef } from "../../prompt/history"
 import { useFrecency } from "../../prompt/frecency"
 import { Keymap, type KeymapCommand } from "../../context/keymap"
-import { displayCharAt, mentionTriggerIndex, slashTriggerIndex } from "../../prompt/display"
+import { displayCharAt, mentionTriggerIndex, slashCommandKind, slashTriggerIndex } from "../../prompt/display"
 import type { FileSystemEntry } from "@opencode/client"
 import { Skill } from "@opencode/schema/skill"
 import { stringWidth } from "../../util/string-width"
@@ -44,7 +44,7 @@ export type AutocompleteOption = {
   path?: string
   absolute?: string
   destructive?: { id: string; confirm: string; run: () => void }
-  kind?: "skill" | "agent" | "reference"
+  kind?: "skill" | "agent" | "reference" | "custom" | "mcp"
   queueable?: boolean
 }
 
@@ -490,6 +490,7 @@ export function Autocomplete(props: {
         description: serverCommand.description,
         queueable: true,
         onSelect: () => insertSlash(serverCommand.name),
+        kind: slashCommandKind(serverCommand.name),
       })
     }
 
@@ -846,6 +847,8 @@ export function Autocomplete(props: {
     skill: "skill",
     agent: "agent",
     reference: "reference",
+    custom: "custom",
+    mcp: "mcp",
   }
 
   return (
