@@ -535,9 +535,12 @@ export function Prompt(props: PromptProps) {
         palette: undefined,
         enabled: status() === "running",
         run: () => {
-          if (auto()?.visible) return
-          if (!input.focused) return
-          if (!props.sessionID) return
+          // Defer to the session route's unconditional `session.background` command
+          // (same id, earlier layer) by returning false. A bare return would stop the
+          // command chain and silently drop the keypress. See #49216.
+          if (auto()?.visible) return false
+          if (!input.focused) return false
+          if (!props.sessionID) return false
 
           void client.api.session.background({
             sessionID: props.sessionID,
