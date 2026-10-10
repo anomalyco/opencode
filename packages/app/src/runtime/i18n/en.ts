@@ -44,6 +44,8 @@ export const dict = {
   "command.session.new": "New session",
   "command.file.open": "Open file",
   "command.tab.close": "Close tab",
+  "command.tab.previous": "Previous tab",
+  "command.tab.next": "Next tab",
   "command.tab.reopenClosed": "Reopen closed tab",
   "command.context.addSelection": "Add selection to context",
   "command.context.addSelection.description": "Add selected lines from the current file",
