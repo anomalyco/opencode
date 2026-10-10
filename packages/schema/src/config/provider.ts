@@ -109,6 +109,8 @@ class ModelConfig extends Schema.Class<ModelConfig>("Config.Model")({
   limit: Limit.pipe(optional),
 }) {}
 
+export const ModelWildcard = "*"
+
 export class Info extends Schema.Class<Info>("Config.Provider")({
   canonical: Provider.ID.pipe(optional),
   name: Schema.String.pipe(optional),
