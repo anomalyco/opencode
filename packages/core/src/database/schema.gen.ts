@@ -275,6 +275,9 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
       yield* tx.run(
         `CREATE INDEX \`session_v2_time_suspended_idx\` ON \`session_v2\` (\`time_suspended\`) WHERE "session_v2"."time_suspended" is not null;`,
       )
+      yield* tx.run(
+        `CREATE INDEX \`session_v2_directory_updated_idx\` ON \`session_v2\` (rtrim(directory, '/'),\`time_updated\`,\`id\`) WHERE directory <> '';`,
+      )
     })
   },
 }

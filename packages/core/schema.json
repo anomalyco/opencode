@@ -2061,6 +2061,19 @@
       "name": "session_v2_time_suspended_idx",
       "entityType": "indexes",
       "table": "session_v2"
+    },
+    {
+      "columns": [
+        { "value": "rtrim(directory, '/')", "isExpression": true },
+        { "value": "time_updated", "isExpression": false },
+        { "value": "id", "isExpression": false }
+      ],
+      "isUnique": false,
+      "where": "directory <> ''",
+      "origin": "manual",
+      "name": "session_v2_directory_updated_idx",
+      "entityType": "indexes",
+      "table": "session_v2"
     }
   ],
   "renames": []

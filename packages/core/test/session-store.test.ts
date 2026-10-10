@@ -299,6 +299,91 @@ describe("SessionStore", () => {
     }),
   )
 
+  it.effect("uses the directory expression index for ordered lookups", () =>
+    Effect.gen(function* () {
+      yield* seedSessions([
+        { id: "ses_index_a", updated: 10 },
+        { id: "ses_index_b", updated: 20 },
+        { id: "ses_index_same", updated: 20 },
+        { id: "ses_index_c", updated: 30 },
+        { id: "ses_index_legacy", updated: 40 },
+      ])
+      const database = yield* Database.Service
+      // Keep the canonical writes intact while checking the index against legacy storage.
+      yield* database.db.run(sql`UPDATE ${SessionTable} SET directory = '/project///' WHERE id = 'ses_index_legacy'`)
+      // Both pagination orders and filesystem roots must use the same expression index.
+      yield* Effect.forEach(["/project/", "/", "C:/", "//server/share/"], (directory) =>
+        Effect.forEach([sql`ASC`, sql`DESC`], (order) =>
+          Effect.gen(function* () {
+            const plan = yield* database.db.all<{ detail: string }>(sql`
+              EXPLAIN QUERY PLAN SELECT id FROM ${SessionTable}
+              WHERE ${SessionTable.directory} <> ''
+                AND rtrim(${SessionTable.directory}, '/') =
+                  rtrim(${sql.param(AbsolutePath.make(directory), SessionTable.directory)}, '/')
+              ORDER BY ${SessionTable.time_updated} ${order}, ${SessionTable.id} ${order}
+              LIMIT 10
+            `)
+            expect(plan.some((row) => row.detail.startsWith("SEARCH ") && row.detail.includes("USING INDEX session_v2_directory_updated_idx"))).toBe(true)
+            expect(plan.some((row) => row.detail.includes("USE TEMP B-TREE"))).toBe(false)
+          }),
+        ),
+      )
+      // Cursor predicates must retain the ordered index access path too.
+      yield* Effect.forEach(
+        [
+          { comparison: sql`>`, order: sql`ASC` },
+          { comparison: sql`<`, order: sql`DESC` },
+        ],
+        (page) =>
+          Effect.gen(function* () {
+            const plan = yield* database.db.all<{ detail: string }>(sql`
+              EXPLAIN QUERY PLAN SELECT id FROM ${SessionTable}
+              WHERE ${SessionTable.directory} <> ''
+                AND rtrim(${SessionTable.directory}, '/') =
+                  rtrim(${sql.param(AbsolutePath.make("/project/"), SessionTable.directory)}, '/')
+                AND (${SessionTable.time_updated} ${page.comparison} 20
+                  OR (${SessionTable.time_updated} = 20 AND ${SessionTable.id} ${page.comparison} 'ses_index_b'))
+              ORDER BY ${SessionTable.time_updated} ${page.order}, ${SessionTable.id} ${page.order}
+              LIMIT 2
+            `)
+            expect(
+              plan.some((row) =>
+                row.detail.startsWith("SEARCH ") && row.detail.includes("USING INDEX session_v2_directory_updated_idx"),
+              ),
+            ).toBe(true)
+            expect(plan.some((row) => row.detail.includes("USE TEMP B-TREE"))).toBe(false)
+          }),
+      )
+      const store = yield* SessionStore.Service
+      const directory = AbsolutePath.make("/project/")
+      const asc = yield* store.list({ directory, order: "asc", limit: 2 })
+      expect(asc.map((session) => String(session.id))).toEqual(["ses_index_a", "ses_index_b"])
+      const desc = yield* store.list({ directory, order: "desc", limit: 2 })
+      expect(desc.map((session) => String(session.id))).toEqual(["ses_index_legacy", "ses_index_c"])
+      const next = yield* store.list({
+        directory,
+        order: "asc",
+        limit: 2,
+        anchor: { id: Session.ID.make("ses_index_b"), time: 20, direction: "next" },
+      })
+      expect(next.map((session) => String(session.id))).toEqual(["ses_index_same", "ses_index_c"])
+      const previous = yield* store.list({
+        directory,
+        order: "asc",
+        limit: 2,
+        anchor: { id: Session.ID.make("ses_index_b"), time: 20, direction: "previous" },
+      })
+      expect(previous.map((session) => String(session.id))).toEqual(["ses_index_a"])
+      const tiePrevious = yield* store.list({
+        directory,
+        order: "asc",
+        limit: 2,
+        anchor: { id: Session.ID.make("ses_index_same"), time: 20, direction: "previous" },
+      })
+      expect(tiePrevious.map((session) => String(session.id))).toEqual(["ses_index_a", "ses_index_b"])
+    }),
+  )
+
   it.effect("lists by updated time and ID with exclusive two-item pages in either direction", () =>
     Effect.gen(function* () {
       yield* seedSessions([

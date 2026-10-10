@@ -73,6 +73,9 @@ export const SessionTable = sqliteTable(
     index("session_v2_time_suspended_idx")
       .on(table.time_suspended)
       .where(sql`${table.time_suspended} is not null`),
+    index("session_v2_directory_updated_idx")
+      .on(sql`rtrim(directory, '/')`, table.time_updated, table.id)
+      .where(sql`directory <> ''`),
   ],
 )
 
