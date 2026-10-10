@@ -3,6 +3,7 @@ import {
   LLMClient,
   LLMError,
   LLMEvent,
+  InvalidProviderOutputReason,
   Message,
   SystemPart,
   isContextOverflowFailure,
@@ -296,7 +297,24 @@ const layer = Layer.effect(
           )
             return yield* Effect.die(continueAfterOverflowCompaction(currentStep))
           if (overflowFailure) yield* publish(overflowFailure)
-          const llmFailure = failure instanceof LLMError ? failure : undefined
+          const recordedFinish = publisher.stepSettlement()?.finish
+          // A successful stream with an explicit provider error is still a failed assistant turn.
+          // `length` is intentionally excluded: it is a valid truncation outcome and may contain
+          // usable partial output, so it is outside this subagent failure fix.
+          const invalidFinish =
+            stream._tag === "Success" && (recordedFinish === "unknown" || recordedFinish === "error")
+              ? new LLMError({
+                  module: "SessionRunner",
+                  method: "run",
+                  reason: new InvalidProviderOutputReason({
+                    message:
+                      recordedFinish === "error"
+                        ? "The provider response ended with an error finish reason."
+                        : "The provider response ended with an unknown finish reason.",
+                  }),
+                })
+              : undefined
+          const llmFailure = failure instanceof LLMError ? failure : invalidFinish
           if (llmFailure && !publisher.hasProviderError()) {
             yield* withPublication(publisher.failUnsettledTools("Provider did not return a tool result", true))
             yield* withPublication(publisher.failAssistant(llmFailure.reason.message))
@@ -323,7 +341,7 @@ const layer = Layer.effect(
             yield* withPublication(publisher.failUnsettledTools(`Tool execution failed: ${message}`))
           }
           const stepSettlement = publisher.stepSettlement()
-          if (stepSettlement && !publisher.hasProviderError()) {
+          if (stepSettlement && !publisher.hasProviderError() && !publisher.hasAssistantFailure()) {
             const endSnapshot = yield* snapshots.capture()
             const files =
               startSnapshot && endSnapshot
@@ -346,12 +364,15 @@ const layer = Layer.effect(
           }
           if (publisher.hasProviderError())
             yield* withPublication(publisher.failUnsettledTools("Tool execution interrupted"))
-          if (stream._tag === "Success" && !publisher.hasProviderError())
+          if (stream._tag === "Success" && !publisher.hasProviderError() && !publisher.hasAssistantFailure())
             yield* withPublication(publisher.failUnsettledTools("Provider did not return a tool result", true))
           if (stream._tag === "Failure") return yield* Effect.failCause(stream.cause)
           if (settled._tag === "Failure" && Cause.hasInterrupts(settled.cause))
             return yield* Effect.failCause(settled.cause)
-          return { needsContinuation: !publisher.hasProviderError() && needsContinuation, step: currentStep }
+          return {
+            needsContinuation: !publisher.hasProviderError() && !publisher.hasAssistantFailure() && needsContinuation,
+            step: currentStep,
+          }
         }),
       )
     }, Effect.scoped)

@@ -3183,6 +3183,35 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("projects an error finish as a terminal assistant step failure", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Finish with an error" }), resume: false })
+
+      response = [
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.textStart({ id: "error-finish-text" }),
+        LLMEvent.textDelta({ id: "error-finish-text", text: "Partial output" }),
+        LLMEvent.textEnd({ id: "error-finish-text" }),
+        LLMEvent.stepFinish({ index: 0, reason: "error" }),
+        LLMEvent.finish({ reason: "error" }),
+      ]
+
+      yield* session.resume(sessionID)
+
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Finish with an error" },
+        {
+          type: "assistant",
+          finish: "error",
+          error: { type: "unknown", message: "The provider response ended with an error finish reason." },
+          content: [{ type: "text", text: "Partial output" }],
+        },
+      ])
+    }),
+  )
+
   it.effect("projects provider errors emitted before assistant step start", () =>
     Effect.gen(function* () {
       yield* setup

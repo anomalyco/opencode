@@ -372,6 +372,52 @@ describe("tool.task", () => {
     }),
   )
 
+  background.instance("background delivery reports a subagent finish error", () =>
+    Effect.gen(function* () {
+      const jobs = yield* BackgroundJob.Service
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const notified = defer<SessionPrompt.PromptInput>()
+
+      const result = yield* def.execute(
+        {
+          description: "inspect bug",
+          prompt: "look into the cache key path",
+          subagent_type: "general",
+          background: true,
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: {
+            promptOps: stubOps({
+              finish: "error",
+              onPrompt: (input) => {
+                if (input.sessionID === chat.id) notified.resolve(input)
+              },
+            }),
+          },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      const waited = yield* jobs.wait({ id: result.metadata.sessionId, timeout: 1_000 })
+      expect(waited.info?.status).toBe("error")
+      expect(waited.info?.error).toBe(
+        `Subagent failed (task_id: ${result.metadata.sessionId}): finished with error (finish: error)`,
+      )
+      const notification = yield* Effect.promise(() => notified.promise)
+      const part = notification.parts[0]
+      expect(part?.type).toBe("text")
+      if (part?.type === "text") expect(part.text).toContain('state="error"')
+    }),
+  )
+
   it.instance("execute surfaces terminal child tool errors with a resumable task_id", () =>
     Effect.gen(function* () {
       const sessions = yield* Session.Service
