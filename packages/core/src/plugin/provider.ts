@@ -19,6 +19,7 @@ import { NeonPlugin } from "./provider/neon.js"
 import { NvidiaPlugin } from "./provider/nvidia.js"
 import { OllamaPlugin } from "./provider/ollama.js"
 import { OpenAIPlugin } from "./provider/openai.js"
+import { OpenAICompatibleLimitsPlugin } from "./provider/openai-compatible-limits.js"
 import { OpenAIContextCapsPlugin } from "./provider/openai-context-caps.js"
 import { SnowflakeCortexPlugin } from "./provider/snowflake-cortex.js"
 import { OpencodePlugin } from "./provider/opencode.js"
@@ -54,6 +55,7 @@ export const ProviderPlugins: PluginInternal.InternalPlugin[] = [
   NvidiaPlugin,
   OllamaPlugin,
   OpencodePlugin,
+  OpenAICompatibleLimitsPlugin,
   SnowflakeCortexPlugin,
   OpenAIPlugin,
   OpenAIContextCapsPlugin,
