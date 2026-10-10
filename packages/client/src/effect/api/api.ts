@@ -1385,12 +1385,17 @@ export type ModelListInput = { readonly location?: { readonly directory?: string
 export type ModelListOutput = { readonly location: Location.PublicRef; readonly data: ReadonlyArray<Model.Info> }
 export type ModelListOperation<E = never> = (input?: ModelListInput) => Effect.Effect<ModelListOutput, E>
 
+export type ModelRefreshInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
+export type ModelRefreshOutput = { readonly location: Location.PublicRef; readonly data: ReadonlyArray<Model.Info> }
+export type ModelRefreshOperation<E = never> = (input?: ModelRefreshInput) => Effect.Effect<ModelRefreshOutput, E>
+
 export type ModelDefaultInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
 export type ModelDefaultOutput = { readonly location: Location.PublicRef; readonly data: Model.Info | undefined }
 export type ModelDefaultOperation<E = never> = (input?: ModelDefaultInput) => Effect.Effect<ModelDefaultOutput, E>
 
 export interface ModelApi<E = never> {
   readonly list: ModelListOperation<E>
+  readonly refresh: ModelRefreshOperation<E>
   readonly default: ModelDefaultOperation<E>
 }
 

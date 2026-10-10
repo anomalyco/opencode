@@ -105,6 +105,8 @@ import type {
   MessageListOutput,
   ModelListInput,
   ModelListOutput,
+  ModelRefreshInput,
+  ModelRefreshOutput,
   ModelDefaultInput,
   ModelDefaultOutput,
   GenerateTextInput,
@@ -1116,6 +1118,18 @@ export function make(options: ClientOptions) {
           {
             method: "GET",
             path: `/api/model`,
+            query: { location: input?.["location"] },
+            successStatus: 200,
+            declaredStatuses: [400, 401, 404, 503],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      refresh: (input?: ModelRefreshInput, requestOptions?: RequestOptions) =>
+        request<ModelRefreshOutput>(
+          {
+            method: "GET",
+            path: `/api/model/refresh`,
             query: { location: input?.["location"] },
             successStatus: 200,
             declaredStatuses: [400, 401, 404, 503],
