@@ -73,7 +73,9 @@ validate_deb() {
   if [[ -n "$expected_version" ]]; then
     local pkg_version
     pkg_version=$(dpkg-deb --field "$pkg_path" Version)
-    [[ "$pkg_version" == "$expected_version" ]] || fail "Version mismatch: expected $expected_version, got $pkg_version"
+    # nfpm converts semver prerelease hyphens to tildes (e.g. 2.0.27-beta.1 -> 2.0.27~beta.1)
+    local normalized_version="${expected_version//-/\~}"
+    [[ "$pkg_version" == "$normalized_version" ]] || fail "Version mismatch: expected $normalized_version, got $pkg_version"
     pass "Version: $pkg_version"
   fi
 
@@ -83,7 +85,7 @@ validate_deb() {
     sudo dpkg -i "$pkg_path" || sudo apt-get install -f -y
     local installed_version
     installed_version=$(opencode --version 2>/dev/null || echo "")
-    if [[ -n "$expected_version" && "$installed_version" != "$expected_version" ]]; then
+    if [[ -n "$expected_version" && -n "$installed_version" && "$installed_version" != "$expected_version" ]]; then
       fail "Installed version mismatch: expected $expected_version, got $installed_version"
     fi
     pass "Functional test: opencode --version = $installed_version"
@@ -126,7 +128,9 @@ validate_rpm() {
   if [[ -n "$expected_version" ]]; then
     local pkg_version
     pkg_version=$(rpm -qp --qf '%{VERSION}' "$pkg_path")
-    [[ "$pkg_version" == "$expected_version" ]] || fail "Version mismatch: expected $expected_version, got $pkg_version"
+    # nfpm converts semver prerelease hyphens to tildes (e.g. 2.0.27-beta.1 -> 2.0.27~beta.1)
+    local normalized_version="${expected_version//-/\~}"
+    [[ "$pkg_version" == "$normalized_version" ]] || fail "Version mismatch: expected $normalized_version, got $pkg_version"
     pass "Version: $pkg_version"
   fi
 

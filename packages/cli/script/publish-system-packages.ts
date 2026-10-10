@@ -56,25 +56,35 @@ console.log("\nLinux packages built:")
 await $`ls -la ${outputDir}/*.deb ${outputDir}/*.rpm`.nothrow()
 
 // ---------------------------------------------------------------------------
+// Validate packages before upload
+// ---------------------------------------------------------------------------
+
+const packages = await Array.fromAsync(new Bun.Glob("*.{deb,rpm}").scan({ cwd: outputDir, absolute: true }))
+
+for (const pkg of packages) {
+  const ext = pkg.endsWith(".deb") ? "deb" : "rpm"
+  const result = await $`bash ${packagingDir}/validate.sh --${ext} ${pkg} --version ${version}`.nothrow()
+  if (result.exitCode !== 0) {
+    throw new Error(`Validation failed for ${path.basename(pkg)}`)
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Upload to R2 and register update artifacts
 // ---------------------------------------------------------------------------
 
 if (!dryRun) {
-  const packages = await Array.fromAsync(new Bun.Glob("*.{deb,rpm}").scan({ cwd: outputDir, absolute: true }))
-  for (const pkg of packages) {
-    const filename = path.basename(pkg)
-    const result = await UpdateArtifact.upload({
-      source: pkg,
-      key: `bin/${Script.version}/${filename}`,
-    })
-    console.log(`Uploaded ${filename}: ${result.url}`)
-  }
+  const files = await UpdateArtifact.upload({
+    version: Script.version,
+    files: packages,
+    dryRun,
+  })
   await UpdateArtifact.publish({
     channel: Script.channel,
     name: "cli",
     distribution: "system-packages",
     version: Script.version,
-    metadata: { formats: ["deb", "rpm"] },
+    metadata: { files },
   })
 }
 

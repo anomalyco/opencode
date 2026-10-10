@@ -644,8 +644,12 @@ jobs:
           ssh-keyscan -H aur.archlinux.org >> ~/.ssh/known_hosts || true
 
       - name: Install nfpm and rpm
+        if: needs.version.outputs.release && (github.ref_name == 'v2' || github.ref_name == 'beta')
         run: |
-          curl -sfL https://github.com/goreleaser/nfpm/releases/download/v2.41.1/nfpm_2.41.1_linux_amd64.tar.gz | tar xz -C /usr/local/bin nfpm
+          curl -sfL https://github.com/goreleaser/nfpm/releases/download/v2.41.1/nfpm_2.41.1_Linux_x86_64.tar.gz -o /tmp/nfpm.tar.gz
+          echo "b3cf95aa6dabed836d09ad7f0c190a13c74c5b1304db60846f0f702ee407f430  /tmp/nfpm.tar.gz" | sha256sum -c
+          sudo tar xzf /tmp/nfpm.tar.gz -C /usr/local/bin nfpm
+          rm /tmp/nfpm.tar.gz
           sudo apt-get install -y --no-install-recommends rpm
 
       - run: ./script/publish.ts
@@ -663,17 +667,6 @@ jobs:
           OPENCODE_DESKTOP_DIST: /tmp/desktop
           CLOUDFLARE_ACCOUNT_ID: 15d29c8639fd3733b1b5486a2acfd968
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-
-      - name: Validate CLI system packages
-        if: needs.version.outputs.release && (github.ref_name == 'v2' || github.ref_name == 'beta')
-        run: |
-          shopt -s nullglob
-          for deb in packages/cli/dist/system-packages/*.deb; do
-            bash packages/cli/packaging/validate.sh --deb "$deb" --version "${{ needs.version.outputs.version }}"
-          done
-          for rpm in packages/cli/dist/system-packages/*.rpm; do
-            bash packages/cli/packaging/validate.sh --rpm "$rpm" --version "${{ needs.version.outputs.version }}"
-          done
 
   notify-discord-v2:
     needs:
