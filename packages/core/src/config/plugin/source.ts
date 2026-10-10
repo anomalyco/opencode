@@ -168,7 +168,14 @@ const scan = Effect.fn("ConfigPluginSource.scan")(function* (
       if (directory) {
         const root = yield* fs.resolve(operation.target)
         const server = yield* fs.resolve(fileURLToPath(entrypoints.server))
-        if (!FSUtil.contains(root, server)) return []
+        if (!FSUtil.contains(root, server)) {
+          yield* Effect.logWarning("configured plugin resolves outside its directory", {
+            target: operation.target,
+            root,
+            entrypoint: server,
+          })
+          return []
+        }
       }
       const times = yield* Effect.forEach(
         [

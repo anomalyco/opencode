@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { describe, it } from "node:test"
@@ -152,5 +152,32 @@ describe("Host.resolve", () => {
       true,
     )
     assert.deepEqual(Host.resolve(plugin.target), { server: undefined, tui: undefined, rpc: undefined })
+  })
+
+  it("resolves a directory symlink to its current target after it is retargeted", async () => {
+    const root = await realpath(await mkdtemp(path.join(tmpdir(), "opencode-host-link-")))
+    const first = path.join(root, "first")
+    const second = path.join(root, "second")
+    const link = path.join(root, "plugin")
+    await mkdir(first, { recursive: true })
+    await mkdir(second, { recursive: true })
+    await writeFile(path.join(first, "index.ts"), source)
+    await writeFile(path.join(second, "index.ts"), source)
+    await symlink(first, link)
+    assert.equal(Host.resolve({ directory: link }).server, pathToFileURL(path.join(first, "index.ts")).href)
+
+    // What a dotfiles tool does on update: repoint the symlink at the new directory.
+    await rm(link)
+    await symlink(second, link)
+    assert.equal(Host.resolve({ directory: link }).server, pathToFileURL(path.join(second, "index.ts")).href)
+    await rm(root, { recursive: true, force: true })
+  })
+
+  it("resolves a directory that does not exist to no entrypoints", () => {
+    assert.deepEqual(Host.resolve({ directory: path.join(tmpdir(), "opencode-host-absent") }), {
+      server: undefined,
+      tui: undefined,
+      rpc: undefined,
+    })
   })
 })

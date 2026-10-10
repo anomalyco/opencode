@@ -1,5 +1,5 @@
 import { expect } from "bun:test"
-import { cp } from "node:fs/promises"
+import { cp, mkdir, symlink, unlink } from "node:fs/promises"
 import path from "node:path"
 import { Brand, Cause, Deferred, Effect, Exit, Fiber, Layer, Option, Schedule, Schema, Scope, Stream } from "effect"
 import { Agent } from "@opencode/schema/agent"
@@ -441,3 +441,29 @@ for (const target of ["policy-fixture@1.2.3", "@scope/policy-fixture@1.2.3"]) {
     }),
   )
 }
+
+it.live("follows a plugin directory symlink retargeted since the previous load", () =>
+  Effect.gen(function* () {
+    const directory = yield* tmpdirScoped()
+    const first = path.join(directory.path, "first")
+    const second = path.join(directory.path, "second")
+    const source = path.join(directory.path, "plugin")
+    yield* Effect.promise(async () => {
+      await mkdir(first, { recursive: true })
+      await mkdir(second, { recursive: true })
+      await Bun.write(path.join(first, "index.ts"), 'export default { id: "first", setup() {} }')
+      await Bun.write(path.join(second, "index.ts"), 'export default { id: "second", setup() {} }')
+      await symlink(first, source, process.platform === "win32" ? "junction" : undefined)
+    })
+
+    const modules = yield* PluginModule.make()
+    const operation = { type: "add" as const, target: source, options: {} }
+    expect(yield* modules.load(operation)).toMatchObject({ id: "first" })
+
+    yield* Effect.promise(async () => {
+      await unlink(source)
+      await symlink(second, source, process.platform === "win32" ? "junction" : undefined)
+    })
+    expect(yield* modules.load(operation)).toMatchObject({ id: "second" })
+  }),
+)
