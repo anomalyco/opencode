@@ -17,7 +17,6 @@ const ExecuteCall = Schema.Struct({
   tool: Schema.String,
   status: Schema.Literals(["running", "completed", "error"]),
   input: Schema.optionalKey(Schema.Record(Schema.String, Schema.Json)),
-  output: Schema.optionalKey(Schema.String),
 })
 
 // Completed results and logs get separate budgets so either can survive a large output from the other.
@@ -80,6 +79,7 @@ export const create = (
         const callIndex = yield* Ref.make(0)
         const files = yield* Ref.make<Array<CollectedFiles>>([])
         const calls = yield* Ref.make<Array<ExecuteCall>>([])
+        const previews = new Map<number, string>()
         const lock = Semaphore.makeUnsafe(1)
         const record = (update: (items: Array<ExecuteCall>) => Array<ExecuteCall>) =>
           lock.withPermit(
@@ -103,20 +103,22 @@ export const create = (
               return text === "" ? null : text
             }),
           {
-            ...progressHooks(record),
+            ...progressHooks(record, previews),
             "execution.interrupted": ({ logs }) =>
               Effect.gen(function* () {
                 const toolCalls = yield* Ref.get(calls)
-                const completed = toolCalls.filter((call) => call.status === "completed")
+                const completed = toolCalls.flatMap((call, index) =>
+                  call.status === "completed" ? [`${call.tool}: ${previews.get(index) ?? "[output omitted]"}`] : [],
+                )
                 const output = [
                   completed.length > 0
-                    ? `Completed tool calls:\n${preview(completed.map((call) => `${call.tool}: ${call.output ?? "[output omitted]"}`).join("\n"), PARTIAL_BYTES)}`
+                    ? `Completed tool calls:\n${preview(completed.join("\n"), PARTIAL_BYTES)}`
                     : undefined,
                   logs.length > 0 ? `Logs:\n${preview(logs.join("\n"), PARTIAL_BYTES)}` : undefined,
                 ]
                   .filter((part) => part !== undefined)
                   .join("\n\n")
-                if (output) yield* context.progress({ toolCalls, interruptedOutput: output })
+                if (output && context.interrupted) yield* context.interrupted([{ type: "text", text: output }])
               }),
           },
         ).execute(code)
@@ -154,7 +156,10 @@ export const create = (
 }
 
 // Rows appear in start order; the same call object arrives at both hooks, so a call finds its row again.
-function progressHooks(record: (update: (items: Array<ExecuteCall>) => Array<ExecuteCall>) => Effect.Effect<unknown>) {
+function progressHooks(
+  record: (update: (items: Array<ExecuteCall>) => Array<ExecuteCall>) => Effect.Effect<unknown>,
+  previews: Map<number, string>,
+) {
   const rows = new WeakMap<object, number>()
   let remaining = PARTIAL_BYTES
   const start = (call: object, entry: ExecuteCall) =>
@@ -174,12 +179,14 @@ function progressHooks(record: (update: (items: Array<ExecuteCall>) => Array<Exe
               Math.min(CALL_BYTES, remaining),
             )
           : undefined
-      if (output !== undefined) remaining -= Buffer.byteLength(output)
+      if (output !== undefined) {
+        remaining -= Buffer.byteLength(output)
+        previews.set(index, output)
+      }
       const next = [...items]
       next[index] = {
         ...items[index],
         status: result.status === "success" ? "completed" : "error",
-        ...(output === undefined ? {} : { output }),
       }
       return next
     })
