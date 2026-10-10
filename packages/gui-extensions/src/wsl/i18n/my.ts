@@ -52,8 +52,5 @@ export default {
   "error.healthTimeout": "{{distro}} ကျန်းမာရေးစစ်ဆေးမှုအတွက် ဆိုက်ကားဆရာ {{timeout}}ms ပြီးနောက် အချိန်ကုန်သွားသည်",
   "error.commandTimeout": "{{command}} {{args}} {{timeout}}ms ပြီးနောက် အချိန်ကုန်သွားသည်",
   "error.failedPort": "ဆိပ်ကမ်းကို ရယူရန် မအောင်မြင်ပါ။",
-  "server.default": "မူရင်း",
-  "menu.default": "မူရင်းအဖြစ် သတ်မှတ်ပါ။",
-  "menu.defaultRemove": "မူရင်းကို ဖယ်ရှားပါ။",
   "menu.remove": "ဖယ်ရှားမည်",
 }

@@ -1,13 +1,14 @@
-import { expect, test, type Page } from "@playwright/test"
+import { chromium, expect, test, type Page } from "@playwright/test"
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises"
 import { createServer, type ServerResponse } from "node:http"
+import type { AddressInfo } from "node:net"
 import { once } from "node:events"
 import { createHash } from "node:crypto"
 import { join, extname, relative, sep } from "node:path"
 import { tmpdir } from "node:os"
 import { fileURLToPath } from "node:url"
 import { build } from "vite"
-import { serviceWorker } from "../../vite.pwa"
+import { onDemandAsset, serviceWorker } from "../../vite.pwa"
 
 type Site = {
   url: string
@@ -127,14 +128,14 @@ const fixture = test.extend<{ site: Site }, { builds: Record<string, Record<stri
 
       const file = builds[state.version][path]
 
-      const types: Record<string, string> = {
-        ".js": "text/javascript",
-        ".html": "text/html",
-        ".json": "application/json",
-        ".wasm": "application/wasm",
-      }
+      const types = new Map([
+        [".js", "text/javascript"],
+        [".html", "text/html"],
+        [".json", "application/json"],
+        [".wasm", "application/wasm"],
+      ])
 
-      response.setHeader("content-type", types[extname(path)] ?? "application/octet-stream")
+      response.setHeader("content-type", types.get(extname(path)) ?? "application/octet-stream")
 
       if (file) return void response.end(file)
 
@@ -145,9 +146,8 @@ const fixture = test.extend<{ site: Site }, { builds: Record<string, Record<stri
 
     server.listen(0, "127.0.0.1")
     await once(server, "listening")
-    const address = server.address()
-
-    if (!address || typeof address === "string") throw new Error("Expected a TCP address")
+    // SAFETY: a server listening on a host and port reports an AddressInfo; only pipe servers report a string.
+    const address = server.address() as AddressInfo
 
     try {
       await use({
@@ -284,9 +284,11 @@ fixture(
     await expect
       .poll(() =>
         replacement.evaluate(() => {
-          const registration = (self as unknown as { registration: ServiceWorkerRegistration }).registration
+          // This runs in the service worker, whose global scope holds its registration.
+          const registration =
+            "registration" in self && self.registration instanceof ServiceWorkerRegistration ? self.registration : undefined
 
-          return { waiting: !!registration.waiting, active: registration.active?.state }
+          return { waiting: !!registration?.waiting, active: registration?.active?.state }
         }),
       )
       .toEqual({ waiting: false, active: "activated" })
@@ -378,15 +380,22 @@ fixture("does not substitute cached HTML for API or missing asset navigations", 
   expect(await asset?.text()).toBe("Not found")
 })
 
-test("the production build precaches every deployable file", async ({ page, context }) => {
+test("the production build precaches every deployable file except on-demand Office assets", async ({
+  page,
+  context,
+}) => {
   const directory = new URL("../../dist/", import.meta.url)
 
-  const files = (await readdir(directory, { recursive: true, withFileTypes: true }))
+  const deployable = (await readdir(directory, { recursive: true, withFileTypes: true }))
     .filter((entry) => entry.isFile())
     .map((entry) => "/" + relative(fileURLToPath(directory), join(entry.parentPath, entry.name)).split(sep).join("/"))
     .filter((path) => !path.endsWith(".map") && !["/_headers", "/_redirects", "/sw.js"].includes(path))
 
+  const files = deployable.filter((path) => !onDemandAsset(path))
+
   expect(files.length).toBeGreaterThan(1)
+  // The Office engines ship but load on demand, so a build without them would make this exclusion vacuous.
+  expect(deployable.some((path) => path.endsWith(".wasm") && onDemandAsset(path))).toBe(true)
 
   const server = createServer(async (request, response) => {
     const path = new URL(request.url ?? "/", "http://localhost").pathname
@@ -411,9 +420,8 @@ test("the production build precaches every deployable file", async ({ page, cont
 
   server.listen(0, "127.0.0.1")
   await once(server, "listening")
-  const address = server.address()
-
-  if (!address || typeof address === "string") throw new Error("Expected a TCP address")
+  // SAFETY: a server listening on a host and port reports an AddressInfo; only pipe servers report a string.
+  const address = server.address() as AddressInfo
   const url = `http://127.0.0.1:${address.port}`
 
   try {
@@ -441,6 +449,47 @@ test("the production build precaches every deployable file", async ({ page, cont
     expect(response?.fromServiceWorker()).toBe(true)
     expect(await response?.text()).toBe(await readFile(new URL("index.html", directory), "utf8"))
   } finally {
+    server.closeAllConnections()
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())))
+  }
+})
+
+test("the production build installs as an app behind an authenticating proxy", async () => {
+  const directory = new URL("../../dist/", import.meta.url)
+
+  const server = createServer(async (request, response) => {
+    // Model a reverse proxy that rejects every request without the signed-in user's cookie.
+    if (!request.headers.cookie?.includes("session=signed-in")) return void response.writeHead(401).end()
+    const path = new URL(request.url ?? "/", "http://localhost").pathname
+    const file = extname(path) ? path : "/index.html"
+    const bytes = await readFile(new URL(`.${file}`, directory)).catch(() => undefined)
+
+    if (!bytes) return void response.writeHead(404).end("Not found")
+
+    // Check the real HTML without starting the app or its service worker.
+    if (file === "/index.html")
+      response.writeHead(200, { "content-type": "text/html", "content-security-policy": "script-src 'none'" })
+
+    response.end(bytes)
+  })
+
+  server.listen(0, "127.0.0.1")
+  await once(server, "listening")
+  // SAFETY: a server listening on a host and port reports an AddressInfo; only pipe servers report a string.
+  const address = server.address() as AddressInfo
+  const url = `http://127.0.0.1:${address.port}`
+  // Chrome Headless Shell has no install checks and reports no errors for any page, and an incognito context always
+  // reports one, so check in a persistent Chrome profile.
+  const context = await chromium.launchPersistentContext("", { channel: "chromium" })
+
+  try {
+    await context.addCookies([{ name: "session", value: "signed-in", url }])
+    const page = await context.newPage()
+    await page.goto(url)
+    const session = await context.newCDPSession(page)
+    expect((await session.send("Page.getInstallabilityErrors")).installabilityErrors).toEqual([])
+  } finally {
+    await context.close()
     server.closeAllConnections()
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())))
   }

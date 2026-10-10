@@ -1,5 +1,5 @@
 import { Effect, Option } from "effect"
-import { AIError, LLMEvent, type ProviderMetadata, type ToolCall } from "../../schema/index.js"
+import { AIError, LLMEvent, type ProviderMetadata, type ToolCall, type ToolInputError } from "../../schema/index.js"
 import { eventError, parseToolInput, type ToolAccumulator } from "../shared.js"
 import { parse } from "./partial-json.js"
 
@@ -79,16 +79,6 @@ const inputDelta = (tool: PendingTool, text: string): LLMEvent => {
 const toolCall = (route: string, tool: PendingTool, inputOverride?: string) => {
   const raw = inputOverride ?? tool.input
   return parseToolInput(route, tool.name, raw).pipe(
-    Effect.catch((error) =>
-      tool.providerExecuted
-        ? Effect.fail(error)
-        : Effect.succeed(
-            Option.getOrElse(
-              Option.map(parsePartialInput(raw), (input) => input ?? {}),
-              () => ({}),
-            ),
-          ),
-    ),
     Effect.map(
       (input): ToolCall =>
         LLMEvent.toolCall({
@@ -100,10 +90,15 @@ const toolCall = (route: string, tool: PendingTool, inputOverride?: string) => {
           providerMetadata: tool.providerMetadata,
         }),
     ),
+    Effect.catch((error) =>
+      tool.providerExecuted
+        ? Effect.fail(error)
+        : Effect.succeed(LLMEvent.toolInputError({ id: tool.id, name: tool.name, namespace: tool.namespace, raw })),
+    ),
   )
 }
 
-const finishEvents = (tool: PendingTool, event: ToolCall): ReadonlyArray<LLMEvent> => [
+const finishEvents = (tool: PendingTool, event: ToolCall | ToolInputError): ReadonlyArray<LLMEvent> => [
   LLMEvent.toolInputEnd({
     id: tool.id,
     name: tool.name,
@@ -206,7 +201,7 @@ export const appendExisting = <K extends StreamKey>(
 
 /**
  * Finalize one pending tool call: parse the accumulated raw JSON, remove it
- * from state, and recover incomplete local arguments when needed.
+ * from state, and reject malformed local arguments without repairing them.
  * Missing keys are a no-op because some providers emit stop events for
  * non-tool content blocks.
  */

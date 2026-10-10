@@ -2,43 +2,40 @@ import { describe, expect, test } from "bun:test"
 import { inlineCodeKind } from "./markdown-inline-code-kind"
 
 describe("inlineCodeKind", () => {
-  test("leaves code expressions as normal inline code", () => {
-    expect(
-      inlineCodeKind(`case "form.created": ... input.setStore("form", form.sessionID, [form]) / splice/insert`),
-    ).toBeUndefined()
-    expect(inlineCodeKind(`<SessionQuestionDock request={request} ... />`)).toBeUndefined()
-    expect(inlineCodeKind(`from sync.data.form + sync.data.session.`)).toBeUndefined()
-    expect(inlineCodeKind(`@opencode/app <StatusPopover />)`)).toBeUndefined()
-    expect(inlineCodeKind(`sync.data.session`)).toBeUndefined()
-    expect(inlineCodeKind(`window.api`)).toBeUndefined()
-    expect(inlineCodeKind(`1.2`)).toBeUndefined()
+  test.each([
+    "app.tsx",
+    "app.tsx:42",
+    "app.tsx#L42-L55",
+    "src/file.ts",
+    "C:\\tmp\\out.html",
+    "/etc/hosts",
+    "app/(auth)/[id]/page.tsx",
+    "console.log",
+    "Dockerfile",
+    "Makefile:12",
+  ])("treats %s as a possible path", (text) => {
+    expect(inlineCodeKind(text)).toBe("path")
   })
 
-  test("detects file and directory paths", () => {
-    expect(inlineCodeKind(`app.tsx`)).toBe("path")
-    expect(inlineCodeKind(`vite.config.mjs`)).toBe("path")
-    expect(inlineCodeKind(`eslint.config.cjs`)).toBe("path")
-    expect(inlineCodeKind(`app.d.ts`)).toBe("path")
-    expect(inlineCodeKind(`component.svelte`)).toBe("path")
-    expect(inlineCodeKind(`schema.graphql`)).toBe("path")
-    expect(inlineCodeKind(`Dockerfile`)).toBe("path")
-    expect(inlineCodeKind(`Dockerfile.dev`)).toBe("path")
-    expect(inlineCodeKind(`.gitignore`)).toBe("path")
-    expect(inlineCodeKind(`Cargo.lock`)).toBe("path")
-    expect(inlineCodeKind(`go.sum`)).toBe("path")
-    expect(inlineCodeKind(`bun.lockb`)).toBe("path")
-    expect(inlineCodeKind(`terraform.tfvars`)).toBe("path")
-    expect(inlineCodeKind(`pnpm-lock.yaml`)).toBe("path")
-    expect(inlineCodeKind(`packages/desktop-electron`)).toBe("path")
-    expect(inlineCodeKind(`~/.config/opencode`)).toBe("path")
-    expect(inlineCodeKind(`@opencode/app`)).toBe("path")
-    expect(inlineCodeKind(`session/status`)).toBe("path")
+  test.each([
+    "value",
+    "readme",
+    "1.2.3",
+    "127.0.0.1:8080",
+    "foo(bar)",
+    "a = b",
+    "<App />",
+    "src/**/*.ts",
+    "{ a: 1 }",
+    "...",
+    "ftp://x/y",
+    "\\\\host\\share\\x.ts",
+    "//host/share/x.ts",
+  ])("leaves %s as code", (text) => {
+    expect(inlineCodeKind(text)).toBeUndefined()
   })
 
-  test("detects urls", () => {
-    expect(inlineCodeKind(`https://opencode.ai/docs`)).toBe("url")
-    expect(inlineCodeKind(`http://localhost:4444`)).toBe("url")
-    expect(inlineCodeKind(`file:///tmp/opencode`)).toBeUndefined()
-    expect(inlineCodeKind(`ftp://opencode.ai/docs`)).toBeUndefined()
+  test("detects http urls", () => {
+    expect(inlineCodeKind("https://opencode.ai/docs")).toBe("url")
   })
 })

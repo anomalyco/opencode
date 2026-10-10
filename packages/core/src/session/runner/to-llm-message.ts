@@ -154,6 +154,9 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
   const sameProvider = String(message.model.providerID) === String(model.providerID)
   const sameModel = sameProvider && String(message.model.id) === String(model.id)
   const reuseProviderMetadata = sameModel && message.error === undefined
+  const reasoningInterrupted = message.content.some(
+    (item) => item.type === "reasoning" && item.time !== undefined && item.time.completed === undefined,
+  )
   const content = message.content.flatMap((item): ContentPart[] => {
     if (item.type === "text")
       return [
@@ -167,7 +170,7 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
       ]
     // Let the destination adapter handle readable reasoning after a model/provider switch.
     if (item.type === "reasoning")
-      return reuseProviderMetadata
+      return reuseProviderMetadata && !reasoningInterrupted
         ? [
             {
               type: "reasoning",
@@ -176,7 +179,7 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
             },
           ]
         : item.text.length > 0
-          ? [{ type: message.error === undefined ? "reasoning" : "text", text: item.text }]
+          ? [{ type: message.error === undefined && !reasoningInterrupted ? "reasoning" : "text", text: item.text }]
           : []
     // Call-side metadata is model-scoped proof of generation (Gemini thought
     // signatures, OpenAI encrypted reasoning): only the producing model may

@@ -37,6 +37,27 @@ export function visibleTimelineMessages(
 
   // Undelivered inputs do not own assistant work, so they stay below the active work like the TUI.
   // They keep admission order: the server delivers steers in that order, so delivery moves nothing.
+  // A pre-promotion failure ends in a failed idle marker with no assistant work, so keep that marker
+  // after the input that triggered it.
+  const tail = visible.at(-1)
+
+  if (tail?.type === "idle" && tail.outcome === "failed") {
+    const start = visible.slice(0, -1).findLastIndex((message) => message.type === "idle") + 1
+
+    if (
+      visible.slice(start, -1).some((message) => inputs.has(message.id)) &&
+      !visible.slice(start, -1).some((message) => message.type === "assistant")
+    ) {
+      const rest = visible.slice(0, -1)
+
+      return [
+        ...rest.filter((message) => !inputs.has(message.id)),
+        ...rest.filter((message) => inputs.has(message.id)),
+        tail,
+      ]
+    }
+  }
+
   return [
     ...visible.filter((message) => !inputs.has(message.id)),
     ...visible.filter((message) => inputs.has(message.id)),

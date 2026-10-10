@@ -26,3 +26,8 @@ export function createCameraAvailability() {
 
   return { supported, available, refetch: actions.refetch }
 }
+
+// Pages served over plain HTTP cannot open the camera. QR codes carry JSON, not a link, so the pasted link is the way in.
+export function cameraHint() {
+  return window.isSecureContext ? "server.connect.camera.unavailable" : "server.connect.camera.native"
+}

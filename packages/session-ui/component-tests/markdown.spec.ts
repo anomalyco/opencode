@@ -36,6 +36,17 @@ story("renders small completed Markdown immediately without skipping sanitizatio
   await expect(harness.locator("pre.shiki")).toBeVisible()
 })
 
+story("keeps Markdown text selectable inside a container that disables selection", async ({ page }) => {
+  await page.evaluate(async (fixture) => {
+    document.body.style.userSelect = "none"
+    const { mountMarkdown } = await import(fixture)
+    await mountMarkdown({ text: "Selectable answer text" })
+  }, fixture)
+
+  await page.getByTestId("markdown-fixture").getByText("Selectable answer text").click({ clickCount: 3 })
+  expect(await page.evaluate(() => getSelection()?.toString().trim())).toBe("Selectable answer text")
+})
+
 story("sanitizes raw HTML while preserving supported Markdown markup", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
     const { sanitizeMarkdown } = await import(fixture)
@@ -126,7 +137,7 @@ story("mounts cached completed Markdown with sanitized HTML and decorations", as
       fixture,
       text: [
         "# Completed response",
-        "`src/file.ts` and `https://example.com/docs` and [link](https://example.com)",
+        "`src/file.ts` and `missing.ts` and `https://example.com/docs` and [link](https://example.com)",
         '<img src="missing" onerror="alert(1)"><script>alert(2)</script><a href="javascript:alert(3)">unsafe</a>',
         "```ts\nconst answer = 42\n```",
       ].join("\n\n"),
@@ -142,10 +153,7 @@ story("mounts cached completed Markdown with sanitized HTML and decorations", as
     "color",
     await resolvedColor(page, "--v2-text-text-code-path"),
   )
-  await expect(markdown.locator('code[data-inline-code-kind="path"]')).toHaveCSS(
-    "background-color",
-    "rgba(0, 0, 0, 0)",
-  )
+  await expect(markdown.locator('code[data-inline-code-kind="path"]')).toHaveCSS("background-color", "rgba(0, 0, 0, 0)")
   await expect(markdown.getByRole("link", { name: "https://example.com/docs" })).toHaveAttribute("target", "_blank")
   await expect(markdown.getByRole("link", { name: "https://example.com/docs" })).toHaveAttribute(
     "rel",
@@ -245,13 +253,14 @@ story("keeps favicon space stable across loading and failure without fetching pr
   expect(await image.evaluate((favicon) => favicon.onclick)).toBeNull()
   expect(await docs.evaluate((link) => link.getBoundingClientRect().width)).toBe(width)
   expect(
-    await image.evaluate((favicon) => favicon.getBoundingClientRect().top - favicon.parentElement!.getBoundingClientRect().top),
+    await image.evaluate(
+      (favicon) => favicon.getBoundingClientRect().top - favicon.parentElement!.getBoundingClientRect().top,
+    ),
   ).toBe(0)
 
-  await expect(markdown.getByRole("link", { name: "missing" }).locator(".markdown-link-favicon img")).not.toHaveAttribute(
-    "data-loaded",
-    "",
-  )
+  await expect(
+    markdown.getByRole("link", { name: "missing" }).locator(".markdown-link-favicon img"),
+  ).not.toHaveAttribute("data-loaded", "")
   await expect(markdown.getByRole("link", { name: "private" }).locator(".markdown-link-favicon img")).toHaveCount(0)
   await expect(markdown.getByRole("link", { name: "GitHub" }).locator(".markdown-link-favicon")).toHaveCount(0)
   expect(requested).toHaveLength(2)

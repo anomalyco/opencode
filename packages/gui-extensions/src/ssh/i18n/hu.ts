@@ -38,8 +38,5 @@ export default {
   "form.name": "Szerver neve (nem kötelező)",
   "form.namePlaceholder": "Localhost",
   "form.add": "Szerver hozzáadása",
-  "server.default": "Alapértelmezett",
-  "menu.default": "Beállítás alapértelmezettként",
-  "menu.defaultRemove": "Alapértelmezés eltávolítása",
   "menu.delete": "Törlés",
 }

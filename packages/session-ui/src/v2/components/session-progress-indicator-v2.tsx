@@ -4,8 +4,8 @@ import "./session-progress-indicator-v2.css"
 const frames = new URL("./session-progress-indicator-v2-1x.png", import.meta.url).href
 
 const dots = Array.from({ length: 25 }, (_, index) => {
-  const x = 1.5 + (index % 5) * 3
-  const y = 1.5 + Math.floor(index / 5) * 3
+  const x = 1 + (index % 5) * 3
+  const y = 1 + Math.floor(index / 5) * 3
 
   return `M${x} ${y}h2v2h-2z`
 }).join("")
@@ -48,7 +48,7 @@ export function SessionProgressIndicatorV2(props: ComponentProps<"svg">) {
         filter={`url(#${filter})`}
         clip-path={`url(#${clip})`}
       />
-      <rect data-reduced-motion x={7.5} y={7.5} width={2} height={2} />
+      <rect data-reduced-motion x={7} y={7} width={2} height={2} />
     </svg>
   )
 }

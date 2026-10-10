@@ -8,8 +8,12 @@ type Mutable<Value> =
       ? { -readonly [Key in keyof Value]: Mutable<Value[Key]> }
       : Value
 
+// SAFETY: IPC replies are fresh structured clones owned by the caller, so dropping the schema's readonly markers
+// cannot alias shared state.
 const mutable = <Value>(value: Value) => value as Mutable<Value>
 
+// SAFETY: IPC bytes arrive in a structured-cloned Uint8Array over an ordinary ArrayBuffer, never a
+// SharedArrayBuffer, so slicing its buffer yields an ArrayBuffer.
 const toArrayBuffer = (value: Uint8Array) =>
   value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength) as ArrayBuffer
 
@@ -20,8 +24,6 @@ export const api: ElectronAPI = {
   awaitInitialization: () => invoke("AppAwaitInitialization"),
   reconnectService: () => invoke("AppReconnectService"),
   consumeInitialDeepLinks: () => invoke("AppConsumeInitialDeepLinks").then(mutable),
-  getDefaultServerUrl: () => invoke("AppGetDefaultServerUrl"),
-  setDefaultServerUrl: (url) => invoke("AppSetDefaultServerUrl", { url }),
   isFirstLaunchOnboardingPending: () => invoke("AppIsFirstLaunchOnboardingPending"),
   finishFirstLaunchOnboarding: (createDefaultProject) =>
     invoke("AppFinishFirstLaunchOnboarding", { createDefaultProject }),

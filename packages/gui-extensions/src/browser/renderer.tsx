@@ -1,9 +1,9 @@
 import { createMemo, createSignal, getOwner, lazy, onCleanup, runWithOwner, Show, Suspense } from "solid-js"
-import { Icon } from "@opencode/ui/icon"
 import { Command, createKeyed, LinkHandler, MenuItem, onIdle, Panel, Style, type PanelTab, type Setup } from "../sdk"
 import { Browser } from "./contract"
 import type definition from "./index"
 import type { Model } from "./model"
+import { PageIcon } from "./page-icon"
 import barStyles from "./bar.css?inline"
 import commentStyles from "./comment.css?inline"
 import tabStyles from "./tabs.css?inline"
@@ -120,11 +120,7 @@ const setup: Setup<typeof definition> = (ctx) => {
     }
   })
 
-  ctx.add(LinkHandler, {
-    priority: 10,
-    match: (link) => !!model()?.match(link),
-    open: (link) => model()?.openLink(link),
-  })
+  // Workspace HTML links reach the pane through the file extension, which resolves the path first.
   // A composer chip for a comment on a picked element.
   ctx.add(LinkHandler, {
     priority: 10,
@@ -153,9 +149,7 @@ const setup: Setup<typeof definition> = (ctx) => {
       },
       label: () => (
         <div class="flex items-center gap-1.5">
-          <Show when={icon()} fallback={<Icon name="outline-globe" class="shrink-0" />}>
-            {(source) => <img src={source()} alt="" class="size-4 shrink-0 object-contain" />}
-          </Show>
+          <PageIcon icon={icon()} />
           <span class="max-w-40 truncate">{text()}</span>
         </div>
       ),

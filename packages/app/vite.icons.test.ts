@@ -29,7 +29,7 @@ test.each(["dev", "beta", "prod", "local"])("bundles %s app icons", async (chann
 
     if (file?.type !== "asset") throw new Error(`Missing asset: ${path}`)
 
-    return typeof file.source === "string" ? new TextEncoder().encode(file.source) : file.source
+    return new Uint8Array(Buffer.from(file.source))
   })
 })
 
@@ -45,12 +45,12 @@ test.each(["dev", "beta", "prod"])("serves %s app icons", async (channel) => {
 
   try {
     await server.listen()
-    const address = server.httpServer?.address()
+    const url = server.resolvedUrls?.local[0]
 
-    if (!address || typeof address === "string") throw new Error("Expected an HTTP port")
+    if (!url) throw new Error("Expected a local URL")
 
     await check(channel, async (path) => {
-      const response = await fetch(`http://127.0.0.1:${address.port}${path}`)
+      const response = await fetch(new URL(path, url))
       expect(response.status).toBe(200)
 
       if (path.endsWith(".webmanifest")) expect(response.headers.get("content-type")).toBe("application/manifest+json")
@@ -67,7 +67,7 @@ test.each(["dev", "beta", "prod"])("serves %s app icons", async (channel) => {
 async function check(channel: string, read: (path: string) => Promise<Uint8Array>) {
   const html = new TextDecoder().decode(await read("/index.html"))
   const actual: typeof manifest = JSON.parse(new TextDecoder().decode(await read("/site.webmanifest")))
-  expect(actual.icons.every((icon) => icon.purpose === "maskable")).toBe(true)
+  expect(actual.icons.some((icon) => icon.purpose === "maskable")).toBe(true)
   expect(actual).toEqual({
     ...manifest,
     icons: manifest.icons.map((icon) => ({ ...icon, src: `/icons/${channel}${icon.src}` })),

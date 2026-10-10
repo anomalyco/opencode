@@ -8,6 +8,7 @@ import {
   createCommandPaletteCommandEntry,
   createServerSessionEntries,
   type CommandPaletteEntry,
+  type PaletteHighlight,
 } from "@/shell/commands/palette"
 import { CommandPaletteView, matchesCommandPaletteEntry } from "@/shell/commands/dialog"
 
@@ -20,7 +21,7 @@ export function HomeCommandPalette(props: {
   const global = useGlobal()
   const language = useLanguage()
   const server = global.ensureServerCtx(props.server)
-  const state = { cleanup: undefined as (() => void) | void, committed: false }
+  const state: PaletteHighlight = { cleanup: undefined, committed: false }
 
   const commandEntries = createMemo(() => {
     const category = language.t("palette.group.commands")
@@ -36,6 +37,7 @@ export function HomeCommandPalette(props: {
     get: (sessionID, signal) => server.sdk.api.session.get({ sessionID }, { signal }),
     untitled: () => language.t("command.session.new"),
     category: () => language.t("command.category.session"),
+    recentCategory: () => language.t("palette.group.recentSessions"),
   })
 
   const highlight = (item: CommandPaletteEntry | undefined) => {

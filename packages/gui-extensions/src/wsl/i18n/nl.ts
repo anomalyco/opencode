@@ -52,8 +52,5 @@ export default {
   "error.healthTimeout": "Time-out bij statuscontrole van sidecar voor {{distro}} na {{timeout}} ms",
   "error.commandTimeout": "Time-out voor {{command}} {{args}} na {{timeout}} ms",
   "error.failedPort": "Kan poort niet ophalen",
-  "server.default": "Standaard",
-  "menu.default": "Als standaard instellen",
-  "menu.defaultRemove": "Standaard verwijderen",
   "menu.remove": "Verwijderen",
 }

@@ -1,12 +1,8 @@
 @import "../submit.css";
 
-* {
+[data-component="button-v2"] {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  text-rendering: geometricPrecision;
-}
-
-[data-component="button-v2"] {
   position: relative;
   display: inline-flex;
   align-items: center;
@@ -24,6 +20,10 @@
   user-select: none;
   cursor: pointer;
   outline: none;
+}
+
+[data-component="button-v2"] > * {
+  pointer-events: none;
 }
 
 [data-component="button-v2"]:focus {

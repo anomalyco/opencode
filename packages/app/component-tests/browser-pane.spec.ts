@@ -69,19 +69,34 @@ story("hides the native view immediately while the pane stays mounted", async ({
 story("keeps a still of the page under floating content that covers it", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   const still = root.locator("#browser-panel img")
+  const native = root.getByTestId("native-Alpha")
   await root.getByRole("button", { name: "Hold capture", exact: true }).click()
   await root.getByRole("button", { name: "Toggle popover", exact: true }).click()
   await expect(root.getByText("Captures: 1", { exact: true })).toBeVisible()
   // The native page stays up until its still is ready, so the pane never shows blank.
-  await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
+  await expect(native).toHaveAttribute("data-visible", "true")
   await expect(still).toHaveCount(0)
 
+  // Main hides the native page at once, so the pane hides it only after a frame has presented the still.
+  const order = await native.evaluateHandle((element) => {
+    const events: string[] = []
+    new PerformanceObserver((list) => {
+      if (list.getEntries().length > 0) events.push("still presented")
+    }).observe({ type: "element" })
+    new MutationObserver(() => {
+      if (element.getAttribute("data-visible") === "false") events.push("page hidden")
+    }).observe(element, { attributeFilter: ["data-visible"] })
+
+    return events
+  })
+
   await root.getByRole("button", { name: "Release capture", exact: true }).click()
-  await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "false")
+  await expect(native).toHaveAttribute("data-visible", "false")
   await expect(still).toBeVisible()
+  expect(await order.jsonValue()).toEqual(["still presented", "page hidden"])
 
   await root.getByRole("button", { name: "Toggle popover", exact: true }).click()
-  await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
+  await expect(native).toHaveAttribute("data-visible", "true")
   await expect(still).toHaveCount(0)
   await expect(root.getByText("Captures: 1", { exact: true })).toBeVisible()
 })
@@ -282,10 +297,25 @@ story("restores the current URL each time the same submitted navigation is block
       await address.press("Enter")
       await expect(address).toHaveValue("https://blocked.example/")
       await root.getByRole("button", { name: "Block navigation", exact: true }).click()
-      await expect(root.getByRole("alert")).toHaveText("Request failed")
+      await expect(root.getByRole("alert")).toHaveText("Only web pages can open here.")
       await expect(address).toHaveValue("https://alpha.example/")
       await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
     })
+  }
+})
+
+story("explains why a typed address cannot open instead of searching for it", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  const address = root.getByRole("combobox", { name: "Browser address", exact: true })
+
+  for (const [typed, reason] of [
+    ["ftp://example.com", "Only web pages can open here."],
+    ["https://user:pass@example.com", "Addresses with a user name or password can't open here."],
+  ]) {
+    await address.fill(typed)
+    await address.press("Enter")
+    await expect(root.getByRole("alert")).toHaveText(reason)
+    await expect(address).toHaveValue("https://alpha.example/")
   }
 })
 
@@ -435,6 +465,9 @@ story("suggests visited pages and opens the first one that completes the typed a
   const options = page.getByRole("option")
   await expect(options).toHaveCount(1)
   await expect(options.first()).toHaveAttribute("aria-selected", "true")
+  // Arrow keys that pick IME candidates leave the suggestions alone.
+  await address.dispatchEvent("keydown", { key: "ArrowDown", isComposing: true })
+  await expect(options.first()).toHaveAttribute("aria-selected", "true")
   await address.press("Enter")
   await expect(address).toHaveValue("http://localhost:5173/settings")
 
@@ -451,14 +484,39 @@ story("suggests visited pages and opens the first one that completes the typed a
 
 story("lists recent pages on a blank tab and opens one", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
+  const address = root.getByRole("combobox", { name: "Browser address", exact: true })
   await root.getByRole("button", { name: "Seed history", exact: true }).click()
   await root.getByRole("button", { name: "Blank page", exact: true }).click()
   await expect(root.getByText("Recent", { exact: true })).toBeVisible()
+  // The globe at the field's start belongs to the field: a click there focuses it.
+  await expect(address).not.toBeFocused()
+  await root.locator('[data-component="browser-address"]').click({ position: { x: 16, y: 14 } })
+  await expect(address).toBeFocused()
+  await address.blur()
+
   await root.getByRole("button", { name: /^Settings - Preview/ }).click()
-  await expect(root.getByRole("combobox", { name: "Browser address", exact: true })).toHaveValue(
-    "http://localhost:5173/settings",
-  )
+  await expect(address).toHaveValue("http://localhost:5173/settings")
   await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
+  // The opened page owns the field afterwards: an edit that is never submitted shows its URL again.
+  await address.click()
+  await address.fill("unsubmitted")
+  await address.blur()
+  await expect(address).toHaveValue("http://localhost:5173/settings")
+})
+
+story("adds the whole page to the session and keeps the draft when the button is pressed again", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  const field = root.locator('[data-component="browser-address"]')
+  const add = root.getByRole("button", { name: "Add page to session", exact: true })
+  await field.hover()
+  await add.click()
+  const editor = root.locator('[data-slot="browser-comment-editor"] textarea')
+  await editor.fill("Check the header layout")
+  await field.hover()
+  await add.click()
+  await expect(editor).toHaveValue("Check the header layout")
+  await editor.press("Enter")
+  await expect(root.getByTestId("fixture-comments").getByRole("listitem")).toHaveText([/: Check the header layout$/])
 })
 
 story("focuses the address field when the page uses the address shortcut", async ({ page }) => {
@@ -478,12 +536,22 @@ story("shows the page's cookies in the site information and clears them", async 
   await expect(site).toContainText("0 cookies in use")
 })
 
-story("zooms the page from the browser options and shows its zoom", async ({ page }) => {
+story("zooms the page from the browser options in view and keeps its zoom in the address field", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
-  await root.getByRole("button", { name: "Browser options", exact: true }).click()
+  const options = root.getByRole("button", { name: "Browser options", exact: true })
+  await options.click()
   await page.getByRole("menuitem", { name: /^Zoom in/ }).click()
   await expect(root.getByText("Zoom: 110", { exact: true })).toBeVisible()
+  // The menu covered the page with a still; it closes so the zoomed page shows at once.
+  await expect(page.getByRole("menu")).toBeHidden()
+  await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
+
+  const zoom = root.getByRole("button", { name: "110%", exact: true })
+  await expect(zoom).toBeVisible()
+  await options.click()
   await expect(page.getByRole("menuitem", { name: /^Reset zoom/ })).toContainText("110%")
-  await page.getByRole("menuitem", { name: /^Reset zoom/ }).click()
+  await page.keyboard.press("Escape")
+  await zoom.click()
   await expect(root.getByText("Zoom: 100", { exact: true })).toBeVisible()
+  await expect(zoom).toBeHidden()
 })

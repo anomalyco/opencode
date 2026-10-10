@@ -1,7 +1,9 @@
 import { expect, test, type Page } from "@playwright/test"
-import { holdRoute, seed, sessionHref } from "../utils/app"
+import { expectPath, holdRoute, NO_PROVIDER, project, REMOTE_SERVER, seed, sessionHref } from "../utils/app"
+import { mockOpenCodeServer } from "../utils/mock-server"
 import { fixture, mockStressTimeline } from "../utils/session-fixture"
-import { expectAppVisible } from "../utils/waits"
+import { mockRemoteServer } from "../utils/workspace"
+import { APP_READY_TIMEOUT, expectAppVisible } from "../utils/waits"
 
 test.use({ serviceWorkers: "block" })
 
@@ -75,6 +77,33 @@ test("the session context menu renames, exports, and deletes a Home session", as
   await expect(renamedRow).toBeHidden()
 })
 
+test("the Home shortcut focuses session search, and the Home button leaves focus alone", async ({ page }) => {
+  await mockStressTimeline(page)
+  await seed(page, {
+    projects: { local: [{ worktree: fixture.directory, expanded: true }] },
+    lastProject: { local: fixture.directory },
+    tabs: [fixture.sourceID],
+  })
+  await page.goto(sessionHref(fixture.sourceID))
+  const editor = page.locator('[data-component="composer-editor"]')
+  await expect(editor).toBeEditable({ timeout: APP_READY_TIMEOUT })
+  await editor.click()
+
+  await page.keyboard.press("ControlOrMeta+b")
+  const search = page.getByRole("textbox", { name: /Search sessions/ })
+  await expect(search).toBeFocused()
+  await page.keyboard.type("jump")
+  await expect(page.getByRole("option")).toHaveCount(1)
+  await expect(page.getByRole("option")).toContainText(fixture.expected.targetTitle)
+
+  await page.keyboard.press("ControlOrMeta+b")
+  await expectPath(page, sessionHref(fixture.sourceID))
+
+  await page.getByRole("button", { name: "Home", exact: true }).click()
+  await expect(search).toHaveValue("")
+  await expect(search).not.toBeFocused()
+})
+
 test("Home shows loaded sessions before the location request resolves", async ({ page }) => {
   const location = await holdRoute(page, (url) => url.pathname === "/api/location")
   await openHome(page)
@@ -85,8 +114,11 @@ test("Home shows loaded sessions before the location request resolves", async ({
 test("Home and the directory picker load without newer browser APIs", async ({ page }) => {
   await page.addInitScript(() => {
     // Safari 16.6 has none of these APIs. Remove them before the web entry runs.
+    // SAFETY: `Partial` only makes the static method optional so `delete` type-checks; the target is the real global.
     delete (Map as Partial<typeof Map>).groupBy
+    // SAFETY: as above, for the real global `Promise`.
     delete (Promise as Partial<typeof Promise>).withResolvers
+    // SAFETY: as above, for the real global `Promise`.
     delete (Promise as Partial<typeof Promise>).try
   })
   await openHome(page, { fileList: () => [] })
@@ -99,6 +131,81 @@ test("Home and the directory picker load without newer browser APIs", async ({ p
   await dialog.getByRole("button", { name: "Cancel", exact: true }).click()
   await expect(dialog).toBeHidden()
   await expect(target).toBeVisible()
+})
+
+test("adding a project to a signed-out server re-pairs it, then continues at the paired address", async ({ page }) => {
+  // The saved address rejects the new token, so saving moves the server to the link's address.
+  const paired = "http://127.0.0.1:4098"
+  await mockRemoteServer(page, { name: "Remote", password: "old-password" })
+  await mockOpenCodeServer(page, {
+    server: paired,
+    directory: "/remote/paired",
+    project: project({ id: "proj_paired", directory: "/remote/paired" }),
+    provider: NO_PROVIDER,
+    sessions: [],
+    pageMessages: () => ({ items: [] }),
+    fileList: () => [],
+    password: "session-token",
+    pairing: { code: "one-time-code", token: "session-token" },
+  })
+  await openHome(page, { fileList: () => [] })
+  const remote = page.locator("[data-home-row]").filter({ hasText: "Remote" })
+  await expect(page.getByRole("button", { name: "Authenticate", exact: true })).toBeVisible()
+
+  await remote.getByRole("button", { name: "Add project", exact: true }).click()
+  const editor = page.getByRole("dialog", { name: "Edit server" })
+  await editor.getByLabel("Pairing link", { exact: true }).fill(`${paired}/auth/connect/one-time-code`)
+  await editor.getByRole("button", { name: "Save", exact: true }).click()
+
+  // The folder picker reads the paired address; the removed one would reject the request.
+  const picker = page.getByRole("dialog").filter({ has: page.getByRole("button", { name: "Select folder" }) })
+  await expect(picker.getByRole("button", { name: "Select folder", exact: true })).toBeEnabled()
+  await expect(picker.getByText("Unable to read this folder")).toHaveCount(0)
+})
+
+test("a server whose saved password changes works with the new password", async ({ page }) => {
+  const accepted = { password: "old-password" }
+  await mockOpenCodeServer(page, {
+    server: REMOTE_SERVER,
+    directory: "/remote/project",
+    project: project({ id: "proj_remote", directory: "/remote/project" }),
+    provider: NO_PROVIDER,
+    sessions: [],
+    pageMessages: () => ({ items: [] }),
+    fileList: () => [],
+    password: () => accepted.password,
+  })
+  // Saved with the password the server accepts until the test changes it.
+  await seed(page, {
+    storage: {
+      "opencode.global.dat:server": {
+        list: [{ type: "http", displayName: "Remote", http: { url: REMOTE_SERVER, password: "old-password" } }],
+      },
+    },
+  })
+  await openHome(page, { fileList: () => [] })
+  const remote = page.locator("[data-home-row]").filter({ hasText: "Remote" })
+  const picker = page.getByRole("dialog").filter({ has: page.getByRole("button", { name: "Select folder" }) })
+
+  // Use the server once, so its controller exists with the old password.
+  await remote.getByRole("button", { name: "Add project", exact: true }).click()
+  await expect(picker.getByRole("button", { name: "Select folder", exact: true })).toBeEnabled()
+  await picker.getByRole("button", { name: "Cancel", exact: true }).click()
+  await expect(picker).toHaveCount(0)
+
+  await remote.getByRole("button", { name: "More options", exact: true }).click()
+  await page.getByRole("menuitem", { name: "Edit", exact: true }).click()
+  const editor = page.getByRole("dialog", { name: "Edit server" })
+  await editor.getByPlaceholder("password").fill("new-password")
+  // The server now rejects the old password, as after `opencode service set password`.
+  accepted.password = "new-password"
+  await editor.getByRole("button", { name: "Save", exact: true }).click()
+  await expect(editor).toHaveCount(0)
+
+  // The picker reads the folder through the server's controller, which must use the saved password now.
+  await remote.getByRole("button", { name: "Add project", exact: true }).click()
+  await expect(picker.getByRole("button", { name: "Select folder", exact: true })).toBeEnabled()
+  await expect(picker.getByText("Unable to read this folder")).toHaveCount(0)
 })
 
 const recovery = "C:/OpenCode/Worktrees/project-menu-recovery"

@@ -2,7 +2,7 @@ import { ClientError } from "@opencode/client/effect"
 import { InvalidCursorError, InvalidRequestError, SessionNotFoundError } from "@opencode/protocol/errors"
 import { Session } from "@opencode/schema/session"
 import { Effect, Schema } from "effect"
-import { HttpClientError } from "effect/unstable/http"
+import { HttpClientError } from "effect/http"
 import { ACPError } from "./error"
 
 export function classify(error: unknown): Effect.Effect<never, ACPError.Error> {

@@ -52,8 +52,5 @@ export default {
   "error.healthTimeout": "{{distro}}のSidecarのヘルスチェックが{{timeout}}ms後にタイムアウトしました",
   "error.commandTimeout": "{{command}} {{args}}が{{timeout}}ms後にタイムアウトしました",
   "error.failedPort": "ポートを取得できませんでした",
-  "server.default": "デフォルト",
-  "menu.default": "デフォルトに設定",
-  "menu.defaultRemove": "デフォルト設定を解除",
   "menu.remove": "削除",
 }

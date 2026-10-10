@@ -198,11 +198,12 @@ export interface Context extends BaseContext {
    */
   readonly keybinds: Keybinds
   /**
-   * The ids of the servers the app lists.
+   * The servers the app lists: their ids, and each one's live `ServerRef`.
    *
    * @example
    * ```ts
    * const known = () => new Set(ctx.servers.list())
+   * const server = (id: string) => ctx.servers.get(id)
    * ```
    */
   readonly servers: Servers

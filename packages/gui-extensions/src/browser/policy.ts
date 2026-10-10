@@ -49,13 +49,13 @@ export function allowedDestination(input: string, policy?: Policy) {
 }
 
 export function normalizeURL(input: string, policy?: Policy) {
-  const value = input.trim() || "about:blank"
-  const local = /^(?:localhost|127(?:\.\d{1,3}){3}|\[::1\])(?::\d+)?(?:[/?#]|$)/i.test(value)
+  const url = withScheme(input)
+  const reason = refusal(url, policy)
 
-  const url =
-    value === "about:blank" || /^[a-z][a-z\d+.-]*:\/\//i.test(value) ? value : `${local ? "http" : "https"}://${value}`
+  if (reason === "browser.address.credentials")
+    throw new Error("URLs with a user name or password are not supported. Remove them from the URL.")
 
-  if (url !== "about:blank" && !allowedDestination(url, policy))
+  if (reason)
     throw new Error(
       policy?.fileRoots?.length
         ? "Only HTTP, HTTPS, about:blank, and file URLs inside the workspace are supported."
@@ -63,4 +63,33 @@ export function normalizeURL(input: string, policy?: Policy) {
     )
 
   return url
+}
+
+/**
+ * Why the pane does not open an address, as the code the window explains it with; undefined when it opens.
+ * - `browser.address.credentials`: a web page address with a user name or password.
+ * - `browser.address.workspace`: anything but a web page or a file in the workspace.
+ * - `browser.address.web`: anything but a web page, where no files open.
+ */
+export function refusal(input: string, policy?: Policy) {
+  const url = withScheme(input)
+
+  if (url === "about:blank" || allowedDestination(url, policy)) return
+
+  // A web page is refused only for its credentials.
+  if (URL.canParse(url) && /^https?:$/.test(new URL(url).protocol)) return "browser.address.credentials"
+
+  return policy?.fileRoots?.length ? "browser.address.workspace" : "browser.address.web"
+}
+
+// The URL an address opens: a blank page for none, else the address with a scheme, `http` for this machine's names.
+function withScheme(input: string) {
+  const value = input.trim()
+
+  if (!value || /^about:blank$/i.test(value)) return "about:blank"
+
+  if (/^[a-z][a-z\d+.-]*:\/\//i.test(value)) return value
+  const local = /^(?:(?:[a-z\d-]+\.)*localhost|127(?:\.\d{1,3}){3}|\[::1\])(?::\d+)?(?:[/?#]|$)/i.test(value)
+
+  return `${local ? "http" : "https"}://${value}`
 }

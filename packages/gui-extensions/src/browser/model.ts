@@ -2,7 +2,7 @@ import { batch, createRoot, createSignal, getOwner, onCleanup } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import type { Browser } from "@opencode/plugin-browser/rpc"
-import { createKeyed, type Link, type SessionRef, type SetupContext } from "../sdk"
+import { createKeyed, type SessionRef, type SetupContext } from "../sdk"
 import { readHref } from "./comment"
 import {
   createConnection,
@@ -14,7 +14,7 @@ import {
 } from "./connection"
 import { recordable, remember, withIcon } from "./history"
 import type definition from "./index"
-import { isHtml, resolveLink, workspaceFileURL } from "./link"
+import { workspaceFileURL } from "./link"
 import { BrowserPane, type PaneEvent } from "./ipc"
 
 type Session = Pick<SessionRef, "key">
@@ -96,8 +96,22 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   const recorded = new Map<string, string>()
   const key = (tabID: string) => `${ctx.id}:${tabID}`
 
+  // Main names why it moved control elsewhere or refused an address; any other failure is a failed request.
+  const describe = (error: string) => {
+    if (error === "browser.pane.replaced") return ctx.t("replaced")
+
+    if (error === "browser.address.credentials") return ctx.t("refused.credentials")
+
+    if (error === "browser.address.workspace") return ctx.t("refused.workspace")
+
+    if (error === "browser.address.web") return ctx.t("refused.web")
+
+    return ctx.t("common.requestFailed")
+  }
+
   // Pages the user or the agent opened, once loaded: only a tab whose page exists has a real URL and title, as a
-  // restored tab's saved URL carries no title until it loads again.
+  // restored tab's saved URL carries no title until it loads again. Only the desktop's own reports count: a restored
+  // tab's embed arrives before its page loads, with the saved URL as if it had.
   const record = (session: string, next: { browser: Browser.State | null; embeds: Readonly<Record<string, string>> }) =>
     next.browser?.tabs.forEach((tab) => {
       if (tab.loading || tab.loadError || !next.embeds[tab.id] || !recordable(tab.url)) return
@@ -194,7 +208,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
           if (visits) history.set({ visits })
         },
         address: (tabID) => addressed.get(id)?.forEach((listener) => listener(tabID)),
-        change: (next, mirror) => {
+        change: (next, mirror, native) => {
           if (next.error === "browser.pane.unsupported") {
             setState("unsupported", ref.server.id, true)
 
@@ -216,15 +230,11 @@ export function createModel(ctx: SetupContext<typeof definition>) {
                 browser: next.browser,
                 embeds: next.embeds,
                 suspended: next.suspended,
-                error:
-                  next.error === "browser.pane.replaced"
-                    ? ctx.t("replaced")
-                    : next.error
-                      ? ctx.t("common.requestFailed")
-                      : undefined,
+                error: next.error ? describe(next.error) : undefined,
               }),
             )
-            record(id, next)
+
+            if (native) record(id, next)
 
             // After the store: closing a strip tab asks this model whether the desktop still has it.
             if (ref.location) return mirror()
@@ -361,9 +371,11 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       if (state.attachments[id]) setState("attachments", id, "error", undefined)
     })
 
-    // An unreachable pane is suspended, not a failed request.
+    // An unreachable pane is suspended, not a failed request. A tab that never opened has no address field to focus.
     const failed = (cause: unknown) => {
-      if (!unavailable(cause)) setState("errors", id, ctx.t("common.requestFailed"))
+      if (action.type === "tabs.open") opening.delete(id)
+
+      if (!unavailable(cause)) setState("errors", id, describe(cause instanceof Error ? cause.message : ""))
     }
 
     const connection = live.get(id)?.connection
@@ -398,24 +410,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     if (current) openURL(session, workspaceFileURL(current, path))
   }
 
-  // HTML the pane can load opens as a browser tab. Palette results and comment chips name files to
-  // edit, so they keep opening file tabs.
-  const target = (link: Link) => {
-    if (link.exact || link.origin || !link.session) return
-    const view = sessions.current()
-
-    if (view?.key !== link.session.key) return
-    const current = files(view)
-
-    if (!current) return
-    const path = resolveLink(current, link.href, link.base)
-
-    if (!path || !isHtml(path) || !canOpen(view, path)) return
-
-    return { view, path }
-  }
-
-  // The agent's browser.preview tool: the link router picks the browser for HTML, the file panel otherwise. Only the
+  // The agent's browser.preview tool: the file extension opens HTML in the browser, other files in the file panel. Only the
   // session's screen resolves workspace paths, so a preview for a session that is not on screen waits for it.
   const preview = (entry: Live, path: string) => {
     const view = sessions.current()
@@ -508,12 +503,6 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
       if (item && item.id !== attachment(session)?.browser?.focusedTabID)
         command(session, { type: "tabs.focus", tabID: item.id })
-    },
-    match: (link: Link) => !!target(link),
-    openLink(link: Link) {
-      const found = target(link)
-
-      if (found) openFile(found.view, found.path)
     },
     /** The page's element picker starting, stopping, or picking an element. */
     onInspect(session: Session, listener: (event: InspectEvent) => void) {

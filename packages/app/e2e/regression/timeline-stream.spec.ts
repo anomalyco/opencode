@@ -1012,6 +1012,99 @@ test.describe("background shortcut", () => {
     await expect(backgroundCard).toContainText("Background task (background)")
   })
 
+  for (const fixture of [
+    { name: "from far below", before: 40, searches: 40, after: 80 },
+    // The collapsed timeline fits the viewport, so it only becomes scrollable once the group opens.
+    { name: "that opens the last row", before: 0, searches: 40, after: 0 },
+    // Reaching the shell lands on the end of the timeline, which would otherwise follow new content again.
+    { name: "at the end of the timeline", before: 40, searches: 0, after: 0 },
+  ]) {
+    test(`holds a revealed shell ${fixture.name} just under its stuck group header`, async ({ page }) => {
+      const timeline = await setupTimeline(page, {
+        settings: { timelineDetail: detailed },
+        sessionStatus: { [sessionID]: { type: "busy" } },
+        messages: [
+          userMessage(),
+          assistantMessage(
+            [
+              ...(fixture.before ? [textPart("prt_earlier", notes("Earlier", fixture.before))] : []),
+              ...searches(0, 42 - fixture.searches),
+              toolPart(
+                "prt_far_shell",
+                "shell",
+                "completed",
+                { command: "sleep 120" },
+                { output: "working", metadata: { shellID: "shell_far", status: "running" } },
+              ),
+              // The open group outgrows the viewport, so aligning the group instead of the shell misses it.
+              ...searches(42 - fixture.searches, fixture.searches),
+              ...(fixture.after ? [textPart("prt_follow_up", notes("Follow-up", fixture.after))] : []),
+            ],
+            { completed: false },
+          ),
+        ],
+      })
+
+      await timeline.transport.send({
+        id: "evt_far_shell_created",
+        created: 3,
+        type: "shell.created",
+        location: { directory },
+        data: {
+          info: {
+            id: "shell_far",
+            status: "running",
+            command: "sleep 120",
+            cwd: directory,
+            shell: "bash",
+            file: "/tmp/far.out",
+            metadata: { sessionID },
+            time: { started: 2 },
+          },
+        },
+      })
+
+      const group = page
+        .locator('[data-component="collapsed-tool-group"]')
+        .locator(':scope > [data-component="collapsible"] > [data-slot="collapsible-trigger"]')
+
+      const shellTrigger = page.locator('[data-timeline-part-id="prt_far_shell"] [data-slot="collapsible-trigger"]')
+
+      const aligned = () =>
+        expect
+          .poll(async () => {
+            const [header, shell] = await Promise.all([group.boundingBox(), shellTrigger.boundingBox()])
+
+            return header && shell ? Math.round(shell.y - (header.y + header.height)) : undefined
+          })
+          .toBe(0)
+
+      await expect(
+        fixture.after ? page.getByText(`Follow-up note ${fixture.after}.`, { exact: true }) : group,
+      ).toBeInViewport()
+      await expect(shellTrigger).toHaveCount(0)
+      await page.getByRole("button", { name: "1 running", exact: true }).click()
+      await page
+        .getByRole("menu", { name: "1 running", exact: true })
+        .getByRole("menuitem", { name: /sleep 120/ })
+        .click()
+
+      await expect(group).toHaveAttribute("aria-expanded", "true")
+      await expect(shellTrigger).toHaveAttribute("aria-expanded", "true")
+      await expect(shellTrigger).toBeInViewport()
+
+      // A shell at the very end cannot rise under the header until more content arrives below it.
+      if (fixture.searches) await aligned()
+      // Nothing covers the row, so it takes the next click.
+      await shellTrigger.click({ trial: true })
+
+      // The agent keeps writing below the shell; the shell stays where it was revealed.
+      await timeline.send(partUpdated(textPart("prt_late", notes("Late", 30))))
+      await expect(page.getByText("Late note 30.", { exact: true })).toBeAttached()
+      await aligned()
+    })
+  }
+
   test("hides the running switcher when viewing the only running subagent", async ({ page }) => {
     const childID = "ses_only_running_child"
 
@@ -1733,6 +1826,16 @@ function pauseExitAnimations(locator: Locator) {
 
     return animations
   })
+}
+
+function notes(label: string, count: number) {
+  return Array.from({ length: count }, (_, index) => `${label} note ${index + 1}.`).join("\n\n")
+}
+
+function searches(from: number, count: number) {
+  return Array.from({ length: count }, (_, index) =>
+    toolPart(`prt_search_${from + index}`, "grep", "completed", { pattern: `needle_${from + index}` }),
+  )
 }
 
 function runningSubagent(): SessionMessageAssistant {

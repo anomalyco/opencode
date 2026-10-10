@@ -1,7 +1,7 @@
 export * as RemoteCli from "./remote-cli"
 
 import { Effect, Schema } from "effect"
-import { HttpClient, HttpClientResponse } from "effect/unstable/http"
+import { HttpClient, HttpClientResponse } from "effect/http"
 
 export class Failure extends Schema.TaggedError<Failure>()("RemoteCliFailure", {
   code: Schema.Literals(["platform", "version", "install"]),

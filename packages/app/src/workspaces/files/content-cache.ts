@@ -14,7 +14,10 @@ export function approxBytes(content: FileContent) {
       return sum + hunk.lines.reduce((lineSum, line) => lineSum + line.length, 0)
     }, 0) ?? 0
 
-  return (content.content.length + (content.diff?.length ?? 0) + patchBytes) * 2
+  // V8 keeps an ASCII string such as base64 at one byte per character; other text may take two.
+  const body = content.content.length * (content.encoding === "base64" ? 1 : 2)
+
+  return body + ((content.diff?.length ?? 0) + patchBytes) * 2
 }
 
 function setBytes(path: string, nextBytes: number) {

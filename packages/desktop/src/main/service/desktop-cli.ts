@@ -4,7 +4,7 @@ import { execFile, spawn } from "node:child_process"
 import { existsSync, readFileSync } from "node:fs"
 import { promisify } from "node:util"
 import { app } from "electron"
-import { Context, Effect, FileSystem, Layer, Option, Path } from "effect"
+import { Context, Effect, FileSystem, Layer, Option, Path, Schema } from "effect"
 import installer from "../../../../../install?raw"
 import { DesktopPaths } from "../paths"
 import { BUNDLED_CLI_VERSION_KEY } from "../storage/keys"
@@ -57,12 +57,14 @@ const make = Effect.fn("DesktopCli.resolve")(function* () {
   const cli = development
     ? {
         version,
+        // Bun's transpiler cache key includes the define table, and the dev version changes on every
+        // run. Reading it from the inherited environment keeps the define fixed and the cache warm.
         command: [
           "bun",
           "run",
           "--cwd",
           development,
-          `--define=OPENCODE_VERSION=${JSON.stringify(version)}`,
+          "--define=OPENCODE_VERSION=process.env.OPENCODE_VERSION",
           "src/index.ts",
         ],
         binary: undefined,
@@ -114,9 +116,9 @@ const bundledVersion = Effect.fn("DesktopCli.bundledVersion")(function* (bundled
   const stat = yield* fs.stat(bundled).pipe(Effect.orElseSucceed(() => undefined))
   const identity = stat ? `${stat.size}:${Option.getOrUndefined(stat.mtime)?.getTime() ?? ""}` : undefined
   const store = getStore()
-  const cached = store.get(BUNDLED_CLI_VERSION_KEY)
+  const cached = Option.getOrUndefined(Schema.decodeUnknownOption(VersionCache)(store.get(BUNDLED_CLI_VERSION_KEY)))
 
-  if (identity && isVersionCache(cached) && cached.path === bundled && cached.identity === identity) {
+  if (identity && cached?.path === bundled && cached.identity === identity) {
     yield* Effect.logInfo("v2 CLI version reused", { version: cached.version })
 
     return cached.version
@@ -124,42 +126,15 @@ const bundledVersion = Effect.fn("DesktopCli.bundledVersion")(function* (bundled
 
   const version = parseCliVersion(yield* run(bundled, ["--version"]))
 
-  if (identity) store.set(BUNDLED_CLI_VERSION_KEY, { path: bundled, identity, version } satisfies VersionCache)
+  if (identity)
+    store.set(BUNDLED_CLI_VERSION_KEY, { path: bundled, identity, version } satisfies typeof VersionCache.Type)
 
   return version
 })
 
-type VersionCache = { path: string; identity: string; version: string }
+const VersionCache = Schema.Struct({ path: Schema.String, identity: Schema.String, version: Schema.String })
 
-function isVersionCache(value: unknown): value is VersionCache {
-  if (!value || typeof value !== "object") return false
-  const cache = value as Record<string, unknown>
-
-  return typeof cache.path === "string" && typeof cache.identity === "string" && typeof cache.version === "string"
-}
-
-export const cleanStages = Effect.fn("DesktopCli.cleanStages")(function* (binary: string) {
-  const fs = yield* FileSystem.FileSystem
-  const path = yield* Path.Path
-  const current = path.dirname(binary)
-  const root = path.dirname(current)
-  const entries = yield* fs.readDirectory(root)
-  yield* Effect.forEach(
-    entries,
-    Effect.fnUntraced(function* (entry) {
-      const target = path.join(root, entry)
-
-      if (target === current) return
-      const stat = yield* fs.stat(target).pipe(Effect.orElseSucceed(() => undefined))
-
-      if (stat?.type !== "Directory") return
-      yield* fs
-        .remove(target, { recursive: true, force: true })
-        .pipe(Effect.catch((error) => Effect.logError("failed to clean staged v2 CLI", { path: target, error })))
-    }),
-    { concurrency: "unbounded" },
-  )
-})
+const ExecFailure = Schema.Struct({ stdout: Schema.optional(Schema.String), stderr: Schema.optional(Schema.String) })
 
 const installCli = Effect.fn("DesktopCli.install")(function* (source: string, version: string) {
   const fs = yield* FileSystem.FileSystem
@@ -191,13 +166,13 @@ const run = Effect.fn("DesktopCli.run")(function* (binary: string, args: string[
 
   const result = yield* Effect.tryPromise(() => execFileAsync(binary, args, { windowsHide: true })).pipe(
     Effect.tapError((error) => {
-      const output = error as { stdout?: string; stderr?: string }
+      const output = Option.getOrUndefined(Schema.decodeUnknownOption(ExecFailure)(error.cause))
 
       return Effect.logError("v2 CLI command failed", {
         args,
-        error: error instanceof Error ? error.message : String(error),
-        stdout: output.stdout?.trim() ?? "",
-        stderr: output.stderr?.trim() ?? "",
+        error: error.cause instanceof Error ? error.cause.message : String(error.cause),
+        stdout: output?.stdout?.trim() ?? "",
+        stderr: output?.stderr?.trim() ?? "",
       })
     }),
   )

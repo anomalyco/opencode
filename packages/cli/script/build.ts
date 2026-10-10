@@ -7,6 +7,7 @@ import { Script } from "@opencode/script"
 import { createSolidTransformPlugin } from "@opentui/solid/bun-plugin"
 import type { BunPlugin } from "bun"
 import pkg from "../package.json"
+import { discoverPluginRuntimeSpecifiers, pluginRuntimeLoaderCode } from "@opencode/plugin/runtime-modules"
 import { buildAppArchive } from "./app-assets"
 import { verifyArtifact, verifySimulationGraph } from "./verify-artifact"
 import { resolveOpencodePty } from "./opencode-pty"
@@ -64,7 +65,8 @@ if (!targets.length) throw new Error(`Unknown build target: ${requestedTarget}`)
 
 if (!skipInstall)
   await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]} @opencode-ai/pty@${pkg.dependencies["@opencode-ai/pty"]}`
-const appArchive = await buildAppArchive(Script.channel, { skipBuild: skipWebUi })
+const appArchive = path.join(dir, ".cache", "bun-app-archive.bin")
+await Bun.write(appArchive, await buildAppArchive(Script.channel, { skipBuild: skipWebUi }))
 const appAssetsPlugin: BunPlugin = {
   name: "opencode-app-assets",
   setup(build) {
@@ -74,7 +76,34 @@ const appAssetsPlugin: BunPlugin = {
     }))
     build.onLoad({ filter: /^opencode-app-assets$/, namespace: "opencode" }, () => ({
       loader: "js",
-      contents: `export default ${appArchive}`,
+      // Embedded as a file, not a string: its bytes go into the executable once and unencoded.
+      contents: `import { readFileSync } from "node:fs"
+import archive from ${JSON.stringify(appArchive.replaceAll("\\", "/"))} with { type: "file" }
+export default () => readFileSync(archive)`,
+    }))
+  },
+}
+const pluginRuntimeEntries = discoverPluginRuntimeSpecifiers()
+const pluginRuntimeModulesSource = [
+  "export const resolveHostPackageRoots = () => []",
+  "const modules = {",
+  ...[...pluginRuntimeEntries.keys()].map(
+    (specifier) => `  ${JSON.stringify(specifier)}: ${pluginRuntimeLoaderCode(specifier, pluginRuntimeEntries)},`,
+  ),
+  "}",
+  "export const loadRuntimeModules = () => modules",
+].join("\n")
+const pluginRuntimePlugin: BunPlugin = {
+  name: "opencode-plugin-runtime",
+  setup(build) {
+    build.onLoad({ filter: /plugin[/\\]src[/\\]runtime-modules\.ts$/ }, () => ({
+      contents: pluginRuntimeModulesSource,
+      loader: "ts",
+    }))
+    build.onLoad({ filter: /[/\\]internal[/\\]httpApi(?:Scalar|Swagger)\.js$/ }, () => ({
+      contents:
+        'export const css = ""; export const javascript = \'document.body.textContent = "Scalar/Swagger UI assets are not bundled in OpenCode"\'',
+      loader: "js",
     }))
   },
 }
@@ -124,7 +153,14 @@ export default { path: file, version: ${JSON.stringify(opencodePty.version)}, sh
   const result = await Bun.build({
     entrypoints: ["./src/index.ts"],
     tsconfig: "./tsconfig.json",
-    plugins: [appAssetsPlugin, solidPlugin, parcelWatcherPlugin, opencodePtyPlugin, simulationGraphPlugin],
+    plugins: [
+      appAssetsPlugin,
+      solidPlugin,
+      parcelWatcherPlugin,
+      opencodePtyPlugin,
+      pluginRuntimePlugin,
+      simulationGraphPlugin,
+    ],
     external: ["node-gyp"],
     format: "esm",
     minify: true,

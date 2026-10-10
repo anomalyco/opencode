@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { Rpc, RpcGroup } from "effect/unstable/rpc"
+import { Rpc, RpcGroup } from "effect/rpc"
 
 const ServerReadyData = Schema.Struct({
   url: Schema.String,
@@ -11,14 +11,6 @@ export const AppReconnectService = Rpc.make("AppReconnectService", { success: Se
 
 export const AppConsumeInitialDeepLinks = Rpc.make("AppConsumeInitialDeepLinks", {
   success: Schema.Array(Schema.String),
-})
-
-export const AppGetDefaultServerUrl = Rpc.make("AppGetDefaultServerUrl", {
-  success: Schema.NullOr(Schema.String),
-})
-
-export const AppSetDefaultServerUrl = Rpc.make("AppSetDefaultServerUrl", {
-  payload: { url: Schema.NullOr(Schema.String) },
 })
 
 export const AppIsFirstLaunchOnboardingPending = Rpc.make("AppIsFirstLaunchOnboardingPending", {
@@ -72,8 +64,6 @@ export const AppRpcs = RpcGroup.make(
   AppAwaitInitialization,
   AppReconnectService,
   AppConsumeInitialDeepLinks,
-  AppGetDefaultServerUrl,
-  AppSetDefaultServerUrl,
   AppIsFirstLaunchOnboardingPending,
   AppFinishFirstLaunchOnboarding,
   AppCheckAppExists,

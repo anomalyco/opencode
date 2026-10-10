@@ -81,6 +81,7 @@ export function host(overrides: Overrides = {}): Plugin.Context {
       get: () => Effect.die("unused integration.get"),
       connect: {
         key: () => Effect.die("unused integration.connect.key"),
+        external: () => Effect.die("unused integration.connect.external"),
       },
       oauth: {
         connect: () => Effect.die("unused integration.oauth.connect"),
@@ -300,6 +301,7 @@ export function integrationHost(integration: Integration.Interface): Plugin.Cont
     get: () => Effect.die("unused integration.get"),
     connect: {
       key: () => Effect.die("unused integration.connect.key"),
+      external: () => Effect.die("unused integration.connect.external"),
     },
     oauth: {
       connect: () => Effect.die("unused integration.oauth.connect"),
@@ -412,6 +414,16 @@ export function integrationHost(integration: Integration.Interface): Plugin.Cont
                 })
                 return
               }
+              if (input.method.type === "external") {
+                editor.method.update({
+                  integrationID: Integration.ID.make(input.integrationID),
+                  method: {
+                    ...input.method,
+                    id: Integration.MethodID.make(input.method.id),
+                  },
+                })
+                return
+              }
               editor.method.update({
                 integrationID: Integration.ID.make(input.integrationID),
                 method: input.method,
@@ -462,7 +474,7 @@ export function webSearchHost(websearch: WebSearch.Interface): Plugin.Context["w
 }
 
 function internalMethod(value: IntegrationMethod): Integration.Method {
-  if (value.type === "oauth" || value.type === "command") {
+  if (value.type === "oauth" || value.type === "command" || value.type === "external") {
     return { ...value, id: Integration.MethodID.make(value.id) }
   }
   return value

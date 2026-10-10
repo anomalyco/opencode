@@ -3,6 +3,7 @@ import { Badge } from "@opencode/ui/badge"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { Icon } from "@opencode/ui/icon"
 import { List } from "@opencode/ui/list"
+import { RadioGroup, RadioItem } from "@opencode/ui/radio"
 import { Spinner } from "@opencode/ui/spinner"
 import { TextField } from "@opencode/ui/text-field"
 import { DialogBody, DialogHeader, DialogTitle, Dialog } from "@opencode/ui/dialog"
@@ -61,7 +62,7 @@ type IntegrationForm = NonNullable<ProviderConnectMethod["form"]>[number]
 type StringForm = Extract<IntegrationForm, { type: "string" }>
 
 export function useProviderConnectController() {
-  const [store, setStore] = createStore({ selected: undefined as string | undefined })
+  const [store, setStore] = createStore<{ selected?: string }>({})
   const reset = () => setStore("selected", undefined)
 
   return {
@@ -83,9 +84,13 @@ export const DialogConnectProvider: Component<{
   const fallback = useProviderConnectController()
   const controller = props.controller ?? fallback
 
-  const [state, setState] = createStore({
+  const [state, setState] = createStore<{
+    completed: boolean
+    modelProvider?: { id: string; name: string }
+    authorization: boolean
+    chatgptWelcome: boolean
+  }>({
     completed: false,
-    modelProvider: undefined as { id: string; name: string } | undefined,
     authorization: false,
     chatgptWelcome: false,
   })
@@ -216,10 +221,12 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
   const integrations = useIntegrations(() => props.directory)
   const language = useLanguage()
 
-  const [store, setStore] = createStore({
+  const [store, setStore] = createStore<{
+    filter: string
+    active?: string
+    connecting?: string
+  }>({
     filter: "",
-    active: undefined as string | undefined,
-    connecting: undefined as string | undefined,
   })
 
   const featured = ["opencode-go", "opencode", "anthropic", "openai", "google", "openrouter", "vercel"]
@@ -421,16 +428,24 @@ function ProviderConnection(props: {
   const isConsole = CONSOLE_PROVIDERS.has(props.provider)
   const remote = isConsole && authServerName(sdk.server) !== undefined
 
-  const [state, setState] = createStore({
+  const [state, setState] = createStore<{
+    copied: boolean
+    copyFailed: boolean
+    firstConnection?: boolean
+    models: boolean
+    noModels: boolean
+    catalogPending: boolean
+    selectedModel: string
+    collapsed: Record<string, boolean>
+  }>({
     copied: false,
     copyFailed: false,
-    firstConnection: undefined as boolean | undefined,
     models: false,
     noModels: false,
     // The workspace providers had not loaded when the wait ran out.
     catalogPending: false,
     selectedModel: "",
-    collapsed: {} as Record<string, boolean>,
+    collapsed: {},
   })
 
   const controller = createProviderConnectionController({
@@ -642,11 +657,22 @@ function ProviderConnection(props: {
   function AuthFormView() {
     const defaults = providerFormDefaults(controller.currentMethod()?.form)
 
-    const [formStore, setFormStore] = createStore({
+    const [formStore, setFormStore] = createStore<{
+      value: Record<string, string>
+      index: number
+      customOn: boolean
+      customText: string
+    }>({
       value: Object.fromEntries(
-        Object.entries(defaults).flatMap(([key, value]) => (typeof value === "string" ? [[key, value]] : [])),
-      ) as Record<string, string>,
+        (controller.currentMethod()?.form ?? []).flatMap((field) =>
+          field.type === "string" && field.key in defaults && field.default !== undefined
+            ? [[field.key, field.default]]
+            : [],
+        ),
+      ),
       index: 0,
+      customOn: false,
+      customText: "",
     })
 
     const fields = createMemo<StringForm[]>(() => {
@@ -677,14 +703,18 @@ function ProviderConnection(props: {
       }
     })
 
+    // Visible defaults prefill the field but enter the answer only once that field is answered,
+    // because the server rejects values for fields whose conditions are not met.
+    const answer = (field: StringForm) => formStore.value[field.key] ?? field.default
+
     const valid = createMemo(() => {
       const item = current()
 
-      if (!item || item.field.options) return false
+      if (!item || (item.field.options && !item.field.custom)) return false
 
       if (!item.field.required) return true
 
-      return (formStore.value[item.field.key] ?? "").trim().length > 0
+      return (answer(item.field) ?? "").trim().length > 0
     })
 
     async function next(index: number, value: Record<string, string>) {
@@ -694,7 +724,7 @@ function ProviderConnection(props: {
       const next = fields().findIndex((field, i) => i > index && matches(field, value))
 
       if (next !== -1) {
-        setFormStore("index", next)
+        setFormStore({ index: next, customOn: false, customText: "" })
 
         return
       }
@@ -706,9 +736,10 @@ function ProviderConnection(props: {
       e.preventDefault()
       const item = current()
 
-      if (!item || item.field.options) return
+      if (!item || !valid()) return
+      const value = answer(item.field)
 
-      if (!valid()) return
+      if (value !== undefined) setFormStore("value", item.field.key, value)
       await next(item.index, formStore.value)
     }
 
@@ -730,6 +761,15 @@ function ProviderConnection(props: {
       return field
     })
 
+    const custom = () => {
+      const field = select()
+
+      if (!field?.custom) return false
+      const value = answer(field)
+
+      return formStore.customOn || (value !== undefined && !field.options?.some((option) => option.value === value))
+    }
+
     return (
       <form onSubmit={handleSubmit} class="flex flex-col items-start gap-4 px-3">
         <Switch>
@@ -738,7 +778,7 @@ function ProviderConnection(props: {
               type="text"
               label={text()?.title ?? ""}
               placeholder={text()?.placeholder}
-              value={text() ? (formStore.value[text()!.key] ?? "") : ""}
+              value={text() ? (answer(text()!) ?? "") : ""}
               onChange={(value) => {
                 const field = text()
 
@@ -750,6 +790,62 @@ function ProviderConnection(props: {
               {language.t("common.continue")}
             </Button>
           </Match>
+          <Match when={select()?.custom && select()}>
+            {(field) => (
+              <>
+                <div class="w-full flex flex-col gap-3">
+                  <div class="text-14-regular text-text-base">{field().title}</div>
+                  <RadioGroup
+                    label={field().title}
+                    hideLabel
+                    description={field().description}
+                    value={
+                      custom()
+                        ? "custom"
+                        : String(field().options?.findIndex((option) => option.value === answer(field())))
+                    }
+                    onChange={(value) => {
+                      const option = field().options?.[Number(value)]
+
+                      if (option) {
+                        if (custom()) setFormStore("customText", answer(field()) ?? "")
+                        setFormStore("customOn", false)
+                        setFormStore("value", field().key, option.value)
+
+                        return
+                      }
+
+                      setFormStore("customOn", true)
+                      setFormStore("value", field().key, formStore.customText)
+                    }}
+                  >
+                    <For each={field().options}>
+                      {(option, index) => (
+                        <RadioItem value={String(index())} label={option.label} description={option.description} />
+                      )}
+                    </For>
+                    <RadioItem value="custom" label={language.t("ui.messagePart.option.typeOwnAnswer")} />
+                    <Show when={custom()}>
+                      <div class="pl-6">
+                        <TextField
+                          ref={(input: HTMLInputElement) => queueMicrotask(() => input.focus())}
+                          type="text"
+                          label={language.t("ui.messagePart.option.typeOwnAnswer")}
+                          hideLabel
+                          placeholder={field().placeholder ?? language.t("ui.question.custom.placeholder")}
+                          value={answer(field()) ?? ""}
+                          onChange={(value) => setFormStore("value", field().key, value)}
+                        />
+                      </div>
+                    </Show>
+                  </RadioGroup>
+                </div>
+                <Button class="w-auto" type="submit" size="large" variant="contrast" disabled={!valid()}>
+                  {language.t("common.continue")}
+                </Button>
+              </>
+            )}
+          </Match>
           <Match when={item()?.field.options !== undefined}>
             <div class="w-full flex flex-col gap-1.5">
               <div class="text-14-regular text-text-base">{select()?.title}</div>
@@ -758,7 +854,7 @@ function ProviderConnection(props: {
                   class="px-3"
                   items={select()?.options ?? []}
                   key={(x) => x.value}
-                  current={select()?.options?.find((x) => x.value === formStore.value[select()!.key])}
+                  current={select()?.options?.find((x) => x.value === answer(select()!))}
                   onSelect={(value) => {
                     if (!value) return
                     const field = select()
@@ -876,9 +972,11 @@ function ProviderConnection(props: {
     let apiKey: HTMLInputElement | undefined
     const errorID = createUniqueId()
 
-    const [formStore, setFormStore] = createStore({
+    const [formStore, setFormStore] = createStore<{
+      value: string
+      error?: string
+    }>({
       value: "",
-      error: undefined as string | undefined,
     })
 
     onMount(() => {
@@ -890,16 +988,16 @@ function ProviderConnection(props: {
 
       if (!(e.currentTarget instanceof HTMLFormElement)) return
       const value = new FormData(e.currentTarget).get("apiKey")
-      const apiKey = typeof value === "string" ? value : ""
+      const key = value instanceof File || value === null ? "" : value
 
-      if (!apiKey?.trim()) {
+      if (!key.trim()) {
         setFormStore("error", language.t("provider.connect.apiKey.required"))
 
         return
       }
 
       setFormStore("error", undefined)
-      await controller.auth.connectKey(apiKey)
+      await controller.auth.connectKey(key)
     }
 
     return (
@@ -954,9 +1052,11 @@ function ProviderConnection(props: {
     let codeInput: HTMLInputElement | undefined
     const errorID = createUniqueId()
 
-    const [formStore, setFormStore] = createStore({
+    const [formStore, setFormStore] = createStore<{
+      value: string
+      error?: string
+    }>({
       value: "",
-      error: undefined as string | undefined,
     })
 
     onMount(() => {
@@ -968,9 +1068,9 @@ function ProviderConnection(props: {
 
       if (!(e.currentTarget instanceof HTMLFormElement)) return
       const value = new FormData(e.currentTarget).get("code")
-      const code = typeof value === "string" ? value : ""
+      const code = value instanceof File || value === null ? "" : value
 
-      if (!code?.trim()) {
+      if (!code.trim()) {
         setFormStore("error", language.t("provider.connect.oauth.code.required"))
 
         return

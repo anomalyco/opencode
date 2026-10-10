@@ -398,20 +398,7 @@ export interface ServerRow {
     /** Shows the lock. */
     readonly auth?: boolean
   }) => JSX.Element
-  /** The default server. `available` is false where the platform keeps no default. */
-  readonly default: {
-    /** The platform keeps a default server. */
-    available(): boolean
-    /** This server is the default. Reactive. */
-    current(): boolean
-    /**
-     * Makes this server the default, or clears it.
-     *
-     * @param value - True to make it the default.
-     */
-    set(value: boolean): void
-  }
-  /** Runs the entry's `remove`, then closes the server's tabs and clears it as the default. */
+  /** Runs the entry's `remove`, then closes the server's tabs. */
   remove(): Promise<void>
   /** MenuItem "server.row" items for this server, rendered as items of the row's own menu. */
   readonly Items: () => JSX.Element
@@ -520,6 +507,15 @@ export interface LinkHandler {
    * @param link - A link `match` accepted.
    */
   open(link: Link): void
+  /**
+   * Whether the link's target exists. Omit it and `Links.exists` answers false, so text never looks like a link this
+   * handler opens. Must never read file contents or show an error: it runs for every candidate path a message renders.
+   * Resolve false on failure.
+   *
+   * @param link - A link `match` accepted.
+   * @returns Whether the target exists, now or once checked.
+   */
+  exists?(link: Link): boolean | Promise<boolean>
 }
 
 /** A titlebar pill, or the dev channel badge as a toggle. */

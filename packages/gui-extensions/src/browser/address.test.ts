@@ -19,6 +19,19 @@ test("the address field navigates to what reads as an address and searches for a
       "mdn",
       "css grid gap",
       "localhost 3000",
+      "ABOUT:BLANK",
+      "file:///C:/repo/index.html",
+      // A typed scheme is an address even where main refuses it, which then says why.
+      "file://server/share/x.html",
+      "ftp://example.com",
+      "about:config",
+      // Text that is no URL searches: no host, a space in it, or a host main would not open as a web page.
+      "https://",
+      "http:// foo",
+      "about: the movie",
+      "user@example.com",
+      ":8080",
+      "error: cannot find module",
     ].map(resolveAddress),
   ).toEqual([
     "about:blank",
@@ -33,6 +46,17 @@ test("the address field navigates to what reads as an address and searches for a
     search("mdn"),
     search("css grid gap"),
     search("localhost 3000"),
+    "about:blank",
+    "file:///C:/repo/index.html",
+    "file://server/share/x.html",
+    "ftp://example.com",
+    "about:config",
+    search("https://"),
+    search("http:// foo"),
+    search("about: the movie"),
+    search("user@example.com"),
+    search(":8080"),
+    search("error: cannot find module"),
   ])
 })
 

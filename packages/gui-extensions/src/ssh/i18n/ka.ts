@@ -38,8 +38,5 @@ export default {
   "form.name": "სერვერის სახელი (არასავალდებულო)",
   "form.namePlaceholder": "Localhost",
   "form.add": "სერვერის დამატება",
-  "server.default": "ნაგულისხმევი",
-  "menu.default": "დაყენება ნაგულისხმევად",
-  "menu.defaultRemove": "ნაგულისხმევის ამოღება",
   "menu.delete": "წაშლა",
 }

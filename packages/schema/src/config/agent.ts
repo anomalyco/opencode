@@ -6,7 +6,7 @@ import { optional, PositiveInt } from "../schema.js"
 import { ConfigModel } from "./model.js"
 import { ConfigProvider } from "./provider.js"
 
-export const Color = Schema.String.check(Schema.isPattern(/^#[0-9a-fA-F]{6}$/))
+export const Color = Schema.String.check(Schema.isPattern(/^#[0-9a-fA-F]{6}$/u))
 
 export class Info extends Schema.Class<Info>("Config.Agent")({
   model: ConfigModel.Selection.pipe(optional),

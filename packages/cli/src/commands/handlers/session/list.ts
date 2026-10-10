@@ -61,7 +61,7 @@ const handler = Effect.fn("cli.session.list")(function* (
 
   const { AppProcess } = yield* Effect.promise(() => import("@opencode/util/process"))
   const { LayerNode } = yield* Effect.promise(() => import("@opencode/util/effect/layer-node"))
-  const { ChildProcess } = yield* Effect.promise(() => import("effect/unstable/process"))
+  const { ChildProcess } = yield* Effect.promise(() => import("effect/process"))
   yield* Effect.gen(function* () {
     const processService = yield* AppProcess.Service
     const pager = yield* processService

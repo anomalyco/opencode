@@ -93,6 +93,7 @@ export function createMountedSession(session: SessionModel) {
     get: file.get,
     missing: file.notFound,
     sync: (path, options) => file.load(path, options),
+    exists: file.exists,
     search: (query, options) =>
       options?.kind === "any" ? file.searchFilesAndDirectories(query, options) : file.searchFiles(query, options),
     selection: {
