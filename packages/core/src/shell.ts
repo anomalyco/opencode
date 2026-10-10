@@ -421,7 +421,7 @@ const layer = () =>
                 ),
               )
 
-              yield* bus.publish(Shell.Event.Created, { info })
+              yield* bus.publish(Shell.Event.Created, { info: command.info })
               yield* Deferred.succeed(ready, command)
               // Hold the handle's scope open until the command terminates; closing it earlier would
               // release (kill) the process before its exit is observed.
