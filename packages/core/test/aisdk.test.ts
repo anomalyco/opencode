@@ -929,6 +929,7 @@ Object.values({
     Effect.gen(function* () {
       const error = yield* streamFailure(payload, true)
       const body = typeof payload === "string" ? payload : JSON.stringify(payload)
+      if (typeof payload !== "string") expect(error.message).toBe("Provider busy")
       expect(error.reason.body).toBe(body)
       expect(error.reason.cause).toBe(payload)
     }),
@@ -1197,6 +1198,46 @@ it.effect("prefers a structured provider message over the code fallback", () =>
       }),
     )
     expect(error.message).toBe("The requested model does not exist")
+  }),
+)
+
+it.effect("surfaces a structured provider message instead of a generic SDK status", () =>
+  Effect.gen(function* () {
+    const error = yield* streamFailure(
+      apiCallError({
+        message: "Provider request failed with HTTP 400",
+        statusCode: 400,
+        responseBody: '{"error":{"message":"The selected model does not support images"}}',
+      }),
+    )
+    expect(error.message).toBe("The selected model does not support images")
+  }),
+)
+
+it.effect("surfaces a string provider error from the response body", () =>
+  Effect.gen(function* () {
+    const responseBody = '{"error":"The selected model is not multimodal"}'
+    const error = yield* streamFailure(
+      apiCallError({
+        message: "Provider request failed with HTTP 400",
+        statusCode: 400,
+        responseBody,
+      }),
+    )
+    expect(error.message).toBe("The selected model is not multimodal")
+    expect(error.reason.body).toBe(responseBody)
+  }),
+)
+
+it.effect("surfaces a string provider error from SDK data", () =>
+  Effect.gen(function* () {
+    const error = yield* streamFailure(
+      apiCallError({
+        statusCode: 400,
+        data: { error: "The selected model is not multimodal" },
+      }),
+    )
+    expect(error.message).toBe("The selected model is not multimodal")
   }),
 )
 
