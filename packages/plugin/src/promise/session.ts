@@ -124,6 +124,22 @@ export interface SessionWebSocketReceive {
   frame: string
 }
 
+/**
+ * Model for one provider turn of the agent loop. Runs before every turn, including tool-call
+ * continuations, retries, and compaction recovery, so a plugin can route each turn to another
+ * model. The change applies to this turn only and never replaces the Session's selected model.
+ * A model that cannot be resolved is ignored and the selected model is kept.
+ */
+export interface SessionModelSelect {
+  readonly sessionID: Session.ID
+  readonly agent: Agent.ID
+  /** 1-based provider turn since the latest promoted user input. */
+  readonly step: number
+  /** Active history the turn will send, including earlier turns' tool calls and results. */
+  readonly messages: ReadonlyArray<SessionMessage.Info>
+  model: Model.Ref
+}
+
 export type SessionRetryDecision = { retry: false } | { retry: true; delay: number }
 
 export interface SessionRetry {
@@ -141,6 +157,7 @@ export interface SessionHooks {
   readonly compaction: SessionCompaction
   readonly generate: SessionGenerate
   readonly title: SessionTitle
+  readonly "model.select": SessionModelSelect
   readonly "model.request": SessionModelRequest
   readonly "http.request": SessionHttpRequest
   readonly "http.response": SessionHttpResponse

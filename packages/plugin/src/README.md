@@ -123,6 +123,17 @@ await ctx.session.hook("retry", (event) => {
 })
 ```
 
+Each provider turn of the agent loop may be routed to another model. The change applies to that
+turn only; the Session keeps its selected model, and an unavailable model is ignored:
+
+```ts
+import { Model } from "@opencode/schema/model"
+
+await ctx.session.hook("model.select", (event) => {
+  if (event.step > 1) event.model = { providerID: event.model.providerID, id: Model.ID.make("claude-haiku-4-5") }
+})
+```
+
 Promise tools use complete executable tool values with async executors:
 
 ```ts
