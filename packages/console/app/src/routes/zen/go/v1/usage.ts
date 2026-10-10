@@ -117,6 +117,8 @@ export async function GET(input: APIEvent) {
 
   return new Response(
     JSON.stringify({
+      workspaceID: auth.workspaceID,
+      userID: auth.userID,
       usage: {
         rolling: formatUsage(
           Subscription.analyzeRollingUsage({
