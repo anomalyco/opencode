@@ -1,10 +1,56 @@
 import { describe, expect, test } from "bun:test"
 import { Message, ToolResultPart, Media } from "@opencode/ai"
 import { boundImages, unsupportedParts } from "@opencode/core/session/model-request"
+import images from "./fixtures/image-minimum.json"
 
 const capabilities = (input: string[]) => ({ tools: true, input, output: ["text"] })
 
 describe("SessionModelRequest.unsupportedParts", () => {
+  test("omits undersized xAI images from user attachments and replayed tool results", () => {
+    for (const image of images) {
+      const attachment = {
+        type: "file" as const,
+        uri: `data:${image.mime};base64,${image.data}`,
+        mime: image.mime,
+        name: "sprite",
+      }
+      const messages = [
+        Message.user({ type: "media", media: Media.base64(image.data, image.mime), filename: "sprite" }),
+        Message.tool(
+          ToolResultPart.make({ id: "read_sprite", name: "read", result: { type: "content", value: [attachment] } }),
+        ),
+      ]
+      const result = unsupportedParts(messages, capabilities(["text", "image"]), "xai")
+      if (image.width >= 8 && image.height >= 8) {
+        result.forEach((message, index) => expect(message).toBe(messages[index]))
+        continue
+      }
+      expect(result[0]?.content[0]).toMatchObject({
+        type: "text",
+        text: expect.stringContaining(`${image.width}x${image.height}`),
+      })
+      expect(result[1]?.content[0]).toMatchObject({
+        type: "tool-result",
+        result: { type: "content", value: [{ type: "text", text: expect.stringContaining("Pad or enlarge") }] },
+      })
+      expect(messages[1]?.content[0]).toMatchObject({
+        type: "tool-result",
+        result: { type: "content", value: [attachment] },
+      })
+      expect(unsupportedParts(messages, capabilities(["text", "image"]), "openai")).toEqual(messages)
+    }
+  })
+
+  test("checks byte-backed images and leaves remote URLs alone", () => {
+    const image = images[0]!
+    const tiny = Message.user({ type: "media", media: Media.bytes(Buffer.from(image.data, "base64"), image.mime) })
+    expect(unsupportedParts([tiny], capabilities(["text", "image"]), "xai")[0]?.content[0]?.type).toBe("text")
+    const remote = Message.user({
+      type: "media",
+      media: Media.url("https://example.com/image.png", { mediaType: "image/png" }),
+    })
+    expect(unsupportedParts([remote], capabilities(["text", "image"]), "xai")[0]).toBe(remote)
+  })
   test("replaces unsupported user media with a visible error", () => {
     const messages = unsupportedParts(
       [

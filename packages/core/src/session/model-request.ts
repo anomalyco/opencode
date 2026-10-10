@@ -27,6 +27,7 @@ import { Cause, Context, Effect, Layer, Result, Stream } from "effect"
 import { HttpClientRequest, HttpClientResponse } from "effect/http"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { App } from "../app.js"
+import { ImageDimensions } from "../image/dimensions.js"
 import { Permission } from "../permission.js"
 import { PluginHooks } from "../plugin/hooks.js"
 import { QuestionTool } from "../tool/plugin/question.js"
@@ -156,19 +157,42 @@ const mediaBytes = (media: Media.Asset) => {
 /** Replaces media with the returned text; messages without replacements are returned unchanged. */
 const replaceMedia = (
   messages: LLMRequest["messages"],
-  replace: (media: { mime: string; name: string | undefined; bytes: () => number }) => string | undefined,
+  replace: (media: {
+    mime: string
+    name: string | undefined
+    bytes: () => number
+    data: () => Uint8Array | undefined
+  }) => string | undefined,
 ) =>
   messages.map((message) => {
     const content = message.content.map((part) => {
       if (part.type === "media") {
-        const text = replace({ mime: part.media.mediaType, name: part.filename, bytes: () => mediaBytes(part.media) })
+        const text = replace({
+          mime: part.media.mediaType,
+          name: part.filename,
+          bytes: () => mediaBytes(part.media),
+          data: () =>
+            part.media.source.type === "bytes"
+              ? part.media.source.data
+              : part.media.source.type === "base64"
+                ? Buffer.from(part.media.source.data, "base64")
+                : undefined,
+        })
         return text === undefined ? part : Message.text(text)
       }
       if (part.type !== "tool-result" || part.result.type !== "content") return part
       const result = part.result
       const value = result.value.map((item): Content => {
         if (item.type !== "file") return item
-        const text = replace({ mime: item.mime, name: item.name, bytes: () => Buffer.byteLength(item.uri) })
+        const text = replace({
+          mime: item.mime,
+          name: item.name,
+          bytes: () => Buffer.byteLength(item.uri),
+          data: () =>
+            /^data:[^,]*;base64,/i.test(item.uri)
+              ? Buffer.from(item.uri.slice(item.uri.indexOf(",") + 1), "base64")
+              : undefined,
+        })
         return text === undefined ? item : { type: "text", text }
       })
       return value.every((item, index) => item === result.value[index])
@@ -184,7 +208,16 @@ export const unsupportedParts = (
   messages: LLMRequest["messages"],
   capabilities: Model.Capabilities,
   provider?: string,
-) => replaceMedia(messages, (media) => unsupportedMedia(media.mime, media.name, capabilities, provider))
+) =>
+  replaceMedia(messages, (media) => {
+    const unsupported = unsupportedMedia(media.mime, media.name, capabilities, provider)
+    if (unsupported) return unsupported
+    if (provider !== "xai" || !media.mime.toLowerCase().startsWith("image/")) return
+    const data = media.data()
+    const size = data === undefined ? undefined : ImageDimensions.dimensions(data)
+    if (!size || (size.width >= 8 && size.height >= 8)) return
+    return `ERROR: Cannot read ${media.name ? `"${media.name}"` : "image"} (${size.width}x${size.height}; xAI requires both dimensions to be at least 8 pixels). The image was omitted. Pad or enlarge it and read it again before describing it.`
+  })
 
 export const boundImages = (messages: LLMRequest["messages"]) => {
   const isImage = (mime: string) => mime.toLowerCase().startsWith("image/")
