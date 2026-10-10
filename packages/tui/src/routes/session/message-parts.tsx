@@ -204,6 +204,7 @@ export function InlineToolRow(props: {
   denied?: boolean
   error?: string
   errorExpanded?: boolean
+  elapsed?: string
   complete: unknown
   pending: string
   failure?: string
@@ -214,16 +215,22 @@ export function InlineToolRow(props: {
   onMouseOut?: () => void
   onMouseUp?: (event: MouseEvent) => void
 }) {
+  const label = () => (
+    <>
+      {props.children}
+      <Show when={props.elapsed}>{(elapsed) => <span>{` · ${elapsed()}`}</span>}</Show>
+    </>
+  )
   return (
     <box paddingLeft={3} onMouseOver={props.onMouseOver} onMouseOut={props.onMouseOut} onMouseUp={props.onMouseUp}>
       <Switch>
         <Match when={props.spinner}>
-          <Show when={props.status} fallback={<Spinner color={props.color} children={props.children} />}>
+          <Show when={props.status} fallback={<Spinner color={props.color} children={label()} />}>
             {(status) => (
               <box flexDirection="row" gap={1}>
                 <Spinner color={props.color} />
                 <InlineToolLabel color={props.color} status={status()}>
-                  {props.children}
+                  {label()}
                 </InlineToolLabel>
               </box>
             )}
@@ -247,7 +254,7 @@ export function InlineToolRow(props: {
                     fg={props.failed ? props.errorColor : props.color}
                     attributes={props.denied ? TextAttributes.STRIKETHROUGH : undefined}
                   >
-                    {props.failed && !props.complete ? (props.failure ?? props.children) : props.children}
+                    {props.failed && !props.complete ? (props.failure ?? label()) : label()}
                   </text>
                 }
               >
@@ -257,7 +264,7 @@ export function InlineToolRow(props: {
                     denied={props.denied}
                     status={status()}
                   >
-                    {props.failed && !props.complete ? (props.failure ?? props.children) : props.children}
+                    {props.failed && !props.complete ? (props.failure ?? label()) : label()}
                   </InlineToolLabel>
                 )}
               </Show>

@@ -1,4 +1,11 @@
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, setSystemTime, test } from "bun:test"
+import { createStore } from "solid-js/store"
+import { createToolElapsed } from "../../../src/routes/session/tool-elapsed"
+import { ConfigProvider, resolve } from "../../../src/config"
+import { ThemeProvider } from "../../../src/context/theme"
+import { TestTuiContexts } from "../../fixture/tui-environment"
+import { emptyThemeSource } from "../../fixture/fixture"
+import { Locale } from "../../../src/util/locale"
 import { For } from "solid-js"
 import { testRender, type JSX } from "@opentui/solid"
 import {
@@ -19,6 +26,7 @@ let testSetup: Awaited<ReturnType<typeof testRender>> | undefined
 afterEach(() => {
   testSetup?.renderer.destroy()
   testSetup = undefined
+  setSystemTime()
 })
 
 type ToolFixture = { icon: string; label: string; error?: string }
@@ -124,6 +132,48 @@ async function renderFrame(component: () => JSX.Element, options: { width: numbe
 }
 
 describe("TUI inline tool wrapping", () => {
+  test("tool elapsed ticks from ran and freezes at completed", async () => {
+    setSystemTime(10_000)
+    const [state, setState] = createStore<{ completed?: number; running: boolean }>({ running: true })
+    const component = () => {
+      const elapsed = createToolElapsed(
+        () => ({ created: 1_000, ran: 7_000, completed: state.completed }),
+        () => state.running,
+      )
+      return (
+        <TestTuiContexts>
+          <ConfigProvider
+            config={resolve({}, { terminalSuspend: true })}
+            service={{ get: async () => ({}), update: async () => ({}) }}
+          >
+            <ThemeProvider mode="dark" source={emptyThemeSource}>
+              <InlineToolRow
+                icon="$"
+                complete={!state.running}
+                spinner={state.running}
+                pending="Shell"
+                elapsed={elapsed() === undefined ? undefined : Locale.duration(elapsed()!)}
+              >
+                Shell sleep 5
+              </InlineToolRow>
+            </ThemeProvider>
+          </ConfigProvider>
+        </TestTuiContexts>
+      )
+    }
+    expect(await renderFrame(component, { width: 72, height: 3 })).toContain("Shell sleep 5 · 3.0s")
+    setSystemTime(12_000)
+    await Bun.sleep(1100)
+    await testSetup!.renderOnce()
+    await testSetup!.renderOnce()
+    expect(testSetup!.captureCharFrame()).toContain("Shell sleep 5 · 5.0s")
+    setState({ running: false, completed: 12_500 })
+    setSystemTime(30_000)
+    await testSetup!.renderOnce()
+    await testSetup!.renderOnce()
+    expect(testSetup!.captureCharFrame()).toContain("Shell sleep 5 · 5.5s")
+  })
+
   test("falls back for unknown tool names", () => {
     expect(toolDisplay("shell")).toBe("shell")
     expect(toolDisplay("subagent")).toBe("subagent")
