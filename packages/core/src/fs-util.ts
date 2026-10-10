@@ -100,9 +100,9 @@ export namespace FSUtil {
       })
 
       const readJson = Effect.fn("FileSystem.readJson")(function* (path: string) {
-        const text = yield* fs.readFileString(path)
+        const bytes = yield* fs.readFile(path)
         return yield* Effect.try({
-          try: () => JSON.parse(text),
+          try: () => JSON.parse(decodeJsonBytes(bytes)),
           catch: (cause) => new FileSystemError({ method: "readJson", cause }),
         })
       })
@@ -271,4 +271,14 @@ export namespace FSUtil {
     const result = relative(parent, child)
     return result === "" || (!isAbsolute(result) && result !== ".." && !result.startsWith(`..${sep}`))
   }
+}
+
+// Windows shells commonly write redirected output as UTF-16 with a BOM
+// (PowerShell's `>` uses UTF-16LE), so accept BOM-prefixed JSON files.
+// TextDecoder's UTF-8 mode strips a UTF-8 BOM by default.
+function decodeJsonBytes(bytes: Uint8Array): string {
+  if (bytes[0] === 0xff && bytes[1] === 0xfe) return Buffer.from(bytes.subarray(2)).toString("utf16le")
+  // UTF-16BE: swap to little-endian, then decode.
+  if (bytes[0] === 0xfe && bytes[1] === 0xff) return Buffer.from(bytes.subarray(2)).swap16().toString("utf16le")
+  return new TextDecoder("utf-8").decode(bytes)
 }

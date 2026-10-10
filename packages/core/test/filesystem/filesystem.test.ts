@@ -125,6 +125,54 @@ describe("FSUtil", () => {
         expect(result).toHaveProperty("_tag", "FileSystemError")
       }),
     )
+
+    it(
+      "reads UTF-16LE JSON with BOM (Windows PowerShell redirection)",
+      Effect.gen(function* () {
+        const fs = yield* FSUtil.Service
+        const filesys = yield* FileSystem.FileSystem
+        const tmp = yield* filesys.makeTempDirectoryScoped()
+        const file = path.join(tmp, "utf16le.json")
+        const json = JSON.stringify({ name: "test", count: 42 })
+
+        yield* filesys.writeFile(file, Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(json, "utf16le")]))
+
+        expect(yield* fs.readJson(file)).toEqual({ name: "test", count: 42 })
+      }),
+    )
+
+    it(
+      "reads UTF-16BE JSON with BOM",
+      Effect.gen(function* () {
+        const fs = yield* FSUtil.Service
+        const filesys = yield* FileSystem.FileSystem
+        const tmp = yield* filesys.makeTempDirectoryScoped()
+        const file = path.join(tmp, "utf16be.json")
+        const json = JSON.stringify({ name: "test", count: 42 })
+
+        yield* filesys.writeFile(
+          file,
+          Buffer.concat([Buffer.from([0xfe, 0xff]), Buffer.from(json, "utf16le").swap16()]),
+        )
+
+        expect(yield* fs.readJson(file)).toEqual({ name: "test", count: 42 })
+      }),
+    )
+
+    it(
+      "reads UTF-8 JSON with BOM",
+      Effect.gen(function* () {
+        const fs = yield* FSUtil.Service
+        const filesys = yield* FileSystem.FileSystem
+        const tmp = yield* filesys.makeTempDirectoryScoped()
+        const file = path.join(tmp, "utf8bom.json")
+        const json = JSON.stringify({ name: "test", count: 42 })
+
+        yield* filesys.writeFile(file, Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(json, "utf8")]))
+
+        expect(yield* fs.readJson(file)).toEqual({ name: "test", count: 42 })
+      }),
+    )
   })
 
   describe("ensureDir", () => {
