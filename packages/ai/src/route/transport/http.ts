@@ -120,16 +120,17 @@ export const httpJson = <Body, Frame>(input: HttpJsonInput<Body, Frame>): HttpJs
       const http = RequestExecutor.responseHttp(response)
       const remaining = Duration.subtract(total, Duration.millis((yield* Clock.currentTimeMillis) - started))
       return {
-        frames: prepared.framing.frame(
-          RequestExecutor.responseStream(response).pipe(
-            Stream.timeoutOrElse({
-              duration: timeoutDuration(request.http?.chunkTimeout),
-              orElse: () => Stream.fail(timeout("read", "Timed out waiting for response data", http)),
-            }),
-            Stream.interruptWhen(
-              Effect.sleep(remaining).pipe(
-                Effect.andThen(Effect.fail(timeout("read", "Timed out waiting for the response to complete", http))),
-              ),
+        // Bound the stall on framed progress, not raw bytes. Framing drops SSE
+        // comment keepalives (`: keepalive`) and other empty events, so counting
+        // bytes would let a provider hold a stalled generation warm forever.
+        frames: prepared.framing.frame(RequestExecutor.responseStream(response)).pipe(
+          Stream.timeoutOrElse({
+            duration: timeoutDuration(request.http?.chunkTimeout),
+            orElse: () => Stream.fail(timeout("read", "Timed out waiting for response data", http)),
+          }),
+          Stream.interruptWhen(
+            Effect.sleep(remaining).pipe(
+              Effect.andThen(Effect.fail(timeout("read", "Timed out waiting for the response to complete", http))),
             ),
           ),
         ),
