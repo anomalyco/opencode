@@ -1,0 +1,23 @@
+import { expect, story } from "../../storybook/playwright/story"
+
+story("tool timing ticks while running and freezes when completed or failed", async ({ mount, page }, testInfo) => {
+  await page.clock.install()
+  const root = await mount("tool-elapsed--running-and-finished")
+  const shell = root.locator('[data-timeline-part-id="elapsed_shell"] [data-slot="tool-elapsed"]')
+  const generic = root.locator('[data-timeline-part-id="elapsed_generic"] [data-slot="tool-elapsed"]')
+  const failed = root.locator('[data-timeline-part-id="elapsed_error"] [data-slot="tool-elapsed"]')
+  await expect(shell).toHaveText("2s")
+  await expect(generic).toHaveText("2s")
+  await expect(failed).toHaveText("1s")
+  await expect(root.locator('[data-timeline-part-id="elapsed_pending"] [data-slot="tool-elapsed"]')).toHaveCount(0)
+  await page.clock.fastForward(2000)
+  await expect(shell).toHaveText("4s")
+  await expect(generic).toHaveText("4s")
+  await page.screenshot({ path: testInfo.outputPath("running.png") })
+  await root.getByRole("button", { name: "Complete tools" }).click()
+  await page.clock.fastForward(3000)
+  await expect(shell).toHaveText("4s")
+  await expect(generic).toHaveText("4s")
+  await expect(failed).toHaveText("1s")
+  await page.screenshot({ path: testInfo.outputPath("completed.png") })
+})

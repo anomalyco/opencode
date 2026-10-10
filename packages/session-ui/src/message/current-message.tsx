@@ -114,6 +114,7 @@ export function SessionAssistantContent(props: {
             metadata={currentToolMetadata(tool())}
             output={currentToolOutput(tool())}
             status={tool().state.status}
+            time={tool().time}
             error={currentToolError(tool())}
             defaultOpen={props.defaultOpen}
             open={props.toolOpen}
