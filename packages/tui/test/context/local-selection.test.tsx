@@ -85,6 +85,26 @@ test("recent models picked in another client do not change the open tab", async 
   expect(setup.local.model.current()?.modelID).toBe("first")
 })
 
+test("a new tab opened from a session inherits its agent, model and variant", async () => {
+  await using setup = await renderLocal({
+    models: [model("first", ["low", "high"]), model("second", ["low", "high"]), model("third", ["low", "high"])],
+    agents: [agent("build"), agent("plan")],
+    sessions: [session("ses_first", { providerID: "provider", id: "first", variant: "low" })],
+    preferences: { recent: [{ providerID: "provider", modelID: "second" }] },
+  })
+  await setup.data.session.sync("ses_first")
+  setup.route.navigate({ type: "session", sessionID: "ses_first" })
+  setup.local.agent.set("plan")
+  setup.local.model.set({ providerID: "provider", modelID: "third" })
+  setup.local.model.variant.set("high")
+  setup.route.navigate({ type: "home" })
+  await setup.waitFor(async () => {
+    await Bun.sleep(10)
+    return setup.local.agent.current()?.id === "plan"
+  })
+  expect(setup.local.model.selection()).toEqual({ providerID: "provider", modelID: "third", variant: "high" })
+})
+
 test("agent and model drafts are isolated across sessions and survive navigation", async () => {
   await using setup = await renderLocal({
     models: [model("first", ["low", "high"]), model("second", ["low", "high"])],
