@@ -44,7 +44,14 @@ export const Plugin = define({
           if (!resolved) continue
           yield* watch(resolved, "directory")
           const files = yield* fs
-            .scan("{*.md,**/SKILL.md}", { cwd: resolved, absolute: true, include: "file", symlink: true, dot: true })
+            .scan("{*.md,**/SKILL.md}", {
+              cwd: resolved,
+              absolute: true,
+              include: "file",
+              symlink: true,
+              dot: true,
+              ignore: SkillFile.SCAN_IGNORE,
+            })
             .pipe(Effect.orElseSucceed(() => [] as string[]))
           for (const filepath of files.toSorted()) {
             const content = yield* fs.readFileStringSafe(filepath).pipe(Effect.orElseSucceed(() => undefined))
