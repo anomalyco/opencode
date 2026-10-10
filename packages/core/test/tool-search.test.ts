@@ -397,4 +397,36 @@ describe("search tools", () => {
         ),
     ),
   )
+
+  it.live("omits absent optional fields from glob and grep permission metadata", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        const assertions: Permission.AssertInput[] = []
+        return Effect.promise(() => fs.writeFile(path.join(tmp.path, "target.txt"), "needle\n")).pipe(
+          Effect.andThen(
+            withTools(
+              tmp.path,
+              (registry) =>
+                Effect.gen(function* () {
+                  yield* executeTool(registry, call("glob", { pattern: "*.txt" }))
+                  yield* executeTool(registry, call("grep", { pattern: "needle" }))
+                  return
+                }),
+              assertions,
+            ),
+          ),
+          Effect.tap((result) =>
+            Effect.sync(() => {
+              expect(assertions.map((input) => input.action)).toEqual(["glob", "grep"])
+              for (const input of assertions) {
+                expect(Object.keys(input.metadata ?? {})).toEqual(["root"])
+              }
+            }),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
 })

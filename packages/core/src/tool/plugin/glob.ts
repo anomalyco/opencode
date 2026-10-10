@@ -71,9 +71,9 @@ export const Plugin = {
                 save: ["*"],
                 metadata: {
                   root: searchPath ?? ".",
-                  path: searchPath,
-                  hidden: input.hidden,
-                  limit: input.limit,
+                  ...(searchPath === undefined ? {} : { path: searchPath }),
+                  ...(input.hidden === undefined ? {} : { hidden: input.hidden }),
+                  ...(input.limit === undefined ? {} : { limit: input.limit }),
                 },
                 sessionID: context.sessionID,
                 agent: context.agent,
