@@ -1189,6 +1189,40 @@ test("marks a server needs_auth when a tool call is rejected with 401", async ()
   )
 })
 
+test("does not mark a server needs_auth when a tool call fails for a non-auth reason", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        let rejectWith500 = false
+        const server = yield* resourceServer({
+          respond: async (request) => {
+            if (request.method !== "POST") return undefined
+            const body = (await request.clone().json()) as { method?: string; id?: unknown }
+            if (body.method !== "tools/call" || !rejectWith500) return undefined
+            return new Response(
+              JSON.stringify({ jsonrpc: "2.0", id: body.id, error: { code: -32000, message: "internal error" } }),
+              { status: 500, headers: { "content-type": "application/json" } },
+            )
+          },
+        })
+        yield* Effect.gen(function* () {
+          const service = yield* Mcp.Service
+          yield* service.callTool({ server: "resources", name: "echo", args: { n: 1 } })
+          expect(server.state.toolCalls).toHaveLength(1)
+
+          rejectWith500 = true
+          const failure = yield* service
+            .callTool({ server: "resources", name: "echo", args: { n: 2 } })
+            .pipe(Effect.exit)
+          expect(Exit.isFailure(failure)).toBe(true)
+          const status = (yield* service.servers()).find((entry) => entry.name === "resources")?.status
+          expect(status?.status).not.toBe("needs_auth")
+        }).pipe(Effect.provide(resourceMcpLayer(server.url)))
+      }),
+    ),
+  )
+})
+
 describe.each([
   ["legacy", undefined],
   ["modern", "2026-07-28"],
