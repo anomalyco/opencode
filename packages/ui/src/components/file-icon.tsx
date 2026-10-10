@@ -4,7 +4,7 @@ import sprite from "./file-icons/sprite.svg"
 import type { IconName } from "./file-icons/types"
 
 export type FileIconProps = JSX.GSVGAttributes<SVGSVGElement> & {
-  node: { path: string; type: "file" | "directory" }
+  node: { path: string; type: "file" | "directory" | "symlink" }
   expanded?: boolean
   mono?: boolean
 }
@@ -572,7 +572,7 @@ const dottedSuffixesDesc = (name: string) => {
   return Array.from(out).sort((a, b) => b.length - a.length) // longest first
 }
 
-export function chooseIconName(path: string, type: "directory" | "file", expanded: boolean): IconName {
+export function chooseIconName(path: string, type: "directory" | "file" | "symlink", expanded: boolean): IconName {
   const base = basenameOf(path)
   const baseLower = base.toLowerCase()
 

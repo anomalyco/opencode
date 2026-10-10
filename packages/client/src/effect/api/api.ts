@@ -1905,7 +1905,7 @@ export type FileListOperation<E = never> = (input?: FileListInput) => Effect.Eff
 export type FileFindInput = {
   readonly location?: { readonly directory?: string | undefined } | undefined
   readonly query: string
-  readonly type?: "file" | "directory" | undefined
+  readonly type?: "file" | "directory" | "symlink" | undefined
   readonly limit?: number | undefined
 }
 export type FileFindOutput = { readonly location: Location.PublicRef; readonly data: ReadonlyArray<FileSystem.Entry> }

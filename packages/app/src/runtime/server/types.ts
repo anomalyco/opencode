@@ -9,7 +9,7 @@ export type FileNode = {
   name: string
   path: string
   absolute: string
-  type: "file" | "directory"
+  type: "file" | "directory" | "symlink"
   ignored: boolean
 }
 

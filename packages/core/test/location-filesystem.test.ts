@@ -68,6 +68,20 @@ describe("FileSystem", () => {
     ),
   )
 
+  it.live("lists symlinks as entries", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(() => fs.writeFile(path.join(directory, "file.txt"), "# Test"))
+        yield* Effect.promise(() => fs.symlink(path.join(directory, "file.txt"), path.join(directory, "link.txt")))
+        const filesystem = yield* FileSystem.Service
+        const entries = yield* filesystem.list()
+        const byPath = new Map(entries.map((entry) => [String(entry.path), entry.type]))
+        expect(byPath.get("file.txt")).toBe("file")
+        expect(byPath.get("link.txt")).toBe("symlink")
+      }).pipe(provide(directory)),
+    ),
+  )
+
   it.live("skips host canonicalization for workspace locations at boot", () =>
     withTmp((directory) =>
       Effect.gen(function* () {

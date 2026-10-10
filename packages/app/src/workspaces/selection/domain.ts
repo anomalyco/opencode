@@ -391,11 +391,13 @@ export async function listPickerDirectory(
 ) {
   const result = await sdk.api.file.list({ location, path: directory })
 
-  return result.data.map((entry) => {
-    const absolute = pickerAbsolutePath(entry.path, result.location.directory)
+  return result.data
+    .filter((entry) => entry.type === "file" || entry.type === "directory")
+    .map((entry) => {
+      const absolute = pickerAbsolutePath(entry.path, result.location.directory)
 
-    return { name: getFilename(absolute), type: entry.type, absolute }
-  })
+      return { name: getFilename(absolute), type: entry.type as "file" | "directory", absolute }
+    })
 }
 
 export function createDirectorySearch(args: {

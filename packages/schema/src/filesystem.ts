@@ -17,7 +17,7 @@ export const Event = { Changed, Definitions: inventory(Changed) }
 export interface Entry extends Schema.Schema.Type<typeof Entry> {}
 export const Entry = Schema.Struct({
   path: RelativePath,
-  type: Schema.Literals(["file", "directory"]),
+  type: Schema.Literals(["file", "directory", "symlink"]),
 }).annotate({ identifier: "FileSystem.Entry" })
 
 export interface Submatch extends Schema.Schema.Type<typeof Submatch> {}
@@ -38,7 +38,7 @@ export const Match = Schema.Struct({
 
 export class FindInput extends Schema.Class<FindInput>("FileSystem.FindInput")({
   query: Schema.String,
-  type: Schema.Literals(["file", "directory"]).pipe(optional),
+  type: Schema.Literals(["file", "directory", "symlink"]).pipe(optional),
   limit: PositiveInt.pipe(optional),
 }) {}
 

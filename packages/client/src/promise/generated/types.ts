@@ -320,7 +320,7 @@ export type PermissionSavedInfo = {
   time: { created: number; updated: number }
 }
 
-export type FileSystemEntry = { path: string; type: "file" | "directory" }
+export type FileSystemEntry = { path: string; type: "file" | "directory" | "symlink" }
 
 export type FileSystemWrite = { path: string }
 
@@ -6213,25 +6213,25 @@ export type FileFindInput = {
   readonly location?: {
     readonly location?: { readonly directory?: string | undefined } | undefined
     readonly query: string
-    readonly type?: "file" | "directory" | undefined
+    readonly type?: "file" | "directory" | "symlink" | undefined
     readonly limit?: number | undefined
   }["location"]
   readonly query: {
     readonly location?: { readonly directory?: string | undefined } | undefined
     readonly query: string
-    readonly type?: "file" | "directory" | undefined
+    readonly type?: "file" | "directory" | "symlink" | undefined
     readonly limit?: number | undefined
   }["query"]
   readonly type?: {
     readonly location?: { readonly directory?: string | undefined } | undefined
     readonly query: string
-    readonly type?: "file" | "directory" | undefined
+    readonly type?: "file" | "directory" | "symlink" | undefined
     readonly limit?: number | undefined
   }["type"]
   readonly limit?: {
     readonly location?: { readonly directory?: string | undefined } | undefined
     readonly query: string
-    readonly type?: "file" | "directory" | undefined
+    readonly type?: "file" | "directory" | "symlink" | undefined
     readonly limit?: number | undefined
   }["limit"]
 }

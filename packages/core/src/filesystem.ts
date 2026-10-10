@@ -191,7 +191,7 @@ const baseLayer = Layer.effect(
           Effect.map((items) =>
             items
               .flatMap((item) => {
-                if (item.type !== "file" && item.type !== "directory") return []
+                if (item.type === "other") return []
                 const absolute = path.join(directory, item.name)
                 const relative = path.relative(location.directory, absolute) || "."
                 return [

@@ -152,8 +152,9 @@ export interface FileNode {
    * What the entry is.
    * - `file`: a file.
    * - `directory`: a directory.
+   * - `symlink`: a symbolic link (to a file or directory).
    */
-  type: "file" | "directory"
+  type: "file" | "directory" | "symlink"
   /** Ignored by the workspace's ignore files. */
   ignored: boolean
 }
