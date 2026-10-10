@@ -1,5 +1,6 @@
 export * as WebFetchTool from "./webfetch.js"
 
+import type { Encoding } from "bun"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { ToolFailure } from "@opencode/ai"
 import { Duration, Effect, Schema } from "effect"
@@ -93,8 +94,21 @@ const isTextualMime = (mime: string) =>
   mime.endsWith("+xml") ||
   mime === "application/javascript" ||
   mime === "application/x-javascript"
+const charsetFrom = (contentType: string) => contentType.match(/charset\s*=\s*"?([^";\s]+)"?/i)?.[1]
+// SAFETY: the charset comes from an untrusted header and may name a label outside
+// the Encoding union; TextDecoder throws for those and the catch falls back to UTF-8.
+const decodeBody = (body: Uint8Array, contentType: string) => {
+  const charset = charsetFrom(contentType)
+  if (!charset) return new TextDecoder().decode(body)
+  try {
+    return new TextDecoder(charset.toLowerCase() as Encoding).decode(body)
+  } catch {
+    return new TextDecoder().decode(body)
+  }
+}
 const convert = (content: string, contentType: string, format: Format) => {
-  if (!contentType.includes("text/html")) return content
+  const mime = mimeFrom(contentType)
+  if (mime !== "text/html" && mime !== "application/xhtml+xml") return content
   if (format === "markdown") return convertHTMLToMarkdown(content)
   if (format === "text") return extractTextFromHTML(content)
   return content
@@ -148,7 +162,7 @@ export const Plugin = {
                   orElse: () => Effect.fail(new Error("Request timed out")),
                 }),
               )
-              const content = new TextDecoder().decode(body)
+              const content = decodeBody(body, contentType)
               const output = yield* Effect.try({
                 try: () => convert(content, contentType, input.format),
                 catch: (error) => error,
