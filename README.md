@@ -57,6 +57,7 @@ brew install anomalyco/tap/opencode # macOS and Linux (recommended, always up to
 brew install opencode              # macOS and Linux (official brew formula, updated less)
 sudo pacman -S opencode            # Arch Linux (Stable)
 paru -S opencode-bin               # Arch Linux (Latest from AUR)
+eselect repository enable guru && emerge dev-util/opencode-bin # Gentoo Linux
 mise use -g opencode               # Any OS
 nix run nixpkgs#opencode           # or github:anomalyco/opencode for latest dev branch
 ```
