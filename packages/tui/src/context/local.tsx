@@ -1,7 +1,7 @@
 import { createStore } from "solid-js/store"
 import { dedupeWith } from "effect/Array"
 import { createSimpleContext } from "./helper"
-import { batch, createMemo, onCleanup } from "solid-js"
+import { batch, createEffect, createMemo, on, onCleanup } from "solid-js"
 import { useEvent } from "./event"
 import path from "path"
 import { useTuiPaths } from "./runtime"
@@ -25,6 +25,7 @@ import { useData } from "./data"
 import { usePermission } from "./permission"
 import { useLocation } from "./location"
 import { parse } from "../util/model"
+import type { LocationRef } from "@opencode/client"
 
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
@@ -144,7 +145,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         variant: {},
       })
       const [selectionState, setSelectionState] = createStore<{
-        newSessionModelByLocationAgent: Record<string, ModelPreferenceModel | undefined>
+        newSessionModelByLocationAgent: Record<string, ModelSelection | undefined>
         selectionBySessionAgent: Record<string, Record<string, ModelSelection | undefined> | undefined>
       }>({
         newSessionModelByLocationAgent: {},
@@ -219,6 +220,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         if (route.data.type === "session") return sessionSelection(route.data.sessionID)
         const model = newSessionModel()
         if (!model) return
+        const current = agent.current()
+        const draft = current && selectionState.newSessionModelByLocationAgent[locationAgentKey(current.id)]
+        if (draft && draft === model) return withValidVariant(draft)
         return preferredSelection(model)
       })
 
@@ -228,8 +232,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         return { providerID: selection.providerID, modelID: selection.modelID }
       })
 
-      function locationAgentKey(agentID: string) {
-        const ref = location.ref ?? data.location.default()
+      function locationAgentKey(agentID: string, target?: LocationRef) {
+        const ref = target ?? location.ref ?? data.location.default()
         return `${JSON.stringify([ref.directory, ref.workspaceID])}:${agentID}`
       }
 
@@ -248,6 +252,15 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         )
         const info = models()?.find((item) => item.providerID === model.providerID && item.id === model.modelID)
         return { ...model, variant: info?.variants.some((item) => item.id === variant) ? variant : undefined }
+      }
+
+      function withValidVariant(selection: ModelSelection): ModelSelection {
+        const info = models()?.find((item) => item.providerID === selection.providerID && item.id === selection.modelID)
+        return {
+          ...selection,
+          variant:
+            !info || info.variants.some((variant) => variant.id === selection.variant) ? selection.variant : undefined,
+        }
       }
 
       function durableSelection(sessionID: string): ModelSelection | undefined {
@@ -316,9 +329,61 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         }
         const current = agent.current()
         if (!current) return false
-        setSelectionState("newSessionModelByLocationAgent", locationAgentKey(current.id), model)
+        const key = locationAgentKey(current.id)
+        const draft = selectionState.newSessionModelByLocationAgent[key]
+        setSelectionState(
+          "newSessionModelByLocationAgent",
+          key,
+          draft?.providerID === model.providerID && draft.modelID === model.modelID ? draft : preferredSelection(model),
+        )
         return true
       }
+
+      function carry(selection: ModelSelection) {
+        const current = agent.current()
+        if (!current || current.model || !isModelValid(selection)) return false
+        if (route.data.type === "session") {
+          setSessionDraft(route.data.sessionID, { ...selection })
+          return true
+        }
+        if (route.data.type !== "home") return false
+        const target = route.data.location ?? data.location.default()
+        setSelectionState("newSessionModelByLocationAgent", locationAgentKey(current.id, target), { ...selection })
+        return true
+      }
+
+      createEffect(() => {
+        if (!preferences.ready || models() === undefined) return
+        if (data.location.config.list(location.ref) === undefined) return
+        const current = agent.current()
+        if (!current || current.model || route.data.type !== "home") return
+        const key = locationAgentKey(current.id)
+        if (selectionState.newSessionModelByLocationAgent[key]) return
+        const fallback = fallbackModel()
+        if (fallback) setSelectionState("newSessionModelByLocationAgent", key, preferredSelection(fallback))
+      })
+
+      let lastSession: { agentID: string; selection: ModelSelection } | undefined
+      createEffect(() => {
+        if (route.data.type !== "session") return
+        const current = agent.current()
+        const selection = currentSelection()
+        lastSession = current && selection ? { agentID: current.id, selection: { ...selection } } : undefined
+      })
+      createEffect(
+        on(
+          () => (route.data.type === "home" ? route.data : undefined),
+          (home) => {
+            if (!home) return
+            const source = lastSession
+            lastSession = undefined
+            if (!source) return
+            agent.set(source.agentID)
+            carry(source.selection)
+          },
+          { defer: true },
+        ),
+      )
 
       function reconcileSessionSelection(sessionID: string) {
         const expected = pendingSelectionCommits.get(sessionID)
@@ -487,6 +552,13 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             if (!m) return
             if (route.data.type === "session") {
               setSessionDraft(route.data.sessionID, { ...m, variant: normalizeModelVariant(value) })
+            } else if (route.data.type === "home") {
+              const current = agent.current()
+              if (current)
+                setSelectionState("newSessionModelByLocationAgent", locationAgentKey(current.id), {
+                  ...m,
+                  variant: normalizeModelVariant(value),
+                })
             }
             setPreferences("variant", modelPreferenceKey(m), value ?? "default")
             void repository.saveVariant(m, value).catch(() => undefined)
