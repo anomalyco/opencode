@@ -162,7 +162,7 @@ const config = ({
     headers,
     http: body === undefined ? undefined : { body },
     providerOptions,
-    queryParams: queryParams === undefined ? undefined : { ...queryParams },
+    queryParams,
     useDeploymentBasedUrls,
   }
   if (baseURL !== undefined) return { ...common, baseURL }

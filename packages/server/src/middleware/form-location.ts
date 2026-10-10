@@ -3,8 +3,8 @@ import { LocationServiceMap } from "@opencode/core/location-services"
 import { Session } from "@opencode/core/session"
 import { LocationNotFoundError, InvalidRequestError, SessionNotFoundError } from "@opencode/protocol/errors"
 import { Effect, Layer } from "effect"
-import { HttpRouter, HttpServerRequest } from "effect/unstable/http"
-import { HttpApiMiddleware } from "effect/unstable/httpapi"
+import { HttpRouter, HttpServerRequest } from "effect/http"
+import { HttpApiMiddleware } from "effect/http-api"
 import { locationErrors, requestRef, sessionInfo, type LocationServices } from "../location"
 
 export class FormLocationMiddleware extends HttpApiMiddleware.Service<

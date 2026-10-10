@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect"
-import { Headers, HttpClientRequest } from "effect/unstable/http"
+import { Headers, HttpClientRequest } from "effect/http"
 import {
   ChoiceQuestion,
   EvaluationInput,

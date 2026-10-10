@@ -53,8 +53,8 @@ import {
   Stream,
 } from "effect"
 import { TestClock } from "effect/testing"
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
-import { ExitCode, makeHandle, ProcessId } from "effect/unstable/process/ChildProcessSpawner"
+import { ChildProcess, ChildProcessSpawner } from "effect/process"
+import { ExitCode, makeHandle, ProcessId } from "effect/process/ChildProcessSpawner"
 import { Image } from "@opencode/core/image"
 import { advance, drain } from "./lib/clock"
 import { testEffect } from "./lib/effect"

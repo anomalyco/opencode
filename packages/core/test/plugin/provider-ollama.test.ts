@@ -1,5 +1,7 @@
 import { Bus } from "@opencode/core/bus"
 import { Config } from "@opencode/core/config"
+import { Environment, makeFiles } from "@opencode/core/environment/index"
+import { EnvironmentUnavailable } from "@opencode/core/environment/unavailable"
 import { Integration } from "@opencode/core/integration"
 import { Model } from "@opencode/core/model"
 import { Plugin } from "@opencode/core/plugin"
@@ -38,6 +40,25 @@ function eventually<A>(
 }
 
 describe("OllamaPlugin", () => {
+  it.live("skips unconfigured default local discovery when the location has no local execution plane", () =>
+    Effect.gen(function* () {
+      const plugin = yield* Plugin.Service
+      const host = yield* PluginHost.make(plugin)
+      const providers = yield* Provider.Service
+      yield* OllamaPlugin.effect(host).pipe(
+        Effect.provideService(
+          Environment.Service,
+          Environment.Service.of({
+            files: makeFiles({ spawner: EnvironmentUnavailable.spawner }),
+            spawner: EnvironmentUnavailable.spawner,
+          }),
+        ),
+      )
+      yield* Effect.promise(() => Bun.sleep(20))
+      expect(yield* providers.get(Provider.ID.make("ollama"))).toBeUndefined()
+    }),
+  )
+
   it.live("discovers local completion models and native metadata", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => {
