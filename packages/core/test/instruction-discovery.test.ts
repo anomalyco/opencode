@@ -276,6 +276,40 @@ describe("ConfigInstructionPlugin.Plugin", () => {
     ),
   )
 
+  it.live("skips directories that match the instruction file name", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) => {
+        const home = path.join(tmp.path, "home")
+        const project = path.join(home, "code", "repo")
+        const projectFile = path.join(project, "AGENTS.md")
+        return Effect.gen(function* () {
+          yield* Effect.promise(() => fs.mkdir(path.join(home, "code", "AGENTS.md"), { recursive: true }))
+          yield* Effect.promise(() => fs.mkdir(path.join(tmp.path, "global", "AGENTS.md"), { recursive: true }))
+          yield* Effect.promise(() => fs.mkdir(project, { recursive: true }))
+          yield* Effect.promise(() => fs.writeFile(projectFile, "project"))
+          const discovery = yield* start()
+          expect((yield* readInitial(yield* discovery.load())).text).toBe(`Instructions from: ${projectFile}\nproject`)
+        }).pipe(
+          Effect.provide(
+            instructionLayer({
+              config: path.join(tmp.path, "global"),
+              home,
+              locationServiceLayer: Layer.succeed(
+                Location.Service,
+                Location.Service.of(
+                  location({ directory: AbsolutePath.make(project) }, { projectDirectory: AbsolutePath.make(project) }),
+                ),
+              ),
+            }),
+          ),
+        )
+      }),
+    ),
+  )
+
   it.live("discovers a newly created instruction file above the project root", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
