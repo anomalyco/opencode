@@ -24,6 +24,7 @@ import { findModelCatalogEntry, loadModelCatalog, type ModelCatalog } from "./mo
 import { geoMapHeight, geoMapWidth, worldBorderPath, worldCountryMarkers, worldCountryPaths } from "./geo-map"
 import { SectionHeading } from "./section-heading"
 import { setStatsPageCacheHeaders } from "./stats-cache"
+import { formatTrillionTokens } from "./token-format"
 import { ComparisonCardsSection, uniqueComparisonPairs, type ComparisonModelRef } from "./compare-cards"
 import {
   applyThemePreference,
@@ -703,7 +704,7 @@ function usageTotal(point: UsagePoint) {
 }
 
 function formatTokens(value: number) {
-  if (value >= 1) return `${value.toFixed(value >= 10 ? 0 : 1)}T`
+  if (value >= 1) return formatTrillionTokens(value)
   return `${Math.round(value * 1000)}B`
 }
 
@@ -832,7 +833,7 @@ function getProviderIconId(author: string) {
 }
 
 function formatBillions(value: number) {
-  if (value >= 1000) return `${(value / 1000).toFixed(value >= 10000 ? 0 : 1)}T`
+  if (value >= 1000) return formatTrillionTokens(value / 1000)
   return `${value}B`
 }
 
@@ -1334,7 +1335,7 @@ function formatTrillions(value: number) {
   if (value === 0) return "0"
   if (value < 0.001) return `${Number((value * 1_000_000).toFixed(value >= 0.00001 ? 0 : 1))}M`
   if (value < 1) return `${Number((value * 1_000).toFixed(value >= 0.01 ? 0 : 1))}B`
-  return `${value.toFixed(value >= 10 ? 0 : 1)}T`
+  return formatTrillionTokens(value)
 }
 
 function formatMarketDate(day: MarketDay | undefined, fallback: string) {
