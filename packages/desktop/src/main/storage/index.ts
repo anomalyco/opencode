@@ -25,6 +25,9 @@ export const layer = Layer.effect(
       runFork(Effect.logError("storage flush failed", { error })),
     )
 
+    // The import is a one-time migration of files the renderer no longer writes. The renderer's
+    // first request arrives over the IPC port, which is handed out after the layers, so the import
+    // runs in the background instead of holding the layers (and the port) back.
     yield* importLegacyStores(storage.db, userData).pipe(
       Effect.tap((result) =>
         result.removed.length === 0
@@ -32,6 +35,7 @@ export const layer = Layer.effect(
           : Effect.logInfo("imported legacy store files", { imported: result.imported, files: result.removed }),
       ),
       Effect.catch((error) => Effect.logWarning("failed to import legacy store files", { error })),
+      Effect.forkScoped,
     )
     const wire = (_event: Electron.Event | undefined, win: BrowserWindow) => win.on("session-end", storage.flush)
     app.on("before-quit", storage.flush)
