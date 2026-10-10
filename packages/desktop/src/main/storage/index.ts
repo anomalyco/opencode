@@ -1,7 +1,7 @@
 export * as DesktopStorage from "./index"
 
 import { app, BrowserWindow } from "electron"
-import { Context, Effect, Layer, Path } from "effect"
+import { Context, Deferred, Effect, Layer, Path } from "effect"
 import { marks } from "../lifecycle/marks"
 import { openDatabase } from "./database"
 import { setStorageSnapshotProvider } from "./snapshot"
@@ -10,7 +10,7 @@ import { importLegacyStores } from "./legacy"
 import { createStateStore } from "./state"
 import { readEnableState } from "../extension/enable-state"
 
-export type Interface = ReturnType<typeof make>
+export type Interface = ReturnType<typeof make> & { readonly ready: Effect.Effect<void> }
 
 export class Service extends Context.Service<Service, Interface>()("opencode/desktop/DesktopStorage") {}
 
@@ -19,6 +19,7 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const path = yield* Path.Path
     const runFork = Effect.runForkWith(yield* Effect.context())
+    const runPromise = Effect.runPromiseWith(yield* Effect.context())
     const userData = app.getPath("userData")
 
     const storage = make(path.join(userData, "drafts.sqlite"), (error) =>
@@ -27,7 +28,11 @@ export const layer = Layer.effect(
 
     // The import is a one-time migration of files the renderer no longer writes. The renderer's
     // first request arrives over the IPC port, which is handed out after the layers, so the import
-    // runs in the background instead of holding the layers (and the port) back.
+    // runs in the background instead of holding the layers (and the port) back. Every read and
+    // write of the state table waits on `ready`: a snapshot or StorageItems answered first would
+    // serve an empty namespace the renderer keeps for its lifetime, and a write before the
+    // import's transaction would be kept by onConflictDoNothing while the import deletes the file.
+    const ready = yield* Deferred.make<void>()
     yield* importLegacyStores(storage.db, userData).pipe(
       Effect.tap((result) =>
         result.removed.length === 0
@@ -35,6 +40,7 @@ export const layer = Layer.effect(
           : Effect.logInfo("imported legacy store files", { imported: result.imported, files: result.removed }),
       ),
       Effect.catch((error) => Effect.logWarning("failed to import legacy store files", { error })),
+      Effect.ensuring(Deferred.succeed(ready, undefined)),
       Effect.forkScoped,
     )
     const wire = (_event: Electron.Event | undefined, win: BrowserWindow) => win.on("session-end", storage.flush)
@@ -49,13 +55,17 @@ export const layer = Layer.effect(
         storage.close()
       }),
     )
-    setStorageSnapshotProvider((names) => ({
-      storage: Object.fromEntries(names.map((name) => [name, storage.state.items(name)])),
-      extensions: readEnableState(storage.db.$client),
-    }))
+    setStorageSnapshotProvider(async (names) => {
+      await runPromise(Deferred.await(ready))
+
+      return {
+        storage: Object.fromEntries(names.map((name) => [name, storage.state.items(name)])),
+        extensions: readEnableState(storage.db.$client),
+      }
+    })
     marks.storage = Date.now()
 
-    return Service.of(storage)
+    return Service.of({ ...storage, ready: Deferred.await(ready) })
   }),
 )
 
