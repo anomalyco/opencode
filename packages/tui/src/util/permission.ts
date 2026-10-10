@@ -186,3 +186,23 @@ function dict(value: unknown): Dict {
 function text(value: unknown) {
   return typeof value === "string" ? value : ""
 }
+
+/**
+ * Fits presentation lines into a collapsed prompt: splits embedded newlines, wraps each line at `width`
+ * columns and, if the result needs more than `maxRows` rows, keeps the first `maxRows - 1` and reports how
+ * many rows are hidden, so the prompt can say so instead of silently clipping the command.
+ */
+export function collapsePermissionLines(lines: readonly string[], width: number, maxRows: number) {
+  const columns = Math.max(10, Math.floor(width))
+  const rows = lines.flatMap((line) =>
+    line.split("\n").flatMap((part) => {
+      if (part.length <= columns) return [part]
+      const chunks: string[] = []
+      for (let index = 0; index < part.length; index += columns) chunks.push(part.slice(index, index + columns))
+      return chunks
+    }),
+  )
+  if (rows.length <= maxRows) return { lines: [...lines], hidden: 0 }
+  const shown = Math.max(1, maxRows - 1)
+  return { lines: rows.slice(0, shown), hidden: rows.length - shown }
+}
