@@ -210,7 +210,7 @@ const segment = (value: Schema.Schema.Type<typeof Segment>): TranscriptionSegmen
   speaker: value.speaker,
 })
 
-const onEvent = Effect.fn("OpenAITranscription.onEvent")(function* (state: State, frame: string) {
+const onEvent = Effect.fnUntraced(function* (state: State, frame: string) {
   if (!EVENT_TYPES.has((yield* decodeEventType(frame)).type)) return [state, []] as const
   const event = yield* decodeEvent(frame)
   if (event.type === "error")

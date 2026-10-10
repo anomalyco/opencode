@@ -7,67 +7,6 @@ const configuration = (provider: string, message: string) =>
   expect.objectContaining({ _tag: "ProviderConfiguration", provider, message })
 
 describe("provider package entrypoints", () => {
-  test("semantic API aliases expose the same contract", async () => {
-    const modules = await Promise.all([
-      import("@opencode/ai/providers/openai"),
-      import("@opencode/ai/providers/openai/responses"),
-      import("@opencode/ai/providers/openai/chat"),
-      import("@opencode/ai/providers/anthropic"),
-      import("@opencode/ai/providers/anthropic-compatible"),
-      import("@opencode/ai/providers/openai-compatible"),
-      import("@opencode/ai/providers/openai-compatible/responses"),
-      import("@opencode/ai/providers/amazon-bedrock"),
-      import("@opencode/ai/providers/azure"),
-      import("@opencode/ai/providers/azure/responses"),
-      import("@opencode/ai/providers/azure/chat"),
-      import("@opencode/ai/providers/google"),
-      import("@opencode/ai/providers/google-vertex"),
-      import("@opencode/ai/providers/google-vertex/gemini"),
-      import("@opencode/ai/providers/google-vertex/chat"),
-      import("@opencode/ai/providers/google-vertex/responses"),
-      import("@opencode/ai/providers/google-vertex/messages"),
-      import("@opencode/ai/providers/openrouter"),
-      import("@opencode/ai/providers/xai"),
-      import("@opencode/ai/providers/amazon-bedrock/mantle"),
-      import("@opencode/ai/providers/amazon-bedrock/mantle/chat"),
-      import("@opencode/ai/providers/amazon-bedrock/mantle/responses"),
-      import("@opencode/ai/providers/togetherai"),
-      import("@opencode/ai/providers/cerebras"),
-      import("@opencode/ai/providers/deepinfra"),
-      import("@opencode/ai/providers/groq"),
-      import("@opencode/ai/providers/baseten"),
-      import("@opencode/ai/providers/deepseek"),
-      import("@opencode/ai/providers/fireworks"),
-      import("@opencode/ai/providers/cloudflare-ai-gateway"),
-      import("@opencode/ai/providers/cloudflare-workers-ai"),
-      import("@opencode/ai/providers/minimax"),
-      import("@opencode/ai/providers/minimax/messages"),
-      import("@opencode/ai/providers/minimax/chat"),
-      import("@opencode/ai/providers/minimax/responses"),
-      import("@opencode/ai/providers/moonshot"),
-      import("@opencode/ai/providers/moonshot/chat"),
-      import("@opencode/ai/providers/moonshot/messages"),
-      import("@opencode/ai/providers/moonshot/responses"),
-      import("@opencode/ai/providers/zai"),
-      import("@opencode/ai/providers/zai/chat"),
-      import("@opencode/ai/providers/zai-coding-plan"),
-      import("@opencode/ai/providers/zai-coding-plan/chat"),
-      import("@opencode/ai/providers/zai-coding-plan/messages"),
-      import("@opencode/ai/providers/zai-coding-plan/responses"),
-      import("@opencode/ai/providers/alibaba"),
-      import("@opencode/ai/providers/alibaba/chat"),
-      import("@opencode/ai/providers/alibaba/messages"),
-      import("@opencode/ai/providers/alibaba/responses"),
-    ])
-
-    for (const module of modules) expect(module.model).toBeFunction()
-    expect(modules[0].model).toBe(modules[1].model)
-    expect(modules[8].model).toBe(modules[9].model)
-    expect(modules[12].model).toBe(modules[13].model)
-    expect(modules[19].model).toBe(modules[21].model)
-    expect(modules[19].model).not.toBe(modules[20].model)
-  })
-
   test("maps Alibaba API entrypoints onto explicit regional routes", async () => {
     const modules = await Promise.all([
       import("@opencode/ai/providers/alibaba"),
@@ -75,7 +14,6 @@ describe("provider package entrypoints", () => {
       import("@opencode/ai/providers/alibaba/messages"),
       import("@opencode/ai/providers/alibaba/responses"),
     ])
-    expect(modules[0].model).toBe(modules[1].model)
     const settings = {
       region: "eu-central-1",
       workspaceID: "llm-fixture",
@@ -103,7 +41,6 @@ describe("provider package entrypoints", () => {
       import("@opencode/ai/providers/moonshot/messages"),
       import("@opencode/ai/providers/moonshot/responses"),
     ])
-    expect(modules[0].model).toBe(modules[1].model)
     const settings = {
       apiKey: "fixture",
       baseURL: "https://gateway.example/v1",
@@ -147,7 +84,6 @@ describe("provider package entrypoints", () => {
       import("@opencode/ai/providers/minimax/chat"),
       import("@opencode/ai/providers/minimax/responses"),
     ])
-    expect(modules[0].model).toBe(modules[1].model)
     const settings = {
       apiKey: "fixture",
       baseURL: "https://gateway.example/v1",
@@ -174,8 +110,6 @@ describe("provider package entrypoints", () => {
       import("@opencode/ai/providers/zai-coding-plan/messages"),
       import("@opencode/ai/providers/zai-coding-plan/responses"),
     ])
-    expect(modules[0].model).toBe(modules[1].model)
-    expect(modules[2].model).toBe(modules[3].model)
     const routes = [
       "zai-chat",
       "zai-chat",
@@ -430,6 +364,7 @@ describe("provider package entrypoints", () => {
 
   test("maps Google package settings onto the Gemini model", async () => {
     const Google = await import("@opencode/ai/providers/google")
+    const GoogleInteractions = await import("@opencode/ai/providers/google/interactions")
     const selected = Google.model("gemini-2.5-flash", {
       apiKey: "fixture",
       baseURL: "https://generativelanguage.test/v1beta",
@@ -443,11 +378,20 @@ describe("provider package entrypoints", () => {
     expect(selected.route.defaults.headers).toEqual({ "x-application": "opencode" })
     expect(selected.route.defaults.http?.body).toEqual({ safetySettings: [] })
     expect(selected.route.defaults.providerOptions).toEqual({ thinkingConfig: { thinkingBudget: 1_024 } })
+    const interactions = GoogleInteractions.model("gemini-3.8-flash", {
+      apiKey: "fixture",
+      baseURL: "https://generativelanguage.test/v1beta",
+      thinkingLevel: "low",
+      store: true,
+    })
+    expect(interactions.route.id).toBe("google-interactions")
+    expect(interactions.route.endpoint.baseURL).toBe("https://generativelanguage.test/v1beta")
+    expect(interactions.route.defaults.providerOptions).toEqual({ thinkingLevel: "low", store: true })
+    expect(Google.configure().interactions("gemini-3.8-flash").route.protocol).toBe("google-interactions")
   })
 
   test("selects Vertex entrypoints with the same model contract", async () => {
     const GoogleVertex = await import("@opencode/ai/providers/google-vertex")
-    const GoogleVertexGemini = await import("@opencode/ai/providers/google-vertex/gemini")
     const GoogleVertexChat = await import("@opencode/ai/providers/google-vertex/chat")
     const GoogleVertexResponses = await import("@opencode/ai/providers/google-vertex/responses")
     const GoogleVertexMessages = await import("@opencode/ai/providers/google-vertex/messages")
@@ -472,7 +416,6 @@ describe("provider package entrypoints", () => {
       project: "vertex-project",
     })
 
-    expect(GoogleVertexGemini.model).toBe(GoogleVertex.model)
     expect(gemini.route.id).toBe("google-vertex-gemini")
     expect(gemini.route.protocol).toBe("gemini")
     expect(gemini.route.endpoint.baseURL).toBe("https://aiplatform.googleapis.com/v1/publishers/google")
@@ -506,6 +449,29 @@ describe("provider package entrypoints", () => {
       store: false,
       include: ["reasoning.encrypted_content"],
     })
+  })
+
+  test("maps Vertex Interactions package settings onto the shared protocol", async () => {
+    const GoogleVertexInteractions = await import("@opencode/ai/providers/google-vertex/interactions")
+    const selected = GoogleVertexInteractions.model("gemini-3.8-flash", {
+      accessToken: "fixture",
+      project: "vertex-project",
+      location: "global",
+      headers: { "x-application": "opencode" },
+      body: { generation_config: { temperature: 0.5 } },
+      thinkingLevel: "low",
+      store: false,
+    })
+    expect(selected.route.id).toBe("google-vertex-interactions")
+    expect(selected.route.protocol).toBe("google-interactions")
+    expect(selected.route.endpoint).toMatchObject({
+      baseURL: "https://aiplatform.googleapis.com/v1beta1/projects/vertex-project/locations/global",
+      path: "/interactions",
+      query: { alt: "sse" },
+    })
+    expect(selected.route.defaults.headers).toEqual({ "x-application": "opencode" })
+    expect(selected.route.defaults.http?.body).toEqual({ generation_config: { temperature: 0.5 } })
+    expect(selected.route.defaults.providerOptions).toEqual({ thinkingLevel: "low", store: false })
   })
 
   test("rejects conflicting Vertex auth settings at runtime", async () => {

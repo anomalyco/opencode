@@ -323,9 +323,6 @@ export const dict = {
   "dialog.server.edit.title": "Sunting server",
 
   "dialog.server.menu.edit": "Sunting",
-  "dialog.server.menu.default": "Tetapkan sebagai bawaan",
-  "dialog.server.menu.defaultRemove": "Hapus bawaan",
-  "dialog.server.status.default": "Bawaan",
 
   "dialog.project.edit.title": "Sunting proyek",
   "dialog.project.edit.icon": "Ikon",
@@ -334,11 +331,6 @@ export const dict = {
   "dialog.project.edit.color.select": "Pilih warna {{color}}",
   "dialog.project.edit.worktree.startup": "Skrip awal ruang kerja",
   "dialog.project.edit.worktree.startup.placeholder": "mis. bun install",
-
-  "dialog.releaseNotes.action.getStarted": "Mulai",
-  "dialog.releaseNotes.action.next": "Berikutnya",
-  "dialog.releaseNotes.action.hideFuture": "Jangan tampilkan ini di masa depan",
-  "dialog.releaseNotes.media.alt": "Pratinjau rilis",
 
   "dialog.usageExceeded.dontShowAgain": "Jangan tampilkan lagi",
 
@@ -787,7 +779,6 @@ export const dict = {
   "session.view.select": "Tampilan sesi",
   "session.background.moveRunning": "Pindah ke latar belakang",
   "session.timeline.working": "Bekerja",
-  "session.review.wrapLines": "Bungkus garis",
   "session.websearch.title": "Pencarian web pihak ketiga",
   "session.websearch.description": "Pilih agen penyedia pencarian yang digunakan untuk mencari web",
   "session.websearch.provider": "Penyedia pencarian",
@@ -846,8 +837,6 @@ export const dict = {
   "settings.timeline.category.subagents": "Subagen",
   "settings.timeline.category.notices": "Pemberitahuan",
   "settings.timeline.category.tools": "Alat lainnya",
-  "settings.general.row.mobileDiffWrap.description":
-    "Bungkus garis panjang dalam perbedaan seluler alih-alih menggulir secara horizontal",
 
   "provider.connect.error.unsupportedFields": "Formulir autentikasi ini berisi bidang yang tidak didukung",
   "settings.about.writtenByNames": "Ditulis oleh {{names}}",
@@ -870,7 +859,6 @@ export const dict = {
   "server.connect.button": "Sambungkan",
   "server.connect.address.invalid": "Masukkan alamat server HTTP atau HTTPS yang valid.",
   "server.connect.failed": "Tidak dapat terhubung. Periksa alamat server dan kata sandi, lalu coba lagi.",
-  "server.connect.pair.description": "Jalankan perintah ini di komputer Anda untuk mendapatkan detail koneksi Anda.",
   "server.connect.scan": "Pindai kode QR",
   "server.connect.scan.description": "Arahkan kamera Anda ke kode QR yang ditampilkan oleh opencode pair.",
   "server.connect.scan.invalid": "Ini bukan kode pemasangan OpenCode. Pindai kode yang ditampilkan oleh opencode pair.",
@@ -878,7 +866,6 @@ export const dict = {
   "server.connect.camera.starting": "Membuka kamera…",
   "server.connect.mixedContent":
     "Tidak dapat terhubung ke server HTTP ini dari halaman HTTPS. Gunakan alamat server HTTPS sebagai gantinya.",
-  "server.connect.camera.insecure": "Pemindaian QR memerlukan halaman ini dibuka melalui HTTPS atau di localhost.",
   "server.connect.camera.unavailable":
     "Tidak ada kamera yang tersedia untuk peramban ini. Masukkan detail koneksi Anda secara manual.",
   "server.connect.camera.error":

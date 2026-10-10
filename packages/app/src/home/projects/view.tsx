@@ -32,6 +32,12 @@ import "./view.css"
 const HOME_PROJECT_NAV_LABEL = "min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap"
 
 const serverContextMenuID = (server: ServerConnection.Any) => `server:${ServerConnection.key(server)}`
+
+// Extension servers ask for sign-in themselves; an HTTP server that rejects its saved credentials needs a new
+// pairing link or password.
+const signInRequired = (server: ServerConnection.Any, health: ServerHealth | undefined) =>
+  (server.type === "extension" && server.authenticationRequired) || (server.type === "http" && !!health?.unauthorized)
+
 const projectContextMenuID = (server: ServerConnection.Any, directory: string) =>
   `project:${ServerConnection.key(server)}:${directory}`
 
@@ -46,8 +52,6 @@ export type HomeProjectsViewProps = {
   serverHealth: (server: ServerConnection.Any) => ServerHealth | undefined
   projectsForServer: (server: ServerConnection.Any) => LocalProject[]
   collapsed: (server: ServerConnection.Any) => boolean
-  canDefaultServer: boolean
-  defaultServerKey: ServerConnection.Key | null | undefined
   canRevealProject: (server: ServerConnection.Any) => boolean
   unseenCount: (server: ServerConnection.Any, project: LocalProject) => number
   onWheel: (event: WheelEvent) => void
@@ -56,7 +60,6 @@ export type HomeProjectsViewProps = {
   onAuthenticateServer?: (server: ServerConnection.Any) => void
   onToggleCollapsed: (server: ServerConnection.Any) => void
   onEditServer: (server: ServerConnection.Http) => void
-  onSetDefaultServer: (server: ServerConnection.Any | undefined) => void
   canRemoveServer: (server: ServerConnection.Any) => boolean
   onRemoveServer: (server: ServerConnection.Any) => void
   canHideServer: (server: ServerConnection.Any) => boolean
@@ -78,9 +81,11 @@ export type HomeProjectsViewProps = {
 export function HomeProjectsView(props: HomeProjectsViewProps) {
   const [state, setState] = createStore({ open: false })
   const selected = createMemo(() => props.projects.find((project) => project.worktree === props.selection.directory))
+
   const server = createMemo(() =>
     props.servers.find((server) => ServerConnection.key(server) === props.selection.server),
   )
+
   return (
     <Show when={props.dropdown} fallback={<HomeProjectsPanel {...props} />}>
       <Popover
@@ -155,11 +160,13 @@ export function HomeProjectsView(props: HomeProjectsViewProps) {
 }
 
 function HomeProjectsPanel(props: HomeProjectsViewProps) {
-  const [contextMenu, setContextMenu] = createStore({ open: undefined as string | undefined })
+  const [contextMenu, setContextMenu] = createStore<{ open: string | undefined }>({ open: undefined })
+
   const contextMenuProps = {
     contextMenuOpen: (id: string) => contextMenu.open === id,
     onSetContextMenuOpen: (id: string, open: boolean) => setContextMenu("open", open ? id : undefined),
   }
+
   return (
     <aside
       class={
@@ -211,7 +218,9 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
           when={
             props.servers.length > 1 ||
             props.servers.some(
-              (server) => server.type === "extension" && (server.authenticationRequired || server.connecting),
+              (server) =>
+                signInRequired(server, props.serverHealth(server)) ||
+                (server.type === "extension" && server.connecting),
             )
           }
           fallback={
@@ -248,8 +257,9 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
                 const healthy = () => !!props.serverHealth(item)?.healthy
                 const hasProjects = () => projects().length > 0
                 const collapsed = () => props.collapsed(item)
-                const authentication = () => item.type === "extension" && item.authenticationRequired
+                const authentication = () => signInRequired(item, props.serverHealth(item))
                 const connecting = () => item.type === "extension" && item.connecting
+
                 return (
                   <div class="flex min-w-0 flex-col gap-1">
                     <HomeServerRow
@@ -334,12 +344,9 @@ function HomeServerRow(props: {
   language: HomeProjectsViewProps["language"]
   projectsForServer: HomeProjectsViewProps["projectsForServer"]
   contextMenuOpen: HomeProjectsContextMenuProps["contextMenuOpen"]
-  canDefaultServer: HomeProjectsViewProps["canDefaultServer"]
-  defaultServerKey: HomeProjectsViewProps["defaultServerKey"]
   onFocusServer: HomeProjectsViewProps["onFocusServer"]
   onToggleCollapsed: HomeProjectsViewProps["onToggleCollapsed"]
   onEditServer: HomeProjectsViewProps["onEditServer"]
-  onSetDefaultServer: HomeProjectsViewProps["onSetDefaultServer"]
   canRemoveServer: HomeProjectsViewProps["canRemoveServer"]
   onRemoveServer: HomeProjectsViewProps["onRemoveServer"]
   canHideServer: HomeProjectsViewProps["canHideServer"]
@@ -352,14 +359,16 @@ function HomeServerRow(props: {
   health: ServerHealth | undefined
 }) {
   const healthy = () => !!props.health?.healthy
-  const authentication = () => props.server.type === "extension" && props.server.authenticationRequired
+  const authentication = () => signInRequired(props.server, props.health)
   const incompatible = () => !!props.health?.incompatible
   const canToggle = () => healthy() && props.projectsForServer(props.server).length > 0
   const contextMenuID = () => serverContextMenuID(props.server)
   onCleanup(() => {
     const id = contextMenuID()
+
     if (props.contextMenuOpen(id)) props.onSetContextMenuOpen(id, false)
   })
+
   return (
     <Tooltip
       appearance="standard"
@@ -402,6 +411,7 @@ function HomeServerRow(props: {
             onClick={(event) => {
               event.preventDefault()
               event.stopPropagation()
+
               if (!canToggle()) return
               props.onToggleCollapsed(props.server)
             }}
@@ -454,13 +464,9 @@ function HomeServerRow(props: {
           <ServerRowMenuView
             server={props.server}
             labels={serverMenuLabels(props.language)}
-            canDefault={props.canDefaultServer}
-            isDefault={props.defaultServerKey === ServerConnection.key(props.server)}
             canRemove={props.canRemoveServer(props.server)}
             canHide={props.canHideServer(props.server)}
             onEdit={props.onEditServer}
-            onSetDefault={() => props.onSetDefaultServer(props.server)}
-            onRemoveDefault={() => props.onSetDefaultServer(undefined)}
             onRemove={() => props.onRemoveServer(props.server)}
             onHide={() => props.onHideServer(props.server)}
             open={props.contextMenuOpen(contextMenuID())}
@@ -517,8 +523,11 @@ function HomeProjectList(props: HomeProjectListProps) {
       ]}
       onDragEnd={(event) => {
         const source = event.operation.source
+
         if (event.canceled || !isSortable(source)) return
+
         if (source.initialIndex !== source.index) props.onMoveProject(props.server, source.id.toString(), source.index)
+
         if (props.selection.server !== ServerConnection.key(props.server))
           props.onSelectProject(props.server, source.id.toString())
       }}
@@ -544,7 +553,9 @@ function HomeProjectSlot(
   },
 ) {
   const initial = props.items.find((item) => item.worktree === props.worktree)
+
   if (!initial) return
+
   const project = createMemo<LocalProject>(
     (previous) => props.items.find((item) => item.worktree === props.worktree) ?? previous,
     initial,
@@ -572,6 +583,7 @@ function HomeProjectEmpty(
   },
 ) {
   const unreachable = () => props.serverHealth(props.server)?.healthy === false
+
   return (
     <div class="flex min-w-0 flex-col gap-1">
       <HomeProjectNavButton
@@ -603,12 +615,16 @@ function HomeRecentlyClosedRow(
   },
 ) {
   const unreachable = () => props.serverHealth(props.server)?.healthy === false
+
   const path = () => {
     const home = props.homedir
     const worktree = props.project.worktree
+
     if (home && (worktree === home || worktree.startsWith(`${home}/`))) return `~${worktree.slice(home.length)}`
+
     return worktree
   }
+
   return (
     <Tooltip placement="right" value={path()}>
       <HomeProjectNavButton
@@ -638,6 +654,7 @@ function HomeProjectRow(
 ) {
   const platform = usePlatform()
   const serverUnreachable = () => props.serverHealth(props.server)?.healthy === false
+
   const sortable = useSortable({
     get id() {
       return props.project.worktree
@@ -646,12 +663,15 @@ function HomeProjectRow(
       return props.index
     },
   })
+
   let pointerDownSelected: boolean | undefined
   const contextMenuID = () => projectContextMenuID(props.server, props.project.worktree)
   onCleanup(() => {
     const id = contextMenuID()
+
     if (props.contextMenuOpen(id)) props.onSetContextMenuOpen(id, false)
   })
+
   return (
     <div
       ref={sortable.ref}
@@ -684,21 +704,28 @@ function HomeProjectRow(
           // does not focus that server and load its session index. Touch is
           // excluded so flick-scrolling the list cannot select rows.
           pointerDownSelected = undefined
+
           if (props.dropdown) return
+
           if (event.button !== 0 || event.pointerType === "touch") return
+
           if (!props.serverSelected) return
           pointerDownSelected = props.selected
+
           if (!props.selected) props.onSelectProject(props.server, props.project.worktree)
         }}
         onClick={(event) => {
           // The drag sensor calls preventDefault on post-drag clicks; never
           // toggle selection as part of a reorder.
           if (event.defaultPrevented) return
+
           // Keyboard activation and touch taps keep the original toggle.
           if (event.detail === 0 || pointerDownSelected === undefined) {
             props.onSelectProject(props.server, props.project.worktree)
+
             return
           }
+
           // Mouse: pointerdown already selected unselected rows; a plain click
           // on an already-selected row toggles it off.
           if (pointerDownSelected) props.onSelectProject(props.server, props.project.worktree)
@@ -782,6 +809,7 @@ function HomeProjectRow(
 
 function HomeProjectNavButton(props: JSX.ButtonHTMLAttributes<HTMLButtonElement>) {
   const [local, rest] = splitProps(props, ["class", "classList", "children"])
+
   return (
     <button
       {...rest}
@@ -804,6 +832,7 @@ function HomeProjectNavButton(props: JSX.ButtonHTMLAttributes<HTMLButtonElement>
 
 function HomeProjectAvatar(props: { project: LocalProject; outline?: boolean }) {
   const name = createMemo(() => displayName(props.project))
+
   return (
     <ProjectAvatar
       fallback={name()}

@@ -59,6 +59,51 @@ describe("SessionModelRequest.unsupportedParts", () => {
     })
   })
 
+  test("replaces images xAI cannot decode and keeps png, jpeg and webp", () => {
+    const image = (mime: string, name: string) => ({
+      type: "media" as const,
+      media: Media.base64("aGVsbG8=", mime),
+      filename: name,
+    })
+    const user = [image("image/png", "a.png"), image("image/jpeg", "b.jpg"), image("image/webp", "c.webp")]
+    const messages = [
+      Message.user([...user, image("image/gif", "d.gif")]),
+      Message.tool(
+        ToolResultPart.make({
+          id: "call_1",
+          name: "read",
+          result: {
+            type: "content",
+            value: [
+              { type: "text", text: "Image read successfully" },
+              { type: "file", uri: "data:image/gif;base64,R0lGODlh", mime: "image/gif", name: "e.gif" },
+            ],
+          },
+        }),
+      ),
+    ]
+    const result = unsupportedParts(messages, capabilities(["text", "image"]), "xai")
+
+    expect(result[0]?.content).toEqual([
+      ...user,
+      Message.text('ERROR: Cannot read "d.gif" (this model does not support image/gif input). Inform the user.'),
+    ])
+    expect(result[1]?.content[0]).toMatchObject({
+      type: "tool-result",
+      result: {
+        type: "content",
+        value: [
+          { type: "text", text: "Image read successfully" },
+          {
+            type: "text",
+            text: 'ERROR: Cannot read "e.gif" (this model does not support image/gif input). Inform the user.',
+          },
+        ],
+      },
+    })
+    expect(unsupportedParts(messages, capabilities(["text", "image"]), "openai")).toEqual(messages)
+  })
+
   test("preserves supported media", () => {
     const message = Message.user({ type: "media", media: Media.base64("aGVsbG8=", "image/png") })
     expect(unsupportedParts([message], capabilities(["text", "image"]))[0]?.content).toEqual(message.content)

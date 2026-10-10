@@ -89,10 +89,12 @@ distinctions such as an absent current field identifying an older format. It
 returns a candidate in the current encoded shape; the current schema then owns
 recovery and validation.
 
-The migration reader preserves excess properties so a migration can describe
-only the fields it observes without dropping unrelated saved preferences. The
-current schema strips fields outside its contract. Writes use only the current
-schema's encoder, never the legacy reader's encoder.
+Plain structs strip fields they do not list, so build every struct level of a
+migration reader, including structs nested in unions or nullable values, with
+`Persistence.legacy(fields)`. It keeps the fields the reader does not name, so a
+migration can describe only the fields it observes without dropping unrelated
+saved preferences. The current schema strips fields outside its contract. Writes
+use only the current schema's encoder, never the legacy reader's encoder.
 
 `Persistence.withInitial(schemaOrMigration, initial)` exposes the same initialized
 codec for focused tests. Test canonical encoding and decode/encode/decode stability

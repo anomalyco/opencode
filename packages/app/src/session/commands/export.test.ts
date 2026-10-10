@@ -20,12 +20,15 @@ describe("fetchSessionExport", () => {
     const first = { id: "msg_1", type: "model-selected" } as unknown as SessionMessageInfo
     const second = { id: "msg_2", type: "user" } as SessionMessageInfo
     const calls: unknown[] = []
+
     const api = {
       session: { get: async () => info },
       message: {
         list: async (input: { cursor?: string }) => {
           calls.push(input)
+
           if (!input.cursor) return { data: [first], cursor: { next: "page-2" } }
+
           return { data: [second], cursor: {} }
         },
       },
@@ -45,9 +48,11 @@ describe("fetchSessionExport", () => {
 describe("saveSessionExport", () => {
   test.each([true, false])("writes pretty JSON to the native save dialog and returns %p", async (saved) => {
     const writes: string[][] = []
+
     const platform: Pick<Platform, "saveFile"> = {
       saveFile: async (options, content) => {
         writes.push([options.defaultPath ?? "", content])
+
         return saved
       },
     }

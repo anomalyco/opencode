@@ -1,7 +1,7 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Cause, Effect, Exit, Layer, PlatformError } from "effect"
+import { Cause, Effect, Exit, Layer, Option, PlatformError, Stream } from "effect"
 import { FSUtil } from "@opencode/util/fs-util"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { FileSystem } from "@opencode/core/filesystem"
@@ -37,13 +37,18 @@ describe("FileSystem", () => {
     withTmp((directory) =>
       Effect.gen(function* () {
         yield* Effect.promise(() => fs.writeFile(path.join(directory, "text.txt"), "hello"))
-        yield* Effect.promise(() => fs.writeFile(path.join(directory, "data.bin"), Buffer.from([0, 1, 2])))
+        yield* Effect.promise(() => fs.writeFile(path.join(directory, "data.bin"), Buffer.from([0, 1, 2, 3, 4])))
         const service = yield* FileSystem.Service
         const text = yield* service.read({ path: RelativePath.make("text.txt") })
         const binary = yield* service.read({ path: RelativePath.make("data.bin") })
-        expect(new TextDecoder().decode(text.content)).toBe("hello")
+        expect(new TextDecoder().decode(yield* Stream.mkUint8Array(text.stream()))).toBe("hello")
         expect(text.mime).toBe("text/plain")
-        expect(binary.content).toEqual(new Uint8Array([0, 1, 2]))
+        expect(text.size).toBe(5)
+        expect(Option.isSome(text.mtime)).toBe(true)
+        expect(yield* Stream.mkUint8Array(binary.stream())).toEqual(new Uint8Array([0, 1, 2, 3, 4]))
+        expect(yield* Stream.mkUint8Array(binary.stream({ offset: 1, bytesToRead: 3 }))).toEqual(
+          new Uint8Array([1, 2, 3]),
+        )
       }).pipe(provide(directory)),
     ),
   )
@@ -173,6 +178,10 @@ describe("FileSystem", () => {
           ])
           const absolute = yield* filesystem.list({ path: path.join(directory, "sibling") })
           expect(absolute).toEqual(sibling)
+          const missing = yield* Effect.flip(filesystem.list({ path: RelativePath.make("missing") }))
+          expect(missing).toBeInstanceOf(FileSystem.NotFoundError)
+          const file = yield* Effect.flip(filesystem.list({ path: RelativePath.make("../sibling/file.txt") }))
+          expect(file).toBeInstanceOf(FileSystem.NotFoundError)
         }).pipe(provide(current))
       }),
     ),
@@ -190,9 +199,10 @@ describe("FileSystem", () => {
         // the location root to the real directory.
         const read = yield* FileSystem.Service.pipe(
           Effect.flatMap((service) => service.read({ path: RelativePath.make("file.txt") })),
+          Effect.flatMap((file) => Stream.mkUint8Array(file.stream())),
           provide(link),
         )
-        expect(new TextDecoder().decode(read.content)).toBe("linked")
+        expect(new TextDecoder().decode(read)).toBe("linked")
       }),
     ),
   )

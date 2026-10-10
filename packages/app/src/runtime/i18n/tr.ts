@@ -324,9 +324,6 @@ export const dict = {
   "dialog.server.edit.title": "Sunucuyu düzenle",
 
   "dialog.server.menu.edit": "Düzenle",
-  "dialog.server.menu.default": "Varsayılan olarak ayarla",
-  "dialog.server.menu.defaultRemove": "Varsayılanı kaldır",
-  "dialog.server.status.default": "Varsayılan",
 
   "dialog.project.edit.title": "Projeyi düzenle",
   "dialog.project.edit.icon": "Simge",
@@ -640,10 +637,6 @@ export const dict = {
   "workspace.delete.confirm": '"{{name}}" çalışma alanı silinsin mi?',
   "workspace.delete.button": "Çalışma alanını sil",
   "common.open": "Aç",
-  "dialog.releaseNotes.action.getStarted": "Başla",
-  "dialog.releaseNotes.action.next": "İleri",
-  "dialog.releaseNotes.action.hideFuture": "Bunu gelecekte bir daha gösterme",
-  "dialog.releaseNotes.media.alt": "Sürüm önizlemesi",
   "toast.project.reloadFailed.title": "{{project}} yeniden yüklenemedi",
   "error.server.invalidConfiguration": "Geçersiz yapılandırma",
   "common.moreCountSuffix": " (+{{count}} daha)",
@@ -792,7 +785,6 @@ export const dict = {
   "session.view.select": "Oturum görünümü",
   "session.background.moveRunning": "Arka plana taşı",
   "session.timeline.working": "Çalışma",
-  "session.review.wrapLines": "Satırları kaydır",
   "session.websearch.title": "Üçüncü taraf web araması",
   "session.websearch.description": "Temsilcilerin web'de arama yapmak için kullanacağı arama sağlayıcısını seçin",
   "session.websearch.provider": "Arama sağlayıcısı",
@@ -853,7 +845,6 @@ export const dict = {
   "settings.timeline.category.subagents": "Alt temsilciler",
   "settings.timeline.category.notices": "Bildirimler",
   "settings.timeline.category.tools": "Diğer araçlar",
-  "settings.general.row.mobileDiffWrap.description": "Yatay olarak kaydırmak yerine mobil farklara uzun çizgiler sarın",
   "provider.connect.error.unsupportedFields": "Bu kimlik doğrulama formu desteklenmeyen alanlar içeriyor",
   "settings.about.writtenByNames": "{{names}} tarafından yazıldı",
   "settings.about.illustratedByNames": "{{names}} tarafından çizilmiştir",
@@ -866,7 +857,6 @@ export const dict = {
   "server.connect.button": "Bağlan",
   "server.connect.address.invalid": "Geçerli bir HTTP veya HTTPS sunucu adresi girin.",
   "server.connect.failed": "Bağlantı kurulamadı. Sunucu adresini ve şifreyi kontrol edip tekrar deneyin.",
-  "server.connect.pair.description": "Bağlantı ayrıntılarınızı almak için bilgisayarınızda bu komutu çalıştırın.",
   "server.connect.scan": "QR kodunu tarayın",
   "server.connect.scan.description": "Kameranızı opencode pair tarafından gösterilen QR koduna doğrultun.",
   "server.connect.scan.invalid":
@@ -875,7 +865,6 @@ export const dict = {
   "server.connect.camera.starting": "Kamera açılıyor…",
   "server.connect.mixedContent":
     "Bu HTTP sunucusuna bir HTTPS sayfasından bağlanılamadı. Bunun yerine HTTPS sunucu adresini kullanın.",
-  "server.connect.camera.insecure": "QR taraması, bu sayfanın HTTPS veya localhost üzerinden açılmasını gerektirir.",
   "server.connect.camera.unavailable":
     "Bu tarayıcıda kamera mevcut değil. Bağlantı ayrıntılarınızı manuel olarak girin.",
   "server.connect.camera.error":

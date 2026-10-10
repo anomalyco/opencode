@@ -11,6 +11,7 @@ export const createSizing = () => {
       clearTimeout(t)
       t = undefined
     }
+
     setState("active", false)
   }
 
@@ -19,6 +20,7 @@ export const createSizing = () => {
       clearTimeout(t)
       t = undefined
     }
+
     setState("active", true)
   }
 

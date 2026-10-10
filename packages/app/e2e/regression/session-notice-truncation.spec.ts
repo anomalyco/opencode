@@ -9,11 +9,13 @@ for (const { width, ...profile } of [
   test(`keeps notices on one line: ${profile.locale} ${profile.direction} ${width}`, async ({ page }) => {
     const command =
       "bun run inspect --target src/renderer/session-timeline.ts --output artifacts/inspection-report.json ".repeat(5)
+
     const descriptions = [
       `${command}--finished`,
       `Instructions changed\n${command}--updated`,
       `\u0645\u0631\u0627\u062c\u0639\u0629 ${command}--reviewed`,
     ]
+
     await setupTimeline(page, {
       settings: {
         timelineDetail: { ...timelinePresets[2].value, notices: { placement: "separate" } },
@@ -58,6 +60,7 @@ for (const { width, ...profile } of [
           nodes.map((node) => {
             const style = getComputedStyle(node)
             const element = node as HTMLElement
+
             return {
               direction: style.direction,
               whiteSpace: style.whiteSpace,

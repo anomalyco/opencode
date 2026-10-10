@@ -311,9 +311,6 @@ export const dict = {
   "dialog.server.edit.title": "Редактировать сервер",
 
   "dialog.server.menu.edit": "Редактировать",
-  "dialog.server.menu.default": "Сделать по умолчанию",
-  "dialog.server.menu.defaultRemove": "Отменить выбор по умолчанию",
-  "dialog.server.status.default": "По умолч.",
 
   "dialog.project.edit.title": "Редактировать проект",
   "dialog.project.edit.icon": "Значок",
@@ -627,10 +624,6 @@ export const dict = {
   "workspace.delete.confirm": 'Удалить рабочее пространство "{{name}}"?',
   "workspace.delete.button": "Удалить рабочее пространство",
   "common.open": "Открыть",
-  "dialog.releaseNotes.action.getStarted": "Начать",
-  "dialog.releaseNotes.action.next": "Далее",
-  "dialog.releaseNotes.action.hideFuture": "Больше не показывать",
-  "dialog.releaseNotes.media.alt": "Предварительный просмотр выпуска",
   "toast.project.reloadFailed.title": "Не удалось перезагрузить {{project}}",
   "error.server.invalidConfiguration": "Недопустимая конфигурация",
   "common.moreCountSuffix": " (ещё {{count}})",
@@ -791,7 +784,6 @@ export const dict = {
   "session.view.select": "Просмотр сеанса",
   "session.background.moveRunning": "Перейти на задний план",
   "session.timeline.working": "Работает",
-  "session.review.wrapLines": "Переносить строки",
   "session.websearch.title": "Сторонний веб-поиск",
   "session.websearch.description":
     "Выберите поставщика услуг поиска, который используют агенты для поиска в Интернете.",
@@ -854,8 +846,6 @@ export const dict = {
   "settings.timeline.category.subagents": "Субагенты",
   "settings.timeline.category.notices": "Уведомления",
   "settings.timeline.category.tools": "Другие инструменты",
-  "settings.general.row.mobileDiffWrap.description":
-    "Перенос длинных строк в мобильных различиях вместо горизонтальной прокрутки",
   "session.background.shell.few": "{{count}} оболочки",
   "session.background.shell.many": "{{count}} оболочек",
   "session.background.subagent.few": "{{count}} субагента",
@@ -883,7 +873,6 @@ export const dict = {
   "server.connect.button": "Подключиться",
   "server.connect.address.invalid": "Введите действительный адрес сервера HTTP или HTTPS.",
   "server.connect.failed": "Не удалось подключиться. Проверьте адрес сервера и пароль, затем попробуйте снова.",
-  "server.connect.pair.description": "Выполните эту команду на вашем компьютере, чтобы получить данные подключения.",
   "server.connect.scan": "Сканировать QR-код",
   "server.connect.scan.description": "Наведите камеру на QR-код, показанный парой opencode.",
   "server.connect.scan.invalid": "Это не код пары OpenCode. Сканируйте код, показанный парой opencode.",
@@ -891,8 +880,6 @@ export const dict = {
   "server.connect.camera.starting": "Открытие камеры…",
   "server.connect.mixedContent":
     "Не удалось подключиться к этому HTTP-серверу с HTTPS-страницы. Используйте адрес HTTPS-сервера вместо этого.",
-  "server.connect.camera.insecure":
-    "Сканирование QR требует открытия этой страницы через HTTPS или на локальном хосте.",
   "server.connect.camera.unavailable": "Камера недоступна для этого браузера. Введите данные подключения вручную.",
   "server.connect.camera.error":
     "Не удалось открыть камеру. Разрешите доступ к камере или введите данные подключения вручную.",

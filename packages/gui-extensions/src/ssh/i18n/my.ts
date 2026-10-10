@@ -36,8 +36,5 @@ export default {
   "form.name": "ဆာဗာအမည် (ချန်လှပ်ထားနိုင်သည်)",
   "form.namePlaceholder": "Localhost",
   "form.add": "ဆာဗာထည့်ပါ။",
-  "server.default": "မူရင်း",
-  "menu.default": "မူရင်းအဖြစ် သတ်မှတ်ပါ။",
-  "menu.defaultRemove": "မူရင်းကို ဖယ်ရှားပါ။",
   "menu.delete": "ဖျက်ပါ",
 }

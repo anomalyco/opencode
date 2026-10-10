@@ -12,4 +12,6 @@ export default {
   "git.description": "Prati, pregledaj i poništi promjene u ovom projektu",
   loadingChanges: "Učitavanje izmjena…",
   noChanges: "Nema izmjena",
+  "settings.wrapLines.title": "Prelamaj retke",
+  "settings.wrapLines.description": "Umotajte dugačke redove u mobilne razlike umjesto horizontalnog pomicanja",
 }

@@ -1,0 +1,38 @@
+[data-slot="mobile-drawer-content"]:has([data-slot="model-selector-drawer"]) {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+[data-slot="model-selector-drawer"] {
+  /* Keep the gutter inside each scroll boundary so outlines are not clipped. */
+  [data-slot="model-selector-search"],
+  .settings-models,
+  [data-slot="model-selector-actions"] {
+    padding-left: max(12px, env(safe-area-inset-left, 0px));
+    padding-right: max(12px, env(safe-area-inset-right, 0px));
+  }
+
+  [data-component="settings-list"][data-variant="catalog"] {
+    padding-inline: 12px;
+  }
+
+  [data-component="settings-row"] {
+    width: calc(100% + 24px);
+    margin-inline: -12px;
+    padding-inline: 12px;
+  }
+
+  .settings-models-console-groups {
+    margin-inline-start: 4px;
+    padding-inline-start: 8px;
+  }
+
+  .provider-model-group-trigger,
+  .provider-model-group-models {
+    padding-inline: 12px;
+  }
+
+  .provider-model-group-models > [data-component="settings-list"] {
+    padding-inline: 0;
+  }
+}

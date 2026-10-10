@@ -10,4 +10,6 @@ export default {
   "git.description": "Энэ төслийн өөрчлөлтийг хянах, хянах, буцаах",
   loadingChanges: "Өөрчлөлтүүдийг ачаалж байна…",
   noChanges: "Өөрчлөлт байхгүй",
+  "settings.wrapLines.title": "Мөрүүдийг нугалах",
+  "settings.wrapLines.description": "Мобайл diff дээр урт мөрүүдийг хэвтээ гүйлгэхийн оронд нугалах",
 }

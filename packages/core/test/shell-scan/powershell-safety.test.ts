@@ -305,4 +305,166 @@ describe("PowerShell scanner safety", () => {
     expect(ShellScan.scanPowerShell("% { ".repeat(33) + "Get-Item x" + " }".repeat(33)).kind).toBe("opaque")
     expect(ShellScan.scanPowerShell(`Write-Output ${"x".repeat(64 * 1024)}`).kind).toBe("opaque")
   })
+
+  test("scans compound subexpressions with expression-mode comments inside expandable strings", () => {
+    const result = ShellScan.scanPowerShell(
+      '$x = "$(switch ${x}#)\n{ default { Invoke-ProbeA; Set-Location /outside } })"',
+    )
+    expect(result).toMatchObject({
+      kind: "scanned",
+      commands: [
+        { resource: "Invoke-ProbeA", words: ["Invoke-ProbeA"] },
+        { resource: "Set-Location /outside", words: ["Set-Location", "/outside"] },
+      ],
+    })
+  })
+
+  test.each([
+    "${x}<# comment #>; Invoke-ProbeA; Set-Location /outside",
+    "$(1)<# comment #>; Invoke-ProbeA; Set-Location /outside",
+    "@(1)<# comment #>; Invoke-ProbeA; Set-Location /outside",
+    "@{a=1}<# comment #>; Invoke-ProbeA; Set-Location /outside",
+    "[int]<# comment #>$x = 1; Invoke-ProbeA; Set-Location /outside",
+    "$x<# comment #>; Invoke-ProbeA; Set-Location /outside",
+    "1<# comment #>; Invoke-ProbeA; Set-Location /outside",
+  ])("recognizes block comments immediately after expression tokens: %s", (source) => {
+    expect(ShellScan.scanPowerShell(source)).toMatchObject({
+      kind: "scanned",
+      commands: [
+        { resource: "Invoke-ProbeA", words: ["Invoke-ProbeA"] },
+        { resource: "Set-Location /outside", words: ["Set-Location", "/outside"] },
+      ],
+    })
+  })
+
+  test("rejects mid-token here-string openers and preserves subsequent commands", () => {
+    expect(ShellScan.scanPowerShell("$x@'\n'; Invoke-ProbeA; Set-Location /outside; '\n'@").kind).toBe("opaque")
+    expect(
+      ShellScan.scanPowerShell("Write-Output $x@'\n'; Invoke-ProbeA; Set-Location /outside; #\n'@'"),
+    ).toMatchObject({
+      kind: "scanned",
+      commands: [
+        { words: ["Write-Output", "$x@\n"] },
+        { resource: "Invoke-ProbeA", words: ["Invoke-ProbeA"] },
+        { resource: "Set-Location /outside", words: ["Set-Location", "/outside"] },
+      ],
+    })
+  })
+
+  test.each([
+    "Write-Output [a; Invoke-ProbeA; Set-Location /outside; Write-Output ]",
+    'Write-Output "${x"\'}"#"\nInvoke-ProbeA; Set-Location /outside\n# "\'',
+    "Write-Output ${a`}'}; Invoke-ProbeA; Set-Location /outside; #'",
+    ".'Write-Output'# '\nInvoke-ProbeA; Set-Location /outside\n# '",
+    "$x > $null#'\n'; Invoke-ProbeA; Set-Location /outside; #'",
+    "$x>$null#'\n'; Invoke-ProbeA; Set-Location /outside; #'",
+    "Write-Output --% arg && Invoke-ProbeA; Set-Location /outside",
+    "Write-Output > --% out.txt; Invoke-ProbeA; Set-Location /outside",
+    "Write-Output `t#'\n'; Invoke-ProbeA; Set-Location /outside; #'",
+    "[CmdletBinding()] param($x) Invoke-ProbeA; Set-Location /outside",
+    "function f#a { Invoke-ProbeA; Set-Location /outside }; f#a",
+    '"$("a""; Invoke-ProbeA; Set-Location /outside; "b"")"',
+    '$x = "$("a""; Invoke-ProbeA; Set-Location /outside; "b"")"',
+    "${a`u{0041}'}; Invoke-ProbeA; Set-Location /outside; #'",
+    '"${a`u{0041}" # }; $(Invoke-ProbeA); $(Set-Location /outside)"',
+    '@"\n${a`u{0041}\n"@; \' # } $(Invoke-ProbeA); $(Set-Location /outside)\n"@#\'',
+    "$probe[-$(Invoke-ProbeA)]; $probe[1+$(Set-Location /outside)]",
+    "function else {}\nelse\nInvoke-ProbeA\nSet-Location /outside\n{}",
+    "function catch {}\ncatch\nInvoke-ProbeA\nSet-Location /outside\n{}",
+    "switch ('x') {\n  a#'\n  ' {} default { Invoke-ProbeA; Set-Location /outside } # '\n}",
+    "data -SupportedCommand a<#'#> ' {}; Invoke-ProbeA; Set-Location /outside # ' {}",
+    "if ($false) { switch -File $global:probe[0#'\n] { default {} } }; Invoke-ProbeA; Set-Location /outside # ' {} }",
+    "if ($false) { switch -File $.a[a<#'#>'] { default {} } }; Invoke-ProbeA; Set-Location /outside # '] {} }",
+    "Write-Output 'a'b[a<#'#>']; Invoke-ProbeA; Set-Location /outside; # ']",
+    "try { throw 1 } catch [Exception<#'#>] { Invoke-ProbeA; Set-Location /outside } # ' {}",
+    "Write-Output --`%('| Invoke-ProbeA; Set-Location /outside #')",
+    "if ($false) { Set-Location --`%('\n} if ($true) { Invoke-ProbeA; Set-Location /outside # ')\n}",
+    "if ($false) { $.a<#'#>' }; Invoke-ProbeA; Set-Location /outside; #' }",
+    "-$n#'\nInvoke-ProbeA; Set-Location /outside\n#'",
+    "--$n<#'#>; Invoke-ProbeA; Set-Location /outside; #'",
+    'Invoke-ProbeA "$( "a`"; Invoke-ProbeB; Set-Location /outside; `"b" )"',
+    'Invoke-ProbeA "$( `"\'"; Invoke-ProbeB; Set-Location /outside; "\'`" )"',
+    'Invoke-ProbeA "$( "a`""""; Invoke-ProbeB; Set-Location /outside; "c`"""" )"',
+    'Invoke-ProbeA "$( ""$( """"\'""""; Invoke-ProbeB; Set-Location /outside; """"\'"""" )"" )"',
+    'Invoke-ProbeA "$( Invoke-ProbeA @"\n""@; Invoke-ProbeB; Set-Location /outside; \'\n"@#\'\n)"',
+    'Invoke-ProbeA "$( \'(\' )"#" )"; Invoke-ProbeB; Set-Location /outside',
+    'Invoke-ProbeA "$( <# ( #> )"#" )"; Invoke-ProbeB; Set-Location /outside',
+    'Invoke-ProbeA "$( # (\n)"#" )"; Invoke-ProbeB; Set-Location /outside',
+    'Invoke-ProbeA "$( ${(} )"#" )"; Invoke-ProbeB; Set-Location /outside',
+    'Invoke-ProbeA "$( "(" )"#" )"; Invoke-ProbeB; Set-Location /outside',
+    "@\"\n$( '(' )\n\"@ ' )\n\"@\nInvoke-ProbeA; Set-Location /outside\n#'",
+    "Write-Output arg`\r\nInvoke-ProbeA\r\nSet-Location /outside",
+    "Write-Output arg`\r\n#'\r\nInvoke-ProbeA; Set-Location /outside\r\n#'",
+    '@"\n`\r\n"@; Invoke-ProbeA; Set-Location /outside; \'\r\n"@#\'',
+    "switch ('x') {\n  $a#'\n  ' {} default { Invoke-ProbeA; Set-Location /outside } # '\n}",
+    "switch ('x') {\n  1#'\n  ' {} default { Invoke-ProbeA; Set-Location /outside } # '\n}",
+    "switch ('x') {\n  ${a}b#'\n  ' {} default { Invoke-ProbeA; Set-Location /outside } # '\n}",
+    "switch ('x') {\n  $a<#'#>' {} default { Invoke-ProbeA; Set-Location /outside } # '\n}",
+    "if ($false) { switch -File @{} { a {} --% {} } }; Invoke-ProbeA; Set-Location /outside <#\n} } #>",
+    "- 1#'\nInvoke-ProbeA; Set-Location /outside\n#'",
+    "- $n#'\nInvoke-ProbeA; Set-Location /outside\n#'",
+    "-- $n#'\nInvoke-ProbeA; Set-Location /outside\n#'",
+    "-[int]$n#'\nInvoke-ProbeA; Set-Location /outside\n#'",
+    "--[int]$n#'\nInvoke-ProbeA; Set-Location /outside\n#'",
+    "$:a = Invoke-ProbeA; $:b = Set-Location /outside",
+    "$α = Invoke-ProbeA; $β = Set-Location /outside",
+    "foreach ($:a in Set-Location /outside) { Invoke-ProbeA }",
+    "foreach ($α in Set-Location /outside) { Invoke-ProbeA }",
+    "$:a#'\nInvoke-ProbeA; Set-Location /outside\n#'",
+    "$α#'\nInvoke-ProbeA; Set-Location /outside\n#'",
+    "$:a = @(1); Write-Output $:a[0]#'\nInvoke-ProbeA; Set-Location /outside\n#'",
+    "$α = @(1); Write-Output $α[0]#'\nInvoke-ProbeA; Set-Location /outside\n#'",
+    "Write-Output $?[a<#'#>']; Invoke-ProbeA; Set-Location /outside; # ']",
+    "Write-Output $?a[a<#'#>']; Invoke-ProbeA; Set-Location /outside; # ']",
+    "Write-Output $?.a[a<#'#>']; Invoke-ProbeA; Set-Location /outside; # ']",
+    "Write-Output ${a}::b[a<#'#>']; Invoke-ProbeA; Set-Location /outside; # ']",
+    "Write-Output $a..b[a<#'#>']; Invoke-ProbeA; Set-Location /outside; # ']",
+    "function f ([a#]$x) {}; Invoke-ProbeA; Set-Location /outside <#\n]) {} #>",
+    "if ($false) { [a#]$x }; Invoke-ProbeA; Set-Location /outside <#\n] } #>",
+    "if ($false) { $x.Foo[a#]() }; Invoke-ProbeA; Set-Location /outside <#\n] } #>",
+    "try { } catch [a#] { Invoke-ProbeA; Set-Location /outside } <#\n] {} #>",
+    "Write-Output a,#'\nb; Invoke-ProbeA; Set-Location /outside; #'",
+    "Write-Output a,<#'#>b; Invoke-ProbeA; Set-Location /outside; #'",
+    "Write-Output a,@'\n'\n'@; Invoke-ProbeA; Set-Location /outside; #'",
+    "Write-Output a,@{k=1#'\n}; Invoke-ProbeA; Set-Location /outside; #'}",
+    "Write-Output a,$probe[0]#'\nInvoke-ProbeA; Set-Location /outside\n#'",
+    'Invoke-ProbeA "$( "a``""; Invoke-ProbeB; Set-Location /outside; `"c``"" )"',
+    'Invoke-ProbeA "$( "a``""; Invoke-ProbeB; Set-Location /outside; ""c``"" )"',
+    'Invoke-ProbeA "$( `"a``""; Invoke-ProbeB; Set-Location /outside; `"c``"" )"',
+    'Invoke-ProbeA "$( Write-Output ``"a; Invoke-ProbeB; Set-Location /outside; Write-Output ``" )"',
+    'Invoke-ProbeA "$( Invoke-ProbeA --% ""`" && Set-Location /outside\n)"',
+    "Write-Output a, --% ; Invoke-ProbeA; Set-Location /outside",
+    "Write-Output a,\n--% ; Invoke-ProbeA; Set-Location /outside",
+    "Write-Output a, --`% ; Invoke-ProbeA; Set-Location /outside",
+    "Write-Output a,<##>--% ; Invoke-ProbeA; Set-Location /outside",
+    "Write-Output -Param: --% ; Invoke-ProbeA; Set-Location /outside",
+    "Write-Output -Param:<##>--% ; Invoke-ProbeA; Set-Location /outside",
+    "Write-Output a,`\r\n1# ; Invoke-ProbeA; Set-Location /outside",
+    "Write-Output a,`\r\n$x# ; Invoke-ProbeA; Set-Location /outside",
+    "Write-Output a,`\n\n1# ; Invoke-ProbeA; Set-Location /outside",
+    "Write-Output a,` #'\nb; Invoke-ProbeA; Set-Location /outside\n#'",
+    "Write-Output a,` <#'#>b; Invoke-ProbeA; Set-Location /outside; #'",
+    "Write-Output a,` @'\n'\n'@; Invoke-ProbeA; Set-Location /outside; #'",
+    "Write-Output a,` @{k=1#'\n}; Invoke-ProbeA; Set-Location /outside; #'}",
+    "Write-Output x,'a'[0]#'\nInvoke-ProbeA; Set-Location /outside\n#'",
+    "Write-Output x,\"a\"[0]#'\nInvoke-ProbeA; Set-Location /outside\n#'",
+    "Write-Output x,'a'#'\nInvoke-ProbeA; Set-Location /outside\n#'",
+    "Write-Output x,'a'<#'#>; Invoke-ProbeA; Set-Location /outside; #'",
+    "Write-Output $probe.Length#'\nInvoke-ProbeA; Set-Location /outside\n#'",
+    "Write-Output $probe.Length<#'#>; Invoke-ProbeA; Set-Location /outside; #'",
+    "Write-Output $probe.<#'#>Length; Invoke-ProbeA; Set-Location /outside; #'",
+    "Write-Output $probe.#'\nLength; Invoke-ProbeA; Set-Location /outside\n#'",
+    "Write-Output (1).ToString#'\nInvoke-ProbeA; Set-Location /outside\n#'",
+    "Write-Output (1)?.ToString#'\nInvoke-ProbeA; Set-Location /outside\n#'",
+    "Write-Output 'a'.Length#'\nInvoke-ProbeA; Set-Location /outside\n#'",
+    "Write-Output ${probe}.Length#'\nInvoke-ProbeA; Set-Location /outside\n#'",
+    "Write-Output x,$probe.Length#'\nInvoke-ProbeA; Set-Location /outside\n#'",
+    "Write-Output x,${probe}.Length#'\nInvoke-ProbeA; Set-Location /outside\n#'",
+  ])("does not hide commands across lexical mode boundaries: %s", (source) => {
+    const result = ShellScan.scanPowerShell(source)
+    expect(result.kind).toBe("scanned")
+    if (result.kind === "opaque") return
+    expect(result.commands.map((command) => command.words[0])).toContain("Invoke-ProbeA")
+    expect(result.commands.map((command) => command.words)).toContainEqual(["Set-Location", "/outside"])
+  })
 })

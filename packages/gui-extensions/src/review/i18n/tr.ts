@@ -10,4 +10,6 @@ export default {
   "git.description": "Bu projedeki değişiklikleri takip et, incele ve geri al",
   loadingChanges: "Değişiklikler yükleniyor…",
   noChanges: "Değişiklik yok",
+  "settings.wrapLines.title": "Satırları kaydır",
+  "settings.wrapLines.description": "Yatay olarak kaydırmak yerine mobil farklara uzun çizgiler sarın",
 }

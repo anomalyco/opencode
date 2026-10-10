@@ -285,9 +285,6 @@ export const dict = {
   "dialog.server.add.passwordPlaceholder": "loyniorð",
   "dialog.server.edit.title": "Rætta ambætara",
   "dialog.server.menu.edit": "Rætta",
-  "dialog.server.menu.default": "Set sum forsett",
-  "dialog.server.menu.defaultRemove": "Strika forsett",
-  "dialog.server.status.default": "Forsett",
   "dialog.project.edit.title": "Rætta verkætlan",
   "dialog.project.edit.icon": "Ikon",
   "dialog.project.edit.icon.alt": "Verkætlanarmerki",
@@ -295,10 +292,6 @@ export const dict = {
   "dialog.project.edit.color.select": "Vel {{color}} lit",
   "dialog.project.edit.worktree.startup": "Uppstartsrit fyri workspace",
   "dialog.project.edit.worktree.startup.placeholder": "t.d. bun install",
-  "dialog.releaseNotes.action.getStarted": "Kom í gongd",
-  "dialog.releaseNotes.action.next": "Næsta",
-  "dialog.releaseNotes.action.hideFuture": "Ikki vísa hesar í framtíðini",
-  "dialog.releaseNotes.media.alt": "Útgávu forskoðan",
   "toast.permissions.autoaccept.on.title": "Sjálvvirkandi góðkenning av loyvum",
   "toast.permissions.autoaccept.on.description": "Loyvisumbønir verða sjálvvirkandi góðkendar",
   "toast.permissions.autoaccept.off.title": "Steðgað sjálvvirkandi góðkenning av loyvum",
@@ -713,7 +706,6 @@ export const dict = {
   "session.view.select": "Setuvísing",
   "session.background.moveRunning": "Flyt til bakgrund",
   "session.timeline.working": "Arbeiða",
-  "session.review.wrapLines": "Brót linjur",
   "session.websearch.title": "Vevleitan frá triðjaparti",
   "session.websearch.description": "Vel leitveitaranum, sum umboðini brúka til at leita á netinum",
   "session.websearch.provider": "Leita veitara",
@@ -772,8 +764,6 @@ export const dict = {
   "settings.timeline.category.subagents": "Undirumboð",
   "settings.timeline.category.notices": "Kunningar",
   "settings.timeline.category.tools": "Onnur tól",
-  "settings.general.row.mobileDiffWrap.description":
-    "Pakka langar linjur inn í fartelefon diffs í staðin fyri at rulla vatnrætt",
   "provider.connect.error.unsupportedFields": "Hesin sannroyndar oyðublaðurin inniheldur óstuðlaðar teigar",
   "settings.about.writtenByNames": "Skrivað hevur {{names}}",
   "settings.about.illustratedByNames": "Myndprýtt við {{names}}",
@@ -786,7 +776,6 @@ export const dict = {
   "server.connect.button": "Samband",
   "server.connect.address.invalid": "Skriva eina gylduga HTTP ella HTTPS ambætaraadressu.",
   "server.connect.failed": "Fekk ikki samband. Kanna ambætaraadressuna og loyniorðið, og royn síðani aftur.",
-  "server.connect.pair.description": "Koyr hesa skipanina á tínari teldu fyri at fáa tínar sambandsupplýsingar.",
   "server.connect.scan": "Skanna QR-kotu",
   "server.connect.scan.description": "Peika myndatólið á QR-kotuna, sum opencode pair vísir.",
   "server.connect.scan.invalid": "Hetta er ikki ein OpenCode paringarkoda. Skanna kotuna, sum opencode pair vísir.",
@@ -794,7 +783,6 @@ export const dict = {
   "server.connect.camera.starting": "Opna myndatól...",
   "server.connect.mixedContent":
     "Kundi ikki seta samband við hendan HTTP ambætaran frá eini HTTPS síðu. Brúka eina HTTPS ambætaraadressu ístaðin.",
-  "server.connect.camera.insecure": "QR-skanning krevur, at tú letur hesa síðuna upp yvir HTTPS ella á localhost.",
   "server.connect.camera.unavailable":
     "Einki myndatól er tøkt til henda kaga. Skriva tínar sambandsupplýsingar manuelt.",
   "server.connect.camera.error":

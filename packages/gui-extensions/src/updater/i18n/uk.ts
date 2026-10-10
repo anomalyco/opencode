@@ -25,4 +25,8 @@ export default {
   "dialog.ready.title": "Оновлення готове",
   "dialog.restart": "Перезапустити",
   "dialog.later": "Пізніше",
+  "releaseNotes.action.getStarted": "Розпочати",
+  "releaseNotes.action.next": "Далі",
+  "releaseNotes.action.hideFuture": "Не показувати це в майбутньому",
+  "releaseNotes.media.alt": "Попередній перегляд релізу",
 }

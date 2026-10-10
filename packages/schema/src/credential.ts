@@ -10,6 +10,7 @@ import { Form } from "./form.js"
 
 export const ID = Schema.String.pipe(
   Schema.brand("Credential.ID"),
+  Schema.annotate({ identifier: "Credential.ID" }),
   statics((schema) => ({ create: () => schema.make("cred_" + ascending()) })),
 )
 export type ID = typeof ID.Type
@@ -46,7 +47,15 @@ export const Key = Schema.Struct({
   configuration: optional(Form.Answer),
 }).annotate({ identifier: "Credential.Key" })
 
-export const Value = Schema.Union([OAuth, Key])
+/** References a credential source whose secrets and renewal are managed outside the credential store. */
+export interface External extends Schema.Schema.Type<typeof External> {}
+export const External = Schema.Struct({
+  type: Schema.Literal("external"),
+  methodID: IntegrationMethodID,
+  metadata: optional(Schema.Record(Schema.String, Schema.Unknown)),
+}).annotate({ identifier: "Credential.External" })
+
+export const Value = Schema.Union([OAuth, Key, External])
   .pipe(Schema.toTaggedUnion("type"))
   .annotate({ identifier: "Credential.Value" })
 export type Value = Schema.Schema.Type<typeof Value>

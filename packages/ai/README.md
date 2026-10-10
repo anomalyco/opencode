@@ -27,6 +27,36 @@ Run `LLM.stream(...)` instead of `generate` when you want incremental `LLMEvent`
 `LLM.request(...)`. The event stream is provider-neutral — same shape across OpenAI Chat, OpenAI Responses,
 Anthropic Messages, Gemini, Bedrock Converse, and any OpenAI-compatible deployment.
 
+### Google Interactions
+
+`Google.configure({ apiKey }).interactions(modelID)` selects the Interactions API; `.model(modelID)` still selects
+GenerateContent. The package entrypoint is `@opencode/ai/providers/google/interactions`.
+
+For Vertex AI, use `GoogleVertexInteractions.configure({ project, location: "global" }).model(modelID)` or
+`@opencode/ai/providers/google-vertex/interactions`. It uses Application Default Credentials by default, accepts
+an explicit `accessToken` or `auth` override, and supports Express mode with `apiKey`. Vertex metadata and raw usage
+live under `providerMetadata.vertex`. The default is still full-history replay with `store: false`.
+
+```ts
+const model = Google.configure({ apiKey }).interactions("gemini-3.8-flash")
+const response = yield* LLM.generate({
+  model,
+  prompt: "Say hello.",
+  providerOptions: { thinkingLevel: "low", thinkingSummaries: "auto", store: true },
+})
+```
+
+Interactions supports text output, streamed function calls, native tool results, thought signatures, and multimodal
+input. Full-history replay is the default (`store: false`); implicit caching works without retained interactions.
+For server-side continuation, set `store: true` on the predecessor, read `interactionId` from the final event's
+`providerMetadata.google`, and pass `previousInteractionId` on the next request with **only new messages**. Repeat
+the system instructions and tool declarations on each request. Set `store: true` on each response you intend to
+continue from. The package does not automatically select or persist continuation IDs.
+
+Raw usage is preserved in `usage.providerMetadata.google`. `inputTokens` follows Google's top-level accounting;
+`contextTokens` uses its full `raw_prompt_token` count when supplied. These can differ substantially with server-side
+continuation. Explicit caches, hosted tools, and generated media are not supported by this initial protocol.
+
 The same configured facade names image, video, speech, and transcription models. `Image.generate` resolves the
 provider's image route from the model and returns `Media.Asset`s with lazily decoded bytes:
 
@@ -80,6 +110,41 @@ for await (const event of ai.llm.stream(ai.llm.request(input))) {
 }
 await ai.dispose()
 ```
+
+## Venice AI
+
+`Venice` provides native Chat Completions with streaming tools and reasoning. `model` and `chat`
+select the same API; credentials default to `VENICE_API_KEY`.
+
+```ts
+import { LLM } from "@opencode/ai"
+import { Venice } from "@opencode/ai/providers"
+import { Effect } from "effect"
+
+const program = Effect.gen(function* () {
+  const response = yield* LLM.generate({
+    model: Venice.configure({ apiKey: process.env.VENICE_API_KEY }).chat("qwen3-6-27b"),
+    prompt: "Explain this design.",
+    providerOptions: {
+      reasoningEffort: "high",
+      veniceParameters: { includeVeniceSystemPrompt: false },
+    },
+  })
+  console.log(response.text)
+})
+```
+
+Effort lowers to `reasoning.effort`; `reasoning.enabled` and `reasoning.summary` are also available.
+Supported effort levels and toggles depend on the selected model. Omitted controls preserve its defaults.
+Venice's added system prompt is disabled by default, matching the previous OpenCode Venice SDK behavior.
+
+Replay complete `response.message` values to retain signed/encrypted reasoning and Gemini thought
+signatures, including per-tool signatures. Venice's encrypted scalar trailers are excluded from visible
+reasoning but retained in provider metadata for replay. Cache affinity uses `promptCacheKey`, and cache-write
+usage reads Venice's `cache_creation_input_tokens` field.
+
+The native package entrypoint is `@opencode/ai/providers/venice`. Image generation, embeddings, Responses, and
+client-side E2EE are not implemented by this provider.
 
 ## Experimental evaluation
 
@@ -1223,7 +1288,7 @@ const gateway = CloudflareAIGateway.configure({
 }).model("workers-ai/@cf/meta/llama-3.1-8b-instruct")
 ```
 
-Included LLM providers: OpenAI, Anthropic, Google (Gemini), Google Vertex, Amazon Bedrock, Azure OpenAI, Baseten, Cerebras, Cohere, Cloudflare AI Gateway, Cloudflare Workers AI, DeepInfra, DeepSeek, Fireworks, Groq, Mistral, OpenRouter, TogetherAI, and xAI. Z.ai currently exposes image generation. Generic Chat Completions, Responses, and Anthropic Messages-compatible entrypoints support custom endpoints.
+Included LLM providers: OpenAI, Anthropic, Google (Gemini), Google Vertex, Amazon Bedrock, Azure OpenAI, Baseten, Cerebras, Cohere, Cloudflare AI Gateway, Cloudflare Workers AI, DeepInfra, DeepSeek, Fireworks, Groq, Mistral, OpenRouter, TogetherAI, Vercel AI Gateway, and xAI. Z.ai currently exposes image generation. Generic Chat Completions, Responses, and Anthropic Messages-compatible entrypoints support custom endpoints.
 
 Each named provider owns its module, endpoint, authentication, and route setup. Providers with the same wire format compose the shared protocol directly:
 
@@ -1256,13 +1321,14 @@ APIs have separate entrypoints:
 - `@opencode/ai/providers/openai-compatible/responses`
 - `@opencode/ai/providers/anthropic-compatible`
 - `@opencode/ai/providers/google-vertex/gemini`
+- `@opencode/ai/providers/google-vertex/interactions`
 - `@opencode/ai/providers/google-vertex/chat`
 - `@opencode/ai/providers/google-vertex/responses`
 - `@opencode/ai/providers/google-vertex/messages`
 
 OpenAI Responses has one semantic route and uses HTTP by default. Advanced callers may supply a per-call WebSocket channel executor through `StreamOptions`; transport policy does not change provider settings, model identity, or route identity. The provider-neutral Open Responses implementation owns the reusable WebSocket request and event contract, while each provider opts in with its own handshake and connection policy. Azure follows the same Chat/Responses split at `providers/azure/chat` and `providers/azure/responses`. Generic OpenAI-compatible Chat remains at `providers/openai-compatible`; the Responses adapter at `providers/openai-compatible/responses` uses the provider-neutral Open Responses protocol. OpenAI Responses extends that baseline with OpenAI tools, event variants, metadata, and defaults. Generic Anthropic Messages-compatible providers use `providers/anthropic-compatible`, which the named Anthropic provider composes. Google Gemini and Amazon Bedrock expose their single native API through their existing provider paths.
 
-Vertex Gemini, Vertex Chat, Vertex Responses, and Vertex Messages are separate API entrypoints. All accept `project`, `location`, and an optional `accessToken`; when no explicit token or auth override is supplied they lazily use Google Application Default Credentials. Vertex Gemini instead selects express mode when `apiKey` or `GOOGLE_VERTEX_API_KEY` is present. Vertex Chat targets MaaS models through the OpenAI-compatible Chat Completions endpoint, while Vertex Responses targets Grok models and defaults `store` to `false` as required by Vertex. `providers/google-vertex` remains the default alias for `providers/google-vertex/gemini`.
+Vertex Gemini, Vertex Interactions, Vertex Chat, Vertex Responses, and Vertex Messages are separate API entrypoints. All accept `project`, `location`, and an optional `accessToken`; when no explicit token or auth override is supplied they lazily use Google Application Default Credentials. Vertex Gemini and Interactions instead select express mode when `apiKey` or `GOOGLE_VERTEX_API_KEY` is present (explicit `project` or `location` selects ADC over an ambient key). Vertex Chat targets MaaS models through the OpenAI-compatible Chat Completions endpoint, while Vertex Responses targets Grok models and defaults `store` to `false` as required by Vertex. `providers/google-vertex` remains the default alias for `providers/google-vertex/gemini`.
 
 Tuned Vertex Gemini deployments use model ids shaped like `endpoints/1234567890` and require OAuth or ADC; Vertex express-mode API keys support publisher models only.
 

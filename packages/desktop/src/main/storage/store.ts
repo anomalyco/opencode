@@ -21,19 +21,23 @@ export type SettingsStore = ReturnType<typeof createSettingsStore>
 // good: %APPDATA%\ai.opencode.desktop.dev\opencode.settings).
 export function getStore(name = SETTINGS_STORE) {
   const cached = cache.get(name)
+
   if (cached) return cached
   const next = createSettingsStore(path.join(electron.app.getPath("userData"), name))
   cache.set(name, next)
+
   return next
 }
 
 export function createSettingsStore(file: string) {
   let data = read(file)
+
   const write = () => {
     mkdirSync(path.dirname(file), { recursive: true })
     writeFileSync(`${file}.tmp`, JSON.stringify(data, null, "\t"))
     renameSync(`${file}.tmp`, file)
   }
+
   return {
     path: file,
     get: (key: string): unknown => data[key],
@@ -52,11 +56,14 @@ export function createSettingsStore(file: string) {
 // A missing file is an empty store. An unreadable one is set aside instead of blocking startup.
 function read(file: string): Record<string, unknown> {
   if (!existsSync(file)) return {}
+
   try {
     const parsed: unknown = JSON.parse(readFileSync(file, "utf8"))
+
     return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {}
   } catch {
     renameSync(file, `${file}.corrupt`)
+
     return {}
   }
 }

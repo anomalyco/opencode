@@ -3,20 +3,25 @@ import { expect, story } from "../../storybook/playwright/story"
 // Moved from packages/app/e2e/regression/session-timeline-projection.spec.ts
 story("renders every admitted tool family and hides timeline-only exclusions", async ({ mount }) => {
   const timeline = await mount("current-session-research-agents--agent-research", { args: { scenario: "workflow" } })
+
   const first = timeline.locator(
     '[data-timeline-part-ids="tool_family_read,tool_family_glob,tool_family_grep,tool_family_list,tool_family_webfetch,tool_family_websearch,tool_family_subagent,tool_family_shell,tool_family_edit,tool_family_write,tool_family_write_extra,tool_family_patch"]',
   )
+
   const second = timeline.locator('[data-timeline-part-ids="tool_family_skill,tool_family_custom"]')
   await expect(first).toBeVisible()
   await expect(second).toBeVisible()
   await first.getByRole("button").click()
   await second.getByRole("button").click()
+
   for (const id of ["webfetch", "websearch", "subagent", "shell", "question", "skill", "custom"]) {
     await expect(timeline.locator(`[data-timeline-part-id="tool_family_${id}"]`), id).toBeVisible()
   }
+
   const files = timeline.locator(
     '[data-timeline-part-ids="tool_family_edit,tool_family_write,tool_family_write_extra,tool_family_patch"]',
   )
+
   await expect(files).toBeVisible()
   await expect(files.locator('[data-scope="apply-patch"]')).toHaveCount(1)
   await expect(files.locator('[data-slot="apply-patch-filename"]')).toHaveText(["a.ts", "new.ts", "extra.ts"])
@@ -38,7 +43,21 @@ story("renders every tool error outcome without leaking hidden tools", async ({ 
   await expect(dismissed.getByText(/dismissed/i)).toBeVisible()
   await expect(dismissed).toContainText(/dismissed/i)
   await expect(timeline.locator('[data-timeline-part-id="tool_error_todo"]')).toHaveCount(0)
+
   for (const name of names) await expect(timeline.locator(`[data-timeline-part-id="tool_error_${name}"]`)).toBeVisible()
+})
+
+story("expands a failed execute to its full code and error", async ({ mount }) => {
+  const timeline = await mount("current-session-terminal-work--execute-failed")
+  await timeline.getByRole("button", { name: /^Used 5 / }).click()
+  const failed = timeline.locator('[data-timeline-part-id="tool_execute_failed_url"]')
+  await failed.getByRole("button", { name: /Invalid browser URL/ }).click()
+  await expect(failed.locator('[data-slot="tool-error-card-subtitle"]')).toContainText(
+    "const shot = await tools.browser.screenshot({ tabID: tab.id, fullPage: true });",
+  )
+  await expect(failed.locator('[data-slot="card-description"]')).toContainText(
+    "The connected server must be able to reach the address; localhost refers to that server.",
+  )
 })
 
 // Moved from packages/app/e2e/regression/session-timeline-tool-projection.spec.ts
@@ -112,9 +131,11 @@ story("labels skill tools from IDs and result metadata", async ({ mount }) => {
 story("groups every collapsed tool until visible text separates the stack", async ({ mount }) => {
   const timeline = await mount("current-session-research-agents--agent-research", { args: { scenario: "steps" } })
   await expect(timeline.locator('[data-timeline-part-ids="tool_boundary_read"]')).toBeVisible()
+
   const group = timeline.locator(
     '[data-timeline-part-ids="tool_boundary_glob,tool_boundary_grep,tool_boundary_shell,tool_boundary_list"]',
   )
+
   await expect(group).toBeVisible()
   await expect(group.getByRole("button")).toHaveAccessibleName("Used 4 Glob, Grep, Shell, List")
   await expect(group.locator('[data-component="context-tool-group-trigger"]')).toHaveAttribute(

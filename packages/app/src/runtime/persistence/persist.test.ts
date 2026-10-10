@@ -10,8 +10,10 @@ type State = { count: number; label: string }
 
 function setup(input: { initial?: string | null; delay?: number; sync?: PersistenceSyncAPI }) {
   const writes: string[] = []
+
   return createRoot((dispose) => {
     const [store, setStore] = createStore<State>({ count: 0, label: "" })
+
     const persist = persistStore({
       store,
       setStore,
@@ -28,6 +30,7 @@ function setup(input: { initial?: string | null; delay?: number; sync?: Persiste
       sync: input.sync,
       delay: input.delay ?? 10,
     })
+
     return { store, set: persist.setStore, persist, writes, dispose }
   })
 }
@@ -66,10 +69,12 @@ describe("persistStore", () => {
   test("applies another window's value when clean and ignores it while dirty", () => {
     const listeners: PersistenceSyncCallback[] = []
     const sent: string[] = []
+
     const value = setup({
       delay: 10_000,
       sync: [(subscriber) => listeners.push(subscriber), (_key, next) => sent.push(String(next))],
     })
+
     listeners[0]!({ key: "state", newValue: JSON.stringify({ count: 3, label: "remote" }), timeStamp: 0 })
     expect(value.store).toEqual({ count: 3, label: "remote" })
     value.set("label", "local")
@@ -83,10 +88,12 @@ describe("persistStore", () => {
   test("a remote value arriving during a no-op local set is adopted when the save finds no change", () => {
     const listeners: PersistenceSyncCallback[] = []
     const sent: string[] = []
+
     const value = setup({
       delay: 10_000,
       sync: [(subscriber) => listeners.push(subscriber), (_key, next) => sent.push(String(next))],
     })
+
     value.set("count", 1)
     value.persist.flush()
     // Setting the same value again marks the store dirty without changing it.

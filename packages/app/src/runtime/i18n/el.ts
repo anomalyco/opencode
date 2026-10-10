@@ -288,9 +288,6 @@ export const dict = {
   "dialog.server.add.passwordPlaceholder": "κωδικός πρόσβασης",
   "dialog.server.edit.title": "Επεξεργασία διακομιστή",
   "dialog.server.menu.edit": "Επεξεργασία",
-  "dialog.server.menu.default": "Ορισμός ως προεπιλογή",
-  "dialog.server.menu.defaultRemove": "Κατάργηση προεπιλογής",
-  "dialog.server.status.default": "Προεπιλογή",
   "dialog.project.edit.title": "Επεξεργασία έργου",
   "dialog.project.edit.icon": "Εικονίδιο",
   "dialog.project.edit.icon.alt": "Εικονίδιο έργου",
@@ -298,10 +295,6 @@ export const dict = {
   "dialog.project.edit.color.select": "Επιλογή {{color}} χρώματος",
   "dialog.project.edit.worktree.startup": "Σενάριο εκκίνησης χώρου εργασίας",
   "dialog.project.edit.worktree.startup.placeholder": "π.χ. εγκατάσταση bun",
-  "dialog.releaseNotes.action.getStarted": "Ξεκινήστε",
-  "dialog.releaseNotes.action.next": "Επόμενο",
-  "dialog.releaseNotes.action.hideFuture": "Να μην εμφανίζονται αυτά στο μέλλον",
-  "dialog.releaseNotes.media.alt": "Προεπισκόπηση έκδοσης",
   "toast.permissions.autoaccept.on.title": "Αυτόματη αποδοχή δικαιωμάτων",
   "toast.permissions.autoaccept.on.description": "Τα αιτήματα άδειας θα εγκρίνονται αυτόματα",
   "toast.permissions.autoaccept.off.title": "Διακοπή αυτόματης αποδοχής δικαιωμάτων",
@@ -723,7 +716,6 @@ export const dict = {
   "session.view.select": "Προβολή συνεδρίας",
   "session.background.moveRunning": "Μετακίνηση στο παρασκήνιο",
   "session.timeline.working": "Εργασία",
-  "session.review.wrapLines": "Αναδίπλωση γραμμών",
   "session.websearch.title": "Αναζήτηση ιστού τρίτων",
   "session.websearch.description":
     "Επιλέξτε τους πράκτορες παρόχου αναζήτησης που χρησιμοποιούν για την αναζήτηση στον ιστό",
@@ -788,8 +780,6 @@ export const dict = {
   "settings.timeline.category.subagents": "Υποπράκτορες",
   "settings.timeline.category.notices": "Ειδοποιήσεις",
   "settings.timeline.category.tools": "Άλλα εργαλεία",
-  "settings.general.row.mobileDiffWrap.description":
-    "Τυλίξτε τις μακριές γραμμές σε κινητές διαφορές αντί να κάνετε κύλιση οριζόντια",
   "provider.connect.error.unsupportedFields": "Αυτή η φόρμα ελέγχου ταυτότητας περιέχει μη υποστηριζόμενα πεδία",
   "settings.about.writtenByNames": "Γράφτηκε από {{names}}",
   "settings.about.illustratedByNames": "Εικονογράφηση από {{names}}",
@@ -803,8 +793,6 @@ export const dict = {
   "server.connect.address.invalid": "Εισαγάγετε μια έγκυρη διεύθυνση διακομιστή HTTP ή HTTPS.",
   "server.connect.failed":
     "Δεν ήταν δυνατή η σύνδεση. Ελέγξτε τη διεύθυνση του διακομιστή και τον κωδικό πρόσβασης και, στη συνέχεια, δοκιμάστε ξανά.",
-  "server.connect.pair.description":
-    "Εκτελέστε αυτήν την εντολή στον υπολογιστή σας για να λάβετε τα στοιχεία της σύνδεσής σας.",
   "server.connect.scan": "Σάρωση κωδικού QR",
   "server.connect.scan.description": "Στρέψτε την κάμερά σας στον κωδικό QR που εμφανίζεται από το opencode pair.",
   "server.connect.scan.invalid":
@@ -813,7 +801,6 @@ export const dict = {
   "server.connect.camera.starting": "Άνοιγμα κάμερας…",
   "server.connect.mixedContent":
     "Δεν ήταν δυνατή η σύνδεση σε αυτόν τον διακομιστή HTTP από μια σελίδα HTTPS. Χρησιμοποιήστε μια διεύθυνση διακομιστή HTTPS.",
-  "server.connect.camera.insecure": "Η σάρωση QR απαιτεί άνοιγμα αυτής της σελίδας μέσω HTTPS ή localhost.",
   "server.connect.camera.unavailable":
     "Δεν υπάρχει κάμερα διαθέσιμη σε αυτό το πρόγραμμα περιήγησης. Εισαγάγετε τα στοιχεία της σύνδεσής σας με μη αυτόματο τρόπο.",
   "server.connect.camera.error":

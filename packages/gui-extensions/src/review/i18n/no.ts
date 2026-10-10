@@ -10,4 +10,6 @@ export default {
   "git.description": "Spor, gjennomgå og angre endringer i dette prosjektet",
   loadingChanges: "Laster endringer…",
   noChanges: "Ingen endringer",
+  "settings.wrapLines.title": "Bryt linjer",
+  "settings.wrapLines.description": "Bryt lange linjer i mobile differ i stedet for å rulle vannrett",
 }

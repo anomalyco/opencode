@@ -292,9 +292,6 @@ export const dict = {
   "dialog.server.add.passwordPlaceholder": "पासवर्ड",
   "dialog.server.edit.title": "सर्वर संपादित करें",
   "dialog.server.menu.edit": "संपादित करें",
-  "dialog.server.menu.default": "डिफाल्ट के रूप में सेट",
-  "dialog.server.menu.defaultRemove": "डिफ़ॉल्ट हटाएँ",
-  "dialog.server.status.default": "डिफ़ॉल्ट",
   "dialog.project.edit.title": "प्रोजेक्ट संपादित करें",
   "dialog.project.edit.icon": "आइकन",
   "dialog.project.edit.icon.alt": "प्रोजेक्ट आइकन",
@@ -302,10 +299,6 @@ export const dict = {
   "dialog.project.edit.color.select": "{{color}} रंग चुनें",
   "dialog.project.edit.worktree.startup": "वर्कस्पेस स्टार्टअप स्क्रिप्ट",
   "dialog.project.edit.worktree.startup.placeholder": "जैसे: bun install",
-  "dialog.releaseNotes.action.getStarted": "शुरू करें",
-  "dialog.releaseNotes.action.next": "अगला",
-  "dialog.releaseNotes.action.hideFuture": "भविष्य में इन्हें न दिखाएँ",
-  "dialog.releaseNotes.media.alt": "रिलीज़ पूर्वावलोकन",
   "dialog.usageExceeded.dontShowAgain": "फिर से न दिखाएँ",
 
   "toast.permissions.autoaccept.on.title": "अनुमतियाँ स्वतः स्वीकार करना",
@@ -719,7 +712,6 @@ export const dict = {
   "session.view.select": "सेशन दृश्य",
   "session.background.moveRunning": "बैकग्राउंड में ले जाएँ",
   "session.timeline.working": "कार्य जारी है",
-  "session.review.wrapLines": "पंक्तियाँ लपेटें",
   "session.websearch.title": "तृतीय-पक्ष वेब खोज",
   "session.websearch.description": "एजेंटों द्वारा वेब खोजने के लिए उपयोग किया जाने वाला खोज प्रोवाइडर चुनें",
   "session.websearch.provider": "खोज प्रोवाइडर",
@@ -778,8 +770,6 @@ export const dict = {
   "settings.timeline.category.subagents": "सबएजेंट",
   "settings.timeline.category.notices": "सूचनाएँ",
   "settings.timeline.category.tools": "अन्य टूल",
-  "settings.general.row.mobileDiffWrap.description":
-    "मोबाइल डिफ़ में लंबी पंक्तियों को क्षैतिज रूप से स्क्रॉल करने के बजाय लपेटें",
 
   "provider.connect.error.unsupportedFields": "इस प्रमाणीकरण फ़ॉर्म में असमर्थित फ़ील्ड हैं",
   "settings.about.writtenByNames": "{{names}} द्वारा लिखित",
@@ -804,7 +794,6 @@ export const dict = {
   "server.connect.button": "जोड़ना",
   "server.connect.address.invalid": "एक वैध HTTP या HTTPS सर्वर पता दर्ज करें।",
   "server.connect.failed": "कनेक्ट नहीं हो सका। सर्वर पता और पासवर्ड जांचें, फिर पुनः प्रयास करें।",
-  "server.connect.pair.description": "अपना कनेक्शन विवरण प्राप्त करने के लिए इस कमांड को अपने कंप्यूटर पर चलाएँ।",
   "server.connect.scan": "QR कोड स्कैन करें",
   "server.connect.scan.description": "अपने कैमरे को ओपनकोड जोड़ी द्वारा दिखाए गए QR कोड पर इंगित करें।",
   "server.connect.scan.invalid": "यह कोई OpenCode युग्मन कोड नहीं है. ओपनकोड जोड़ी द्वारा दिखाए गए कोड को स्कैन करें।",
@@ -812,7 +801,6 @@ export const dict = {
   "server.connect.camera.starting": "कैमरा खुल रहा है...",
   "server.connect.mixedContent":
     "किसी HTTPS पेज से इस HTTP सर्वर से कनेक्ट नहीं किया जा सका। इसके बजाय HTTPS सर्वर पते का उपयोग करें।",
-  "server.connect.camera.insecure": "QR स्कैनिंग के लिए इस पृष्ठ को HTTPS या लोकलहोस्ट पर खोलने की आवश्यकता है।",
   "server.connect.camera.unavailable":
     "इस ब्राउज़र पर कोई कैमरा उपलब्ध नहीं है. अपना कनेक्शन विवरण मैन्युअल रूप से दर्ज करें।",
   "server.connect.camera.error":

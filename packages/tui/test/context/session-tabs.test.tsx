@@ -286,7 +286,15 @@ test("loads location metadata when an open session moves", async () => {
   const setup = await renderSessionTabs("first")
 
   try {
-    await wait(() => setup.locations.includes(directory) && setup.vcsLocations.includes(directory))
+    // server.connected loads the default location on its own, so also wait for the session and its tab:
+    // a move that arrives before either has loaded is dropped.
+    await wait(
+      () =>
+        setup.data.session.get("first") !== undefined &&
+        setup.tabs.tabs().some((tab) => tab.sessionID === "first") &&
+        setup.locations.includes(directory) &&
+        setup.vcsLocations.includes(directory),
+    )
     setup.emit({
       id: "evt_moved",
       created: 1,

@@ -36,8 +36,5 @@ export default {
   "form.name": "Serweriň ady (islege görä)",
   "form.namePlaceholder": "Localhost",
   "form.add": "Serwer goşuň",
-  "server.default": "Bellenen",
-  "menu.default": "Dymmaklyk hökmünde düzüň",
-  "menu.defaultRemove": "Dymmaklygy aýyryň",
   "menu.delete": "Poz",
 }

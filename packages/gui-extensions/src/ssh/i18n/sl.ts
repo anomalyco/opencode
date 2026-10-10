@@ -36,8 +36,5 @@ export default {
   "form.name": "Ime strežnika (neobvezno)",
   "form.namePlaceholder": "Lokalni gostitelj",
   "form.add": "Dodaj strežnik",
-  "server.default": "Privzeto",
-  "menu.default": "Nastavi kot privzeto",
-  "menu.defaultRemove": "Odstrani privzeto",
   "menu.delete": "Izbriši",
 }

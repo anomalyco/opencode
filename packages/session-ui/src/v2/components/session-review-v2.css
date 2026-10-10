@@ -1,10 +1,18 @@
 [data-component="session-review-v2"] {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;
   min-height: 0;
   overflow: hidden;
   background: var(--v2-background-bg-base);
+}
+
+[data-component="session-review-v2"] [data-slot="session-review-v2-sidebar-toggle"] {
+  position: absolute;
+  inset-block-start: 9.5px;
+  inset-inline-start: 8px;
+  z-index: 2;
 }
 
 [data-component="session-review-v2"] [data-slot="session-review-v2-body"] {
@@ -68,6 +76,14 @@
   flex-shrink: 0;
 }
 
+[data-component="session-review-v2"][data-sidebar-toggle] [data-slot="session-review-v2-sidebar-header"] {
+  box-sizing: border-box;
+  height: 48px;
+  padding-block: 0;
+  padding-inline-start: 46px;
+  border-bottom: 1px solid transparent;
+}
+
 [data-component="session-review-v2-sidebar-root"] [data-slot="session-review-v2-sidebar-title"] {
   display: flex;
   align-items: center;
@@ -81,6 +97,10 @@
 [data-component="session-review-v2-sidebar-root"]
   [data-slot="session-review-v2-sidebar-title"]:not(:has([data-component="select-v2-root"])) {
   margin-inline-start: 8px;
+}
+
+[data-component="session-review-v2"][data-sidebar-toggle] [data-slot="session-review-v2-sidebar-title"] {
+  margin-inline-start: 0;
 }
 
 [data-component="session-review-v2-sidebar-root"]
@@ -231,14 +251,27 @@
 }
 
 [data-component="session-review-v2"] [data-slot="session-review-v2-toolbar"] {
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 10px 12px;
-  padding-inline-start: 8px;
+  height: 48px;
+  padding-block: 0;
+  padding-inline: 8px 12px;
   flex-shrink: 0;
   border-bottom: 1px solid var(--border-weaker-base, var(--v2-border-border-weak));
+}
+
+[data-component="session-review-v2"][data-sidebar-toggle][data-sidebar-collapsed]
+  [data-slot="session-review-v2-toolbar"] {
+  padding-inline-start: 46px;
+}
+
+[data-component="session-review-v2"][data-sidebar-toggle-gap="10"] [data-slot="session-review-v2-sidebar-header"],
+[data-component="session-review-v2"][data-sidebar-toggle-gap="10"][data-sidebar-collapsed]
+  [data-slot="session-review-v2-toolbar"] {
+  padding-inline-start: 54px;
 }
 
 [data-component="session-review-v2"] [data-slot="session-review-v2-toolbar-group"] {

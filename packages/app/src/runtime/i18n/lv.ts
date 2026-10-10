@@ -286,9 +286,6 @@ export const dict = {
   "dialog.server.add.passwordPlaceholder": "parole",
   "dialog.server.edit.title": "Rediģēt serveri",
   "dialog.server.menu.edit": "Rediģēt",
-  "dialog.server.menu.default": "Iestatīt kā noklusējumu",
-  "dialog.server.menu.defaultRemove": "Noņemt noklusējumu",
-  "dialog.server.status.default": "Noklusējuma",
   "dialog.project.edit.title": "Rediģēt projektu",
   "dialog.project.edit.icon": "Ikona",
   "dialog.project.edit.icon.alt": "Projekta ikona",
@@ -296,10 +293,6 @@ export const dict = {
   "dialog.project.edit.color.select": "Izvēlieties {{color}} krāsu",
   "dialog.project.edit.worktree.startup": "Darbtelpas starta skripts",
   "dialog.project.edit.worktree.startup.placeholder": "piem., bun install",
-  "dialog.releaseNotes.action.getStarted": "Sākt",
-  "dialog.releaseNotes.action.next": "Tālāk",
-  "dialog.releaseNotes.action.hideFuture": "Turpmāk nerādīt",
-  "dialog.releaseNotes.media.alt": "Versijas priekšskatījums",
   "toast.permissions.autoaccept.on.title": "Atļaujas tiek automātiski apstiprinātas",
   "toast.permissions.autoaccept.on.description": "Atļauju pieprasījumi tiks apstiprināti automātiski",
   "toast.permissions.autoaccept.off.title": "Automātiska atļauju apstiprināšana apturēta",
@@ -721,7 +714,6 @@ export const dict = {
   "session.view.select": "Sesijas skats",
   "session.background.moveRunning": "Pāriet uz fonu",
   "session.timeline.working": "Darbojas",
-  "session.review.wrapLines": "Aplauzt rindas",
   "session.websearch.title": "Trešās puses tīmekļa meklēšana",
   "session.websearch.description": "Atlasiet meklēšanas nodrošinātāja aģentus, ko izmanto, lai meklētu tīmeklī",
   "session.websearch.provider": "Meklēšanas nodrošinātājs",
@@ -781,8 +773,6 @@ export const dict = {
   "settings.timeline.category.subagents": "Apakšaģenti",
   "settings.timeline.category.notices": "Paziņojumi",
   "settings.timeline.category.tools": "Citi instrumenti",
-  "settings.general.row.mobileDiffWrap.description":
-    "Aptiniet garās līnijas mobilajās diffās, nevis ritiniet horizontāli",
   "session.background.shell.zero": "{{count}} čaulu",
   "session.background.subagent.zero": "{{count}} apakšaģentu",
   "settings.about.otherContributor.zero": "{{count}} citu",
@@ -799,7 +789,6 @@ export const dict = {
   "server.connect.address.invalid": "Ievadiet derīgu HTTP vai HTTPS servera adresi.",
   "server.connect.failed":
     "Nevarēja izveidot savienojumu. Pārbaudiet servera adresi un paroli, pēc tam mēģiniet vēlreiz.",
-  "server.connect.pair.description": "Palaidiet šo komandu datorā, lai iegūtu informāciju par savienojumu.",
   "server.connect.scan": "Skenējiet QR kodu",
   "server.connect.scan.description": "Pavērsiet kameru pret QR kodu, ko parāda opencode pair.",
   "server.connect.scan.invalid": "Šis nav kods OpenCode savienošanai pārī. Skenējiet kodu, ko parāda opencode pair.",
@@ -807,7 +796,6 @@ export const dict = {
   "server.connect.camera.starting": "Tiek atvērta kamera…",
   "server.connect.mixedContent":
     "Nevarēja izveidot savienojumu ar šo HTTP serveri no HTTPS lapas. Tā vietā izmantojiet HTTPS servera adresi.",
-  "server.connect.camera.insecure": "Lai skenētu QR, šī lapa ir jāatver, izmantojot HTTPS vai localhost.",
   "server.connect.camera.unavailable":
     "Šai pārlūkprogrammai nav pieejama neviena kamera. Manuāli ievadiet savienojuma informāciju.",
   "server.connect.camera.error":

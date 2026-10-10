@@ -295,9 +295,6 @@ export const dict = {
   "dialog.server.add.passwordPlaceholder": "پاس ورڈ",
   "dialog.server.edit.title": "سرور میں ترمیم کریں۔",
   "dialog.server.menu.edit": "ترمیم کریں۔",
-  "dialog.server.menu.default": "بطور ڈیفالٹ سیٹ کریں۔",
-  "dialog.server.menu.defaultRemove": "ڈیفالٹ کو ہٹا دیں۔",
-  "dialog.server.status.default": "طے شدہ",
   "dialog.project.edit.title": "پروجیکٹ میں ترمیم کریں۔",
   "dialog.project.edit.icon": "آئیکن",
   "dialog.project.edit.icon.alt": "پروجیکٹ کا آئیکن",
@@ -305,10 +302,6 @@ export const dict = {
   "dialog.project.edit.color.select": "\u2068{{color}}\u2069 رنگ منتخب کریں۔",
   "dialog.project.edit.worktree.startup": "ورک اسپیس اسٹارٹ اپ اسکرپٹ",
   "dialog.project.edit.worktree.startup.placeholder": "جیسے bun install",
-  "dialog.releaseNotes.action.getStarted": "شروع کرو",
-  "dialog.releaseNotes.action.next": "اگلا",
-  "dialog.releaseNotes.action.hideFuture": "مستقبل میں یہ نہ دکھائیں۔",
-  "dialog.releaseNotes.media.alt": "ریلیز کا پیش منظر",
   "dialog.usageExceeded.dontShowAgain": "دوبارہ نہ دکھائیں",
 
   "toast.permissions.autoaccept.on.title": "خودکار طور پر قبول کرنے کی اجازتیں۔",
@@ -727,7 +720,6 @@ export const dict = {
   "session.view.select": "سیشن منظر",
   "session.background.moveRunning": "پس منظر میں منتقل کریں",
   "session.timeline.working": "کام جاری ہے",
-  "session.review.wrapLines": "سطریں لپیٹیں",
   "session.websearch.title": "فریق ثالث کی ویب تلاش",
   "session.websearch.description": "وہ تلاش فراہم کنندہ منتخب کریں جسے ایجنٹس ویب پر تلاش کے لیے استعمال کریں",
   "session.websearch.provider": "تلاش فراہم کنندہ",
@@ -785,7 +777,6 @@ export const dict = {
   "settings.timeline.category.subagents": "ذیلی ایجنٹس",
   "settings.timeline.category.notices": "اطلاعات",
   "settings.timeline.category.tools": "دیگر ٹولز",
-  "settings.general.row.mobileDiffWrap.description": "موبائل ڈف میں افقی اسکرولنگ کے بجائے لمبی سطریں لپیٹیں",
 
   "provider.connect.error.unsupportedFields": "اس توثیقی فارم میں غیر معاون خانے ہیں",
   "settings.about.writtenByNames": "\u2068{{names}}\u2069 کی تحریر",
@@ -810,7 +801,6 @@ export const dict = {
   "server.connect.button": "جڑیں۔",
   "server.connect.address.invalid": "ایک درست HTTP یا HTTPS سرور کا پتہ درج کریں۔",
   "server.connect.failed": "رابطہ نہیں ہو سکا۔ سرور کا پتہ اور پاس ورڈ چیک کریں، پھر دوبارہ کوشش کریں۔",
-  "server.connect.pair.description": "اپنے کنکشن کی تفصیلات حاصل کرنے کے لیے اس کمانڈ کو اپنے کمپیوٹر پر چلائیں۔",
   "server.connect.scan": "QR کوڈ اسکین کریں۔",
   "server.connect.scan.description": "اپنے کیمرے کو اوپن کوڈ پیئر کے ذریعے دکھائے گئے QR کوڈ کی طرف پوائنٹ کریں۔",
   "server.connect.scan.invalid":
@@ -819,7 +809,6 @@ export const dict = {
   "server.connect.camera.starting": "کیمرہ کھل رہا ہے…",
   "server.connect.mixedContent":
     "ایک HTTPS صفحہ سے اس HTTP سرور سے مربوط نہیں ہو سکا۔ اس کے بجائے ایک HTTPS سرور کا پتہ استعمال کریں۔",
-  "server.connect.camera.insecure": "QR اسکیننگ کے لیے اس صفحہ کو HTTPS پر یا لوکل ہوسٹ پر کھولنے کی ضرورت ہے۔",
   "server.connect.camera.unavailable":
     "اس براؤزر پر کوئی کیمرہ دستیاب نہیں ہے۔ اپنے کنکشن کی تفصیلات دستی طور پر درج کریں۔",
   "server.connect.camera.error":

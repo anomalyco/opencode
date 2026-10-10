@@ -17,10 +17,12 @@ export default function Layout(props: ParentProps) {
   const settings = useSettingsSurface()
   const preferences = useSettings()
   const mobile = createMediaQuery("(max-width: 767px)")
-  const [state, setState] = createStore({
+
+  const [state, setState] = createStore<{ tabsWidth: number; tabsMount: HTMLElement | undefined }>({
     tabsWidth: 260,
-    tabsMount: undefined as HTMLElement | undefined,
+    tabsMount: undefined,
   })
+
   const verticalTabs = () => preferences.appearance.tabLayout() === "vertical" && !mobile()
   const bottomTitlebar = () => mobile() && preferences.general.mobileTitlebarPosition() === "bottom"
 
@@ -29,9 +31,12 @@ export default function Layout(props: ParentProps) {
       <div
         class="relative bg-v2-background-bg-deep flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text"
         style={{
-          // Native Windows chrome supplies the gap; retain paint clearance for the panels' outer outlines.
+          // Mobile panels only need clearance for their outer border.
+          "--shell-inline-inset": mobile() ? "1px" : "8px",
+          // A bottom mobile titlebar leaves main's top edge to the safe area. Native Windows chrome supplies the gap;
+          // retain outer-outline clearance.
           "--shell-top-inset": bottomTitlebar()
-            ? "max(0px, calc(8px - env(safe-area-inset-top, 0px)))"
+            ? "0px"
             : platform.platform === "desktop" && platform.os === "windows"
               ? "1px"
               : "8px",
@@ -74,7 +79,6 @@ export default function Layout(props: ParentProps) {
               "--settings-bottom-inset": bottomTitlebar()
                 ? "40px"
                 : "var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))",
-              "--settings-top-inset": mobile() && !bottomTitlebar() ? "0px" : "var(--shell-top-inset, 8px)",
             }}
           >
             <ExtensionServerCover>
@@ -82,7 +86,7 @@ export default function Layout(props: ParentProps) {
             </ExtensionServerCover>
           </main>
         </div>
-        <ExtensionSlot at="shell.bottom" input={{}} />
+        <ExtensionSlot at="window.bottom" input={{}} />
         <ToastRegion />
         <UploadToastHost />
       </div>

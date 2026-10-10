@@ -11,7 +11,7 @@ import { ID, Info, Model, Ref } from "@opencode/core/model"
 import { Provider } from "@opencode/core/provider"
 import { Npm } from "@opencode/util/npm"
 import { Effect, Layer } from "effect"
-import { HttpClient, HttpClientResponse } from "effect/unstable/http"
+import { HttpClient, HttpClientResponse } from "effect/http"
 import { testEffect } from "./lib/effect"
 
 const selected = Info.make({
@@ -32,6 +32,7 @@ const integrations = Layer.mock(Integration.Service, {
     active: () => Effect.undefined,
     resolve: () => Effect.die("unused"),
     key: () => Effect.die("unused"),
+    external: () => Effect.die("unused"),
     activate: () => Effect.die("unused"),
     update: () => Effect.die("unused"),
     remove: () => Effect.die("unused"),

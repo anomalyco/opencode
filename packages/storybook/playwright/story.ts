@@ -3,6 +3,12 @@ import type { Locator } from "@playwright/test"
 
 export { expect }
 
+/**
+ * The dev server URL of a source module, in the form Vite rewrites imports to. A different spelling, such as
+ * `/@fs//Users/...`, loads a second instance of the module, whose contexts the rest of the page never provides.
+ */
+export const sourceURL = (url: URL) => `/@fs${url.pathname}`
+
 export const story = test.extend<{
   mount: (
     id: string,

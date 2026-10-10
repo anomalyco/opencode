@@ -31,7 +31,9 @@ export function dismissToast(toastId: number) {
 
 function resolveIcon(icon: IconProps["name"] | undefined, variant: ToastOptions["variant"]) {
   const name = icon ?? (variant === "success" ? "check" : undefined)
+
   if (!name) return undefined
+
   // Solid resolves JSX accessors under the toast's render owner, not this imperative call site.
   return (() => <Icon name={name} />) as unknown as JSX.Element
 }

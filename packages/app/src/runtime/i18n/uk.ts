@@ -341,9 +341,6 @@ export const dict = {
   "dialog.server.edit.title": "Редагувати сервер",
 
   "dialog.server.menu.edit": "Редагувати",
-  "dialog.server.menu.default": "Встановити за замовчуванням",
-  "dialog.server.menu.defaultRemove": "Скасувати використання за замовчуванням",
-  "dialog.server.status.default": "За замовчуванням",
 
   "dialog.project.edit.title": "Редагувати проєкт",
   "dialog.project.edit.icon": "Іконка",
@@ -352,11 +349,6 @@ export const dict = {
   "dialog.project.edit.color.select": "Вибрати колір {{color}}",
   "dialog.project.edit.worktree.startup": "Скрипт запуску робочої області",
   "dialog.project.edit.worktree.startup.placeholder": "напр. bun install",
-
-  "dialog.releaseNotes.action.getStarted": "Розпочати",
-  "dialog.releaseNotes.action.next": "Далі",
-  "dialog.releaseNotes.action.hideFuture": "Не показувати це в майбутньому",
-  "dialog.releaseNotes.media.alt": "Попередній перегляд релізу",
 
   "dialog.usageExceeded.dontShowAgain": "Більше не показувати",
 
@@ -809,7 +801,6 @@ export const dict = {
   "session.view.select": "Вид сеансу",
   "session.background.moveRunning": "Перейти до фону",
   "session.timeline.working": "Працює",
-  "session.review.wrapLines": "Переносити рядки",
   "session.websearch.title": "Веб-пошук сторонніх розробників",
   "session.websearch.description": "Виберіть пошукову службу, яку агенти використовують для пошуку в Інтернеті",
   "session.websearch.provider": "Пошукова служба",
@@ -870,8 +861,6 @@ export const dict = {
   "settings.timeline.category.subagents": "Субагенти",
   "settings.timeline.category.notices": "Повідомлення",
   "settings.timeline.category.tools": "Інші інструменти",
-  "settings.general.row.mobileDiffWrap.description":
-    "Переносити довгі рядки в мобільні відмінності замість прокручування по горизонталі",
   "provider.connect.error.unsupportedFields": "Ця форма автентифікації містить непідтримувані поля",
   "settings.about.writtenByNames": "Автор: {{names}}",
   "settings.about.illustratedByNames": "Ілюстрації: {{names}}",
@@ -893,7 +882,6 @@ export const dict = {
   "server.connect.button": "Підключитися",
   "server.connect.address.invalid": "Введіть дійсну адресу сервера HTTP або HTTPS.",
   "server.connect.failed": "Не вдалося підключитися. Перевірте адресу сервера та пароль, потім повторіть спробу.",
-  "server.connect.pair.description": "Запустіть цю команду на своєму комп’ютері, щоб отримати дані підключення.",
   "server.connect.scan": "Сканувати QR-код",
   "server.connect.scan.description": "Наведіть камеру на QR-код, показаний opencode pair.",
   "server.connect.scan.invalid": "Це не код підключення OpenCode. Відскануйте код, показаний opencode pair.",
@@ -901,7 +889,6 @@ export const dict = {
   "server.connect.camera.starting": "Відкриваємо камеру…",
   "server.connect.mixedContent":
     "Не вдалося підключитися до цього HTTP-сервера з HTTPS-сторінки. Використайте адресу HTTPS-сервера.",
-  "server.connect.camera.insecure": "Сканування QR вимагає відкриття цієї сторінки через HTTPS або на localhost.",
   "server.connect.camera.unavailable": "У цьому веббраузері немає доступної камери. Введіть дані підключення вручну.",
   "server.connect.camera.error":
     "Не вдалося відкрити камеру. Дозвольте доступ до камери або введіть дані підключення вручну.",

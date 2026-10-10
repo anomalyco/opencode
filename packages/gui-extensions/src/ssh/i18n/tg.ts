@@ -38,8 +38,5 @@ export default {
   "form.name": "Номи сервер (ихтиёрӣ)",
   "form.namePlaceholder": "Localhost",
   "form.add": "Илова кардани сервер",
-  "server.default": "Пешфарз",
-  "menu.default": "Ҳамчун пешфарз таъин кунед",
-  "menu.defaultRemove": "Пешфарзро хориҷ кунед",
   "menu.delete": "Нобуд кунед",
 }

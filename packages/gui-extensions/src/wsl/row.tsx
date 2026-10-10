@@ -1,10 +1,9 @@
-import { Badge } from "@opencode/ui/badge"
 import { Button } from "@opencode/ui/button"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Menu } from "@opencode/ui/menu"
 import { Show } from "solid-js"
-import { useExtension, type RemoteClient, type ServerRow } from "../sdk"
+import { useExtension, type IpcClient, type ServerRow } from "../sdk"
 import type { Wsl, WslServersState } from "./contract"
 import { wslOpencodeAction } from "./model"
 
@@ -12,17 +11,20 @@ export default function WslRow(props: {
   row: ServerRow
   distro: string
   state: () => WslServersState | undefined
-  api: () => RemoteClient<(typeof Wsl)["spec"]> | undefined
+  api: () => IpcClient<(typeof Wsl)["spec"]> | undefined
   pending: (key: string) => boolean
-  request: (key: string, action: () => Promise<unknown>) => void
+  request: <T>(key: string, action: () => Promise<T>) => void
 }) {
   const extension = useExtension()
   const check = () => props.state()?.opencodeChecks[props.distro]
   const opencodeAction = () => wslOpencodeAction(check())
+
   const busy = () => {
     const job = props.state()?.job
+
     return job?.kind === "install-opencode" && job.distro === props.distro
   }
+
   return (
     <Show when={props.api()}>
       {(api) => (
@@ -42,9 +44,6 @@ export default function WslRow(props: {
             </div>
           </div>
           <div class="settings-servers-actions">
-            <Show when={props.row.default.available() && props.row.default.current()}>
-              <Badge>{extension.t("server.default")}</Badge>
-            </Show>
             <Show when={opencodeAction()}>
               {(label) => (
                 <Button
@@ -69,14 +68,6 @@ export default function WslRow(props: {
                   <Menu.Group>
                     <Menu.GroupLabel>{extension.t("server.menu.label")}</Menu.GroupLabel>
                     <props.row.Items />
-                    <Show when={props.row.default.available() && !props.row.default.current()}>
-                      <Menu.Item onSelect={() => props.row.default.set(true)}>{extension.t("menu.default")}</Menu.Item>
-                    </Show>
-                    <Show when={props.row.default.available() && props.row.default.current()}>
-                      <Menu.Item onSelect={() => props.row.default.set(false)}>
-                        {extension.t("menu.defaultRemove")}
-                      </Menu.Item>
-                    </Show>
                     <Menu.Separator />
                     <Menu.Item
                       disabled={props.pending(props.row.key)}

@@ -36,8 +36,5 @@ export default {
   "form.name": "সার্ভারের নাম (ঐচ্ছিক)",
   "form.namePlaceholder": "Localhost",
   "form.add": "সার্ভার যোগ করুন",
-  "server.default": "ডিফল্ট",
-  "menu.default": "ডিফল্ট হিসেবে সেট করুন",
-  "menu.defaultRemove": "ডিফল্ট সরান",
   "menu.delete": "মুছে দিন",
 }

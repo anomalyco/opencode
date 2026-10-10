@@ -9,6 +9,8 @@ import { ClientProvider } from "../../src/context/client"
 import { DataProvider, useData } from "../../src/context/data"
 import { Keymap } from "../../src/context/keymap"
 import { RouteProvider } from "../../src/context/route"
+import { TuiAppProvider } from "../../src/context/runtime"
+import { StorageProvider } from "../../src/context/storage"
 import { ThemeProvider } from "../../src/context/theme"
 import { Composer } from "../../src/routes/session/composer"
 import { DialogProvider } from "../../src/ui/dialog"
@@ -66,23 +68,27 @@ async function setup(width: number, output = "") {
   const app = await testRender(
     () => (
       <TestTuiContexts directory={temporary.path} paths={{ state: temporary.path }}>
-        <ConfigProvider config={createTuiResolvedConfig()}>
-          <RouteProvider initialRoute={{ type: "session", sessionID: "ses_fixture" }}>
-            <ClientProvider api={api}>
-              <DataProvider directory={temporary.path}>
-                <ThemeProvider mode={width === 40 ? "light" : "dark"} source={emptyThemeSource}>
-                  <Keymap.Provider>
-                    <ToastProvider>
-                      <DialogProvider>
-                        <Shells />
-                      </DialogProvider>
-                    </ToastProvider>
-                  </Keymap.Provider>
-                </ThemeProvider>
-              </DataProvider>
-            </ClientProvider>
-          </RouteProvider>
-        </ConfigProvider>
+        <TuiAppProvider value={{ name: "test", version: "test", channel: "test" }}>
+          <StorageProvider>
+            <ConfigProvider config={createTuiResolvedConfig()}>
+              <RouteProvider initialRoute={{ type: "session", sessionID: "ses_fixture" }}>
+                <ClientProvider api={api}>
+                  <DataProvider directory={temporary.path}>
+                    <ThemeProvider mode={width === 40 ? "light" : "dark"} source={emptyThemeSource}>
+                      <Keymap.Provider>
+                        <ToastProvider>
+                          <DialogProvider>
+                            <Shells />
+                          </DialogProvider>
+                        </ToastProvider>
+                      </Keymap.Provider>
+                    </ThemeProvider>
+                  </DataProvider>
+                </ClientProvider>
+              </RouteProvider>
+            </ConfigProvider>
+          </StorageProvider>
+        </TuiAppProvider>
       </TestTuiContexts>
     ),
     { width, height: 30, kittyKeyboard: true },

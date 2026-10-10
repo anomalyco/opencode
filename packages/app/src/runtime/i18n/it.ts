@@ -22,8 +22,6 @@ export const dict = {
   "server.connect.button": "Connettiti",
   "server.connect.address.invalid": "Inserisci un indirizzo server HTTP o HTTPS valido.",
   "server.connect.failed": "Impossibile connettersi. Controlla l'indirizzo del server e la password, quindi riprova.",
-  "server.connect.pair.description":
-    "Esegui questo comando sul tuo computer per ottenere i dettagli della connessione.",
   "server.connect.scan": "Scansiona il codice QR",
   "server.connect.scan.description": "Punta la fotocamera sul codice QR mostrato da opencode pair.",
   "server.connect.scan.invalid":
@@ -32,7 +30,6 @@ export const dict = {
   "server.connect.camera.starting": "Apertura della fotocamera…",
   "server.connect.mixedContent":
     "Impossibile connettersi a questo server HTTP da una pagina HTTPS. Utilizza invece un indirizzo server HTTPS.",
-  "server.connect.camera.insecure": "La scansione QR richiede l'apertura di questa pagina su HTTPS o su localhost.",
   "server.connect.camera.unavailable":
     "Nessuna fotocamera è disponibile per questo browser. Inserisci manualmente i dettagli della tua connessione.",
   "server.connect.camera.error":
@@ -134,7 +131,6 @@ export const dict = {
   "session.view.select": "Vista sessione",
   "session.background.moveRunning": "Sposta in background",
   "session.timeline.working": "In elaborazione",
-  "session.review.wrapLines": "A capo automatico",
   "session.websearch.title": "Ricerca web di terze parti",
   "session.websearch.description": "Seleziona il provider di ricerca utilizzato dagli agenti per cercare sul web",
   "session.websearch.provider": "Provider di ricerca",
@@ -195,8 +191,6 @@ export const dict = {
   "settings.timeline.category.subagents": "Subagenti",
   "settings.timeline.category.notices": "Avvisi",
   "settings.timeline.category.tools": "Altri strumenti",
-  "settings.general.row.mobileDiffWrap.description":
-    "Manda a capo le righe lunghe nei diff per dispositivi mobili invece di scorrere orizzontalmente",
   "session.background.shell.many": "{{count}} shell",
   "session.background.subagent.many": "{{count}} subagenti",
   "settings.about.otherContributor.many": "{{count}} altri",
@@ -452,9 +446,6 @@ export const dict = {
   "dialog.server.add.passwordPlaceholder": "password",
   "dialog.server.edit.title": "Modifica server",
   "dialog.server.menu.edit": "Modifica",
-  "dialog.server.menu.default": "Imposta come predefinito",
-  "dialog.server.menu.defaultRemove": "Rimuovi predefinito",
-  "dialog.server.status.default": "Predefinito",
   "dialog.project.edit.title": "Modifica progetto",
   "dialog.project.edit.icon": "Icona",
   "dialog.project.edit.icon.alt": "Icona del progetto",
@@ -462,10 +453,6 @@ export const dict = {
   "dialog.project.edit.color.select": "Seleziona il colore {{color}}",
   "dialog.project.edit.worktree.startup": "Script di avvio dell'area di lavoro",
   "dialog.project.edit.worktree.startup.placeholder": "es. bun install",
-  "dialog.releaseNotes.action.getStarted": "Inizia",
-  "dialog.releaseNotes.action.next": "Avanti",
-  "dialog.releaseNotes.action.hideFuture": "Non mostrarli in futuro",
-  "dialog.releaseNotes.media.alt": "Anteprima delle novità",
   "dialog.usageExceeded.dontShowAgain": "Non mostrare più",
 
   "toast.permissions.autoaccept.on.title": "Accettazione automatica delle autorizzazioni",

@@ -34,8 +34,5 @@ export default {
   "form.name": "نام سرور (اختیاری)",
   "form.namePlaceholder": "Localhost",
   "form.add": "سرور اضافه کنید",
-  "server.default": "پیش فرض",
-  "menu.default": "به عنوان پیش فرض تنظیم کنید",
-  "menu.defaultRemove": "حذف پیش فرض",
   "menu.delete": "حذف",
 }

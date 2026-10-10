@@ -30,6 +30,7 @@ for (const mode of ["failed", "stopped", "ready"] as const) {
       await page.getByRole("menuitem", { name: "Retry start", exact: true }).click()
       await expect(page.getByLabel("WSL actions")).toHaveText("start:wsl:Ubuntu")
     }
+
     await expect(settings.getByRole("tab", { name: "Projects", exact: true })).toBeEnabled()
     await connection.getByRole("button", { name: "Update OpenCode", exact: true }).click()
     await expect(page.getByLabel("WSL actions")).toContainText("update:Ubuntu")
@@ -64,10 +65,33 @@ test("adding a WSL server while the WSL extension is down shows that WSL is unav
   await expect(dialog.getByText("WSL is unavailable", { exact: true })).toBeVisible()
 })
 
+test("adding an SSH server while the SSH extension is down fails instead of connecting forever", async ({ page }) => {
+  await mockOpenCodeServer(page, {
+    directory: "/repo",
+    project: project({ id: "proj_ssh_unavailable", directory: "/repo", name: "SSH project" }),
+    provider: NO_PROVIDER,
+    sessions: [],
+    pageMessages: () => ({ items: [] }),
+  })
+  await page.goto(`/e2e/utils/settings-wsl.html?${new URLSearchParams({ server: SERVER, mode: "ready" })}`)
+  const settings = page.getByTestId("settings-screen")
+  await expect(settings.getByRole("tab", { name: "Ubuntu", exact: true })).toHaveCount(1)
+  await page.getByRole("checkbox", { name: "SSH extension" }).uncheck()
+
+  await settings.getByRole("button", { name: "Add server", exact: true }).press("Enter")
+  await page.getByRole("menuitem", { name: "Add SSH server", exact: true }).click()
+  const dialog = page.getByRole("dialog")
+  await dialog.getByRole("textbox", { name: "Host or SSH command" }).fill("ssh devbox")
+  await dialog.getByRole("button", { name: "Add server", exact: true }).click()
+  await expect(dialog.getByRole("alert")).toHaveText("Request failed")
+  await expect(dialog.getByRole("button", { name: "Add server", exact: true })).toBeEnabled()
+})
+
 test("an open session's terminal follows its WSL server to the endpoint it restarts on", async ({ page }) => {
   const restarted = "http://127.0.0.1:4098"
   const directory = "/home/ubuntu/project"
   const wsl = session({ id: "ses_wsl", directory, title: "WSL session" })
+
   const config = {
     directory,
     project: project({ id: "proj_wsl", directory }),
@@ -75,11 +99,13 @@ test("an open session's terminal follows its WSL server to the endpoint it resta
     sessions: [wsl],
     pageMessages: () => ({ items: [] }),
   }
+
   const servers = await mockServers(page, {
     [SERVER]: { ...config, sessions: [] },
     [REMOTE_SERVER]: { ...config, pty: { prefix: "pty_before" } },
     [restarted]: { ...config, pty: { prefix: "pty_after" } },
   })
+
   const path = `/server/${base64Encode("wsl:Ubuntu")}/session/${wsl.id}`
   await page.goto(
     `/e2e/utils/settings-wsl.html?${new URLSearchParams({ server: SERVER, mode: "ready", wsl: REMOTE_SERVER, restart: restarted, path })}`,
@@ -107,6 +133,7 @@ test("an open session's terminal follows its WSL server to the endpoint it resta
 test("WSL session and draft tabs outlive the extension going away until the server is removed", async ({ page }) => {
   const directory = "/home/ubuntu/project"
   const wsl = session({ id: "ses_wsl_tabs", directory, title: "WSL tabs session" })
+
   const config = {
     directory,
     project: project({ id: "proj_wsl_tabs", directory }),
@@ -114,6 +141,7 @@ test("WSL session and draft tabs outlive the extension going away until the serv
     sessions: [wsl],
     pageMessages: () => ({ items: [] }),
   }
+
   await mockServers(page, { [SERVER]: { ...config, sessions: [] }, [REMOTE_SERVER]: config })
   const href = `/server/${base64Encode("wsl:Ubuntu")}/session/${wsl.id}`
   await page.goto(
@@ -126,11 +154,13 @@ test("WSL session and draft tabs outlive the extension going away until the serv
   await editor.fill("keep this draft")
   await expect(editor).toHaveText("keep this draft")
   const tabs = page.locator("a[data-titlebar-tab-link]")
+
   const expectTabs = async () => {
     await expect(tabs).toHaveCount(2)
     await expect(tabs.nth(0)).toHaveAttribute("href", href)
     await expect(tabs.nth(1)).toHaveAttribute("href", /^\/new-session\?draftId=/)
   }
+
   await expectTabs()
 
   const extension = page.getByRole("checkbox", { name: "WSL extension" })
@@ -155,6 +185,7 @@ test("WSL session and draft tabs outlive the extension going away until the serv
 test("an SSH host that asks for sign-in again opens the dialog once per selected tab", async ({ page }) => {
   const directory = "/home/box/project"
   const box = session({ id: "ses_ssh_offer", directory, title: "SSH offer session" })
+
   const config = {
     directory,
     project: project({ id: "proj_ssh_offer", directory }),
@@ -162,6 +193,7 @@ test("an SSH host that asks for sign-in again opens the dialog once per selected
     sessions: [box],
     pageMessages: () => ({ items: [] }),
   }
+
   await mockServers(page, { [SERVER]: { ...config, sessions: [] }, [REMOTE_SERVER]: config })
   const path = `/server/${base64Encode("ssh:box")}/session/${box.id}`
   await page.goto(
@@ -199,14 +231,17 @@ test("an SSH host that asks for sign-in again opens the dialog once per selected
 test("an open session moves to the controller a new SSH sign-in creates", async ({ page }) => {
   const directory = "/home/box/project"
   const model = { id: "box-model", name: "Box Model" }
+
   const box = session({
     id: "ses_ssh",
     directory,
     title: "SSH session",
     model: { id: model.id, providerID: "opencode" },
   })
+
   const remote = { password: "ssh-1" }
   const prompts: unknown[] = []
+
   const config = {
     directory,
     project: project({ id: "proj_ssh", directory }),
@@ -214,6 +249,7 @@ test("an open session moves to the controller a new SSH sign-in creates", async 
     sessions: [box],
     pageMessages: () => ({ items: [] }),
   }
+
   const servers = await mockServers(page, {
     [SERVER]: { ...config, sessions: [] },
     [REMOTE_SERVER]: {
@@ -222,6 +258,7 @@ test("an open session moves to the controller a new SSH sign-in creates", async 
       onPrompt: (input) => prompts.push(input.body.text),
     },
   })
+
   const path = `/server/${base64Encode("ssh:box")}/session/${box.id}`
   await page.goto(
     `/e2e/utils/settings-wsl.html?${new URLSearchParams({ server: SERVER, mode: "ready", ssh: REMOTE_SERVER, path })}`,

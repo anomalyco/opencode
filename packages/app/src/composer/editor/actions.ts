@@ -18,11 +18,15 @@ export type ComposerStateStoreInput = ComposerStateStore | Accessor<ComposerStat
 
 export function createComposerEditorActions(input: ComposerStateStoreInput) {
   const tuple = () => (typeof input === "function" ? input() : input)
+
   const store = () => {
     const value = tuple()[0]
+
     return typeof value === "function" ? value() : value
   }
+
   const setStore = () => tuple()[1]
+
   const clearRetry = () => {
     if (untrack(() => store().retry) !== undefined) setStore()("retry", undefined)
   }
@@ -76,6 +80,7 @@ export function createComposerEditorActions(input: ComposerStateStoreInput) {
       const text = store()
         .prompt.map((part) => ("content" in part ? part.content : ""))
         .join("")
+
       const end = range?.end ?? store().cursor ?? text.length
       const start = range?.start ?? text.slice(0, end).lastIndexOf("@")
       setStore()("prompt", insertMention(store().prompt, start < 0 ? end : start, end, mention))
@@ -92,21 +97,29 @@ export function createComposerEditorActions(input: ComposerStateStoreInput) {
 function insertText(prompt: ComposerPrompt, cursor: number, content: string): ComposerPrompt {
   let position = 0
   let inserted = false
+
   const parts = prompt.flatMap<ComposerPrompt[number]>((part) => {
     if (isAttachment(part)) return [part]
     const start = position
     position += part.content.length
+
     if (inserted) return [part]
+
     if (part.type === "text" && cursor >= start && cursor <= position) {
       inserted = true
       const offset = cursor - start
+
       return [{ ...part, content: part.content.slice(0, offset) + content + part.content.slice(offset) }]
     }
+
     if (cursor > start) return [part]
     inserted = true
+
     return [{ type: "text", content, start: 0, end: 0 }, part]
   })
+
   if (!inserted) parts.push({ type: "text", content, start: 0, end: 0 })
+
   return withOffsets(parts)
 }
 
@@ -119,29 +132,36 @@ function insertMention(
   if (start === 0 && end === 0) {
     return withOffsets([mention, { type: "text", content: " ", start: 0, end: 0 }, ...prompt])
   }
+
   let position = 0
+
   const parts = prompt.flatMap<ComposerPrompt[number]>((part) => {
     if (isAttachment(part)) return [part]
     const partStart = position
     position += part.content.length
+
     if (part.type !== "text" || start < partStart || end > position) return [part]
     const before = part.content.slice(0, start - partStart)
     const after = part.content.slice(end - partStart)
+
     return [
       ...(before ? [{ type: "text" as const, content: before, start: 0, end: 0 }] : []),
       mention,
       { type: "text" as const, content: ` ${after}`, start: 0, end: 0 },
     ]
   })
+
   return withOffsets(parts)
 }
 
 function withOffsets(prompt: ComposerPrompt): ComposerPrompt {
   let offset = 0
+
   return prompt.map((part) => {
     if (isAttachment(part)) return part
     const next = { ...part, start: offset, end: offset + part.content.length }
     offset = next.end
+
     return next
   })
 }

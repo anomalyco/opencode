@@ -55,6 +55,7 @@ describe("Composer store", () => {
       cursor: 2,
       context: { items: [] },
     })
+
     const prompt = createComposerEditorActions([state, setState])
 
     prompt.addText("X\nY")

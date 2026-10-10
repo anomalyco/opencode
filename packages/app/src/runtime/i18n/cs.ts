@@ -286,9 +286,6 @@ export const dict = {
   "dialog.server.add.passwordPlaceholder": "heslo",
   "dialog.server.edit.title": "Upravit server",
   "dialog.server.menu.edit": "Upravit",
-  "dialog.server.menu.default": "Nastavit jako výchozí",
-  "dialog.server.menu.defaultRemove": "Odebrat výchozí",
-  "dialog.server.status.default": "Výchozí",
   "dialog.project.edit.title": "Upravit projekt",
   "dialog.project.edit.icon": "ikona",
   "dialog.project.edit.icon.alt": "Ikona projektu",
@@ -296,10 +293,6 @@ export const dict = {
   "dialog.project.edit.color.select": "Vyberte barvu {{color}}",
   "dialog.project.edit.worktree.startup": "Spouštěcí skript pracovního prostoru",
   "dialog.project.edit.worktree.startup.placeholder": "např. bun install",
-  "dialog.releaseNotes.action.getStarted": "Začněte",
-  "dialog.releaseNotes.action.next": "Další",
-  "dialog.releaseNotes.action.hideFuture": "V budoucnu je nezobrazujte",
-  "dialog.releaseNotes.media.alt": "Náhled vydání",
   "toast.permissions.autoaccept.on.title": "Automatické přijímání oprávnění",
   "toast.permissions.autoaccept.on.description": "Žádosti o povolení budou automaticky schváleny",
   "toast.permissions.autoaccept.off.title": "Zastaveno automatické přijímání oprávnění",
@@ -725,7 +718,6 @@ export const dict = {
   "session.view.select": "Zobrazení relace",
   "session.background.moveRunning": "Přesun na pozadí",
   "session.timeline.working": "Pracuje",
-  "session.review.wrapLines": "Zalamovat řádky",
   "session.websearch.title": "Webové vyhledávání třetích stran",
   "session.websearch.description": "Vyberte agenty poskytovatele vyhledávání, které používají k vyhledávání na webu",
   "session.websearch.provider": "Poskytovatel vyhledávání",
@@ -784,8 +776,6 @@ export const dict = {
   "settings.timeline.category.subagents": "subagenty",
   "settings.timeline.category.notices": "Upozornění",
   "settings.timeline.category.tools": "Jiné nářadí",
-  "settings.general.row.mobileDiffWrap.description":
-    "Zabalte dlouhé řádky do mobilních diffů namísto vodorovného posouvání",
   "session.background.shell.few": "{{count}} shelly",
   "session.background.shell.many": "{{count}} shellu",
   "session.background.subagent.few": "{{count}} podagenti",
@@ -813,7 +803,6 @@ export const dict = {
   "server.connect.button": "Připojit",
   "server.connect.address.invalid": "Zadejte platnou adresu serveru HTTP nebo HTTPS.",
   "server.connect.failed": "Připojení se nezdařilo. Zkontrolujte adresu serveru a heslo a zkuste to znovu.",
-  "server.connect.pair.description": "Spuštěním tohoto příkazu v počítači získáte údaje pro připojení.",
   "server.connect.scan": "Naskenovat QR kód",
   "server.connect.scan.description": "Namiřte kameru na QR kód zobrazený příkazem opencode pair.",
   "server.connect.scan.invalid": "Toto není párovací kód OpenCode. Naskenujte kód zobrazený příkazem opencode pair.",
@@ -821,7 +810,6 @@ export const dict = {
   "server.connect.camera.starting": "Otevírání kamery…",
   "server.connect.mixedContent":
     "K tomuto serveru HTTP se nelze připojit ze stránky HTTPS. Použijte adresu serveru HTTPS.",
-  "server.connect.camera.insecure": "Skenování QR kódu vyžaduje otevření této stránky přes HTTPS nebo na localhostu.",
   "server.connect.camera.unavailable":
     "Pro tento prohlížeč není dostupná žádná kamera. Zadejte údaje pro připojení ručně.",
   "server.connect.camera.error":

@@ -180,6 +180,7 @@ for (const direction of ["ltr", "rtl"]) {
           theme,
         ),
       )
+
       if (theme === "light") {
         await expect(track.locator("span").last()).toHaveCSS("background-image", "none")
         await expect(track).toHaveCSS(
@@ -187,9 +188,11 @@ for (const direction of ["ltr", "rtl"]) {
           await track.evaluate((element) => getComputedStyle(element).getPropertyValue("--v2-grey-500").trim()),
         )
       }
+
       if (theme === "dark") {
         await expect(track.locator("span").last()).not.toHaveCSS("background-image", "none")
       }
+
       await page.screenshot({ path: testInfo.outputPath(`timeline-${theme}-${direction}.png`) })
       const list = component.locator('[data-slot="timeline-detail-list"]')
       const columns = component.locator('[data-slot="timeline-detail-columns"]')
@@ -198,38 +201,49 @@ for (const direction of ["ltr", "rtl"]) {
       expect(
         await advancedTrigger.evaluate((element) => {
           const trigger = element.getBoundingClientRect()
+
           const heading = document
             .querySelector('[data-slot="timeline-detail-columns"] > :nth-child(2)')!
             .getBoundingClientRect()
+
           return Math.abs(trigger.y + trigger.height / 2 - (heading.y + heading.height / 2))
         }),
       ).toBeLessThan(1)
       expect(
         await list.evaluate((element) => {
           const list = element.getBoundingClientRect()
+
           const trigger = document
             .querySelector('[data-slot="timeline-detail-advanced"] > [data-slot="collapsible-trigger"]')!
             .getBoundingClientRect()
+
           return list.y - trigger.bottom
         }),
       ).toBe(8)
+
       for (const [column, field] of [
         [2, "placement"],
         [3, "details"],
       ] as const) {
         const heading = await columns.locator(`> :nth-child(${column})`).evaluate((element) => {
           const rect = element.getBoundingClientRect()
+
           return rect.x + rect.width / 2
         })
+
         const toggle = await component
           .locator(`[data-category="shell"][data-field="${field}"] [data-slot="switch-control"]`)
           .evaluate((element) => {
             const rect = element.getBoundingClientRect()
+
             return rect.x + rect.width / 2
           })
+
         expect(Math.abs(heading - toggle)).toBeLessThan(1)
       }
+
       await expect(component.locator('[data-slot="timeline-detail-activity"]').first()).toHaveCSS("gap", "8px")
+
       for (const width of [900, 320]) {
         await page.setViewportSize({ width, height: 900 })
         await expect(component.getByRole("switch", { name: "Shell grouped", exact: true })).toBeVisible()
@@ -257,6 +271,7 @@ for (const direction of ["ltr", "rtl"]) {
         )
         await slider.focus()
         await slider.press("Home")
+
         for (const position of [0, 1, 2, 3, 4]) {
           if (position > 0) await slider.press("ArrowUp")
           await expect(track).toHaveCSS("--timeline-detail-progress", `${position * 25}%`)
@@ -265,8 +280,10 @@ for (const direction of ["ltr", "rtl"]) {
             "background-color",
             await track.evaluate((element) => getComputedStyle(element, "::before").backgroundColor),
           )
+
           const fill = await track.evaluate((element) => {
             const style = getComputedStyle(element, "::before")
+
             return {
               fraction: parseFloat(style.width) / element.getBoundingClientRect().width,
               start: style.getPropertyValue("inset-inline-start"),
@@ -274,6 +291,7 @@ for (const direction of ["ltr", "rtl"]) {
               remainder: getComputedStyle(element).backgroundColor,
             }
           })
+
           expect(fill.fraction).toBeCloseTo(position / 4, 2)
           expect(fill.start).toBe("0px")
           expect(fill.color).not.toBe(fill.remainder)

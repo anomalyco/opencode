@@ -6,6 +6,7 @@ const local = {
   variant: "base",
   http: { url: "http://localhost:4096" },
 } as const
+
 const remote = {
   type: "extension",
   key: "ssh:example",

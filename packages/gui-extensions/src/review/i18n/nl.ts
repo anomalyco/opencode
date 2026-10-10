@@ -10,4 +10,6 @@ export default {
   "git.description": "Wijzigingen in dit project bijhouden, beoordelen en ongedaan maken",
   loadingChanges: "Wijzigingen laden…",
   noChanges: "Geen wijzigingen",
+  "settings.wrapLines.title": "Regels laten teruglopen",
+  "settings.wrapLines.description": "Lange regels in mobiele diffs laten teruglopen in plaats van horizontaal scrollen",
 }

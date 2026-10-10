@@ -52,8 +52,5 @@ export default {
   "error.healthTimeout": "{{distro}} առողջության ստուգման կողային մեքենայի ժամանակը սպառվել է {{timeout}} ms",
   "error.commandTimeout": "{{command}} {{args}} ժամանակը սպառվել է {{timeout}}ms",
   "error.failedPort": "Չհաջողվեց ստանալ միացքը",
-  "server.default": "Լռելյայն",
-  "menu.default": "Սահմանել որպես լռելյայն",
-  "menu.defaultRemove": "Հեռացնել լռելյայն",
   "menu.remove": "Հեռացնել",
 }

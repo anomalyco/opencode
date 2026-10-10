@@ -5,17 +5,28 @@ import type { MockAnswer } from "../utils/mock-server"
 import { openDraft, openSession, openWorktreeDraft, type WorkspaceInput } from "../utils/workspace"
 
 const directory = "C:/OpenCode/WorkspacePending"
+
 const workspace = "C:/OpenCode/pending-workspace"
+
 const projectID = "proj_workspace_pending"
+
 const draftID = "draft_workspace_pending"
+
 const otherID = "ses_workspace_pending_other"
+
 const text = "Create the workspace, then explain the pending session."
+
 const followUp = "Then explain the setup scripts.\nInclude the install command."
+
 const headers = { "access-control-allow-origin": "*" }
+
 const editor = (page: Page) => page.locator('[data-component="composer-editor"]')
+
 const submit = (page: Page) => page.locator('[data-action="composer-submit"]')
+
 const tabLink = (page: Page, sessionID: string) =>
   page.locator(`[data-titlebar-tab-link][href="${sessionHref(sessionID)}"]`)
+
 // A draft on the local project (C:/OpenCode/WorkspacePending) beside one other session tab.
 const pendingDraft = {
   name: "WorkspacePending",
@@ -25,6 +36,7 @@ const pendingDraft = {
   sessions: [{ id: otherID, title: "Other session" }],
   createdSessionTitle: "Created workspace session",
 } satisfies WorkspaceInput & { draftID: string }
+
 const failFirstCreate = (_: unknown, attempt: number): MockAnswer | undefined =>
   attempt === 1 ? { status: 500, body: { message: "Session creation failed in the fixture" } } : undefined
 
@@ -44,8 +56,10 @@ test("the dark new session panel exposes no lighter background at its rounded co
   await openDraft(page, { name: "PanelCorner", seed: { theme: { id: "oc-2", scheme: "dark" } } })
   await expect(page.locator("html")).toHaveAttribute("data-color-scheme", "dark")
   const box = await page.locator('[data-component="new-session"]').boundingBox()
+
   if (!box) throw new Error("New-session panel bounds are unavailable")
   const screenshot = await page.screenshot()
+
   // Sample the four corner pixels, which lie outside the rounded panel.
   const corners = await page.evaluate(
     async ({ source, points }) => {
@@ -57,6 +71,7 @@ test("the dark new session panel exposes no lighter background at its rounded co
       canvas.height = image.naturalHeight
       const context = canvas.getContext("2d")!
       context.drawImage(image, 0, 0)
+
       return points.map((point) => Array.from(context.getImageData(point.x, point.y, 1, 1).data))
     },
     {
@@ -69,6 +84,7 @@ test("the dark new session panel exposes no lighter background at its rounded co
       ],
     },
   )
+
   expect(corners.filter(([red, green, blue, alpha]) => red > 8 || green > 8 || blue > 8 || alpha !== 255)).toEqual([])
 })
 
@@ -160,12 +176,15 @@ test("the title and message stay stable through worktree creation", async ({ pag
   const title = page.locator("[data-session-title]").getByRole("heading", { level: 1 })
   const before = await title.boundingBox()
   const messageBefore = await pending.message.boundingBox()
+
   // Observe painted frames during the handoff, without using frame counts to wait for readiness.
   const observation = await page.evaluateHandle(() => {
     const frames: { title: string | null; message: boolean; spinner: boolean; draft: string | null }[] = []
     let frame = 0
+
     const visible = (element: Element | null) =>
       !!element?.checkVisibility({ checkVisibilityCSS: true, checkOpacity: true })
+
     const sample = () => {
       const title = document.querySelector<HTMLElement>("[data-session-title] h1")
       const editor = document.querySelector('[data-component="composer-editor"]')
@@ -181,12 +200,15 @@ test("the title and message stay stable through worktree creation", async ({ pag
       })
       frame = requestAnimationFrame(sample)
     }
+
     sample()
+
     return {
       // A frame painted after the synchronous first sample that already shows the created session's title.
       handedOff: () => frames.slice(1).some((frame) => frame.title === "Created workspace session"),
       stop: () => {
         cancelAnimationFrame(frame)
+
         return frames
       },
     }
@@ -234,8 +256,11 @@ for (const row of [
       ...pendingDraft,
       onSessionCreate: row.failure === "session" ? failFirstCreate : undefined,
     })
+
     const pending = await submitPending(page, mock)
+
     if (row.followUp) await draftFollowUp(page)
+
     if (row.failure === "prompt")
       await page.route(`**/api/session/${pending.sessionID}/prompt`, (route) =>
         route.fulfill({ status: 500, json: { message: "Prompt admission failed" }, headers }),
@@ -253,6 +278,7 @@ for (const row of [
     await expect(pending.shimmer).toHaveCount(0)
     await expect.poll(() => mock.calls).toEqual(row.calls)
     expect(mock.prompts).toEqual([])
+
     if (row.followUp) return
     await expect(page.getByText("Failed to create worktree", { exact: true })).toBeVisible()
     await expect(page.getByRole("button", { name: "New worktree", exact: true })).toBeVisible()
@@ -331,13 +357,16 @@ test("restores the draft after closing and revisiting a pending session that fai
 
 test("executes a selected slash command after creating its worktree", async ({ page }) => {
   const commands: { sessionID: string; body: unknown }[] = []
+
   const mock = await openWorktreeDraft(page, {
     ...pendingDraft,
     commands: [{ name: "review", description: "Review changes" }],
     onCommand: (input) => commands.push(input),
   })
+
   const expanded =
     "Review the latest commit for correctness and regressions. Check the relevant tests and report actionable findings."
+
   await editor(page).fill("/review")
   const suggestion = page.getByRole("button", { name: "/review Review changes", exact: true })
   await suggestion.click()
@@ -378,6 +407,7 @@ test("executes a selected slash command after creating its worktree", async ({ p
 })
 
 const accentRoot = "C:/OpenCode/WorkspaceAccent"
+
 const accentWorkspace = `${accentRoot}/.worktrees/feature`
 
 for (const row of [
@@ -390,12 +420,14 @@ for (const row of [
 ]) {
   test(`workspace accent colors the user message only for ${row.name}`, async ({ page }) => {
     const inventory: WorktreeDirectory[] = [{ directory: accentRoot }, { directory: accentWorkspace, strategy: "git" }]
+
     const listed = page.waitForResponse(
       (response) =>
         new URL(response.url()).pathname === "/api/worktree" &&
         new URL(response.url()).searchParams.get("projectID") === "proj_workspaceaccent" &&
         response.request().method() === "GET",
     )
+
     const view = await openSession(page, {
       name: "WorkspaceAccent",
       // The mock answers every location with the session directory while the project stays rooted at main.
@@ -417,6 +449,7 @@ for (const row of [
       worktrees: () => inventory,
       seed: { theme: { id: "oc-2", scheme: "light" } },
     })
+
     expect((await listed).ok()).toBe(true)
     const composer = page.locator('[data-component="composer"]')
     const send = composer.getByRole("button", { name: "Send", exact: true })
@@ -433,12 +466,15 @@ for (const row of [
     await expect(message).toHaveText("Check this fixture workspace.")
     await expectToken(message, "background-color", row.accent ? "--v2-background-bg-accent" : "--v2-blue-100")
     await expectToken(message, "color", row.accent ? "--v2-text-text-contrast" : "--v2-blue-700")
+
     if (!row.accent) return
 
     const url = page.url()
+
     const refreshed = page.waitForResponse(
       (response) => new URL(response.url()).pathname === "/api/worktree" && response.request().method() === "GET",
     )
+
     await view.push([
       {
         id: "evt_accent_inventory",
@@ -514,6 +550,7 @@ async function submitPending(page: Page, mock: Awaited<ReturnType<typeof openWor
   expect(mock.worktreeRequests.map((request) => request.body)).toEqual([expect.objectContaining({ projectID })])
   expect(mock.creates).toEqual([])
   expect(mock.prompts).toEqual([])
+
   return { url, sessionID, messageID, message, shimmer }
 }
 
@@ -526,8 +563,10 @@ async function expectBackground(element: Locator, token: string) {
     element.append(probe)
     const color = getComputedStyle(probe).backgroundColor
     probe.remove()
+
     return color
   }, token)
+
   await expect(element).toHaveCSS("background-image", new RegExp(color.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")))
 }
 
@@ -539,7 +578,9 @@ async function expectToken(element: Locator, property: string, token: string) {
     element.append(probe)
     const color = getComputedStyle(probe).color
     probe.remove()
+
     return color
   }, token)
+
   await expect(element).toHaveCSS(property, color)
 }

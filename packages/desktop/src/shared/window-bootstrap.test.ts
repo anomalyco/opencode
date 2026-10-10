@@ -3,7 +3,7 @@ import { windowBootstrapArgument, windowBootstrapFromArguments } from "./window-
 
 describe("window bootstrap", () => {
   test("round-trips through argv and keeps unknown values absent", () => {
-    const bootstrap = { id: "win a/b ü", firstLaunchPending: false, defaultServerUrl: "http://127.0.0.1:1234" }
+    const bootstrap = { id: "win a/b ü", firstLaunchPending: false, packaged: true }
     expect(windowBootstrapFromArguments(["electron", windowBootstrapArgument(bootstrap)])).toEqual(bootstrap)
     // Absent means "ask over IPC", so a value must not appear on the way through.
     expect(windowBootstrapFromArguments([windowBootstrapArgument({ id: "x" })])).toEqual({ id: "x" })

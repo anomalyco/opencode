@@ -1,10 +1,12 @@
 import type { SessionMessageAssistant, SessionMessageShell } from "@opencode/client/promise"
+import { Match } from "effect"
 import { createMemo, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { DataProvider } from "../context/data"
 import { SessionShellMessage } from "../tools/tool-renderer"
 import { CurrentSessionProviders, CurrentSessionTimelineStory } from "../storybook/current-session-story"
 import {
+  STORY_TIME,
   executeCodeDocument,
   expandedShellDocument,
   recoveryDocument,
@@ -73,6 +75,7 @@ export const LiveUserCommand = {
   argTypes: { outcome: { control: "select", options: ["exited", "nonzero", "timeout", "killed"] } },
   render: (args: { outcome: "exited" | "nonzero" | "timeout" | "killed"; output: boolean; expanded: boolean }) => {
     const [stats, setStats] = createStore({ reads: 0 })
+
     const [message, setMessage] = createSignal<SessionMessageShell>({
       id: "msg_shell_live",
       type: "shell",
@@ -81,7 +84,9 @@ export const LiveUserCommand = {
       status: "running",
       time: { created: 1 },
     })
+
     let output = args.output ? "ready\n" : ""
+
     return (
       <section class="mx-auto flex w-full max-w-[720px] flex-col gap-4 p-6">
         <output aria-label="Output requests">{stats.reads}</output>
@@ -95,7 +100,11 @@ export const LiveUserCommand = {
             setMessage((value) => ({
               ...value,
               status: args.outcome === "nonzero" ? "exited" : args.outcome,
-              exit: args.outcome === "nonzero" ? 1 : args.outcome === "exited" ? 0 : undefined,
+              exit: Match.value(args.outcome).pipe(
+                Match.when("nonzero", () => 1),
+                Match.when("exited", () => 0),
+                Match.orElse(() => undefined),
+              ),
               output: { output, cursor: output.length, size: output.length, truncated: false },
               time: { created: 1, completed: 2 },
             }))
@@ -108,10 +117,13 @@ export const LiveUserCommand = {
           data={{ session: [], session_status: {}, session_diff: {} }}
           shellOutput={async (input) => {
             setStats("reads", (value) => value + 1)
+
             if (message().status !== "running") throw new Error("Shell output unavailable")
+
             if (input.id !== "shell_live" || input.location?.directory !== "/workspace") {
               throw new Error("Unexpected shell output request")
             }
+
             return {
               location: {
                 directory: "/workspace",
@@ -180,6 +192,73 @@ export const ExecuteCode = {
   ),
 }
 
+export const ExecuteFailed = {
+  render: () => (
+    <CurrentSessionTimelineStory
+      title="Execute failed"
+      description="Failed Code Mode executions open to show the full code and the full error message."
+      document={storyDocument([
+        storyTool(
+          "tool_execute_search",
+          "execute",
+          "completed",
+          { code: 'const found = search({ namespace: "browser", offset: 20, limit: 30 });\nreturn found;\n' },
+          { output: "[]" },
+        ),
+        storyTool(
+          "tool_execute_failed_url",
+          "execute",
+          "completed",
+          {
+            code: 'const tab = await tools.browser.tabs.open({\n  url: "file:///C:/tmp/opencode/throne-of-glass-luke.html",\n  focus: true\n});\nconst shot = await tools.browser.screenshot({ tabID: tab.id, fullPage: true });\nreturn { tab, shot };\n',
+          },
+          {
+            output:
+              "Invalid browser URL. Use an HTTP/HTTPS URL or about:blank without embedded credentials. Paths and file:// URLs are not browser URLs; use browser.preview to show a local file to the user. The connected server must be able to reach the address; localhost refers to that server.",
+            metadata: { error: true },
+          },
+        ),
+        {
+          type: "reasoning",
+          text: "## Serving the page\n\nThe browser needs an HTTP URL, so I will serve the file locally.",
+          time: { created: STORY_TIME + 150, completed: STORY_TIME + 1_150 },
+        },
+        storyTool(
+          "tool_execute_serve",
+          "shell",
+          "completed",
+          {
+            command:
+              "bun -e \"Bun.serve({ port: 4399, fetch() { return new Response(Bun.file('C:/tmp/opencode/throne-of-glass-luke.html'), { headers: { 'content-type': 'text/html' } }) } })\"",
+          },
+          { output: "", metadata: { exit: 0 } },
+        ),
+        storyTool(
+          "tool_execute_failed_screenshot",
+          "execute",
+          "completed",
+          {
+            code: 'const tab = await tools.browser.tabs.open({\n  url: "http://localhost:4399",\n  focus: true\n});\nawait tools.browser.wait({ tabID: tab.id, condition: "load", timeoutMs: 5000 });\nconst shot = await tools.browser.screenshot({ tabID: tab.id, fullPage: true });\nreturn { tab, shot };\n',
+          },
+          {
+            output:
+              "[browser.operation_failed] browser.screenshot failed. Screenshot needs a visible tab. Call browser.tabs.focus and keep its desktop window visible.",
+            metadata: { error: true },
+          },
+        ),
+        storyTool(
+          "tool_execute_list",
+          "execute",
+          "completed",
+          { code: "const list = await tools.browser.tabs.list();\nreturn list;\n" },
+          { output: "[]" },
+        ),
+      ])}
+      width="786px"
+    />
+  ),
+}
+
 export const TestFailed = {
   render: () => (
     <CurrentSessionTimelineStory
@@ -198,15 +277,28 @@ function InteractiveCommandStory(props: {
   existingGroup?: boolean
   tool?: "shell" | "execute" | "subagent"
 }) {
+  const initialPhase: "streaming" | "input" | "running" | "completed" = props.streaming ? "streaming" : "completed"
+
   const [state, setState] = createStore({
-    phase: props.streaming ? "streaming" : "completed",
+    phase: initialPhase,
     started: !props.existingGroup,
     lines: 3,
     sibling: false,
     busy: false,
   })
+
   const document = createMemo(() => {
-    const phase = state.phase as "streaming" | "input" | "running" | "completed"
+    const phase = state.phase
+
+    const options: NonNullable<Parameters<typeof storyTool>[4]> = {
+      output:
+        phase === "running"
+          ? "still running"
+          : Array.from({ length: state.lines }, (_, index) => `line ${index + 1}`).join("\n"),
+    }
+
+    if (phase === "streaming") options.raw = ""
+
     const content: SessionMessageAssistant["content"] = [
       ...(props.existingGroup
         ? [storyTool("tool_context_lifecycle", "read", "completed", { filePath: "/workspace/README.md" })]
@@ -224,23 +316,19 @@ function InteractiveCommandStory(props: {
                   : props.tool === "subagent"
                     ? { description: "Inspect lifecycle", agent: "explore", prompt: "Inspect lifecycle" }
                     : { command: "printf ready" },
-              {
-                output:
-                  phase === "running"
-                    ? "still running"
-                    : Array.from({ length: state.lines }, (_, index) => `line ${index + 1}`).join("\n"),
-                ...(phase === "streaming" ? { raw: "" } : {}),
-              },
+              options,
             ),
           ]
         : []),
       ...(state.sibling ? [{ type: "text" as const, text: "Sibling content" }] : []),
     ]
+
     return {
       ...storyDocument(content, state.started && phase !== "completed"),
       status: { type: (state.started && phase !== "completed") || state.busy ? ("busy" as const) : ("idle" as const) },
     }
   })
+
   return (
     <section class="mx-auto flex w-full max-w-[720px] flex-col gap-4 p-6">
       <div class="flex flex-wrap gap-3">

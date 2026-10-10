@@ -14,8 +14,9 @@ import {
   statics,
 } from "@opencode/schema/schema"
 import { Event } from "@opencode/schema/event"
-import { Context, Effect, Encoding, Result, Schema, SchemaGetter, Struct } from "effect"
-import { HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
+import { Context, Effect, Result, Schema, SchemaGetter, SchemaParser, Struct } from "effect"
+import { Base64Url } from "effect/encoding"
+import { HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema, OpenApi } from "effect/http-api"
 import {
   ConflictError,
   LocationNotFoundError,
@@ -98,13 +99,18 @@ const invalidCursor = "Invalid cursor" as const
 
 export const SessionsCursor = Schema.String.pipe(
   Schema.brand("SessionsCursor"),
+  Schema.annotate({
+    identifier: "SessionsCursor",
+    description: "Opaque pagination cursor returned as cursor.previous or cursor.next in the previous response.",
+  }),
   statics((schema) => {
-    const make = schema.make.bind(schema)
+    // Read the default constructor without caching it on the schema, so `make` can be replaced.
+    const make = SchemaParser.make(schema)
     return {
-      make: (input: typeof SessionsCursorInput.Type) => make(Encoding.encodeBase64Url(encodeSessionsCursor(input))),
+      make: (input: typeof SessionsCursorInput.Type) => make(Base64Url.encode(encodeSessionsCursor(input))),
       parse: (input: string) =>
         Effect.suspend(() => {
-          const result = Encoding.decodeBase64UrlString(input)
+          const result = Base64Url.decodeString(input)
           return Result.isFailure(result)
             ? Effect.fail(invalidCursor)
             : decodeSessionsCursor(result.success).pipe(Effect.mapError(() => invalidCursor))
@@ -159,16 +165,12 @@ const BooleanFromString = Schema.Literals(["true", "false"]).pipe(
   }),
 )
 
-const SessionsQueryCursor = SessionsCursor.annotate({
-  description: "Opaque pagination cursor returned as cursor.previous or cursor.next in the previous response.",
-})
-
 export const SessionsQuery = Schema.Struct({
   ...SessionsQueryFields,
   directory: AbsolutePath.pipe(Schema.optional),
   project: Project.ID.pipe(Schema.optional),
   subpath: RelativePath.pipe(Schema.optional),
-  cursor: SessionsQueryCursor.pipe(Schema.optional),
+  cursor: SessionsCursor.pipe(Schema.optional),
 }).annotate({ identifier: "SessionsQuery" })
 
 export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI extends HttpApiMiddleware.AnyId, FormS>(

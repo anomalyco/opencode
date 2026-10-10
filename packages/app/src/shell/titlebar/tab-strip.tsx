@@ -40,6 +40,7 @@ function SessionTabSlot(props: {
       return props.index
     },
   })
+
   let ref!: HTMLDivElement
 
   return (
@@ -92,10 +93,12 @@ function SessionTabEntry(props: {
   const pending = createMemo(() => tabs.pendingSession(props.tab.server, props.tab.sessionId))
   const cachedSession = createMemo(() => props.serverCtx?.data.session.get(props.tab.sessionId))
   const persisted = createMemo(() => tabs.info[props.id])
+
   const [loadedSession] = createResource(
     () => {
       if (pending()) return null
       const ctx = props.serverCtx
+
       return ctx ? { id: props.tab.sessionId, ctx } : null
     },
     ({ id, ctx }) =>
@@ -104,6 +107,7 @@ function SessionTabEntry(props: {
         .then(() => ctx.data.session.get(id))
         .catch(() => undefined),
   )
+
   const session = createMemo(() => (pending() ? undefined : (cachedSession() ?? loadedSession())))
   const missingSession = createMemo(() => !pending() && !!props.serverCtx && !loadedSession.loading && !session())
   const visible = createMemo(() => !!pending() || !!session() || missingSession() || !!persisted()?.title)
@@ -111,14 +115,17 @@ function SessionTabEntry(props: {
   const rename = async (title: string) => {
     const value = session()
     const ctx = props.serverCtx
+
     if (!value || !ctx) return
 
     ctx.data.session.remember({ ...value, title })
+
     try {
       await ctx.sdk.api.session.update({ sessionID: value.id, title })
     } catch (err) {
       const current = session()
       const currentCtx = props.serverCtx
+
       if (current && currentCtx) currentCtx.data.session.remember({ ...current, title: value.title })
       showToast({
         title: language.t("common.requestFailed"),
@@ -132,25 +139,36 @@ function SessionTabEntry(props: {
   createEffect(() => {
     const ctx = props.serverCtx
     const value = session()
+
     if (!ctx || !value || props.active || ctx.sdk.connection.status() !== "connected") return
+
     const timer = window.setTimeout(
       () =>
         void Promise.allSettled([
           ctx.data.session.sync(value.id, { children: true }),
-          // The selected timeline loads transcript and inbox data; inactive tabs need only attention and metadata.
+          // The selected timeline loads the transcript; inactive tabs need attention, metadata, and the inbox,
+          // whose waiting work keeps the tab busy.
           ctx.data.session.permission.sync(value.id),
           ctx.data.session.form.sync(value.id),
+          ctx.data.session.pending.sync(value.id),
         ]),
       300 + props.index * 50,
     )
+
     onCleanup(() => window.clearTimeout(timer))
   })
 
   createEffect(() => {
     const value = session()
+
     if (!value) return
-    tabs.rememberSessionInfo(props.tab, value)
+    tabs.rememberSessionInfo(
+      props.tab,
+      value,
+      props.serverCtx?.data.session.message.list(value.id).some((message) => message.type === "user") ?? false,
+    )
     const current = sdk()
+
     if (!current) return
     createTabComposerState(tabs, props.tab, current.scope, {
       dir: base64Encode(value.location.directory),
@@ -199,6 +217,7 @@ function DraftTabSlot(props: {
       return props.index
     },
   })
+
   let ref!: HTMLDivElement
 
   return (
@@ -270,6 +289,7 @@ export function TitlebarTabStrip(props: {
     const current = props.currentTab
     const key = adjacentTabKey(visibleTabIds(), current ? tabKey(current) : undefined, offset)
     const next = props.tabs.find((tab) => tabKey(tab) === key)
+
     if (next) props.onNavigate(next)
   }
 
@@ -311,9 +331,12 @@ export function TitlebarTabStrip(props: {
           ]}
           onDragStart={(event) => {
             const source = event.operation.source
+
             if (!source) return
             const tab = props.tabs.find((item) => tabKey(item) === source.id.toString())
+
             if (!tab) return
+
             if (vertical()) return
             const tabEl = source.element?.querySelector<HTMLDivElement>("[data-titlebar-tab]")
             props.onNavigate(tab, tabEl ?? undefined)
@@ -321,9 +344,11 @@ export function TitlebarTabStrip(props: {
           onDragEnd={(event) => {
             const current = visibleTabIds()
             const source = event.operation.source
+
             if (event.canceled || !isSortable(source)) return
 
             const { initialIndex, index } = source
+
             if (initialIndex !== index) {
               props.onReorder(
                 mergeVisibleTabOrder(
@@ -348,8 +373,10 @@ export function TitlebarTabStrip(props: {
                 let ref!: HTMLDivElement
                 const visibleIndex = () => visibleTabs().findIndex((item) => tabKey(item) === id)
                 useTabShortcut(visibleIndex, () => props.onNavigate(tab, ref))
+
                 const serverCtx = useServerCtx(() => {
                   if (tab.type !== "session") return
+
                   return global.servers.list().find((item) => ServerConnection.key(item) === tab.server)
                 })
 
@@ -413,7 +440,9 @@ function useTabShortcut(index: () => number, onSelect: () => void) {
 
   command.register(() => {
     const number = index() + 1
+
     if (number < 1 || number > 9) return []
+
     return [
       {
         id: `tab.${number}`,

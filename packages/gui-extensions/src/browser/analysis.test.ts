@@ -10,6 +10,7 @@ test("trace analysis reports observed durations without inventing Web Vitals", (
       { name: "marker", ph: "i" },
     ],
   })
+
   expect(result.metrics).toEqual([
     { name: "recordedEvents", value: 4, unit: "count" },
     { name: "longTasks", value: 1, unit: "count" },
@@ -29,6 +30,7 @@ test("CPU analysis attributes sample intervals to their functions", () => {
     samples: [1, 2, 1],
     timeDeltas: [1000, 2000, 3000],
   })
+
   expect(result.durationMs).toBe(6)
   expect(result.functions).toEqual([
     { name: "first", url: "a.js", line: 1, selfMs: 4 },
@@ -51,6 +53,7 @@ test("heap queries and object links use snapshot IDs and shallow sizes", () => {
     edges: [0, 2, 5, 1, 4, 5],
     strings: ["root", "child", "next", "WeakRef", "target"],
   })
+
   expect(heap.summary()).toMatchObject({ nodes: 3, edges: 2, selfBytes: 38 })
   expect(heap.query("", 1)).toMatchObject({ nodes: [{ id: 3, selfBytes: 20 }], truncated: true })
   expect(heap.object(1).references).toMatchObject([{ name: "next", node: { id: 3 } }])
@@ -67,6 +70,7 @@ test("heap parsing rejects edge counts and targets the file does not carry", () 
     edge_fields: ["type", "name_or_index", "to_node"],
     edge_types: [["property"], "string", "node"],
   }
+
   // A trillion claimed edges with an empty edge array must fail at parse time, not traverse.
   expect(() => parseHeap({ snapshot: { meta }, nodes: [0, 0, 1, 10, 1e12], edges: [], strings: ["root"] })).toThrow(
     "unsupported or incomplete",

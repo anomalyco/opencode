@@ -6,15 +6,18 @@ for (const tool of ["shell", "execute", "subagent"]) {
       const timeline = await mount("current-session-terminal-work--terminal-commands", {
         args: { existingGroup: true, tool },
       })
+
       const group = timeline.locator('[data-component="collapsed-tool-group"]')
       const trigger = group.locator(':scope > [data-component="collapsible"] > [data-slot="collapsible-trigger"]')
       await expect(group).toHaveAttribute("data-timeline-part-ids", "tool_context_lifecycle")
+
       if (open) await trigger.click()
       await expect(trigger).toHaveAttribute("aria-expanded", String(open))
       await timeline.getByRole("button", { name: "Start tool", exact: true }).click()
       await expect(group).toHaveAttribute("data-timeline-part-ids", "tool_context_lifecycle,tool_shell_lifecycle")
       const original = await group.elementHandle()
       const title = tool === "subagent" ? "Agent" : tool === "execute" ? "Execute" : "Shell"
+
       for (const action of [undefined, "Complete input", "Run command", "Complete command"]) {
         if (action) await timeline.getByRole("button", { name: action, exact: true }).click()
         await expect(group).toHaveAttribute("data-timeline-part-ids", "tool_context_lifecycle,tool_shell_lifecycle")
@@ -25,6 +28,7 @@ for (const tool of ["shell", "execute", "subagent"]) {
         await expect(timeline.locator('[data-timeline-row="AssistantPart"]')).toHaveCount(1)
         await expect(trigger).toHaveAttribute("aria-expanded", String(open))
         expect(await original!.evaluate((node) => node.isConnected)).toBe(true)
+
         if (open) await expect(group.locator('[data-timeline-part-id="tool_shell_lifecycle"]')).toBeVisible()
       }
     })
@@ -35,9 +39,11 @@ for (const expanded of [false, true]) {
   // Moved from packages/app/e2e/regression/session-timeline-lifecycle-state.spec.ts
   story(`preserves shell user intent from a ${expanded ? "expanded" : "collapsed"} default`, async ({ mount }) => {
     const timeline = await mount("current-session-terminal-work--terminal-commands", { args: { expanded } })
+
     const trigger = expanded
       ? timeline.locator('[data-timeline-part-id="tool_shell_lifecycle"] [data-slot="collapsible-trigger"]')
       : timeline.getByRole("button", { name: "Used 1 Shell", exact: true })
+
     await expect(trigger).toHaveAttribute("aria-expanded", String(expanded))
     await trigger.click()
     await expect(trigger).toHaveAttribute("aria-expanded", String(!expanded))
@@ -119,6 +125,7 @@ for (const open of [false, true]) {
       await expect(thought).toHaveAttribute("aria-expanded", "false")
       await thought.click()
       await expect(thought).toHaveAttribute("aria-expanded", "true")
+
       if (!open) await thought.click()
       await expect(thought).toHaveAttribute("aria-expanded", String(open))
       await timeline.getByRole("button", { name: "Start shell" }).click()
@@ -145,6 +152,7 @@ for (const open of [false, true]) {
       )
       await expect(timeline.locator('[data-timeline-row="Thinking"]')).toHaveCount(0)
       await expect(used).toHaveAttribute("aria-expanded", "true")
+
       if (!open) await thought.click()
       await expect(reasoning.getByRole("heading", { name: "Inspecting stability", exact: true })).toBeVisible()
       await used.click()

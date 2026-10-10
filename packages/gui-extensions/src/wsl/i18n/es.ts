@@ -53,8 +53,5 @@ export default {
     "Se agotó el tiempo de espera de la comprobación de estado del sidecar de {{distro}} tras {{timeout}} ms",
   "error.commandTimeout": "Se agotó el tiempo de espera de {{command}} {{args}} tras {{timeout}} ms",
   "error.failedPort": "No se pudo obtener el puerto",
-  "server.default": "Predeterminado",
-  "menu.default": "Establecer como predeterminado",
-  "menu.defaultRemove": "Quitar como predeterminado",
   "menu.remove": "Quitar",
 }

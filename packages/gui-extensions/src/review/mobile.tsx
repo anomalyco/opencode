@@ -1,22 +1,31 @@
-import { createEffect, onCleanup, Show } from "solid-js"
+import { onCleanup, Show } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { SessionReview } from "@opencode/session-ui/session-review"
-import { Layout, Links, Preferences, useExtension, type SessionView } from "../sdk"
+import { createKeyed, useExtension, type MountedSession } from "../sdk"
+import type Review from "./index"
 import type { ReviewModel } from "./model"
 import { ReviewEmpty, ReviewTitle } from "./parts"
 
+type ScrollState = {
+  scroll?: HTMLDivElement
+  restoreFrame?: number
+  userInteracted: boolean
+  restored?: { x: number; y: number }
+}
+
 /** The narrow-screen review: every changed file as one scrollable list. */
-export default function SessionMobileReview(props: { review: ReviewModel; session: SessionView }) {
-  const ctx = useExtension()
-  const links = ctx.use(Links)
-  const preferences = ctx.use(Preferences)
+export default function SessionMobileReview(props: { review: ReviewModel; session: MountedSession }) {
+  const ctx = useExtension<typeof Review>()
+  const links = ctx.links
+  const mobileDiff = ctx.stores.mobileDiff
+
   return (
     <div class="relative h-full overflow-hidden">
       <Show when={!props.review.deferRender()}>
         <SessionReviewTab
           review={props.review}
           session={props.session}
-          overflow={preferences.mobileDiffWrap() ? "wrap" : "scroll"}
+          overflow={mobileDiff.value.wrap ? "wrap" : "scroll"}
           onViewFile={(file) => void links.open({ href: file, exact: true, session: props.session })}
         />
       </Show>
@@ -26,26 +35,22 @@ export default function SessionMobileReview(props: { review: ReviewModel; sessio
 
 function SessionReviewTab(props: {
   review: ReviewModel
-  session: SessionView
+  session: MountedSession
   overflow: "wrap" | "scroll"
   onViewFile: (file: string) => void
 }) {
   const ctx = useExtension()
-  const layout = ctx.use(Layout)
+  const layout = ctx.layout
   const review = props.review
-  const state = {
-    scroll: undefined as HTMLDivElement | undefined,
-    restoreFrame: undefined as number | undefined,
-    userInteracted: false,
-    restored: undefined as { x: number; y: number } | undefined,
-  }
+  const state: ScrollState = { userInteracted: false }
 
   const readFile = async (path: string) => {
     return props.session.server.client.file
-      .read({ path, location: { directory: props.session.file.root } })
+      .read({ path, location: { directory: props.review.screen.file.root } })
       .then((data) => ({ type: "text" as const, content: new TextDecoder().decode(data) }))
       .catch((error) => {
         console.debug("[session-review] failed to read file", { path, error })
+
         return undefined
       })
   }
@@ -62,10 +67,13 @@ function SessionReviewTab(props: {
   const doRestore = () => {
     state.restoreFrame = undefined
     const el = state.scroll
+
     if (!el || !layout.ready() || state.userInteracted) return
+
     if (el.clientHeight === 0 || el.clientWidth === 0) return
 
     const s = layout.scroll.get(props.session, "review")
+
     if (!s || (s.x === 0 && s.y === 0)) return
 
     const maxY = Math.max(0, el.scrollHeight - el.clientHeight)
@@ -77,6 +85,7 @@ function SessionReviewTab(props: {
     if (el.scrollTop === targetY && el.scrollLeft === targetX) return
 
     if (el.scrollTop !== targetY) el.scrollTop = targetY
+
     if (el.scrollLeft !== targetX) el.scrollLeft = targetX
     state.restored = { x: el.scrollLeft, y: el.scrollTop }
   }
@@ -89,14 +98,18 @@ function SessionReviewTab(props: {
   const handleScroll = (event: Event & { currentTarget: HTMLDivElement }) => {
     const el = event.currentTarget
     const prev = state.restored
+
     if (prev && el.scrollTop === prev.y && el.scrollLeft === prev.x) {
       state.restored = undefined
+
       return
     }
 
     state.restored = undefined
     handleInteraction()
+
     if (!layout.ready()) return
+
     if (el.clientHeight === 0 || el.clientWidth === 0) return
 
     layout.scroll.set(props.session, "review", {
@@ -105,12 +118,16 @@ function SessionReviewTab(props: {
     })
   }
 
-  createEffect(() => {
-    review.diffs().length
-    props.overflow
-    if (!layout.ready()) return
-    queueRestore()
-  })
+  // Restores the stored scroll once the layout loads, and again when the list or its wrapping changes.
+  createKeyed(
+    () => {
+      const count = review.diffs().length
+      const overflow = props.overflow
+
+      return layout.ready() ? { count, overflow } : undefined
+    },
+    () => queueRestore(),
+  )
 
   onCleanup(() => {
     if (state.restoreFrame !== undefined) cancelAnimationFrame(state.restoreFrame)
