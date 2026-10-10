@@ -42,6 +42,10 @@ export const dict = {
   "command.palette": "Command palette",
 
   "command.session.new": "New session",
+  "command.session.previous": "Previous session",
+  "command.session.next": "Next session",
+  "command.session.previous.unseen": "Previous unread session",
+  "command.session.next.unseen": "Next unread session",
   "command.file.open": "Open file",
   "command.tab.close": "Close tab",
   "command.tab.reopenClosed": "Reopen closed tab",

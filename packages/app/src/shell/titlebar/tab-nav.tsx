@@ -11,7 +11,7 @@ import { useServerCtx } from "@/runtime/server/runtime"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ServerConnection, serverName, useServers } from "@/runtime/server/registry"
 import { displayName } from "@opencode/ui/project-avatar"
-import { SessionTabAvatar } from "@/shell/layout/session-tab-avatar"
+import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
 import { SessionProgressIndicatorV2 } from "@opencode/session-ui/v2/session-progress-indicator-v2"
 import type { SessionInfo } from "@opencode/client/promise"
 import { sessionTabTitle } from "./tab-title"
@@ -27,6 +27,8 @@ export function TabNavItem(props: {
   server: ServerConnection.Key
   session: SessionInfo | undefined
   preparing: boolean
+  unread: boolean
+  loading: boolean
   fallbackTitle?: string
   onRename: (title: string) => Promise<void>
   onClose: () => void
@@ -298,11 +300,11 @@ export function TabNavItem(props: {
             }
           >
             {(session) => (
-              <SessionTabAvatar
+              <SessionTabAvatarView
                 project={project()}
                 directory={session.location.directory}
-                sessionId={session.id}
-                server={props.server}
+                unread={props.unread}
+                loading={props.loading}
               />
             )}
           </Show>
