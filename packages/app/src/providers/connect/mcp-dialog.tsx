@@ -1,11 +1,11 @@
-import { Component, createMemo, Show } from "solid-js"
+import { Component, createEffect, createMemo, Show } from "solid-js"
 import { useData } from "@/runtime/server/current"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { Dialog, DialogBody, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
 import { List } from "@opencode/ui/list"
 import { Switch } from "@opencode/ui/switch"
 import { useLanguage } from "@/runtime/i18n/language"
-import { useMcpToggle } from "@/providers/connect/mcp"
+import { useMcpToggle, type McpControls } from "@/providers/connect/mcp"
 
 const statusLabels = {
   connected: "mcp.status.connected",
@@ -14,20 +14,38 @@ const statusLabels = {
   disabled: "mcp.status.disabled",
 } as const
 
-export const DialogSelectMcp: Component = () => {
+export const DialogSelectMcp: Component<{ directory?: string; controls?: McpControls }> = (props) => {
   const data = useData()
   const sdk = useWorkspaceLocation()
   const language = useLanguage()
+  const directory = () => props.directory ?? sdk().directory
+  const servers = () => data.location.mcp.server.list({ directory: directory() }) ?? []
+
+  createEffect(() => {
+    void data.location.mcp.server.sync({ directory: directory() }).catch(() => undefined)
+  })
 
   const items = createMemo(() =>
-    (data.location.mcp.server.list({ directory: sdk().directory }) ?? [])
+    servers()
       .map((server) => ({ name: server.name, status: server.status.status }))
       .sort((a, b) => a.name.localeCompare(b.name)),
   )
 
-  const toggle = useMcpToggle(() => sdk().directory)
+  const toggle = useMcpToggle(directory)
+  const enabled = (name: string) => {
+    const connected = servers().find((server) => server.name === name)?.status.status === "connected"
 
-  const enabledCount = createMemo(() => items().filter((i) => i.status === "connected").length)
+    return props.controls?.preview ? (props.controls.states[name] ?? connected) : connected
+  }
+  const change = (name: string) => {
+    if (props.controls) {
+      if (!props.controls.pending) props.controls.change(name, !enabled(name))
+      return
+    }
+    if (!toggle.isPending) toggle.mutate(name)
+  }
+
+  const enabledCount = createMemo(() => items().filter((i) => enabled(i.name)).length)
   const totalCount = createMemo(() => items().length)
 
   return (
@@ -48,18 +66,18 @@ export const DialogSelectMcp: Component = () => {
           filterKeys={["name", "status"]}
           sortBy={(a, b) => a.name.localeCompare(b.name)}
           onSelect={(x) => {
-            if (!x || x.status === "pending" || toggle.isPending) return
-            toggle.mutate(x.name)
+            if (!x || (!props.controls?.preview && x.status === "pending")) return
+            change(x.name)
           }}
         >
           {(i) => {
-            const mcpStatus = () =>
-              data.location.mcp.server.list({ directory: sdk().directory })?.find((server) => server.name === i.name)
-                ?.status
+            const mcpStatus = () => servers().find((server) => server.name === i.name)?.status
 
             const status = () => mcpStatus()?.status
 
             const statusLabel = () => {
+              // A new worktree has staged preferences, not live connection statuses.
+              if (props.controls?.preview) return
               const key = status() ? statusLabels[status() as keyof typeof statusLabels] : undefined
 
               if (!key) return
@@ -72,8 +90,6 @@ export const DialogSelectMcp: Component = () => {
 
               if (s?.status === "failed") return s.error
             }
-
-            const enabled = () => status() === "connected"
 
             return (
               <div class="w-full flex items-center justify-between gap-x-3">
@@ -91,12 +107,12 @@ export const DialogSelectMcp: Component = () => {
                 <div onClick={(e) => e.stopPropagation()}>
                   <Switch
                     appearance="standard"
-                    checked={enabled()}
-                    disabled={status() === "pending" || (toggle.isPending && toggle.variables === i.name)}
-                    onChange={() => {
-                      if (toggle.isPending) return
-                      toggle.mutate(i.name)
-                    }}
+                    checked={enabled(i.name)}
+                    disabled={
+                      (!props.controls?.preview && status() === "pending") ||
+                      (props.controls ? props.controls.pending : toggle.isPending && toggle.variables === i.name)
+                    }
+                    onChange={() => change(i.name)}
                   />
                 </div>
               </div>
