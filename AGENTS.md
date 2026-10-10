@@ -41,6 +41,8 @@ Valid types are `feat`, `fix`, `docs`, `chore`, `refactor`, and `test`. Scopes a
 
 Examples: `fix(tui): simplify thinking toggle styling`, `docs: update contributing guide`, `chore(sdk): regenerate types`.
 
+`fix`, `chore`, and `test` PRs must reference an existing issue (for example, `Closes #123`). `feat`, `docs`, and `refactor` PRs are exempt from the automated linked-issue check.
+
 ## Style Guide
 
 ### General Principles
@@ -82,6 +84,8 @@ const { a, b } = obj
 ```
 
 ### Imports
+
+These rules apply to new or modified import statements. Do not rewrite unrelated existing imports solely to conform to them.
 
 - Never alias imports. Do not use `import { foo as bar } from "..."` or renamed imports like `resolve as pathResolve`.
 - Never use type-position `import("...")` references such as `Schema.declare<import("@opencode/plugin/effect/plugin").Plugin["effect"]>`. Only when two imports genuinely collide on a name and no other option exists, an aliased type import (`import type { Plugin as PluginDefinition } from "..."`) is permitted as a last resort — still strongly preferred not to.
