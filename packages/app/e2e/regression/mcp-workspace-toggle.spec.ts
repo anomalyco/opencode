@@ -32,7 +32,8 @@ for (const entry of ["slash command", "shortcut"] as const) {
         onPrompt: (prompt) => void prompts.push(prompt),
         onMcpAction: (action) => void actions.push(action),
       } satisfies WorkspaceInput
-      const draft = destination === "new worktree" ? await openWorktreeDraft(page, input) : await openDraft(page, input)
+      const pending = destination === "new worktree" ? await openWorktreeDraft(page, input) : undefined
+      const draft = pending ?? (await openDraft(page, input))
       if (destination === "existing worktree") {
         await page.getByRole("button", { name: "Local", exact: true }).click()
         await page.getByRole("menuitem", { name: "Worktree", exact: true }).click()
@@ -69,12 +70,12 @@ for (const entry of ["slash command", "shortcut"] as const) {
       await expectPath(page, draftHref(draft.draftID))
       expect(creates).toEqual([])
       expect(prompts).toEqual([])
-      if ("worktree" in draft) {
+      if (pending) {
         await draft.editor.fill("Use the selected MCP")
         await draft.editor.press("Enter")
-        await expect.poll(() => draft.worktreeRequests).toHaveLength(1)
+        await expect.poll(() => pending.worktreeRequests).toHaveLength(1)
         expect(actions).toEqual([])
-        draft.worktree.resolve({ status: 200, json: { directory: workspace } })
+        pending.worktree.resolve({ status: 200, json: { directory: workspace } })
         await expect.poll(() => prompts).toHaveLength(1)
         expect(actions).toEqual([{ server: "draft-mcp", action: "connect", directory: workspace }])
         expect(creates).toEqual([expect.objectContaining({ location: { directory: workspace } })])
