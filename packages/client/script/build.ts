@@ -10,11 +10,13 @@ import { EventLog } from "@opencode/schema/event-log"
 import { FileDiff } from "@opencode/schema/file-diff"
 import { FileSystem } from "@opencode/schema/filesystem"
 import { Form } from "@opencode/schema/form"
+import { Instruction } from "@opencode/schema/instruction"
 import { InstructionEntry } from "@opencode/schema/instruction-entry"
 import { Integration } from "@opencode/schema/integration"
 import { Location } from "@opencode/schema/location"
 import { Mcp } from "@opencode/schema/mcp"
 import { Model } from "@opencode/schema/model"
+import { Money } from "@opencode/schema/money"
 import { Permission } from "@opencode/schema/permission"
 import { PermissionSaved } from "@opencode/schema/permission-saved"
 import { Plugin } from "@opencode/schema/plugin"
@@ -27,14 +29,17 @@ import { Pty } from "@opencode/schema/pty"
 import { PtyTicket } from "@opencode/schema/pty-ticket"
 import { Question } from "@opencode/schema/question"
 import { Reference } from "@opencode/schema/reference"
-import { AbsolutePath, PositiveInt, RelativePath } from "@opencode/schema/schema"
+import { AbsolutePath, RelativePath } from "@opencode/schema/schema"
 import { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { SessionInbox } from "@opencode/schema/session-inbox"
 import { Shell } from "@opencode/schema/shell"
 import { Skill } from "@opencode/schema/skill"
+import { Snapshot } from "@opencode/schema/snapshot"
 import { Vcs } from "@opencode/schema/vcs"
 import { WebSearch } from "@opencode/schema/websearch"
+import { Workspace } from "@opencode/schema/workspace"
+import { SessionsCursor } from "@opencode/protocol/groups/session"
 import { Effect, Schema } from "effect"
 import { fileURLToPath } from "url"
 
@@ -50,12 +55,14 @@ const effectTypeReferences = [
   ...namespaceTypes("FileDiff", "@opencode/schema/file-diff", FileDiff),
   ...namespaceTypes("FileSystem", "@opencode/schema/filesystem", FileSystem),
   ...namespaceTypes("Form", "@opencode/schema/form", Form),
+  ...namespaceTypes("Instruction", "@opencode/schema/instruction", Instruction),
   ...namespaceTypes("InstructionEntry", "@opencode/schema/instruction-entry", InstructionEntry),
   ...namespaceTypes("Integration", "@opencode/schema/integration", Integration),
   typeReference("Location.PublicRef", "@opencode/schema/location", Location.PublicRef),
   typeReference("Location.PublicInfo", "@opencode/schema/location", Location.PublicInfo),
   ...namespaceTypes("Mcp", "@opencode/schema/mcp", Mcp),
   ...namespaceTypes("Model", "@opencode/schema/model", Model),
+  ...namespaceTypes("Money", "@opencode/schema/money", Money),
   ...namespaceTypes("Permission", "@opencode/schema/permission", Permission),
   ...namespaceTypes("PermissionSaved", "@opencode/schema/permission-saved", PermissionSaved),
   ...namespaceTypes("Plugin", "@opencode/schema/plugin", Plugin),
@@ -72,15 +79,17 @@ const effectTypeReferences = [
   ...namespaceTypes("SessionInbox", "@opencode/schema/session-inbox", SessionInbox),
   ...namespaceTypes("Shell", "@opencode/schema/shell", Shell),
   ...namespaceTypes("Skill", "@opencode/schema/skill", Skill),
+  ...namespaceTypes("Snapshot", "@opencode/schema/snapshot", Snapshot),
   ...namespaceTypes("Vcs", "@opencode/schema/vcs", Vcs),
   ...namespaceTypes("WebSearch", "@opencode/schema/websearch", WebSearch),
+  ...namespaceTypes("Workspace", "@opencode/schema/workspace", Workspace),
   typeReference("Prompt", "@opencode/schema/prompt", Prompt),
   typeReference("PromptMention", "@opencode/schema/prompt", PromptMention),
   typeReference("FileAttachment", "@opencode/schema/prompt", FileAttachment),
   typeReference("AgentAttachment", "@opencode/schema/prompt", AgentAttachment),
   typeReference("AbsolutePath", "@opencode/schema/schema", AbsolutePath),
-  typeReference("PositiveInt", "@opencode/schema/schema", PositiveInt),
   typeReference("RelativePath", "@opencode/schema/schema", RelativePath),
+  typeReference("SessionsCursor", "@opencode/protocol/groups/session", SessionsCursor),
 ]
 
 await Effect.runPromise(
