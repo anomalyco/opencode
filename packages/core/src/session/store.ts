@@ -102,7 +102,15 @@ const layer = Layer.effect(
         const order = direction === "previous" ? (requestedOrder === "asc" ? "desc" : "asc") : requestedOrder
         const sortColumn = SessionTable.time_updated
         const conditions: SQL[] = []
-        if ("directory" in input) conditions.push(eq(SessionTable.directory, input.directory))
+        if ("directory" in input) {
+          // Preserve exact empty-directory lookups for legacy rows without matching filesystem roots.
+          // Nonempty directories also match legacy rows with trailing slashes.
+          conditions.push(
+            !input.directory
+              ? eq(SessionTable.directory, "")
+              : sql`${SessionTable.directory} <> '' AND rtrim(${SessionTable.directory}, '/') = rtrim(${sql.param(input.directory, SessionTable.directory)}, '/')`,
+          )
+        }
         if (input.workspaceID) conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
         if ("project" in input) conditions.push(eq(SessionTable.project_id, input.project))
         if ("project" in input && input.subpath !== undefined) conditions.push(eq(SessionTable.path, input.subpath))
