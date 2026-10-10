@@ -61,7 +61,7 @@ import { testEffect } from "./lib/effect"
 import { registerIntegrationPolicy } from "./fixture/policy"
 import { imagePassthrough } from "./lib/image"
 import { location } from "./fixture/location"
-import { tmpdirScoped } from "./fixture/tmpdir"
+import { tmpdir, tmpdirScoped } from "./fixture/tmpdir"
 import { hostEnvironmentLayer, recordingEnvironmentLayer } from "./fixture/environment"
 import {
   codeModeListings,
@@ -1640,6 +1640,46 @@ test("adds, disconnects, and reconnects MCP servers at runtime", async () => {
           ),
         )
       }),
+    ),
+  )
+})
+
+test("reconnects a dropped local MCP server as a fresh process", async () => {
+  await using dir = await tmpdir()
+  const pidFile = path.join(dir.path, "pids")
+  const pids = Effect.promise(() =>
+    fs
+      .readFile(pidFile, "utf8")
+      .then((text) => text.trim().split("\n").filter(Boolean))
+      .catch(() => [] as string[]),
+  )
+
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const service = yield* Mcp.Service
+        yield* settled(service)
+        expect(yield* pids).toHaveLength(1)
+        process.kill(Number((yield* pids)[0]))
+
+        yield* Effect.gen(function* () {
+          const status = (yield* service.servers()).find((server) => server.name === "resources")?.status
+          const spawned = yield* pids
+          if (status?.status !== "connected" || spawned.length < 2) return yield* Effect.fail("waiting")
+          return spawned
+        }).pipe(Effect.retry({ times: 600, schedule: Schedule.spaced("50 millis") }))
+
+        expect(yield* pids).toHaveLength(2)
+      }).pipe(
+        Effect.provide(
+          resourceMcpLayer(
+            new ConfigMCP.Local({
+              type: "local",
+              command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-reconnect.cjs"), pidFile],
+            }),
+          ),
+        ),
+      ),
     ),
   )
 })
