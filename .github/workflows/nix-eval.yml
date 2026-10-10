@@ -5,6 +5,8 @@ on:
     branches: [dev, v2]
   pull_request:
     branches: [dev, v2]
+    paths-ignore:
+      - services/www/src/docs/**
   workflow_dispatch:
 
 concurrency:

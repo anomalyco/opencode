@@ -27,6 +27,7 @@ jobs:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     outputs:
       app: ${{ steps.packages.outputs.app }}
+      docs: ${{ steps.docs.outputs.only }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
@@ -52,6 +53,17 @@ jobs:
           bun x turbo@2.10.2 ls --affected --filter=@opencode/app --output=json > affected.json
           bun -e 'const result = await Bun.file("affected.json").json(); console.log(`app=${result.packages.count > 0}`)' >> "$GITHUB_OUTPUT"
 
+      # A pull request that changes only documentation site files cannot affect what the unit job tests or builds; the
+      # typecheck job and the www workflow check those files.
+      - name: Find documentation-only pull request
+        id: docs
+        if: github.event_name == 'pull_request'
+        run: |
+          files=$(git diff --name-only HEAD^1 HEAD)
+          if [ -n "$files" ] && ! grep -qv '^services/www/src/docs/' <<< "$files"; then
+            echo "only=true" >> "$GITHUB_OUTPUT"
+          fi
+
   unit:
     name: unit (${{ matrix.settings.name }})
     strategy:
@@ -62,39 +74,48 @@ jobs:
             host: blacksmith-4vcpu-ubuntu-2404
           - name: windows
             host: blacksmith-4vcpu-windows-2025
+    needs: affected
     runs-on: ${{ matrix.settings.host }}
+    env:
+      # Skip steps rather than the job so the required unit (linux) and unit (windows) checks still report.
+      UNIT_ENABLED: ${{ needs.affected.outputs.docs != 'true' }}
     defaults:
       run:
         shell: bash
     steps:
       - name: Checkout repository
+        if: env.UNIT_ENABLED == 'true'
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
       - name: Setup Node
+        if: env.UNIT_ENABLED == 'true'
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "24"
 
       - name: Setup Bun
+        if: env.UNIT_ENABLED == 'true'
         uses: ./.github/actions/setup-bun
 
       - name: Test Effect simplification rules
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && env.UNIT_ENABLED == 'true'
         run: bun run test:effect-simplification-rules
 
       - name: Check Effect simplifications
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && env.UNIT_ENABLED == 'true'
         run: bun run lint:effect-simplifications
 
       - name: Configure git identity
+        if: env.UNIT_ENABLED == 'true'
         run: |
           git config --global user.email "bot@opencode.ai"
           git config --global user.name "opencode"
 
       - name: Cache Turbo
+        if: env.UNIT_ENABLED == 'true'
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: node_modules/.cache/turbo
@@ -104,6 +125,7 @@ jobs:
             turbo-${{ runner.os }}-
 
       - name: Run unit tests
+        if: env.UNIT_ENABLED == 'true'
         timeout-minutes: 20
         run: |
           # The runners have four vCPUs, and each Bun test process performs its own concurrent work.
@@ -118,12 +140,12 @@ jobs:
           TURBO_SCM_HEAD: ${{ github.sha }}
 
       - name: Verify published codemode package
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && env.UNIT_ENABLED == 'true'
         working-directory: packages/codemode
         run: bun run script/publish.ts --dry-run
 
       - name: Verify packed workerd SDK
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && env.UNIT_ENABLED == 'true'
         timeout-minutes: 15
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
@@ -136,7 +158,7 @@ jobs:
           TURBO_SCM_HEAD: ${{ github.sha }}
 
       - name: Verify compiled service lifecycle
-        if: always()
+        if: always() && env.UNIT_ENABLED == 'true'
         timeout-minutes: 10
         working-directory: packages/cli
         env:
@@ -146,13 +168,13 @@ jobs:
           bun run script/service-smoke.ts
 
       - name: Setup Node build runtime
-        if: always()
+        if: always() && env.UNIT_ENABLED == 'true'
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "26.4.0"
 
       - name: Verify Node build
-        if: always()
+        if: always() && env.UNIT_ENABLED == 'true'
         timeout-minutes: 15
         working-directory: packages/cli
         env:
@@ -162,12 +184,12 @@ jobs:
           bun run script/service-smoke.ts --node
 
       - name: Check generated client
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && env.UNIT_ENABLED == 'true'
         working-directory: packages/client
         run: bun run check:generated
 
       - name: Check generated documentation
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && env.UNIT_ENABLED == 'true'
         working-directory: services/www
         run: bun run check:generated
 
