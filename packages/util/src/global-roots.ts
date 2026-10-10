@@ -9,11 +9,13 @@ const state = process.env.XDG_STATE_HOME || (home ? path.join(home, ".local", "s
 
 /** The XDG base directories that root opencode's global paths. */
 export function roots(app: string) {
+  // The system tmp directory is shared by every user, so a fixed name can already belong to someone else.
+  const uid = process.getuid?.()
   return {
     data: path.join(data!, app),
     cache: path.join(cache!, app),
     config: path.join(config!, app),
     state: path.join(state!, app),
-    tmp: path.join(os.tmpdir(), app),
+    tmp: path.join(os.tmpdir(), uid === undefined ? app : `${app}-${uid}`),
   }
 }
