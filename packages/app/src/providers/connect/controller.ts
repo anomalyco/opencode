@@ -62,8 +62,8 @@ export function createProviderConnectionController(options: {
   keyProvider?: () => string
   directory: () => string | undefined
   onComplete: () => void
-  /** Picks the method to start without asking when the integration exposes several. */
-  autoSelect?: (methods: ProviderConnectMethod[]) => number | undefined
+  /** Skips auto-selecting a lone method; the caller starts it. */
+  manual?: () => boolean
   /** Runs after the catalogs refresh; returning false keeps the dialog on a retryable error. */
   prepare?: (active: () => boolean) => Promise<boolean>
   pollInterval?: number
@@ -148,12 +148,9 @@ export function createProviderConnectionController(options: {
   )
 
   const autoIndex = createMemo(() => {
-    if (integration.loading) return undefined
-    const values = methods()
+    if (integration.loading || options.manual?.()) return undefined
 
-    if (values.length === 1) return 0
-
-    return options.autoSelect?.(values)
+    return methods().length === 1 ? 0 : undefined
   })
 
   type Action =

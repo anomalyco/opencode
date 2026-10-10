@@ -44,7 +44,11 @@ export type MockFileContent =
 export interface MockServerConfig {
   server?: string
   provider: Resolvable<MockProviderCatalog>
-  integrations?: unknown[]
+  integrations?: Resolvable<unknown[]>
+  // Runs on POST /api/credential/:id/activate; the fixture swaps its integrations and catalog to the new account.
+  onCredentialActivate?: (credentialID: string) => void
+  // Runs on PATCH /api/credential/:id with the request body; the fixture applies the new label.
+  onCredentialUpdate?: (credentialID: string, body: unknown) => void
   onConnectKey?: (input: { integrationID: string; body: unknown }) => void
   // Terminal shells the settings offer (`/api/config/shell`).
   shells?: unknown[]
@@ -103,6 +107,8 @@ export interface MockServerConfig {
   // Starts an OAuth attempt (POST .../connect/oauth) and returns its authorization URL; the attempt then stays pending.
   // Without it, OAuth connects answer 501 MockUnsupported.
   onIntegrationOAuth?: (input: { integrationID: string; directory: string; body: unknown }) => { url: string }
+  // Answers status polls for an OAuth attempt; without it every attempt stays pending.
+  onIntegrationOAuthStatus?: (attemptID: string) => "pending" | "complete"
   plugins?: Resolvable<unknown[]>
   skills?: Resolvable<unknown[]>
   // Replaces the `/api/worktree` inventory, which defaults to the directory plus project sandboxes.
@@ -843,19 +849,20 @@ function mockHandlers(
         model: () => Effect.succeed({ location: location(config), data: currentModels(resolve(config.provider)) }),
         modelDefault: () =>
           Effect.succeed({ location: location(config), data: currentDefaultModel(resolve(config.provider)) }),
-        integrationList: () => Effect.succeed({ location: location(config), data: config.integrations ?? [] }),
+        integrationList: () =>
+          Effect.sync(() => ({ location: location(config), data: resolve(config.integrations ?? []) })),
         integrationGet: (ctx) =>
-          Effect.succeed({
+          Effect.sync(() => ({
             location: location(config),
-            data: config.integrations
-              ?.filter(Predicate.isObject)
+            data: resolve(config.integrations ?? [])
+              .filter(Predicate.isObject)
               .find((integration) => integration.id === ctx.params.integrationID) ?? {
               id: ctx.params.integrationID,
               name: ctx.params.integrationID,
               methods: [{ type: "key", label: "API key" }],
               connections: [],
             },
-          }),
+          })),
         integrationConnect: (ctx) =>
           Effect.sync(() => config.onConnectKey?.({ integrationID: ctx.params.integrationID, body: ctx.payload })).pipe(
             Effect.andThen(noContent),
@@ -892,9 +899,18 @@ function mockHandlers(
 
             return Effect.succeed({
               location: location(config, requestDirectory(config, ctx.request)),
-              data: { status: "pending", time: { created, expires: created + 600_000 } },
+              data: {
+                status: config.onIntegrationOAuthStatus?.(ctx.params.attemptID) ?? "pending",
+                time: { created, expires: created + 600_000 },
+              },
             })
           }),
+        credentialActivate: (ctx) =>
+          Effect.sync(() => config.onCredentialActivate?.(ctx.params.credentialID)).pipe(Effect.andThen(noContent)),
+        credentialUpdate: (ctx) =>
+          Effect.sync(() => config.onCredentialUpdate?.(ctx.params.credentialID, ctx.payload)).pipe(
+            Effect.andThen(noContent),
+          ),
         credentialRemove: () => noContent,
         command: (ctx) =>
           Effect.sync(() => ({
@@ -1398,6 +1414,8 @@ function currentProviders(catalog: MockProviderCatalog) {
     .map((provider) => ({
       id: provider.id,
       name: provider.name,
+      canonical: provider.canonical,
+      integrationID: provider.integrationID,
       package: provider.id,
       activation: connected.has(provider.id) ? "enabled" : "auto",
     }))
@@ -1529,7 +1547,14 @@ const decodePromptPayload = Schema.decodeUnknownOption(
   }),
 )
 
-const decodeProvider = Schema.decodeUnknownOption(Schema.Struct({ id: Schema.String, name: Schema.String }))
+const decodeProvider = Schema.decodeUnknownOption(
+  Schema.Struct({
+    id: Schema.String,
+    name: Schema.String,
+    canonical: lenient(Schema.String),
+    integrationID: lenient(Schema.String),
+  }),
+)
 
 const decodeModelProvider = Schema.decodeUnknownOption(
   Schema.Struct({ id: Schema.String, models: Schema.Record(Schema.String, Schema.Unknown) }),

@@ -126,6 +126,19 @@ const Group = HttpApiGroup.make("mock")
     }),
   )
   .add(
+    HttpApiEndpoint.post("credentialActivate", "/api/credential/:credentialID/activate", {
+      params: { credentialID: Schema.String },
+      success: NoContent,
+    }),
+  )
+  .add(
+    HttpApiEndpoint.patch("credentialUpdate", "/api/credential/:credentialID", {
+      params: { credentialID: Schema.String },
+      payload: JsonPayload,
+      success: NoContent,
+    }),
+  )
+  .add(
     HttpApiEndpoint.delete("credentialRemove", "/api/credential/:credentialID", {
       params: { credentialID: Schema.String },
       success: NoContent,

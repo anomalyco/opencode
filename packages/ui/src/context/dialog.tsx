@@ -108,6 +108,9 @@ function init() {
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return
+
+      // A control that cancels its own edit on Escape, such as an inline rename, keeps the dialog open.
+      if (event.target instanceof Element && event.target.closest("[data-owns-escape]")) return
       dismiss()
       event.preventDefault()
       event.stopPropagation()

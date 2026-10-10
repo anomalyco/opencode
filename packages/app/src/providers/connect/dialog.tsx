@@ -4,6 +4,7 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import { Icon } from "@opencode/ui/icon"
 import { List } from "@opencode/ui/list"
 import { RadioGroup, RadioItem } from "@opencode/ui/radio"
+import { Loader } from "@opencode/ui/loader"
 import { Spinner } from "@opencode/ui/spinner"
 import { TextField } from "@opencode/ui/text-field"
 import { DialogBody, DialogHeader, DialogTitle, Dialog } from "@opencode/ui/dialog"
@@ -23,7 +24,6 @@ import {
 } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useParams } from "@solidjs/router"
-import { ExternalLink } from "@/runtime/platform/external-link"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useServerSDK } from "@/runtime/server/client"
@@ -43,7 +43,6 @@ import { Persist, persisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
 import { Schema } from "effect"
 import {
-  CONSOLE_INTEGRATION,
   CONSOLE_PROVIDERS,
   consoleIntegration,
   createProviderConnectionController,
@@ -53,6 +52,10 @@ import {
 import { ConsoleAuthorization } from "./console"
 import { DialogChatGPTPlanWelcome } from "./chatgpt-welcome"
 import { authServerName, RemoteAuthNotice } from "./remote"
+import { providerAccounts, type ProviderAccount } from "@/settings/providers/accounts"
+import { AccountNameInput } from "@/settings/providers/account-name"
+import { IconButton } from "@opencode/ui/icon-button"
+import { Menu } from "@opencode/ui/menu"
 import "./models.css"
 
 const CUSTOM_ID = "_custom"
@@ -89,10 +92,12 @@ export const DialogConnectProvider: Component<{
     modelProvider?: { id: string; name: string }
     authorization: boolean
     chatgptWelcome: boolean
+    picked: boolean
   }>({
     completed: false,
     authorization: false,
     chatgptWelcome: false,
+    picked: false,
   })
 
   const language = useLanguage()
@@ -112,6 +117,7 @@ export const DialogConnectProvider: Component<{
 
   const select = (provider?: string) => {
     back.current = reset
+    setState("picked", true)
     controller.select(provider)
   }
 
@@ -128,6 +134,7 @@ export const DialogConnectProvider: Component<{
           {(provider) => (
             <ProviderConnection
               provider={provider}
+              accounts={state.picked}
               directory={props.directory}
               defaultLocation={props.defaultLocation}
               onBack={reset}
@@ -137,8 +144,7 @@ export const DialogConnectProvider: Component<{
               onConnected={(methodID) => {
                 props.onConnected?.(provider)
 
-                if (provider === "openai" && methodID === "chatgpt-token-sharing")
-                  setState("chatgptWelcome", true)
+                if (provider === "openai" && methodID === "chatgpt-token-sharing") setState("chatgptWelcome", true)
               }}
               onFirstConnection={(provider) => setState("modelProvider", provider)}
               onAuthorization={(authorization) => setState("authorization", authorization)}
@@ -177,7 +183,8 @@ export const DialogConnectProvider: Component<{
       }}
       class="[font-family:var(--v2-font-family-sans)] [&_[data-slot=dialog-header]]:!px-5 [&_[data-slot=dialog-header-title]]:!text-[15px] [&_[data-slot=dialog-header-title]]:!tracking-[-0.13px]"
       classList={{
-        "[&_[data-slot=dialog-header]]:!pt-4 [&_[data-slot=dialog-header]]:!pb-3": consoleSelected() && !state.modelProvider,
+        "[&_[data-slot=dialog-header]]:!pt-4 [&_[data-slot=dialog-header]]:!pb-3":
+          consoleSelected() && !state.modelProvider,
         "[&_[data-slot=dialog-header]]:!pt-5": !!state.modelProvider,
       }}
     >
@@ -232,29 +239,11 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
   const featured = ["opencode-go", "opencode", "anthropic", "openai", "google", "openrouter", "vercel"]
   const custom = () => ({ id: CUSTOM_ID, name: language.t("dialog.provider.custom.label") })
 
-  // Only a stored credential hides a provider: environment and config connections can still be
-  // replaced by a sign-in. OpenCode Zen stays until a Console account (not a key) is connected.
-  const consoleAccount = createMemo(() =>
-    integrations
-      .list()
-      .find((integration) => integration.id === CONSOLE_INTEGRATION)
-      ?.connections.some((connection) => connection.type === "credential" && connection.method === "oauth"),
-  )
-
   const all = createMemo(() => {
     language.locale()
     const query = store.filter.trim().toLowerCase()
 
-    const values = [
-      custom(),
-      ...integrations
-        .list()
-        .filter((integration) =>
-          integration.id === CONSOLE_INTEGRATION
-            ? !consoleAccount()
-            : !integration.connections.some((connection) => connection.type === "credential"),
-        ),
-    ]
+    const values = [custom(), ...integrations.list()]
 
     if (!query) return values
 
@@ -280,6 +269,10 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
   )
 
   const rows = createMemo(() => [...popular(), ...other()])
+
+  const accountCount = (provider: { id: string }) =>
+    providerAccounts(integrations.list().find((integration) => integration.id === provider.id)).length
+
   let picker: HTMLDivElement | undefined
   let search: HTMLInputElement | undefined
 
@@ -356,7 +349,18 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
                       >
                         <ProviderModelIcon provider={provider} class="shrink-0 text-v2-icon-icon-base" />
                         <span class="min-w-0 truncate font-[530] text-v2-text-text-base">{provider.name}</span>
-                        <Show when={CONSOLE_PROVIDERS.has(provider.id)}>
+                        <Show when={accountCount(provider) > 0}>
+                          <Badge
+                            variant="subtle"
+                            class="shrink-0"
+                            aria-label={language.plural("dialog.provider.accounts.count", accountCount(provider), {
+                              count: accountCount(provider),
+                            })}
+                          >
+                            {accountCount(provider)}
+                          </Badge>
+                        </Show>
+                        <Show when={CONSOLE_PROVIDERS.has(provider.id) && accountCount(provider) === 0}>
                           <span class="min-w-0 truncate font-[440] text-v2-text-text-muted">
                             {language.t(
                               provider.id === "opencode"
@@ -409,6 +413,7 @@ function ProviderConnection(props: {
   onConnected?: (methodID?: string) => void
   onFirstConnection: (provider: { id: string; name: string }) => void
   onAuthorization: (authorization: boolean) => void
+  accounts?: boolean
 }) {
   const dialog = useDialog()
   const params = useParams()
@@ -437,7 +442,15 @@ function ProviderConnection(props: {
     catalogPending: boolean
     selectedModel: string
     collapsed: Record<string, boolean>
+    adding: boolean
+    direct: boolean
+    confirming?: string
+    switching?: string
+    activating?: string
+    renaming?: string
   }>({
+    adding: false,
+    direct: false,
     copied: false,
     copyFailed: false,
     models: false,
@@ -448,18 +461,23 @@ function ProviderConnection(props: {
     collapsed: {},
   })
 
+  // Sorted by name so rows stay put when the server moves the active account first.
+  const serverAccounts = () =>
+    providerAccounts(integrations.list().find((integration) => integration.id === props.provider))
+
+  const accounts = () => serverAccounts().toSorted((a, b) => a.label.localeCompare(b.label) || a.id.localeCompare(b.id))
+
+  const activeAccount = () => state.activating ?? serverAccounts()[0]?.id
+
+  const showAccounts = () => !!props.accounts && !state.adding && accounts().length > 0
+
   const controller = createProviderConnectionController({
     provider: () => integrationID,
     // A Go service-account key still belongs to the `opencode-go` integration (zen/go/v1),
     // exactly as before; only the sign-in is shared with the Console.
     keyProvider: () => props.provider,
     directory,
-    autoSelect: (methods) => {
-      if (!isConsole) return undefined
-      const index = methods.findIndex((method) => method.type === "oauth")
-
-      return index === -1 ? undefined : index
-    },
+    manual: () => isConsole || (!!props.accounts && accounts().length > 0),
     prepare: isConsole ? prepareConsoleCatalog : undefined,
     pollInterval: isConsole ? 500 : undefined,
     onComplete: () => {
@@ -467,9 +485,7 @@ function ProviderConnection(props: {
       props.onConnected?.(method?.type === "oauth" ? method.id : undefined)
       // The picker only lists the newest model per family by default, which hides most of
       // what a new connection just unlocked. Show everything the connected integration offers.
-      global.models.show(
-        connectionModels().map((model) => ({ providerID: model.providerID, modelID: model.id })),
-      )
+      global.models.show(connectionModels().map((model) => ({ providerID: model.providerID, modelID: model.id })))
 
       if (state.catalogPending) {
         setState("noModels", true)
@@ -593,7 +609,9 @@ function ProviderConnection(props: {
   })
   createEffect(() => {
     const current = controller.auth.state()
-    props.onAuthorization(controller.authorization() !== undefined && (current === "waiting" || current === "refreshing"))
+    props.onAuthorization(
+      controller.authorization() !== undefined && (current === "waiting" || current === "refreshing"),
+    )
   })
 
   const provider = createMemo(() => ({
@@ -646,13 +664,17 @@ function ProviderConnection(props: {
   const keyIndex = () => controller.methods().findIndex((method) => method.type === "key")
   const oauthIndex = () => controller.methods().findIndex((method) => method.type === "oauth")
 
-  // The Console device flow owns the dialog from the first frame until the catalogs are loaded.
   const consoleSignIn = () =>
     isConsole &&
     !state.noModels &&
-    controller.currentMethod()?.type !== "key" &&
+    controller.currentMethod()?.type === "oauth" &&
     controller.auth.state() !== "error" &&
-    (controller.busy() || controller.authorization()?.mode === "auto")
+    controller.authorization()?.mode === "auto"
+
+  const consoleStarting = () => controller.currentMethod()?.type === "oauth" && controller.auth.state() === "pending"
+
+  const consoleIntro = () =>
+    isConsole && !controller.loading() && (controller.methodIndex() === undefined || consoleStarting())
 
   function AuthFormView() {
     const defaults = providerFormDefaults(controller.currentMethod()?.form)
@@ -889,15 +911,19 @@ function ProviderConnection(props: {
   }
 
   function goBack() {
-    // The API key path for the Console is an escape hatch below the sign-in flow, so
-    // "back" returns to the sign-in rather than leaving the provider.
-    if (isConsole && controller.currentMethod()?.type === "key" && oauthIndex() !== -1) {
-      void controller.auth.select(oauthIndex())
+    if (
+      props.accounts &&
+      state.adding &&
+      accounts().length > 0 &&
+      (state.direct || controller.methodIndex() === undefined)
+    ) {
+      controller.auth.reset()
+      setState({ adding: false, direct: false })
 
       return
     }
 
-    if (!isConsole && controller.methods().length > 1 && controller.methodIndex() !== undefined) {
+    if ((isConsole || controller.methods().length > 1) && controller.methodIndex() !== undefined) {
       controller.auth.reset()
 
       return
@@ -952,7 +978,7 @@ function ProviderConnection(props: {
 
   function ErrorRow() {
     return (
-      <div class="flex flex-col items-start gap-3">
+      <div class="flex flex-col items-start" classList={{ "gap-3": !isConsole, "gap-4": isConsole }}>
         <div class="flex items-start gap-2 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base">
           <Icon name="circle-ban-sign" size="small" class="mt-0.5 shrink-0 text-v2-state-fg-danger" />
           <span role="alert">
@@ -961,8 +987,8 @@ function ProviderConnection(props: {
               : language.t("provider.connect.status.failed", { error: controller.auth.error() ?? "" })}
           </span>
         </div>
-        <Button variant="neutral" onClick={() => void controller.auth.retry()}>
-          {language.t("common.retry")}
+        <Button variant={isConsole ? undefined : "neutral"} onClick={() => void controller.auth.retry()}>
+          {language.t(isConsole ? "provider.connect.console.retry" : "common.retry")}
         </Button>
       </div>
     )
@@ -1001,21 +1027,15 @@ function ProviderConnection(props: {
     }
 
     return (
-      <div class="flex flex-col gap-5 px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted">
-        <Show
-          when={isConsole}
-          fallback={language.t("provider.connect.apiKey.description", { provider: provider().name })}
-        >
-          <div>
-            {language.t("provider.connect.console.apiKey.description")}{" "}
-            <ExternalLink
-              href="https://opencode.ai/console"
-              class="text-v2-text-text-base focus-visible:rounded-xs focus-visible:outline-2 focus-visible:outline-v2-border-border-focus"
-            >
-              {language.t("provider.connect.console.apiKey.link")}
-            </ExternalLink>
-          </div>
-        </Show>
+      <div
+        class="flex flex-col gap-5 px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted"
+        classList={{ "pb-1": isConsole }}
+      >
+        <p>
+          {isConsole
+            ? language.t("provider.connect.console.serviceKeyDescription")
+            : language.t("provider.connect.apiKey.description", { provider: provider().name })}
+        </p>
         <form onSubmit={handleSubmit} class="flex flex-col items-start gap-5 self-stretch">
           <label class="flex w-full flex-col gap-2 font-[530] leading-4 text-v2-text-text-base">
             {language.t("provider.connect.apiKey.label", { provider: provider().name })}
@@ -1040,7 +1060,12 @@ function ProviderConnection(props: {
               </div>
             )}
           </Show>
-          <Button type="submit" variant="contrast" data-action="provider-connect-submit">
+          <Button
+            type="submit"
+            variant="contrast"
+            class={isConsole ? "!px-3" : undefined}
+            data-action="provider-connect-submit"
+          >
             {language.t("common.continue")}
           </Button>
         </form>
@@ -1143,18 +1168,211 @@ function ProviderConnection(props: {
     )
   }
 
-  // Deliberately quiet: most people should never need a key, so this stays small and at the bottom.
-  function ConsoleApiKeySwitch() {
+  const refreshAccounts = async () => {
+    const ref = location()
+    data.location.integration.invalidate(ref)
+    data.location.provider.invalidate(ref)
+    data.location.model.invalidate(ref)
+    await Promise.all([
+      data.location.integration.sync(ref),
+      data.location.provider.sync(ref),
+      data.location.model.sync(ref),
+    ])
+  }
+
+  const accountError = (error: unknown) =>
+    showToast({
+      title: language.t("common.requestFailed"),
+      description: error instanceof Error ? error.message : String(error),
+    })
+
+  const addAccount = () => {
+    setState({ adding: true, direct: false, confirming: undefined })
+
+    // Go signs in through the Console, which would add a Console account, so Go adds a key instead.
+    const index =
+      props.provider === "opencode-go" ? keyIndex() : !isConsole && controller.methods().length === 1 ? 0 : -1
+
+    if (index === -1) return
+    setState("direct", true)
+    void controller.auth.select(index)
+  }
+
+  const activateAccount = async (account: ProviderAccount) => {
+    if (activeAccount() === account.id || state.switching) return
+    setState({ switching: account.id, activating: account.id, confirming: undefined })
+    await sdk.api.credential
+      .activate({ credentialID: account.id })
+      .then(refreshAccounts)
+      .then(() =>
+        showToast({
+          variant: "success",
+          icon: "circle-check",
+          title: language.t("settings.providers.account.switched.title", { provider: provider().name }),
+          description: language.t("settings.providers.account.switched.description", { account: account.label }),
+        }),
+      )
+      .catch(accountError)
+      .finally(() => setState({ switching: undefined, activating: undefined }))
+  }
+
+  const renameAccount = (account: ProviderAccount, label: string) =>
+    sdk.api.credential
+      .update({ credentialID: account.id, label })
+      .then(refreshAccounts)
+      .then(() => true)
+      .catch((error: unknown) => {
+        accountError(error)
+
+        return false
+      })
+
+  const removeAccount = async (account: ProviderAccount) => {
+    const final = accounts().length === 1
+    setState({ switching: account.id, confirming: undefined })
+    await sdk.api.credential
+      .remove({ credentialID: account.id })
+      .then(refreshAccounts)
+      .then(() =>
+        showToast({
+          variant: "success",
+          icon: "circle-check",
+          title: final
+            ? language.t("provider.disconnect.toast.disconnected.title", { provider: provider().name })
+            : language.t("settings.providers.account.removed.title", { account: account.label }),
+          description: final
+            ? language.t("provider.disconnect.toast.disconnected.description", { provider: provider().name })
+            : language.t("settings.providers.account.removed.description", { provider: provider().name }),
+        }),
+      )
+      .catch(accountError)
+      .finally(() => setState("switching", undefined))
+  }
+
+  function AccountsView() {
     return (
-      <div data-component="console-service-account" class="flex h-7 items-center gap-1 px-3 pt-5 text-[13px]">
-        <span class="text-v2-text-text-faint">{language.t("provider.connect.console.serviceAccount")}</span>
-        <Button
-          variant="ghost-muted"
-          data-action="provider-connect-api-key"
-          onClick={() => void controller.auth.select(keyIndex())}
-        >
-          {language.t("provider.connect.console.useApiKey")}
+      <div data-component="provider-accounts" class="flex flex-col gap-3">
+        <section class="flex flex-col">
+          <div class="px-3 pb-2 text-[13px] font-[440] leading-text-compact tracking-[-0.04px] text-v2-text-text-muted">
+            {language.t("dialog.provider.accounts.connected")}
+          </div>
+          <div role="radiogroup" aria-label={language.t("dialog.provider.accounts.connected")} class="flex flex-col">
+            <For each={accounts()}>
+              {(account) => (
+                <Show
+                  when={state.confirming !== account.id}
+                  fallback={
+                    <div class="flex min-h-9 items-center gap-2 rounded-md px-3 text-[13px] leading-5 tracking-[-0.04px]">
+                      <span role="alert" class="min-w-0 flex-1 truncate font-[440] text-v2-text-text-base">
+                        {language.t("dialog.provider.accounts.removeConfirm", { account: account.label })}
+                      </span>
+                      <Button variant="ghost-muted" onClick={() => setState("confirming", undefined)}>
+                        {language.t("common.cancel")}
+                      </Button>
+                      <Button variant="neutral" onClick={() => void removeAccount(account)}>
+                        {language.t("dialog.provider.accounts.remove")}
+                      </Button>
+                    </div>
+                  }
+                >
+                  <div class="group relative flex min-h-9 items-center rounded-md hover:bg-v2-overlay-simple-overlay-hover focus-within:bg-v2-overlay-simple-overlay-hover">
+                    <Show
+                      when={state.renaming !== account.id}
+                      fallback={
+                        <div class="flex min-h-9 min-w-0 flex-1 items-center px-3">
+                          <AccountNameInput
+                            value={account.label}
+                            class="-ms-1 max-w-full text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base"
+                            onSave={(label) => renameAccount(account, label)}
+                            onClose={() => setState("renaming", undefined)}
+                          />
+                        </div>
+                      }
+                    >
+                      <button
+                        type="button"
+                        role="radio"
+                        aria-checked={activeAccount() === account.id}
+                        class="flex min-h-9 min-w-0 flex-1 items-center gap-2 px-3 text-left text-[13px] leading-5 tracking-[-0.04px] focus-visible:outline-none"
+                        disabled={state.switching !== undefined}
+                        onClick={() => void activateAccount(account)}
+                      >
+                        <span class="min-w-0 truncate font-[440] text-v2-text-text-base">{account.label}</span>
+                        <Show when={activeAccount() === account.id}>
+                          <Icon name="check" size="small" class="shrink-0 text-v2-icon-icon-base" />
+                        </Show>
+                      </button>
+                    </Show>
+                    <div class="flex shrink-0 items-center pe-1.5">
+                      <Menu gutter={4} modal={false} placement="bottom-end">
+                        <Menu.Trigger
+                          as={IconButton}
+                          variant="ghost-muted"
+                          size="small"
+                          icon={<Icon name="outline-dots" />}
+                          disabled={state.switching !== undefined}
+                          aria-label={language.t("dialog.provider.accounts.options", { account: account.label })}
+                        />
+                        <Menu.Portal>
+                          <Menu.Content onCloseAutoFocus={(event) => state.renaming && event.preventDefault()}>
+                            <Menu.Item onSelect={() => setState({ renaming: account.id, confirming: undefined })}>
+                              {language.t("common.rename")}
+                            </Menu.Item>
+                            <Menu.Item onSelect={() => setState({ confirming: account.id, renaming: undefined })}>
+                              {language.t("dialog.provider.accounts.remove")}
+                            </Menu.Item>
+                          </Menu.Content>
+                        </Menu.Portal>
+                      </Menu>
+                    </div>
+                  </div>
+                </Show>
+              )}
+            </For>
+          </div>
+        </section>
+        <Button class="-mt-1 ms-2.5 self-start !px-3" disabled={state.switching !== undefined} onClick={addAccount}>
+          {language.t("dialog.provider.accounts.add")}
         </Button>
+      </div>
+    )
+  }
+
+  function ConsoleIntro() {
+    return (
+      <div class="flex flex-col items-start gap-5 px-3">
+        <p class="text-[13px] leading-5 text-v2-text-text-muted">{language.t("provider.connect.console.intro")}</p>
+        <Button
+          size="large"
+          class="!px-3"
+          variant="contrast"
+          disabled={oauthIndex() === -1 || consoleStarting()}
+          aria-busy={consoleStarting()}
+          onClick={() => void controller.auth.select(oauthIndex())}
+        >
+          <Show when={consoleStarting()}>
+            <span class="absolute inset-0 flex items-center justify-center gap-1.5">
+              <Loader />
+              <span>{language.t("provider.connect.console.openingBrowser")}</span>
+            </span>
+          </Show>
+          <span aria-hidden={consoleStarting() ? "true" : undefined} classList={{ "opacity-0": consoleStarting() }}>
+            {language.t("provider.connect.console.continue")}
+          </span>
+        </Button>
+        <Show when={keyIndex() !== -1}>
+          <div data-component="console-service-account" class="flex h-7 items-center gap-1 text-[13px]">
+            <span class="text-v2-text-text-faint">{language.t("provider.connect.console.serviceAccount")}</span>
+            <Button
+              variant="ghost-muted"
+              data-action="provider-connect-api-key"
+              disabled={consoleStarting()}
+              onClick={() => void controller.auth.select(keyIndex())}
+            >
+              {language.t("provider.connect.console.useApiKey")}
+            </Button>
+          </div>
+        </Show>
       </div>
     )
   }
@@ -1352,13 +1570,26 @@ function ProviderConnection(props: {
           <div class="text-[15px] font-[530] leading-5 tracking-[-0.13px] text-v2-text-text-base">
             <DialogTitle>
               <Switch>
-                <Match when={consoleSignIn()}>{language.t("provider.connect.console.title")}</Match>
+                <Match when={showAccounts()}>{provider().name}</Match>
+                <Match when={isConsole && controller.auth.state() === "error"}>
+                  {language.t("provider.connect.opencode.errorTitle")}
+                </Match>
+                <Match when={consoleSignIn()}>
+                  {language.t(
+                    props.provider === "opencode-go"
+                      ? "provider.connect.console.titleGo"
+                      : "provider.connect.console.title",
+                  )}
+                </Match>
                 <Match
                   when={
                     props.provider === "anthropic" && controller.currentMethod()?.label?.toLowerCase().includes("max")
                   }
                 >
                   {language.t("provider.connect.title.anthropicProMax")}
+                </Match>
+                <Match when={props.provider === "opencode"}>
+                  {language.t("provider.connect.title", { provider: language.t("provider.connect.opencode.name") })}
                 </Match>
                 <Match when={true}>{language.t("provider.connect.title", { provider: provider().name })}</Match>
               </Switch>
@@ -1390,6 +1621,12 @@ function ProviderConnection(props: {
                 />
               </div>
             </Match>
+            <Match when={showAccounts() && controller.methodIndex() === undefined}>
+              <AccountsView />
+            </Match>
+            <Match when={consoleIntro()}>
+              <ConsoleIntro />
+            </Match>
             <Match when={controller.busy()}>
               <div class="px-3">
                 <StatusRow>{language.t("provider.connect.status.inProgress")}</StatusRow>
@@ -1416,17 +1653,6 @@ function ProviderConnection(props: {
               <OAuthAutoView />
             </Match>
           </Switch>
-          <Show
-            when={
-              isConsole &&
-              !controller.loading() &&
-              !state.noModels &&
-              controller.currentMethod()?.type !== "key" &&
-              keyIndex() !== -1
-            }
-          >
-            <ConsoleApiKeySwitch />
-          </Show>
         </div>
       </div>
     </Show>
