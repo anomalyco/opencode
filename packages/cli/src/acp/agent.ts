@@ -10,7 +10,7 @@ import {
   type Stream,
 } from "@agentclientprotocol/sdk"
 import type { OpenCodeClient } from "@opencode/client/effect"
-import { Cause, Deferred, Effect, Ref, type Scope } from "effect"
+import { Cause, Deferred, Effect, Ref, Result, Schema, type Scope } from "effect"
 import { ACPCapabilities } from "./capabilities"
 import { ACPCatalog } from "./catalog"
 import { ACPClient } from "./client"
@@ -117,6 +117,14 @@ export const connect = Effect.fnUntraced(function* (client: OpenCodeClient, stre
     "session/cancel",
     handle((service, ctx) => service.cancel(ctx.params)),
   )
+  // Interim extension until ACP has native mid-turn steering.
+  app.onRequest(
+    "_session/steering",
+    parseSteering,
+    handle<ACPTurn.SteeringRequest, ACPTurn.SteeringResponse>((service, ctx) => service.steer(ctx.params))(
+      spanName("_session/steering"),
+    ),
+  )
   const acp = ACPConnection.make(app, stream)
   const connection = acp.connection
   const sessions = yield* ACPSessions.make({ client, connection, catalog })
@@ -128,6 +136,14 @@ export const connect = Effect.fnUntraced(function* (client: OpenCodeClient, stre
   })
   return acp.agent
 })
+
+const Steering = Schema.Struct({ sessionId: Schema.String, prompt: Schema.mutable(Schema.Array(Schema.Any)) })
+
+function parseSteering(params: unknown) {
+  return Schema.decodeUnknownResult(Steering)(params).pipe(
+    Result.getOrThrowWith((error) => RequestError.invalidParams({ details: error.message })),
+  )
+}
 
 const spanName = (method: string) => `cli.acp.${method.replaceAll("/", ".")}`
 
