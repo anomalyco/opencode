@@ -27,6 +27,7 @@ import { createSidecarResolver, initializationData, sidecarHttp } from "./startu
 import { preloadStoredLocale } from "./startup/locale"
 import { LoadingSplash } from "./startup/splash"
 import { getLastActiveUrl } from "./window/route-storage"
+import { SessionDeepLinks } from "./startup/session-deep-link"
 import { DesktopMemoryRouter } from "./window/router"
 
 const MigrationStatus = lazy(() => import("./migration-status").then((module) => ({ default: module.MigrationStatus })))
@@ -122,6 +123,7 @@ export function DesktopApp(props: { api: ElectronAPI; version: string }) {
             onReady={() => setStartup("onboardingReady", true)}
           />
           <DesktopEffects api={props.api} />
+          <SessionDeepLinks />
           <Suspense fallback={null}>
             <Show when={initializationData(sidecar)} keyed>
               {(server) => <MigrationStatus server={server} />}
