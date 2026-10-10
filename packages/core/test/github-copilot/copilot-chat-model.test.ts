@@ -71,6 +71,15 @@ const FIXTURES = {
     `data: {"choices":[{"finish_reason":"tool_calls","index":0,"delta":{"content":null,"role":"assistant","tool_calls":[{"function":{"arguments":"{}","name":"read_file"},"id":"call_reasoning_only_2","index":1,"type":"function"}]}}],"created":1769917420,"id":"opaque-only","usage":{"completion_tokens":12,"prompt_tokens":123,"prompt_tokens_details":{"cached_tokens":0},"total_tokens":135,"reasoning_tokens":0},"model":"gemini-3-flash-preview"}`,
     `data: [DONE]`,
   ],
+
+  // Interleaved thinking (Claude) sends a new reasoning_opaque before each tool call
+  interleavedReasoningOpaque: [
+    `data: {"choices":[{"index":0,"delta":{"content":null,"role":"assistant","reasoning_text":"Read the readme first."}}],"created":1791590400,"id":"interleaved","model":"claude-opus-5.5"}`,
+    `data: {"choices":[{"index":0,"delta":{"content":null,"role":"assistant","tool_calls":[{"function":{"arguments":"{\\"filePath\\":\\"/README.md\\"}","name":"read_file"},"id":"call_first","index":0,"type":"function"}],"reasoning_opaque":"opaque-first"}}],"created":1791590400,"id":"interleaved","model":"claude-opus-5.5"}`,
+    `data: {"choices":[{"index":0,"delta":{"content":null,"role":"assistant","reasoning_text":"Then the manifest."}}],"created":1791590401,"id":"interleaved","model":"claude-opus-5.5"}`,
+    `data: {"choices":[{"finish_reason":"tool_calls","index":0,"delta":{"content":null,"role":"assistant","tool_calls":[{"function":{"arguments":"{\\"filePath\\":\\"/package.json\\"}","name":"read_file"},"id":"call_second","index":1,"type":"function"}],"reasoning_opaque":"opaque-second"}}],"created":1791590401,"id":"interleaved","usage":{"completion_tokens":42,"prompt_tokens":1200,"total_tokens":1242},"model":"claude-opus-5.5"}`,
+    `data: [DONE]`,
+  ],
 }
 
 function createMockFetch(chunks: string[]) {
@@ -501,6 +510,43 @@ describe("doStream", () => {
           reasoningOpaque: "opaque-xyz",
         },
       },
+    })
+  })
+
+  test("should pair each interleaved reasoning segment with its own reasoning_opaque", async () => {
+    const mockFetch = createMockFetch(FIXTURES.interleavedReasoningOpaque)
+    const model = createModel(mockFetch)
+
+    const { stream } = await model.doStream({
+      prompt: TEST_PROMPT,
+      includeRawChunks: false,
+    })
+
+    const parts = await convertReadableStreamToArray(stream)
+
+    expect(parts.filter((p) => p.type === "error")).toEqual([])
+    expect(
+      parts.filter((p) => p.type === "reasoning-delta" || p.type === "reasoning-end" || p.type === "tool-call"),
+    ).toMatchObject([
+      { type: "reasoning-delta", delta: "Read the readme first." },
+      { type: "reasoning-end", providerMetadata: { copilot: { reasoningOpaque: "opaque-first" } } },
+      {
+        type: "tool-call",
+        toolCallId: "call_first",
+        providerMetadata: { copilot: { reasoningOpaque: "opaque-first" } },
+      },
+      { type: "reasoning-delta", delta: "Then the manifest." },
+      { type: "reasoning-end", providerMetadata: { copilot: { reasoningOpaque: "opaque-second" } } },
+      {
+        type: "tool-call",
+        toolCallId: "call_second",
+        providerMetadata: { copilot: { reasoningOpaque: "opaque-second" } },
+      },
+    ])
+    expect(parts.at(-1)).toMatchObject({
+      type: "finish",
+      finishReason: { unified: "tool-calls" },
+      providerMetadata: { copilot: { reasoningOpaque: "opaque-second" } },
     })
   })
 

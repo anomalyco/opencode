@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Context, Effect, Exit, Layer, Scope, Stream } from "effect"
-import { FetchHttpClient } from "effect/unstable/http"
+import { FetchHttpClient } from "effect/http"
 import { tmpdirScoped } from "../../core/test/fixture/tmpdir"
 import { testEffect } from "../../core/test/lib/effect"
 import { AbsolutePath, Location, OpenCode, Session } from "../src/effect"

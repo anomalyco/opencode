@@ -22,6 +22,8 @@ const unsafeCSS = `
     color-mix(in lab, var(--diffs-bg) 98%, var(--diffs-mixer)),
     color-mix(in lab, var(--diffs-bg) 95%, var(--diffs-mixer))
   );
+  /* The app's code wrapping rules do not reach this shadow tree, and pretty is inherited from the page. */
+  text-wrap-style: auto;
 }
 
 [data-diff],

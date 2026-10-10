@@ -1,6 +1,6 @@
 import { Cause, Effect, Queue, Stream } from "effect"
-import { Headers } from "effect/unstable/http"
-import { Socket } from "effect/unstable/socket"
+import { Headers } from "effect/http"
+import { Socket } from "effect/socket"
 import {
   AIError,
   AIErrorReason,
@@ -32,11 +32,6 @@ export interface WebSocketConnection {
 export interface WebSocketConnector {
   readonly open: (input: WebSocketRequest) => Effect.Effect<WebSocketConnection, AIError>
 }
-
-type WebSocketConstructorWithHeaders = (
-  url: string,
-  options?: { readonly headers?: Headers.Headers },
-) => globalThis.WebSocket
 
 const MAX_FRAME_BYTES = 16 * 1024 * 1024
 const transportError = (
@@ -81,9 +76,9 @@ const annotateTransportError = (
       })
     : error
 
-const eventMessage = (event: Event) => {
+const eventMessage = (event: Socket.WebSocketEvent) => {
   if ("message" in event && typeof event.message === "string") return event.message
-  return event.type
+  return event.type ?? "error"
 }
 
 const binaryMessage = (data: unknown) => {
@@ -93,7 +88,7 @@ const binaryMessage = (data: unknown) => {
   return undefined
 }
 
-const waitOpen = (ws: globalThis.WebSocket, input: WebSocketRequest) => {
+const waitOpen = (ws: Socket.WebSocketLike, input: WebSocketRequest) => {
   if (ws.readyState === globalThis.WebSocket.OPEN) return Effect.void
   if (ws.readyState === globalThis.WebSocket.CLOSING || ws.readyState === globalThis.WebSocket.CLOSED) {
     return Effect.fail(
@@ -125,7 +120,7 @@ const waitOpen = (ws: globalThis.WebSocket, input: WebSocketRequest) => {
       cleanup()
       resume(Effect.void)
     }
-    const onError = (event: Event) => {
+    const onError = (event: Socket.WebSocketEvent) => {
       cleanup()
       resume(
         Effect.fail(
@@ -139,7 +134,7 @@ const waitOpen = (ws: globalThis.WebSocket, input: WebSocketRequest) => {
         ),
       )
     }
-    const onClose = (event: CloseEvent) => {
+    const onClose = (event: Socket.WebSocketEvent) => {
       cleanup()
       resume(
         Effect.fail(
@@ -191,12 +186,7 @@ export const open = (input: WebSocketRequest) =>
   Effect.gen(function* () {
     const constructor = yield* Socket.WebSocketConstructor
     const ws = yield* Effect.try({
-      try: () =>
-        // Platform implementations may extend Effect's browser-compatible constructor with handshake options.
-        // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
-        (constructor as unknown as WebSocketConstructorWithHeaders)(input.url, {
-          headers: input.headers,
-        }),
+      try: () => constructor(input.url, { headers: input.headers }),
       catch: (error) =>
         transportError(error instanceof Error ? error.message : "Failed to construct WebSocket", {
           cause: error,
@@ -210,7 +200,7 @@ export const open = (input: WebSocketRequest) =>
   })
 
 export const fromWebSocket = (
-  ws: globalThis.WebSocket,
+  ws: Socket.WebSocketLike,
   input: WebSocketRequest,
 ): Effect.Effect<WebSocketConnection, AIError> =>
   Effect.gen(function* () {
@@ -243,7 +233,7 @@ export const fromWebSocket = (
       Queue.offerUnsafe(messages, message)
     }
 
-    const onMessage = (event: MessageEvent) => {
+    const onMessage = (event: Socket.WebSocketEvent) => {
       if (typeof event.data === "string") return offer(event.data)
       const binary = binaryMessage(event.data)
       if (binary) return offer(binary)
@@ -260,7 +250,7 @@ export const fromWebSocket = (
         ),
       )
     }
-    const onError = (event: Event) => {
+    const onError = (event: Socket.WebSocketEvent) => {
       Queue.failCauseUnsafe(
         messages,
         Cause.fail(
@@ -274,7 +264,7 @@ export const fromWebSocket = (
         ),
       )
     }
-    const onClose = (event: CloseEvent) => {
+    const onClose = (event: Socket.WebSocketEvent) => {
       Queue.failCauseUnsafe(
         messages,
         Cause.fail(
