@@ -66,54 +66,6 @@ The `providers` object is keyed by the provider ID used in model references, suc
 | `body` | JSON fields merged into request bodies. |
 | `models` | Models to add or override, keyed by the OpenCode model ID. |
 
-## Ace Data Cloud
-
-Create an [Ace Data Cloud](https://platform.acedata.cloud) account and get an API key from the
-[console](https://platform.acedata.cloud/console/applications). This explicit configuration adds Ace Data Cloud without
-requiring it to be present in the built-in catalog.
-
-```jsonc title="opencode.jsonc"
-{
-  "$schema": "https://opencode.ai/config.json",
-  "model": "acedatacloud/gpt-5.6-sol",
-  "providers": {
-    "acedatacloud": {
-      "name": "Ace Data Cloud",
-      "env": ["ACEDATACLOUD_API_KEY"],
-      "package": "@opencode/ai/providers/openai-compatible",
-      "settings": {
-        "baseURL": "https://api.acedata.cloud/openai",
-      },
-      "models": {
-        "gpt-5.6-sol": {
-          "name": "GPT-5.6 Sol",
-          "settings": { "reasoningEffort": "low" },
-          "capabilities": {
-            "tools": true,
-            "input": ["text", "image"],
-            "output": ["text"],
-          },
-          "limit": { "context": 1050000, "input": 922000, "output": 128000 },
-        },
-      },
-    },
-  },
-}
-```
-
-Open OpenCode in the directory containing this file. Run `/connect`, select **Ace Data Cloud**, enter the API key, then
-run `/models` and select **GPT-5.6 Sol**.
-
-```text
-/connect
-/models
-```
-
-You can instead provide `ACEDATACLOUD_API_KEY` to the server process as described in
-[Provider accounts](/cli/providers#environment). The example uses Chat Completions; other models may require a
-different endpoint or runtime. Check the [Ace Data Cloud model catalog](https://platform.acedata.cloud/models) before
-adding them.
-
 ## Endpoint
 
 Override `settings.baseURL` to send a catalog provider through a proxy or compatible endpoint. Its existing package,
@@ -627,6 +579,54 @@ The configuration key becomes the provider prefix and each `models` key becomes 
   },
 }
 ```
+
+### Ace Data Cloud
+
+Create an [Ace Data Cloud](https://platform.acedata.cloud) account and get an API key from the
+[console](https://platform.acedata.cloud/console/applications). This explicit configuration adds Ace Data Cloud without
+requiring it to be present in the built-in catalog.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "acedatacloud/gpt-5.6-sol",
+  "providers": {
+    "acedatacloud": {
+      "name": "Ace Data Cloud",
+      "env": ["ACEDATACLOUD_API_KEY"],
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "https://api.acedata.cloud/openai",
+      },
+      "models": {
+        "gpt-5.6-sol": {
+          "name": "GPT-5.6 Sol",
+          "settings": { "reasoningEffort": "low" },
+          "capabilities": {
+            "tools": true,
+            "input": ["text", "image"],
+            "output": ["text"],
+          },
+          "limit": { "context": 1050000, "input": 922000, "output": 128000 },
+        },
+      },
+    },
+  },
+}
+```
+
+Open OpenCode in the directory containing this file. Run `/connect`, select **Ace Data Cloud**, enter the API key, then
+run `/models` and select **GPT-5.6 Sol**.
+
+```text
+/connect
+/models
+```
+
+You can instead provide `ACEDATACLOUD_API_KEY` to the server process as described in
+[Provider accounts](/cli/providers#environment). The example uses Chat Completions; other models may require a
+different endpoint or runtime. Check the [Ace Data Cloud model catalog](https://platform.acedata.cloud/models) before
+adding them.
 
 ## Errors
 
