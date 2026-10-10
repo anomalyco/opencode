@@ -1,6 +1,7 @@
 export * as ConfigMigrateV1 from "./migrate.js"
 
 import { ConfigAgent } from "@opencode/schema/config/agent"
+import { ConfigProvider } from "@opencode/schema/config/provider"
 import { Schema } from "effect"
 import { ConfigAgentV1 } from "./agent.js"
 import { ConfigCommandV1 } from "./command.js"
@@ -118,10 +119,21 @@ function migrateStandardProvider(info: ConfigProviderV1.Info) {
     settings: info.api ? { ...options.settings, baseURL: info.api } : info.options ? options.settings : undefined,
     headers: info.options && options.headers,
     body: info.options && options.body,
-    models:
-      info.models &&
-      Object.fromEntries(Object.entries(info.models).map(([name, model]) => [name, migrateModel(model)])),
+    models: migrateModels(info),
   }
+}
+
+function migrateModels(info: ConfigProviderV1.Info) {
+  const models: Record<string, ReturnType<typeof migrateModel>> = Object.fromEntries(
+    Object.entries(info.models ?? {}).map(([name, model]) => [name, migrateModel(model)]),
+  )
+  if (info.whitelist) {
+    models[ConfigProvider.ModelWildcard] = { ...models[ConfigProvider.ModelWildcard], disabled: true }
+    for (const name of info.whitelist) models[name] = { ...models[name], disabled: false }
+  }
+  for (const name of info.blacklist ?? []) models[name] = { ...models[name], disabled: true }
+  if (!info.models && !info.whitelist && !info.blacklist) return undefined
+  return models
 }
 
 function migrateAzureCognitiveServicesProvider(info: ConfigProviderV1.Info) {

@@ -74,8 +74,10 @@ export const Plugin = define({
         })
         const definitions = new Map<string, { readonly inherit: boolean; readonly base?: Model.Info }>()
         for (const [id, config] of Object.entries(item.models ?? {})) {
+          if (id === ConfigProvider.ModelWildcard) continue
           const base = source?.models.get(config.modelID ?? id) ?? source?.models.get(id)
           const inherit = changed || !current?.models.has(id)
+          if (!base && !current?.models.has(id) && isToggleOnly(config)) continue
           // Bind the source at this point in the provider fold. Later source edits/removal
           // and its credential availability must not change an already-defined alias.
           definitions.set(id, { inherit, base: base && structuredClone(base) })
@@ -99,8 +101,16 @@ export const Plugin = define({
       if (configuredDefault !== undefined) models.default.set(configuredDefault.providerID, configuredDefault.model)
       for (const [item, definition] of sources.models) {
         const providerID = definition.providerID
+        const wildcard = item.models?.[ConfigProvider.ModelWildcard]
+        if (wildcard?.disabled !== undefined)
+          for (const model of models.list(providerID))
+            models.update(providerID, model.id, (draft) => {
+              draft.enabled = !wildcard.disabled
+            })
         for (const [id, config] of Object.entries(item.models ?? {})) {
+          if (id === ConfigProvider.ModelWildcard) continue
           const source = definition.models.get(id)
+          if (!source?.base && !models.get(providerID, id) && isToggleOnly(config)) continue
           const inherit = source?.inherit || !models.get(providerID, id)
           models.update(providerID, id, (model) => {
             if (inherit && source?.base) {
@@ -162,6 +172,13 @@ export const Plugin = define({
     })
   }),
 })
+
+function isToggleOnly(config: { readonly disabled?: boolean }) {
+  return (
+    config.disabled !== undefined &&
+    Object.entries(config).every(([key, value]) => key === "disabled" || value === undefined)
+  )
+}
 
 function configuredProviders(entries: readonly Entry[]) {
   return entries

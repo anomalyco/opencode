@@ -766,4 +766,36 @@ describe("ConfigProviderPlugin.Plugin", () => {
       }),
     ),
   )
+  it.effect("applies a wildcard model override before explicit models", () =>
+    Effect.gen(function* () {
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
+      const providerID = Provider.ID.make("custom")
+      const first = Model.ID.make("first")
+      const second = Model.ID.make("second")
+      yield* providers.transform((editor) => {
+        editor.update(providerID, () => {})
+        editor.models.update(providerID, first, () => {})
+        editor.models.update(providerID, second, () => {})
+      })
+      yield* addPlugin([
+        new Document({
+          type: "document",
+          info: decode({
+            providers: {
+              custom: {
+                models: { "*": { disabled: true }, second: { disabled: false }, missing: { disabled: false } },
+              },
+            },
+          }),
+        }),
+      ])
+
+      expect((yield* providers.get(providerID))?.activation).toBe("enabled")
+      expect((yield* models.get(providerID, first))?.enabled).toBe(false)
+      expect((yield* models.get(providerID, second))?.enabled).toBe(true)
+      expect(yield* models.get(providerID, Model.ID.make("*"))).toBeUndefined()
+      expect(yield* models.get(providerID, Model.ID.make("missing"))).toBeUndefined()
+    }),
+  )
 })
