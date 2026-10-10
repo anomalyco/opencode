@@ -165,6 +165,11 @@ jobs:
         working-directory: packages/client
         run: bun run check:generated
 
+      - name: Check generated protocol document
+        if: runner.os == 'Linux'
+        working-directory: packages/protocol
+        run: bun run check:generated
+
       - name: Check generated documentation
         if: runner.os == 'Linux'
         working-directory: services/www
