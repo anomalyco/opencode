@@ -2527,7 +2527,7 @@ it.effect("waits for permission before calling an MCP tool", () =>
           type: "tool-call",
           id: "call_mcp_permission",
           name: "execute",
-          input: { code: "return await tools.demo.search({})" },
+          input: { code: 'return await tools.demo.search({ query: "open issues" })' },
         },
       })
       .pipe(Effect.forkScoped)
@@ -2535,7 +2535,7 @@ it.effect("waits for permission before calling an MCP tool", () =>
       action: "demo_search",
       resources: ["*"],
       save: ["*"],
-      metadata: {},
+      metadata: { query: "open issues" },
       sessionID: Session.ID.make("ses_mcp_permission"),
       agent: toolIdentity.agent,
       source: {
