@@ -406,10 +406,8 @@ const layer: Layer.Layer<
 
       if (!entry?.path) {
         const directoryExists = yield* fs.exists(directory).pipe(Effect.orDie)
-        if (directoryExists) {
-          yield* stopFsmonitor(directory)
-          yield* cleanDirectory(directory)
-        }
+        if (directoryExists)
+          return yield* new RemoveFailedError({ message: "Directory is not a registered git worktree" })
         return true
       }
 

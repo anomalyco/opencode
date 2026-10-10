@@ -3,7 +3,7 @@ import { describe, expect } from "bun:test"
 import * as fs from "fs/promises"
 import path from "path"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { Effect } from "effect"
+import { Cause, Effect, Exit } from "effect"
 import { InstanceBootstrap } from "../../src/project/bootstrap"
 import { InstanceStore } from "../../src/project/instance-store"
 import { Worktree } from "../../src/worktree"
@@ -14,6 +14,30 @@ const it = testEffect(LayerNode.compile(Worktree.node, [[InstanceStore.bootstrap
 const wintest = process.platform === "win32" ? it.instance : it.instance.skip
 
 describe("Worktree.remove", () => {
+  it.instance(
+    "refuses to delete an unregistered directory",
+    () =>
+      Effect.gen(function* () {
+        const root = (yield* TestInstance).directory
+        const svc = yield* Worktree.Service
+        const directory = path.join(root, "unregistered")
+        const sentinel = path.join(directory, "keep.txt")
+
+        yield* Effect.promise(() => fs.mkdir(directory, { recursive: true }))
+        yield* Effect.promise(() => Bun.write(sentinel, "keep\n"))
+
+        const exit = yield* Effect.exit(svc.remove({ directory }))
+
+        expect(Exit.isFailure(exit)).toBe(true)
+        if (Exit.isFailure(exit)) {
+          const error = Cause.squash(exit.cause)
+          expect(error).toBeInstanceOf(Worktree.RemoveFailedError)
+        }
+        expect(yield* Effect.promise(() => Bun.file(sentinel).text())).toBe("keep\n")
+      }),
+    { git: true },
+  )
+
   it.instance(
     "continues when git remove exits non-zero after detaching",
     () =>
