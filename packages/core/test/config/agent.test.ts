@@ -119,6 +119,17 @@ permissions:
     }
   }
 
+  // A value opening with `[` is read as a YAML flow sequence; `[Team] Does a
+  // thing` is not valid flow syntax, so the frontmatter used to fail to parse
+  // and `decode()` dropped the agent silently.
+  it.live("keeps a Markdown agent whose description starts with an unquoted [", () =>
+    Effect.gen(function* () {
+      const agent = yield* loadMarkdownAgent("description: [Team] Does a thing\nmode: subagent")
+      expect(agent.description).toBe("[Team] Does a thing")
+      expect(agent.mode).toBe("subagent")
+    }),
+  )
+
   it.live("keeps Markdown legacy permission precedence in source order", () =>
     Effect.gen(function* () {
       const agent = yield* loadMarkdownAgent('permission:\n  "*": allow\n  bash: ask\n  edit: deny')

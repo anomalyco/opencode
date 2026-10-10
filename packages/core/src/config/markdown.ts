@@ -33,8 +33,28 @@ export function sanitize(content: string) {
     if (!entry) return [line]
     const value = entry[2].trim()
     if (value === "" || value === ">" || value === "|" || value.startsWith('"') || value.startsWith("'")) return [line]
+    // A plain scalar beginning with a flow indicator ([ or {) is read as a
+    // flow collection. When it is not valid flow syntax (e.g.
+    // `description: [Team] Does a thing`) the whole frontmatter block fails to
+    // parse and the document is dropped silently; quote it so the value is
+    // kept as written. When it *is* valid flow syntax, leave the line alone so
+    // a real flow collection (e.g. `tools: {write: false}`) is not rewritten
+    // into a block scalar by the colon rule below.
+    if (value.startsWith("[") || value.startsWith("{")) {
+      if (isParseableValue(value)) return [line]
+      return [`${entry[1]}: ${JSON.stringify(value)}`]
+    }
     if (!value.includes(":")) return [line]
     return [`${entry[1]}: |-`, `  ${value}`]
   })
   return content.replace(frontmatter, () => result.join("\n"))
+}
+
+function isParseableValue(value: string): boolean {
+  try {
+    matter(`---\nvalue: ${value}\n---\n`, {})
+    return true
+  } catch {
+    return false
+  }
 }
