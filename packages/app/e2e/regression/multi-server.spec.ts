@@ -1,4 +1,6 @@
 import { expect, test, type Page } from "@playwright/test"
+import type { SessionNotFoundError } from "@opencode/client/promise"
+import { Data } from "effect"
 import { REMOTE_SERVER, SERVER, expectPath, project, seed, session, sessionHref, type TabSeed } from "../utils/app"
 import { mockServers, type MockServerConfig } from "../utils/mock-server"
 import { expectSessionTitle } from "../utils/waits"
@@ -26,7 +28,10 @@ function pending(id: string, sessionID: string) {
   return { id, sessionID, action: "shell", resources: ["git status"], metadata: {}, save: [] }
 }
 
-async function setup(page: Page, input: { tabs: TabSeed[]; a?: Partial<MockServerConfig> }) {
+async function setup(
+  page: Page,
+  input: { tabs: TabSeed[]; a?: Partial<MockServerConfig>; b?: Partial<MockServerConfig> },
+) {
   const replies: Reply[] = []
   const lists: URL[] = []
   const sessionGets: string[] = []
@@ -62,7 +67,7 @@ async function setup(page: Page, input: { tabs: TabSeed[]; a?: Partial<MockServe
       onSession: (id) => sessionGets.push(id),
       ...input.a,
     },
-    [REMOTE_SERVER]: config(REMOTE_SERVER, "Server B", directoryB, [sessionB]),
+    [REMOTE_SERVER]: { ...config(REMOTE_SERVER, "Server B", directoryB, [sessionB]), ...input.b },
   })
 
   await seed(page, { servers: [REMOTE_SERVER], tabs: input.tabs })
@@ -89,6 +94,57 @@ const reply = (sessionID: string, permissionID: string) => ({
   sessionID,
   permissionID,
   body: { decision: "once" },
+})
+
+test("a pending missing-session deletion only closes tabs on its originating server", async ({ page }) => {
+  const release = Promise.withResolvers<void>()
+  const deleting = Promise.withResolvers<string>()
+  const sessions = [{ ...sessionA }]
+  await setup(page, {
+    tabs: [sessionA.id, { session: sessionA.id, server: REMOTE_SERVER }],
+    a: {
+      sessions,
+      onSessionRemove: async (sessionID) => {
+        deleting.resolve(sessionID)
+        await release.promise
+        sessions.splice(
+          sessions.findIndex((item) => item.id === sessionID),
+          1,
+        )
+
+        return {
+          status: 404,
+          body: Data.taggedEnum<SessionNotFoundError>().SessionNotFoundError({
+            sessionID,
+            message: "Session not found",
+          }),
+        }
+      },
+    },
+    b: { sessions: [{ ...sessionB, id: sessionA.id }] },
+  })
+  await page.goto("/")
+  const row = page.locator('[data-component="home-session-row"]').filter({ hasText: sessionA.title })
+  await expect(row).toBeVisible()
+  await row.click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Delete…" }).click()
+  const dialog = page.getByRole("dialog")
+  await dialog.getByRole("button", { name: "Delete session" }).click()
+  expect(await deleting.promise).toBe(sessionA.id)
+  await dialog.getByRole("button", { name: "Cancel", exact: true }).click()
+  await expect(dialog).toBeHidden()
+  const local = page.locator(`[data-slot="titlebar-tabs"] a[href="${sessionHref(sessionA.id)}"]`)
+  const remote = page.locator(`[data-slot="titlebar-tabs"] a[href="${sessionHref(sessionA.id, REMOTE_SERVER)}"]`)
+  await remote.click()
+  await expectSessionTitle(page, sessionB.title)
+  release.resolve()
+  await expect(local).toHaveCount(0)
+  await expect(remote).toBeVisible()
+  await expectPath(page, sessionHref(sessionA.id, REMOTE_SERVER))
+  await page.reload()
+  await expectSessionTitle(page, sessionB.title)
+  await expect(local).toHaveCount(0)
+  await expect(remote).toBeVisible()
 })
 
 test("settings opened from a remote session sweep every server and keep the remote scope", async ({ page }) => {

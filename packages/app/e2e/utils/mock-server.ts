@@ -113,6 +113,8 @@ export interface MockServerConfig {
   onWorktreeRemove?: (input: Worktree.RemoveInput) => void | Promise<void>
   // POST /api/session keeps the client-reserved `id` and `location`. Return an answer to fail the attempt (1-based).
   onSessionCreate?: (body: Schema.JsonObject, attempt: number) => void | MockAnswer
+  // DELETE a session may hold the response or return a typed failure without emitting a deletion event.
+  onSessionRemove?: (sessionID: string) => void | MockAnswer | Promise<void | MockAnswer>
   // Title of created sessions (default: the request's title, else "New session").
   createdSessionTitle?: string
   // Slash commands served by `/api/command`.
@@ -814,6 +816,15 @@ function mockHandlers(
           return HttpServerResponse.jsonUnsafe({ data: created })
         }),
       )
+      .handleRaw("sessionRemove", (ctx) =>
+        Effect.promise(() => Promise.resolve(config.onSessionRemove?.(ctx.params.sessionID))).pipe(
+          Effect.map((answer) =>
+            answer
+              ? HttpServerResponse.jsonUnsafe(answer.body, { status: answer.status })
+              : HttpServerResponse.empty({ status: 204 }),
+          ),
+        ),
+      )
       .handleAll({
         info: () =>
           Effect.succeed({
@@ -1183,7 +1194,6 @@ function mockHandlers(
               ? Effect.succeed({ data: currentSession(session, config.directory) })
               : Effect.fail(new MockNotFound({ message: "Session not found" }))
           }),
-        sessionRemove: () => noContent,
         sessionShell: () => noContent,
         sessionForm: (ctx) =>
           Effect.succeed({
