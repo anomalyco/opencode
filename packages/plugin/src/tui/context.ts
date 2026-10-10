@@ -156,10 +156,20 @@ export interface Page {
   readonly render: (input: { readonly data?: Record<string, any> }) => JSX.Element
 }
 
+export type SelectedModelInput = {
+  readonly providerID: string
+  readonly modelID: string
+}
+
+type ModelSlotInput = {
+  readonly model?: SelectedModelInput
+}
+
 type PromptFooterInput = {
   readonly sessionID?: string
   readonly mode: "normal" | "shell"
   readonly showDetails: boolean
+  readonly model?: SelectedModelInput
 }
 
 export type PanelPresentation = "panel" | "fullscreen"
@@ -191,14 +201,14 @@ export interface PanelInput {
 export interface SlotMap {
   readonly app: Readonly<Record<string, never>>
   readonly "home.footer": Readonly<Record<string, never>>
-  readonly "home.footer.status": Readonly<Record<string, never>>
+  readonly "home.footer.status": ModelSlotInput
   readonly "prompt.footer": PromptFooterInput
   readonly "prompt.footer.status": PromptFooterInput
   readonly "prompt.footer.file": PromptFooterInput
   readonly "session.composer.top": { readonly sessionID: string }
   readonly "session.panel": PanelInput
-  readonly "sidebar.content": { readonly sessionID: string }
-  readonly "sidebar.footer": { readonly sessionID: string }
+  readonly "sidebar.content": { readonly sessionID: string } & ModelSlotInput
+  readonly "sidebar.footer": { readonly sessionID: string } & ModelSlotInput
 }
 export type SlotPath = keyof SlotMap
 
