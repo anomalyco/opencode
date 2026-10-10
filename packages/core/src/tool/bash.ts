@@ -110,6 +110,7 @@ const layer = Layer.effectDiscard(
           input: Input,
           output: Output,
           structured: StructuredOutput,
+          timeoutMs: false,
           toStructuredOutput: ({ output }) => ({
             truncated: output.truncated,
             ...(output.exit === undefined ? {} : { exit: output.exit }),

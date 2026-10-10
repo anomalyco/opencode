@@ -1,7 +1,7 @@
 export * as ToolRegistry from "./registry"
 
 import { ToolOutput, type ToolCall, type ToolDefinition, type ToolResultValue } from "@opencode-ai/llm"
-import { Context, Effect, Layer, Scope } from "effect"
+import { Context, Duration, Effect, Layer, Option, Scope } from "effect"
 import { AgentV2 } from "../agent"
 import { PermissionV2 } from "../permission"
 import { SessionMessage } from "../session/message"
@@ -9,7 +9,7 @@ import { SessionSchema } from "../session/schema"
 import { ToolOutputStore } from "../tool-output-store"
 import { Wildcard } from "../util/wildcard"
 import { ApplicationTools } from "./application-tools"
-import { definition, permission, settle, validateName, type AnyTool, type RegistrationError } from "./tool"
+import { definition, permission, settle, timeoutMs, validateName, type AnyTool, type RegistrationError } from "./tool"
 import { Tools } from "./tools"
 import { makeLocationNode } from "../effect/app-node"
 
@@ -39,6 +39,40 @@ export interface Settlement {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/ToolRegistry") {}
 
+/** Shared absolute execution deadline for tools without their own timeout policy. */
+export const DEFAULT_TOOL_TIMEOUT_MS = 5 * 60 * 1000
+
+// The registry is the only settlement boundary, so the deadline lives here
+// instead of in every tool. Timeout interrupts the leaf fiber and becomes an
+// ordinary error result, so the runner's FiberSet join always terminates and a
+// late leaf completion can never overwrite the recorded outcome. Permission
+// approval waits inside leaf execution are bounded by this deadline too.
+const withDeadline = <A, E, R>(
+  effect: Effect.Effect<A, E, R>,
+  name: string,
+  configured: number | false | undefined,
+): Effect.Effect<A | { readonly result: { readonly type: "error"; readonly value: string } }, E, R> => {
+  if (configured === false) return effect
+  const limit =
+    configured === undefined || !Number.isFinite(configured) || configured <= 0
+      ? DEFAULT_TOOL_TIMEOUT_MS
+      : configured
+  const deadline = Duration.millis(limit)
+  return effect.pipe(
+    Effect.timeoutOption(deadline),
+    Effect.map((settled) =>
+      Option.isSome(settled)
+        ? settled.value
+        : {
+            result: {
+              type: "error" as const,
+              value: `Tool "${name}" timed out after ${limit}ms`,
+            },
+          },
+    ),
+  )
+}
+
 const registryLayer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -59,16 +93,20 @@ const registryLayer = Layer.effect(
         }
       if (advertised && registration.identity !== advertised)
         return { result: { type: "error" as const, value: `Stale tool call: ${input.call.name}` } }
-      const pending = yield* settle(registration.tool, input.call, {
-        sessionID: input.sessionID,
-        agent: input.agent,
-        assistantMessageID: input.assistantMessageID,
-        toolCallID: input.call.id,
-      }).pipe(
-        Effect.map((output) => ({ output })),
-        Effect.catchTag("LLM.ToolFailure", (failure) =>
-          Effect.succeed({ result: { type: "error" as const, value: failure.message } }),
+      const pending = yield* withDeadline(
+        settle(registration.tool, input.call, {
+          sessionID: input.sessionID,
+          agent: input.agent,
+          assistantMessageID: input.assistantMessageID,
+          toolCallID: input.call.id,
+        }).pipe(
+          Effect.map((output) => ({ output })),
+          Effect.catchTag("LLM.ToolFailure", (failure) =>
+            Effect.succeed({ result: { type: "error" as const, value: failure.message } }),
+          ),
         ),
+        input.call.name,
+        timeoutMs(registration.tool),
       )
       if ("result" in pending) return pending
       const output = pending.output

@@ -58,10 +58,18 @@ type Config<
     readonly input: Schema.Schema.Type<Input>
     readonly output: Output["Encoded"]
   }) => ReadonlyArray<Content>
+  /**
+   * Execution deadline in milliseconds enforced by the shared settlement
+   * boundary. `undefined` inherits the registry default. `false` opts out
+   * entirely for tools that own their deadline (bash) or legitimately wait
+   * on the user (question).
+   */
+  readonly timeoutMs?: number | false
 }
 
 type Runtime = {
   readonly permission?: string
+  readonly timeoutMs?: number | false
   readonly definition: (name: string) => ToolDefinition
   readonly settle: (call: ToolCall, context: Context) => Effect.Effect<ToolOutput, ToolFailure>
 }
@@ -76,6 +84,7 @@ export function make<
   const tool = Object.freeze({}) as Definition<Input, Structured>
   const definitions = new Map<string, ToolDefinition>()
   runtimes.set(tool, {
+    timeoutMs: config.timeoutMs,
     definition: (name) => {
       const cached = definitions.get(name)
       if (cached) return cached
@@ -146,6 +155,7 @@ export const withPermission = <Input extends SchemaType<any>, Output extends Sch
 }
 
 export const permission = (tool: AnyTool, name: string) => runtimeOf(tool).permission ?? name
+export const timeoutMs = (tool: AnyTool) => runtimeOf(tool).timeoutMs
 export const definition = (name: string, tool: AnyTool) => runtimeOf(tool).definition(name)
 export const settle = (tool: AnyTool, call: ToolCall, context: Context) => runtimeOf(tool).settle(call, context)
 

@@ -56,6 +56,7 @@ const layer = Layer.effectDiscard(
           description,
           input: Input,
           output: Output,
+          timeoutMs: false,
           toModelOutput: ({ input, output }) => [
             { type: "text", text: toModelOutput(input.questions, output.answers) },
           ],

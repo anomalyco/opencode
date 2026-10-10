@@ -7,7 +7,7 @@ import { ApplicationTools } from "@opencode-ai/core/tool/application-tools"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
-import { ToolRegistry } from "@opencode-ai/core/tool/registry"
+import { DEFAULT_TOOL_TIMEOUT_MS, ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { executeTool, settleTool, toolDefinitions } from "./lib/tool"
 import { Cause, Deferred, Effect, Exit, Fiber, Layer, Option, Schema, SchemaGetter, SchemaIssue, Scope } from "effect"
 import { testEffect } from "./lib/effect"
@@ -200,6 +200,76 @@ describe("ToolRegistry", () => {
           Effect.catchDefect(Effect.succeed),
         ),
       ).toBe("unexpected executor defect")
+    }),
+  )
+
+  it.effect("keeps a finite shared default deadline", () =>
+    Effect.gen(function* () {
+      expect(DEFAULT_TOOL_TIMEOUT_MS).toBe(5 * 60 * 1000)
+    }),
+  )
+
+  it.live("fails a never-settling tool with a terminal timeout error", () =>
+    Effect.gen(function* () {
+      const service = yield* ToolRegistry.Service
+      yield* service.register({
+        hanging: Tool.make({
+          description: "Hanging",
+          input: Schema.Struct({}),
+          output: Schema.Struct({ ok: Schema.Boolean }),
+          timeoutMs: 50,
+          execute: () => Effect.never,
+        }),
+      })
+      const materialized = yield* service.materialize()
+      const settlement = yield* materialized.settle({
+        sessionID,
+        ...identity,
+        call: { type: "tool-call", id: "call-hanging", name: "hanging", input: {} },
+      })
+      expect(settlement.result).toMatchObject({
+        type: "error",
+        value: expect.stringContaining('timed out after 50ms'),
+      })
+    }),
+  )
+
+  it.live("discards a late completion after timeout without corrupting later calls", () =>
+    Effect.gen(function* () {
+      const service = yield* ToolRegistry.Service
+      const gate = yield* Deferred.make<void>()
+      yield* service.register({
+        slow: Tool.make({
+          description: "Slow",
+          input: Schema.Struct({ text: Schema.String }),
+          output: Schema.Struct({ text: Schema.String }),
+          timeoutMs: 50,
+          execute: ({ text }) => Deferred.await(gate).pipe(Effect.as({ text })),
+          toModelOutput: ({ output }) => [{ type: "text", text: output.text }],
+        }),
+      })
+      const materialized = yield* service.materialize()
+      const fiber = yield* materialized
+        .settle({
+          sessionID,
+          ...identity,
+          call: { type: "tool-call", id: "call-slow", name: "slow", input: { text: "slow" } },
+        })
+        .pipe(Effect.forkScoped)
+      expect((yield* Fiber.join(fiber)).result).toMatchObject({
+        type: "error",
+        value: expect.stringContaining("timed out"),
+      })
+      yield* Deferred.succeed(gate, undefined)
+      expect(
+        (
+          yield* materialized.settle({
+            sessionID,
+            ...identity,
+            call: { type: "tool-call", id: "call-slow-retry", name: "slow", input: { text: "slow" } },
+          })
+        ).result,
+      ).toEqual({ type: "text", value: "slow" })
     }),
   )
 
