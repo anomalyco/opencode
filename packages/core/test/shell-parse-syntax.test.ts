@@ -28,8 +28,26 @@ describe("native shell syntax compatibility", () => {
   ])("PowerShell scriptblock callers preserve permission resources and usable approvals: %s", async (command) => {
     const legacy = await Effect.runPromise(ShellParse.scan(command, "pwsh", "/workspace"))
     const native = await Effect.runPromise(ShellParse.scan(command, "pwsh", "/workspace", { portable: true }))
+    expect(native.commands.length, command).toBeGreaterThan(0)
     expect(native.commands.map((item) => item.resource)).toEqual(legacy.commands.map((item) => item.resource))
-    for (const item of native.commands) expect(Wildcard.match(item.resource, item.save), item.resource).toBe(true)
+    for (const item of native.commands) {
+      // Every scriptblock command must reach a usable approval, so a missing proposal fails here.
+      expect(typeof item.save, item.resource).toBe("string")
+      // Absence already failed above; this only narrows the type for the matcher.
+      if (item.save !== undefined) expect(Wildcard.match(item.resource, item.save), item.resource).toBe(true)
+    }
+  })
+
+  test("PowerShell saved approvals keep an exact prefix and stay inside it", async () => {
+    const command = "Write-Output 'a;b'"
+    for (const portable of [false, true]) {
+      expect(
+        (await Effect.runPromise(ShellParse.scan(command, "pwsh", "/workspace", { portable }))).commands,
+        portable ? "portable" : "Tree-sitter",
+      ).toEqual([{ resource: command, save: "Write-Output *" }])
+    }
+    expect(Wildcard.match("Write-Output 'a;b' again", "Write-Output *")).toBe(true)
+    expect(Wildcard.match("Write-Warning 'a;b'", "Write-Output *")).toBe(false)
   })
 
   for (const shell of ["bash", "zsh"]) {

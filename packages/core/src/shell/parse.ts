@@ -16,7 +16,7 @@ const POWERSHELL_PATH_FLAG_RE =
   /^-(?:p(?:ath|at|a)?|lp|l(?:i(?:t(?:e(?:r(?:a(?:l(?:p(?:a(?:t(?:h)?)?)?)?)?)?)?)?)?)?|psp(?:a(?:t(?:h)?)?)?):?$/i
 
 export type Result = {
-  commands: Array<{ resource: string; save: string }>
+  commands: Array<{ resource: string; save?: string }>
   directories: string[]
 }
 
@@ -193,13 +193,20 @@ const scanLegacy = Effect.fnUntraced(function* (command: string, shell: string, 
               result.directories.push(...directoryArgs(command, powershell, cwd, shell))
               return result
             }
-            result.commands.push({
-              resource: (node.parent?.type === "redirected_statement" ? node.parent.text : node.text).trim(),
-              save: `${prefix(tokens).join(" ")} *`,
-            })
+            const span = node.parent?.type === "redirected_statement" ? node.parent : node
+            const resource = span.text.trim()
+            if (powershell) {
+              result.commands.push({
+                resource,
+                save: `${prefix(tokens).join(" ")} *`,
+              })
+              return result
+            }
+            const save = savedPrefix(span, node, resource, tokens)
+            result.commands.push({ resource, ...(save !== undefined ? { save } : {}) })
             return result
           },
-          { commands: [] as Array<{ resource: string; save: string }>, directories: [] as string[] },
+          { commands: [] as Result["commands"], directories: [] as string[] },
         ),
       ),
     (tree) => Effect.sync(() => tree.delete()),
@@ -264,12 +271,20 @@ export const scanPortable = Effect.fnUntraced(function* (command: string, shell:
       )
       continue
     }
+    if (!powershell) {
+      const save = proposal(
+        item.commandOffset ? item.resource.slice(0, item.commandOffset) : "",
+        words.slice(0, PREFIX_LENGTH),
+      )
+      output.commands.push({ resource: item.resource, ...(save !== undefined ? { save } : {}) })
+      continue
+    }
     const selected = prefix(words.slice(0, PREFIX_LENGTH))
     const conventional = `${selected.join(" ")} *`
     const end = item.wordEnds?.[selected.length - 1]
     // Keep existing grants stable unless normalized spacing loses the original source boundary.
     const save =
-      !powershell || end === undefined || Wildcard.match(item.resource, conventional)
+      end === undefined || Wildcard.match(item.resource, conventional)
         ? conventional
         : (() => {
             const boundary =
@@ -286,6 +301,40 @@ export const scanPortable = Effect.fnUntraced(function* (command: string, shell:
   }
   return output
 })
+
+// Grammar recovery can glue statements together; quoted assignment, redirect and here-string contents are not boundaries.
+function crossesStatementBoundary(span: Node, end: number) {
+  let start = span.startIndex
+  for (const child of span.descendantsOfType(["variable_assignment", "file_redirect", "herestring_redirect"])) {
+    if (!child) continue
+    if (child.startIndex >= end) continue
+    if (/[;&|\r\n]/.test(span.text.slice(start - span.startIndex, child.startIndex - span.startIndex))) return true
+    start = Math.max(start, child.endIndex)
+  }
+  return /[;&|\r\n]/.test(span.text.slice(start - span.startIndex, end - span.startIndex))
+}
+
+// The reusable approval keeps the literal source before the executable. Only an assignment-prefixed command
+// preserves that head verbatim; without assignments the proposal stays the inherited bare-command
+// normalization, so leading redirects remain resource text that no proposal covers.
+function savedPrefix(span: Node, node: Node, resource: string, tokens: string[]) {
+  const executable = node.childForFieldName("name")
+  if (!executable || executable.text === "") return undefined
+  const assigned = Array.from({ length: node.childCount }, (_, index) => node.child(index)).some(
+    (child) =>
+      child?.type === "variable_assignment" ||
+      (child?.type === "ERROR" && child.descendantsOfType("variable_assignment").length > 0),
+  )
+  if (!assigned) return `${prefix(tokens).join(" ")} *`
+  if (crossesStatementBoundary(span, executable.startIndex)) return undefined
+  return proposal(
+    resource.slice(
+      0,
+      Math.max(0, executable.startIndex - (span.startIndex + (span.text.length - span.text.trimStart().length))),
+    ),
+    tokens,
+  )
+}
 
 function parts(node: Node) {
   return Array.from({ length: node.childCount }).flatMap((_, index): Part[] => {
@@ -378,6 +427,13 @@ function prefix(tokens: string[]) {
     if (arity !== undefined) return tokens.slice(0, arity)
   }
   return tokens.slice(0, 1)
+}
+
+// Wildcard treats * and ? as glob syntax and normalizes backslash, so such a head cannot be saved literally.
+function proposal(head: string, tokens: string[]) {
+  if (tokens.length === 0 || tokens[0] === "") return undefined
+  if (/[*?\\]/.test(head)) return undefined
+  return `${head}${prefix(tokens).join(" ")} *`
 }
 
 function resolve(asset: string) {

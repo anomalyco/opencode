@@ -168,13 +168,233 @@ describe("ShellParse", () => {
     expect(bash.directories).toEqual([path.join(os.homedir(), "src")])
 
     const backslash = await Effect.runPromise(ShellParse.scan("cd '~\\src'", "/bin/bash", "/workspace"))
-    expect(backslash.directories).toEqual(
-      process.platform === "win32" ? [path.join(os.homedir(), "src")] : ["~\\src"],
-    )
+    expect(backslash.directories).toEqual(process.platform === "win32" ? [path.join(os.homedir(), "src")] : ["~\\src"])
 
     const powershell = await Effect.runPromise(
       ShellParse.scan('Set-Location "$PWD/src"; Set-Location $PSHOME', "/usr/local/bin/pwsh", "/workspace"),
     )
     expect(powershell.directories).toEqual(["/workspace/src", "/usr/local/bin"])
   })
+
+  test.each([
+    ["FOO=bar git status", "FOO=bar git status", "FOO=bar git status *"],
+    ["FOO=bar FOO2=baz git status", "FOO=bar FOO2=baz git status", "FOO=bar FOO2=baz git status *"],
+    ["FOO= git status", "FOO= git status", "FOO= git status *"],
+    ['FOO="two words" git status', 'FOO="two words" git status', 'FOO="two words" git status *'],
+    [
+      'FOO="two words"\tgit remote add origin x',
+      'FOO="two words"\tgit remote add origin x',
+      'FOO="two words"\tgit remote add *',
+    ],
+    ["FOO=bar npm run test", "FOO=bar npm run test", "FOO=bar npm run test *"],
+    ["FOO=bar unknowncmd foo", "FOO=bar unknowncmd foo", "FOO=bar unknowncmd *"],
+    [">out FOO=bar git status", ">out FOO=bar git status", ">out FOO=bar git status *"],
+    ["FOO=bar >out git status", "FOO=bar >out git status", "FOO=bar >out git status *"],
+    ["FOO=bar git status >out", "FOO=bar git status >out", "FOO=bar git status *"],
+    ["  FOO=bar git status  ", "FOO=bar git status", "FOO=bar git status *"],
+    ["FOO='a b' git status", "FOO='a b' git status", "FOO='a b' git status *"],
+    ['FOO="a=b" git status', 'FOO="a=b" git status', 'FOO="a=b" git status *'],
+    ["FOO='a;b' printf done", "FOO='a;b' printf done", "FOO='a;b' printf *"],
+    ['FOO="a\nb" printf done', 'FOO="a\nb" printf done', 'FOO="a\nb" printf *'],
+    ["FOO=bar > 'a;b' printf done", "FOO=bar > 'a;b' printf done", "FOO=bar > 'a;b' printf *"],
+    ['FOO=bar > "a\nb" printf done', 'FOO=bar > "a\nb" printf done', 'FOO=bar > "a\nb" printf *'],
+    ["FOO='a&b' printf done", "FOO='a&b' printf done", "FOO='a&b' printf *"],
+    ["FOO='a|b' printf done", "FOO='a|b' printf done", "FOO='a|b' printf *"],
+    ['FOO=bar > "o&t" printf done', 'FOO=bar > "o&t" printf done', 'FOO=bar > "o&t" printf *'],
+    ["FOO=bar > 'o|t' printf done", "FOO=bar > 'o|t' printf done", "FOO=bar > 'o|t' printf *"],
+  ] as const)("preserves environment prefixes in saved proposals: %s", async (command, resource, save) => {
+    for (const portable of [false, true]) {
+      const scanner = portable ? "portable" : "Tree-sitter"
+      const result = await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace", { portable }))
+      expect(result.directories, scanner).toEqual([])
+      expect(result.commands, scanner).toEqual([{ resource, save }])
+    }
+  })
+
+  test.each([
+    ["A=x <<<';' printf ok", "A=x <<<';' printf *"],
+    ["A=x <<<'&' printf ok", "A=x <<<'&' printf *"],
+    ["A=x <<<'&&' printf ok", "A=x <<<'&&' printf *"],
+    ["A=x <<<'||' printf ok", "A=x <<<'||' printf *"],
+    ["A=x <<<'|' printf ok", "A=x <<<'|' printf *"],
+    ["A=x <<<';' >out printf ok", "A=x <<<';' >out printf *"],
+    ["A=x <<<';' printf ok >out", "A=x <<<';' printf *"],
+    ["FOO=你好 <<<';' printf ok", "FOO=你好 <<<';' printf *"],
+    ["A=x <<<';你好' printf ok", "A=x <<<';你好' printf *"],
+  ] as const)("preserves a here-string whose quoted content only looks like a separator: %s", async (command, save) => {
+    for (const portable of [false, true]) {
+      const scanner = portable ? "portable" : "Tree-sitter"
+      const result = await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace", { portable }))
+      expect(result.directories, scanner).toEqual([])
+      expect(result.commands, scanner).toEqual([{ resource: command, save }])
+    }
+  })
+
+  test.each([
+    ["A=x <<<';' printf ok; git status", "A=x <<<';' printf ok", "A=x <<<';' printf *"],
+    ["A=x <<<';' printf ok && git status", "A=x <<<';' printf ok", "A=x <<<';' printf *"],
+  ] as const)(
+    "keeps quoted here-string content in the head while leaving the next statement outside the grant: %s",
+    async (command, resource, save) => {
+      for (const portable of [false, true]) {
+        expect(
+          (await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace", { portable }))).commands,
+          portable ? "portable" : "Tree-sitter",
+        ).toEqual([
+          { resource, save },
+          { resource: "git status", save: "git status *" },
+        ])
+      }
+    },
+  )
+
+  test.each([["A=x <<<$'a\\nb' printf ok"], ["FOO=a\\b <<<';' printf ok"]] as const)(
+    "omits a here-string head Wildcard cannot represent literally: %s",
+    async (command) => {
+      for (const portable of [false, true]) {
+        const scanner = portable ? "portable" : "Tree-sitter"
+        const result = await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace", { portable }))
+        expect(result.commands, scanner).toEqual([{ resource: command }])
+      }
+    },
+  )
+
+  test("keeps a safe sibling when the here-string head is not representable", async () => {
+    for (const portable of [false, true]) {
+      expect(
+        (
+          await Effect.runPromise(
+            ShellParse.scan("FOO=a\\b <<<';' printf ok && printf hello", "/bin/bash", "/workspace", { portable }),
+          )
+        ).commands,
+        portable ? "portable" : "Tree-sitter",
+      ).toEqual([{ resource: "FOO=a\\b <<<';' printf ok" }, { resource: "printf hello", save: "printf *" }])
+    }
+  })
+
+  test("keeps the inherited heredoc resource divergence unchanged", async () => {
+    const command = "A=x <<EOF printf ok\ntext\nEOF"
+    expect((await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace"))).commands).toEqual([])
+    expect(
+      (await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace", { portable: true }))).commands,
+    ).toEqual([{ resource: command, save: "A=x <<EOF printf *" }])
+  })
+
+  test.each([
+    [
+      "echo 😀; FOO=你好 git status",
+      [
+        { resource: "echo 😀", save: "echo *" },
+        { resource: "FOO=你好 git status", save: "FOO=你好 git status *" },
+      ],
+    ],
+    [
+      "echo $(FOO=bar git status)",
+      [
+        { resource: "echo $(FOO=bar git status)", save: "echo *" },
+        { resource: "FOO=bar git status", save: "FOO=bar git status *" },
+      ],
+    ],
+    [
+      "if true; then FOO=bar git status; fi",
+      [
+        { resource: "true", save: "true *" },
+        { resource: "FOO=bar git status", save: "FOO=bar git status *" },
+      ],
+    ],
+    [
+      "FOO=bar git status && printf hello",
+      [
+        { resource: "FOO=bar git status", save: "FOO=bar git status *" },
+        { resource: "printf hello", save: "printf *" },
+      ],
+    ],
+  ] as const)("preserves prefixes across compound commands: %s", async (command, expected) => {
+    for (const portable of [false, true]) {
+      expect(
+        (await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace", { portable }))).commands,
+        portable ? "portable" : "Tree-sitter",
+      ).toEqual([...expected])
+    }
+  })
+
+  test.each([
+    "FOO='a*b' git status",
+    'FOO="a?b" git status',
+    "FOO=a\\b git status",
+    ">out* FOO=bar git status",
+    "FOO=bar >out* git status",
+  ] as const)("omits only the proposal when the preserved head is not literally representable: %s", async (command) => {
+    for (const portable of [false, true]) {
+      const scanner = portable ? "portable" : "Tree-sitter"
+      const result = await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace", { portable }))
+      expect(result.commands, scanner).toHaveLength(1)
+      expect(result.commands[0]?.resource, scanner).toBe(command)
+      expect(result.commands[0]?.save, scanner).toBeUndefined()
+    }
+  })
+
+  test("retains safe sibling proposals alongside an omitted unsafe prefix", async () => {
+    for (const portable of [false, true]) {
+      const scanner = portable ? "portable" : "Tree-sitter"
+      const result = await Effect.runPromise(
+        ShellParse.scan("FOO='a*b' git status && printf hello", "/bin/bash", "/workspace", { portable }),
+      )
+      expect(
+        result.commands.map((item) => item.resource),
+        scanner,
+      ).toEqual(["FOO='a*b' git status", "printf hello"])
+      expect(result.commands[0]?.save, scanner).toBeUndefined()
+      expect(result.commands[1], scanner).toEqual({ resource: "printf hello", save: "printf *" })
+    }
+  })
+
+  test.each(["FOO=bar", "FOO=bar BAZ=qux"] as const)("never proposes assignment-only rules: %s", async (command) => {
+    for (const portable of [false, true]) {
+      expect(
+        (await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace", { portable }))).commands,
+        portable ? "portable" : "Tree-sitter",
+      ).toEqual([])
+    }
+  })
+
+  test.each([
+    ["FOO=bar > output; printf done", "FOO=bar > output; printf done"],
+    ["FOO=bar > output\nprintf done", "FOO=bar > output\nprintf done"],
+    ["FOO=bar > output & printf done", "FOO=bar > output & printf done"],
+    ["FOO=bar > output && printf done", "FOO=bar > output && printf done"],
+    ["FOO=bar > output || printf done", "FOO=bar > output || printf done"],
+    ["FOO=bar > output | printf done", "FOO=bar > output | printf done"],
+  ] as const)("does not save an assignment head across a statement boundary: %s", async (command, resource) => {
+    for (const portable of [false, true]) {
+      expect(
+        (await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace", { portable }))).commands,
+        portable ? "portable" : "Tree-sitter",
+      ).toEqual(portable ? [{ resource: "printf done", save: "printf *" }] : [{ resource }])
+    }
+  })
+
+  test.each([
+    ['FOO="a*b" printf hello ${X', undefined],
+    ["FOO=bar printf hello ${X", "FOO=bar printf *"],
+  ] as const)(
+    "malformed env-prefixed commands never erase the head into an executable-only grant: %s",
+    async (command, save) => {
+      expect((await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace"))).commands).toEqual(
+        save === undefined ? [{ resource: command }] : [{ resource: command, save }],
+      )
+    },
+  )
+
+  test.each([">out printf hello", ">out* printf hello"] as const)(
+    "preserves baseline unprefixed behavior for leading redirects: %s",
+    async (command) => {
+      for (const portable of [false, true]) {
+        expect(
+          (await Effect.runPromise(ShellParse.scan(command, "/bin/bash", "/workspace", { portable }))).commands,
+          portable ? "portable" : "Tree-sitter",
+        ).toEqual([{ resource: command, save: "printf *" }])
+      }
+    },
+  )
 })
