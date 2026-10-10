@@ -13,19 +13,12 @@ const upDelta = Number(process.env.SCROLL_BENCH_UP_DELTA ?? -900)
 const fastSteps = Number(process.env.SCROLL_BENCH_FAST_STEPS ?? 8)
 const fastDelta = Number(process.env.SCROLL_BENCH_FAST_DELTA ?? 2_600)
 
-// Escape hatch for a machine whose installed Chromium revision does not match the one this
-// Playwright build pins. Unset on CI, where the pinned browser is downloaded normally.
-const chromiumExecutable = process.env.SCROLL_BENCH_CHROMIUM_EXECUTABLE
-
-benchmark.use({ launchOptions: chromiumExecutable ? { executablePath: chromiumExecutable } : {} })
-
 /**
  * Scroll-path pacing for a long Markdown session.
  *
- * The cold tail settle re-reads every mounted row's `offsetHeight` on each scroll event while it is
- * still pending, so these two scenarios bracket that gate: one scrolls as soon as the timeline
- * mounts, the other waits until the settle finished and the gate is unreachable. Metrics are
- * reported for before/after comparison only; no timing or frame-rate threshold is asserted.
+ * The two scenarios bracket the cold tail settle: one scrolls as soon as the timeline mounts,
+ * the other waits until the settle finished. Metrics are reported for before/after comparison
+ * only; no timing or frame-rate threshold is asserted.
  */
 benchmark.describe("performance: session timeline scrolling", () => {
   benchmark("scrolls a long session from the cold tail", async ({ page, report }) => {
@@ -42,9 +35,17 @@ benchmark.describe("performance: session timeline scrolling", () => {
 async function runTimelineScrollBenchmark(page: Page, options: { waitForColdSettle: boolean }) {
   const fixture = await setupTimelineBenchmark(page, { historyTurns, eventBatch: 1 })
 
+  // The settle removes the inline `visibility: hidden` from the virtual content once the cold
+  // tail finished; the second scenario starts only after that gate is gone.
   if (options.waitForColdSettle)
     await expect
-      .poll(() => fixture.scroller.evaluate(coldPending), { timeout: 120_000, intervals: [100, 250, 500] })
+      .poll(
+        () =>
+          fixture.scroller.evaluate(
+            () => document.querySelector<HTMLElement>("[data-timeline-virtual-content]")?.style.visibility === "hidden",
+          ),
+        { timeout: 120_000, intervals: [100, 250, 500] },
+      )
       .toBe(false)
 
   const maxScroll = await fixture.scroller.evaluate((element) => element.scrollHeight - element.clientHeight)
@@ -89,24 +90,8 @@ async function runTimelineScrollBenchmark(page: Page, options: { waitForColdSett
  * Assigns `scrollTop` rather than wheeling: a wheel burst makes this app navigate, which destroys
  * the execution context mid-measurement. The assignment still fires a real scroll event, so the
  * settle path under measurement runs unchanged.
- *
- * The first scroll after load makes the app reload the same route once, which also destroys the
- * context. The calibration step absorbs that reload; the measured steps then run on a settled
- * document.
  */
 async function wheelThrough(scroller: Locator, steps: number, delta: number) {
-  for (let attempt = 0; ; attempt++) {
-    try {
-      return await stepThrough(scroller, steps, delta)
-    } catch (error) {
-      if (attempt >= 1 || !/Execution context was destroyed/.test(String(error))) throw error
-
-      await settleNavigation(scroller)
-    }
-  }
-}
-
-async function stepThrough(scroller: Locator, steps: number, delta: number) {
   const start = await scroller.evaluate((element) => element.scrollTop)
 
   for (let step = 0; step < steps; step++) {
@@ -128,30 +113,6 @@ async function stepThrough(scroller: Locator, steps: number, delta: number) {
 const stableFrames = 3
 
 const settleFrameBudget = 1_200
-
-/**
- * Resolves once the scroller answers two consecutive reads, which proves the document stopped
- * navigating. Reads the document rather than the geometry, so a cold tail stays cold.
- */
-async function settleNavigation(scroller: Locator) {
-  let answered = 0
-
-  await expect
-    .poll(
-      async () => {
-        try {
-          await scroller.evaluate(() => document.readyState)
-          answered += 1
-        } catch {
-          answered = 0
-        }
-
-        return answered
-      },
-      { timeout: 60_000, intervals: [100, 250, 500] },
-    )
-    .toBeGreaterThanOrEqual(2)
-}
 
 /**
  * Resolves once scrollTop repeats across consecutive frames, or once the frame budget runs out.
@@ -177,9 +138,4 @@ function waitForScrollToSettle(element: HTMLElement, budget: { stableFrames: num
 
     requestAnimationFrame(sample)
   })
-}
-
-/** The settle owns the row sweep until it removes the content's inline `visibility: hidden`. */
-function coldPending() {
-  return document.querySelector<HTMLElement>("[data-timeline-virtual-content]")?.style.visibility === "hidden"
 }
