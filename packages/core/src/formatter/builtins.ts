@@ -131,7 +131,9 @@ export function make(input: {
       ".gql",
     ],
     enabled: Effect.gen(function* () {
-      const found = yield* Effect.forEach(["biome.json", "biome.jsonc"], findUp, { concurrency: "unbounded" })
+      const found = yield* Effect.forEach(["biome.json", "biome.jsonc", ".biome.json", ".biome.jsonc"], findUp, {
+        concurrency: "unbounded",
+      })
       if (!found.some((items) => items.length > 0)) return disabled
       const bin = yield* input.npm.which("@biomejs/biome")
       return bin ? [bin, "format", "--write", "$FILE"] : disabled
