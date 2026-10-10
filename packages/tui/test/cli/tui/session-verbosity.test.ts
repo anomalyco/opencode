@@ -49,6 +49,14 @@ const instruction = (id: string, paths: string[]): SessionMessageInfo => ({
   metadata: { instruction: { paths } },
   time: { created: 1 },
 })
+const update = (id: string, paths: string[]): SessionMessageInfo => ({
+  type: "system",
+  id,
+  text: "Updated instructions",
+  description: `Instructions updated: ${paths.join(", ")}`,
+  metadata: { notice: "instructions", instructionSources: paths },
+  time: { created: 1 },
+})
 
 test("reasoning and exploration group at every level; other tools stand alone", () => {
   for (const verbosity of ["medium", "high"] as const) {
@@ -66,12 +74,16 @@ test("medium and high add web tools to exploration and group instruction loads",
   }
 })
 
-test("low wraps tools, thoughts and instruction loads in activity; text and other messages break it", () => {
+test("low wraps tools, thoughts, instruction loads and updates in activity; text and other messages break it", () => {
   expect(partPath({ type: "reasoning" }, "low")).toEqual(["activity", "reasoning"])
   expect(partPath({ type: "tool", name: "read" }, "low")).toEqual(["activity", "exploration"])
   expect(partPath({ type: "tool", name: "shell" }, "low")).toEqual(["activity"])
   expect(partPath({ type: "text" }, "low")).toEqual([])
   expect(messagePath(instruction("i", ["AGENTS.md"]), "low")).toEqual(["activity", "instructions"])
+  expect(messagePath(update("u", ["core/codemode"]), "low")).toEqual(["activity"])
+  for (const verbosity of ["medium", "high"] as const)
+    expect(messagePath(update("u", ["core/codemode"]), verbosity)).toEqual([])
+  expect(messagePath({ ...update("u", ["core/codemode"]), metadata: {} }, "low")).toEqual([])
   expect(messagePath({ type: "user", id: "u", text: "hi", time: { created: 1 } }, "low")).toEqual([])
   // Shell/subagent completion notices are ordinary synthetic messages without instruction metadata.
   expect(
@@ -87,6 +99,43 @@ test("low wraps tools, thoughts and instruction loads in activity; text and othe
       "low",
     ),
   ).toEqual([])
+})
+
+test("low keeps activity together across updates and shows the exact notices when expanded", () => {
+  const messages: SessionMessageInfo[] = [
+    assistant("a", [tool("sh1", "shell"), { type: "reasoning", text: "Plan", time: { created: 1, completed: 2 } }]),
+    update("u", ["core/codemode", "core/mcp-guidance"]),
+    assistant("b", [tool("sh2", "shell"), { type: "reasoning", text: "Finish", time: { created: 1, completed: 2 } }]),
+  ]
+  const rows = reduceSessionRows(messages, new Set(), false, "low")
+  expect(rows.map((row) => (row.type === "group" ? `${row.kind}:${row.size}` : row.type))).toEqual(["activity:5"])
+  const activity = rows[0]
+  if (activity.type !== "group") throw new Error("Expected activity")
+  expect(activity.children.map((child) => (child.type === "entry" ? child.entry.type : child.kind))).toEqual([
+    "part",
+    "reasoning",
+    "message",
+    "part",
+    "reasoning",
+  ])
+  expect(summarizeActivity(activity, (id) => messages.find((message) => message.id === id), [], true).label).toBe(
+    "2 commands, 2 thoughts, 1 other",
+  )
+  expect(
+    reduceSessionRows([update("u", ["core/codemode", "core/mcp-guidance"])], new Set(), false, "low").map((row) =>
+      row.type === "group" ? row.kind : row.type,
+    ),
+  ).toEqual(["activity"])
+})
+
+test("each update notice counts once rather than counting changed sources", () => {
+  const messages = [update("u1", ["a", "b"]), update("u2", ["a"])]
+  const activity = reduceSessionRows(messages, new Set(), false, "low")[0]
+  if (activity.type !== "group") throw new Error("Expected activity")
+  expect(summarizeActivity(activity, (id) => messages.find((message) => message.id === id), [], true).label).toBe(
+    "2 others",
+  )
+  expect(reduceSessionRows(messages, new Set(), false, "medium").map((row) => row.type)).toEqual(["message", "message"])
 })
 
 test("low hydration nests subgroups inside one activity group per run", () => {

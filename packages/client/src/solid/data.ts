@@ -804,7 +804,7 @@ export function createData(config: CreateDataInput) {
           type: "system",
           text: updateText,
           description: `Instructions updated: ${Object.keys(event.data.delta).join(", ")}`,
-          metadata: event.metadata,
+          metadata: { ...event.metadata, notice: "instructions", instructionSources: Object.keys(event.data.delta) },
           time: { created: event.created },
         })
         return
