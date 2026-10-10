@@ -15,4 +15,8 @@ export class Policy extends Schema.Class<Policy>("ConfigV2.Experimental.Policy")
 
 export class Experimental extends Schema.Class<Experimental>("ConfigV2.Experimental")({
   policies: Policy.pipe(Schema.Array, Schema.optional),
+  vision_model: Schema.String.pipe(Schema.optional).annotate({
+    description:
+      "Model used to transcribe image attachments when the selected model does not support image input, as provider/model",
+  }),
 }) {}
