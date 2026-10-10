@@ -3,7 +3,7 @@
   --text-shimmer-duration: 1200ms;
   --text-shimmer-swap: 220ms;
   --text-shimmer-index: 0;
-  --text-shimmer-base-color: var(--text-weak);
+  --text-shimmer-peak-color: var(--text-strong);
 
   display: inline-flex;
   align-items: baseline;
@@ -36,11 +36,14 @@
 }
 
 [data-component="text-shimmer"] [data-slot="text-shimmer-char-shimmer"] {
-  color: var(--text-shimmer-base-color);
+  color: var(--text-shimmer-peak-color);
   opacity: 0;
 }
 
-[data-component="text-shimmer"] [data-slot="text-shimmer-char-shimmer"][data-run="true"] {
+/* Only opacity is animated (so it composites on the compositor), and the
+   animation is scoped to [data-active="true"] so that turning active off
+   removes it immediately and the opacity transition above can fade out. */
+[data-component="text-shimmer"][data-active="true"] [data-slot="text-shimmer-char-shimmer"] {
   animation-name: text-shimmer-pulse;
   animation-duration: var(--text-shimmer-duration);
   animation-iteration-count: infinite;
