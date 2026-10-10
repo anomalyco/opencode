@@ -126,6 +126,8 @@ export interface MockServerConfig {
   sessionStatus?: Resolvable<Record<string, { type: string }>>
   inbox?: unknown[] | (() => unknown[])
   onPrompt?: (input: { sessionID: string; body: Schema.JsonObject }) => void
+  // Holds model selection before prompt admission; return an answer to reject the selection.
+  beforeSwitchModelResponse?: (sessionID: string) => Promise<void | MockAnswer>
   onCompact?: (input: { sessionID: string; body: Schema.JsonObject }) => void
   generate?: (input: { sessionID: string; prompt: string }) => { text: string } | Promise<{ text: string }>
   onInboxChange?: (input: { sessionID: string; inboxID: string; action: "cancel" | "steer" | "queue" }) => void
@@ -814,6 +816,15 @@ function mockHandlers(
           return HttpServerResponse.jsonUnsafe({ data: created })
         }),
       )
+      .handleRaw("sessionSwitchModel", (ctx) =>
+        Effect.promise(async () => {
+          const answer = await config.beforeSwitchModelResponse?.(ctx.params.sessionID)
+
+          return answer
+            ? HttpServerResponse.jsonUnsafe(answer.body, { status: answer.status })
+            : HttpServerResponse.empty({ status: 204 })
+        }),
+      )
       .handleAll({
         info: () =>
           Effect.succeed({
@@ -1254,7 +1265,6 @@ function mockHandlers(
             }),
           ).pipe(Effect.andThen(noContent)),
         sessionSwitchAgent: () => noContent,
-        sessionSwitchModel: () => noContent,
         // Only the session's own list; location requests (`permissions`) come from `/api/permission/request`.
         sessionPermission: (ctx) =>
           Effect.sync(() => ({

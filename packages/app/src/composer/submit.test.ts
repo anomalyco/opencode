@@ -141,6 +141,7 @@ function session(input: {
       session: {
         setStatus: (_sessionID, status) => input.statuses?.push(status),
         prompt: async (value) => {
+          await value.gate
           input.calls.push("prompt")
           await input.prompt?.(value)
 

@@ -1,8 +1,72 @@
 import { expect, test, type Locator, type Page } from "@playwright/test"
 import { NO_PROVIDER, T0, provider } from "../utils/app"
 import { openDraft, openSession } from "../utils/workspace"
+import type { MockAnswer } from "../utils/mock-server"
 
 test.use({ permissions: ["clipboard-read", "clipboard-write"] })
+
+for (const outcome of ["accepted", "rejected"] as const) {
+  test(`shows an existing session's prompt before model selection finishes (${outcome})`, async ({ page }) => {
+    const selection = Promise.withResolvers<void | MockAnswer>()
+    const selecting = Promise.withResolvers<string>()
+    const prompts: Record<string, unknown>[] = []
+    const { editor, session, push } = await openSession(page, {
+      name: "InstantPrompt",
+      beforeSwitchModelResponse: (id) => {
+        selecting.resolve(id)
+
+        return selection.promise
+      },
+      onPrompt: (input) => prompts.push(input.body),
+    })
+    const text = "Show this prompt immediately"
+    const message = page.locator('[data-slot="session-timeline-scroll"]').getByText(text, { exact: true })
+
+    try {
+      await editor.fill(text)
+      await editor.press("Enter")
+      expect(await selecting.promise).toBe(session.id)
+      await expect(editor).toBeEmpty()
+      await expect(message).toBeVisible()
+      await expect(message).toHaveCount(1)
+      expect(prompts).toHaveLength(0)
+
+      selection.resolve(
+        outcome === "accepted" ? undefined : { status: 500, body: { name: "SelectionFailed", message: "Fixture failure" } },
+      )
+
+      if (outcome === "rejected") {
+        await expect(editor).toHaveText(text)
+        await expect(message).toHaveCount(0)
+        expect(prompts).toHaveLength(0)
+
+        return
+      }
+
+      await expect.poll(() => prompts.length).toBe(1)
+      const id = String(prompts[0].id)
+      expect(prompts[0].text).toBe(text)
+      await push([
+        {
+          id: "evt_instant_prompt_enqueued",
+          type: "session.inbox.enqueued",
+          created: T0,
+          durable: { aggregateID: session.id, seq: 1, version: 1 },
+          data: {
+            sessionID: session.id,
+            inboxID: id,
+            item: { type: "user", payload: { text }, delivery: "steer" },
+          },
+        },
+      ])
+      await expect(message).toHaveCount(1)
+      await expect(message).toBeVisible()
+      await expect(editor).toBeEmpty()
+    } finally {
+      selection.resolve()
+    }
+  })
+}
 
 async function draft(page: Page) {
   const { editor } = await openDraft(page, { name: "ComposerDraft", provider: NO_PROVIDER })

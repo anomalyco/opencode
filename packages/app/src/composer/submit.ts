@@ -500,10 +500,14 @@ async function sendPrompt(
     if (session.current()?.revert) await session.api.revert.commit({ sessionID: session.id })
   }
 
-  if (value.delivery === "steer") await applySelection(session, value.selection, track, settle)
-  else await settle()
+  const prepared = value.delivery === "steer" ? applySelection(session, value.selection, track, settle) : settle()
+
+  // A committed revert also deletes inbox rows after its boundary, so do not insert the optimistic row before it.
+  if (session.current()?.revert) await prepared
 
   const admission = {
+    // Render through the client's existing optimistic admission before selection finishes, but keep the POST gated.
+    gate: prepared,
     id: value.id,
     sessionID: session.id,
     delivery: value.delivery,
