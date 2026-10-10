@@ -6,7 +6,7 @@ import { ephemeral } from "@opencode/schema/event"
 import type { Session } from "@opencode/schema/session"
 import { createHash } from "node:crypto"
 import { isDeepStrictEqual } from "node:util"
-import { Cause, Context, Effect, Exit, FiberSet, Latch, Layer, Schema, Scope, Semaphore, Stream, Types } from "effect"
+import { Cause, Context, Effect, Exit, FiberSet, Latch, Layer, Schedule, Schema, Scope, Semaphore, Stream, Types } from "effect"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Credential } from "../credential.js"
 import { Bus } from "../bus.js"
@@ -364,6 +364,45 @@ export const layer = (options?: Options) =>
           ),
         )
 
+      // A dropped or never-connected server retries with backoff instead of staying failed until the
+      // next config change: the onClose handler below and failed startups both funnel here.
+      // `reconnecting` dedupes the retries and the per-server lock serializes them with the
+      // reconcile-driven lifecycle work (replace/remove/connect).
+      const reconnecting = new Set<ServerName>()
+      const scheduleReconnect = Effect.fnUntraced(function* (
+        name: ServerName,
+        entry: ServerEntry,
+      ): Effect.fn.Return<void, never, never> {
+        if (reconnecting.has(name)) return
+        reconnecting.add(name)
+        // Retries sleep outside the per-server lock: each attempt takes the lock just long
+        // enough to run startServer, so backoff never wedges user-driven connects or
+        // reconcile-driven replacements queued behind it.
+        yield* Effect.forkDetach(
+          Effect.gen(function* () {
+            // Grace period before the first attempt: a drop often coincides with an in-flight
+            // reconcile that is about to replace or remove this entry — respawning instantly
+            // would race it.
+            yield* Effect.sleep("500 millis")
+            // Bail if reconcile replaced this entry or someone already fixed it: retries must not
+            // fight a replacement or a user-driven connect that landed while we waited.
+            if (entries.get(name) !== entry) return
+            if (entry.config.disabled) return
+            if (entry.status.status !== "failed") return
+            yield* startServer(name, entry)
+            if (entry.status.status === "failed") return yield* Effect.fail("mcp reconnect failed")
+          }).pipe(
+            locks.withLock(name),
+            Effect.retry({
+              times: 10,
+              schedule: Schedule.exponential("1 second").pipe(Schedule.jittered),
+            }),
+            Effect.ignore,
+            Effect.ensuring(Effect.sync(() => reconnecting.delete(name))),
+          ),
+        )
+      })
+
       const loadCatalog = (name: ServerName, entry: ServerEntry, connection: McpClient.Connection) =>
         recovering(name, entry, connection, (connection) =>
           Effect.all(
@@ -407,6 +446,9 @@ export const layer = (options?: Options) =>
               entry.status = { status: "failed", error: reason }
               yield* stopServer(name, entry)
               yield* bus.publish(McpEvent.StatusChanged, { server: name })
+              // A dropped server retries with backoff instead of staying failed until the next
+              // config change; failed startups funnel into the same path below.
+              yield* scheduleReconnect(name, entry)
             }),
           ),
         )
@@ -424,7 +466,10 @@ export const layer = (options?: Options) =>
         connection.onResourcesChanged(() => live(bus.publish(McpEvent.ResourcesChanged, { server: name })))
       }
 
-      const startServer = (name: ServerName, entry: ServerEntry) =>
+      const startServer: (name: ServerName, entry: ServerEntry) => Effect.Effect<void, never, never> = (
+        name,
+        entry,
+      ) =>
         Effect.gen(function* () {
           // Announce the handshake so connect() and credential reconnects don't show a stale
           // disabled/failed status for the duration of the connection attempt.
@@ -475,6 +520,7 @@ export const layer = (options?: Options) =>
               : { status: "failed", error: error instanceof Error ? error.message : String(error) }
           yield* Effect.logWarning("mcp connect failed", { server: name, status: entry.status })
           yield* bus.publish(McpEvent.StatusChanged, { server: name })
+          yield* scheduleReconnect(name, entry)
         }).pipe(
           Effect.ensuring(entry.startup.open),
           Effect.annotateLogs({ server: name, directory: location.directory, connectionID: crypto.randomUUID() }),
