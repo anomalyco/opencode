@@ -39,6 +39,8 @@ test("validates the session tabs setting", () => {
   expect(() => decode({ tabs: { indicators: "unknown" } })).toThrow()
   expect(() => decode({ tabs: { layout: true } })).toThrow()
   expect(() => decode({ tabs: { mode: true } })).toThrow()
+  expect(decode({ tabs: { restore: false } })).toEqual({ tabs: { restore: false } })
+  expect(() => decode({ tabs: { restore: "never" } })).toThrow()
   expect(decode({ tabs: { enabled: false } })).toEqual({ tabs: { enabled: false } })
   expect(decode({ prompt: { image_preview: true } })).toEqual({ prompt: { image_preview: true } })
   expect(decode({ session: { image_preview: true } })).toEqual({ session: { image_preview: true } })
@@ -68,6 +70,7 @@ test("resolves nested config and keybind defaults", () => {
     mode: "auto",
     enabled: true,
     scope: "cwd",
+    restore: true,
     layout: "horizontal",
     indicators: "status",
   })
@@ -97,6 +100,10 @@ test("shows resolved tab defaults in settings", () => {
     values: ["off", "on", "auto"],
   })
   expect(settings.find((setting) => setting.path.join(".") === "tabs.scope")?.default).toBe("cwd")
+  expect(settings.find((setting) => setting.path.join(".") === "tabs.restore")).toMatchObject({
+    default: true,
+    values: [false, true],
+  })
   expect(settings.find((setting) => setting.path.join(".") === "tabs.layout")?.default).toBe("horizontal")
   expect(settings.find((setting) => setting.path.join(".") === "tabs.indicators")).toMatchObject({
     default: "status",
