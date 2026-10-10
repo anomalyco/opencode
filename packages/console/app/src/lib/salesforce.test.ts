@@ -46,7 +46,6 @@ test("a fake entry keeps the visitor message, spend range, and enterprise lead s
     company: "Example Test Company",
     email: "fake-visitor@example.test",
     inferenceSpend: "$10K–$50K",
-    leadSource: "enterprise website form",
     message: "  We need SSO for our developers.\nPlease share the enterprise options.  ",
   })
 
@@ -76,7 +75,6 @@ test("the local Enterprise request handler applies the updated mapping to a form
         company: "Example Test Company",
         email: "fake-local-visitor@example.test",
         inferenceSpend: "50k-100k",
-        leadSource: "enterprise website form",
         message: "  How are you bro!\nThis is a local form test.  ",
         alias: "",
       }),

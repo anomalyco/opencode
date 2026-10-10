@@ -14,7 +14,6 @@ interface EnterpriseFormData {
   email: string
   phone?: string
   inferenceSpend?: string
-  leadSource?: "enterprise website form"
   alias?: string
   message: string
 }
@@ -120,7 +119,6 @@ ${body.phone ? `${body.phone}<br>` : ""}`.trim()
           email: body.email,
           phone: body.phone,
           inferenceSpend: inferenceSpend?.salesforceValue,
-          leadSource: body.leadSource === "enterprise website form" ? body.leadSource : undefined,
           message: body.message,
           consoleAccount: account,
         },

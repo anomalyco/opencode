@@ -95,7 +95,6 @@ export interface SalesforceLeadInput {
   email: string
   phone?: string
   inferenceSpend?: string
-  leadSource?: "enterprise website form"
   message: string
   consoleAccount?: ConsoleAccount | null
 }
@@ -112,7 +111,7 @@ export async function createLead(
     Title: input.role,
     Description: input.message,
     Current_Monthly_Inference_Spend__c: input.inferenceSpend,
-    LeadSource: input.leadSource ?? "Website",
+    LeadSource: "enterprise website form",
     ...(input.consoleAccount === undefined ? {} : consoleAccountFields(input.consoleAccount)),
   }
   if (submit) return submit(payload)
