@@ -1113,6 +1113,7 @@ describe("SessionRunnerLLM", () => {
         messageID: expect.stringMatching(/^msg_/),
         id: Tool.CallID.make("call-location"),
         progress: expect.any(Function),
+        interrupted: expect.any(Function),
       },
     ])
     expect(Array.from(yield* Fiber.join(progressFiber))[0]?.data.metadata).toEqual({ phase: "reading" })
@@ -5130,6 +5131,187 @@ describe("SessionRunnerLLM", () => {
     yield* s.resume
     expect(messageRoles(s.requests[0])).toEqual(["user", "assistant", "tool"])
   })
+
+  scenario("keeps completed Code Mode previews out of successful execution events", function* (s) {
+    const registry = yield* Tool.Service
+    yield* transformTools(registry, {
+      first: {
+        name: "first",
+        description: "Return an intermediate result",
+        input: Schema.Struct({}),
+        output: Schema.String,
+        execute: () => Effect.succeed({ output: "UNUSED_PREVIEW_42" }),
+      },
+    })
+    yield* s.admit("Run successfully")
+    yield* s.llm.push(
+      TestLLM.tool("call-execute", "execute", { code: 'await tools.first({}); return "done"' }),
+      TestLLM.text("Finished", "text-finished"),
+    )
+    yield* s.resume
+    const database = yield* Database.Service
+    const events = yield* database.db
+      .select({ type: EventTable.type, data: EventTable.data })
+      .from(EventTable)
+      .where(eq(EventTable.aggregate_id, sessionID))
+      .all()
+      .pipe(Effect.orDie)
+    expect(events.some((event) => event.type === "session.tool.success.2")).toBe(true)
+    expect(JSON.stringify(events)).not.toContain("UNUSED_PREVIEW_42")
+    expect(JSON.stringify(yield* s.context)).not.toContain("UNUSED_PREVIEW_42")
+  })
+
+  scenario("retains native tool interruption content once across replay and continuation", function* (s) {
+    const registry = yield* Tool.Service
+    const waiting = yield* Deferred.make<void>()
+    yield* transformTools(registry, {
+      partial: {
+        name: "partial",
+        description: "Retain partial output when interrupted",
+        input: Schema.Struct({}),
+        options: { codemode: false },
+        execute: (_, context) =>
+          Deferred.succeed(waiting, undefined).pipe(
+            Effect.andThen(Effect.never),
+            Effect.onInterrupt(
+              () => context.interrupted?.([{ type: "text", text: "NATIVE_PARTIAL_42" }]) ?? Effect.void,
+            ),
+          ),
+      },
+    })
+    yield* s.admit("Start a native tool")
+    yield* s.llm.push(TestLLM.tool("call-partial", "partial", {}))
+    const run = yield* s.resume.pipe(Effect.forkChild)
+    yield* Deferred.await(waiting)
+    yield* s.session.interrupt(sessionID)
+    expect(Exit.hasInterrupts(yield* Fiber.await(run))).toBe(true)
+    const context = yield* s.context
+    const tool = requireAssistant(context).content.find((part) => part.type === "tool")
+    expect(tool).toMatchObject({
+      state: {
+        status: "error",
+        error: { type: "aborted" },
+        content: [{ type: "text", text: "NATIVE_PARTIAL_42" }],
+      },
+    })
+    const database = yield* Database.Service
+    const events = yield* database.db
+      .select({ type: EventTable.type, data: EventTable.data })
+      .from(EventTable)
+      .where(eq(EventTable.aggregate_id, sessionID))
+      .all()
+      .pipe(Effect.orDie)
+    expect(
+      events.filter((event) => JSON.stringify(event.data).includes("NATIVE_PARTIAL_42")).map((event) => event.type),
+    ).toEqual(["session.tool.failed.2"])
+    yield* replaySessionProjection(sessionID)
+    expect(yield* s.context).toEqual(context)
+    s.requests.length = 0
+    yield* s.admit("Use the native tool's partial output")
+    yield* s.llm.push(TestLLM.text("Recovered", "text-native-recovered"))
+    yield* s.resume
+    expect(JSON.stringify(s.requests[0].messages)).toContain("NATIVE_PARTIAL_42")
+  })
+
+  for (const large of [false, true])
+    scenario(
+      `preserves completed Code Mode results and logs across interruption and replay (${large ? "bounded" : "small"})`,
+      function* (s) {
+        const count = large ? 6 : 1
+        const result = "FIRST_RESULT_42" + (large ? "🙂".repeat(3000) : "")
+        const log = "LOG_MARKER" + (large ? "中".repeat(5000) : "")
+        const registry = yield* Tool.Service
+        const waiting = yield* Deferred.make<void>()
+        const calls: string[] = []
+        yield* transformTools(registry, {
+          first: {
+            name: "first",
+            description: "Return a completed result",
+            input: Schema.Struct({}),
+            output: Schema.String,
+            execute: () =>
+              Effect.sync(() => {
+                calls.push("first")
+                return { output: result }
+              }),
+          },
+          second: {
+            name: "second",
+            description: "Wait until interrupted",
+            input: Schema.Struct({}),
+            output: Schema.String,
+            execute: () =>
+              Effect.sync(() => calls.push("second")).pipe(
+                Effect.andThen(Deferred.succeed(waiting, undefined)),
+                Effect.andThen(Effect.never),
+              ),
+          },
+        })
+        yield* s.admit("Run the script")
+        yield* s.llm.push(
+          TestLLM.tool("call-execute", "execute", {
+            code: `for (let i = 0; i < ${count}; i++) await tools.first({}); console.log(${JSON.stringify(log)}); await tools.second({})`,
+          }),
+        )
+        const run = yield* s.resume.pipe(Effect.forkChild)
+        yield* Deferred.await(waiting)
+        yield* s.session.interrupt(sessionID)
+        expect(Exit.hasInterrupts(yield* Fiber.await(run))).toBe(true)
+        const context = yield* s.context
+        expect(context).toMatchObject([
+          Expected.user("Run the script"),
+          Expected.assistant({ error: { type: "aborted" } }, [
+            Expected.failedTool(
+              { id: "call-execute" },
+              {
+                error: { type: "aborted", message: "Tool execution interrupted" },
+                content: [{ type: "text" }],
+                metadata: {
+                  toolCalls: [
+                    ...Array.from({ length: count }, () => ({ tool: "first", status: "completed" })),
+                    { tool: "second", status: "error" },
+                  ],
+                },
+              },
+            ),
+          ]),
+        ])
+        const tool = requireAssistant(context).content.find((part) => part.type === "tool")
+        if (!tool || tool.state.status !== "error") throw new Error("Expected an interrupted execute call")
+        const text = tool.state.content?.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n") ?? ""
+        expect(text).toContain("FIRST_RESULT_42")
+        expect(text).toContain("LOG_MARKER")
+        expect(Buffer.byteLength(text)).toBeLessThanOrEqual(16 * 1024 + 64)
+        expect(text).not.toContain("�")
+        if (large) expect(text).toContain("[truncated]")
+        expect(tool.state.metadata).not.toHaveProperty("interruptedOutput")
+        expect(JSON.stringify(tool.state.metadata)).not.toContain("FIRST_RESULT_42")
+        const database = yield* Database.Service
+        const events = yield* database.db
+          .select({ type: EventTable.type, data: EventTable.data })
+          .from(EventTable)
+          .where(eq(EventTable.aggregate_id, sessionID))
+          .all()
+          .pipe(Effect.orDie)
+        expect(
+          events.filter((event) => JSON.stringify(event.data).includes("FIRST_RESULT_42")).map((event) => event.type),
+        ).toEqual(["session.tool.failed.2"])
+        expect(JSON.stringify(events.filter((event) => event.type === "session.tool.progress.1"))).not.toContain(
+          "LOG_MARKER",
+        )
+        yield* replaySessionProjection(sessionID)
+        expect(yield* s.context).toEqual(context)
+        s.requests.length = 0
+        yield* s.admit("Use the completed result")
+        yield* s.llm.push(TestLLM.text("Recovered", "text-recovered-execute"))
+        yield* s.resume
+        const request = JSON.stringify(s.requests[0].messages)
+        expect(request).toContain("FIRST_RESULT_42")
+        expect(request).toContain("LOG_MARKER")
+        expect(request).toContain("Tool execution interrupted")
+        expect(calls).toEqual([...Array<string>(count).fill("first"), "second"])
+      },
+    )
 
   scenario("interrupts a blocked step without local tool execution", function* (s) {
     yield* s.admit("Interrupt provider")
