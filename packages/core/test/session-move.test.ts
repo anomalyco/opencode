@@ -1,5 +1,7 @@
 import type { FileSystem } from "@opencode/core/filesystem"
 import { describe, expect } from "bun:test"
+import { $ } from "bun"
+import { eq } from "drizzle-orm"
 import path from "path"
 import { chmod, mkdir, readdir, rm } from "fs/promises"
 import { Cause, Context, Deferred, Duration, Effect, Exit, Fiber, Layer, LayerMap, Queue } from "effect"
@@ -14,6 +16,7 @@ import { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import type { LocationServices } from "@opencode/core/location-services"
 import { Project } from "@opencode/core/project"
+import { ProjectTable } from "@opencode/core/project/sql"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { SessionEvent } from "@opencode/core/session/event"
@@ -87,7 +90,7 @@ const itWithUnavailableDestination = testEffect(
   ),
 )
 const itWithExecution = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Session.node, SessionExecution.node]), [
+  AppNodeBuilder.build(LayerNode.group([Session.node, SessionExecution.node, Database.node]), [
     Global.node.replace(tempGlobalLayer),
     offlineModels,
   ]),
@@ -144,6 +147,38 @@ const sourceProbe = (options: { execution?: boolean } = {}) =>
   })
 
 describe("Session.move", () => {
+  itWithExecution.live(
+    "does not repoint global when moving from a missing empty repository",
+    () =>
+      Effect.gen(function* () {
+        const tmp = yield* tmpdirScoped()
+        const source = AbsolutePath.make(path.join(tmp.path, "source"))
+        const destination = AbsolutePath.make(path.join(tmp.path, "destination"))
+        yield* Effect.promise(async () => {
+          await Promise.all([mkdir(source), mkdir(destination)])
+          await $`git init -q`.cwd(source)
+          await $`git init -q`.cwd(destination)
+        })
+        const sessions = yield* Session.Service
+        const execution = yield* SessionExecution.Service
+        const db = (yield* Database.Service).db
+        const created = yield* sessions.create({ location: Location.Ref.make({ directory: source }) })
+        // Match the reported existing database, where global already points at the source.
+        yield* db.update(ProjectTable).set({ worktree: source }).where(eq(ProjectTable.id, Project.ID.global)).run()
+
+        yield* Effect.promise(() => rm(source, { recursive: true }))
+
+        yield* sessions.move({ sessionID: created.id, directory: destination })
+        yield* execution.awaitIdle(created.id)
+
+        expect((yield* sessions.get(created.id)).location.directory).toBe(destination)
+        expect(
+          (yield* db.select().from(ProjectTable).where(eq(ProjectTable.id, Project.ID.global)).get())?.worktree,
+        ).toBe(source)
+      }),
+    { timeout: 120_000 },
+  )
+
   itWithInstance.live("moves through the bound service without depending on the Session facade", () =>
     Effect.gen(function* () {
       const tmp = yield* tmpdirScoped()
