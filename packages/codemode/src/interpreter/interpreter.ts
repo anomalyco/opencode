@@ -99,6 +99,7 @@ import { type Hint, preserveConsumerError, toPrimitive } from "./callback.js"
 import { Pending, resolvePromise, resolvePromiseValue } from "./promises.js"
 import { describeValue, isOpaque, rejectCircularInsertion, typeofValue } from "./references.js"
 import { ScopeStack } from "./scope.js"
+import { Activity } from "./activity.js"
 import { constructRegExp } from "../stdlib/regexp.js"
 import { enumerableSource } from "../stdlib/object.js"
 import { compoundOperators } from "../stdlib/value.js"
@@ -316,6 +317,7 @@ export class Interpreter<R> {
   readonly pending: Pending<R>
   readonly builtins: Builtins
   readonly logs: Array<string>
+  readonly activity: Activity
   /** Template objects by site: a tag sees the same `strings` array every time its literal is evaluated, as in JS. */
   readonly templates = new WeakMap<TaggedTemplateExpression, Arr>()
   private readonly root: Frame<R>
@@ -325,12 +327,14 @@ export class Interpreter<R> {
     readonly pending: Pending<R>
     readonly builtins: Builtins
     readonly logs?: Array<string>
+    readonly activity?: Activity
     readonly globals?: (ctx: Interpreter<R>) => ReadonlyArray<readonly [string, Value]>
   }) {
     this.tools = options.tools
     this.pending = options.pending
     this.builtins = options.builtins
     this.logs = options.logs ?? []
+    this.activity = options.activity ?? new Activity()
     // Program code has no receiver: top-level `this` is undefined, as in a module.
     const globalScope = new Map<string, Binding>([["this", { mutable: false, value: undefined }]])
     // Calling back into the program never reads frame state, so any frame serves; the root is always alive.
@@ -368,7 +372,7 @@ export class Interpreter<R> {
     const ctx = this
     return Effect.gen(function* () {
       const json = yield* Effect.forEach(args, (arg) => toBoundary(ctx, arg))
-      return fromJson(ctx, yield* run(json))
+      return fromJson(ctx, yield* ctx.activity.track(run(json)))
     })
   }
 }
@@ -434,6 +438,7 @@ class Frame<R> {
   }
 
   private evaluateStatement(node: Statement | ModuleDeclaration): Effect.Effect<StatementResult, unknown, R> {
+    this.ctx.activity.steps++
     switch (node.type) {
       case "ExpressionStatement":
         return Effect.as(this.evaluateExpression(node.expression), { kind: "none" })
@@ -1289,6 +1294,7 @@ class Frame<R> {
   }
 
   private evaluateExpression(node: Expression): Effect.Effect<Value, unknown, R> {
+    this.ctx.activity.steps++
     switch (node.type) {
       case "Literal": {
         const regex = node.regex

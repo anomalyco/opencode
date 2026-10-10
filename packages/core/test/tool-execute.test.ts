@@ -6,7 +6,9 @@ import { Agent } from "@opencode/schema/agent"
 import { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
 import type { Info } from "@opencode/schema/tool"
-import { Effect, Schema } from "effect"
+import { Effect, Fiber, Schema } from "effect"
+import { TestClock } from "effect/testing"
+import { it } from "./lib/effect"
 
 const context = {
   sessionID: Session.ID.make("ses_execute"),
@@ -28,6 +30,7 @@ test("execute describes invariant Code Mode behavior", () => {
       'Call tools through `tools` using only exact paths and signatures from the catalog. Do not infer or normalize tool names; preserve bracket notation such as `tools.<namespace>["tool-name"](input)`.',
       "Prefer an explicit `return`; if omitted, the final top-level expression becomes the result.",
       "Await every call whose completion matters; pending calls are interrupted when execution ends. Run independent calls concurrently with `Promise.allSettled`.",
+      "Do not use it to wait or poll: without timers it cannot sleep, and a program awaiting a promise that nothing can settle fails as stalled.",
     ].join("\n"),
   )
 })
@@ -145,3 +148,16 @@ test("execute supports callable namespace tools", async () => {
   })
   expect(result.content).toEqual([{ type: "text", text: '[\n  "admin",\n  "created"\n]' }])
 })
+
+it.effect("execute fails a program that stalls instead of holding the turn", () =>
+  Effect.gen(function* () {
+    const fiber = yield* createCodeMode(new Map())
+      .execute({ code: "await new Promise((resolve) => resolve); return 1" }, context)
+      .pipe(Effect.forkChild)
+    yield* TestClock.adjust("30 seconds")
+    const result = yield* Fiber.join(fiber)
+
+    expect(result.metadata).toEqual({ toolCalls: [], error: true })
+    expect(result.content).toEqual([{ type: "text", text: expect.stringContaining("Execution stalled") }])
+  }),
+)
