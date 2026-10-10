@@ -1,7 +1,7 @@
 export * as SessionRunnerLLM from "./llm.js"
 
 import { Message } from "@opencode/ai"
-import { and, desc, eq, sql } from "drizzle-orm"
+import { and, desc, eq, inArray, sql } from "drizzle-orm"
 import { Cause, Effect, Exit, FiberMap, Layer } from "effect"
 import { Database } from "../../database/database.js"
 import { Bus } from "../../bus.js"
@@ -34,6 +34,9 @@ import { MAX_STEPS_PROMPT } from "./max-steps.js"
 
 const CONTINUE_AFTER_INCOMPLETE_STREAM =
   "The previous response was interrupted. Continue from where you left off without repeating completed content."
+
+const CONTINUE_AFTER_OUTPUT_LIMIT =
+  "Your last response hit the output token limit (stop reason: length). Do not apologize, recap, or repeat yourself. Break the remaining work into smaller pieces."
 
 const layer = Layer.effect(
   Service,
@@ -282,6 +285,36 @@ const layer = Layer.effect(
               assistantMessageID,
             })
             yield* bus.publish(SessionEvent.Synthetic, { sessionID, text: CONTINUE_AFTER_INCOMPLETE_STREAM })
+            assistantMessageID = SessionMessage.ID.create()
+          }),
+          OutputLimit: Effect.fn("SessionRunner.continueOutputLimit")(function* (outcome) {
+            // The current response is included. User input or any other finish breaks the streak.
+            const rows = yield* db
+              .select()
+              .from(SessionMessageTable)
+              .where(
+                and(
+                  eq(SessionMessageTable.session_id, sessionID),
+                  inArray(SessionMessageTable.type, ["user", "assistant"]),
+                ),
+              )
+              .orderBy(desc(SessionMessageTable.seq))
+              .limit(3)
+              .all()
+              .pipe(Effect.orDie)
+            const recent = yield* Effect.forEach(rows, SessionHistory.decodeMessageRow)
+            const exhausted =
+              recent.length === 3 &&
+              recent.every((message) => message.type === "assistant" && message.finish === "length")
+            if (exhausted)
+              return yield* new StepFailedError({
+                error: {
+                  type: "output-limit",
+                  message: "Response still truncated after two output token limit continuations",
+                },
+              })
+            if (outcome.needsContinuation) return true
+            yield* bus.publish(SessionEvent.Synthetic, { sessionID, text: CONTINUE_AFTER_OUTPUT_LIMIT })
             assistantMessageID = SessionMessage.ID.create()
           }),
           Compacted: Effect.fnUntraced(function* () {

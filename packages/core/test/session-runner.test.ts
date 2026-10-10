@@ -5541,6 +5541,99 @@ describe("SessionRunnerLLM", () => {
     expect(s.requests).toHaveLength(2)
   })
 
+  for (const type of ["text", "reasoning"] as const) {
+    scenario(`continues ${type} after an output token limit`, function* (s) {
+      const nudge =
+        "Your last response hit the output token limit (stop reason: length). Do not apologize, recap, or repeat yourself. Break the remaining work into smaller pieces."
+      const partial =
+        type === "text"
+          ? [
+              LLMEvent.textStart({ id: "partial" }),
+              LLMEvent.textDelta({ id: "partial", text: "Partial" }),
+              LLMEvent.textEnd({ id: "partial" }),
+            ]
+          : [
+              LLMEvent.reasoningStart({ id: "partial" }),
+              LLMEvent.reasoningDelta({ id: "partial", text: "Partial" }),
+              LLMEvent.reasoningEnd({ id: "partial" }),
+            ]
+      yield* s.llm.push(
+        TestLLM.complete({ reason: { normalized: "length" } }, ...partial),
+        TestLLM.text("Finished", "finished"),
+      )
+
+      yield* s.runPrompt("Complete the response")
+
+      expect(s.requests).toHaveLength(2)
+      expect(s.requests[1]?.messages.at(-2)).toMatchObject({
+        role: "assistant",
+        content: [expect.objectContaining({ text: "Partial" })],
+      })
+      expect(s.requests[1]?.messages.at(-1)).toMatchObject({
+        role: "user",
+        content: [{ type: "text", text: nudge }],
+      })
+      expect(yield* s.context).toMatchObject([
+        { type: "user" },
+        Expected.assistant({ finish: "length" }, [
+          type === "text" ? Expected.text("Partial") : Expected.reasoning("Partial"),
+        ]),
+        { type: "synthetic", text: nudge },
+        Expected.assistant({ finish: "stop" }, [Expected.text("Finished")]),
+      ])
+      expect(yield* recordedEventTypes(sessionID)).not.toContain("session.retry.scheduled.1")
+    })
+  }
+
+  for (const tools of ["hosted", "unfinished"] as const) {
+    scenario(`caps output token limit continuations and resets for new input (${tools})`, function* (s) {
+      const toolEvents =
+        tools === "hosted"
+          ? [
+              hostedCall("hosted-search", "Search"),
+              LLMEvent.toolResult({
+                id: "hosted-search",
+                name: "web_search",
+                providerExecuted: true,
+                result: { type: "json", value: [] },
+              }),
+            ]
+          : [
+              LLMEvent.toolInputStart({ id: "call-incomplete", name: "echo" }),
+              LLMEvent.toolInputDelta({ id: "call-incomplete", name: "echo", text: '{"text":"partial' }),
+            ]
+      const truncated = () =>
+        TestLLM.complete(
+          { reason: { normalized: "length" } },
+          ...toolEvents,
+          LLMEvent.textStart({ id: "partial" }),
+          LLMEvent.textDelta({ id: "partial", text: "Partial" }),
+          LLMEvent.textEnd({ id: "partial" }),
+        )
+      const syntheticCount = s.context.pipe(
+        Effect.map((messages) => messages.filter((message) => message.type === "synthetic").length),
+      )
+      const expectedNudges = (count: number) => (tools === "hosted" ? count : 0)
+      yield* s.llm.push(...Array.from({ length: 3 }, truncated))
+
+      expect(yield* s.runPrompt("Keep going").pipe(Effect.flip)).toMatchObject({ error: { type: "output-limit" } })
+      expect(s.requests).toHaveLength(3)
+      expect(yield* syntheticCount).toBe(expectedNudges(2))
+      expect(s.executions).toEqual([])
+
+      yield* replaySessionProjection(sessionID)
+      yield* s.llm.push(truncated())
+      expect(yield* s.resume.pipe(Effect.flip)).toMatchObject({ error: { type: "output-limit" } })
+      expect(s.requests).toHaveLength(4)
+      expect(yield* syntheticCount).toBe(expectedNudges(2))
+
+      yield* s.llm.push(truncated(), TestLLM.text("Finished", "finished"))
+      yield* s.runPrompt("Try a new response")
+      expect(s.requests).toHaveLength(6)
+      expect(yield* syntheticCount).toBe(expectedNudges(3))
+    })
+  }
+
   scenario("continues an incomplete stream after observable text", function* (s) {
     const failure = incompleteStream()
     yield* s.admit("Continue partial output")
@@ -6046,103 +6139,127 @@ describe("SessionRunnerLLM", () => {
 
     expect(s.requests).toHaveLength(2)
     expect(s.executions).toEqual([])
+    expect((yield* s.context).some((message) => message.type === "synthetic")).toBe(false)
     expect(requireAssistant(yield* s.context).content).toMatchObject([
       {
         type: "tool",
         id: "call-incomplete",
         executed: false,
-        state: { status: "error", error: { type: "tool.input-incomplete" } },
+        state: {
+          status: "error",
+          input: {},
+          error: {
+            type: "tool.input-incomplete",
+            message: expect.stringContaining('Input excerpt (first 16 of 16 characters):\n{"text":"partial'),
+          },
+        },
       },
     ])
   })
 
-  scenario("continues after malformed local tool input without exposing raw arguments", function* (s) {
-    const marker = "raw-malformed-marker"
-    const raw = `{"text":"${marker}`
-    yield* s.llm.push(
-      TestLLM.toolCalls(
-        LLMEvent.toolInputStart({ id: "call-malformed", name: "echo" }),
-        LLMEvent.toolInputDelta({ id: "call-malformed", name: "echo", text: raw }),
-        LLMEvent.toolInputEnd({ id: "call-malformed", name: "echo" }),
-        LLMEvent.toolInputError({
-          id: "call-malformed",
-          name: "echo",
-          raw,
-        }),
-      ),
-      TestLLM.stop(),
-    )
+  for (const finish of ["tool-calls", "length"] as const) {
+    scenario(`continues malformed local tool input with a bounded excerpt (${finish})`, function* (s) {
+      const marker = "raw-malformed-marker"
+      const raw = `{"text":"${marker}${"x".repeat(3000)}omitted-marker`
+      const guidance =
+        finish === "length"
+          ? "The tool call was not executed because the output token limit (stop reason: length) was reached before you could complete the arguments. Break large payloads into smaller tool calls and reissue the call with complete arguments."
+          : "The tool input could not be parsed as JSON, so the call was not executed. Reissue the call with valid JSON arguments."
+      const message = [
+        guidance,
+        "",
+        `Input excerpt (first 2048 of ${raw.length} characters):`,
+        raw.slice(0, 2048),
+        "[truncated]",
+      ].join("\n")
+      yield* s.llm.push(
+        TestLLM.complete(
+          { reason: { normalized: finish } },
+          LLMEvent.toolInputStart({ id: "call-malformed", name: "echo" }),
+          LLMEvent.toolInputDelta({ id: "call-malformed", name: "echo", text: raw }),
+          LLMEvent.toolInputEnd({ id: "call-malformed", name: "echo" }),
+          LLMEvent.toolInputError({
+            id: "call-malformed",
+            name: "echo",
+            raw,
+          }),
+        ),
+        TestLLM.stop(),
+      )
 
-    yield* s.runPrompt("Recover malformed tool input")
+      yield* s.runPrompt("Recover malformed tool input")
 
-    expect(s.requests).toHaveLength(2)
-    expect(s.executions).toEqual([])
-    expect(JSON.stringify(s.requests[1])).not.toContain(marker)
-    expect(s.requests[1]?.messages).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          role: "assistant",
-          content: expect.arrayContaining([
-            expect.objectContaining({ type: "tool-call", id: "call-malformed", name: "echo", input: {} }),
-          ]),
-        }),
-        expect.objectContaining({
-          role: "tool",
-          content: expect.arrayContaining([
-            expect.objectContaining({
-              type: "tool-result",
-              id: "call-malformed",
-              result: expect.objectContaining({
-                type: "error",
-                value: expect.objectContaining({
-                  error: expect.objectContaining({
-                    message: "Tool call arguments were malformed JSON and were not executed. Retry with valid JSON.",
+      expect(s.requests).toHaveLength(2)
+      expect(s.executions).toEqual([])
+      expect(JSON.stringify(s.requests[1])).toContain(marker)
+      expect(JSON.stringify(s.requests[1])).not.toContain("omitted-marker")
+      expect((yield* s.context).some((message) => message.type === "synthetic")).toBe(false)
+      expect(s.requests[1]?.messages).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            role: "assistant",
+            content: expect.arrayContaining([
+              expect.objectContaining({ type: "tool-call", id: "call-malformed", name: "echo", input: {} }),
+            ]),
+          }),
+          expect.objectContaining({
+            role: "tool",
+            content: expect.arrayContaining([
+              expect.objectContaining({
+                type: "tool-result",
+                id: "call-malformed",
+                result: expect.objectContaining({
+                  type: "error",
+                  value: expect.objectContaining({
+                    error: expect.objectContaining({
+                      message,
+                    }),
                   }),
                 }),
               }),
-            }),
-          ]),
-        }),
-      ]),
-    )
-    const context = yield* s.context
-    const failed = context.find(
-      (message): message is SessionMessage.Assistant =>
-        message.type === "assistant" && message.content.some((item) => item.type === "tool"),
-    )
-    expect(failed).toMatchObject({
-      content: [
-        Expected.failedTool(
-          { id: "call-malformed", executed: false },
-          {
-            input: {},
-            error: {
-              type: "tool.input-json",
-              message: "Tool call arguments were malformed JSON and were not executed. Retry with valid JSON.",
+            ]),
+          }),
+        ]),
+      )
+      const context = yield* s.context
+      const failed = context.find(
+        (message): message is SessionMessage.Assistant =>
+          message.type === "assistant" && message.content.some((item) => item.type === "tool"),
+      )
+      expect(failed).toMatchObject({
+        content: [
+          Expected.failedTool(
+            { id: "call-malformed", executed: false },
+            {
+              input: {},
+              error: {
+                type: finish === "length" ? "tool.input-incomplete" : "tool.input-json",
+                message,
+              },
             },
-          },
-        ),
-      ],
-    })
-    if (!failed) throw new Error("Malformed tool assistant missing")
-    expect(failed.error).toBeUndefined()
-    expect(yield* recordedStepSettlementTypes(sessionID, failed.id)).toEqual([
-      "session.step.started.1",
-      "session.tool.failed.2",
-      "session.step.ended.1",
-    ])
+          ),
+        ],
+      })
+      if (!failed) throw new Error("Malformed tool assistant missing")
+      expect(failed.error).toBeUndefined()
+      expect(yield* recordedStepSettlementTypes(sessionID, failed.id)).toEqual([
+        "session.step.started.1",
+        "session.tool.failed.2",
+        "session.step.ended.1",
+      ])
 
-    const durable = yield* s.db
-      .select({ type: EventTable.type, data: EventTable.data })
-      .from(EventTable)
-      .where(eq(EventTable.aggregate_id, sessionID))
-      .all()
-      .pipe(Effect.orDie)
-    expect(durable.find((event) => event.type === "session.tool.input.ended.1")?.data).toMatchObject({
-      id: "call-malformed",
-      text: raw,
+      const durable = yield* s.db
+        .select({ type: EventTable.type, data: EventTable.data })
+        .from(EventTable)
+        .where(eq(EventTable.aggregate_id, sessionID))
+        .all()
+        .pipe(Effect.orDie)
+      expect(durable.find((event) => event.type === "session.tool.input.ended.1")?.data).toMatchObject({
+        id: "call-malformed",
+        text: raw,
+      })
     })
-  })
+  }
 
   scenario("settles a valid sibling before recovering malformed tool input", function* (s) {
     yield* s.admit("Run parallel tools")
