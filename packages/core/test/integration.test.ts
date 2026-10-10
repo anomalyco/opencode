@@ -557,7 +557,7 @@ describe("Integration", () => {
     }),
   )
 
-  it.effect("projects credential and env connections", () => {
+  it.effect("projects credential types and env connections without secrets", () => {
     const integrationID = Integration.ID.make("acme")
     return Effect.acquireUseRelease(
       Effect.sync(() => {
@@ -592,14 +592,20 @@ describe("Integration", () => {
           const personal = yield* credentials.create({
             integrationID,
             label: "Personal",
-            value: Credential.Key.make({ type: "key", key: "b" }),
+            value: Credential.OAuth.make({
+              type: "oauth",
+              methodID: Integration.MethodID.make("browser"),
+              access: "access-token",
+              refresh: "refresh-token",
+              expires: 1700000000000,
+            }),
           })
 
           // Stored credentials and detected env vars appear as connections.
           expect((yield* integrations.get(integrationID))?.connections).toEqual([
             {
               type: "credential",
-              method: "key",
+              method: "oauth",
               id: personal.id,
               label: "Personal",
             },
@@ -619,7 +625,7 @@ describe("Integration", () => {
           ])
           expect(yield* integrations.connection.active(integrationID)).toEqual({
             type: "credential",
-            method: "key",
+            method: "oauth",
             id: personal.id,
             label: "Personal",
           })
@@ -654,7 +660,7 @@ describe("Integration", () => {
           yield* integrations.connection.remove(work.id)
           expect(yield* integrations.connection.active(integrationID)).toEqual({
             type: "credential",
-            method: "key",
+            method: "oauth",
             id: personal.id,
             label: "Personal",
           })
