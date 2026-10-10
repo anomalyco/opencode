@@ -21,6 +21,32 @@ function setup() {
 }
 
 describe("OSC 7501 program status", () => {
+  test.each(["working first", "blocked first"])("summarizes one working and one blocked session: %s", (order) => {
+    const harness = setup()
+    const working = session("working", { running: true })
+    const blocked = session("blocked", { running: true, permission: true })
+    harness.update(order === "working first" ? [working, blocked] : [blocked, working])
+
+    expect(harness.output).toHaveLength(4)
+    expect(harness.output.slice(0, 2)).toEqual([
+      "\x1b]7501;state=blocked:app=opencode:kind=permission\x1b\\",
+      "\x1b]7501;state=blocked:app=opencode:id=opencode:kind=permission\x1b\\",
+    ])
+    expect(harness.output).toContain(
+      `\x1b]7501;state=working:app=opencode:id=${sessionProgramID(working.id, () => undefined)}\x1b\\`,
+    )
+    expect(harness.output).toContain(
+      `\x1b]7501;state=blocked:app=opencode:id=${sessionProgramID(blocked.id, () => undefined)}:kind=permission\x1b\\`,
+    )
+
+    harness.update([working, { ...blocked, permission: false }])
+    expect(harness.output.slice(4)).toEqual([
+      "\x1b]7501;state=working:app=opencode\x1b\\",
+      "\x1b]7501;state=working:app=opencode:id=opencode\x1b\\",
+      `\x1b]7501;state=working:app=opencode:id=${sessionProgramID(blocked.id, () => undefined)}\x1b\\`,
+    ])
+  })
+
   test("reports the most urgent tracked state on the root and namespace", () => {
     const harness = setup()
     const tracked = [
