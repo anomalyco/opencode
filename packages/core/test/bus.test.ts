@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Cause, Deferred, Effect, Exit, Fiber, Layer, Ref, Schema, Stream } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Layer, Option, Ref, Schema, Stream } from "effect"
 import { Bus } from "@opencode/core/bus"
 import { Event } from "@opencode/schema/event"
 import { Session } from "@opencode/schema/session"
@@ -278,6 +278,57 @@ describe("Bus", () => {
     }),
   )
 
+  it.effect("log does not publish an event whose durable transaction rolls back", () =>
+    Effect.gen(function* () {
+      const readStarted = yield* Deferred.make<void>()
+      const releaseRead = yield* Deferred.make<void>()
+      const firstRead = yield* Ref.make(true)
+      const eventLayer = AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node]), [
+        Bus.node.replace(
+          Bus.configured({
+            persist: true,
+            beforeAggregateRead: () =>
+              Ref.getAndSet(firstRead, false).pipe(
+                Effect.flatMap((shouldBlock) => {
+                  if (!shouldBlock) return Effect.void
+                  return Deferred.succeed(readStarted, undefined).pipe(Effect.andThen(Deferred.await(releaseRead)))
+                }),
+              ),
+          }),
+        ),
+      ])
+
+      yield* Effect.gen(function* () {
+        const bus = yield* Bus.Service
+        const aggregateID = Session.ID.create()
+        yield* bus.publish(DurableMessage, durableData(aggregateID, "seed"))
+        const fiber = yield* bus
+          .log({ aggregateID, follow: true })
+          .pipe(Stream.take(3), Stream.runCollect, Effect.forkScoped)
+
+        yield* Deferred.await(readStarted)
+        const failed = yield* bus
+          .publish(DurableMessage, durableData(aggregateID, "rolled back"), { commit: () => Effect.die("commit failed") })
+          .pipe(Effect.exit)
+        expect(String(failed)).toContain("commit failed")
+        yield* Deferred.succeed(releaseRead, undefined)
+
+        yield* bus.publish(DurableMessage, durableData(aggregateID, "committed"))
+        const items = yield* Fiber.join(fiber)
+        expect(items.map((item) => (Bus.isSynced(item) ? item.type : Schema.decodeUnknownSync(DurableMessage.data)(item.data).title))).toEqual([
+          "seed",
+          "log.synced",
+          "committed",
+        ])
+        expect(items[2]).toMatchObject({
+          type: DurableMessage.type,
+          durable: { aggregateID, seq: Event.Seq.make(1) },
+          data: { sessionID: aggregateID, title: "committed" },
+        })
+      }).pipe(Effect.provide(eventLayer))
+    }),
+  )
+
   itWithoutPersistence.effect("projects durable events without retaining their payloads", () =>
     Effect.gen(function* () {
       const bus = yield* Bus.Service
@@ -296,6 +347,99 @@ describe("Bus", () => {
       expect(
         yield* db.select().from(EventSequenceTable).where(eq(EventSequenceTable.aggregate_id, aggregateID)).all(),
       ).toEqual([{ aggregate_id: aggregateID, seq: 0, owner_id: null }])
+    }),
+  )
+
+  itWithoutPersistence.effect("log follows new durable events without replaying prior payloads", () =>
+    Effect.gen(function* () {
+      const bus = yield* Bus.Service
+      const aggregateID = Session.ID.create()
+      yield* bus.publish(DurableMessage, durableData(aggregateID, "before follow"))
+
+      const replay = yield* Stream.runCollect(bus.log({ aggregateID }))
+      expect(replay).toEqual([{ type: "log.synced", aggregateID, seq: Event.Seq.make(0) }])
+
+      const fiber = yield* bus
+        .log({ aggregateID, after: Event.Seq.make(0), follow: true })
+        .pipe(Stream.take(3), Stream.runCollect, Effect.forkScoped)
+      yield* Effect.yieldNow
+
+      yield* bus.publishAll([
+        [DurableMessage, durableData(aggregateID, "one")],
+        [DurableMessage, durableData(aggregateID, "two")],
+      ])
+
+      const items = yield* Fiber.join(fiber)
+      expect(items.map((item) => (Bus.isSynced(item) ? item : item.durable?.seq))).toEqual([
+        { type: "log.synced", aggregateID, seq: Event.Seq.make(0) },
+        Event.Seq.make(1),
+        Event.Seq.make(2),
+      ])
+      expect(
+        items.flatMap((item) =>
+          Bus.isSynced(item) ? [] : [Schema.decodeUnknownSync(DurableMessage.data)(item.data).title],
+        ),
+      ).toEqual(["one", "two"])
+    }),
+  )
+
+  itWithoutPersistence.live("log preserves commits racing subscription and watermark capture", () =>
+    Effect.gen(function* () {
+      const watermarkStarted = yield* Deferred.make<void>()
+      const releaseWatermark = yield* Deferred.make<void>()
+      const eventLayer = AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node]), [
+        Bus.node.replace(
+          Bus.configured({
+            persist: false,
+            beforeLogWatermark: () =>
+              Deferred.succeed(watermarkStarted, undefined).pipe(Effect.andThen(Deferred.await(releaseWatermark))),
+          }),
+        ),
+      ])
+
+      yield* Effect.gen(function* () {
+        const bus = yield* Bus.Service
+        const aggregateID = Session.ID.create()
+
+        const follower = yield* bus
+          .log({ aggregateID, follow: true })
+          .pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped)
+        yield* Deferred.await(watermarkStarted)
+
+        const publisher = yield* bus.publish(DurableMessage, durableData(aggregateID, "between subscribe and watermark"))
+          .pipe(Effect.forkScoped)
+        // Give an uncoordinated publisher time to commit while watermark capture is paused.
+        // With an atomic capture it waits for the boundary and proceeds after release.
+        yield* Fiber.join(publisher).pipe(Effect.timeoutOption("100 millis"))
+        yield* Deferred.succeed(releaseWatermark, undefined)
+
+        yield* Fiber.join(publisher)
+        const result = yield* Fiber.join(follower).pipe(Effect.timeoutOption("1 second"))
+        expect(Option.isSome(result)).toBe(true)
+        if (Option.isNone(result)) return
+
+        const items = result.value
+        const events = items.filter((item): item is Event.Payload => !Bus.isSynced(item))
+        expect(events).toHaveLength(1)
+        expect(events[0]).toMatchObject({
+          type: DurableMessage.type,
+          durable: { aggregateID, seq: Event.Seq.make(0) },
+        })
+        if (!events[0]) return
+        expect(Schema.decodeUnknownSync(DurableMessage.data)(events[0].data).title).toBe(
+          "between subscribe and watermark",
+        )
+
+        const marker = items.find(Bus.isSynced)
+        expect(marker).toBeDefined()
+        if (!marker) return
+        if (marker.seq === undefined) {
+          expect(items).toEqual([marker, events[0]])
+        } else {
+          expect(marker.seq).toBe(Event.Seq.make(0))
+          expect(items).toEqual([events[0], marker])
+        }
+      }).pipe(Effect.provide(eventLayer))
     }),
   )
 
@@ -1384,6 +1528,56 @@ describe("Bus", () => {
           { type: "log.synced", aggregateID, seq: Event.Seq.make(0) },
           Event.Seq.make(1),
         ])
+      }).pipe(Effect.provide(eventLayer))
+    }),
+  )
+
+  it.effect("log follows events committed during replay without persistence", () =>
+    Effect.gen(function* () {
+      const readStarted = yield* Deferred.make<void>()
+      const releaseRead = yield* Deferred.make<void>()
+      const firstRead = yield* Ref.make(true)
+      const eventLayer = AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node]), [
+        Bus.node.replace(
+          Bus.configured({
+            persist: false,
+            beforeAggregateRead: () =>
+              Ref.getAndSet(firstRead, false).pipe(
+                Effect.flatMap((shouldBlock) => {
+                  if (!shouldBlock) return Effect.void
+                  return Deferred.succeed(readStarted, undefined).pipe(Effect.andThen(Deferred.await(releaseRead)))
+                }),
+              ),
+          }),
+        ),
+      ])
+
+      yield* Effect.gen(function* () {
+        const bus = yield* Bus.Service
+        const aggregateID = Session.ID.create()
+        yield* bus.publish(DurableMessage, durableData(aggregateID, "zero"))
+        const fiber = yield* bus
+          .log({ aggregateID, follow: true })
+          .pipe(Stream.take(3), Stream.runCollect, Effect.forkScoped)
+
+        yield* Deferred.await(readStarted)
+        yield* bus.publishAll([
+          [DurableMessage, durableData(aggregateID, "one")],
+          [DurableMessage, durableData(aggregateID, "two")],
+        ])
+        yield* Deferred.succeed(releaseRead, undefined)
+
+        const items = yield* Fiber.join(fiber)
+        expect(items.map((item) => (Bus.isSynced(item) ? item : item.durable?.seq))).toEqual([
+          { type: "log.synced", aggregateID, seq: Event.Seq.make(0) },
+          Event.Seq.make(1),
+          Event.Seq.make(2),
+        ])
+        expect(
+          items.flatMap((item) =>
+            Bus.isSynced(item) ? [] : [Schema.decodeUnknownSync(DurableMessage.data)(item.data).title],
+          ),
+        ).toEqual(["one", "two"])
       }).pipe(Effect.provide(eventLayer))
     }),
   )
