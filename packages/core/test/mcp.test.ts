@@ -1145,6 +1145,124 @@ test("reconnects and retries a tool call after the MCP session expires", async (
   )
 })
 
+test("marks a server needs_auth when a tool call is rejected with 401", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        let rejectWith401 = false
+        const server = yield* resourceServer({
+          respond: async (request) => {
+            if (request.method !== "POST") return undefined
+            const body = (await request.clone().json()) as { method?: string; id?: unknown }
+            if (body.method !== "tools/call" || !rejectWith401) return undefined
+            return new Response(
+              JSON.stringify({ jsonrpc: "2.0", id: body.id, error: { code: -32001, message: "Unauthorized" } }),
+              { status: 401, headers: { "content-type": "application/json" } },
+            )
+          },
+        })
+        yield* Effect.gen(function* () {
+          const service = yield* Mcp.Service
+          // The callable server starts connected.
+          yield* service.callTool({ server: "resources", name: "echo", args: { n: 1 } })
+          expect(server.state.toolCalls).toHaveLength(1)
+
+          // Once the server rejects a refreshed token, the call fails and the server is marked needs_auth.
+          rejectWith401 = true
+          const failure = yield* service
+            .callTool({ server: "resources", name: "echo", args: { n: 2 } })
+            .pipe(Effect.exit)
+          expect(Exit.isFailure(failure)).toBe(true)
+          const status = (yield* service.servers()).find((entry) => entry.name === "resources")?.status
+          expect(status?.status).toBe("needs_auth")
+          if (status?.status === "needs_auth") expect(status.error).toMatch(/401|unauthoriz/i)
+
+          // The server is torn down, so the next call reports the auth requirement instead of another 401.
+          const again = yield* service
+            .callTool({ server: "resources", name: "echo", args: { n: 3 } })
+            .pipe(Effect.exit)
+          expect(Exit.isFailure(again)).toBe(true)
+          expect(server.state.toolCalls).toHaveLength(1)
+        }).pipe(Effect.provide(resourceMcpLayer(server.url)))
+      }),
+    ),
+  )
+})
+
+test("does not mark a server needs_auth when a tool call fails for a non-auth reason", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        let rejectWith500 = false
+        const server = yield* resourceServer({
+          respond: async (request) => {
+            if (request.method !== "POST") return undefined
+            const body = (await request.clone().json()) as { method?: string; id?: unknown }
+            if (body.method !== "tools/call" || !rejectWith500) return undefined
+            return new Response(
+              JSON.stringify({ jsonrpc: "2.0", id: body.id, error: { code: -32000, message: "internal error" } }),
+              { status: 500, headers: { "content-type": "application/json" } },
+            )
+          },
+        })
+        yield* Effect.gen(function* () {
+          const service = yield* Mcp.Service
+          yield* service.callTool({ server: "resources", name: "echo", args: { n: 1 } })
+          expect(server.state.toolCalls).toHaveLength(1)
+
+          rejectWith500 = true
+          const failure = yield* service
+            .callTool({ server: "resources", name: "echo", args: { n: 2 } })
+            .pipe(Effect.exit)
+          expect(Exit.isFailure(failure)).toBe(true)
+          const status = (yield* service.servers()).find((entry) => entry.name === "resources")?.status
+          expect(status?.status).not.toBe("needs_auth")
+        }).pipe(Effect.provide(resourceMcpLayer(server.url)))
+      }),
+    ),
+  )
+})
+
+test("does not mark a server needs_auth when a tool error body merely echoes 401", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        let failBody = false
+        const server = yield* resourceServer({
+          respond: async (request) => {
+            if (request.method !== "POST") return undefined
+            const body = (await request.clone().json()) as { method?: string; id?: unknown }
+            if (body.method !== "tools/call" || !failBody) return undefined
+            // HTTP 200 with a normal JSON-RPC tool error whose message echoes "401" (e.g. a downstream
+            // API the tool wraps). This must NOT be mistaken for an auth failure of the MCP server itself.
+            return new Response(
+              JSON.stringify({
+                jsonrpc: "2.0",
+                id: body.id,
+                error: { code: -32001, message: "GitHub API returned 401 for repo foo" },
+              }),
+              { status: 200, headers: { "content-type": "application/json" } },
+            )
+          },
+        })
+        yield* Effect.gen(function* () {
+          const service = yield* Mcp.Service
+          yield* service.callTool({ server: "resources", name: "echo", args: { n: 1 } })
+          expect(server.state.toolCalls).toHaveLength(1)
+
+          failBody = true
+          const failure = yield* service
+            .callTool({ server: "resources", name: "echo", args: { n: 2 } })
+            .pipe(Effect.exit)
+          expect(Exit.isFailure(failure)).toBe(true)
+          const status = (yield* service.servers()).find((entry) => entry.name === "resources")?.status
+          expect(status?.status).not.toBe("needs_auth")
+        }).pipe(Effect.provide(resourceMcpLayer(server.url)))
+      }),
+    ),
+  )
+})
+
 describe.each([
   ["legacy", undefined],
   ["modern", "2026-07-28"],

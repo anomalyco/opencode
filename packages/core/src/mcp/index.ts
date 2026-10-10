@@ -678,14 +678,39 @@ export const layer = (options?: Options) =>
           const result = yield* recovering(target.name, target.entry, target.entry.client, (connection) =>
             connection.callTool({ name: input.name, args: input.args, sessionID: input.sessionID }),
           ).pipe(
-            Effect.mapError(
+            // A precisely-detected auth failure (real HTTP 401 / SDK UnauthorizedError surfaced as
+            // NeedsAuthError): stop the server and mark it needs_auth rather than letting each call
+            // turn into another refresh. Match by the tagged error, not message text.
+            Effect.catchIf(
+              (error) => "_tag" in error && error._tag === "MCP.NeedsAuthError",
               (error) =>
-                new ToolCallError({
-                  server: target.name,
-                  tool: input.name,
-                  message: `MCP tool "${input.name}" on server "${target.name}" failed: ${error.message}`,
+                Effect.gen(function* () {
+                  // Teardown serializes with other lifecycle ops and only stops a server that is still live,
+                  // mirroring recover(), in case the connection was replaced or stopped while the call ran.
+                  yield* Effect.gen(function* () {
+                    if (target.entry.client == null) return
+                    yield* stopServer(target.name, target.entry)
+                  }).pipe(locks.withLock(target.name))
+                  target.entry.status = { status: "needs_auth", error: error.message }
+                  yield* bus.publish(McpEvent.StatusChanged, { server: target.name })
+                  return yield* Effect.fail(
+                    new ToolCallError({
+                      server: target.name,
+                      tool: input.name,
+                      message: `MCP tool "${input.name}" on server "${target.name}" requires authentication: ${error.message}`,
+                    }),
+                  )
                 }),
             ),
+            Effect.mapError((error) => {
+              if (error instanceof ToolCallError) return error
+              const message = error instanceof Error ? error.message : String(error)
+              return new ToolCallError({
+                server: target.name,
+                tool: input.name,
+                message: `MCP tool "${input.name}" on server "${target.name}" failed: ${message}`,
+              })
+            }),
           )
           return { ...result, server: target.name, tool: input.name }
         }),
