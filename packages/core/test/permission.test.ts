@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Cause, Deferred, Effect, Fiber, Layer } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Layer } from "effect"
 import { Agent } from "@opencode/core/agent"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -98,6 +98,179 @@ function waitForRequest(input: Partial<Permission.AssertInput> = {}) {
 }
 
 describe("Permission", () => {
+  it.effect("does not reject a concurrent reply while closing other requests", () =>
+    Effect.gen(function* () {
+      yield* setup()
+      const selected = yield* waitForRequest()
+      const other = yield* waitForRequest({ id: Permission.ID.create("per_other") })
+      const bus = yield* Bus.Service
+      const closing = yield* Deferred.make<void>()
+      const replying = yield* Deferred.make<void>()
+      const releaseClose = yield* Deferred.make<void>()
+      const releaseReply = yield* Deferred.make<void>()
+      const events: Permission.ID[] = []
+      const unsubscribe = yield* bus.listen((event) => {
+        if (event.type !== Permission.Event.Replied.type) return Effect.void
+        const id = (event.data as { requestID: Permission.ID }).requestID
+        events.push(id)
+        return id === selected.request.id
+          ? Deferred.succeed(closing, undefined).pipe(Effect.andThen(Deferred.await(releaseClose)))
+          : Deferred.succeed(replying, undefined).pipe(Effect.andThen(Deferred.await(releaseReply)))
+      })
+      yield* Effect.addFinalizer(() => unsubscribe)
+      const close = yield* selected.service.close.pipe(Effect.forkScoped)
+      yield* Deferred.await(closing)
+      const reply = yield* selected.service
+        .reply({ requestID: other.request.id, reply: "once" })
+        .pipe(Effect.forkScoped)
+      yield* Deferred.await(replying)
+      yield* Deferred.succeed(releaseClose, undefined)
+      yield* Fiber.join(close)
+      const pending = other.fiber.pollUnsafe()
+      yield* Deferred.succeed(releaseReply, undefined)
+      yield* Fiber.join(reply)
+
+      expect(pending).toBeUndefined()
+      expect(Exit.isSuccess(yield* Fiber.await(other.fiber))).toBe(true)
+      expect(Exit.isFailure(yield* Fiber.await(selected.fiber))).toBe(true)
+      expect(events).toEqual([selected.request.id, other.request.id])
+      expect(yield* selected.service.list()).toEqual([])
+    }),
+  )
+
+  for (const reply of ["reject", "always"] as const) {
+    it.effect(`excludes concurrent replies while publishing a ${reply} cascade`, () =>
+      Effect.gen(function* () {
+        yield* setup()
+        const selected = yield* waitForRequest({ save: ["src/*"] })
+        const other = yield* waitForRequest({ id: Permission.ID.create("per_other") })
+        const bus = yield* Bus.Service
+        const publishing = yield* Deferred.make<void>()
+        const release = yield* Deferred.make<void>()
+        const events: Permission.ID[] = []
+        const unsubscribe = yield* bus.listen((event) => {
+          if (event.type !== Permission.Event.Replied.type) return Effect.void
+          const id = (event.data as { requestID: Permission.ID }).requestID
+          events.push(id)
+          if (id !== other.request.id || events.length !== 2) return Effect.void
+          return Deferred.succeed(publishing, undefined).pipe(Effect.andThen(Deferred.await(release)))
+        })
+        yield* Effect.addFinalizer(() => unsubscribe)
+        const fiber = yield* selected.service
+          .reply({ requestID: selected.request.id, reply, message: "Use another file" })
+          .pipe(Effect.forkScoped)
+        yield* Deferred.await(publishing)
+        const result = yield* selected.service.reply({ requestID: other.request.id, reply: "once" }).pipe(Effect.exit)
+        yield* Deferred.succeed(release, undefined)
+        yield* Fiber.join(fiber)
+
+        expect(Exit.isFailure(result)).toBe(true)
+        if (Exit.isFailure(result))
+          expect(result.cause.reasons).toMatchObject([
+            { _tag: "Fail", error: new Permission.NotFoundError({ requestID: other.request.id }) },
+          ])
+        expect(events).toEqual([selected.request.id, other.request.id])
+        expect(yield* selected.service.list()).toEqual([])
+        for (const request of [selected, other]) {
+          const exit = yield* Fiber.await(request.fiber)
+          expect(Exit.isFailure(exit)).toBe(reply === "reject")
+          if (Exit.isFailure(exit))
+            expect(exit.cause.reasons).toMatchObject([
+              { _tag: "Fail", error: new Permission.CorrectedError({ feedback: "Use another file" }) },
+            ])
+        }
+      }),
+    )
+
+    it.effect(`keeps a failed ${reply} cascade pending for another reply`, () =>
+      Effect.gen(function* () {
+        yield* setup()
+        const service = yield* Permission.Service
+        const bus = yield* Bus.Service
+        yield* service.ask(assertion({ save: ["src/*"] }))
+        const other = Permission.ID.create("per_other")
+        yield* service.ask(assertion({ id: other }))
+        const unsubscribe = yield* bus.listen((event) =>
+          event.type === Permission.Event.Replied.type &&
+          (event.data as { requestID: Permission.ID }).requestID === other
+            ? Effect.die("cascade listener failed")
+            : Effect.void,
+        )
+        yield* Effect.addFinalizer(() => unsubscribe)
+
+        expect(
+          Exit.isFailure(
+            yield* service.reply({ requestID: Permission.ID.create("per_test"), reply }).pipe(Effect.exit),
+          ),
+        ).toBe(true)
+        expect(yield* service.list()).toMatchObject([{ id: other }])
+        yield* unsubscribe
+        yield* service.reply({ requestID: other, reply: "once" })
+        expect(yield* service.list()).toEqual([])
+      }),
+    )
+  }
+
+  it.effect("keeps a failed primary reply pending for another reply", () =>
+    Effect.gen(function* () {
+      yield* setup()
+      const selected = yield* waitForRequest()
+      const bus = yield* Bus.Service
+      const unsubscribe = yield* bus.listen((event) =>
+        event.type === Permission.Event.Replied.type ? Effect.die("reply listener failed") : Effect.void,
+      )
+      yield* Effect.addFinalizer(() => unsubscribe)
+
+      expect(
+        Exit.isFailure(
+          yield* selected.service.reply({ requestID: selected.request.id, reply: "once" }).pipe(Effect.exit),
+        ),
+      ).toBe(true)
+      expect(yield* selected.service.list()).toEqual([selected.request])
+      expect(selected.fiber.pollUnsafe()).toBeUndefined()
+      yield* unsubscribe
+      yield* selected.service.reply({ requestID: selected.request.id, reply: "once" })
+      yield* Fiber.join(selected.fiber)
+      expect(yield* selected.service.list()).toEqual([])
+    }),
+  )
+
+  for (const reply of ["once", "always", "reject"] as const) {
+    it.effect(`settles once when a reply races a publishing ${reply}`, () =>
+      Effect.gen(function* () {
+        yield* setup()
+        const selected = yield* waitForRequest({ save: ["src/*"] })
+        const bus = yield* Bus.Service
+        const publishing = yield* Deferred.make<void>()
+        const release = yield* Deferred.make<void>()
+        const events: string[] = []
+        const unsubscribe = yield* bus.listen((event) => {
+          if (event.type !== Permission.Event.Replied.type) return Effect.void
+          events.push(event.type)
+          if (events.length !== 1) return Effect.void
+          return Deferred.succeed(publishing, undefined).pipe(Effect.andThen(Deferred.await(release)))
+        })
+        yield* Effect.addFinalizer(() => unsubscribe)
+        const fiber = yield* selected.service.reply({ requestID: selected.request.id, reply }).pipe(Effect.forkScoped)
+        yield* Deferred.await(publishing)
+        const result = yield* selected.service
+          .reply({ requestID: selected.request.id, reply: "once" })
+          .pipe(Effect.exit)
+        yield* Deferred.succeed(release, undefined)
+        yield* Fiber.join(fiber)
+
+        expect(Exit.isFailure(result)).toBe(true)
+        if (Exit.isFailure(result))
+          expect(result.cause.reasons).toMatchObject([
+            { _tag: "Fail", error: new Permission.NotFoundError({ requestID: selected.request.id }) },
+          ])
+        expect(events).toEqual([Permission.Event.Replied.type])
+        expect(yield* selected.service.list()).toEqual([])
+        expect(Exit.isFailure(yield* Fiber.await(selected.fiber))).toBe(reply === "reject")
+      }),
+    )
+  }
+
   it.effect("returns the evaluated effect and only queues prompts", () =>
     Effect.gen(function* () {
       yield* setup([{ action: "read", resource: "*", effect: "allow" }])
