@@ -32,6 +32,7 @@ import { stringWidth } from "../../util/string-width"
 import { createStore, produce, unwrap } from "solid-js/store"
 import { emptyPrompt, usePromptHistory, type PromptInfo, type PromptPartRef } from "../../prompt/history"
 import { saveDraft, takeDraft } from "./draft-stash"
+import { Session } from "@opencode/schema/session"
 import { Skill } from "@opencode/schema/skill"
 import { computePromptTraits } from "../../prompt/traits"
 import { expandPastedTextPlaceholders, expandTrackedPastedText } from "../../prompt/part"
@@ -70,6 +71,7 @@ import { directoryRecentValue } from "../../prompt/directory-completion"
 import { useWorkingDirectoryActions } from "../../ui/working-directory-actions"
 import { truncateFilePath } from "../../ui/file-path"
 import { PromptMetadataRow } from "./metadata"
+import { PendingCommands, PromptPendingCommands } from "./pending-command"
 
 export type PromptProps = {
   sessionID?: string
@@ -135,7 +137,7 @@ export function PromptInterruptStatus(props: {
   })
 
   return (
-    <text fg={props.armed ? armedColor() : props.text} wrapMode="none" truncate flexShrink={1}>
+    <text fg={props.armed ? armedColor() : props.text} wrapMode="none" flexShrink={0}>
       esc{" "}
       <span style={{ fg: props.armed ? armedColor() : props.subdued }}>
         {props.armed ? "again to interrupt" : "interrupt"}
@@ -209,6 +211,10 @@ export function Prompt(props: PromptProps) {
   const dialog = useDialog()
   const toast = useToast()
   const status = createMemo(() => data.session.status(props.sessionID ?? ""))
+  const pendingCommands = createMemo(() =>
+    PendingCommands.list(props.sessionID ? Session.ID.make(props.sessionID, { disableChecks: true }) : undefined),
+  )
+  let submissionEpoch = 0
   const history = usePromptHistory()
   const stash = usePromptStash()
   const keymap = Keymap.use()
@@ -1177,6 +1183,7 @@ export function Prompt(props: PromptProps) {
     // history records exactly what was submitted instead of the live store
     // (which may have absorbed mid-flight typing). Failure paths restore the
     // snapshot unless the user has started typing something new.
+    const currentEpoch = trimmed ? ++submissionEpoch : submissionEpoch
     const currentMode = store.mode
     const entry = { ...store.prompt, mode: currentMode }
     if (trimmed) {
@@ -1184,7 +1191,7 @@ export function Prompt(props: PromptProps) {
       props.onSubmit?.()
     }
     const restoreEntry = () => {
-      if (disposed || input.isDestroyed || input.plainText !== "") return
+      if (disposed || input.isDestroyed || input.plainText !== "" || submissionEpoch !== currentEpoch) return
       input.setText(entry.text)
       setStore("prompt", entry)
       setStore("mode", entry.mode ?? "normal")
@@ -1270,7 +1277,7 @@ export function Prompt(props: PromptProps) {
       }
     }
 
-    const target = sessionID
+    const target = Session.ID.make(sessionID, { disableChecks: true })
     const prepareAgent = async () => {
       if (!session) {
         await data.session.sync(target)
@@ -1322,9 +1329,25 @@ export function Prompt(props: PromptProps) {
           delivery,
         })
       }
-      void (newSession ? newSession.gate.then(send) : send()).catch((error) =>
-        newSession ? newSession.recover(error) : fail("Failed to run command", error),
-      )
+      const pending = PendingCommands.add({
+        sessionID: target,
+        name: slashHead.name,
+        arguments: slashHead.arguments,
+        delivery,
+        files: entry.files,
+        agents: entry.agents,
+        skills: entry.skills?.length ? entry.skills : undefined,
+      })
+      const execute = newSession ? newSession.gate.then(send) : send()
+      void execute
+        .then(() => {
+          PendingCommands.remove(pending.id, target)
+        })
+        .catch((error) => {
+          PendingCommands.remove(pending.id, target)
+          if (newSession) newSession.recover(error)
+          else fail("Failed to run command", error)
+        })
     } else {
       move.startSubmit()
       if (!(await attempt("Failed to prepare session", prepareAgent))) return true
@@ -1618,11 +1641,17 @@ export function Prompt(props: PromptProps) {
     const branch = data.location.vcs.info(location)?.branch.current
     return branch ? `${directory}:${branch}` : directory
   })
-  const [locationWidth, setLocationWidth] = createSignal(dimensions().width)
+  const [footerStatusWidth, setFooterStatusWidth] = createSignal(dimensions().width)
+  const pendingMaxWidth = createMemo(() => {
+    // This status region already excludes footer controls and any session-tab rail.
+    const interruptWidth =
+      status() === "running" ? stringWidth(store.interrupt > 0 ? "esc again to interrupt" : "esc interrupt") + 1 : 0
+    return Math.max(0, footerStatusWidth() - interruptWidth - 1)
+  })
   const locationLabelDisplay = createMemo(() => {
     const label = locationLabel()
     if (!label) return
-    return truncateFilePath(label, locationWidth())
+    return truncateFilePath(label, footerStatusWidth())
   })
   const locationActions = useWorkingDirectoryActions({
     directory: () => footerLocation()?.directory,
@@ -1881,10 +1910,45 @@ export function Prompt(props: PromptProps) {
                 minWidth={0}
                 onSizeChange={function (this: BoxRenderable) {
                   const width = this.width
-                  queueMicrotask(() => setLocationWidth(width))
+                  queueMicrotask(() => setFooterStatusWidth(width))
                 }}
               >
                 <Switch>
+                  <Match when={pendingCommands().length > 0}>
+                    <box
+                      flexDirection="row"
+                      gap={1}
+                      flexGrow={1}
+                      flexShrink={1}
+                      minWidth={0}
+                      height={1}
+                      minHeight={0}
+                      justifyContent="flex-start"
+                    >
+                      <box
+                        marginLeft={1}
+                        flexShrink={1}
+                        minWidth={0}
+                        maxWidth={pendingMaxWidth()}
+                        height={1}
+                        minHeight={0}
+                      >
+                        <PromptPendingCommands commands={pendingCommands()} />
+                      </box>
+                      <Show when={status() === "running"}>
+                        <box flexShrink={0}>
+                          <PromptInterruptStatus
+                            armed={store.interrupt > 0}
+                            animations={animationsEnabled()}
+                            text={theme.text.base}
+                            subdued={theme.text.muted}
+                            warning={theme.text.feedback.warning.base}
+                            flash={theme.decrease(theme.text.feedback.warning.base, 2)}
+                          />
+                        </box>
+                      </Show>
+                    </box>
+                  </Match>
                   <Match when={status() === "running"}>
                     <box flexDirection="row" gap={1} flexGrow={1} justifyContent="flex-start">
                       <box marginLeft={1}>

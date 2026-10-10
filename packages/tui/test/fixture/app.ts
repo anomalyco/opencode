@@ -14,6 +14,7 @@ export async function createAppFixture(
     state?: string
     config?: Config.Info
     args?: TuiInput["args"]
+    environment?: TuiInput["environment"]
     fetch?: FetchHandler
   } = {},
 ) {
@@ -38,6 +39,7 @@ export async function createAppFixture(
       packages: { prepare: async () => ({ directory: "" }) },
       terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: ready.resolve }),
       args: input.args ?? {},
+      environment: input.environment,
       log: () => {},
     }).pipe(
       Effect.provide(
