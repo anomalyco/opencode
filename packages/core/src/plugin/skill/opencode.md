@@ -40,16 +40,18 @@ For questions about the terminal interface, command-line invocation, `run`,
 that section.
 
 CLI and TUI preferences are separate from OpenCode's server and project
-configuration. They live in the global `~/.config/opencode/cli.json`, or
-`$XDG_CONFIG_HOME/opencode/cli.json` when `XDG_CONFIG_HOME` is set. There is no
-project-local CLI configuration. Set `OPENCODE_CLI_CONFIG_CONTENT` to merge
-inline JSON over the global settings. Most preferences can also be changed from
-the TUI by pressing `Ctrl+P` and selecting **Open settings**.
+configuration. They live in the global `~/.config/opencode/cli.jsonc` or
+`~/.config/opencode/cli.json`, or the same names under `$XDG_CONFIG_HOME/opencode`
+when `XDG_CONFIG_HOME` is set. Both filenames support comments, `cli.jsonc` takes
+precedence when both exist, and `cli.json` is created when neither is present.
+There is no project-local CLI configuration. Set `OPENCODE_CLI_CONFIG_CONTENT` to
+merge inline JSON over the global settings. Most preferences can also be changed
+from the TUI by pressing `Ctrl+P` and selecting **Open settings**.
 
 ### [Settings](https://opencode.ai/v2/docs/cli/config)
 
 Fetch the full [CLI settings reference](https://opencode.ai/v2/docs/cli/config)
-before editing `cli.json`. It documents every terminal-only setting, accepted
+before editing `cli.json(c)`. It documents every terminal-only setting, accepted
 values, and examples, including themes, input, sessions, tabs, diffs, alerts,
 Mini, keybindings, terminal plugins, and debugging. Do not put these settings
 in `opencode.json(c)`.
