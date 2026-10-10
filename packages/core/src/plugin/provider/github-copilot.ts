@@ -226,10 +226,22 @@ export const GithubCopilotPlugin = define({
         })
         return
       }
+      // Without the live model list, the models.dev package says which Copilot API serves
+      // each model: Anthropic Messages stays native, OpenAI means Responses, and anything
+      // else goes through the bundled Copilot SDK's model ID fallback.
       for (const id of item.models.keys()) {
         evt.models.update(item.provider.id, id, (model) => {
+          if (model.package === "@opencode/ai/providers/anthropic") {
+            if (loaded.baseURL)
+              model.settings = Provider.mergeOverlay(model.settings, { baseURL: `${loaded.baseURL}/v1` })
+            return
+          }
+          const responses = model.package === "@opencode/ai/providers/openai"
           model.package = Provider.aisdk("@ai-sdk/github-copilot")
-          if (loaded.baseURL) model.settings = Provider.mergeOverlay(model.settings, { baseURL: loaded.baseURL })
+          model.settings = Provider.mergeOverlay(model.settings, {
+            ...(loaded.baseURL ? { baseURL: loaded.baseURL } : {}),
+            ...(responses ? { endpoint: "responses" } : {}),
+          })
         })
       }
     })
