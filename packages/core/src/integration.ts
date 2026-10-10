@@ -24,7 +24,7 @@ import { State } from "./state.js"
 import { Bus } from "./bus.js"
 import { IntegrationConnection } from "./integration/connection.js"
 import { AppProcess } from "@opencode/util/process"
-import { ChildProcess } from "effect/unstable/process"
+import { ChildProcess } from "effect/process"
 import { Form } from "./form.js"
 
 export const ID = Integration.ID

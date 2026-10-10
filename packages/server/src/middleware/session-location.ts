@@ -1,8 +1,8 @@
 import { Instance } from "@opencode/core/instance/service"
 import { Session } from "@opencode/core/session"
 import { Effect, Layer } from "effect"
-import { HttpRouter } from "effect/unstable/http"
-import { HttpApiMiddleware } from "effect/unstable/httpapi"
+import { HttpRouter } from "effect/http"
+import { HttpApiMiddleware } from "effect/http-api"
 import { LocationNotFoundError, InvalidRequestError, SessionNotFoundError } from "@opencode/protocol/errors"
 import { locationErrors, sessionInfo, type LocationServices } from "../location"
 

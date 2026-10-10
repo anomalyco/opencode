@@ -1,5 +1,5 @@
 import { Effect, Stream } from "effect"
-import { makeParser } from "effect/unstable/encoding/Sse"
+import { makeParser } from "effect/encoding/Sse"
 import { AIError, InvalidProviderOutputError } from "../schema/index.js"
 
 /**

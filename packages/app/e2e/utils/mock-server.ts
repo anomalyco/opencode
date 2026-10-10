@@ -3,8 +3,8 @@ import type { OpenCodeEvent, SessionMessageInfo } from "@opencode/client/promise
 import { Permission } from "@opencode/schema/permission"
 import { Worktree } from "@opencode/schema/worktree"
 import { Duration, Effect, Layer, Option, Predicate, Schema } from "effect"
-import { HttpRouter, HttpServer, HttpServerResponse } from "effect/unstable/http"
-import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
+import { HttpRouter, HttpServer, HttpServerResponse } from "effect/http"
+import { HttpApiBuilder, HttpApiSchema } from "effect/http-api"
 import { SERVER } from "./app"
 import {
   MockApi,
