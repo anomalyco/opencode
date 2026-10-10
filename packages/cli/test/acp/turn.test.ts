@@ -181,7 +181,7 @@ describe("acp mid-turn steering over the wire", () => {
     acp.server.active.add(acp.sessionId)
 
     expect(await steer(acp)).toEqual({ outcome: "injected" })
-    expect(acp.server.prompts).toEqual([expect.objectContaining({ text: "redirect", delivery: "steer" })])
+    expect(acp.server.prompts).toEqual([expect.objectContaining({ text: "redirect", delivery: "steer", resume: false })])
   })
 
   test("rejects an unknown session and malformed params", async () => {

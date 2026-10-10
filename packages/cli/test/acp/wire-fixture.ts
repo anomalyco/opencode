@@ -63,7 +63,13 @@ type ServerRequest = {
 
 const Files = Schema.Array(Schema.Struct({ uri: Schema.String, name: Schema.optional(Schema.String) }))
 const Delivery = Schema.optional(Schema.String)
-const PromptBody = Schema.Struct({ id: Schema.String, text: Schema.String, files: Files, delivery: Delivery })
+const PromptBody = Schema.Struct({
+  id: Schema.String,
+  text: Schema.String,
+  files: Files,
+  delivery: Delivery,
+  resume: Schema.optional(Schema.Boolean),
+})
 const CommandBody = Schema.Struct({ name: Schema.String, text: Schema.String, files: Files, delivery: Delivery })
 const CompactBody = Schema.Struct({ id: Schema.String })
 const SyntheticBody = Schema.Struct({
