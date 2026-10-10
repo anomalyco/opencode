@@ -614,6 +614,11 @@ export function createData(config: CreateDataInput) {
               })
               activeUpdates = undefined
               setStore("session", "active", reconcile(Object.fromEntries(snapshot)))
+              // Sessions created before this connection (while disconnected, or before the client started)
+              // never delivered `session.created`; without their info a running child never joins its root's family.
+              snapshot.forEach((status, id) => {
+                if (status === "running" && !store.session.info[id]) refresh(() => result.session.sync(id))
+              })
             })
             .catch(() => {
               if (activeUpdates === updates) activeUpdates = undefined
