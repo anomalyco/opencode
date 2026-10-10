@@ -190,7 +190,7 @@ statements that broader configuration can override.
     "policies": [
       { "action": "provider.use", "resource": "*", "effect": "deny" },
       { "action": "provider.use", "resource": "anthropic", "effect": "allow" },
-      { "action": "permission", "resource": "shell:git push *", "effect": "deny" },
+      { "action": "tool.use", "resource": "shell:git push *", "effect": "deny" },
     ],
   },
 }

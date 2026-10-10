@@ -286,7 +286,7 @@ approvals run. It turns `allow` or `ask` into `deny` and never grants access.
 ```jsonc
 {
   "experimental": {
-    "policies": [{ "action": "permission", "resource": "shell:sudo *", "effect": "deny" }],
+    "policies": [{ "action": "tool.use", "resource": "shell:sudo *", "effect": "deny" }],
   },
 }
 ```
