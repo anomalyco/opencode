@@ -11,20 +11,58 @@ export { normalizePromptContent } from "./prompt/content"
 
 type EditorStdio = "inherit" | "pipe" | "ignore" | number | Stream
 
+/** Splits an editor command, keeping quoted runs (single or double quotes) together and stripping the quotes. */
+export function parseEditorCommand(command: string) {
+  const parts: string[] = []
+  let current = ""
+  let quote: '"' | "'" | undefined
+  for (const char of command) {
+    if (quote) {
+      if (char === quote) quote = undefined
+      else current += char
+      continue
+    }
+    if (char === '"' || char === "'") {
+      quote = char
+      continue
+    }
+    if (char === " " || char === "\t") {
+      if (current) parts.push(current)
+      current = ""
+      continue
+    }
+    current += char
+  }
+  if (current) parts.push(current)
+  return parts
+}
+
+/**
+ * Windows launches the editor through a shell, which re-joins the argument vector without quoting,
+ * so every token is quoted to keep paths with spaces intact. Unix spawns the program directly and
+ * must receive the raw value, because literal quotes would become part of the path.
+ */
+export function quoteEditorArgument(value: string, shell: boolean) {
+  return shell ? `"${value.replaceAll('"', '""')}"` : value
+}
+
 export async function openEditor(input: { value: string; renderer: CliRenderer; cwd?: string; stdin?: EditorStdio }) {
   const editor = process.env.VISUAL || process.env.EDITOR
   if (!editor) return
+  const [program, ...args] = parseEditorCommand(editor)
+  if (!program) return
   const file = path.join(os.tmpdir(), `${Date.now()}.md`)
   await writeFile(file, input.value)
   input.renderer.suspend()
   input.renderer.currentRenderBuffer.clear()
   try {
     await new Promise<void>((resolve, reject) => {
-      const parts = editor.split(" ")
-      const child = spawn(parts[0]!, [...parts.slice(1), file], {
+      const shell = process.platform === "win32"
+      const quote = (value: string) => quoteEditorArgument(value, shell)
+      const child = spawn(quote(program), [...args, file].map(quote), {
         cwd: input.cwd && existsSync(input.cwd) ? input.cwd : process.cwd(),
         stdio: [input.stdin ?? "inherit", "inherit", "inherit"],
-        shell: process.platform === "win32",
+        shell,
       })
       child.on("error", reject)
       child.on("exit", (code, signal) => {
