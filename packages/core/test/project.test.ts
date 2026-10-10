@@ -254,7 +254,12 @@ describe("Project archiving", () => {
       yield* db
         .insert(ProjectTable)
         .values([
-          { id: Project.ID.make("updated"), worktree: abs("/opencode-missing-updated"), sandboxes: [], time_active: old },
+          {
+            id: Project.ID.make("updated"),
+            worktree: abs("/opencode-missing-updated"),
+            sandboxes: [],
+            time_active: old,
+          },
           {
             id: Project.ID.make("active"),
             worktree: abs("/opencode-missing-active"),
