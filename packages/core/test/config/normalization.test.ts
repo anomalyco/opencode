@@ -411,6 +411,21 @@ describe("ConfigNormalize", () => {
     ).toBe(true)
   })
 
+  test("expands a numeric MCP timeout instead of dropping the server", () => {
+    const result = normalized({
+      mcp: {
+        timeout: 7000,
+        servers: { native: { type: "local", command: ["native"], timeout: 60000 } },
+      },
+    })
+
+    expect(result.encoded.mcp).toEqual({
+      timeout: { catalog: 7000, execution: 7000 },
+      servers: { native: { type: "local", command: ["native"], timeout: { catalog: 60000, execution: 60000 } } },
+    })
+    expect(result.diagnostics).toEqual([])
+  })
+
   test("uses raw MCP discriminators for reserved server names", () => {
     const result = normalized({
       mcp: {

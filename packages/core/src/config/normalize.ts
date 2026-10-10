@@ -271,7 +271,8 @@ function normalizeMcp(input: Record<string, unknown>, encoded: Record<string, un
           return
         }
         if (name === "servers" && !isDirectLegacyMcp(value)) {
-          Object.entries(decodeMap(value, ConfigMCP.Server, path, diagnostics, decodeEncoded)).forEach(
+          const servers = isRecord(value) ? mapValues(value, expandNativeMcpTimeout) : value
+          Object.entries(decodeMap(servers, ConfigMCP.Server, path, diagnostics, decodeEncoded)).forEach(
             ([key, server]) => setOwn(nativeServers, key, server),
           )
           return
@@ -303,6 +304,12 @@ function normalizeMcpTimeout(
   path: string[],
   diagnostics: Diagnostic[],
 ) {
+  const shorthand = mcpTimeoutShorthand(value)
+  if (shorthand !== undefined) {
+    overlay(timeout, "catalog", shorthand.catalog, [...path, "catalog"], diagnostics)
+    overlay(timeout, "execution", shorthand.execution, [...path, "execution"], diagnostics)
+    return
+  }
   if (!isRecord(value)) {
     invalid(path, diagnostics)
     return
@@ -787,6 +794,21 @@ function conflict(path: string[], diagnostics: Diagnostic[]) {
 
 function isDirectLegacyMcp(value: unknown) {
   return isRecord(value) && (value.type === "local" || value.type === "remote")
+}
+
+/**
+ * A numeric `timeout` is the documented shorthand and the legacy shape for an MCP server or the
+ * global default: it raises both discovery (`catalog`) and execution, matching `ConfigMigrateV1`.
+ */
+function mcpTimeoutShorthand(value: unknown) {
+  const numeric = Schema.decodeUnknownOption(PositiveInt)(value)
+  return Option.isSome(numeric) ? { catalog: numeric.value, execution: numeric.value } : undefined
+}
+
+function expandNativeMcpTimeout(value: unknown) {
+  if (!isRecord(value)) return value
+  const timeout = mcpTimeoutShorthand(value.timeout)
+  return timeout === undefined ? value : { ...value, timeout }
 }
 
 function isEnabledOnlyMcp(value: unknown) {
