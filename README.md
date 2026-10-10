@@ -59,6 +59,11 @@ sudo pacman -S opencode            # Arch Linux (Stable)
 paru -S opencode-bin               # Arch Linux (Latest from AUR)
 mise use -g opencode               # Any OS
 nix run nixpkgs#opencode           # or github:anomalyco/opencode for latest dev branch
+
+# System packages (amd64 and arm64)
+# Download from https://opencode.ai/download
+sudo dpkg -i opencode_*_amd64.deb  # Debian/Ubuntu
+sudo rpm -i opencode-*.x86_64.rpm  # Fedora/RHEL
 ```
 
 > [!TIP]
