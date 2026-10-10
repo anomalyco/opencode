@@ -202,9 +202,15 @@ const responseBody = (body: string | void, request: HttpClientRequest.HttpClient
 }
 
 const providerMessage = (status: number, body: { readonly body?: string }) => {
+  if (body.body && isHtmlDocument(body.body)) {
+    if (status >= 500) return `Provider temporarily unavailable (HTTP ${status})`
+    return `Provider request failed (HTTP ${status})`
+  }
   if (body.body && body.body.length <= 500) return `Provider request failed with HTTP ${status}: ${body.body}`
   return `Provider request failed with HTTP ${status}`
 }
+
+const isHtmlDocument = (value: string) => /<(?:!doctype\s+html|html|head|body)(?:\s|>)/i.test(value)
 
 const responseHttp = (input: {
   readonly request: HttpClientRequest.HttpClientRequest

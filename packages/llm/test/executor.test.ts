@@ -295,6 +295,33 @@ describe("RequestExecutor", () => {
     }),
   )
 
+  it.effect("bounds html provider error messages", () =>
+    Effect.gen(function* () {
+      const executor = yield* RequestExecutor.Service
+      const error = yield* executor.execute(request).pipe(Effect.flip)
+
+      expectLLMError(error)
+      expect(error.reason).toMatchObject({
+        _tag: "ProviderInternal",
+        message: "Provider temporarily unavailable (HTTP 503)",
+      })
+      expect(errorHttp(error)?.body).toContain("<html>")
+    }).pipe(
+      Effect.provide(
+        responsesLayer(
+          Array.from(
+            { length: 3 },
+            () =>
+              new Response(
+                `<html>\n<head><title>503 Service Temporarily Unavailable</title></head>\n<body>\n<center><h1>503 Service Temporarily Unavailable</h1></center>\n<hr><center>nginx</center>\n</body>\n</html>`,
+                { status: 503, headers: { "retry-after-ms": "0" } },
+              ),
+          ),
+        ),
+      ),
+    ),
+  )
+
   it.effect("does not retry non-retryable status responses and truncates large bodies", () =>
     Effect.gen(function* () {
       const executor = yield* RequestExecutor.Service
