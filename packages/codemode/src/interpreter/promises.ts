@@ -16,8 +16,194 @@ const capability = <R>(ctx: Interpreter<R>, name: string, settle: (value: Value)
     return undefined
   })
 
+type Waiter = {
+  readonly fiber: Fiber.Fiber<unknown, unknown>
+  readonly resume: (effect: Effect.Effect<void>) => void
+  next?: Waiter
+  removed: boolean
+}
+
+// Program fibers that synchronous starts and handbacks may nest on the host stack. Deeper ones start and resume
+// through the scheduler, so deep recursion through async calls cannot overflow the host stack.
+const MAX_NESTING = 100
+
+type Handback = {
+  readonly fiber: Fiber.Fiber<unknown, unknown>
+  returned: boolean
+  resume?: (effect: Effect.Effect<void>) => void
+}
+
+/**
+ * The right to run program code. JavaScript runs one job at a time: code between two awaits finishes before another
+ * job starts. Effect preempts a busy fiber so timeouts and host work still run, so only the fiber holding the turn may
+ * run program code. A synchronous call into another fiber (an async function's body up to its first await, a
+ * generator step) lends that fiber the turn and gets it back when the callee suspends or ends. An await gives the turn
+ * to the next waiting job and queues to take it back. Work that only settles a promise or runs host code leaves
+ * without it, so tool calls stay concurrent and resolvers settle in the call, as in JavaScript.
+ */
+export class Turn {
+  private holder: Fiber.Fiber<unknown, unknown> | undefined
+  // Callers waiting for a callee to hand the turn back, innermost last.
+  private readonly handbacks: Array<Handback> = []
+  // Jobs waiting to take the turn, in the order they became ready.
+  private first: Waiter | undefined
+  private last: Waiter | undefined
+  private nesting = 0
+
+  // Take the turn when it is free, after the jobs already waiting.
+  readonly take: Effect.Effect<void> = Effect.withFiber((fiber) => {
+    if (this.holder === undefined) {
+      this.holder = fiber
+      return Effect.void
+    }
+    return Effect.callback<void>((resume) => {
+      const waiter: Waiter = { fiber, resume, removed: false }
+      if (this.last === undefined) this.first = waiter
+      else this.last.next = waiter
+      this.last = waiter
+      // Interrupted while waiting, or after the turn was granted but before it ran.
+      return Effect.sync(() => {
+        if (this.holder === fiber) this.release(fiber)
+        else waiter.removed = true
+      })
+    })
+  })
+
+  // Run `effect` holding the turn, as the program's main job does.
+  hold<A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> {
+    return Effect.withFiber((fiber) =>
+      Effect.andThen(this.take, effect).pipe(Effect.ensuring(Effect.sync(() => this.release(fiber)))),
+    )
+  }
+
+  // Give up the turn, back to the innermost caller waiting for it or to the next waiting job.
+  release(fiber: Fiber.Fiber<unknown, unknown>): void {
+    if (this.holder !== fiber) return
+    const back = this.handbacks.pop()
+    if (back !== undefined) {
+      this.holder = back.fiber
+      this.handBack(back)
+      return
+    }
+    let next = this.first
+    while (next !== undefined && next.removed) next = next.next
+    this.first = next?.next
+    if (this.first === undefined) this.last = undefined
+    this.holder = next?.fiber
+    // Resume in the scheduler, as a yield would: release can run inside another fiber's step.
+    if (next !== undefined) next.fiber.currentDispatcher.scheduleTask(() => next.resume(Effect.void), 0)
+  }
+
+  // Wait without the turn, then queue for it like any job that became ready. An interrupted fiber stops without it.
+  suspend<A, E, R>(wait: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> {
+    return Effect.uninterruptibleMask((restore) =>
+      Effect.withFiber((fiber) => {
+        this.release(fiber)
+        return Effect.flatMap(Effect.exit(restore(wait)), (exit) =>
+          Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause) ? exit : Effect.andThen(restore(this.take), exit),
+        )
+      }),
+    )
+  }
+
+  // Wait without the turn and finish without it, for work that only settles a promise or runs host code.
+  leave<A, E, R>(wait: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> {
+    return Effect.withFiber((fiber) => {
+      this.release(fiber)
+      return wait
+    })
+  }
+
+  // Run `start`, which wakes a fiber parked with `park`, and continue once it hands the turn back.
+  handOff<A, E, R>(start: Effect.Effect<A, E, R>): Effect.Effect<void, E, R> {
+    return Effect.withFiber((fiber) => {
+      const back: Handback = { fiber, returned: false }
+      this.handbacks.push(back)
+      return Effect.andThen(this.nest(start), awaitHandback(back))
+    })
+  }
+
+  // Wait without the turn for a caller to hand it over with `handOff`.
+  park<A, E, R>(wait: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> {
+    return Effect.uninterruptibleMask((restore) =>
+      Effect.withFiber((fiber) => {
+        this.release(fiber)
+        // The wake runs inside the caller's step; when that is deep, yield so the body continues on its own stack.
+        return Effect.tap(restore(wait), () => {
+          this.holder = fiber
+          return this.nesting > MAX_NESTING ? Effect.yieldNow : Effect.void
+        })
+      }),
+    )
+  }
+
+  // Fork a fiber that runs program code. It starts with the caller's turn, and the caller continues once the fiber
+  // suspends or ends; the fiber gives up the turn whenever it ends.
+  fork<A, E, R>(effect: Effect.Effect<A, E, R>, scope: Scope.Scope): Effect.Effect<Fiber.Fiber<A, E>, never, R> {
+    return Effect.withFiber((caller) => {
+      const back: Handback = { fiber: caller, returned: false }
+      this.handbacks.push(back)
+      let started = false
+      const body = Effect.withFiber((fiber) => {
+        started = true
+        this.holder = fiber
+        return effect
+      })
+      const forked =
+        this.nesting < MAX_NESTING
+          ? this.nest(Effect.forkIn(body, scope, { startImmediately: true }))
+          : Effect.forkIn(body, scope)
+      return Effect.flatMap(forked, (fiber) => {
+        fiber.addObserver(() => {
+          if (started) return this.release(fiber)
+          // Forked into a closing scope: it never took the turn, so the caller keeps it.
+          const index = this.handbacks.lastIndexOf(back)
+          if (index >= 0) this.handbacks.splice(index, 1)
+          this.handBack(back)
+        })
+        // A callee that suspends without blocking hands the turn back before `forkIn` returns.
+        return back.returned ? Effect.succeed(fiber) : Effect.as(awaitHandback(back), fiber)
+      })
+    })
+  }
+
+  private handBack(back: Handback): void {
+    back.returned = true
+    const resume = back.resume
+    if (resume === undefined) return
+    if (this.nesting >= MAX_NESTING) return back.fiber.currentDispatcher.scheduleTask(() => resume(Effect.void), 0)
+    this.nesting++
+    try {
+      resume(Effect.void)
+    } finally {
+      this.nesting--
+    }
+  }
+
+  // Run `effect`, which can run another program fiber inside the current step, counting the nesting.
+  private nest<A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> {
+    return Effect.suspend(() => {
+      this.nesting++
+      return Effect.ensuring(
+        effect,
+        Effect.sync(() => {
+          this.nesting--
+        }),
+      )
+    })
+  }
+}
+
+// The check runs when the caller suspends: it can be preempted after deciding to wait.
+const awaitHandback = (back: Handback) =>
+  Effect.callback<void>((resume) => {
+    if (back.returned) resume(Effect.void)
+    else back.resume = resume
+  })
+
 // Observation only controls rejection reporting; program completion interrupts all promise work.
 export class Pending<R> {
+  readonly turn = new Turn()
   private readonly active = new Set<PromiseObj>()
   private readonly ids = new WeakMap<PromiseObj, number>()
   private readonly observed = new WeakSet<PromiseObj>()
@@ -40,7 +226,20 @@ export class Pending<R> {
     })
   }
 
+  // A promise whose work runs program code, on the turn. Host work that runs no program code uses `createHost`.
   create(effect: Effect.Effect<Value, unknown, R>): Effect.Effect<PromiseObj, never, R> {
+    return this.register(effect, (body) => this.turn.fork(body, this.scope))
+  }
+
+  // Starts now, without the turn, so host work stays concurrent and attaches to host promises at once.
+  createHost(effect: Effect.Effect<Value, unknown, R>): Effect.Effect<PromiseObj, never, R> {
+    return this.register(effect, (body) => Effect.forkIn(body, this.scope, { startImmediately: true }))
+  }
+
+  private register(
+    effect: Effect.Effect<Value, unknown, R>,
+    fork: (body: Effect.Effect<Value, unknown, R>) => Effect.Effect<Fiber.Fiber<Value, unknown>, never, R>,
+  ): Effect.Effect<PromiseObj, never, R> {
     return Effect.flatMap(CallSite, (site) => {
       if (this.active.size >= MAX_PENDING_PROMISES) {
         throw rangeError(
@@ -50,7 +249,7 @@ export class Pending<R> {
       // Allocate before forking so reruns get distinct IDs and diagnostics retain creation order.
       const id = this.nextID++
       const body = Effect.catchDefect(effect, (defect) => Effect.die(locate(defect, site.node)))
-      return Effect.map(Effect.forkIn(body, this.scope, { startImmediately: true }), (fiber) => {
+      return Effect.map(fork(body), (fiber) => {
         const promise = new PromiseObj(this.proto, fiber)
         this.active.add(promise)
         this.ids.set(promise, id)
@@ -84,7 +283,7 @@ export class Pending<R> {
   }
 
   fork(effect: Effect.Effect<unknown, unknown, R>): Effect.Effect<void, never, R> {
-    return Effect.asVoid(Effect.forkIn(effect, this.scope, { startImmediately: true }))
+    return Effect.asVoid(this.turn.fork(effect, this.scope))
   }
 
   diagnostics(): Array<Diagnostic> {
@@ -118,7 +317,7 @@ export const resolvePromiseValue = <R>(
 
   return Effect.gen(function* () {
     // Promise resolution invokes a thenable's method in a later job.
-    yield* Effect.yieldNow
+    yield* ctx.pending.turn.suspend(Effect.yieldNow)
     const deferred = Deferred.makeUnsafe<Value, unknown>()
     const resolve = capability(ctx, "resolve", (result) => Deferred.doneUnsafe(deferred, Exit.succeed(result)))
     const reject = capability(ctx, "reject", (reason) => Deferred.doneUnsafe(deferred, Exit.fail(new Throw(reason))))
@@ -127,7 +326,7 @@ export const resolvePromiseValue = <R>(
       if (Cause.hasInterruptsOnly(executed.cause)) return yield* Effect.failCause(executed.cause)
       Deferred.doneUnsafe(deferred, Exit.fail(Cause.squash(executed.cause)))
     }
-    return yield* resolvePromiseValue(ctx, yield* Deferred.await(deferred), own)
+    return yield* resolvePromiseValue(ctx, yield* ctx.pending.turn.leave(Deferred.await(deferred)), own)
   })
 }
 
@@ -184,6 +383,7 @@ const invokePromiseMethod = <R>(
         return new Arr(
           ctx.builtins.Array,
           yield* settleAfterTurn(
+            ctx,
             Effect.all(
               items.map((item) => Effect.flatten(ctx.pending.await(item))),
               { concurrency: "unbounded" },
@@ -192,29 +392,33 @@ const invokePromiseMethod = <R>(
         )
       }
       if (name === "allSettled") {
-        const outcomes: Array<Value> = []
-        for (const item of items) {
-          const exit = yield* ctx.pending.await(item)
-          if (Exit.isSuccess(exit)) {
-            outcomes.push(record(ctx.builtins.Object, { status: "fulfilled", value: exit.value }))
-            continue
-          }
-          if (Cause.hasInterruptsOnly(exit.cause)) return yield* Effect.failCause(exit.cause)
-          outcomes.push(
-            record(ctx.builtins.Object, {
-              status: "rejected",
-              reason: materialize(ctx, Cause.squash(exit.cause)),
-            }),
-          )
-        }
-        yield* Effect.yieldNow
-        return new Arr(ctx.builtins.Array, outcomes)
+        return yield* ctx.pending.turn.suspend(
+          Effect.gen(function* () {
+            const outcomes: Array<Value> = []
+            for (const item of items) {
+              const exit = yield* ctx.pending.await(item)
+              if (Exit.isSuccess(exit)) {
+                outcomes.push(record(ctx.builtins.Object, { status: "fulfilled", value: exit.value }))
+                continue
+              }
+              if (Cause.hasInterruptsOnly(exit.cause)) return yield* Effect.failCause(exit.cause)
+              outcomes.push(
+                record(ctx.builtins.Object, {
+                  status: "rejected",
+                  reason: materialize(ctx, Cause.squash(exit.cause)),
+                }),
+              )
+            }
+            yield* Effect.yieldNow
+            return new Arr(ctx.builtins.Array, outcomes)
+          }),
+        )
       }
       if (name === "race") {
         if (items.length === 0) {
           throw typeError("Promise.race([]) would never settle; provide at least one promise or value.")
         }
-        return yield* settleAfterTurn(Effect.flatten(Effect.raceAll(items.map((item) => ctx.pending.await(item)))))
+        return yield* settleAfterTurn(ctx, Effect.flatten(Effect.raceAll(items.map((item) => ctx.pending.await(item)))))
       }
       const flipped = items.map((item) =>
         Effect.flatMap(ctx.pending.await(item), (exit) => {
@@ -224,6 +428,7 @@ const invokePromiseMethod = <R>(
         }),
       )
       return yield* settleAfterTurn(
+        ctx,
         Effect.all(flipped, { concurrency: "unbounded" }).pipe(
           Effect.flatMap((reasons) =>
             Effect.fail(new Throw(createAggregateErrorValue(ctx, reasons, "All promises were rejected"))),
@@ -259,7 +464,9 @@ const promiseCapability = <R>(ctx: Interpreter<R>) =>
   Effect.gen(function* () {
     const deferred = Deferred.makeUnsafe<Value, unknown>()
     const promise = yield* ctx.pending.createWithSelf((self) =>
-      Effect.flatMap(Deferred.await(deferred), (value) => resolvePromiseValue(ctx, value, self)),
+      Effect.flatMap(ctx.pending.turn.leave(Deferred.await(deferred)), (value) =>
+        resolvePromiseValue(ctx, value, self),
+      ),
     )
     const resolve = capability(ctx, "resolve", (value) => Deferred.doneUnsafe(deferred, Exit.succeed(value)))
     const reject = capability(ctx, "reject", (value) => Deferred.doneUnsafe(deferred, Exit.fail(new Throw(value))))
@@ -281,9 +488,12 @@ const constructPromise = <R>(ctx: Interpreter<R>, executor: Value): Effect.Effec
   })
 }
 
-// Settle one reaction turn after the deciding member, after its existing reactions.
-const settleAfterTurn = <A, E, R>(body: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
-  Effect.flatMap(Effect.exit(body), (exit) => Effect.andThen(Effect.yieldNow, exit))
+// Settle one reaction turn after the deciding member, after its existing reactions. That reaction is a job: it queues
+// for the turn behind the jobs ready before it and settles holding it.
+const settleAfterTurn = <A, E, R>(ctx: Interpreter<R>, body: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+  Effect.flatten(
+    ctx.pending.turn.suspend(Effect.flatMap(Effect.exit(body), (exit) => Effect.as(Effect.yieldNow, exit))),
+  )
 
 class PromiseAnyFulfilled {
   constructor(readonly value: Value) {}
@@ -304,12 +514,14 @@ const reactionExit = <R>(
   ctx: Interpreter<R>,
   source: PromiseObj,
 ): Effect.Effect<Exit.Exit<Value, unknown>, unknown, R> =>
-  Effect.gen(function* () {
-    const exit = yield* ctx.pending.await(source)
-    if (!Exit.isSuccess(exit) && Cause.hasInterruptsOnly(exit.cause)) return yield* Effect.failCause(exit.cause)
-    yield* Effect.yieldNow
-    return exit
-  })
+  ctx.pending.turn.suspend(
+    Effect.gen(function* () {
+      const exit = yield* ctx.pending.await(source)
+      if (!Exit.isSuccess(exit) && Cause.hasInterruptsOnly(exit.cause)) return yield* Effect.failCause(exit.cause)
+      yield* Effect.yieldNow
+      return exit
+    }),
+  )
 
 const chainReaction = <R>(
   ctx: Interpreter<R>,

@@ -274,6 +274,9 @@ Math.floor)` is `"3"`). A detached method loses its receiver, as in JS: `values.
       unless its cleanup fails, and direct self-resolution rejects with a `TypeError`.
 - [x] Every `await` (including of plain values and already-settled promises) defers its continuation one reaction
       turn, so concurrent async functions interleave at await points as in JavaScript.
+- [x] Each job runs to completion: code between two awaits, and an async function's body up to its first await,
+      finishes before another job runs, even when the scheduler preempts a long job. Tool calls still run
+      concurrently.
 - [x] Combinators settle one reaction turn after their deciding member (V8-observable ordering): reactions already
       attached to members run first, and an aggregate cannot beat a plain value settling in the same turn into a
       `Promise.race`. Exact microtask-count parity beyond this observable ordering is not a documented guarantee.
