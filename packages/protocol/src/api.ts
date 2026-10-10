@@ -42,7 +42,6 @@ type LocationGroups<LocationId extends HttpApiMiddleware.AnyId> =
   | HttpApiGroup.AddMiddleware<typeof IntegrationGroup, LocationId>
   | HttpApiGroup.AddMiddleware<typeof WebSearchGroup, LocationId>
   | HttpApiGroup.AddMiddleware<typeof McpGroup, LocationId>
-  | HttpApiGroup.AddMiddleware<typeof ProjectGroup, LocationId>
   | HttpApiGroup.AddMiddleware<typeof FileSystemGroup, LocationId>
   | HttpApiGroup.AddMiddleware<typeof CommandGroup, LocationId>
   | HttpApiGroup.AddMiddleware<typeof SkillGroup, LocationId>
@@ -96,6 +95,7 @@ type ApiGroups<
   | typeof GenerateGroup
   | typeof PersistentPtyGroup
   | typeof CredentialGroup
+  | typeof ProjectGroup
   | LocationGroups<LocationId>
   | LocationGroup<LocationId, LocationService>
   | PtyGroups<LocationId, LocationService>
@@ -169,7 +169,7 @@ const makeApiFromGroup = <
     .add(IntegrationGroup.middleware(locationMiddleware))
     .add(McpGroup.middleware(locationMiddleware))
     .add(CredentialGroup)
-    .add(ProjectGroup.middleware(locationMiddleware))
+    .add(ProjectGroup)
     .add(makeFormGroup(locationMiddleware))
     .add(makePermissionGroup(locationMiddleware, sessionLocationMiddleware))
     .add(FileSystemGroup.middleware(locationMiddleware))
