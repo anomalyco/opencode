@@ -538,6 +538,62 @@ describe("WebFetchTool registration", () => {
     }),
   )
 
+  it.effect("decodes bodies using the charset declared in content-type", () =>
+    Effect.gen(function* () {
+      reset()
+      respond = () =>
+        Effect.succeed(
+          new Response(new Uint8Array([0x63, 0x61, 0x66, 0xe9]), {
+            headers: { "content-type": "text/plain; charset=iso-8859-1" },
+          }),
+        )
+      const registry = yield* Tool.Service
+
+      expect(yield* executeTool(registry, call({ url: "https://1.1.1.1/latin", format: "markdown" }))).toMatchObject({
+        status: "completed",
+        content: [{ type: "text", text: "café" }],
+      })
+    }),
+  )
+
+  it.effect("falls back to utf-8 when the declared charset is unsupported", () =>
+    Effect.gen(function* () {
+      reset()
+      respond = () =>
+        Effect.succeed(
+          new Response("hello", {
+            headers: { "content-type": "text/plain; charset=not-a-real-encoding" },
+          }),
+        )
+      const registry = yield* Tool.Service
+
+      expect(
+        yield* executeTool(registry, call({ url: "https://1.1.1.1/bogus-charset", format: "markdown" })),
+      ).toMatchObject({
+        status: "completed",
+        content: [{ type: "text", text: "hello" }],
+      })
+    }),
+  )
+
+  it.effect("converts application/xhtml+xml responses like html", () =>
+    Effect.gen(function* () {
+      reset()
+      respond = () =>
+        Effect.succeed(
+          new Response("<h1>Hello</h1><p>world</p>", {
+            headers: { "content-type": "application/xhtml+xml" },
+          }),
+        )
+      const registry = yield* Tool.Service
+
+      expect(yield* executeTool(registry, call({ url: "https://1.1.1.1/page.xhtml", format: "markdown" }))).toMatchObject({
+        status: "completed",
+        content: [{ type: "text", text: "# Hello\n\nworld" }],
+      })
+    }),
+  )
+
   it.effect("converts deeply nested HTML without overflowing", () =>
     Effect.gen(function* () {
       reset()
