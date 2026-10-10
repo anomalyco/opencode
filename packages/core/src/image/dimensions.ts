@@ -33,15 +33,20 @@ export function dimensions(data: Uint8Array) {
     const type = bytes.toString("ascii", offset, offset + 4)
     const size = bytes.readUInt32LE(offset + 4)
     offset += 8
-    if (offset + size > bytes.length) return
-    if (type === "VP8X" && size >= 10)
+    if (type === "VP8X" && size >= 10 && offset + 10 <= bytes.length)
       return { width: bytes.readUIntLE(offset + 4, 3) + 1, height: bytes.readUIntLE(offset + 7, 3) + 1 }
-    if (type === "VP8L" && size >= 5 && bytes[offset] === 0x2f) {
+    if (type === "VP8L" && size >= 5 && offset + 5 <= bytes.length && bytes[offset] === 0x2f) {
       const bits = bytes.readUInt32LE(offset + 1)
       return { width: (bits & 0x3fff) + 1, height: ((bits >>> 14) & 0x3fff) + 1 }
     }
-    if (type === "VP8 " && size >= 10 && bytes.subarray(offset + 3, offset + 6).equals(Buffer.from([0x9d, 0x01, 0x2a])))
+    if (
+      type === "VP8 " &&
+      size >= 10 &&
+      offset + 10 <= bytes.length &&
+      bytes.subarray(offset + 3, offset + 6).equals(Buffer.from([0x9d, 0x01, 0x2a]))
+    )
       return { width: bytes.readUInt16LE(offset + 6) & 0x3fff, height: bytes.readUInt16LE(offset + 8) & 0x3fff }
+    if (offset + size > bytes.length) return
     offset += size + (size % 2)
   }
 }

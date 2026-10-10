@@ -43,6 +43,8 @@ import type { SessionMessage } from "./message.js"
 
 const IMAGE_BYTES_TRIGGER = 25 * 1024 * 1024 // 25 MiB
 const IMAGE_BYTES_TARGET = 15 * 1024 * 1024 // 15 MiB
+// Decode at most 48 KiB of header bytes; 64 KiB of base64 ends on a complete quartet.
+const IMAGE_HEADER_BASE64_LIMIT = 64 * 1024
 const IMAGE_REMOVED =
   "[This image was removed to reduce the request size and is no longer visible. Do not make claims about its contents from memory. If needed, retrieve it again with an available tool or ask the user to attach it again.]"
 const GENERATION_KEYS = new Set(Object.keys(GenerationOptions.fields))
@@ -175,7 +177,7 @@ const replaceMedia = (
             part.media.source.type === "bytes"
               ? part.media.source.data
               : part.media.source.type === "base64"
-                ? Buffer.from(part.media.source.data, "base64")
+                ? Buffer.from(part.media.source.data.slice(0, IMAGE_HEADER_BASE64_LIMIT), "base64")
                 : undefined,
         })
         return text === undefined ? part : Message.text(text)
@@ -188,10 +190,11 @@ const replaceMedia = (
           mime: item.mime,
           name: item.name,
           bytes: () => Buffer.byteLength(item.uri),
-          data: () =>
-            /^data:[^,]*;base64,/i.test(item.uri)
-              ? Buffer.from(item.uri.slice(item.uri.indexOf(",") + 1), "base64")
-              : undefined,
+          data: () => {
+            if (!/^data:[^,]*;base64,/i.test(item.uri)) return
+            const start = item.uri.indexOf(",") + 1
+            return Buffer.from(item.uri.slice(start, start + IMAGE_HEADER_BASE64_LIMIT), "base64")
+          },
         })
         return text === undefined ? item : { type: "text", text }
       })

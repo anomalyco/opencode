@@ -18,3 +18,15 @@ test("truncated and unrelated headers do not throw", () => {
   }
   expect(ImageDimensions.dimensions(Buffer.from("hello"))).toBeUndefined()
 })
+
+test("reads WebP dimensions without the complete compressed chunk", () => {
+  for (const image of images.filter((image) => image.mime === "image/webp")) {
+    const bytes = Buffer.from(image.data, "base64")
+    const length = bytes.toString("ascii", 12, 16) === "VP8L" ? 25 : 30
+    expect(ImageDimensions.dimensions(bytes.subarray(0, length))).toEqual({
+      width: image.width,
+      height: image.height,
+    })
+    expect(ImageDimensions.dimensions(bytes.subarray(0, length - 1))).toBeUndefined()
+  }
+})
