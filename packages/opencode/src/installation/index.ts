@@ -77,7 +77,35 @@ export interface Interface {
   readonly method: () => Effect.Effect<Method>
   readonly latest: (method?: Method) => Effect.Effect<string>
   readonly upgrade: (method: Method, target: string) => Effect.Effect<void, UpgradeFailedError>
+  readonly upgradeMajor: (method: Method) => Effect.Effect<void, UpgradeFailedError>
 }
+
+// OpenCode 2 ships under different package names but the same `opencode` binary, so package
+// manager installs remove V1 first and restore it if the V2 install fails.
+const MAJOR_INSTALL: Partial<Record<Method, { remove: string[]; install: string[]; restore: string[] }>> = {
+  npm: {
+    remove: ["npm", "uninstall", "-g", "opencode-ai"],
+    install: ["npm", "install", "-g", "@opencode/cli"],
+    restore: ["npm", "install", "-g", `opencode-ai@${InstallationVersion}`],
+  },
+  pnpm: {
+    remove: ["pnpm", "remove", "-g", "opencode-ai"],
+    install: ["pnpm", "add", "-g", "--allow-build=@opencode/cli", "@opencode/cli"],
+    restore: ["pnpm", "add", "-g", `opencode-ai@${InstallationVersion}`],
+  },
+  bun: {
+    remove: ["bun", "remove", "-g", "opencode-ai"],
+    install: ["bun", "install", "-g", "--trust", "@opencode/cli"],
+    restore: ["bun", "install", "-g", `opencode-ai@${InstallationVersion}`],
+  },
+  yarn: {
+    remove: ["yarn", "global", "remove", "opencode-ai"],
+    install: ["yarn", "global", "add", "@opencode/cli"],
+    restore: ["yarn", "global", "add", `opencode-ai@${InstallationVersion}`],
+  },
+}
+
+export const MAJOR_INSTRUCTIONS = "https://opencode.ai/v2/docs"
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Installation") {}
 
@@ -163,6 +191,40 @@ const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProcess.Serv
       },
       Effect.mapError(() => new UpgradeFailedError({ stderr: upgradeFailure("curl") })),
     )
+
+    const majorUpgrade = Effect.fnUntraced(function* (m: Method) {
+      if (m === "curl") {
+        // The V2 installer writes to the same ~/.opencode/bin/opencode path, replacing V1 in place.
+        const response = yield* httpOk
+          .execute(HttpClientRequest.get("https://opencode.ai/v2/install"))
+          .pipe(Effect.mapError(() => new UpgradeFailedError({ stderr: upgradeFailure("curl") })))
+        const body = yield* response.text.pipe(
+          Effect.mapError(() => new UpgradeFailedError({ stderr: upgradeFailure("curl") })),
+        )
+        return yield* run([yield* upgradeScriptShell(), "-c", body])
+      }
+
+      if (m === "brew") {
+        const formula = yield* getBrewFormula()
+        const env = { HOMEBREW_NO_AUTO_UPDATE: "1" }
+        const removed = yield* run(["brew", "uninstall", formula], { env })
+        if (removed.code !== 0) return removed
+        const installed = yield* run(["brew", "install", "anomalyco/tap/opencode-v2"], { env })
+        if (installed.code !== 0) yield* run(["brew", "install", formula], { env })
+        return installed
+      }
+
+      const steps = MAJOR_INSTALL[m]
+      if (!steps)
+        return yield* new UpgradeFailedError({
+          stderr: `OpenCode 2 can't be installed automatically with ${m}. See ${MAJOR_INSTRUCTIONS}`,
+        })
+      const removed = yield* run(steps.remove)
+      if (removed.code !== 0) return removed
+      const installed = yield* run(steps.install)
+      if (installed.code !== 0) yield* run(steps.restore)
+      return installed
+    })
 
     const result: Interface = {
       info: Effect.fn("Installation.info")(function* () {
@@ -319,6 +381,11 @@ const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProcess.Serv
         })
         yield* text([process.execPath, "--version"])
       }),
+      upgradeMajor: Effect.fn("Installation.upgradeMajor")(function* (m: Method) {
+        const outcome = yield* majorUpgrade(m)
+        if (outcome.code !== 0) return yield* new UpgradeFailedError({ stderr: upgradeFailure(m, outcome) })
+        yield* Effect.logInfo("upgraded major", { method: m, stdout: outcome.stdout, stderr: outcome.stderr })
+      }),
     }
 
     return Service.of(result)
@@ -332,5 +399,7 @@ const { runPromise } = makeRuntime(Service, AppNodeBuilder.build(node))
 export const latest = (...args: Parameters<Interface["latest"]>) => runPromise((s) => s.latest(...args))
 export const method = () => runPromise((s) => s.method())
 export const upgrade = (...args: Parameters<Interface["upgrade"]>) => runPromise((s) => s.upgrade(...args))
+export const upgradeMajor = (...args: Parameters<Interface["upgradeMajor"]>) =>
+  runPromise((s) => s.upgradeMajor(...args))
 
 export * as Installation from "."

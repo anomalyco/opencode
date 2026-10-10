@@ -237,4 +237,102 @@ describe("installation", () => {
       }),
     )
   })
+
+  describe("upgradeMajor", () => {
+    const calls: string[] = []
+    testEffect(
+      testLayer(
+        () => jsonResponse({}),
+        (cmd, args) => {
+          calls.push([cmd, ...args].join(" "))
+          return ""
+        },
+      ),
+    ).effect("replaces the npm package with OpenCode 2", () =>
+      Effect.gen(function* () {
+        calls.length = 0
+        yield* Installation.use.upgradeMajor("npm")
+        expect(calls.slice(0, 2)).toEqual(["npm uninstall -g opencode-ai", "npm install -g @opencode/cli"])
+      }),
+    )
+
+    const restoreCalls: string[] = []
+    testEffect(
+      testLayer(
+        () => jsonResponse({}),
+        (cmd, args) => {
+          restoreCalls.push([cmd, ...args].join(" "))
+          if (args.includes("@opencode/cli")) return { code: 1, stderr: "install failed" }
+          return ""
+        },
+      ),
+    ).effect("restores OpenCode 1 when the OpenCode 2 install fails", () =>
+      Effect.gen(function* () {
+        restoreCalls.length = 0
+        const error = yield* Effect.flip(Installation.use.upgradeMajor("npm"))
+        expect(error.stderr).toBe("Upgrade failed for npm (exit code 1).")
+        expect(restoreCalls[2]).toMatch(/^npm install -g opencode-ai@/)
+      }),
+    )
+
+    const brewCalls: string[] = []
+    testEffect(
+      testLayer(
+        () => jsonResponse({}),
+        (cmd, args) => {
+          brewCalls.push([cmd, ...args].join(" "))
+          if (args.join(" ") === "list --formula anomalyco/tap/opencode") return "opencode"
+          return ""
+        },
+      ),
+    ).effect("replaces the brew formula with the OpenCode 2 formula", () =>
+      Effect.gen(function* () {
+        brewCalls.length = 0
+        yield* Installation.use.upgradeMajor("brew")
+        expect(brewCalls).toContain("brew uninstall anomalyco/tap/opencode")
+        expect(brewCalls).toContain("brew install anomalyco/tap/opencode-v2")
+      }),
+    )
+
+    const curlCalls: string[] = []
+    const curlUrls: string[] = []
+    testEffect(
+      testLayer(
+        (request) => {
+          curlUrls.push(request.url)
+          return new Response("echo v2", { status: 200 })
+        },
+        (cmd, args) => {
+          curlCalls.push(cmd)
+          if (cmd === "bash" && args[0] === "--version") return "GNU bash"
+          return ""
+        },
+      ),
+    ).effect("runs the OpenCode 2 install script for curl installs", () =>
+      Effect.gen(function* () {
+        curlUrls.length = 0
+        yield* Installation.use.upgradeMajor("curl")
+        expect(curlUrls).toEqual(["https://opencode.ai/v2/install"])
+        expect(curlCalls).toContain("bash")
+      }),
+    )
+
+    const chocoCalls: string[] = []
+    testEffect(
+      testLayer(
+        () => jsonResponse({}),
+        (cmd) => {
+          chocoCalls.push(cmd)
+          return ""
+        },
+      ),
+    ).effect("leaves package managers without OpenCode 2 untouched", () =>
+      Effect.gen(function* () {
+        chocoCalls.length = 0
+        const error = yield* Effect.flip(Installation.use.upgradeMajor("choco"))
+        expect(error.stderr).toContain(Installation.MAJOR_INSTRUCTIONS)
+        expect(chocoCalls).toEqual([])
+      }),
+    )
+  })
 })
