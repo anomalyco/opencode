@@ -36,6 +36,12 @@ export interface Interface {
     readonly continuation?: Continuation
     /** "steer" settles the active intent without promoting queued next-turn work. */
     readonly promotable?: Promotable
+    /**
+     * Reports that the drain is stopping because the user declined a tool call. The drain interrupts
+     * its own fiber, so it names the stop here; the execution layer then settles a deliberate stop
+     * that releases its claim instead of resuming the turn at the next server start.
+     */
+    readonly reportDeclined?: () => Effect.Effect<void>
   }) => Effect.Effect<DrainResult, RunError>
 }
 

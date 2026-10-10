@@ -93,7 +93,15 @@ export const layer = Layer.effect(
       const session = yield* store.get(sessionID)
       if (!session) return yield* Effect.die(new Error(`Session not found: ${sessionID}`))
       const result = yield* SessionRunner.Service.use((runner) =>
-        runner.drain({ sessionID, force, continuation, promotable }),
+        runner.drain({
+          sessionID,
+          force,
+          continuation,
+          promotable,
+          // A declined tool call stops the turn deliberately, so the settle must not read it as an
+          // unowned teardown: that reason is what keeps the claim and resumes after a restart.
+          reportDeclined: () => coordinator.stopReason(sessionID, "user"),
+        }),
       ).pipe(
         instances.provide(session),
         Effect.tapCause((cause) =>

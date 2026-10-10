@@ -56,6 +56,8 @@ interface Input {
   readonly recoverContinuation: boolean
   /** The runner owns compaction policy; the attempt invokes it only before durable output. */
   readonly recoverOverflow: Effect.Effect<boolean>
+  /** Names the stop a declined tool call makes, so settlement releases the turn instead of resuming it. */
+  readonly reportDeclined?: () => Effect.Effect<void>
 }
 
 const TOOLS_INTERRUPTED = { type: "aborted", message: "Tool execution interrupted" } as const
@@ -277,6 +279,9 @@ export const make = Effect.gen(function* () {
         if (Exit.isFailure(stream)) return yield* Effect.failCause(stream.cause)
         if (tools.declines.length > 0) {
           if (input.isLocationClosed()) return Outcome.Completed({ needsContinuation: true })
+          // A decline is the user's own stop, not a process that vanished: name it here, because
+          // this fiber interrupts itself and nothing outside the drain can tell the settle why.
+          if (input.reportDeclined) yield* input.reportDeclined()
           return yield* Effect.interrupt
         }
         if (tools.interrupted && tools.failure) return yield* Effect.failCause(tools.failure)
