@@ -1645,7 +1645,7 @@ test("adds, disconnects, and reconnects MCP servers at runtime", async () => {
 })
 
 test("reconnects a dropped local MCP server as a fresh process", async () => {
-  const dir = await tmpdir()
+  await using dir = await tmpdir()
   const pidFile = path.join(dir.path, "pids")
   const pids = Effect.promise(() =>
     fs

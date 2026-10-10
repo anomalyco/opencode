@@ -366,39 +366,44 @@ export const layer = (options?: Options) =>
 
       // A dropped or never-connected server retries with backoff instead of staying failed until the
       // next config change: the onClose handler below and failed startups both funnel here.
-      // `reconnecting` dedupes the retries and the per-server lock serializes them with the
-      // reconcile-driven lifecycle work (replace/remove/connect).
-      const reconnecting = new Set<ServerName>()
+      // `reconnecting` dedupes retries per entry — a replaced config gets its own retry loop —
+      // and the scoped `fork` keeps the loop inside the layer's lifetime so teardown interrupts it.
+      const reconnecting = new Map<ServerName, ServerEntry>()
       const scheduleReconnect = Effect.fnUntraced(function* (
         name: ServerName,
         entry: ServerEntry,
       ): Effect.fn.Return<void, never, never> {
-        if (reconnecting.has(name)) return
-        reconnecting.add(name)
-        // Retries sleep outside the per-server lock: each attempt takes the lock just long
-        // enough to run startServer, so backoff never wedges user-driven connects or
-        // reconcile-driven replacements queued behind it.
-        yield* Effect.forkDetach(
-          Effect.gen(function* () {
-            // Grace period before the first attempt: a drop often coincides with an in-flight
-            // reconcile that is about to replace or remove this entry — respawning instantly
-            // would race it.
-            yield* Effect.sleep("500 millis")
-            // Bail if reconcile replaced this entry or someone already fixed it: retries must not
-            // fight a replacement or a user-driven connect that landed while we waited.
-            if (entries.get(name) !== entry) return
-            if (entry.config.disabled) return
-            if (entry.status.status !== "failed") return
-            yield* startServer(name, entry)
-            if (entry.status.status === "failed") return yield* Effect.fail("mcp reconnect failed")
-          }).pipe(
-            locks.withLock(name),
-            Effect.retry({
-              times: 10,
-              schedule: Schedule.exponential("1 second").pipe(Schedule.jittered),
-            }),
+        if (reconnecting.get(name) === entry) return
+        reconnecting.set(name, entry)
+        // The 500ms grace period and the backoff sleeps both run outside the per-server lock: a
+        // drop often coincides with an in-flight reconcile that is about to replace or remove this
+        // entry, and each attempt takes the lock just long enough to run startServer, so waiting
+        // never wedges user-driven connects or reconcile-driven replacements queued behind it.
+        fork(
+          Effect.sleep("500 millis").pipe(
+            Effect.andThen(
+              Effect.gen(function* () {
+                // Bail if reconcile replaced this entry or someone already fixed it: retries must
+                // not fight a replacement or a user-driven connect that landed while we waited.
+                if (entries.get(name) !== entry) return
+                if (entry.config.disabled) return
+                if (entry.status.status !== "failed") return
+                yield* startServer(name, entry)
+                if (entry.status.status === "failed") return yield* Effect.fail("mcp reconnect failed")
+              }).pipe(
+                locks.withLock(name),
+                Effect.retry({
+                  times: 10,
+                  schedule: Schedule.exponential("1 second").pipe(Schedule.jittered),
+                }),
+              ),
+            ),
             Effect.ignore,
-            Effect.ensuring(Effect.sync(() => reconnecting.delete(name))),
+            Effect.ensuring(
+              Effect.sync(() => {
+                if (reconnecting.get(name) === entry) reconnecting.delete(name)
+              }),
+            ),
           ),
         )
       })
