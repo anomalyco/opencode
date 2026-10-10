@@ -63,7 +63,7 @@ import {
   typeError,
   unsupportedSyntax,
 } from "./model.js"
-import { checkStringLength } from "./limits.js"
+import { checkArgumentCount, checkArrayLength, checkStringLength } from "./limits.js"
 import { locate, materialize } from "./errors.js"
 import { type Builtins, primitivePrototype } from "./intrinsics.js"
 import { globals } from "./globals.js"
@@ -79,7 +79,8 @@ import {
   has,
   hidden,
   hasPrototype,
-  keys,
+  ownKeys,
+  enumerable,
   Native,
   parseArrayIndex,
   Arguments,
@@ -100,7 +101,7 @@ import { Pending, resolvePromise, resolvePromiseValue } from "./promises.js"
 import { describeValue, isOpaque, rejectCircularInsertion, typeofValue } from "./references.js"
 import { ScopeStack } from "./scope.js"
 import { constructRegExp } from "../stdlib/regexp.js"
-import { enumerableSource } from "../stdlib/object.js"
+import { enumerableSource, restrict } from "../stdlib/object.js"
 import { compoundOperators } from "../stdlib/value.js"
 
 /** The binary operators that convert object operands through ToPrimitive before acting on primitives. */
@@ -318,7 +319,7 @@ export class Interpreter<R> {
   readonly logs: Array<string>
   /** Template objects by site: a tag sees the same `strings` array every time its literal is evaluated, as in JS. */
   readonly templates = new WeakMap<TaggedTemplateExpression, Arr>()
-  private readonly root: Frame<R>
+  readonly root: Frame<R>
 
   constructor(options: {
     readonly tools: ToolRuntime<R>
@@ -506,7 +507,7 @@ class Frame<R> {
   ): Fn {
     const builtins = this.ctx.builtins
     const fn = new Fn(
-      builtins.Function,
+      node.generator ? (node.async ? builtins.AsyncGeneratorFunction : builtins.GeneratorFunction) : builtins.Function,
       name,
       node.params,
       node.body,
@@ -955,10 +956,24 @@ class Frame<R> {
   }
 
   // for...in over null/undefined iterates nothing, like JS.
+  // EnumerateObjectProperties: own keys, then each prototype's, visiting a shadowed key once.
   private enumerableKeys(value: Value, node: AstNode): Array<string> {
     if (value instanceof ToolReference) return [...this.ctx.tools.keys(value.path)]
     if (value === null || value === undefined) return []
-    return keys(enumerableSource(this.ctx, "for...in", value, node))
+    const seen = new Set<string>()
+    const result: Array<string> = []
+    for (
+      let current: Obj | null = enumerableSource(this.ctx, "for...in", value, node);
+      current !== null;
+      current = current.proto
+    ) {
+      for (const key of ownKeys(current)) {
+        if (typeof key !== "string" || seen.has(key)) continue
+        seen.add(key)
+        if (enumerable(current, key)) result.push(key)
+      }
+    }
+    return result
   }
 
   private evaluateForInStatement(
@@ -982,6 +997,8 @@ class Frame<R> {
       const assignment = left.type === "VariableDeclaration" ? undefined : left
 
       for (const key of keys) {
+        // A key deleted before its turn is skipped, as in JS.
+        if (right instanceof Obj && !has(right, key)) continue
         const result = yield* Effect.gen(function* () {
           if (declared?.lexical) {
             self.scopes.push()
@@ -1264,6 +1281,7 @@ class Frame<R> {
             const next = yield* cursor.next
             done = next.done
             if (!done) rest.push(next.value)
+            checkArrayLength(rest.length)
           }
           yield* consume(element.argument, new Arr(self.ctx.builtins.Array, rest), element)
           return
@@ -1710,13 +1728,20 @@ class Frame<R> {
     })
   }
 
-  // Built-ins throw without a location, synchronously or inside their Effect; the call site supplies it.
+  // Built-ins throw without a location, synchronously or inside their Effect; the call site supplies it. A built-in
+  // reached through `ctx.call` runs on the root frame, so the deeper of the frame and the enclosing site counts. There
+  // it was invoked by another built-in, and those hops are counted too, so a cycle through built-ins alone
+  // (toString → join → toString) bottoms out without changing the depth of program calls.
   private native(body: () => Effect.Effect<Value, unknown, R>, node?: AstNode): Effect.Effect<Value, unknown, R> {
-    return Effect.provideService(
-      Effect.catchDefect(Effect.suspend(body), (defect) => Effect.die(locate(defect, node))),
-      CallSite,
-      { node, depth: this.depth },
-    )
+    return Effect.flatMap(CallSite, (site) => {
+      const natives = this === this.ctx.root ? site.natives + 1 : 0
+      if (natives > MAX_CALL_DEPTH) throw rangeError("Maximum call stack size exceeded", node)
+      return Effect.provideService(
+        Effect.catchDefect(Effect.suspend(body), (defect) => Effect.die(locate(defect, node))),
+        CallSite,
+        { node, depth: Math.max(this.depth, site.depth), natives },
+      )
+    })
   }
 
   private evaluateCallArguments(
@@ -1734,6 +1759,7 @@ class Frame<R> {
             const step = yield* cursor.next
             if (step.done) break
             args.push(step.value)
+            checkArgumentCount(args.length)
           }
         } else {
           args.push(yield* self.evaluateExpression(argNode))
@@ -2093,6 +2119,7 @@ class Frame<R> {
             const step = yield* cursor.next
             if (step.done) break
             values.push(step.value)
+            checkArrayLength(values.length)
           }
         } else {
           values.push(yield* self.evaluateExpression(element))
@@ -2155,12 +2182,16 @@ class Frame<R> {
     define(
       strings,
       "raw",
-      new Arr(
-        array,
-        node.quasi.quasis.map((quasi) => quasi.value.raw),
+      restrict(
+        "freeze",
+        new Arr(
+          array,
+          node.quasi.quasis.map((quasi) => quasi.value.raw),
+        ),
       ),
       frozen,
     )
+    restrict("freeze", strings)
     this.ctx.templates.set(node, strings)
     return strings
   }
@@ -2208,7 +2239,7 @@ class Frame<R> {
       if (typeof key !== "string") {
         throw typeError("Tool paths must use string property names.", propertyNode)
       }
-      return new ToolReference([...objectValue.path, key])
+      return objectValue.child(key)
     }
 
     if (objectValue instanceof Obj) return { target: objectValue, key, receiver: objectValue }

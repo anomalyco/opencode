@@ -21,7 +21,7 @@ import { errorGlobal } from "./errors.js"
 import { errorTypes } from "./intrinsics.js"
 import { constants, constructor, methods, native, receiver } from "./native.js"
 import { AsyncIteratorSymbol, IteratorSymbol, typeError } from "./model.js"
-import { checkArrayLength } from "./limits.js"
+import { checkArgumentCount } from "./limits.js"
 import { generatorGlobals } from "./generators.js"
 import { promiseGlobal } from "./promises.js"
 import type { Interpreter } from "./interpreter.js"
@@ -45,7 +45,10 @@ const functionGlobal = <R>(ctx: Interpreter<R>) => {
         return native<R>(ctx.builtins, {
           name: `bound ${coerceToString(get(fn, "name"))}`,
           length: Math.max(0, fn.length - bound.length),
-          call: (_, rest) => ctx.call(fn, args[0], [...bound, ...rest]),
+          call: (_, rest) => {
+            checkArgumentCount(bound.length + rest.length)
+            return ctx.call(fn, args[0], [...bound, ...rest])
+          },
         })
       },
     ],
@@ -61,10 +64,13 @@ const functionGlobal = <R>(ctx: Interpreter<R>) => {
 // CreateListFromArrayLike: `apply` reads `length` and the indexed properties of any object.
 const listFromArrayLike = (value: Value): Array<Value> => {
   if (value === undefined || value === null) return []
-  if (value instanceof Arr) return [...value.items]
+  if (value instanceof Arr) {
+    checkArgumentCount(value.items.length)
+    return [...value.items]
+  }
   if (!(value instanceof Obj)) throw typeError("Function.prototype.apply expects an array-like argument list.")
   const length = Math.max(0, coerceToInteger(get(value, "length")))
-  checkArrayLength(length)
+  checkArgumentCount(length)
   return Array.from({ length }, (_, index) => get(value, String(index)))
 }
 

@@ -5,6 +5,7 @@ import { invalidData, IteratorSymbol, rangeError, typeError } from "../interpret
 import {
   define,
   get,
+  Callable,
   hidden,
   Arr,
   GeneratorObj,
@@ -63,6 +64,7 @@ const arrayFrom = <R>(ctx: Interpreter<R>, args: Array<Value>): Effect.Effect<Va
           ? step.value
           : yield* preserveConsumerError(cursor.close, apply([step.value, index], args[2])),
       )
+      checkArrayLength(values.length)
       index += 1
     }
   })
@@ -165,13 +167,12 @@ export const arrayGlobal = <R>(ctx: Interpreter<R>) => {
     [
       "toString",
       0,
-      (thisValue) =>
-        withPrimitives(
-          ctx,
-          "string",
-          Array.from(self(thisValue, "toString").items, (item) => item ?? ""),
-          (items) => items.map(coerceToString).join(","),
-        ),
+      (thisValue) => {
+        // Spec: delegate to this.join, so an overridden join shows up in `arr + ""` and String(arr).
+        const target = self(thisValue, "toString")
+        const join = get(target, "join")
+        return join instanceof Callable ? ctx.call(join, target, []) : `[object ${target.tag}]`
+      },
     ],
     [
       "includes",

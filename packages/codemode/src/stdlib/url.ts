@@ -1,4 +1,5 @@
 import { Effect } from "effect"
+import { boundedString, checkStringLength } from "../interpreter/limits.js"
 import { constructor, fn, type Method, methods, prototypeFrom, receiver, requiresNew } from "../interpreter/native.js"
 import { IteratorSymbol, PendingThrow, typeError, uriError } from "../interpreter/model.js"
 import {
@@ -46,9 +47,10 @@ export const uriGlobal = <R>(ctx: Interpreter<R>, name: UriFunction) =>
   fn<R>(ctx.builtins, name, 1, (_, args) => {
     const value = coerceToString(args[0])
     try {
-      return uriFunctions[name](value)
+      return boundedString(uriFunctions[name](value))
     } catch (error) {
-      throw uriError(`${name} received malformed URI data: ${error instanceof Error ? error.message : String(error)}`)
+      if (!(error instanceof URIError)) throw error
+      throw uriError(`${name} received malformed URI data: ${error.message}`)
     }
   })
 
@@ -272,7 +274,17 @@ export const urlSearchParamsGlobal = <R>(ctx: Interpreter<R>) => {
     ["keys", 0, (thisValue) => hostIterator(builtins, self(thisValue, "keys").params.keys())],
     ["values", 0, (thisValue) => hostIterator(builtins, self(thisValue, "values").params.values())],
     ["entries", 0, (thisValue) => hostIterator(builtins, self(thisValue, "entries").iterator(builtins))],
-    ["toString", 0, (thisValue) => self(thisValue, "toString").params.toString()],
+    [
+      "toString",
+      0,
+      (thisValue) => {
+        const params = self(thisValue, "toString").params
+        // Every character serializes to at least one, plus `=` per pair and `&` between pairs, so this lower bound
+        // rejects before the host builds anything.
+        checkStringLength([...params].reduce((length, [key, value]) => length + key.length + value.length + 2, -1))
+        return boundedString(params.toString())
+      },
+    ],
     [
       "forEach",
       1,

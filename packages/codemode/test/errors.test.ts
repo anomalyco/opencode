@@ -178,6 +178,25 @@ describe("call depth", () => {
     expect(Date.now() - started).toBeLessThan(2000)
   })
 
+  test("recursion routed through nested built-ins keeps counting depth", async () => {
+    const started = Date.now()
+    expect(
+      await value(`
+        const a = [1]
+        a.join = () => a + ""
+        const o = { toString() { return [o].map(String)[0] } }
+        const e = new Error()
+        e.message = { toString() { return String(e) } }
+        const names = []
+        for (const run of [() => String(a), () => String(o), () => String(e)]) {
+          try { run() } catch (error) { names.push(error.name) }
+        }
+        return names
+      `),
+    ).toEqual(["RangeError", "RangeError", "RangeError"])
+    expect(Date.now() - started).toBeLessThan(2000)
+  })
+
   test("uncaught overflow reports the call that overflowed", async () => {
     const failure = await error(`const f = (n) => f(n + 1); return f(0)`)
     expect(failure.kind).toBe("ExecutionFailure")

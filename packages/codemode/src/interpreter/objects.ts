@@ -36,6 +36,7 @@ export const hidden: Attributes = { writable: true, enumerable: false, configura
 export const readonly: Attributes = { writable: false, enumerable: false, configurable: true }
 /** Constants such as `Math.PI` and a constructor's `prototype`. */
 export const frozen: Attributes = { writable: false, enumerable: false, configurable: false }
+export const readOnly: Attributes = { writable: false, enumerable: false, configurable: true }
 
 /**
  * An object owned by the program: own properties plus a prototype link. Subclasses answer, in one place, how a
@@ -645,7 +646,7 @@ export const ownKeys = (target: Obj): Array<string | symbol> => {
   ]
 }
 
-const enumerable = (target: Obj, key: string | symbol): boolean => own(target, key)?.enumerable === true
+export const enumerable = (target: Obj, key: string | symbol): boolean => own(target, key)?.enumerable === true
 
 /** Own enumerable keys, including the iterator symbols; what spread and `Object.assign` copy. */
 export const enumerableKeys = (target: Obj): Array<string | symbol> =>
