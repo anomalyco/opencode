@@ -3,19 +3,16 @@ export * as RemoteTunnel from "./remote-tunnel"
 import type { OpenTunnelError } from "@opentunnel/client/effect"
 import { Cause, Effect, Schedule } from "effect"
 import { EOL } from "os"
-import { OPENCODE_CHANNEL } from "../version"
 
 // OpenTunnel keeps one tunnel per device in its default profile, shared by the opentunnel CLI and every app
-// using the SDK; each claims its own routes. The service claims a subdomain rather than the tunnel hostname,
-// which the CLI may route, and each channel's service gets its own subdomain.
-export function route(channel = OPENCODE_CHANNEL) {
-  if (channel === "latest") return "opencode"
-  return `opencode-${channel.toLowerCase().replace(/[^a-z0-9-]/g, "-")}`.slice(0, 63).replace(/-+$/, "")
-}
+// using the SDK; each claims its own routes. The service claims a subdomain (its route) rather than the tunnel
+// hostname, which the CLI may route. Tunnel hostnames appear in public certificate logs but the certificate
+// covers subdomains with a wildcard, so a random route keeps the service's address unguessable.
 
 // Holds the route for the life of the service. The SDK reconnects through network failures itself, so only
 // setup failures reach the retry here; a rejected token or failed certificate stops it for good.
 export const run = Effect.fnUntraced(function* (input: {
+  readonly route: string
   readonly target: string
   readonly onURL: (url: string | undefined) => void
 }) {
@@ -25,8 +22,8 @@ export const run = Effect.fnUntraced(function* (input: {
     (error.cause instanceof OpenTunnelAttachError || error.message.startsWith("Certificate issuance failed"))
   yield* Effect.gen(function* () {
     const client = yield* OpenTunnelClient
-    const connection = yield* client.tunnel.connect({ routes: { [route()]: input.target } })
-    input.onURL(`https://${route()}.${connection.tunnel.hostname}`)
+    const connection = yield* client.tunnel.connect({ routes: { [input.route]: input.target } })
+    input.onURL(`https://${input.route}.${connection.tunnel.hostname}`)
     yield* connection.closed
   }).pipe(
     Effect.scoped,
@@ -55,7 +52,7 @@ export const ensure = Effect.fnUntraced(function* () {
     const client = yield* OpenTunnelClient
     if ((yield* client.tunnel.get()) === undefined)
       process.stderr.write("Setting up remote access; this can take a minute..." + EOL)
-    return `${route()}.${(yield* client.tunnel.ensure()).hostname}`
+    return (yield* client.tunnel.ensure()).hostname
   }).pipe(
     Effect.provide(OpenTunnelClient.layer()),
     Effect.timeoutOrElse({
@@ -66,8 +63,8 @@ export const ensure = Effect.fnUntraced(function* () {
 })
 
 // The tunnel hostname is persisted once the certificate is ready, so this is undefined until then.
-export const hostname = Effect.fnUntraced(function* () {
+export const hostname = Effect.fnUntraced(function* (route: string) {
   const { OpenTunnelStorage } = yield* Effect.promise(() => import("@opentunnel/client/effect"))
   const identity = yield* OpenTunnelStorage.xdg().load("default")
-  return identity === undefined ? undefined : `${route()}.${identity.hostname}`
+  return identity === undefined ? undefined : `${route}.${identity.hostname}`
 })

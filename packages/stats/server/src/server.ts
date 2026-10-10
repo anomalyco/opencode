@@ -1,7 +1,7 @@
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer"
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime"
 import { Config, Layer } from "effect"
-import { HttpRouter } from "effect/unstable/http"
+import { HttpRouter } from "effect/http"
 import { createServer } from "node:http"
 import { Ingest } from "./ingest"
 import { Routes } from "./router"
@@ -12,8 +12,8 @@ registerShutdownSignalHandlers()
 const ServerLive = NodeHttpServer.layerConfig(
   () => createServer(),
   Config.all({
-    port: Config.number("PORT").pipe(Config.withDefault(3000)),
-    host: Config.string("HOST").pipe(Config.withDefault("0.0.0.0")),
+    port: Config.Number("PORT").pipe(Config.withDefault(3000)),
+    host: Config.String("HOST").pipe(Config.withDefault("0.0.0.0")),
   }),
 )
 

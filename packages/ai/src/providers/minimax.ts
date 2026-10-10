@@ -133,7 +133,7 @@ export const model: ProviderPackage.Definition<Settings<MessagesOptionsInput>, M
     apiKey,
     baseURL,
     headers,
-    http: body === undefined ? undefined : { body: { ...body } },
+    http: body === undefined ? undefined : { body },
     providerOptions,
   }).model(modelID)
 

@@ -11,6 +11,6 @@ export const model: ProviderPackage.Definition<Settings, Cohere.ChatOptionsInput
     apiKey,
     baseURL,
     headers,
-    http: body === undefined ? undefined : { body: { ...body } },
+    http: body === undefined ? undefined : { body },
     providerOptions,
   }).chat(modelID)

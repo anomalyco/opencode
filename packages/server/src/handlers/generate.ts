@@ -5,9 +5,9 @@ import { AbsolutePath } from "@opencode/core/schema"
 import { InvalidRequestError, ServiceUnavailableError } from "@opencode/protocol/errors"
 import { Global } from "@opencode/util/global"
 import { Effect } from "effect"
-import { HttpApiBuilder } from "effect/unstable/httpapi"
+import { HttpApiBuilder } from "effect/http-api"
 import { Api } from "../api"
-import { locationErrors } from "../location"
+import { awaitPlugins, locationErrors } from "../location"
 
 export const GenerateHandler = HttpApiBuilder.group(Api, "server.generate", (handlers) =>
   Effect.gen(function* () {
@@ -18,6 +18,7 @@ export const GenerateHandler = HttpApiBuilder.group(Api, "server.generate", (han
       "generate.text",
       Effect.fn("server.generate.text")(
         function* (request) {
+          yield* awaitPlugins
           const generate = yield* Generate.Service
           const text = yield* generate
             .text(request.payload)

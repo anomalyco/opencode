@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { ConfigProvider, Effect } from "effect"
-import { HttpClientRequest } from "effect/unstable/http"
+import { HttpClientRequest } from "effect/http"
 import { LLM, LLMEvent, Message, SystemPart, ToolDefinition, Media } from "../../src/index.js"
 import { Mistral } from "../../src/providers/index.js"
 import { MistralChat } from "../../src/protocols/index.js"

@@ -15,6 +15,7 @@ import { NonNegativeInt } from "../../schema.js"
 import { Session } from "../../session.js"
 import { SessionSchema } from "../../session/schema.js"
 import { Shell } from "../../shell.js"
+import { shellParserWasm } from "#shell-parser-wasm"
 import { ShellParse } from "../../shell/parse.js"
 import { ShellSelect } from "../../shell/select.js"
 import { ShellResult } from "../../shell/result.js"
@@ -124,7 +125,7 @@ export const Plugin = {
       const timeout = invocation.timeout
       const portable =
         Config.latest(yield* config.entries(), "experimental")?.portable_shell_scanner ??
-        (ctx.app.channel === "local" || ctx.app.channel === "dev")
+        (shellParserWasm.bash === "" || ctx.app.channel === "local" || ctx.app.channel === "dev")
       const parsed = yield* ShellParse.scan(invocation.command, invocation.shell, target.absolute, { portable })
       const directories = yield* Effect.forEach(parsed.directories, (directory) =>
         access.resolve({

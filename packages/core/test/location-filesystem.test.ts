@@ -178,6 +178,10 @@ describe("FileSystem", () => {
           ])
           const absolute = yield* filesystem.list({ path: path.join(directory, "sibling") })
           expect(absolute).toEqual(sibling)
+          const missing = yield* Effect.flip(filesystem.list({ path: RelativePath.make("missing") }))
+          expect(missing).toBeInstanceOf(FileSystem.NotFoundError)
+          const file = yield* Effect.flip(filesystem.list({ path: RelativePath.make("../sibling/file.txt") }))
+          expect(file).toBeInstanceOf(FileSystem.NotFoundError)
         }).pipe(provide(current))
       }),
     ),

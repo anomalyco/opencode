@@ -52,3 +52,49 @@ export const ProviderErrors = {
     />
   ),
 }
+
+const executionErrorsDocument = {
+  sessionID: CURRENT_SESSION_ID,
+  messages: [
+    {
+      id: "msg_story_exec_user_1",
+      type: "user",
+      text: "Reply with the single word ok.",
+      time: { created: STORY_TIME + 40_000 },
+    },
+    {
+      id: "msg_story_exec_idle_1",
+      type: "idle",
+      outcome: "failed",
+      error: { type: "provider.no-route", message: "Model unavailable: opencode/gpt-5.2" },
+      time: { created: STORY_TIME + 40_500 },
+    },
+    {
+      id: "msg_story_exec_user_2",
+      type: "user",
+      text: "Check the changed files and run lint.",
+      time: { created: STORY_TIME + 42_000 },
+    },
+    ...thinkingDocument.messages.slice(1),
+    {
+      id: "msg_story_exec_idle_2",
+      type: "idle",
+      outcome: "failed",
+      error: { type: "unknown", message: "Failed to execute statement" },
+      time: { created: STORY_TIME + 45_000 },
+    },
+  ],
+  status: { type: "idle" },
+  diffs: [],
+} satisfies SessionDocument
+
+export const ExecutionErrors = {
+  render: () => (
+    <CurrentSessionTimelineStory
+      title="Execution errors"
+      description="Pre-step and between-step session execution failures surfaced from the idle marker."
+      document={executionErrorsDocument}
+      width="480px"
+    />
+  ),
+}

@@ -120,11 +120,7 @@ const setup: Setup<typeof definition> = (ctx) => {
     }
   })
 
-  ctx.add(LinkHandler, {
-    priority: 10,
-    match: (link) => !!model()?.match(link),
-    open: (link) => model()?.openLink(link),
-  })
+  // Workspace HTML links reach the pane through the file extension, which resolves the path first.
   // A composer chip for a comment on a picked element.
   ctx.add(LinkHandler, {
     priority: 10,

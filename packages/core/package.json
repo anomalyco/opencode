@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "2.0.25",
+  "version": "2.0.26",
   "name": "@opencode/core",
   "type": "module",
   "license": "MIT",
@@ -92,7 +92,8 @@
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "@types/which": "3.0.4",
-    "drizzle-kit": "catalog:"
+    "drizzle-kit": "catalog:",
+    "fast-check": "catalog:"
   },
   "dependencies": {
     "@ai-sdk/cohere": "3.0.27",

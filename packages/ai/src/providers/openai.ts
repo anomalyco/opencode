@@ -152,9 +152,9 @@ const config = ({
     apiKey,
     baseURL,
     headers: Object.keys(headers).length === 0 ? undefined : headers,
-    http: body === undefined ? undefined : { body: { ...body } },
+    http: body === undefined ? undefined : { body },
     providerOptions,
-    queryParams: queryParams === undefined ? undefined : { ...queryParams },
+    queryParams,
   }
 }
 

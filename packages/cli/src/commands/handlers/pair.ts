@@ -19,7 +19,7 @@ export default Runtime.handler(
     if (input.remote && Option.isSome(input.url))
       return yield* Effect.fail(new Error("--remote cannot be combined with --url"))
     // Changing the setting restarts the service, and the ensure below starts it again with the tunnel.
-    if (input.remote && config.remote !== true) yield* ServiceConfig.set("remote", "true")
+    if (input.remote && config.remote === undefined) yield* ServiceConfig.set("remote", "true")
     const endpoint = yield* Service.ensure(yield* ServiceConfig.options())
     const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) })
     const urls = yield* pairingURLs(client, input)
@@ -77,7 +77,8 @@ const pairingURLs = Effect.fnUntraced(function* (
 // The service attaches the tunnel in the background, so wait for its URL to appear in server info.
 const remoteURL = Effect.fnUntraced(function* (client: ReturnType<typeof OpenCode.make>) {
   const tunnelURL = Effect.gen(function* () {
-    const hostname = yield* RemoteTunnel.hostname()
+    const route = (yield* ServiceConfig.read()).remote?.route
+    const hostname = route === undefined ? undefined : yield* RemoteTunnel.hostname(route)
     const info = yield* Effect.tryPromise(() => client.server.info())
     const url = info.urls.find((candidate) => hostname !== undefined && new URL(candidate).hostname === hostname)
     if (url === undefined) return yield* Effect.fail(new Error("Remote tunnel is not ready"))

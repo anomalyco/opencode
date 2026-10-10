@@ -264,15 +264,15 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         const current = agent.current()
         if (!current) return
         const session = data.session.get(sessionID)
-        const selected = [
-          selectionState.selectionBySessionAgent[sessionID]?.[current.id],
-          !session?.agent || session.agent === current.id ? durableSelection(sessionID) : undefined,
-        ].find((selection) => selection && isModelValid(selection))
+        const selected =
+          selectionState.selectionBySessionAgent[sessionID]?.[current.id] ??
+          (!session?.agent || session.agent === current.id ? durableSelection(sessionID) : undefined)
         if (selected) {
           const info = models()?.find((item) => item.providerID === selected.providerID && item.id === selected.modelID)
           return {
             ...selected,
-            variant: info?.variants.some((variant) => variant.id === selected.variant) ? selected.variant : undefined,
+            variant:
+              !info || info.variants.some((variant) => variant.id === selected.variant) ? selected.variant : undefined,
           }
         }
         const model = newSessionModel()

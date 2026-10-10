@@ -77,7 +77,7 @@ const configuredRoute = (input: Config) => {
     project: inputProject,
     ...rest
   } = input
-  const location = GoogleVertexShared.location(inputLocation, "global")
+  const location = GoogleVertexShared.location(inputLocation)
   const project = GoogleVertexShared.project(inputProject)
   return route.with({
     ...rest,
@@ -113,8 +113,8 @@ export const model: ProviderPackage.Definition<Settings, AnthropicMessages.Provi
   return configure({
     accessToken,
     baseURL,
-    headers: headers === undefined ? undefined : { ...headers },
-    http: body === undefined ? undefined : { body: { ...body } },
+    headers,
+    http: body === undefined ? undefined : { body },
     location,
     project,
     providerOptions,

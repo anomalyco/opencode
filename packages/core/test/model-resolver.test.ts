@@ -3,7 +3,7 @@ import { LLM, LanguageModel, Message } from "@opencode/ai"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { compileRequest } from "@opencode/ai/route/client"
 import { ConfigProvider, Effect, Layer } from "effect"
-import { Headers } from "effect/unstable/http"
+import { Headers } from "effect/http"
 import { AISDKNative } from "@opencode/core/aisdk-native"
 import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
@@ -981,6 +981,7 @@ describe("ModelResolver", () => {
       const packages = [
         ["@opencode/ai/providers/google-vertex", "accessToken"],
         ["@opencode/ai/providers/google-vertex/gemini", "accessToken"],
+        ["@opencode/ai/providers/google-vertex/interactions", "accessToken"],
         ["@opencode/ai/providers/google-vertex/chat", "accessToken"],
         ["@opencode/ai/providers/google-vertex/responses", "accessToken"],
         ["@opencode/ai/providers/google-vertex/messages", "accessToken"],

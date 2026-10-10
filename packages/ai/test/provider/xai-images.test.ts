@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
-import { Headers, HttpClientRequest } from "effect/unstable/http"
+import { Headers, HttpClientRequest } from "effect/http"
 import { Image, ImageClient } from "../../src/index.js"
 import { XAI } from "../../src/providers.js"
 import { Auth } from "../../src/route.js"
