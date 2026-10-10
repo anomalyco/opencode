@@ -6,11 +6,13 @@ import type { Files } from "./files.js"
 import { makeFiles } from "./index.js"
 import { makeLocalDriver } from "./local.js"
 import { Location } from "../location.js"
+import { RipgrepBinary } from "../ripgrep/binary.js"
 import { Workspace } from "../workspace.js"
 
 export interface Interface {
   readonly files: Files
   readonly spawner: ChildProcessSpawner["Service"]
+  readonly ripgrep?: Effect.Effect<string, Error>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Environment") {}
@@ -21,6 +23,7 @@ const layer = Layer.effect(
     const spawner = yield* ChildProcessSpawner
     const location = yield* Location.Service
     const workspace = yield* Workspace.Service
+    const binary = yield* RipgrepBinary.Service
     const driver = location.workspaceID
       ? yield* workspace.connect(location.workspaceID).pipe(
           // Environment has no error channel; an unknown or destroyed placement is a configuration defect by design.
@@ -30,14 +33,15 @@ const layer = Layer.effect(
           Effect.orDie,
         )
       : makeLocalDriver(spawner)
-    return Service.of({ files: makeFiles(driver), spawner: driver.spawner })
+    const ripgrep = location.workspaceID ? Effect.succeed("rg") : binary.filepath
+    return Service.of({ files: makeFiles(driver), spawner: driver.spawner, ripgrep })
   }),
 )
 
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [CrossSpawnSpawner.node, Location.node, Workspace.node],
+  deps: [CrossSpawnSpawner.node, Location.node, Workspace.node, RipgrepBinary.node],
 })
 
 export * as EnvironmentService from "./environment.js"
