@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import path from "node:path"
 import { agent, model, renderLocal, session } from "../fixture/local"
 import { json } from "../fixture/tui-client"
 
@@ -55,6 +56,33 @@ test("switching agents restores their model and variant within the session", asy
   expect(setup.local.model.selection()).toEqual({ providerID: "provider", modelID: "first", variant: "low" })
   setup.local.agent.set("plan")
   expect(setup.local.model.selection()).toEqual({ providerID: "provider", modelID: "third", variant: "high" })
+})
+
+test("recent models picked in another client do not change the open tab", async () => {
+  await using setup = await renderLocal({
+    models: [model("first"), model("second")],
+    agents: [agent("build"), agent("plan")],
+    preferences: { recent: [{ providerID: "provider", modelID: "first" }] },
+  })
+  await setup.waitFor(async () => {
+    await Bun.sleep(10)
+    return setup.local.model.current()?.modelID === "first"
+  })
+  await Bun.write(
+    path.join(setup.state, "model.json"),
+    JSON.stringify({
+      recent: [
+        { providerID: "provider", modelID: "second" },
+        { providerID: "provider", modelID: "first" },
+      ],
+    }),
+  )
+  const started = Date.now()
+  while (setup.local.model.recent()[0]?.modelID !== "second") {
+    if (Date.now() - started > 2_000) throw new Error("Timed out waiting for shared recent models")
+    await Bun.sleep(20)
+  }
+  expect(setup.local.model.current()?.modelID).toBe("first")
 })
 
 test("agent and model drafts are isolated across sessions and survive navigation", async () => {
