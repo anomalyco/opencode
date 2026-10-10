@@ -2,7 +2,7 @@ export * as Project from "./project.js"
 
 import { Context, Duration, Effect, Layer, Schedule, Schema } from "effect"
 import { ChildProcess } from "effect/process"
-import { and, asc, desc, eq, gte, isNotNull, isNull, lte, ne, sql } from "drizzle-orm"
+import { and, asc, desc, eq, gte, isNotNull, isNull, lt, lte, ne, sql } from "drizzle-orm"
 import path from "path"
 import { AbsolutePath } from "./schema.js"
 import { Bus } from "./bus.js"
@@ -58,6 +58,7 @@ export const root = Effect.fn("Project.root")(function* (
 })
 
 const ACTIVATE_INTERVAL = 60_000
+const SWEEP_INTERVAL = Duration.hours(1)
 
 export interface ListInput {
   /** Includes archived Projects when true. */
@@ -396,10 +397,18 @@ const layer = Layer.effect(
     })
 
     const sweep = Effect.fn("Project.sweep")(function* () {
+      const cutoff = Date.now() - Duration.toMillis(SWEEP_INTERVAL)
+      // Projects touched since the cutoff are left alone. Checking again in the update means a
+      // resolve that moves the canonical directory mid-sweep bumps time_updated and wins.
+      const idle = and(
+        isNull(ProjectTable.time_archived),
+        lt(ProjectTable.time_updated, cutoff),
+        lt(ProjectTable.time_active, cutoff),
+      )
       const projects = yield* db
         .select({ id: ProjectTable.id, canonical: ProjectTable.worktree })
         .from(ProjectTable)
-        .where(and(isNull(ProjectTable.time_archived), ne(ProjectTable.id, ID.global)))
+        .where(and(idle, ne(ProjectTable.id, ID.global)))
         .all()
         .pipe(Effect.orDie)
       const worktrees = yield* db.select().from(WorktreeTable).all().pipe(Effect.orDie)
@@ -423,7 +432,7 @@ const layer = Layer.effect(
                 ? { worktree: main.directory }
                 : { time_archived: Date.now(), time_updated: sql`${ProjectTable.time_updated}` },
             )
-            .where(and(eq(ProjectTable.id, project.id), isNull(ProjectTable.time_archived)))
+            .where(and(eq(ProjectTable.id, project.id), idle))
             .returning()
             .get()
             .pipe(Effect.orDie)
@@ -448,7 +457,13 @@ export const sweepNode = makeGlobalNode({
   layer: Layer.effectDiscard(
     Effect.gen(function* () {
       const project = yield* Service
-      yield* project.sweep().pipe(Effect.repeat(Schedule.spaced(Duration.hours(1))), Effect.forkScoped)
+      yield* project
+        .sweep()
+        .pipe(
+          Effect.ignoreCause({ log: "Error", message: "Project archive sweep failed" }),
+          Effect.repeat(Schedule.spaced(SWEEP_INTERVAL)),
+          Effect.forkScoped,
+        )
     }),
   ),
   deps: [node],

@@ -184,6 +184,7 @@ describe("Project archiving", () => {
       const keptProject = yield* project.resolve(abs(kept))
       const removedProject = yield* project.resolve(abs(removed))
       yield* project.update({ projectID: removedProject.id, name: "Removed" })
+      yield* idle()
       const updated = (yield* project.list()).find((item) => item.id === removedProject.id)?.time.updated
       const updates: Project.Info[] = []
       yield* bus.subscribe(ProjectSchema.Event.Updated).pipe(
@@ -234,6 +235,7 @@ describe("Project archiving", () => {
       const initial = yield* project.resolve(abs(main))
       yield* project.resolve(abs(linked))
       yield* project.resolve(abs(clone))
+      yield* idle()
 
       yield* Effect.promise(() => fs.rm(main, { recursive: true }))
       yield* project.sweep()
@@ -244,13 +246,53 @@ describe("Project archiving", () => {
     }),
   )
 
+  it.live("skips projects updated or active within the last sweep interval", () =>
+    Effect.gen(function* () {
+      const db = (yield* Database.Service).db
+      const project = yield* Project.Service
+      const old = Date.now() - 2 * 60 * 60 * 1000
+      yield* db
+        .insert(ProjectTable)
+        .values([
+          { id: Project.ID.make("updated"), worktree: abs("/opencode-missing-updated"), sandboxes: [], time_active: old },
+          {
+            id: Project.ID.make("active"),
+            worktree: abs("/opencode-missing-active"),
+            sandboxes: [],
+            time_updated: old,
+          },
+          {
+            id: Project.ID.make("idle"),
+            worktree: abs("/opencode-missing-idle"),
+            sandboxes: [],
+            time_updated: old,
+            time_active: old,
+          },
+        ])
+        .run()
+
+      yield* project.sweep()
+
+      expect((yield* project.list()).map((item) => item.id).toSorted()).toEqual([
+        Project.ID.make("active"),
+        Project.ID.make("updated"),
+      ])
+    }),
+  )
+
   it.effect("never archives the global project", () =>
     Effect.gen(function* () {
       const db = (yield* Database.Service).db
       const project = yield* Project.Service
       yield* db
         .insert(ProjectTable)
-        .values({ id: Project.ID.global, worktree: abs("/opencode-missing-global"), sandboxes: [] })
+        .values({
+          id: Project.ID.global,
+          worktree: abs("/opencode-missing-global"),
+          sandboxes: [],
+          time_updated: 1,
+          time_active: 1,
+        })
         .run()
 
       yield* project.sweep()
@@ -258,6 +300,12 @@ describe("Project archiving", () => {
       expect((yield* project.list()).map((item) => item.id)).toEqual([Project.ID.global])
     }),
   )
+})
+
+// Backdates every Project past the sweep's recent-activity window.
+const idle = Effect.fn(function* () {
+  const db = (yield* Database.Service).db
+  yield* db.update(ProjectTable).set({ time_updated: 1, time_active: 1 }).run()
 })
 
 function remoteID(remote: string) {
