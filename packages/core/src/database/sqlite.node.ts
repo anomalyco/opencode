@@ -3,7 +3,7 @@ import { Context, Effect, Layer } from "effect"
 import { Reactivity } from "effect/reactivity"
 import { SqlClient } from "effect/sql"
 import { classifySqliteError, SqlError } from "effect/sql/SqlError"
-import { Sqlite } from "./sqlite.js"
+import { retryLocked, Sqlite } from "./sqlite.js"
 
 const TypeId = "~@opencode/core/database/SqliteNode" as const
 
@@ -25,6 +25,7 @@ interface Config extends Sqlite.ClientConfig {
 const make = (options: Config) =>
   Effect.gen(function* () {
     const native = (yield* Sqlite.Native) as DatabaseSync
+    const retryIfAutocommit = retryLocked(() => native.isTransaction)
 
     const run = (query: string, params: ReadonlyArray<unknown> = []) =>
       Effect.withFiber<Array<Record<string, unknown>>, SqlError>((fiber) => {
@@ -39,7 +40,7 @@ const make = (options: Config) =>
             }),
           )
         }
-      })
+      }).pipe(retryIfAutocommit)
 
     const runValues = (query: string, params: ReadonlyArray<unknown> = []) =>
       Effect.withFiber<ReadonlyArray<ReadonlyArray<unknown>>, SqlError>((fiber) => {
@@ -57,7 +58,7 @@ const make = (options: Config) =>
             }),
           )
         }
-      })
+      }).pipe(retryIfAutocommit)
 
     const connection = Sqlite.makeConnection(run, runValues, {
       loadExtension: (path: string) =>
