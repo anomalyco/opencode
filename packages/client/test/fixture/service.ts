@@ -1,10 +1,13 @@
 import { appendFile, rename, rm, writeFile } from "node:fs/promises"
+import { writeSync } from "node:fs"
 
 const [registration, mode, delay] = process.argv.slice(2)
 if (registration === undefined || mode === undefined) throw new Error("Missing service fixture arguments")
 if (mode === "failed") process.exit(1)
 if (mode === "stderr-failed") {
-  process.stderr.write("x".repeat(16_384) + "\nactionable startup failure\n")
+  process.stderr.write(
+    "x".repeat(16_384) + '\nactionable startup failure\n{"type":"port-conflict","hostname":"127.0.0.1","port":49374}\n',
+  )
   process.exit(1)
 }
 if (mode === "record-start") {
@@ -23,6 +26,10 @@ if (mode === "controlled") {
   const release = registration + `.release-${process.pid}`
   while (!(await Bun.file(release).exists())) await Bun.sleep(5)
   controlled = await Bun.file(release).text()
+  if (controlled === "conflict") {
+    writeSync(3, JSON.stringify({ type: "port-conflict", hostname: "127.0.0.1", port: 49374 }))
+    process.exit(23)
+  }
   if (controlled === "fail") {
     process.stderr.write("actionable startup failure: storage initialization denied\n")
     process.exit(23)

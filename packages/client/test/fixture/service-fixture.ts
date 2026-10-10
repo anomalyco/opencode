@@ -39,11 +39,11 @@ export async function serviceFixture() {
       }
       throw new Error(`Timed out waiting for ${count} contenders`)
     },
-    async release(pid: number, action: "fail" | "hang" | "ready") {
+    async release(pid: number, action: "fail" | "conflict" | "hang" | "ready") {
       const file = registration + `.release-${pid}`
       await Bun.write(file + ".tmp", action)
       await rename(file + ".tmp", file)
-      if (action === "fail") await waitForExit(pid)
+      if (action === "fail" || action === "conflict") await waitForExit(pid)
     },
     spawn(mode: string, ...args: string[]) {
       const subprocess = Bun.spawn(command(mode, ...args), { stdout: "ignore", stderr: "inherit" })

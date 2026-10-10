@@ -1,9 +1,10 @@
 import type { ElectronAPI } from "../api-types"
+import { Predicate } from "effect"
 
 type SidecarData = Awaited<ReturnType<ElectronAPI["awaitInitialization"]>>
 
 export function initializationData<A>(state: (() => A | undefined) & { error: unknown }) {
-  if (state.error !== undefined) throw markLocalServerStartup(state.error)
+  if (state.error !== undefined) throw initializationError(state.error)
 
   return state()
 }
@@ -35,8 +36,14 @@ function sameSidecar(current: SidecarData | undefined, next: SidecarData) {
   return current?.url === next.url
 }
 
-function markLocalServerStartup(error: unknown) {
-  const failure = error instanceof Error ? error : new Error(String(error))
+export function initializationError(error: unknown) {
+  const failure =
+    error instanceof Error
+      ? error
+      : new Error(
+          Predicate.hasProperty(error, "message") && Predicate.isString(error.message) ? error.message : String(error),
+          { cause: error },
+        )
   Object.defineProperty(failure, "localServerStartup", { value: true })
 
   return failure

@@ -5,11 +5,12 @@ import { cleanStages } from "./cli-stages"
 import { DesktopCli } from "./desktop-cli"
 import { SidecarCredentials } from "./sidecar-credentials"
 import { sidecarProbe } from "./sidecar-probe"
+import { LocalServerPortConflict } from "../../shared/ipc-rpc/app"
 
 export * as BackgroundService from "./background-service"
 
 export interface Interface {
-  readonly connection: Effect.Effect<SidecarCredentials.Data>
+  readonly connection: Effect.Effect<SidecarCredentials.Data, LocalServerPortConflict>
   readonly reconnect: Effect.Effect<SidecarCredentials.Data>
 }
 
@@ -65,7 +66,22 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
   const early = mode === "initial" && !isolated ? yield* Effect.promise(sidecarProbe) : undefined
 
   if (early) yield* Effect.sync(() => void ensure().catch(() => undefined))
-  const service = early ?? (yield* Effect.tryPromise(ensure))
+  const service =
+    early ??
+    (yield* Effect.tryPromise({ try: ensure, catch: (error) => error }).pipe(
+      Effect.catch((error) =>
+        error instanceof client.PortConflictError
+          ? Effect.fail(
+              new LocalServerPortConflict({
+                hostname: error.hostname,
+                port: error.port,
+                message: error.message,
+                details: error.cause instanceof Error ? error.cause.message : error.message,
+              }),
+            )
+          : Effect.die(error),
+      ),
+    ))
 
   if (service.auth?.type !== "basic") throw new Error("V2 CLI background service did not provide authentication")
   const url = new URL(service.url)

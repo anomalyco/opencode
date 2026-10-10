@@ -1,12 +1,13 @@
 export * as ServerProcess from "./server-process"
 
 import { NodeServices } from "@effect/platform-node"
-import { Service } from "@opencode/client/effect/service"
+import { PortConflictError, Service } from "@opencode/client/effect/service"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
 import { OPENCODE_ARTIFACT, OPENCODE_CHANNEL, OPENCODE_VERSION } from "./version"
 import { AppProcess } from "@opencode/util/process"
 import { randomBytes, randomUUID } from "node:crypto"
+import { writeSync } from "node:fs"
 import { Effect, Option, Redacted, Schema } from "effect"
 import { PersistentPty } from "@opencode/schema/persistent-pty"
 import { HttpServer } from "effect/http"
@@ -45,6 +46,8 @@ export const run = Effect.fnUntraced(function* (options: Options) {
 })
 
 const processEffect = Effect.fnUntraced(function* (options: Options) {
+  const startupPipe = process.env.OPENCODE_SERVICE_STARTUP_PIPE === "1"
+  delete process.env.OPENCODE_SERVICE_STARTUP_PIPE
   const inherited = process.env.OPENCODE_PTY_HANDOFF
   delete process.env.OPENCODE_PTY_HANDOFF
   const handoff =
@@ -151,7 +154,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
       )
       const server = yield* launch.pipe(
         Effect.catch((error) => {
-          if (findIncumbent === undefined || !addressInUse(error)) return Effect.fail(error)
+          if (findIncumbent === undefined || port === undefined || !addressInUse(error)) return Effect.fail(error)
           return Effect.gen(function* () {
             const deadline = Date.now() + 15_000
             while (Date.now() < deadline) {
@@ -163,13 +166,10 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
               const server = yield* launch.pipe(Effect.catchIf(addressInUse, () => Effect.void))
               if (server !== undefined) return server
             }
-            return yield* Effect.fail(
-              new Error(
-                `Managed service port ${port} on ${hostname} is already in use by another process. ` +
-                  "Configure another port with `opencode service set port <port>` and start the service again.",
-                { cause: error },
-              ),
-            )
+            yield* Effect.try(() => {
+              if (startupPipe) writeSync(3, JSON.stringify({ type: "port-conflict", hostname, port }))
+            }).pipe(Effect.ignore) // The parent may have already adopted another contender or disconnected.
+            return yield* Effect.fail(new PortConflictError(hostname, port, { cause: error }))
           })
         }),
       )

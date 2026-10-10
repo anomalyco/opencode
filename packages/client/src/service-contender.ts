@@ -1,11 +1,13 @@
 import { spawn, type ChildProcess } from "node:child_process"
 import type { EnsureTiming } from "./service-timing.js"
+import { PortConflictError } from "./service.js"
 
 export type ServiceContender = {
   readonly child: ChildProcess
   readonly error: () => Error | undefined
   readonly closed: () => boolean
   readonly stderr: () => string
+  readonly conflict: () => PortConflictError | undefined
   readonly release: () => void
 }
 
@@ -19,12 +21,20 @@ export function spawnServiceContender(
   const child = spawn(command, args, {
     detached: true,
     windowsHide: true,
-    stdio: ["ignore", "ignore", "pipe"],
-    env: { ...process.env, ...env },
+    // Startup facts have their own pipe: stderr prose must never be mistaken for a typed failure.
+    stdio: ["ignore", "ignore", "pipe", "pipe"],
+    env: { ...process.env, ...env, OPENCODE_SERVICE_STARTUP_PIPE: "1" },
   })
   let error: Error | undefined
   let closed = false
   let stderr = Buffer.alloc(0)
+  let startup = Buffer.alloc(0)
+  const pipe = child.stdio[3]
+  const onStartup = (chunk: Buffer) => {
+    startup = Buffer.concat([startup, chunk]).subarray(-stderrLimit)
+  }
+  pipe?.on("data", onStartup)
+  if (pipe !== null && pipe !== undefined && "unref" in pipe && typeof pipe.unref === "function") pipe.unref()
   const onStderr = (chunk: Buffer) => {
     const tail = chunk.subarray(-stderrLimit)
     stderr =
@@ -46,10 +56,27 @@ export function spawnServiceContender(
     error: () => error,
     closed: () => closed,
     stderr: () => stderr.toString("utf8").trim(),
+    conflict: () => {
+      // This is the sole decoding boundary for the private child-process startup pipe.
+      try {
+        const value: unknown = JSON.parse(startup.toString("utf8"))
+        if (typeof value !== "object" || value === null) return
+        if (!("type" in value) || value.type !== "port-conflict") return
+        if (!("hostname" in value) || typeof value.hostname !== "string") return
+        if (!("port" in value) || typeof value.port !== "number" || !Number.isInteger(value.port)) return
+        if (value.port < 1 || value.port > 65535) return
+        return new PortConflictError(value.hostname, value.port)
+      } catch {
+        return undefined
+      }
+    },
     release: () => {
       child.stderr?.off("data", onStderr)
       child.stderr?.resume()
       stderr = Buffer.alloc(0)
+      pipe?.off("data", onStartup)
+      pipe?.destroy()
+      startup = Buffer.alloc(0)
     },
   }
 }
@@ -88,7 +115,7 @@ export function contenderPool(timing: EnsureTiming) {
     recruitNow() {
       lastSpawn = Date.now() - spawnDelay
     },
-    /** Collect finished attempts. Returns the startup failure once no attempt is left alive. */
+    /** Collect finished attempts. Report the startup failure once no attempt is left alive. */
     reap() {
       const finished = [...contenders].filter(contenderFinished)
       failure ??= finished.map(contenderFailure).find((error) => error !== undefined)
@@ -120,8 +147,14 @@ export function contenderPool(timing: EnsureTiming) {
 function contenderFailure(contender: ServiceContender) {
   const error = contender.error()
   if (error !== undefined) return error
-  if (contender.child.exitCode !== null && contender.child.exitCode !== 0)
-    return startupError(`Server process exited with code ${contender.child.exitCode}`, contender.stderr())
+  if (contender.child.exitCode !== null && contender.child.exitCode !== 0) {
+    const failure = startupError(`Server process exited with code ${contender.child.exitCode}`, contender.stderr())
+    const conflict = contender.conflict()
+    if (!conflict) return failure
+
+    conflict.cause = failure
+    return conflict
+  }
   if (contender.child.signalCode !== null)
     return startupError(`Server process terminated by ${contender.child.signalCode}`, contender.stderr())
   return undefined

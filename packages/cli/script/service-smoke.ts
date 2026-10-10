@@ -7,6 +7,7 @@ import { Effect, Schema } from "effect"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
+import { pathToFileURL } from "node:url"
 
 const nodeBuild = process.argv.includes("--node")
 const target = `cli${nodeBuild ? "-node" : ""}-${process.platform === "win32" ? "windows" : process.platform}-${process.arch}`
@@ -84,6 +85,7 @@ try {
   if (!(await exitsWithin(winner, 10_000))) throw new Error("Compiled service did not stop")
   for (let attempt = 0; attempt < 200 && (await Bun.file(registration).exists()); attempt++) await Bun.sleep(25)
   if (await Bun.file(registration).exists()) throw new Error("Compiled service registration was not removed")
+  await verifyPortConflict(registration)
 } catch (cause) {
   failure = cause
 } finally {
@@ -109,6 +111,54 @@ function spawnService() {
   processes.push(process)
   errors.push(new Response(process.stderr).text())
   return process
+}
+
+// Exercise Node's spawn (the desktop runtime), not Bun.spawn, against the compiled executable.
+async function verifyPortConflict(registration: string) {
+  using listener = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("unrelated") })
+  const configured = Bun.spawn([binary, "service", "set", "port", String(listener.port)], {
+    env,
+    stdout: "ignore",
+    stderr: "pipe",
+  })
+  processes.push(configured)
+  errors.push(new Response(configured.stderr).text())
+  if (!(await exitsWithin(configured, 10_000)) || (await configured.exited) !== 0)
+    throw new Error("Could not configure the smoke-test port")
+
+  const build = await Bun.build({
+    entrypoints: [path.join(import.meta.dir, "../../client/src/promise/service.ts")],
+    target: "node",
+    format: "esm",
+  })
+  if (!build.success) throw new AggregateError(build.logs, "Could not bundle the Node service client")
+  const client = path.join(root, "client.mjs")
+  await Bun.write(client, build.outputs[0])
+  const check = Bun.spawn(
+    [
+      "node",
+      "--input-type=module",
+      "-e",
+      `import assert from "node:assert/strict"
+import { Service, PortConflictError } from ${JSON.stringify(pathToFileURL(client).href)}
+const [binary, file, port] = process.argv.slice(1)
+const error = await Service.ensure({ file, command: [binary, "serve", "--service"] }).catch(error => error)
+assert(error instanceof PortConflictError, String(error))
+assert.equal(error.hostname, "127.0.0.1")
+assert.equal(error.port, Number(port))
+assert.match(error.cause.message, /Server process exited with code 1/)
+`,
+      binary,
+      registration,
+      String(listener.port),
+    ],
+    { env, stdout: "ignore", stderr: "pipe" },
+  )
+  processes.push(check)
+  errors.push(new Response(check.stderr).text())
+  if (!(await exitsWithin(check, 45_000)) || (await check.exited) !== 0)
+    throw new Error("Node client did not receive the compiled service's typed port conflict")
+  if (await Bun.file(registration).exists()) throw new Error("Conflicting service published a registration")
 }
 
 async function waitForRegistration() {

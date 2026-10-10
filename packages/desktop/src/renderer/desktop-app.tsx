@@ -23,7 +23,7 @@ import type { ElectronAPI } from "./api-types"
 import { DesktopFirstLaunchOnboarding } from "./onboarding"
 import { createDesktopPlatform } from "./platform"
 import { bindDesktopMenu } from "./platform/menu"
-import { createSidecarResolver, initializationData, sidecarHttp } from "./startup/initialization"
+import { createSidecarResolver, initializationData, initializationError, sidecarHttp } from "./startup/initialization"
 import { preloadStoredLocale } from "./startup/locale"
 import { LoadingSplash } from "./startup/splash"
 import { getLastActiveUrl } from "./window/route-storage"
@@ -61,7 +61,12 @@ export function DesktopApp(props: { api: ElectronAPI; version: string }) {
   )
 
   const platform = createDesktopPlatform(props.api, windowState)
-  const [sidecar, { mutate: setSidecar }] = createResource(() => props.api.awaitInitialization())
+  // Normalize encoded IPC failures before Solid replaces non-Error rejections with "Unknown error".
+  const [sidecar, { mutate: setSidecar }] = createResource(() =>
+    props.api.awaitInitialization().catch((error) => {
+      throw initializationError(error)
+    }),
+  )
 
   const [locale] = createResource(() => preloadStoredLocale(platform))
 

@@ -53,6 +53,9 @@ type PlatformBase = {
   /** Restart the app  */
   restart(): Promise<void>
 
+  /** Save the managed local service port before restarting (desktop only). */
+  setLocalServerPort?(port: number): Promise<void>
+
   /** Send a system notification */
   notify(title: string, description?: string, onClick?: () => void): Promise<void>
 

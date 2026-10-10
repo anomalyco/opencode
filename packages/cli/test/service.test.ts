@@ -516,6 +516,30 @@ test("the original managed service contender binds when the occupied port is rel
   }
 }, 45_000)
 
+test("unrelated managed port occupancy reaches the client as a typed conflict", async () => {
+  const { PortConflictError, Service } = await import("@opencode/client/service")
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-conflict-"))
+  using listener = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("unrelated") })
+  const port = listener.port
+  const registration = path.join(root, "state", "opencode", "service-local.json")
+  await fs.mkdir(path.join(root, "config", "opencode"), { recursive: true })
+  await fs.writeFile(path.join(root, "config", "opencode", "service-local.json"), JSON.stringify({ port }))
+  try {
+    const error = await Service.ensure({
+      file: registration,
+      command: [process.execPath, path.join(import.meta.dir, "../src/index.ts"), "serve", "--service"],
+      env: serviceEnv(root),
+    }).catch((error: unknown) => error)
+    expect(error).toBeInstanceOf(PortConflictError)
+    expect(error).toMatchObject({ hostname: "127.0.0.1", port })
+    expect(error).toHaveProperty("cause.message", expect.stringContaining("Server process exited with code 1"))
+    expect(error).toHaveProperty("message", expect.stringContaining("opencode service set port <port>"))
+    expect(await Bun.file(registration).exists()).toBe(false)
+  } finally {
+    await fs.rm(root, { recursive: true, force: true })
+  }
+}, 30_000)
+
 test("unresponsive managed port occupancy reports a bounded conflict", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-unresponsive-conflict-"))
   const recognizing = Promise.withResolvers<void>()

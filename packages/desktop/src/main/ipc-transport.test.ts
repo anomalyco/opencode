@@ -7,9 +7,49 @@ import { Rpc, RpcGroup, RpcMessage, RpcServer } from "effect/rpc"
 import { Transferable } from "effect/workers"
 import { omitUndefined } from "../shared/ipc-transport"
 import { FilesOpenFilePicker } from "../shared/ipc-rpc/files"
+import { AppAwaitInitialization, LocalServerPortConflict } from "../shared/ipc-rpc/app"
 import { IpcPortHandoff, IpcServerProtocolLive } from "./ipc-transport"
 
 describe("desktop RPC transport", () => {
+  test("preserves a typed startup conflict across the renderer wire format", async () => {
+    const rpcs = RpcGroup.make(AppAwaitInitialization)
+    const conflict = new LocalServerPortConflict({
+      hostname: "127.0.0.1",
+      port: 49374,
+      message: "port occupied",
+      details: "Server process exited with code 1\nOriginal listener failure",
+    })
+    const runtime = ManagedRuntime.make(
+      RpcServer.layer(rpcs).pipe(
+        Layer.provide(rpcs.toLayer({ AppAwaitInitialization: () => Effect.fail(conflict) })),
+        Layer.provideMerge(IpcServerProtocolLive),
+      ),
+    )
+    const handoff = await runtime.runPromise(IpcPortHandoff)
+    const channel = new MessageChannel()
+    handoff.bind(sender(1), serverPort(channel.port1))
+    try {
+      const response = await call(channel.port2, 0, "AppAwaitInitialization", null)
+      expect(response.exit).toMatchObject({
+        _tag: "Failure",
+        cause: [
+          {
+            _tag: "Fail",
+            error: {
+              _tag: "LocalServerPortConflict",
+              hostname: "127.0.0.1",
+              port: 49374,
+              details: "Server process exited with code 1\nOriginal listener failure",
+            },
+          },
+        ],
+      })
+    } finally {
+      channel.port2.close()
+      await runtime.dispose()
+    }
+  })
+
   test("decodes renderer payloads whose optional fields are undefined", async () => {
     let received: unknown
     const rpcs = RpcGroup.make(FilesOpenFilePicker)

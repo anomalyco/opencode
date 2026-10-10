@@ -55,3 +55,29 @@ export type Info = {
   /** Private service password, when authentication is enabled. */
   readonly password?: string
 }
+
+/** A managed service could not bind its fixed port and did not recognize an OpenCode incumbent. */
+export class PortConflictError extends Error {
+  /** Error identity for managed service port conflicts. */
+  override readonly name = "PortConflictError"
+
+  /**
+   * Create a confirmed managed service port conflict.
+   * @param hostname Host on which the service attempted to listen.
+   * @param port Fixed TCP port that was already occupied.
+   * @param options Original listener failure, when available.
+   */
+  constructor(
+    /** Host on which the service attempted to listen. */
+    readonly hostname: string,
+    /** Fixed TCP port that was already occupied. */
+    readonly port: number,
+    options?: ErrorOptions,
+  ) {
+    super(
+      `Managed service port ${port} on ${hostname} is already in use by another process. ` +
+        "Configure another port with `opencode service set port <port>` and start the service again.",
+      options,
+    )
+  }
+}

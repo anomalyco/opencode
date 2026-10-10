@@ -22,6 +22,7 @@ export interface Resolved {
 export interface Interface {
   readonly resolve: Effect.Effect<Resolved>
   readonly install: Effect.Effect<string, Error>
+  readonly setServicePort: (port: number) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("opencode/desktop/DesktopCli") {}
@@ -46,7 +47,16 @@ export const layer = Layer.effect(
       return path.join(home, ".opencode", "bin", "opencode")
     })
 
-    return Service.of({ resolve, install })
+    const setServicePort = Effect.fn("DesktopCli.setServicePort")(function* (port: number) {
+      const cli = yield* resolve
+      const [binary, ...args] = cli.command
+
+      if (!binary) return yield* Effect.die(new Error("Missing service command"))
+
+      yield* run(binary, [...args, "service", "set", "port", String(port)]).pipe(Effect.orDie)
+    })
+
+    return Service.of({ resolve, install, setServicePort })
   }),
 )
 

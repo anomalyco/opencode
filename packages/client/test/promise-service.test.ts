@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { Service, type EnsureReason } from "../src/promise/service"
+import { PortConflictError, Service, type EnsureReason } from "../src/promise/service"
 import { expectPortAvailable, serviceFixture } from "./fixture/service-fixture"
 import { accelerate } from "./fixture/service-timing"
 
@@ -112,14 +112,14 @@ test("reports a failed registered service", async () => {
   )
 })
 
-test("reports overlapping contender failures without recruiting replacements", async () => {
+test.each(["fail", "conflict"] as const)("reports overlapping failures (%s) without respawning", async (action) => {
   await using fixture = await serviceFixture()
   const started = Date.now()
   const pending = ensure({ file: fixture.registration, version: "test", command: fixture.command("controlled") }).catch(
     (error: unknown) => error,
   )
   const [first, second] = await fixture.waitForStarts(2)
-  await fixture.release(first, "fail")
+  await fixture.release(first, action)
   // Let discovery observe the exit across two accelerated spawn windows before the survivor exits.
   await Bun.sleep(450)
   await fixture.release(second, "fail")
@@ -128,8 +128,14 @@ test("reports overlapping contender failures without recruiting replacements", a
   expect(Date.now() - started).toBeLessThan(3_000)
   expect(error).toBeInstanceOf(Error)
   if (!(error instanceof Error)) throw error
-  expect(error.message).toContain("Server process exited with code 23")
-  expect(error.message).toContain("storage initialization denied")
+  if (action === "conflict") {
+    expect(error).toBeInstanceOf(PortConflictError)
+    expect(error).toHaveProperty("cause.message", "Server process exited with code 23")
+  }
+  if (action === "fail") {
+    expect(error.message).toContain("Server process exited with code 23")
+    expect(error.message).toContain("storage initialization denied")
+  }
   expect(await fixture.starts()).toHaveLength(2)
 })
 
@@ -152,11 +158,13 @@ test("retains a contender failure until the deadline while its survivor stalls",
   expect(() => process.kill(second, 0)).not.toThrow()
 })
 
-test("accepts a surviving contender after a failure without recruiting replacements", async () => {
+test.each(["fail", "conflict"] as const)("accepts a survivor after failure (%s) without respawning", async (action) => {
   await using fixture = await serviceFixture()
   const pending = ensure({ file: fixture.registration, version: "test", command: fixture.command("controlled") })
+  // Observe early rejection too, without leaving an unhandled promise while the survivor starts.
+  void pending.catch(() => undefined)
   const [first, second] = await fixture.waitForStarts(2)
-  await fixture.release(first, "fail")
+  await fixture.release(first, action)
   await Bun.sleep(450)
   await fixture.release(second, "ready")
   const endpoint = await pending
@@ -192,6 +200,7 @@ test("reports a bounded contender stderr tail with native promises", async () =>
   }).catch((error: unknown) => error)
 
   expect(error).toBeInstanceOf(Error)
+  expect(error).not.toBeInstanceOf(PortConflictError)
   if (!(error instanceof Error)) throw error
   expect(error.message).toContain("actionable startup failure")
   expect(error.message.length).toBeLessThan(9_000)

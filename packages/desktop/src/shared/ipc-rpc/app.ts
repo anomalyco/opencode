@@ -5,9 +5,23 @@ const ServerReadyData = Schema.Struct({
   url: Schema.String,
 })
 
-export const AppAwaitInitialization = Rpc.make("AppAwaitInitialization", { success: ServerReadyData })
+export class LocalServerPortConflict extends Schema.TaggedError<LocalServerPortConflict>()("LocalServerPortConflict", {
+  hostname: Schema.String,
+  port: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 })),
+  message: Schema.String,
+  details: Schema.optionalKey(Schema.String),
+}) {}
+
+export const AppAwaitInitialization = Rpc.make("AppAwaitInitialization", {
+  success: ServerReadyData,
+  error: LocalServerPortConflict,
+})
 
 export const AppReconnectService = Rpc.make("AppReconnectService", { success: ServerReadyData })
+
+export const AppSetServicePort = Rpc.make("AppSetServicePort", {
+  payload: { port: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 })) },
+})
 
 export const AppConsumeInitialDeepLinks = Rpc.make("AppConsumeInitialDeepLinks", {
   success: Schema.Array(Schema.String),
@@ -63,6 +77,7 @@ export const AppRelaunch = Rpc.make("AppRelaunch")
 export const AppRpcs = RpcGroup.make(
   AppAwaitInitialization,
   AppReconnectService,
+  AppSetServicePort,
   AppConsumeInitialDeepLinks,
   AppIsFirstLaunchOnboardingPending,
   AppFinishFirstLaunchOnboarding,
