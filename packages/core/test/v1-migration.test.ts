@@ -897,6 +897,61 @@ describe("V1Migration database workflow", () => {
     )
   })
 
+  test("imports V1 sessions created after migration completes", async () => {
+    await database(
+      Effect.gen(function* () {
+        const { db } = yield* Database.Service
+        yield* db.run(
+          sql`INSERT INTO project (id, worktree, time_created, time_updated, sandboxes) VALUES ('global', '/tmp/test', 1, 2, '[]')`,
+        )
+        yield* db.run(
+          sql`INSERT INTO session (id, project_id, slug, directory, title, version, time_created, time_updated) VALUES ('ses_older', 'global', 'older', '/tmp/test', 'Older', '1', 1, 2)`,
+        )
+        expect(yield* V1Migration.run()).toEqual({ status: "completed" })
+        expect(yield* V1Migration.status()).toEqual({ status: "completed" })
+        expect(yield* db.get(sql`SELECT title FROM session_v2 WHERE id = 'ses_older'`)).toEqual({ title: "Older" })
+
+        yield* db.run(sql`UPDATE session_v2 SET title = 'Edited in V2' WHERE id = 'ses_older'`)
+        yield* db.run(
+          sql`INSERT INTO session (id, project_id, slug, directory, title, version, time_created, time_updated) VALUES ('ses_newer', 'global', 'newer', '/tmp/test', 'Newer', '1', 3, 4)`,
+        )
+
+        expect(yield* V1Migration.status()).toEqual({ status: "required" })
+        expect(yield* V1Migration.run()).toEqual({ status: "completed" })
+        expect(yield* db.get(sql`SELECT title FROM session_v2 WHERE id = 'ses_newer'`)).toEqual({ title: "Newer" })
+        expect(yield* db.get(sql`SELECT title FROM session_v2 WHERE id = 'ses_older'`)).toEqual({
+          title: "Edited in V2",
+        })
+        expect(yield* V1Migration.status()).toEqual({ status: "completed" })
+      }),
+    )
+  })
+
+  test("does not re-import V1 sessions deleted in V2", async () => {
+    await database(
+      Effect.gen(function* () {
+        const { db } = yield* Database.Service
+        yield* db.run(
+          sql`INSERT INTO project (id, worktree, time_created, time_updated, sandboxes) VALUES ('global', '/tmp/test', 1, 2, '[]')`,
+        )
+        yield* db.run(
+          sql`INSERT INTO session (id, project_id, slug, directory, title, version, time_created, time_updated) VALUES ('ses_kept', 'global', 'kept', '/tmp/test', 'Kept', '1', 1, 2)`,
+        )
+        yield* db.run(
+          sql`INSERT INTO session (id, project_id, slug, directory, title, version, time_created, time_updated) VALUES ('ses_removed', 'global', 'removed', '/tmp/test', 'Removed', '1', 1, 2)`,
+        )
+        expect(yield* V1Migration.run()).toEqual({ status: "completed" })
+        expect(yield* db.get(sql`SELECT id FROM session_v2 WHERE id = 'ses_removed'`)).toEqual({ id: "ses_removed" })
+
+        // Deleting in V2 only removes the session_v2 row; the legacy row stays (#50260).
+        yield* db.run(sql`DELETE FROM session_v2 WHERE id = 'ses_removed'`)
+        expect(yield* V1Migration.status()).toEqual({ status: "completed" })
+        expect(yield* V1Migration.run()).toEqual({ status: "completed" })
+        expect(yield* db.get(sql`SELECT id FROM session_v2 WHERE id = 'ses_removed'`)).toBeUndefined()
+      }),
+    )
+  })
+
   test("yields while clearing stale events in batches", async () => {
     await database(
       Effect.gen(function* () {
@@ -1136,7 +1191,7 @@ describe("V1Migration database workflow", () => {
           worktree: path.parse(global.data).root,
         })
         expect(yield* db.get(sql`SELECT value FROM kv WHERE key = 'migration.v1-v2'`)).toEqual({
-          value: '{"phase":"completed"}',
+          value: '{"phase":"completed","watermark":"ses_orphan"}',
         })
       }),
     )
@@ -1216,7 +1271,7 @@ describe("V1Migration database workflow", () => {
           time_compacting: 3,
         })
         expect(yield* db.get(sql`SELECT value FROM kv WHERE key = 'migration.v1-v2'`)).toEqual({
-          value: '{"phase":"completed"}',
+          value: '{"phase":"completed","watermark":"ses_test"}',
         })
       }),
     )
