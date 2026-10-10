@@ -5,7 +5,7 @@ import { Dialog, DialogBody } from "@opencode/ui/dialog"
 import { Icon } from "@opencode/ui/icon"
 import { Keybind } from "@opencode/ui/keybind"
 import { TextInput } from "@opencode/ui/text-input"
-import { createEffect, createMemo, For, Match, Show, Switch } from "solid-js"
+import { createEffect, createMemo, For, Match, onCleanup, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
 import { formatKeybindParts } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -70,13 +70,13 @@ export function CommandPaletteView(props: {
 }) {
   const language = useLanguage()
   const tabs = useTabs()
-  const [store, setStore] = createStore({ query: "", active: undefined as string | undefined })
+  const [store, setStore] = createStore<{ query: string; active?: string }>({ query: "" })
 
   const search = createCommandPaletteSearch({ query: () => store.query, items: props.items, sources: props.sources })
   const visibleEntries = search.items
   const groupedEntries = createMemo(() => groups(visibleEntries()))
 
-  // Keep keyboard selection stable when another search source adds results.
+  // Follow the first result until the user explicitly chooses a row.
   const activeEntry = createMemo(
     () => visibleEntries().find((entry) => entry.id === store.active) ?? visibleEntries()[0],
   )
@@ -86,17 +86,23 @@ export function CommandPaletteView(props: {
   )
 
   createEffect(() => {
-    // Pin automatic selection too: a later source can insert rows before it.
-    const id = activeEntry()?.id
-
-    if (store.active !== id) setStore("active", id)
-  })
-
-  createEffect(() => {
     props.highlight(activeEntry())
   })
 
   let resultsRef: HTMLDivElement | undefined
+
+  createEffect(() => {
+    // Incoming results can move an explicitly selected row below the viewport.
+    visibleEntries()
+
+    if (!activeEntry()) return
+
+    const frame = requestAnimationFrame(() => {
+      resultsRef?.querySelector("[data-active]")?.scrollIntoView({ block: "nearest" })
+    })
+
+    onCleanup(() => cancelAnimationFrame(frame))
+  })
 
   const move = (delta: -1 | 1) => {
     const count = visibleEntries().length
@@ -104,9 +110,6 @@ export function CommandPaletteView(props: {
     if (count === 0) return
     const index = visibleEntries().findIndex((entry) => entry.id === activeEntry()?.id)
     setStore("active", visibleEntries()[(index + delta + count) % count].id)
-    requestAnimationFrame(() => {
-      resultsRef?.querySelector("[data-active]")?.scrollIntoView({ block: "nearest" })
-    })
   }
 
   const handleKeyDown = (event: KeyboardEvent) => {

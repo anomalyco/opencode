@@ -85,12 +85,51 @@ test("appends search results without resetting the selected command", async ({ p
   await expect(dialog.getByRole("option", { name: "Copy Project ID", exact: true })).toHaveCount(0)
 })
 
-test("keeps the automatically selected file when session results arrive later", async ({ page }) => {
-  const warnings = captureConsoleWarnings(page)
+test("selects the first session when it arrives above automatically selected files", async ({ page }) => {
   const { dialog, input } = await openCommandPalette(page)
   const sessions = Promise.withResolvers<void>()
   await page.route("**/api/fs/find?*", (route) =>
     route.fulfill({ json: { data: [{ path: "README.md", type: "file" }] } }),
+  )
+  await page.route("**/api/session?*", async (route) => {
+    await sessions.promise
+    await route.fulfill({
+      json: {
+        data: Array.from({ length: 18 }, (_, index) => ({
+          ...paletteSession,
+          id: index === 0 ? paletteSession.id : `ses_palette_readme_${index}`,
+          location: { directory: paletteSession.directory },
+          title: `README work ${index + 1}`,
+        })),
+      },
+    })
+  })
+  await input.fill("README")
+  await expect(dialog.getByRole("option", { name: "/ README.md", exact: true })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  )
+  sessions.resolve()
+  const first = dialog.getByRole("option", { name: /README work 1 command-palette/ })
+  const second = dialog.getByRole("option", { name: /README work 2 command-palette/ })
+  await expect(first).toHaveAttribute("aria-selected", "true")
+  await expect(first).toBeInViewport()
+  await input.press("ArrowDown")
+  await expect(second).toHaveAttribute("aria-selected", "true")
+  await expect(second).toBeInViewport()
+  await input.press("ArrowUp")
+  await expect(first).toHaveAttribute("aria-selected", "true")
+  await input.press("Enter")
+  await expect(dialog).toHaveCount(0)
+  await expect(page.getByRole("heading", { name: paletteSession.title, exact: true })).toBeVisible()
+})
+
+test("keeps a keyboard-selected file when session results arrive later", async ({ page }) => {
+  const warnings = captureConsoleWarnings(page)
+  const { dialog, input } = await openCommandPalette(page)
+  const sessions = Promise.withResolvers<void>()
+  await page.route("**/api/fs/find?*", (route) =>
+    route.fulfill({ json: { data: [{ path: "README.txt", type: "file" }, { path: "README.md", type: "file" }] } }),
   )
   await page.route("**/api/session?*", async (route) => {
     await sessions.promise
@@ -102,6 +141,11 @@ test("keeps the automatically selected file when session results arrive later", 
   })
   await input.fill("README")
   const file = dialog.getByRole("option", { name: "/ README.md", exact: true })
+  await expect(dialog.getByRole("option", { name: "/ README.txt", exact: true })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  )
+  await input.press("ArrowDown")
   await expect(file).toHaveAttribute("aria-selected", "true")
   sessions.resolve()
   await expect(dialog.getByRole("option", { name: /README work/ })).toBeVisible()
