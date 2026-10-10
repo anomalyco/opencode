@@ -455,6 +455,7 @@ describe("OpencodePlugin", () => {
                         settings: { baseURL: `${origin}/anthropic` },
                       },
                       disabled: { name: "Disabled", disabled: true },
+                      "*": { disabled: true },
                     },
                   },
                 },
@@ -557,6 +558,7 @@ describe("OpencodePlugin", () => {
               ?.settings?.baseURL,
           ).toBe("https://upstream.example/v1")
           expect(yield* models.get(Provider.ID.openai, Model.ID.make("api-model"))).toBeUndefined()
+          expect(yield* models.get(Provider.ID.make("remote"), Model.ID.make("*"))).toBeUndefined()
 
           yield* credentials.update(initial.id, { label: "Renamed" })
           yield* Effect.yieldNow
@@ -1968,7 +1970,9 @@ describe("OpencodePlugin with a Console config", () => {
           fetch: () =>
             Response.json({
               $schema,
-              providers: { "console-openai": { canonical: "openai", name: "Console OpenAI" } },
+              providers: {
+                "console-openai": { canonical: "openai", name: "Console OpenAI", models: { "*": { disabled: true } } },
+              },
             }),
         }),
       ),
@@ -1996,6 +2000,8 @@ describe("OpencodePlugin with a Console config", () => {
           expect(consoleOpenAI.name).toBe("Console OpenAI")
           expect(consoleOpenAI.integrationID).toBe(Integration.ID.make("opencode"))
           expect(consoleOpenAI.settings?.transport).toBeUndefined()
+          const models = yield* Model.Service
+          expect(yield* models.get(Provider.ID.make("console-openai"), Model.ID.make("*"))).toBeUndefined()
         }),
       (server) => Effect.promise(() => server.stop(true)),
     ),
