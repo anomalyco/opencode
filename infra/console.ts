@@ -248,6 +248,10 @@ const ENTERPRISE_SALES_INBOX_EMAIL = new sst.Secret("ENTERPRISE_SALES_INBOX_EMAI
 const SALESFORCE_CLIENT_ID = new sst.Secret("SALESFORCE_CLIENT_ID")
 const SALESFORCE_CLIENT_SECRET = new sst.Secret("SALESFORCE_CLIENT_SECRET")
 const SALESFORCE_INSTANCE_URL = new sst.Secret("SALESFORCE_INSTANCE_URL")
+const CONSOLE_CRM_TOKEN = new sst.Secret("CONSOLE_CRM_TOKEN")
+const CONSOLE_CRM_LOOKUP_URL = new sst.Linkable("CONSOLE_CRM_LOOKUP_URL", {
+  properties: { value: `https://${domain}/console/api/internal/console-account` },
+})
 
 const logProcessor = new sst.cloudflare.Worker("LogProcessor", {
   handler: "packages/console/function/src/log-processor.ts",
@@ -277,6 +281,8 @@ new sst.cloudflare.x.SolidStart("Console", {
     SALESFORCE_CLIENT_ID,
     SALESFORCE_CLIENT_SECRET,
     SALESFORCE_INSTANCE_URL,
+    CONSOLE_CRM_TOKEN,
+    CONSOLE_CRM_LOOKUP_URL,
     ZEN_BLACK_PRICE,
     ZEN_LITE_PRICE,
     new sst.Secret("ZEN_LIMITS"),
