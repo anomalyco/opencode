@@ -5,6 +5,7 @@ import { i18n } from "~/i18n"
 import { localeFromRequest } from "~/lib/language"
 import { createLead } from "~/lib/salesforce"
 import { inferenceSpendOptions } from "~/lib/inference-spend"
+import { lookupConsoleAccount, type ConsoleAccount } from "~/lib/console-account"
 
 interface EnterpriseFormData {
   name: string
@@ -13,6 +14,7 @@ interface EnterpriseFormData {
   email: string
   phone?: string
   inferenceSpend?: string
+  leadSource?: "enterprise website form"
   alias?: string
   message: string
 }
@@ -61,9 +63,20 @@ function subscribe(email: string, fullName: string) {
 }
 
 export async function POST(event: APIEvent) {
-  const dict = i18n(localeFromRequest(event.request))
+  return handleEnterpriseRequest(event.request)
+}
+
+export async function handleEnterpriseRequest(
+  request: Request,
+  options: {
+    salesforceSubmit?: (payload: Record<string, unknown>) => Promise<boolean>
+    notifications?: boolean
+    accountLookup?: (email: string) => Promise<ConsoleAccount | null>
+  } = {},
+) {
+  const dict = i18n(localeFromRequest(request))
   try {
-    const body = (await event.request.json()) as EnterpriseFormData
+    const body = (await request.json()) as EnterpriseFormData
     const trap = typeof body.alias === "string" ? body.alias.trim() : ""
 
     if (trap) {
@@ -84,6 +97,8 @@ export async function POST(event: APIEvent) {
       return Response.json({ error: dict["enterprise.form.error.invalidInferenceSpend"] }, { status: 400 })
     }
 
+    const account = await (options.accountLookup ?? lookupConsoleAccount)(body.email)
+
     const emailContent = `
 ${body.message}<br><br>
 ${inferenceSpend ? `Current monthly inference spend: ${inferenceSpend.salesforceValue}<br><br>` : ""}
@@ -94,31 +109,38 @@ ${body.company ? `${body.company}<br>` : ""}${body.email}<br>
 ${body.phone ? `${body.phone}<br>` : ""}`.trim()
 
     const [lead, mail, octopus] = await Promise.all([
-      createLead({
-        name: body.name,
-        role: body.role,
-        company: body.company,
-        email: body.email,
-        phone: body.phone,
-        inferenceSpend: inferenceSpend?.salesforceValue,
-        message: body.message,
-      }).catch((err) => {
+      createLead(
+        {
+          name: body.name,
+          role: body.role,
+          company: body.company,
+          email: body.email,
+          phone: body.phone,
+          inferenceSpend: inferenceSpend?.salesforceValue,
+          leadSource: body.leadSource === "enterprise website form" ? body.leadSource : undefined,
+          message: body.message,
+          consoleAccount: account,
+        },
+        options.salesforceSubmit,
+      ).catch((err) => {
         console.error("Failed to create Salesforce lead:", err)
         return false
       }),
-      AWS.sendEmail({
-        to: Resource.ENTERPRISE_SALES_INBOX_EMAIL.value,
-        subject: `Enterprise Inquiry from ${body.name}`,
-        body: emailContent,
-        replyTo: body.email,
-      }).then(
-        () => true,
-        (err) => {
-          console.error("Failed to send enterprise email:", err)
-          return false
-        },
-      ),
-      subscribe(body.email, body.name),
+      options.notifications === false
+        ? Promise.resolve(false)
+        : AWS.sendEmail({
+            to: Resource.ENTERPRISE_SALES_INBOX_EMAIL.value,
+            subject: `Enterprise Inquiry from ${body.name}`,
+            body: emailContent,
+            replyTo: body.email,
+          }).then(
+            () => true,
+            (err) => {
+              console.error("Failed to send enterprise email:", err)
+              return false
+            },
+          ),
+      options.notifications === false ? Promise.resolve(false) : subscribe(body.email, body.name),
     ])
 
     if (!lead && !mail && !octopus) {
