@@ -21,15 +21,68 @@ function setup() {
 }
 
 describe("OSC 7501 program status", () => {
+  test("reports the most urgent tracked state on the root and namespace", () => {
+    const harness = setup()
+    const tracked = [
+      session("idle"),
+      session("done", { outcome: "succeeded", time: { created: 0, updated: 1, idle: 1 } }),
+      session("error", { outcome: "failed", time: { created: 0, updated: 1, idle: 1 } }),
+      session("working", { running: true }),
+      session("blocked", { permission: true }),
+    ]
+    const expected = [
+      { state: "blocked", kind: "permission" },
+      { state: "working" },
+      { state: "error" },
+      { state: "done" },
+      { state: "idle" },
+    ]
+    expected.forEach((state, index) => {
+      harness.update(tracked.slice(0, tracked.length - index))
+      const kind = "kind" in state ? `:kind=${state.kind}` : ""
+      expect(harness.output.filter((sequence) => !sequence.includes(":id=")).at(-1)).toBe(
+        `\x1b]7501;state=${state.state}:app=opencode${kind}\x1b\\`,
+      )
+      expect(
+        harness.output
+          .filter((sequence) => sequence.includes(":id=opencode\x1b") || sequence.includes(":id=opencode:kind="))
+          .at(-1),
+      ).toBe(`\x1b]7501;state=${state.state}:app=opencode:id=opencode${kind}\x1b\\`)
+    })
+    harness.update([])
+    expect(harness.output.filter((sequence) => !sequence.includes(":id=")).at(-1)).toBe(
+      "\x1b]7501;state=idle:app=opencode\x1b\\",
+    )
+  })
+
+  test("includes global input in the tab summary and resets the root without an unscoped clear", () => {
+    const harness = setup()
+    harness.update([session("working", { running: true })], true)
+    expect(harness.output).toContain("\x1b]7501;state=blocked:app=opencode:kind=auth\x1b\\")
+    harness.update([session("working", { running: true })], false, [{ fields: [{ key: "answer", type: "string" }] }])
+    expect(harness.output).toContain("\x1b]7501;state=blocked:app=opencode:kind=question\x1b\\")
+    harness.update([session("working", { running: true })])
+    expect(harness.output).toContain("\x1b]7501;state=working:app=opencode\x1b\\")
+    harness.reporter.dispose()
+    expect(harness.output.slice(-2)).toEqual([
+      "\x1b]7501;state=idle:app=opencode\x1b\\",
+      "\x1b]7501;state=clear:app=opencode:id=opencode\x1b\\",
+    ])
+    expect(harness.output.some((sequence) => sequence.includes("state=clear:") && !sequence.includes(":id="))).toBe(
+      false,
+    )
+  })
+
   test("reports complete ST-terminated records without prompt, tool, or error text", () => {
     const harness = setup()
     harness.update([session("session", { running: true })])
     expect(harness.output).toEqual([
-      "\x1b]7501;state=idle:app=opencode:id=opencode\x1b\\",
+      "\x1b]7501;state=working:app=opencode\x1b\\",
+      "\x1b]7501;state=working:app=opencode:id=opencode\x1b\\",
       `\x1b]7501;state=working:app=opencode:id=${sessionProgramID("session", () => undefined)}\x1b\\`,
     ])
     harness.update([session("session", { running: true })])
-    expect(harness.output).toHaveLength(2)
+    expect(harness.output).toHaveLength(3)
   })
 
   test("keeps completion and failure until viewed, but cancellation is idle", () => {
@@ -39,7 +92,7 @@ describe("OSC 7501 program status", () => {
     harness.update([completed])
     expect(harness.output.at(-1)).toContain("state=done:")
     harness.update([completed])
-    expect(harness.output).toHaveLength(3)
+    expect(harness.output).toHaveLength(6)
     harness.update([{ ...completed, time: { ...completed.time, viewed: 10 } }])
     expect(harness.output.at(-1)).toContain("state=idle:")
     harness.update([{ ...completed, outcome: "failed" }])
@@ -86,8 +139,8 @@ describe("OSC 7501 program status", () => {
     const parentID = sessionProgramID(parent.id, () => undefined)
     const childID = sessionProgramID(child.id, (id) => (id === child.id ? child : parent))
     expect(childID.startsWith(`${parentID}/`)).toBe(true)
-    expect(harness.output[1]).toContain(`state=working:app=opencode:id=${parentID}`)
-    expect(harness.output[2]).toContain(`state=blocked:app=opencode:id=${childID}:kind=permission`)
+    expect(harness.output[2]).toContain(`state=working:app=opencode:id=${parentID}`)
+    expect(harness.output[3]).toContain(`state=blocked:app=opencode:id=${childID}:kind=permission`)
     const otherID = sessionProgramID(other.id, () => undefined)
     expect(otherID.startsWith(`${parentID}/`)).toBe(false)
   })
@@ -99,9 +152,9 @@ describe("OSC 7501 program status", () => {
       session("failed", { outcome: "failed", time: { created: 0, updated: 1, idle: 1 } }),
       session("blocked", { permission: true }),
     ])
-    expect(harness.output[1]).toContain("state=done:")
-    expect(harness.output[2]).toContain("state=error:")
-    expect(harness.output[3]).toContain("state=blocked:")
+    expect(harness.output[2]).toContain("state=done:")
+    expect(harness.output[3]).toContain("state=error:")
+    expect(harness.output[4]).toContain("state=blocked:")
   })
 
   test("clears closed records and re-emits surviving descendants after an ancestor clear", () => {

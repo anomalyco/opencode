@@ -59,7 +59,7 @@ export function createProgramStatus(write: (sequence: string) => void) {
               .slice(0, 48)
               .join(""),
           ).toString("base64")
-    const sequence = `\x1b]7501;state=${state.state}:app=opencode:id=${id}${"kind" in state ? `:kind=${state.kind}` : ""}${label ? `:title=${label}` : ""}\x1b\\`
+    const sequence = `\x1b]7501;state=${state.state}:app=opencode${id ? `:id=${id}` : ""}${"kind" in state ? `:kind=${state.kind}` : ""}${label ? `:title=${label}` : ""}\x1b\\`
     if (records.get(id) === sequence) return
     write(sequence)
     records.set(id, sequence)
@@ -72,19 +72,18 @@ export function createProgramStatus(write: (sequence: string) => void) {
       forms: ProgramSession["forms"] = [],
     ) {
       if (disposed) return
-      report("opencode", { state: "idle" })
       const candidates = sessions.map((session) => ({
         id: sessionProgramID(session.id, get),
         state: sessionProgramState(session),
         title: session.title,
       }))
-      // Leave room for the namespace and global input; do not evict active work for old idle subagents.
+      // Reserve the root, namespace and global input; keep active work ahead of old idle subagents.
       const next = new Map(
-        (candidates.length <= 62
+        (candidates.length <= 61
           ? candidates
           : candidates.toSorted((a, b) => priority[a.state.state] - priority[b.state.state])
         )
-          .slice(0, 62)
+          .slice(0, 61)
           .map((record) => [record.id, record]),
       )
       if (auth || forms.length) {
@@ -100,7 +99,14 @@ export function createProgramStatus(write: (sequence: string) => void) {
           },
         })
       }
-      const removed = Array.from(records.keys()).filter((id) => id !== "opencode" && !next.has(id))
+      const summary = Array.from(next.values()).reduce<ProgramState>(
+        (state, record) => (priority[record.state.state] < priority[state.state] ? record.state : state),
+        { state: "idle" },
+      )
+      // Flat per-tab consumers read the root; hierarchical consumers also get a namespace summary.
+      report("", summary)
+      report("opencode", summary)
+      const removed = Array.from(records.keys()).filter((id) => id !== "" && id !== "opencode" && !next.has(id))
       removed.forEach((id) => {
         report(id, { state: "clear" })
         records.delete(id)
@@ -114,7 +120,11 @@ export function createProgramStatus(write: (sequence: string) => void) {
     dispose() {
       if (disposed) return
       disposed = true
-      if (records.size) report("opencode", { state: "clear" })
+      if (records.size) {
+        // An unscoped clear would delete other programs' records too.
+        report("", { state: "idle" })
+        report("opencode", { state: "clear" })
+      }
       records.clear()
     },
   }
