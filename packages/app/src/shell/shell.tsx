@@ -1,3 +1,4 @@
+import { AppBadge } from "@/shell/notifications/app-badge"
 import { Show, Suspense, type ParentProps } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createMediaQuery } from "@solid-primitives/media"
@@ -28,6 +29,7 @@ export default function Layout(props: ParentProps) {
 
   return (
     <TitlebarRightProvider>
+      <AppBadge />
       <div
         class="relative bg-v2-background-bg-deep flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text"
         style={{

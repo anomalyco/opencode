@@ -12,6 +12,7 @@ const server = "local\nhttp://localhost:4096" as ServerConnection.Key
 const session = { id: "session-1", title: "Test session", location: { directory: "/project" } }
 
 const alerts: string[] = []
+const preference = { autoApprove: false }
 
 const tabs: { store: Tab[] } = { store: [] }
 
@@ -34,6 +35,7 @@ beforeAll(async () => {
     useSettings: () => ({
       sounds: { agentEnabled: () => false, errorsEnabled: () => false },
       notifications: { agent: () => true, errors: () => true },
+      permissions: { autoApprove: () => preference.autoApprove },
     }),
   }))
   mock.module("@/runtime/i18n/language", () => ({ useLanguage: () => ({ t: (key: string) => key }) }))
@@ -75,7 +77,9 @@ test.each([
           },
         },
       } as unknown as ServerSDK,
-      data: { session: { get: () => session } } as unknown as Data,
+      data: {
+        session: { get: () => session, permission: { sessions: () => [] }, form: { sessions: () => [] } },
+      } as unknown as Data,
       coordinator: { system: async (_id: string, fn: () => Promise<void>) => fn() },
     } as Parameters<typeof createServerNotificationState>[0])
 
@@ -89,6 +93,7 @@ test.each([
   })
   await new Promise((resolve) => setTimeout(resolve, 0))
   expect(dispose.state.session.all(session.id)).toHaveLength(1)
+  expect(dispose.state.attention()).toEqual([session.id])
   expect(alerts).toEqual([])
 
   tabs.store = [{ type: "session", server, sessionId: session.id }]
@@ -99,5 +104,38 @@ test.each([
   })
   await new Promise((resolve) => setTimeout(resolve, 0))
   expect(alerts).toEqual([title])
+  expect(dispose.state.attention()).toEqual([session.id])
+  dispose.state.session.markViewed(session.id)
+  expect(dispose.state.attention()).toEqual([])
+  listener?.({ type: "session.deleted", data: { sessionID: session.id } })
+  expect(dispose.state.session.all(session.id)).toEqual([])
   dispose.dispose()
+})
+
+test("attention deduplicates manual requests and excludes auto-approved permissions", () => {
+  const root = createRoot((dispose) => {
+    const state = createServerNotificationState({
+      key: server,
+      sdk: {
+        scope: ServerScope.local,
+        event: { listen: () => () => {} },
+      } as unknown as ServerSDK,
+      data: {
+        session: {
+          permission: { sessions: () => ["permission-only", "both"] },
+          form: { sessions: () => ["form-only", "both"] },
+        },
+      } as unknown as Data,
+      coordinator: { system: async (_id: string, fn: () => Promise<void>) => fn() },
+    } as Parameters<typeof createServerNotificationState>[0])
+    return { state, dispose }
+  })
+  try {
+    expect(root.state.attention()).toEqual(["permission-only", "both", "form-only"])
+    preference.autoApprove = true
+    expect(root.state.attention()).toEqual(["form-only", "both"])
+  } finally {
+    preference.autoApprove = false
+    root.dispose()
+  }
 })

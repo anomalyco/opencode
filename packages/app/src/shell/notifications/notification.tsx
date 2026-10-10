@@ -15,6 +15,7 @@ import { ServerConnection } from "@/runtime/server/registry"
 import { sessionIDHasOpenTab, useTabs } from "@/shell/tabs/tabs"
 import { sessionHref } from "@/shell/routes/session"
 import { useServer } from "@/runtime/server/current"
+import { isSessionNotFoundError } from "@/runtime/server/errors"
 
 const NotificationBase = {
   directory: Schema.optional(Schema.String),
@@ -142,7 +143,7 @@ export function createServerNotificationState(input: {
 
   const [index, setIndex] = createStore<NotificationIndex>(buildNotificationIndex(store.list))
 
-  const meta = { pruned: false, disposed: false }
+  const meta = { pruned: false, reconciled: false, disposed: false }
 
   const updateUnseen = (scope: "session" | "project", key: string, unseen: Notification[]) => {
     setIndex(scope, "unseen", key, unseen)
@@ -306,7 +307,32 @@ export function createServerNotificationState(input: {
     })
   }
 
+  const removeSession = (sessionID: string) => {
+    const removed = index.session.all[sessionID] ?? empty
+    batch(() => {
+      removed.forEach(removeFromIndex)
+      setStore("list", (list) => list.filter((notification) => notification.session !== sessionID))
+    })
+  }
+
+  createEffect(() => {
+    if (!ready()) return
+    if (meta.reconciled) return
+    meta.reconciled = true
+    for (const sessionID of Object.keys(index.session.unseen)) {
+      if (!index.session.unseen[sessionID]?.length) continue
+      void input.sdk.api.session.get({ sessionID }).catch((error: unknown) => {
+        if (!meta.disposed && isSessionNotFoundError(error, sessionID)) removeSession(sessionID)
+      })
+    }
+  })
+
   const unsub = input.sdk.event.listen((event) => {
+    if (event.type === "session.deleted") {
+      removeSession(event.data.sessionID)
+      return
+    }
+
     if (event.type !== "session.execution.succeeded" && event.type !== "session.execution.failed") return
 
     const time = Date.now()
@@ -327,6 +353,15 @@ export function createServerNotificationState(input: {
 
   return {
     ready,
+    attention() {
+      return [
+        ...new Set([
+          ...Object.keys(index.session.unseen).filter((id) => index.session.unseen[id]?.length),
+          ...(settings.permissions.autoApprove() ? [] : input.data.session.permission.sessions()),
+          ...input.data.session.form.sessions(),
+        ]),
+      ]
+    },
     session: {
       all(session: string) {
         return index.session.all[session] ?? empty
