@@ -205,6 +205,9 @@ export const OpenAIChatUsage = Schema.StructWithRest(
     prompt_tokens: optionalNull(Schema.Number),
     completion_tokens: optionalNull(Schema.Number),
     total_tokens: optionalNull(Schema.Number),
+    // Gateways that price a request (OpenRouter, LiteLLM, Manifest) stamp the
+    // billed USD amount here; ordinary providers omit it.
+    cost: optionalNull(Schema.Number),
     // Provider-specific cache accounting fields.
     cached_tokens: optionalNull(Schema.Number),
     prompt_cache_hit_tokens: optionalNull(Schema.Number),
@@ -925,6 +928,7 @@ const mapUsage = (usage: OpenAIChatEvent["usage"], providerMetadataKey: string):
     cacheWriteInputTokens: cacheWrite,
     reasoningTokens: reasoning,
     totalTokens: ProviderShared.totalTokens(input, output, usage.total_tokens ?? undefined),
+    cost: usage.cost ?? undefined,
     providerMetadata: { [providerMetadataKey]: usage },
   })
 }
