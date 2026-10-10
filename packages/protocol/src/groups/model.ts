@@ -23,6 +23,21 @@ export const ModelGroup = HttpApiGroup.make("server.model")
       ),
   )
   .add(
+    HttpApiEndpoint.get("model.refresh", "/api/model/refresh", {
+      query: LocationQuery,
+      success: Location.response(Schema.Array(Model.Info)),
+      error: ServiceUnavailableError,
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "model.refresh",
+          summary: "Refresh models",
+          description: "Force a refresh of the models cache, then return the updated snapshot of available models.",
+        }),
+      ),
+  )
+  .add(
     HttpApiEndpoint.get("model.default", "/api/model/default", {
       query: LocationQuery,
       success: Location.response(Schema.UndefinedOr(Model.Info)),

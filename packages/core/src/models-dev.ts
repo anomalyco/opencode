@@ -405,6 +405,8 @@ export const layer = (options?: Options) =>
       const get = (): Effect.Effect<readonly Snapshot[]> => cachedGet
 
       const refresh = Effect.fn("ModelsDev.refresh")(function* (force = false) {
+        // A fetch-disabled server never dials out: a forced refresh is a no-op.
+        if (!fetch) return
         yield* lock
           .withPermit(
             Effect.gen(function* () {

@@ -111,6 +111,8 @@ import type {
   MessageListOutput,
   ModelListInput,
   ModelListOutput,
+  ModelRefreshInput,
+  ModelRefreshOutput,
   ModelDefaultInput,
   ModelDefaultOutput,
   GenerateTextInput,
@@ -832,6 +834,11 @@ const EndpointModelList = (raw: RawClient["server.model"]) => (input?: ModelList
     raw["model.list"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
+const EndpointModelRefresh = (raw: RawClient["server.model"]) => (input?: ModelRefreshInput) =>
+  preserveEffect<ModelRefreshOutput>()(
+    raw["model.refresh"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
+  )
+
 const EndpointModelDefault = (raw: RawClient["server.model"]) => (input?: ModelDefaultInput) =>
   preserveEffect<ModelDefaultOutput>()(
     raw["model.default"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
@@ -839,6 +846,7 @@ const EndpointModelDefault = (raw: RawClient["server.model"]) => (input?: ModelD
 
 const adaptGroupModel = (raw: RawClient["server.model"]) => ({
   list: EndpointModelList(raw),
+  refresh: EndpointModelRefresh(raw),
   default: EndpointModelDefault(raw),
 })
 

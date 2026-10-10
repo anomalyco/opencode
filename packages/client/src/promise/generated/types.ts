@@ -5640,6 +5640,12 @@ export type ModelListInput = {
 
 export type ModelListOutput = { location: LocationPublicRef; data: Array<ModelInfo> }
 
+export type ModelRefreshInput = {
+  readonly location?: { readonly location?: { readonly directory?: string | undefined } | undefined }["location"]
+}
+
+export type ModelRefreshOutput = { location: LocationPublicRef; data: Array<ModelInfo> }
+
 export type ModelDefaultInput = {
   readonly location?: { readonly location?: { readonly directory?: string | undefined } | undefined }["location"]
 }

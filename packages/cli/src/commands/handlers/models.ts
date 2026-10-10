@@ -17,7 +17,13 @@ export default Runtime.handler(
       baseUrl: server.endpoint.url,
       headers: Service.headers(server.endpoint),
     })
-    const response = yield* Effect.promise(() => client.model.list({ location: { directory: process.cwd() } }))
+    const response = input.refresh
+      ? yield* Effect.promise(() => client.model.refresh({ location: { directory: process.cwd() } }))
+      : yield* Effect.promise(() => client.model.list({ location: { directory: process.cwd() } }))
+    if (input.verbose) {
+      process.stdout.write(response.data.map((model) => JSON.stringify(model, null, 2)).join(EOL) + EOL)
+      return
+    }
     const models = response.data
       .map((model) => `${model.providerID}/${model.id}`)
       .toSorted((a, b) => a.localeCompare(b))
