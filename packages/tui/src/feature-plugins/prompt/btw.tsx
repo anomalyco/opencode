@@ -1,7 +1,8 @@
 import { Plugin } from "@opencode/plugin/tui"
 import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
-import { createMemo, createSignal, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, on, Show } from "solid-js"
+import { createStore } from "solid-js/store"
 import { Spinner } from "../../component/spinner"
 import { useConfig } from "../../config"
 import { useClipboard } from "../../context/clipboard"
@@ -23,14 +24,17 @@ const instructions = [
 export default Plugin.define({
   id: "opencode.btw",
   setup(context) {
-    const [pending, setPending] = createSignal(0)
+    // Keyed by session so the loader and answer stay with the session that asked.
+    const [pending, setPending] = createStore<Record<string, number>>({})
+    const [answers, setAnswers] = createStore<Record<string, { id: number; question: string; answer: string }[]>>({})
+    let answerID = 0
 
     context.ui.slot({
       append: "prompt.footer.status",
-      render: () => {
+      render: (input) => {
         const theme = useTheme()
         return (
-          <Show when={pending() > 0}>
+          <Show when={(pending[input.sessionID] ?? 0) > 0}>
             <box flexShrink={0}>
               <Spinner color={theme.hue.interactive[200]}>/btw</Spinner>
             </box>
@@ -45,6 +49,31 @@ export default Plugin.define({
         const toast = useToast()
         // Dialogs render beside PluginProvider, so Answer cannot call usePlugin().
         const plugins = usePlugin()
+        // Answers wait until their session is open, then show one at a time.
+        const next = createMemo(
+          () => {
+            const route = context.ui.router.current()
+            if (route.type !== "session") return
+            const aside = answers[route.sessionID]?.[0]
+            if (aside) return { sessionID: route.sessionID, ...aside }
+          },
+          undefined,
+          { equals: (previous, current) => previous?.id === current?.id },
+        )
+        createEffect(
+          on(next, (current) => {
+            if (!current) return
+            context.ui.dialog.show(
+              () => <Answer question={current.question} answer={current.answer} markdown={plugins.markdown} />,
+              // The dialog is still closing here; showing the next answer synchronously would be discarded.
+              () =>
+                queueMicrotask(() =>
+                  setAnswers(current.sessionID, (list) => list.filter((item) => item.id !== current.id)),
+                ),
+            )
+            context.ui.dialog.set({ size: "large", centered: true })
+          }),
+        )
         context.keymap.layer(() => ({
           mode: "global",
           commands: [
@@ -61,20 +90,21 @@ export default Plugin.define({
                   toast.show({ message: "Open a session first", variant: "warning" })
                   return
                 }
+                const sessionID = route.sessionID
                 const question =
                   input?.trim() || (await context.ui.dialog.prompt({ title: "/btw", placeholder: "Ask anything" }))
                 if (!question) return
-                setPending((count) => count + 1)
+                setPending(sessionID, (count = 0) => count + 1)
                 await context.client.session
-                  .generate({ sessionID: route.sessionID, prompt: [instructions, question].join("\n\n") })
-                  .then((result) => {
-                    context.ui.dialog.show(() => (
-                      <Answer question={question} answer={result.text.trim()} markdown={plugins.markdown} />
-                    ))
-                    context.ui.dialog.set({ size: "large", centered: true })
-                  })
+                  .generate({ sessionID, prompt: [instructions, question].join("\n\n") })
+                  .then((result) =>
+                    setAnswers(sessionID, (list = []) => [
+                      ...list,
+                      { id: ++answerID, question, answer: result.text.trim() },
+                    ]),
+                  )
                   .catch((cause: unknown) => toast.error(cause))
-                  .finally(() => setPending((count) => count - 1))
+                  .finally(() => setPending(sessionID, (count) => count - 1))
               },
             },
           ],
