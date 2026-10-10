@@ -22,7 +22,9 @@ export interface ModelEditor {
   }
 }
 
-export interface ModelDomain extends ModelApi {
+// `refresh` is a server/CLI concern (force a models.dev cache update) and is not
+// exposed through the plugin model domain, so hosts are not required to provide it.
+export interface ModelDomain extends Omit<ModelApi, "refresh"> {
   readonly transform: Transform<ModelEditor>
   readonly reload: () => Promise<void>
 }
