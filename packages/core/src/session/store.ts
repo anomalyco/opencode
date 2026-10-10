@@ -103,12 +103,12 @@ const layer = Layer.effect(
         const sortColumn = SessionTable.time_updated
         const conditions: SQL[] = []
         if ("directory" in input) {
-          // An empty legacy directory must not be treated as the filesystem root.
-          if (!input.directory) return []
-          // Keep legacy rows with trailing slashes discoverable without rewriting persisted sessions.
-          // rtrim('/') is empty, but legacy rows with an empty directory are not the filesystem root.
+          // Preserve exact empty-directory lookups for legacy rows without matching filesystem roots.
+          // Nonempty directories also match legacy rows with trailing slashes.
           conditions.push(
-            sql`${SessionTable.directory} <> '' AND rtrim(${SessionTable.directory}, '/') = rtrim(${sql.param(input.directory, SessionTable.directory)}, '/')`,
+            !input.directory
+              ? eq(SessionTable.directory, "")
+              : sql`${SessionTable.directory} <> '' AND rtrim(${SessionTable.directory}, '/') = rtrim(${sql.param(input.directory, SessionTable.directory)}, '/')`,
           )
         }
         if (input.workspaceID) conditions.push(eq(SessionTable.workspace_id, input.workspaceID))

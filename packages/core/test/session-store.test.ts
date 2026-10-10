@@ -232,7 +232,7 @@ describe("SessionStore", () => {
       const root = yield* store.list({ directory: AbsolutePath.make("/") })
       expect(root.map((item) => String(item.id))).toEqual(["ses_posix_root"])
       const empty = yield* store.list({ directory: AbsolutePath.make("") })
-      expect(empty).toEqual([])
+      expect(empty.map((item) => String(item.id))).toEqual(["ses_legacy_empty"])
     }),
   )
 
