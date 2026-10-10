@@ -149,6 +149,44 @@ describe("Watcher lifecycle", () => {
     ),
   )
 
+  it.live("rebases directory watch events and honors ignores across symlinked roots", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const real = path.join(tmp.path, "real")
+          const link = path.join(tmp.path, "link")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(path.join(real, "ignored"), { recursive: true })
+            await fs.mkdir(path.join(real, "plugins"), { recursive: true })
+            await fs.symlink(real, link, process.platform === "win32" ? "junction" : undefined)
+          })
+          const native = yield* Watcher.Native
+          const events: Watcher.Update[] = []
+          yield* Effect.acquireRelease(
+            native.subscribe({
+              type: "directory",
+              target: link,
+              ignore: ["ignored"],
+              publish: (update) => events.push(update),
+            }),
+            (subscription) => Effect.promise(() => subscription?.unsubscribe() ?? Promise.resolve()),
+          )
+          yield* Effect.promise(async () => {
+            await fs.writeFile(path.join(link, "ignored", "skip.ts"), "ignored")
+            await fs.writeFile(path.join(link, "plugins", "beta.ts"), "export default {}")
+          })
+          yield* Effect.sync(() => events.some((update) => update.path === path.join(link, "plugins", "beta.ts"))).pipe(
+            Effect.filterOrFail(Boolean),
+            Effect.retry(Schedule.spaced("10 millis")),
+            Effect.timeout("5 seconds"),
+          )
+          expect(events.some((update) => update.path.includes("skip.ts"))).toBe(false)
+          expect(events.every((update) => FSUtil.contains(link, update.path))).toBe(true)
+        }).pipe(Effect.provide(Watcher.nativeLayer)),
+      ),
+    ),
+  )
+
   it.effect("interrupting a consumer interrupts a pending acquisition", () =>
     Effect.gen(function* () {
       const started = yield* Deferred.make<void>()

@@ -403,10 +403,11 @@ describeNative("ConfigCommandPlugin native watcher", () => {
   it.live("reloads commands from real file edits", () =>
     Effect.gen(function* () {
       const fs = yield* FSUtil.Service
-      // Watcher events report real paths, so resolve the tempdir symlink up front.
-      const tmp = yield* fs.makeTempDirectoryScoped({ prefix: "opencode-core-test-" }).pipe(Effect.flatMap(fs.realPath))
+      const tmp = yield* fs.makeTempDirectoryScoped({ prefix: "opencode-core-test-" })
+      const real = path.join(tmp, "real-global")
       const global = path.join(tmp, "global")
-      yield* fs.makeDirectory(path.join(global, "commands"), { recursive: true })
+      yield* fs.makeDirectory(path.join(real, "commands"), { recursive: true })
+      yield* fs.symlink(real, global)
       yield* fs.makeDirectory(path.join(tmp, "project"))
       yield* Effect.gen(function* () {
         const command = yield* Command.Service
