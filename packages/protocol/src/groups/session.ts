@@ -648,7 +648,8 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
         OpenApi.annotations({
           identifier: "session.inbox.update",
           summary: "Update inbox item",
-          description: "Change a pending inbox item's delivery mode. Steering wakes session execution.",
+          description:
+            "Change a pending inbox item's delivery mode. Requesting its current mode is a no-op. Steering wakes session execution, including for an item that is already steering.",
         }),
       ),
     )
