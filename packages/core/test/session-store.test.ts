@@ -231,6 +231,8 @@ describe("SessionStore", () => {
       yield* database.db.run(sql`UPDATE ${SessionTable} SET directory = '' WHERE id = 'ses_legacy_empty'`)
       const root = yield* store.list({ directory: AbsolutePath.make("/") })
       expect(root.map((item) => String(item.id))).toEqual(["ses_posix_root"])
+      const empty = yield* store.list({ directory: AbsolutePath.make("") })
+      expect(empty).toEqual([])
     }),
   )
 
