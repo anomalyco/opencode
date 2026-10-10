@@ -83,6 +83,11 @@ export interface MockServerConfig {
   onMessage?: (input: { sessionID: string; messageID: string }) => void
   onRevertStage?: (input: { sessionID: string; messageID: string }) => void
   onSession?: (sessionID: string) => void
+  // Records DELETE /api/session/:id (204).
+  onSessionRemove?: (sessionID: string) => void
+  // POST /api/session/:id/fork adds a session titled "<source title> (fork #n)", a child of the source when the request
+  // sets `child`. The hook receives it; serve the copied history from `pageMessages`.
+  onFork?: (input: { sessionID: string; forkID: string; body: Schema.JsonObject }) => void
   events?: () => OpenCodeEvent[]
   eventRetry?: number
   // Idle event streams send a comment every 15 s like the real server. Set false only to test the client's stall watchdog.
@@ -500,6 +505,7 @@ export function createMockServerHandler(config: MockServerConfig, emit: (events:
           cursors: new Map<string, string>(),
           nextCursor: 0,
           sessionCreates: 0,
+          forks: 0,
           pty,
           emit,
           mcp: new Map<string, MockMcpStatus>(),
@@ -683,6 +689,7 @@ function mockHandlers(
     cursors: Map<string, string>
     nextCursor: number
     sessionCreates: number
+    forks: number
     pty: ReturnType<typeof createPty>
     emit: (events: OpenCodeEvent[]) => void
     // MCP status overrides by `<directory>\n<server>`, and OAuth attempt creation times by attempt ID.
@@ -1183,7 +1190,35 @@ function mockHandlers(
               ? Effect.succeed({ data: currentSession(session, config.directory) })
               : Effect.fail(new MockNotFound({ message: "Session not found" }))
           }),
-        sessionRemove: () => noContent,
+        sessionRemove: (ctx) =>
+          Effect.sync(() => config.onSessionRemove?.(ctx.params.sessionID)).pipe(Effect.andThen(noContent)),
+        sessionFork: (ctx) =>
+          Effect.suspend(() => {
+            const source = config.sessions.find((item) => item.id === ctx.params.sessionID)
+
+            if (!source) return Effect.fail(new MockNotFound({ message: "Session not found" }))
+
+            const body = Option.getOrElse(decodeJsonObject(ctx.payload), (): Schema.JsonObject => ({}))
+
+            state.forks += 1
+            const forkID = `ses_mock_fork_${state.forks}`
+
+            const forked = currentSession(
+              {
+                ...source,
+                id: forkID,
+                title: `${currentSession(source, config.directory).title} (fork #${state.forks})`,
+                parentID: body.child === true ? source.id : undefined,
+                time: { created: Date.now(), updated: Date.now() },
+              },
+              config.directory,
+            )
+
+            config.sessions.push(forked)
+            config.onFork?.({ sessionID: source.id, forkID, body })
+
+            return Effect.succeed({ data: forked })
+          }),
         sessionShell: () => noContent,
         sessionForm: (ctx) =>
           Effect.succeed({

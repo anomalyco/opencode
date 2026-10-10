@@ -96,6 +96,8 @@ type CompactInput = Parameters<Session.Handle["compact"]>[0] & { sessionID: Sess
 type ForkInput = {
   sessionID: SessionSchema.ID
   before?: SessionMessage.ID
+  /** Links the fork as a child of the source session, so it is deleted with it and its requests surface there. */
+  child?: boolean
 }
 
 export {
@@ -353,6 +355,7 @@ const layer = Layer.effect(
           sessionID,
           parentID: parent.id,
           boundary: { type: input.before ? "before" : "through", messageID: boundary.id },
+          ...(input.child ? { child: true } : {}),
           ...inherited,
         })
         return yield* result.get(sessionID).pipe(Effect.orDie)
