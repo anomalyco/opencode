@@ -166,6 +166,53 @@ describe("Npm.cacheKey", () => {
 })
 
 describe("Npm.add", () => {
+  test("reports dependency resolution failures with the package and underlying cause", async () => {
+    await using tmp = await tmpdir()
+    const packages = [
+      {
+        name: "@fixture/conflicting-plugin",
+        version: "1.0.0",
+        peerDependencies: { "@fixture/consumer": "1.0.0", "@fixture/peer": "1.0.0" },
+      },
+      { name: "@fixture/consumer", version: "1.0.0", peerDependencies: { "@fixture/peer": "2.0.0" } },
+      { name: "@fixture/peer", version: "1.0.0" },
+      { name: "@fixture/peer", version: "2.0.0" },
+    ]
+    await using server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch(request) {
+        const name = decodeURIComponent(new URL(request.url).pathname.slice(1))
+        const versions = packages.filter((pkg) => pkg.name === name)
+        return Response.json({
+          name,
+          "dist-tags": { latest: versions.at(-1)?.version },
+          versions: Object.fromEntries(versions.map((pkg) => [pkg.version, pkg])),
+        })
+      },
+    })
+    const cache = path.join(tmp.path, "cache")
+    const spec = "@fixture/conflicting-plugin@1.0.0"
+    const root = path.join(cache, "npm", await Npm.cacheKey(spec))
+    await fs.mkdir(root, { recursive: true })
+    await Bun.write(
+      path.join(root, ".npmrc"),
+      `registry=${server.url}\n@fixture:registry=${server.url}\ncache=${path.join(tmp.path, "npm-cache")}\nfetch-retries=0\n`,
+    )
+
+    const error = await Effect.gen(function* () {
+      const npm = yield* Npm.Service
+      return yield* npm.add(spec).pipe(Effect.flip)
+    }).pipe(Effect.scoped, Effect.provide(npmLayer(cache)), Effect.runPromise)
+
+    expect(error).toBeInstanceOf(Npm.InstallFailedError)
+    if (!(error instanceof Npm.InstallFailedError)) throw error
+    expect(error.cause).toBeInstanceOf(Error)
+    expect(error.cause).toMatchObject({ code: "ERESOLVE", message: "unable to resolve dependency tree" })
+    expect(error.message).toContain(spec)
+    expect(error.message).toContain("unable to resolve dependency tree")
+  })
+
   test("locates cached scoped package specs without reifying", async () => {
     await using tmp = await tmpdir()
     const spec = "@fixture/provider@1.0.0"
