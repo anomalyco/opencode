@@ -189,6 +189,7 @@ const headless = (app: App.Info) =>
         const interval = Math.max(Number.parseInt(device.interval) || 5, 1) * 1000
         return {
           mode: "auto" as const,
+          device: true,
           url: `${issuer}/codex/device`,
           instructions: `Enter code: ${device.user_code}`,
           callback: Effect.gen(function* () {

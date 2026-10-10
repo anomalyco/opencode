@@ -149,6 +149,7 @@ const oauth = (app: App.Info) =>
 
         return {
           mode: "auto" as const,
+          device: true,
           url: device.verification_uri,
           instructions: `Enter code: ${device.user_code}`,
           callback: poll(interval),

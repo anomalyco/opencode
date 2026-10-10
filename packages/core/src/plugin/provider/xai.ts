@@ -61,6 +61,7 @@ const device = (app: App.Info) =>
               const lifetime = positiveSeconds(value.expires_in, 0)
               return {
                 mode: "auto" as const,
+                device: true,
                 url: value.verification_uri_complete ?? value.verification_uri,
                 instructions: `Open ${value.verification_uri} on any device and enter code: ${value.user_code}`,
                 ...(lifetime ? { expiresAt: created + lifetime * 1000 } : {}),
