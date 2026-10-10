@@ -5,8 +5,7 @@ import { Vcs } from "@opencode/schema/vcs"
 import { Schema } from "effect"
 import { createContext, onCleanup, type JSX, useContext } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
-import { watch } from "fs"
-import path from "path"
+import { createSourceWatcher } from "../plugin/watch"
 import { TuiKeybind } from "./keybind"
 
 export interface Interface {
@@ -354,15 +353,31 @@ export function ConfigProvider(props: {
     return info
   }
   let reload = Promise.resolve()
+  let disposed = false
+  let timeout: ReturnType<typeof setTimeout> | undefined
+  const refresh = () => {
+    if (!host?.path || disposed) return
+    void watcher?.wait(host.path)
+    clearTimeout(timeout)
+    timeout = setTimeout(() => {
+      reload = reload
+        .then(async () => {
+          if (disposed) return
+          const info = await host.get()
+          if (!disposed) apply(info)
+        })
+        .catch(() => {})
+    }, 100)
+  }
   const watcher = host?.path
-    ? watch(path.dirname(host.path), () => {
-        reload = reload
-          .then(() => host.get())
-          .then(apply)
-          .catch(() => {})
-      })
+    ? createSourceWatcher(refresh)
     : undefined
-  onCleanup(() => watcher?.close())
+  if (host?.path) void watcher?.wait(host.path).then(refresh)
+  onCleanup(() => {
+    disposed = true
+    clearTimeout(timeout)
+    watcher?.dispose()
+  })
   return (
     <ConfigContext.Provider value={{ data: config, path: host?.path, update }}>{props.children}</ConfigContext.Provider>
   )

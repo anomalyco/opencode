@@ -18,6 +18,33 @@ function run<A, E>(directory: string, effect: Effect.Effect<A, E, Config.Service
   )
 }
 
+test("retains the last valid config across incomplete and invalid external writes", async () => {
+  await using directory = await tmpdir()
+  const file = path.join(directory.path, "cli.json")
+  await Bun.write(file, JSON.stringify({ mouse: false, leader: { timeout: 500 } }))
+
+  await run(
+    directory.path,
+    Effect.gen(function* () {
+      const service = yield* Config.Service
+      expect(yield* service.get()).toEqual({ mouse: false, leader: { timeout: 500 } })
+      yield* Effect.promise(() => Bun.write(file, '{"mouse":'))
+      expect(yield* service.get()).toEqual({ mouse: false, leader: { timeout: 500 } })
+      yield* Effect.promise(() => Bun.write(file, JSON.stringify({ leader: { timeout: "invalid" } })))
+      expect(yield* service.get()).toEqual({ mouse: false, leader: { timeout: 500 } })
+      yield* Effect.promise(() => Bun.write(file, JSON.stringify({ mouse: true })))
+      expect(yield* service.get()).toEqual({ mouse: true })
+      yield* service.update((draft) => {
+        draft.mouse = false
+      })
+      yield* Effect.promise(() => Bun.write(file, "{"))
+      expect(yield* service.get()).toEqual({ mouse: false })
+      yield* Effect.promise(() => Bun.write(file, "{}"))
+      expect(yield* service.get()).toEqual({})
+    }),
+  )
+})
+
 test("generates reusable keybind schemas and preserves descriptions and numeric constraints", () => {
   const document = Schema.toJsonSchemaDocument(Config.Info)
   expect(document).toHaveProperty(["definitions", "TuiKeybind.BindingValue"])
