@@ -156,6 +156,51 @@ describe("SessionExecution lifecycle", () => {
     }),
   )
 
+  it.effect("settles a declined tool call as a deliberate stop that never resurrects", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+      const sessionID = Session.ID.make("ses_claim_declined")
+      yield* seedSessions(database, [sessionID])
+
+      const draining = yield* Deferred.make<void>()
+      const drained: Session.ID[] = []
+      const interrupted: SessionEvent.Execution.Interrupted[] = []
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      // The runner names the stop and then interrupts itself, exactly as a declined Step does.
+      const context = yield* buildExecution(scope, (input) =>
+        Effect.suspend(() => {
+          drained.push(input.sessionID)
+          const report = input.reportDeclined ?? (() => Effect.void)
+          return Deferred.succeed(draining, undefined).pipe(
+            Effect.andThen(report()),
+            Effect.andThen(Effect.interrupt),
+          )
+        }),
+      )
+      const execution = Context.get(context, SessionExecution.Service)
+      const restart = Context.get(context, SessionRestart.Service)
+      yield* bus.project(SessionEvent.Execution.Interrupted, (event) =>
+        Effect.sync(() => void interrupted.push(event)),
+      )
+
+      yield* execution.resume(sessionID).pipe(Effect.forkScoped)
+      yield* Deferred.await(draining)
+      expect((yield* claims(database))[sessionID]).toBe(true)
+      yield* execution.awaitIdle(sessionID)
+
+      // A decline is the user's own stop: it settles as "user" and releases the claim, where an
+      // unnamed interrupt reads as "shutdown" and holds the claim for the next server start.
+      expect(interrupted.map((event) => event.data.reason)).toEqual(["user"])
+      expect((yield* claims(database))[sessionID]).toBe(false)
+
+      // The recovery sweep finds nothing left to resume.
+      yield* restart.resumeSuspendedSessions
+      expect(drained).toEqual([sessionID])
+    }),
+  )
+
   it.effect("does not resume a user-cancelled background child whose notification was not admitted", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
