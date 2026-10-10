@@ -29,7 +29,7 @@ type Frontmatter = {
   negative?: { phase: "parse" | "resolution" | "runtime"; type: string }
 }
 
-const limits = { timeoutMs: 5000, maxToolCalls: undefined, maxOutputBytes: undefined }
+const limits = { timeoutMs: 5000, stallMs: undefined, maxToolCalls: undefined, maxOutputBytes: undefined }
 const prepared = ToolRuntime.prepare<never>({})
 
 export const run = async (file: string): Promise<Outcome> => {

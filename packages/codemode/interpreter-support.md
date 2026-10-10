@@ -33,6 +33,9 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] The global `search(...)` built-in: synchronous tool discovery that counts as an admitted tool call and is
       shadowable by program declarations like other globals.
 - [x] Cooperative timeout, an optional total tool-call limit, output bounding, and unrestricted tool-call concurrency.
+- [x] Optional stall detection (`stallMs`): a program body that takes no step for the whole window while no tool or
+      extension call is running fails with `Stalled`. Without timers, only those calls or the program's own steps can
+      settle a promise, so such a program is awaiting one that never settles, as in `await new Promise(() => {})`.
 - [x] The timeout fires between interpreter steps, so one built-in is bounded in what it may build: strings up to
       2^24 characters (`repeat`, `pad*`, `concat`, `join`, `+`, template literals, `JSON.stringify`), arrays up to
       10,000,000 elements (`Array(n)`, `length =`, `Array.from`, `split`, `matchAll`, `concat`, `flat`; below the JS
