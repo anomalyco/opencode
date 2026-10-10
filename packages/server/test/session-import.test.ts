@@ -50,6 +50,29 @@ it.live("preserves imported parentID through HTTP import, read, and parent filte
     }).toEqual({ imported: parent.data.id, read: parent.data.id, children: [id] })
   }).pipe(Effect.scoped),
 )
+it.live("maps imported message-ID collisions to 409 without creating the session", () =>
+  Effect.gen(function* () {
+    const request = yield* setup
+    const template = Schema.decodeUnknownSync(SessionResponse)(yield* request("/api/session", {}))
+    const messages = [{ id: "msg_clash", type: "user", text: "Hello", time: { created: 1 } }]
+    const first = Session.ID.create()
+    yield* request("/api/experimental/session/import", {
+      info: { ...template.data, id: first, title: "Original" },
+      messages,
+    })
+    const second = Session.ID.create()
+    const error = yield* request(
+      "/api/experimental/session/import",
+      { info: { ...template.data, id: second, title: "Copy" }, messages },
+      409,
+    )
+    expect(error).toMatchObject({ _tag: "ConflictError", resource: second })
+    expect(yield* request(`/api/session/${second}`, undefined, 404)).toMatchObject({
+      _tag: "SessionNotFoundError",
+      sessionID: second,
+    })
+  }).pipe(Effect.scoped),
+)
 ;["missing", "self"].forEach((parent) => {
   it.live(`rejects a ${parent} parent without creating the imported session`, () =>
     Effect.gen(function* () {

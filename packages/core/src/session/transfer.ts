@@ -3,7 +3,7 @@ export * as SessionTransfer from "./transfer.js"
 import { SessionTransfer } from "@opencode/schema/session-transfer"
 import { Tool } from "@opencode/schema/tool"
 import { Skill } from "@opencode/schema/skill"
-import { eq } from "drizzle-orm"
+import { eq, inArray } from "drizzle-orm"
 import { Clock, Context, DateTime, Effect, Layer, Schema } from "effect"
 import { map } from "effect/Array"
 import path from "path"
@@ -70,11 +70,21 @@ const layer = Layer.effect(
           .get()
           .pipe(Effect.orDie)
         if (recorded) return yield* new ImportConflictError({ sessionID })
+        const settled = input.data.messages.filter(isSettled)
+        for (const batch of batches(settled.map((message) => message.id))) {
+          const taken = yield* db
+            .select({ id: SessionMessageTable.id })
+            .from(SessionMessageTable)
+            .where(inArray(SessionMessageTable.id, batch))
+            .get()
+            .pipe(Effect.orDie)
+          if (taken) return yield* new ImportConflictError({ sessionID })
+        }
         if (input.data.info.parentID) yield* sessions.get(input.data.info.parentID)
         const project = yield* projects.resolve(input.location.directory)
         yield* upsertProject(db, project).pipe(Effect.orDie)
         const importedAt = yield* Clock.currentTimeMillis
-        const messages = input.data.messages.filter(isSettled).map((message, index) => {
+        const messages = settled.map((message, index) => {
           const encoded = encodeMessage(message)
           const { id: _, type, ...data } = encoded
           return {
@@ -166,6 +176,10 @@ function isSettled(message: SessionMessage.Info) {
   if (message.type === "assistant") return message.time.completed !== undefined
   if (message.type === "shell" || message.type === "compaction") return message.status !== "running"
   return true
+}
+
+function batches<T>(items: T[]) {
+  return Array.from({ length: Math.ceil(items.length / 500) }, (_, index) => items.slice(index * 500, (index + 1) * 500))
 }
 
 function redact(kind: string, id: string, value: string) {
