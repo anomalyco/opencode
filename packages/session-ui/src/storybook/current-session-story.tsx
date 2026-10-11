@@ -8,6 +8,7 @@ import { FileComponentProvider } from "@opencode/ui/context/file"
 import { Button } from "@opencode/ui/button"
 import { Show, createMemo, createSignal, type JSX } from "solid-js"
 import { CURRENT_SESSION_ID, STORY_TIME } from "./current-session-fixtures"
+import { SessionID } from "@opencode/schema/session-id"
 
 export function CurrentSessionProviders(props: { document: SessionDocument; children: JSX.Element }) {
   return (
@@ -43,13 +44,13 @@ export function CurrentSessionProviders(props: { document: SessionDocument; chil
             time: { created: STORY_TIME, updated: STORY_TIME + 300_000 },
           },
           {
-            id: "session_child_review",
+            id: SessionID.make("session_child_review", { disableChecks: true }),
             parentID: CURRENT_SESSION_ID,
             title: "Review current Session fixtures",
             time: { created: STORY_TIME + 71_000, updated: STORY_TIME + 72_000 },
           },
           {
-            id: "session_child_tests",
+            id: SessionID.make("session_child_tests", { disableChecks: true }),
             parentID: CURRENT_SESSION_ID,
             title: "Check the Storybook scenarios",
             time: { created: STORY_TIME + 73_000, updated: STORY_TIME + 74_000 },

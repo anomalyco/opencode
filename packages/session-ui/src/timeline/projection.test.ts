@@ -1,3 +1,7 @@
+import { Provider } from "@opencode/schema/provider"
+import { Model } from "@opencode/schema/model"
+import { Agent } from "@opencode/schema/agent"
+import { SessionMessage } from "@opencode/schema/session-message"
 import { describe, expect, test } from "bun:test"
 import type {
   ModelRef,
@@ -17,47 +21,56 @@ import {
 
 const context = (key: string, partIDs: string[], identity: { userMessageID?: string; messageID?: string } = {}) =>
   new TimelineRow.AssistantPart({
-    userMessageID: identity.userMessageID ?? "user-1",
+    userMessageID: SessionMessage.ID.make(identity.userMessageID ?? "user-1", { disableChecks: true }),
     group: {
       key,
       type: "context",
-      refs: partIDs.map((partID) => ({ messageID: identity.messageID ?? "assistant-1", partID })),
+      refs: partIDs.map((partID) => ({
+        messageID: SessionMessage.ID.make(identity.messageID ?? "assistant-1", { disableChecks: true }),
+        partID,
+      })),
     } satisfies PartGroup,
     previousAssistantPart: false,
   })
 
 const patch = (key: string, partIDs: string[], userMessageID = "user-1") =>
   new TimelineRow.AssistantPart({
-    userMessageID,
+    userMessageID: SessionMessage.ID.make(userMessageID, { disableChecks: true }),
     group: {
       key,
       type: "file",
-      refs: partIDs.map((partID) => ({ messageID: "assistant-1", partID })),
+      refs: partIDs.map((partID) => ({
+        messageID: SessionMessage.ID.make("assistant-1", { disableChecks: true }),
+        partID,
+      })),
     } satisfies PartGroup,
     previousAssistantPart: false,
   })
 
 const part = (key: string, partID: string) =>
   new TimelineRow.AssistantPart({
-    userMessageID: "user-1",
+    userMessageID: SessionMessage.ID.make("user-1", { disableChecks: true }),
     group: {
       key,
       type: "part",
-      ref: { messageID: "assistant-1", partID },
+      ref: { messageID: SessionMessage.ID.make("assistant-1", { disableChecks: true }), partID },
     } satisfies PartGroup,
     previousAssistantPart: false,
   })
 
-const user = (userMessageID = "user-1") => new TimelineRow.UserMessage({ userMessageID })
-
+const user = (userMessageID = "user-1") =>
+  new TimelineRow.UserMessage({ userMessageID: SessionMessage.ID.make(userMessageID, { disableChecks: true }) })
 const keys = (rows: TimelineRow.TimelineRow[]) => rows.map(TimelineRow.key)
 
 describe("Timeline.resolveContent", () => {
   const assistant = (content: SessionMessageAssistant["content"]): SessionMessageAssistant => ({
-    id: "assistant",
+    id: SessionMessage.ID.make("assistant", { disableChecks: true }),
     type: "assistant",
-    agent: "build",
-    model: { id: "model", providerID: "provider" },
+    agent: Agent.ID.make("build", { disableChecks: true }),
+    model: {
+      id: Model.ID.make("model", { disableChecks: true }),
+      providerID: Provider.ID.make("provider", { disableChecks: true }),
+    },
     content,
     time: { created: 0 },
   })
@@ -220,23 +233,44 @@ describe("reuseTimelineRows", () => {
 
 describe("createTimelineProjection", () => {
   test("builds current message, parent, context, and row indexes", () => {
-    const selectedModel = { id: "selected", providerID: "provider" } satisfies ModelRef
-    const assistantModel = { id: "assistant", providerID: "provider", variant: "fast" } satisfies ModelRef
-
+    const selectedModel = {
+      id: Model.ID.make("selected", { disableChecks: true }),
+      providerID: Provider.ID.make("provider", { disableChecks: true }),
+    } satisfies ModelRef
+    const assistantModel = {
+      id: Model.ID.make("assistant", { disableChecks: true }),
+      providerID: Provider.ID.make("provider", { disableChecks: true }),
+      variant: Model.VariantID.make("fast", { disableChecks: true }),
+    } satisfies ModelRef
     const messages = [
-      { id: "agent", type: "agent-switched", agent: "explore", time: { created: 1 } },
-      { id: "model", type: "model-switched", model: selectedModel, time: { created: 2 } },
-      { id: "user-1", type: "user", text: "first", time: { created: 3 } },
       {
-        id: "assistant-1",
+        id: SessionMessage.ID.make("agent", { disableChecks: true }),
+        type: "agent-switched",
+        agent: Agent.ID.make("explore", { disableChecks: true }),
+        time: { created: 1 },
+      },
+      {
+        id: SessionMessage.ID.make("model", { disableChecks: true }),
+        type: "model-switched",
+        model: selectedModel,
+        time: { created: 2 },
+      },
+      {
+        id: SessionMessage.ID.make("user-1", { disableChecks: true }),
+        type: "user",
+        text: "first",
+        time: { created: 3 },
+      },
+      {
+        id: SessionMessage.ID.make("assistant-1", { disableChecks: true }),
         type: "assistant",
-        agent: "build",
+        agent: Agent.ID.make("build", { disableChecks: true }),
         model: assistantModel,
         content: [{ type: "text", text: "answer" }],
         time: { created: 4, completed: 5 },
       },
       {
-        id: "user-2",
+        id: SessionMessage.ID.make("user-2", { disableChecks: true }),
         type: "user",
         text: "second",
         metadata: {
@@ -253,15 +287,21 @@ describe("createTimelineProjection", () => {
       reasoningMode: "full",
     })
 
-    expect(result.activeMessageID).toBe("user-2")
+    expect<unknown>(result.activeMessageID).toBe("user-2")
     expect(result.messageByID).toBe(result.sessionMessageByID)
-    expect(result.sessionMessageByID.get("assistant-1")).toBe(messages[3])
-    expect(result.assistantMessagesByParent.get("user-1")?.map((message) => message.id)).toEqual(["assistant-1"])
+    expect(result.sessionMessageByID.get(SessionMessage.ID.make("assistant-1", { disableChecks: true }))).toBe(
+      messages[3],
+    )
+    expect<unknown>(result.assistantMessagesByParent.get("user-1")?.map((message) => message.id)).toEqual(["assistant-1"])
     expect(result.assistantMessagesByParent.has("user-2")).toBe(false)
     expect(result.userContextByID.get("user-1")).toEqual({ agent: "build", model: assistantModel })
-    expect(result.userContextByID.get("user-2")).toEqual({
+    expect<unknown>(result.userContextByID.get("user-2")).toEqual({
       agent: "review",
-      model: { id: "override", providerID: "custom", variant: "precise" },
+      model: {
+        id: "override",
+        providerID: "custom",
+        variant: Model.VariantID.make("precise"),
+      },
     })
     expect(result.messageRowIndex.get("user-1")).toBe(0)
     expect(result.messageLastRowIndex.get("user-1")).toBe(3)
@@ -271,12 +311,20 @@ describe("createTimelineProjection", () => {
 
   test("reuses a stable projected row array", () => {
     const messages = [
-      { id: "user-1", type: "user", text: "first", time: { created: 1 } },
       {
-        id: "assistant-1",
+        id: SessionMessage.ID.make("user-1", { disableChecks: true }),
+        type: "user",
+        text: "first",
+        time: { created: 1 },
+      },
+      {
+        id: SessionMessage.ID.make("assistant-1", { disableChecks: true }),
         type: "assistant",
-        agent: "build",
-        model: { id: "model", providerID: "provider" },
+        agent: Agent.ID.make("build", { disableChecks: true }),
+        model: {
+          id: Model.ID.make("model", { disableChecks: true }),
+          providerID: Provider.ID.make("provider", { disableChecks: true }),
+        },
         content: [{ type: "text", text: "answer" }],
         time: { created: 2, completed: 3 },
       },
@@ -303,18 +351,24 @@ describe("createTimelineProjection", () => {
   test("indexes a leading partial assistant turn under its projected turn ID", () => {
     const messages = [
       {
-        id: "assistant-1",
+        id: SessionMessage.ID.make("assistant-1", { disableChecks: true }),
         type: "assistant",
-        agent: "build",
-        model: { id: "model", providerID: "provider" },
+        agent: Agent.ID.make("build", { disableChecks: true }),
+        model: {
+          id: Model.ID.make("model", { disableChecks: true }),
+          providerID: Provider.ID.make("provider", { disableChecks: true }),
+        },
         content: [{ type: "text", text: "partial answer" }],
         time: { created: 2, completed: 3 },
       },
       {
-        id: "assistant-2",
+        id: SessionMessage.ID.make("assistant-2", { disableChecks: true }),
         type: "assistant",
-        agent: "build",
-        model: { id: "model", providerID: "provider" },
+        agent: Agent.ID.make("build", { disableChecks: true }),
+        model: {
+          id: Model.ID.make("model", { disableChecks: true }),
+          providerID: Provider.ID.make("provider", { disableChecks: true }),
+        },
         content: [{ type: "text", text: "final answer" }],
         time: { created: 4, completed: 5 },
       },
@@ -326,7 +380,7 @@ describe("createTimelineProjection", () => {
       reasoningMode: "full",
     })
 
-    expect(result.assistantMessagesByParent.get("assistant-1")?.map((message) => message.id)).toEqual([
+    expect<unknown>(result.assistantMessagesByParent.get("assistant-1")?.map((message) => message.id)).toEqual([
       "assistant-1",
       "assistant-2",
     ])

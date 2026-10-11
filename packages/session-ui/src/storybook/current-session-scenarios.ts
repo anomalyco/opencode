@@ -1,6 +1,8 @@
 import type { JsonValue, SessionMessageAssistant, SessionMessageAssistantTool } from "@opencode/client/promise"
 import type { SessionDocument } from "../document"
 import { CURRENT_SESSION_ID, STORY_MODEL, STORY_TIME, thinkingDocument } from "./current-session-fixtures"
+import { Agent } from "@opencode/schema/agent"
+import { SessionMessage } from "@opencode/schema/session-message"
 
 export function storyTool(
   id: string,
@@ -49,9 +51,9 @@ export function storyDocument(content: SessionMessageAssistant["content"], busy 
     messages: [
       ...thinkingDocument.messages,
       {
-        id: "msg_tool_projection_assistant",
+        id: SessionMessage.ID.make("msg_tool_projection_assistant", { disableChecks: true }),
         type: "assistant",
-        agent: "build",
+        agent: Agent.ID.make("build"),
         model: STORY_MODEL,
         content,
         time: { created: STORY_TIME, ...(busy ? {} : { completed: STORY_TIME + 300 }) },
