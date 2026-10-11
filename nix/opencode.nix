@@ -1,6 +1,8 @@
 {
   lib,
   stdenvNoCC,
+  stdenv,
+  patchelf,
   callPackage,
   bun,
   nodejs,
@@ -26,7 +28,8 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     makeBinaryWrapper
     models-dev
     writableTmpDirAsHomeHook
-  ];
+  ]
+  ++ lib.optional stdenvNoCC.hostPlatform.isLinux patchelf;
 
   postPatch = ''
     # NOTE: Relax Bun version check to be a warning instead of an error
@@ -41,7 +44,25 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     cp -R ${finalAttrs.node_modules}/. .
     patchShebangs node_modules
     patchShebangs packages/*/node_modules
-
+    ${lib.optionalString stdenvNoCC.hostPlatform.isLinux ''
+      # Fix the copied GNU helper before build.ts hashes and embeds its bytes.
+      # Resolve from the PTY package, as packages/cli/script/opencode-pty.ts does.
+      ptyBinary="$(bun --eval '
+        const { createRequire } = require("node:module");
+        const { resolve } = require("node:path");
+        const core = createRequire(resolve("packages/core/package.json"));
+        const pty = createRequire(core.resolve("@opencode-ai/pty/package.json"));
+        console.log(pty.resolve("@opencode-ai/pty-linux-" + process.arch + "-gnu/bin/opencode-pty"));
+      ')"
+      ptyBinary="$(realpath "$ptyBinary")"
+      case "$ptyBinary" in
+        "$PWD"/*) ;;
+        *) echo "PTY helper resolved outside the copied source: $ptyBinary" >&2; exit 1 ;;
+      esac
+      chmod u+w "$ptyBinary"
+      patchelf --set-interpreter ${stdenv.cc.bintools.dynamicLinker} \
+        --set-rpath ${lib.makeLibraryPath [ stdenv.cc.libc ]} "$ptyBinary"
+    ''}
     runHook postConfigure
   '';
 
