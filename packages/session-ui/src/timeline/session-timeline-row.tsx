@@ -30,6 +30,8 @@ import { SessionRetry } from "../components/session-retry"
 import { SessionError } from "../components/session-error"
 import { timelineCategory, type TimelineDetail } from "./detail"
 import { currentToolFailed } from "../message/current-tool-state"
+import { Model } from "@opencode/schema/model"
+import { Provider } from "@opencode/schema/provider"
 import {
   createReactiveTimelineProjection,
   Timeline,
@@ -734,7 +736,7 @@ export function createSessionTimelineRowRenderer(input: {
                       comments={presentation()?.comments}
                       references={presentation()?.references}
                       historicalAgent={context()?.agent ?? ""}
-                      historicalModel={context()?.model ?? { id: "", providerID: "" }}
+                      historicalModel={context()?.model ?? { id: Model.ID.make(""), providerID: Provider.ID.make("") }}
                       actions={input.actions}
                     />
                   </div>

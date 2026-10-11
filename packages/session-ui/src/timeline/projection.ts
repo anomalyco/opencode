@@ -17,6 +17,8 @@ import {
 } from "../message/current-tool-state"
 import { TimelineRow, type PartGroup, type PartRef, type TimelineRowMap } from "./timeline-row"
 import { timelineCategory, timelineNoticeRequired, type TimelineDetail } from "./detail"
+import { Model } from "@opencode/schema/model"
+import { Provider } from "@opencode/schema/provider"
 
 export { TimelineRow, type PartGroup, type PartRef, type TimelineRowMap }
 
@@ -83,7 +85,9 @@ export type TimelineProjectionInput = {
 }
 
 export function createTimelineProjection(input: TimelineProjectionInput) {
-  const sessionMessageByID = new Map(input.sessionMessages.map((message) => [message.id, message] as const))
+  const sessionMessageByID = new Map<string, SessionMessageInfo>(
+    input.sessionMessages.map((message) => [message.id, message] as const),
+  )
 
   const projection = Timeline.constructSessionMessageRows(
     input.sessionMessages,
@@ -135,7 +139,7 @@ export function createReactiveTimelineProjection(input: {
   queuedCompactionIDs?: Accessor<readonly string[]>
 }) {
   const sessionMessageByID = createMemo(
-    () => new Map(input.sessionMessages().map((message) => [message.id, message] as const)),
+    () => new Map<string, SessionMessageInfo>(input.sessionMessages().map((message) => [message.id, message] as const)),
   )
 
   const userContextByID = createMemo(() => indexUserContext(input.sessionMessages()))
@@ -678,7 +682,7 @@ export function reuseTimelineRows(previous: TimelineRow.TimelineRow[] | undefine
 function indexUserContext(messages: SessionMessageInfo[]) {
   const result = new Map<string, { agent: string; model: ModelRef }>()
   let agent = ""
-  let model: ModelRef = { id: "", providerID: "" }
+  let model: ModelRef = { id: Model.ID.make(""), providerID: Provider.ID.make("") }
   let userID: string | undefined
 
   messages.forEach((message) => {
@@ -698,7 +702,11 @@ function indexUserContext(messages: SessionMessageInfo[]) {
         }),
         model:
           localModel && localModelID
-            ? { id: localModelID, providerID: localModel.providerID, variant: localModel.variant }
+            ? {
+                id: Model.ID.make(localModelID),
+                providerID: Provider.ID.make(localModel.providerID),
+                variant: localModel.variant === undefined ? undefined : Model.VariantID.make(localModel.variant),
+              }
             : model,
       })
     }
