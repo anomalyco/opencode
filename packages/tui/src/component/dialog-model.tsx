@@ -24,12 +24,12 @@ export function DialogModel(props: { providerID?: string }) {
   )
   const models = createMemo(() => data.location.model.list(location.ref) ?? [])
 
-  const showExtra = createMemo(() => connected() && !props.providerID)
+  const showExtra = createMemo(() => !props.providerID)
 
   const options = createMemo(() => {
     const needle = query().trim()
     const showSections = showExtra() && needle.length === 0
-    const favorites = connected() ? local.model.favorite() : []
+    const favorites = local.model.favorite()
     const recents = local.model.recent()
 
     function toOptions(items: typeof favorites, category: string) {
@@ -157,7 +157,6 @@ export function DialogModel(props: { providerID?: string }) {
         {
           command: "model.dialog.favorite",
           title: "Favorite",
-          hidden: !connected(),
           onTrigger: (option) => {
             local.model.toggleFavorite(option.value as { providerID: string; modelID: string })
           },
