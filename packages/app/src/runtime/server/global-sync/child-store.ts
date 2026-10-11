@@ -152,6 +152,7 @@ export function createChildStoreManager(input: {
     const stores = Object.keys(children)
 
     if (stores.length === 0) return
+    const now = Date.now()
 
     const list = pickDirectoriesToEvict({
       stores,
@@ -159,7 +160,7 @@ export function createChildStoreManager(input: {
       pins: new Set(stores.filter(pinned)),
       max: MAX_DIR_STORES,
       ttl: DIR_IDLE_TTL_MS,
-      now: Date.now(),
+      now,
     }).filter((directory) => directory !== skip)
 
     if (list.length === 0) return
