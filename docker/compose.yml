@@ -2,9 +2,9 @@ name: opencode-prod
 services:
   opencode-prod:
     # 生产 pin digest（CI 推送的 manifest 双 registry 同 digest；跟版时改这一行）
-    image: swr.cn-north-9.myhuaweicloud.com/xieyucheng123/opencode-tools@sha256:94caa60c15393e726c9f16d5ec6a663ebf3c31fa189f7c9f554fbaf7094ca754
+    image: swr.cn-north-9.myhuaweicloud.com/xieyucheng123/opencode-tools@sha256:ae6cda29d4746b180b09b65a9e40dbc6d70927012b919aa248bc9e9492fd1e4c
     # GHCR 同 digest 备选（需先 docker login ghcr.io）：
-    # image: ghcr.io/xieyucheng123/opencode-tools@sha256:94caa60c15393e726c9f16d5ec6a663ebf3c31fa189f7c9f554fbaf7094ca754
+    # image: ghcr.io/xieyucheng123/opencode-tools@sha256:ae6cda29d4746b180b09b65a9e40dbc6d70927012b919aa248bc9e9492fd1e4c
     container_name: opencode-prod
     network_mode: host
     env_file:
