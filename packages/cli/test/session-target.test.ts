@@ -1,15 +1,23 @@
+import { Model } from "@opencode/schema/model"
+import { Agent } from "@opencode/schema/agent"
+import { Provider } from "@opencode/schema/provider"
+import { Session } from "@opencode/schema/session"
+import { Project } from "@opencode/schema/project"
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
 import { OpenCode, type LocationGetOutput, type ModelRef, type SessionInfo } from "@opencode/client/promise"
 import { resolveSessionTarget, SessionTargetMutationError } from "../src/session-target"
 
 function location(directory: string): LocationGetOutput {
-  return { directory, project: { id: "project", directory, canonical: directory } }
+  return {
+    directory,
+    project: { id: Project.ID.make("project", { disableChecks: true }), directory, canonical: directory },
+  }
 }
 
 function session(id: string, directory: string, model?: ModelRef): SessionInfo {
   return {
-    id,
-    projectID: "project",
+    id: Session.ID.make(id, { disableChecks: true }),
+    projectID: Project.ID.make("project", { disableChecks: true }),
     title: id,
     location: { directory },
     model,
@@ -21,7 +29,7 @@ function session(id: string, directory: string, model?: ModelRef): SessionInfo {
 
 const prepare = async (input: { model: ModelRef | undefined; agent: string | undefined }) => ({
   model: input.model,
-  agent: input.agent,
+  agent: input.agent === undefined ? undefined : Agent.ID.make(input.agent, { disableChecks: true }),
 })
 
 afterEach(() => mock.restore())
@@ -29,7 +37,10 @@ afterEach(() => mock.restore())
 describe("session target resolver", () => {
   test("adopts an explicit Session location and model", async () => {
     const client = OpenCode.make({ baseUrl: "https://opencode.test" })
-    const selected = session("ses_resume", "/session", { providerID: "openai", id: "gpt-5" })
+    const selected = session(Session.ID.make("ses_resume", { disableChecks: true }), "/session", {
+      providerID: Provider.ID.make("openai", { disableChecks: true }),
+      id: Model.ID.make("gpt-5", { disableChecks: true }),
+    })
     spyOn(client.session, "get").mockResolvedValue(selected)
     spyOn(client.location, "get").mockResolvedValue(location("/session"))
 
@@ -46,9 +57,15 @@ describe("session target resolver", () => {
     const client = OpenCode.make({ baseUrl: "https://opencode.test" })
     spyOn(client.session, "get").mockRejectedValue({ _tag: "SessionNotFoundError" })
     spyOn(client.location, "get").mockResolvedValue(location("/project"))
-    const create = spyOn(client.session, "create").mockResolvedValue(session("ses_chosen", "/project"))
+    const create = spyOn(client.session, "create").mockResolvedValue(
+      session(Session.ID.make("ses_chosen", { disableChecks: true }), "/project"),
+    )
 
-    const target = await resolveSessionTarget({ client, session: "ses_chosen", prepare })
+    const target = await resolveSessionTarget({
+      client,
+      session: Session.ID.make("ses_chosen", { disableChecks: true }),
+      prepare,
+    })
     expect(create).toHaveBeenCalledWith(expect.objectContaining({ id: "ses_chosen" }))
     expect(target).toMatchObject({ session: { id: "ses_chosen" }, resume: false })
   })
@@ -58,9 +75,14 @@ describe("session target resolver", () => {
     spyOn(client.session, "get").mockRejectedValue({ _tag: "SessionNotFoundError" })
     const create = spyOn(client.session, "create")
 
-    await expect(resolveSessionTarget({ client, session: "ses_chosen", fork: true, prepare })).rejects.toThrow(
-      "Session not found",
-    )
+    await expect(
+      resolveSessionTarget({
+        client,
+        session: Session.ID.make("ses_chosen", { disableChecks: true }),
+        fork: true,
+        prepare,
+      }),
+    ).rejects.toThrow("Session not found")
     expect(create).not.toHaveBeenCalled()
   })
 
@@ -70,16 +92,19 @@ describe("session target resolver", () => {
     const explicit = Array.from({ length: 50 }, (_, index) => session(`ses_${index}`, `/other/${index}`))
     const list = spyOn(client.session, "list")
       .mockResolvedValueOnce({ data: explicit, cursor: { next: "page_2" } })
-      .mockResolvedValueOnce({ data: [session("ses_implicit", "/project")], cursor: {} })
+      .mockResolvedValueOnce({
+        data: [session(Session.ID.make("ses_implicit", { disableChecks: true }), "/project")],
+        cursor: {},
+      })
 
     const target = await resolveSessionTarget({ client, location: { directory: "/project" }, continue: true, prepare })
     expect(list).toHaveBeenCalledTimes(2)
-    expect(target.session.id).toBe("ses_implicit")
+    expect<unknown>(target.session.id).toBe("ses_implicit")
   })
 
   test("attaches the terminal environment to the resolved local Session", async () => {
     const client = OpenCode.make({ baseUrl: "https://opencode.test" })
-    const selected = session("ses_resume", "/session")
+    const selected = session(Session.ID.make("ses_resume", { disableChecks: true }), "/session")
     spyOn(client.session, "get").mockResolvedValue(selected)
     spyOn(client.location, "get").mockResolvedValue(location("/session"))
     const environment = spyOn(client.session, "environment").mockResolvedValue()
@@ -104,16 +129,16 @@ describe("session target resolver", () => {
     const create = spyOn(client.session, "create").mockImplementation(async (input) => {
       order.push("create")
       expect(input).toMatchObject({ agent: "prepared", location: { directory: "/server" } })
-      return session("ses_fresh", "/server")
+      return session(Session.ID.make("ses_fresh", { disableChecks: true }), "/server")
     })
 
     await resolveSessionTarget({
       client,
-      agent: "requested",
+      agent: Agent.ID.make("requested", { disableChecks: true }),
       prepare: async (input) => {
         order.push("prepare")
         expect(input.location.directory).toBe("/server")
-        return { model: input.model, agent: "prepared" }
+        return { model: input.model, agent: Agent.ID.make("prepared", { disableChecks: true }) }
       },
     })
     expect(create).toHaveBeenCalledTimes(1)
@@ -123,10 +148,13 @@ describe("session target resolver", () => {
   test("uses the agent resolved by the server for a fresh Session", async () => {
     const client = OpenCode.make({ baseUrl: "https://opencode.test" })
     spyOn(client.location, "get").mockResolvedValue(location("/project"))
-    spyOn(client.session, "create").mockResolvedValue({ ...session("ses_fresh", "/project"), agent: "review" })
+    spyOn(client.session, "create").mockResolvedValue({
+      ...session(Session.ID.make("ses_fresh", { disableChecks: true }), "/project"),
+      agent: Agent.ID.make("review", { disableChecks: true }),
+    })
 
     const target = await resolveSessionTarget({ client, prepare })
-    expect(target.agent).toBe("review")
+    expect<unknown>(target.agent).toBe("review")
   })
 
   test("does not retry an ambiguous Session creation", async () => {

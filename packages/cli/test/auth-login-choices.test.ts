@@ -1,3 +1,4 @@
+import { Integration } from "@opencode/schema/integration"
 import { expect, test } from "bun:test"
 import type { IntegrationInfo } from "@opencode/client"
 import { loginChoices } from "../src/commands/handlers/auth/login"
@@ -11,13 +12,29 @@ const integration = (value: Partial<IntegrationInfo> & Pick<IntegrationInfo, "id
 test("groups the CLI choices like /connect while keeping stable login IDs", () => {
   expect(
     loginChoices([
-      integration({ id: "mistral", name: "Mistral" }),
-      integration({ id: "openai", name: "OpenAI" }),
-      integration({ id: "linear", name: "Linear", metadata: { source: "mcp" } }),
-      integration({ id: "github", name: "GitHub", metadata: { source: "mcp" } }),
-      integration({ id: "opencode", name: "OpenCode Console" }),
-      integration({ id: "opencode-go", name: "OpenCode Go", connections: [{ type: "env", name: "GO_KEY" }] }),
-      integration({ id: "unused", name: "Unused", methods: [{ type: "env", names: ["UNUSED_KEY"] }] }),
+      integration({ id: Integration.ID.make("mistral", { disableChecks: true }), name: "Mistral" }),
+      integration({ id: Integration.ID.make("openai", { disableChecks: true }), name: "OpenAI" }),
+      integration({
+        id: Integration.ID.make("linear", { disableChecks: true }),
+        name: "Linear",
+        metadata: { source: "mcp" },
+      }),
+      integration({
+        id: Integration.ID.make("github", { disableChecks: true }),
+        name: "GitHub",
+        metadata: { source: "mcp" },
+      }),
+      integration({ id: Integration.ID.make("opencode", { disableChecks: true }), name: "OpenCode Console" }),
+      integration({
+        id: Integration.ID.make("opencode-go", { disableChecks: true }),
+        name: "OpenCode Go",
+        connections: [{ type: "env", name: "GO_KEY" }],
+      }),
+      integration({
+        id: Integration.ID.make("unused", { disableChecks: true }),
+        name: "Unused",
+        methods: [{ type: "env", names: ["UNUSED_KEY"] }],
+      }),
     ]),
   ).toEqual([
     { value: "github", label: "GitHub", category: "MCP", connected: false },
