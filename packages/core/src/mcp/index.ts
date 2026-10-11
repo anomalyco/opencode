@@ -3,7 +3,7 @@ export * as Mcp from "./index.js"
 import { Mcp } from "@opencode/schema/mcp"
 import { McpEvent } from "@opencode/schema/mcp-event"
 import { ephemeral } from "@opencode/schema/event"
-import type { Session } from "@opencode/schema/session"
+import { Session } from "@opencode/schema/session"
 import { createHash } from "node:crypto"
 import { isDeepStrictEqual } from "node:util"
 import { Cause, Context, Effect, Exit, FiberSet, Latch, Layer, Schema, Scope, Semaphore, Stream, Types } from "effect"
@@ -15,6 +15,7 @@ import { Form } from "../form.js"
 import { Integration } from "../integration.js"
 import { KeyedMutex } from "../effect/keyed-mutex.js"
 import { Location } from "../location.js"
+import { SessionStore } from "../session/store.js"
 import { waitForAbort } from "@opencode/util/process"
 import { State } from "../state.js"
 import type { McpClient } from "./client.js"
@@ -160,6 +161,7 @@ export const layer = (options?: Options) =>
       const forms = yield* Form.Service
       const integration = yield* Integration.Service
       const credentials = yield* Credential.Service
+      const sessions = yield* SessionStore.Service
       const root = yield* Effect.scope
       const fork = yield* FiberSet.makeRuntime<never, void, never>()
 
@@ -596,6 +598,26 @@ export const layer = (options?: Options) =>
           Stream.runForEach((event) => Effect.sync(() => fork(reconnect(event.data.integrationID)))),
         ),
       )
+      // Release stdio MCP servers when the last session in this directory is deleted. Without
+      // this, the shared background service accumulates MCP server processes for every visited
+      // directory for the lifetime of the process.
+      fork(
+        bus.subscribe(Session.Event.Deleted).pipe(
+          Stream.runForEach((event) =>
+            Effect.gen(function* () {
+              const remaining = yield* sessions.list({ directory: location.directory })
+              if (remaining.length > 0) return
+              for (const [name, entry] of entries) {
+                if (!entry.scope) continue
+                yield* stopServer(name, entry)
+              }
+              yield* Effect.logInfo("mcp servers released: no remaining sessions", {
+                directory: location.directory,
+              })
+            }),
+          ),
+        ),
+      )
       const state: State.Interface<Data, Editor> = State.create<Data, Editor>({
         name: "mcp",
         initial: () => ({
@@ -775,7 +797,7 @@ export function configured(options?: Options) {
   return makeLocationNode({
     service: Service,
     layer: layer(options),
-    deps: [Location.node, Environment.node, Bus.node, Form.node, Integration.node, Credential.node],
+    deps: [Location.node, Environment.node, Bus.node, Form.node, Integration.node, Credential.node, SessionStore.node],
   })
 }
 

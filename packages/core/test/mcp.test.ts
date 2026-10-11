@@ -32,6 +32,7 @@ import { McpStdio } from "@opencode/core/mcp/stdio"
 import { Permission } from "@opencode/core/permission"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
+import { SessionStore } from "@opencode/core/session/store"
 import { State } from "@opencode/core/state"
 import { McpTool } from "@opencode/core/tool/mcp"
 import { McpResourceTools } from "@opencode/core/tool/plugin/mcp-resource"
@@ -362,6 +363,7 @@ function resourceMcpLayer(
           },
         }),
         Layer.mock(Credential.Service, {}),
+        Layer.mock(SessionStore.Service, { list: () => Effect.succeed([]) }),
         overrides?.environment ?? hostEnvironmentLayer,
       ),
     ),
@@ -2033,7 +2035,10 @@ shutdownIt.effect("discards in-flight and queued MCP notifications after its lay
     yield* Effect.addFinalizer(() =>
       Deferred.succeed(release, undefined).pipe(Effect.andThen(State.shutdown(Scope.close(root, Exit.void)))),
     )
-    const context = yield* Layer.buildWithScope(Mcp.layer(), root)
+    const context = yield* Layer.buildWithScope(
+      Mcp.layer().pipe(Layer.provide(Layer.mock(SessionStore.Service, { list: () => Effect.succeed([]) }))),
+      root,
+    )
     const service = Context.get(context, Mcp.Service)
     const observed: string[] = []
     let block = false
