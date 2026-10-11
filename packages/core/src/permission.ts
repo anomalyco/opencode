@@ -3,6 +3,7 @@ export * as Permission from "./permission.js"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Context, Deferred, Effect, Layer, Schema } from "effect"
 import { Permission } from "@opencode/schema/permission"
+import path from "path"
 import { Bus } from "./bus.js"
 import { Location } from "./location.js"
 import { Agent } from "./agent.js"
@@ -85,14 +86,18 @@ export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Permissi
 export type Error = BlockedError | CorrectedError
 
 export function evaluate(action: string, resource: string, ...rulesets: Permission.Ruleset[]): Permission.Rule {
+  return evaluateRules(action, resource, rulesets.flat())
+}
+
+// `absolute` is the same file as a Location-relative `resource`; only absolute rules match it, so relative
+// patterns stay Location-scoped and last-match-wins order is preserved.
+function evaluateRules(action: string, resource: string, rules: Permission.Ruleset, absolute?: string) {
   return (
-    rulesets
-      .flat()
-      .findLast((rule) => Wildcard.match(action, rule.action) && Wildcard.match(resource, rule.resource)) ?? {
-      action,
-      resource: "*",
-      effect: "ask",
-    }
+    rules.findLast(
+      (rule) =>
+        Wildcard.match(action, rule.action) &&
+        Wildcard.match(absolute !== undefined && path.isAbsolute(rule.resource) ? absolute : resource, rule.resource),
+    ) ?? { action, resource: "*", effect: "ask" as const }
   )
 }
 
@@ -162,8 +167,15 @@ const layer = Layer.effect(
       return merge(agent?.permissions ?? missingAgentPermissions, session.permissions ?? [])
     })
 
+    // File tools pass Location-relative resources for internal paths, so absolute rules (such as the Plan
+    // directory allow) must also be tried against the resolved path.
+    function evaluateResource(action: string, resource: string, rules: Permission.Ruleset) {
+      const file = (action === "read" || action === "edit") && !path.isAbsolute(resource)
+      return evaluateRules(action, resource, rules, file ? path.resolve(location.directory, resource) : undefined)
+    }
+
     function denied(input: Pick<Request, "action" | "resources">, rules: Permission.Ruleset) {
-      return input.resources.some((resource) => evaluate(input.action, resource, rules).effect === "deny")
+      return input.resources.some((resource) => evaluateResource(input.action, resource, rules).effect === "deny")
     }
 
     function relevant(input: AssertInput, rules: Permission.Ruleset) {
@@ -174,7 +186,7 @@ const layer = Layer.effect(
       const rules = yield* configured(input.sessionID, input.agent)
       if (denied(input, rules)) return { effect: "deny" as const, rules }
       const all = [...rules, ...(yield* savedRules())]
-      const effects = input.resources.map((resource) => evaluate(input.action, resource, all).effect)
+      const effects = input.resources.map((resource) => evaluateResource(input.action, resource, all).effect)
       const effect: Permission.Effect = effects.includes("ask") ? "ask" : "allow"
       const event = yield* hooks.trigger("permission", "evaluate", {
         sessionID: input.sessionID,
