@@ -29,7 +29,9 @@ export type Data = SessionTransfer.Data
 
 export class ImportConflictError extends Schema.TaggedError<ImportConflictError>()(
   "SessionTransfer.ImportConflictError",
-  { sessionID: Session.ID },
+  // "session": the session row already exists; "messages": only some message IDs exist
+  // under another session, so the session itself was never created.
+  { sessionID: Session.ID, reason: Schema.Literals(["session", "messages"]) },
 ) {}
 
 export interface Interface {
@@ -72,7 +74,7 @@ const layer = Layer.effect(
           .where(eq(SessionTable.id, sessionID))
           .get()
           .pipe(Effect.orDie)
-        if (recorded) return yield* new ImportConflictError({ sessionID })
+        if (recorded) return yield* new ImportConflictError({ sessionID, reason: "session" })
         const settled = input.data.messages.filter(isSettled)
         for (const batch of batches(settled.map((message) => message.id))) {
           const taken = yield* db
@@ -81,7 +83,7 @@ const layer = Layer.effect(
             .where(inArray(SessionMessageTable.id, batch))
             .get()
             .pipe(Effect.orDie)
-          if (taken) return yield* new ImportConflictError({ sessionID })
+          if (taken) return yield* new ImportConflictError({ sessionID, reason: "messages" })
         }
         if (input.data.info.parentID) yield* sessions.get(input.data.info.parentID)
         const project = yield* projects.resolve(input.location.directory)
@@ -193,7 +195,7 @@ const layer = Layer.effect(
           .pipe(
             Effect.catchDefect((defect) =>
               defect instanceof SessionProjector.SessionAlreadyProjected
-                ? Effect.fail(new ImportConflictError({ sessionID }))
+                ? Effect.fail(new ImportConflictError({ sessionID, reason: "session" }))
                 : Effect.die(defect),
             ),
           )

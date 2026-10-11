@@ -149,10 +149,24 @@ it.live("maps imported message-ID collisions to 409 without creating the session
       { info: { ...template.data, id: second, title: "Copy" }, messages },
       409,
     )
-    expect(error).toMatchObject({ _tag: "ConflictError", resource: second })
+    expect(error).toMatchObject({
+      _tag: "ConflictError",
+      resource: second,
+      message: `Session messages already exist: ${second}`,
+    })
     expect(yield* request(`/api/session/${second}`, undefined, 404)).toMatchObject({
       _tag: "SessionNotFoundError",
       sessionID: second,
+    })
+    const reimport = yield* request(
+      "/api/experimental/session/import",
+      { info: { ...template.data, id: first, title: "Original" }, messages: [] },
+      409,
+    )
+    expect(reimport).toMatchObject({
+      _tag: "ConflictError",
+      resource: first,
+      message: `Session already exists: ${first}`,
     })
   }).pipe(Effect.scoped),
 )

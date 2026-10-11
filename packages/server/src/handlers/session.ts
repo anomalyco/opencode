@@ -133,7 +133,12 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                   "SessionTransfer.ImportConflictError",
                   (error) =>
                     new ConflictError({
-                      message: `Session already exists: ${error.sessionID}`,
+                      // A message-ID conflict never created the destination session, so
+                      // claiming "Session already exists" would be wrong for it.
+                      message:
+                        error.reason === "messages"
+                          ? `Session messages already exist: ${error.sessionID}`
+                          : `Session already exists: ${error.sessionID}`,
                       resource: error.sessionID,
                     }),
                 ),
