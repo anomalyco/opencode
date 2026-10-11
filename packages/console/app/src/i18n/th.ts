@@ -3,6 +3,9 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
+  "go.referral.ended.label": "คำเตือน",
+  "go.referral.ended": "โปรแกรมแนะนำเพื่อนสิ้นสุดแล้ว ลิงก์แนะนำจะไม่ให้เครดิตแก่คุณหรือผู้ที่แชร์ลิงก์อีกต่อไป",
+  "go.graph.bonus": "ใช้งาน {{count}} เท่า",
   "nav.github": "GitHub",
   "nav.docs": "เอกสาร",
   "nav.changelog": "บันทึกการเปลี่ยนแปลง",
@@ -58,6 +61,7 @@ export const dict = {
   "common.cancel": "ยกเลิก",
   "common.creating": "กำลังสร้าง...",
   "common.create": "สร้าง",
+  "common.contactUs": "ติดต่อเรา",
 
   "common.videoUnsupported": "เบราว์เซอร์ของคุณไม่รองรับแท็ก video",
   "common.figure": "รูปที่ {{n}}",
@@ -225,6 +229,9 @@ export const dict = {
   "zen.faq.q8": "ฉันสามารถใช้ Zen กับเอเจนต์เขียนโค้ดอื่นได้หรือไม่?",
   "zen.faq.a8":
     "แม้ว่า Zen จะทำงานได้ดีเยี่ยมกับ OpenCode แต่คุณสามารถใช้ Zen กับเอเจนต์ใดก็ได้ เพียงทำตามคำแนะนำการตั้งค่าในเอเจนต์เขียนโค้ดที่คุณต้องการ",
+  "zen.faq.q9": "ฉันขอเงินคืนได้หรือไม่?",
+  "zen.faq.a9":
+    "หากมีการเรียกเก็บเงินภายใน 14 วันที่ผ่านมาและคุณยังไม่ได้ใช้เครดิตใดๆ จากการซื้อนั้น คุณอาจมีสิทธิ์ได้รับเงินคืน {{contact}}เพื่อขอเงินคืน",
 
   "zen.cta.start": "เริ่มต้นใช้งาน Zen",
   "zen.pricing.title": "เติมเงิน $20 แบบ Pay as you go",
@@ -252,11 +259,12 @@ export const dict = {
     "โมเดล Zen ทั้งหมดโฮสต์ในสหรัฐอเมริกา ผู้ให้บริการปฏิบัติตามนโยบายไม่เก็บรักษาข้อมูล (zero-retention policy) และไม่ใช้ข้อมูลของคุณสำหรับการฝึกโมเดล โดยมี",
   "zen.privacy.exceptionsLink": "ข้อยกเว้นดังนี้",
 
+  "go.promo.step5": "Step 5 Preview Free โมเดลใหม่ เปิดให้ใช้ฟรีชั่วคราว",
   "go.title": "OpenCode Go | โมเดลเขียนโค้ดราคาประหยัดสำหรับทุกคน",
-  "go.banner.text": "DeepSeek V4 Flash เพิ่มโควตาการใช้งานเป็น 2 เท่าในช่วงเวลาจำกัด",
   "go.meta.description":
     "Go มีราคา $10/เดือน พร้อมขีดจำกัดการใช้งานที่เอื้อเฟื้อและการเข้าถึงโมเดลเขียนโค้ดชั้นนำอย่างเชื่อถือได้",
   "go.hero.title": "โมเดลเขียนโค้ดราคาประหยัดสำหรับทุกคน",
+  "go.hero.tagline": "ใช้กับเอเจนต์ใดก็ได้ เติมเครดิตหากจำเป็น ยกเลิกได้ตลอดเวลา",
   "go.hero.body":
     "Go นำการเขียนโค้ดแบบเอเจนต์มาสู่นักเขียนโปรแกรมทั่วโลก เสนอขีดจำกัดที่กว้างขวางและการเข้าถึงโมเดลโอเพนซอร์สที่มีความสามารถสูงสุดได้อย่างน่าเชื่อถือ เพื่อให้คุณสามารถสร้างสรรค์ด้วยเอเจนต์ที่ทรงพลังโดยไม่ต้องกังวลเรื่องค่าใช้จ่ายหรือความพร้อมใช้งาน",
 
@@ -264,11 +272,33 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "สมัครสมาชิก Go",
   "go.cta.price": "$10/เดือน",
+  "go.plans.month": "ต่อเดือน",
+  "go.plans.plus.cta": "สมัคร Go Plus",
+  "go.plans.plus.description": "Go Plus ราคา $40/เดือน พร้อมขีดจำกัดการใช้งานที่สูงขึ้น",
+  "go.plans.go.feature1": "โมเดลคัดสรรในราคาคุ้มค่า",
+  "go.plans.go.feature2": "ทดสอบสำหรับการเขียนโค้ดด้วยเอเจนต์",
+  "go.plans.go.feature3": "ขีดจำกัดสูงและเข้าถึงได้อย่างเสถียร",
+  "go.plans.plus.feature1": "รวมทุกสิ่งที่มีใน Go",
+  "go.plans.plus.feature2": "ขีดจำกัดสูงขึ้น เพื่อเขียนโค้ดอย่างต่อเนื่องและมีสมาธิได้นานขึ้น",
+  "go.plans.plus.feature3": "เหมาะสำหรับโปรเจกต์ขนาดใหญ่ที่ซับซ้อน",
+  "go.plans.limits": "ขีดจำกัด",
+  "go.plans.description": "จำนวนคำขอโดยประมาณต่อ 5 ชั่วโมงและขีดจำกัดรายเดือนแยกตามโมเดล",
+  "go.plans.legend": "แพ็กเกจ",
   "go.pricing.body": "ใช้กับเอเจนต์ใดก็ได้ $10/เดือน เติมเครดิตหากจำเป็น ยกเลิกได้ตลอดเวลา",
   "go.graph.free": "ฟรี",
   "go.graph.freePill": "Big Pickle และโมเดลฟรี",
   "go.graph.go": "Go",
   "go.graph.label": "คำขอต่อ 5 ชั่วโมง",
+  "go.graph.period": "การใช้งาน",
+  "go.graph.model": "โมเดล",
+  "go.graph.requests": "requests โดยประมาณ / 5 ชม.",
+  "go.graph.allowance": "ปริมาณการใช้งานรายเดือน",
+  "go.graph.new": "ใหม่",
+  "go.graph.scale": "มาตราส่วนจำนวนคำขอแบบไม่เป็นเชิงเส้น",
+  "go.graph.showAll": "ดูโมเดลทั้งหมด {{count}} โมเดล",
+  "go.graph.showLess": "แสดงโมเดลน้อยลง",
+  "go.graph.limitedRegions": "เฉพาะบางภูมิภาค",
+  "go.graph.limitedTime": "ช่วงเวลาจำกัด",
   "go.graph.usageLimits": "ขีดจำกัดการใช้งาน",
   "go.graph.aria": "คำขอต่อ 5 ชม.: {{free}} vs {{go}}",
 
@@ -342,12 +372,15 @@ export const dict = {
   "go.faq.a5.used": "นำไปใช้",
   "go.faq.a5.notUsed": "ไม่นำไปใช้",
   "go.faq.a5.noAgreement": "ไม่มีข้อตกลง",
+  "go.faq.a5.notZdr": "ไม่ใช่ ZDR",
   "go.faq.a5.grokRetention":
     "ZDR ปิดใช้งานฟีเจอร์ API สำคัญที่ต้องอาศัยข้อมูลที่จัดเก็บไว้ ซึ่งรวมถึง Responses API แบบมีสถานะ, Files and Collections และ Batch API",
   "go.faq.a5.gptRetention":
     "ระบบจะสร้างบันทึกการตรวจสอบการใช้งานในทางที่ผิดสำหรับการใช้งานฟีเจอร์ API ทั้งหมด และเก็บรักษาไว้นานสูงสุด 30 วัน",
+  "go.faq.a5.museRetention":
+    "ราคาของ token ลดลงอย่างมาก โดยแลกกับการอนุญาตให้นำพรอมต์และผลลัพธ์ที่สร้างขึ้นของคุณไปใช้ฝึกโมเดล Meta ในอนาคต",
   "go.faq.a5.learnMore": "ดูข้อมูลเพิ่มเติม",
-  "go.faq.a5.deepseekRetention": "ข้อตกลง ZDR จะต่ออายุทุกเดือน ข้อตกลงปัจจุบันมีผลใช้ถึงวันที่ 31 สิงหาคม 2026",
+  "go.faq.a5.deepseekRetention": "ข้อตกลง ZDR จะต่ออายุทุกเดือน ข้อตกลงปัจจุบันมีผลใช้ถึงวันที่ 30 กันยายน 2026",
 
   "go.faq.a5.beforeExceptions":
     "โมเดล Go โฮสต์ในสหรัฐอเมริกา ผู้ให้บริการปฏิบัติตามนโยบายไม่เก็บรักษาข้อมูล (zero-retention policy) และไม่ใช้ข้อมูลของคุณสำหรับการฝึกโมเดล โดยมี",
@@ -361,7 +394,10 @@ export const dict = {
 
   "go.faq.q9": "ความแตกต่างระหว่างโมเดลฟรีและ Go คืออะไร?",
   "go.faq.a9":
-    "โมเดลฟรีประกอบด้วย Big Pickle และโมเดลโปรโมชันที่มีให้บริการในขณะนั้น โดยมีโควตา 200 คำขอ/วัน Go นำเสนอชุดโมเดลที่คัดสรร พร้อมโควตาคำขอที่สูงกว่าซึ่งบังคับใช้ตามกรอบเวลาแบบต่อเนื่อง (5 ชั่วโมง, รายสัปดาห์ และรายเดือน) เทียบเท่าประมาณ $12 ต่อ 5 ชั่วโมง, $30 ต่อสัปดาห์ และ $60 ต่อเดือน (จำนวนคำขอจริงแตกต่างกันไปตามโมเดลและการใช้งาน)",
+    "โมเดลฟรีประกอบด้วย Big Pickle และโมเดลโปรโมชันที่มีให้บริการในขณะนั้น โดยมีโควตา 200 คำขอ/วัน Go นำเสนอชุดโมเดลที่คัดสรร พร้อมโควตาคำขอที่สูงกว่าในกรอบเวลาแบบต่อเนื่อง ได้แก่ 20% ของโควตารายเดือนต่อ 5 ชั่วโมง 50% ต่อสัปดาห์ และ 100% ต่อเดือน โควตาเฉพาะอาจแตกต่างกันไปตามโมเดล (จำนวนคำขอจริงแตกต่างกันไปตามโมเดลและการใช้งาน)",
+  "go.faq.q10": "ฉันขอเงินคืนได้หรือไม่?",
+  "go.faq.a10":
+    "หากมีการเรียกเก็บเงินภายใน 14 วันที่ผ่านมาและคุณยังไม่ได้ใช้สิทธิ์การใช้งาน Go เลยในรอบการเรียกเก็บเงินนั้น คุณอาจมีสิทธิ์ได้รับเงินคืน {{contact}}เพื่อขอเงินคืน",
 
   "zen.api.error.rateLimitExceeded": "เกินขีดจำกัดอัตราการใช้งาน กรุณาลองใหม่ในภายหลัง",
   "zen.api.error.modelNotSupported": "ไม่รองรับโมเดล {{model}}",
@@ -387,6 +423,9 @@ export const dict = {
   "zen.api.error.modelDisabled": "โมเดลถูกปิดใช้งาน",
   "zen.api.error.regionNotAllowed":
     "โมเดลเวอร์ชันล่าสุดนี้ให้บริการเฉพาะผ่านระบบที่โฮสต์ในประเทศจีน และต้องให้ความยินยอมอย่างชัดแจ้งก่อนใช้งาน: {{consoleGoUrl}}",
+  "zen.api.error.countryNotAllowed": "โมเดลนี้ไม่พร้อมให้บริการในประเทศของคุณ",
+  "zen.api.error.trainingNotAllowed":
+    "โมเดลนี้เก็บรวบรวมข้อมูลที่ใช้เพื่อปรับปรุงคุณภาพของโมเดล และต้องได้รับความยินยอมอย่างชัดแจ้งก่อนใช้งาน: {{consoleGoUrl}}",
   "zen.api.error.trialEnded":
     "โปรโมชันฟรีสำหรับ {{model}} สิ้นสุดแล้ว คุณสามารถใช้โมเดลต่อได้โดยสมัครสมาชิก OpenCode Go - {{link}}",
 
@@ -622,7 +661,6 @@ export const dict = {
   "workspace.payments.type.subscription": "subscription",
   "workspace.payments.view": "ดู",
 
-  "workspace.black.loading": "กำลังโหลด...",
   "workspace.black.time.day": "วัน",
   "workspace.black.time.days": "วัน",
   "workspace.black.time.hour": "ชั่วโมง",
@@ -632,7 +670,8 @@ export const dict = {
   "workspace.black.time.fewSeconds": "ไม่กี่วินาที",
   "workspace.black.subscription.title": "การสมัครสมาชิก",
   "workspace.black.subscription.message": "คุณสมัครสมาชิก OpenCode Black ในราคา ${{plan}} ต่อเดือน",
-  "workspace.black.subscription.manage": "จัดการการสมัครสมาชิก",
+  "workspace.black.subscription.ending":
+    "OpenCode Black จะสิ้นสุดเมื่อครบรอบการเรียกเก็บเงินปัจจุบันและจะไม่ต่ออายุ เราจะย้ายคุณไปยังคอนโซลใหม่",
   "workspace.black.subscription.rollingUsage": "การใช้งาน 5 ชั่วโมง",
   "workspace.black.subscription.weeklyUsage": "การใช้งานรายสัปดาห์",
   "workspace.black.subscription.resetsIn": "รีเซ็ตใน",
@@ -659,15 +698,24 @@ export const dict = {
   "workspace.lite.time.fewSeconds": "ไม่กี่วินาที",
   "workspace.lite.subscription.message": "คุณได้สมัครสมาชิก OpenCode Go แล้ว",
   "workspace.lite.subscription.manage": "จัดการการสมัครสมาชิก",
-  "workspace.lite.subscription.rollingUsage": "การใช้งานแบบหมุนเวียน",
+  "workspace.lite.subscription.rollingUsage": "การใช้งานใน 5 ชั่วโมง",
+  "workspace.lite.subscription.rollingQuota": "โควตา 5 ชั่วโมง",
   "workspace.lite.subscription.weeklyUsage": "การใช้งานรายสัปดาห์",
+  "workspace.lite.subscription.weeklyQuota": "โควตารายสัปดาห์",
   "workspace.lite.subscription.monthlyUsage": "การใช้งานรายเดือน",
+  "workspace.lite.subscription.monthlyQuota": "โควตารายเดือน",
   "workspace.lite.subscription.resetsIn": "รีเซ็ตใน",
+  "workspace.lite.subscription.showDetails": "แสดงรายละเอียด",
+  "workspace.lite.subscription.hideDetails": "ซ่อนรายละเอียด",
+  "workspace.lite.subscription.model": "โมเดล",
+  "workspace.lite.subscription.contribution": "%",
+  "workspace.lite.subscription.total": "รวม",
   "workspace.lite.subscription.useBalance": "ใช้ยอดคงเหลือของคุณหลังจากถึงขีดจำกัดการใช้งาน",
   "workspace.lite.subscription.selectProvider":
     'เลือก "OpenCode Go" เป็นผู้ให้บริการในการตั้งค่า opencode ของคุณเพื่อใช้โมเดล Go',
   "workspace.lite.providers.title": "ผู้ให้บริการ",
   "workspace.lite.providers.description": "ควบคุมผู้ให้บริการที่ใช้สำหรับการกำหนดเส้นทาง",
+  "workspace.lite.providers.allowTraining": "อนุญาตโมเดลที่ฝึกด้วยข้อมูลคำขอ",
   "workspace.lite.providers.useChina": "เปิดใช้โมเดลที่โฮสต์ในจีน",
   "workspace.lite.black.message":
     "ขณะนี้คุณสมัครสมาชิก OpenCode Black หรืออยู่ในรายการรอ โปรดยกเลิกการสมัครก่อนหากต้องการเปลี่ยนไปใช้ Go",
@@ -766,6 +814,14 @@ export const dict = {
   "enterprise.form.email.placeholder": "jeff@amazon.com",
   "enterprise.form.phone.label": "หมายเลขโทรศัพท์",
   "enterprise.form.phone.placeholder": "+1 234 567 8900",
+  "enterprise.form.inferenceSpend.label": "ค่าใช้จ่ายด้าน AI inference รายเดือนในปัจจุบันของบริษัทคุณคือเท่าไร (USD)?",
+  "enterprise.form.inferenceSpend.placeholder": "เลือกช่วง (ไม่บังคับ)",
+  "enterprise.form.inferenceSpend.none": "ยังไม่มีค่าใช้จ่าย",
+  "enterprise.form.inferenceSpend.under1k": "ต่ำกว่า $1K",
+  "enterprise.form.inferenceSpend.1kTo10k": "$1K–$10K",
+  "enterprise.form.inferenceSpend.10kTo50k": "$10K–$50K",
+  "enterprise.form.inferenceSpend.50kTo100k": "$50K–$100K",
+  "enterprise.form.inferenceSpend.over100k": "$100K ขึ้นไป",
   "enterprise.form.message.label": "คุณกำลังพยายามแก้ปัญหาอะไร?",
   "enterprise.form.message.placeholder": "เราต้องการความช่วยเหลือเรื่อง...",
   "enterprise.form.send": "ส่ง",
@@ -774,6 +830,7 @@ export const dict = {
   "enterprise.form.success.submitted": "ส่งแบบฟอร์มสำเร็จแล้ว",
   "enterprise.form.error.allFieldsRequired": "จำเป็นต้องกรอกทุกช่อง",
   "enterprise.form.error.invalidEmailFormat": "รูปแบบอีเมลไม่ถูกต้อง",
+  "enterprise.form.error.invalidInferenceSpend": "เลือกช่วงค่าใช้จ่ายด้าน inference ที่ถูกต้อง",
   "enterprise.form.error.internalServer": "เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์",
   "enterprise.faq.title": "คำถามที่พบบ่อย",
   "enterprise.faq.q1": "OpenCode Enterprise คืออะไร?",

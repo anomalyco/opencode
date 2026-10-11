@@ -2,6 +2,10 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
+  "go.referral.ended.label": "Попередження",
+  "go.referral.ended":
+    "Реферальну програму завершено. Реферальні посилання більше не нараховують кредити ні вам, ні тому, хто ними поділився.",
+  "go.graph.bonus": "Ліміт ×{{count}}",
   "nav.github": "GitHub",
   "nav.docs": "Документація",
   "nav.changelog": "Журнал змін",
@@ -226,6 +230,9 @@ export const dict = {
   "zen.faq.q8": "Чи можна використовувати Zen з іншими агентами кодування?",
   "zen.faq.a8":
     "Хоча Zen чудово працює з OpenCode, ви можете використовувати Zen з будь-яким агентом. Дотримуйтесь інструкцій з налаштування у вашому агенті.",
+  "zen.faq.q9": "Чи можу я отримати повернення коштів?",
+  "zen.faq.a9":
+    "Ви можете претендувати на повернення, якщо кошти було списано протягом останніх 14 днів і ви не використали кошти, отримані внаслідок цієї покупки. {{contact}}, щоб подати запит на повернення.",
 
   "zen.cta.start": "Почати з Zen",
   "zen.pricing.title": "Додати $20 балансу Pay as you go",
@@ -254,11 +261,12 @@ export const dict = {
     "Усі моделі Zen розміщені в США. Провайдери дотримуються політики нульового зберігання та не використовують ваші дані для навчання моделей, за",
   "zen.privacy.exceptionsLink": "такими винятками",
 
+  "go.promo.step5": "Нова модель Step 5 Preview Free тимчасово доступна безкоштовно.",
   "go.title": "OpenCode Go | Недорогі моделі кодування для всіх",
-  "go.banner.text": "DeepSeek V4 Flash отримує 2x ліміти використання протягом обмеженого часу",
   "go.meta.description":
     "Go коштує $10/місяць, зі щедрими лімітами використання та надійним доступом до провідних моделей для кодування.",
   "go.hero.title": "Недорогі моделі кодування для всіх",
+  "go.hero.tagline": "Використовуйте з будь-яким агентом. Поповнюйте за потреби. Скасуйте в будь-який час.",
   "go.hero.body":
     "Go надає агентне програмування програмістам у всьому світі, пропонуючи щедрі ліміти та надійний доступ до найкращих моделей з відкритим кодом.",
 
@@ -266,12 +274,33 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "Підписатися на Go",
   "go.cta.price": "$10/місяць",
-  "go.pricing.body":
-    "Використовуйте з будь-яким агентом. $10/місяць. Поповнюйте за потреби. Скасуйте в будь-який час.",
+  "go.plans.month": "на місяць",
+  "go.plans.plus.cta": "Підписатися на Go Plus",
+  "go.plans.plus.description": "Go Plus коштує $40/місяць і пропонує вищі ліміти.",
+  "go.plans.go.feature1": "Відібрані доступні моделі",
+  "go.plans.go.feature2": "Перевірені для агентного програмування",
+  "go.plans.go.feature3": "Щедрі ліміти й надійний доступ",
+  "go.plans.plus.feature1": "Усе, що входить до Go",
+  "go.plans.plus.feature2": "Вищі ліміти для тривалішої зосередженої роботи над кодом",
+  "go.plans.plus.feature3": "Для більших і складніших проєктів",
+  "go.plans.limits": "Ліміти",
+  "go.plans.description": "Орієнтовні запити за 5 годин і місячні ліміти за моделями",
+  "go.plans.legend": "Плани",
+  "go.pricing.body": "Використовуйте з будь-яким агентом. $10/місяць. Поповнюйте за потреби. Скасуйте в будь-який час.",
   "go.graph.free": "Безкоштовно",
   "go.graph.freePill": "Big Pickle та безкоштовні моделі",
   "go.graph.go": "Go",
   "go.graph.label": "Запитів за 5 годин",
+  "go.graph.period": "Використання",
+  "go.graph.model": "Модель",
+  "go.graph.requests": "Оцінка запитів / 5 год",
+  "go.graph.allowance": "Використання за місяць",
+  "go.graph.new": "Нове",
+  "go.graph.scale": "Нелінійна шкала кількості запитів",
+  "go.graph.showAll": "Показати всі моделі ({{count}})",
+  "go.graph.showLess": "Показати менше моделей",
+  "go.graph.limitedRegions": "обмежені регіони",
+  "go.graph.limitedTime": "обмежений час",
   "go.graph.usageLimits": "Ліміти використання",
   "go.graph.aria": "Запитів за 5 год: {{free}} vs {{go}}",
 
@@ -305,8 +334,7 @@ export const dict = {
   "go.problem.item3": "Створено для якомога більшої кількості програмістів",
   "go.problem.item4": "Добірка моделей, протестованих для агентного кодування",
   "go.how.title": "Як працює Go",
-  "go.how.body":
-    "Go коштує $10/місяць. Використовуйте з OpenCode або будь-яким агентом.",
+  "go.how.body": "Go коштує $10/місяць. Використовуйте з OpenCode або будь-яким агентом.",
   "go.how.step1.title": "Створіть обліковий запис",
   "go.how.step1.beforeLink": "дотримуйтесь",
   "go.how.step1.link": "інструкцій з налаштування",
@@ -346,12 +374,15 @@ export const dict = {
   "go.faq.a5.used": "Використовується",
   "go.faq.a5.notUsed": "Не використовується",
   "go.faq.a5.noAgreement": "Немає угоди",
+  "go.faq.a5.notZdr": "Не ZDR",
   "go.faq.a5.grokRetention":
     "ZDR вимикає важливі функції API, які залежать від збережених даних, зокрема Responses API зі збереженням стану, Files and Collections та Batch API.",
   "go.faq.a5.gptRetention":
     "Журнали моніторингу зловживань створюються для всіх випадків використання функцій API та зберігаються до 30 днів.",
   "go.faq.a5.learnMore": "Докладніше",
-  "go.faq.a5.deepseekRetention": "Угода ZDR поновлюється щомісяця. Поточна угода дійсна до 31 серпня 2026 року.",
+  "go.faq.a5.deepseekRetention": "Угода ZDR поновлюється щомісяця. Поточна угода дійсна до 30 вересня 2026 року.",
+  "go.faq.a5.museRetention":
+    "Значно знижені ціни на токени в обмін на дозвіл використовувати ваші промпти та відповіді для навчання майбутніх моделей Meta.",
 
   "go.faq.a5.beforeExceptions":
     "Моделі Go розміщені в США. Провайдери дотримуються політики нульового зберігання та не використовують ваші дані для навчання моделей, за",
@@ -365,7 +396,10 @@ export const dict = {
 
   "go.faq.q9": "Яка різниця між безкоштовними моделями та Go?",
   "go.faq.a9":
-    "Безкоштовні моделі включають Big Pickle та доступні на той момент акційні моделі з квотою 200 запитів/день. Go пропонує добірку моделей із вищими квотами запитів, що застосовуються протягом ковзних періодів (5 годин, тижня та місяця), приблизно еквівалентними $12 за 5 годин, $30 на тиждень і $60 на місяць (фактична кількість запитів залежить від моделі та використання).",
+    "Безкоштовні моделі включають Big Pickle та доступні на той момент акційні моделі з квотою 200 запитів/день. Go пропонує добірку моделей із вищими квотами запитів протягом ковзних періодів: 20% місячного ліміту за 5 годин, 50% за тиждень і 100% за місяць. Ліміти для окремих моделей можуть відрізнятися (фактична кількість запитів залежить від моделі та використання).",
+  "go.faq.q10": "Чи можу я отримати повернення коштів?",
+  "go.faq.a10":
+    "Ви можете претендувати на повернення, якщо кошти було списано протягом останніх 14 днів і ви не використали ліміт Go протягом цього розрахункового періоду. {{contact}}, щоб подати запит на повернення.",
 
   "zen.api.error.rateLimitExceeded": "Перевищено ліміт запитів. Спробуйте пізніше.",
   "zen.api.error.modelNotSupported": "Модель {{model}} не підтримується",
@@ -391,6 +425,9 @@ export const dict = {
   "zen.api.error.modelDisabled": "Модель вимкнено",
   "zen.api.error.regionNotAllowed":
     "Остання версія цієї моделі доступна лише на серверах у Китаї, і для її використання потрібно надати явну згоду: {{consoleGoUrl}}",
+  "zen.api.error.countryNotAllowed": "Ця модель недоступна у вашій країні.",
+  "zen.api.error.trainingNotAllowed":
+    "Ця модель збирає дані, які використовуються для покращення її якості; для її використання потрібна ваша явна згода: {{consoleGoUrl}}",
   "zen.api.error.trialEnded":
     "Безкоштовна акція для {{model}} закінчилася. Ви можете продовжити використання, підписавшись на OpenCode Go — {{link}}",
 
@@ -626,7 +663,6 @@ export const dict = {
   "workspace.payments.type.subscription": "підписка",
   "workspace.payments.view": "Переглянути",
 
-  "workspace.black.loading": "Завантаження...",
   "workspace.black.time.day": "день",
   "workspace.black.time.days": "дні",
   "workspace.black.time.hour": "година",
@@ -636,7 +672,8 @@ export const dict = {
   "workspace.black.time.fewSeconds": "кілька секунд",
   "workspace.black.subscription.title": "Підписка",
   "workspace.black.subscription.message": "Ви підписані на OpenCode Black за ${{plan}} на місяць.",
-  "workspace.black.subscription.manage": "Керувати підпискою",
+  "workspace.black.subscription.ending":
+    "OpenCode Black завершиться наприкінці поточного розрахункового періоду й не буде подовжений. Ми перенесемо вас до нової консолі.",
   "workspace.black.subscription.rollingUsage": "Використання (5 год)",
   "workspace.black.subscription.weeklyUsage": "Тижневе використання",
   "workspace.black.subscription.resetsIn": "Скидається через",
@@ -663,14 +700,23 @@ export const dict = {
   "workspace.lite.time.fewSeconds": "кілька секунд",
   "workspace.lite.subscription.message": "Ви підписані на OpenCode Go.",
   "workspace.lite.subscription.manage": "Керувати підпискою",
-  "workspace.lite.subscription.rollingUsage": "Ковзне використання",
+  "workspace.lite.subscription.rollingUsage": "Використання за 5 годин",
+  "workspace.lite.subscription.rollingQuota": "Квота на 5 годин",
   "workspace.lite.subscription.weeklyUsage": "Тижневе використання",
+  "workspace.lite.subscription.weeklyQuota": "Тижнева квота",
   "workspace.lite.subscription.monthlyUsage": "Місячне використання",
+  "workspace.lite.subscription.monthlyQuota": "Місячна квота",
   "workspace.lite.subscription.resetsIn": "Скидається через",
+  "workspace.lite.subscription.showDetails": "Показати подробиці",
+  "workspace.lite.subscription.hideDetails": "Приховати подробиці",
+  "workspace.lite.subscription.model": "Модель",
+  "workspace.lite.subscription.contribution": "%",
+  "workspace.lite.subscription.total": "Усього",
   "workspace.lite.subscription.useBalance": "Використовуйте доступний баланс після досягнення лімітів",
   "workspace.lite.subscription.selectProvider": 'Виберіть "OpenCode Go" як провайдера в конфігурації opencode.',
   "workspace.lite.providers.title": "Провайдери",
   "workspace.lite.providers.description": "Керуйте провайдерами, які використовуються для маршрутизації.",
+  "workspace.lite.providers.allowTraining": "Дозволити моделі, що навчаються на даних запитів",
   "workspace.lite.providers.useChina": "Увімкнути моделі, розміщені в Китаї",
   "workspace.lite.black.message":
     "Ви вже підписані на OpenCode Black або в списку очікування. Спочатку скасуйте підписку, якщо хочете перейти на Go.",
@@ -735,6 +781,14 @@ export const dict = {
   "enterprise.form.email.placeholder": "jeff@amazon.com",
   "enterprise.form.phone.label": "Номер телефону",
   "enterprise.form.phone.placeholder": "+1 234 567 8900",
+  "enterprise.form.inferenceSpend.label": "Які поточні щомісячні витрати вашої компанії на інференс (USD)?",
+  "enterprise.form.inferenceSpend.placeholder": "Виберіть діапазон (необов'язково)",
+  "enterprise.form.inferenceSpend.none": "Витрат поки немає",
+  "enterprise.form.inferenceSpend.under1k": "Менше $1K",
+  "enterprise.form.inferenceSpend.1kTo10k": "$1K–$10K",
+  "enterprise.form.inferenceSpend.10kTo50k": "$10K–$50K",
+  "enterprise.form.inferenceSpend.50kTo100k": "$50K–$100K",
+  "enterprise.form.inferenceSpend.over100k": "$100K або більше",
   "enterprise.form.message.label": "Яку проблему ви намагаєтеся вирішити?",
   "enterprise.form.message.placeholder": "Нам потрібна допомога з...",
   "enterprise.form.send": "Надіслати",
@@ -743,6 +797,7 @@ export const dict = {
   "enterprise.form.success.submitted": "Форму успішно надіслано.",
   "enterprise.form.error.allFieldsRequired": "Усі поля обов'язкові.",
   "enterprise.form.error.invalidEmailFormat": "Недійсний формат email.",
+  "enterprise.form.error.invalidInferenceSpend": "Виберіть допустимий діапазон витрат на інференс.",
   "enterprise.form.error.internalServer": "Внутрішня помилка сервера.",
   "enterprise.faq.title": "FAQ",
   "enterprise.faq.q1": "Що таке OpenCode Enterprise?",

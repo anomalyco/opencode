@@ -93,7 +93,7 @@ if (answer?.trim().toLowerCase() !== "y" && answer?.trim().toLowerCase() !== "ye
   process.exit(0)
 }
 
-await $`gh workflow run publish.yml --ref v2 ${input} -f release_notes=${releaseNotes}`
+await $`gh workflow run publish.yml --ref dev ${input} -f release_notes=${releaseNotes}`
 console.log(`Triggered the ${version} release`)
 
 async function generateReview(base: string, head: string) {

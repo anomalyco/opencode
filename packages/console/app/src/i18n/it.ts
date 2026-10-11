@@ -3,6 +3,10 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
+  "go.referral.ended.label": "Avviso",
+  "go.referral.ended":
+    "Il programma referral è terminato. I link referral non danno più credito né a te né a chi li ha condivisi.",
+  "go.graph.bonus": "Utilizzo {{count}}×",
   "nav.github": "GitHub",
   "nav.docs": "Documentazione",
   "nav.changelog": "Changelog",
@@ -58,6 +62,7 @@ export const dict = {
   "common.cancel": "Annulla",
   "common.creating": "Creazione...",
   "common.create": "Crea",
+  "common.contactUs": "Contattaci",
 
   "common.videoUnsupported": "Il tuo browser non supporta il tag video.",
   "common.figure": "Fig {{n}}.",
@@ -226,6 +231,9 @@ export const dict = {
   "zen.faq.q8": "Posso usare Zen con altri agenti di coding?",
   "zen.faq.a8":
     "Anche se Zen funziona alla grande con OpenCode, puoi usare Zen con qualsiasi agente. Segui le istruzioni di configurazione nel tuo agente di coding preferito.",
+  "zen.faq.q9": "Posso ottenere un rimborso?",
+  "zen.faq.a9":
+    "Potresti avere diritto a un rimborso se l'addebito è stato effettuato negli ultimi 14 giorni e non hai utilizzato il credito di quell'acquisto. {{contact}} per richiedere un rimborso.",
 
   "zen.cta.start": "Inizia con Zen",
   "zen.pricing.title": "Aggiungi $20 di saldo a consumo",
@@ -253,11 +261,12 @@ export const dict = {
     "Tutti i modelli Zen sono ospitati negli Stati Uniti. I provider seguono una policy di zero-retention e non usano i tuoi dati per l'addestramento dei modelli, con le",
   "zen.privacy.exceptionsLink": "seguenti eccezioni",
 
+  "go.promo.step5": "Step 5 Preview Free, un nuovo modello, è disponibile gratuitamente per un periodo limitato.",
   "go.title": "OpenCode Go | Modelli di coding a basso costo per tutti",
-  "go.banner.text": "DeepSeek V4 Flash offre limiti di utilizzo 2x superiori per un periodo limitato",
   "go.meta.description":
     "Go costa $10/mese, con limiti di utilizzo generosi e un accesso affidabile ai principali modelli di coding.",
   "go.hero.title": "Modelli di coding a basso costo per tutti",
+  "go.hero.tagline": "Usalo con qualsiasi agente. Ricarica il credito se necessario. Annulla quando vuoi.",
   "go.hero.body":
     "Go porta il coding agentico ai programmatori di tutto il mondo. Offrendo limiti generosi e un accesso affidabile ai modelli open source più capaci, in modo da poter costruire con agenti potenti senza preoccuparsi dei costi o della disponibilità.",
 
@@ -265,12 +274,34 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "Abbonati a Go",
   "go.cta.price": "$10/mese",
+  "go.plans.month": "al mese",
+  "go.plans.plus.cta": "Abbonati a Go Plus",
+  "go.plans.plus.description": "Go Plus costa $40/mese e offre limiti più alti.",
+  "go.plans.go.feature1": "Modelli selezionati e convenienti",
+  "go.plans.go.feature2": "Testati per la programmazione agentica",
+  "go.plans.go.feature3": "Limiti generosi e accesso affidabile",
+  "go.plans.plus.feature1": "Tutto ciò che include Go",
+  "go.plans.plus.feature2": "Limiti più alti per sessioni di coding più lunghe e concentrate",
+  "go.plans.plus.feature3": "Per progetti più grandi e impegnativi",
+  "go.plans.limits": "Limiti",
+  "go.plans.description": "Richieste stimate ogni 5 ore e limiti mensili per modello",
+  "go.plans.legend": "Piani",
   "go.pricing.body":
     "Usalo con qualsiasi agente. $10/mese. Ricarica il credito se necessario. Annulla in qualsiasi momento.",
   "go.graph.free": "Gratis",
   "go.graph.freePill": "Big Pickle e modelli gratuiti",
   "go.graph.go": "Go",
   "go.graph.label": "Richieste ogni 5 ore",
+  "go.graph.period": "Utilizzo",
+  "go.graph.model": "Modello",
+  "go.graph.requests": "Richieste stimate / 5 ore",
+  "go.graph.allowance": "Utilizzo mensile",
+  "go.graph.new": "Nuovo",
+  "go.graph.scale": "Scala non lineare delle richieste",
+  "go.graph.showAll": "Mostra tutti i {{count}} modelli",
+  "go.graph.showLess": "Mostra meno modelli",
+  "go.graph.limitedRegions": "regioni limitate",
+  "go.graph.limitedTime": "periodo limitato",
   "go.graph.usageLimits": "Limiti di utilizzo",
   "go.graph.aria": "Richieste ogni 5h: {{free}} vs {{go}}",
 
@@ -344,13 +375,16 @@ export const dict = {
   "go.faq.a5.used": "Utilizzato",
   "go.faq.a5.notUsed": "Non utilizzato",
   "go.faq.a5.noAgreement": "Nessun accordo",
+  "go.faq.a5.notZdr": "Non ZDR",
   "go.faq.a5.grokRetention":
     "ZDR disabilita importanti funzionalità API che dipendono dai dati archiviati, tra cui la Responses API con stato, Files and Collections e Batch API.",
   "go.faq.a5.gptRetention":
     "I log di monitoraggio degli abusi vengono generati per l'utilizzo di tutte le funzionalità API e conservati per un massimo di 30 giorni.",
   "go.faq.a5.learnMore": "Scopri di più",
   "go.faq.a5.deepseekRetention":
-    "L'accordo ZDR viene rinnovato mensilmente. L'accordo attuale è valido fino al 31 agosto 2026.",
+    "L'accordo ZDR viene rinnovato mensilmente. L'accordo attuale è valido fino al 30 settembre 2026.",
+  "go.faq.a5.museRetention":
+    "Prezzi dei token fortemente scontati in cambio dell'autorizzazione a utilizzare i tuoi prompt e completamenti per addestrare futuri modelli Meta.",
   "go.faq.a5.beforeExceptions":
     "I modelli Go sono ospitati negli Stati Uniti. I provider seguono una policy di zero-retention e non usano i tuoi dati per l'addestramento dei modelli, con le",
   "go.faq.a5.exceptionsLink": "seguenti eccezioni",
@@ -364,7 +398,10 @@ export const dict = {
 
   "go.faq.q9": "Qual è la differenza tra i modelli gratuiti e Go?",
   "go.faq.a9":
-    "I modelli gratuiti includono Big Pickle più i modelli promozionali disponibili al momento, con una quota di 200 richieste/giorno. Go offre una selezione curata di modelli con quote di richiesta più elevate applicate su finestre mobili (5 ore, settimanale e mensile), approssimativamente equivalenti a $12 ogni 5 ore, $30 a settimana e $60 al mese (il conteggio effettivo delle richieste varia in base al modello e all'utilizzo).",
+    "I modelli gratuiti includono Big Pickle più i modelli promozionali disponibili al momento, con una quota di 200 richieste/giorno. Go offre una selezione curata di modelli con quote di richiesta più elevate su finestre mobili: il 20% della quota mensile ogni 5 ore, il 50% a settimana e il 100% al mese. Le quote specifiche possono variare in base al modello (il conteggio effettivo delle richieste varia in base al modello e all'utilizzo).",
+  "go.faq.q10": "Posso ottenere un rimborso?",
+  "go.faq.a10":
+    "Potresti avere diritto a un rimborso se l'addebito è stato effettuato negli ultimi 14 giorni e non hai utilizzato la tua quota Go durante quel periodo di fatturazione. {{contact}} per richiedere un rimborso.",
 
   "zen.api.error.rateLimitExceeded": "Limite di richieste superato. Riprova più tardi.",
   "zen.api.error.modelNotSupported": "Modello {{model}} non supportato",
@@ -390,6 +427,9 @@ export const dict = {
   "zen.api.error.modelDisabled": "Il modello è disabilitato",
   "zen.api.error.regionNotAllowed":
     "La versione più recente di questo modello è disponibile solo con hosting in Cina e richiede un consenso esplicito: {{consoleGoUrl}}",
+  "zen.api.error.countryNotAllowed": "Questo modello non è disponibile nel tuo paese.",
+  "zen.api.error.trainingNotAllowed":
+    "Questo modello raccoglie dati utilizzati per migliorarne la qualità e richiede il tuo consenso esplicito: {{consoleGoUrl}}",
   "zen.api.error.trialEnded":
     "La promozione gratuita di {{model}} è terminata. Puoi continuare a usare il modello abbonandoti a OpenCode Go - {{link}}",
 
@@ -627,7 +667,6 @@ export const dict = {
   "workspace.payments.type.subscription": "abbonamento",
   "workspace.payments.view": "Visualizza",
 
-  "workspace.black.loading": "Caricamento...",
   "workspace.black.time.day": "giorno",
   "workspace.black.time.days": "giorni",
   "workspace.black.time.hour": "ora",
@@ -637,7 +676,8 @@ export const dict = {
   "workspace.black.time.fewSeconds": "pochi secondi",
   "workspace.black.subscription.title": "Abbonamento",
   "workspace.black.subscription.message": "Sei abbonato a OpenCode Black per ${{plan}} al mese.",
-  "workspace.black.subscription.manage": "Gestisci Abbonamento",
+  "workspace.black.subscription.ending":
+    "OpenCode Black termina con il periodo di fatturazione in corso e non verrà rinnovato. Ti trasferiremo nella nuova console.",
   "workspace.black.subscription.rollingUsage": "Utilizzo 5-ore",
   "workspace.black.subscription.weeklyUsage": "Utilizzo Settimanale",
   "workspace.black.subscription.resetsIn": "Si resetta tra",
@@ -664,15 +704,24 @@ export const dict = {
   "workspace.lite.time.fewSeconds": "pochi secondi",
   "workspace.lite.subscription.message": "Sei abbonato a OpenCode Go.",
   "workspace.lite.subscription.manage": "Gestisci Abbonamento",
-  "workspace.lite.subscription.rollingUsage": "Utilizzo Continuativo",
+  "workspace.lite.subscription.rollingUsage": "Utilizzo su 5 ore",
+  "workspace.lite.subscription.rollingQuota": "Quota su 5 ore",
   "workspace.lite.subscription.weeklyUsage": "Utilizzo Settimanale",
+  "workspace.lite.subscription.weeklyQuota": "Quota Settimanale",
   "workspace.lite.subscription.monthlyUsage": "Utilizzo Mensile",
+  "workspace.lite.subscription.monthlyQuota": "Quota Mensile",
   "workspace.lite.subscription.resetsIn": "Si resetta tra",
+  "workspace.lite.subscription.showDetails": "Mostra dettagli",
+  "workspace.lite.subscription.hideDetails": "Nascondi dettagli",
+  "workspace.lite.subscription.model": "Modello",
+  "workspace.lite.subscription.contribution": "%",
+  "workspace.lite.subscription.total": "Totale",
   "workspace.lite.subscription.useBalance": "Usa il tuo saldo disponibile dopo aver raggiunto i limiti di utilizzo",
   "workspace.lite.subscription.selectProvider":
     'Seleziona "OpenCode Go" come provider nella tua configurazione opencode per utilizzare i modelli Go.',
   "workspace.lite.providers.title": "Provider",
   "workspace.lite.providers.description": "Controlla quali provider vengono usati per il routing.",
+  "workspace.lite.providers.allowTraining": "Consenti i modelli che si addestrano sui dati delle richieste",
   "workspace.lite.providers.useChina": "Abilita modelli ospitati in Cina",
   "workspace.lite.black.message":
     "Attualmente sei abbonato a OpenCode Black o sei in lista d'attesa. Annulla l'iscrizione prima se desideri passare a Go.",
@@ -772,6 +821,14 @@ export const dict = {
   "enterprise.form.email.placeholder": "jeff@amazon.com",
   "enterprise.form.phone.label": "Numero di telefono",
   "enterprise.form.phone.placeholder": "+1 234 567 8900",
+  "enterprise.form.inferenceSpend.label": "Qual è l'attuale spesa mensile della tua azienda per l'inferenza (USD)?",
+  "enterprise.form.inferenceSpend.placeholder": "Seleziona una fascia (facoltativo)",
+  "enterprise.form.inferenceSpend.none": "Nessuna spesa al momento",
+  "enterprise.form.inferenceSpend.under1k": "Meno di $1K",
+  "enterprise.form.inferenceSpend.1kTo10k": "$1K–$10K",
+  "enterprise.form.inferenceSpend.10kTo50k": "$10K–$50K",
+  "enterprise.form.inferenceSpend.50kTo100k": "$50K–$100K",
+  "enterprise.form.inferenceSpend.over100k": "$100K o più",
   "enterprise.form.message.label": "Quale problema stai cercando di risolvere?",
   "enterprise.form.message.placeholder": "Abbiamo bisogno di aiuto con...",
   "enterprise.form.send": "Invia",
@@ -780,6 +837,7 @@ export const dict = {
   "enterprise.form.success.submitted": "Modulo inviato con successo.",
   "enterprise.form.error.allFieldsRequired": "Tutti i campi sono obbligatori.",
   "enterprise.form.error.invalidEmailFormat": "Formato email non valido.",
+  "enterprise.form.error.invalidInferenceSpend": "Seleziona una fascia di spesa per l'inferenza valida.",
   "enterprise.form.error.internalServer": "Errore interno del server.",
   "enterprise.faq.title": "FAQ",
   "enterprise.faq.q1": "Cos'è OpenCode Enterprise?",
