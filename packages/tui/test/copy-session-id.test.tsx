@@ -1,5 +1,5 @@
 import { expect, spyOn, test } from "bun:test"
-import { InputRenderable, TextareaRenderable } from "@opentui/core"
+import { ClipboardTarget, InputRenderable, TextareaRenderable } from "@opentui/core"
 import { createTestRenderer } from "@opentui/core/testing"
 import { Effect, FileSystem } from "effect"
 import { Global } from "@opencode/util/global"
@@ -38,7 +38,10 @@ test.each(["success", "failure", "home"])("Copy session ID from Ctrl+P (%s)", as
     run({
       app: { name: "test", version: "test", channel: "test" },
       server: { endpoint: { url: server.url.toString() } },
-      config: { get: async () => ({ animations: false }), update: async () => ({}) },
+      config: {
+        get: async () => ({ animations: false, terminal: { copy: "both" as const } }),
+        update: async () => ({}),
+      },
       packages: { prepare: async () => ({ directory: "" }) },
       terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
       args: mode === "home" ? {} : { sessionID },
@@ -61,8 +64,7 @@ test.each(["success", "failure", "home"])("Copy session ID from Ctrl+P (%s)", as
     const frame = await setup.waitForFrame((frame) =>
       frame.includes(mode === "success" ? "Session ID copied to clipboard!" : "Failed to copy session ID"),
     )
-    expect(copy).toHaveBeenCalledTimes(1)
-    expect(copy.mock.calls[0]?.[0]).toBe(sessionID)
+    expect(copy.mock.calls).toEqual([[sessionID, ClipboardTarget.Clipboard]])
     expect(frame).not.toContain("Copy session ID")
     await setup.waitFor(
       () =>
