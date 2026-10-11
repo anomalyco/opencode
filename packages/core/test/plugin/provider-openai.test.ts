@@ -122,6 +122,13 @@ describe("OpenAIPlugin", () => {
         catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-6-astra"), (model) => {
           model.limit = { context: 1_050_000, input: 922_000, output: 128_000 }
         })
+        catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-6-astra-fast"), (model) => {
+          model.modelID = Model.ID.make("gpt-6-astra")
+          model.limit = { context: 1_050_000, input: 922_000, output: 128_000 }
+        })
+        catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-5.3-codex-spark"), (model) => {
+          model.limit = { context: 128_000, input: 96_000, output: 32_000 }
+        })
         catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-5.10"), (model) => {
           model.limit = { context: 1_050_000, input: 922_000, output: 128_000 }
         })
@@ -170,7 +177,7 @@ describe("OpenAIPlugin", () => {
       expect(eligible.package).toBe("@opencode/ai/providers/openai")
       expect(eligible.headers).toMatchObject({ originator: "opencode", "chatgpt-account-id": "acct_123" })
       expect(eligible.cost).toEqual([])
-      expect(eligible.limit).toEqual({ context: 400_000, input: 272_000, output: 128_000 })
+      expect(eligible.limit).toEqual({ context: 1_050_000, input: 922_000, output: 128_000 })
       expect(eligible.enabled).toBe(true)
       expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-5.5-pro"))).enabled).toBe(false)
       expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-5.4-pro"))).enabled).toBe(false)
@@ -178,9 +185,23 @@ describe("OpenAIPlugin", () => {
       expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-5.6"))).enabled).toBe(false)
       const gpt56 = required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-5.6-sol")))
       expect(gpt56.enabled).toBe(true)
-      expect(gpt56.limit).toEqual({ context: 400_000, input: 272_000, output: 128_000 })
+      expect(gpt56.limit).toEqual({ context: 1_050_000, input: 922_000, output: 128_000 })
       expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-4.1"))).enabled).toBe(false)
       expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-6-astra"))).enabled).toBe(true)
+      expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-6-astra"))).limit).toEqual({
+        context: 1_050_000,
+        input: 922_000,
+        output: 128_000,
+      })
+      expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-6-astra-fast")))).toMatchObject({
+        enabled: true,
+        modelID: "gpt-6-astra",
+        limit: { context: 1_050_000, input: 922_000, output: 128_000 },
+      })
+      expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-5.3-codex-spark")))).toMatchObject({
+        enabled: true,
+        limit: { context: 128_000, input: 96_000, output: 32_000 },
+      })
       expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-5.10"))).enabled).toBe(true)
       expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-5"))).enabled).toBe(false)
       expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-5.04-astra"))).enabled).toBe(false)
