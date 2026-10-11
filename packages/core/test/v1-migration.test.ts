@@ -1142,6 +1142,76 @@ describe("V1Migration database workflow", () => {
     )
   })
 
+  test("imports legacy V1 sessions from tables missing newer columns", async () => {
+    await database(
+      Effect.gen(function* () {
+        const { db } = yield* Database.Service
+        yield* db.run(sql`DROP TABLE session`)
+        yield* db.run(sql`
+          CREATE TABLE session (
+            id text PRIMARY KEY,
+            project_id text NOT NULL,
+            parent_id text,
+            workspace_id text,
+            slug text NOT NULL,
+            directory text NOT NULL,
+            title text NOT NULL,
+            version text NOT NULL,
+            share_url text,
+            summary_additions integer,
+            summary_deletions integer,
+            summary_files integer,
+            summary_diffs text,
+            revert text,
+            permission text,
+            time_created integer NOT NULL,
+            time_updated integer NOT NULL,
+            time_compacting integer,
+            time_archived integer
+          )
+        `)
+        yield* db.run(
+          sql`INSERT INTO session (id, project_id, slug, directory, title, version, time_created, time_updated) VALUES ('ses_test', 'global', 'test', '/tmp/test', 'Test', '1', 1, 2)`,
+        )
+        const source = user("msg_000000000030aaaaaaaaaaaaaa")
+        const sourcePart = part("prt_1", source.id, { type: "text", text: "old shape" })
+        yield* db.run(
+          sql`INSERT INTO message (id, session_id, time_created, time_updated, data) VALUES (${source.id}, 'ses_test', 10, 11, ${source.data})`,
+        )
+        yield* db.run(
+          sql`INSERT INTO part (id, message_id, session_id, time_created, time_updated, data) VALUES ('prt_1', ${source.id}, 'ses_test', 1, 2, ${sourcePart.data})`,
+        )
+        expect(yield* V1Migration.run()).toEqual({ status: "completed" })
+        expect(yield* V1Migration.status()).toEqual({ status: "completed" })
+        expect(
+          yield* db.get(
+            sql`SELECT path, metadata, cost, tokens_input, agent, model, time_created, time_updated FROM session_v2 WHERE id = 'ses_test'`,
+          ),
+        ).toEqual({
+          path: null,
+          metadata: null,
+          cost: 0,
+          tokens_input: 0,
+          agent: "build",
+          model: '{"id":"model","providerID":"provider","variant":"default"}',
+          time_created: 1,
+          time_updated: 2,
+        })
+        expect(yield* db.all(sql`SELECT id, type, seq, data FROM session_message`)).toEqual([
+          {
+            id: source.id,
+            type: "user",
+            seq: 0,
+            data: '{"text":"old shape","time":{"created":10}}',
+          },
+        ])
+        expect(yield* db.get(sql`SELECT value FROM kv WHERE key = 'migration.v1-v2'`)).toEqual({
+          value: '{"phase":"completed"}',
+        })
+      }),
+    )
+  })
+
   test("replaces projections containing apostrophes and checkpoints completion", async () => {
     await database(
       Effect.gen(function* () {
