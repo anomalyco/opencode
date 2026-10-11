@@ -25,6 +25,8 @@ import { useData } from "./data"
 import { usePermission } from "./permission"
 import { useLocation } from "./location"
 import { parse } from "../util/model"
+import { Model } from "@opencode/schema/model"
+import { Provider } from "@opencode/schema/provider"
 
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
@@ -225,7 +227,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       const currentModel = createMemo(() => {
         const selection = currentSelection()
         if (!selection) return
-        return { providerID: selection.providerID, modelID: selection.modelID }
+        return { providerID: Provider.ID.make(selection.providerID), modelID: Model.ID.make(selection.modelID) }
       })
 
       function locationAgentKey(agentID: string) {
@@ -357,7 +359,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           if (route.data.type !== "session" || !current || !selection) return
           setSessionSelection(route.data.sessionID, current.id, { ...selection })
         },
-        available(model = currentModel()) {
+        available(model: ModelPreferenceModel | undefined = currentModel()) {
           return model ? isModelValid(model) : false
         },
         trackSessionCommit(
@@ -471,7 +473,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         },
         variant: {
           selected() {
-            return currentSelection()?.variant
+            const variant = currentSelection()?.variant
+            return variant === undefined ? undefined : Model.VariantID.make(variant)
           },
           current() {
             return this.selected()
@@ -544,7 +547,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         })
 
       const slots = createMemo(() => {
-        const existing = new Set(
+        const existing = new Set<string>(
           data.session
             .list()
             .filter((x) => x.parentID === undefined)

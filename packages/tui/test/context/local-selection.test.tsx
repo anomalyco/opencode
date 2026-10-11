@@ -7,14 +7,14 @@ test("cycles all recent models in a stable order in both directions", async () =
     models: [model("first"), model("second"), model("third")],
     preferences: { recent: ["first", "second", "third"].map((modelID) => ({ providerID: "provider", modelID })) },
   })
-  expect(setup.local.model.current()?.modelID).toBe("first")
+  expect<unknown>(setup.local.model.current()?.modelID).toBe("first")
   for (const id of ["second", "third", "first"]) {
     setup.local.model.cycle(1)
-    expect(setup.local.model.current()?.modelID).toBe(id)
+    expect<unknown>(setup.local.model.current()?.modelID).toBe(id)
   }
   for (const id of ["third", "second", "first"]) {
     setup.local.model.cycle(-1)
-    expect(setup.local.model.current()?.modelID).toBe(id)
+    expect<unknown>(setup.local.model.current()?.modelID).toBe(id)
   }
 })
 
@@ -72,10 +72,10 @@ test("agent and model drafts are isolated across sessions and survive navigation
   setup.local.model.variant.set("low")
   setup.route.navigate({ type: "session", sessionID: "ses_second" })
   expect(setup.local.agent.current()?.id).toBe("plan")
-  expect(setup.local.model.variant.current()).toBe("high")
+  expect<unknown>(setup.local.model.variant.current()).toBe("high")
   setup.route.navigate({ type: "session", sessionID: "ses_first" })
   expect(setup.local.agent.current()?.id).toBe("plan")
-  expect(setup.local.model.variant.current()).toBe("low")
+  expect<unknown>(setup.local.model.variant.current()).toBe("low")
   setup.local.agent.set("build")
   expect(setup.local.model.selection()).toEqual({ providerID: "provider", modelID: "first", variant: "low" })
 })
@@ -143,7 +143,7 @@ test("a late inactive-agent acknowledgment preserves its choice after the active
   setup.local.model.trackSessionCommit("ses_first", { providerID: "provider", id: "first" }, "build")
   await publishSelection(setup, "build", "first")
   setup.local.agent.set("plan")
-  expect(setup.local.model.current()?.modelID).toBe("third")
+  expect<unknown>(setup.local.model.current()?.modelID).toBe("third")
 })
 
 test("same-model agent switches clear drafts without a model acknowledgment", async () => {
@@ -159,7 +159,7 @@ test("same-model agent switches clear drafts without a model acknowledgment", as
   setup.local.model.trackSessionCommit("ses_first", { providerID: "provider", id: "first" }, "plan")
   await publishSelection(setup, "plan", "first", false)
   await publishSelection(setup, "plan", "second")
-  expect(setup.local.model.current()?.modelID).toBe("second")
+  expect<unknown>(setup.local.model.current()?.modelID).toBe("second")
 })
 
 async function publishSelection(

@@ -55,7 +55,7 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
 
   function reduce() {
     const messages = data.session.message.list(sessionID())
-    const inputs = new Set(data.session.input.list(sessionID()))
+    const inputs = new Set<string>(data.session.input.list(sessionID()))
     const pending = data.session.pending.list(sessionID())
     const queued = new Set(
       pending.flatMap((item) => (item.type === "user" && item.delivery === "queue" ? [item.id] : [])),

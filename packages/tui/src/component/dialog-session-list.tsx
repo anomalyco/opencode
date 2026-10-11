@@ -140,7 +140,7 @@ export function DialogSessionList() {
 
   const options = createMemo(() => {
     const today = new Date().toDateString()
-    const sessionMap = new Map(
+    const sessionMap = new Map<string, SessionInfo>(
       sessions()
         .filter((session) => !session.parentID)
         .map((session) => [session.id, session]),

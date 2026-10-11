@@ -24,7 +24,7 @@ export function findMessageBoundary(input: {
   currentID?: string
   userOnly?: boolean
 }) {
-  const messages = new Map(input.messages.map((message) => [message.id, message]))
+  const messages = new Map<string, SessionMessageInfo>(input.messages.map((message) => [message.id, message]))
   const visible = input.children
     .flatMap((child) => {
       if (!child.id) return []

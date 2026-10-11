@@ -9,7 +9,7 @@ test("variant picker can explicitly reset an agent variant", async () => {
     models: [model("first", ["low", "high"])],
     agents: [agent("build", { providerID: "provider", id: "first", variant: "high" })],
   })
-  expect(setup.local.model.variant.current()).toBe("high")
+  expect<unknown>(setup.local.model.variant.current()).toBe("high")
   setup.dialog.replace(() => <DialogVariant />)
   await setup.waitForFrame((frame) => frame.includes("Select variant") && frame.includes("Default"))
   // The dialog paints before its deferred filter focus is ready for typing.
