@@ -29,6 +29,10 @@ export function mount(input: {
   ssh?: string | null
   storage?: string | null
   hold?: string | null
+  /** Comma-separated installed distributions for the add-server dialog. */
+  distros?: string | null
+  /** Holds the distribution refresh job while inspecting disabled dialog controls. */
+  busy?: string | null
   /** Enables the updater Ipc; check and install reject with this message, which may be empty. */
   updater?: string | null
 }) {
@@ -40,6 +44,7 @@ export function mount(input: {
   const endpoint = { url: input.wsl ?? input.server }
   const ready = () => ({ kind: "ready" as const, url: endpoint.url, password: null })
   const held = Promise.withResolvers<void>()
+  const distros = input.distros?.split(",").filter(Boolean) ?? []
 
   const storage = (name?: string) => {
     const item = (key: string) => (name ? `${name}:${key}` : key)
@@ -82,11 +87,18 @@ export function mount(input: {
       },
       state: {
         runtime: { available: true, version: "2", error: null },
-        installed: [],
-        online: [],
-        distroProbes: {},
+        installed: distros.map((name) => ({ name, version: name === "Debian-WSL1" ? 1 : 2, isDefault: false })),
+        online: distros.length
+          ? ["Debian", "FedoraLinux-43", "openSUSE-Tumbleweed", "OracleLinux_9_1", "kali-linux"].map((name) => ({
+              name,
+              label: name,
+            }))
+          : [],
+        distroProbes: Object.fromEntries(
+          distros.map((name) => [name, { name, canExecute: true, hasBash: true, hasCurl: true, error: null }]),
+        ),
         pendingRestart: false,
-        job: null,
+        job: input.busy ? { kind: "distros", startedAt: 0 } : null,
         servers: [
           {
             config: { id: "wsl:Ubuntu", distro: "Ubuntu" },
@@ -100,6 +112,19 @@ export function mount(input: {
           },
         ],
         opencodeChecks: {
+          ...Object.fromEntries(
+            distros.map((name) => [
+              name,
+              {
+                distro: name,
+                resolvedPath: null,
+                version: null,
+                expectedVersion: "current",
+                matchesDesktop: null,
+                error: null,
+              },
+            ]),
+          ),
           Ubuntu: {
             distro: "Ubuntu",
             resolvedPath: "/usr/bin/opencode",
