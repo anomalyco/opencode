@@ -453,6 +453,48 @@ describe("ConfigProviderPlugin.Plugin", () => {
     )
   }
 
+  for (const scenario of [
+    {
+      name: "input modalities",
+      legacy: { modalities: { input: ["text", "image"] } },
+      expected: { tools: false, input: ["text", "image"], output: ["audio"] },
+    },
+    {
+      name: "output modalities",
+      legacy: { modalities: { output: ["text"] } },
+      expected: { tools: false, input: ["audio"], output: ["text"] },
+    },
+    {
+      name: "tool support",
+      legacy: { tool_call: true },
+      expected: { tools: true, input: ["audio"], output: ["audio"] },
+    },
+    {
+      name: "empty modalities",
+      legacy: { modalities: { input: [] } },
+      expected: { tools: false, input: [], output: ["audio"] },
+    },
+  ]) {
+    it.effect(`preserves unspecified catalog capabilities when migrating ${scenario.name}`, () =>
+      Effect.gen(function* () {
+        const providers = yield* Provider.Service
+        const models = yield* Model.Service
+        const providerID = Provider.ID.make("custom")
+        const modelID = Model.ID.make("chat")
+        yield* providers.transform((editor) => {
+          editor.models.update(providerID, modelID, (model) => {
+            model.capabilities = { tools: false, input: ["audio"], output: ["audio"] }
+          })
+        })
+        const result = ConfigNormalize.normalize({ provider: { custom: { models: { chat: scenario.legacy } } } })
+        if (result.type !== "normalized") throw new Error("Expected normalized config")
+        expect(result.diagnostics).toEqual([])
+        yield* addPlugin([new Document({ type: "document", info: decode(result.encoded) })])
+        expect((yield* models.get(providerID, modelID))?.capabilities).toEqual(scenario.expected)
+      }),
+    )
+  }
+
   it.effect("preserves existing catalog metadata when migrated fields are omitted", () =>
     Effect.gen(function* () {
       const providers = yield* Provider.Service

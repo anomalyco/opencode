@@ -204,13 +204,12 @@ function migrateModel(info: typeof ConfigProviderV1.Model.Type) {
         ]
       : []),
   ]
-  const defaults = Model.Capabilities.default()
   const capabilities =
     info.tool_call !== undefined || info.modalities?.input !== undefined || info.modalities?.output !== undefined
       ? {
-          tools: info.tool_call ?? defaults.tools,
-          input: info.modalities?.input ?? defaults.input,
-          output: info.modalities?.output ?? defaults.output,
+          tools: info.tool_call,
+          input: info.modalities?.input,
+          output: info.modalities?.output,
         }
       : undefined
   return {
