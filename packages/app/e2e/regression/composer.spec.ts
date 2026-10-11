@@ -132,6 +132,28 @@ test("pastes plain text without markup and keeps native undo", async ({ page }) 
   }
 })
 
+test("types after trailing pasted newlines, including after undo and redo", async ({ page }) => {
+  const input = await draft(page)
+  await page.evaluate(() => navigator.clipboard.writeText("first\r\n\r\nsecond\r\n\r\n"))
+  await page.keyboard.press("ControlOrMeta+V")
+  await expect.poll(() => input.innerText()).toBe("first\n\nsecond\n\n")
+  await page.keyboard.type("Continue")
+  await expect.poll(() => input.innerText()).toBe("first\n\nsecond\n\nContinue")
+  await page.keyboard.press("ControlOrMeta+Z")
+  await expect.poll(() => input.innerText()).toBe("first\n\nsecond\n\n")
+  await page.keyboard.press("ControlOrMeta+Z")
+  await expect(input).toBeEmpty()
+  await page.keyboard.press("ControlOrMeta+Shift+Z")
+  await expect.poll(() => input.innerText()).toBe("first\n\nsecond\n\n")
+  await page.keyboard.type("Again")
+  await expect.poll(() => input.innerText()).toBe("first\n\nsecond\n\nAgain")
+  await page.keyboard.press("ControlOrMeta+Z")
+  await expect.poll(() => input.innerText()).toBe("first\n\nsecond\n\n")
+  await page.keyboard.press("Backspace")
+  await page.keyboard.type("Joined")
+  await expect.poll(() => input.innerText()).toBe("first\n\nsecond\nJoined")
+})
+
 test("replaces only the selected text and leaves the caret after the paste", async ({ page }) => {
   const input = await draft(page)
   await page.evaluate(() => navigator.clipboard.writeText("one\ntwo"))
