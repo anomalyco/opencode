@@ -1713,7 +1713,7 @@ describe("SessionRunnerLLM", () => {
     yield* stream.release
     const moved = yield* Fiber.join(run)
 
-    expect(moved).toEqual(SessionRunner.DrainResult.Moved({ continuation: { step: 2 } }))
+    expect(moved).toEqual(SessionRunner.DrainResult.Moved({ continuation: { step: 2, stoppingContinuations: 0 } }))
     expect(s.requests).toHaveLength(1)
     expect(yield* SessionInbox.find(s.db, compaction.id)).toMatchObject({ id: compaction.id })
     if (moved._tag !== "Moved") throw new Error("Expected a Location handoff")
@@ -7117,15 +7117,15 @@ describe("SessionRunnerLLM", () => {
 
   // experimental.stopping: pre-terminal continuation votes. Voters run at
   // natural turn end before Complete(); a grant admits a synthetic steer and
-  // loops the drain, capped at two continuations per turn.
-  const stoppingKey = "opencode.stopping.continuations"
+  // loops the drain, capped at two continuations per turn. The count is
+  // drain-owned (fresh drains start at 0, moves carry it in the
+  // continuation); host session metadata stays untouched.
 
-  scenario("leaves stopping metadata untouched without registered voters", function* (s) {
+  scenario("completes without registered voters", function* (s) {
     yield* s.llm.push(TestLLM.text("Done", "text-done"))
     yield* s.runPrompt("Plain prompt")
 
     expect(s.requests).toHaveLength(1)
-    expect((yield* s.session.get(sessionID)).metadata?.[stoppingKey]).toBeUndefined()
   })
 
   scenario("continues the turn when a stopping voter grants with text", function* (s) {
@@ -7154,7 +7154,6 @@ describe("SessionRunnerLLM", () => {
     expect((yield* s.context).filter((message) => message.type === "synthetic")).toMatchObject([
       { text: "Keep going" },
     ])
-    expect((yield* s.session.get(sessionID)).metadata?.[stoppingKey]).toBe(1)
   })
 
   scenario("stops silently after two granted stopping continuations", function* (s) {
@@ -7176,7 +7175,6 @@ describe("SessionRunnerLLM", () => {
     expect(s.requests).toHaveLength(3)
     // Two grants, then cap exhaustion returns Complete() without a third vote.
     expect(continuations).toEqual([0, 1])
-    expect((yield* s.session.get(sessionID)).metadata?.[stoppingKey]).toBe(2)
   })
 
   scenario("exposes the configured step limit to stopping voters", function* (s) {
@@ -7211,7 +7209,6 @@ describe("SessionRunnerLLM", () => {
     yield* s.runPrompt("Start")
 
     expect(s.requests).toHaveLength(1)
-    expect((yield* s.session.get(sessionID)).metadata?.[stoppingKey]).toBeUndefined()
   })
 
   scenario("treats an empty stopping grant as abstention", function* (s) {
@@ -7225,7 +7222,6 @@ describe("SessionRunnerLLM", () => {
     yield* s.runPrompt("Start")
 
     expect(s.requests).toHaveLength(1)
-    expect((yield* s.session.get(sessionID)).metadata?.[stoppingKey]).toBeUndefined()
   })
 
   scenario("gives the last registered stopping voter the final word", function* (s) {
@@ -7244,7 +7240,6 @@ describe("SessionRunnerLLM", () => {
     yield* s.runPrompt("Start")
 
     expect(s.requests).toHaveLength(1)
-    expect((yield* s.session.get(sessionID)).metadata?.[stoppingKey]).toBeUndefined()
   })
 
   scenario("continues when the last registered stopping voter grants", function* (s) {
@@ -7266,7 +7261,6 @@ describe("SessionRunnerLLM", () => {
     yield* s.runPrompt("Start")
 
     expect(s.requests).toHaveLength(2)
-    expect((yield* s.session.get(sessionID)).metadata?.[stoppingKey]).toBe(1)
   })
 
   scenario("does not consult stopping voters when a move control is pending", function* (s) {
@@ -7296,46 +7290,104 @@ describe("SessionRunnerLLM", () => {
     expect(votes).toBe(0)
   })
 
-  scenario("resets the stopping counter on a fresh turn", function* (s) {
+  scenario("carries the stopping counter across a mid-turn move", function* (s) {
+    const votes: number[] = []
     let granted = false
     const hooks = yield* PluginHooks.Service
     yield* hooks.register("session", "experimental.stopping", (event) =>
       Effect.sync(() => {
+        votes.push(event.continuations)
         if (granted) return
         granted = true
+        event.decision = { shouldContinue: true, text: "Keep going" }
+      }),
+    )
+    yield* s.admit("Echo before moving")
+    yield* s.llm.push(TestLLM.text("First", "text-first"), TestLLM.tool("call-move", "echo", { text: "moving" }))
+    const tools = yield* s.blockTools()
+    const runner = yield* SessionRunner.Service
+    const run = yield* runner.drain({ sessionID, force: false }).pipe(Effect.forkChild)
+    yield* tools.started
+    yield* s.sessionInbox.admit({
+      id: SessionMessage.ID.create(),
+      sessionID,
+      item: {
+        type: "move",
+        payload: {
+          location: Location.Ref.make({ directory: AbsolutePath.make("/project") }),
+          projectID: Project.ID.global,
+        },
+        delivery: "steer",
+      },
+    })
+    yield* tools.release
+    const moved = yield* Fiber.join(run)
+
+    // One grant before the move; the handoff preserves it, so the successor
+    // turn resumes with one continuation already spent. Step restarts at 2:
+    // promoting the granted steer funds a fresh agent budget.
+    expect(votes).toEqual([0])
+    expect(s.requests).toHaveLength(2)
+    expect(moved).toEqual(SessionRunner.DrainResult.Moved({ continuation: { step: 2, stoppingContinuations: 1 } }))
+  })
+
+  scenario("restarts the stopping counter on a fresh turn", function* (s) {
+    const seen: number[] = []
+    let grants = 0
+    const hooks = yield* PluginHooks.Service
+    yield* hooks.register("session", "experimental.stopping", (event) =>
+      Effect.sync(() => {
+        seen.push(event.continuations)
+        if (grants >= 1) return
+        grants++
         event.decision = { shouldContinue: true, text: "One more" }
       }),
     )
     yield* s.llm.push(TestLLM.text("First", "text-first"), TestLLM.text("Second", "text-second"))
     yield* s.runPrompt("First turn")
-    expect((yield* s.session.get(sessionID)).metadata?.[stoppingKey]).toBe(1)
 
     yield* s.llm.push(TestLLM.text("Third", "text-third"))
     yield* s.runPrompt("Second turn")
     expect(s.requests).toHaveLength(3)
-    // Fresh-drain entry cleared the durable counter; the abstained second-turn
-    // vote then left nothing behind.
-    expect((yield* s.session.get(sessionID)).metadata?.[stoppingKey]).toBeUndefined()
+    // Grant, post-grant abstention, then a fresh turn restarting at 0.
+    expect(seen).toEqual([0, 1, 0])
   })
 
-  scenario("drops the stopping counter with the session", function* (s) {
-    let granted = false
+  scenario("never writes the stopping counter into session metadata", function* (s) {
     const hooks = yield* PluginHooks.Service
     yield* hooks.register("session", "experimental.stopping", (event) =>
       Effect.sync(() => {
-        if (granted) return
-        granted = true
-        event.decision = { shouldContinue: true, text: "One more" }
+        event.decision = { shouldContinue: true, text: `Continue ${event.continuations}` }
       }),
     )
-    yield* s.llm.push(TestLLM.text("First", "text-first"), TestLLM.text("Second", "text-second"))
+    yield* s.llm.push(
+      TestLLM.text("First", "text-first"),
+      TestLLM.text("Second", "text-second"),
+      TestLLM.text("Third", "text-third"),
+    )
     yield* s.runPrompt("Start")
-    expect((yield* s.session.get(sessionID)).metadata?.[stoppingKey]).toBe(1)
 
-    yield* s.session.remove(sessionID)
-    expect(yield* s.session.get(sessionID).pipe(Effect.flip)).toMatchObject({
-      _tag: "Session.NotFoundError",
-      sessionID,
-    })
+    // Three requests prove two grants happened; host metadata is opaque to
+    // core, so the drain-owned counter must leave no trace there.
+    expect(s.requests).toHaveLength(3)
+    expect((yield* s.session.get(sessionID)).metadata?.["opencode.stopping.continuations"]).toBeUndefined()
+  })
+
+  scenario("does not consult stopping voters on a drain with nothing pending", function* (s) {
+    let votes = 0
+    const hooks = yield* PluginHooks.Service
+    yield* hooks.register("session", "experimental.stopping", (event) =>
+      Effect.sync(() => {
+        votes++
+        event.decision = { shouldContinue: true, text: "Keep going" }
+      }),
+    )
+    const runner = yield* SessionRunner.Service
+    const result = yield* runner.drain({ sessionID, force: false })
+
+    // An empty wake is not a turn: no vote, no admitted steer, no model call.
+    expect(result._tag).toBe("Complete")
+    expect(votes).toBe(0)
+    expect(s.requests).toHaveLength(0)
   })
 })
