@@ -1,29 +1,36 @@
+import { SessionID } from "@opencode/schema/session-id"
+import { SessionMessage } from "@opencode/schema/session-message"
 import { describe, expect, test } from "bun:test"
 import type { SessionInboxInfo } from "@opencode/client/promise"
 import { queuedPromptAttachments, queuedPromptRows } from "./queue"
 
 const queued = [
   {
-    id: "msg_original",
-    sessionID: "ses_1",
+    id: SessionMessage.ID.make("msg_original", { disableChecks: true }),
+    sessionID: SessionID.make("ses_1", { disableChecks: true }),
     time: { created: 1 },
     type: "user",
     delivery: "queue",
     payload: { text: "original" },
   },
   {
-    id: "msg_replacement",
-    sessionID: "ses_1",
+    id: SessionMessage.ID.make("msg_replacement", { disableChecks: true }),
+    sessionID: SessionID.make("ses_1", { disableChecks: true }),
     time: { created: 2 },
     type: "user",
     delivery: "queue",
     payload: { text: "edited" },
   },
 ] satisfies SessionInboxInfo[]
-
-const other = { ...queued[0], id: "msg_other", payload: { text: "other" } }
-
-const edit = { original: "msg_original", replacement: "msg_replacement" }
+const other = {
+  ...queued[0],
+  id: SessionMessage.ID.make("msg_other", { disableChecks: true }),
+  payload: { text: "other" },
+}
+const edit = {
+  original: SessionMessage.ID.make("msg_original", { disableChecks: true }),
+  replacement: SessionMessage.ID.make("msg_replacement", { disableChecks: true }),
+}
 
 describe("queuedPromptRows", () => {
   test.each([

@@ -163,7 +163,13 @@ describe("buildPromptRequest", () => {
     })
 
     expect(result.files).toEqual([])
-    expect(result.skills).toEqual([{ id: skill.id, name: skill.name, mention: { start: 0, end: 7, text: "@review" } }])
+    expect(result.skills).toEqual([
+      {
+        id: Skill.ID.make(skill.id, { disableChecks: true }),
+        name: skill.name,
+        mention: { start: 0, end: 7, text: "@review" },
+      },
+    ])
   })
 
   test.each<{ dir: string; path: string; selection?: FileSelection; context?: true; uri: string }>([
