@@ -7,19 +7,26 @@ import { Global } from "@opencode/util/global"
 import { AppProcess } from "@opencode/util/process"
 import path from "path"
 import { Effect, Option, Predicate, Schema, Stream } from "effect"
-import { ChildProcess } from "effect/unstable/process"
+import { ChildProcess } from "effect/process"
 import { Config } from "../../config.js"
 import { Location } from "../../location.js"
+import { Permission } from "../../permission.js"
 import { normalizeContent } from "../../tool/runtime.js"
 
 // Runs the PreToolUse and PostToolUse command hooks from Claude Code settings files, using the same
-// stdin payload and exit codes: 2 blocks the call (or reports back after it) with stderr as the reason.
+// stdin payload, exit codes and JSON output: exit 2 blocks the call (or reports back after it) with stderr
+// as the reason, and exit 0 may print a JSON decision on stdout.
 
 type Event = "PreToolUse" | "PostToolUse"
 type Hook = { readonly matcher: string; readonly command: string; readonly timeout: number }
+export type Decision =
+  | { readonly type: "deny"; readonly reason?: string }
+  | { readonly type: "ask"; readonly reason?: string }
+  | { readonly type: "feedback"; readonly text: string }
 
 const files = ["settings.json", "settings.local.json"]
 const defaultTimeout = 60
+const askKey = "claudeHookAsk"
 const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
 
 // Claude Code tool and input names, so matchers and scripts written for it keep working.
@@ -70,6 +77,41 @@ export function matches(matcher: string, tool: string) {
   return Option.getOrElse(Option.liftThrowable(() => new RegExp(`^(?:${matcher})$`).test(tool))(), () => false)
 }
 
+const text = (value: unknown) => (typeof value === "string" && value.trim() ? value.trim() : undefined)
+
+// Reads the JSON a hook prints on exit 0. "allow" is not honored: a hook can tighten permissions, not loosen them.
+export function decision(event: Event, stdout: string): Decision | undefined {
+  const output = Option.getOrUndefined(decodeJson(stdout.trim()))
+  if (!Predicate.isObject(output)) return
+  const specific = Predicate.isObject(output.hookSpecificOutput) ? output.hookSpecificOutput : {}
+  if (event === "PreToolUse") {
+    const permission = specific.permissionDecision
+    if (permission === "deny" || permission === "ask")
+      return { type: permission, reason: text(specific.permissionDecisionReason) }
+    // older Claude Code form
+    if (output.decision === "block") return { type: "deny", reason: text(output.reason) }
+    return
+  }
+  const feedback = [output.decision === "block" ? text(output.reason) : undefined, text(specific.additionalContext)]
+    .filter((item) => item !== undefined)
+    .join("\n")
+  return feedback ? { type: "feedback", text: feedback } : undefined
+}
+
+function outcome(event: Event, result: AppProcess.RunResult): Decision | undefined {
+  if (result.exitCode === 0) return decision(event, result.stdout.toString("utf8"))
+  if (result.exitCode !== 2) return
+  const stderr = text(result.stderr.toString("utf8"))
+  if (event === "PreToolUse") return { type: "deny", reason: stderr }
+  return stderr ? { type: "feedback", text: stderr } : undefined
+}
+
+// what the permission prompt shows for an ask
+function resource(input: unknown) {
+  if (!Predicate.isObject(input)) return
+  return text(input.command) ?? text(input.path) ?? text(input.url) ?? text(input.pattern)
+}
+
 export function toolInput(input: unknown) {
   if (!Predicate.isObject(input)) return input
   return {
@@ -86,6 +128,7 @@ export const Plugin = define({
     const location = yield* Location.Service
     const global = yield* Global.Service
     const runner = yield* AppProcess.Service
+    const permission = yield* Permission.Service
     const loaded: Record<Event, Hook[]> = { PreToolUse: [], PostToolUse: [] }
 
     const refresh = Effect.fn("ConfigClaudeHooksPlugin.refresh")(function* () {
@@ -105,7 +148,7 @@ export const Plugin = define({
       loaded.PostToolUse = parsed.flatMap((item) => item.PostToolUse)
     })
 
-    // Returns the stderr of the first hook that exits 2. Other failures never block a tool call.
+    // A deny from any hook wins over an ask. Hooks that fail or time out never block a tool call.
     const run = Effect.fn("ConfigClaudeHooksPlugin.run")(function* (
       event: Event,
       input: { readonly tool: string; readonly sessionID: string; readonly id: string; readonly input: unknown },
@@ -123,6 +166,7 @@ export const Plugin = define({
         tool_use_id: input.id,
         ...(response === undefined ? {} : { tool_response: response }),
       })
+      const results: Decision[] = []
       for (const hook of hooks) {
         const result = yield* runner
           .run(
@@ -139,8 +183,14 @@ export const Plugin = define({
               Effect.logWarning("claude hook failed", { command: hook.command, error }).pipe(Effect.as(undefined)),
             ),
           )
-        if (result?.exitCode === 2) return result.stderr.toString("utf8").trim() || `${event} hook blocked ${tool}`
+        const found = result && outcome(event, result)
+        if (found?.type === "deny") return { ...found, reason: found.reason ?? `${event} hook blocked ${tool}` }
+        if (found) results.push(found)
       }
+      const ask = results.find((item) => item.type === "ask")
+      if (ask) return ask
+      const feedback = results.flatMap((item) => (item.type === "feedback" ? [item.text] : []))
+      return feedback.length > 0 ? { type: "feedback" as const, text: feedback.join("\n") } : undefined
     })
 
     yield* config.changes().pipe(
@@ -149,20 +199,49 @@ export const Plugin = define({
     )
     yield* refresh()
 
+    // Ask requests carry this key, so the evaluate hook can turn them into a prompt even when rules allow the tool.
+    yield* ctx.permission.hook("evaluate", (event) =>
+      Effect.sync(() => {
+        if (!Predicate.isObject(event.metadata) || !(askKey in event.metadata) || event.effect === "deny") return
+        event.effect = "ask"
+        event.message = text(event.metadata[askKey])
+      }),
+    )
+
     yield* ctx.tool.hook("execute.before", (event) =>
       Effect.gen(function* () {
-        const blocked = yield* run("PreToolUse", event)
-        if (blocked) return yield* new Tool.Error({ message: blocked })
+        const result = yield* run("PreToolUse", event)
+        if (result?.type === "deny") return yield* new Tool.Error({ message: result.reason ?? "" })
+        if (result?.type !== "ask") return
+        yield* permission
+          .assert({
+            sessionID: event.sessionID,
+            agent: event.agent,
+            action: event.tool,
+            resources: [resource(event.input) ?? "*"],
+            metadata: { [askKey]: result.reason ?? "" },
+            source: { type: "tool", messageID: event.messageID, id: event.id },
+          })
+          .pipe(
+            Effect.catchTags({
+              "Permission.BlockedError": (error) => Effect.fail(new Tool.Error({ message: error.message })),
+              "Permission.CorrectedError": (error) => Effect.fail(new Tool.Error({ message: error.feedback })),
+              "Session.NotFoundError": (error) => Effect.fail(new Tool.Error({ message: String(error) })),
+            }),
+          )
       }),
     )
     yield* ctx.tool.hook("execute.after", (event) =>
       Effect.gen(function* () {
         if (event.status !== "completed") return
-        const feedback = yield* run("PostToolUse", event, event.result.output ?? event.result.content)
-        if (!feedback) return
+        const result = yield* run("PostToolUse", event, event.result.output ?? event.result.content)
+        if (result?.type !== "feedback") return
         event.result = {
           ...event.result,
-          content: [...normalizeContent(event.result.content, event.result.output), { type: "text", text: feedback }],
+          content: [
+            ...normalizeContent(event.result.content, event.result.output),
+            { type: "text", text: result.text },
+          ],
         }
       }),
     )
