@@ -59,22 +59,45 @@ export type ThinkingInput = typeof Thinking.Encoded
 export type OptionsInput = ProviderOptions & typeof Options.Encoded
 export type ProviderOptionsInput = OptionsInput
 
+const CompactTrigger = Schema.Struct({
+  type: Schema.Literal("input_tokens"),
+  value: Schema.Int.check(Schema.isGreaterThanOrEqualTo(50000)),
+})
+const InputTokens = Schema.Struct({ type: Schema.Literal("input_tokens"), value: Schema.Int })
+const ToolUses = Schema.Struct({ type: Schema.Literal("tool_uses"), value: Schema.Int })
+const ClearThinkingKeep = Schema.Union([
+  Schema.Struct({ type: Schema.Literal("thinking_turns"), value: Schema.Int }),
+  Schema.Literal("all"),
+])
+
+// Context editing (`clear_*`) runs server-side, so it keeps preserved thinking valid, unlike client-side history edits.
+// https://platform.claude.com/docs/en/build-with-claude/context-editing
 export const ContextManagement = Schema.Struct({
   edits: Schema.Array(
-    Schema.Struct({
-      type: Schema.Literal("compact_20260112"),
-      trigger: Schema.optional(
-        Schema.Struct({
-          type: Schema.Literal("input_tokens"),
-          value: Schema.Int.check(Schema.isGreaterThanOrEqualTo(50000)),
-        }),
-      ),
-      pauseAfterCompaction: Schema.optional(Schema.Boolean),
-      instructions: Schema.optional(Schema.String),
-    }),
+    Schema.Union([
+      Schema.Struct({
+        type: Schema.Literal("compact_20260112"),
+        trigger: Schema.optional(CompactTrigger),
+        pauseAfterCompaction: Schema.optional(Schema.Boolean),
+        instructions: Schema.optional(Schema.String),
+      }),
+      Schema.Struct({
+        type: Schema.Literal("clear_tool_uses_20250919"),
+        trigger: Schema.optional(Schema.Union([InputTokens, ToolUses])),
+        keep: Schema.optional(ToolUses),
+        clearAtLeast: Schema.optional(InputTokens),
+        excludeTools: Schema.optional(Schema.Array(Schema.String)),
+        clearToolInputs: Schema.optional(Schema.Boolean),
+      }),
+      Schema.Struct({
+        type: Schema.Literal("clear_thinking_20251015"),
+        keep: Schema.optional(ClearThinkingKeep),
+      }),
+    ]),
   ),
 })
 export type ContextManagement = typeof ContextManagement.Type
+type ContextEdit = ContextManagement["edits"][number]
 
 // =============================================================================
 // Request Body Schema
@@ -362,12 +385,26 @@ const AnthropicBodyFields = {
   context_management: Schema.optional(
     Schema.Struct({
       edits: Schema.Array(
-        Schema.Struct({
-          type: Schema.Literal("compact_20260112"),
-          trigger: ContextManagement.fields.edits.value.fields.trigger,
-          pause_after_compaction: Schema.optional(Schema.Boolean),
-          instructions: Schema.optional(Schema.String),
-        }),
+        Schema.Union([
+          Schema.Struct({
+            type: Schema.Literal("compact_20260112"),
+            trigger: Schema.optional(CompactTrigger),
+            pause_after_compaction: Schema.optional(Schema.Boolean),
+            instructions: Schema.optional(Schema.String),
+          }),
+          Schema.Struct({
+            type: Schema.Literal("clear_tool_uses_20250919"),
+            trigger: Schema.optional(Schema.Union([InputTokens, ToolUses])),
+            keep: Schema.optional(ToolUses),
+            clear_at_least: Schema.optional(InputTokens),
+            exclude_tools: Schema.optional(Schema.Array(Schema.String)),
+            clear_tool_inputs: Schema.optional(Schema.Boolean),
+          }),
+          Schema.Struct({
+            type: Schema.Literal("clear_thinking_20251015"),
+            keep: Schema.optional(ClearThinkingKeep),
+          }),
+        ]),
       ),
     }),
   ),
@@ -1090,18 +1127,31 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
     service_tier: options.service_tier ?? options.serviceTier,
   }
   if (!management) return body
-  return {
-    ...body,
-    context_management: {
-      edits: management.edits.map((edit) => ({
+  return { ...body, context_management: { edits: management.edits.map(lowerContextEdit) } }
+})
+
+const lowerContextEdit = (edit: ContextEdit) => {
+  switch (edit.type) {
+    case "compact_20260112":
+      return {
         type: edit.type,
         trigger: edit.trigger,
         pause_after_compaction: edit.pauseAfterCompaction,
         instructions: edit.instructions,
-      })),
-    },
+      }
+    case "clear_tool_uses_20250919":
+      return {
+        type: edit.type,
+        trigger: edit.trigger,
+        keep: edit.keep,
+        clear_at_least: edit.clearAtLeast,
+        exclude_tools: edit.excludeTools,
+        clear_tool_inputs: edit.clearToolInputs,
+      }
+    case "clear_thinking_20251015":
+      return { type: edit.type, keep: edit.keep }
   }
-})
+}
 
 // =============================================================================
 // Stream Parsing
@@ -1646,7 +1696,9 @@ function requiredBetaHeaders(body: Pick<AnthropicMessagesBody, "messages" | "con
   // model and ignores it where unsupported, while manual-thinking models need
   // it for thinking between tool calls.
   const betas: string[] = ["interleaved-thinking-2025-05-14"]
-  const requestsCompaction = (body.context_management?.edits.length ?? 0) > 0
+  const edits = body.context_management?.edits ?? []
+  const requestsCompaction = edits.some((edit) => edit.type === "compact_20260112")
+  if (edits.some((edit) => edit.type !== "compact_20260112")) betas.push("context-management-2025-06-27")
   const replaysCompaction = body.messages.some((message) =>
     message.content.some((block) => block.type === "compaction"),
   )
