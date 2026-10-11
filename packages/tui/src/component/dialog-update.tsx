@@ -70,8 +70,6 @@ export function DialogUpdate(props: {
   })
 
   createEffect(() => setActive(Math.max(0, buttons().length - 1)))
-  // Wide enough to keep the release-notes link on the first line; the dialog still clamps to the terminal width.
-  createEffect(() => dialog.setSize(state().type === "major" ? "xlarge" : "medium"))
 
   const move = (offset: number) => {
     const count = buttons().length
@@ -134,18 +132,23 @@ export function DialogUpdate(props: {
               </Match>
               <Match when={current.type === "major"}>
                 <box gap={1}>
-                  <text
-                    fg={theme.textMuted}
-                    wrapMode="word"
-                    onMouseUp={() => {
-                      openUrl(V2_ANNOUNCEMENT_URL).catch(() => {})
-                    }}
-                  >
-                    OpenCode 2.0 is the next major release. Read more about it:{" "}
-                    <a href={V2_ANNOUNCEMENT_URL} style={{ fg: theme.primary }}>
-                      {V2_ANNOUNCEMENT_URL}
-                    </a>
-                  </text>
+                  <box>
+                    <text fg={theme.textMuted} wrapMode="word">
+                      OpenCode 2.0 is the next major release.
+                    </text>
+                    <text
+                      fg={theme.textMuted}
+                      wrapMode="word"
+                      onMouseUp={() => {
+                        openUrl(V2_ANNOUNCEMENT_URL).catch(() => {})
+                      }}
+                    >
+                      Read more about it:{" "}
+                      <a href={V2_ANNOUNCEMENT_URL} style={{ fg: theme.primary }}>
+                        {V2_ANNOUNCEMENT_URL}
+                      </a>
+                    </text>
+                  </box>
                   <text fg={theme.textMuted} wrapMode="word">
                     It contains some breaking changes.
                   </text>
