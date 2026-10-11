@@ -1,7 +1,7 @@
 import { Clock, Effect, Layer, Ref } from "effect"
-import { HttpClient, HttpClientResponse, type HttpMethod } from "effect/unstable/http"
-import { HttpClientError, TransportError } from "effect/unstable/http/HttpClientError"
-import type { HttpClientRequest } from "effect/unstable/http"
+import { HttpClient, HttpClientResponse, type HttpMethod } from "effect/http"
+import { HttpClientError, TransportError } from "effect/http/HttpClientError"
+import type { HttpClientRequest } from "effect/http"
 import { SimulationProtocol } from "../protocol"
 
 /**

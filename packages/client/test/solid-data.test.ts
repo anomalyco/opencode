@@ -1004,9 +1004,24 @@ test.each([
       created: 2,
       type,
       durable: { aggregateID: "ses_refresh", seq: 2, version: 1 },
-      data: { sessionID: "ses_refresh", reason: "user" },
+      data: {
+        sessionID: "ses_refresh",
+        reason: "user",
+        ...(type === "session.execution.failed"
+          ? { error: { type: "provider.no-route", message: "Model unavailable: opencode/gpt-5.2" } }
+          : {}),
+      },
     })
     expect(setup.data.session.status("ses_refresh")).toBe(type === "session.execution.started" ? "running" : "idle")
+    if (type === "session.execution.failed") {
+      expect(setup.data.session.message.list("ses_refresh").at(-1)).toEqual({
+        id: "msg_activity",
+        type: "idle",
+        outcome: "failed",
+        error: { type: "provider.no-route", message: "Model unavailable: opencode/gpt-5.2" },
+        time: { created: 2 },
+      })
+    }
     release.resolve()
     await wait(() => setup.data.session.status("ses_hydrated") === "running")
     expect(setup.data.session.status("ses_refresh")).toBe(type === "session.execution.started" ? "running" : "idle")

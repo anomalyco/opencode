@@ -3,6 +3,10 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
+  "go.referral.ended.label": "Advarsel",
+  "go.referral.ended":
+    "Henvisningsprogrammet er afsluttet. Henvisningslinks giver ikke længere kredit til dig eller den, der delte dem.",
+  "go.graph.bonus": "{{count}}× forbrug",
   "nav.github": "GitHub",
   "nav.docs": "Dokumentation",
   "nav.changelog": "Changelog",
@@ -58,6 +62,7 @@ export const dict = {
   "common.cancel": "Annuller",
   "common.creating": "Opretter...",
   "common.create": "Opret",
+  "common.contactUs": "Kontakt os",
 
   "common.videoUnsupported": "Din browser understøtter ikke video-tagget.",
   "common.figure": "Fig {{n}}.",
@@ -226,6 +231,9 @@ export const dict = {
   "zen.faq.q8": "Kan jeg bruge Zen med andre kodningsagenter?",
   "zen.faq.a8":
     "Selvom Zen fungerer godt med OpenCode, kan du bruge Zen med enhver agent. Følg opsætningsinstruktionerne i din foretrukne kodningsagent.",
+  "zen.faq.q9": "Kan jeg få en refusion?",
+  "zen.faq.a9":
+    "Du kan muligvis få en refusion, hvis opkrævningen blev foretaget inden for de seneste 14 dage, og du ikke har brugt kreditten fra dette køb. {{contact}} for at anmode om en refusion.",
 
   "zen.cta.start": "Kom godt i gang med Zen",
   "zen.pricing.title": "Tilføj $20 Pay as you go-saldo",
@@ -253,11 +261,12 @@ export const dict = {
     "Alle Zen-modeller er hostet i USA. Udbydere følger en nulopbevaringspolitik og bruger ikke dine data til modeltræning med",
   "zen.privacy.exceptionsLink": "følgende undtagelser",
 
+  "go.promo.step5": "Den nye model Step 5 Preview Free er gratis i en begrænset periode.",
   "go.title": "OpenCode Go | Kodningsmodeller til lav pris for alle",
-  "go.banner.text": "DeepSeek V4 Flash får fordoblet brugsgrænse i en begrænset periode",
   "go.meta.description":
     "Go koster $10/måned, med generøse brugsgrænser og pålidelig adgang til førende kodningsmodeller.",
   "go.hero.title": "Kodningsmodeller til lav pris for alle",
+  "go.hero.tagline": "Brug med enhver agent. Tank op med kredit efter behov. Afmeld når som helst.",
   "go.hero.body":
     "Go bringer agentisk kodning til programmører over hele verden. Med generøse grænser og pålidelig adgang til de mest kapable open source-modeller, så du kan bygge med kraftfulde agenter uden at bekymre dig om omkostninger eller tilgængelighed.",
 
@@ -265,13 +274,34 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "Abonner på Go",
   "go.cta.price": "$10/måned",
-  "go.pricing.body":
-    "Brug med enhver agent. $10/måned. Tank op med kredit efter behov. Afmeld når som helst.",
+  "go.plans.month": "om måneden",
+  "go.plans.plus.cta": "Abonnér på Go Plus",
+  "go.plans.plus.description": "Go Plus koster $40/måned og giver højere brugsgrænser.",
+  "go.plans.go.feature1": "Udvalgte, prisvenlige modeller",
+  "go.plans.go.feature2": "Testet til agentbaseret kodning",
+  "go.plans.go.feature3": "Generøse grænser og pålidelig adgang",
+  "go.plans.plus.feature1": "Alt i Go er inkluderet",
+  "go.plans.plus.feature2": "Højere grænser til længere, fokuserede kodningsforløb",
+  "go.plans.plus.feature3": "Til større, krævende projekter",
+  "go.plans.limits": "Grænser",
+  "go.plans.description": "Anslåede anmodninger pr. 5 timer og månedlige grænser pr. model",
+  "go.plans.legend": "Abonnementer",
+  "go.pricing.body": "Brug med enhver agent. $10/måned. Tank op med kredit efter behov. Afmeld når som helst.",
   "go.graph.free": "Gratis",
   "go.graph.freePill": "Big Pickle og gratis modeller",
   "go.graph.go": "Go",
   "go.graph.label": "Forespørgsler pr. 5 timer",
-  "go.graph.usageLimits": "Brugsgrænser",
+  "go.graph.period": "Forbrug",
+  "go.graph.model": "Model",
+  "go.graph.requests": "Estimerede anmodninger / 5 timer",
+  "go.graph.allowance": "Månedligt forbrug",
+  "go.graph.new": "Ny",
+  "go.graph.scale": "Ikke-lineær skala for anmodninger",
+  "go.graph.showAll": "Vis alle {{count}} modeller",
+  "go.graph.showLess": "Vis færre modeller",
+  "go.graph.limitedRegions": "begrænsede regioner",
+  "go.graph.limitedTime": "begrænset periode",
+  "go.graph.usageLimits": "Forbrugsgrænser",
   "go.graph.aria": "Forespørgsler pr. 5t: {{free}} vs {{go}}",
 
   "go.testimonials.brand.zen": "Zen",
@@ -304,8 +334,7 @@ export const dict = {
   "go.problem.item3": "Bygget til så mange programmører som muligt",
   "go.problem.item4": "Et kurateret modeludvalg testet til agentisk kodning",
   "go.how.title": "Hvordan Go virker",
-  "go.how.body":
-    "Go koster $10/måned. Du kan bruge det med OpenCode eller enhver agent.",
+  "go.how.body": "Go koster $10/måned. Du kan bruge det med OpenCode eller enhver agent.",
   "go.how.step1.title": "Opret en konto",
   "go.how.step1.beforeLink": "følg",
   "go.how.step1.link": "opsætningsinstruktionerne",
@@ -345,13 +374,16 @@ export const dict = {
   "go.faq.a5.used": "Brugt",
   "go.faq.a5.notUsed": "Ikke brugt",
   "go.faq.a5.noAgreement": "Ingen aftale",
+  "go.faq.a5.notZdr": "Ikke ZDR",
   "go.faq.a5.grokRetention":
     "ZDR deaktiverer vigtige API-funktioner, der afhænger af lagrede data, herunder den tilstandsbevarende Responses API, Files and Collections og Batch API.",
   "go.faq.a5.gptRetention":
     "Logfiler til overvågning af misbrug genereres ved al brug af API-funktioner og opbevares i op til 30 dage.",
+  "go.faq.a5.museRetention":
+    "Kraftigt nedsatte tokenpriser til gengæld for tilladelse til at bruge dine prompts og modelsvar til at træne fremtidige Meta-modeller.",
   "go.faq.a5.learnMore": "Læs mere",
   "go.faq.a5.deepseekRetention":
-    "ZDR-aftalen fornyes månedligt. Den nuværende aftale er gyldig til og med 31. august 2026.",
+    "ZDR-aftalen fornyes månedligt. Den nuværende aftale er gyldig til og med 30. september 2026.",
 
   "go.faq.a5.beforeExceptions":
     "Go-modeller hostes i USA. Udbydere følger en nulopbevaringspolitik og bruger ikke dine data til modeltræning, med de",
@@ -365,7 +397,10 @@ export const dict = {
 
   "go.faq.q9": "Hvad er forskellen på gratis modeller og Go?",
   "go.faq.a9":
-    "Gratis modeller inkluderer Big Pickle plus kampagnemodeller, der er tilgængelige på det pågældende tidspunkt, med en kvote på 200 forespørgsler/dag. Go tilbyder et kurateret modeludvalg med højere forespørgselskvoter håndhævet over rullende perioder (5 timer, ugentligt og månedligt), omtrent svarende til $12 pr. 5 timer, $30 pr. uge og $60 pr. måned (det faktiske antal forespørgsler varierer efter model og brug).",
+    "Gratis modeller inkluderer Big Pickle plus kampagnemodeller, der er tilgængelige på det pågældende tidspunkt, med en kvote på 200 forespørgsler/dag. Go tilbyder et kurateret modeludvalg med højere forespørgselskvoter i rullende perioder: 20 % af den månedlige kvote pr. 5 timer, 50 % pr. uge og 100 % pr. måned. Modelspecifikke kvoter kan variere (det faktiske antal forespørgsler varierer efter model og brug).",
+  "go.faq.q10": "Kan jeg få en refusion?",
+  "go.faq.a10":
+    "Du kan muligvis få en refusion, hvis opkrævningen blev foretaget inden for de seneste 14 dage, og du ikke har brugt din Go-kvote i den pågældende faktureringsperiode. {{contact}} for at anmode om en refusion.",
 
   "zen.api.error.rateLimitExceeded": "Hastighedsgrænse overskredet. Prøv venligst igen senere.",
   "zen.api.error.modelNotSupported": "Model {{model}} understøttes ikke",
@@ -391,6 +426,9 @@ export const dict = {
   "zen.api.error.modelDisabled": "Modellen er deaktiveret",
   "zen.api.error.regionNotAllowed":
     "Den nyeste version af denne model er kun tilgængelig som hostet i Kina og kræver, at du aktivt tilvælger den: {{consoleGoUrl}}",
+  "zen.api.error.countryNotAllowed": "Denne model er ikke tilgængelig i dit land.",
+  "zen.api.error.trainingNotAllowed":
+    "Denne model indsamler data, der bruges til at forbedre dens kvalitet, og kræver, at du aktivt tilvælger den: {{consoleGoUrl}}",
   "zen.api.error.trialEnded":
     "Den gratis kampagne for {{model}} er afsluttet. Du kan fortsætte med at bruge modellen ved at abonnere på OpenCode Go - {{link}}",
 
@@ -626,7 +664,6 @@ export const dict = {
   "workspace.payments.type.subscription": "abonnement",
   "workspace.payments.view": "Vis",
 
-  "workspace.black.loading": "Indlæser...",
   "workspace.black.time.day": "dag",
   "workspace.black.time.days": "dage",
   "workspace.black.time.hour": "time",
@@ -636,7 +673,8 @@ export const dict = {
   "workspace.black.time.fewSeconds": "et par sekunder",
   "workspace.black.subscription.title": "Abonnement",
   "workspace.black.subscription.message": "Du abonnerer på OpenCode Black for ${{plan}} om måneden.",
-  "workspace.black.subscription.manage": "Administrer abonnement",
+  "workspace.black.subscription.ending":
+    "OpenCode Black slutter med din nuværende faktureringsperiode og fornyes ikke. Vi flytter dig til den nye konsol.",
   "workspace.black.subscription.rollingUsage": "5-timers brug",
   "workspace.black.subscription.weeklyUsage": "Ugentlig brug",
   "workspace.black.subscription.resetsIn": "Nulstiller i",
@@ -663,15 +701,24 @@ export const dict = {
   "workspace.lite.time.fewSeconds": "et par sekunder",
   "workspace.lite.subscription.message": "Du abonnerer på OpenCode Go.",
   "workspace.lite.subscription.manage": "Administrer abonnement",
-  "workspace.lite.subscription.rollingUsage": "Løbende forbrug",
+  "workspace.lite.subscription.rollingUsage": "5-timers forbrug",
+  "workspace.lite.subscription.rollingQuota": "5-timers kvote",
   "workspace.lite.subscription.weeklyUsage": "Ugentligt forbrug",
+  "workspace.lite.subscription.weeklyQuota": "Ugentlig kvote",
   "workspace.lite.subscription.monthlyUsage": "Månedligt forbrug",
+  "workspace.lite.subscription.monthlyQuota": "Månedlig kvote",
   "workspace.lite.subscription.resetsIn": "Nulstiller i",
+  "workspace.lite.subscription.showDetails": "Vis detaljer",
+  "workspace.lite.subscription.hideDetails": "Skjul detaljer",
+  "workspace.lite.subscription.model": "Model",
+  "workspace.lite.subscription.contribution": "%",
+  "workspace.lite.subscription.total": "I alt",
   "workspace.lite.subscription.useBalance": "Brug din tilgængelige saldo, når du har nået forbrugsgrænserne",
   "workspace.lite.subscription.selectProvider":
     'Vælg "OpenCode Go" som udbyder i din opencode-konfiguration for at bruge Go-modeller.',
   "workspace.lite.providers.title": "Udbydere",
   "workspace.lite.providers.description": "Styr, hvilke udbydere der bruges til routing.",
+  "workspace.lite.providers.allowTraining": "Tillad modeller, der træner på anmodningsdata",
   "workspace.lite.providers.useChina": "Aktivér modeller hostet i Kina",
   "workspace.lite.black.message":
     "Du abonnerer i øjeblikket på OpenCode Black eller er på venteliste. Afmeld venligst først, hvis du vil skifte til Go.",
@@ -770,6 +817,14 @@ export const dict = {
   "enterprise.form.email.placeholder": "jeff@amazon.com",
   "enterprise.form.phone.label": "Telefonnummer",
   "enterprise.form.phone.placeholder": "+1 234 567 8900",
+  "enterprise.form.inferenceSpend.label": "Hvad er jeres virksomheds nuværende månedlige forbrug på inferens (USD)?",
+  "enterprise.form.inferenceSpend.placeholder": "Vælg et interval (valgfrit)",
+  "enterprise.form.inferenceSpend.none": "Intet forbrug endnu",
+  "enterprise.form.inferenceSpend.under1k": "Under $1K",
+  "enterprise.form.inferenceSpend.1kTo10k": "$1K–$10K",
+  "enterprise.form.inferenceSpend.10kTo50k": "$10K–$50K",
+  "enterprise.form.inferenceSpend.50kTo100k": "$50K–$100K",
+  "enterprise.form.inferenceSpend.over100k": "$100K eller mere",
   "enterprise.form.message.label": "Hvilket problem prøver du at løse?",
   "enterprise.form.message.placeholder": "Vi har brug for hjælp med...",
   "enterprise.form.send": "Send",
@@ -778,6 +833,7 @@ export const dict = {
   "enterprise.form.success.submitted": "Formular indsendt med succes.",
   "enterprise.form.error.allFieldsRequired": "Alle felter er påkrævet.",
   "enterprise.form.error.invalidEmailFormat": "Ugyldigt e-mailformat.",
+  "enterprise.form.error.invalidInferenceSpend": "Vælg et gyldigt interval for inferensforbrug.",
   "enterprise.form.error.internalServer": "Intern serverfejl.",
   "enterprise.faq.title": "FAQ",
   "enterprise.faq.q1": "Hvad er OpenCode Enterprise?",

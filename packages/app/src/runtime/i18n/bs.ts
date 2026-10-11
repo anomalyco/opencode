@@ -312,9 +312,6 @@ export const dict = {
   "dialog.server.edit.title": "Uredi server",
 
   "dialog.server.menu.edit": "Uredi",
-  "dialog.server.menu.default": "Postavi kao podrazumijevano",
-  "dialog.server.menu.defaultRemove": "Ukloni podrazumijevano",
-  "dialog.server.status.default": "Podrazumijevano",
 
   "dialog.project.edit.title": "Uredi projekat",
   "dialog.project.edit.icon": "Ikonica",
@@ -624,10 +621,6 @@ export const dict = {
   "workspace.delete.confirm": 'Izbriši radni prostor "{{name}}"?',
   "workspace.delete.button": "Izbriši radni prostor",
   "common.open": "Otvori",
-  "dialog.releaseNotes.action.getStarted": "Započni",
-  "dialog.releaseNotes.action.next": "Sljedeće",
-  "dialog.releaseNotes.action.hideFuture": "Ne prikazuj ovo u budućnosti",
-  "dialog.releaseNotes.media.alt": "Pregled izdanja",
   "toast.project.reloadFailed.title": "Nije uspjelo ponovno učitavanje {{project}}",
   "error.server.invalidConfiguration": "Nevažeća konfiguracija",
   "common.moreCountSuffix": " (+{{count}} više)",
@@ -783,7 +776,6 @@ export const dict = {
   "session.view.select": "Prikaz sesije",
   "session.background.moveRunning": "Premjesti u pozadinu",
   "session.timeline.working": "U tijeku",
-  "session.review.wrapLines": "Prelamaj retke",
   "session.websearch.title": "Web pretraga treće strane",
   "session.websearch.description": "Odaberite provajdera pretraživanja koje agenti koriste za pretraživanje weba",
   "session.websearch.provider": "Provajder pretraživanja",
@@ -843,8 +835,6 @@ export const dict = {
   "settings.timeline.category.subagents": "Podagenti",
   "settings.timeline.category.notices": "Napomene",
   "settings.timeline.category.tools": "Ostali alati",
-  "settings.general.row.mobileDiffWrap.description":
-    "Umotajte dugačke redove u mobilne razlike umjesto horizontalnog pomicanja",
   "session.background.shell.few": "{{count}} ljuske",
   "session.background.subagent.few": "{{count}} podagenta",
   "settings.about.otherContributor.few": "{{count}} druga",
@@ -869,7 +859,6 @@ export const dict = {
   "server.connect.button": "Poveži se",
   "server.connect.address.invalid": "Unesite ispravnu HTTP ili HTTPS adresu servera.",
   "server.connect.failed": "Povezivanje nije uspjelo. Provjerite adresu servera i lozinku, pa pokušajte ponovo.",
-  "server.connect.pair.description": "Pokrenite ovu naredbu na računaru da biste dobili podatke za povezivanje.",
   "server.connect.scan": "Skeniraj QR kod",
   "server.connect.scan.description": "Usmjerite kameru prema QR kodu koji prikazuje opencode pair.",
   "server.connect.scan.invalid": "Ovo nije OpenCode kod za uparivanje. Skenirajte kod koji prikazuje opencode pair.",
@@ -877,8 +866,6 @@ export const dict = {
   "server.connect.camera.starting": "Otvaranje kamere…",
   "server.connect.mixedContent":
     "Nije se moguće povezati s ovim HTTP serverom s HTTPS stranice. Umjesto toga koristite HTTPS adresu servera.",
-  "server.connect.camera.insecure":
-    "Za skeniranje QR koda ovu stranicu morate otvoriti putem HTTPS-a ili na localhostu.",
   "server.connect.camera.unavailable": "Ovom pregledniku nije dostupna kamera. Ručno unesite podatke za povezivanje.",
   "server.connect.camera.error":
     "Kameru nije bilo moguće otvoriti. Dozvolite pristup kameri ili ručno unesite podatke za povezivanje.",

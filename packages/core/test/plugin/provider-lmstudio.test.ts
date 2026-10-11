@@ -226,6 +226,13 @@ describe("LMStudioPlugin", () => {
             yield* bus.publish(Event.Updated, {})
             yield* eventually(providers.get(providerID), (provider) => provider?.settings?.apiKey === "")
             expect(requests).toContainEqual({ authorization: null, path: "/proxy/api/v1/models" })
+
+            requests.splice(0)
+            const apiBaseURL = `${configured.url.origin}/proxy/api/v1`
+            yield* config.setEntries([configuration(apiBaseURL, "api-secret")])
+            yield* bus.publish(Event.Updated, {})
+            yield* eventually(providers.get(providerID), (provider) => provider?.settings?.baseURL === apiBaseURL)
+            expect(requests).toContainEqual({ authorization: "Bearer api-secret", path: "/proxy/api/v1/models" })
           }),
         ({ initial, configured }) => Effect.promise(() => Promise.all([initial.stop(true), configured.stop(true)])),
       ),

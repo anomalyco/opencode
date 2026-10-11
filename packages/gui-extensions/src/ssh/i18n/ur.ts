@@ -35,8 +35,5 @@ export default {
   "form.name": "سرور کا نام (اختیاری)",
   "form.namePlaceholder": "Localhost",
   "form.add": "سرور شامل کریں۔",
-  "server.default": "طے شدہ",
-  "menu.default": "بطور ڈیفالٹ سیٹ کریں۔",
-  "menu.defaultRemove": "ڈیفالٹ کو ہٹا دیں۔",
   "menu.delete": "حذف کریں۔",
 }

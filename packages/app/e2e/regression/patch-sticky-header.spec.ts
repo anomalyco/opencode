@@ -4,7 +4,9 @@ import { createTwoFilesPatch } from "diff"
 import { assistantMessage, setupTimeline, textPart, toolPart, userMessage } from "../utils/timeline"
 
 const before = Array.from({ length: 80 }, (_, index) => `export const value${index} = ${index}\n`).join("")
+
 const after = before.replaceAll(" = ", " = 1 + ")
+
 const files = ["src/a.ts", "src/b.ts"].map((file) => ({
   file,
   status: "modified",
@@ -12,8 +14,10 @@ const files = ["src/a.ts", "src/b.ts"].map((file) => ({
   deletions: 80,
   patch: createTwoFilesPatch(file, file, before, after),
 }))
+
 // Five separated hunks, so the sticky header must stay put across hunk separators.
 const long = Array.from({ length: 1_000 }, (_, index) => `export const value${index} = ${index}\n`)
+
 const hunks = {
   file: "src/a.ts",
   status: "modified",
@@ -28,6 +32,7 @@ const hunks = {
       .join(""),
   ),
 }
+
 const scenarios = [
   {
     name: "grouped patch",
@@ -161,9 +166,11 @@ for (const scenario of scenarios) {
         viewport: { width, height: 900 },
       })
       await page.evaluate((direction) => (document.documentElement.dir = direction), direction)
+
       if (scenario.placement === "grouped") {
         await page.locator('[data-component="context-tool-group-trigger"]').click()
       }
+
       const patch = page.locator('[data-scope="apply-patch"]')
       await expect(patch).toHaveCount(1)
       const scroller = page.locator('[data-slot="session-timeline-scroll"] .scroll-view__viewport')
@@ -194,10 +201,12 @@ for (const scenario of scenarios) {
           .poll(() =>
             content.evaluate((element) => {
               const viewport = element.closest<HTMLElement>(".scroll-view__viewport")!
+
               return element.getBoundingClientRect().top - viewport.getBoundingClientRect().top
             }),
           )
           .toBeLessThan(0)
+
         for (const [index, offset] of scenario.offsets.entries()) {
           if (index)
             await scroller.evaluate(
@@ -209,29 +218,38 @@ for (const scenario of scenarios) {
               header.evaluate((element) => {
                 const viewport = element.closest<HTMLElement>(".scroll-view__viewport")!
                 const title = viewport.querySelector("[data-session-title]")?.firstElementChild
+
                 const toolTitle = element
                   .closest('[data-component="edit-tool"]')
                   ?.querySelector('[data-slot="collapsible-trigger"][data-locked]')
+
                 // Grouped file headers stack below the stuck Used header.
                 const group = element
                   .closest('[data-component="collapsed-tool-group"]')
                   ?.querySelector(':scope > [data-component="collapsible"] > [data-slot="collapsible-trigger"]')
+
                 const sessionTop = viewport.getBoundingClientRect().top + (title?.getBoundingClientRect().height ?? 0)
                 const top = sessionTop + (group?.getBoundingClientRect().height ?? 0)
                 const rect = element.getBoundingClientRect()
                 const trigger = element.querySelector("button")!
+
+                // The header stuck directly below the session title sits where the title's fade starts.
+                const hits = (target: Element, box: DOMRect) =>
+                  [box.top + 1, box.top + box.height / 2].every((y) =>
+                    target.contains(document.elementFromPoint(box.left + box.width / 2, y)),
+                  )
+
                 return {
                   gap: Math.abs(rect.top - top - (toolTitle?.getBoundingClientRect().height ?? 0)),
                   groupGap: group ? Math.abs(group.getBoundingClientRect().top - sessionTop) : 0,
                   titleGap: toolTitle ? Math.abs(toolTitle.getBoundingClientRect().top - top) : 0,
-                  clickable: trigger.contains(
-                    document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2),
-                  ),
+                  clickable: hits(trigger, rect) && (!group || hits(group, group.getBoundingClientRect())),
                 }
               }),
             )
             .toEqual({ gap: 0, groupGap: 0, titleGap: 0, clickable: true })
         }
+
         await page.screenshot({ path: info.outputPath(`${file}.png`) })
       }
 

@@ -11,6 +11,7 @@ export function settingsProjects(context: {
   const tracked = context.projects.list()
   const paths = new Set(tracked.map((project) => pathKey(project.worktree)))
   const closed = new Set(context.projects.closed().map(pathKey))
+
   return [
     ...tracked,
     // Inventory reads must not allocate directory stores: async cache hydration can trigger an eviction/reload loop.
@@ -31,10 +32,12 @@ export type SettingsServer = {
 export function settingsServers(connections: readonly ServerConnection.Any[], sources: readonly ExtensionServer[]) {
   const byKey = new Map(sources.map((item) => [item.key, item]))
   const connected = new Set<string>(connections.map(ServerConnection.key))
+
   return [
     ...connections.map((connection): SettingsServer => {
       const key = ServerConnection.key(connection)
       const source = byKey.get(key)
+
       return {
         key,
         name: source?.entry.name ?? (serverName(connection) || key),
@@ -58,11 +61,13 @@ export function settingsServers(connections: readonly ServerConnection.Any[], so
 export function useSettingsServersLoaded() {
   const servers = useServers()
   const extensions = useExtensionServers()
+
   return () => servers.hydrated() && extensions.ready()
 }
 
 export function useSettingsServers() {
   const servers = useServers()
   const extensions = useExtensionServers()
+
   return createMemo(() => settingsServers(servers.list, extensions.entries()))
 }

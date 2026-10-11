@@ -6,14 +6,18 @@ type Pair = {
 }
 
 const directory = Bun.argv[2]
+
 if (!directory) throw new Error("Pass the directory containing session-load pairs")
+
 const pairs = await Promise.all(
   [...new Bun.Glob("{compact,ungrouped}-*.json").scanSync(directory)].map(async (file) => {
     const pair = (await Bun.file(`${directory}/${file}`).json()) as Pair
     const cold = pair.samples.find((sample) => sample.phase === "cold")
     const warm = pair.samples.find((sample) => sample.phase === "warm")
+
     if (cold?.firstCorrectObservedMs == null || warm?.firstCorrectObservedMs == null)
       throw new Error(`Expected a completed cold/warm pair in ${file}`)
+
     return {
       mode: pair.mode,
       cold: cold.firstCorrectObservedMs,
@@ -22,11 +26,14 @@ const pairs = await Promise.all(
     }
   }),
 )
+
 if (!pairs.length) throw new Error(`No session-load pairs found in ${directory}`)
 
 const result = ["compact", "ungrouped"].flatMap((mode) => {
   const selected = pairs.filter((pair) => pair.mode === mode)
+
   if (!selected.length) return []
+
   return [
     {
       mode,
@@ -37,7 +44,9 @@ const result = ["compact", "ungrouped"].flatMap((mode) => {
     },
   ]
 })
+
 await Bun.write(`${directory}/summary.json`, JSON.stringify(result, null, 2))
+
 console.table(
   result.map((row) => ({
     mode: row.mode,
@@ -53,6 +62,7 @@ console.table(
 
 function stats(values: number[]) {
   const sorted = values.toSorted((left, right) => left - right)
+
   return {
     n: sorted.length,
     median: (sorted[Math.floor((sorted.length - 1) / 2)] + sorted[Math.floor(sorted.length / 2)]) / 2,

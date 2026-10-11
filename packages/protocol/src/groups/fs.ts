@@ -2,7 +2,7 @@ import { FileSystem } from "@opencode/schema/filesystem"
 import { Location } from "@opencode/schema/location"
 import { PositiveInt } from "@opencode/schema/schema"
 import { Schema } from "effect"
-import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
+import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/http-api"
 import { FileNotFoundError } from "../errors.js"
 import { LocationQuery, locationQueryOpenApi } from "./location.js"
 
@@ -16,7 +16,8 @@ const ListQuery = Schema.Struct({
 const WriteQuery = Schema.Struct({
   ...LocationQuery.fields,
   path: Schema.String.annotate({
-    description: "An absolute path or a path relative to the requested location. Missing parent directories are created.",
+    description:
+      "An absolute path or a path relative to the requested location. Missing parent directories are created.",
   }),
 })
 
@@ -39,7 +40,8 @@ export const FileSystemGroup = HttpApiGroup.make("server.fs")
         OpenApi.annotations({
           identifier: "fs.read",
           summary: "Read file",
-          description: "Serve one file relative to the requested location.",
+          description:
+            "Stream one file relative to the requested location with ETag, Last-Modified, and single-range HTTP Range support (206 Partial Content, 416 Range Not Satisfiable, and 304 Not Modified; multi-range and malformed Range headers fall back to 200).",
         }),
       ),
   )
@@ -47,6 +49,7 @@ export const FileSystemGroup = HttpApiGroup.make("server.fs")
     HttpApiEndpoint.get("fs.list", "/api/fs/list", {
       query: ListQuery,
       success: Location.response(Schema.Array(FileSystem.Entry)),
+      error: FileNotFoundError,
     })
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(

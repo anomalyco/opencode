@@ -311,9 +311,6 @@ export const dict = {
   "dialog.server.add.passwordPlaceholder": "heslo",
   "dialog.server.edit.title": "Upraviť server",
   "dialog.server.menu.edit": "Upraviť",
-  "dialog.server.menu.default": "Nastaviť ako predvolený",
-  "dialog.server.menu.defaultRemove": "Odstrániť predvolený",
-  "dialog.server.status.default": "Predvolený",
   "dialog.project.edit.title": "Upraviť projekt",
   "dialog.project.edit.icon": "Ikona",
   "dialog.project.edit.icon.alt": "Ikona projektu",
@@ -321,10 +318,6 @@ export const dict = {
   "dialog.project.edit.color.select": "Vyberte farbu {{color}}",
   "dialog.project.edit.worktree.startup": "Štartovací skript pracovného priestoru",
   "dialog.project.edit.worktree.startup.placeholder": "napr. bun install",
-  "dialog.releaseNotes.action.getStarted": "Začať",
-  "dialog.releaseNotes.action.next": "Ďalej",
-  "dialog.releaseNotes.action.hideFuture": "Nabudúce nezobrazovať",
-  "dialog.releaseNotes.media.alt": "Ukážka vydania",
   "toast.permissions.autoaccept.on.title": "Automatické schvaľovanie povolení",
   "toast.permissions.autoaccept.on.description": "Žiadosti o povolenie budú automaticky schválené",
   "toast.permissions.autoaccept.off.title": "Automatické schvaľovanie povolení zastavené",
@@ -739,7 +732,6 @@ export const dict = {
   "session.view.select": "Zobrazenie relácie",
   "session.background.moveRunning": "Presun na pozadie",
   "session.timeline.working": "Pracuje",
-  "session.review.wrapLines": "Zalamovať riadky",
   "session.websearch.title": "Webové vyhľadávanie tretích strán",
   "session.websearch.description":
     "Vyberte poskytovateľa vyhľadávania, ktorého agenti používajú na vyhľadávanie na webe",
@@ -799,8 +791,6 @@ export const dict = {
   "settings.timeline.category.subagents": "subagenty",
   "settings.timeline.category.notices": "Oznámenia",
   "settings.timeline.category.tools": "Ostatné náradie",
-  "settings.general.row.mobileDiffWrap.description":
-    "Zabaľte dlhé riadky do mobilných rozdielov namiesto vodorovného posúvania",
   "provider.connect.error.unsupportedFields": "Tento overovací formulár obsahuje nepodporované polia",
   "settings.about.writtenByNames": "Napísal {{names}}",
   "settings.about.illustratedByNames": "Ilustroval {{names}}",
@@ -822,7 +812,6 @@ export const dict = {
   "server.connect.button": "Pripojiť sa",
   "server.connect.address.invalid": "Zadajte platnú adresu servera s protokolom HTTP alebo HTTPS.",
   "server.connect.failed": "Nepodarilo sa pripojiť. Skontrolujte adresu servera a heslo a skúste znova.",
-  "server.connect.pair.description": "Spustite tento príkaz na svojom počítači, aby ste získali údaje na pripojenie.",
   "server.connect.scan": "Naskenujte QR kód",
   "server.connect.scan.description": "Namierte kameru na QR kód zobrazený pomocou opencode pair.",
   "server.connect.scan.invalid": "Toto nie je párovací kód OpenCode. Naskenujte kód zobrazený pomocou opencode pair.",
@@ -830,7 +819,6 @@ export const dict = {
   "server.connect.camera.starting": "Otvorenie kamery…",
   "server.connect.mixedContent":
     "Nie je možné pripojiť sa k tomuto HTTP serveru z HTTPS stránky. Namiesto toho použite adresu HTTPS.",
-  "server.connect.camera.insecure": "Na skenovanie QR je potrebné otvoriť túto stránku cez HTTPS alebo na localhoste.",
   "server.connect.camera.unavailable":
     "Tento prehliadač nemá k dispozícii žiadnu kameru. Zadajte údaje na pripojenie ručne.",
   "server.connect.camera.error":

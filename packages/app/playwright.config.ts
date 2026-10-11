@@ -1,21 +1,31 @@
 import { defineConfig, devices } from "@playwright/test"
 
 const port = Number(process.env.PLAYWRIGHT_PORT ?? 3000)
+
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${port}`
+
 const url = new URL(baseURL)
+
 if (url.protocol !== "http:") throw new Error("E2E fixtures require an http:// app URL")
+
 const built = !!process.env.CI || process.env.PLAYWRIGHT_BUILD === "1"
+
 // Production connects to its own origin, so fixture URLs must match the preview server.
 if (built) {
   process.env.PLAYWRIGHT_SERVER_HOST = url.hostname
   process.env.PLAYWRIGHT_SERVER_PORT = url.port || "80"
 }
+
 const serverHost = process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"
+
 const serverPort = process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"
+
 const command = built
   ? `bun run build && bun run serve -- --host 127.0.0.1 --port ${port} --strictPort`
   : `bun run dev -- --host 127.0.0.1 --port ${port} --strictPort`
+
 const workers = Number(process.env.PLAYWRIGHT_WORKERS ?? (process.env.CI ? 5 : 0)) || undefined
+
 export default defineConfig({
   testDir: "./e2e",
   testIgnore: [

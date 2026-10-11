@@ -22,6 +22,7 @@ import { useLanguage } from "@/runtime/i18n/language"
 import type { WebSearchRequestModel } from "./requests/websearch"
 
 const modelReady = Object.assign(() => true, { promise: undefined }) satisfies ModelSelection["ready"]
+
 const storyComposerModel = {
   id: STORY_MODEL.id,
   providerID: STORY_MODEL.providerID,
@@ -88,6 +89,7 @@ export type SessionPreviewProps = {
 export function SessionPreview(props: SessionPreviewProps) {
   const [state, setState] = createStore({ revision: 1 })
   const queryClient = new QueryClient({ defaultOptions: { mutations: { retry: false } } })
+
   return (
     <QueryClientProvider client={queryClient}>
       <Show when={state.revision} keyed>
@@ -126,6 +128,7 @@ function createPromptController(input: {
     model: { providerID: STORY_MODEL.providerID, modelID: STORY_MODEL.id, variant: STORY_MODEL.variant },
     context: { items: [] },
   })
+
   const interaction = createComposerEditor({
     store: draft,
     commands: () => [],
@@ -139,6 +142,7 @@ function createPromptController(input: {
         working: () => input.status().type !== "idle",
         onSubmit: () => {
           const value = interaction.value().trim()
+
           if (!value) return
           input.onSubmit(value)
           draft[1]("prompt", [{ type: "text", content: "", start: 0, end: 0 }])
@@ -152,6 +156,7 @@ function createPromptController(input: {
       },
     },
   })
+
   return {
     controller: {
       ...interaction,
@@ -166,6 +171,7 @@ function createPromptController(input: {
 
 function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void }) {
   const language = useLanguage()
+
   const [state, setState] = createStore<{
     activity: string
     reviewOpened: boolean
@@ -177,6 +183,7 @@ function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void 
     request: props.request,
     searchProvider: "random",
   })
+
   const prompt = createPromptController({
     initial: props.draft ?? "",
     placeholder: language.t("prompt.placeholder.normal"),
@@ -185,6 +192,7 @@ function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void 
     onSubmit: (text) => setState("activity", `Submitted locally: ${text}`),
     onStop: () => setState("activity", "Requested a local stop"),
   })
+
   const region = {
     state: {
       questionRequest: () => (state.request?.type === "question" ? state.request.value : undefined),
@@ -325,6 +333,7 @@ function SessionSurfaceHeader(props: {
   onReset: () => void
 }) {
   const language = useLanguage()
+
   return (
     <header class="flex min-h-14 shrink-0 items-center justify-between gap-4 border-b border-border-weak-base px-4 py-2">
       <div class="flex min-w-0 items-center gap-3">

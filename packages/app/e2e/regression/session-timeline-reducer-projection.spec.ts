@@ -22,6 +22,7 @@ test("keeps failed search calls and their error cards inside the collapsed stack
       },
     ),
   ]
+
   await setupTimeline(page, { messages: [userMessage(), assistantMessage(parts)] })
 
   const group = page.locator('[data-component="collapsed-tool-group"]')

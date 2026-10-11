@@ -77,8 +77,10 @@ export const DelegateFocusedTasks = {
 
 function CodebaseExplorationStory() {
   const [state, setState] = createStore({ read: false, glob: false })
+
   const tool = (name: "read" | "glob", completed: boolean) => {
     const input = name === "read" ? { path: "src/a.ts", offset: 0, limit: 120 } : { path: ".", pattern: "**/*.ts" }
+
     return {
       type: "tool",
       id: `tool_context_${name}`,
@@ -93,6 +95,7 @@ function CodebaseExplorationStory() {
       },
     } satisfies SessionMessageAssistantTool
   }
+
   const document = createMemo(
     () =>
       ({
@@ -112,6 +115,7 @@ function CodebaseExplorationStory() {
         diffs: [],
       }) satisfies SessionDocument,
   )
+
   return (
     <section class="mx-auto flex w-full max-w-[720px] flex-col gap-4 p-6">
       <div class="flex gap-2">
@@ -276,16 +280,25 @@ const CompleteAgentWorkflow = {
 const RecoverFromToolFailures = {
   render: () => {
     const names = ["shell", "edit", "write", "patch", "webfetch", "websearch", "subagent", "skill", "mcp_probe"]
+
     const input = (name: string): Record<string, JsonValue> => {
       if (name === "shell") return { command: "exit 1" }
+
       if (name === "edit" || name === "write") return { path: "src/error.ts", content: "" }
+
       if (name === "patch") return { patchText: "Update src/error.ts" }
+
       if (name === "webfetch") return { url: "https://example.com" }
+
       if (name === "websearch") return { query: "failure" }
+
       if (name === "subagent") return { description: "Fail subagent", agent: "explore", prompt: "Inspect." }
+
       if (name === "skill") return { name: "failure" }
+
       return { target: "failure" }
     }
+
     return (
       <CurrentSessionTimelineStory
         title="Recover from failed work"
@@ -308,6 +321,7 @@ const RecoverFromToolFailures = {
 
 function FailedCommandAndQuestionStory() {
   const [state, setState] = createStore({ failed: false })
+
   const document = createMemo(() =>
     storyDocument(
       [
@@ -327,6 +341,7 @@ function FailedCommandAndQuestionStory() {
       !state.failed,
     ),
   )
+
   return (
     <section class="mx-auto flex w-full max-w-[720px] flex-col gap-4 p-6">
       <button type="button" onClick={() => setState("failed", true)}>

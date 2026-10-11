@@ -23,7 +23,6 @@ export const dict = {
   "server.connect.address.invalid": "Indtast en gyldig HTTP- eller HTTPS-serveradresse.",
   "server.connect.failed":
     "Kunne ikke oprette forbindelse. Tjek serveradressen og adgangskoden, og prøv derefter igen.",
-  "server.connect.pair.description": "Kør denne kommando på din computer for at få dine forbindelsesdetaljer.",
   "server.connect.scan": "Scan QR kode",
   "server.connect.scan.description": "Ret dit kamera mod QR-koden vist af opencode pair.",
   "server.connect.scan.invalid": "Dette er ikke en OpenCode-parringskode. Scan koden vist af opencode pair.",
@@ -31,7 +30,6 @@ export const dict = {
   "server.connect.camera.starting": "Åbner kamera...",
   "server.connect.mixedContent":
     "Kunne ikke oprette forbindelse til denne HTTP-server fra en HTTPS-side. Brug i stedet en HTTPS-serveradresse.",
-  "server.connect.camera.insecure": "QR-scanning kræver, at denne side åbnes over HTTPS eller på localhost.",
   "server.connect.camera.unavailable":
     "Intet kamera er tilgængeligt for denne browser. Indtast dine forbindelsesoplysninger manuelt.",
   "server.connect.camera.error":
@@ -121,7 +119,6 @@ export const dict = {
   "session.view.select": "Sessionsvisning",
   "session.background.moveRunning": "Flyt til baggrunden",
   "session.timeline.working": "Arbejder",
-  "session.review.wrapLines": "Ombryd linjer",
   "session.websearch.title": "Websøgning fra tredjepart",
   "session.websearch.description": "Vælg den søgeudbyder, som agenter bruger til at søge på nettet",
   "session.websearch.provider": "Søgeudbyder",
@@ -180,7 +177,6 @@ export const dict = {
   "settings.timeline.category.subagents": "Underagenter",
   "settings.timeline.category.notices": "Meddelelser",
   "settings.timeline.category.tools": "Andre værktøjer",
-  "settings.general.row.mobileDiffWrap.description": "Ombryd lange linjer i mobile diffs i stedet for at rulle vandret",
   "toast.migration.progress.clearingOldEvents": "Rydder gamle hændelser",
   "toast.migration.progress.migratingSessions": "Migrerer sessioner",
   "session.new.workspace.existingLabel": "Worktree",
@@ -450,9 +446,6 @@ export const dict = {
   "dialog.server.edit.title": "Rediger server",
 
   "dialog.server.menu.edit": "Rediger",
-  "dialog.server.menu.default": "Sæt som standard",
-  "dialog.server.menu.defaultRemove": "Fjern som standard",
-  "dialog.server.status.default": "Standard",
 
   "dialog.project.edit.title": "Rediger projekt",
   "dialog.project.edit.icon": "Ikon",
@@ -759,10 +752,6 @@ export const dict = {
   "workspace.delete.confirm": 'Slet arbejdsområde "{{name}}"?',
   "workspace.delete.button": "Slet arbejdsområde",
   "common.open": "Åbn",
-  "dialog.releaseNotes.action.getStarted": "Kom i gang",
-  "dialog.releaseNotes.action.next": "Næste",
-  "dialog.releaseNotes.action.hideFuture": "Vis ikke disse i fremtiden",
-  "dialog.releaseNotes.media.alt": "Forhåndsvisning af udgivelse",
   "toast.project.reloadFailed.title": "Kunne ikke genindlæse {{project}}",
   "error.server.invalidConfiguration": "Ugyldig konfiguration",
   "common.moreCountSuffix": " (+{{count}} mere)",

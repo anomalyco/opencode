@@ -7,6 +7,7 @@ test("review and terminal follow the session tab and stay mounted", async ({ pag
   await page.setViewportSize({ width: 1440, height: 900 })
   const a = { id: "ses_side_a", title: "Alpha session" }
   const b = { id: "ses_side_b", title: "Beta session" }
+
   const { directory, pty } = await openSession(page, {
     name: "SidePanels",
     sessions: [a, b],
@@ -19,10 +20,12 @@ test("review and terminal follow the session tab and stay mounted", async ({ pag
       settings: { general: { terminalPlacement: "bottom" } },
     },
   })
+
   const chat = page.locator('[data-slot="session-chat-panel"]')
   const review = page.locator('#review-panel [data-component="session-review-v2"]')
   const terminal = page.locator('[data-component="terminal"]')
   const terminalPanel = page.locator('[data-component="terminal-panel"]')
+
   const switchTab = async (title: string) => {
     await page.locator("[data-titlebar-tab-slot]", { hasText: title }).click()
     await expectSessionTitle(page, title)
@@ -94,6 +97,7 @@ test("review and terminal follow the session tab and stay mounted", async ({ pag
 
 test("terminal stacks under review by default and spans the bottom when configured", async ({ page }) => {
   await page.setViewportSize({ width: 1400, height: 900 })
+
   // A large nested branch diff; its first file is the sentinel that proves the virtualized tree stays mounted.
   const diffs = [
     fileDiff(".github/actions/setup-bun/action.yml", { additions: 7 }),
@@ -104,6 +108,7 @@ test("terminal stacks under review by default and spans the bottom when configur
       ),
     ),
   ]
+
   await openSession(page, { name: "SideStack", pty: {}, vcsDiff: diffs })
   const toggle = page.getByRole("button", { name: "Toggle review" })
   const reviewPanel = page.locator("#review-panel")
@@ -114,10 +119,12 @@ test("terminal stacks under review by default and spans the bottom when configur
   await toggle.click()
   await expect(reviewPanel).toBeVisible()
   await expectTreeSentinel(page)
+
   for (const direction of ["ltr", "rtl"] as const) {
     await page.evaluate((direction) => (document.documentElement.dir = direction), direction)
     await expect.poll(() => sideContentOffset(page, direction)).toBeLessThanOrEqual(1)
   }
+
   await page.evaluate(() => (document.documentElement.dir = "ltr"))
 
   await page.keyboard.press("Control+Backquote")
@@ -128,6 +135,7 @@ test("terminal stacks under review by default and spans the bottom when configur
       const top = (await reviewPanel.boundingBox())!
       const bottom = (await terminalPanel.boundingBox())!
       const gap = bottom.y - top.y - top.height
+
       return (
         Math.abs(top.x - bottom.x) <= 1 &&
         Math.abs(top.x + top.width - bottom.x - bottom.width) <= 1 &&
@@ -200,10 +208,14 @@ test("terminal stacks under review by default and spans the bottom when configur
   await expect
     .poll(() =>
       page.evaluate(() => {
-        const review = document.querySelector("#review-panel")!.getBoundingClientRect()
-        const terminal = document.querySelector("#terminal-panel")!.getBoundingClientRect()
-        const sidebar = document.querySelector('#review-panel [data-slot="session-review-v2-sidebar"]')!
+        const review = document.querySelector("#review-panel")?.getBoundingClientRect()
+        const terminal = document.querySelector("#terminal-panel")?.getBoundingClientRect()
+        const sidebar = document.querySelector('#review-panel [data-slot="session-review-v2-sidebar"]')
+
+        // The side region appears before its lazy review content after reload.
+        if (!review || !terminal || !sidebar) return false
         const gap = terminal.top - review.bottom
+
         return (
           terminal.left <= 9 &&
           terminal.right >= window.innerWidth - 9 &&
@@ -234,6 +246,7 @@ for (const direction of ["ltr", "rtl"] as const) {
       "aria-selected",
       "true",
     )
+
     for (const number of [2, 3, 4]) {
       await terminal.getByRole("button", { name: "New terminal", exact: true }).click()
       await expect(terminal.getByRole("tab", { name: `Terminal ${number}`, exact: true })).toHaveAttribute(
@@ -246,6 +259,7 @@ for (const direction of ["ltr", "rtl"] as const) {
       .poll(async () => {
         const tabs = (await terminal.getByRole("tablist").boundingBox())!
         const button = (await toggle.boundingBox())!
+
         return direction === "rtl" ? tabs.x >= button.x + button.width : tabs.x + tabs.width <= button.x
       })
       .toBe(true)
@@ -275,6 +289,7 @@ for (const direction of ["ltr", "rtl"] as const) {
       .poll(async () => {
         const actions = (await page.locator('[data-slot="session-side-panel-actions"]').boundingBox())!
         const button = (await toggle.boundingBox())!
+
         return actions.y + actions.height / 2 - (button.y + button.height / 2)
       })
       .toBe(0)
@@ -307,6 +322,7 @@ async function expectTreeSentinel(page: Page) {
 function holdTransitions(page: Page) {
   return page.evaluate(() => {
     const host = window as Window & { e2eHold?: { active: boolean } }
+
     if (!host.e2eHold) {
       const hold = { active: false }
       host.e2eHold = hold
@@ -318,6 +334,7 @@ function holdTransitions(page: Page) {
           .forEach((item) => item.pause())
       })
     }
+
     host.e2eHold.active = true
   })
 }
@@ -344,26 +361,32 @@ async function stackGeometry(page: Page, progress?: number) {
         )
         .map((item) => ((item.effect as KeyframeEffect).target as Element).getAttribute("data-slot")),
     )
+
   if (progress !== undefined) {
     await expect.poll(held).toEqual(expect.arrayContaining(["session-side-region", "session-side-terminal-region"]))
   }
+
   return page.evaluate((progress) => {
     const transitions = document
       .getAnimations()
       .filter((item): item is CSSTransition => item instanceof CSSTransition && item.playState === "paused")
+
     const region = transitions.find(
       (item) => ((item.effect as KeyframeEffect).target as Element).getAttribute("data-slot") === "session-side-region",
     )
+
     if (progress !== undefined) {
       const time = Number(region!.effect!.getTiming().duration) * progress
       transitions.forEach((item) => (item.currentTime = time))
     }
+
     const box = (selector: string) => document.querySelector(selector)?.getBoundingClientRect()
     const reviewRegion = box('[data-slot="session-side-region"]')!
     const terminalRegion = box('[data-slot="session-side-terminal-region"]')!
     const review = box("#review-panel")
     const terminal = box("#terminal-panel")!
     const content = box('[data-slot="terminal-panel-content"]')!
+
     return {
       moving: transitions.map((item) => ((item.effect as KeyframeEffect).target as Element).getAttribute("data-slot")),
       terminalRegion: terminalRegion.height,
@@ -380,6 +403,7 @@ function sideContentOffset(page: Page, direction: "ltr" | "rtl") {
   return page.evaluate((direction) => {
     const frame = document.querySelector('[data-slot="session-side-panel-presence"]')!.getBoundingClientRect()
     const content = document.querySelector('[data-slot="session-side-panel-content"]')!.getBoundingClientRect()
+
     return direction === "rtl" ? Math.abs(frame.right - content.right) : Math.abs(frame.left - content.left)
   }, direction)
 }
@@ -392,11 +416,13 @@ async function expectTerminalControlsAligned(terminal: Locator, toggle: Locator)
           button.locator("svg").evaluate((element) => {
             const svg = element as SVGSVGElement
             const path = svg.getBBox()
+
             return new DOMPoint(path.x + path.width / 2, path.y + path.height / 2).matrixTransform(svg.getScreenCTM()!)
               .y
           }),
         ),
       )
+
       return centers[0]! - centers[1]!
     })
     .toBeCloseTo(0, 1)

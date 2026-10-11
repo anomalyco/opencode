@@ -12,4 +12,7 @@ export default {
   "git.description": "Suivre, examiner et annuler les modifications dans ce projet",
   loadingChanges: "Chargement des modifications…",
   noChanges: "Aucune modification",
+  "settings.wrapLines.title": "Renvoyer les lignes à la ligne",
+  "settings.wrapLines.description":
+    "Renvoyer à la ligne les longues lignes des diffs mobiles au lieu de les faire défiler horizontalement",
 }

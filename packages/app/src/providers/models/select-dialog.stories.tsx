@@ -49,6 +49,7 @@ const models = [
 
 function SelectorStory(props: { plan: boolean }) {
   const [current, setCurrent] = createSignal(models[0].id)
+
   return (
     <div class="flex min-h-[280px] items-end justify-center">
       <ModelSelectorPopoverView
@@ -75,4 +76,5 @@ export default {
 }
 
 export const ChatGPTPlan = { render: () => <SelectorStory plan /> }
+
 export const ApiKey = { render: () => <SelectorStory plan={false} /> }

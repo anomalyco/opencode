@@ -296,9 +296,6 @@ export const dict = {
   "dialog.server.add.password": "パスワード (オプション)",
   "dialog.server.edit.title": "サーバーを編集",
   "dialog.server.menu.edit": "編集",
-  "dialog.server.menu.default": "デフォルトに設定",
-  "dialog.server.menu.defaultRemove": "デフォルト設定を解除",
-  "dialog.server.status.default": "デフォルト",
 
   "dialog.project.edit.title": "プロジェクトを編集",
   "dialog.project.edit.icon": "アイコン",
@@ -630,10 +627,6 @@ export const dict = {
   "workspace.status.dirty": "このワークスペースで未マージの変更が検出されました。",
   "workspace.delete.button": "ワークスペースを削除",
   "common.open": "開く",
-  "dialog.releaseNotes.action.getStarted": "始める",
-  "dialog.releaseNotes.action.next": "次へ",
-  "dialog.releaseNotes.action.hideFuture": "今後表示しない",
-  "dialog.releaseNotes.media.alt": "リリースのプレビュー",
   "toast.project.reloadFailed.title": "{{project}} の再読み込みに失敗しました",
   "error.server.invalidConfiguration": "無効な設定",
   "common.moreCountSuffix": " (他 {{count}} 件)",
@@ -729,7 +722,6 @@ export const dict = {
   "session.view.select": "セッションビュー",
   "session.background.moveRunning": "背景に移動",
   "session.timeline.working": "作業中",
-  "session.review.wrapLines": "折り返しライン",
   "session.websearch.title": "第三者のウェブ検索",
   "session.websearch.description": "ウェブ検索に使用する検索プロバイダーエージェントを選択します",
   "session.websearch.provider": "検索プロバイダー",
@@ -791,7 +783,6 @@ export const dict = {
   "settings.timeline.category.subagents": "サブエージェント",
   "settings.timeline.category.notices": "お知らせ",
   "settings.timeline.category.tools": "その他のツール",
-  "settings.general.row.mobileDiffWrap.description": "横にスクロールするのではなく、モバイル差分で長い行を折り返す",
 
   "provider.connect.error.unsupportedFields": "この認証フォームにはサポートされていないフィールドが含まれています",
   "settings.about.writtenByNames": "{{names}}によって書かれました",
@@ -814,7 +805,6 @@ export const dict = {
   "server.connect.button": "接続",
   "server.connect.address.invalid": "有効なHTTPまたはHTTPSサーバーアドレスを入力してください。",
   "server.connect.failed": "接続できませんでした。サーバーアドレスとパスワードを確認して、もう一度お試しください。",
-  "server.connect.pair.description": "このコマンドをコンピューターで実行して接続情報を取得してください。",
   "server.connect.scan": "QRコードをスキャン",
   "server.connect.scan.description": "opencode pair に表示されたQRコードにカメラを向けてください。",
   "server.connect.scan.invalid":
@@ -823,7 +813,6 @@ export const dict = {
   "server.connect.camera.starting": "カメラを開いています…",
   "server.connect.mixedContent":
     "HTTPSページからこのHTTPサーバーに接続できません。代わりにHTTPSサーバーのアドレスを使用してください。",
-  "server.connect.camera.insecure": "QRスキャンには、このページをHTTPSで開くか、ローカルホストで開く必要があります。",
   "server.connect.camera.unavailable": "このブラウザで使用可能なカメラがありません。接続情報を手動で入力してください。",
   "server.connect.camera.error":
     "カメラを開くことができません。カメラへのアクセスを許可するか、接続情報を手動で入力してください。",

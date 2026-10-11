@@ -26,16 +26,22 @@ import { isProjectDirectory, isWorkspaceDirectory } from "@/workspaces/paths"
 import { sessionHref } from "@/shell/routes/session"
 import { showToast } from "@/shell/notifications/toast"
 import { sessionTitle } from "./title"
+import { SessionWorkingIndicator } from "./header/session-working-indicator"
 import "./session-identity-header.css"
 
 export function SessionTitleHeader(props: ParentProps) {
   return (
-    <div
-      data-session-title
-      class="sticky top-0 z-30 w-full bg-[linear-gradient(to_bottom,var(--v2-background-bg-base)_48px,transparent)] pb-4 pe-3 ps-2.5"
-    >
-      {props.children}
-    </div>
+    <>
+      {/* The bottom inset reserves room for the fade without covering rows stuck below the bar. */}
+      <div data-session-title class="pointer-events-none sticky top-0 z-30 w-full pb-4">
+        <div class="pointer-events-auto bg-v2-background-bg-base pe-3 ps-2.5">{props.children}</div>
+      </div>
+      {/* Stuck timeline headers stack above this fade, so it only fades content scrolling under the bar. */}
+      <div
+        aria-hidden="true"
+        class="pointer-events-none sticky top-12 z-[5] -mt-4 h-4 w-full bg-[linear-gradient(to_bottom,var(--v2-background-bg-base),transparent)]"
+      />
+    </>
   )
 }
 
@@ -50,15 +56,19 @@ export function SessionProjectMenu(props: {
   const layout = useLayout()
   const settingsSurface = useSettingsSurface()
   const navigate = useNavigate()
+
   const [state, setState] = createStore({
     open: false,
     projectTruncated: false,
     pathTruncated: false,
     pathFocused: false,
   })
+
   const projectName = createMemo(() => displayName(props.project ?? { worktree: props.directory ?? "" }))
+
   const canOpenPath = () =>
     platform.platform === "desktop" && !!platform.openPath && server.isLocal && !!props.directory
+
   const openPath = () => {
     if (!canOpenPath() || !platform.openPath || !props.directory) return
     void platform.openPath(props.directory).catch((cause: unknown) =>
@@ -68,8 +78,10 @@ export function SessionProjectMenu(props: {
       }),
     )
   }
+
   const openProjectSettings = () => {
     const current = props.project
+
     if (!current) return
     settingsSurface.openProject({
       server: ServerConnection.key(server.conn),
@@ -114,6 +126,7 @@ export function SessionProjectMenu(props: {
               disabled={!props.project}
               onSelect={() => {
                 const project = props.project
+
                 if (!project) return
                 server.ctx.projects.open(project.worktree)
                 layout.home.setSelection({ server: server.key, directory: project.worktree })
@@ -203,13 +216,14 @@ export function SessionAncestorTrail(props: {
   trailing: boolean
 }) {
   const server = useServer()
-  const tabs = useTabs()
-  const navigate = useNavigate()
   const language = useLanguage()
+  const open = useOpenSessionRoute()
+
   const ancestors = createMemo(() => {
     const path: { id: string; title: string; direct: boolean }[] = []
     const seen = new Set([props.sessionID])
     let id: string | undefined = props.parentID
+
     while (id && !seen.has(id)) {
       seen.add(id)
       const info = server.ctx.data.session.get(id)
@@ -222,18 +236,9 @@ export function SessionAncestorTrail(props: {
       })
       id = info?.parentID
     }
+
     return path
   })
-  const open = (id: string) => {
-    const tab = tabs.store.find(
-      (item) =>
-        item.type === "session" &&
-        item.server === server.key &&
-        (item.sessionId === props.sessionID || item.routeSessionId === props.sessionID),
-    )
-    if (tab?.type === "session") tabs.rememberSessionRoute(tab, id, server.ctx.data.session.get(id)?.parentID)
-    navigate(sessionHref(server.key, id))
-  }
 
   return (
     <div class="flex min-w-0 max-w-full items-center">
@@ -249,16 +254,16 @@ export function SessionAncestorTrail(props: {
                 data-slot={ancestor.direct ? "session-title-parent" : "session-title-ancestor"}
                 data-session-id={ancestor.id}
                 title={ancestor.title}
-                dir="auto"
-                class="max-w-[min(200px,40vw)] shrink-0 truncate pl-2 text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-faint transition-colors hover:text-v2-text-text-muted"
-                onClick={() => open(ancestor.id)}
+                class="max-w-[min(200px,40vw)] shrink-0 truncate text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-faint transition-colors hover:text-v2-text-text-muted"
+                classList={{ "ps-1": index() === 0, "ps-2": index() > 0 }}
+                onClick={() => open(props.sessionID, ancestor.id)}
               >
-                {ancestor.title}
+                <bdi dir="auto">{ancestor.title}</bdi>
               </button>
               <Show when={index() < ancestors().length - 1}>
                 <span
                   data-slot="session-title-separator"
-                  class="-translate-y-[0.5px] shrink-0 pl-2 pr-1 text-[11px] font-medium text-v2-text-text-faint"
+                  class="-translate-y-[0.5px] shrink-0 ps-2 pe-1 text-[11px] font-medium text-v2-text-text-faint"
                   aria-hidden="true"
                 >
                   /
@@ -271,7 +276,7 @@ export function SessionAncestorTrail(props: {
       <Show when={props.trailing}>
         <span
           data-slot="session-title-separator"
-          class="-translate-y-[0.5px] shrink-0 pl-2 pr-1 text-[11px] font-medium text-v2-text-text-faint"
+          class="-translate-y-[0.5px] shrink-0 ps-2 pe-1 text-[11px] font-medium text-v2-text-text-faint"
           aria-hidden="true"
         >
           /
@@ -281,11 +286,32 @@ export function SessionAncestorTrail(props: {
   )
 }
 
-export function SessionIdentityHeader(props: { sessionID: string; session?: SessionInfo }) {
+// Opens a related session in the tab showing `from`, and records its parent so the tab's route stays consistent.
+// `reveal` names a tool call or shell the opened timeline scrolls to and expands.
+export function useOpenSessionRoute() {
+  const server = useServer()
+  const tabs = useTabs()
+  const navigate = useNavigate()
+
+  return (from: string, id: string, reveal?: string) => {
+    const tab = tabs.store.find(
+      (item) =>
+        item.type === "session" &&
+        item.server === server.key &&
+        (item.sessionId === from || item.routeSessionId === from),
+    )
+
+    if (tab?.type === "session") tabs.rememberSessionRoute(tab, id, server.ctx.data.session.get(id)?.parentID)
+    navigate(sessionHref(server.key, id), reveal ? { state: { reveal } } : undefined)
+  }
+}
+
+export function SessionIdentityHeader(props: ParentProps<{ sessionID: string; session?: SessionInfo }>) {
   const server = useServer()
   const tabs = useTabs()
   const language = useLanguage()
   const pending = createMemo(() => tabs.pendingSession(server.key, props.sessionID))
+
   const tab = createMemo(() =>
     tabs.store.find(
       (item) =>
@@ -294,48 +320,64 @@ export function SessionIdentityHeader(props: { sessionID: string; session?: Sess
         (item.sessionId === props.sessionID || item.routeSessionId === props.sessionID),
     ),
   )
+
   const info = createMemo(() => {
     const current = tab()
+
     return current ? tabs.info[tabKey(current)] : undefined
   })
+
   const parentID = createMemo(() => {
     if (props.session?.parentID) return props.session.parentID
     const current = tab()
+
     if (current?.type !== "session" || current.routeSessionId !== props.sessionID) return
+
     return current.routeParentId ?? current.sessionId
   })
+
   const parent = createMemo(() => {
     const id = parentID()
+
     return id ? server.ctx.data.session.get(id) : undefined
   })
+
   const parentTitle = createMemo(() => {
     const id = parentID()
     const current = tab()
+
     return sessionTitle(
       parent()?.title ?? (current?.type === "session" && current.sessionId === id ? info()?.title : undefined),
     )
   })
+
   const directory = createMemo(
     () => props.session?.location.directory ?? pending()?.draft.directory ?? info()?.directory,
   )
+
   const title = createMemo(() =>
     pending()
       ? language.t("session.tab.session")
       : sessionTitle(props.session?.title ?? (parentID() ? undefined : info()?.title)),
   )
+
   const project = createMemo(() => {
     if (props.session) return server.ctx.projects.forSession(props.session)
     const projects = server.ctx.projects.list()
     const value = directory()
+
     if (!value) return undefined
     const key = pathKey(value)
+
     return (
       projects.find(
         (item) => pathKey(item.worktree) === key || item.sandboxes?.some((sandbox) => pathKey(sandbox) === key),
       ) ?? server.ctx.sync.data.project.find((item) => isProjectDirectory(item, value))
     )
   })
+
   const workspaceSession = createMemo(() => !!pending() || isWorkspaceDirectory(project(), directory() ?? ""))
+
   return (
     <Show when={title() || parentTitle()}>
       <SessionTitleHeader>
@@ -353,7 +395,11 @@ export function SessionIdentityHeader(props: { sessionID: string; session?: Sess
                   />
                 )}
               </Show>
-              <Show when={title()}>
+              <Show when={parentID() && props.children}>{props.children}</Show>
+              <Show when={!parentID() || !props.children}>
+                <SessionWorkingIndicator sessionID={props.sessionID} />
+              </Show>
+              <Show when={(!parentID() || !props.children) && title()}>
                 {(value) => (
                   <h1
                     data-slot={parentID() ? "session-title-child" : undefined}
@@ -365,6 +411,7 @@ export function SessionIdentityHeader(props: { sessionID: string; session?: Sess
                   </h1>
                 )}
               </Show>
+              <Show when={!parentID()}>{props.children}</Show>
             </div>
           </div>
         </div>

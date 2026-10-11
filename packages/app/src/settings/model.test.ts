@@ -14,7 +14,9 @@ import {
 } from "./model"
 
 const schema = Persistence.withInitial(settingsPersistence, defaultSettings)
+
 const decode = Schema.decodeUnknownSync(schema)
+
 const encode = Schema.encodeSync(schema)
 
 describe("settings timeline detail migration", () => {
@@ -23,6 +25,7 @@ describe("settings timeline detail migration", () => {
       general: { shellToolPartsExpanded: true, editToolPartsExpanded: false, showReasoningSummaries: true },
       appearance: { fontSize: 16 },
     })
+
     expect(settings.general.timelineDetail).toEqual({
       ...timelinePresets[2].value,
       shell: { placement: "separate", details: "expanded" },
@@ -34,19 +37,37 @@ describe("settings timeline detail migration", () => {
 })
 
 describe("settings schema", () => {
-  test("keeps summary expansion for the summary extension and discards retired preferences", () => {
+  test("keeps the values extensions copy out once and discards retired preferences", () => {
     const settings = decode({
-      general: { showStatus: true, showSearch: true, experimentalBrowser: false, showProjectIcon: true },
+      general: {
+        showStatus: true,
+        showSearch: true,
+        experimentalBrowser: false,
+        showProjectIcon: true,
+        releaseNotes: false,
+        mobileDiffWrap: false,
+      },
       appearance: { showProjectName: true },
       sessionSummary: { projectExpanded: false, serverExpanded: true },
     })
+
     expect(settings.general.showSearch).toBe(true)
     expect(settings.general).not.toHaveProperty("showStatus")
     expect(settings.general).not.toHaveProperty("experimentalBrowser")
     expect(settings.general).not.toHaveProperty("showProjectIcon")
     expect(settings.appearance).not.toHaveProperty("showProjectName")
-    expect(settings.sessionSummary).toEqual({ projectExpanded: false, serverExpanded: true })
-    expect(decode(encode(settings)).sessionSummary).toEqual(settings.sessionSummary)
+
+    const copied = (value: typeof settings) => ({
+      sessionSummary: value.sessionSummary,
+      releaseNotes: value.general.releaseNotes,
+      mobileDiffWrap: value.general.mobileDiffWrap,
+    })
+
+    expect(copied(decode(encode(settings)))).toEqual({
+      sessionSummary: { projectExpanded: false, serverExpanded: true },
+      releaseNotes: false,
+      mobileDiffWrap: false,
+    })
   })
 
   test("uses the supplied initial values independently of the current schema", () => {
@@ -55,6 +76,7 @@ describe("settings schema", () => {
       general: { ...defaultSettings.general, timelineDetail: timelinePresets[4].value, autoSave: false },
       appearance: { ...defaultSettings.appearance, fontSize: 20 },
     }
+
     const restore = Schema.decodeUnknownSync(Persistence.withInitial(settingsPersistence, initial))
     expect(restore({})).toEqual(initial)
     expect(restore({ general: { reasoningMode: "invalid", showReasoningSummaries: true } })).toEqual(initial)
@@ -68,12 +90,10 @@ describe("settings schema", () => {
   test("supplies the existing defaults for an empty document", () => {
     expect(decode({})).toEqual({
       general: {
-        releaseNotes: true,
         showFileTree: false,
         timelineDetail: timelinePresets[2].value,
         showCustomAgents: false,
         mobileTitlebarPosition: "top",
-        mobileDiffWrap: true,
         terminalPlacement: "side",
         followUpBehavior: "steer",
       },
@@ -115,10 +135,10 @@ describe("settings schema", () => {
       notifications: { agent: false, permissions: "yes", errors: true },
       sounds: { agent: "custom", agentEnabled: false, permissions: 3 },
     })
+
     expect(settings.general).toMatchObject({
       showTerminal: true,
       autoSave: false,
-      releaseNotes: true,
       timelineDetail: timelinePresets[2].value,
       followUpBehavior: "steer",
     })

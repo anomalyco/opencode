@@ -94,7 +94,7 @@ const fromRequest = Effect.fn("OpenAISpeech.fromRequest")(function* (request: Me
 
 const isSse = (body: MediaProtocol.Body) => body.type === "json" && body.value.stream_format === "sse"
 
-const onEvent = Effect.fn("OpenAISpeech.onEvent")(function* (state: State, frame: string) {
+const onEvent = Effect.fnUntraced(function* (state: State, frame: string) {
   const event = yield* decodeEvent(frame)
   if (event.type === "speech.audio.delta") return SpeechStream.delta(state, event.audio)
   const usage = event.usage

@@ -19,10 +19,12 @@ const channels = [
 async function load(channel: string) {
   const previous = process.env.OPENCODE_CHANNEL
   process.env.OPENCODE_CHANNEL = channel
+
   try {
     return (await import(`./electron-builder.config.ts?${channel}`)).default as Configuration
   } finally {
     delete process.env.OPENCODE_CHANNEL
+
     if (previous !== undefined) process.env.OPENCODE_CHANNEL = previous
   }
 }
@@ -42,6 +44,7 @@ test.each(channels)("channel identity for $channel", async ({ channel, appId }) 
   expect(config.extraMetadata?.desktopName).toBe(`${appId}.desktop`)
   expect(config.linux?.executableName).toBe(appId)
   expect(config.linux?.desktop?.entry?.StartupWMClass).toBe(appId)
+
   for (const fpm of [config.deb?.fpm, config.rpm?.fpm]) {
     expect(fpm).toContainEqual(expect.stringContaining(`/usr/share/metainfo/${appId}.metainfo.xml`))
     expect(
@@ -74,9 +77,11 @@ test("shared packaging defaults", async () => {
 
 test("trims external dependencies without excluding runtime files", async () => {
   const filter = trimFilter(import.meta.dirname, await load("dev"))
+
   for (const prefix of ["node_modules/", "node_modules/parent/node_modules/"]) {
     const included = (file: string, stats = statSync(import.meta.filename)) =>
       filter(path.join(import.meta.dirname, prefix, file), stats)
+
     // One file for each excluded pattern, including each brace alternative.
     for (const file of [
       "@zip.js/zip.js/dist/zip.js",
@@ -95,6 +100,7 @@ test("trims external dependencies without excluding runtime files", async () => 
     ]) {
       expect(included(file)).toBe(false)
     }
+
     for (const file of [
       "@zip.js/zip.js/index.js",
       "@zip.js/zip.js/lib/z-worker-inline.js",
@@ -118,6 +124,7 @@ test("trims external dependencies without excluding runtime files", async () => 
     ]) {
       expect(included(file)).toBe(true)
     }
+
     expect(included("@zip.js/zip.js/dist", statSync(import.meta.dirname))).toBe(false)
     expect(included("@zip.js/zip.js/lib", statSync(import.meta.dirname))).toBe(true)
   }
@@ -128,6 +135,7 @@ test("the trimmed Zip.js package can still export compressed logs", async () => 
   const dir = await mkdtemp(path.join(os.tmpdir(), "opencode-zip-package-"))
   const source = path.dirname(fileURLToPath(import.meta.resolve("@zip.js/zip.js/package.json")))
   const filter = trimFilter(dir, config)
+
   try {
     await cp(source, dir, {
       recursive: true,

@@ -9,11 +9,17 @@ import { useDialog, useI18n } from "@opencode/ui/context"
 import { DialogUsageExceeded } from "@/providers/connect/usage-exceeded"
 
 const GO_UPSELL_FREE_TIER_LAST_SEEN_AT = "go_upsell_last_seen_at"
+
 const GO_UPSELL_FREE_TIER_DONT_SHOW = "go_upsell_dont_show"
+
 const GO_UPSELL_ACCOUNT_RATE_LIMIT_LAST_SEEN_AT = "go_upsell_account_rate_limit_last_seen_at"
+
 const GO_UPSELL_ACCOUNT_RATE_LIMIT_DONT_SHOW = "go_upsell_account_rate_limit_dont_show"
+
 const GO_UPSELL_WINDOW = 86_400_000 // 24 hrs
+
 const GO_UPSELL_PROVIDERS = new Set(["opencode", "opencode-go"])
+
 const CHATGPT_USAGE_LIMIT_WINDOW = 86_400_000 // 24 hrs
 
 export function isChatGPTUsageLimit(error: SessionStepFailed["data"]["error"]) {
@@ -33,13 +39,16 @@ export const GoUpsellState = Persistence.struct({
 function goUpsellKeys(status: SessionStatus) {
   if (status.type !== "retry" || !status.action) return
   const { action } = status
+
   if (!GO_UPSELL_PROVIDERS.has(action.provider)) return
+
   if (action.reason === "free_tier_limit") {
     return {
       lastSeenAt: GO_UPSELL_FREE_TIER_LAST_SEEN_AT,
       dontShow: GO_UPSELL_FREE_TIER_DONT_SHOW,
     } as const
   }
+
   if (action.reason === "account_rate_limit") {
     return {
       lastSeenAt: GO_UPSELL_ACCOUNT_RATE_LIMIT_LAST_SEEN_AT,
@@ -60,6 +69,7 @@ export function useUsageExceededDialogs() {
     [GO_UPSELL_ACCOUNT_RATE_LIMIT_LAST_SEEN_AT]: null,
     [GO_UPSELL_ACCOUNT_RATE_LIMIT_DONT_SHOW]: null,
   })
+
   const [chatgptUsageLimit, setChatGPTUsageLimit] = persisted(
     Persist.global("chatgpt-usage-limit"),
     Persistence.struct({ lastSeenAt: Schema.NullOr(Schema.Finite) }),
@@ -69,7 +79,9 @@ export function useUsageExceededDialogs() {
   onCleanup(
     sdk().event.on("session.step.failed", (evt) => {
       if (evt.data.sessionID !== params.id) return
+
       if (!isChatGPTUsageLimit(evt.data.error) || dialog.active) return
+
       if (chatgptUsageLimit.lastSeenAt && Date.now() - chatgptUsageLimit.lastSeenAt < CHATGPT_USAGE_LIMIT_WINDOW) return
 
       void import("@/providers/connect/chatgpt-usage-limit").then((usage) => {
@@ -83,16 +95,22 @@ export function useUsageExceededDialogs() {
   onCleanup(
     sdk().event.on("session.status", (evt) => {
       if (evt.data.sessionID !== params.id) return
+
       if (evt.data.status.type !== "retry") return
       const { action } = evt.data.status
+
       if (!action) return
+
       if (dialog.active) return
 
       const keys = goUpsellKeys(evt.data.status)
+
       if (!keys) return
 
       const seen = goUpsellState[keys.lastSeenAt]
+
       if (seen && Date.now() - seen < GO_UPSELL_WINDOW) return
+
       if (goUpsellState[keys.dontShow]) return
 
       if (action.reason === "free_tier_limit") {
@@ -104,6 +122,7 @@ export function useUsageExceededDialogs() {
             link={action.link}
             onClose={(dontShowAgain) => {
               setGoUpsellState(keys.lastSeenAt, Date.now())
+
               if (dontShowAgain) setGoUpsellState(keys.dontShow, Date.now())
               else {
                 void import("@/providers/connect/dialog").then((x) => {
@@ -124,6 +143,7 @@ export function useUsageExceededDialogs() {
             link={action.link}
             onClose={(dontShowAgain) => {
               setGoUpsellState(keys.lastSeenAt, Date.now())
+
               if (dontShowAgain) setGoUpsellState(keys.dontShow, Date.now())
             }}
           />

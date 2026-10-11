@@ -52,8 +52,5 @@ export default {
   "error.healthTimeout": "Сидецар за {{distro}} проверу здравља истекло је после {{timeout}}мс",
   "error.commandTimeout": "{{command}} {{args}} истекло је после {{timeout}}мс",
   "error.failedPort": "није успело преузимање порта",
-  "server.default": "подразумевано",
-  "menu.default": "Подесите као подразумевано",
-  "menu.defaultRemove": "Уклони подразумевано",
   "menu.remove": "Уклони",
 }

@@ -31,10 +31,15 @@ const words = [
 ]
 
 const sourceID = "ses_smoke_source"
+
 const targetID = "ses_smoke_target"
+
 const childID = "ses_smoke_child"
+
 const directory = "C:/OpenCode/SmokeProject"
+
 const projectID = "proj_smoke_timeline"
+
 const model = { providerID: "opencode", modelID: "claude-opus-4-6", variant: "max" }
 
 type MessagePart =
@@ -56,12 +61,15 @@ type MessagePart =
 function lorem(seed: number, length: number) {
   let out = ""
   let i = seed
+
   while (out.length < length) {
     const word = words[i % words.length]
     out += (out ? " " : "") + word
+
     if (i % 17 === 0) out += ".\n\n"
     i += 7
   }
+
   return out.slice(0, length)
 }
 
@@ -71,6 +79,7 @@ function id(prefix: string, value: number) {
 
 function userMessage(_sessionID: string, index: number, textLength: number, diffs: unknown[] = []): SessionMessageInfo {
   const messageID = id("msg_user", index)
+
   return {
     id: messageID,
     type: "user",
@@ -87,6 +96,7 @@ function assistantMessage(
   parts: MessagePart[],
 ): SessionMessageInfo {
   const messageID = id("msg_assistant", index)
+
   return {
     id: messageID,
     type: "assistant",
@@ -102,6 +112,7 @@ function assistantMessage(
 
 function messageContent(part: MessagePart): SessionMessageAssistant["content"][number] {
   if (part.type === "text") return { type: "text", text: part.text ?? "" }
+
   if (part.type === "reasoning")
     return {
       type: "reasoning",
@@ -110,6 +121,7 @@ function messageContent(part: MessagePart): SessionMessageAssistant["content"][n
         ? { created: part.time.start, ...(part.time.end === undefined ? {} : { completed: part.time.end }) }
         : undefined,
     }
+
   return {
     type: "tool",
     id: part.id,
@@ -126,6 +138,7 @@ function messageContent(part: MessagePart): SessionMessageAssistant["content"][n
 
 function textPart(index: number, partIndex: number, length: number): MessagePart {
   const prose = lorem(index * 13 + partIndex, length)
+
   const text =
     index % 12 === 0
       ? `${prose}\n\n\`\`\`ts\n${code(index, 80)}\n\`\`\``
@@ -134,6 +147,7 @@ function textPart(index: number, partIndex: number, length: number): MessagePart
         : index % 7 === 0
           ? `${prose}\n\nThe wrapped inline value is \`${lorem(index, 180)}\`.`
           : prose
+
   return { id: id(`prt_text_${partIndex}`, index), type: "text", text }
 }
 
@@ -165,6 +179,7 @@ function toolPart(
         : tool === "question"
           ? { answers: [["Proceed"], ["Keep sample output"]] }
           : {})
+
   return {
     id: id(`call_${tool}_${partIndex}`, index),
     type: "tool",
@@ -187,6 +202,7 @@ function patchFile(seed: number, status: "added" | "modified" | "deleted") {
   const file = `src/generated/patch-${seed}.ts`
   const before = status === "added" ? "" : code(seed, 18)
   const after = status === "deleted" ? "" : code(seed + 1, 24)
+
   return {
     file,
     status,
@@ -199,12 +215,14 @@ function patchFile(seed: number, status: "added" | "modified" | "deleted") {
 function fileDiff(file: string, seed: number) {
   const lines = seed % 12 === 0 ? 300 : seed % 8 === 0 ? 2 : 38
   const before = code(seed, lines, seed % 10 === 0 ? 280 : 32)
+
   const after =
     lines === 2
       ? before.replace("value1", "updatedValue1")
       : lines === 300
         ? code(seed + 1, lines, seed % 10 === 0 ? 280 : 32)
         : before.replace("value4", "updatedValue4").replace("value20", "updatedValue20")
+
   return {
     file,
     status: "modified" as const,
@@ -224,6 +242,7 @@ function code(seed: number, lines: number, width = 32) {
 function turn(index: number): SessionMessageInfo[] {
   const diff = index % 9 === 0 ? [fileDiff(`src/generated/summary-${index}.ts`, index)] : []
   const user = userMessage(targetID, index, 100 + (index % 4) * 80, diff)
+
   const parts = [
     ...(index % 5 === 0 ? [reasoningPart(index, 0, 420)] : []),
     ...(index % 3 === 0
@@ -278,10 +297,12 @@ function turn(index: number): SessionMessageInfo[] {
         ]
       : []),
   ]
+
   return [user, assistantMessage(targetID, index, user.id, parts)]
 }
 
 const targetMessages = Array.from({ length: 72 }, (_, index) => turn(index)).flat()
+
 const sourceMessages = Array.from({ length: 12 }, (_, index) => [
   userMessage(sourceID, index + 1000, 120),
   assistantMessage(sourceID, index + 1000, id("msg_user", index + 1000), [
@@ -300,10 +321,12 @@ const sourceMessages = Array.from({ length: 12 }, (_, index) => [
       : []),
   ]),
 ]).flat()
+
 const childMessages = Array.from({ length: 4 }, (_, index) => [
   userMessage(childID, index + 2000, 120),
   assistantMessage(childID, index + 2000, id("msg_user", index + 2000), [textPart(index + 2000, 0, 240)]),
 ]).flat()
+
 const messages: Record<string, SessionMessageInfo[]> = {
   [sourceID]: sourceMessages,
   [targetID]: targetMessages,
@@ -376,10 +399,13 @@ export const fixture = {
     targetPartIDs: targetMessages.flatMap((message) => {
       if (message.type !== "assistant") return []
       const ordinals = { text: 0, reasoning: 0 }
+
       return message.content.flatMap((part) => {
         if (part.type === "text") return part.text.trim() ? [`${message.id}:text:${ordinals.text++}`] : []
+
         if (part.type === "reasoning")
           return part.text.trim() ? [`${message.id}:reasoning:${ordinals.reasoning++}`] : []
+
         return [part.id]
       })
     }),

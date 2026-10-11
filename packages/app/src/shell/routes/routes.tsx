@@ -12,22 +12,31 @@ import { requireServerKey } from "./session"
 import { ExtensionAttachment } from "@/runtime/extension/root"
 
 export const File = lazy(() => import("@opencode/session-ui/file").then((module) => ({ default: module.File })))
+
 const loadSessionRoute = () => Promise.all([import("@/session/route"), File.preload()]).then(([module]) => module)
+
 const DraftRoute = lazy(() => import("@/new-session/route").then((module) => ({ default: module.DraftRoute })))
+
 const SettingsScreen = lazy(() => import("@/settings/shell").then((module) => ({ default: module.SettingsScreen })))
+
 const ConnectServerScreen = lazy(() =>
   import("@/servers/connect/screen").then((module) => ({ default: module.ConnectServerScreen })),
 )
+
 const TargetSessionRouteContent = lazy(() =>
   loadSessionRoute().then((module) => ({ default: module.TargetSessionRouteContent })),
 )
 
 export function preloadRoute(url: string) {
   const pathname = url.split(/[?#]/, 1)[0]
+
   if (pathname === "/new-session") return DraftRoute.preload().then(() => undefined)
+
   if (pathname === "/settings") return SettingsScreen.preload().then(() => undefined)
+
   if (/^\/server\/[^/]+\/session\/[^/]+$/.test(pathname))
     return TargetSessionRouteContent.preload().then(() => undefined)
+
   return Promise.resolve()
 }
 
@@ -42,7 +51,7 @@ export function AppRoutes() {
           <SessionRouteFrame>
             <Suspense
               fallback={
-                <div class="flex min-h-0 flex-1 px-2 pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]">
+                <div class="flex min-h-0 flex-1 px-[var(--shell-inline-inset,8px)] pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]">
                   <SessionPanelFrame raised />
                 </div>
               }
@@ -62,6 +71,7 @@ export function AppRoutes() {
 function TargetServerRoute(props: ParentProps) {
   const params = useParams<{ serverKey: string }>()
   const global = useGlobal()
+
   const connection = createMemo(() =>
     global.servers.list().find((item) => ServerConnection.key(item) === requireServerKey(params.serverKey)),
   )
@@ -76,12 +86,16 @@ function TargetServerRoute(props: ParentProps) {
 function AppLayout(props: ParentProps) {
   const servers = useServers()
   const global = useGlobal()
+
   // A lone server that rejects our credentials (e.g. the web app before pairing) has nothing else to show.
   const signedOut = () => {
     const only = servers.list.length === 1 ? servers.list[0] : undefined
+
     if (only?.type !== "http") return
+
     return global.servers.health[ServerConnection.key(only)]?.unauthorized ? only : undefined
   }
+
   return (
     <Show when={servers.list.length > 0 && !signedOut()} fallback={<ConnectServerScreen url={signedOut()?.http.url} />}>
       <LayoutProvider>

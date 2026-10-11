@@ -19,6 +19,9 @@ export type OAuth = Credential.OAuth
 export const Key = Credential.Key
 export type Key = Credential.Key
 
+export const External = Credential.External
+export type External = Credential.External
+
 export const Value = Credential.Value
 export type Value = Credential.Value
 

@@ -1,4 +1,3 @@
-import { Badge } from "@opencode/ui/badge"
 import { Button } from "@opencode/ui/button"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
@@ -12,15 +11,20 @@ import type { SshController } from "./state"
 export default function SshRow(props: { row: ServerRow; id: string; ssh: SshController }) {
   const extension = useExtension()
   const pending = () => props.ssh.pending(props.id)
+
   return (
     <Show when={props.ssh.item(props.id)}>
       {(item) => {
         const indicator = () => {
           if (item().stage === "ready") return props.row.health() ?? { healthy: true }
+
           if (item().stage === "incompatible") return { healthy: false, incompatible: true }
+
           if (item().stage === "failed") return { healthy: false }
+
           return undefined
         }
+
         return (
           <div class="settings-servers-row">
             <div class="settings-servers-lead">
@@ -65,9 +69,6 @@ export default function SshRow(props: { row: ServerRow; id: string; ssh: SshCont
                   {pending() ? extension.t("session.connecting") : extension.t("action.authenticate")}
                 </Button>
               </Show>
-              <Show when={props.row.default.available() && props.row.default.current()}>
-                <Badge>{extension.t("server.default")}</Badge>
-              </Show>
               <Menu gutter={4} modal={false} placement="bottom-end">
                 <Menu.Trigger
                   as={IconButton}
@@ -81,16 +82,6 @@ export default function SshRow(props: { row: ServerRow; id: string; ssh: SshCont
                     <Menu.Group>
                       <Menu.GroupLabel>{extension.t("server.menu.label")}</Menu.GroupLabel>
                       <props.row.Items />
-                      <Show when={props.row.default.available() && !props.row.default.current()}>
-                        <Menu.Item onSelect={() => props.row.default.set(true)}>
-                          {extension.t("menu.default")}
-                        </Menu.Item>
-                      </Show>
-                      <Show when={props.row.default.available() && props.row.default.current()}>
-                        <Menu.Item onSelect={() => props.row.default.set(false)}>
-                          {extension.t("menu.defaultRemove")}
-                        </Menu.Item>
-                      </Show>
                       <Menu.Separator />
                       <Menu.Item onSelect={() => void props.row.remove()}>{extension.t("menu.delete")}</Menu.Item>
                     </Menu.Group>

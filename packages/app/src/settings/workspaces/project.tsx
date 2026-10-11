@@ -128,6 +128,7 @@ export const SettingsProjectGeneral: Component<{
                 <For each={PROJECT_AVATAR_VARIANTS}>
                   {(color) => {
                     const selected = () => getProjectAvatarVariant(model.store.color) === color
+
                     return (
                       <button
                         type="button"

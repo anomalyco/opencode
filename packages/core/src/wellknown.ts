@@ -2,7 +2,7 @@ export * as WellKnown from "./wellknown.js"
 
 import { Integration } from "@opencode/schema/integration"
 import { Context, Effect, Layer, Ref, Schema, Semaphore } from "effect"
-import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { isDeepStrictEqual } from "node:util"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { httpClient } from "@opencode/util/effect/app-node-platform"
@@ -48,7 +48,10 @@ export interface Interface {
   readonly refresh: () => Effect.Effect<boolean, Error>
   readonly add: (origin: string) => Effect.Effect<Entry, Error>
   readonly remove: (origin: string) => Effect.Effect<void>
+  /** Resolves and caches the configuration for a registered source. */
   readonly resolve: (entry: Entry, variables: Readonly<Record<string, string>>) => Effect.Effect<Config[], Error>
+  /** Returns the last configuration resolved for an origin, kept until the source is removed. */
+  readonly cached: (origin: string) => Effect.Effect<Config[]>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/WellKnown") {}
@@ -57,11 +60,14 @@ export const Event = {
   Updated: Bus.ephemeral({ type: "wellknown.updated", schema: {} }),
 }
 
+const requestTimeout = "15 seconds"
+
 export const inspect = Effect.fn("WellKnown.inspect")(function* (origin: string) {
   const url = `${origin.replace(/\/+$/, "")}/.well-known/opencode`
   const http = HttpClient.filterStatusOk(yield* HttpClient.HttpClient)
   return yield* http.execute(HttpClientRequest.get(url).pipe(HttpClientRequest.acceptJson)).pipe(
     Effect.flatMap(HttpClientResponse.schemaBodyJson(Manifest)),
+    Effect.timeout(requestTimeout),
     Effect.mapError((cause) => new Error(`Failed to load wellknown manifest from ${url}`, { cause })),
   )
 })
@@ -89,6 +95,7 @@ const resolveEntry = Effect.fnUntraced(function* (entry: Entry, variables: Reado
     .execute(HttpClientRequest.get(url).pipe(HttpClientRequest.acceptJson, HttpClientRequest.setHeaders(headers)))
     .pipe(
       Effect.flatMap(HttpClientResponse.schemaBodyJson(Config)),
+      Effect.timeout(requestTimeout),
       Effect.mapError((cause) => new Error(`Failed to load wellknown remote config from ${url}`, { cause })),
     )
   if (Schema.is(Config)(remote.config)) return [...configs, remote.config]
@@ -97,6 +104,9 @@ const resolveEntry = Effect.fnUntraced(function* (entry: Entry, variables: Reado
 
 const sourcesKey = "wellknown:sources"
 const Sources = Schema.Array(Schema.String)
+const manifestKey = (origin: string) => `wellknown:manifest:${origin}`
+const configKey = (origin: string) => `wellknown:config:${origin}`
+const Configs = Schema.Array(Config)
 
 const layer = Layer.effect(
   Service,
@@ -107,7 +117,22 @@ const layer = Layer.effect(
     const cache = yield* Ref.make(new Map<string, Entry>())
     const lock = Semaphore.makeUnsafe(1)
     const loadEntry = Effect.fn("WellKnown.loadEntry")(function* (origin: string) {
-      const manifest = yield* inspect(origin).pipe(Effect.provideService(HttpClient.HttpClient, http))
+      const manifest = yield* inspect(origin).pipe(
+        Effect.provideService(HttpClient.HttpClient, http),
+        Effect.tap((manifest) => kv.set(manifestKey(origin), manifest)),
+        // An unreachable source keeps its last manifest so its remote config still loads after a restart.
+        Effect.catch((error) =>
+          kv
+            .get(manifestKey(origin))
+            .pipe(
+              Effect.flatMap((cached) =>
+                Schema.is(Manifest)(cached)
+                  ? Effect.logWarning("failed to load wellknown manifest", { origin, error }).pipe(Effect.as(cached))
+                  : Effect.fail(error),
+              ),
+            ),
+        ),
+      )
       return { origin, integrationID: Integration.ID.make(origin), manifest }
     })
 
@@ -134,7 +159,7 @@ const layer = Layer.effect(
         const changed = !isDeepStrictEqual(Ref.getUnsafe(cache), next)
         if (!changed) return false
         yield* Ref.set(cache, next)
-        yield* bus.publish(Event.Updated, {})
+        yield* bus.publish(Event.Updated, {}, { global: true })
         return true
       },
       (effect) => lock.withPermit(effect),
@@ -153,7 +178,7 @@ const layer = Layer.effect(
           const origins = Schema.is(Sources)(sources) ? sources : []
           yield* kv.set(sourcesKey, Array.from(new Set([...origins, origin])))
           yield* Ref.update(cache, (current) => new Map(current).set(origin, entry))
-          yield* bus.publish(Event.Updated, {})
+          yield* bus.publish(Event.Updated, {}, { global: true })
           return entry
         },
         (effect, _value) => lock.withPermit(effect),
@@ -167,18 +192,26 @@ const layer = Layer.effect(
             sourcesKey,
             origins.filter((item) => item !== origin),
           )
+          yield* kv.remove(manifestKey(origin))
+          yield* kv.remove(configKey(origin))
           yield* Ref.update(cache, (current) => {
             const next = new Map(current)
             next.delete(origin)
             return next
           })
-          yield* bus.publish(Event.Updated, {})
+          yield* bus.publish(Event.Updated, {}, { global: true })
         },
         (effect, _value) => lock.withPermit(effect),
       ),
-      resolve: Effect.fn("WellKnown.resolveEntry")((entry, variables) =>
-        resolveEntry(entry, variables).pipe(Effect.provideService(HttpClient.HttpClient, http)),
-      ),
+      resolve: Effect.fn("WellKnown.resolveEntry")(function* (entry, variables) {
+        const configs = yield* resolveEntry(entry, variables).pipe(Effect.provideService(HttpClient.HttpClient, http))
+        yield* kv.set(configKey(entry.origin), configs)
+        return configs
+      }),
+      cached: Effect.fn("WellKnown.cached")(function* (origin) {
+        const value = yield* kv.get(configKey(origin))
+        return Schema.is(Configs)(value) ? [...value] : []
+      }),
     })
   }),
 )

@@ -8,10 +8,12 @@ import { sender } from "./context"
 export const windowHandlers = WindowRpcs.toLayer(
   Effect.gen(function* () {
     const handoff = yield* IpcPortHandoff
+
     return WindowRpcs.of({
       WindowThemeReady: (_args, context) =>
         Effect.sync(() => {
           const win = BrowserWindow.fromWebContents(sender(handoff, context))
+
           if (!win) throw new Error("Window not found")
           setWindowThemeReady(win)
         }),
@@ -29,6 +31,7 @@ export const windowHandlers = WindowRpcs.toLayer(
           const contents = sender(handoff, context)
           contents.setZoomFactor(factor)
           const win = BrowserWindow.fromWebContents(contents)
+
           if (win) updateTitlebar(win)
         }),
       WindowGetPinchZoomEnabled: () => Effect.sync(getPinchZoomEnabled),
@@ -36,6 +39,7 @@ export const windowHandlers = WindowRpcs.toLayer(
       WindowSetTitlebar: ({ theme }, context) =>
         Effect.sync(() => {
           const win = BrowserWindow.fromWebContents(sender(handoff, context))
+
           if (win) setTitlebar(win, theme)
         }),
     })

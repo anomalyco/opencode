@@ -38,8 +38,5 @@ export default {
   "form.name": "Ime servera (opcionalno)",
   "form.namePlaceholder": "Localhost",
   "form.add": "Dodaj server",
-  "server.default": "Podrazumijevano",
-  "menu.default": "Postavi kao podrazumijevano",
-  "menu.defaultRemove": "Ukloni podrazumijevano",
   "menu.delete": "Izbriši",
 }

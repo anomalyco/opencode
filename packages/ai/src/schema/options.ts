@@ -48,10 +48,23 @@ export const mergeProviderOptions = (
   ...items: ReadonlyArray<ProviderOptions | undefined>
 ): ProviderOptions | undefined => mergeJsonRecords(...items)
 
+/** Milliseconds for an HTTP timeout, or `false` to disable it. */
+export const HttpTimeout = Schema.Union([Schema.Number.check(Schema.isGreaterThan(0)), Schema.Literal(false)])
+export type HttpTimeout = Schema.Schema.Type<typeof HttpTimeout>
+
+/** Applied to `headerTimeout` and `chunkTimeout` when a request leaves them unset. */
+export const DEFAULT_HTTP_TIMEOUT_MS = 300_000
+
 export class HttpOptions extends Schema.Class<HttpOptions>("AI.HttpOptions")({
   body: Schema.optional(JsonSchema),
   headers: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   query: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+  /** Time allowed for the whole request, from send until the response completes. Unbounded when unset. */
+  timeout: Schema.optional(HttpTimeout),
+  /** Time allowed for response headers to arrive. */
+  headerTimeout: Schema.optional(HttpTimeout),
+  /** Time allowed between streamed response chunks once headers have arrived. */
+  chunkTimeout: Schema.optional(HttpTimeout),
 }) {}
 
 export namespace HttpOptions {
@@ -70,8 +83,12 @@ export const mergeHttpOptions = (...items: ReadonlyArray<HttpOptions | undefined
   const body = mergeJsonRecords(...items.map((item) => item?.body))
   const headers = mergeStringRecords(...items.map((item) => item?.headers))
   const query = mergeStringRecords(...items.map((item) => item?.query))
-  if (!body && !headers && !query) return undefined
-  return new HttpOptions({ body, headers, query })
+  const timeout = items.findLast((item) => item?.timeout !== undefined)?.timeout
+  const headerTimeout = items.findLast((item) => item?.headerTimeout !== undefined)?.headerTimeout
+  const chunkTimeout = items.findLast((item) => item?.chunkTimeout !== undefined)?.chunkTimeout
+  if (!body && !headers && !query && timeout === undefined && headerTimeout === undefined && chunkTimeout === undefined)
+    return undefined
+  return new HttpOptions({ body, headers, query, timeout, headerTimeout, chunkTimeout })
 }
 
 export class GenerationOptions extends Schema.Class<GenerationOptions>("LLM.GenerationOptions")({

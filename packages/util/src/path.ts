@@ -87,3 +87,61 @@ export function encodeFilePath(filepath: string): string {
     })
     .join("/")
 }
+
+const MAX_LINE_NUMBER = 1_000_000
+
+const lineHashPattern = /^#L(\d+)(?:C\d+)?(?:-L?(\d+)(?:C\d+)?)?$/i
+
+const lineHashSuffixPattern = /^(.*?)#L(\d+)(?:C\d+)?(?:-L?(\d+)(?:C\d+)?)?$/i
+
+const lineColonSuffixPattern = /^(.*?):(\d+)(?::\d+)?(?:-(\d+)(?::\d+)?)?:?$/
+
+function toLineRange(first: number, second: number) {
+  if (
+    !Number.isSafeInteger(first) ||
+    !Number.isSafeInteger(second) ||
+    first < 1 ||
+    second < 1 ||
+    first > MAX_LINE_NUMBER ||
+    second > MAX_LINE_NUMBER
+  ) {
+    return undefined
+  }
+
+  return {
+    start: Math.min(first, second),
+    end: Math.max(first, second),
+  }
+}
+
+export function isLineRangeHash(hash: string) {
+  return lineHashPattern.test(hash)
+}
+
+export function parsePathLineSuffix(input: string) {
+  const hashMatch = input.match(lineHashSuffixPattern)
+
+  if (hashMatch) {
+    const first = Number(hashMatch[2])
+    const second = hashMatch[3] ? Number(hashMatch[3]) : first
+
+    return {
+      path: hashMatch[1] ?? "",
+      selection: toLineRange(first, second),
+    }
+  }
+
+  const colonMatch = input.match(lineColonSuffixPattern)
+
+  if (colonMatch && !/^[a-z]:?$/i.test(colonMatch[1] ?? "")) {
+    const first = Number(colonMatch[2])
+    const second = colonMatch[3] ? Number(colonMatch[3]) : first
+
+    return {
+      path: colonMatch[1] ?? "",
+      selection: toLineRange(first, second),
+    }
+  }
+
+  return { path: input, selection: undefined }
+}

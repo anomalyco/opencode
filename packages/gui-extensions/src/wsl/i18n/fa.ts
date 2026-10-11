@@ -51,8 +51,5 @@ export default {
   "error.healthTimeout": "Sidecar برای بررسی سلامت {{distro}} پس از {{timeout}}ms به پایان رسید",
   "error.commandTimeout": "زمان {{command}} {{args}} پس از {{timeout}}ms تمام شد",
   "error.failedPort": "پورت دریافت نشد",
-  "server.default": "پیش فرض",
-  "menu.default": "به عنوان پیش فرض تنظیم کنید",
-  "menu.defaultRemove": "حذف پیش فرض",
   "menu.remove": "حذف",
 }

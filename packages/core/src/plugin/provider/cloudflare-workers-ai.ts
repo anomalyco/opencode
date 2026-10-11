@@ -26,6 +26,10 @@ export const CloudflareWorkersAIPlugin = define({
     yield* ctx.integration.transform((editor) => {
       editor.method.update({
         integrationID: providerID,
+        method: { type: "env", names: ["CLOUDFLARE_API_KEY", "CLOUDFLARE_WORKERS_AI_TOKEN", "CLOUDFLARE_API_TOKEN"] },
+      })
+      editor.method.update({
+        integrationID: providerID,
         method: {
           type: "key",
           label: "API key",

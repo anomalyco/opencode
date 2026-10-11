@@ -10,6 +10,7 @@ export interface ImagePreviewProps {
 
 export function ImagePreview(props: ImagePreviewProps) {
   const i18n = useI18n()
+
   return (
     <div data-component="image-preview">
       <div data-slot="image-preview-container">

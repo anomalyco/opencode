@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { HttpClientRequest } from "effect/unstable/http"
+import { HttpClientRequest } from "effect/http"
+import { mkdtemp, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { LanguageModel, LLM, Message, ToolCallPart } from "../../src/index.js"
 import { GoogleVertex, GoogleVertexChat, GoogleVertexMessages, GoogleVertexResponses } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
@@ -11,6 +14,57 @@ import { deltaChunk, finishChunk } from "../lib/openai-chunks.js"
 import { sseEvents } from "../lib/sse.js"
 
 describe("Google Vertex providers", () => {
+  test("loads CLOUDSDK_CONFIG credentials and preserves quota-project overrides", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "vertex-adc-"))
+    try {
+      await Bun.write(
+        join(directory, "application_default_credentials.json"),
+        JSON.stringify({
+          type: "authorized_user",
+          client_id: "fixture-client",
+          client_secret: "fixture-secret",
+          refresh_token: "fixture-refresh-token",
+          quota_project_id: "file-quota",
+        }),
+      )
+      // Isolate Google's environment and credential caches; no token refresh or model call.
+      const child = Bun.spawn(
+        [
+          process.execPath,
+          "-e",
+          `import { GoogleVertexShared } from ${JSON.stringify(join(import.meta.dir, "../../src/providers/google-vertex-shared.ts"))};
+           const client = await GoogleVertexShared.loadADCClient("fixture-project");
+           console.log(JSON.stringify({
+             custom: client.credentials.refresh_token === "fixture-refresh-token",
+             quota: client.quotaProjectId,
+           }));`,
+        ],
+        {
+          env: {
+            ...process.env,
+            HOME: directory,
+            APPDATA: directory,
+            CLOUDSDK_CONFIG: directory,
+            GOOGLE_APPLICATION_CREDENTIALS: undefined,
+            google_application_credentials: undefined,
+            GOOGLE_CLOUD_QUOTA_PROJECT: "environment-quota",
+            METADATA_SERVER_DETECTION: "none",
+          },
+          stdout: "pipe",
+          stderr: "pipe",
+        },
+      )
+      const result = JSON.parse(await new Response(child.stdout).text())
+      expect({ exitCode: await child.exited, stderr: await new Response(child.stderr).text() }).toEqual({
+        exitCode: 0,
+        stderr: "",
+      })
+      expect(result).toEqual({ custom: true, quota: "environment-quota" })
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  })
+
   it.effect("sends Gemini requests to the global Vertex endpoint", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(

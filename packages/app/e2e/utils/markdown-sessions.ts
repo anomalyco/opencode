@@ -11,8 +11,10 @@ export const messages: Record<string, SessionMessageInfo[]> = Object.fromEntries
       const seed = fixture.messages[fixture.targetID]
       const user = seed[(index % (seed.length / 2)) * 2]!
       const assistant = seed[(index % (seed.length / 2)) * 2 + 1]!
+
       if (user.type !== "user" || assistant.type !== "assistant") throw new Error("Expected a user/assistant pair")
       const suffix = `${sessionID}_${String(index).padStart(4, "0")}`
+
       return [
         {
           ...user,

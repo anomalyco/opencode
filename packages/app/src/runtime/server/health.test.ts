@@ -11,16 +11,20 @@ const info = (version = "1.2.3") =>
 
 function abortFromInput(input: RequestInfo | URL, init?: RequestInit) {
   if (init?.signal) return init.signal
+
   if (input instanceof Request) return input.signal
+
   return undefined
 }
 
 describe("checkServerHealth", () => {
   test.each([undefined, "secret"])("reads /api/info authenticating with only the password (%s)", async (password) => {
     const requests: { path: string; authorization: string | null }[] = []
+
     const fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = input instanceof URL ? input : new URL(input instanceof Request ? input.url : input)
       requests.push({ path: url.pathname, authorization: new Headers(init?.headers).get("authorization") })
+
       return info("2.0.0")
     }) as typeof globalThis.fetch
 
@@ -32,8 +36,10 @@ describe("checkServerHealth", () => {
 
   test("reports rejected credentials without retrying", async () => {
     let calls = 0
+
     const fetch = (async () => {
       calls++
+
       return Response.json({ _tag: "UnauthorizedError", message: "Authentication required" }, { status: 401 })
     }) as unknown as typeof globalThis.fetch
 
@@ -48,6 +54,7 @@ describe("checkServerHealth", () => {
       configurable: true,
       value: (ms: number) => {
         timeoutMs = ms
+
         return new AbortController().signal
       },
     })
@@ -56,6 +63,7 @@ describe("checkServerHealth", () => {
 
     await checkServerHealth(server, fetch).finally(() => {
       if (timeout) Object.defineProperty(AbortSignal, "timeout", timeout)
+
       if (!timeout) delete (AbortSignal as Partial<typeof AbortSignal>).timeout
     })
 
@@ -70,6 +78,7 @@ describe("checkServerHealth", () => {
     })
 
     let aborted = false
+
     const fetch = ((input: RequestInfo | URL, init?: RequestInit) =>
       new Promise<Response>((_resolve, reject) => {
         const signal = abortFromInput(input, init)
@@ -87,6 +96,7 @@ describe("checkServerHealth", () => {
       timeoutMs: 10,
     }).finally(() => {
       if (timeout) Object.defineProperty(AbortSignal, "timeout", timeout)
+
       if (!timeout) delete (AbortSignal as Partial<typeof AbortSignal>).timeout
     })
 
@@ -96,8 +106,10 @@ describe("checkServerHealth", () => {
 
   test("uses provided abort signal", async () => {
     let signal: AbortSignal | undefined
+
     const fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       signal = abortFromInput(input, init)
+
       return info()
     }) as unknown as typeof globalThis.fetch
 
@@ -111,9 +123,12 @@ describe("checkServerHealth", () => {
 
   test("retries transient failures and eventually succeeds", async () => {
     let count = 0
+
     const fetch = (async () => {
       count += 1
+
       if (count < 3) throw new TypeError("network")
+
       return info()
     }) as unknown as typeof globalThis.fetch
 
@@ -128,6 +143,7 @@ describe("checkServerHealth", () => {
 
   test("returns unhealthy when retries are exhausted", async () => {
     let count = 0
+
     const fetch = (async () => {
       count += 1
       throw new TypeError("network")

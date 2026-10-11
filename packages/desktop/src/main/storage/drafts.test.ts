@@ -4,12 +4,16 @@ import { openDatabase } from "./database"
 import { blobGrace, createDraftStore } from "./drafts"
 
 const collectInterval = 60_000
+
 const start = Date.UTC(2026, 6, 1)
+
 const clock = (ms: number) => setSystemTime(new Date(start + ms))
+
 const text = (...ids: string[]) =>
   JSON.stringify({ prompt: [{ type: "text", content: { blob: { kind: "text", ids } } }] })
 
 beforeEach(() => clock(0))
+
 afterEach(() => setSystemTime())
 
 describe("draft store", () => {
@@ -103,6 +107,7 @@ describe("draft store", () => {
     const drafts = createDraftStore(database.db)
     const kept = drafts.putBlob(new TextEncoder().encode("kept"))
     const image = drafts.putBlob(new Uint8Array([9]))
+
     const document = JSON.stringify({
       prompt: [
         { type: "text", content: { blob: { kind: "text", ids: [kept, "gone-chunk"] } } },
@@ -110,6 +115,7 @@ describe("draft store", () => {
         { type: "image", blob: { id: "gone-image" } },
       ],
     })
+
     // A strict write with missing blobs is refused: the previous document remains.
     drafts.set("doc", JSON.stringify({ previous: true }))
     expect(drafts.set("doc", document, true).sort()).toEqual(["gone-chunk", "gone-image"])

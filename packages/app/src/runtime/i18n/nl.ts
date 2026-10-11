@@ -23,7 +23,6 @@ export const dict = {
   "server.connect.address.invalid": "Voer een geldig HTTP- of HTTPS-serveradres in.",
   "server.connect.failed":
     "Kan geen verbinding maken. Controleer het serveradres en het wachtwoord en probeer het opnieuw.",
-  "server.connect.pair.description": "Voer deze opdracht uit op uw computer om uw verbindingsgegevens op te halen.",
   "server.connect.scan": "Scan de QR-code",
   "server.connect.scan.description": "Richt uw camera op de QR-code weergegeven door opencode pair.",
   "server.connect.scan.invalid": "Dit is geen OpenCode-koppelingscode. Scan de code weergegeven door opencode pair.",
@@ -31,8 +30,6 @@ export const dict = {
   "server.connect.camera.starting": "Camera openen…",
   "server.connect.mixedContent":
     "Kan geen verbinding maken met deze HTTP-server vanaf een HTTPS-pagina. Gebruik in plaats daarvan een HTTPS-serveradres.",
-  "server.connect.camera.insecure":
-    "Voor het scannen van QR moet deze pagina worden geopend via HTTPS of op localhost.",
   "server.connect.camera.unavailable":
     "Er is geen camera beschikbaar voor deze browser. Voer uw verbindingsgegevens handmatig in.",
   "server.connect.camera.error":
@@ -129,7 +126,6 @@ export const dict = {
   "session.view.select": "Sessieweergave",
   "session.background.moveRunning": "Naar de achtergrond verplaatsen",
   "session.timeline.working": "Bezig",
-  "session.review.wrapLines": "Regels laten teruglopen",
   "session.websearch.title": "Webzoekopdracht van derden",
   "session.websearch.description": "Selecteer de zoekprovider die agents gebruiken om op het web te zoeken",
   "session.websearch.provider": "Zoekprovider",
@@ -190,8 +186,6 @@ export const dict = {
   "settings.timeline.category.subagents": "Subagents",
   "settings.timeline.category.notices": "Meldingen",
   "settings.timeline.category.tools": "Andere hulpmiddelen",
-  "settings.general.row.mobileDiffWrap.description":
-    "Lange regels in mobiele diffs laten teruglopen in plaats van horizontaal scrollen",
   "toast.migration.progress.clearingOldEvents": "Oude gebeurtenissen worden gewist",
   "toast.migration.progress.migratingSessions": "Sessies worden gemigreerd",
   "session.new.workspace.existingLabel": "Worktree",
@@ -504,9 +498,6 @@ export const dict = {
   "dialog.server.add.passwordPlaceholder": "wachtwoord",
   "dialog.server.edit.title": "Server bewerken",
   "dialog.server.menu.edit": "Bewerken",
-  "dialog.server.menu.default": "Als standaard instellen",
-  "dialog.server.menu.defaultRemove": "Standaard verwijderen",
-  "dialog.server.status.default": "Standaard",
   "dialog.project.edit.title": "Project bewerken",
   "dialog.project.edit.icon": "Pictogram",
   "dialog.project.edit.icon.alt": "Projectpictogram",
@@ -514,10 +505,6 @@ export const dict = {
   "dialog.project.edit.color.select": "Kleur {{color}} selecteren",
   "dialog.project.edit.worktree.startup": "Opstartscript voor werkruimte",
   "dialog.project.edit.worktree.startup.placeholder": "bijv. bun install",
-  "dialog.releaseNotes.action.getStarted": "Ga aan de slag",
-  "dialog.releaseNotes.action.next": "Volgende",
-  "dialog.releaseNotes.action.hideFuture": "Laat deze in de toekomst niet zien",
-  "dialog.releaseNotes.media.alt": "Releasevoorbeeld",
   "dialog.usageExceeded.dontShowAgain": "Niet meer weergeven",
 
   "toast.permissions.autoaccept.on.title": "Machtigingen automatisch accepteren",

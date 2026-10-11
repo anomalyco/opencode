@@ -287,9 +287,6 @@ export const dict = {
   "dialog.server.add.passwordPlaceholder": "парол",
   "dialog.server.edit.title": "Серверро таҳрир кунед",
   "dialog.server.menu.edit": "Таҳрир",
-  "dialog.server.menu.default": "Ҳамчун пешфарз таъин кунед",
-  "dialog.server.menu.defaultRemove": "Пешфарзро хориҷ кунед",
-  "dialog.server.status.default": "Пешфарз",
   "dialog.project.edit.title": "Таҳрири лоиҳа",
   "dialog.project.edit.icon": "Нишона",
   "dialog.project.edit.icon.alt": "Нишонаи лоиҳа",
@@ -297,10 +294,6 @@ export const dict = {
   "dialog.project.edit.color.select": "Ранги {{color}}-ро интихоб кунед",
   "dialog.project.edit.worktree.startup": "Скрипти оғозёбии фазои корӣ",
   "dialog.project.edit.worktree.startup.placeholder": "масалан. bun install",
-  "dialog.releaseNotes.action.getStarted": "Оғоз кунед",
-  "dialog.releaseNotes.action.next": "Баъдӣ",
-  "dialog.releaseNotes.action.hideFuture": "Инҳоро дар оянда нишон надиҳед",
-  "dialog.releaseNotes.media.alt": "Намоиши пешнамоиш",
   "toast.permissions.autoaccept.on.title": "Қабули худкор иҷозатҳо",
   "toast.permissions.autoaccept.on.description": "Дархостҳои иҷозат ба таври худкор тасдиқ карда мешаванд",
   "toast.permissions.autoaccept.off.title": "Қабули худкори иҷозатҳоро қатъ кард",
@@ -717,7 +710,6 @@ export const dict = {
   "session.view.select": "Намуди сессия",
   "session.background.moveRunning": "Ба замина гузаронед",
   "session.timeline.working": "Кор карда истодааст",
-  "session.review.wrapLines": "Сатрҳоро печонед",
   "session.websearch.title": "Ҷустуҷӯи веби тарафи сеюм",
   "session.websearch.description":
     "Провайдери ҷустуҷӯеро интихоб кунед, ки агентҳо барои ҷустуҷӯи веб истифода мебаранд",
@@ -780,8 +772,6 @@ export const dict = {
   "settings.timeline.category.subagents": "Зер-агентҳо",
   "settings.timeline.category.notices": "Огоҳиҳо",
   "settings.timeline.category.tools": "Абзорҳои дигар",
-  "settings.general.row.mobileDiffWrap.description":
-    "Сатрҳои дарозро дар diff-ҳои мобилӣ ба ҷойи ҳаракати уфуқӣ печонед",
   "provider.connect.error.unsupportedFields": "Ин шакли аутентификатсия майдонҳои дастгиринашаванда дорад",
   "settings.about.writtenByNames": "Муаллиф: {{names}}",
   "settings.about.illustratedByNames": "Мусаввир: {{names}}",
@@ -803,7 +793,6 @@ export const dict = {
   "server.connect.button": "Пайваст кунед",
   "server.connect.address.invalid": "Суроғаи сервери дурусти HTTP ё HTTPS-ро ворид кунед.",
   "server.connect.failed": "Пайваст шуда натавонист. Суроғаи сервер ва паролро тафтиш кунед ва аз нав кӯшиш кунед.",
-  "server.connect.pair.description": "Барои гирифтани тафсилоти пайвасти худ ин фармонро дар компютери худ иҷро кунед.",
   "server.connect.scan": "Рамзи QR-ро скан кунед",
   "server.connect.scan.description": "Камераро ба рамзи QR, ки opencode pair нишон медиҳад, равона кунед.",
   "server.connect.scan.invalid":
@@ -812,8 +801,6 @@ export const dict = {
   "server.connect.camera.starting": "Кушодани камера…",
   "server.connect.mixedContent":
     "Аз саҳифаи HTTPS ба ин сервери HTTP пайваст шуда натавонист. Ба ҷои он суроғаи сервери HTTPS-ро истифода баред.",
-  "server.connect.camera.insecure":
-    "Сканкунии QR талаб мекунад, ки ин саҳифа тавассути HTTPS ё дар localhost кушода шавад.",
   "server.connect.camera.unavailable":
     "Барои ин браузер ягон камера дастрас нест. Тафсилоти пайвасти худро дастӣ ворид кунед.",
   "server.connect.camera.error":

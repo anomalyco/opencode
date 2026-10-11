@@ -42,26 +42,28 @@ const RESPECTS_INLINE_HINTS = new Set([
   "alibaba-messages",
   "anthropic-messages",
   "anthropic-compatible-messages",
+  "bedrock-mantle-messages",
   "cloudflare-ai-gateway-messages",
   "google-vertex-messages",
   "meta-messages",
   "minimax-messages",
   "moonshot-messages",
+  "vercel-ai-gateway-messages",
   "zai-coding-messages",
   "bedrock-converse",
   "openrouter",
   "digitalocean",
 ])
 
-// OpenRouter upstreams other than Anthropic and Alibaba Qwen cache without breakpoints. Gemini uses only the last
-// breakpoint, so a conversation-tail breakpoint writes a new cache every step and costs more than none. Qwen ignores
-// breakpoints on tool definitions and caches tools with the system prompt.
+// OpenRouter and Vercel AI Gateway upstreams other than Anthropic and Alibaba Qwen cache without breakpoints.
+// Gemini uses only the last breakpoint, so a conversation-tail breakpoint writes a new cache every step and costs
+// more than none. Qwen ignores breakpoints on tool definitions and caches tools with the system prompt.
 const QWEN: CachePolicyObject = { system: true, messages: { tail: 1 } }
-const openRouterPolicy = (modelID: string): CachePolicyObject => {
+const gatewayPolicy = (modelID: string): CachePolicyObject => {
   // `~anthropic/claude-sonnet-latest` style IDs are OpenRouter aliases for the latest model in a family.
   const id = modelID.replace(/^~/, "")
   if (id.startsWith("anthropic/")) return AUTO
-  if (id.startsWith("qwen/")) return QWEN
+  if (id.startsWith("qwen/") || id.startsWith("alibaba/qwen")) return QWEN
   return NONE
 }
 
@@ -169,11 +171,13 @@ const countHints = (request: LLMRequest) =>
   )
 
 export const applyCachePolicy = (request: LLMRequest): LLMRequest => {
-  if (!RESPECTS_INLINE_HINTS.has(request.model.route.id)) return request
+  const route = request.model.route.id
+  if (!RESPECTS_INLINE_HINTS.has(route)) return request
   const policy =
-    request.model.route.id === "openrouter" && (request.cache === undefined || request.cache === "auto")
-      ? openRouterPolicy(request.model.id)
-      : request.model.route.id === "alibaba-chat" && (request.cache === undefined || request.cache === "auto")
+    (route === "openrouter" || route === "vercel-ai-gateway-messages") &&
+    (request.cache === undefined || request.cache === "auto")
+      ? gatewayPolicy(request.model.id)
+      : route === "alibaba-chat" && (request.cache === undefined || request.cache === "auto")
         ? request.model.id.toLowerCase().startsWith("qwen")
           ? QWEN
           : NONE

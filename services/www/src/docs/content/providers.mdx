@@ -131,6 +131,31 @@ Both fields can also be set on a model or variant when only part of a provider's
 }
 ```
 
+## Timeouts
+
+HTTP requests wait up to five minutes for response headers and up to five minutes between streamed response chunks.
+Set the provider's `settings.headerTimeout` or `settings.chunkTimeout` to a number of milliseconds to change a limit,
+or to `false` to disable it. `settings.timeout` additionally bounds the whole request from send until the response
+completes; it has no default. These configuration settings apply provider-wide, not per model or variant. On a
+WebSocket transport, `chunkTimeout` bounds the gap between frames instead and defaults to thirty minutes.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "anthropic": {
+      "settings": {
+        "headerTimeout": 600000,
+        "chunkTimeout": false,
+      },
+    },
+  },
+}
+```
+
+A request that exceeds either limit fails with a transport error. OpenCode retries a timed-out request up to three
+times before giving up.
+
 ## Packages
 
 The `package` field selects the runtime that communicates with a provider. Use the compatible runtime for APIs that

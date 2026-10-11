@@ -39,8 +39,5 @@ export default {
   "form.name": "Nume server (opțional)",
   "form.namePlaceholder": "Localhost",
   "form.add": "Adaugă server",
-  "server.default": "Implicit",
-  "menu.default": "Setează ca implicit",
-  "menu.defaultRemove": "Elimină implicitul",
   "menu.delete": "Șterge",
 }

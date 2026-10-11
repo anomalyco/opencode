@@ -1,4 +1,8 @@
-export const dict: Record<string, string> = {
+import en from "./en"
+
+type Keys = keyof typeof en
+
+export const dict = {
   "desktop.menu.app": "OpenCode",
   "desktop.menu.file": "ගොනුව",
   "desktop.menu.edit": "සංස්කරණය කරන්න",
@@ -285,9 +289,6 @@ export const dict: Record<string, string> = {
   "dialog.server.add.passwordPlaceholder": "මුරපදය",
   "dialog.server.edit.title": "සේවාදායකය සංස්කරණය කරන්න",
   "dialog.server.menu.edit": "සංස්කරණය කරන්න",
-  "dialog.server.menu.default": "පෙරනිමිය ලෙස සකසන්න",
-  "dialog.server.menu.defaultRemove": "පෙරනිමිය ඉවත් කරන්න",
-  "dialog.server.status.default": "පෙරනිමිය",
   "dialog.project.edit.title": "ව්‍යාපෘතිය සංස්කරණය කරන්න",
   "dialog.project.edit.icon": "නිරූපකය",
   "dialog.project.edit.icon.alt": "ව්යාපෘති නිරූපකය",
@@ -295,10 +296,6 @@ export const dict: Record<string, string> = {
   "dialog.project.edit.color.select": "{{color}} වර්ණය තෝරන්න",
   "dialog.project.edit.worktree.startup": "වැඩබිම් ආරම්භක ස්ක්‍රිප්ට්",
   "dialog.project.edit.worktree.startup.placeholder": "උදා. බන් ස්ථාපනය",
-  "dialog.releaseNotes.action.getStarted": "පටන් ගන්න",
-  "dialog.releaseNotes.action.next": "ඊළඟ",
-  "dialog.releaseNotes.action.hideFuture": "මේවා ඉස්සරහට පෙන්නන්න එපා",
-  "dialog.releaseNotes.media.alt": "පෙරදසුන නිකුත් කරන්න",
   "toast.permissions.autoaccept.on.title": "ස්වයං-පිළිගැනීමේ අවසර",
   "toast.permissions.autoaccept.on.description": "අවසර ඉල්ලීම් ස්වයංක්‍රීයව අනුමත වේ",
   "toast.permissions.autoaccept.off.title": "අවසර ස්වයංක්‍රීයව පිළිගැනීම නතර විය",
@@ -709,7 +706,6 @@ export const dict: Record<string, string> = {
   "session.view.select": "සැසි දසුන",
   "session.background.moveRunning": "පසුබිමට ගෙන යන්න",
   "session.timeline.working": "ක්‍රියා කරමින්",
-  "session.review.wrapLines": "පේළි එතීම",
   "session.websearch.title": "තෙවන පාර්ශ්ව වෙබ් සෙවුම",
   "session.websearch.description": "නියෝජිතයින් වෙබය සෙවීමට භාවිත කරන සෙවුම් සැපයුම්කරු තෝරන්න",
   "session.websearch.provider": "සෙවුම් සැපයුම්කරු",
@@ -770,7 +766,6 @@ export const dict: Record<string, string> = {
   "settings.timeline.category.subagents": "උප නියෝජිතයින්",
   "settings.timeline.category.notices": "දැනුම්දීම්",
   "settings.timeline.category.tools": "වෙනත් මෙවලම්",
-  "settings.general.row.mobileDiffWrap.description": "ජංගම ඩිෆ්වල තිරස්ව අනුචලනය කිරීම වෙනුවට දිගු පේළි ඔතන්න",
 
   "provider.connect.error.unsupportedFields": "මෙම සත්‍යාපන පෝරමයේ සහාය නොදක්වන ක්ෂේත්‍ර ඇත",
   "settings.about.writtenByNames": "ලියන ලද්දේ {{names}} විසිනි",
@@ -794,7 +789,6 @@ export const dict: Record<string, string> = {
   "server.connect.button": "සම්බන්ධ කරන්න",
   "server.connect.address.invalid": "වලංගු HTTP හෝ HTTPS සේවාදායක ලිපිනයක් ඇතුළත් කරන්න.",
   "server.connect.failed": "සම්බන්ධ වීමට නොහැකි විය. සේවාදායක ලිපිනය සහ මුරපදය පරීක්ෂා කර නැවත උත්සාහ කරන්න.",
-  "server.connect.pair.description": "ඔබගේ සම්බන්ධතා විස්තර ලබා ගැනීමට මෙම විධානය ඔබගේ පරිගණකයේ ක්‍රියාත්මක කරන්න.",
   "server.connect.scan": "QR කේතය පරිලෝකනය කරන්න",
   "server.connect.scan.description": "opencode pair මගින් පෙන්වන QR කේතය වෙත ඔබේ කැමරාව යොමු කරන්න.",
   "server.connect.scan.invalid":
@@ -803,7 +797,6 @@ export const dict: Record<string, string> = {
   "server.connect.camera.starting": "කැමරාව විවෘත කරමින්...",
   "server.connect.mixedContent":
     "මෙම HTTP සේවාදායකයට HTTPS පිටුවකින් සම්බන්ධ වීමට නොහැකි විය. ඒ වෙනුවට HTTPS සේවාදායක ලිපිනයක් භාවිතා කරන්න.",
-  "server.connect.camera.insecure": "QR ස්කෑන් කිරීම සඳහා මෙම පිටුව HTTPS හරහා හෝ localhost මත විවෘත කිරීම අවශ්‍ය වේ.",
   "server.connect.camera.unavailable": "මෙම බ්‍රවුසරයට කැමරාවක් නොමැත. ඔබගේ සම්බන්ධතා විස්තර අතින් ඇතුලත් කරන්න.",
   "server.connect.camera.error":
     "කැමරාව විවෘත කිරීමට නොහැකි විය. කැමරා ප්‍රවේශයට ඉඩ දෙන්න හෝ ඔබගේ සම්බන්ධතා විස්තර හස්තීයව ඇතුලත් කරන්න.",
@@ -895,4 +888,4 @@ export const dict: Record<string, string> = {
   "prompt.toast.uploading.percent": "{{percent}}%",
   "prompt.toast.uploading.cancelFile": "{{filename}} ගොනුව උඩුගත කිරීම අවලංගු කරන්න",
   "prompt.toast.uploadFailed.title": "උඩුගත කිරීම අසාර්ථකයි",
-}
+} satisfies Partial<Record<Keys, string>>

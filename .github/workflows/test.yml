@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - dev
-      - v2
   pull_request:
   workflow_dispatch:
 
@@ -184,7 +183,7 @@ jobs:
             host: blacksmith-4vcpu-windows-2025
     runs-on: ${{ matrix.settings.host }}
     env:
-      E2E_ENABLED: ${{ needs.affected.outputs.app == 'true' && github.ref_name != 'v2' && github.head_ref != 'v2' }}
+      E2E_ENABLED: ${{ needs.affected.outputs.app == 'true' && github.ref_name != 'dev' && github.head_ref != 'dev' }}
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.playwright-browsers
     defaults:
       run:
@@ -252,6 +251,13 @@ jobs:
           CI: true
         timeout-minutes: 15
 
+      - name: Run app component tests
+        if: ${{ !cancelled() && env.E2E_ENABLED == 'true' }}
+        run: bun --cwd packages/app test:components
+        env:
+          CI: true
+        timeout-minutes: 15
+
       - name: Upload Playwright artifacts
         if: always() && env.E2E_ENABLED == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -264,3 +270,5 @@ jobs:
             packages/app/e2e/playwright-report
             packages/session-ui/component-tests/test-results
             packages/session-ui/component-tests/playwright-report
+            packages/app/component-tests/test-results
+            packages/app/component-tests/playwright-report

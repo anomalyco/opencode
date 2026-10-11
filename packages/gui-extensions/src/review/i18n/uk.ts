@@ -14,4 +14,7 @@ export default {
   "git.description": "Відстежуйте, переглядайте та скасовуйте зміни в цьому проєкті",
   loadingChanges: "Завантаження змін…",
   noChanges: "Немає змін",
+  "settings.wrapLines.title": "Переносити рядки",
+  "settings.wrapLines.description":
+    "Переносити довгі рядки в мобільні відмінності замість прокручування по горизонталі",
 }

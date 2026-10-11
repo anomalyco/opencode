@@ -11,6 +11,7 @@ const durable = {
   href: "tab_00000000-0000-4000-8000-000000000000",
   comment: "Rename this",
 }
+
 const note = { ...durable, live: { subject: 'the "button#save" element (browser ref @e42)' } }
 
 describe("extension notes", () => {
@@ -31,6 +32,7 @@ describe("extension notes", () => {
       },
       comment: "Match @src/button.css",
     }
+
     const value = readPromptPresentation({
       displayText: "hi",
       comments: [
@@ -41,6 +43,7 @@ describe("extension notes", () => {
         { path: "src/app.ts", comment: "Keep" },
       ],
     })
+
     expect(value?.comments).toEqual([
       note,
       {

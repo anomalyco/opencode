@@ -3,6 +3,10 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
+  "go.referral.ended.label": "Uyarı",
+  "go.referral.ended":
+    "Tavsiye programı sona erdi. Tavsiye bağlantıları artık size veya bağlantıyı paylaşan kişiye kredi kazandırmıyor.",
+  "go.graph.bonus": "{{count}}× kullanım",
   "nav.github": "GitHub",
   "nav.docs": "Dokümantasyon",
   "nav.changelog": "Değişiklik günlüğü",
@@ -58,6 +62,7 @@ export const dict = {
   "common.cancel": "İptal",
   "common.creating": "Oluşturuluyor...",
   "common.create": "Oluştur",
+  "common.contactUs": "Bize ulaşın",
 
   "common.videoUnsupported": "Tarayıcınız video etiketini desteklemiyor.",
   "common.figure": "Şekil {{n}}.",
@@ -227,6 +232,9 @@ export const dict = {
   "zen.faq.q8": "Zen'i diğer kodlama ajanlarıyla kullanabilir miyim?",
   "zen.faq.a8":
     "Zen OpenCode ile harika çalışır, ama Zen'i herhangi bir ajan ile kullanabilirsiniz. Tercih ettiğiniz kodlama ajanında kurulum talimatlarını izleyin.",
+  "zen.faq.q9": "Para iadesi alabilir miyim?",
+  "zen.faq.a9":
+    "Ücret son 14 gün içinde tahsil edildiyse ve bu satın alımdan gelen kredilerin hiçbirini kullanmadıysanız para iadesine hak kazanabilirsiniz. {{contact}} ve para iadesi talep edin.",
 
   "zen.cta.start": "Zen'i kullanmaya başlayın",
   "zen.pricing.title": "20$ Kullandıkça öde bakiyesi ekle",
@@ -255,11 +263,12 @@ export const dict = {
     "Tüm Zen modelleri ABD'de barındırılmaktadır. Sağlayıcılar sıfır saklama politikası izler ve verilerinizi model eğitimi için kullanmaz; şu",
   "zen.privacy.exceptionsLink": "aşağıdaki istisnalar",
 
+  "go.promo.step5": "Yeni model Step 5 Preview Free, sınırlı bir süre ücretsiz olarak kullanılabilir.",
   "go.title": "OpenCode Go | Herkes için düşük maliyetli kodlama modelleri",
-  "go.banner.text": "DeepSeek V4 Flash sınırlı bir süre için 2x kullanım limiti sunuyor",
   "go.meta.description":
     "Go ayda 10$'dır; cömert kullanım limitleri ve önde gelen kodlama modellerine güvenilir erişim sunar.",
   "go.hero.title": "Herkes için düşük maliyetli kodlama modelleri",
+  "go.hero.tagline": "Herhangi bir ajanla kullanın. Gerekirse kredi yükleyin. İstediğiniz zaman iptal edin.",
   "go.hero.body":
     "Go, dünya çapındaki programcılara ajan tabanlı kodlama getiriyor. En yetenekli açık kaynaklı modellere cömert limitler ve güvenilir erişim sunarak, maliyet veya erişilebilirlik konusunda endişelenmeden güçlü ajanlarla geliştirme yapmanızı sağlar.",
 
@@ -267,12 +276,33 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "Go'ya abone ol",
   "go.cta.price": "Ayda 10$",
-  "go.pricing.body":
-    "Herhangi bir ajanla kullanın. Ayda 10$. Gerekirse kredi yükleyin. İstediğiniz zaman iptal edin.",
+  "go.plans.month": "aylık",
+  "go.plans.plus.cta": "Go Plus'a abone ol",
+  "go.plans.plus.description": "Go Plus ayda 40$'dır ve daha yüksek limitler sunar.",
+  "go.plans.go.feature1": "Seçilmiş, uygun fiyatlı modeller",
+  "go.plans.go.feature2": "Ajan destekli kodlama için test edildi",
+  "go.plans.go.feature3": "Cömert limitler ve güvenilir erişim",
+  "go.plans.plus.feature1": "Go'daki her şey dahil",
+  "go.plans.plus.feature2": "Daha uzun, odaklı kodlama oturumları için daha yüksek limitler",
+  "go.plans.plus.feature3": "Daha büyük ve zorlu projeler için",
+  "go.plans.limits": "Limitler",
+  "go.plans.description": "Model başına 5 saatlik tahmini istek ve aylık kullanım limitleri",
+  "go.plans.legend": "Planlar",
+  "go.pricing.body": "Herhangi bir ajanla kullanın. Ayda 10$. Gerekirse kredi yükleyin. İstediğiniz zaman iptal edin.",
   "go.graph.free": "Ücretsiz",
   "go.graph.freePill": "Big Pickle ve ücretsiz modeller",
   "go.graph.go": "Go",
   "go.graph.label": "5 saat başına istekler",
+  "go.graph.period": "Kullanım",
+  "go.graph.model": "Model",
+  "go.graph.requests": "Tahmini istek / 5 saat",
+  "go.graph.allowance": "Aylık kullanım",
+  "go.graph.new": "Yeni",
+  "go.graph.scale": "Doğrusal olmayan istek ölçeği",
+  "go.graph.showAll": "{{count}} modelin tümünü göster",
+  "go.graph.showLess": "Daha az model göster",
+  "go.graph.limitedRegions": "sınırlı bölgeler",
+  "go.graph.limitedTime": "sınırlı süre",
   "go.graph.usageLimits": "Kullanım limitleri",
   "go.graph.aria": "5 saatlik istekler: {{free}} vs {{go}}",
 
@@ -307,8 +337,7 @@ export const dict = {
   "go.problem.item3": "Mümkün olduğunca çok programcı için geliştirildi",
   "go.problem.item4": "Ajan tabanlı kodlama için test edilmiş, özenle seçilmiş model seçenekleri",
   "go.how.title": "Go nasıl çalışır?",
-  "go.how.body":
-    "Go ayda 10$'dır. OpenCode veya herhangi bir ajanla kullanabilirsiniz.",
+  "go.how.body": "Go ayda 10$'dır. OpenCode veya herhangi bir ajanla kullanabilirsiniz.",
   "go.how.step1.title": "Bir hesap oluşturun",
   "go.how.step1.beforeLink": "takip edin",
   "go.how.step1.link": "kurulum talimatları",
@@ -348,13 +377,16 @@ export const dict = {
   "go.faq.a5.used": "Kullanılır",
   "go.faq.a5.notUsed": "Kullanılmaz",
   "go.faq.a5.noAgreement": "Anlaşma yok",
+  "go.faq.a5.notZdr": "ZDR değil",
   "go.faq.a5.grokRetention":
     "ZDR, durum bilgisi tutan Responses API, Files and Collections ve Batch API dahil olmak üzere saklanan verilere bağlı önemli API özelliklerini devre dışı bırakır.",
   "go.faq.a5.gptRetention":
     "Tüm API özelliklerinin kullanımı için kötüye kullanım izleme günlükleri oluşturulur ve 30 güne kadar saklanır.",
   "go.faq.a5.learnMore": "Daha fazla bilgi",
   "go.faq.a5.deepseekRetention":
-    "ZDR anlaşması aylık olarak yenilenir. Mevcut anlaşma 31 Ağustos 2026 tarihine kadar geçerlidir.",
+    "ZDR anlaşması aylık olarak yenilenir. Mevcut anlaşma 30 Eylül 2026 tarihine kadar geçerlidir.",
+  "go.faq.a5.museRetention":
+    "İstemlerinizi ve tamamlamalarınızı gelecekteki Meta modellerini eğitmek için kullanma izni karşılığında büyük ölçüde indirimli token fiyatları.",
 
   "go.faq.a5.beforeExceptions":
     "Go modelleri ABD'de barındırılmaktadır. Sağlayıcılar sıfır saklama politikası izler ve verilerinizi model eğitimi için kullanmaz; şu",
@@ -369,7 +401,10 @@ export const dict = {
 
   "go.faq.q9": "Ücretsiz modeller ve Go arasındaki fark nedir?",
   "go.faq.a9":
-    "Ücretsiz modeller, günlük 200 istek kotasıyla Big Pickle'ı ve o sırada mevcut olan promosyonel modelleri içerir. Go ise kayan zaman aralıklarında (5 saatlik, haftalık ve aylık) uygulanan daha yüksek istek kotalarıyla özenle seçilmiş model seçenekleri sunar. Bu kotalar kabaca her 5 saatte 12$, haftada 30$ ve ayda 60$ değerine eşdeğerdir (gerçek istek sayıları modele ve kullanıma göre değişir).",
+    "Ücretsiz modeller, günlük 200 istek kotasıyla Big Pickle'ı ve o sırada mevcut olan promosyonel modelleri içerir. Go ise kayan zaman aralıklarında daha yüksek istek kotalarıyla özenle seçilmiş model seçenekleri sunar: aylık kotanın %20'si her 5 saatte, %50'si haftada ve %100'ü ayda kullanılabilir. Modele özgü kullanım hakları farklılık gösterebilir (gerçek istek sayıları modele ve kullanıma göre değişir).",
+  "go.faq.q10": "Para iadesi alabilir miyim?",
+  "go.faq.a10":
+    "Ücret son 14 gün içinde tahsil edildiyse ve ilgili faturalandırma döneminde Go kullanım hakkınızı hiç kullanmadıysanız para iadesine hak kazanabilirsiniz. {{contact}} ve para iadesi talep edin.",
 
   "zen.api.error.rateLimitExceeded": "İstek limiti aşıldı. Lütfen daha sonra tekrar deneyin.",
   "zen.api.error.modelNotSupported": "{{model}} modeli desteklenmiyor",
@@ -395,6 +430,9 @@ export const dict = {
   "zen.api.error.modelDisabled": "Model devre dışı",
   "zen.api.error.regionNotAllowed":
     "Bu modelin en son sürümü yalnızca Çin'de barındırılıyor ve kullanabilmek için açıkça onay vermeniz gerekiyor: {{consoleGoUrl}}",
+  "zen.api.error.countryNotAllowed": "Bu model ülkenizde kullanılamıyor.",
+  "zen.api.error.trainingNotAllowed":
+    "Bu model, kalitesini artırmak için kullanılan verileri toplar. Modeli kullanabilmek için açıkça onay vermeniz gerekir: {{consoleGoUrl}}",
   "zen.api.error.trialEnded":
     "{{model}} için ücretsiz promosyon sona erdi. OpenCode Go'ya abone olarak modeli kullanmaya devam edebilirsiniz - {{link}}",
 
@@ -630,7 +668,6 @@ export const dict = {
   "workspace.payments.type.subscription": "abonelik",
   "workspace.payments.view": "Görüntüle",
 
-  "workspace.black.loading": "Yükleniyor...",
   "workspace.black.time.day": "gün",
   "workspace.black.time.days": "gün",
   "workspace.black.time.hour": "saat",
@@ -640,7 +677,8 @@ export const dict = {
   "workspace.black.time.fewSeconds": "birkaç saniye",
   "workspace.black.subscription.title": "Abonelik",
   "workspace.black.subscription.message": "Aylık ${{plan}} karşılığında OpenCode Black'e abonesiniz.",
-  "workspace.black.subscription.manage": "Aboneliği Yönet",
+  "workspace.black.subscription.ending":
+    "OpenCode Black mevcut fatura döneminizin sonunda sona erer ve yenilenmez. Sizi yeni konsola taşıyacağız.",
   "workspace.black.subscription.rollingUsage": "5 Saatlik Kullanım",
   "workspace.black.subscription.weeklyUsage": "Haftalık Kullanım",
   "workspace.black.subscription.resetsIn": "Sıfırlama süresi",
@@ -667,15 +705,24 @@ export const dict = {
   "workspace.lite.time.fewSeconds": "birkaç saniye",
   "workspace.lite.subscription.message": "OpenCode Go abonesisiniz.",
   "workspace.lite.subscription.manage": "Aboneliği Yönet",
-  "workspace.lite.subscription.rollingUsage": "Devam Eden Kullanım",
+  "workspace.lite.subscription.rollingUsage": "5 Saatlik Kullanım",
+  "workspace.lite.subscription.rollingQuota": "5 Saatlik Kota",
   "workspace.lite.subscription.weeklyUsage": "Haftalık Kullanım",
+  "workspace.lite.subscription.weeklyQuota": "Haftalık Kota",
   "workspace.lite.subscription.monthlyUsage": "Aylık Kullanım",
+  "workspace.lite.subscription.monthlyQuota": "Aylık Kota",
   "workspace.lite.subscription.resetsIn": "Sıfırlama süresi",
+  "workspace.lite.subscription.showDetails": "Ayrıntıları göster",
+  "workspace.lite.subscription.hideDetails": "Ayrıntıları gizle",
+  "workspace.lite.subscription.model": "Model",
+  "workspace.lite.subscription.contribution": "%",
+  "workspace.lite.subscription.total": "Toplam",
   "workspace.lite.subscription.useBalance": "Kullanım limitlerine ulaştıktan sonra mevcut bakiyenizi kullanın",
   "workspace.lite.subscription.selectProvider":
     'Go modellerini kullanmak için opencode yapılandırmanızda "OpenCode Go"\'yu sağlayıcı olarak seçin.',
   "workspace.lite.providers.title": "Sağlayıcılar",
   "workspace.lite.providers.description": "Yönlendirme için hangi sağlayıcıların kullanılacağını kontrol edin.",
+  "workspace.lite.providers.allowTraining": "İstek verileriyle eğitilen modellere izin ver",
   "workspace.lite.providers.useChina": "Çin'de barındırılan modelleri etkinleştir",
   "workspace.lite.black.message":
     "Şu anda OpenCode Black abonesisiniz veya bekleme listesindesiniz. Go'ya geçmek istiyorsanız lütfen önce aboneliğinizi iptal edin.",
@@ -777,6 +824,14 @@ export const dict = {
   "enterprise.form.email.placeholder": "jeff@amazon.com",
   "enterprise.form.phone.label": "Telefon numarası",
   "enterprise.form.phone.placeholder": "+1 234 567 8900",
+  "enterprise.form.inferenceSpend.label": "Şirketinizin mevcut aylık çıkarım (inference) harcaması nedir (USD)?",
+  "enterprise.form.inferenceSpend.placeholder": "Bir aralık seçin (isteğe bağlı)",
+  "enterprise.form.inferenceSpend.none": "Henüz harcama yok",
+  "enterprise.form.inferenceSpend.under1k": "$1K altı",
+  "enterprise.form.inferenceSpend.1kTo10k": "$1K–$10K",
+  "enterprise.form.inferenceSpend.10kTo50k": "$10K–$50K",
+  "enterprise.form.inferenceSpend.50kTo100k": "$50K–$100K",
+  "enterprise.form.inferenceSpend.over100k": "$100K veya daha fazla",
   "enterprise.form.message.label": "Hangi problemi çözmeye çalışıyorsunuz?",
   "enterprise.form.message.placeholder": "Şu konuda yardıma ihtiyacımız var...",
   "enterprise.form.send": "Gönder",
@@ -785,6 +840,7 @@ export const dict = {
   "enterprise.form.success.submitted": "Form başarıyla gönderildi.",
   "enterprise.form.error.allFieldsRequired": "Tüm alanlar gereklidir.",
   "enterprise.form.error.invalidEmailFormat": "Geçersiz e-posta formatı.",
+  "enterprise.form.error.invalidInferenceSpend": "Geçerli bir çıkarım harcaması aralığı seçin.",
   "enterprise.form.error.internalServer": "İç sunucu hatası.",
   "enterprise.faq.title": "SSS",
   "enterprise.faq.q1": "OpenCode Enterprise nedir?",

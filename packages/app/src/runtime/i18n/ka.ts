@@ -286,9 +286,6 @@ export const dict = {
   "dialog.server.add.passwordPlaceholder": "პაროლი",
   "dialog.server.edit.title": "სერვერის რედაქტირება",
   "dialog.server.menu.edit": "რედაქტირება",
-  "dialog.server.menu.default": "დაყენება ნაგულისხმევად",
-  "dialog.server.menu.defaultRemove": "ნაგულისხმევის ამოღება",
-  "dialog.server.status.default": "ნაგულისხმევი",
   "dialog.project.edit.title": "პროექტის რედაქტირება",
   "dialog.project.edit.icon": "ხატულა",
   "dialog.project.edit.icon.alt": "პროექტის ხატულა",
@@ -296,10 +293,6 @@ export const dict = {
   "dialog.project.edit.color.select": "აირჩიეთ {{color}} ფერი",
   "dialog.project.edit.worktree.startup": "სამუშაო სივრცის გაშვების სკრიპტი",
   "dialog.project.edit.worktree.startup.placeholder": "მაგ. bun ინსტალაცია",
-  "dialog.releaseNotes.action.getStarted": "დაწყება",
-  "dialog.releaseNotes.action.next": "შემდეგი",
-  "dialog.releaseNotes.action.hideFuture": "მომავალში არ მაჩვენო",
-  "dialog.releaseNotes.media.alt": "გამოშვების გადახედვა",
   "toast.permissions.autoaccept.on.title": "ნებართვების ავტომატური მიღება",
   "toast.permissions.autoaccept.on.description": "ნებართვის მოთხოვნები ავტომატურად დამტკიცდება",
   "toast.permissions.autoaccept.off.title": "შეწყდა ნებართვების ავტომატური მიღება",
@@ -714,7 +707,6 @@ export const dict = {
   "session.view.select": "სესიის ხედი",
   "session.background.moveRunning": "ფონურ რეჟიმში გადატანა",
   "session.timeline.working": "მუშაობს",
-  "session.review.wrapLines": "სტრიქონების გადატანა",
   "session.websearch.title": "მესამე მხარის ვებძიება",
   "session.websearch.description": "აირჩიეთ ძიების მომწოდებელი, რომელსაც აგენტები ვებში ძიებისთვის გამოიყენებენ",
   "session.websearch.provider": "ძიების მომწოდებელი",
@@ -775,8 +767,6 @@ export const dict = {
   "settings.timeline.category.subagents": "ქვეაგენტები",
   "settings.timeline.category.notices": "შეტყობინებები",
   "settings.timeline.category.tools": "სხვა ხელსაწყოები",
-  "settings.general.row.mobileDiffWrap.description":
-    "მობილურ diff-ებში გრძელი სტრიქონების გადატანა ჰორიზონტალური გადახვევის ნაცვლად",
   "provider.connect.error.unsupportedFields": "ავთენტიფიკაციის ეს ფორმა შეიცავს მხარდაუჭერელ ველებს",
   "settings.about.writtenByNames": "ავტორი: {{names}}",
   "settings.about.illustratedByNames": "ილუსტრატორი: {{names}}",
@@ -798,7 +788,6 @@ export const dict = {
   "server.connect.button": "დაკავშირება",
   "server.connect.address.invalid": "შეიყვანეთ ვალიდური HTTP ან HTTPS სერვერის მისამართი.",
   "server.connect.failed": "ვერ მოხერხდა დაკავშირება. შეამოწმეთ სერვერის მისამართი და პაროლი, შემდეგ კვლავ სცადეთ.",
-  "server.connect.pair.description": "ჩაატარეთ ეს ბრძანება თქვენს კომპიუტერზე, რათა მიიღოთ თქვენი კავშირის დეტალები.",
   "server.connect.scan": "სკანირება QR კოდით",
   "server.connect.scan.description": "მიმართეთ კამერა opencode pair-ის მიერ ნაჩვენებ QR კოდზე.",
   "server.connect.scan.invalid":
@@ -807,7 +796,6 @@ export const dict = {
   "server.connect.camera.starting": "კამერის გახსნა…",
   "server.connect.mixedContent":
     "ვერ მოხერხდა დაკავშირება ამ HTTP სერვერთან HTTPS გვერდიდან. გამოიყენეთ HTTPS სერვერის მისამართი.",
-  "server.connect.camera.insecure": "QR სკანირება საჭიროებს ამ გვერდის გახსნა HTTPS-ზე ან localhost-ზე.",
   "server.connect.camera.unavailable":
     "ამ ბრაუზერისთვის კამერა არ არის ხელმისაწვდომი. შეიყვანეთ თქვენი კავშირის დეტალები ხელით.",
   "server.connect.camera.error":

@@ -25,6 +25,7 @@ export function previewSessionTab(
     if (previewIndex === -1 || preview === tab) {
       return { tabs: { all: current.tabs.all, active: tab }, preview: preview === tab ? tab : undefined }
     }
+
     return {
       tabs: { all: current.tabs.all.filter((item) => item !== preview), active: tab },
     }
@@ -51,6 +52,7 @@ export function openSessionTab(
   first = false,
 ): SessionTabState {
   const preview = sessionTabPreview(current, launchers)
+
   if (first) {
     return {
       tabs: { all: [tab, ...current.tabs.all.filter((item) => item !== tab)], active: tab },
@@ -60,10 +62,12 @@ export function openSessionTab(
 
   const previewIndex = preview ? current.tabs.all.indexOf(preview) : -1
   const existingIndex = current.tabs.all.indexOf(tab)
+
   if (existingIndex !== -1) {
     if (previewIndex === -1 || preview === tab) {
       return { tabs: { all: current.tabs.all, active: tab } }
     }
+
     return {
       tabs: { all: current.tabs.all.filter((item) => item !== preview), active: tab },
     }
@@ -84,9 +88,11 @@ export function openSessionTab(
 export function closeSessionTab(current: SessionTabState, tab: string): SessionTabState {
   const all = current.tabs.all.filter((item) => item !== tab)
   const preview = current.preview === tab ? undefined : current.preview
+
   if (current.tabs.active !== tab) return { tabs: { ...current.tabs, all }, preview }
 
   const index = current.tabs.all.indexOf(tab)
+
   return {
     tabs: {
       all,

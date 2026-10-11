@@ -25,4 +25,8 @@ export default {
   "dialog.ready.title": "Yangilanish tayyor",
   "dialog.restart": "Qayta ishga tushirish",
   "dialog.later": "Keyinchalik",
+  "releaseNotes.action.getStarted": "Boshlash",
+  "releaseNotes.action.next": "Keyingi",
+  "releaseNotes.action.hideFuture": "Kelajakda bularni ko'rsatmang",
+  "releaseNotes.media.alt": "Chiqarishni oldindan ko'rish",
 }
