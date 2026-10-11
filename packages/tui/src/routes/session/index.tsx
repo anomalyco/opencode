@@ -1333,6 +1333,12 @@ export function Session(props: {
     bindings: [...baseAndUnfocusedCommands, ...baseCommands()].map((command) => command.id),
   }))
 
+  // Subagent views keep the composer open, so the background hint must stay reachable in composer mode.
+  Keymap.createLayer(() => ({
+    mode: "composer",
+    bindings: ["session.background"],
+  }))
+
   createEffect(
     on(
       () => route.sessionID,
