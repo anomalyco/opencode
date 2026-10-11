@@ -415,9 +415,7 @@ export const layer = Layer.effect(
                 Effect.flatMap((model) =>
                   model && hasPackage(model)
                     ? Effect.succeed(model)
-                    : Effect.map(models.available(), (models) =>
-                        models.find((model) => hasPackage(model) && Model.supportsText(model)),
-                      ),
+                    : Effect.map(models.available(), (models) => Model.fallback(models.filter(hasPackage))),
                 ),
               )
         if (!selected) return undefined

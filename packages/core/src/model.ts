@@ -261,7 +261,7 @@ const layer = Layer.effect(
         const value = yield* read()
         const requested = value.data.defaultModel
         const model = requested && value.byProvider.get(requested.providerID)?.get(requested.modelID)
-        return model?.enabled ? model : value.available.find(supportsText)
+        return model?.enabled ? model : fallback(value.available)
       }),
       small: Effect.fn("Model.small")(function* (providerID) {
         const value = yield* read()
@@ -281,6 +281,11 @@ const layer = Layer.effect(
 )
 
 export const node = makeLocationNode({ service: Service, layer, deps: [Provider.node, Bus.node, Location.node] })
+
+/** Picks the newest text model from a newest-first list, preferring one that can call tools. */
+export function fallback<T extends Pick<Info, "capabilities">>(models: readonly T[]) {
+  return models.find((model) => supportsText(model) && model.capabilities.tools) ?? models.find(supportsText)
+}
 
 export function supportsText(model: Pick<Info, "capabilities">) {
   return (

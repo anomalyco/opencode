@@ -569,6 +569,42 @@ describe("Provider and Model", () => {
     }),
   )
 
+  it.effect("falls back past newer models that cannot call tools", () =>
+    Effect.gen(function* () {
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
+      const providerID = Provider.ID.make("test")
+      yield* providers.transform((editor) => {
+        editor.update(providerID, () => {})
+        editor.models.update(providerID, Model.ID.make("tools"), (model) => {
+          model.time.released = 1000
+        })
+        editor.models.update(providerID, Model.ID.make("newest-no-tools"), (model) => {
+          model.capabilities.tools = false
+          model.time.released = 2000
+        })
+      })
+
+      expect((yield* models.default())?.id).toBe(Model.ID.make("tools"))
+    }),
+  )
+
+  it.effect("falls back to a text model without tools when none can call tools", () =>
+    Effect.gen(function* () {
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
+      const providerID = Provider.ID.make("test")
+      yield* providers.transform((editor) => {
+        editor.update(providerID, () => {})
+        editor.models.update(providerID, Model.ID.make("no-tools"), (model) => {
+          model.capabilities.tools = false
+        })
+      })
+
+      expect((yield* models.default())?.id).toBe(Model.ID.make("no-tools"))
+    }),
+  )
+
   it.effect("uses a transform-provided default model until that transform is replaced", () =>
     Effect.gen(function* () {
       const providers = yield* Provider.Service
