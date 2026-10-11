@@ -146,6 +146,17 @@ export const Info = Schema.Struct({
       }),
     }),
   ).annotate({ description: "Prompt input behavior" }),
+  statusline: Schema.optional(
+    Schema.Struct({
+      command: Schema.String.annotate({
+        description:
+          "Shell command that receives session state as JSON on stdin; the first line of its stdout is shown in the prompt footer",
+      }),
+      interval: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))).annotate({
+        description: "Also rerun the command every this many seconds",
+      }),
+    }),
+  ).annotate({ description: "Custom status line" }),
   session: Schema.optional(
     Schema.Struct({
       sidebar: Schema.optional(Schema.Literals(["auto", "hide"])).annotate({
