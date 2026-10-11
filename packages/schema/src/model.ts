@@ -79,6 +79,9 @@ export const Compatibility = Schema.Struct({
   maxTokensField: MaxTokensField.pipe(optional),
   requireFinishReason: Schema.Boolean.pipe(optional),
   requireAssistantAfterTool: Schema.Boolean.pipe(optional),
+  supportsStore: Schema.Boolean.pipe(optional),
+  supportsUsageInStreaming: Schema.Boolean.pipe(optional),
+  supportsStrictMode: Schema.Boolean.pipe(optional),
   supportsPromptCacheKey: Schema.Boolean.pipe(optional),
   /** Supports Anthropic's thinking-prefix mismatch controls. Overrides model-ID detection. */
   supportsThinkingBlockBinding: Schema.Boolean.pipe(optional),
