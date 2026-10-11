@@ -16,6 +16,7 @@ export type ComposerProps = {
   onClose?: () => void
   terminals?: boolean
   visibleTerminalID?: string
+  hideSubagents?: boolean
 }
 
 export function Composer(props: ComposerProps) {
@@ -26,7 +27,10 @@ export function Composer(props: ComposerProps) {
     active: "",
   })
 
-  const tabList = createMemo(() => Object.values(store.tabs))
+  // Subagents always leads; a live show/hide remount must not move it behind Shell.
+  const tabList = createMemo(() =>
+    Object.values(store.tabs).sort((a, b) => (a.id === "subagents" ? -1 : b.id === "subagents" ? 1 : 0)),
+  )
   const activeTab = createMemo(() => tabList().find((t) => t.id === store.active))
   const footerHints = createMemo(() => activeTab()?.hints?.() ?? [])
 
@@ -124,7 +128,9 @@ export function Composer(props: ComposerProps) {
                 esc
               </text>
             </box>
-            <SubagentsTab sessionID={props.sessionID} />
+            <Show when={!props.hideSubagents}>
+              <SubagentsTab sessionID={props.sessionID} />
+            </Show>
             <ShellTab sessionID={props.sessionID} />
             <Show when={props.terminals}>
               <TerminalsTab sessionID={props.sessionID} visibleTerminalID={props.visibleTerminalID} />
