@@ -1,23 +1,25 @@
 export * as ConfigClaudeHooksPlugin from "./claude-hooks.js"
 
+import { Message } from "@opencode/ai"
 import { define } from "@opencode/plugin/effect/plugin"
+import type { Session } from "@opencode/schema/session"
 import { Tool } from "@opencode/schema/tool"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import { AppProcess } from "@opencode/util/process"
 import path from "path"
-import { Effect, Option, Predicate, Schema, Stream } from "effect"
+import { Deferred, Effect, Option, Predicate, Schema, Stream } from "effect"
 import { ChildProcess } from "effect/process"
 import { Config } from "../../config.js"
 import { Location } from "../../location.js"
 import { Permission } from "../../permission.js"
 import { normalizeContent } from "../../tool/runtime.js"
 
-// Runs the PreToolUse and PostToolUse command hooks from Claude Code settings files, using the same
-// stdin payload, exit codes and JSON output: exit 2 blocks the call (or reports back after it) with stderr
-// as the reason, and exit 0 may print a JSON decision on stdout.
+// Runs the PreToolUse, PostToolUse and SessionStart command hooks from Claude Code settings files, using the
+// same stdin payload, exit codes and JSON output: exit 2 blocks the call (or reports back after it) with stderr
+// as the reason, and exit 0 may print a JSON decision on stdout. SessionStart output is added to a new session.
 
-type Event = "PreToolUse" | "PostToolUse"
+type Event = "PreToolUse" | "PostToolUse" | "SessionStart"
 type Hook = { readonly matcher: string; readonly command: string; readonly timeout: number }
 export type Decision =
   | { readonly type: "deny"; readonly reason?: string }
@@ -68,7 +70,7 @@ export function parse(text: string): Record<Event, Hook[]> {
         ]
       })
     })
-  return { PreToolUse: list("PreToolUse"), PostToolUse: list("PostToolUse") }
+  return { PreToolUse: list("PreToolUse"), PostToolUse: list("PostToolUse"), SessionStart: list("SessionStart") }
 }
 
 export function matches(matcher: string, tool: string) {
@@ -82,6 +84,11 @@ const text = (value: unknown) => (typeof value === "string" && value.trim() ? va
 // Reads the JSON a hook prints on exit 0. "allow" is not honored: a hook can tighten permissions, not loosen them.
 export function decision(event: Event, stdout: string): Decision | undefined {
   const output = Option.getOrUndefined(decodeJson(stdout.trim()))
+  // like Claude Code, plain stdout from a SessionStart hook is context too
+  if (event === "SessionStart" && !Predicate.isObject(output)) {
+    const plain = text(stdout)
+    return plain ? { type: "feedback", text: plain } : undefined
+  }
   if (!Predicate.isObject(output)) return
   const specific = Predicate.isObject(output.hookSpecificOutput) ? output.hookSpecificOutput : {}
   if (event === "PreToolUse") {
@@ -100,10 +107,14 @@ export function decision(event: Event, stdout: string): Decision | undefined {
 
 function outcome(event: Event, result: AppProcess.RunResult): Decision | undefined {
   if (result.exitCode === 0) return decision(event, result.stdout.toString("utf8"))
-  if (result.exitCode !== 2) return
+  if (result.exitCode !== 2 || event === "SessionStart") return
   const stderr = text(result.stderr.toString("utf8"))
   if (event === "PreToolUse") return { type: "deny", reason: stderr }
   return stderr ? { type: "feedback", text: stderr } : undefined
+}
+
+function isText(message: Message, value: string) {
+  return message.role === "user" && message.content.some((part) => part.type === "text" && part.text === value)
 }
 
 // what the permission prompt shows for an ask
@@ -129,7 +140,9 @@ export const Plugin = define({
     const global = yield* Global.Service
     const runner = yield* AppProcess.Service
     const permission = yield* Permission.Service
-    const loaded: Record<Event, Hook[]> = { PreToolUse: [], PostToolUse: [] }
+    const loaded: Record<Event, Hook[]> = { PreToolUse: [], PostToolUse: [], SessionStart: [] }
+    // SessionStart context still being produced, so the first request can wait for it
+    const starting = new Map<Session.ID, Deferred.Deferred<string | undefined>>()
 
     const refresh = Effect.fn("ConfigClaudeHooksPlugin.refresh")(function* () {
       // Only the user's own settings: hooks in a project's .claude directory would run commands from a
@@ -146,7 +159,25 @@ export const Plugin = define({
       )
       loaded.PreToolUse = parsed.flatMap((item) => item.PreToolUse)
       loaded.PostToolUse = parsed.flatMap((item) => item.PostToolUse)
+      loaded.SessionStart = parsed.flatMap((item) => item.SessionStart)
     })
+
+    const spawn = (hook: Hook, stdin: string, cwd: string) =>
+      runner
+        .run(
+          ChildProcess.make(hook.command, [], {
+            shell: true,
+            cwd,
+            extendEnv: true,
+            env: { CLAUDE_PROJECT_DIR: cwd },
+          }),
+          { stdin, timeout: `${hook.timeout} seconds` },
+        )
+        .pipe(
+          Effect.catch((error) =>
+            Effect.logWarning("claude hook failed", { command: hook.command, error }).pipe(Effect.as(undefined)),
+          ),
+        )
 
     // A deny from any hook wins over an ask. Hooks that fail or time out never block a tool call.
     const run = Effect.fn("ConfigClaudeHooksPlugin.run")(function* (
@@ -168,21 +199,7 @@ export const Plugin = define({
       })
       const results: Decision[] = []
       for (const hook of hooks) {
-        const result = yield* runner
-          .run(
-            ChildProcess.make(hook.command, [], {
-              shell: true,
-              cwd: location.directory,
-              extendEnv: true,
-              env: { CLAUDE_PROJECT_DIR: location.directory },
-            }),
-            { stdin, timeout: `${hook.timeout} seconds` },
-          )
-          .pipe(
-            Effect.catch((error) =>
-              Effect.logWarning("claude hook failed", { command: hook.command, error }).pipe(Effect.as(undefined)),
-            ),
-          )
+        const result = yield* spawn(hook, stdin, location.directory)
         const found = result && outcome(event, result)
         if (found?.type === "deny") return { ...found, reason: found.reason ?? `${event} hook blocked ${tool}` }
         if (found) results.push(found)
@@ -193,11 +210,69 @@ export const Plugin = define({
       return feedback.length > 0 ? { type: "feedback" as const, text: feedback.join("\n") } : undefined
     })
 
+    // Collects the context SessionStart hooks print for a new session. Exit codes other than 0 are ignored.
+    const start = Effect.fn("ConfigClaudeHooksPlugin.start")(function* (sessionID: Session.ID, cwd: string) {
+      const hooks = loaded.SessionStart.filter((hook) => matches(hook.matcher, "startup"))
+      const stdin = JSON.stringify({ session_id: sessionID, cwd, hook_event_name: "SessionStart", source: "startup" })
+      const found: string[] = []
+      for (const hook of hooks) {
+        const result = yield* spawn(hook, stdin, cwd)
+        const context = result && outcome("SessionStart", result)
+        if (context?.type === "feedback") found.push(context.text)
+      }
+      return found.length > 0 ? found.join("\n") : undefined
+    })
+
     yield* config.changes().pipe(
       Stream.runForEach(() => refresh()),
       Effect.forkScoped({ startImmediately: true }),
     )
     yield* refresh()
+
+    yield* ctx.event.subscribe().pipe(
+      Stream.filter((event) => event.type === "session.created"),
+      Stream.runForEach((event) =>
+        Effect.gen(function* () {
+          // Claude Code does not run SessionStart for subagents either.
+          if (event.data.parentID !== undefined) return
+          if (!loaded.SessionStart.some((hook) => matches(hook.matcher, "startup"))) return
+          const sessionID = event.data.sessionID
+          const done = yield* Deferred.make<string | undefined>()
+          starting.set(sessionID, done)
+          yield* start(sessionID, event.data.location.directory).pipe(
+            Effect.tap((context) =>
+              context
+                ? ctx.session
+                    .synthetic({ sessionID, text: context, resume: false })
+                    .pipe(
+                      Effect.catchCause((cause) =>
+                        Effect.logWarning("failed to save SessionStart context", { sessionID, cause }),
+                      ),
+                    )
+                : Effect.void,
+            ),
+            Effect.exit,
+            Effect.flatMap((exit) => Deferred.done(done, exit)),
+            Effect.forkScoped,
+          )
+        }),
+      ),
+      Effect.forkScoped({ startImmediately: true }),
+    )
+
+    // A request that starts before the hooks finish waits for them and gets the context directly, since the
+    // saved message may land after its history was read.
+    yield* ctx.session.hook("context", (event) =>
+      Effect.gen(function* () {
+        const done = starting.get(event.sessionID)
+        if (!done) return
+        const context = yield* Deferred.await(done).pipe(Effect.orElseSucceed(() => undefined))
+        starting.delete(event.sessionID)
+        if (!context || event.messages.some((message) => isText(message, context))) return
+        const at = event.messages.at(-1)?.role === "user" ? event.messages.length - 1 : event.messages.length
+        event.messages.splice(at, 0, Message.user(context))
+      }),
+    )
 
     // Ask requests carry this key, so the evaluate hook can turn them into a prompt even when rules allow the tool.
     yield* ctx.permission.hook("evaluate", (event) =>

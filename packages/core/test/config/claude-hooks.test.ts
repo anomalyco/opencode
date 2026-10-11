@@ -1,7 +1,8 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect, test } from "bun:test"
-import { Effect, Exit } from "effect"
+import { Effect, Exit, PubSub, Stream } from "effect"
+import { Message } from "@opencode/ai"
 import { Config } from "@opencode/core/config"
 import { ConfigClaudeHooksPlugin } from "@opencode/core/config/plugin/claude-hooks"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -9,6 +10,7 @@ import { Location } from "@opencode/core/location"
 import { Permission } from "@opencode/core/permission"
 import { AbsolutePath } from "@opencode/core/schema"
 import type { PermissionEvaluation } from "@opencode/plugin/effect/permission"
+import type { SessionHooks } from "@opencode/plugin/effect/session"
 import type { ToolHooks } from "@opencode/plugin/effect/tool"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
@@ -57,8 +59,11 @@ const start = Effect.fnUntraced(function* (
     before?: (event: Before) => Effect.Effect<void, unknown>
     after?: (event: After) => Effect.Effect<void>
     evaluate?: (event: PermissionEvaluation) => Effect.Effect<void>
+    context?: (event: SessionHooks["context"]) => Effect.Effect<void>
   } = {}
   const asked: Permission.AssertInput[] = []
+  const saved: { sessionID: string; text: string; resume?: boolean }[] = []
+  const events = yield* PubSub.unbounded<unknown>()
   yield* ConfigClaudeHooksPlugin.Plugin.effect(
     host({
       tool: {
@@ -73,6 +78,23 @@ const start = Effect.fnUntraced(function* (
           if (name === "execute.after") hooks.after = callback as unknown as typeof hooks.after
           return Effect.succeed({ dispose: Effect.void })
         },
+      },
+      event: {
+        // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
+        subscribe: () => Stream.fromPubSub(events) as never,
+      },
+      session: {
+        hook: (name, callback) => {
+          // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
+          if (name === "context") hooks.context = callback as unknown as typeof hooks.context
+          return Effect.succeed({ dispose: Effect.void })
+        },
+        synthetic: (input) =>
+          Effect.sync(() => {
+            saved.push({ sessionID: input.sessionID, text: input.text, resume: input.resume })
+            // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
+            return {} as never
+          }),
       },
       permission: {
         list: () => Effect.die("unused permission.list"),
@@ -105,7 +127,11 @@ const start = Effect.fnUntraced(function* (
     before: (event: unknown) => hooks.before!(event as Before),
     after: (event: After) => hooks.after!(event),
     evaluate: (event: PermissionEvaluation) => hooks.evaluate!(event),
+    context: (event: SessionHooks["context"]) => hooks.context!(event),
+    created: (data: { sessionID: string; parentID?: string }) =>
+      PubSub.publish(events, { type: "session.created", data: { location: { directory }, ...data } }),
     asked,
+    saved,
   }
 })
 
@@ -138,8 +164,9 @@ describe("ConfigClaudeHooksPlugin", () => {
         { matcher: "", command: "c", timeout: 60 },
       ],
       PostToolUse: [],
+      SessionStart: [],
     })
-    expect(ConfigClaudeHooksPlugin.parse("not json")).toEqual({ PreToolUse: [], PostToolUse: [] })
+    expect(ConfigClaudeHooksPlugin.parse("not json")).toEqual({ PreToolUse: [], PostToolUse: [], SessionStart: [] })
   })
 
   test("matches tool names like Claude Code", () => {
@@ -337,6 +364,59 @@ describe("ConfigClaudeHooksPlugin", () => {
           const exit = yield* rejected.before({ ...base }).pipe(Effect.exit)
           expect(Exit.isFailure(exit)).toBe(true)
           expect(String(exit)).toContain("use --dry-run")
+        }),
+      ),
+    ),
+  )
+
+  test("reads SessionStart context from JSON or plain stdout", () => {
+    const start = (stdout: string) => ConfigClaudeHooksPlugin.decision("SessionStart", stdout)
+    expect(start(JSON.stringify({ hookSpecificOutput: { additionalContext: "login expired" } }))).toEqual({
+      type: "feedback",
+      text: "login expired",
+    })
+    expect(start("plain note\n")).toEqual({ type: "feedback", text: "plain note" })
+    expect(start("")).toBeUndefined()
+  })
+
+  live("SessionStart output is saved to a new session and given to its first request", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const context = JSON.stringify({
+            hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: "cloud login expired" },
+          })
+          const hooks = yield* start(tmp.path, {
+            hooks: {
+              SessionStart: [
+                command("startup", `cat > payload.json; echo '${context}'`),
+                command("resume", "echo 'not on startup'"),
+              ],
+            },
+          })
+          yield* hooks.created({ sessionID: "ses_child", parentID: "ses_parent" })
+          yield* hooks.created({ sessionID: "ses_test" })
+          const request = {
+            sessionID: "ses_test",
+            messages: [Message.user("hello")],
+          } as unknown as SessionHooks["context"]
+          yield* hooks.context(request)
+          expect(request.messages.map((message) => message.content)).toEqual([
+            [{ type: "text", text: "cloud login expired" }],
+            [{ type: "text", text: "hello" }],
+          ])
+          expect(hooks.saved).toEqual([{ sessionID: "ses_test", text: "cloud login expired", resume: false }])
+          expect(
+            JSON.parse(yield* Effect.promise(() => fs.readFile(path.join(tmp.path, "payload.json"), "utf8"))),
+          ).toEqual({ session_id: "ses_test", cwd: tmp.path, hook_event_name: "SessionStart", source: "startup" })
+
+          // later requests read the saved message from history instead
+          const next = {
+            sessionID: "ses_test",
+            messages: [Message.user("again")],
+          } as unknown as SessionHooks["context"]
+          yield* hooks.context(next)
+          expect(next.messages).toHaveLength(1)
         }),
       ),
     ),
