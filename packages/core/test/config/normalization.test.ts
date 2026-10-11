@@ -466,6 +466,19 @@ describe("ConfigNormalize", () => {
     ])
   })
 
+  test("migrates a legacy per-server timeout into the startup budget that governs connection", () => {
+    const result = normalized({
+      mcp: {
+        example: { type: "local", command: ["tool"], timeout: 30000 },
+      },
+    })
+    expect((result.encoded.mcp as { servers: Record<string, { timeout?: unknown }> }).servers.example.timeout).toEqual({
+      startup: 30000,
+      catalog: 30000,
+      execution: 30000,
+    })
+  })
+
   test("distinguishes empty, mixed, and wholly malformed enabled provider lists", () => {
     expect(normalized({ enabled_providers: [] }).encoded.experimental).toEqual({
       policies: [{ action: "provider.use", resource: "*", effect: "deny" }],
