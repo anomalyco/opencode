@@ -1,4 +1,4 @@
-import { Duration, Effect, Equal, Option, Schema, SchemaGetter, Scope, Semaphore, Stream } from "effect"
+import { Clock, Duration, Effect, Equal, Option, Schema, SchemaGetter, Scope, Semaphore, Stream } from "effect"
 import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect/integration"
 import { define } from "@opencode/plugin/effect/plugin"
 import type { SessionHttpResponse } from "@opencode/plugin/effect/session"
@@ -81,6 +81,21 @@ const Unauthorized = Schema.Struct({ _tag: Schema.Literal("Unauthorized") })
 const signedOutMessage = "Reconnect OpenCode Console to continue"
 const ssoMessage = (organization: string | undefined) =>
   `Sign in with SSO again to use ${organization ?? "your OpenCode Console organization"}`
+
+type Fetched = {
+  readonly key: string | undefined
+  readonly at: number
+  readonly config: typeof RemoteResponse.Type | undefined
+  readonly organization: string | undefined
+  // Console MCP servers carry the credential in their headers, so a rotated token changes the snapshot.
+  readonly mcp:
+    | { servers: NonNullable<typeof RemoteResponse.Type.mcp>["servers"]; headers: Record<string, string> }
+    | undefined
+}
+// The supervisor activates this plugin on its own before the full plugin set, and the full activation starts it
+// again. Keyed by the shared policy service so that second start reuses the config fetched moments earlier.
+const fetched = new WeakMap<ManagedPolicy.Interface, Fetched>()
+const reuseFor = Duration.seconds(30)
 
 class SsoRequiredError extends Schema.TaggedError<SsoRequiredError>()("OpencodeConsole.SsoRequired", {
   organization: Schema.optional(Schema.String),
@@ -190,13 +205,10 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Manag
     const loading = Semaphore.makeUnsafe(1)
     type ActiveConnection = Effect.Success<ReturnType<typeof ctx.integration.connection.active>>
     let snapshot: {
-      config: typeof RemoteResponse.Type | undefined
+      config: Fetched["config"]
       connection: ActiveConnection
       organization: string | undefined
-      // Console MCP servers carry the credential in their headers, so a rotated token changes the snapshot.
-      mcp:
-        | { servers: NonNullable<typeof RemoteResponse.Type.mcp>["servers"]; headers: Record<string, string> }
-        | undefined
+      mcp: Fetched["mcp"]
     } = { config: undefined, connection: undefined, organization: undefined, mcp: undefined }
     // Status last reported for the active connection, so inference failures can name the fix.
     let reported: IntegrationConnection.Status | undefined
@@ -223,6 +235,19 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Manag
               organization: organizationName(credential),
               mcp: config?.mcp && { servers: config.mcp.servers, headers: credentialHeaders(credential) },
             })),
+            Effect.tap((next) =>
+              Clock.currentTimeMillis.pipe(
+                Effect.map((at) =>
+                  fetched.set(managed, {
+                    key: IntegrationConnection.key(connection),
+                    at,
+                    config: next.config,
+                    organization: next.organization,
+                    mcp: next.mcp,
+                  }),
+                ),
+              ),
+            ),
           )
         }),
         Effect.tap(() => status(undefined)),
@@ -241,6 +266,19 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Manag
         ),
       )
     })
+    const initial = Effect.fn("OpencodePlugin.initial")(function* () {
+      const connection = yield* ctx.integration.connection.active("opencode")
+      const previous = fetched.get(managed)
+      const now = yield* Clock.currentTimeMillis
+      if (
+        connection &&
+        previous &&
+        previous.key === IntegrationConnection.key(connection) &&
+        now - previous.at < Duration.toMillis(reuseFor)
+      )
+        return { config: previous.config, connection, organization: previous.organization, mcp: previous.mcp }
+      return yield* load()
+    })
     // Statements ride on the snapshot, so a credential switch, disconnect, or 404 replaces them too.
     const publish = (next: typeof snapshot) =>
       managed.set({ statements: next.config?.experimental?.policies ?? [], organization: next.organization })
@@ -253,7 +291,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Manag
       editor.method.update({ integrationID: "opencode", method: { type: "key", label: "API key (service account)" } })
     })
 
-    snapshot = yield* load()
+    snapshot = yield* initial()
     yield* publish(snapshot)
     yield* ctx.provider.transform((providers) => {
       for (const [providerID, item] of Object.entries(snapshot.config?.providers ?? {})) {

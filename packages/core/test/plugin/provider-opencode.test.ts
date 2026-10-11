@@ -661,6 +661,40 @@ describe("OpencodePlugin", () => {
     ),
   )
 
+  it.effect("reuses a just-fetched Console config when the plugin starts again", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const state = { requests: 0 }
+        const server = Bun.serve({
+          port: 0,
+          fetch: () => {
+            state.requests++
+            return Response.json({ providers: {} })
+          },
+        })
+        return { server, state }
+      }),
+      ({ server, state }) =>
+        Effect.gen(function* () {
+          const credentials = yield* Credential.Service
+          yield* credentials.create({
+            integrationID: Integration.ID.make("opencode"),
+            value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: server.url.origin } }),
+          })
+          yield* addPlugin().pipe(Effect.scoped)
+          expect(state.requests).toBe(1)
+
+          yield* addPlugin().pipe(Effect.scoped)
+          expect(state.requests).toBe(1)
+
+          yield* TestClock.adjust("30 seconds")
+          yield* addPlugin().pipe(Effect.scoped)
+          expect(state.requests).toBe(2)
+        }),
+      ({ server }) => Effect.promise(() => server.stop(true)),
+    ),
+  )
+
   it.effect("registers the Console's MCP servers as sent, attaching the credential only where asked", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => {
