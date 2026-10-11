@@ -1,7 +1,7 @@
 export * as RemoteCli from "./remote-cli"
 
 import { Effect, Schema } from "effect"
-import { HttpClient, HttpClientResponse } from "effect/unstable/http"
+import { HttpClient, HttpClientResponse } from "effect/http"
 
 export class Failure extends Schema.TaggedError<Failure>()("RemoteCliFailure", {
   code: Schema.Literals(["platform", "version", "install"]),
@@ -19,6 +19,7 @@ export function quote(value: string) {
 export function requireVersion(version: string) {
   if (version !== "local" && !/^[0-9][a-zA-Z0-9.+-]*$/.test(version))
     throw new Failure({ code: "version", detail: version })
+
   return version
 }
 
@@ -48,10 +49,13 @@ export function parseVersion(output: string) {
     .split(/\r?\n/)
     .find((line) => line.trim())
     ?.trim()
+
   if (!line) return null
   const marker = line.lastIndexOf(" v")
   const version = marker === -1 ? line : line.slice(marker + 2)
+
   if (!version) throw new Error("V2 CLI did not provide a version")
+
   return version
 }
 
@@ -71,6 +75,7 @@ printf 'OPENCODE_REMOTE_TARGET=%s\\n' "$target"
 export function archiveUrl(target: string, version: string) {
   if (!/^(linux|darwin)-(x64-baseline|arm64)(-musl)?$/.test(target))
     throw new Failure({ code: "platform", detail: target })
+
   return `https://registry.npmjs.org/@opencode/cli-${target}/-/cli-${target}-${requireVersion(version)}.tgz`
 }
 
@@ -78,6 +83,7 @@ type Source = { type: "download"; url: string } | { type: "archive" } | { type: 
 
 export function installScript(input: { version: string; directory?: string; source: Source }) {
   const version = requireVersion(input.version)
+
   // The managed CLI installer also configures the user's shell PATH. Private
   // installations use archives so their destination and shell setup stay isolated.
   if (input.source.type === "installer")
@@ -85,6 +91,7 @@ export function installScript(input: { version: string; directory?: string; sour
 curl -fsSL https://raw.githubusercontent.com/anomalyco/opencode/v2/install | bash -s -- ${input.source.binary ? `--binary ${input.source.binary}` : `--version ${quote(version)}`}
 ${verifyScript('"$HOME/.opencode/bin/opencode"', version)}
 `
+
   return `set -eu
 umask 077
 destination="$HOME"/${quote(`${input.directory ?? ".opencode/bin"}/opencode`)}
@@ -100,6 +107,7 @@ mv "$stage/package/bin/opencode" "$destination"
 
 function stageBinary(source: Exclude<Source, { type: "installer" }>) {
   if (source.type === "archive") return 'cat > "$stage/archive.tgz"\ntar -xzf "$stage/archive.tgz" -C "$stage"'
+
   return `url=${quote(source.url)}
 if command -v curl >/dev/null 2>&1; then
   curl -fsSL --connect-timeout 15 --max-time 180 "$url" -o "$stage/archive.tgz"
@@ -117,11 +125,13 @@ const Beta = Schema.Struct({ version: Schema.String.check(Schema.isPattern(/^0\.
 
 export const latestBeta = Effect.fn("RemoteCli.latestBeta")(function* () {
   const http = yield* HttpClient.HttpClient
+
   const metadata = yield* http.get("https://registry.npmjs.org/@opencode%2fcli/beta").pipe(
     Effect.flatMap(HttpClientResponse.filterStatusOk),
     Effect.flatMap(HttpClientResponse.schemaBodyJson(Beta)),
     Effect.timeout("30 seconds"),
     Effect.mapError(() => new Failure({ code: "install", detail: "https://registry.npmjs.org/@opencode%2fcli/beta" })),
   )
+
   return metadata.version
 })

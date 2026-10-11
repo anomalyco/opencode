@@ -14,12 +14,12 @@ import { Mark } from "@opencode/ui/logo"
 import { Keybind } from "@opencode/ui/keybind"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { Menu } from "@opencode/ui/menu"
-import { SessionReviewV2SidebarToggle } from "@opencode/session-ui/v2/session-review-v2"
 import {
-  Menu as MenuPoint,
-  type Menu as MenuItem,
+  MenuItem,
+  type MountedSession,
+  type SessionScreen,
   type PanelSidebar,
-  type SessionView,
+  type SessionPanelMenuItem,
 } from "@opencode/gui-extensions/sdk"
 import { useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -36,7 +36,8 @@ const FILE_TREE_WIDTH_MIN = 240
 
 /** The side region: the tab strip with its "+" menu, the selected panel, and the inner sidebar. */
 export function SideRegion(props: {
-  view: SessionView
+  view: MountedSession
+  screen: SessionScreen
   region: Region
   sidebar: PanelSidebar
   fileTree: boolean
@@ -56,16 +57,21 @@ export function SideRegion(props: {
   const open = createMemo(() => tabsOpen() || fileOpen())
   const visible = createMemo(() => tabsVisible() || fileOpen())
   const fileTreeWidth = createMemo(() => Math.max(FILE_TREE_WIDTH_MIN, layout.fileTree.width()))
+
   const panelWidth = createMemo(() => {
     if (!visible()) return "0px"
+
     if (tabsVisible()) return "auto"
+
     return `${fileTreeWidth()}px`
   })
+
   const treeWidth = createMemo(() => (fileOpen() ? `${fileTreeWidth()}px` : "0px"))
+
   const menu = createMemo(() =>
     host
-      .list(MenuPoint)
-      .filter((item) => item.menu === "session.panel")
+      .list(MenuItem)
+      .flatMap((item) => (item.menu === "session.panel" ? [item] : []))
       .toSorted((a, b) => (a.order ?? 0) - (b.order ?? 0)),
   )
 
@@ -120,6 +126,7 @@ export function SideRegion(props: {
                     ]}
                     onDragEnd={(event) => {
                       const source = event.operation.source
+
                       if (event.canceled || !isSortable(source) || source.initialIndex === source.index) return
                       tabs().move(source.id.toString(), source.index)
                     }}
@@ -139,7 +146,12 @@ export function SideRegion(props: {
                           props.region.select(value)
                       }}
                     >
-                      <div class="session-review-v2-tabs-bar sticky top-0 shrink-0 flex items-center">
+                      {/* Tabs and actions share the review toggle's row: the session header's 48px, or the 51px
+                          above a side dock's divider. */}
+                      <div
+                        class="session-review-v2-tabs-bar sticky top-0 shrink-0 flex items-center"
+                        style={{ "--tabs-bar-height": props.stacked ? "51px" : "48px" }}
+                      >
                         <Tabs.List
                           ref={(el: HTMLDivElement) => {
                             tabList = el
@@ -152,13 +164,6 @@ export function SideRegion(props: {
                             onCleanup(createTabStripScroll({ el, lead: props.region.lead }))
                           }}
                         >
-                          <div class="session-review-v2-sidebar-toggle-slot h-full shrink-0 sticky start-0 z-10 flex items-center justify-center bg-v2-background-bg-base">
-                            <SessionReviewV2SidebarToggle
-                              opened={props.sidebar.opened()}
-                              disabled={props.region.selected()?.tab.sidebar === "locked"}
-                              onToggle={props.sidebar.toggle}
-                            />
-                          </div>
                           <For each={props.region.keys()}>
                             {(key) => (
                               <Show when={props.region.entry(key)}>
@@ -167,6 +172,7 @@ export function SideRegion(props: {
                                     value={key}
                                     extension={entry().extension}
                                     tab={entry().tab}
+                                    session={props.view}
                                     index={tabs().all().indexOf(key)}
                                     active={props.region.active() === key}
                                     preview={tabs().preview() === key}
@@ -188,12 +194,21 @@ export function SideRegion(props: {
                         </Tabs.List>
                         <div
                           data-slot="session-side-panel-actions"
-                          class="session-review-v2-open-in-app-slot self-start shrink-0 flex items-center gap-2 pe-3"
-                          classList={{ "h-[51px]": props.stacked, "h-12": !props.stacked }}
+                          class="session-review-v2-open-in-app-slot h-[var(--tabs-bar-height)] shrink-0 flex items-center gap-2 pe-3"
                           onPointerDown={(event) => event.stopPropagation()}
                           onClick={(event) => event.stopPropagation()}
                         >
-                          <ExtensionSlot at="session.panel.end" input={{ session: props.view }} />
+                          <ExtensionSlot
+                            at="session.panel.end"
+                            input={{
+                              get session() {
+                                return props.view
+                              },
+                              get screen() {
+                                return props.screen
+                              },
+                            }}
+                          />
                           <Show when={tabsVisible()}>
                             <div class="size-7 shrink-0" aria-hidden />
                           </Show>
@@ -215,6 +230,7 @@ export function SideRegion(props: {
                       <RegionContent
                         region={props.region}
                         view={props.view}
+                        screen={props.screen}
                         frame={{
                           shown: tabsOpen,
                           present: tabsVisible,
@@ -244,7 +260,17 @@ export function SideRegion(props: {
                   class="h-full flex flex-col overflow-hidden group/filetree"
                   classList={{ "border-l border-border-weaker-base": tabsOpen() }}
                 >
-                  <ExtensionSlot at="session.panel.sidebar" input={{ session: props.view }} />
+                  <ExtensionSlot
+                    at="session.panel.sidebar"
+                    input={{
+                      get session() {
+                        return props.view
+                      },
+                      get screen() {
+                        return props.screen
+                      },
+                    }}
+                  />
                 </div>
                 <div onPointerDown={() => props.size.start()}>
                   <ResizeHandle
@@ -268,9 +294,10 @@ export function SideRegion(props: {
   )
 }
 
-function AddButton(props: { item: MenuItem }): JSX.Element {
+function AddButton(props: { item: SessionPanelMenuItem }): JSX.Element {
   const command = useCommand()
   const keybind = createMemo(() => (props.item.keybind ? command.keybindParts(props.item.keybind) : []))
+
   return (
     <Tooltip
       value={
@@ -288,16 +315,17 @@ function AddButton(props: { item: MenuItem }): JSX.Element {
         icon={<Icon name="plus" />}
         variant="ghost-muted"
         size="large"
-        onClick={() => props.item.run("")}
+        onClick={() => props.item.run()}
         aria-label={props.item.title}
       />
     </Tooltip>
   )
 }
 
-function AddMenu(props: { items: readonly MenuItem[] }): JSX.Element {
+function AddMenu(props: { items: readonly SessionPanelMenuItem[] }): JSX.Element {
   const language = useLanguage()
   const command = useCommand()
+
   return (
     <Tooltip value={language.t("session.tab.add")} placement="bottom" class="flex items-center">
       <Menu appearance="standard" modal={false} placement="bottom-start" gutter={4}>
@@ -316,10 +344,11 @@ function AddMenu(props: { items: readonly MenuItem[] }): JSX.Element {
             <For each={props.items}>
               {(item) => {
                 const keybind = createMemo(() => (item.keybind ? command.keybindParts(item.keybind) : []))
+
                 return (
                   <Menu.Item
                     class="!gap-6"
-                    onSelect={() => item.run("")}
+                    onSelect={() => item.run()}
                     shortcut={
                       <Show when={keybind().length > 0}>
                         <Keybind keys={keybind()} variant="neutral" />

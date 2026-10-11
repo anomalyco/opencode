@@ -36,8 +36,5 @@ export default {
   "form.name": "සේවාදායකයේ නම (විකල්ප)",
   "form.namePlaceholder": "Localhost",
   "form.add": "සේවාදායකය එක් කරන්න",
-  "server.default": "පෙරනිමිය",
-  "menu.default": "පෙරනිමිය ලෙස සකසන්න",
-  "menu.defaultRemove": "පෙරනිමිය ඉවත් කරන්න",
   "menu.delete": "මකන්න",
 }

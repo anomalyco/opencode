@@ -1,7 +1,6 @@
 import { createEffect, createMemo, createSignal, Show } from "solid-js"
 import { useData } from "../context/data"
 import { useClient } from "../context/client"
-import { Keymap } from "../context/keymap"
 import { pipe, sortBy } from "remeda"
 import { DialogSelect } from "../ui/dialog-select"
 import { useDialog } from "../ui/dialog"

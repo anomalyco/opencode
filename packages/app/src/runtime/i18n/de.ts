@@ -27,8 +27,6 @@ export const dict = {
   "server.connect.address.invalid": "Geben Sie eine gültige HTTP- oder HTTPS-Serveradresse ein.",
   "server.connect.failed":
     "Es konnte keine Verbindung hergestellt werden. Überprüfen Sie die Serveradresse und das Passwort und versuchen Sie es dann erneut.",
-  "server.connect.pair.description":
-    "Führen Sie diesen Befehl auf Ihrem Computer aus, um Ihre Verbindungsdetails abzurufen.",
   "server.connect.scan": "Scannen Sie den QR-Code",
   "server.connect.scan.description": "Richten Sie Ihre Kamera auf den von opencode pair angezeigten Code QR.",
   "server.connect.scan.invalid":
@@ -37,8 +35,6 @@ export const dict = {
   "server.connect.camera.starting": "Kamera wird geöffnet…",
   "server.connect.mixedContent":
     "Es konnte keine Verbindung zu diesem HTTP-Server von einer HTTPS-Seite hergestellt werden. Verwenden Sie stattdessen eine HTTPS-Serveradresse.",
-  "server.connect.camera.insecure":
-    "Zum Scannen mit QR muss diese Seite über HTTPS oder auf localhost geöffnet werden.",
   "server.connect.camera.unavailable":
     "Für diesen Browser ist keine Kamera verfügbar. Geben Sie Ihre Verbindungsdaten manuell ein.",
   "server.connect.camera.error":
@@ -136,7 +132,6 @@ export const dict = {
   "session.view.select": "Sitzungsansicht",
   "session.background.moveRunning": "In den Hintergrund verschieben",
   "session.timeline.working": "In Arbeit",
-  "session.review.wrapLines": "Zeilen umbrechen",
   "session.websearch.title": "Websuche von Drittanbietern",
   "session.websearch.description": "Wählen Sie den Suchanbieter aus, den Agenten für die Websuche verwenden",
   "session.websearch.provider": "Suchanbieter",
@@ -198,8 +193,6 @@ export const dict = {
   "settings.timeline.category.subagents": "Unteragenten",
   "settings.timeline.category.notices": "Hinweise",
   "settings.timeline.category.tools": "Andere Tools",
-  "settings.general.row.mobileDiffWrap.description":
-    "Lange Zeilen in mobilen Diffs umbrechen, statt horizontal zu scrollen",
   "toast.migration.progress.clearingOldEvents": "Alte Ereignisse werden gelöscht",
   "toast.migration.progress.migratingSessions": "Sitzungen werden migriert",
   "session.new.workspace.existingLabel": "Worktree",
@@ -449,9 +442,6 @@ export const dict = {
   "dialog.server.add.password": "Passwort (optional)",
   "dialog.server.edit.title": "Server bearbeiten",
   "dialog.server.menu.edit": "Bearbeiten",
-  "dialog.server.menu.default": "Als Standard festlegen",
-  "dialog.server.menu.defaultRemove": "Standard entfernen",
-  "dialog.server.status.default": "Standard",
   "dialog.project.edit.title": "Projekt bearbeiten",
   "dialog.project.edit.icon": "Symbol",
   "dialog.project.edit.icon.alt": "Projektsymbol",
@@ -733,10 +723,6 @@ export const dict = {
   "workspace.delete.confirm": 'Arbeitsbereich "{{name}}" löschen?',
   "workspace.delete.button": "Arbeitsbereich löschen",
   "common.open": "Öffnen",
-  "dialog.releaseNotes.action.getStarted": "Loslegen",
-  "dialog.releaseNotes.action.next": "Weiter",
-  "dialog.releaseNotes.action.hideFuture": "In Zukunft nicht mehr anzeigen",
-  "dialog.releaseNotes.media.alt": "Vorschau auf die Version",
   "toast.project.reloadFailed.title": "Fehler beim Neuladen von {{project}}",
   "error.server.invalidConfiguration": "Ungültige Konfiguration",
   "common.moreCountSuffix": " (+{{count}} weitere)",

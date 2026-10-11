@@ -35,8 +35,5 @@ export default {
   "form.name": "सर्वर नाम (वैकल्पिक)",
   "form.namePlaceholder": "Localhost",
   "form.add": "सर्वर जोड़ें",
-  "server.default": "डिफ़ॉल्ट",
-  "menu.default": "डिफाल्ट के रूप में सेट",
-  "menu.defaultRemove": "डिफ़ॉल्ट हटाएँ",
   "menu.delete": "हटाएँ",
 }

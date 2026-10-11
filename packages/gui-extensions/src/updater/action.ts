@@ -3,6 +3,7 @@ import type { UpdaterState } from "./contract"
 /** The one update action the settings row and the titlebar pill offer for a state. */
 export function updaterAction(state: UpdaterState | undefined) {
   if (!state) return { label: "action.checkNow" as const }
+
   switch (state.status) {
     case "checking":
       return { label: "action.checking" as const }

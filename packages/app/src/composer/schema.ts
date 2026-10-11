@@ -12,7 +12,9 @@ const PartBase = {
 }
 
 const SourceText = Schema.Struct({ value: Schema.String, start: Schema.Number, end: Schema.Number })
+
 const Position = Schema.Struct({ line: Schema.Number, character: Schema.Number })
+
 const FilePartSource = Schema.Union([
   Schema.Struct({ type: Schema.Literal("file"), text: SourceText, path: Schema.String }),
   Schema.Struct({
@@ -27,6 +29,7 @@ const FilePartSource = Schema.Union([
 ])
 
 export const TextPart = Persistence.struct({ type: Schema.Literal("text"), ...PartBase })
+
 export type TextPart = typeof TextPart.Type
 
 export const FileAttachmentPart = Persistence.struct({
@@ -36,12 +39,15 @@ export const FileAttachmentPart = Persistence.struct({
   selection: Persistence.optional(FileSelection),
   mime: Persistence.optional(Schema.String),
   filename: Persistence.optional(Schema.String),
+  description: Persistence.optional(Schema.String),
   url: Persistence.optional(Schema.String),
   source: Persistence.optional(FilePartSource),
 })
+
 export type FileAttachmentPart = typeof FileAttachmentPart.Type
 
 export const AgentPart = Persistence.struct({ type: Schema.Literal("agent"), ...PartBase, name: Schema.String })
+
 export type AgentPart = typeof AgentPart.Type
 
 export const SkillPart = Persistence.struct({
@@ -50,6 +56,7 @@ export const SkillPart = Persistence.struct({
   id: Skill.ID,
   name: Skill.Name,
 })
+
 export type SkillPart = typeof SkillPart.Type
 
 const ImageFields = {
@@ -59,6 +66,7 @@ const ImageFields = {
   sourcePath: Persistence.optional(Schema.String),
   mime: Schema.String,
 }
+
 const Image = Persistence.struct({
   ...ImageFields,
   // An empty URL is an image whose bytes are still in the draft store; see `resolveBlobUrl`.
@@ -78,6 +86,7 @@ export const ImageAttachmentPart = Schema.Struct({
     decode: SchemaGetter.transform((value) => {
       const id = value.blob?.id ?? value.dataUrl ?? ""
       const url = value.blob?.url
+
       return {
         type: value.type,
         id: value.id,
@@ -93,6 +102,7 @@ export const ImageAttachmentPart = Schema.Struct({
     encode: SchemaGetter.transform((value) => value),
   }),
 )
+
 export type ImageAttachmentPart = typeof ImageAttachmentPart.Type
 
 // A file the model receives as a path on the server: its bytes never enter the draft store.
@@ -103,6 +113,7 @@ export const PathAttachmentPart = Persistence.struct({
   mime: Schema.String,
   path: Schema.String,
 })
+
 export type PathAttachmentPart = typeof PathAttachmentPart.Type
 
 export const ContentPart = Schema.Union([
@@ -113,8 +124,11 @@ export const ContentPart = Schema.Union([
   ImageAttachmentPart,
   PathAttachmentPart,
 ])
+
 export type ContentPart = typeof ContentPart.Type
+
 export const Prompt = Persistence.array(ContentPart)
+
 export type Prompt = typeof Prompt.Type
 
 export const PromptModel = Persistence.struct({
@@ -122,6 +136,7 @@ export const PromptModel = Persistence.struct({
   modelID: Schema.String,
   variant: Persistence.optional(Schema.NullOr(Schema.String)),
 })
+
 export type PromptModel = typeof PromptModel.Type
 
 export const FileContextItem = Persistence.struct({
@@ -132,7 +147,11 @@ export const FileContextItem = Persistence.struct({
   commentID: Persistence.optional(Schema.String),
   commentOrigin: Persistence.optional(Schema.Literals(["review", "file"])),
   preview: Persistence.optional(Schema.String),
+  // A file restored from a sent prompt keeps the name and description it was sent with.
+  name: Persistence.optional(Schema.String),
+  description: Persistence.optional(Schema.String),
 })
+
 export type FileContextItem = typeof FileContextItem.Type
 
 const NoteFields = {
@@ -145,11 +164,16 @@ const NoteFields = {
   live: Persistence.optional(Persistence.struct({ subject: Schema.String, href: Persistence.optional(Schema.String) })),
   comment: Schema.String,
 }
+
 /** An extension's comment on something other than workspace lines, as sent in message metadata. */
 export const NoteComment = Persistence.struct(NoteFields)
+
 export type NoteComment = typeof NoteComment.Type
+
 export const NoteContextItem = Persistence.struct({ ...NoteFields, commentID: Schema.String })
+
 export type NoteContextItem = typeof NoteContextItem.Type
+
 export type ContextItem = FileContextItem | NoteContextItem
 
 /** A note's live part names state inside the app process that attached it; anything that may outlive it drops it. */
@@ -174,6 +198,7 @@ const LegacyBrowserComment = Persistence.struct({
   }),
   comment: Schema.String,
 })
+
 export const LegacyBrowserNote = LegacyBrowserComment.pipe(
   Schema.decodeTo(Schema.toType(NoteComment), {
     decode: SchemaGetter.transform(legacyBrowserNote),
@@ -184,6 +209,7 @@ export const LegacyBrowserNote = LegacyBrowserComment.pipe(
 // The subject those builds sent for an element whose ref no longer applies.
 function legacyBrowserNote(item: typeof LegacyBrowserComment.Type): NoteComment {
   const element = item.element
+
   const details = [
     element.role ? `role ${element.role}` : undefined,
     element.name ? `accessible name ${JSON.stringify(element.name)}` : undefined,
@@ -192,6 +218,7 @@ function legacyBrowserNote(item: typeof LegacyBrowserComment.Type): NoteComment 
       ? `selector ${JSON.stringify(element.selector)}${element.selector.includes(" >>> ") ? ' (">>>" enters a shadow root)' : ""}`
       : undefined,
   ].filter((detail) => detail !== undefined)
+
   return {
     type: "note",
     origin: "browser",
@@ -206,10 +233,13 @@ function legacyBrowserNote(item: typeof LegacyBrowserComment.Type): NoteComment 
 export function contextItemKey(item: ContextItem) {
   if (item.type === "note") return `note:${item.origin}:c=${item.commentID}`
   const key = `${item.type}:${item.path}:${item.selection?.startLine}:${item.selection?.endLine}`
+
   if (item.commentID) return `${key}:c=${item.commentID}`
   const comment = item.comment?.trim()
+
   if (!comment) return key
   const digest = checksum(comment) ?? comment
+
   return `${key}:c=${digest.slice(0, 8)}`
 }
 
@@ -219,6 +249,7 @@ const FileContextEntry = Schema.Struct({ ...FileContextItem.fields, key: Persist
     encode: SchemaGetter.transform((item) => item),
   }),
 )
+
 const NoteContextEntry = Schema.Struct({
   ...NoteContextItem.fields,
   key: Persistence.optional(Schema.String),
@@ -229,6 +260,7 @@ const NoteContextEntry = Schema.Struct({
     encode: SchemaGetter.transform((item) => item),
   }),
 )
+
 const LegacyBrowserContextEntry = Schema.Struct({
   ...LegacyBrowserComment.fields,
   commentID: Schema.String,
@@ -237,11 +269,13 @@ const LegacyBrowserContextEntry = Schema.Struct({
   Schema.decodeTo(Persistence.struct({ ...NoteContextItem.fields, key: Schema.String }).pipe(Schema.toType), {
     decode: SchemaGetter.transform((item) => {
       const note = { ...legacyBrowserNote(item), commentID: item.commentID }
+
       return { ...note, key: contextItemKey(note) }
     }),
     encode: SchemaGetter.forbidden(() => "Legacy browser comments are read-only"),
   }),
 )
+
 const ContextEntry = Schema.Union([FileContextEntry, NoteContextEntry, LegacyBrowserContextEntry])
 
 export const DEFAULT_PROMPT: Prompt = [{ type: "text", content: "", start: 0, end: 0 }]
@@ -276,6 +310,7 @@ export const ComposerStore = Persistence.struct({
   ),
   context: Persistence.struct({ items: Persistence.array(ContextEntry) }),
 })
+
 export type ComposerStore = typeof ComposerStore.Type
 
 export const LineComment = Persistence.struct({
@@ -285,11 +320,13 @@ export const LineComment = Persistence.struct({
   comment: Schema.String,
   time: Schema.Number,
 })
+
 export type LineComment = typeof LineComment.Type
 
 export const CommentStore = Persistence.struct({
   comments: Schema.Record(Schema.String, Schema.mutableKey(Persistence.array(LineComment))),
 })
+
 export type CommentStore = typeof CommentStore.Type
 
 export const PromptHistoryComment = Persistence.struct({
@@ -301,6 +338,7 @@ export const PromptHistoryComment = Persistence.struct({
   origin: Persistence.optional(Schema.Literals(["review", "file"])),
   preview: Persistence.optional(Schema.String),
 })
+
 export type PromptHistoryComment = typeof PromptHistoryComment.Type
 
 // History entries require a prompt array; only its individual parts recover.
@@ -310,13 +348,16 @@ const HistoryPrompt = Schema.Array(Persistence.fallback(Schema.UndefinedOr(Conte
     encode: SchemaGetter.transform((parts) => parts),
   }),
 )
+
 const HistoryEntry = Schema.Struct({ prompt: HistoryPrompt, comments: Persistence.array(PromptHistoryComment) })
+
 export const PromptHistoryEntry = Schema.Union([HistoryEntry, HistoryPrompt]).pipe(
   Schema.decodeTo(Schema.toType(HistoryEntry), {
     decode: SchemaGetter.transform((entry) => ("prompt" in entry ? entry : { prompt: entry, comments: [] })),
     encode: SchemaGetter.transform((entry) => entry),
   }),
 )
+
 export type PromptHistoryEntry = typeof PromptHistoryEntry.Type
 
 export const PromptHistoryState = Persistence.struct({ entries: Persistence.array(PromptHistoryEntry) })

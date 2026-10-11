@@ -3,6 +3,7 @@ import { Effect } from "effect"
 import os from "os"
 import path from "path"
 import { ShellParse } from "@opencode/core/shell/parse"
+import { shellParserWasm } from "../src/shell/parser-wasm.workerd"
 
 describe("ShellParse", () => {
   test("splits bash commands and derives reusable prefixes", async () => {
@@ -15,6 +16,35 @@ describe("ShellParse", () => {
         { resource: "npm run test -- --watch", save: "npm run test *" },
       ],
       directories: [],
+    })
+  })
+
+  test("defaults to portable scanning when parser wasm assets are empty", async () => {
+    const result = await Effect.runPromise(
+      ShellParse.scan("git status && npm run test -- --watch", "/bin/bash", "/workspace", {
+        wasm: shellParserWasm,
+      }),
+    )
+    expect(result).toEqual({
+      commands: [
+        { resource: "git status", save: "git status *" },
+        { resource: "npm run test -- --watch", save: "npm run test *" },
+      ],
+      directories: [],
+    })
+    const malformed = await Effect.runPromiseExit(
+      ShellParse.scan('echo "', "/bin/bash", "/workspace", { wasm: shellParserWasm }),
+    )
+    expect(malformed).toMatchObject({
+      _tag: "Failure",
+      cause: {
+        reasons: [
+          {
+            _tag: "Fail",
+            error: { message: expect.stringContaining("Portable shell scanner cannot analyze command") },
+          },
+        ],
+      },
     })
   })
 

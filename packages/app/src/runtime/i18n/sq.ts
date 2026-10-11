@@ -286,9 +286,6 @@ export const dict = {
   "dialog.server.add.passwordPlaceholder": "fjalëkalimin",
   "dialog.server.edit.title": "Redakto serverin",
   "dialog.server.menu.edit": "Redakto",
-  "dialog.server.menu.default": "Cakto si parazgjedhje",
-  "dialog.server.menu.defaultRemove": "Hiq parazgjedhjen",
-  "dialog.server.status.default": "E paracaktuar",
   "dialog.project.edit.title": "Redakto projektin",
   "dialog.project.edit.icon": "Ikona",
   "dialog.project.edit.icon.alt": "Ikona e projektit",
@@ -296,10 +293,6 @@ export const dict = {
   "dialog.project.edit.color.select": "Zgjidhni ngjyrën {{color}}",
   "dialog.project.edit.worktree.startup": "Skript i nisjes së hapësirës së punës",
   "dialog.project.edit.worktree.startup.placeholder": "p.sh. bun install",
-  "dialog.releaseNotes.action.getStarted": "Filloni",
-  "dialog.releaseNotes.action.next": "Tjetra",
-  "dialog.releaseNotes.action.hideFuture": "Mos i shfaq këto në të ardhmen",
-  "dialog.releaseNotes.media.alt": "Pamja paraprake e publikimit",
   "toast.permissions.autoaccept.on.title": "Auto-pranimi i lejeve",
   "toast.permissions.autoaccept.on.description": "Kërkesat për leje do të miratohen automatikisht",
   "toast.permissions.autoaccept.off.title": "Ndaloi pranimin automatik të lejeve",
@@ -714,7 +707,6 @@ export const dict = {
   "session.view.select": "Pamja e seancës",
   "session.background.moveRunning": "Kaloni në sfond",
   "session.timeline.working": "Duke punuar",
-  "session.review.wrapLines": "Mbështill rreshtat",
   "session.websearch.title": "Kërkimi në ueb i palëve të treta",
   "session.websearch.description": "Zgjidhni agjentët e ofruesit të kërkimit që përdorin për të kërkuar në ueb",
   "session.websearch.provider": "Ofruesi i kërkimit",
@@ -774,8 +766,6 @@ export const dict = {
   "settings.timeline.category.subagents": "Nënagjentë",
   "settings.timeline.category.notices": "Njoftimet",
   "settings.timeline.category.tools": "Mjete të tjera",
-  "settings.general.row.mobileDiffWrap.description":
-    "Mbështillni linjat e gjata në diferenca celulare në vend që të lëvizni horizontalisht",
   "provider.connect.error.unsupportedFields": "Ky formular vërtetimi përmban fusha të pambështetura",
   "settings.about.writtenByNames": "Shkruar nga {{names}}",
   "settings.about.illustratedByNames": "Ilustruar nga {{names}}",
@@ -789,7 +779,6 @@ export const dict = {
   "server.connect.address.invalid": "Fut një adresë të vlefshme serveri HTTP ose HTTPS.",
   "server.connect.failed":
     "Nuk mund të lidhej. Kontrolloni adresën dhe fjalëkalimin e serverit, më pas provoni përsëri.",
-  "server.connect.pair.description": "Ekzekutoni këtë komandë në kompjuterin tuaj për të marrë detajet e lidhjes suaj.",
   "server.connect.scan": "Skanoni kodin QR",
   "server.connect.scan.description": "Drejtoje kamerën drejt kodit QR të treguar nga opencode pair.",
   "server.connect.scan.invalid": "Ky nuk është një kod çiftimi OpenCode. Skanoni kodin e treguar nga opencode pair.",
@@ -797,7 +786,6 @@ export const dict = {
   "server.connect.camera.starting": "Hapja e kamerës…",
   "server.connect.mixedContent":
     "Nuk mund të lidhej me këtë server HTTP nga një faqe HTTPS. Në vend të kësaj, përdorni një adresë serveri HTTPS.",
-  "server.connect.camera.insecure": "Skanimi QR kërkon hapjen e kësaj faqeje mbi HTTPS ose në localhost.",
   "server.connect.camera.unavailable":
     "Asnjë kamerë nuk disponohet për këtë shfletues. Futni manualisht detajet e lidhjes suaj.",
   "server.connect.camera.error":

@@ -25,4 +25,8 @@ export default {
   "dialog.ready.title": "Έτοιμη ενημέρωση",
   "dialog.restart": "Επανεκκίνηση",
   "dialog.later": "Αργότερα",
+  "releaseNotes.action.getStarted": "Ξεκινήστε",
+  "releaseNotes.action.next": "Επόμενο",
+  "releaseNotes.action.hideFuture": "Να μην εμφανίζονται αυτά στο μέλλον",
+  "releaseNotes.media.alt": "Προεπισκόπηση έκδοσης",
 }

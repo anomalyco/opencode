@@ -29,7 +29,10 @@ export function isSshConnecting(stage: SshItem["stage"]) {
 /** Another window answering the challenge reads as connecting here, not as a prompt of its own. */
 export function sshServerState(item: SshItem): ServerState {
   if (isSshConnecting(item.stage) || item.authenticatingElsewhere) return "starting"
+
   if (item.stage === "authentication") return "auth"
+
   if (item.stage === "ready" || item.stage === "failed" || item.stage === "incompatible") return item.stage
+
   return "stopped"
 }

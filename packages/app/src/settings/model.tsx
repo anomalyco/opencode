@@ -1,6 +1,6 @@
-import { reconcile, unwrap } from "solid-js/store"
+import { produce, reconcile, unwrap } from "solid-js/store"
 import { createEffect, createMemo } from "solid-js"
-import { Effect, Option, Schema, SchemaGetter } from "effect"
+import { Effect, Option, Predicate, Schema, SchemaGetter } from "effect"
 import { createSimpleContext } from "@opencode/ui/context"
 import { timelinePresets, type TimelineCategory, type TimelineDetail } from "@opencode/session-ui/timeline/detail"
 import { persisted } from "@/runtime/persistence/storage"
@@ -8,25 +8,39 @@ import { Persistence } from "@/runtime/persistence/schema"
 import { ScopedKey, type ServerScope } from "@/runtime/server/scope"
 
 export type Settings = typeof settingsSchema.Type
+
 export type WorkspaceDefaultDestination = Settings["workspaces"]["defaultDestination"]
+
 export type WorkspaceLastUsed = Settings["workspaces"]["lastUsed"][string]
+
 export type TerminalPlacement = Settings["general"]["terminalPlacement"]
+
 export type FollowUpBehavior = Settings["general"]["followUpBehavior"]
+
 export type TabLayout = Settings["appearance"]["tabLayout"]
+
 export type NotificationSettings = Settings["notifications"]
+
 export type SoundSettings = Settings["sounds"]
 
 export const monoDefault = "IBM Plex Mono"
+
 export const sansDefault = "Inter"
+
 export const terminalDefault = "JetBrainsMono Nerd Font Mono"
+
 const monoFallback =
   '"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
+
 const sansFallback = '"Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
+
 const terminalFallback =
   '"JetBrainsMono Nerd Font Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
 
 const monoBase = monoFallback
+
 const sansBase = sansFallback
+
 const terminalBase = terminalFallback
 
 function input(font: string | undefined) {
@@ -35,12 +49,15 @@ function input(font: string | undefined) {
 
 function family(font: string) {
   if (/^[\w-]+$/.test(font)) return font
+
   return `"${font.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`
 }
 
 function stack(font: string | undefined, base: string) {
   const value = font?.trim() ?? ""
+
   if (!value) return base
+
   return `${family(value)}, ${base}`
 }
 
@@ -69,14 +86,18 @@ export function terminalFontFamily(font: string | undefined) {
 }
 
 const placementSchema = Schema.Literals(["separate", "grouped", "hidden"])
+
 const detailsSchema = Schema.Literals(["collapsed", "expanded"])
+
 const activitySchema = Persistence.struct({ placement: placementSchema, details: detailsSchema })
+
 const placementOnlySchema = Persistence.struct({ placement: placementSchema })
 
 const generalSchema = Persistence.struct({
   // Retired preferences without readers; kept so stored values still decode and round-trip.
   autoSave: Persistence.optional(Schema.Boolean),
-  releaseNotes: Schema.Boolean,
+  // Owned by the updater extension, which copies it out once; kept so settings rewrites cannot drop it first.
+  releaseNotes: Persistence.optional(Schema.Boolean),
   showFileTree: Schema.Boolean,
   showNavigation: Persistence.optional(Schema.Boolean),
   showSearch: Persistence.optional(Schema.Boolean),
@@ -91,7 +112,8 @@ const generalSchema = Persistence.struct({
   }),
   showCustomAgents: Schema.Boolean,
   mobileTitlebarPosition: Schema.Literals(["top", "bottom"]),
-  mobileDiffWrap: Schema.Boolean,
+  // Owned by the review extension, which copies it out once; kept so settings rewrites cannot drop it first.
+  mobileDiffWrap: Persistence.optional(Schema.Boolean),
   terminalPlacement: Schema.Literals(["side", "bottom"]),
   followUpBehavior: Schema.Literals(["queue", "steer"]),
 })
@@ -132,7 +154,7 @@ const soundsSchema = Persistence.struct({
 
 export const settingsSchema = Persistence.struct({
   general: generalSchema,
-  // Owned by the summary extension, which copies it out once; kept so settings rewrites cannot drop it first.
+  // Owned by the details extension, which copies it out once; kept so settings rewrites cannot drop it first.
   sessionSummary: Schema.optional(
     Persistence.struct({ projectExpanded: Schema.Boolean, serverExpanded: Schema.Boolean }),
   ),
@@ -147,7 +169,7 @@ export const settingsSchema = Persistence.struct({
 function storedTimelineCategory(category: TimelineCategory) {
   return Persistence.optional(
     Schema.Union([
-      Schema.Struct({
+      Persistence.legacy({
         placement: Persistence.optional(placementSchema),
         details: Persistence.optional(detailsSchema),
       }),
@@ -155,7 +177,8 @@ function storedTimelineCategory(category: TimelineCategory) {
     ]).pipe(
       Schema.decode({
         decode: SchemaGetter.transform((value) => {
-          if (typeof value !== "string") return value
+          if (!Predicate.isString(value)) return value
+
           return {
             placement:
               value === "hidden"
@@ -181,6 +204,7 @@ function storedTimelineCategory(category: TimelineCategory) {
 function legacyTimelineActivity(value: boolean | "hidden" | "compact" | "full" | null | undefined) {
   if (value === undefined || value === null) return
   const expanded = value === true || value === "full"
+
   return {
     placement: value === "hidden" ? "hidden" : expanded ? "separate" : "grouped",
     details: expanded ? "expanded" : "collapsed",
@@ -189,13 +213,13 @@ function legacyTimelineActivity(value: boolean | "hidden" | "compact" | "full" |
 
 export const settingsPersistence = Persistence.migrate(
   settingsSchema,
-  Schema.Struct({
+  Persistence.legacy({
     general: Persistence.optional(
-      Schema.Struct({
+      Persistence.legacy({
         // Keep invalid explicit values distinct from absent values so legacy preferences cannot replace them.
         timelineDetail: Schema.optional(
           Schema.NullOr(
-            Schema.Struct({
+            Persistence.legacy({
               shell: storedTimelineCategory("shell"),
               edit: storedTimelineCategory("edit"),
               thinking: storedTimelineCategory("thinking"),
@@ -217,7 +241,9 @@ export const settingsPersistence = Persistence.migrate(
     Schema.decode({
       decode: SchemaGetter.transform((value) => {
         const general = value.general
+
         if (!general || general.timelineDetail !== undefined) return value
+
         return {
           ...value,
           general: {
@@ -239,12 +265,10 @@ export const settingsPersistence = Persistence.migrate(
 
 export const defaultSettings: Settings = {
   general: {
-    releaseNotes: true,
     showFileTree: false,
     timelineDetail: { ...timelinePresets[2].value },
     showCustomAgents: false,
     mobileTitlebarPosition: "top",
-    mobileDiffWrap: true,
     terminalPlacement: "side",
     followUpBehavior: "steer",
   },
@@ -273,10 +297,12 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
   init: () => {
     const [store, setStore, , ready] = persisted({ key: "settings.v3" }, settingsPersistence, defaultSettings)
     const showFileTree = withFallback(() => store.general?.showFileTree, defaultSettings.general.showFileTree)
+
     const showCustomAgents = withFallback(
       () => store.general?.showCustomAgents,
       defaultSettings.general.showCustomAgents,
     )
+
     createEffect(() => {
       if (typeof document === "undefined") return
       const root = document.documentElement
@@ -294,10 +320,6 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         return store
       },
       general: {
-        releaseNotes: withFallback(() => store.general?.releaseNotes, defaultSettings.general.releaseNotes),
-        setReleaseNotes(value: boolean) {
-          setStore("general", "releaseNotes", value)
-        },
         showFileTree,
         setShowFileTree(value: boolean) {
           setStore("general", "showFileTree", value)
@@ -316,10 +338,6 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         ),
         setMobileTitlebarPosition(value: "top" | "bottom") {
           setStore("general", "mobileTitlebarPosition", value)
-        },
-        mobileDiffWrap: withFallback(() => store.general?.mobileDiffWrap, defaultSettings.general.mobileDiffWrap),
-        setMobileDiffWrap(value: boolean) {
-          setStore("general", "mobileDiffWrap", value)
         },
         terminalPlacement: withFallback(
           () => store.general?.terminalPlacement,
@@ -365,12 +383,13 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
           setStore("keybinds", action, keybind)
         },
         reset(action: string) {
-          setStore("keybinds", (current) => {
-            if (!Object.prototype.hasOwnProperty.call(current, action)) return current
-            const next = { ...current }
-            delete next[action]
-            return next
-          })
+          // A returned object would merge into the stored one, keeping the key; delete it on the store itself.
+          setStore(
+            "keybinds",
+            produce((draft) => {
+              delete draft[action]
+            }),
+          )
         },
         resetAll() {
           setStore("keybinds", reconcile({}))

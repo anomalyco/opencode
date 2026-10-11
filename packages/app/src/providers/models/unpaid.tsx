@@ -13,7 +13,9 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { ModelTooltip } from "./tooltip"
 
 type ModelState = ModelSelection
+
 const featuredProviders = ["opencode-go", "opencode", "openai", "anthropic", "google", "github-copilot"]
+
 const displayModelName = (name: string) => name.replace(/\s+(?:\(free\)|free)$/i, "")
 
 export const DialogSelectModelUnpaid: Component<{ model?: ModelState }> = (props) => {
@@ -25,14 +27,19 @@ export const DialogSelectModelUnpaid: Component<{ model?: ModelState }> = (props
   const integrations = useIntegrations(directory)
   const language = useLanguage()
   const modelKey = (item: ReturnType<ModelState["list"]>[number]) => `${item.provider.id}:${item.id}`
+
   const currentKey = createMemo(() => {
     const c = model.current()
+
     return c ? `${c.provider.id}:${c.id}` : undefined
   })
+
   const isFree = (item: ReturnType<ModelState["list"]>[number]) =>
     item.provider.id === "opencode" && (!item.cost || item.cost.input === 0)
+
   const providerName = (provider: { id: string; name: string }) =>
     provider.id === "opencode" ? language.t("provider.connect.opencode.name") : provider.name
+
   const freeModels = createMemo(() => model.list().filter(isFree))
 
   const openProviders = (provider?: string) => {
@@ -54,15 +61,20 @@ export const DialogSelectModelUnpaid: Component<{ model?: ModelState }> = (props
   onMount(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return
+
       if (!listEl) return
       const buttons = Array.from(listEl.querySelectorAll<HTMLButtonElement>("button"))
+
       if (buttons.length === 0) return
       const index = buttons.indexOf(document.activeElement as HTMLButtonElement)
+
       const next =
         index < 0 ? (e.key === "ArrowDown" ? 0 : buttons.length - 1) : index + (e.key === "ArrowDown" ? 1 : -1)
+
       buttons[(next + buttons.length) % buttons.length]?.focus()
       e.preventDefault()
     }
+
     document.addEventListener("keydown", handleKeyDown)
     onCleanup(() => document.removeEventListener("keydown", handleKeyDown))
   })

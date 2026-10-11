@@ -10,4 +10,6 @@ export default {
   "git.description": "Fylgstu með, skoðaðu og afturkallaðu breytingar á þessu verkefni",
   loadingChanges: "Hleður breytingum…",
   noChanges: "Engar breytingar",
+  "settings.wrapLines.title": "Brjóta línur",
+  "settings.wrapLines.description": "Vefjið langar línur inn í farsímadiffur í stað þess að fletta lárétt",
 }

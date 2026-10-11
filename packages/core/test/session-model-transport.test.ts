@@ -10,7 +10,7 @@ import { SessionModelTransport } from "@opencode/core/session/model-transport"
 import { Session } from "@opencode/schema/session"
 import { Cause, Deferred, Effect, Fiber, Metric, Queue, Stream } from "effect"
 import { TestClock } from "effect/testing"
-import { Headers } from "effect/unstable/http"
+import { Headers } from "effect/http"
 
 const session = Session.ID.make("ses_transport")
 const otherSession = Session.ID.make("ses_transport_other")
@@ -630,6 +630,36 @@ describe("SessionModelTransport", () => {
           failure: { reason: { _tag: "Transport", code: "idle-timeout", delivery: "ambiguous" } },
         })
         expect(closed).toBe(1)
+      }),
+    )
+  })
+
+  test("disables the idle timeout when chunkTimeout is false", async () => {
+    const started = Deferred.makeUnsafe<void>()
+    const messages = queue<string | Uint8Array, AIError>()
+    const connector: WebSocketConnector = {
+      open: () =>
+        Effect.succeed({
+          sendText: () => Deferred.succeed(started, undefined),
+          messages: Stream.fromQueue(messages),
+          close: Queue.shutdown(messages),
+        }),
+    }
+
+    await runWithTestClock(
+      connector,
+      Effect.gen(function* () {
+        const transport = yield* SessionModelTransport.Service
+        const running = yield* collect(transport.bind(session, undefined, false), exchange("patient")).pipe(
+          Effect.forkChild({ startImmediately: true }),
+        )
+        yield* Deferred.await(started)
+        yield* Effect.yieldNow
+
+        yield* TestClock.adjust("2 hours")
+        yield* Queue.offer(messages, "completed:patient")
+
+        expect(yield* Fiber.join(running)).toEqual(["completed:patient"])
       }),
     )
   })

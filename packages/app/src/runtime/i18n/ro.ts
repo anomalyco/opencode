@@ -285,9 +285,6 @@ export const dict = {
   "dialog.server.add.passwordPlaceholder": "parolă",
   "dialog.server.edit.title": "Editează server",
   "dialog.server.menu.edit": "Editează",
-  "dialog.server.menu.default": "Setează ca implicit",
-  "dialog.server.menu.defaultRemove": "Elimină implicitul",
-  "dialog.server.status.default": "Implicit",
   "dialog.project.edit.title": "Editează proiectul",
   "dialog.project.edit.icon": "Pictogramă",
   "dialog.project.edit.icon.alt": "Pictograma proiectului",
@@ -295,10 +292,6 @@ export const dict = {
   "dialog.project.edit.color.select": "Selectează culoarea {{color}}",
   "dialog.project.edit.worktree.startup": "Script de pornire workspace",
   "dialog.project.edit.worktree.startup.placeholder": "ex: bun install",
-  "dialog.releaseNotes.action.getStarted": "Începe",
-  "dialog.releaseNotes.action.next": "Următorul",
-  "dialog.releaseNotes.action.hideFuture": "Nu mai arăta acestea pe viitor",
-  "dialog.releaseNotes.media.alt": "Previzualizare lansare",
   "toast.permissions.autoaccept.on.title": "Permisiuni acceptate automat",
   "toast.permissions.autoaccept.on.description": "Solicitările de permisiune vor fi aprobate automat",
   "toast.permissions.autoaccept.off.title": "Oprire acceptare automată permisiuni",
@@ -720,7 +713,6 @@ export const dict = {
   "session.view.select": "Vizualizare sesiune",
   "session.background.moveRunning": "Mutați în fundal",
   "session.timeline.working": "De lucru",
-  "session.review.wrapLines": "Încadrează liniile",
   "session.websearch.title": "Căutare web terță parte",
   "session.websearch.description": "Selectați furnizorul de căutare pe care agenții îl folosesc pentru a căuta pe web",
   "session.websearch.provider": "Furnizor de căutare",
@@ -780,8 +772,6 @@ export const dict = {
   "settings.timeline.category.subagents": "Subagenți",
   "settings.timeline.category.notices": "Notificări",
   "settings.timeline.category.tools": "Alte instrumente",
-  "settings.general.row.mobileDiffWrap.description":
-    "Înfășurați linii lungi în diferențele mobile în loc să derulați pe orizontală",
   "session.background.shell.few": "{{count}} shell-uri",
   "session.background.subagent.few": "{{count}} subagenți",
   "settings.about.otherContributor.few": "{{count}} alți colaboratori",
@@ -797,7 +787,6 @@ export const dict = {
   "server.connect.button": "Conectați",
   "server.connect.address.invalid": "Introduceți o adresă validă de server HTTP sau HTTPS.",
   "server.connect.failed": "Nu s-a putut conecta. Verificați adresa serverului și parola, apoi încercați din nou.",
-  "server.connect.pair.description": "Rulați această comandă pe computer pentru a obține detaliile conexiunii.",
   "server.connect.scan": "Scanează codul QR",
   "server.connect.scan.description": "Îndreptați camera către codul QR afișat de opencode pair.",
   "server.connect.scan.invalid": "Acesta nu este un cod de asociere OpenCode. Scanați codul afișat de opencode pair.",
@@ -805,7 +794,6 @@ export const dict = {
   "server.connect.camera.starting": "Deschiderea camerei…",
   "server.connect.mixedContent":
     "Nu s-a putut conecta la acest server HTTP de pe o pagină HTTPS. Utilizați în schimb o adresă de server HTTPS.",
-  "server.connect.camera.insecure": "Scanarea QR necesită deschiderea acestei pagini prin HTTPS sau pe localhost.",
   "server.connect.camera.unavailable":
     "Nicio cameră nu este disponibilă pentru acest browser. Introduceți manual detaliile conexiunii.",
   "server.connect.camera.error":

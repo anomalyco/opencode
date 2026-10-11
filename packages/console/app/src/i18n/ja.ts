@@ -3,6 +3,10 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
+  "go.referral.ended.label": "警告",
+  "go.referral.ended":
+    "紹介プログラムは終了しました。紹介リンクを使っても、あなたや共有した人にクレジットは付与されません。",
+  "go.graph.bonus": "利用枠{{count}}倍",
   "nav.github": "GitHub",
   "nav.docs": "ドキュメント",
   "nav.changelog": "変更履歴",
@@ -58,6 +62,7 @@ export const dict = {
   "common.cancel": "キャンセル",
   "common.creating": "作成中...",
   "common.create": "作成",
+  "common.contactUs": "お問い合わせ",
 
   "common.videoUnsupported": "お使いのブラウザは video タグをサポートしていません。",
   "common.figure": "図 {{n}}.",
@@ -224,6 +229,9 @@ export const dict = {
   "zen.faq.q8": "他のコーディングエージェントでもZenを使えますか？",
   "zen.faq.a8":
     "ZenはOpenCodeとの相性が良いですが、どのエージェントでもZenを利用できます。お使いのコーディングエージェントのセットアップ手順に従ってください。",
+  "zen.faq.q9": "返金を受けられますか？",
+  "zen.faq.a9":
+    "請求から14日以内で、その購入分のクレジットを一切使用していない場合、返金の対象となる可能性があります。返金を希望する場合は、{{contact}}ください。",
 
   "zen.cta.start": "Zenをはじめる",
   "zen.pricing.title": "$20の従量課金制残高を追加",
@@ -252,11 +260,12 @@ export const dict = {
     "すべてのZenモデルは米国でホストされています。プロバイダーはゼロ保持ポリシーに従い、モデルのトレーニングにデータを使用しません（",
   "zen.privacy.exceptionsLink": "以下の例外",
 
+  "go.promo.step5": "新モデル Step 5 Preview Free を期間限定で無料提供中です。",
   "go.title": "OpenCode Go | すべての人のための低価格なコーディングモデル",
-  "go.banner.text": "DeepSeek V4 Flashの利用上限が期間限定で2倍に",
   "go.meta.description":
     "Goは月額$10で、主要なコーディングモデルへのゆとりある利用上限と安定したアクセスを提供します。",
   "go.hero.title": "すべての人のための低価格なコーディングモデル",
+  "go.hero.tagline": "どのエージェントでも利用できます。必要に応じてクレジットをチャージ。いつでもキャンセル可能。",
   "go.hero.body":
     "Goは、世界中のプログラマーにエージェント型コーディングをもたらします。最も高性能なオープンソースモデルへの十分な制限と安定したアクセスを提供し、コストや可用性を気にすることなく強力なエージェントで構築できます。",
 
@@ -264,12 +273,34 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "Goを購読する",
   "go.cta.price": "$10/月",
+  "go.plans.month": "/月",
+  "go.plans.plus.cta": "Go Plus に登録",
+  "go.plans.plus.description": "Go Plus は月額$40で、より高い利用枠を提供します。",
+  "go.plans.go.feature1": "厳選された手頃なモデル",
+  "go.plans.go.feature2": "エージェント型コーディングで検証済み",
+  "go.plans.go.feature3": "十分な利用枠と安定したアクセス",
+  "go.plans.plus.feature1": "Go のすべての特典を含む",
+  "go.plans.plus.feature2": "より高い利用枠で、長時間のコーディングに集中",
+  "go.plans.plus.feature3": "大規模で高度なプロジェクト向け",
+  "go.plans.limits": "利用枠",
+  "go.plans.description": "モデル別の5時間あたりの推定リクエスト数と月間利用枠",
+  "go.plans.legend": "プラン",
   "go.pricing.body":
     "どのエージェントでも使えます。月額$10。必要に応じてクレジットを追加。いつでもキャンセルできます。",
   "go.graph.free": "無料",
   "go.graph.freePill": "Big Pickleと無料モデル",
   "go.graph.go": "Go",
   "go.graph.label": "5時間あたりのリクエスト数",
+  "go.graph.period": "利用枠",
+  "go.graph.model": "モデル",
+  "go.graph.requests": "推定リクエスト数 / 5時間",
+  "go.graph.allowance": "月間利用枠",
+  "go.graph.new": "新着",
+  "go.graph.scale": "リクエスト数は非線形目盛りで表示",
+  "go.graph.showAll": "全{{count}}モデルを表示",
+  "go.graph.showLess": "折りたたむ",
+  "go.graph.limitedRegions": "一部の地域に限定",
+  "go.graph.limitedTime": "期間限定",
   "go.graph.usageLimits": "利用制限",
   "go.graph.aria": "5時間あたりのリクエスト数: {{free}} 対 {{go}}",
 
@@ -344,11 +375,14 @@ export const dict = {
   "go.faq.a5.used": "使用あり",
   "go.faq.a5.notUsed": "使用なし",
   "go.faq.a5.noAgreement": "契約なし",
+  "go.faq.a5.notZdr": "ZDRではない",
   "go.faq.a5.grokRetention":
     "ZDRでは、保存データに依存する重要なAPI機能（ステートフルなResponses API、Files and Collections、Batch APIなど）が無効になります。",
   "go.faq.a5.gptRetention": "不正使用監視ログはすべてのAPI機能の使用時に生成され、最大30日間保持されます。",
+  "go.faq.a5.museRetention":
+    "将来のMetaモデルのトレーニングにプロンプトと生成結果を使用する許可と引き換えに、トークン料金が大幅に割引されます。",
   "go.faq.a5.learnMore": "詳しく見る",
-  "go.faq.a5.deepseekRetention": "ZDR契約は毎月更新されます。現在の契約は2026年8月31日まで有効です。",
+  "go.faq.a5.deepseekRetention": "ZDR契約は毎月更新されます。現在の契約は2026年9月30日まで有効です。",
   "go.faq.a5.beforeExceptions":
     "Goのモデルは米国でホストされています。プロバイダーはゼロ保持ポリシーに従い、モデルのトレーニングにデータを使用しません（",
   "go.faq.a5.exceptionsLink": "以下の例外",
@@ -362,7 +396,10 @@ export const dict = {
 
   "go.faq.q9": "無料モデルとGoの違いは何ですか？",
   "go.faq.a9":
-    "無料モデルにはBig Pickleと、その時点で利用可能なプロモーションモデルが含まれ、1日200リクエストの制限があります。Goでは厳選されたモデルラインナップを利用でき、ローリングウィンドウ（5時間、週間、月間）全体でより高いリクエスト制限が適用されます。これは概算で5時間あたり$12、週間$30、月間$60相当です（実際のリクエスト数はモデルと使用状況により異なります）。",
+    "無料モデルにはBig Pickleと、その時点で利用可能なプロモーションモデルが含まれ、1日200リクエストの制限があります。Goでは厳選されたモデルラインナップを利用でき、ローリングウィンドウで月間利用枠の20%を5時間ごと、50%を週ごと、100%を月ごとの上限として適用します。モデル別の利用枠は異なる場合があります（実際のリクエスト数はモデルと使用状況により異なります）。",
+  "go.faq.q10": "返金を受けられますか？",
+  "go.faq.a10":
+    "請求から14日以内で、その請求期間中にGoの利用枠を一切使用していない場合、返金の対象となる可能性があります。返金を希望する場合は、{{contact}}ください。",
 
   "zen.api.error.rateLimitExceeded": "レート制限を超えました。後でもう一度お試しください。",
   "zen.api.error.modelNotSupported": "モデル {{model}} はサポートされていません",
@@ -389,6 +426,9 @@ export const dict = {
   "zen.api.error.modelDisabled": "モデルが無効です",
   "zen.api.error.regionNotAllowed":
     "このモデルの最新バージョンは中国でのみホスト提供されており、利用するには明示的なオプトインが必要です: {{consoleGoUrl}}",
+  "zen.api.error.countryNotAllowed": "このモデルはお住まいの国では利用できません。",
+  "zen.api.error.trainingNotAllowed":
+    "このモデルは品質向上のためのデータを収集します。利用するには明示的な同意が必要です: {{consoleGoUrl}}",
   "zen.api.error.trialEnded":
     "{{model}} の無料プロモーションは終了しました。OpenCode Go を購読するとモデルを引き続き使用できます - {{link}}",
 
@@ -624,7 +664,6 @@ export const dict = {
   "workspace.payments.type.subscription": "サブスクリプション",
   "workspace.payments.view": "表示",
 
-  "workspace.black.loading": "読み込み中...",
   "workspace.black.time.day": "日",
   "workspace.black.time.days": "日",
   "workspace.black.time.hour": "時間",
@@ -634,7 +673,8 @@ export const dict = {
   "workspace.black.time.fewSeconds": "数秒",
   "workspace.black.subscription.title": "サブスクリプション",
   "workspace.black.subscription.message": "あなたは OpenCode Black を月額 ${{plan}} で購読しています。",
-  "workspace.black.subscription.manage": "サブスクリプションの管理",
+  "workspace.black.subscription.ending":
+    "OpenCode Black は現在の請求期間の終了とともに終了し、更新されません。新しいコンソールへ移行いたします。",
   "workspace.black.subscription.rollingUsage": "5時間利用",
   "workspace.black.subscription.weeklyUsage": "週間利用量",
   "workspace.black.subscription.resetsIn": "リセットまで",
@@ -662,15 +702,24 @@ export const dict = {
   "workspace.lite.time.fewSeconds": "数秒",
   "workspace.lite.subscription.message": "あなたは OpenCode Go を購読しています。",
   "workspace.lite.subscription.manage": "サブスクリプションの管理",
-  "workspace.lite.subscription.rollingUsage": "ローリング利用量",
+  "workspace.lite.subscription.rollingUsage": "5時間利用量",
+  "workspace.lite.subscription.rollingQuota": "5時間上限",
   "workspace.lite.subscription.weeklyUsage": "週間利用量",
+  "workspace.lite.subscription.weeklyQuota": "週間上限",
   "workspace.lite.subscription.monthlyUsage": "月間利用量",
+  "workspace.lite.subscription.monthlyQuota": "月間上限",
   "workspace.lite.subscription.resetsIn": "リセットまで",
+  "workspace.lite.subscription.showDetails": "詳細を表示",
+  "workspace.lite.subscription.hideDetails": "詳細を非表示",
+  "workspace.lite.subscription.model": "モデル",
+  "workspace.lite.subscription.contribution": "%",
+  "workspace.lite.subscription.total": "合計",
   "workspace.lite.subscription.useBalance": "利用限度額に達したら利用可能な残高を使用する",
   "workspace.lite.subscription.selectProvider":
     "Go モデルを使用するには、opencode の設定で「OpenCode Go」をプロバイダーとして選択してください。",
   "workspace.lite.providers.title": "プロバイダー",
   "workspace.lite.providers.description": "ルーティングに使用するプロバイダーを管理します。",
+  "workspace.lite.providers.allowTraining": "リクエストデータを学習に使用するモデルを許可",
   "workspace.lite.providers.useChina": "中国でホストされているモデルを有効にする",
   "workspace.lite.black.message":
     "現在 OpenCode Black を購読中、またはウェイティングリストに登録されています。Go に切り替える場合は、先に登録を解除してください。",
@@ -770,6 +819,14 @@ export const dict = {
   "enterprise.form.email.placeholder": "jeff@amazon.com",
   "enterprise.form.phone.label": "電話番号",
   "enterprise.form.phone.placeholder": "+1 234 567 8900",
+  "enterprise.form.inferenceSpend.label": "貴社の現在の月間 AI 推論費用（USD）はどのくらいですか？",
+  "enterprise.form.inferenceSpend.placeholder": "範囲を選択（任意）",
+  "enterprise.form.inferenceSpend.none": "まだ費用は発生していない",
+  "enterprise.form.inferenceSpend.under1k": "$1K 未満",
+  "enterprise.form.inferenceSpend.1kTo10k": "$1K–$10K",
+  "enterprise.form.inferenceSpend.10kTo50k": "$10K–$50K",
+  "enterprise.form.inferenceSpend.50kTo100k": "$50K–$100K",
+  "enterprise.form.inferenceSpend.over100k": "$100K 以上",
   "enterprise.form.message.label": "どのような課題を解決したいですか？",
   "enterprise.form.message.placeholder": "これについて支援が必要です...",
   "enterprise.form.send": "送信",
@@ -778,6 +835,7 @@ export const dict = {
   "enterprise.form.success.submitted": "フォームが正常に送信されました。",
   "enterprise.form.error.allFieldsRequired": "すべての項目は必須です。",
   "enterprise.form.error.invalidEmailFormat": "無効なメール形式です。",
+  "enterprise.form.error.invalidInferenceSpend": "有効な推論費用の範囲を選択してください。",
   "enterprise.form.error.internalServer": "内部サーバーエラー。",
   "enterprise.faq.title": "FAQ",
   "enterprise.faq.q1": "OpenCode Enterpriseとは？",

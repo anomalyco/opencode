@@ -12,6 +12,7 @@ import { SessionSchema } from "../schema.js"
 import { SessionError } from "@opencode/schema/session-error"
 import { Money } from "@opencode/schema/money"
 import { SessionUsage } from "../usage.js"
+import { contentFilterError } from "../to-session-error.js"
 import type { Tool } from "../../tool.js"
 
 type Input = {
@@ -19,7 +20,8 @@ type Input = {
   readonly agent: Agent.ID
   readonly model: Model.Ref
   readonly providerMetadataKey: string
-  readonly snapshot?: Snapshot.ID
+  /** The start snapshot, awaited before `Step.Started` so its capture can overlap the provider request. */
+  readonly pendingSnapshot?: Effect.Effect<Snapshot.ID | undefined>
   readonly started: number
   readonly assistantMessageID: SessionMessage.ID
 }
@@ -98,13 +100,16 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
 
   const startAssistant = Effect.fnUntraced(function* () {
     if (stepStarted) return assistantMessageID
+    const snapshot = input.pendingSnapshot ? yield* input.pendingSnapshot : undefined
+    // Check again after the await, so the check and the mark below never straddle a yield.
+    if (stepStarted) return assistantMessageID
     stepStarted = true
     yield* bus.publish(SessionEvent.Step.Started, {
       sessionID: input.sessionID,
       agent: input.agent,
       model: input.model,
       assistantMessageID,
-      snapshot: input.snapshot,
+      snapshot,
       started: input.started,
     })
     return assistantMessageID
@@ -394,7 +399,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
   })
 
   const failUnsettledTools = Effect.fn("SessionRunner.failUnsettledTools")(
-    (error: SessionError.Error, scope: "hosted" | "all" = "all") => failTools(error, scope),
+    (error: SessionError.Error, scope: "hosted" | "all" | "uncalled" = "all") => failTools(error, scope),
   )
 
   const publish = Effect.fnUntraced(function* (event: LLMEvent) {
@@ -543,15 +548,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
         }
         if (event.reason.normalized === "content-filter") {
           providerFailed = true
-          yield* failAssistant({
-            type: "provider.content-filter",
-            message: [
-              `Provider blocked the response${event.reason.category === undefined ? "" : ` (${event.reason.category})`}`,
-              event.reason.explanation,
-            ]
-              .filter(Boolean)
-              .join(": "),
-          })
+          yield* failAssistant(contentFilterError("Provider blocked the response", event.reason))
           return
         }
         return

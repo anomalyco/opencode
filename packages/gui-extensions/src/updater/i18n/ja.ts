@@ -25,4 +25,8 @@ export default {
   "dialog.ready.title": "アップデートの準備ができました",
   "dialog.restart": "再起動",
   "dialog.later": "後で",
+  "releaseNotes.action.getStarted": "始める",
+  "releaseNotes.action.next": "次へ",
+  "releaseNotes.action.hideFuture": "今後表示しない",
+  "releaseNotes.media.alt": "リリースのプレビュー",
 }

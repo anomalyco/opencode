@@ -298,9 +298,6 @@ export const dict = {
   "dialog.server.add.passwordPlaceholder": "jelszó",
   "dialog.server.edit.title": "Szerver szerkesztése",
   "dialog.server.menu.edit": "Szerkesztés",
-  "dialog.server.menu.default": "Beállítás alapértelmezettként",
-  "dialog.server.menu.defaultRemove": "Alapértelmezés eltávolítása",
-  "dialog.server.status.default": "Alapértelmezett",
   "dialog.project.edit.title": "Projekt szerkesztése",
   "dialog.project.edit.icon": "Ikon",
   "dialog.project.edit.icon.alt": "Projekt ikonra",
@@ -308,10 +305,6 @@ export const dict = {
   "dialog.project.edit.color.select": "Válassza ki a {{color}} színt",
   "dialog.project.edit.worktree.startup": "Munkaterület indító szkriptje",
   "dialog.project.edit.worktree.startup.placeholder": "például zsemle telepítés",
-  "dialog.releaseNotes.action.getStarted": "Kezdje el",
-  "dialog.releaseNotes.action.next": "Következő",
-  "dialog.releaseNotes.action.hideFuture": "Ne mutasd ezeket a jövőben",
-  "dialog.releaseNotes.media.alt": "Kiadás előnézete",
   "toast.permissions.autoaccept.on.title": "Engedélyek automatikus elfogadása",
   "toast.permissions.autoaccept.on.description": "Az engedélykérések automatikusan jóváhagyásra kerülnek",
   "toast.permissions.autoaccept.off.title": "Az engedélyek automatikus elfogadása leállítva",
@@ -723,7 +716,6 @@ export const dict = {
   "session.view.select": "Munkamenet nézet",
   "session.background.moveRunning": "Ugrás a háttérre",
   "session.timeline.working": "Dolgozik",
-  "session.review.wrapLines": "Sorok tördelése",
   "session.websearch.title": "Harmadik fél internetes keresése",
   "session.websearch.description": "Válassza ki a keresési szolgáltató ügynökei által az interneten végzett kereséshez",
   "session.websearch.provider": "Keresőszolgáltató",
@@ -787,8 +779,6 @@ export const dict = {
   "settings.timeline.category.subagents": "Alügynökök",
   "settings.timeline.category.notices": "Megjegyzések",
   "settings.timeline.category.tools": "Egyéb eszközök",
-  "settings.general.row.mobileDiffWrap.description":
-    "Vízszintes görgetés helyett csavarja be a hosszú sorokat mobil diff-be",
   "provider.connect.error.unsupportedFields": "Ez a hitelesítési űrlap nem támogatott mezőket tartalmaz",
   "settings.about.writtenByNames": "Írta: {{names}}",
   "settings.about.illustratedByNames": "Illusztrálta: {{names}}",
@@ -801,8 +791,6 @@ export const dict = {
   "server.connect.button": "Csatlakozás",
   "server.connect.address.invalid": "Adjon meg egy érvényes HTTP vagy HTTPS szervercímet.",
   "server.connect.failed": "Nem sikerült csatlakozni. Ellenőrizze a szerver címét és jelszavát, majd próbálja újra.",
-  "server.connect.pair.description":
-    "Futtassa ezt a parancsot a számítógépén a kapcsolat részleteinek megtekintéséhez.",
   "server.connect.scan": "QR-kód beolvasása",
   "server.connect.scan.description": "Irányítsa kameráját a opencode pair által mutatott QR kódra.",
   "server.connect.scan.invalid": "Ez nem egy OpenCode párosítási kód. Olvassa be a opencode pair által mutatott kódot.",
@@ -810,7 +798,6 @@ export const dict = {
   "server.connect.camera.starting": "Kamera nyitása…",
   "server.connect.mixedContent":
     "Nem sikerült csatlakozni ehhez a HTTP szerverhez egy HTTPS oldalról. Használjon helyette HTTPS szervercímet.",
-  "server.connect.camera.insecure": "A QR beolvasásához ezt az oldalt a HTTPS vagy a localhost oldalon kell megnyitni.",
   "server.connect.camera.unavailable":
     "Ehhez a böngészőhöz nem érhető el kamera. Adja meg manuálisan a kapcsolat adatait.",
   "server.connect.camera.error":

@@ -201,14 +201,20 @@ export const DESKTOP_NATIVE_LOCALE_TAGS: Record<DesktopNativeLocale, string> = {
 export function detectDesktopNativeLocale(languages: readonly string[]): DesktopNativeLocale {
   for (const language of languages) {
     const source = locale(language)
+
     if (!source) continue
+
     if (["no", "nb", "nn"].includes(source.language)) return "no"
+
     const match = DESKTOP_NATIVE_LOCALES.find((candidate) => {
       const target = locale(DESKTOP_NATIVE_LOCALE_TAGS[candidate])
+
       return target?.language === source.language && normalizeScript(target.script) === normalizeScript(source.script)
     })
+
     if (match) return match
   }
+
   return "en"
 }
 
@@ -303,10 +309,13 @@ export const DESKTOP_NATIVE_ENGLISH = {
 } as const
 
 export type DesktopNativeKey = keyof typeof DESKTOP_NATIVE_ENGLISH
+
 export type DesktopNativeMessages = Record<DesktopNativeKey, string>
+
 export type DesktopNativeBundle = { locale: DesktopNativeLocale; messages: DesktopNativeMessages }
 
 export const DESKTOP_NATIVE_KEYS = Object.keys(DESKTOP_NATIVE_ENGLISH) as DesktopNativeKey[]
+
 export const DESKTOP_NATIVE_MAX_PAYLOAD_BYTES = 64 * 1024
 
 export function createDesktopNativeBundle(
@@ -321,26 +330,36 @@ export function createDesktopNativeBundle(
 
 export function parseDesktopNativeBundle(value: unknown): DesktopNativeBundle | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined
+
   try {
     if (new TextEncoder().encode(JSON.stringify(value)).byteLength > DESKTOP_NATIVE_MAX_PAYLOAD_BYTES) return undefined
   } catch {
     return undefined
   }
+
   const bundle = value as { locale?: unknown; messages?: unknown }
+
   if (!DESKTOP_NATIVE_LOCALES.some((locale) => locale === bundle.locale)) return undefined
+
   if (!bundle.messages || typeof bundle.messages !== "object" || Array.isArray(bundle.messages)) return undefined
   const messages = bundle.messages as Record<string, unknown>
   const keys = Object.keys(messages)
+
   if (keys.length !== DESKTOP_NATIVE_KEYS.length) return undefined
+
   if (!DESKTOP_NATIVE_KEYS.every((key) => typeof messages[key] === "string")) return undefined
+
   if (!keys.every((key) => key in DESKTOP_NATIVE_ENGLISH)) return undefined
+
   return bundle as DesktopNativeBundle
 }
 
 export function formatDesktopNativeMessage(message: string, params?: Record<string, string | number>) {
   if (!params) return message
+
   return message.replace(/\{\{([^{}]+)\}\}/g, (match, key: string) => {
     const value = params[key]
+
     return value === undefined ? match : String(value)
   })
 }

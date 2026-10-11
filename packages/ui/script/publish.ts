@@ -9,6 +9,7 @@ import { pack } from "./pack"
 process.chdir(fileURLToPath(new URL("..", import.meta.url)))
 
 const pkg = (await Bun.file("package.json").json()) as { name: string; version: string }
+
 const tarball = `${pkg.name.replace("@", "").replace("/", "-")}-${pkg.version}.tgz`
 
 if ((await $`npm view ${pkg.name}@${pkg.version} version`.nothrow()).exitCode === 0) {

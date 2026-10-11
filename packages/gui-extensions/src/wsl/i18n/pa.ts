@@ -52,8 +52,5 @@ export default {
   "error.healthTimeout": "⁨{{distro}}⁩ دے sidecar دی صحت پڑتال لئی مقرر ویلا ⁨{{timeout}}⁩ms پچھوں مُک گیا",
   "error.commandTimeout": "⁨{{command}}⁩ ⁨{{args}}⁩ لئی مقرر ویلا ⁨{{timeout}}⁩ms پچھوں مُک گیا",
   "error.failedPort": "پورٹ نئیں مل سکی",
-  "server.default": "طے شدہ",
-  "menu.default": "ڈیفالٹ دے طور تے سیٹ کرو",
-  "menu.defaultRemove": "ڈیفالٹ ہٹاؤ",
   "menu.remove": "ہٹا دیں۔",
 }

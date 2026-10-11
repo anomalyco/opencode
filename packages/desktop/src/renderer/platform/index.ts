@@ -1,4 +1,4 @@
-import { ServerConnection, type Platform } from "@opencode/app/desktop"
+import type { Platform } from "@opencode/app/desktop"
 import type { ElectronAPI } from "../api-types"
 import { setPinchZoomEnabled, webviewZoom } from "../window/zoom"
 import { windowFullscreen } from "../window/fullscreen"
@@ -16,6 +16,7 @@ export type DesktopWindowState = {
 
 export function createDesktopPlatform(api: ElectronAPI, windowState: DesktopWindowState): Platform {
   const os = desktopOS()
+
   return {
     platform: "desktop",
     os,
@@ -30,15 +31,8 @@ export function createDesktopPlatform(api: ElectronAPI, windowState: DesktopWind
     notify: createDesktopNotify(api),
     fetch: (input, init) => {
       if (input instanceof Request) return fetch(input)
+
       return fetch(input, init)
-    },
-    getDefaultServer: async () => {
-      const url = await api.getDefaultServerUrl().catch(() => null)
-      if (!url) return null
-      return ServerConnection.Key.make(url)
-    },
-    setDefaultServer: async (url) => {
-      await api.setDefaultServerUrl(url)
     },
     webviewZoom,
     windowFullscreen,
@@ -46,6 +40,7 @@ export function createDesktopPlatform(api: ElectronAPI, windowState: DesktopWind
     setPinchZoomEnabled,
     onDragCancel: (callback) => {
       window.addEventListener(DragCancelEvent, callback)
+
       return () => window.removeEventListener(DragCancelEvent, callback)
     },
     runDesktopMenuAction: createDesktopMenuAction(api),
@@ -58,7 +53,10 @@ export function createDesktopPlatform(api: ElectronAPI, windowState: DesktopWind
 
 function desktopOS() {
   if (navigator.userAgent.includes("Mac")) return "macos"
+
   if (navigator.userAgent.includes("Windows")) return "windows"
+
   if (navigator.userAgent.includes("Linux")) return "linux"
+
   return undefined
 }

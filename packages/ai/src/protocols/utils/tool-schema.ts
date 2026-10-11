@@ -54,9 +54,17 @@ const MODEL_NAMES = [
 ] as const
 
 // Tool arguments are always a JSON object, and most providers reject a tool schema whose root does not
-// declare `type: "object"`, such as `{}` or a bare `properties` map. Effect encodes an empty struct as
-// `anyOf` object or array; every object matches its bare object branch, so that `anyOf` is dropped.
+// declare `type: "object"`, such as `{}` or a bare `properties` map. An object root makes Effect's
+// empty-struct markers redundant: `{ not: { type: "null" } }`, and `anyOf` object or array from older
+// releases. Both are dropped so the root is a plain object schema.
 const objectRoot = (schema: JsonSchema): JsonSchema => {
+  if (
+    (schema.type === undefined || schema.type === "object") &&
+    isRecord(schema.not) &&
+    schema.not.type === "null" &&
+    Object.keys(schema.not).length === 1
+  )
+    return { type: "object", ...Object.fromEntries(Object.entries(schema).filter(([key]) => key !== "not")) }
   if (schema.type !== undefined) return schema
   if (
     Array.isArray(schema.anyOf) &&

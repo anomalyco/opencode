@@ -218,9 +218,6 @@ export const dict = {
   "dialog.server.add.password": "비밀번호 (선택 사항)",
   "dialog.server.edit.title": "서버 편집",
   "dialog.server.menu.edit": "편집",
-  "dialog.server.menu.default": "기본값으로 설정",
-  "dialog.server.menu.defaultRemove": "기본값 제거",
-  "dialog.server.status.default": "기본값",
   "dialog.project.edit.title": "프로젝트 편집",
   "dialog.project.edit.icon": "아이콘",
   "dialog.project.edit.icon.alt": "프로젝트 아이콘",
@@ -447,10 +444,6 @@ export const dict = {
   "workspace.status.dirty": "이 작업 공간에서 병합되지 않은 변경 사항이 감지되었습니다.",
   "workspace.delete.button": "작업 공간 삭제",
   "common.open": "열기",
-  "dialog.releaseNotes.action.getStarted": "시작하기",
-  "dialog.releaseNotes.action.next": "다음",
-  "dialog.releaseNotes.action.hideFuture": "다시 보지 않기",
-  "dialog.releaseNotes.media.alt": "릴리스 미리보기",
   "toast.project.reloadFailed.title": "{{project}} 다시 불러오기 실패",
   "error.server.invalidConfiguration": "잘못된 구성",
   "common.moreCountSuffix": " (외 {{count}}개)",
@@ -728,7 +721,6 @@ export const dict = {
   "session.view.select": "세션 보기",
   "session.background.moveRunning": "배경으로 이동",
   "session.timeline.working": "일하고 있는",
-  "session.review.wrapLines": "줄 바꿈",
   "session.websearch.title": "타사 웹 검색",
   "session.websearch.description": "에이전트가 웹 검색에 사용하는 검색 공급자를 선택하세요.",
   "session.websearch.provider": "검색 공급자",
@@ -786,7 +778,6 @@ export const dict = {
   "settings.timeline.category.subagents": "하위 에이전트",
   "settings.timeline.category.notices": "공지사항",
   "settings.timeline.category.tools": "기타 도구",
-  "settings.general.row.mobileDiffWrap.description": "가로로 스크롤하는 대신 모바일 diff에 긴 줄을 넣습니다.",
 
   "provider.connect.error.unsupportedFields": "이 인증 양식에는 지원되지 않는 필드가 포함되어 있습니다.",
   "settings.about.writtenByNames": "작성자: {{names}}",
@@ -809,7 +800,6 @@ export const dict = {
   "server.connect.button": "연결",
   "server.connect.address.invalid": "유효한 HTTP 또는 HTTPS 서버 주소를 입력하세요.",
   "server.connect.failed": "연결할 수 없습니다. 서버 주소와 비밀번호를 확인한 후 다시 시도하세요.",
-  "server.connect.pair.description": "컴퓨터에서 이 명령어를 실행하여 연결 세부 정보를 확인하세요.",
   "server.connect.scan": "QR 코드 스캔",
   "server.connect.scan.description": "opencode pair에서 표시된 QR 코드를 카메라로 가리키세요.",
   "server.connect.scan.invalid":
@@ -818,7 +808,6 @@ export const dict = {
   "server.connect.camera.starting": "카메라 열기…",
   "server.connect.mixedContent":
     "HTTPS 페이지에서 이 HTTP 서버에 연결할 수 없습니다. 대신 HTTPS 서버 주소를 사용하세요.",
-  "server.connect.camera.insecure": "QR 스캔을 위해서는 HTTPS를 통해 이 페이지를 열거나 로컬호스트에서 열어야 합니다.",
   "server.connect.camera.unavailable":
     "이 브라우저에서 사용할 수 있는 카메라가 없습니다. 연결 세부 정보를 수동으로 입력하세요.",
   "server.connect.camera.error":

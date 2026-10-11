@@ -25,4 +25,8 @@ export default {
   "dialog.ready.title": "আপডেট প্রস্তুত",
   "dialog.restart": "রিস্টার্ট করুন",
   "dialog.later": "পরে",
+  "releaseNotes.action.getStarted": "শুরু করুন",
+  "releaseNotes.action.next": "পরবর্তী",
+  "releaseNotes.action.hideFuture": "ভবিষ্যতে এগুলো দেখাবেন না",
+  "releaseNotes.media.alt": "রিলিজ পূর্বরূপ",
 }

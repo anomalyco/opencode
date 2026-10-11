@@ -55,7 +55,13 @@ const patterns = [
 
 const payloadPatterns = [/request entity too large/i, /payload too large/i, /request too large/i]
 
-const exclusions = [/^(throttling error|service unavailable):/i, /rate limit/i, /too many requests/i]
+const exclusions = [
+  /^(throttling error|service unavailable):/i,
+  /rate limit/i,
+  /too many requests/i,
+  // Cohere reports an output limit above the model maximum as "too many tokens"; compaction cannot fix it.
+  /max[_ ]tokens must be less than/i,
+]
 
 export const isContextOverflow = (message: string) =>
   !exclusions.some((pattern) => pattern.test(message)) &&

@@ -48,8 +48,5 @@ export default {
   "error.healthTimeout": "Sidecar for {{distro}} የጤና ፍተሻ ጊዜው አልፎበታል ከ{{timeout}}ሚሴ በኋላ",
   "error.commandTimeout": "{{command}} {{args}} ጊዜው አልፎበታል ከ{{timeout}}ሚሴ በኋላ",
   "error.failedPort": "ወደብ ማግኘት አልተሳካም",
-  "server.default": "ነባሪ",
-  "menu.default": "ነባሪ አዘጋጅ",
-  "menu.defaultRemove": "ነባሪውን አስወግድ",
   "menu.remove": "አስወግድ",
 }

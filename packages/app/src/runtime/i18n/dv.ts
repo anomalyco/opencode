@@ -292,9 +292,6 @@ export const dict = {
   "dialog.server.add.passwordPlaceholder": "ޕާސްވަރޑް",
   "dialog.server.edit.title": "އެޑިޓް ސަރވަރ",
   "dialog.server.menu.edit": "ބަދަލު ގެނައުން",
-  "dialog.server.menu.default": "ޑިފޯލްޓް ގޮތުގައި ސެޓްކުރުން",
-  "dialog.server.menu.defaultRemove": "ޑިފޯލްޓް ނައްތާލާށެވެ",
-  "dialog.server.status.default": "ޑީފޯލްޓް",
   "dialog.project.edit.title": "އެޑިޓް ޕްރޮޖެކްޓް",
   "dialog.project.edit.icon": "އައިކޮން",
   "dialog.project.edit.icon.alt": "ޕްރޮޖެކްޓް އައިކޮން",
@@ -302,10 +299,6 @@ export const dict = {
   "dialog.project.edit.color.select": "\u2068{{color}}\u2069 ކުލަ ހޮވާށެވެ",
   "dialog.project.edit.worktree.startup": "ވޯކްސްޕޭސް ސްޓާޓްއަޕް ސްކްރިޕްޓް",
   "dialog.project.edit.worktree.startup.placeholder": "މ. bun install އެވެ",
-  "dialog.releaseNotes.action.getStarted": "ފަށާށެވެ",
-  "dialog.releaseNotes.action.next": "ދެން",
-  "dialog.releaseNotes.action.hideFuture": "ކުރިއަށް އޮތްތަނުގައި މިކަންކަން ނުދައްކާށެވެ",
-  "dialog.releaseNotes.media.alt": "ރިލީޒް ޕްރިވިއު",
   "toast.permissions.autoaccept.on.title": "އޮޓޯ އެކްސެޕްޓިންގ ހުއްދަތައް",
   "toast.permissions.autoaccept.on.description": "ހުއްދައަށް އެދޭ ފަރާތްތަކުން އޮޓޮމެޓިކުން ފާސްކުރެވޭނެއެވެ",
   "toast.permissions.autoaccept.off.title": "ހުއްދަތައް އޮޓޯ އެކްސެޕްޓްކުރުން ހުއްޓާލިއެވެ",
@@ -733,7 +726,6 @@ export const dict = {
   "session.view.select": "ސެޝަން ވިއު",
   "session.background.moveRunning": "ބެކްގްރައުންޑަށް ބަދަލުކުރައްވާ",
   "session.timeline.working": "މަސައްކަތް ކުރަމުން",
-  "session.review.wrapLines": "ރޮނގުތައް ވެށުވުން",
   "session.websearch.title": "ތިންވަނަ ފަރާތެއްގެ ވެބް ހޯދުން",
   "session.websearch.description": "އޭޖެންޓްތަކުން ވެބް ހޯދުމަށް ބޭނުންކުރާ ހޯދުމުގެ ޕްރޮވައިޑަރ ހޮވާށެވެ",
   "session.websearch.provider": "ހޯދުމުގެ ޕްރޮވައިޑަރ",
@@ -796,8 +788,6 @@ export const dict = {
   "settings.timeline.category.subagents": "ސަބްއޭޖެންޓްތައް",
   "settings.timeline.category.notices": "ނޯޓިސްތައް",
   "settings.timeline.category.tools": "އެހެން ޓޫލްތައް",
-  "settings.general.row.mobileDiffWrap.description":
-    "މޯބައިލް ޑިފްތަކުގައި އަރުދުކޮށް ސްކްރޯލްކުރުމުގެ ބަދަލުގައި ދިގު ރޮނގުތައް ވެށުވާ",
 
   "provider.connect.error.unsupportedFields": "މި އޮތެންޓިކޭޝަން ފޯމުގައި ސަޕޯޓް ނުކުރާ ފީލްޑްތައް ހުރެއެވެ",
   "settings.about.writtenByNames": "ލިޔުނީ \u2068{{names}}\u2069",
@@ -823,7 +813,6 @@ export const dict = {
   "server.connect.address.invalid": "ސައްހަ HTTP ނުވަތަ HTTPS ސަރވަރ އެޑްރެހެއް ލިޔެލާށެވެ.",
   "server.connect.failed":
     "ގުޅެވޭ ގޮތެއް ނުވިއެވެ. ސަރވަރ އެޑްރެހާއި ޕާސްވޯޑް ޗެކްކޮށްލުމަށްފަހު އަލުން މަސައްކަތް ކުރާށެވެ.",
-  "server.connect.pair.description": "ކަނެކްޝަންގެ ތަފްސީލު ހޯދުމަށްޓަކައި ކޮމްޕިއުޓަރުގައި މި ކޮމާންޑް ހިންގާށެވެ.",
   "server.connect.scan": "QR ކޯޑް ސްކޭން ކުރާށެވެ",
   "server.connect.scan.description": "އޮޕަންކޯޑް ޖޯޑުން ދައްކާ QR ކޯޑަށް ކެމެރާ އިޝާރާތް ކުރާށެވެ.",
   "server.connect.scan.invalid": "މިއީ OpenCode ޖޯޑު ކޯޑެއް ނޫނެވެ. އޮޕަންކޯޑް ޕެއާ އިން ދައްކާ ކޯޑް ސްކޭން ކުރާށެވެ.",
@@ -831,8 +820,6 @@ export const dict = {
   "server.connect.camera.starting": "ކެމެރާ ހުޅުވަނީ...",
   "server.connect.mixedContent":
     "HTTPS ޕޭޖަކުން މި HTTP ސަރވަރ އާއި ގުޅޭ ގޮތެއް ނުވިއެވެ. އޭގެ ބަދަލުގައި HTTPS ސަރވަރ އެޑްރެހެއް ބޭނުން ކުރާށެވެ.",
-  "server.connect.camera.insecure":
-    "QR ސްކޭން ކުރުމަށް މި ޕޭޖް ހުޅުވަން ޖެހެނީ HTTPS ގެ މައްޗަށް ނުވަތަ ލޯކަލްހޯސްޓް އިންނެވެ.",
   "server.connect.camera.unavailable":
     "މި ބްރައުޒާއަށް އެއްވެސް ކެމެރާއެއް ނުލިބެއެވެ. ކަނެކްޝަންގެ ތަފްސީލުތައް އަމިއްލައަށް ލިޔެލާށެވެ.",
   "server.connect.camera.error":

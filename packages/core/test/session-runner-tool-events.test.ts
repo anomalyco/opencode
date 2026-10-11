@@ -30,7 +30,11 @@ const base64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB"
 
 const capture = (
   providerMetadataKey = "anthropic",
-  options?: { readonly interruptProgress?: boolean; readonly beforeTextDelta?: Effect.Effect<void> },
+  options?: {
+    readonly interruptProgress?: boolean
+    readonly beforeTextDelta?: Effect.Effect<void>
+    readonly pendingSnapshot?: Effect.Effect<Snapshot.ID | undefined>
+  },
 ) => {
   const published: Array<{ readonly type: string; readonly data: unknown }> = []
   const bus: Pick<Bus.Interface, "publish"> = {
@@ -60,6 +64,7 @@ const capture = (
         providerID: Provider.ID.opencode,
       },
       providerMetadataKey,
+      pendingSnapshot: options?.pendingSnapshot,
       started: 0,
       assistantMessageID: SessionMessage.ID.create(),
     }),
@@ -578,6 +583,20 @@ test("success event data can carry provider-executed result state", () => {
     },
   })
   expect(decoded.resultState).toMatchObject({ result: { type: "content" } })
+})
+
+test("step start waits for the pending start snapshot", async () => {
+  const snapshot = Effect.runSync(Deferred.make<Snapshot.ID | undefined>())
+  const { published, publisher } = capture("anthropic", { pendingSnapshot: Deferred.await(snapshot) })
+  const started = Effect.runFork(publisher.publish(LLMEvent.stepStart({ index: 0 })))
+  await Effect.runPromise(Effect.yieldNow)
+  expect(published).toEqual([])
+
+  Effect.runSync(Deferred.succeed(snapshot, Snapshot.ID.make("tree-start")))
+  await Effect.runPromise(Fiber.join(started))
+  expect(published.map((event) => [event.type, (event.data as { snapshot?: string }).snapshot])).toEqual([
+    ["session.step.started.1", "tree-start"],
+  ])
 })
 
 test("step finish records settlement without publishing step ended", async () => {

@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api"
 import { UnauthorizedError } from "../errors.js"
 
 export const ServerInfo = Schema.Struct({
@@ -10,6 +10,12 @@ export const ServerInfo = Schema.Struct({
   paths: Schema.Struct({
     tmp: Schema.String,
   }),
+  // Optional at every level so clients still decode servers that predate a capability.
+  capabilities: Schema.optional(
+    Schema.Struct({
+      persistentPty: Schema.optional(Schema.Boolean),
+    }),
+  ),
 }).annotate({ identifier: "ServerInfo" })
 export type ServerInfo = typeof ServerInfo.Type
 

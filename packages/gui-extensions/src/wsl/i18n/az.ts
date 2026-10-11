@@ -52,8 +52,5 @@ export default {
   "error.healthTimeout": "{{distro}} üçün sidecar sağlamlıq yoxlamasının {{timeout}}ms gözləmə müddəti bitdi",
   "error.commandTimeout": "{{command}} {{args}} üçün {{timeout}}ms gözləmə müddəti bitdi",
   "error.failedPort": "Portu əldə etmək mümkün olmadı",
-  "server.default": "Standart",
-  "menu.default": "Standart olaraq təyin et",
-  "menu.defaultRemove": "Standartı sil",
   "menu.remove": "Sil",
 }

@@ -38,8 +38,5 @@ export default {
   "form.name": "Server adı (istəyə bağlı)",
   "form.namePlaceholder": "Localhost",
   "form.add": "Server əlavə et",
-  "server.default": "Standart",
-  "menu.default": "Standart olaraq təyin et",
-  "menu.defaultRemove": "Standartı sil",
   "menu.delete": "Sil",
 }

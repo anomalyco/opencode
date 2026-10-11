@@ -9,17 +9,21 @@ describe("Provider", () => {
       "@opencode/ai/providers/cerebras",
       "@opencode/ai/providers/cloudflare-ai-gateway",
       "@opencode/ai/providers/cloudflare-workers-ai",
+      "@opencode/ai/providers/cohere",
+      "@opencode/ai/providers/cohere/chat",
       "@opencode/ai/providers/deepinfra",
       "@opencode/ai/providers/deepseek",
       "@opencode/ai/providers/fireworks",
       "@opencode/ai/providers/google-vertex",
       "@opencode/ai/providers/google-vertex/gemini",
+      "@opencode/ai/providers/google-vertex/interactions",
       "@opencode/ai/providers/google-vertex/chat",
       "@opencode/ai/providers/google-vertex/responses",
       "@opencode/ai/providers/google-vertex/messages",
       "@opencode/ai/providers/groq",
       "@opencode/ai/providers/mistral",
       "@opencode/ai/providers/togetherai",
+      "@opencode/ai/providers/vercel-ai-gateway",
     ]
 
     for (const specifier of packages) {

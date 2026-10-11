@@ -5,6 +5,7 @@ import { MediaRoute } from "../route/media.js"
 import type { ProviderPackage } from "../provider-package.js"
 import { ProviderID, type ModelID } from "../schema/index.js"
 import { Gemini } from "../protocols/gemini.js"
+import { GoogleInteractions } from "../protocols/google-interactions.js"
 import { GoogleImages } from "../protocols/google-images.js"
 import { GoogleSpeech } from "../protocols/google-speech.js"
 import { GoogleTranscription } from "../protocols/google-transcription.js"
@@ -16,15 +17,16 @@ export type { GoogleTranscriptionOptions } from "../protocols/google-transcripti
 export type { GoogleVideoOptions } from "../protocols/google-video.js"
 export type GeminiOptionsInput = Gemini.OptionsInput
 export type GeminiProviderOptionsInput = Gemini.ProviderOptionsInput
+export type GoogleInteractionsOptionsInput = GoogleInteractions.OptionsInput
 
 export const id = ProviderID.make("google")
 
-export const routes = [Gemini.route]
+export const routes = [Gemini.route, GoogleInteractions.route]
 
 export type Config = RouteDefaultsInput &
   ProviderAuthOption<"optional"> & {
     readonly baseURL?: string
-    readonly providerOptions?: Gemini.ProviderOptionsInput
+    readonly providerOptions?: Gemini.ProviderOptionsInput & GoogleInteractions.ProviderOptionsInput
   }
 
 export type Settings = ProviderPackage.Settings &
@@ -45,12 +47,19 @@ const configuredRoute = (input: Config) => {
   return Gemini.route.with({ ...rest, endpoint: { baseURL }, auth: auth(input) })
 }
 
+const interactionsRoute = (input: Config) => {
+  const { apiKey: _, auth: _auth, baseURL, ...rest } = input
+  return GoogleInteractions.route.with({ ...rest, endpoint: { baseURL }, auth: auth(input) })
+}
+
 export const configure = (input: Config = {}) => {
   const route = configuredRoute(input)
   const media = MediaRoute.deployment(input, auth(input))
   return {
     id,
     model: (modelID: string | ModelID) => route.model<Gemini.ProviderOptionsInput>({ id: modelID }),
+    interactions: (modelID: string | ModelID) =>
+      interactionsRoute(input).model<GoogleInteractions.ProviderOptionsInput>({ id: modelID }),
     image: (modelID: string | ModelID) => GoogleImages.model({ ...media, id: modelID }),
     video: (modelID: string | ModelID) => GoogleVideo.model({ ...media, id: modelID }),
     speech: (modelID: string | ModelID) => GoogleSpeech.model({ ...media, id: modelID }),
@@ -67,12 +76,13 @@ export const model: ProviderPackage.Definition<Settings, Gemini.ProviderOptionsI
   configure({
     apiKey,
     baseURL,
-    headers: headers === undefined ? undefined : { ...headers },
-    http: body === undefined ? undefined : { body: { ...body } },
+    headers,
+    http: body === undefined ? undefined : { body },
     providerOptions,
   }).model(modelID)
 
 export const image = provider.image
+export const interactions = provider.interactions
 export const video = provider.video
 export const speech = provider.speech
 export const transcription = provider.transcription

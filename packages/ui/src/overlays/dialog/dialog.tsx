@@ -31,6 +31,7 @@ export function DialogFooter(props: ParentProps) {
 
 export function DialogBody(props: ParentProps & { class?: ComponentProps<"div">["class"] }) {
   const [local] = splitProps(props, ["class", "children"])
+
   return (
     <div data-slot="dialog-body" class={local.class}>
       {local.children}
@@ -96,6 +97,7 @@ export function Dialog(props: DialogProps) {
     "onCloseAutoFocus",
     "preventBackdropDismiss",
   ])
+
   const layer = useDialogLayer()
   createEffect(() => layer?.setBackdropDismiss(!local.preventBackdropDismiss))
 
@@ -120,6 +122,7 @@ export function Dialog(props: DialogProps) {
           onOpenAutoFocus={(e) => {
             const target = e.currentTarget as HTMLElement | null
             const autofocusEl = target?.querySelector("[autofocus]") as HTMLElement | null
+
             if (autofocusEl) {
               e.preventDefault()
               autofocusEl.focus({ preventScroll: true })

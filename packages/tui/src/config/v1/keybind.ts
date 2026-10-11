@@ -248,9 +248,6 @@ export const KeybindOverrides = Schema.Struct(
     ]),
   ),
 ).annotate({ description: "TUI keybinding overrides" })
-export const Descriptions = Object.fromEntries(
-  Object.entries(Definitions).map(([name, item]) => [name, item.description]),
-) as Record<KeybindName, string>
 export const CommandMap = {
   app_exit: "app.exit",
   app_debug: "app.debug",
@@ -453,8 +450,6 @@ export function parse(keybinds: KeybindOverrides): Keybinds {
     ]),
   ) as Keybinds
 }
-
-export const Keybinds = { parse }
 
 export function unknownKeys(input: object) {
   return Object.keys(input).filter((key) => !KeybindNames.has(key))

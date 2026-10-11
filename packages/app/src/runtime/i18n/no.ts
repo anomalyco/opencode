@@ -1,4 +1,5 @@
 import en from "./en"
+
 type Keys = keyof typeof en
 
 export const dict = {
@@ -25,7 +26,6 @@ export const dict = {
   "server.connect.button": "Koble til",
   "server.connect.address.invalid": "Skriv inn en gyldig HTTP- eller HTTPS-serveradresse.",
   "server.connect.failed": "Kunne ikke koble til. Sjekk serveradressen og passordet, og prøv på nytt.",
-  "server.connect.pair.description": "Kjør denne kommandoen på datamaskinen for å få tilkoblingsdetaljer.",
   "server.connect.scan": "Skann QR-koden",
   "server.connect.scan.description": "Pek kameraet mot QR-koden vist av opencode pair.",
   "server.connect.scan.invalid": "Dette er ikke en OpenCode-paringskode. Skann koden vist av opencode pair.",
@@ -33,7 +33,6 @@ export const dict = {
   "server.connect.camera.starting": "Åpner kamera …",
   "server.connect.mixedContent":
     "Kunne ikke koble til denne HTTP-serveren fra en HTTPS-side. Bruk en HTTPS-serveradresse i stedet.",
-  "server.connect.camera.insecure": "QR-skanning krever at denne siden åpnes over HTTPS eller på localhost.",
   "server.connect.camera.unavailable":
     "Ingen kamera er tilgjengelig for denne nettleseren. Skriv inn tilkoblingsdetaljene manuelt.",
   "server.connect.camera.error": "Kunne ikke åpne kameraet. Gi kameratilgang eller angi tilkoblingsdetaljene manuelt.",
@@ -122,7 +121,6 @@ export const dict = {
   "session.view.select": "Øktvisning",
   "session.background.moveRunning": "Flytt til bakgrunnen",
   "session.timeline.working": "Arbeider",
-  "session.review.wrapLines": "Bryt linjer",
   "session.websearch.title": "Nettsøk fra tredjepart",
   "session.websearch.description": "Velg søkeleverandøren agentene bruker til nettsøk",
   "session.websearch.provider": "Søkeleverandør",
@@ -180,7 +178,6 @@ export const dict = {
   "settings.timeline.category.subagents": "Underagenter",
   "settings.timeline.category.notices": "Merknader",
   "settings.timeline.category.tools": "Andre verktøy",
-  "settings.general.row.mobileDiffWrap.description": "Bryt lange linjer i mobile differ i stedet for å rulle vannrett",
   "toast.migration.progress.clearingOldEvents": "Fjerner gamle hendelser",
   "toast.migration.progress.migratingSessions": "Migrerer økter",
   "session.new.workspace.existingLabel": "Worktree",
@@ -510,9 +507,6 @@ export const dict = {
   "dialog.server.edit.title": "Rediger server",
 
   "dialog.server.menu.edit": "Rediger",
-  "dialog.server.menu.default": "Sett som standard",
-  "dialog.server.menu.defaultRemove": "Fjern standard",
-  "dialog.server.status.default": "Standard",
 
   "dialog.project.edit.title": "Rediger prosjekt",
   "dialog.project.edit.icon": "Ikon",
@@ -773,10 +767,6 @@ export const dict = {
   "workspace.delete.confirm": 'Slette arbeidsområdet "{{name}}"?',
   "workspace.delete.button": "Slett arbeidsområde",
   "common.open": "Åpne",
-  "dialog.releaseNotes.action.getStarted": "Kom i gang",
-  "dialog.releaseNotes.action.next": "Neste",
-  "dialog.releaseNotes.action.hideFuture": "Ikke vis disse igjen",
-  "dialog.releaseNotes.media.alt": "Forhåndsvisning av utgivelse",
   "toast.project.reloadFailed.title": "Kunne ikke laste inn {{project}} på nytt",
   "error.server.invalidConfiguration": "Ugyldig konfigurasjon",
   "common.moreCountSuffix": " (+{{count}} mer)",

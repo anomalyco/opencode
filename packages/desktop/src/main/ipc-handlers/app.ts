@@ -15,7 +15,6 @@ import { finishFirstLaunchOnboarding, isFirstLaunchOnboardingPending } from "../
 import { BackgroundService } from "../service/background-service"
 import { DesktopCli } from "../service/desktop-cli"
 import { SidecarCredentials } from "../service/sidecar-credentials"
-import { getDefaultServerUrl, setDefaultServerUrl } from "../service/server-settings"
 import { getLastFocusedWindow, setBackgroundColor } from "../windows"
 import { sender } from "./context"
 
@@ -27,12 +26,11 @@ export const appHandlers = AppRpcs.toLayer(
     const desktopCli = yield* DesktopCli.Service
     const logging = yield* DesktopLogging.Service
     const runFork = Effect.runForkWith(yield* Effect.context())
+
     return AppRpcs.of({
       AppAwaitInitialization: () => background.connection.pipe(Effect.map(SidecarCredentials.ready)),
       AppReconnectService: () => background.reconnect.pipe(Effect.map(SidecarCredentials.ready)),
       AppConsumeInitialDeepLinks: () => Effect.sync(lifecycle.consumeInitialDeepLinks),
-      AppGetDefaultServerUrl: () => Effect.sync(getDefaultServerUrl),
-      AppSetDefaultServerUrl: ({ url }) => Effect.sync(() => setDefaultServerUrl(url)),
       AppIsFirstLaunchOnboardingPending: isFirstLaunchOnboardingPending,
       AppFinishFirstLaunchOnboarding: ({ createDefaultProject }) =>
         finishFirstLaunchOnboarding(createDefaultProject).pipe(Effect.orDie),
@@ -47,15 +45,20 @@ export const appHandlers = AppRpcs.toLayer(
         Effect.sync(() => {
           const contents = sender(handoff, context)
           const win = BrowserWindow.fromWebContents(contents)
+
           if (!win || win.isDestroyed() || win.webContents !== contents) {
             throw new Error("Invalid native translation sender")
           }
+
           const bundle = parseDesktopNativeBundle(value)
+
           if (!bundle) throw new Error("Invalid native translation bundle")
+
           if (!setNativeTranslations(bundle)) return
           createMenu({
             trigger: (id) => {
               const win = getLastFocusedWindow()
+
               if (win) sendMenuCommand(win, id)
             },
             installCli: () => runFork(showCliInstaller(desktopCli)),

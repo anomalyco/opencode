@@ -9,6 +9,7 @@ import { createAppearanceSettingsController, type AppearanceSettingsController }
 import "@/settings/settings.css"
 
 const schemeOptions: ("system" | "light" | "dark")[] = ["system", "light", "dark"]
+
 const fontSettings = {
   ui: {
     action: "settings-ui-font",
@@ -39,6 +40,7 @@ const FontSetting: Component<{
 }> = (props) => {
   const language = useLanguage()
   const config = () => fontSettings[props.kind]
+
   return (
     <SettingsRow title={language.t(config().title)} description={language.t(config().description)}>
       <div class="w-full sm:w-[220px]">
@@ -91,7 +93,9 @@ export const SettingsAppearance: Component = () => {
                 gutter={6}
                 label={(option) => {
                   if (option === "system") return language.t("theme.scheme.system")
+
                   if (option === "light") return language.t("theme.scheme.light")
+
                   return language.t("theme.scheme.dark")
                 }}
                 onSelect={(option) => option && appearance.scheme.select(option)}

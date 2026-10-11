@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { ConfigProvider, Effect } from "effect"
-import { Headers } from "effect/unstable/http"
+import { Headers } from "effect/http"
 import { Auth, LLM, LLMClient, Message, ReasoningPart, ToolDefinition } from "../../src/index.js"
 import { ZAI, ZAICodingPlan } from "../../src/providers.js"
 import { compileRequest } from "../../src/route/client.js"

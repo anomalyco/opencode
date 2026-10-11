@@ -9,8 +9,11 @@ type Input = {
 /** A tab that opens at the lead of the strip scrolls to the start; other new tabs scroll to the end. */
 export const nextTabStripScrollLeft = (input: Input) => {
   if (input.scrollWidth <= input.prevScrollWidth) return
+
   if (!input.prevLeadOpen && input.leadOpen) return 0
+
   if (input.scrollWidth <= input.clientWidth) return
+
   return input.scrollWidth - input.clientWidth
 }
 
@@ -23,6 +26,7 @@ export const createTabStripScroll = (input: { el: HTMLDivElement; lead: () => bo
     const scrollWidth = input.el.scrollWidth
     const clientWidth = input.el.clientWidth
     const leadOpen = input.lead()
+
     const left = nextTabStripScrollLeft({
       prevScrollWidth,
       scrollWidth,
@@ -63,6 +67,7 @@ export const createTabStripScroll = (input: { el: HTMLDivElement; lead: () => bo
   return () => {
     input.el.removeEventListener("wheel", onWheel)
     observer.disconnect()
+
     if (frame !== undefined) cancelAnimationFrame(frame)
   }
 }

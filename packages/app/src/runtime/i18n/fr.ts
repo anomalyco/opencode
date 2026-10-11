@@ -23,8 +23,6 @@ export const dict = {
   "server.connect.address.invalid": "Entrez une adresse de serveur HTTP ou HTTPS valide.",
   "server.connect.failed":
     "Impossible de se connecter. Vérifiez l'adresse et le mot de passe du serveur, puis réessayez.",
-  "server.connect.pair.description":
-    "Exécutez cette commande sur votre ordinateur pour obtenir les détails de votre connexion.",
   "server.connect.scan": "Scanner le code QR",
   "server.connect.scan.description": "Pointez votre appareil photo vers le code QR affiché par opencode pair.",
   "server.connect.scan.invalid":
@@ -33,7 +31,6 @@ export const dict = {
   "server.connect.camera.starting": "Ouverture de la caméra…",
   "server.connect.mixedContent":
     "Impossible de se connecter à ce serveur HTTP à partir d'une page HTTPS. Utilisez plutôt une adresse de serveur HTTPS.",
-  "server.connect.camera.insecure": "L'analyse QR nécessite l'ouverture de cette page sur HTTPS ou sur localhost.",
   "server.connect.camera.unavailable":
     "Aucune caméra n'est disponible pour ce navigateur. Saisissez manuellement vos informations de connexion.",
   "server.connect.camera.error":
@@ -135,7 +132,6 @@ export const dict = {
   "session.view.select": "Vue de la session",
   "session.background.moveRunning": "Déplacer en arrière-plan",
   "session.timeline.working": "En cours",
-  "session.review.wrapLines": "Renvoyer les lignes à la ligne",
   "session.websearch.title": "Recherche web tierce",
   "session.websearch.description":
     "Sélectionnez le fournisseur de recherche que les agents utilisent pour effectuer des recherches sur le web",
@@ -198,8 +194,6 @@ export const dict = {
   "settings.timeline.category.subagents": "Sous-agents",
   "settings.timeline.category.notices": "Avis",
   "settings.timeline.category.tools": "Autres outils",
-  "settings.general.row.mobileDiffWrap.description":
-    "Renvoyer à la ligne les longues lignes des diffs mobiles au lieu de les faire défiler horizontalement",
   "session.background.shell.many": "{{count}} shells",
   "session.background.subagent.many": "{{count}} sous-agents",
   "settings.about.otherContributor.many": "{{count}} autres",
@@ -522,9 +516,6 @@ export const dict = {
   "dialog.server.add.password": "Mot de passe (optionnel)",
   "dialog.server.edit.title": "Modifier le serveur",
   "dialog.server.menu.edit": "Modifier",
-  "dialog.server.menu.default": "Définir par défaut",
-  "dialog.server.menu.defaultRemove": "Ne plus utiliser par défaut",
-  "dialog.server.status.default": "Défaut",
   "dialog.project.edit.title": "Modifier le projet",
   "dialog.project.edit.icon": "Icône",
   "dialog.project.edit.icon.alt": "Icône du projet",
@@ -806,10 +797,6 @@ export const dict = {
   "workspace.delete.confirm": 'Supprimer l\'espace de travail "{{name}}" ?',
   "workspace.delete.button": "Supprimer l'espace de travail",
   "common.open": "Ouvrir",
-  "dialog.releaseNotes.action.getStarted": "Commencer",
-  "dialog.releaseNotes.action.next": "Suivant",
-  "dialog.releaseNotes.action.hideFuture": "Ne plus afficher à l'avenir",
-  "dialog.releaseNotes.media.alt": "Aperçu de la version",
   "toast.project.reloadFailed.title": "Échec du rechargement de {{project}}",
   "error.server.invalidConfiguration": "Configuration invalide",
   "common.moreCountSuffix": " (+{{count}} de plus)",

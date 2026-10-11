@@ -7,7 +7,9 @@ import type { HomeProjectSelection } from "@/shell/state/layout"
 
 export function compareSessionTime(a: SessionInfo, b: SessionInfo) {
   const updated = (b.time.updated ?? b.time.created) - (a.time.updated ?? a.time.created)
+
   if (updated !== 0) return updated
+
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
 }
 
@@ -19,6 +21,7 @@ type ProjectAppearance = {
 
 function withProjectAppearance<T extends ProjectAppearance>(metadata: T, appearance?: ProjectAppearance) {
   if (!appearance || appearance === metadata) return metadata
+
   return { ...metadata, name: displayName(appearance), icon: appearance.icon }
 }
 
@@ -28,6 +31,7 @@ export function toggleHomeProjectSelection(
   directory: string,
 ): HomeProjectSelection {
   if (current?.server === server && current.directory === directory) return { server }
+
   return { server, directory }
 }
 
@@ -38,12 +42,15 @@ export function closeHomeProject(
   directory: string,
 ) {
   projects.close(directory)
+
   if (selected?.server === server && selected.directory === directory) return { server }
+
   return selected
 }
 
 export function homeProjectDirectories(result: string | string[] | null) {
   if (!result) return []
+
   return Array.isArray(result) ? result : [result]
 }
 
@@ -52,24 +59,33 @@ export function projectForSession<T extends { id?: string; worktree: string; san
   projects: T[],
 ) {
   const matching = projects.filter((project) => project.id === session.projectID)
+
   if (matching.length === 1) return matching[0]
+
   if (matching.length > 1) {
     const directory = pathKey(session.location.directory)
+
     const exact =
       matching.find((project) => pathKey(project.worktree) === directory) ??
       matching.find((project) => project.sandboxes?.some((sandbox) => pathKey(sandbox) === directory))
+
     if (exact) return exact
+
     return (
       matching
         .filter((project) => isProjectDirectory(project, session.location.directory))
         .sort((a, b) => b.worktree.length - a.worktree.length)[0] ?? matching.at(-1)
     )
   }
+
   const directory = pathKey(session.location.directory)
+
   const exact =
     projects.find((project) => pathKey(project.worktree) === directory) ??
     projects.find((project) => project.sandboxes?.some((sandbox) => pathKey(sandbox) === directory))
+
   if (exact) return exact
+
   return projects
     .filter((project) => isProjectDirectory(project, session.location.directory))
     .sort((a, b) => b.worktree.length - a.worktree.length)[0]
@@ -80,19 +96,27 @@ export function resolveProjectForSession<
   U extends { id?: string; worktree: string; sandboxes?: string[] },
 >(session: SessionInfo, opened: T[], stored: U[]) {
   const current = projectForSession(session, opened)
+
   if (current?.id === session.projectID) {
     const unresolved = opened.find(
       (project) => !project.id && pathKey(project.worktree) === pathKey(session.location.directory),
     )
+
     if (!unresolved) return current
     const canonical = projectForSession(session, stored)
+
     if (canonical?.id === session.projectID && pathKey(canonical.worktree) === pathKey(unresolved.worktree))
       return unresolved
+
     return current
   }
+
   const synced = projectForSession(session, stored)
+
   if (synced?.id !== session.projectID) return current ?? synced
+
   if (current && !current.id && pathKey(current.worktree) === pathKey(session.location.directory)) return current
+
   return synced
 }
 
@@ -101,15 +125,20 @@ export function resolveSessionDetailsProject<
   U extends ProjectAppearance & { id?: string; sandboxes?: string[] },
 >(session: SessionInfo, opened: T[], stored: U[]) {
   const metadata = projectForSession(session, stored)
+
   if (!metadata) return
+
   return withProjectAppearance(metadata, resolveProjectForSession(session, opened, stored))
 }
 
 export const errorMessage = (err: unknown, fallback: string) => {
   if (err && typeof err === "object" && "data" in err) {
     const data = (err as { data?: { message?: string } }).data
+
     if (data?.message) return data.message
   }
+
   if (err instanceof Error) return err.message
+
   return fallback
 }

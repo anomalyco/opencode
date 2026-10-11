@@ -7,6 +7,7 @@ import { sender } from "./context"
 export const eventHandlers = EventRpcs.toLayer(
   Effect.gen(function* () {
     const handoff = yield* IpcPortHandoff
+
     return EventRpcs.of({
       DesktopEvents: (_request, context) => ipcEventStream(sender(handoff, context).id),
     })
