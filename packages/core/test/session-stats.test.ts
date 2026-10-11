@@ -235,6 +235,17 @@ describe("SessionStats", () => {
       const project = yield* SessionStats.get({ projectID, timezone: "UTC", tools: "none" })
       expect(DateTime.toEpochMillis(project.range.from)).toBe(Date.UTC(2025, 11, 30, 10))
 
+      // An empty project filter behaves like an omitted one. No explicit `from`,
+      // so this also covers the derived-range query that shares the same filter.
+      const unfiltered = yield* SessionStats.get({ to: Date.UTC(2026, 1, 1), timezone: "UTC", tools: "none" })
+      const emptyProject = yield* SessionStats.get({
+        to: Date.UTC(2026, 1, 1),
+        projectID: Project.ID.make(""),
+        timezone: "UTC",
+        tools: "none",
+      })
+      expect(emptyProject).toEqual(unfiltered)
+
       const error = yield* Effect.flip(
         SessionStats.get({ from: Date.UTC(2026, 1, 1), to: Date.UTC(2026, 0, 1), tools: "none" }),
       )
