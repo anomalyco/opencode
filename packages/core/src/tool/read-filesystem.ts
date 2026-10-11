@@ -31,6 +31,7 @@ export const MEDIA_MIMES = new Set([
   "audio/ogg",
   "audio/flac",
   "audio/mp4",
+  "audio/aac",
   "video/mp4",
   "video/quicktime",
   "video/webm",
@@ -145,8 +146,8 @@ export const read = Effect.fn("ReadTool.read")(function* (
   )
   if ("type" in first) return first
 
-  const media = Mime.detectMedia(first.bytes)
-  if (media && MEDIA_MIMES.has(media)) {
+  const media = Mime.detect(first.bytes, input)
+  if (MEDIA_MIMES.has(media)) {
     if (first.info.size > MAX_MEDIA_INGEST_BYTES)
       return yield* new MediaIngestLimitError({ resource, maximumBytes: MAX_MEDIA_INGEST_BYTES })
     const whole = yield* readFile(files, input, resource)

@@ -46,7 +46,7 @@ describe("Mime.detect", () => {
     ["png", bytes(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a), "image/png"],
     ["jpeg", bytes(0xff, 0xd8, 0xff, 0xe0), "image/jpeg"],
     ["gif", bytes(0x47, 0x49, 0x46, 0x38, 0x39, 0x61), "image/gif"],
-    ["bmp", bytes(0x42, 0x4d, 0x00, 0x00), "image/bmp"],
+    ["bmp", bytes(0x42, 0x4d, 0x3a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x36, 0x00, 0x00, 0x00, 0x28, 0x00, 0x00, 0x00), "image/bmp"],
     ["pdf", bytes(0x25, 0x50, 0x44, 0x46, 0x2d), "application/pdf"],
     ["webp", Uint8Array.from([...ascii("RIFF"), 0x00, 0x00, 0x00, 0x00, ...ascii("WEBP")]), "image/webp"],
     ["avif", ftyp("avif"), "image/avif"],
@@ -68,5 +68,20 @@ describe("Mime.detect", () => {
     it(`detects ${name}`, () => {
       expect(Mime.detect(input)).toBe(expected)
     })
+  })
+})
+
+describe("Mime.detect with a path", () => {
+  it("does not treat a UTF-16LE text file as audio", () => {
+    const utf16le = bytes(0xff, 0xfe, 0x68, 0x00, 0x69, 0x00)
+    expect(Mime.detect(utf16le)).toBe("application/octet-stream")
+    expect(Mime.detect(utf16le, "note.txt")).toBe("text/plain")
+  })
+
+  it("uses the extension to disambiguate an audio-only MP4 container", () => {
+    expect(Mime.detect(ftyp("isom"), "clip.m4a")).toBe("audio/mp4")
+    expect(Mime.detect(ftyp("mp42"), "clip.m4a")).toBe("audio/mp4")
+    expect(Mime.detect(ftyp("isom"), "sound.aac")).toBe("audio/aac")
+    expect(Mime.detect(ftyp("isom"), "clip.mp4")).toBe("video/mp4")
   })
 })

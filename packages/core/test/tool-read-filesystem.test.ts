@@ -751,12 +751,14 @@ describe("ReadToolFileSystem", () => {
 
       const result = yield* ReadToolFileSystem.read(environment, absolute(file), "pixel.png")
 
-      expect(result).toMatchObject({
-        type: "file",
-        content: Buffer.from(content).toString("base64"),
-        encoding: "base64",
+      expect(result).toEqual({
+        type: "media",
+        uri: pathToFileURL(file).href,
         mime: "image/png",
+        name: "pixel.png",
+        bytes: expect.any(Uint8Array),
       })
+      expect(result.type === "media" && result.bytes).toEqual(content)
     }),
   )
 
@@ -769,12 +771,14 @@ describe("ReadToolFileSystem", () => {
 
       const result = yield* ReadToolFileSystem.read(environment, absolute(file), "sound.mp3")
 
-      expect(result).toMatchObject({
-        type: "file",
-        content: Buffer.from(content).toString("base64"),
-        encoding: "base64",
+      expect(result).toEqual({
+        type: "media",
+        uri: pathToFileURL(file).href,
         mime: "audio/mpeg",
+        name: "sound.mp3",
+        bytes: expect.any(Uint8Array),
       })
+      expect(result.type === "media" && result.bytes).toEqual(content)
     }),
   )
 
@@ -787,12 +791,14 @@ describe("ReadToolFileSystem", () => {
 
       const result = yield* ReadToolFileSystem.read(environment, absolute(file), "clip.mp4")
 
-      expect(result).toMatchObject({
-        type: "file",
-        content: Buffer.from(content).toString("base64"),
-        encoding: "base64",
+      expect(result).toEqual({
+        type: "media",
+        uri: pathToFileURL(file).href,
         mime: "video/mp4",
+        name: "clip.mp4",
+        bytes: expect.any(Uint8Array),
       })
+      expect(result.type === "media" && result.bytes).toEqual(content)
     }),
   )
 
@@ -831,6 +837,38 @@ describe("ReadToolFileSystem", () => {
         { type: "text", text: "Video read successfully" },
         { type: "file", mime: "video/mp4" },
       ])
+    }),
+  )
+
+  it.effect("reads an audio-only MP4 as audio, not video", () =>
+    Effect.gen(function* () {
+      const { environment, files, directory } = yield* fixture
+      const file = path.join(directory, "sound.m4a")
+      const content = Uint8Array.of(0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d)
+      yield* files.writeFile(file, content)
+
+      const result = yield* ReadToolFileSystem.read(environment, absolute(file), "sound.m4a")
+
+      expect(result).toEqual({
+        type: "media",
+        uri: pathToFileURL(file).href,
+        mime: "audio/mp4",
+        name: "sound.m4a",
+        bytes: expect.any(Uint8Array),
+      })
+      expect(result.type === "media" && result.bytes).toEqual(content)
+    }),
+  )
+
+  it.effect("does not treat a UTF-16LE text file as audio", () =>
+    Effect.gen(function* () {
+      const { environment, files, directory } = yield* fixture
+      const file = path.join(directory, "note.txt")
+      yield* files.writeFile(file, Uint8Array.of(0xff, 0xfe, 0x68, 0x00, 0x69, 0x00))
+
+      const error = yield* ReadToolFileSystem.read(environment, absolute(file), "note.txt").pipe(Effect.flip)
+
+      expect(error).toBeInstanceOf(ReadToolFileSystem.BinaryFileError)
     }),
   )
 })
