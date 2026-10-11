@@ -277,6 +277,7 @@ export const dict = {
   "common.color.blue": "blue",
   "common.color.purple": "purple",
   "common.color.gray": "gray",
+  "common.color.transparent": "transparent",
   "common.open": "Open",
   "common.connect": "Connect",
   "common.disconnect": "Disconnect",
