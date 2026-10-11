@@ -1,25 +1,34 @@
 import { expect } from "bun:test"
 import { OpenCode, type SessionMessageInfo } from "@opencode/client"
 import { Session } from "@opencode/schema/session"
+import { SessionMessage } from "@opencode/schema/session-message"
+import { Agent } from "@opencode/schema/agent"
+import { Model } from "@opencode/schema/model"
+import { Provider } from "@opencode/schema/provider"
 import { Effect } from "effect"
 import { it } from "../../core/test/lib/effect"
 import { ServerFetch } from "../src/fetch"
 
 const messages: SessionMessageInfo[] = [
-  { id: "msg_z", type: "user", text: "First request", time: { created: 300 } },
+  { id: SessionMessage.ID.make("msg_z"), type: "user", text: "First request", time: { created: 300 } },
   {
-    id: "msg_assistant",
+    id: SessionMessage.ID.make("msg_assistant"),
     type: "assistant",
-    agent: "build",
-    model: { providerID: "test", id: "test" },
+    agent: Agent.ID.make("build"),
+    model: { providerID: Provider.ID.make("test"), id: Model.ID.make("test") },
     content: [{ type: "text", text: "First answer" }],
     finish: "stop",
     time: { created: 400, completed: 500 },
   },
-  { id: "msg_b", type: "user", text: "Second request", time: { created: 100 } },
-  { id: "msg_synthetic", type: "synthetic", text: "Background completion", time: { created: 200 } },
+  { id: SessionMessage.ID.make("msg_b"), type: "user", text: "Second request", time: { created: 100 } },
   {
-    id: "msg_compaction",
+    id: SessionMessage.ID.make("msg_synthetic"),
+    type: "synthetic",
+    text: "Background completion",
+    time: { created: 200 },
+  },
+  {
+    id: SessionMessage.ID.make("msg_compaction"),
     type: "compaction",
     status: "completed",
     reason: "manual",
@@ -27,9 +36,9 @@ const messages: SessionMessageInfo[] = [
     recent: "",
     time: { created: 700 },
   },
-  { id: "msg_x", type: "user", text: "Third request", time: { created: 600 } },
-  { id: "msg_system", type: "system", text: "Updated instructions", time: { created: 800 } },
-  { id: "msg_a", type: "user", text: "Fourth request", time: { created: 500 } },
+  { id: SessionMessage.ID.make("msg_x"), type: "user", text: "Third request", time: { created: 600 } },
+  { id: SessionMessage.ID.make("msg_system"), type: "system", text: "Updated instructions", time: { created: 800 } },
+  { id: SessionMessage.ID.make("msg_a"), type: "user", text: "Fourth request", time: { created: 500 } },
 ]
 
 const setup = Effect.gen(function* () {
@@ -63,7 +72,9 @@ it.live("filters message types before paginating in either direction through the
         (await fixture.api.message.list({ sessionID: fixture.sessionID })).data.map((message) => message.id),
       ).toEqual(messages.toReversed().map((message) => message.id))
       for (const order of ["asc", "desc"] as const) {
-        const ids = order === "asc" ? ["msg_z", "msg_b", "msg_x", "msg_a"] : ["msg_a", "msg_x", "msg_b", "msg_z"]
+        const ids = (order === "asc" ? ["msg_z", "msg_b", "msg_x", "msg_a"] : ["msg_a", "msg_x", "msg_b", "msg_z"]).map(
+          (id) => SessionMessage.ID.make(id),
+        )
         const first = await fixture.api.message.list({ ...input, order })
         expect(first.data.map((message) => message.id)).toEqual(ids.slice(0, 2))
         if (!first.cursor.next) throw new Error("Expected a next cursor")

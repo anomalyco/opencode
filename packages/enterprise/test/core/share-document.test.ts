@@ -1,3 +1,4 @@
+import { SessionMessage } from "@opencode/schema/session-message"
 import { describe, expect, test } from "bun:test"
 import { readShareDocument } from "../../src/core/share-document"
 import { Share } from "../../src/core/share"
@@ -32,8 +33,15 @@ describe("share document", () => {
 
     const result = await readShareDocument(data)
 
-    expect(result.session.id).toBe("ses_current")
-    expect(result.messages).toEqual([{ id: "msg_current", type: "user", text: "Current prompt", time: { created: 1 } }])
+    expect<unknown>(result.session.id).toBe("ses_current")
+    expect<unknown>(result.messages).toEqual([
+      {
+        id: "msg_current",
+        type: "user",
+        text: "Current prompt",
+        time: { created: 1 },
+      },
+    ])
   })
 
   test("maps a legacy Session without changing its blob", async () => {
@@ -149,19 +157,28 @@ describe("share document", () => {
     expect(data).toEqual(snapshot)
     expect(result.session).toMatchObject({ id: sessionID, location: { directory: "/workspace" } })
     expect(result.session).toMatchObject({ model: { id: "model", providerID: "provider" }, cost: 0 })
-    expect(result.messages).toEqual([
+    expect<unknown>(result.messages).toEqual([
       {
-        id: messageID,
+        id: SessionMessage.ID.make(messageID, { disableChecks: true }),
         type: "user",
         text: "Stored prompt\n\nVisible ignored text",
-        metadata: { agent: "build", model: { id: "model", providerID: "provider" } },
+        metadata: {
+          agent: "build",
+          model: {
+            id: "model",
+            providerID: "provider",
+          },
+        },
         time: { created: 1 },
       },
       {
-        id: assistantID,
+        id: SessionMessage.ID.make(assistantID, { disableChecks: true }),
         type: "assistant",
         agent: "build",
-        model: { id: "model", providerID: "provider" },
+        model: {
+          id: "model",
+          providerID: "provider",
+        },
         content: [
           { type: "text", text: "Stored response" },
           {
