@@ -477,6 +477,34 @@ context.keymap.layer(() => ({
 }))
 ```
 
+## Prompt
+
+Read the composer draft and append to it. `current()` is reactive when read in a Solid computation. It returns
+`undefined` when no composer is mounted, for example on a plugin route or while a permission prompt replaces the
+composer.
+
+```ts
+const draft = context.ui.prompt.current()
+// { text: "Review @src/app.ts", selection: { start: 18, end: 18 }, mode: "normal" }
+context.ui.prompt.append(" Check the tests too.")
+```
+
+`text` is the composer text as shown. Attachments and collapsed pastes appear as their labels, such as `@src/app.ts`
+or `[Pasted ~3 lines]`. `selection` holds UTF-16 indices into `text`, the units `String.prototype.slice` uses, and
+`start === end` is the caret.
+
+`append` adds text at the end of the composer and moves the cursor after it. Existing attachments are unchanged, line
+endings become `\n`, and one undo removes the appended text. It returns `false` when no composer is mounted, or once
+the plugin that owns this `context` is disabled, reloaded, or fails setup.
+
+Clear or submit the composer with the built-in commands. `prompt.submit` only submits while the composer has keyboard
+focus, for example from a key binding pressed while typing.
+
+```ts
+context.keymap.dispatch("prompt.clear")
+context.keymap.dispatch("prompt.submit")
+```
+
 ## Slots
 
 Slots insert or replace JSX at `app`, `home.footer`, `home.footer.status`, `prompt.footer`, `prompt.footer.status`,

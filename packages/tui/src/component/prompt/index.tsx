@@ -1,5 +1,6 @@
 import {
   BoxRenderable,
+  CliRenderEvents,
   RGBA,
   TextareaRenderable,
   MouseEvent,
@@ -59,6 +60,7 @@ import { useInteractivity } from "../../context/interactivity"
 import { abbreviateHome } from "../../runtime"
 import { Slot } from "../../plugin/render"
 import type { SessionInbox } from "@opencode/schema/session-inbox"
+import type { PromptDraft } from "@opencode/plugin/tui/context"
 import {
   deduplicatePromptImages,
   preserveMentionlessPromptAttachments,
@@ -95,6 +97,8 @@ export type PromptRef = {
   blur(): void
   focus(): void
   submit(): void
+  draft(): PromptDraft | undefined
+  append(text: string): boolean
 }
 
 const DRAFT_RETENTION_MIN_CHARS = 20
@@ -311,6 +315,10 @@ export function Prompt(props: PromptProps) {
     ],
   }))
   const [cursorVersion, setCursorVersion] = createSignal(0)
+  // Mouse selections change the textarea without a cursor event.
+  const bumpCursor = () => setCursorVersion((value) => value + 1)
+  renderer.on(CliRenderEvents.SELECTION, bumpCursor)
+  onCleanup(() => renderer.off(CliRenderEvents.SELECTION, bumpCursor))
   const connected = useConnected()
 
   function promptModelWarning() {
@@ -697,6 +705,31 @@ export function Prompt(props: PromptProps) {
     submit() {
       void submit()
     },
+    draft() {
+      cursorVersion()
+      if (input.isDestroyed) return
+      const range = input.getSelection() ?? { start: input.cursorOffset, end: input.cursorOffset }
+      return {
+        text: input.plainText,
+        // Textarea offsets count display cells, and wide characters and tabs span several. The text before an offset
+        // gives its UTF-16 index.
+        selection: { start: input.getTextRange(0, range.start).length, end: input.getTextRange(0, range.end).length },
+        mode: store.mode,
+      }
+    },
+    append(text) {
+      if (input.isDestroyed) return false
+      if (!text) return true
+      auto()?.close()
+      // gotoBufferEnd only collapses an active selection, so clear it first to reach the end.
+      input.clearSelection()
+      input.gotoBufferEnd()
+      input.insertText(text)
+      // Content events arrive on a microtask and never after the textarea is destroyed. Sync now so a same-tick read
+      // or unmount sees the appended text.
+      syncFromInput()
+      return true
+    },
   }
 
   function resetComposer() {
@@ -871,6 +904,12 @@ export function Prompt(props: PromptProps) {
         draft.prompt.pasted = pasted
       }),
     )
+  }
+
+  function syncFromInput() {
+    setStore("prompt", "text", input.plainText)
+    syncExtmarksWithPromptParts()
+    setCursorVersion((value) => value + 1)
   }
 
   const stashCommands = createMemo(() =>
@@ -1110,10 +1149,7 @@ export function Prompt(props: PromptProps) {
     // IME: double-defer may fire before onContentChange flushes the last
     // composed character (e.g. Korean hangul) to the store, so read
     // plainText directly and sync before any downstream reads.
-    if (input && !input.isDestroyed && input.plainText !== store.prompt.text) {
-      setStore("prompt", "text", input.plainText)
-      syncExtmarksWithPromptParts()
-    }
+    if (input && !input.isDestroyed && input.plainText !== store.prompt.text) syncFromInput()
     if (move.creating()) return false
     if (auto()?.visible) return false
     const trimmed = store.prompt.text.trim()
@@ -1751,11 +1787,8 @@ export function Prompt(props: PromptProps) {
               maxHeight={maxHeight()}
               cursorStyle={config.cursor}
               onContentChange={() => {
-                const value = input.plainText
-                setStore("prompt", "text", value)
-                auto()?.onInput(value)
-                syncExtmarksWithPromptParts()
-                setCursorVersion((value) => value + 1)
+                syncFromInput()
+                auto()?.onInput(input.plainText)
               }}
               onCursorChange={() => setCursorVersion((value) => value + 1)}
               onKeyDown={(e: { preventDefault(): void }) => {
@@ -1803,6 +1836,7 @@ export function Prompt(props: PromptProps) {
                 if (promptPartTypeId === 0) {
                   promptPartTypeId = input.extmarks.registerType("prompt-part")
                 }
+                onCleanup(promptRef.bind(ref))
                 props.ref?.(ref)
                 setTimeout(() => {
                   // setTimeout is a workaround and needs to be addressed properly
