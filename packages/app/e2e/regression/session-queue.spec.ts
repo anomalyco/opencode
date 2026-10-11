@@ -4,7 +4,7 @@ import { PromptInput } from "@opencode/schema/prompt-input"
 import { SessionInbox } from "@opencode/schema/session-inbox"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { Schema } from "effect"
-import { provider } from "../utils/app"
+import { holdRoute, provider } from "../utils/app"
 import type { MockServerConfig } from "../utils/mock-server"
 import { openSession } from "../utils/workspace"
 
@@ -160,6 +160,7 @@ async function openQueue(
   mock: ReturnType<typeof createQueueMock>,
   followUpBehavior?: "queue" | "steer",
   revert?: string,
+  status: "idle" | "running" = "running",
 ) {
   const model = { id: "queue-model", name: "Queue Model" }
 
@@ -175,7 +176,7 @@ async function openQueue(
     ],
     provider: provider(model),
     pageMessages: () => ({ items: mock.messages }),
-    sessionStatus: () => ({ [sessionID]: { type: "running" } }),
+    sessionStatus: () => ({ [sessionID]: { type: status } }),
     inbox: () => [...mock.rows.map((row) => ({ ...row, payload: { ...row.payload } })), ...mock.compactions],
     onPrompt: mock.onPrompt,
     onCompact: mock.onCompact,
@@ -221,6 +222,61 @@ test("follow-up preference controls Enter while Mod+Enter uses the alternate del
   await view.input.press("ControlOrMeta+Enter")
   await expect.poll(() => mock.prompts.map((prompt) => prompt.delivery)).toEqual(["queue", "steer"])
   await expect(view.input).toHaveText("")
+})
+
+test("a steer shows in the timeline as the composer clears, before its selection commits", async ({ page }) => {
+  const mock = createQueueMock([])
+  const view = await openQueue(page, mock, "steer")
+  const commit = await holdRoute(page, (url) => url.pathname === `/api/session/${sessionID}/model`, { method: "POST" })
+
+  const prompt = page.locator('[data-timeline-virtual-content] [data-timeline-row="UserMessage"]', {
+    hasText: "steer while the model commits",
+  })
+
+  await view.input.fill("steer while the model commits")
+  await view.input.press("Enter")
+  await commit.arrived
+  await expect(view.input).toHaveText("")
+  await expect(prompt).toBeVisible()
+  expect(mock.prompts).toEqual([])
+
+  commit.release()
+  await expect.poll(() => mock.prompts.map((item) => item.text)).toEqual(["steer while the model commits"])
+  await expect(prompt).toHaveCount(1)
+})
+
+test("a steer into an idle session leaves the finished turn finished until delivery", async ({ page }) => {
+  const mock = createQueueMock(
+    [],
+    [
+      { id: "msg_queue_finished_user", type: "user", text: "Inspect the queue.", time: { created: 1700000000000 } },
+      {
+        id: "msg_queue_finished_assistant",
+        type: "assistant",
+        agent: "build",
+        model: { id: "queue-model", providerID: "opencode" },
+        content: [{ type: "text", text: "The queue is fine." }],
+        finish: "stop",
+        time: { created: 1700000000001, completed: 1700000000002 },
+      },
+      { id: "msg_queue_finished_idle", type: "idle", outcome: "succeeded", time: { created: 1700000000003 } },
+    ],
+  )
+
+  const view = await openQueue(page, mock, "steer", undefined, "idle")
+  const finished = page.getByRole("button", { name: "Copy response" })
+  await expect(finished).toHaveCount(1)
+
+  await view.input.fill("start the next turn")
+  await view.input.press("Enter")
+  await expect.poll(() => mock.prompts.map((item) => item.text)).toEqual(["start the next turn"])
+  await expect(
+    page.locator('[data-timeline-virtual-content] [data-timeline-row="UserMessage"]', {
+      hasText: "start the next turn",
+    }),
+  ).toBeVisible()
+  // The admitted steer waits for delivery; the finished turn above it keeps its copy action and duration.
+  await expect(finished).toHaveCount(1)
 })
 
 test("dragging reorders queued prompts", async ({ page }) => {

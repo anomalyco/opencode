@@ -1,6 +1,5 @@
 import { Predicate } from "effect"
 import { base64Encode } from "@opencode/util/encode"
-import type { SessionMessageUser } from "@opencode/client/promise"
 import { Session } from "@opencode/schema/session"
 import { startTransition } from "solid-js"
 import type { NewSessionComposerAdapter } from "@/composer/adapter"
@@ -10,13 +9,13 @@ import { createComposerProjectControls } from "./project/controller"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useLocal } from "@/providers/models/selection"
 import { useData, useServer } from "@/runtime/server/current"
-import { type ServerSDK, useServerSDK } from "@/runtime/server/client"
+import { useServerSDK } from "@/runtime/server/client"
 import { useTabs } from "@/shell/tabs/tabs"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { createWorktree } from "@/workspaces/create"
 import { showToast } from "@/shell/notifications/toast"
 import { SessionRouteKey, SessionStateKey } from "@/runtime/server/scope"
-import { clearSessionMessageHandoff, setSessionMessageHandoff } from "@/session/handoff"
+import { createSessionMessageHandoff } from "@/session/handoff"
 import type { DraftMcpControls } from "./mcp"
 
 export function createNewSessionComposerAdapter(props: {
@@ -161,7 +160,7 @@ export function createNewSessionComposerAdapter(props: {
         session: {
           id: created.id,
           directory: sessionDirectory,
-          handoff: createMessageHandoff(sessionKey, created.id, serverSDK.event),
+          handoff: createSessionMessageHandoff(sessionKey, created.id, serverSDK.event),
           api: {
             command: (input) => afterCreation(() => serverSDK.api.session.command(input)),
             shell: (input) => afterCreation(() => serverSDK.api.session.shell(input)),
@@ -193,28 +192,6 @@ export function createNewSessionComposerAdapter(props: {
     project: createComposerProjectControls({ draftId: props.draftID, worktree: props.worktree }),
     model,
     ready: prompt.ready,
-  }
-}
-
-function createMessageHandoff(key: string, sessionID: string, event: ServerSDK["event"]) {
-  let unsubscribe: VoidFunction | undefined
-
-  return {
-    set(message: SessionMessageUser) {
-      unsubscribe?.()
-      setSessionMessageHandoff(key, message)
-      unsubscribe = event.on("session.inbox.enqueued", (item) => {
-        if (item.data.sessionID !== sessionID || item.data.inboxID !== message.id) return
-        unsubscribe?.()
-        unsubscribe = undefined
-        clearSessionMessageHandoff(key, message.id)
-      })
-    },
-    clear(messageID: string) {
-      unsubscribe?.()
-      unsubscribe = undefined
-      clearSessionMessageHandoff(key, messageID)
-    },
   }
 }
 

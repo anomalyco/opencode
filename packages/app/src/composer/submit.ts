@@ -146,16 +146,25 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
       const restore = () => restoreSubmission(input, submission, value, comments)
 
       if (value.mode === "normal" && !command) {
-        session.handoff?.set(handoffMessage(value))
+        // The timeline shows a steer, and any switches it makes, as the composer clears; a queued prompt shows in
+        // the queue once admitted.
+        if (value.delivery === "steer")
+          session.handoff.set({
+            message: handoffMessage(value),
+            selection: {
+              agent: value.selection.agent,
+              model: {
+                id: value.selection.model.modelID,
+                providerID: value.selection.model.providerID,
+                variant: value.selection.variant,
+              },
+            },
+          })
         const optimisticBusy = !input.adapter.working()
 
-        if (optimisticBusy && input.adapter.kind === "new-session")
-          session.data.session.setStatus(session.id, "running")
+        if (optimisticBusy) session.data.session.setStatus(session.id, "running")
 
-        const sending = sendPrompt(session, value, input.adapter.controls().model.selection.trackSessionCommit, () => {
-          if (optimisticBusy && input.adapter.kind === "active-session")
-            session.data.session.setStatus(session.id, "running")
-        }).then(
+        const sending = sendPrompt(session, value, input.adapter.controls().model.selection.trackSessionCommit).then(
           () => ({ ok: true as const }),
           (error) => ({ ok: false as const, error }),
         )
@@ -485,7 +494,6 @@ async function sendPrompt(
   session: ComposerSession,
   value: ComposerSubmission,
   track: ModelSelection["trackSessionCommit"] | undefined,
-  onAdmit: () => void,
 ) {
   const request = await buildSubmissionRequest(session, value)
 
@@ -525,9 +533,7 @@ async function sendPrompt(
     },
   }
 
-  const sending = session.data.session.prompt(admission).catch(() => session.data.session.prompt(admission))
-  onAdmit()
-  await sending
+  await session.data.session.prompt(admission).catch(() => session.data.session.prompt(admission))
 }
 
 async function buildSubmissionRequest(session: ComposerSession, value: ComposerSubmission) {
@@ -559,7 +565,7 @@ function failSubmission(
 ) {
   if (messageID && session.admitted(messageID)) return
 
-  if (messageID) session.handoff?.clear(messageID)
+  if (messageID) session.handoff.clear(messageID)
   rollback?.()
   restore()
   input.notify.failed(kind, error)
