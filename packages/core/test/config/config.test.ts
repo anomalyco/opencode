@@ -412,6 +412,52 @@ describe("Config", () => {
     ),
   )
 
+  it.live("reloads successive edits to a symlinked global config target", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const global = path.join(tmp.path, "global")
+          const project = path.join(tmp.path, "project")
+          const target = path.join(tmp.path, "config.json")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(global)
+            await fs.mkdir(project)
+            await fs.writeFile(target, JSON.stringify({ shell: "one" }))
+            await fs.symlink(target, path.join(global, "opencode.json"))
+          })
+          return yield* Effect.gen(function* () {
+            const config = yield* Config.Service
+            const bus = yield* Bus.Service
+            expect(Config.latest(yield* config.entries(), "shell")).toBe("one")
+            // A readiness rescan can catch the first edit; the second requires a target watch.
+            for (const shell of ["two", "three"]) {
+              const changed = yield* bus
+                .subscribe(Event.Updated)
+                .pipe(Stream.take(1), Stream.runDrain, Effect.forkScoped({ startImmediately: true }))
+              yield* Effect.promise(() => fs.writeFile(target, JSON.stringify({ shell })))
+              yield* Fiber.join(changed).pipe(Effect.timeout("3 seconds"))
+              expect(Config.latest(yield* config.entries(), "shell")).toBe(shell)
+            }
+          }).pipe(
+            Effect.provide(
+              AppNodeBuilder.build(LayerNode.group([Config.node, Bus.node]), [
+                Location.node.replace(
+                  Layer.succeed(
+                    Location.Service,
+                    Location.Service.of(location({ directory: AbsolutePath.make(project) })),
+                  ),
+                ),
+                Global.node.replace(Global.layerWith({ config: global, home: path.join(global, "home") })),
+                Credential.node.replace(emptyCredentialNode),
+                WellKnown.node.replace(emptyWellknownNode),
+              ]),
+            ),
+          )
+        }),
+      ),
+    ),
+  )
+
   it.effect("backs Config.Service and Config.Test with one shared test implementation", () =>
     Effect.gen(function* () {
       const config = yield* Config.Service
