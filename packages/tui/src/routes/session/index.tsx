@@ -455,11 +455,20 @@ export function Session(props: {
     if (revealingOlderRows || !scroll || scroll.isDestroyed || scroll.scrollTop > scroll.viewport.height) return false
     if (current === 0) return prependHistory(scrollBy)
     revealingOlderRows = true
-    const before = scroll.scrollHeight
     scroll.stickyScroll = false
+    // Pin the current first row so the prepend is compensated in the same frame. Correcting two
+    // frames later would flash the top of the revealed chunk for a frame.
+    const first = scroll.content.getChildren()[0]
+    const hold = first ? { node: first, top: layoutTop(first) - scroll.scrollTop } : undefined
+    if (hold) held = hold
+    const before = scroll.scrollHeight
     setHiddenRows(rowsBefore(weights(), current, TRANSCRIPT_BACKFILL_CHUNK))
     afterLayout(() => {
-      scroll.scrollBy(scroll.scrollHeight - before + scrollBy)
+      if (hold && held === hold) {
+        holdAnchor()
+        held = undefined
+      }
+      scroll.scrollBy((hold ? 0 : scroll.scrollHeight - before) + scrollBy)
       scroll.stickyScroll = !navigationMessage()
       revealingOlderRows = false
     })
