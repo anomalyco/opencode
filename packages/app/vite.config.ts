@@ -2,6 +2,7 @@ import { sentryVitePlugin } from "@sentry/vite-plugin"
 import { fileURLToPath } from "node:url"
 import { defineConfig } from "vite"
 import desktopPlugin, { channel } from "./vite.js"
+import { diffsStyleFallback } from "./vite.diffs"
 import { icons } from "./vite.icons"
 import { serviceWorker } from "./vite.pwa"
 
@@ -25,30 +26,33 @@ const sentry =
 export default defineConfig({
   plugins: [
     desktopPlugin,
+    diffsStyleFallback(),
     icons(channel),
     serviceWorker(fileURLToPath(new URL("./dist", import.meta.url))),
     sentry,
-  ] as any,
+  ],
   server: {
     host: "0.0.0.0",
     allowedHosts: true,
     port: 3000,
   },
   build: {
-    ...(process.env.VITE_OPENCODE_TEST_FIXTURES === "1"
-      ? {
-          rolldownOptions: {
+    // Test fixture pages build next to the app only for e2e runs.
+    rolldownOptions:
+      process.env.VITE_OPENCODE_TEST_FIXTURES === "1"
+        ? {
             input: [
               "index.html",
               "e2e/utils/settings-wsl.html",
               "e2e/utils/app-direction.html",
               "e2e/utils/windows-menu.html",
             ],
-          },
-        }
-      : {}),
+          }
+        : undefined,
     assetsDir: "_assets",
     target: "esnext",
+    // Lower CSS that older Safari cannot parse (nesting before 17.2, light-dark() before 17.5): it would drop those rules.
+    cssTarget: "safari16.4",
     sourcemap: true,
   },
 })

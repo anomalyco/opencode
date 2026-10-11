@@ -178,27 +178,64 @@ const unsafeCSS = `
   );
 }
 
-[data-diff-header],
-[data-diff],
-[data-file] {
-  [data-separator] {
-    height: 24px;
-  }
-  [data-column-number] {
-    cursor: default !important;
+/* This string is not lowered at build time. Safari before 17.5 has no light-dark(): Pierre's :host declares
+   color-scheme: light dark, so the preferred color scheme picks the value, as it does for light-dark(). */
+@supports not (color: light-dark(#000, #fff)) {
+  :host {
+    --diffs-bg-separator-override: color-mix(in lab, var(--diffs-bg) 98%, var(--diffs-mixer));
   }
 
-  &[data-interactive-line-numbers] [data-column-number] {
-    cursor: default !important;
+  [data-diff],
+  [data-file] {
+    --diffs-bg-deletion-override: color-mix(in lab, var(--diffs-bg) 33.333%, var(--diffs-deletion-base));
+    --diffs-bg-addition-override: color-mix(in lab, var(--diffs-bg) 33.333%, var(--diffs-addition-base));
   }
 
-  &[data-interactive-lines] [data-line] {
-    cursor: auto !important;
+  [data-diff] [data-line][data-line-type='change-deletion'][data-selected-line] {
+    --diffs-bg-deletion-emphasis: rgb(from var(--diffs-deletion-base) r g b / 0.07);
   }
-  [data-code] {
-    overflow-x: auto !important;
-    overflow-y: clip !important;
+
+  @media (prefers-color-scheme: dark) {
+    :host {
+      --diffs-bg-separator-override: color-mix(in lab, var(--diffs-bg) 95%, var(--diffs-mixer));
+    }
+
+    [data-diff],
+    [data-file] {
+      --diffs-bg-deletion-override: color-mix(in lab, var(--diffs-bg) 60%, var(--diffs-deletion-base));
+      --diffs-bg-addition-override: color-mix(in lab, var(--diffs-bg) 60%, var(--diffs-addition-base));
+    }
+
+    [data-diff] [data-line][data-line-type='change-deletion'][data-selected-line] {
+      --diffs-bg-deletion-emphasis: rgb(from var(--diffs-deletion-base) r g b / 0.1);
+    }
   }
+}
+
+/* Flat rules: Safari before 17.2 drops nested rules. */
+[data-diff-header] [data-separator],
+[data-diff] [data-separator],
+[data-file] [data-separator] {
+  height: 24px;
+}
+
+[data-diff-header] [data-column-number],
+[data-diff] [data-column-number],
+[data-file] [data-column-number] {
+  cursor: default !important;
+}
+
+[data-diff-header][data-interactive-lines] [data-line],
+[data-diff][data-interactive-lines] [data-line],
+[data-file][data-interactive-lines] [data-line] {
+  cursor: auto !important;
+}
+
+[data-diff-header] [data-code],
+[data-diff] [data-code],
+[data-file] [data-code] {
+  overflow-x: auto !important;
+  overflow-y: clip !important;
 }
 
 ${lineCommentStyles}
