@@ -169,6 +169,31 @@ test("reports a failed registered service without spawning", async () => {
   expect(process.exitCode).toBe(null)
 })
 
+test("waits for a busy registered service to recover without replacing it", async () => {
+  await using fixture = await serviceFixture()
+  const registration = fixture.registration
+  const existing = fixture.spawn("busy")
+  await fixture.waitForFile()
+  const original = await Bun.file(registration).json()
+  const starts: EnsureReason[] = []
+
+  const endpoint = await run(
+    accelerate(Service.ensure, { unresponsiveTimeout: 1_000 })({
+      file: registration,
+      version: "test",
+      command: fixture.command("record-start"),
+      onStart: (reason) => starts.push(reason),
+    }),
+  )
+
+  expect((await Bun.file(registration + ".requests").text()).trim().split("\n")).toHaveLength(4)
+  expect(endpoint.url).toBe(original.url)
+  expect(await Bun.file(registration).json()).toEqual(original)
+  expect(existing.exitCode).toBe(null)
+  expect(starts).toEqual([])
+  expect(await Bun.file(registration + ".started").exists()).toBe(false)
+})
+
 test("evicts an unresponsive registered service before starting its replacement", async () => {
   await using fixture = await serviceFixture()
   const registration = fixture.registration
