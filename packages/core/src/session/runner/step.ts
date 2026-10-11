@@ -235,6 +235,20 @@ export const make = Effect.gen(function* () {
           yield* publisher.failUnsettledTools(INPUT_INCOMPLETE, "uncalled")
         }
 
+        if (
+          Exit.isSuccess(stream) &&
+          !interrupted &&
+          recorded.finish &&
+          !recorded.providerFailed &&
+          !llmError &&
+          !recorded.usableOutput &&
+          !recorded.needsContinuation
+        )
+          yield* publisher.failAssistant({
+            type: "provider.invalid-output",
+            message: "The provider response ended without visible text or a tool call.",
+          })
+
         const record = publisher.record()
         if (record.finish || record.failure) {
           const startSnapshot = yield* Fiber.join(pendingStartSnapshot)
