@@ -281,6 +281,8 @@ const makeCrossSpawnSpawner = Effect.gen(function* () {
       const closed = Deferred.makeUnsafe<readonly [code: number | null, signal: NodeJS.Signals | null]>()
       const exited = Deferred.makeUnsafe<readonly [code: number | null, signal: NodeJS.Signals | null]>()
       const proc = launch(command.command, command.args, opts)
+      // Keep late stdin errors handled after the Effect sink has removed its listeners.
+      proc.stdin?.on("error", () => {})
       let end = false
       let exit: readonly [code: number | null, signal: NodeJS.Signals | null] | undefined
       proc.on("error", (err) => {

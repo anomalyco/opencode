@@ -79,6 +79,19 @@ describe("AppProcess", () => {
       }),
     )
 
+    it.live(
+      "returns a child's diagnostic when it exits before consuming stdin",
+      Effect.gen(function* () {
+        const svc = yield* AppProcess.Service
+        const result = yield* svc.run(cmd("-e", "process.stderr.write('rejected input'); process.exit(128)"), {
+          stdin: "input",
+        })
+        expect(result.exitCode).toBe(128)
+        expect(result.stderr.toString("utf8")).toBe("rejected input")
+        yield* Effect.sleep("10 millis")
+      }),
+    )
+
     it.effect(
       "requireSuccess fails on non-zero exit",
       Effect.gen(function* () {

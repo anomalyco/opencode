@@ -746,6 +746,26 @@ test("reports a local MCP server as failed when the location has no execution pl
   )
 })
 
+test("survives local MCP commands that exit before consuming stdin", async () => {
+  const config = new ConfigMCP.Local({ type: "local", command: [process.execPath, "-e", "process.exit(128)"] })
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      yield* Effect.forEach(
+        ["one", "two", "three", "four"],
+        (name) =>
+          connect(name, config, import.meta.dir).pipe(
+            Effect.scoped,
+            Effect.exit,
+            Effect.tap((exit) => Effect.sync(() => expect(Exit.isFailure(exit)).toBe(true))),
+          ),
+        { concurrency: "unbounded" },
+      )
+      // The writable destroy path can emit EPIPE after the connect effects have finished.
+      yield* Effect.sleep("100 millis")
+    }),
+  )
+})
+
 test("rejects sends before the stdio transport is started", async () => {
   await Effect.runPromise(
     Effect.scoped(
