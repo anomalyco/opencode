@@ -13,9 +13,12 @@ export type UpdateState =
   | { readonly type: "installed"; readonly target: UpdateTarget }
   | { readonly type: "failed"; readonly target: UpdateTarget; readonly message: string }
 
+// A newer OpenCode 1 release wins; OpenCode 2 is only suggested once OpenCode 1 is up to date.
+export type UpdateNotice = { readonly type: "available"; readonly version: string } | { readonly type: "major" }
+
 // Implemented by the CLI process so checks and installs run against this machine's installation.
 export type UpdateSource = {
-  readonly subscribe: (notify: (notice: { readonly type: "available"; readonly version: string }) => void) => () => void
+  readonly subscribe: (notify: (notice: UpdateNotice) => void) => () => void
   readonly check: () => Promise<{ readonly current: string; readonly latest?: string }>
   readonly apply: (target: UpdateTarget) => Promise<void>
 }
@@ -28,23 +31,24 @@ export const { use: useUpdateNotification, provider: UpdateNotificationProvider 
     const kv = useKV()
     const dialog = useDialog()
     const exit = useExit()
-    const [available, setAvailable] = createSignal<string>()
+    const [available, setAvailable] = createSignal<UpdateNotice>()
     const [state, setState] = createSignal<UpdateState>()
 
     // Checks only announce a version. Installing always goes through /update.
     onMount(() => {
       if (!props.updater) return
-      onCleanup(props.updater.subscribe((notice) => setAvailable(notice.version)))
+      onCleanup(props.updater.subscribe(setAvailable))
     })
 
     const notification = createMemo(() => {
       const current = state()
       if (current?.type === "installed") return current
-      const version = available()
-      if (!version) return undefined
+      const notice = available()
+      if (!notice) return undefined
+      if (notice.type === "major") return kv.get("skipped_major") ? undefined : notice
       const skipped = kv.get("skipped_version")
-      if (skipped && !isVersionGreater(version, skipped)) return undefined
-      return { type: "available" as const, version }
+      if (skipped && !isVersionGreater(notice.version, skipped)) return undefined
+      return notice
     })
 
     const install = async (target: UpdateTarget) => {
@@ -75,7 +79,9 @@ export const { use: useUpdateNotification, provider: UpdateNotificationProvider 
           check={updater.check}
           state={state}
           install={install}
-          skip={(version) => kv.set("skipped_version", version)}
+          skip={(target) =>
+            target.type === "major" ? kv.set("skipped_major", true) : kv.set("skipped_version", target.version)
+          }
           restart={() => exit()}
         />
       ))

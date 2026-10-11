@@ -9,18 +9,17 @@ import { Spinner } from "./spinner"
 
 type Version = { current: string; latest?: string }
 
-// OpenCode 2 is always offered; the OpenCode 1 update only appears when a newer release exists.
-export function updateTargets(version: Version | undefined): UpdateTarget[] {
-  const latest = version?.latest && version.latest !== version.current ? version.latest : undefined
-  if (!latest) return [{ type: "major" }]
-  return [{ type: "major" }, { type: "latest", version: latest }]
+// A newer OpenCode 1 release uses the normal update flow; OpenCode 2 is only offered when OpenCode 1 is current.
+export function updateTarget(version: Version): UpdateTarget {
+  if (version.latest && version.latest !== version.current) return { type: "latest", version: version.latest }
+  return { type: "major" }
 }
 
 export function DialogUpdate(props: {
   check: () => Promise<Version | undefined>
   state: () => UpdateState | undefined
   install: (target: UpdateTarget) => Promise<void>
-  skip: (version: string) => void
+  skip: (target: UpdateTarget) => void
   restart: () => void
 }) {
   const dialog = useDialog()
@@ -34,36 +33,36 @@ export function DialogUpdate(props: {
     }),
   )
 
-  const latest = () => updateTargets(check()).find((target) => target.type === "latest")
+  const target = () => {
+    const version = check()
+    if (!version?.latest) return undefined
+    return updateTarget(version)
+  }
   const state = createMemo(() => {
     const current = props.state()
     if (current?.type === "installing" || current?.type === "installed") return current
     if (check.loading) return { type: "checking" as const }
     if (current?.type === "failed") return current
-    const message = error() ?? (check()?.latest ? undefined : "Couldn't check for updates.")
-    if (message) return { type: "check-failed" as const, message }
-    const target = latest()
-    if (target) return { type: "available" as const, version: target.version }
-    return { type: "current" as const }
+    const next = target()
+    if (!next) return { type: "check-failed" as const, message: error() ?? "Couldn't check for updates." }
+    if (next.type === "major") return { type: "major" as const }
+    return { type: "available" as const, version: next.version }
   })
   const buttons = createMemo(() => {
     const current = state()
     if (current.type === "checking" || current.type === "installing") return []
     if (current.type === "installed") return [skip(), { label: "Restart", run: props.restart }]
-    const target = latest()
-    return [
-      skip(),
-      { label: "OpenCode 2", run: () => props.install({ type: "major" }) },
-      ...(target ? [{ label: "Update", run: () => props.install(target) }] : []),
-    ]
+    const next = target()
+    if (!next) return [skip()]
+    return [skip(), { label: next.type === "major" ? "Upgrade" : "Update", run: () => props.install(next) }]
   })
 
   function skip() {
     return {
       label: "Skip",
       run: () => {
-        const target = latest()
-        if (target && props.state()?.type !== "installed") props.skip(target.version)
+        const next = target()
+        if (next && props.state()?.type !== "installed") props.skip(next)
         dialog.clear()
       },
     }
@@ -92,7 +91,7 @@ export function DialogUpdate(props: {
         <text attributes={TextAttributes.BOLD} fg={theme.text}>
           {state().type === "installing"
             ? "Updating OpenCode"
-            : state().type === "available" || state().type === "failed"
+            : state().type === "available" || state().type === "major" || state().type === "failed"
               ? "Update available"
               : "Update"}
         </text>
@@ -130,8 +129,15 @@ export function DialogUpdate(props: {
                   </text>
                 )}
               </Match>
-              <Match when={current.type === "current"}>
-                <text fg={theme.textMuted}>OpenCode is already up to date.</text>
+              <Match when={current.type === "major"}>
+                <box>
+                  <text fg={theme.textMuted} wrapMode="word">
+                    OpenCode is already up to date. OpenCode 2 is available.
+                  </text>
+                  <text fg={theme.textMuted} wrapMode="word">
+                    Upgrading installs OpenCode 2 and removes OpenCode 1.
+                  </text>
+                </box>
               </Match>
               <Match when={(current.type === "failed" || current.type === "check-failed") && current} keyed>
                 {(failed) => (
@@ -142,11 +148,6 @@ export function DialogUpdate(props: {
               </Match>
             </Switch>
           )}
-        </Show>
-        <Show when={buttons().some((button) => button.label === "OpenCode 2")}>
-          <text fg={theme.textMuted} wrapMode="word">
-            OpenCode 2 is also available. Upgrading installs OpenCode 2 and removes OpenCode 1.
-          </text>
         </Show>
       </box>
       <Show when={buttons().length > 0}>
