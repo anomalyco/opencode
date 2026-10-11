@@ -17,15 +17,24 @@ describe("TerminalState", () => {
       ],
     })
 
-    expect(decoded).toEqual({
+    expect<unknown>(decoded).toEqual({
       active: "one",
       all: [
         { id: "one", title: "Terminal 2", titleNumber: 2 },
-        { id: "two", title: "logs", titleNumber: 4, rows: 24, cols: 80, buffer: "output", cursor: 12, scrollY: 3 },
+        {
+          id: "two",
+          title: "logs",
+          titleNumber: 4,
+          rows: 24,
+          cols: 80,
+          buffer: "output",
+          cursor: 12,
+          scrollY: 3,
+        },
       ],
     })
     const active = decodeTerminalState({ ...decoded, active: "two" })
-    expect(active.active).toBe("two")
+    expect<unknown>(active.active).toBe("two")
     expect(decodeTerminalState(Schema.encodeSync(TerminalState)(active))).toEqual(active)
   })
 
@@ -33,7 +42,7 @@ describe("TerminalState", () => {
     expect(decodeTerminalState({})).toEqual({ active: undefined, all: [] })
     expect(decodeTerminalState({ active: 2, all: "invalid" })).toEqual({ active: undefined, all: [] })
     expect(decodeTerminalState({ all: [null, {}, { id: "" }, { id: 2 }] })).toEqual({ active: undefined, all: [] })
-    expect(
+    expect<unknown>(
       decodeTerminalState({
         all: [
           {
