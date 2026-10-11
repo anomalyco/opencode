@@ -103,6 +103,10 @@
 }
 .session-summary-heading .session-summary-label {
   flex: 0 1 auto;
+  /* Center the cap height, not the line box, between the avatar and the chevron.
+     Clip only horizontally so the trimmed box keeps descenders visible. */
+  overflow: clip visible;
+  text-box: trim-both cap alphabetic;
 }
 .session-summary-disclosure {
   flex-shrink: 0;
