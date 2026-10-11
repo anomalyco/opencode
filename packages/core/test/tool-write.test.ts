@@ -110,6 +110,15 @@ describe("WriteTool", () => {
         Effect.gen(function* () {
           expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["write", "execute"])
           const settled = yield* executeTool(registry, call({ path: "src/new.txt", content: "created" }))
+          const files = [
+            {
+              file: "src/new.txt",
+              status: "added",
+              additions: 1,
+              deletions: 0,
+              patch: expect.stringContaining("+created"),
+            },
+          ]
           expect(settled).toEqual({
             status: "completed",
             output: {
@@ -117,8 +126,10 @@ describe("WriteTool", () => {
               target: path.join(yield* Effect.promise(() => fs.realpath(tmp.path)), "src", "new.txt"),
               resource: "src/new.txt",
               existed: false,
+              files,
             },
             content: [{ type: "text", text: "Created file successfully: src/new.txt" }],
+            metadata: { files },
           })
           expect(yield* Effect.promise(() => fs.readFile(path.join(tmp.path, "src", "new.txt"), "utf8"))).toBe(
             "created",
@@ -145,7 +156,7 @@ describe("WriteTool", () => {
     }),
   )
 
-  it.live("formats the committed file", () =>
+  it.live("formats the committed file and returns the diff for final formatted content", () =>
     withTempDir((tmp) => {
       const fixture = makeWriteFixture()
       const target = path.join(tmp.path, "formatted.txt")
@@ -154,13 +165,33 @@ describe("WriteTool", () => {
           await fs.writeFile(file, (await fs.readFile(file, "utf8")).toUpperCase())
           return true
         })
-      return withTool(tmp.path, fixture, (registry) =>
-        Effect.gen(function* () {
-          expect(yield* executeTool(registry, call({ path: "formatted.txt", content: "format me" }))).toMatchObject({
-            status: "completed",
-          })
-          expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("FORMAT ME")
-        }),
+      return Effect.promise(() => fs.writeFile(target, "before\n")).pipe(
+        Effect.andThen(
+          withTool(tmp.path, fixture, (registry) =>
+            executeTool(registry, call({ path: "formatted.txt", content: "format me\n" })),
+          ),
+        ),
+        Effect.andThen((settled) =>
+          Effect.gen(function* () {
+            expect(settled.status).toBe("completed")
+            if (settled.status !== "completed") return
+            const files = [
+              {
+                file: "formatted.txt",
+                status: "modified",
+                additions: 1,
+                deletions: 1,
+                patch: expect.stringMatching(/-before\n\+FORMAT ME\n/),
+              },
+            ]
+            expect(settled.output).toMatchObject({ files })
+            expect(settled.metadata).toMatchObject({ files })
+            expect(fixture.assertions[0]?.metadata).toMatchObject({
+              files: [{ patch: expect.stringContaining("+format me") }],
+            })
+            expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("FORMAT ME\n")
+          }),
+        ),
       )
     }),
   )
