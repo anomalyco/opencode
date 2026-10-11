@@ -1738,6 +1738,61 @@ describe("SessionRunnerLLM", () => {
     expect(yield* s.messages).toHaveLength(3)
   })
 
+  scenario("keeps the system prompt stable across a committed revert", function* (s) {
+    yield* s.runPrompt("First")
+    // Changed after the baseline, so it is delivered as a chronological update, not in `system`.
+    s.systemBaseline = "Changed context"
+    yield* s.runPrompt("Second")
+    const third = yield* s.runPrompt("Third")
+    const before = s.requests.at(-1)?.system.map((part) => part.text)
+    expect(before).toEqual([defaultSystem, fakeIdentity, "Initial context"])
+
+    // Revert only the last message. Everything earlier, including the baseline, is untouched.
+    yield* s.bus.publish(SessionEvent.RevertEvent.Committed, { sessionID, to: third.id })
+    yield* s.runPrompt("Fourth")
+
+    // Any change here shifts the prompt-cache prefix for the entire conversation.
+    expect(s.requests.at(-1)?.system.map((part) => part.text)).toEqual(before)
+  })
+
+  scenario("resyncs the instruction state when a committed revert removes an update", function* (s) {
+    yield* s.runPrompt("First")
+    s.systemBaseline = "Changed context"
+    const second = yield* s.runPrompt("Second")
+    s.systemBaseline = "Latest context"
+    yield* s.runPrompt("Third")
+
+    // Deletes "Second", "Third", and the "Latest context" update, so the fold would claim the model knows it.
+    yield* s.bus.publish(SessionEvent.RevertEvent.Committed, { sessionID, to: second.id })
+    expect(
+      yield* s.db.select().from(InstructionStateTable).where(eq(InstructionStateTable.session_id, sessionID)).get(),
+    ).toBeUndefined()
+
+    yield* s.runPrompt("Fourth")
+    const request = s.requests.at(-1)
+    expect(request?.system.map((part) => part.text)).toEqual([defaultSystem, fakeIdentity, "Latest context"])
+  })
+
+  scenario("does not replay updates removed by an earlier committed revert", function* (s) {
+    const first = yield* s.runPrompt("A")
+    s.systemBaseline = "Changed context"
+    yield* s.runPrompt("B")
+    // Deletes "A", "B", and the "Changed context" update; the event row for that update remains.
+    yield* s.bus.publish(SessionEvent.RevertEvent.Committed, { sessionID, to: first.id })
+
+    s.systemBaseline = "Initial context"
+    const third = yield* s.runPrompt("C")
+    s.systemBaseline = "Other context"
+    yield* s.runPrompt("D")
+    yield* s.bus.publish(SessionEvent.RevertEvent.Committed, { sessionID, to: third.id })
+    yield* s.runPrompt("E")
+
+    // The reverted "Changed context" update must not resurface, and no stale update is emitted.
+    const request = s.requests.at(-1)
+    expect(request?.system.map((part) => part.text).at(-1)).toBe("Other context")
+    expect(request?.messages.filter((message) => message.role === "system")).toEqual([])
+  })
+
   scenario("uses the selected model family prompt when the agent does not override it", function* (s) {
     s.currentModel = LanguageModel.make({ id: "gpt-5", provider: "openai", route: OpenAIChat.route })
     yield* s.admit("First")

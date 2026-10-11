@@ -153,6 +153,29 @@ export const advanceEpoch = Effect.fn("InstructionState.advanceEpoch")(function*
     .pipe(Effect.orDie)
 })
 
+/**
+ * Resyncs the fold after a committed revert deleted history from `boundarySeq` onward.
+ *
+ * A revert deletes message rows but not events, so the fold cannot be rebuilt from events without
+ * also replaying updates that an earlier revert removed. When no update was removed, the fold
+ * already matches the surviving history and is kept, so the epoch baseline and the rendered system
+ * prompt stay byte-identical. Clearing it would re-observe live sources into a new baseline,
+ * folding every update since the epoch start into the system prompt and invalidating the provider
+ * prompt cache for the whole conversation.
+ *
+ * When an update was removed, `current_values` would claim the model knows a value its history no
+ * longer shows, so the next boundary would never re-deliver it. Clear the fold to resync.
+ */
+export const rewind = Effect.fn("InstructionState.rewind")(function* (
+  db: DatabaseService,
+  sessionID: SessionSchema.ID,
+  boundarySeq: number,
+) {
+  const state = yield* find(db, sessionID)
+  if (!state || state.through_seq < boundarySeq) return
+  yield* reset(db, sessionID)
+})
+
 export const reset = Effect.fn("InstructionState.reset")(function* (db: DatabaseService, sessionID: SessionSchema.ID) {
   yield* db
     .delete(InstructionStateTable)
