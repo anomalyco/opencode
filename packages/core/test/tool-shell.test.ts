@@ -1861,4 +1861,86 @@ describe("ShellTool", () => {
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
     ),
   )
+
+  it.live("retains partial output on interruption without deleting the output file and preserves explicit removal", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        return withSession(tmp.path, (registry) =>
+          Effect.gen(function* () {
+            const shell = yield* Shell.Service
+            const checkpoints: Tool.Checkpoint[] = []
+            const emitAndSleepCommand = isWindows
+              ? "[Console]::Out.Write('partial output before interrupt'); Start-Sleep -Seconds 60"
+              : "printf 'partial output before interrupt'; sleep 60"
+
+            const tools = yield* registry.snapshot()
+            const fiber = yield* tools
+              .execute({
+                ...call({ command: emitAndSleepCommand, timeout: 60_000 }, "call-shell-interrupt"),
+                checkpoint: (checkpoint) =>
+                  Effect.sync(() => {
+                    const normalized: Tool.Checkpoint =
+                      typeof checkpoint === "object" && checkpoint !== null && !Array.isArray(checkpoint)
+                        ? (checkpoint as Tool.Checkpoint)
+                        : { content: checkpoint }
+                    checkpoints.push(normalized)
+                  }),
+              })
+              .pipe(Effect.forkChild)
+
+            const waitForOutput = (remaining = 2000): Effect.Effect<string, Error> =>
+              Effect.gen(function* () {
+                const list = yield* shell.list()
+                if (list.length > 0) {
+                  const info = list[0]
+                  const exists = yield* Effect.promise(() => Bun.file(info.file).exists())
+                  if (exists) {
+                    const content = yield* Effect.promise(() => Bun.file(info.file).text())
+                    if (content.includes("partial output before interrupt")) return info.id
+                  }
+                }
+                if (remaining <= 0) return yield* Effect.fail(new Error("Timed out waiting for shell output"))
+                yield* Effect.promise(() => Bun.sleep(10))
+                return yield* waitForOutput(remaining - 1)
+              })
+
+            const shellID = yield* waitForOutput()
+            const id = ID.make(shellID)
+            const infoBeforeInterrupt = yield* shell.get(id)
+
+            yield* Fiber.interrupt(fiber)
+            const exit = yield* Fiber.await(fiber)
+            expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBe(true)
+
+            expect(checkpoints.length).toBeGreaterThan(0)
+            const lastCheckpoint = checkpoints[checkpoints.length - 1]
+            expect(lastCheckpoint.metadata).toMatchObject({ shellID })
+            expect(lastCheckpoint.content).toEqual([
+              {
+                type: "text",
+                text: "partial output before interrupt",
+              },
+            ])
+
+            const fileStillExists = yield* Effect.promise(() => Bun.file(infoBeforeInterrupt.file).exists())
+            expect(fileStillExists).toBe(true)
+            const fileContent = yield* Effect.promise(() => Bun.file(infoBeforeInterrupt.file).text())
+            expect(fileContent).toBe("partial output before interrupt")
+
+            const infoAfterInterrupt = yield* shell.get(id)
+            expect(infoAfterInterrupt.status).toBe("killed")
+
+            yield* shell.remove(id)
+            const fileAfterRemove = yield* Effect.promise(() => Bun.file(infoBeforeInterrupt.file).exists())
+            expect(fileAfterRemove).toBe(false)
+            const afterRemoveExit = yield* shell.get(id).pipe(Effect.exit)
+            expect(Exit.isFailure(afterRemoveExit)).toBe(true)
+          }),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+    ),
+  )
 })

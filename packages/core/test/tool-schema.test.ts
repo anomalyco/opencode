@@ -15,6 +15,7 @@ const context = {
   messageID: SessionMessage.ID.make("msg_tool_schema"),
   id: Tool.CallID.make("call_tool_schema"),
   progress: () => Effect.void,
+  checkpoint: () => Effect.void,
 } satisfies Tool.Context
 
 test("tools are structural values", async () => {

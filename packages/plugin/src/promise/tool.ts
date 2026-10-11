@@ -1,5 +1,5 @@
 export { CallID, Error } from "@opencode/schema/tool"
-export type { Metadata, Options, Result } from "@opencode/schema/tool"
+export type { Checkpoint, Metadata, Options, Result } from "@opencode/schema/tool"
 
 import { Tool } from "@opencode/schema/tool"
 import type { Agent } from "@opencode/schema/agent"
@@ -8,9 +8,16 @@ import type { SessionMessage } from "@opencode/schema/session-message"
 import type { Types } from "effect"
 import type { Hooks, Transform } from "./registration.js"
 
-export interface ToolContext extends Omit<Tool.Context, "progress"> {
+type CheckpointValue = Parameters<Tool.Context["checkpoint"]>[0]
+
+export interface ToolContext extends Omit<Tool.Context, "progress" | "checkpoint"> {
   readonly signal: AbortSignal
   readonly progress: (update: Tool.Metadata) => Promise<void>
+  /**
+   * Register directly in the abort listener. For asynchronous cleanup, pass an async callback returning the snapshot.
+   * Interruption awaits the callback and checkpoint publication without waiting for the executor to settle.
+   */
+  readonly checkpoint: (checkpoint: CheckpointValue | (() => Promise<CheckpointValue>)) => Promise<void>
 }
 
 export type Info<

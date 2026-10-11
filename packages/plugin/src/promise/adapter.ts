@@ -6,7 +6,7 @@ import type { Scope } from "effect"
 import { HttpApiEndpoint, HttpApiSchema } from "effect/http-api"
 import { define } from "../effect/plugin.js"
 import type { Plugin } from "./plugin.js"
-import type { Info } from "./tool.js"
+import type { Info, ToolContext } from "./tool.js"
 import type { RpcDomain, RpcHandlers } from "./rpc.js"
 
 type HostRegistration = { readonly dispose: Effect.Effect<void> }
@@ -255,6 +255,7 @@ export function fromPromise(plugin: Plugin) {
               execute(input, {
                 ...context,
                 progress: (update) => Effect.promise(() => context.progress(update)),
+                checkpoint: (checkpoint) => Effect.promise(() => context.checkpoint(checkpoint)),
               }),
               { signal: context.signal },
             )
@@ -489,16 +490,21 @@ export function fromPromise(plugin: Plugin) {
                       }),
                     update: (id, update) =>
                       editor.update(id, (tool) => {
+                        const execute = promiseExecutor(tool.execute)
                         const value: Info = {
                           ...tool,
-                          execute: promiseExecutor(tool.execute),
+                          execute,
                         }
                         update(value)
                         Object.assign(tool, value, {
                           output: value.output,
                           options: value.options,
-                          execute: (input: Parameters<Info["execute"]>[0], context: Tool.Context) =>
-                            executePromiseTool(value, input, context),
+                          // Metadata edits must retain the Effect executor's interruption cleanup.
+                          execute:
+                            value.execute === execute
+                              ? tool.execute
+                              : (input: Parameters<Info["execute"]>[0], context: Tool.Context) =>
+                                  executePromiseTool(value, input, context),
                         })
                       }),
                     remove: editor.remove,
@@ -622,10 +628,37 @@ function attempt<A>(evaluate: (signal: AbortSignal) => PromiseLike<A>) {
 type RuntimeSchema = Schema.Codec<unknown, unknown>
 
 const executePromiseTool = (tool: Info, input: any, context: Tool.Context) =>
-  Effect.promise((signal) =>
-    tool.execute(input, {
+  Effect.gen(function* () {
+    const controller = new AbortController()
+    const checkpoints = new Set<Promise<void>>()
+    const toolContext: ToolContext = {
       ...context,
-      signal,
-      progress: (update) => Effect.runPromise(context.progress(update), { signal }),
-    }),
-  )
+      signal: controller.signal,
+      progress: (update) => Effect.runPromise(context.progress(update), { signal: controller.signal }),
+      checkpoint: (checkpoint) => {
+        const promise =
+          typeof checkpoint === "function"
+            ? Promise.resolve()
+                .then(checkpoint)
+                .then((snapshot) => Effect.runPromise(context.checkpoint(snapshot)))
+            : Effect.runPromise(context.checkpoint(checkpoint))
+        checkpoints.add(promise)
+        void promise.then(
+          () => checkpoints.delete(promise),
+          () => checkpoints.delete(promise),
+        )
+        return promise
+      },
+    }
+
+    return yield* Effect.promise(() => tool.execute(input, toolContext)).pipe(
+      Effect.onInterrupt(() =>
+        Effect.gen(function* () {
+          // Abort listeners register the whole cleanup callback before it starts asynchronous work.
+          // Keep the publisher alive until cleanup and checkpoint publication finish.
+          controller.abort()
+          yield* Effect.promise(() => Promise.allSettled(checkpoints))
+        }),
+      ),
+    )
+  })

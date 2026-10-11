@@ -11,12 +11,18 @@ export type Metadata = Readonly<Record<string, any>>
 export const CallID = Schema.String.pipe(Schema.brand("Tool.CallID"))
 export type CallID = typeof CallID.Type
 
+export interface Checkpoint {
+  readonly content?: string | ReadonlyArray<Content>
+  readonly metadata?: Metadata
+}
+
 export interface Context {
   readonly sessionID: Session.ID
   readonly agent: Agent.ID
   readonly messageID: SessionMessage.ID
   readonly id: CallID
   readonly progress: (update: Metadata) => Effect.Effect<void>
+  readonly checkpoint: (checkpoint: Checkpoint | string | ReadonlyArray<Content>) => Effect.Effect<void>
 }
 
 export interface Namespace {

@@ -219,6 +219,32 @@ testEffect(
   }),
 )
 
+test("progress replaces metadata and an empty update clears it while preserving checkpoint content", async () => {
+  const { published, publisher } = capture()
+  await Effect.runPromise(publisher.publish(call))
+  await Effect.runPromise(
+    publisher.checkpoint(call.id, {
+      content: [{ type: "text", text: "retained output" }],
+      metadata: { checkpointOnly: true },
+    }),
+  )
+  await Effect.runPromise(publisher.progress(call.id, { stage: "running", obsolete: true }))
+  await Effect.runPromise(publisher.progress(call.id, { stage: "cleanup" }))
+  await Effect.runPromise(publisher.progress(call.id, {}))
+  expect(published.filter((event) => event.type === "session.tool.progress").map((event) => event.data)).toEqual([
+    expect.objectContaining({ metadata: { checkpointOnly: true } }),
+    expect.objectContaining({ metadata: { stage: "running", obsolete: true } }),
+    expect.objectContaining({ metadata: { stage: "cleanup" } }),
+    expect.objectContaining({ metadata: {} }),
+  ])
+  await Effect.runPromise(publisher.failUnsettledTools({ type: "aborted", message: "interrupted" }))
+  const failed = published.find((event) => event.type === "session.tool.failed.2")?.data
+  expect(failed).toMatchObject({
+    content: [{ type: "text", text: "retained output" }],
+  })
+  expect(failed).toHaveProperty("metadata", {})
+})
+
 test("interrupted progress metadata remains in the terminal failure snapshot", async () => {
   const { published, publisher } = capture("anthropic", { interruptProgress: true })
   await Effect.runPromise(publisher.publish(call))
@@ -282,6 +308,115 @@ test("failure snapshot retains canonical progress above the default byte limit",
 
   expect(published.find((event) => event.type === "session.tool.failed.2")?.data).toMatchObject({
     metadata: { detail },
+  })
+})
+
+test("interrupted checkpoint content and metadata remain in the terminal failure snapshot", async () => {
+  const { published, publisher } = capture()
+  await Effect.runPromise(publisher.publish(call))
+  await Effect.runPromise(
+    publisher.checkpoint(call.id, {
+      content: [{ type: "text", text: "partial output before cancellation" }],
+      metadata: { phase: "processing", count: 42 },
+    }),
+  )
+  await Effect.runPromise(publisher.failUnsettledTools({ type: "aborted", message: "Tool execution interrupted" }))
+
+  const failed = published.find((event) => event.type === "session.tool.failed.2")?.data
+  expect(failed).toMatchObject({
+    error: { type: "aborted", message: "Tool execution interrupted" },
+    content: [{ type: "text", text: "partial output before cancellation" }],
+    metadata: { phase: "processing", count: 42 },
+  })
+})
+
+test("latest checkpoint content supersedes earlier checkpoints and merges progress metadata", async () => {
+  const { published, publisher } = capture()
+  await Effect.runPromise(publisher.publish(call))
+  await Effect.runPromise(publisher.progress(call.id, { initial: "setup" }))
+  await Effect.runPromise(
+    publisher.checkpoint(call.id, {
+      content: [{ type: "text", text: "first checkpoint" }],
+      metadata: { step: 1 },
+    }),
+  )
+  await Effect.runPromise(
+    publisher.checkpoint(call.id, {
+      content: [{ type: "text", text: "second checkpoint" }],
+      metadata: { step: 2 },
+    }),
+  )
+  await Effect.runPromise(publisher.failUnsettledTools({ type: "aborted", message: "Tool execution interrupted" }))
+
+  const failed = published.find((event) => event.type === "session.tool.failed.2")?.data
+  expect(failed).toMatchObject({
+    content: [{ type: "text", text: "second checkpoint" }],
+    metadata: { initial: "setup", step: 2 },
+  })
+})
+
+test("later progress metadata overrides earlier checkpoint metadata while preserving content", async () => {
+  const { published, publisher } = capture()
+  await Effect.runPromise(publisher.publish(call))
+  await Effect.runPromise(
+    publisher.checkpoint(call.id, {
+      content: [{ type: "text", text: "checkpoint text" }],
+      metadata: { stage: "early", count: 1 },
+    }),
+  )
+  await Effect.runPromise(publisher.progress(call.id, { stage: "late", count: 2 }))
+  await Effect.runPromise(publisher.failUnsettledTools({ type: "aborted", message: "Tool execution interrupted" }))
+
+  const failed = published.find((event) => event.type === "session.tool.failed.2")?.data
+  expect(failed).toMatchObject({
+    error: { type: "aborted", message: "Tool execution interrupted" },
+    content: [{ type: "text", text: "checkpoint text" }],
+    metadata: { stage: "late", count: 2 },
+  })
+})
+
+test("later checkpoint metadata overrides earlier progress metadata while preserving content", async () => {
+  const { published, publisher } = capture()
+  await Effect.runPromise(publisher.publish(call))
+  await Effect.runPromise(publisher.progress(call.id, { stage: "early", count: 1 }))
+  await Effect.runPromise(
+    publisher.checkpoint(call.id, {
+      content: [{ type: "text", text: "checkpoint text" }],
+      metadata: { stage: "late", count: 2 },
+    }),
+  )
+  await Effect.runPromise(publisher.failUnsettledTools({ type: "aborted", message: "Tool execution interrupted" }))
+
+  const failed = published.find((event) => event.type === "session.tool.failed.2")?.data
+  expect(failed).toMatchObject({
+    error: { type: "aborted", message: "Tool execution interrupted" },
+    content: [{ type: "text", text: "checkpoint text" }],
+    metadata: { stage: "late", count: 2 },
+  })
+})
+
+test("terminal failure metadata overrides prior checkpoint and progress metadata", async () => {
+  const { published, publisher } = capture()
+  await Effect.runPromise(publisher.publish(call))
+  await Effect.runPromise(
+    publisher.checkpoint(call.id, {
+      content: [{ type: "text", text: "checkpoint text" }],
+      metadata: { stage: "running", provider: "initial" },
+    }),
+  )
+  await Effect.runPromise(publisher.progress(call.id, { stage: "finishing", step: 5 }))
+  await Effect.runPromise(
+    publisher.failTool(
+      call.id,
+      { type: "tool.execution", message: "failed" },
+      { provider: "terminal-override", final: true },
+    ),
+  )
+
+  const failed = published.find((event) => event.type === "session.tool.failed.2")?.data
+  expect(failed).toMatchObject({
+    content: [{ type: "text", text: "checkpoint text" }],
+    metadata: { stage: "finishing", step: 5, provider: "terminal-override", final: true },
   })
 })
 

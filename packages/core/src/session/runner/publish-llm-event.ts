@@ -84,12 +84,31 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     settled: boolean
     providerExecuted: boolean
     progress?: Tool.Metadata
+    content?: ReadonlyArray<Tool.Content>
   }
   const tools = new Map<string, ToolState>()
-  const failureSnapshot = (tool: { readonly progress?: Tool.Metadata }, metadata?: Tool.Metadata) => {
-    if (tool.progress === undefined) return metadata === undefined ? {} : { metadata }
-    if (metadata === undefined) return { metadata: tool.progress }
-    return { metadata: { ...tool.progress, ...metadata } }
+  const failureSnapshot = (
+    tool: {
+      readonly progress?: Tool.Metadata
+      readonly content?: ReadonlyArray<Tool.Content>
+    },
+    metadata?: Tool.Metadata,
+    content?: ReadonlyArray<Tool.Content>,
+  ) => {
+    const mergedMetadata =
+      tool.progress === undefined
+        ? metadata
+        : metadata === undefined
+          ? tool.progress
+          : {
+              ...tool.progress,
+              ...metadata,
+            }
+    const finalContent = content ?? tool.content
+    return {
+      ...(finalContent !== undefined && isReadonlyArrayNonEmpty(finalContent) ? { content: finalContent } : {}),
+      ...(mergedMetadata !== undefined ? { metadata: mergedMetadata } : {}),
+    }
   }
   const assistantMessageID = input.assistantMessageID
   let stepStarted = false
@@ -344,7 +363,12 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
 
   const flush = Effect.fn("SessionRunner.flush")(flushFragments)
 
-  const failTool = Effect.fnUntraced(function* (id: string, error: SessionError.Error, metadata?: Tool.Metadata) {
+  const failTool = Effect.fnUntraced(function* (
+    id: string,
+    error: SessionError.Error,
+    metadata?: Tool.Metadata,
+    content?: ReadonlyArray<Tool.Content>,
+  ) {
     const tool = tools.get(id)
     if (!tool || tool.settled) return false
     tool.settled = true
@@ -356,7 +380,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
         tool.name === "subagent" && error.type === "aborted" && typeof tool.progress?.sessionID === "string"
           ? { ...error, message: `${error.message} (sessionID: ${tool.progress.sessionID})` }
           : error,
-      ...failureSnapshot(tool, metadata),
+      ...failureSnapshot(tool, metadata, content),
       executed: tool.providerExecuted,
     })
     return true
@@ -575,6 +599,30 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     })
   })
 
+  const checkpoint = Effect.fnUntraced(function* (
+    id: string,
+    snapshot: {
+      readonly content?: ReadonlyArray<Tool.Content>
+      readonly metadata?: Tool.Metadata
+    },
+  ) {
+    const tool = tools.get(id)
+    if (!tool?.called || tool.settled)
+      return yield* Effect.die(new Error(`Tool checkpoint outside running call: ${id}`))
+    if (snapshot.content !== undefined) {
+      tool.content = snapshot.content
+    }
+    if (snapshot.metadata !== undefined) {
+      tool.progress = { ...tool.progress, ...snapshot.metadata }
+      yield* bus.publish(SessionEvent.Tool.Progress, {
+        sessionID: input.sessionID,
+        assistantMessageID,
+        id,
+        metadata: tool.progress,
+      })
+    }
+  })
+
   /** Publishes one canonical terminal event for a locally executed tool call. */
   const toolExecution = Effect.fnUntraced(function* (id: string, name: string, result: Tool.NormalizedResult) {
     const tool = tools.get(id)
@@ -602,6 +650,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
       return publishTraced(event)
     },
     progress,
+    checkpoint,
     toolExecution,
     flush,
     failAssistant,

@@ -14,6 +14,7 @@ const context = {
   messageID: SessionMessage.ID.make("msg_execute"),
   id: Tool.CallID.make("call_execute"),
   progress: () => Effect.void,
+  checkpoint: () => Effect.void,
 }
 
 const createCodeMode = (tools: ReadonlyMap<string, Info>) =>
