@@ -1248,4 +1248,42 @@ Earlier work
       },
     ])
   })
+
+  test("short shell output passes through verbatim", () => {
+    const shell = SessionMessage.Shell.make({
+      id: id("short-shell"),
+      type: "shell",
+      shellID: Shell.ID.make("sh_short"),
+      status: "exited",
+      command: "cat big.log",
+      output: { output: "hello\n", cursor: 6, size: 6, truncated: false },
+      time: { created },
+    })
+    expect(toLLMMessages([shell], model)).toEqual([
+      Message.make({
+        id: shell.id,
+        role: "user",
+        content:
+          "The following shell command was executed by the user:\n\nCommand:\ncat big.log\n\nOutput:\nhello\n",
+      }),
+    ])
+  })
+
+  test("shell output past the tool-output limit is cut with a marker and the tail is gone", () => {
+    const output = `head-${"a".repeat(60_000)}-TAIL`
+    const shell = SessionMessage.Shell.make({
+      id: id("long-shell"),
+      type: "shell",
+      shellID: Shell.ID.make("sh_long"),
+      status: "exited",
+      command: "cat big.log",
+      output: { output, cursor: output.length, size: output.length, truncated: false },
+      time: { created },
+    })
+    const [message] = toLLMMessages([shell], model)
+    const text = typeof message?.content === "string" ? message.content : JSON.stringify(message?.content)
+    expect(text).toContain("head-")
+    expect(text).toContain("[truncated")
+    expect(text).not.toContain("TAIL")
+  })
 })

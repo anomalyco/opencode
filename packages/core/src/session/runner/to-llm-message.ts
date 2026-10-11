@@ -13,6 +13,7 @@ import { fileURLToPath } from "url"
 import { SessionMessage } from "../message.js"
 import { SessionProviderContext } from "../provider-context.js"
 import type { FileAttachment } from "@opencode/schema/prompt"
+import { ToolOutput } from "../../tool-output.js"
 
 const imageMimes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"])
 
@@ -290,17 +291,28 @@ function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMe
       return [Message.make({ id: message.id, role: "user", content: message.text, metadata: message.metadata })]
     case "system":
       return [Message.system(message.text)]
-    case "shell":
+    case "shell": {
       // Background shell results enter context once, through their completion inbox item.
       if (message.metadata?.background === true) return []
+      // Unbounded shell output reaches the provider request verbatim and can
+      // strand the session on context overflow. Bound the model-facing preview
+      // to the tool-output limit; the full output stays in session history.
+      const output = message.output?.output ?? ""
+      const preview =
+        Buffer.byteLength(output, "utf-8") <= ToolOutput.MAX_BYTES
+          ? output
+          : `${Buffer.from(output, "utf-8")
+              .subarray(0, ToolOutput.MAX_BYTES)
+              .toString("utf-8")}\n[truncated: shell output exceeds 50 KiB; full output retained in session history]`
       return [
         Message.make({
           id: message.id,
           role: "user",
-          content: `The following shell command was executed by the user:\n\nCommand:\n${message.command}\n\nOutput:\n${message.output?.output ?? ""}`,
+          content: `The following shell command was executed by the user:\n\nCommand:\n${message.command}\n\nOutput:\n${preview}`,
           metadata: message.metadata,
         }),
       ]
+    }
     case "assistant":
       return assistant(message, model, providerMetadataKey)
     case "compaction":
