@@ -426,6 +426,41 @@ describe("Project.resolve", () => {
     }),
   )
 
+  it.live("keeps a usable cached id", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      yield* Effect.promise(() => initRepo(tmp.path, { commit: true }))
+      yield* Effect.promise(() => Bun.write(path.join(tmp.path, ".git", "opencode"), "old-id"))
+      const project = yield* Project.Service
+
+      const result = yield* project.resolve(abs(tmp.path))
+
+      expect(result.previous).toBe(Project.ID.make("old-id"))
+      expect(result.id).toBe(Project.ID.make("old-id"))
+    }),
+  )
+
+  it.live("ignores a corrupt cached id", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      )
+      yield* Effect.promise(() => initRepo(tmp.path, { commit: true }))
+      yield* Effect.promise(() => Bun.write(path.join(tmp.path, ".git", "opencode"), "\u0000".repeat(40)))
+      const project = yield* Project.Service
+
+      const result = yield* project.resolve(abs(tmp.path))
+
+      expect(result.previous).toBeUndefined()
+      expect(result.id).toBe(Project.ID.make(yield* Effect.promise(() => rootCommit(tmp.path))))
+      expect(result.id).not.toContain("\u0000")
+    }),
+  )
+
   it.live("does not write the cache while resolving", () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireRelease(
