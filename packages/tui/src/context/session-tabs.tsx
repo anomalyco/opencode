@@ -332,11 +332,6 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       const closed = closeSessionTab(state().tabs, target)
       const selected = navigate && current() === target
       if (closed.tabs === state().tabs && !selected) return
-      const previous = selected
-        ? moveSessionTabHistory(recordSessionTabHistory(history, target), closed.tabs, target, -1)
-        : { history, sessionID: undefined }
-      const next = previous.sessionID ?? closed.next
-      history = previous.history
       update((draft) => {
         draft.tabs = closeSessionTab(draft.tabs, target).tabs
       })
@@ -346,7 +341,8 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
         delete next[target]
         return next
       })
-      if (selected) route.navigate(next ? { type: "session", sessionID: next } : { type: "home" })
+      // Like a browser, closing the active tab selects its right neighbor, or its left one at the end.
+      if (selected) route.navigate(closed.next ? { type: "session", sessionID: closed.next } : { type: "home" })
     }
 
     return {
