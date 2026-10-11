@@ -24,6 +24,9 @@ const start = Effect.fnUntraced(function* () {
   const command = yield* Command.Service
   const events = yield* PubSub.unbounded<{ type: string; data: Record<string, unknown> }>()
   const sent: Sent[] = []
+  const notices: string[] = []
+  // "flaky" works once, then fails like a command that was removed
+  let flaky = 0
   yield* LoopPlugin.Plugin.effect(
     host({
       command: {
@@ -45,11 +48,19 @@ const start = Effect.fnUntraced(function* () {
             })
           }),
         command: (input) =>
-          input.name === "missing"
-            ? Effect.fail(new Error("Command not found: missing"))
+          input.name === "missing" || (input.name === "flaky" && flaky++ > 0)
+            ? Effect.fail(new Error(`Command not found: ${input.name}`))
             : Effect.sync(() => {
                 sent.push({ command: input.name, text: input.text, delivery: input.delivery })
               }),
+        synthetic: (input) =>
+          Effect.sync(() => {
+            expect(input.description).toBe(input.text)
+            expect(input.resume).toBe(false)
+            notices.push(input.text)
+            // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
+            return {} as never
+          }),
       },
     }),
   ).pipe(
@@ -65,7 +76,7 @@ const start = Effect.fnUntraced(function* () {
   const emit = (type: string, data: Record<string, unknown> = {}) =>
     PubSub.publish(events, { type, data: { sessionID, ...data } }).pipe(Effect.andThen(settle))
   const wait = (duration: Duration.Input) => TestClock.adjust(duration).pipe(Effect.andThen(settle))
-  return { loop, emit, wait, sent }
+  return { loop, emit, wait, sent, notices }
 })
 
 describe("LoopPlugin", () => {
@@ -90,7 +101,7 @@ describe("LoopPlugin", () => {
 
   it.effect("repeats the prompt until /loop stop and skips ticks while busy", () =>
     Effect.gen(function* () {
-      const { loop, emit, wait, sent } = yield* start()
+      const { loop, emit, wait, sent, notices } = yield* start()
       yield* loop("5m say hi")
       expect(sent).toEqual([{ text: "say hi", delivery: "steer" }])
       yield* wait("5 minutes")
@@ -107,6 +118,11 @@ describe("LoopPlugin", () => {
       yield* loop("stop")
       yield* wait("20 minutes")
       expect(sent).toHaveLength(3)
+      expect(notices).toEqual([
+        "Loop started: every 5m for up to 7 days: say hi. Run /loop stop to end it.",
+        "Loop stopped.",
+      ])
+      expect(String(yield* loop("stop").pipe(Effect.exit))).toContain("No loop is running")
     }),
   )
 
@@ -122,12 +138,16 @@ describe("LoopPlugin", () => {
 
   it.effect("interrupting the session stops the loop", () =>
     Effect.gen(function* () {
-      const { loop, emit, wait, sent } = yield* start()
+      const { loop, emit, wait, sent, notices } = yield* start()
       yield* loop("1m say hi")
       yield* emit(SessionEvent.Execution.Started.type)
       yield* emit(SessionEvent.Execution.Interrupted.type, { reason: "user" })
       yield* wait("5 minutes")
       expect(sent).toHaveLength(1)
+      expect(notices.at(-1)).toBe("Loop stopped because the session was interrupted.")
+      // an interrupt with no loop running posts nothing
+      yield* emit(SessionEvent.Execution.Interrupted.type, { reason: "user" })
+      expect(notices).toHaveLength(2)
     }),
   )
 
@@ -145,13 +165,51 @@ describe("LoopPlugin", () => {
 
   it.effect("fails with usage for an empty prompt and drops a loop whose first run fails", () =>
     Effect.gen(function* () {
-      const { loop, wait, sent } = yield* start()
+      const { loop, wait, sent, notices } = yield* start()
       const empty = yield* loop("10m").pipe(Effect.exit)
       expect(Exit.isFailure(empty)).toBe(true)
       expect(String(empty)).toContain("Usage: /loop")
       expect(Exit.isFailure(yield* loop("1m /missing").pipe(Effect.exit))).toBe(true)
       yield* wait("5 minutes")
       expect(sent).toEqual([])
+      expect(notices.at(-1)).toBe("Loop stopped: Command not found: missing")
+    }),
+  )
+
+  it.effect("rejects intervals under a minute", () =>
+    Effect.gen(function* () {
+      const { loop, sent, notices } = yield* start()
+      const exit = yield* loop("30s say hi").pipe(Effect.exit)
+      expect(String(exit)).toContain("at least 1m")
+      expect(sent).toEqual([])
+      expect(notices).toEqual([])
+      yield* loop("60s say hi")
+      expect(sent).toHaveLength(1)
+    }),
+  )
+
+  it.effect("ends the loop after 7 days", () =>
+    Effect.gen(function* () {
+      const { loop, wait, sent, notices } = yield* start()
+      yield* loop("24h say hi")
+      yield* wait("6 days")
+      expect(sent).toHaveLength(7)
+      yield* wait("1 day")
+      expect(sent).toHaveLength(7)
+      expect(notices.at(-1)).toBe("Loop ended after 7 days. Run /loop again to restart it.")
+      yield* wait("3 days")
+      expect(sent).toHaveLength(7)
+    }),
+  )
+
+  it.effect("tells the session when a later tick fails", () =>
+    Effect.gen(function* () {
+      const { loop, wait, sent, notices } = yield* start()
+      yield* loop("1m /flaky")
+      yield* wait("1 minute")
+      yield* wait("5 minutes")
+      expect(sent).toHaveLength(1)
+      expect(notices.at(-1)).toBe("Loop stopped: Command not found: flaky")
     }),
   )
 })

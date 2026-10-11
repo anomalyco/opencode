@@ -2,11 +2,14 @@ export * as LoopPlugin from "./loop.js"
 
 import { define } from "@opencode/plugin/effect/plugin"
 import type { Session } from "@opencode/schema/session"
-import { Duration, Effect, FiberMap, Stream } from "effect"
+import { Cause, Clock, Duration, Effect, FiberMap, Predicate, Stream } from "effect"
 import { Bus } from "../bus.js"
 import { SessionEvent } from "../session/event.js"
 
 const usage = "Usage: /loop [interval] <prompt>, e.g. /loop 5m check the deploy"
+// Same bounds as Claude Code's recurring tasks: minute granularity, gone after a week.
+const minimum = Duration.minutes(1)
+const lifetime = Duration.days(7)
 const intervalRegex = /^\s*([1-9]\d*)([smh])(?:\s+|$)/
 const units = { s: 1, m: 60, h: 3600 }
 
@@ -21,9 +24,17 @@ export function parse(text: string) {
     every: interval
       ? Duration.seconds(Number(interval[1]) * units[interval[2] as keyof typeof units])
       : Duration.minutes(10),
+    label: interval ? `${interval[1]}${interval[2]}` : "10m",
     prompt,
     command: command && { name: command, text: prompt.slice(command.length + 1).trim() },
   }
+}
+
+function message(cause: Cause.Cause<unknown>) {
+  const error = Cause.squash(cause)
+  if (error instanceof Error) return error.message
+  if (Predicate.hasProperty(error, "message") && typeof error.message === "string") return error.message
+  return String(error)
 }
 
 export const Plugin = define({
@@ -32,6 +43,19 @@ export const Plugin = define({
     const bus = yield* Bus.Service
     const loops = yield* FiberMap.make<Session.ID>()
     const busy = new Set<Session.ID>()
+
+    // Shown in the session, so a loop never starts or stops without the user seeing it.
+    const notify = (sessionID: Session.ID, text: string) =>
+      ctx.session
+        .synthetic({ sessionID, text, description: text, metadata: { source: "loop" }, resume: false })
+        .pipe(Effect.catchCause((cause) => Effect.logWarning("failed to post loop notice", { sessionID, cause })))
+    const stop = (sessionID: Session.ID, text: string) =>
+      Effect.gen(function* () {
+        if (!(yield* FiberMap.has(loops, sessionID))) return false
+        yield* FiberMap.remove(loops, sessionID)
+        yield* notify(sessionID, text)
+        return true
+      })
 
     yield* bus
       .subscribe([
@@ -47,7 +71,7 @@ export const Plugin = define({
           busy.delete(sessionID)
           // interrupting the session also ends its loop
           if (event.type === SessionEvent.Execution.Interrupted.type && event.data.reason === "user")
-            return FiberMap.remove(loops, sessionID)
+            return stop(sessionID, "Loop stopped because the session was interrupted.")
           return Effect.void
         }),
         Effect.forkScoped({ startImmediately: true }),
@@ -61,7 +85,12 @@ export const Plugin = define({
           Effect.gen(function* () {
             const parsed = parse(input.prompt.text)
             if (!parsed) return yield* Effect.fail(new Error(usage))
-            if (parsed.type === "stop") return yield* FiberMap.remove(loops, input.sessionID)
+            if (parsed.type === "stop") {
+              if (yield* stop(input.sessionID, "Loop stopped.")) return
+              return yield* Effect.fail(new Error("No loop is running in this session."))
+            }
+            if (Duration.isLessThan(parsed.every, minimum))
+              return yield* Effect.fail(new Error("The loop interval must be at least 1m."))
             const step = (delivery: typeof input.delivery) =>
               parsed.command
                 ? ctx.session.command({
@@ -73,14 +102,29 @@ export const Plugin = define({
                 : ctx.session
                     .prompt({ ...input.prompt, sessionID: input.sessionID, text: parsed.prompt, delivery })
                     .pipe(Effect.asVoid)
-            // Ticks that land while the session is busy are skipped rather than queued.
-            yield* Effect.suspend(() => (busy.has(input.sessionID) ? Effect.void : step("queue"))).pipe(
-              Effect.delay(parsed.every),
-              Effect.forever,
-              Effect.catchCause((cause) => Effect.logError("loop stopped", { sessionID: input.sessionID, cause })),
-              FiberMap.run(loops, input.sessionID),
+            const run = Effect.gen(function* () {
+              const end = (yield* Clock.currentTimeMillis) + Duration.toMillis(lifetime)
+              while (true) {
+                yield* Effect.sleep(parsed.every)
+                if ((yield* Clock.currentTimeMillis) >= end)
+                  return yield* notify(input.sessionID, "Loop ended after 7 days. Run /loop again to restart it.")
+                // Ticks that land while the session is busy are skipped rather than queued.
+                if (!busy.has(input.sessionID)) yield* step("queue")
+              }
+            }).pipe(
+              Effect.catchCauseIf(
+                (cause) => !Cause.hasInterruptsOnly(cause),
+                (cause) => notify(input.sessionID, `Loop stopped: ${message(cause)}`),
+              ),
             )
-            yield* step(input.delivery).pipe(Effect.onError(() => FiberMap.remove(loops, input.sessionID)))
+            yield* notify(
+              input.sessionID,
+              `Loop started: every ${parsed.label} for up to 7 days: ${parsed.prompt}. Run /loop stop to end it.`,
+            )
+            yield* FiberMap.run(loops, input.sessionID, run)
+            yield* step(input.delivery).pipe(
+              Effect.tapCause((cause) => stop(input.sessionID, `Loop stopped: ${message(cause)}`)),
+            )
           }),
       })
     })
