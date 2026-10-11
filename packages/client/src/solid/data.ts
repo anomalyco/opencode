@@ -84,6 +84,11 @@ const messagePageLimit = 20
 // Trailing window for event bursts that each ask for the same refetch.
 export const settleMs = 150
 
+// Sessions whose cached transcript outgrows this bound release their cache when the session
+// view unmounts, so re-entering the session reduces one fresh page instead of every page the
+// user ever scrolled through.
+export const messageCacheReleaseLimit = messagePageLimit * 20
+
 // Global MCP elicitations temporarily use "global" instead of a real session ID, so the
 // server cannot recover their Location when settling them. Preserve the event Location
 // until MCP elicitations carry session ownership.
@@ -256,6 +261,7 @@ export function createData(config: CreateDataInput) {
     Object.values(store.session.info).toSorted((a, b) => b.time.updated - a.time.updated),
   )
   const messageIndex = new Map<string, Map<string, number>>()
+  const messageEpoch = new Map<string, number>()
   const sync = createSync()
   let activeUpdates: Map<string, DataSessionStatus | undefined> | undefined
   const pendingUpdates = new Map<string, Map<string, SessionInboxInfo | SessionInbox.Delivery | undefined>>()
@@ -1652,11 +1658,14 @@ export function createData(config: CreateDataInput) {
         },
         sync(sessionID: string) {
           return sync.run(`session.message:${sessionID}`, async () => {
+            const epoch = (messageEpoch.get(sessionID) ?? 0) + 1
+            messageEpoch.set(sessionID, epoch)
             const response = await api().message.list({
               sessionID,
               limit: config.initialMessageLimit?.() ?? messagePageLimit,
               order: "desc",
             })
+            if (messageEpoch.get(sessionID) !== epoch) return
             const fetched = response.data.toReversed()
             // Same protection as the pending sync: a re-fetch racing an
             // admission must not wipe its local transcript row.
@@ -1711,6 +1720,7 @@ export function createData(config: CreateDataInput) {
           }
           const cursor = store.session.messageCursor[sessionID]
           if (!cursor || signal?.aborted) return
+          const epoch = messageEpoch.get(sessionID) ?? 0
           setStore("session", "messageLoading", sessionID, true)
           const request = (async () => {
             const fetched: SessionMessageInfo[] = []
@@ -1729,6 +1739,9 @@ export function createData(config: CreateDataInput) {
               next = response.cursor.next ?? undefined
               if (!options?.all) break
             } while (next)
+            // A release or re-sync can replace the cursor while this page is in flight.
+            if (store.session.messageCursor[sessionID] !== cursor || (messageEpoch.get(sessionID) ?? 0) !== epoch)
+              return
             // A jump through history publishes once, not once per page of offscreen messages.
             const existing = store.session.message[sessionID] ?? []
             const ids = new Set(existing.map((item) => item.id))
@@ -1750,6 +1763,29 @@ export function createData(config: CreateDataInput) {
         },
         invalidate(sessionID: string) {
           sync.invalidate(`session.message:${sessionID}`)
+        },
+        release(sessionID: string) {
+          messageEpoch.set(sessionID, (messageEpoch.get(sessionID) ?? 0) + 1)
+          messageIndex.delete(sessionID)
+          // Invalidate so the next visit re-syncs instead of replaying a resolved sync.
+          sync.invalidate(`session.message:${sessionID}`)
+          const admitted = new Set(
+            (store.session.pending[sessionID] ?? []).flatMap((item) =>
+              item.type === "user" || item.type === "synthetic" ? [item.id] : [],
+            ),
+          )
+          const local = (store.session.message[sessionID] ?? []).filter(
+            (item) => outbox.has(item.id) || admitted.has(item.id),
+          )
+          if (local.length) messageIndex.set(sessionID, new Map(local.map((item, index) => [item.id, index])))
+          setStore(
+            "session",
+            produce((draft) => {
+              delete draft.message[sessionID]
+              delete draft.messageCursor[sessionID]
+              if (local.length) draft.message[sessionID] = local
+            }),
+          )
         },
       },
       permission: {
