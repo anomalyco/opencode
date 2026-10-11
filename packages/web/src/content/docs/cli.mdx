@@ -651,11 +651,18 @@ To upgrade to a specific version.
 opencode upgrade v0.1.48
 ```
 
+To upgrade to OpenCode 2 and remove OpenCode 1.
+
+```bash
+opencode upgrade --major
+```
+
 #### Flags
 
 | Flag                                   | Short | Description                                                       |
 | -------------------------------------- | ----- | ----------------------------------------------------------------- |
 | <nobr><code>{"--method"}</code></nobr> | `-m`  | The installation method that was used; curl, npm, pnpm, bun, brew |
+| <nobr><code>{"--major"}</code></nobr>  |       | Upgrade to OpenCode 2 and remove OpenCode 1                       |
 
 ---
 
@@ -685,7 +692,7 @@ OpenCode can be configured using environment variables.
 | `OPENCODE_TUI_CONFIG`                 | string  | Path to TUI config file                           |
 | `OPENCODE_CONFIG_DIR`                 | string  | Path to config directory                          |
 | `OPENCODE_CONFIG_CONTENT`             | string  | Inline json config content                        |
-| `OPENCODE_DISABLE_AUTOUPDATE`         | boolean | Disable automatic update checks                   |
+| `OPENCODE_DISABLE_AUTOUPDATE`         | boolean | Disable update checks and notices                 |
 | `OPENCODE_DISABLE_PRUNE`              | boolean | Disable pruning of old data                       |
 | `OPENCODE_DISABLE_TERMINAL_TITLE`     | boolean | Disable automatic terminal title updates          |
 | `OPENCODE_PERMISSION`                 | string  | Inlined json permissions config                   |
