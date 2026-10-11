@@ -21,9 +21,7 @@ export const Plugin = define({
       Stream.runForEach(() => reload),
       Effect.forkScoped({ startImmediately: true }),
     )
-    // Authored documents reverse so user-global policy outranks repository policy; organization statements
-    // from the connected Console follow every authored one and have the final say.
-    const policies = () => ManagedPolicy.statements(loaded.entries, managed.current())
+    const policies = () => ManagedPolicy.statements(loaded.entries, managed.current(), config.managed)
     yield* ctx.provider.transform((providers) => {
       const current = policies()
       for (const record of providers.list()) {
