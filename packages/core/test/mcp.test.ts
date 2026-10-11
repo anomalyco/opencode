@@ -4,6 +4,7 @@ import { describe, expect, test } from "bun:test"
 import { Client, InMemoryTransport, StreamableHTTPClientTransport } from "@modelcontextprotocol/client"
 import {
   createMcpHandler,
+  type ElicitRequestFormParams,
   inputRequired,
   inputResponse,
   Server,
@@ -95,6 +96,7 @@ function resourceServer(
     listChanged?: boolean
     emptyElicitation?: boolean
     urlElicitation?: boolean
+    formElicitation?: boolean
     respond?: (request: Request) => Response | undefined | Promise<Response | undefined>
   } = {},
 ) {
@@ -122,6 +124,10 @@ function resourceServer(
           progressToken: unknown
         }>,
         initializations: 0,
+        // Legacy capabilities arrive in the initialize handshake; modern ones ride every request's
+        // `_meta.io.modelcontextprotocol/clientCapabilities`, so both are recorded to assert the wire shape.
+        capabilities: [] as unknown[],
+        metaCapabilities: [] as unknown[],
         urls: [] as string[],
         sessions: [] as string[],
       }
@@ -146,7 +152,9 @@ function resourceServer(
               ? [{ name: "empty-elicitation", inputSchema: { type: "object" as const, properties: {} } }]
               : input.urlElicitation
                 ? [{ name: "url-elicitation", inputSchema: { type: "object" as const, properties: {} } }]
-                : [{ name: "echo", inputSchema: { type: "object" as const, properties: {} } }],
+                : input.formElicitation
+                  ? [{ name: "form-elicitation", inputSchema: { type: "object" as const, properties: {} } }]
+                  : [{ name: "echo", inputSchema: { type: "object" as const, properties: {} } }],
           })
         })
         if (input.emptyElicitation) {
@@ -184,7 +192,51 @@ function resourceServer(
             }
           })
         }
-        if (!input.emptyElicitation && !input.urlElicitation) {
+        if (input.formElicitation) {
+          // The primitive schema kinds the elicitation specification allows (client/elicitation#requested-schema):
+          // string with constraints and a default, integer with bounds, a single-select enum, and a boolean.
+          const requestedSchema = {
+            type: "object",
+            properties: {
+              name: {
+                type: "string",
+                title: "Full name",
+                description: "Your display name",
+                minLength: 2,
+                maxLength: 40,
+                default: "Octocat",
+              },
+              age: { type: "integer", title: "Age", minimum: 0, maximum: 130 },
+              colour: { type: "string", enum: ["Red", "Green", "Blue"], default: "Green" },
+              newsletter: { type: "boolean", title: "Newsletter", default: true },
+            },
+            required: ["name"],
+          } satisfies ElicitRequestFormParams["requestedSchema"]
+          const message = "Tell us about yourself"
+          // Modern servers cannot call elicitInput; they return input_required and the SDK client
+          // retries the call with inputResponses (basic/patterns/mrtr).
+          protocol.setRequestHandler("tools/call", async (request, ctx) => {
+            const responses = ctx.mcpReq.inputResponses
+            if (input.modern && !responses) {
+              return inputRequired({
+                inputRequests: { profile: inputRequired.elicit({ message, requestedSchema }) },
+              })
+            }
+            const result = input.modern
+              ? (() => {
+                  const response = inputResponse(responses, "profile")
+                  return response.kind === "elicit"
+                    ? { action: response.action, content: response.content }
+                    : { action: "cancel" }
+                })()
+              : await protocol.elicitInput({ mode: "form", message, requestedSchema })
+            return {
+              content: [{ type: "text", text: JSON.stringify(result) }],
+              structuredContent: result,
+            }
+          })
+        }
+        if (!input.emptyElicitation && !input.urlElicitation && !input.formElicitation) {
           protocol.setRequestHandler("tools/call", (request) => {
             state.toolCalls.push({
               name: request.params.name,
@@ -241,6 +293,18 @@ function resourceServer(
           const body: unknown = request.method === "POST" ? await request.clone().json() : undefined
           if (typeof body === "object" && body !== null && "method" in body && body.method === "initialize") {
             state.initializations += 1
+          }
+          if (typeof body === "object" && body !== null && "params" in body) {
+            const params = body.params
+            if (typeof params === "object" && params !== null) {
+              if ("capabilities" in params) state.capabilities.push(params.capabilities)
+              const meta =
+                "_meta" in params && typeof params._meta === "object" && params._meta !== null
+                  ? (params._meta as Record<string, unknown>)
+                  : undefined
+              const capabilities = meta?.["io.modelcontextprotocol/clientCapabilities"]
+              if (capabilities !== undefined) state.metaCapabilities.push(capabilities)
+            }
           }
           return (await input.respond?.(request)) ?? modern?.fetch(request) ?? current.transport.handleRequest(request)
         },
@@ -334,7 +398,10 @@ function resourceMcpLayer(
             } as Payload<typeof definition>
             overrides?.published?.push(event.type)
             if (event.type !== Form.Event.Created.type || !onFormCreated) return Effect.succeed(event)
-            return onFormCreated(Schema.decodeUnknownSync(Form.Event.Created.data)(data).form).pipe(Effect.as(event))
+            // Subscribers receive events after a JSON hop, where undefined-valued optional members drop.
+            // Roundtrip so this mock decodes the same shape a real subscriber sees.
+            const encoded = Schema.encodeUnknownSync(Form.Event.Created.data)(data as { readonly form: Form.Info })
+            return onFormCreated(Schema.decodeUnknownSync(Form.Event.Created.data)(encoded).form).pipe(Effect.as(event))
           },
         }),
         Layer.mock(Integration.Service, {
@@ -1368,6 +1435,151 @@ test("settles modern MCP URL elicitations when the user confirms", async () => {
         )
 
         expect(result.structured).toEqual({ action: "accept" })
+      }),
+    ),
+  )
+})
+
+test("advertises the specification's MCP elicitation capability in both protocol eras", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const legacy = yield* resourceServer({ resources: false })
+        yield* Effect.gen(function* () {
+          yield* settled(yield* Mcp.Service)
+        }).pipe(Effect.provide(resourceMcpLayer(legacy.url)))
+
+        // `toEqual` catches extra members, so a vendor field such as the SDK's `applyDefaults`
+        // fails this. The capability is specified as `{ form: {}, url: {} }`.
+        const legacyCapabilities = legacy.state.capabilities.at(-1) as { elicitation?: unknown } | undefined
+        expect(legacyCapabilities?.elicitation).toEqual({ form: {}, url: {} })
+
+        const modern = yield* resourceServer({ modern: true, resources: false })
+        yield* Effect.gen(function* () {
+          yield* settled(yield* Mcp.Service)
+        }).pipe(
+          Effect.provide(
+            resourceMcpLayer(
+              new ConfigMCP.Remote({
+                type: "remote",
+                url: modern.url,
+                oauth: false,
+                protocol: "2026-07-28",
+              }),
+            ),
+          ),
+        )
+
+        // 2026-07-28 carries the same capability object in every request's `_meta` instead of the
+        // initialize handshake, so the wire shape is asserted there too.
+        const modernCapabilities = modern.state.metaCapabilities.at(-1) as { elicitation?: unknown } | undefined
+        expect(modernCapabilities?.elicitation).toEqual({ form: {}, url: {} })
+      }),
+    ),
+  )
+})
+
+// Shared by the form elicitation tests below. The form service maps the requested schema onto these
+// fields, preserving titles, constraints, enum options, and defaults (`toElicitationField`).
+const profileFormFields: Form.Fields = [
+  {
+    key: "name",
+    title: "Full name",
+    description: "Your display name",
+    required: true,
+    type: "string",
+    minLength: 2,
+    maxLength: 40,
+    default: "Octocat",
+  },
+  { key: "age", title: "Age", type: "integer", minimum: 0, maximum: 130 },
+  {
+    key: "colour",
+    title: "colour",
+    type: "string",
+    default: "Green",
+    options: [
+      { value: "Red", label: "Red" },
+      { value: "Green", label: "Green" },
+      { value: "Blue", label: "Blue" },
+    ],
+    custom: false,
+  },
+  { key: "newsletter", title: "Newsletter", type: "boolean", default: true },
+]
+
+test("answers a modern MCP form elicitation through the multi-round-trip flow", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const server = yield* resourceServer({ modern: true, resources: false, formElicitation: true })
+        const created = yield* Deferred.make<Form.Info>()
+        const result = yield* Effect.gen(function* () {
+          const service = yield* Mcp.Service
+          const forms = yield* Form.Service
+          const call = yield* service
+            .callTool({ server: "resources", name: "form-elicitation" })
+            .pipe(Effect.forkScoped)
+
+          const form = yield* Deferred.await(created)
+          expect(form.metadata).toEqual({
+            kind: "mcp-elicitation",
+            server: "resources",
+            message: "Tell us about yourself",
+          })
+          expect(form.fields).toEqual(profileFormFields)
+
+          yield* forms.reply({
+            id: form.id,
+            answer: { name: "Mona", age: 30, colour: "Blue", newsletter: false },
+          })
+          return yield* Fiber.join(call)
+        }).pipe(
+          Effect.provide(
+            resourceMcpLayer(
+              new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false, protocol: "2026-07-28" }),
+              (form) => Deferred.succeed(created, form).pipe(Effect.asVoid),
+            ),
+          ),
+        )
+
+        expect(result.structured).toEqual({
+          action: "accept",
+          content: { name: "Mona", age: 30, colour: "Blue", newsletter: false },
+        })
+      }),
+    ),
+  )
+})
+
+test("answers a legacy MCP form elicitation with fields", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const server = yield* resourceServer({ resources: false, formElicitation: true })
+        const created = yield* Deferred.make<Form.Info>()
+        const result = yield* Effect.gen(function* () {
+          const service = yield* Mcp.Service
+          const forms = yield* Form.Service
+          const call = yield* service
+            .callTool({ server: "resources", name: "form-elicitation" })
+            .pipe(Effect.forkScoped)
+
+          const form = yield* Deferred.await(created)
+          expect(form.fields).toEqual(profileFormFields)
+          yield* forms.reply({
+            id: form.id,
+            answer: { name: "Mona", age: 30, colour: "Blue", newsletter: false },
+          })
+          return yield* Fiber.join(call)
+        }).pipe(
+          Effect.provide(resourceMcpLayer(server.url, (form) => Deferred.succeed(created, form).pipe(Effect.asVoid))),
+        )
+
+        expect(result.structured).toEqual({
+          action: "accept",
+          content: { name: "Mona", age: 30, colour: "Blue", newsletter: false },
+        })
       }),
     ),
   )
