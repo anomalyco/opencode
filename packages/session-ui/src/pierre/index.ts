@@ -1,6 +1,7 @@
 import { DiffLineAnnotation, FileContents, FileDiffOptions, type SelectedLineRange } from "@pierre/diffs"
 import { ComponentProps } from "solid-js"
 import { lineCommentStyles } from "../components/line-comment-styles"
+import { diffColorTuningCSS } from "./diff-color-tuning"
 
 export type DiffProps<T = {}> = FileDiffOptions<T, undefined> & {
   before: FileContents
@@ -22,21 +23,31 @@ const unsafeCSS = `
     color-mix(in lab, var(--diffs-bg) 98%, var(--diffs-mixer)),
     color-mix(in lab, var(--diffs-bg) 95%, var(--diffs-mixer))
   );
+  --diffs-bg-addition-emphasis-override: light-dark(
+    rgb(from var(--v2-green-600) r g b / 0.2),
+    rgb(from var(--v2-green-600) r g b / 0.4)
+  );
+  --diffs-bg-deletion-emphasis-override: light-dark(
+    rgb(from var(--v2-red-600) r g b / 0.2),
+    rgb(from var(--v2-red-600) r g b / 0.4)
+  );
+  --diffs-fg-number-override: var(--v2-text-text-faint);
+  --diffs-fg-number-addition-override: light-dark(var(--v2-green-900), var(--v2-green-400));
+  --diffs-fg-number-deletion-override: light-dark(var(--v2-red-800), var(--v2-red-500));
   /* The app's code wrapping rules do not reach this shadow tree, and pretty is inherited from the page. */
   text-wrap-style: auto;
 }
 
 [data-diff],
 [data-file] {
-  /* Pierre 1.2 mixes these override targets at 12% in light mode and 20% in dark mode. */
   --diffs-bg-deletion-override: light-dark(
-    color-mix(in lab, var(--diffs-bg) 33.333%, var(--diffs-deletion-base)),
-    color-mix(in lab, var(--diffs-bg) 60%, var(--diffs-deletion-base))
+    rgb(from var(--v2-red-600) r g b / 0.05),
+    rgb(from var(--v2-red-600) r g b / 0.1)
   );
   --diffs-bg-deletion-number-override: var(--diffs-bg-deletion-override);
   --diffs-bg-addition-override: light-dark(
-    color-mix(in lab, var(--diffs-bg) 33.333%, var(--diffs-addition-base)),
-    color-mix(in lab, var(--diffs-bg) 60%, var(--diffs-addition-base))
+    rgb(from var(--v2-green-600) r g b / 0.05),
+    rgb(from var(--v2-green-800) r g b / 0.1)
   );
   --diffs-bg-addition-number-override: var(--diffs-bg-addition-override);
   --diffs-selection-base: var(--v2-background-bg-accent);
@@ -58,14 +69,47 @@ const unsafeCSS = `
   width: 2px;
 }
 
+[data-indicators='bars'] [data-column-number][data-line-type='change-addition']::before {
+  background-color: light-dark(var(--v2-green-900), var(--v2-green-400));
+}
+
 [data-indicators='bars'] [data-column-number][data-line-type='change-deletion']::before {
   background-image: none;
-  background-color: var(--diffs-deletion-base);
+  background-color: light-dark(var(--v2-red-800), var(--v2-red-500));
 }
 
 [data-background] [data-column-number] {
   --mix-light: 88%;
   --mix-dark: 80%;
+}
+
+/* Changed-row overrides are final translucent fills, so Pierre must not blend them into the background again. */
+[data-background]
+  :is([data-line], [data-no-newline], [data-column-number], [data-gutter-buffer]):is(
+    [data-line-type='change-addition'],
+    [data-line-type='change-deletion']
+  ) {
+  --mix-light: 0%;
+  --mix-dark: 0%;
+}
+
+/* Syntax colors are inline styles on token spans, so emphasized text needs !important to stay legible on its highlight. */
+[data-line-type='change-addition'] [data-diff-span],
+[data-line-type='change-addition'] [data-diff-span] * {
+  color: light-dark(var(--v2-green-1200), var(--v2-text-text-base)) !important;
+}
+
+[data-line-type='change-deletion'] [data-diff-span],
+[data-line-type='change-deletion'] [data-diff-span] * {
+  color: light-dark(var(--v2-red-1200), var(--v2-text-text-base)) !important;
+}
+
+:is([data-separator-content], [data-expand-button]) {
+  color: var(--v2-text-text-faint);
+}
+
+[data-expand-button]:hover {
+  color: var(--diffs-fg);
 }
 
 [data-diff-type='split'] [data-additions],
@@ -203,6 +247,7 @@ const unsafeCSS = `
 
 ${lineCommentStyles}
 
+${diffColorTuningCSS}
 `
 
 export function createDefaultOptions<T>(style: FileDiffOptions<T, undefined>["diffStyle"]) {

@@ -1,0 +1,41 @@
+/* Baseline stylesheet: colors, units, selectors, at-rules. */
+:root {
+  --brand: #3b5cf6;
+  --radius: 6px;
+  --gap: 8px;
+}
+
+.card {
+  display: flex;
+  gap: var(--gap);
+  padding: 12px 16px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: var(--radius);
+  background: #ffffff;
+  color: #161616;
+}
+
+.card:hover {
+  background: #fafafa;
+}
+
+.card[data-state="error"] {
+  color: #b82d35;
+  border-color: #f2bbb7;
+}
+
+@media (max-width: 768px) {
+  .card {
+    flex-direction: column;
+    padding: 8px;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

@@ -1,0 +1,601 @@
+diff --git a/diff-color-fixture/01-inline.tsx b/diff-color-fixture/01-inline.tsx
+index 1d16049d61..5074a3bc83 100644
+--- a/diff-color-fixture/01-inline.tsx
++++ b/diff-color-fixture/01-inline.tsx
+@@ -1,37 +1,37 @@
+-// BEGIN: baseline — first-line change
++// BEGIN: edited — first-line change
+ type ReviewState = "pending" | "ready" | "failed"
+ type ReviewProps = { title: string; count: number; state: ReviewState }
+ 
+-export const heading = "Review the old checkout experience"
+-export const count = 8
+-export const obsolete = "delete this isolated row"
++export const heading = "Review the new checkout experience"
++export const count = 9
+ export const anchor = "unchanged between deletion and addition"
++export const added = "add this isolated row"
+ 
+ // Contiguous span versus several separated small spans.
+-export const contiguous = "Keep the original checkout message readable"
+-export const scattered = "alpha: old; beta: cold; gamma: slow"
+-export const oneCharacter = "item-7"
+-export const atStart = "before middle remains ending remains"
+-export const atMiddle = "start remains before ending remains"
+-export const atEnd = "start remains middle remains before"
+-export const punctuation = { label: "Ready", enabled: true }
+-export const spaces = "one two three"
+-export const indent = "indent-only change"
+-export const trailing = "trailing-space-only change"
++export const contiguous = "Keep the redesigned payment summary readable"
++export const scattered = "alpha: new; beta: warm; gamma: fast"
++export const oneCharacter = "item-8"
++export const atStart = "after middle remains ending remains"
++export const atMiddle = "start remains after ending remains"
++export const atEnd = "start remains middle remains after"
++export const punctuation = { label: "Ready", enabled: true };
++export const spaces = "one  two three"
++  export const indent = "indent-only change"
++export const trailing = "trailing-space-only change"  
+ 
+ // Syntax competition: comment, keyword, type, boolean, string, number.
+ export function ReviewCard(props: ReviewProps) {
+-  const status: ReviewState = "pending"
+-  const enabled = false
+-  const retries = 3
+-  // Keep this quiet explanation readable on a tinted row.
+-  return <section aria-label="Old review" data-state={status}>
++  const status: ReviewState | undefined = "ready"
++  const enabled = true
++  const retries = 4
++  // Keep this revised explanation readable on a tinted row.
++  return <article aria-label="New review" data-state={status}>
+     <h2>{props.title}</h2>
+-    <span className="text-muted">{props.count} old items</span>
+-    <button disabled={!enabled}>Continue checkout</button>
+-  </section>
++    <span className="text-primary">{props.count} new items</span>
++    <button disabled={!enabled}>Confirm payment</button>
++  </article>
+ }
+ 
+-export const longLine = "Start unchanged | The old checkout flow waits for manual confirmation before showing the receipt | Middle unchanged with punctuation: brackets [one, two], braces {three}, quotes 'four', slash /five/ | The old final instruction asks the reviewer to close the window | End unchanged"
++export const longLine = "Start unchanged | The new payment flow waits for automatic confirmation before showing the receipt | Middle unchanged with punctuation: brackets [one, two], braces {three}, quotes 'four', slash /five/ | The new final instruction asks the reviewer to keep the window | End unchanged"
+ 
+-// END: baseline — last-line change
++// END: edited — last-line change
+diff --git a/diff-color-fixture/02-folded.ts b/diff-color-fixture/02-folded.ts
+index 07541ab49d..a5b9b354c3 100644
+--- a/diff-color-fixture/02-folded.ts
++++ b/diff-color-fixture/02-folded.ts
+@@ -1,5 +1,5 @@
+-// BEGIN baseline
+-export const first = "old"
++// BEGIN edited
++export const first = "new"
+ // quiet context A01
+ // quiet context A02
+ // quiet context A03
+@@ -20,7 +20,7 @@ export const first = "old"
+ // quiet context A18
+ // quiet context A19
+ // quiet context A20
+-export const second = "old"
++export const second = "new"
+ // quiet context B01
+ // quiet context B02
+ // quiet context B03
+@@ -41,7 +41,7 @@ export const second = "old"
+ // quiet context B18
+ // quiet context B19
+ // quiet context B20
+-export const third = "old"
++export const third = "new"
+ // quiet context C01
+ // quiet context C02
+ // quiet context C03
+@@ -62,5 +62,5 @@ export const third = "old"
+ // quiet context C18
+ // quiet context C19
+ // quiet context C20
+-export const fourth = "old"
+-// END baseline
++export const fourth = "new"
++// END edited
+diff --git a/diff-color-fixture/03-prose.md b/diff-color-fixture/03-prose.md
+index 4d5b31e3b9..7d01146b6a 100644
+--- a/diff-color-fixture/03-prose.md
++++ b/diff-color-fixture/03-prose.md
+@@ -1,21 +1,21 @@
+-# Before: plain-text review
++# After: plain-text review
+ 
+ Unchanged prose should remain quiet, not compete with changed rows.
+-Replace one contiguous phrase: the original checkout experience stays here.
+-Several little edits: red apple, cold tea, slow train.
+-One character: ticket 7.
+-before — the middle and the end remain unchanged.
+-The start remains — before — the end remains.
+-The start and the middle remain — before
+-Punctuation only: hello, world!
+-Whitespace only: one two three
+-Trailing whitespace only.
+-Delete this sentence without a replacement.
++Replace one contiguous phrase: the redesigned payment summary stays here.
++Several little edits: green apple, warm tea, fast train.
++One character: ticket 8.
++after — the middle and the end remain unchanged.
++The start remains — after — the end remains.
++The start and the middle remain — after
++Punctuation only: hello; world?
++Whitespace only: one  two three
++Trailing whitespace only.  
+ 
+ This unchanged sentence separates a deletion from an addition.
++Add this sentence without a corresponding deletion.
+ 
+-Long prose: The original checkout flow asks the reader to review the old confirmation message before proceeding through the receipt screen, while the unchanged middle of this deliberately long paragraph checks whether horizontal scrolling or line wrapping keeps small inline edits visible at a narrow viewport; the final old phrase appears near the far right edge.
++Long prose: The redesigned payment flow asks the reader to review the new confirmation message before proceeding through the receipt screen, while the unchanged middle of this deliberately long paragraph checks whether horizontal scrolling or line wrapping keeps small inline edits visible at a narrow viewport; the final new phrase appears near the far right edge.
+ 
+-**Syntax-like Markdown** competes with `inline code`, [links](https://example.com/old), and _emphasis_.
++**Syntax-rich Markdown** competes with `inline code`, [links](https://example.com/new), and _emphasis_.
+ 
+-Final sentence before.
++Final sentence after.
+diff --git a/diff-color-fixture/04-many-rows.ts b/diff-color-fixture/04-many-rows.ts
+index 7a8c6ecd49..b3e544ae5f 100644
+--- a/diff-color-fixture/04-many-rows.ts
++++ b/diff-color-fixture/04-many-rows.ts
+@@ -10,46 +10,46 @@ export const records = [
+   { id: "row-008", state: "pending", count: 8 },
+   { id: "row-009", state: "pending", count: 9 },
+   { id: "row-010", state: "pending", count: 10 },
+-  { id: "row-011", state: "pending", count: 11 },
+-  { id: "row-012", state: "pending", count: 12 },
+-  { id: "row-013", state: "pending", count: 13 },
+-  { id: "row-014", state: "pending", count: 14 },
+-  { id: "row-015", state: "pending", count: 15 },
+-  { id: "row-016", state: "pending", count: 16 },
+-  { id: "row-017", state: "pending", count: 17 },
+-  { id: "row-018", state: "pending", count: 18 },
+-  { id: "row-019", state: "pending", count: 19 },
+-  { id: "row-020", state: "pending", count: 20 },
+-  { id: "row-021", state: "pending", count: 21 },
+-  { id: "row-022", state: "pending", count: 22 },
+-  { id: "row-023", state: "pending", count: 23 },
+-  { id: "row-024", state: "pending", count: 24 },
+-  { id: "row-025", state: "pending", count: 25 },
+-  { id: "row-026", state: "pending", count: 26 },
+-  { id: "row-027", state: "pending", count: 27 },
+-  { id: "row-028", state: "pending", count: 28 },
+-  { id: "row-029", state: "pending", count: 29 },
+-  { id: "row-030", state: "pending", count: 30 },
+-  { id: "row-031", state: "pending", count: 31 },
+-  { id: "row-032", state: "pending", count: 32 },
+-  { id: "row-033", state: "pending", count: 33 },
+-  { id: "row-034", state: "pending", count: 34 },
+-  { id: "row-035", state: "pending", count: 35 },
+-  { id: "row-036", state: "pending", count: 36 },
+-  { id: "row-037", state: "pending", count: 37 },
+-  { id: "row-038", state: "pending", count: 38 },
+-  { id: "row-039", state: "pending", count: 39 },
+-  { id: "row-040", state: "pending", count: 40 },
+-  { id: "row-041", state: "pending", count: 41 },
+-  { id: "row-042", state: "pending", count: 42 },
+-  { id: "row-043", state: "pending", count: 43 },
+-  { id: "row-044", state: "pending", count: 44 },
+-  { id: "row-045", state: "pending", count: 45 },
+-  { id: "row-046", state: "pending", count: 46 },
+-  { id: "row-047", state: "pending", count: 47 },
+-  { id: "row-048", state: "pending", count: 48 },
+-  { id: "row-049", state: "pending", count: 49 },
+-  { id: "row-050", state: "pending", count: 50 },
++  { id: "row-011", state: "ready", count: 111 },
++  { id: "row-012", state: "ready", count: 112 },
++  { id: "row-013", state: "ready", count: 113 },
++  { id: "row-014", state: "ready", count: 114 },
++  { id: "row-015", state: "ready", count: 115 },
++  { id: "row-016", state: "ready", count: 116 },
++  { id: "row-017", state: "ready", count: 117 },
++  { id: "row-018", state: "ready", count: 118 },
++  { id: "row-019", state: "ready", count: 119 },
++  { id: "row-020", state: "ready", count: 120 },
++  { id: "row-021", state: "ready", count: 121 },
++  { id: "row-022", state: "ready", count: 122 },
++  { id: "row-023", state: "ready", count: 123 },
++  { id: "row-024", state: "ready", count: 124 },
++  { id: "row-025", state: "ready", count: 125 },
++  { id: "row-026", state: "ready", count: 126 },
++  { id: "row-027", state: "ready", count: 127 },
++  { id: "row-028", state: "ready", count: 128 },
++  { id: "row-029", state: "ready", count: 129 },
++  { id: "row-030", state: "ready", count: 130 },
++  { id: "row-031", state: "ready", count: 131 },
++  { id: "row-032", state: "ready", count: 132 },
++  { id: "row-033", state: "ready", count: 133 },
++  { id: "row-034", state: "ready", count: 134 },
++  { id: "row-035", state: "ready", count: 135 },
++  { id: "row-036", state: "ready", count: 136 },
++  { id: "row-037", state: "ready", count: 137 },
++  { id: "row-038", state: "ready", count: 138 },
++  { id: "row-039", state: "ready", count: 139 },
++  { id: "row-040", state: "ready", count: 140 },
++  { id: "row-041", state: "ready", count: 141 },
++  { id: "row-042", state: "ready", count: 142 },
++  { id: "row-043", state: "ready", count: 143 },
++  { id: "row-044", state: "ready", count: 144 },
++  { id: "row-045", state: "ready", count: 145 },
++  { id: "row-046", state: "ready", count: 146 },
++  { id: "row-047", state: "ready", count: 147 },
++  { id: "row-048", state: "ready", count: 148 },
++  { id: "row-049", state: "ready", count: 149 },
++  { id: "row-050", state: "ready", count: 150 },
+   { id: "row-051", state: "pending", count: 51 },
+   { id: "row-052", state: "pending", count: 52 },
+   { id: "row-053", state: "pending", count: 53 },
+diff --git a/diff-color-fixture/05-deleted.txt b/diff-color-fixture/05-deleted.txt
+deleted file mode 100644
+index e80ad6b276..0000000000
+--- a/diff-color-fixture/05-deleted.txt
++++ /dev/null
+@@ -1,4 +0,0 @@
+-This entire tracked file will be deleted after the baseline commit.
+-Only deletion tint should be present.
+-No syntax colors should compete with this text.
+-Last deleted row.
+diff --git a/diff-color-fixture/06-added.txt b/diff-color-fixture/06-added.txt
+new file mode 100644
+index 0000000000..f27ed60c9b
+--- /dev/null
++++ b/diff-color-fixture/06-added.txt
+@@ -0,0 +1,5 @@
++This entire file is newly added, not a replacement for the deleted example.
++Only addition tint should be present.
++Plain text: keep the words readable against the changed-row background.
++A deliberately long added line checks the horizontal extent of the green row while the reviewer compares the quiet surrounding application surface against the color used for new content in both dark and light modes.
++Last added row.
+diff --git a/diff-color-fixture/07-styles.css b/diff-color-fixture/07-styles.css
+index a757ef7085..4f4937480e 100644
+--- a/diff-color-fixture/07-styles.css
++++ b/diff-color-fixture/07-styles.css
+@@ -1,32 +1,35 @@
+-/* Baseline stylesheet: colors, units, selectors, at-rules. */
++/* Edited stylesheet: colors, units, selectors, at-rules. */
+ :root {
+-  --brand: #3b5cf6;
+-  --radius: 6px;
++  --brand: #0b34f4;
++  --radius: 8px;
+   --gap: 8px;
++  --shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+ }
+ 
+ .card {
+-  display: flex;
++  display: grid;
+   gap: var(--gap);
+-  padding: 12px 16px;
+-  border: 1px solid rgba(0, 0, 0, 0.1);
++  padding: 12px 20px;
++  border: 1px solid rgba(0, 0, 0, 0.12);
+   border-radius: var(--radius);
+   background: #ffffff;
+   color: #161616;
++  box-shadow: var(--shadow);
+ }
+ 
+-.card:hover {
+-  background: #fafafa;
++.card:hover,
++.card:focus-visible {
++  background: #f5f5f5;
+ }
+ 
+ .card[data-state="error"] {
+-  color: #b82d35;
++  color: #d92e3c;
+   border-color: #f2bbb7;
+ }
+ 
+-@media (max-width: 768px) {
++@media (max-width: 640px) {
+   .card {
+-    flex-direction: column;
++    grid-template-columns: 1fr;
+     padding: 8px;
+   }
+ }
+@@ -34,8 +37,10 @@
+ @keyframes fade-in {
+   from {
+     opacity: 0;
++    transform: translateY(4px);
+   }
+   to {
+     opacity: 1;
++    transform: none;
+   }
+ }
+diff --git a/diff-color-fixture/08-config.json b/diff-color-fixture/08-config.json
+index 09631d931c..8b6f1485fd 100644
+--- a/diff-color-fixture/08-config.json
++++ b/diff-color-fixture/08-config.json
+@@ -1,21 +1,22 @@
+ {
+   "name": "diff-color-fixture",
+-  "version": "1.0.0",
++  "version": "1.1.0",
+   "private": true,
+   "settings": {
+-    "theme": "light",
++    "theme": "dark",
+     "fontSize": 13,
+-    "lineHeight": 20,
+-    "wrap": false,
+-    "tabs": ["review", "files", "terminal"]
++    "lineHeight": 24,
++    "wrap": true,
++    "tabs": ["review", "files", "terminal", "browser"]
+   },
+   "features": {
+     "inlineHighlights": true,
+     "foldUnchanged": true,
+-    "splitView": false
++    "splitView": true,
++    "wordDiff": "word-line"
+   },
+   "limits": {
+-    "maxFiles": 100,
++    "maxFiles": 250,
+     "maxLineLength": 1000
+   }
+ }
+diff --git a/diff-color-fixture/09-service.py b/diff-color-fixture/09-service.py
+index 64fe32db80..5da0737cf5 100644
+--- a/diff-color-fixture/09-service.py
++++ b/diff-color-fixture/09-service.py
+@@ -1,36 +1,44 @@
+-"""Baseline Python service: decorators, f-strings, indentation, comments."""
++"""Edited Python service: decorators, f-strings, indentation, comments."""
+ 
+ import asyncio
+-from dataclasses import dataclass
++import logging
++from dataclasses import dataclass, field
+ 
++logger = logging.getLogger(__name__)
+ 
+-@dataclass
++
++@dataclass(frozen=True)
+ class Review:
+     id: str
+     title: str
+     approved: bool = False
++    tags: list[str] = field(default_factory=list)
+ 
+ 
+ class ReviewService:
+-    def __init__(self, timeout: float = 2.0) -> None:
++    def __init__(self, timeout: float = 5.0) -> None:
+         self.timeout = timeout
+         self.cache: dict[str, Review] = {}
+ 
+     async def load(self, review_id: str) -> Review | None:
+         # Return cached reviews before touching the network.
+         if review_id in self.cache:
++            logger.debug("cache hit %s", review_id)
+             return self.cache[review_id]
+-        await asyncio.sleep(self.timeout)
++        try:
++            await asyncio.wait_for(asyncio.sleep(0), timeout=self.timeout)
++        except asyncio.TimeoutError:
++            return None
+         return None
+ 
+     def summary(self, review: Review) -> str:
+-        status = "approved" if review.approved else "pending"
+-        return f"Review {review.id}: {review.title} ({status})"
++        status = "approved" if review.approved else "needs review"
++        return f"Review {review.id}: {review.title!r} ({status})"
+ 
+ 
+ def main() -> None:
+     service = ReviewService()
+-    review = Review(id="r-1", title="Checkout")
++    review = Review(id="r-1", title="Checkout", tags=["ui"])
+     print(service.summary(review))
+ 
+ 
+diff --git a/diff-color-fixture/10-moved-block.ts b/diff-color-fixture/10-moved-block.ts
+index fbd5ecba84..214094d8eb 100644
+--- a/diff-color-fixture/10-moved-block.ts
++++ b/diff-color-fixture/10-moved-block.ts
+@@ -3,11 +3,6 @@ export function first() {
+   return "first"
+ }
+ 
+-export function second() {
+-  const values = [1, 2, 3]
+-  return values.map((value) => value * 2)
+-}
+-
+ export function third() {
+   return "third"
+ }
+@@ -16,4 +11,9 @@ export function fourth() {
+   return "fourth"
+ }
+ 
+-export const order = ["first", "second", "third", "fourth"]
++export function second() {
++  const values = [1, 2, 3]
++  return values.map((value) => value * 2)
++}
++
++export const order = ["first", "third", "fourth", "second"]
+diff --git a/diff-color-fixture/11-deploy.sh b/diff-color-fixture/11-deploy.sh
+index 5390c2fe9f..ae367067d6 100644
+--- a/diff-color-fixture/11-deploy.sh
++++ b/diff-color-fixture/11-deploy.sh
+@@ -1,17 +1,20 @@
+ #!/usr/bin/env bash
+-# Baseline shell script: variables, quoting, conditionals.
++# Edited shell script: variables, quoting, conditionals.
+ set -euo pipefail
+ 
+ ENVIRONMENT="${1:-staging}"
+-REGION="us-east-1"
+-RETRIES=3
++REGION="${REGION:-eu-west-1}"
++RETRIES=5
+ 
+ log() {
+-  echo "[deploy] $*"
++  printf '[deploy] %s\n' "$*" >&2
+ }
+ 
+ if [[ "$ENVIRONMENT" == "production" ]]; then
+   log "Deploying to production in $REGION"
++elif [[ "$ENVIRONMENT" == "preview" ]]; then
++  log "Skipping preview deploy"
++  exit 0
+ else
+   log "Deploying to $ENVIRONMENT"
+ fi
+diff --git a/diff-color-fixture/12-pipeline.yml b/diff-color-fixture/12-pipeline.yml
+index 1fbd5aa75c..251a7e4372 100644
+--- a/diff-color-fixture/12-pipeline.yml
++++ b/diff-color-fixture/12-pipeline.yml
+@@ -1,19 +1,20 @@
+ name: review
+ on:
+   push:
+-    branches: [v2]
++    branches: [v2, dev]
+   pull_request:
+ 
+ jobs:
+   check:
+-    runs-on: ubuntu-latest
+-    timeout-minutes: 10
++    runs-on: ubuntu-24.04
++    timeout-minutes: 15
+     steps:
+       - uses: actions/checkout@v4
++      - uses: oven-sh/setup-bun@v2
+       - name: Install
+-        run: bun install
++        run: bun install --frozen-lockfile
+       - name: Check
+         run: bun run check
+         env:
+           CI: true
+-          LOG_LEVEL: info
++          LOG_LEVEL: debug
+diff --git a/diff-color-fixture/13-unicode.md b/diff-color-fixture/13-unicode.md
+index 1470ef9294..5bd43c3b1f 100644
+--- a/diff-color-fixture/13-unicode.md
++++ b/diff-color-fixture/13-unicode.md
+@@ -1,12 +1,12 @@
+ # Unicode and mixed scripts
+ 
+-Emoji: ✅ ready, ⚠️ warning, ❌ failed.
+-CJK: 代码审查 完成。
+-Japanese: レビューを開始します。
++Emoji: ✅ ready, ⚠️ warning, ❌ failed, 🚀 shipped.
++CJK: 代码审查 已完成。
++Japanese: レビューを完了しました。
+ Korean: 변경 사항을 검토합니다.
+-Arabic (RTL): مراجعة التغييرات
++Arabic (RTL): مراجعة جميع التغييرات
+ Hebrew (RTL): סקירת שינויים
+-Accents: café, naïve, résumé.
+-Math: a ≤ b, x ≠ y, ∑ values.
++Accents: café, naïve, résumé, déjà vu.
++Math: a ≥ b, x ≠ y, ∏ values.
+ Box: ┌─┐ │ │ └─┘
+ Combining: e\u0301 vs é
+diff --git a/diff-color-fixture/14-tabs.go b/diff-color-fixture/14-tabs.go
+index ab9aca86dd..53e5e11a7c 100644
+--- a/diff-color-fixture/14-tabs.go
++++ b/diff-color-fixture/14-tabs.go
+@@ -7,11 +7,12 @@ type Review struct {
+ 	ID       string
+ 	Title    string
+ 	Approved bool
++	Tags     []string
+ }
+ 
+ func (r Review) Summary() string {
+ 	status := "pending"
+-	if r.Approved {
++    if r.Approved {
+ 		status = "approved"
+ 	}
+ 	return fmt.Sprintf("%s: %s (%s)", r.ID, r.Title, status)
+diff --git a/diff-color-fixture/15-empty-to-content.txt b/diff-color-fixture/15-empty-to-content.txt
+index e69de29bb2..aa4be0acdb 100644
+--- a/diff-color-fixture/15-empty-to-content.txt
++++ b/diff-color-fixture/15-empty-to-content.txt
+@@ -0,0 +1,2 @@
++This tracked file was empty in the baseline.
++Every row should render as an addition, without a file-added badge.
+diff --git a/diff-color-fixture/16-content-to-empty.txt b/diff-color-fixture/16-content-to-empty.txt
+index bb6e474b37..e69de29bb2 100644
+--- a/diff-color-fixture/16-content-to-empty.txt
++++ b/diff-color-fixture/16-content-to-empty.txt
+@@ -1,3 +0,0 @@
+-This tracked file keeps existing but loses all content.
+-Every row should render as a deletion.
+-The file itself is not deleted.
+diff --git a/diff-color-fixture/17-no-newline.txt b/diff-color-fixture/17-no-newline.txt
+index 51b84a61e2..dc6945a1fa 100644
+--- a/diff-color-fixture/17-no-newline.txt
++++ b/diff-color-fixture/17-no-newline.txt
+@@ -1,2 +1,2 @@
+ First line
+-Last line without trailing newline
+\ No newline at end of file
++Last line now with trailing newline
+diff --git a/diff-color-fixture/18-page.html b/diff-color-fixture/18-page.html
+index bc1b2d9daa..9f4df11c24 100644
+--- a/diff-color-fixture/18-page.html
++++ b/diff-color-fixture/18-page.html
+@@ -2,13 +2,14 @@
+ <html lang="en">
+   <head>
+     <meta charset="utf-8" />
+-    <title>Review</title>
++    <meta name="viewport" content="width=device-width" />
++    <title>Review changes</title>
+   </head>
+-  <body class="light">
+-    <main id="app" data-state="idle">
+-      <h1>Old heading</h1>
+-      <button type="button" disabled>Continue</button>
+-      <!-- baseline comment -->
++  <body class="dark">
++    <main id="app" data-state="ready">
++      <h1>New heading</h1>
++      <button type="button">Continue</button>
++      <!-- edited comment -->
+     </main>
+   </body>
+ </html>
+diff --git a/diff-color-fixture/19-query.sql b/diff-color-fixture/19-query.sql
+index b078ad0869..88b64001e0 100644
+--- a/diff-color-fixture/19-query.sql
++++ b/diff-color-fixture/19-query.sql
+@@ -1,6 +1,6 @@
+-SELECT id, title, status
++SELECT id, title, status, author_id
+ FROM reviews
+-WHERE status = 'pending'
+-  AND created_at > NOW() - INTERVAL '7 days'
+-ORDER BY created_at DESC
+-LIMIT 50;
++WHERE status IN ('pending', 'blocked')
++  AND created_at > NOW() - INTERVAL '14 days'
++ORDER BY updated_at DESC
++LIMIT 100;

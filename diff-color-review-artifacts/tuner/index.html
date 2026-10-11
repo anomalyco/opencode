@@ -1,0 +1,697 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Diff color tuner</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: light-dark(#fafafa, #121212);
+    --panel: light-dark(#ffffff, #1b1b1b);
+    --line: light-dark(#e6e6e6, #2c2c2c);
+    --text: light-dark(#161616, #ededed);
+    --muted: light-dark(#6b6b6b, #9a9a9a);
+    --accent: #3b5cf6;
+    font: 13px/20px Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); }
+  header {
+    position: sticky; top: 0; z-index: 5; display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+    padding: 12px 16px; background: var(--panel); border-bottom: 1px solid var(--line);
+  }
+  header h1 { font-size: 14px; line-height: 20px; margin: 0 8px 0 0; font-weight: 600; }
+  button, select, input[type="text"] {
+    font: inherit; color: inherit; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 6px; height: 28px; padding: 0 8px;
+  }
+  button { cursor: default; }
+  button:hover { background: light-dark(#f2f2f2, #242424); }
+  label.toggle { display: inline-flex; gap: 6px; align-items: center; }
+  #status { color: var(--muted); margin-left: auto; font-variant-numeric: tabular-nums; }
+  main { padding: 12px 16px 48px; max-width: 1180px; }
+  h2 { font-size: 12px; line-height: 16px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 20px 0 8px; font-weight: 600; }
+  dialog { width: min(720px, calc(100vw - 32px)); padding: 16px; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 12px 32px #0004; }
+  .sets { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 4px 0 8px; }
+  .sets label { font-weight: 600; }
+  #set { min-width: 200px; }
+  #name-input { width: 100%; margin: 8px 0 12px; }
+  dialog::backdrop { background: #0006; }
+  dialog h3 { margin: 0 0 4px; font-size: 14px; line-height: 20px; }
+  #paste-text { width: 100%; height: 280px; margin-top: 8px; padding: 8px; resize: vertical; color: var(--text); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 6px; font: 12px/18px "IBM Plex Mono", ui-monospace, monospace; }
+  #paste-result { min-height: 16px; }
+  #paste-result[data-error] { color: #d92e3c; }
+  .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  h2 { display: flex; align-items: center; gap: 12px; }
+  .group-toggle { text-transform: none; letter-spacing: 0; font-weight: 500; font-size: 12px; color: var(--text); }
+  .grid.off { opacity: .45; }
+  .grid { display: grid; grid-template-columns: minmax(220px, 1.1fr) 1fr 1fr; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); overflow: hidden; }
+  .grid > div { padding: 8px 10px; border-top: 1px solid var(--line); min-width: 0; }
+  .grid > .head { border-top: 0; font-weight: 600; color: var(--muted); font-size: 12px; line-height: 16px; }
+  .slot-label { font-weight: 500; }
+  .slot-help { color: var(--muted); font-size: 12px; line-height: 16px; }
+  .cell { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .cell[data-mode="dark"] { background: light-dark(#f6f6f6, #161616); }
+  .swatch { width: 28px; height: 28px; border-radius: 6px; border: 1px solid var(--line); flex: none;
+    background-image: linear-gradient(45deg, #ccc 25%, transparent 25%, transparent 75%, #ccc 75%), linear-gradient(45deg, #ccc 25%, transparent 25%, transparent 75%, #ccc 75%);
+    background-size: 8px 8px; background-position: 0 0, 4px 4px; position: relative; overflow: hidden; }
+  .swatch::after { content: ""; position: absolute; inset: 0; background: var(--swatch, transparent); }
+  .swatch[data-current]::after { background: repeating-linear-gradient(-45deg, transparent 0 4px, light-dark(#0001, #fff1) 4px 8px); }
+  input[type="color"] { width: 36px; height: 28px; padding: 0 2px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
+  input[type="range"] { width: 90px; }
+  button.token { display: inline-flex; align-items: center; gap: 6px; min-width: 200px; max-width: 100%; text-align: left; }
+  button.token .token-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 12px/16px "IBM Plex Mono", ui-monospace, monospace; }
+  button.token .caret { color: var(--muted); }
+  .mini { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--line); background: var(--swatch, transparent); flex: none; }
+  #picker { position: fixed; z-index: 50; width: 560px; max-width: calc(100vw - 16px); max-height: min(520px, calc(100vh - 16px)); display: flex; flex-direction: column;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 12px 32px #0003; }
+  .picker-head { display: flex; gap: 8px; align-items: center; padding: 8px; border-bottom: 1px solid var(--line); }
+  #picker-search { flex: 1; }
+  #picker-mode { color: var(--muted); font-size: 12px; }
+  #picker-body { overflow: auto; padding: 4px 8px 8px; }
+  .family { margin-top: 8px; }
+  .family-name { color: var(--muted); font-size: 11px; line-height: 16px; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; }
+  .chip { width: 36px; height: 28px; padding: 0; border-radius: 5px; border: 1px solid var(--line); position: relative; overflow: hidden;
+    background-image: linear-gradient(45deg, #ccc 25%, transparent 25%, transparent 75%, #ccc 75%), linear-gradient(45deg, #ccc 25%, transparent 25%, transparent 75%, #ccc 75%);
+    background-size: 8px 8px; background-position: 0 0, 4px 4px; }
+  .chip::after { content: ""; position: absolute; inset: 0; background: var(--swatch); }
+  .chip span { position: absolute; z-index: 1; inset: auto 0 1px; font-size: 9px; line-height: 10px; text-align: center; color: var(--chip-text); }
+  .chip[aria-selected="true"] { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .rows { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 8px; }
+  .row { display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 6px; border: 0; background: transparent; text-align: left; min-width: 0; }
+  .row:hover, .row[aria-selected="true"] { background: light-dark(#f0f0f0, #262626); }
+  .row[aria-selected="true"] { box-shadow: inset 0 0 0 1px var(--accent); }
+  .row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 12px/16px "IBM Plex Mono", ui-monospace, monospace; }
+  .alpha { display: inline-flex; align-items: center; gap: 2px; color: var(--muted); }
+  .alpha-input { width: 56px; height: 28px; padding: 0 6px; font: inherit; font-variant-numeric: tabular-nums; color: var(--text);
+    background: var(--panel); border: 1px solid var(--line); border-radius: 6px; text-align: right; }
+  .hidden { display: none !important; }
+  pre { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; overflow: auto; font: 12px/18px "IBM Plex Mono", ui-monospace, monospace; max-height: 360px; }
+  .note { color: var(--muted); max-width: 820px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Diff color tuner</h1>
+  <label class="toggle"><input type="checkbox" id="enabled" checked /> Overrides on</label>
+  <button id="undo" disabled title="Undo last change (⌘Z)">Undo</button>
+  <button id="redo" disabled title="Redo (⇧⌘Z)">Redo</button>
+  <button id="reset">Reset all</button>
+  <button id="copy">Copy CSS</button>
+  <button id="paste">Paste CSS</button>
+  <span id="status">Loading…</span>
+</header>
+<main>
+  <div class="sets">
+    <label for="set">Override set</label>
+    <select id="set"></select>
+    <button id="set-new">New</button>
+    <button id="set-duplicate">Duplicate</button>
+    <button id="set-rename">Rename</button>
+    <button id="set-delete">Delete</button>
+    <span id="set-note" class="slot-help"></span>
+  </div>
+  <p class="note">
+    Each change is pushed live into open diff views in the dev app and saved to
+    <code>packages/session-ui/src/pierre/diff-color-tuning.ts</code>. “Current” leaves the branch's colors untouched.
+    Picked fills are exact final colors; tokens resolve per mode from OpenCode v2 tokens.
+  </p>
+  <div id="groups"></div>
+  <h2>Generated CSS</h2>
+  <pre id="css"></pre>
+</main>
+<dialog id="name-dialog">
+  <form method="dialog">
+    <h3 id="name-title">Name</h3>
+    <input type="text" id="name-input" spellcheck="false" autocomplete="off" />
+    <div class="dialog-actions">
+      <button value="cancel">Cancel</button>
+      <button id="name-ok" value="ok" class="primary">Save</button>
+    </div>
+  </form>
+</dialog>
+<dialog id="paste-dialog">
+  <form method="dialog">
+    <h3>Paste CSS</h3>
+    <p class="slot-help">Paste CSS copied from this tuner. It replaces the current settings; Undo restores them.</p>
+    <textarea id="paste-text" spellcheck="false" placeholder="/* diff-color-tuner: … */"></textarea>
+    <p id="paste-result" class="slot-help"></p>
+    <div class="dialog-actions">
+      <button value="cancel">Cancel</button>
+      <button id="paste-apply" value="apply" class="primary">Apply</button>
+    </div>
+  </form>
+</dialog>
+<div id="picker" class="hidden" role="dialog" aria-label="Choose a v2 token">
+  <div class="picker-head">
+    <input type="text" id="picker-search" placeholder="Search tokens, e.g. red, state, 1200" spellcheck="false" autocomplete="off" />
+    <span id="picker-mode"></span>
+  </div>
+  <div id="picker-body"></div>
+</div>
+<script type="module">
+const LIGHT = ':host(:not([data-color-scheme="dark"]))'
+const DARK = ':host([data-color-scheme="dark"])'
+const ADD = '[data-line-type="change-addition"]'
+const DEL = '[data-line-type="change-deletion"]'
+const CONTEXT = ':is([data-line-type="context"], [data-line-type="context-expanded"])'
+const ROW = ':is([data-line], [data-no-newline])'
+const GUTTER = ':is([data-column-number], [data-gutter-buffer])'
+const exactRow = (sel) => (host, v) => `${host} ${sel} { --diffs-diff-line-mix-target: ${v}; --mix-light: 0%; --mix-dark: 0%; }`
+const hostVar = (name) => (host, v) => `${host} { ${name}: ${v}; }`
+const scopedVar = (name) => (host, v) => `${host} :is([data-diff], [data-file]) { ${name}: ${v}; }`
+const direct = (sel, decl) => (host, v) => `${host} ${sel} { ${decl(v)} }`
+// Syntax colors are inline style attributes on the token spans, so only !important can override them.
+const inlineText = (line) => (host, v) =>
+  `${host} ${line} [data-diff-span], ${host} ${line} [data-diff-span] * { color: ${v} !important; }`
+
+const GROUPS = [
+  ["Backgrounds", [
+    { id: "bg", label: "File background", help: "--diffs-bg. Base for context rows and Pierre's derived mixes.", rule: hostVar("--diffs-bg"), light: "v2-grey-50", dark: "v2-grey-1100" },
+    { id: "context-row", label: "Unchanged row", help: "Context code rows.", rule: exactRow(`${CONTEXT}${ROW}`), light: "v2-grey-50", dark: "v2-grey-1100" },
+    { id: "context-gutter", label: "Unchanged gutter", help: "Context line-number cells.", rule: exactRow(`${CONTEXT}${GUTTER}`), light: "v2-grey-50", dark: "v2-grey-1100" },
+    { id: "fold-row", label: "Folded “unmodified lines” row", help: "--diffs-bg-separator-override.", rule: hostVar("--diffs-bg-separator-override"), light: "v2-grey-100", dark: "v2-grey-1000" },
+    { id: "buffer-bg", label: "Split empty side", help: "--diffs-bg-context-gutter-override (blank side of split rows).", rule: hostVar("--diffs-bg-context-gutter-override"), light: "v2-grey-100", dark: "v2-grey-1000" },
+    { id: "buffer-hatch", label: "Split empty side hatch", help: "--diffs-bg-buffer-override (Pierre stripes; OpenCode currently hides them).", rule: hostVar("--diffs-bg-buffer-override"), light: "v2-grey-200", dark: "v2-grey-900" },
+    { id: "hover", label: "Hover tint", help: "--diffs-bg-hover-override. Mixed in at ~3% light / ~9% dark, not exact.", rule: hostVar("--diffs-bg-hover-override"), light: "v2-grey-1200", dark: "v2-grey-50" },
+    { id: "selection", label: "Selected lines", help: "--diffs-selection-base (row and number tints derive from it).", rule: scopedVar("--diffs-selection-base"), light: "v2-background-bg-accent", dark: "v2-background-bg-accent" },
+    { id: "comment", label: "Comment annotation", help: "--diffs-comment-bg.", rule: scopedVar("--diffs-comment-bg"), light: "v2-blue-100", dark: "v2-blue-1200" },
+  ]],
+  ["Additions", [
+    { id: "add-row", label: "Added row", help: "Exact fill of added code rows.", rule: exactRow(`${ADD}${ROW}`), light: "v2-green-100", dark: "v2-green-1200" },
+    { id: "add-gutter", label: "Added gutter", help: "Exact fill of added line-number cells.", rule: exactRow(`${ADD}${GUTTER}`), light: "v2-green-100", dark: "v2-green-1200" },
+    { id: "add-inline", label: "Added inline highlight", help: "Word/char emphasis span, painted over the row.", rule: direct(`${ADD} [data-diff-span]`, (v) => `background-color: ${v};`), light: "v2-green-200", dark: "v2-green-1100" },
+    { id: "add-inline-text", label: "Added inline text", help: "Text color inside the highlight. Replaces syntax colors there.", rule: inlineText(ADD), light: "v2-green-1000", dark: "v2-green-300" },
+    { id: "add-bar", label: "Added change bar", help: "2px gutter bar.", rule: direct(`[data-column-number]${ADD}::before`, (v) => `background-color: ${v}; background-image: none;`), light: "v2-state-fg-success", dark: "v2-state-fg-success" },
+    { id: "add-number", label: "Added line-number text", help: "--diffs-fg-number-addition-override.", rule: hostVar("--diffs-fg-number-addition-override"), light: "v2-state-fg-success", dark: "v2-state-fg-success" },
+    { id: "add-seed", label: "Addition seed", help: "--diffs-addition-color-override. Feeds anything above left on Current.", rule: hostVar("--diffs-addition-color-override"), light: "v2-state-fg-success", dark: "v2-state-fg-success" },
+  ]],
+  ["Deletions", [
+    { id: "del-row", label: "Deleted row", help: "Exact fill of deleted code rows.", rule: exactRow(`${DEL}${ROW}`), light: "v2-red-100", dark: "v2-red-1200" },
+    { id: "del-gutter", label: "Deleted gutter", help: "Exact fill of deleted line-number cells.", rule: exactRow(`${DEL}${GUTTER}`), light: "v2-red-100", dark: "v2-red-1200" },
+    { id: "del-inline", label: "Deleted inline highlight", help: "Word/char emphasis span, painted over the row.", rule: direct(`${DEL} [data-diff-span]`, (v) => `background-color: ${v};`), light: "v2-red-200", dark: "v2-red-1100" },
+    { id: "del-inline-text", label: "Deleted inline text", help: "Text color inside the highlight. Replaces syntax colors there.", rule: inlineText(DEL), light: "v2-red-1000", dark: "v2-red-300" },
+    { id: "del-bar", label: "Deleted change bar", help: "2px gutter bar.", rule: direct(`[data-column-number]${DEL}::before`, (v) => `background-color: ${v}; background-image: none;`), light: "v2-state-fg-danger", dark: "v2-state-fg-danger" },
+    { id: "del-number", label: "Deleted line-number text", help: "--diffs-fg-number-deletion-override.", rule: hostVar("--diffs-fg-number-deletion-override"), light: "v2-state-fg-danger", dark: "v2-state-fg-danger" },
+    { id: "del-seed", label: "Deletion seed", help: "--diffs-deletion-color-override. Feeds anything above left on Current.", rule: hostVar("--diffs-deletion-color-override"), light: "v2-state-fg-danger", dark: "v2-state-fg-danger" },
+  ]],
+  ["Text", [
+    { id: "number", label: "Unchanged line-number text", help: "--diffs-fg-number-override. Also fold labels unless set below.", rule: hostVar("--diffs-fg-number-override"), light: "v2-text-text-faint", dark: "v2-text-text-faint" },
+    { id: "fold-text", label: "Fold label and expand icon", help: "“N unmodified lines” text and expand button.", rule: direct(":is([data-separator-content], [data-expand-button])", (v) => `color: ${v};`), light: "v2-text-text-muted", dark: "v2-text-text-muted" },
+  ]],
+]
+const SLOTS = GROUPS.flatMap((group) => group[1])
+
+let tokens = []
+let tokenMap = new Map()
+let state = { enabled: true, slots: {} }
+let liveTimer, saveTimer, liveBusy = false, livePending = false
+
+const $ = (sel) => document.querySelector(sel)
+const status = (text) => ($("#status").textContent = text)
+
+function hex8(hex, alpha) {
+  return alpha >= 100 ? hex : hex + Math.round((alpha / 100) * 255).toString(16).padStart(2, "0")
+}
+function tokenHex(name, mode) {
+  const value = tokenMap.get(name)?.[mode]
+  return value && /^#[0-9a-f]{6}/i.test(value) ? value.slice(0, 7) : "#888888"
+}
+function valueOf(entry) {
+  if (!entry || entry.kind === "current") return null
+  if (entry.kind === "color") return hex8(entry.hex, entry.alpha)
+  if (!tokenMap.has(entry.token)) return null
+  return entry.alpha >= 100 ? `var(--${entry.token})` : `rgb(from var(--${entry.token}) r g b / ${entry.alpha / 100})`
+}
+function swatchOf(entry, mode) {
+  if (!entry || entry.kind === "current") return null
+  if (entry.kind === "color") return hex8(entry.hex, entry.alpha)
+  const value = tokenMap.get(entry.token)?.[mode]
+  if (!value) return null
+  return entry.alpha >= 100 ? value : `rgb(from ${value} r g b / ${entry.alpha / 100})`
+}
+
+function buildCSS() {
+  if (!state.enabled) return ""
+  const active = GROUPS.filter(([title]) => !state.disabledGroups?.[title]).flatMap((group) => group[1])
+  return [["light", LIGHT], ["dark", DARK]]
+    .flatMap(([mode, host]) =>
+      active.flatMap((slot) => {
+        const value = valueOf(state.slots[slot.id]?.[mode])
+        return value ? [`/* ${mode}: ${slot.label} */\n${slot.rule(host, value)}`] : []
+      }),
+    )
+    .join("\n")
+}
+
+function entryFor(slot, mode) {
+  state.slots[slot.id] ??= {}
+  state.slots[slot.id][mode] ??= { kind: "current" }
+  return state.slots[slot.id][mode]
+}
+
+function render() {
+  const root = $("#groups")
+  root.textContent = ""
+  for (const [title, slots] of GROUPS) {
+    const heading = document.createElement("h2")
+    heading.innerHTML = `<span></span><label class="toggle group-toggle"><input type="checkbox" /> <span>On</span></label>`
+    heading.firstElementChild.textContent = title
+    const enabled = !state.disabledGroups?.[title]
+    const toggle = heading.querySelector("input")
+    toggle.checked = enabled
+    heading.querySelector(".group-toggle span").textContent = enabled ? "On" : "Off"
+    toggle.onchange = () => {
+      state.disabledGroups ??= {}
+      if (toggle.checked) delete state.disabledGroups[title]
+      else state.disabledGroups[title] = true
+      render()
+      changed(true)
+    }
+    const grid = document.createElement("div")
+    grid.className = "grid"
+    grid.classList.toggle("off", !enabled)
+    grid.innerHTML = `<div class="head">Slot</div><div class="head">Light</div><div class="head">Dark</div>`
+    for (const slot of slots) {
+      const info = document.createElement("div")
+      info.innerHTML = `<div class="slot-label"></div><div class="slot-help"></div>`
+      info.children[0].textContent = slot.label
+      info.children[1].textContent = slot.help
+      grid.append(info, cell(slot, "light"), cell(slot, "dark"))
+    }
+    root.append(heading, grid)
+  }
+  $("#enabled").checked = state.enabled
+  $("#css").textContent = buildCSS() || "/* No overrides */"
+}
+
+function cell(slot, mode) {
+  const entry = entryFor(slot, mode)
+  const el = document.createElement("div")
+  el.className = "cell"
+  el.dataset.mode = mode
+  el.innerHTML = `
+    <span class="swatch"></span>
+    <select class="kind"><option value="current">Current</option><option value="color">Color</option><option value="token">v2 token</option></select>
+    <input type="color" class="hex" />
+    <button type="button" class="token"><span class="mini"></span><span class="token-name"></span><span class="caret">▾</span></button>
+    <input type="range" class="alpha-range" min="0" max="100" step="1" />
+    <span class="alpha"><input type="number" class="alpha-input" min="0" max="100" step="any" aria-label="Opacity percent" /><span>%</span></span>`
+  const swatch = el.querySelector(".swatch")
+  const kind = el.querySelector(".kind")
+  const hex = el.querySelector(".hex")
+  const token = el.querySelector(".token")
+  const alpha = el.querySelector(".alpha-range")
+  const alphaText = el.querySelector(".alpha")
+  const alphaInput = el.querySelector(".alpha-input")
+  const sync = () => {
+    kind.value = entry.kind
+    hex.classList.toggle("hidden", entry.kind !== "color")
+    token.classList.toggle("hidden", entry.kind !== "token")
+    alpha.classList.toggle("hidden", entry.kind === "current")
+    alphaText.classList.toggle("hidden", entry.kind === "current")
+    if (entry.kind === "color") hex.value = entry.hex
+    if (entry.kind === "token") {
+      token.querySelector(".token-name").textContent = entry.token
+      token.querySelector(".mini").style.setProperty("--swatch", tokenMap.get(entry.token)?.[mode] ?? "transparent")
+    }
+    alpha.value = entry.alpha ?? 100
+    if (document.activeElement !== alphaInput) alphaInput.value = entry.alpha ?? 100
+    const color = swatchOf(entry, mode)
+    if (color) swatch.style.setProperty("--swatch", color)
+    swatch.toggleAttribute("data-current", !color)
+    swatch.title = entry.kind === "token" ? `${entry.token}: ${tokenMap.get(entry.token)?.[mode] ?? "unknown token"}` : (color ?? "Current (unchanged)")
+    token.style.outline = entry.kind === "token" && !tokenMap.has(entry.token) ? "1px solid #d92e3c" : ""
+  }
+  kind.onchange = () => {
+    const previous = { ...entry }
+    entry.kind = kind.value
+    entry.alpha ??= 100
+    if (entry.kind === "color") entry.hex = previous.kind === "token" ? tokenHex(previous.token, mode) : (previous.hex ?? tokenHex(slot[mode], mode))
+    if (entry.kind === "token") entry.token = previous.token ?? slot[mode]
+    sync()
+    changed(true)
+  }
+  hex.oninput = () => { entry.hex = hex.value; sync(); changed(false) }
+  hex.onchange = () => changed(true)
+  token.onclick = () => openPicker(token, mode, entry.token, (name) => { entry.token = name; sync(); changed(true) })
+  alpha.oninput = () => { entry.alpha = Number(alpha.value); sync(); changed(false) }
+  alpha.onchange = () => changed(true)
+  alphaInput.oninput = () => {
+    const value = Number(alphaInput.value)
+    if (alphaInput.value === "" || !Number.isFinite(value)) return
+    entry.alpha = Math.min(100, Math.max(0, value))
+    sync()
+    changed(false)
+  }
+  alphaInput.onchange = () => { alphaInput.value = entry.alpha ?? 100; changed(true) }
+  alphaInput.onkeydown = (event) => { if (event.key === "Enter") alphaInput.blur() }
+  sync()
+  return el
+}
+
+const RAMP_ORDER = ["grey", "red", "orange", "yellow", "green", "cyan", "blue", "purple", "pink", "alpha-dark", "alpha-light"]
+const picker = { anchor: null, mode: "light", selected: "", onPick: null }
+
+function familyOf(name) {
+  const ramp = /^v2-([a-z]+(?:-dark|-light)?)-(\d+)$/.exec(name)
+  if (ramp && RAMP_ORDER.includes(ramp[1])) return { family: ramp[1], step: ramp[2], ramp: true }
+  return { family: name.split("-")[1] ?? "other", step: "", ramp: false }
+}
+function readableOn(value) {
+  const hex = /^#([0-9a-f]{6})/i.exec(value)?.[1]
+  if (!hex) return "#000"
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.55 ? "#0009" : "#fffb"
+}
+
+function openPicker(anchor, mode, selected, onPick) {
+  Object.assign(picker, { anchor, mode, selected, onPick })
+  $("#picker-mode").textContent = `${mode} values`
+  $("#picker-search").value = ""
+  $("#picker").classList.remove("hidden")
+  renderPicker()
+  placePicker()
+  $("#picker-search").focus()
+  const current = $(`#picker-body [aria-selected="true"]`)
+  $("#picker-body").scrollTop = current ? current.offsetTop - $("#picker-body").offsetTop - 60 : 0
+}
+function closePicker() {
+  $("#picker").classList.add("hidden")
+  picker.anchor?.focus()
+  picker.anchor = null
+}
+function placePicker() {
+  const el = $("#picker")
+  const rect = picker.anchor.getBoundingClientRect()
+  const height = el.offsetHeight
+  const top = rect.bottom + 4 + height > innerHeight ? Math.max(8, rect.top - 4 - height) : rect.bottom + 4
+  el.style.top = `${top}px`
+  el.style.left = `${Math.min(Math.max(8, rect.left), innerWidth - el.offsetWidth - 8)}px`
+}
+function renderPicker() {
+  const terms = $("#picker-search").value.toLowerCase().split(/\s+/).filter(Boolean)
+  const matches = tokens.filter((token) => terms.every((term) => token.name.includes(term)))
+  const groups = new Map()
+  for (const token of matches) {
+    const info = familyOf(token.name)
+    if (!groups.has(info.family)) groups.set(info.family, { ramp: info.ramp, items: [] })
+    groups.get(info.family).items.push({ token, step: info.step })
+  }
+  const order = [...groups.keys()].sort((a, b) => {
+    const ia = RAMP_ORDER.indexOf(a), ib = RAMP_ORDER.indexOf(b)
+    if (ia !== -1 || ib !== -1) return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib)
+    return a.localeCompare(b)
+  })
+  const body = $("#picker-body")
+  body.textContent = ""
+  if (!matches.length) body.innerHTML = `<p class="slot-help">No tokens match.</p>`
+  for (const family of order) {
+    const group = groups.get(family)
+    const section = document.createElement("div")
+    section.className = "family"
+    const title = document.createElement("div")
+    title.className = "family-name"
+    title.textContent = family
+    const list = document.createElement("div")
+    list.className = group.ramp ? "chips" : "rows"
+    for (const item of group.items) {
+      const value = item.token[picker.mode]
+      const button = document.createElement("button")
+      button.type = "button"
+      button.title = `${item.token.name}\nlight ${item.token.light}\ndark ${item.token.dark}`
+      button.setAttribute("aria-selected", String(item.token.name === picker.selected))
+      button.style.setProperty("--swatch", value)
+      if (group.ramp) {
+        button.className = "chip"
+        button.style.setProperty("--chip-text", readableOn(value))
+        button.innerHTML = `<span>${item.step}</span>`
+      } else {
+        button.className = "row"
+        button.innerHTML = `<span class="mini"></span><span class="name"></span>`
+        button.querySelector(".name").textContent = item.token.name.replace(/^v2-/, "")
+      }
+      button.onclick = () => {
+        picker.onPick(item.token.name)
+        closePicker()
+      }
+      list.append(button)
+    }
+    section.append(title, list)
+    body.append(section)
+  }
+}
+$("#picker-search").oninput = renderPicker
+$("#picker-search").onkeydown = (event) => {
+  if (event.key === "Escape") closePicker()
+  if (event.key === "Enter") $("#picker-body button")?.click()
+}
+document.addEventListener("mousedown", (event) => {
+  if (!picker.anchor || $("#picker").contains(event.target) || picker.anchor.contains(event.target)) return
+  closePicker()
+})
+window.addEventListener("resize", () => picker.anchor && placePicker())
+document.addEventListener("scroll", () => picker.anchor && placePicker(), true)
+
+// History holds committed snapshots only, so one drag of a picker or slider is one undo step.
+const history = { undo: [], redo: [], committed: "" }
+function record() {
+  const snapshot = JSON.stringify(state)
+  if (snapshot === history.committed) return
+  history.undo.push(history.committed)
+  history.redo = []
+  history.committed = snapshot
+  syncHistory()
+}
+function travel(from, to) {
+  if (!from.length) return
+  to.push(history.committed)
+  history.committed = from.pop()
+  state = JSON.parse(history.committed)
+  render()
+  syncHistory()
+  changed(false)
+  clearTimeout(saveTimer)
+  saveTimer = setTimeout(save, 150)
+}
+function syncHistory() {
+  $("#undo").disabled = !history.undo.length
+  $("#redo").disabled = !history.redo.length
+}
+$("#undo").onclick = () => travel(history.undo, history.redo)
+$("#redo").onclick = () => travel(history.redo, history.undo)
+document.addEventListener("keydown", (event) => {
+  if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "z") return
+  if (event.target instanceof HTMLInputElement && ["text", "number"].includes(event.target.type)) return
+  event.preventDefault()
+  if (event.shiftKey) travel(history.redo, history.undo)
+  else travel(history.undo, history.redo)
+})
+
+// Live pushes stay responsive while dragging; file writes are debounced to limit dev-server hot reloads.
+function changed(commit) {
+  if (commit) record()
+  const css = buildCSS()
+  $("#css").textContent = css || "/* No overrides */"
+  clearTimeout(liveTimer)
+  liveTimer = setTimeout(() => live(css), 30)
+  clearTimeout(saveTimer)
+  saveTimer = setTimeout(save, commit ? 150 : 700)
+  status("Saving…")
+}
+async function live(css) {
+  if (liveBusy) { livePending = true; return }
+  liveBusy = true
+  await fetch("/api/live", { method: "POST", body: JSON.stringify({ css }) }).catch(() => {})
+  liveBusy = false
+  if (livePending) { livePending = false; live(buildCSS()) }
+}
+async function save() {
+  // The committed reference set is read-only; the first edit forks it so the reference stays intact.
+  if (current.readonly) {
+    const name = `${state.name} copy`
+    const created = await fetch("/api/sets", { method: "POST", body: JSON.stringify({ name, set: state }) }).then((r) => r.json())
+    state.name = name
+    state.readonly = false
+    await loadSets(created.id)
+    $("#set-note").textContent = `Reference is read-only, so your edits were saved as “${name}”.`
+  }
+  const response = await fetch(`/api/sets/${current.id}`, { method: "PUT", body: JSON.stringify({ set: state, css: buildCSS() }) }).catch(() => null)
+  if (!response?.ok) return status("Save failed — is server.ts running?")
+  const result = await response.json()
+  status(`Saved ${new Date().toLocaleTimeString()} · live in ${result.live} diff view${result.live === 1 ? "" : "s"}`)
+}
+
+$("#enabled").onchange = () => { state.enabled = $("#enabled").checked; render(); changed(true) }
+$("#reset").onclick = () => { if (!confirm("Reset every slot to Current?")) return; state = { ...state, enabled: true, disabledGroups: {}, slots: {} }; render(); changed(true) }
+// Shared CSS carries the exact settings in a header so pasting restores token choices, opacity and category toggles.
+function shareableCSS() {
+  const css = buildCSS()
+  if (!css) return ""
+  const slots = Object.fromEntries(
+    Object.entries(state.slots).flatMap(([id, modes]) => {
+      const active = Object.fromEntries(Object.entries(modes).filter(([, entry]) => entry.kind !== "current"))
+      return Object.keys(active).length ? [[id, active]] : []
+    }),
+  )
+  const settings = { enabled: state.enabled, disabledGroups: state.disabledGroups ?? {}, slots }
+  return `/* diff-color-tuner: ${JSON.stringify(settings)} */\n${css}`
+}
+
+function parseShared(text) {
+  // Chat apps often render "*…*" as Markdown emphasis and drop the asterisks, so don't require comment delimiters.
+  // The settings JSON is always on one line, so a greedy match within the line is safe.
+  const header = /diff-color-tuner:\s*(\{.*\})/.exec(text)
+  if (header) {
+    const settings = JSON.parse(header[1])
+    const slots = Object.fromEntries(Object.entries(settings.slots ?? {}).filter(([id]) => SLOTS.some((slot) => slot.id === id)))
+    return { state: { enabled: settings.enabled ?? true, disabledGroups: settings.disabledGroups ?? {}, slots }, count: Object.values(slots).reduce((sum, modes) => sum + Object.keys(modes).length, 0) }
+  }
+  // Fallback for CSS without the header: read each "/* mode: Label */" comment and the first color value after it.
+  const slots = {}
+  let count = 0
+  for (const match of text.matchAll(/^\s*\/\*?\s*(light|dark):\s*(.+?)\s*\*?\/\s*\n\s*([^\n]+)/gm)) {
+    const label = (value) => value.replace(/[“”"]/g, '"').replace(/\s*\*$/, "")
+    const slot = SLOTS.find((candidate) => label(candidate.label) === label(match[2]))
+    const entry = slot && parseValue(match[3].slice(match[3].indexOf("{")))
+    if (!entry) continue
+    slots[slot.id] ??= {}
+    slots[slot.id][match[1]] = entry
+    count++
+  }
+  return count ? { state: { enabled: true, disabledGroups: {}, slots }, count } : null
+}
+
+function parseValue(rule) {
+  const alphaToken = /rgb\(from var\(--([\w-]+)\) r g b \/ ([\d.]+)\)/.exec(rule)
+  if (alphaToken && tokenMap.has(alphaToken[1])) return { kind: "token", token: alphaToken[1], alpha: Number(alphaToken[2]) * 100 }
+  const token = /var\(--(v2-[\w-]+)\)/.exec(rule)
+  if (token && tokenMap.has(token[1])) return { kind: "token", token: token[1], alpha: 100 }
+  const hex = /#([0-9a-f]{6})([0-9a-f]{2})?\b/i.exec(rule)
+  if (hex) return { kind: "color", hex: `#${hex[1].toLowerCase()}`, alpha: hex[2] ? Math.round((parseInt(hex[2], 16) / 255) * 1000) / 10 : 100 }
+  return null
+}
+
+$("#paste").onclick = () => {
+  $("#paste-text").value = ""
+  $("#paste-result").textContent = ""
+  $("#paste-result").removeAttribute("data-error")
+  $("#paste-dialog").showModal()
+  $("#paste-text").focus()
+}
+$("#paste-apply").onclick = (event) => {
+  let parsed = null
+  try {
+    parsed = parseShared($("#paste-text").value)
+  } catch {}
+  if (!parsed) {
+    event.preventDefault()
+    $("#paste-result").textContent = "No tuner rules found in that text."
+    $("#paste-result").setAttribute("data-error", "")
+    return
+  }
+  state = { ...parsed.state, name: state.name, readonly: state.readonly }
+  render()
+  changed(true)
+  status(`Applied ${parsed.count} pasted override${parsed.count === 1 ? "" : "s"}`)
+}
+
+$("#copy").onclick = async () => {
+  const css = shareableCSS()
+  if (!css) return status("Nothing to copy — no active overrides")
+  const result = await fetch("/api/copy", { method: "POST", body: css }).then((r) => r.json()).catch(() => null)
+  if (result?.ok) return status(`Copied ${css.split("\n").filter((line) => /^\/\* (light|dark):/.test(line)).length} rules`)
+  const copied = await navigator.clipboard.writeText(css).then(() => true, () => false)
+  status(copied ? "CSS copied" : "Copy failed — select the CSS at the bottom manually")
+}
+
+let current = { id: "reference", readonly: true }
+
+async function loadSets(selected) {
+  const data = await fetch("/api/sets").then((r) => r.json())
+  const id = selected ?? data.active
+  $("#set").innerHTML = ""
+  for (const set of data.sets) {
+    const option = document.createElement("option")
+    option.value = set.id
+    option.textContent = set.readonly ? `${set.name} (read-only)` : set.name
+    $("#set").append(option)
+  }
+  const match = data.sets.find((set) => set.id === id) ?? data.sets[0]
+  current = { id: match.id, readonly: match.readonly }
+  $("#set").value = current.id
+  $("#set-rename").disabled = current.readonly
+  $("#set-delete").disabled = current.readonly
+  return current.id
+}
+
+async function switchSet(id) {
+  clearTimeout(saveTimer)
+  await loadSets(id)
+  state = await fetch(`/api/sets/${current.id}`).then((r) => r.json())
+  history.undo = []
+  history.redo = []
+  history.committed = JSON.stringify(state)
+  syncHistory()
+  render()
+  $("#set-note").textContent = current.readonly ? "Edits to the reference are saved as a new set." : ""
+  const result = await fetch("/api/active", { method: "POST", body: JSON.stringify({ id: current.id, css: buildCSS() }) }).then((r) => r.json())
+  status(`Showing “${state.name}” · live in ${result.live} diff view${result.live === 1 ? "" : "s"}`)
+}
+
+// window.prompt isn't available in Electron, so names come from an in-page dialog.
+function askName(title, value) {
+  return new Promise((resolve) => {
+    const dialog = $("#name-dialog")
+    $("#name-title").textContent = title
+    $("#name-input").value = value
+    dialog.onclose = () => resolve(dialog.returnValue === "ok" ? $("#name-input").value.trim() || null : null)
+    dialog.returnValue = ""
+    $("#name-input").onkeydown = (event) => {
+      if (event.key !== "Enter") return
+      event.preventDefault()
+      dialog.close("ok")
+    }
+    dialog.showModal()
+    $("#name-input").select()
+  })
+}
+
+async function createSet(name, set) {
+  const created = await fetch("/api/sets", { method: "POST", body: JSON.stringify({ name, set }) }).then((r) => r.json())
+  await switchSet(created.id)
+}
+
+$("#set").onchange = () => switchSet($("#set").value)
+$("#set-new").onclick = async () => {
+  const name = await askName("New override set", "My overrides")
+  if (name) await createSet(name, { enabled: true, disabledGroups: {}, slots: {} })
+}
+$("#set-duplicate").onclick = async () => {
+  const name = await askName("Duplicate set", `${state.name} copy`)
+  if (name) await createSet(name, state)
+}
+$("#set-rename").onclick = async () => {
+  const name = await askName("Rename set", state.name)
+  if (!name) return
+  state.name = name
+  await save()
+  await loadSets(current.id)
+}
+$("#set-delete").onclick = async () => {
+  if (!confirm(`Delete “${state.name}”?`)) return
+  await fetch(`/api/sets/${current.id}`, { method: "DELETE" })
+  await switchSet("reference")
+}
+
+const tokenList = await fetch("/api/tokens").then((r) => r.json())
+tokens = tokenList
+tokenMap = new Map(tokens.map((token) => [token.name, token]))
+await switchSet()
+</script>
+</body>
+</html>
