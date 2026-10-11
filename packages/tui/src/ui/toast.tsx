@@ -1,10 +1,11 @@
-import { createContext, createSignal, onCleanup, useContext, type ParentProps, Show } from "solid-js"
+import { createContext, createResource, createSignal, onCleanup, useContext, type ParentProps, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useTheme } from "../context/theme"
 import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { SplitBorder } from "./border"
 import { TextAttributes } from "@opentui/core"
-import { errorMessage } from "../util/error"
+import { useOptionalConfig } from "../config"
+import { createLanguage, dictionary, loadDictionary } from "../i18n/translate"
 export type ToastOptions = {
   title?: string
   message: string
@@ -24,6 +25,7 @@ function ToastSurface(props: {
   onActivate: () => void
 }) {
   const theme = useTheme()
+  const language = useToastLanguage()
   const dimensions = useTerminalDimensions()
   const renderer = useRenderer()
   const [hovered, setHovered] = createSignal(false)
@@ -93,7 +95,7 @@ function ToastSurface(props: {
         </Show>
         <Show when={props.pending}>
           <text fg={theme.text.muted} marginTop={1}>
-            +{props.pending} more
+            {language.t("tui.dialogs.moreToasts", { count: props.pending! })}
           </text>
         </Show>
       </box>
@@ -119,6 +121,7 @@ export function Toast() {
 }
 
 function init() {
+  const language = useToastLanguage()
   const [store, setStore] = createStore({
     currentToast: null as ToastOptions | null,
     queue: [] as ToastOptions[],
@@ -166,7 +169,15 @@ function init() {
       start(toastOptions.duration)
     },
     error: (err: unknown) => {
-      toast.show({ variant: "error", message: errorMessage(err) })
+      if (err instanceof Error)
+        return toast.show({
+          variant: "error",
+          message: err.message,
+        })
+      toast.show({
+        variant: "error",
+        message: language.t("tui.dialogs.unknownError"),
+      })
     },
     pause() {
       if (!store.currentToast || paused) return
@@ -197,6 +208,14 @@ function init() {
 }
 
 export type ToastContext = ReturnType<typeof init>
+
+function useToastLanguage() {
+  // ToastProvider also supports standalone consumers without configuration.
+  const config = useOptionalConfig()
+  const locale = () => config?.data.language ?? "en"
+  const [current] = createResource(locale, loadDictionary, { initialValue: dictionary(locale()) })
+  return createLanguage(locale, () => current() ?? dictionary(locale()))
+}
 
 const ctx = createContext<ToastContext>()
 

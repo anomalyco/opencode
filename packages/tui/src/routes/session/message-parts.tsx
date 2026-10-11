@@ -1,4 +1,5 @@
 import { createMemo, createSignal, Match, Show, Switch } from "solid-js"
+import { useLanguage } from "../../context/language"
 import { RGBA, TextAttributes, type MouseEvent } from "@opentui/core"
 import type { JSX } from "@opentui/solid"
 import type {
@@ -11,7 +12,6 @@ import { createSyntaxStyleMemo, useTheme, useThemes } from "../../context/theme"
 import { reasoningSummary } from "../../context/thinking"
 import { usePlugin } from "../../plugin/context"
 import { SplitBorder } from "../../ui/border"
-import { Locale } from "../../util/locale"
 import { use } from "./render-context"
 import { generateThinkingSyntax } from "./thinking-syntax"
 import { canonicalToolName } from "../../util/tool-display"
@@ -44,6 +44,7 @@ export function ReasoningPart(props: {
   part: SessionMessageAssistantReasoning
   message: SessionMessageAssistant
 }) {
+  const language = useLanguage()
   const theme = useTheme()
   const { currentSyntax: syntax } = useThemes()
   const thinkingSyntax = createSyntaxStyleMemo(() => generateThinkingSyntax(syntax(), theme.text.muted))
@@ -83,7 +84,7 @@ export function ReasoningPart(props: {
               open={!inMinimal() || expanded()}
               done={isDone()}
               title={inMinimal() && !expanded() ? summary().title : null}
-              duration={isDone() ? Locale.duration(duration()) : undefined}
+              duration={isDone() ? language.duration(duration()) : undefined}
             />
           </box>
         </box>
@@ -124,6 +125,7 @@ function ReasoningHeader(props: {
   title: string | null
   duration?: string
 }) {
+  const language = useLanguage()
   const theme = useTheme()
   const fg = () =>
     props.open
@@ -139,7 +141,11 @@ function ReasoningHeader(props: {
     <Switch>
       <Match when={!props.done}>
         <box flexDirection="row">
-          <Spinner color={fg()}>{props.title ? "Thinking: " + props.title : "Thinking"}</Spinner>
+          <Spinner color={fg()}>
+            {props.title
+              ? language.t("tui.transcript.thinkingTitle", { title: props.title })
+              : language.t("tui.transcript.thinking")}
+          </Spinner>
         </box>
       </Match>
       <Match when={true}>
@@ -147,7 +153,7 @@ function ReasoningHeader(props: {
           <Show when={props.toggleable}>
             <span>{props.open ? "- " : "+ "}</span>
           </Show>
-          <span>Thought</span>
+          <span>{language.t("tui.transcript.thought")}</span>
           <Show when={props.title || props.duration}>
             <span>: </span>
           </Show>

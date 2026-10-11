@@ -6,8 +6,11 @@ import { useClipboard } from "../context/clipboard"
 import { useExit } from "../context/exit"
 import { useTuiApp } from "../context/runtime"
 import { describeOS, describeTerminal } from "../util/system"
+import { createLanguage, type Locale } from "../i18n/translate"
 
-export function ErrorComponent(props: { error: Error; reset: () => void; mode?: "dark" | "light" }) {
+export function ErrorComponent(props: { error: Error; reset: () => void; mode?: "dark" | "light"; locale?: Locale }) {
+  // The root error boundary is outside ConfigProvider and may catch a config failure.
+  const language = createLanguage(() => props.locale ?? "en")
   const term = useTerminalDimensions()
   const exit = useExit()
   const clipboard = useClipboard()
@@ -41,9 +44,9 @@ export function ErrorComponent(props: { error: Error; reset: () => void; mode?: 
         success: "#7fd88f",
       }
 
-  const message = props.error.message || "An unknown error occurred."
-  const stack = props.error.stack || "No stack trace available."
-  const issueURL = buildIssueURL(message, stack, app.version)
+  const message = props.error.message || language.t("tui.dialogs.unknownError")
+  const stack = props.error.stack || language.t("tui.dialogs.noStack")
+  const issueURL = buildIssueURL(message, stack, app.version, language)
 
   const copyReport = () => {
     void clipboard
@@ -55,12 +58,17 @@ export function ErrorComponent(props: { error: Error; reset: () => void; mode?: 
   const actions = [
     {
       key: "c",
-      label: () => ({ idle: "Copy report", copied: "✓ Copied", failed: "Copy failed" })[copyState()],
+      label: () =>
+        ({
+          idle: language.t("tui.dialogs.copyReport"),
+          copied: language.t("tui.dialogs.copied"),
+          failed: language.t("tui.dialogs.copyFailed"),
+        })[copyState()],
       copy: true,
       onUse: copyReport,
     },
-    { key: "r", label: () => "Restart", onUse: props.reset },
-    { key: "q", label: () => "Quit", onUse: () => exit() },
+    { key: "r", label: () => language.t("tui.dialogs.restart"), onUse: props.reset },
+    { key: "q", label: () => language.t("tui.dialogs.quit"), onUse: () => exit() },
   ]
   const [selected, setSelected] = createSignal(0)
   const move = (delta: number) => setSelected((prev) => (prev + delta + actions.length) % actions.length)
@@ -117,10 +125,10 @@ export function ErrorComponent(props: { error: Error; reset: () => void; mode?: 
         {/* Headline */}
         <box flexDirection="column" alignItems="center" flexShrink={0}>
           <text attributes={TextAttributes.BOLD} fg={colors.text}>
-            OpenCode crashed
+            {language.t("tui.dialogs.crashed")}
           </text>
           <Show when={showSubtext()}>
-            <text fg={colors.muted}>An unexpected error stopped the session.</text>
+            <text fg={colors.muted}>{language.t("tui.dialogs.crashDescription")}</text>
           </Show>
         </box>
 
@@ -130,7 +138,7 @@ export function ErrorComponent(props: { error: Error; reset: () => void; mode?: 
           border
           borderStyle="rounded"
           borderColor={colors.error}
-          title=" Error "
+          title={` ${language.t("tui.dialogs.error")} `}
           titleColor={colors.error}
           paddingLeft={2}
           paddingRight={2}
@@ -184,9 +192,9 @@ export function ErrorComponent(props: { error: Error; reset: () => void; mode?: 
           border
           borderStyle="rounded"
           borderColor={colors.borderSubtle}
-          title=" Stack trace "
+          title={` ${language.t("tui.dialogs.stackTrace")} `}
           titleColor={colors.muted}
-          bottomTitle=" ↑↓ scroll "
+          bottomTitle={` ↑↓ ${language.t("tui.session.scroll")} `}
           bottomTitleAlignment="right"
           paddingLeft={1}
           paddingRight={1}
@@ -205,10 +213,10 @@ export function ErrorComponent(props: { error: Error; reset: () => void; mode?: 
           <box flexDirection="column" alignItems="center" flexShrink={0}>
             <text fg={colors.muted}>
               {copyState() === "copied"
-                ? "Report copied — paste it into a new GitHub issue."
+                ? language.t("tui.dialogs.reportCopied")
                 : copyState() === "failed"
-                  ? "Clipboard write failed. Try again or report the crash manually."
-                  : "Copy the report and open a GitHub issue to help us fix this."}
+                  ? language.t("tui.dialogs.reportCopyFailed")
+                  : language.t("tui.dialogs.reportCrash")}
             </text>
             <text fg={colors.muted}>OpenCode {app.version}</text>
           </box>
@@ -218,27 +226,24 @@ export function ErrorComponent(props: { error: Error; reset: () => void; mode?: 
   )
 }
 
-function buildIssueURL(message: string, stack: string, version: string) {
+function buildIssueURL(message: string, stack: string, version: string, language: ReturnType<typeof createLanguage>) {
   // Field keys match the ids in .github/ISSUE_TEMPLATE/bug-report.yml so the issue
   // form opens pre-filled. Populating os/terminal/reproduce keeps the report past
   // the contributing-guidelines compliance check, which pushes for system info.
   const url = new URL("https://github.com/anomalyco/opencode/issues/new?template=bug-report.yml")
-  url.searchParams.set("title", `TUI crash: ${message}`)
+  url.searchParams.set("title", language.t("tui.dialogs.crashTitle", { message }))
   url.searchParams.set("opencode-version", version)
   url.searchParams.set("os", describeOS())
   url.searchParams.set("terminal", describeTerminal())
-  url.searchParams.set(
-    "reproduce",
-    "Reported automatically from the OpenCode crash screen. If you can, describe what you were doing when it crashed.",
-  )
+  url.searchParams.set("reproduce", language.t("tui.dialogs.crashReproduce"))
 
   // Budget the stack against the fully URL-encoded length (not the raw length) so
   // the final link stays under GitHub's practical limit; flag truncation so a
   // clipped trace is obvious. searchParams.set handles encoding without throwing,
   // so measuring url.toString() is both correct and safe on any input.
   const MAX_URL_LENGTH = 6000
-  const marker = "\n… (truncated)"
-  const head = `The OpenCode TUI crashed with an unexpected error.\n\n**Error:** ${message}\n\n**Stack trace:**\n`
+  const marker = `\n${language.t("tui.dialogs.truncated")}`
+  const head = language.t("tui.dialogs.crashReport", { message })
   const setBody = (body: string) => url.searchParams.set("description", head + "```\n" + body + "\n```")
 
   setBody(stack)

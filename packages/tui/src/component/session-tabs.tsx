@@ -1,3 +1,4 @@
+import { useLanguage } from "../context/language"
 import {
   BoxRenderable,
   CliRenderEvents,
@@ -39,11 +40,11 @@ import {
 } from "../context/session-tabs-model"
 import { createAnimatable, spring, tween } from "../ui/animation"
 import { Locale } from "../util/locale"
+import { stringWidth } from "../util/string-width"
 import { TabPulse, unreadGlowIntensity } from "./tab-pulse"
 import { tint } from "../theme/color"
 import { SESSION_SIDEBAR_WIDTH, SESSION_TABS_COMPACT_BREAKPOINT } from "../ui/layout"
 import { projectName } from "../util/project"
-import { stringWidth } from "../util/string-width"
 import { marqueeCycleWidth, marqueeOverflows, marqueeTextParts } from "../util/marquee"
 import { useDialog } from "../ui/dialog"
 import { useToast } from "../ui/toast"
@@ -370,6 +371,7 @@ export function createTabMarquee(animations: () => boolean) {
 }
 
 function TabContextMenu(props: { state: TabContextMenuState; tabs: SessionTabsController; onClose: () => void }) {
+  const language = useLanguage()
   const dimensions = useTerminalDimensions()
   const theme = useTheme()
   const background = () => theme.background.raised.base
@@ -380,40 +382,51 @@ function TabContextMenu(props: { state: TabContextMenuState; tabs: SessionTabsCo
   onCleanup(Keymap.use().mode.push("menu"))
   Keymap.createLayer(() => ({
     mode: "menu",
-    commands: [{ bind: "escape,ctrl+c", title: "Close tab menu", group: "Tabs", run: props.onClose }],
+    commands: [
+      {
+        bind: "escape,ctrl+c",
+        title: language.t("tui.dialogs.closeTabMenu"),
+        group: language.t("titlebar.tabs"),
+        run: props.onClose,
+      },
+    ],
   }))
   const actions = createMemo<Array<{ title: string; run?: () => void }>>(() => {
     const sessionID = props.state.sessionID
     const title = props.state.title
     const closed = (props.tabs.recentlyClosed?.() ?? []).slice(0, 10)
     return [
-      ...(sessionID && props.tabs.add ? [{ title: NEW_SESSION_TAB_TITLE, run: () => props.tabs.add?.() }] : []),
+      ...(sessionID && props.tabs.add
+        ? [{ title: language.t("tui.dialogs.newTab"), run: () => props.tabs.add?.() }]
+        : []),
       ...(sessionID
         ? [
             {
-              title: "Rename",
+              title: language.t("tui.dialogs.rename"),
               run: () =>
                 props.tabs.rename ? props.tabs.rename(sessionID) : DialogSessionRename.show(dialog, sessionID, title),
             },
             {
-              title: "Copy session ID",
+              title: language.t("tui.session.copySessionID"),
               run: () =>
                 void clipboard
                   .write(sessionID)
-                  .then(() => toast.show({ message: "Session ID copied to clipboard", variant: "info" }))
+                  .then(() =>
+                    toast.show({ message: language.t("tui.session.sessionIDCopiedToClipboard"), variant: "info" }),
+                  )
                   .catch(toast.error),
             },
-            { title: "Close", run: () => props.tabs.close(sessionID) },
+            { title: language.t("tui.dialogs.close"), run: () => props.tabs.close(sessionID) },
           ]
         : []),
       ...(!sessionID && props.tabs.reopen
         ? [
-            { title: "Recently closed tabs" },
+            { title: language.t("tui.dialogs.recentlyClosedTabs") },
             ...closed.map((tab) => ({
-              title: tab.title || "Untitled session",
+              title: tab.title || language.t("tui.tabs.untitled"),
               run: () => props.tabs.reopen?.(tab.sessionID),
             })),
-            ...(closed.length === 0 ? [{ title: "No recently closed tabs" }] : []),
+            ...(closed.length === 0 ? [{ title: language.t("tui.dialogs.noRecentlyClosedTabs") }] : []),
           ]
         : []),
     ]
@@ -549,6 +562,7 @@ function VerticalSessionTabs(props: {
   unreadMarker?: TabUnreadMarker
   width?: number
 }) {
+  const language = useLanguage()
   const tabs: SessionTabsController = props.controller ?? useSessionTabs()
   const data = props.controller ? undefined : useData()
   const dimensions = useTerminalDimensions()
@@ -604,9 +618,7 @@ function VerticalSessionTabs(props: {
     return moveSessionTab(tabs.tabs(), pending.sessionID, pending.index)
   })
   const items = ordered
-  const highlightColor = createMemo(() =>
-    tint(background(), actionHovered(), actionHovered().a),
-  )
+  const highlightColor = createMemo(() => tint(background(), actionHovered(), actionHovered().a))
   const highlighted = (sessionID: string | undefined) =>
     sessionID !== undefined && (activeID() === sessionID || hovered() === sessionID || dragging() === sessionID)
   const addHighlighted = () => newTab() || addHovered()
@@ -751,7 +763,8 @@ function VerticalSessionTabs(props: {
               const restingTitleWidth = () => Math.max(1, width() - prefixWidth() - 1)
               const hoveredTitleWidth = () => Math.max(1, restingTitleWidth() - 1)
               const titleWidth = () => (hovered() === tab.sessionID ? hoveredTitleWidth() : restingTitleWidth())
-              const title = () => (props.controller ? undefined : session()?.title) ?? tab.title ?? "Untitled session"
+              const title = () =>
+                (props.controller ? undefined : session()?.title) ?? tab.title ?? language.t("tui.tabs.untitled")
               const scrolling = () => marquee.active() === tab.sessionID
               const visibleTitleParts = createMemo(() =>
                 scrolling()
@@ -858,9 +871,7 @@ function VerticalSessionTabs(props: {
               const separatorUpperColor = createMemo(() =>
                 tint(background(), previousGlowHue(), 0.1 * previousGlowLevel()),
               )
-              const separatorLowerColor = createMemo(() =>
-                tint(background(), glowHue(), 0.12 * glowLevel()),
-              )
+              const separatorLowerColor = createMemo(() => tint(background(), glowHue(), 0.12 * glowLevel()))
               const titleColor = (index: number, separator: boolean) => {
                 const level = titleGlow.value().level
                 const color =
@@ -925,9 +936,7 @@ function VerticalSessionTabs(props: {
                         edge="top"
                         width={width()}
                         color={pulseBackground()}
-                        background={
-                          highlighted(items()[index() - 1]?.sessionID) ? highlightColor() : background()
-                        }
+                        background={highlighted(items()[index() - 1]?.sessionID) ? highlightColor() : background()}
                       />
                       <SessionTabHalfRow
                         top={1}
@@ -952,7 +961,7 @@ function VerticalSessionTabs(props: {
                         width={width()}
                         status={status()}
                         label={sessionTabNumberLabel(index())}
-                        idleLabel={Locale.graphemes(title().trimStart())[0] ?? "U"}
+                        idleLabel={Locale.graphemes(title().trimStart() || language.t("tui.tabs.untitled"))[0]}
                         color={
                           selected()
                             ? theme.text.base
@@ -1211,7 +1220,7 @@ function VerticalSessionTabs(props: {
                   selectable={false}
                   attributes={newTab() ? TextAttributes.BOLD : undefined}
                 >
-                  {NEW_SESSION_TAB_TITLE}
+                  {language.t("command.session.new")}
                 </text>
               </Show>
               <Show when={newTab() && !compact()}>
@@ -1260,7 +1269,7 @@ function VerticalSessionTabs(props: {
                 {Locale.truncateWidth(
                   data?.session.get(sessionID())?.title ??
                     items().find((tab) => tab.sessionID === sessionID())?.title ??
-                    "Untitled session",
+                    language.t("tui.tabs.untitled"),
                   tooltipWidth() - 2,
                 )}
               </text>
@@ -1292,6 +1301,7 @@ function HorizontalSessionTabs(props: {
   unreadMarker?: TabUnreadMarker
   numbers: boolean
 }) {
+  const language = useLanguage()
   const tabs = props.controller ?? useSessionTabs()
   const data = props.controller ? undefined : useData()
   const dimensions = useTerminalDimensions()
@@ -1582,7 +1592,10 @@ function HorizontalSessionTabs(props: {
           const glowColor = createMemo(() => tint(background(), feedbackColor() ?? unreadColor(), glowLevel()))
           const glows = () =>
             Boolean(status().attention || (!selected() && !status().busy && status().unread !== undefined))
-          const title = () => data?.session.get(tab.sessionID)?.title ?? tab.title ?? "Untitled session"
+          const title = () =>
+            tab === NEW_SESSION_TAB
+              ? language.t("command.session.new")
+              : (data?.session.get(tab.sessionID)?.title ?? tab.title ?? language.t("tui.tabs.untitled"))
           const tabNumber = createMemo(() => items().findIndex((item) => item.sessionID === tab.sessionID) + 1)
           const numberWidth = () => Math.max(2, String(items().length).length)
           // Hovering reveals the close mark, so the title's right bound shifts left of it.
