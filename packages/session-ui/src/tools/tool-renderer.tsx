@@ -417,11 +417,6 @@ export function getToolInfo(
             ? i18n.plural("ui.common.fileCount", input.files.length)
             : undefined,
       }
-    case "todowrite":
-      return {
-        icon: "checklist",
-        title: i18n.t("ui.tool.todos"),
-      }
     case "question":
       return {
         icon: "bubble-5",
