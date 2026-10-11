@@ -19,6 +19,11 @@ const id = (value: string) => SessionMessage.ID.make(`msg_${value}`)
 const model = Model.Ref.make({ id: Model.ID.make("model"), providerID: Provider.ID.make("provider") })
 const build = Agent.defaultID
 
+const messageText = (message: ReturnType<typeof toLLMMessages>[number]) =>
+  typeof message.content === "string"
+    ? message.content
+    : message.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("")
+
 describe("toLLMMessages", () => {
   test("background user shells enter model context only through their completion notification", () => {
     const shell = SessionMessage.Shell.make({
@@ -50,6 +55,46 @@ describe("toLLMMessages", () => {
     expect(toLLMMessages([completed, notification], model)).toEqual([
       Message.make({ id: notification.id, role: "user", content: notification.text }),
     ])
+  })
+
+  test("bounds large shell output before it reaches the model", () => {
+    const output = "x".repeat(60 * 1024)
+    const shell = SessionMessage.Shell.make({
+      id: id("shell-large"),
+      type: "shell",
+      shellID: Shell.ID.make("sh_large"),
+      status: "exited",
+      command: "bun typecheck",
+      exit: 0,
+      output: { output, cursor: output.length, size: output.length, truncated: false },
+      time: { created, completed: created },
+    })
+
+    const [message] = toLLMMessages([shell], model)
+    const text = messageText(message)
+    expect(text).toContain("Command:\nbun typecheck")
+    expect(text).toContain("[truncated:")
+    expect(text.endsWith("bytes omitted]")).toBe(true)
+    expect(Buffer.byteLength(text, "utf-8")).toBeLessThan(50 * 1024 + 128)
+  })
+
+  test("does not split multi-byte shell output at the truncation boundary", () => {
+    const output = "é".repeat(40 * 1024)
+    const shell = SessionMessage.Shell.make({
+      id: id("shell-multibyte"),
+      type: "shell",
+      shellID: Shell.ID.make("sh_multibyte"),
+      status: "exited",
+      command: "echo",
+      exit: 0,
+      output: { output, cursor: output.length, size: output.length, truncated: false },
+      time: { created, completed: created },
+    })
+
+    const [message] = toLLMMessages([shell], model)
+    const text = messageText(message)
+    expect(text).not.toContain("\uFFFD")
+    expect(text).toContain("[truncated:")
   })
 
   test("omits empty assistant turns", () => {

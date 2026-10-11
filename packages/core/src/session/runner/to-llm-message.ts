@@ -13,8 +13,27 @@ import { fileURLToPath } from "url"
 import { SessionMessage } from "../message.js"
 import { SessionProviderContext } from "../provider-context.js"
 import type { FileAttachment } from "@opencode/schema/prompt"
+import { ToolOutput } from "../../tool-output.js"
 
 const imageMimes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"])
+
+// Session shell output must obey the same bounded preview as normal tool output. Without this cap a
+// large shell command is injected in full into the next model request, which can exceed the context
+// window, fail as `provider.unknown`, and strand the session until a manual compaction.
+const truncateShellOutput = (value: string) => {
+  const total = Buffer.byteLength(value, "utf-8")
+  if (total <= ToolOutput.MAX_BYTES) return value
+  // Truncate by code point so multi-byte UTF-8 content is never split into replacement characters.
+  let bytes = 0
+  let head = ""
+  for (const char of value) {
+    const size = Buffer.byteLength(char, "utf-8")
+    if (bytes + size > ToolOutput.MAX_BYTES) break
+    head += char
+    bytes += size
+  }
+  return `${head}\n[truncated: ${total - bytes} bytes omitted]`
+}
 
 const media = (file: FileAttachment): ContentPart => ({
   type: "media",
@@ -297,7 +316,7 @@ function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMe
         Message.make({
           id: message.id,
           role: "user",
-          content: `The following shell command was executed by the user:\n\nCommand:\n${message.command}\n\nOutput:\n${message.output?.output ?? ""}`,
+          content: `The following shell command was executed by the user:\n\nCommand:\n${message.command}\n\nOutput:\n${truncateShellOutput(message.output?.output ?? "")}`,
           metadata: message.metadata,
         }),
       ]
