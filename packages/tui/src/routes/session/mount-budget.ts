@@ -1,5 +1,5 @@
 import { groupID } from "./anchors"
-import type { GroupKind, SessionNode, SessionRow } from "./grouping/session"
+import { soleGroup, type GroupKind, type SessionNode, type SessionRow } from "./grouping/session"
 
 /**
  * Transcript mounting is budgeted by rendered entries, not rows. A collapsed group
@@ -13,6 +13,8 @@ export function rowWeight(
 ) {
   if (row.type !== "group") return 1
   const visit = (node: Extract<SessionNode, { type: "group" }>, level: number): number => {
+    const sole = soleGroup(node, input.grouped)
+    if (sole) return visit(sole, level + 1)
     if (!input.grouped(node.kind)) return node.size
     const id = groupID(node, level)
     if (!id || !input.expanded(id, node.kind)) return 1
