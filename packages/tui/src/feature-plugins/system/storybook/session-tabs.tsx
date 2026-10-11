@@ -12,6 +12,7 @@ import {
   type TabUnreadMarker,
 } from "../../../component/session-tabs"
 import { closeSessionTab, cycleSessionTab, moveSessionTab } from "../../../context/session-tabs-model"
+import { directoryKey } from "../../../util/project"
 import { StoryFooter } from "./footer"
 import { DialogPrompt } from "../../../ui/dialog-prompt"
 import { useDialog } from "../../../ui/dialog"
@@ -30,18 +31,23 @@ import type { Story } from "./index"
 type FixtureStatus = ReturnType<SessionTabsController["status"]>
 
 const FIXTURE_TABS = [
-  { sessionID: "fixture-1", title: "Implement session tabs", project: "opencode" },
-  { sessionID: "fixture-2", title: "Investigate rendering", project: "opencode" },
-  { sessionID: "fixture-3", title: "A deliberately long session title for truncation", project: "opencode-slack" },
-  { sessionID: "fixture-4", title: "Fix provider state", project: "opencode" },
-  { sessionID: "fixture-5", title: "Review animation", project: "opencode-slack" },
-  { sessionID: "fixture-6", title: "Untitled behavior", project: "opencode-drive" },
-  { sessionID: "fixture-7", title: "Queue follow-up work", project: "opencode" },
-  { sessionID: "fixture-8", title: "Check narrow layout", project: "opencode-drive" },
-  { sessionID: "fixture-9", title: "Profile terminal output", project: "opencode" },
-  { sessionID: "fixture-10", title: "Handle permission", project: "opencode-slack" },
-  { sessionID: "fixture-11", title: "Run focused tests", project: "opencode" },
-  { sessionID: "fixture-12", title: "Prepare review", project: "opencode-drive" },
+  { sessionID: "fixture-1", title: "Implement session tabs", project: "opencode", directory: "/repo/opencode" },
+  { sessionID: "fixture-2", title: "Investigate rendering", project: "opencode", directory: "/repo/opencode" },
+  {
+    sessionID: "fixture-3",
+    title: "A deliberately long session title for truncation",
+    project: "opencode-slack",
+    directory: "/repo/opencode-slack",
+  },
+  { sessionID: "fixture-4", title: "Fix provider state", project: "opencode", directory: "/repo/opencode" },
+  { sessionID: "fixture-5", title: "Review animation", project: "opencode-slack", directory: "/repo/opencode-slack" },
+  { sessionID: "fixture-6", title: "Untitled behavior", project: "opencode-drive", directory: "/repo/opencode-drive" },
+  { sessionID: "fixture-7", title: "Queue follow-up work", project: "opencode", directory: "/repo/opencode" },
+  { sessionID: "fixture-8", title: "Check narrow layout", project: "opencode-drive", directory: "/repo/opencode-drive" },
+  { sessionID: "fixture-9", title: "Profile terminal output", project: "opencode", directory: "/repo/opencode" },
+  { sessionID: "fixture-10", title: "Handle permission", project: "opencode-slack", directory: "/repo/opencode-slack" },
+  { sessionID: "fixture-11", title: "Run focused tests", project: "opencode", directory: "/repo/opencode" },
+  { sessionID: "fixture-12", title: "Prepare review", project: "opencode-drive", directory: "/repo/opencode-drive" },
 ]
 
 const FIXTURE_STATUSES: Record<string, FixtureStatus> = {
@@ -68,13 +74,19 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
   const theme = props.context.theme
   const dialog = useDialog()
   // A keyed store mirrors production: retitles mutate rows in place instead of remounting them.
-  const [tabStore, setTabStore] = createStore<{ items: { sessionID: string; title?: string }[] }>({
+  const [tabStore, setTabStore] = createStore<{
+    items: { sessionID: string; title?: string; directory?: string; project?: string }[]
+  }>({
     items: FIXTURE_TABS.slice(0, 6).map((tab) => ({ ...tab })),
   })
   const tabs = () => tabStore.items
-  const setItems = (next: { sessionID: string; title?: string }[]) =>
+  const setItems = (next: { sessionID: string; title?: string; directory?: string; project?: string }[]) =>
     setTabStore("items", reconcile(next, { key: "sessionID" }))
   const [active, setActive] = createSignal<string | undefined>("fixture-1")
+  const [collapsed, setCollapsed] = createSignal<Record<string, boolean>>({})
+  const directoryOf = (sessionID: string) =>
+    tabStore.items.find((tab) => tab.sessionID === sessionID)?.directory ??
+    FIXTURE_TABS.find((tab) => tab.sessionID === sessionID)?.directory
   const [lastEvent, setLastEvent] = createSignal("idle / working / question / permission / complete / error")
   const [statuses, setStatuses] = createSignal<Record<string, FixtureStatus>>(FIXTURE_STATUSES)
   const [orientation, setOrientation] = createSignal<"horizontal" | "vertical">("vertical")
@@ -132,9 +144,16 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
       setLastEvent("all fixture tabs are open")
       return
     }
-    setItems([...tabs().map((tab) => ({ ...tab })), { sessionID: next.sessionID }])
+    setItems([...tabs().map((tab) => ({ ...tab })), { sessionID: next.sessionID, directory: next.directory, project: next.project }])
     select(next.sessionID)
     setLastEvent(`tab ${number(next.sessionID)} opened untitled; run it to earn its title`)
+  }
+
+  const toggleAllGroups = () => {
+    const keys = [...new Set(tabs().map((tab) => directoryKey(directoryOf(tab.sessionID) ?? tab.sessionID)))]
+    const anyExpanded = keys.some((key) => !collapsed()[key])
+    setCollapsed(Object.fromEntries(keys.map((key) => [key, anyExpanded])))
+    setLastEvent(anyExpanded ? "all folder groups collapsed" : "all folder groups expanded")
   }
 
   const controller = {
@@ -160,6 +179,10 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
     detail(sessionID) {
       return FIXTURE_TABS.find((tab) => tab.sessionID === sessionID)?.project
     },
+    directory: directoryOf,
+    collapsed: () => collapsed(),
+    isCollapsed: (key: string) => collapsed()[key] ?? false,
+    toggleCollapsed: (key: string) => setCollapsed((current) => ({ ...current, [key]: !(current[key] ?? false) })),
     status(sessionID) {
       return statuses()[sessionID] ?? EMPTY_SESSION_TAB_STATUS
     },
@@ -317,6 +340,7 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
       setStatuses(showcase ? FIXTURE_STATUSES : {})
       setOutcomes(showcase ? FIXTURE_OUTCOMES : {})
       setActive("fixture-1")
+      setCollapsed({})
       setSpinner("dots")
       setMarker("small-dot")
       setAnimations(true)
@@ -485,6 +509,7 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
       },
       { bind: "r,shift+r", title: "Reset to idle", group: "Storybook", run: () => reset() },
       { bind: "v", title: "Show all states", group: "Storybook", run: () => reset(true) },
+      { bind: "G", title: "Collapse or expand folder groups", group: "Storybook", run: toggleAllGroups },
     ],
   }))
 
@@ -557,6 +582,8 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
           { shortcut: "drag edge", label: "resize / double-click reset" },
           { shortcut: "r", label: "reset idle" },
           { shortcut: "v", label: "all states" },
+          { shortcut: "G", label: "collapse groups" },
+          { shortcut: "click ▸/▾", label: "toggle group" },
           { shortcut: "esc", label: "back" },
         ]}
       />

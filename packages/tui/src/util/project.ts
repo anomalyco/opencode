@@ -5,3 +5,9 @@ export function projectName(project?: { canonical: string; name?: string }, fall
   if (canonical === "/") return fallback ? path.basename(fallback) : undefined
   return project?.name || path.basename(canonical)
 }
+
+export function directoryKey(directory: string | undefined) {
+  if (directory === undefined) return ""
+  const trimmed = directory.replace(/[/\\]+$/, "")
+  return trimmed === "" && directory !== "" ? "/" : trimmed
+}

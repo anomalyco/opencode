@@ -34,6 +34,7 @@ type TabsState = {
   tabs: SessionTab[]
   // Kept empty for rollback compatibility with clients that still read this field.
   unread: Record<string, unknown>
+  collapsed: Record<string, boolean>
 }
 
 type PersistedState = {
@@ -46,7 +47,7 @@ export type ScrollAnchor = {
   screenY: number
 }
 
-const empty = (): TabsState => ({ tabs: [], unread: {} })
+const empty = (): TabsState => ({ tabs: [], unread: {}, collapsed: {} })
 
 // Deliberately after connect settles: the visible session's mount syncs win the first slots.
 const TAB_PREFETCH_DELAY = 300
@@ -134,6 +135,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
         return openSessionTab(tabs, { sessionID, title: title(sessionID, tab.title) })
       }, []),
       unread: {},
+      collapsed: value.collapsed ?? {},
     })
     const current = () => (route.data.type === "session" ? root(route.data.sessionID) : undefined)
     createSessionRetention({
@@ -246,6 +248,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
         const next = normalize(draft)
         draft.tabs = next.tabs
         draft.unread = next.unread
+        draft.collapsed = next.collapsed
       })
     })
 
@@ -389,6 +392,18 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       },
       setGroupExpanded(sessionID: string, groupID: string, expanded: boolean) {
         setExpandedGroups(sessionID, (current) => ({ ...current, [groupID]: expanded }))
+      },
+      collapsed() {
+        return state().collapsed ?? {}
+      },
+      isCollapsed(key: string) {
+        return state().collapsed?.[key] ?? false
+      },
+      toggleCollapsed(key: string) {
+        update((draft) => {
+          draft.collapsed ??= {}
+          draft.collapsed[key] = !(draft.collapsed[key] ?? false)
+        })
       },
       select(sessionID: string) {
         if (!enabled()) return
