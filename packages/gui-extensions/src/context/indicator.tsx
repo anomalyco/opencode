@@ -1,6 +1,6 @@
 import { Show, createMemo, type ComponentProps, type JSX } from "solid-js"
 import { ProgressCircle } from "@opencode/ui/progress-circle"
-import { IconButton } from "@opencode/ui/icon-button"
+import { Button } from "@opencode/ui/button"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { useI18n } from "@opencode/ui/context/i18n"
 import { useExtension, type MountedSession } from "../sdk"
@@ -62,8 +62,24 @@ export function SessionContextUsage(props: {
     }
   })
 
+  const tokens = createMemo(() =>
+    new Intl.NumberFormat(i18n.locale(), { notation: "compact", maximumFractionDigits: 0 })
+      .format(context()?.total ?? 0)
+      .toLocaleLowerCase(i18n.locale()),
+  )
+
   const cost = createMemo(() => {
     return usd().format(info()?.cost ?? 0)
+  })
+
+  const showCost = createMemo(() => {
+    if ((info()?.cost ?? 0) > 0) return true
+    const ref = info()?.model ?? messages().findLast((item) => item.type === "assistant")?.model
+    const model = ref ? catalogModel(props.session, ref)?.model : undefined
+
+    if (!model) return true
+
+    return model.cost.some((cost) => cost.input > 0 || cost.output > 0 || cost.cache.read > 0 || cost.cache.write > 0)
   })
 
   const openContext = () => {
@@ -89,13 +105,15 @@ export function SessionContextUsage(props: {
 
   const compactCircle = () => (
     <div class="flex items-center justify-center">
-      <ProgressCircle appearance="compact" percentage={context()?.usage ?? 0} />
+      <ProgressCircle appearance="compact" size={16} percentage={context()?.usage ?? 0} />
     </div>
   )
 
   const tooltipValue = () => (
     <div class="flex w-[120px] flex-col gap-2">
-      <ContextTooltipRow name={ctx.t("usage.cost")} value={cost()} />
+      <Show when={showCost()}>
+        <ContextTooltipRow name={ctx.t("usage.cost")} value={cost()} />
+      </Show>
       <ContextTooltipRow name={ctx.t("usage.usage")} value={`${context()?.usage ?? 0}%`} />
       <ContextTooltipRow name={ctx.t("usage.tokens")} value={context()?.total.toLocaleString(i18n.locale()) ?? "0"} />
     </div>
@@ -103,18 +121,33 @@ export function SessionContextUsage(props: {
 
   return (
     <Show when={props.session.id}>
-      <Tooltip value={tooltipValue()} placement={props.placement ?? "top"} shift={-8}>
+      <Tooltip
+        value={variant() === "indicator" ? tooltipValue() : ctx.t("usage.toggle")}
+        placement={props.placement ?? "top"}
+      >
         <Show
           when={variant() === "indicator"}
           fallback={
-            <IconButton
+            <Button
               type="button"
               variant="ghost-muted"
-              size="large"
-              icon={compactCircle()}
+              class="group shrink-0"
+              style={{ padding: "0 6px", color: "var(--v2-text-text-faint)" }}
               onClick={openContext}
-              aria-label={ctx.t("usage.view")}
-            />
+              aria-expanded={layout.state(`${ctx.id}:main`, props.session) === "visible"}
+              aria-label={ctx.t("usage.toggle")}
+            >
+              <span class="flex items-center gap-2 whitespace-nowrap group-active:text-v2-text-text-muted">
+                {compactCircle()}
+                <span>{tokens()}</span>
+                <Show when={showCost()}>
+                  <span aria-hidden="true" class="flex w-1.5 shrink-0 items-center justify-center">
+                    ·
+                  </span>
+                  <span>{cost()}</span>
+                </Show>
+              </span>
+            </Button>
           }
         >
           {circle()}

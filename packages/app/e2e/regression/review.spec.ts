@@ -143,7 +143,7 @@ test("open file tab browses, searches, and tracks missing files", async ({ page 
   const panel = page.locator("#review-panel")
   const sidebar = panel.locator('[data-slot="session-review-v2-sidebar"]')
   const sidebarToggle = panel.getByRole("button", { name: "Toggle file tree" })
-  const contextButton = page.getByRole("button", { name: "View context usage" })
+  const contextButton = page.getByRole("button", { name: "Toggle session context" })
   const openFile = panel.getByRole("button", { name: "Open file" })
   const tab = (name: string) => panel.getByRole("tab", { name, exact: true })
   await contextButton.click()
@@ -309,7 +309,7 @@ test("context closes the side region only when its button opened it", async ({ p
   })
   const panel = page.locator("#review-panel")
   const toggle = page.getByRole("button", { name: "Toggle review", exact: true })
-  const contextButton = page.getByRole("button", { name: "View context usage" })
+  const contextButton = page.getByRole("button", { name: "Toggle session context" })
   const context = panel.getByRole("tab", { name: "Context", exact: true })
 
   await contextButton.click()
@@ -331,6 +331,57 @@ test("context closes the side region only when its button opened it", async ({ p
   await expect(context).toHaveCount(0)
   await expect(toggle).toHaveAttribute("aria-expanded", "true")
   await expect(panel.locator("#session-side-panel-review-tab")).toHaveAttribute("aria-selected", "true")
+})
+
+test("context hides free-model cost but keeps paid-model zero cost", async ({ page }) => {
+  const cases = [
+    { id: "ses_context_free", title: "Free model", model: "free", cost: 0, usage: false, text: "0" },
+    { id: "ses_context_paid", title: "Paid model", model: "paid", cost: 0, usage: false, text: "0·$0.00" },
+    { id: "ses_context_used", title: "Paid usage", model: "paid", cost: 1.25, usage: true, text: "2k·$1.25" },
+    { id: "ses_context_free_used", title: "Free usage", model: "free", cost: 0, usage: true, text: "2k" },
+    { id: "ses_context_mixed", title: "Previously paid", model: "free", cost: 1.25, usage: true, text: "2k·$1.25" },
+    { id: "ses_context_unknown", title: "Unknown pricing", model: "missing", cost: 0, usage: false, text: "0·$0.00" },
+    { id: "ses_context_output", title: "Output pricing", model: "output", cost: 0, usage: false, text: "0·$0.00" },
+  ]
+
+  await openSession(page, {
+    name: "ContextPricing",
+    provider: provider(
+      { id: "free", name: "Free", cost: { input: 0, output: 0 } },
+      { id: "paid", name: "Paid", cost: { input: 1, output: 3 } },
+      { id: "output", name: "Output", cost: { input: 0, output: 1 } },
+    ),
+    sessions: cases.map((item) => ({
+      id: item.id,
+      title: item.title,
+      model: { id: item.model, providerID: "opencode" },
+      cost: item.cost,
+    })),
+    pageMessages: (id) => ({
+      items: cases.flatMap((item): SessionMessageInfo[] =>
+        item.id === id && item.usage
+          ? [
+              {
+                id: `msg_${item.id}`,
+                type: "assistant",
+                agent: "build",
+                model: { id: item.model, providerID: "opencode" },
+                tokens: { input: 1500, output: 500, reasoning: 0, cache: { read: 0, write: 0 } },
+                content: [{ type: "text", text: "Done." }],
+                time: { created: 1, completed: 2 },
+              },
+            ]
+          : [],
+      ),
+    }),
+  })
+  const button = page.getByRole("button", { name: "Toggle session context", exact: true })
+
+  for (const item of cases) {
+    await page.locator("[data-titlebar-tab-slot]", { hasText: item.title }).click()
+    await expectSessionTitle(page, item.title)
+    await expect(button).toHaveText(item.text)
+  }
 })
 
 test("file tree expands Windows paths and scrolls long names in both directions", async ({ page }) => {
@@ -630,7 +681,7 @@ test("restores review state and the side-panel tab per session", async ({ page }
   await page.getByRole("option", { name: "Branch changes" }).click()
   await page.getByRole("button", { name: "beta.ts" }).click()
   await selectedFile("beta.ts")
-  await page.getByRole("button", { name: "View context usage" }).click()
+  await page.getByRole("button", { name: "Toggle session context" }).click()
   await selectedTab("Context")
 
   await switchSession("Gamma review state")

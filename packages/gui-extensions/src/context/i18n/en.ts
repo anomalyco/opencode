@@ -5,6 +5,7 @@ export default {
   "usage.usage": "Context",
   "usage.cost": "Cost",
   "usage.view": "View context usage",
+  "usage.toggle": "Toggle session context",
   "systemPrompt.title": "System Prompt",
   "rawMessages.title": "Raw messages",
   "export.session": "Export session",
