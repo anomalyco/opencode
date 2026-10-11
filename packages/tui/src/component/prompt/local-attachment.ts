@@ -26,15 +26,20 @@ export function readLocalAttachment(file: string, maxBytes = MAX_LOCAL_ATTACHMEN
   )
 }
 
-export async function resolvePastedAttachments(text: string, platform: string) {
+// Attachments are recognized by extension, so plain text resolves to undefined synchronously.
+export function resolvePastedAttachments(text: string, platform: string) {
   const pastedContent = text.trim()
   const filepath = normalizePastedFilepath(pastedContent, platform)
   if (/^(https?):\/\//.test(filepath)) return undefined
+  const filepaths = parsePastedFilepaths(pastedContent, platform)
+  if (![filepath, ...filepaths].some((file) => path.extname(file).toLowerCase() in mimeTypes)) return undefined
+  return readPastedAttachments(filepath, filepaths)
+}
 
+async function readPastedAttachments(filepath: string, filepaths: string[]) {
   const attachment = await readLocalAttachment(filepath)
   const attachments = attachment ? [{ filepath, attachment }] : []
   if (!attachment) {
-    const filepaths = parsePastedFilepaths(pastedContent, platform)
     if (filepaths.length <= 1) return undefined
     let remaining = MAX_LOCAL_ATTACHMENT_BYTES
     for (const candidate of filepaths) {

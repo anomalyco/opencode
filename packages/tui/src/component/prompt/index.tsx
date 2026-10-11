@@ -483,9 +483,7 @@ export function Prompt(props: PromptProps) {
               })
               return
             }
-            if (content?.mime === "text/plain") {
-              await pasteInputText(content.data, changed)
-            }
+            if (content?.mime === "text/plain") pasteInputText(content.data)
           })
         },
       },
@@ -1434,12 +1432,23 @@ export function Prompt(props: PromptProps) {
     return true
   }
 
-  async function pasteInputText(text: string, changed: () => boolean) {
+  function pasteInputText(text: string) {
+    // Windows ConPTY/Terminal often sends CR-only newlines in bracketed paste.
     const normalizedText = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
-    const pastedContent = normalizedText.trim()
-    const attachments = await resolvePastedAttachments(pastedContent, terminalEnvironment.platform)
-    if (changed()) return
-    if (attachments) {
+    // Plain text inserts now so keys from the same input batch, such as punctuation
+    // that commits a multi-character IME candidate, land after it.
+    const pending = resolvePastedAttachments(normalizedText, terminalEnvironment.platform)
+    if (!pending) {
+      insertPastedText(normalizedText)
+      return
+    }
+    void enqueuePaste(async (changed) => {
+      const attachments = await pending
+      if (changed()) return
+      if (!attachments) {
+        insertPastedText(normalizedText)
+        return
+      }
       attachments.forEach((attachment) => {
         if (attachment.type === "text") {
           pasteText(attachment.content, `[SVG: ${attachment.filename || "image"}]`)
@@ -1447,9 +1456,11 @@ export function Prompt(props: PromptProps) {
         }
         pasteAttachment(attachment)
       })
-      return
-    }
+    })
+  }
 
+  function insertPastedText(normalizedText: string) {
+    const pastedContent = normalizedText.trim()
     const lineCount = (pastedContent.match(/\n/g)?.length ?? 0) + 1
     if ((lineCount >= 3 || pastedContent.length > 150) && config.prompt?.paste !== "full") {
       const extmark = input.extmarks.getAllForTypeId(promptPartTypeId).find((extmark) => {
@@ -1776,11 +1787,6 @@ export function Prompt(props: PromptProps) {
                   return
                 }
 
-                // Normalize line endings at the boundary
-                // Windows ConPTY/Terminal often sends CR-only newlines in bracketed paste
-                // Replace CRLF first, then any remaining CR
-                const normalizedText = decodePasteBytes(event.bytes).replace(/\r\n/g, "\n").replace(/\r/g, "\n")
-
                 // Windows Terminal <1.25 can surface image-only clipboard as an
                 // empty bracketed paste. Windows Terminal 1.25+ does not.
                 if (event.bytes.byteLength === 0) {
@@ -1788,11 +1794,10 @@ export function Prompt(props: PromptProps) {
                   return
                 }
 
-                // Once we cross an async boundary below, the terminal may perform its
-                // default paste unless we suppress it first and handle insertion ourselves.
+                // pasteInputText may insert after an async attachment check, so suppress
+                // the default paste and let it handle insertion.
                 event.preventDefault()
-
-                void enqueuePaste((changed) => pasteInputText(normalizedText, changed))
+                pasteInputText(decodePasteBytes(event.bytes))
               }}
               ref={(r: TextareaRenderable) => {
                 input = r
