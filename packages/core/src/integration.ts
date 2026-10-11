@@ -402,11 +402,11 @@ const layer = Layer.effect(
           method: credential.value.type,
         }))
         .toReversed()
+      // Only the first set variable is used, so the others are not connections.
       const env = (entry?.methods ?? [])
-        .filter((method) => method.type === "env")
-        .flatMap((method) => method.names.filter((name) => process.env[name]))
-        .map((name) => ({ type: "env" as const, name }))
-      return [...credentials, ...env]
+        .flatMap((method) => (method.type === "env" ? method.names : []))
+        .find((name) => process.env[name])
+      return env === undefined ? credentials : [...credentials, { type: "env" as const, name: env }]
     }
 
     const project = (entry: Entry, connections: IntegrationConnection.Info[]): Info =>
