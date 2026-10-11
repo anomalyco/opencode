@@ -38,7 +38,7 @@ test("patch file borders retain a full CSS pixel at 390px on high-density displa
     reducedMotion: true,
     viewport: { width: 390, height: 900 },
   })
-  await page.getByRole("button", { name: "Used 1 Patch", exact: true }).click()
+  await page.getByRole("button", { name: "1 edit", exact: true }).click()
   const patch = page.locator('[data-component="apply-patch-tool"]')
   const trigger = patch.getByRole("button", { name: /patch-border.ts/ })
   await expect(trigger).toHaveAttribute("aria-expanded", "false")

@@ -235,10 +235,10 @@ test.describe("static projection", () => {
 
     await expect(page.locator('[data-timeline-part-id="prt_expanded_shell"]')).toBeVisible()
     const group = page.locator('[data-timeline-part-ids="prt_collapsed_patch,prt_collapsed_read"]')
-    await expect(group.getByRole("button", { name: "Used 2 Patch, Read", exact: true })).toBeVisible()
+    await expect(group.getByRole("button", { name: "1 edit, 1 read", exact: true })).toBeVisible()
     await expect(group.locator('[data-component="context-tool-group-trigger"]')).toHaveAttribute(
       "aria-label",
-      "Used 2 Patch, Read",
+      "1 edit, 1 read",
     )
     await expect(page.locator('[data-timeline-spacing="tool"]')).toHaveCSS("padding-top", "8px")
   })
@@ -302,7 +302,7 @@ test("combines adjacent patch calls and repeated files into one group", async ({
   await expect(page.locator(`[data-timeline-part-id="${first}"], [data-timeline-part-id="${second}"]`)).toHaveCount(0)
 })
 
-test("keeps a failed patch in Used without losing the surviving file choice", async ({ page }) => {
+test("keeps a failed patch in its tool group without losing the surviving file choice", async ({ page }) => {
   const failed = "prt_grouped_patch_failed"
   const surviving = "prt_grouped_patch_surviving"
 
@@ -582,7 +582,7 @@ test.describe("Working", () => {
     await expect(working).toHaveCount(0)
   })
 
-  test("keeps Working instead of Used 1 Thought while reasoning is the only activity", async ({ page }) => {
+  test("keeps Working instead of a thought group while reasoning is the only activity", async ({ page }) => {
     const timeline = await setupTimeline(page, {
       messages: [
         userMessage(),
@@ -595,7 +595,7 @@ test.describe("Working", () => {
     const group = page.locator('[data-component="collapsed-tool-group"]')
     await expect(working).toBeVisible()
     await expect(group).toHaveCount(0)
-    await expect(page.getByRole("button", { name: "Used 1 Thought" })).toHaveCount(0)
+    await expect(page.getByRole("button", { name: "1 thought" })).toHaveCount(0)
 
     await timeline.send(partUpdated(toolPart("prt_after_thought", "read", "running", { filePath: "package.json" })))
     await expect(group).toBeVisible()
@@ -719,7 +719,7 @@ test.describe("Working", () => {
 
       const trigger = page
         .locator('[data-component="collapsed-tool-group"]')
-        .getByRole("button", { name: "Used 2 Shell", exact: true, includeHidden: true })
+        .getByRole("button", { name: "2 commands", exact: true, includeHidden: true })
 
       await expect(trigger).toHaveAttribute("aria-expanded", "false")
       await expect(working).toBeVisible()
@@ -955,7 +955,7 @@ test.describe("background shortcut", () => {
       .locator('[data-timeline-part-ids="call_backgrounded,call_shell_backgrounded,call_blocking"]')
       .locator(':scope > [data-component="collapsible"] > [data-slot="collapsible-trigger"]')
 
-    await expect(used).toHaveText(/^Used\s*3\s*Agent, Shell$/)
+    await expect(used).toHaveText(/^1 command, 2 tools$/)
     await expect(used).toHaveAttribute("aria-expanded", "false")
     await page.getByRole("button", { name: "3 running", exact: true }).click()
     const list = page.getByRole("menu", { name: "3 running", exact: true })
@@ -1604,7 +1604,7 @@ test("changes timeline presets and saves custom thinking details", async ({ page
     .toEqual({ placement: "grouped", details: "collapsed" })
   await settings.getByRole("button", { name: "Back to app", exact: true }).click()
   await expect(settings).toBeHidden()
-  await page.getByRole("button", { name: "Used 1 Thought", exact: true }).click()
+  await page.getByRole("button", { name: "1 thought", exact: true }).click()
   await expect(part.getByRole("button")).toHaveAttribute("aria-expanded", "false")
   await part.getByRole("button").click()
   await expect(part.getByText("The selected mode controls these details.", { exact: true })).toBeVisible()

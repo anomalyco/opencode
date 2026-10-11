@@ -227,8 +227,6 @@ export const dict: Record<string, string> = {
   "ui.sessionTurn.retry.attemptRetrying": "འབད་རྩོལ་ {{attempt}} - {{line}}",
   "ui.messagePart.context.notice.one": "{{count}} གསལ་བསྒྲགས།",
   "ui.messagePart.context.notice.other": "{{count}} གསལ་བསྒྲགས།",
-  "ui.messagePart.context.thought.one": "བསམ་བློ།",
-  "ui.messagePart.context.thought.other": "བསམ་བློ།",
   "ui.promptInput.dropFiles.image": "ཁ་སྐོང་རྐྱབ་ནིའི་དོན་ལུ་ གཟུགས་བརྙན་ཚུ་ཡང་ན་ཡིག་སྣོད་ཚུ་བཀོག་བཞག།",
   "ui.promptInput.dropFiles.pdf": "ཁ་སྐོང་བརྐྱབ་ནིའི་དོན་ལུ་ པི་ཌི་ཨེཕ་ཚུ་ཡང་ན་ཡིག་སྣོད་ཚུ་བཀོག་བཞག།",
   "ui.promptInput.dropFiles.imagePdf":
@@ -245,8 +243,6 @@ export const dict: Record<string, string> = {
   "ui.messagePart.compaction.interrupted": "ལཱ་ཡུན་བསྡམ་བཞག་འདི་བར་ཆད་བྱུང་ཡོདཔ།",
   "ui.messagePart.providerCompaction": "ལཱ་ཡུན་བྱིན་མི་གིས་བསྡུ་སྒྲིག་འབད་ཡོདཔ།",
   "ui.messagePart.compaction.usage": "{{input}} ནང་འཛུལ་ · {{output}} ཕྱིར་ཐོན།",
-  "ui.messagePart.tools.used.one": "ལག་ལེན་འཐབ་ཡོད་པའི་ {{count}} {{tools}}",
-  "ui.messagePart.tools.used.other": "ལག་ལེན་འཐབ་ཡོད་པའི་ {{count}} {{tools}}",
   "ui.tool.browser": "བརའུ་ཟར་",
   "ui.common.fileCount.one": "{{count}} ཡིག་སྣོད་",
   "ui.common.fileCount.other": "{{count}} ཡིག་སྣོད་ཚུ།",

@@ -43,7 +43,7 @@ story("merges follow-up patches into one stack with distinct files", async ({ mo
   await root.getByRole("button", { name: "Start follow-up patch" }).click()
   await expect(group.locator('[data-component="context-tool-group-trigger"]')).toHaveAttribute(
     "aria-label",
-    "Used 3 Shell, Patch",
+    "1 command, 2 edits",
   )
   await expect(patches).toHaveCount(1)
   await expect(patches.locator('[data-slot="apply-patch-filename"]')).toHaveText(["a.ts", "b.ts"])

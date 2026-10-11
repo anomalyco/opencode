@@ -26,7 +26,7 @@ test("keeps failed search calls and their error cards inside the collapsed stack
   await setupTimeline(page, { messages: [userMessage(), assistantMessage(parts)] })
 
   const group = page.locator('[data-component="collapsed-tool-group"]')
-  const summary = group.getByRole("button", { name: "Used 2 Glob, Grep", exact: true })
+  const summary = group.getByRole("button", { name: "2 tools", exact: true })
   await expect(summary).toHaveAttribute("aria-expanded", "false")
   await summary.click()
   await expect(group.locator('[data-kind="tool-error-card"]')).toHaveCount(2)

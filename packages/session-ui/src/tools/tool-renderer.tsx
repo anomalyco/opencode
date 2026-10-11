@@ -559,55 +559,16 @@ export function CurrentContextToolGroup(props: {
     () => props.busy || tools().some((tool) => tool.state.status === "streaming" || tool.state.status === "running"),
   )
 
-  const names = createMemo(() =>
-    i18n.list([
-      ...new Set(
-        props.parts.flatMap((part) => {
-          if (part.type !== "tool" && part.type !== "shell") return []
-
-          return [
-            part.type !== "tool"
-              ? i18n.t("ui.tool.shell")
-              : part.name === "skill"
-                ? i18n.t("ui.tool.skill")
-                : part.name === "subagent"
-                  ? i18n.t("ui.tool.agent.default")
-                  : getToolInfo(part.name, undefined, part.name === "websearch" ? currentToolMetadata(part) : undefined)
-                      .title,
-          ]
-        }),
-      ),
-    ]),
-  )
-
+  // Matches the TUI activity summary, e.g. "3 commands, 1 edit, 2 thoughts, 4 reads".
   const label = createMemo(() => {
-    const thoughts = props.parts.filter((part) => part.type === "reasoning").length
+    const kinds = props.parts.flatMap(activityKinds)
+    const phrases = activityOrder.flatMap((kind) => {
+      const count = kinds.filter((item) => item === kind).length
 
-    if (!names() && !thoughts) {
-      const text = i18n.t("ui.messagePart.context.updates")
+      return count > 0 ? [i18n.plural(`ui.messagePart.context.${kind}`, count)] : []
+    })
 
-      return { text, title: "", before: text, count: "", between: "", after: "" }
-    }
-
-    const title = names() || i18n.plural("ui.messagePart.context.thought", thoughts)
-    const count = props.parts.filter((part) => part.type === "tool" || part.type === "shell").length || thoughts
-    const text = i18n.plural("ui.messagePart.tools.used", count, { tools: title })
-    const index = text.indexOf(title)
-    const before = text.slice(0, index).trim()
-    const countText = String(count)
-    const countIndex = before.indexOf(countText)
-    const after = text.slice(index + title.length).trim()
-
-    if (countIndex === -1) return { text, title, before, count: "", between: "", after }
-
-    return {
-      text,
-      title,
-      before: before.slice(0, countIndex).trim(),
-      count: countText,
-      between: before.slice(countIndex + countText.length).trim(),
-      after,
-    }
+    return phrases.length > 0 ? i18n.list(phrases) : i18n.t("ui.messagePart.context.updates")
   })
 
   const items = createMemo(() =>
@@ -698,25 +659,9 @@ export function CurrentContextToolGroup(props: {
         open={props.open}
         onOpenChange={change}
         trigger={
-          <div data-component="context-tool-group-trigger" aria-label={label().text}>
+          <div data-component="context-tool-group-trigger" aria-label={label()}>
             <span data-slot="context-tool-group-title">
-              <Show when={label().before || label().count || label().between}>
-                <span data-slot="context-tool-group-usage">
-                  <Show when={label().before}>
-                    {(before) => <span data-slot="context-tool-group-prefix">{before()}</span>}
-                  </Show>
-                  <Show when={label().count}>
-                    {(count) => <span data-slot="context-tool-group-count">{count()}</span>}
-                  </Show>
-                  <Show when={label().between}>
-                    {(between) => <span data-slot="context-tool-group-prefix">{between()}</span>}
-                  </Show>
-                </span>
-              </Show>
-              <Show when={label().title}>{(title) => <span data-slot="basic-tool-tool-title">{title()}</span>}</Show>
-              <Show when={label().after}>
-                {(after) => <span data-slot="context-tool-group-prefix">{after()}</span>}
-              </Show>
+              <span data-slot="basic-tool-tool-title">{label()}</span>
             </span>
           </div>
         }
@@ -927,6 +872,29 @@ export function CurrentContextToolGroup(props: {
       </BasicTool>
     </div>
   )
+}
+
+const activityOrder = ["command", "edit", "thought", "read", "tool"] as const
+
+function activityKinds(part: ContextGroupPart): (typeof activityOrder)[number][] {
+  if (part.type === "reasoning") return ["thought"]
+  if (part.type === "shell") return ["command"]
+  if (part.type !== "tool") return []
+  if (part.name === "shell" || part.name === "bash") return ["command"]
+  if (["edit", "write", "patch", "apply_patch"].includes(part.name)) return ["edit"]
+  if (part.name === "read") return ["read"]
+  if (part.name !== "execute") return ["tool"]
+
+  // Code Mode counts its nested calls rather than itself.
+  const calls = currentToolMetadata(part).toolCalls
+  const tools = Array.isArray(calls)
+    ? calls.flatMap((call) =>
+        call !== null && typeof call === "object" && "tool" in call && typeof call.tool === "string" ? [call.tool] : [],
+      )
+    : []
+  if (tools.length === 0) return ["tool"]
+
+  return tools.map((tool) => (tool === "read" ? "read" : "tool"))
 }
 
 export function CurrentReadToolGroup(props: {

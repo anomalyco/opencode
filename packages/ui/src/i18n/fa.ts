@@ -227,8 +227,6 @@ export const dict: Record<string, string> = {
   "ui.sessionTurn.retry.attemptRetrying": "تلاش {{attempt}} - \u2068{{line}}\u2069",
   "ui.messagePart.context.notice.one": "{{count}} اعلان",
   "ui.messagePart.context.notice.other": "{{count}} اعلان",
-  "ui.messagePart.context.thought.one": "فکر",
-  "ui.messagePart.context.thought.other": "فکرها",
   "ui.promptInput.dropFiles.image": "تصاویر یا فایل‌ها را برای افزودن رها کنید",
   "ui.promptInput.dropFiles.pdf": "فایل‌های \u2068PDF\u2069 یا فایل‌ها را برای افزودن رها کنید",
   "ui.promptInput.dropFiles.imagePdf": "تصاویر، فایل‌های \u2068PDF\u2069 یا فایل‌ها را برای افزودن رها کنید",
@@ -244,8 +242,6 @@ export const dict: Record<string, string> = {
   "ui.messagePart.compaction.interrupted": "فشرده‌سازی نشست قطع شد",
   "ui.messagePart.providerCompaction": "نشست توسط ارائه‌دهنده فشرده شد",
   "ui.messagePart.compaction.usage": "{{input}} ورودی · {{output}} خروجی",
-  "ui.messagePart.tools.used.one": "از {{count}} ابزار استفاده شد: \u2068{{tools}}\u2069",
-  "ui.messagePart.tools.used.other": "از {{count}} ابزار استفاده شد: \u2068{{tools}}\u2069",
   "ui.tool.browser": "مرورگر",
 
   "ui.messagePart.context.updates": "به‌روزرسانی‌ها",

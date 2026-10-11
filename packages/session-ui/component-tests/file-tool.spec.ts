@@ -1,9 +1,9 @@
 import { expect, story } from "../../storybook/playwright/story"
 
-story("keeps grouped file choices when the Used group reopens", async ({ mount }) => {
+story("keeps grouped file choices when the tool group reopens", async ({ mount }) => {
   const root = await mount("current-session-research-agents--agent-research", { args: { scenario: "workflow" } })
-  const group = root.locator('[data-component="collapsed-tool-group"]').filter({ hasText: "Patch" })
-  const disclosure = group.getByRole("button", { name: /^Used \d+ .*Edit.*Write.*Patch$/ })
+  const group = root.locator('[data-component="collapsed-tool-group"]').filter({ hasText: /\d+ edits/ })
+  const disclosure = group.getByRole("button", { name: /\d+ edits/ })
   await disclosure.click()
 
   const files = group.locator(

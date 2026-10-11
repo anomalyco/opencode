@@ -374,7 +374,7 @@ function MessageTimelineView(
         return message?.type === "compaction" && message.status === "running"
       }
 
-      // Used and read groups keep the fallback, so each new read does not swap Working out for its short call.
+      // Tool groups and read groups keep the fallback, so each new read does not swap Working out for its short call.
       if (!Predicate.isTagged(row, "AssistantPart") || row.group.type === "context" || row.group.type === "read")
         return false
 

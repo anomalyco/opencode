@@ -946,10 +946,10 @@ for (const delivery of ["steer", "queue"] as const) {
     })
     const tools = page.locator('[data-timeline-part-ids="tool_queue_read,tool_queue_grep"]')
     await expect(tools).toBeVisible()
-    await expect(tools).toHaveText(/^Used\s*2\s*Read, Grep$/)
+    await expect(tools).toHaveText(/^1 read, 1 tool$/)
     await expect(tools.locator('[data-component="context-tool-group-trigger"]')).toHaveAttribute(
       "aria-label",
-      "Used 2 Read, Grep",
+      "1 read, 1 tool",
     )
     await expect(thinking).toHaveCount(0)
     await expect(pending).toBeVisible()
@@ -958,7 +958,7 @@ for (const delivery of ["steer", "queue"] as const) {
     ])
     await transcript.screenshot({ path: testInfo.outputPath("pending-steer.png") })
 
-    await expect(tools.or(pending)).toHaveText([/^Used\s*2\s*Read, Grep$/, /U2: Also check the retry path\./])
+    await expect(tools.or(pending)).toHaveText([/^1 read, 1 tool$/, /U2: Also check the retry path\./])
     await expect(transcript.locator('[data-timeline-row="AssistantPart"]').filter({ has: tools })).toHaveAttribute(
       "data-message-id",
       userID,
@@ -1005,7 +1005,7 @@ for (const delivery of ["steer", "queue"] as const) {
     await expect(response).toHaveAttribute("data-message-id", inboxID)
     await expect(thinking).toHaveCount(0)
     await expect(tools.or(pending).or(response)).toHaveText([
-      /^Used\s*2\s*Read, Grep$/,
+      /^1 read, 1 tool$/,
       /U2: Also check the retry path\./,
       /A3: Now checking the retry path for U2\./,
     ])

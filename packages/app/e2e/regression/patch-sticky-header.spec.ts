@@ -223,7 +223,7 @@ for (const scenario of scenarios) {
                   .closest('[data-component="edit-tool"]')
                   ?.querySelector('[data-slot="collapsible-trigger"][data-locked]')
 
-                // Grouped file headers stack below the stuck Used header.
+                // Grouped file headers stack below the stuck tool group header.
                 const group = element
                   .closest('[data-component="collapsed-tool-group"]')
                   ?.querySelector(':scope > [data-component="collapsible"] > [data-slot="collapsible-trigger"]')

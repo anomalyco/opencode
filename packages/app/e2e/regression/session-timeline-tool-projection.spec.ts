@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test"
 import { timelinePresets } from "@opencode/session-ui/timeline/detail"
 import { assistantMessage, partUpdated, setupTimeline, toolPart, userMessage } from "../utils/timeline"
 
-test("keeps shell and question failures in their Used group", async ({ page }) => {
+test("keeps shell and question failures in their tool group", async ({ page }) => {
   const shellID = "prt_transition_error_shell"
   const questionID = "prt_transition_error_question"
 

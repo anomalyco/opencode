@@ -7,10 +7,10 @@ const runs = [
   "context.tsx",
 ]
 
-story("collapses each run of reads inside a Used group into one row", async ({ mount }) => {
+story("collapses each run of reads inside a tool group into one row", async ({ mount }) => {
   const root = await mount("current-read-group--used-group", { args: { width: "960" } })
   const group = root.locator('[data-component="collapsed-tool-group"]')
-  await expect(group.getByRole("button", { name: "Used 65 Read, Shell", exact: true })).toBeVisible()
+  await expect(group.getByRole("button", { name: "2 commands, 8 thoughts, 63 reads", exact: true })).toBeVisible()
   const reads = group.locator('[data-component="read-tool-group"]')
   await expect(reads).toHaveCount(9)
   await expect(reads.locator('[data-slot="basic-tool-tool-subtitle"]').first()).toHaveText(runs[0]!)
@@ -60,7 +60,7 @@ story("truncates long read rows and expands them in place", async ({ mount }) =>
   await expect(row).toHaveAttribute("aria-expanded", "true")
 })
 
-story("merges adjacent reads when tools render outside a Used group", async ({ mount }) => {
+story("merges adjacent reads when tools render outside a tool group", async ({ mount }) => {
   const root = await mount("current-read-group--without-used-group", { args: { width: "960" } })
   await expect(root.locator('[data-component="collapsed-tool-group"]')).toHaveCount(0)
   const reads = root.locator('[data-timeline-row="AssistantPart"] [data-component="read-tool-group"]')
