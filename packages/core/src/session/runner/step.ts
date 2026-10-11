@@ -28,6 +28,7 @@ import { SessionUsage } from "../usage.js"
 import { SessionRunnerModel } from "./model.js"
 import { createLLMEventPublisher } from "./publish-llm-event.js"
 import { SessionRunnerRetry } from "./retry.js"
+import { Integration } from "../../integration.js"
 
 export type Outcome = Data.TaggedEnum<{
   Completed: { readonly needsContinuation: boolean }
@@ -37,6 +38,7 @@ export type Outcome = Data.TaggedEnum<{
     readonly decision: SessionRunnerRetry.Decision
   }
   RecoverFull: {}
+  RecoverAuth: {}
   Compacted: {}
 }>
 export const Outcome = Data.taggedEnum<Outcome>()
@@ -54,6 +56,7 @@ interface Input {
     retry: boolean,
   ) => Effect.Effect<{ readonly retry: false } | SessionRunnerRetry.Decision>
   readonly recoverContinuation: boolean
+  readonly recoverAuth: boolean
   /** The runner owns compaction policy; the attempt invokes it only before durable output. */
   readonly recoverOverflow: Effect.Effect<boolean>
 }
@@ -73,6 +76,7 @@ export const make = Effect.gen(function* () {
   const llm = yield* LLMClient.Service
   const snapshots = yield* Snapshot.Service
   const toolOutput = yield* ToolOutput.Service
+  const integrations = yield* Integration.Service
 
   const attempt = Effect.fn("SessionStep.attempt")(function* (input: Input) {
     // The start snapshot only has to exist before local tools run, which cannot happen before Step.Started,
@@ -190,8 +194,51 @@ export const make = Effect.gen(function* () {
           !recorded.outputStarted
         )
           return Outcome.RecoverFull()
+
+        let authRecoveryAttempted = false
+        if (
+          (input.prepared.usesConnection?.() ?? true) &&
+          llmFailure?.reason._tag === "Authentication" &&
+          !recorded.outputStarted &&
+          input.model.connection &&
+          input.model.integrationID
+        ) {
+          if (!input.recoverAuth) {
+            yield* integrations.connection.status({
+              integrationID: input.model.integrationID,
+              connection: input.model.connection,
+              status: { status: "needs_auth", message: "Authentication failed. Reconnect the integration." },
+            })
+          }
+          authRecoveryAttempted = true
+          const recovered = input.recoverAuth
+            ? yield* restore(
+                integrations.connection
+                  .recover({
+                    integrationID: input.model.integrationID,
+                    connection: input.model.connection,
+                    status: llmFailure.reason.http?.status ?? 401,
+                    response: { headers: llmFailure.reason.http?.headers, body: llmFailure.reason.body },
+                  })
+                  .pipe(Effect.orElseSucceed(() => undefined)),
+              )
+            : undefined
+          if (recovered) {
+            yield* Effect.logInfo("recovered integration credential after authentication rejection", {
+              sessionID: input.sessionID,
+              integrationID: input.model.integrationID,
+              connection: input.model.connection,
+            })
+            return Outcome.RecoverAuth()
+          }
+        }
+
         const retry =
-          llmFailure && llmError && !isContextOverflowFailure(llmFailure)
+          llmFailure &&
+          llmError &&
+          !isContextOverflowFailure(llmFailure) &&
+          // Integration recovery owns the one authentication retry, including legacy plugin hooks.
+          !(llmFailure.reason._tag === "Authentication" && (authRecoveryAttempted || !input.recoverAuth))
             ? yield* restore(
                 input.retry(
                   llmFailure,

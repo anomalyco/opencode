@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import path from "path"
-import { Clock, Deferred, Effect } from "effect"
+import { Cause, Clock, Deferred, Effect, Exit } from "effect"
 import { TestClock } from "effect/testing"
 import { Command } from "@opencode/core/command"
 import { Bus } from "@opencode/core/bus"
@@ -14,8 +14,74 @@ import { Watcher } from "@opencode/core/filesystem/watcher"
 import { fromPromise } from "@opencode/plugin/promise/adapter"
 import { testEffect } from "./lib/effect"
 import { PluginTestLayer } from "./plugin/fixture"
+import { toSessionError } from "@opencode/core/session/to-session-error"
 
 const it = testEffect(PluginTestLayer)
+
+for (const operation of ["recover", "refresh-fallback", "resolve"]) {
+  it.effect(`reports rejected Promise ${operation} as an authorization error`, () =>
+    Effect.gen(function* () {
+      const plugins = yield* Plugin.Service
+      const integrations = yield* Integration.Service
+      const credentials = yield* Credential.Service
+      const integrationID = Integration.ID.make("promise-recovery")
+      const methodID = Integration.MethodID.make("oauth")
+      yield* plugins.activate([
+        {
+          ...fromPromise({
+            id: "promise-recovery",
+            async setup(ctx) {
+              await ctx.integration.transform((editor) =>
+                editor.method.update({
+                  integrationID,
+                  method: { id: methodID, type: "oauth", label: "OAuth" },
+                  authorize: async () => ({ mode: "auto", url: "", instructions: "", callback: new Promise(() => {}) }),
+                  refresh: async () => {
+                    throw new Error("Refresh endpoint unavailable")
+                  },
+                  ...(operation === "recover"
+                    ? {
+                        recover: async () => {
+                          throw new Error("Refresh endpoint unavailable")
+                        },
+                      }
+                    : {}),
+                }),
+              )
+            },
+          }),
+          revision: "1",
+        },
+      ])
+      const credential = yield* credentials.create({
+        integrationID,
+        value: Credential.OAuth.make({ type: "oauth", methodID, access: "old", refresh: "refresh", expires: 0 }),
+      })
+      const connection = { type: "credential" as const, id: credential.id, label: "OAuth", method: "oauth" as const }
+      const result = yield* (
+        operation === "resolve"
+          ? integrations.connection.resolve(connection)
+          : integrations.connection.recover({ integrationID, connection, status: 401 })
+      ).pipe(Effect.exit)
+      expect(Exit.isFailure(result)).toBe(true)
+      if (Exit.isFailure(result)) {
+        expect(Cause.hasDies(result.cause)).toBe(false)
+        expect(Cause.squash(result.cause)).toBeInstanceOf(Integration.AuthorizationError)
+        expect(toSessionError(Cause.squash(result.cause))).toEqual({
+          type: "provider.auth",
+          message: "Refresh endpoint unavailable",
+        })
+        expect(yield* Effect.failCause(result.cause).pipe(Effect.orElseSucceed(() => undefined))).toBeUndefined()
+      }
+      if (operation !== "resolve")
+        expect((yield* integrations.connection.active(integrationID))?.status).toEqual({
+          status: "needs_auth",
+          message: "Refresh endpoint unavailable",
+        })
+      expect((yield* credentials.get(credential.id))?.value).toHaveProperty("access", "old")
+    }),
+  )
+}
 
 for (const scenario of [
   {

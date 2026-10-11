@@ -23,6 +23,7 @@ import { Agent } from "../src/agent"
 import { Bus } from "../src/bus"
 import { Database } from "../src/database/database"
 import { AppNodeBuilder } from "../src/effect/app-node-builder"
+import { Integration } from "../src/integration"
 import { Location } from "../src/location"
 import { Project } from "../src/project"
 import { ProjectTable } from "../src/project/sql"
@@ -160,6 +161,7 @@ const run = (snapshots: Layer.Layer<Snapshot.Service>) =>
           },
           retry: () => Effect.succeed({ retry: false as const }),
           recoverContinuation: false,
+          recoverAuth: false,
           recoverOverflow: Effect.succeed(false),
         })
       }
@@ -168,9 +170,13 @@ const run = (snapshots: Layer.Layer<Snapshot.Service>) =>
     Effect.provide(snapshots),
     Effect.provide(
       Layer.merge(
-        AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SessionProjector.node, ToolOutput.node]), [
-          Bus.node.replace(Bus.configured({ persist: true })),
-        ]),
+        AppNodeBuilder.build(
+          LayerNode.group([Database.node, Bus.node, SessionProjector.node, ToolOutput.node, Integration.node]),
+          [
+            Bus.node.replace(Bus.configured({ persist: true })),
+            Location.node.replace(Location.boundNode(Location.Ref.make({ directory: AbsolutePath.make(directory) }))),
+          ],
+        ),
         TestLLM.testLayer(),
       ),
     ),

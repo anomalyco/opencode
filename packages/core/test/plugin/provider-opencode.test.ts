@@ -1240,13 +1240,14 @@ describe("OpencodePlugin", () => {
     ),
   )
 
-  it.effect("reports a Console session rejected before its token expires as signed out", () =>
+  it.effect("keeps a rejected Console session blocked until reconnecting", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => {
-        const state = { revoked: true, refreshes: 0 }
+        const state = { revoked: true, refreshes: 0, requests: 0 }
         const server = Bun.serve({
           port: 0,
           fetch: (request) => {
+            state.requests++
             if (new URL(request.url).pathname === "/auth/device/token") state.refreshes++
             if (state.revoked)
               return Response.json({ _tag: "Unauthorized", message: "Invalid or expired session" }, { status: 401 })
@@ -1279,10 +1280,26 @@ describe("OpencodePlugin", () => {
           expect((yield* credentials.get(credential.id))?.value).toMatchObject({ access: "revoked" })
 
           state.revoked = false
+          const before = state.requests
           yield* TestClock.adjust("1 minute")
           yield* drain
-          expect(yield* status()).toBeUndefined()
+          expect(yield* status()).toHaveProperty("status", "needs_auth")
+          expect(state.requests).toBe(before)
           expect(state.refreshes).toBe(0)
+          yield* credentials.create({
+            integrationID: credential.integrationID,
+            value: Credential.OAuth.make({
+              type: "oauth",
+              methodID: Integration.MethodID.make("device"),
+              access: "reconnected",
+              refresh: "new-refresh",
+              expires: Number.MAX_SAFE_INTEGER,
+              metadata: { server: server.url.origin, orgID: "org_acme", orgName: "Acme" },
+            }),
+          })
+          yield* eventually(Effect.sync(() => state.requests), (requests) => requests > before)
+          yield* eventually(status(), (status) => status === undefined)
+          expect(state.requests).toBeGreaterThan(before)
         }),
       ({ server }) => Effect.promise(() => server.stop(true)),
     ),

@@ -7,6 +7,8 @@ import { Provider } from "@opencode/schema/provider"
 import { Context, Effect, Layer, Schema } from "effect"
 import { ModelResolver } from "../../model-resolver.js"
 import { SessionSchema } from "../schema.js"
+import { Integration } from "../../integration.js"
+import { IntegrationConnection } from "../../integration/connection.js"
 
 export class ModelNotSelectedError extends Schema.TaggedError<ModelNotSelectedError>()(
   "SessionRunnerModel.ModelNotSelectedError",
@@ -52,6 +54,8 @@ export const resolved = (
     readonly limit: Model.Info["limit"]
     readonly compaction?: Provider.Compaction
     readonly transport?: Provider.Transport
+    readonly connection?: IntegrationConnection.Info
+    readonly integrationID?: Integration.ID
   },
 ): Resolved => ({
   model,
@@ -65,6 +69,8 @@ export const resolved = (
   limit: options.limit,
   compaction: options.compaction,
   transport: options.transport,
+  connection: options.connection,
+  integrationID: options.integrationID,
 })
 
 const layer = Layer.effect(

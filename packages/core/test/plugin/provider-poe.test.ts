@@ -331,3 +331,27 @@ it.effect("keeps near-expiry keys usable and requires a new login after expiry",
     expect(test.requests).toHaveLength(0)
   }),
 )
+
+it.effect("requires reauthentication after a rejected unexpired Poe API key", () =>
+  Effect.gen(function* () {
+    yield* fixture
+    const credentials = yield* Credential.Service
+    const integrations = yield* Integration.Service
+    const credential = yield* credentials.create({
+      integrationID,
+      value: Credential.OAuth.make({
+        type: "oauth",
+        methodID,
+        access: "rejected-key",
+        refresh: "",
+        expires: Number.MAX_SAFE_INTEGER,
+      }),
+    })
+    const connection = yield* integrations.connection.active(integrationID)
+    expect(connection).toBeDefined()
+    if (!connection) return
+    expect(yield* integrations.connection.recover({ integrationID, connection, status: 401 })).toBeUndefined()
+    expect((yield* integrations.connection.active(integrationID))?.status?.status).toBe("needs_auth")
+    expect((yield* credentials.get(credential.id))?.value).toEqual(credential.value)
+  }),
+)

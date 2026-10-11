@@ -46,7 +46,13 @@ describe("SessionModelRequest HTTP hooks", () => {
       const seen: Array<{ hook: string; kind: SessionRequestKind; agent: Agent.ID }> = []
       yield* hooks.register("session", "http.request", (event) =>
         Effect.sync(() => {
+          event.request.headers.set("x-request-id", "fixture-updated")
           seen.push({ hook: "request", kind: event.kind, agent: event.agent })
+        }),
+      )
+      yield* hooks.register("session", "model.request", (event) =>
+        Effect.sync(() => {
+          event.headers["x-request-id"] = "fixture"
         }),
       )
       yield* hooks.register("session", "http.response", (event) =>
@@ -69,6 +75,7 @@ describe("SessionModelRequest HTTP hooks", () => {
         yield* http(HttpClientRequest.post("https://example.test/v1/chat/completions"), (request) =>
           Effect.succeed(HttpClientResponse.fromWeb(request, new Response("{}", { status: 200 }))),
         )
+        expect(prepared.usesConnection?.()).toBe(true)
       }
 
       expect(seen).toEqual(
@@ -79,6 +86,60 @@ describe("SessionModelRequest HTTP hooks", () => {
       )
     }).pipe(Effect.provideService(SessionModelTransport.Service, transport)),
   )
+
+  ;["authorization", "x-api-key", "api-key", "x-goog-api-key", "x-key"].forEach((header) => {
+    it.effect(`tracks ${header} replacement by model.request`, () =>
+      Effect.gen(function* () {
+        const hooks = yield* PluginHooks.Service
+        yield* hooks.register("session", "model.request", (event) =>
+          Effect.sync(() => {
+            event.headers[header] = "external-credential"
+          }),
+        )
+        const requests = yield* SessionModelRequest.Service.pipe(Effect.provide(SessionModelRequest.layer))
+        const prepared = yield* requests.primary({
+          session,
+          agent: Agent.ID.make("build"),
+          model,
+          system: [],
+          messages: [],
+        })
+        expect(prepared.request.http?.headers?.[header]).toBe("external-credential")
+        expect(prepared.usesConnection?.()).toBe(false)
+      }).pipe(Effect.provideService(SessionModelTransport.Service, transport)),
+    )
+    it.effect(`tracks ${header} replacement by http.request`, () =>
+      Effect.gen(function* () {
+        const hooks = yield* PluginHooks.Service
+        yield* hooks.register("session", "http.request", (event) =>
+          Effect.sync(() => {
+            event.request.headers.set(header, "external-credential")
+          }),
+        )
+        const requests = yield* SessionModelRequest.Service.pipe(Effect.provide(SessionModelRequest.layer))
+        const prepared = yield* requests.primary({
+          session,
+          agent: Agent.ID.make("build"),
+          model,
+          system: [],
+          messages: [],
+        })
+        const http = prepared.options.http
+        if (!http) throw new Error("Expected HTTP middleware")
+        expect(prepared.usesConnection?.()).toBe(true)
+        yield* http(
+          HttpClientRequest.post("https://example.test/v1/messages").pipe(
+            HttpClientRequest.setHeader(header, "stored-credential"),
+          ),
+          (request) => {
+            expect(request.headers[header]).toBe("external-credential")
+            return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("{}", { status: 401 })))
+          },
+        )
+        expect(prepared.usesConnection?.()).toBe(false)
+      }).pipe(Effect.provideService(SessionModelTransport.Service, transport)),
+    )
+  })
 
   it.effect("offers the WebSocket executor alongside HTTP hooks and routes the WebSocket hooks", () =>
     Effect.gen(function* () {
@@ -143,7 +204,9 @@ describe("SessionModelRequest HTTP hooks", () => {
 
       expect(prepared.options.http).toBeDefined()
       expect(prepared.options.webSocket).toBeDefined()
+      expect(prepared.usesConnection?.()).toBe(true)
       yield* prepared.options.webSocket!.execute({} as never)
+      expect(prepared.usesConnection?.()).toBe(false)
       expect(bound).toEqual([{ url: "wss://example.test/v1/responses", headers: { authorization: "Bearer minted" } }])
       expect(frames).toEqual(["create+plugin", "CREATED"])
       expect(seen).toEqual([

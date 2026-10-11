@@ -29,6 +29,8 @@ export const PoePlugin = define({
       editor.method.update({
         integrationID,
         method: { id: methodID, type: "oauth", label: "Login with Poe (browser)" },
+        // Poe-issued API keys cannot be refreshed after an authentication rejection.
+        recover: () => Effect.succeed(undefined),
         // Poe-issued API keys remain usable until expiry, then require another login.
         refresh: (value) =>
           Clock.currentTimeMillis.pipe(

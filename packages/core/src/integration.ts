@@ -5,6 +5,7 @@ import {
   Cause,
   Clock,
   Context,
+  Deferred,
   Duration,
   Effect,
   Equal,
@@ -26,6 +27,7 @@ import { IntegrationConnection } from "./integration/connection.js"
 import { AppProcess } from "@opencode/util/process"
 import { ChildProcess } from "effect/process"
 import { Form } from "./form.js"
+import { KeyedMutex } from "./effect/keyed-mutex.js"
 
 export const ID = Integration.ID
 export type ID = Integration.ID
@@ -77,6 +79,11 @@ export interface OAuthImplementation {
   readonly method: OAuthMethod
   readonly authorize: (answer: Form.Answer) => Effect.Effect<OAuthAuthorization, unknown, Scope.Scope>
   readonly refresh?: (credential: Credential.OAuth) => Effect.Effect<Credential.OAuth, unknown>
+  readonly recover?: (
+    credential: Credential.OAuth,
+    status: number,
+    response?: { readonly headers?: Record<string, string>; readonly body?: string },
+  ) => Effect.Effect<Credential.OAuth | undefined, unknown>
   readonly label?: (credential: Credential.OAuth) => string | undefined
 }
 
@@ -182,6 +189,13 @@ export interface Interface extends State.Transformable<Editor> {
     readonly resolve: (
       connection: IntegrationConnection.Info,
     ) => Effect.Effect<Credential.Value | undefined, AuthorizationError>
+    /** Recovers a connection's credentials after an authentication rejection (HTTP 401/403). */
+    readonly recover: (input: {
+      readonly integrationID: ID
+      readonly connection: IntegrationConnection.Info
+      readonly status: number
+      readonly response?: { readonly headers?: Record<string, string>; readonly body?: string }
+    }) => Effect.Effect<Credential.Value | undefined, AuthorizationError>
     /** Runs a key method and stores the resulting credential. */
     readonly key: (input: {
       /** Integration receiving the credential. */
@@ -312,6 +326,8 @@ const layer = Layer.effect(
     const commandAttempts = SynchronizedRef.makeUnsafe(new Map<AttemptID, CommandAttemptEntry>())
     // Runtime-only: statuses describe the current process's view of a connection and are not persisted.
     const statuses = new Map<string, IntegrationConnection.Status>()
+    const inFlightRecoveries = new Map<string, Deferred.Deferred<Credential.Value | undefined, AuthorizationError>>()
+    const credentialLocks = KeyedMutex.makeUnsafe<Credential.ID>()
     const statusKey = (integrationID: ID, connection: IntegrationConnection.Info) =>
       `${integrationID}:${IntegrationConnection.key(connection)}`
     const state = State.create<Data, Editor>({
@@ -718,26 +734,121 @@ const layer = Layer.effect(
       connection: {
         active: Effect.fn("Integration.connection.active")(function* (id) {
           const entry = state.get().integrations.get(id)
-          return resolveConnections(entry, yield* credentials.list(id))[0]
+          const connection = resolveConnections(entry, yield* credentials.list(id))[0]
+          if (!connection) return undefined
+          const status = statuses.get(statusKey(id, connection))
+          return status ? { ...connection, status } : connection
         }),
         resolve: Effect.fn("Integration.connection.resolve")(function* (connection) {
           if (connection.type === "env") {
             const key = process.env[connection.name]
             return key ? Credential.Key.make({ type: "key", key }) : undefined
           }
-          const credential = yield* credentials.get(connection.id)
-          if (!credential) return undefined
-          if (credential.value.type !== "oauth") return credential.value
-          const implementation = state
-            .get()
-            .integrations.get(credential.integrationID)
-            ?.implementations.get(credential.value.methodID)
-          if (!implementation?.refresh) return credential.value
-          const now = yield* Clock.currentTimeMillis
-          if (credential.value.expires > now + Duration.toMillis(Duration.minutes(5))) return credential.value
-          const value = yield* authorize(implementation.refresh(credential.value))
-          yield* credentials.update(credential.id, { value })
-          return value
+          // Read the grant and status inside the shared lock: recovery may rotate or reject it while we wait.
+          return yield* Effect.gen(function* () {
+            const credential = yield* credentials.get(connection.id)
+            if (!credential) return undefined
+            const status = statuses.get(statusKey(credential.integrationID, connection))
+            if (status?.status === "needs_auth" && !status.url) {
+              return yield* new AuthorizationError({ cause: new Error(status.message) })
+            }
+            if (credential.value.type !== "oauth") return credential.value
+            const implementation = state
+              .get()
+              .integrations.get(credential.integrationID)
+              ?.implementations.get(credential.value.methodID)
+            if (!implementation?.refresh) return credential.value
+            const now = yield* Clock.currentTimeMillis
+            if (credential.value.expires > now + Duration.toMillis(Duration.minutes(5))) return credential.value
+            const value = yield* authorize(implementation.refresh(credential.value))
+            yield* credentials.update(credential.id, { value })
+            return value
+          }).pipe(credentialLocks.withLock(connection.id))
+        }),
+        recover: Effect.fn("Integration.connection.recover")(function* (input) {
+          if (input.connection.type !== "credential") return undefined
+          const credentialID = input.connection.id
+          const credential = yield* credentials.get(credentialID)
+          if (credential && credential.integrationID !== input.integrationID) return undefined
+          // Only equivalent failures share a policy decision; header insertion order is immaterial.
+          const recoveryKey = JSON.stringify([
+            input.integrationID,
+            credentialID,
+            input.status,
+            Object.entries(input.response?.headers ?? {}).toSorted(([a], [b]) => a.localeCompare(b)),
+            input.response?.body,
+          ])
+          const existing = inFlightRecoveries.get(recoveryKey)
+          if (existing) {
+            return yield* Deferred.await(existing)
+          }
+          const deferred = yield* Deferred.make<Credential.Value | undefined, AuthorizationError>()
+          inFlightRecoveries.set(recoveryKey, deferred)
+
+          yield* Effect.gen(function* () {
+            // A preceding recovery may rotate the grant while this policy decision waits for the lock.
+            const credential = yield* credentials.get(credentialID)
+            if (credential && credential.integrationID !== input.integrationID) return undefined
+            const key = statusKey(input.integrationID, input.connection)
+            if (!credential || credential.value.type !== "oauth") {
+              statuses.set(key, { status: "needs_auth", message: "Authentication failed. Reconnect the integration." })
+              yield* bus.publish(Integration.Event.Updated, {})
+              return undefined
+            }
+            const oauthValue = credential.value
+
+            const implementation = state
+              .get()
+              .integrations.get(credential.integrationID)
+              ?.implementations.get(oauthValue.methodID)
+            if (!implementation) {
+              statuses.set(key, { status: "needs_auth", message: "Authentication failed. Reconnect the integration." })
+              yield* bus.publish(Integration.Event.Updated, {})
+              return undefined
+            }
+
+            const recovery = yield* Effect.gen(function* () {
+              if (implementation.recover) {
+                return yield* authorize(implementation.recover(oauthValue, input.status, input.response))
+              }
+              if (input.status === 401 && implementation.refresh) {
+                return yield* authorize(implementation.refresh(oauthValue))
+              }
+              return undefined
+            }).pipe(Effect.exit)
+
+            if (Exit.isSuccess(recovery) && recovery.value !== undefined) {
+              const value = recovery.value
+              yield* credentials.update(credential.id, { value })
+              if (statuses.has(key)) {
+                statuses.delete(key)
+                yield* bus.publish(Integration.Event.Updated, {})
+              }
+              return value
+            }
+
+            const failureMsg = Exit.isFailure(recovery)
+              ? message(recovery.cause)
+              : "Authentication failed. Reconnect the integration."
+            statuses.set(key, { status: "needs_auth", message: failureMsg })
+            yield* bus.publish(Integration.Event.Updated, {})
+
+            if (Exit.isFailure(recovery)) {
+              return yield* recovery
+            }
+            return undefined
+          }).pipe(
+            credentialLocks.withLock(credentialID),
+            Effect.onExit((exit) =>
+              Effect.gen(function* () {
+                inFlightRecoveries.delete(recoveryKey)
+                yield* Deferred.done(deferred, exit)
+              }),
+            ),
+            Effect.forkIn(scope, { startImmediately: true }),
+          )
+
+          return yield* Deferred.await(deferred)
         }),
         key: Effect.fn("Integration.connection.key")(function* (input) {
           const method = state

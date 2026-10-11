@@ -96,6 +96,7 @@ export function host(overrides: Overrides = {}): Plugin.Context {
       connection: {
         active: () => Effect.die("unused integration.connection.active"),
         resolve: () => Effect.die("unused integration.connection.resolve"),
+        recover: () => Effect.die("unused integration.connection.recover"),
         status: () => Effect.die("unused integration.connection.status"),
       },
     },
@@ -231,13 +232,15 @@ export function providerHost(providers: Provider.Interface): Plugin.Context["pro
   return {
     list: () => providers.available().pipe(Effect.map(located)),
     get: (input) =>
-      providers.get(Provider.ID.make(input.providerID)).pipe(
-        Effect.flatMap((provider) =>
-          provider === undefined
-            ? Effect.fail(new Error(`Provider not found: ${input.providerID}`))
-            : Effect.succeed(located(provider)),
+      providers
+        .get(Provider.ID.make(input.providerID))
+        .pipe(
+          Effect.flatMap((provider) =>
+            provider === undefined
+              ? Effect.fail(new Error(`Provider not found: ${input.providerID}`))
+              : Effect.succeed(located(provider)),
+          ),
         ),
-      ),
     reload: providers.reload,
     transform: (callback) =>
       providers.transform((editor) =>
@@ -318,6 +321,16 @@ export function integrationHost(integration: Integration.Interface): Plugin.Cont
         integration.connection.resolve(
           connection.type === "credential" ? { ...connection, id: Credential.ID.make(connection.id) } : connection,
         ),
+      recover: (input) =>
+        integration.connection.recover({
+          integrationID: Integration.ID.make(input.integrationID),
+          connection:
+            input.connection.type === "credential"
+              ? { ...input.connection, id: Credential.ID.make(input.connection.id) }
+              : input.connection,
+          status: input.status,
+          response: input.response,
+        }),
       status: (input) =>
         integration.connection.status({
           integrationID: Integration.ID.make(input.integrationID),
@@ -344,6 +357,7 @@ export function integrationHost(integration: Integration.Interface): Plugin.Cont
               if ("authorize" in input) {
                 const methodID = Integration.MethodID.make(input.method.id)
                 const refresh = input.refresh
+                const recover = input.recover
                 editor.method.update({
                   integrationID: Integration.ID.make(input.integrationID),
                   method: { ...input.method, id: methodID },
@@ -386,6 +400,22 @@ export function integrationHost(integration: Integration.Interface): Plugin.Cont
                                 ...next,
                                 methodID: Integration.MethodID.make(next.methodID),
                               }),
+                            ),
+                          ),
+                      }
+                    : {}),
+                  ...(recover
+                    ? {
+                        recover: (
+                          value: Credential.OAuth,
+                          status: number,
+                          response?: { readonly headers?: Record<string, string>; readonly body?: string },
+                        ) =>
+                          recover(value, status, response).pipe(
+                            Effect.map((next) =>
+                              next
+                                ? Credential.OAuth.make({ ...next, methodID: Integration.MethodID.make(next.methodID) })
+                                : undefined,
                             ),
                           ),
                       }

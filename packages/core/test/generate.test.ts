@@ -37,6 +37,7 @@ const integrations = Layer.mock(Integration.Service, {
     update: () => Effect.die("unused"),
     remove: () => Effect.die("unused"),
     status: () => Effect.die("unused"),
+    recover: () => Effect.die("unused"),
   },
   oauth: {
     connect: () => Effect.die("unused"),
@@ -88,6 +89,11 @@ resolverIt.effect("resolves dynamic models with their catalog metadata", () =>
       model: runtime,
       ref: Ref.make({ providerID: selected.providerID, id: selected.id }),
       capabilities: selected.capabilities,
+      connection: undefined,
+      integrationID: Integration.ID.make(selected.providerID),
+      compaction: undefined,
+      transport: undefined,
+      chunkTimeout: undefined,
       cost: selected.cost,
       limit: selected.limit,
     })

@@ -14,10 +14,12 @@ import {
   copilotBaseURL,
   copilotEntitlementError,
   copilotFetch,
+  CopilotHttp,
   GithubCopilotPlugin,
   utilityTitle,
 } from "@opencode/core/plugin/provider/github-copilot"
 import { Message, SystemPart } from "@opencode/ai"
+import { Credential } from "@opencode/core/credential"
 import { Provider } from "@opencode/core/provider"
 import { Integration } from "@opencode/core/integration"
 import type { SessionRequestKind } from "@opencode/plugin/effect/session"
@@ -623,10 +625,9 @@ describe("GithubCopilotPlugin", () => {
         editor.models.update(Provider.ID.githubCopilot, Model.ID.make("gpt-5-chat-latest"), () => {})
       })
       yield* addPlugin()
-      expect(
-        required(yield* models.get(Provider.ID.githubCopilot, Model.ID.make("gpt-5-chat-latest")))
-          .enabled,
-      ).toBe(false)
+      expect(required(yield* models.get(Provider.ID.githubCopilot, Model.ID.make("gpt-5-chat-latest"))).enabled).toBe(
+        false,
+      )
     }),
   )
 
@@ -640,8 +641,7 @@ describe("GithubCopilotPlugin", () => {
       })
       yield* addPlugin()
       expect(
-        required(yield* models.get(Provider.ID.make("custom-copilot"), Model.ID.make("gpt-5-chat-latest")))
-          .enabled,
+        required(yield* models.get(Provider.ID.make("custom-copilot"), Model.ID.make("gpt-5-chat-latest"))).enabled,
       ).toBe(true)
     }),
   )
@@ -664,4 +664,426 @@ describe("GithubCopilotPlugin", () => {
       expect(result.language).toBeUndefined()
     }),
   )
+
+  describe("Authentication Recovery", () => {
+    it.live("settles without starting discovery loops and does not rediscover during ordinary resolution", () =>
+      Effect.gen(function* () {
+        let discoveries = 0
+        let server: ReturnType<typeof Bun.serve>
+        yield* Effect.acquireRelease(
+          Effect.sync(() => {
+            server = Bun.serve({
+              port: 0,
+              fetch(request) {
+                const url = new URL(request.url)
+                if (url.pathname === "/copilot_internal/user") {
+                  discoveries++
+                  return Response.json({
+                    chat_enabled: true,
+                    endpoints: { api: `http://127.0.0.1:${server.port}/api` },
+                  })
+                }
+                return Response.json({ data: [] })
+              },
+            })
+            return server
+          }),
+          (server) => Effect.sync(() => server.stop(true)),
+        )
+
+        yield* Effect.gen(function* () {
+          yield* addPlugin()
+
+          const credentials = yield* Credential.Service
+          const integrations = yield* Integration.Service
+          const credential = yield* credentials.create({
+            integrationID: Integration.ID.make("github-copilot"),
+            value: Credential.OAuth.make({
+              type: "oauth",
+              methodID: Integration.MethodID.make("device"),
+              access: "test-token",
+              refresh: "test-token",
+              expires: 0,
+              metadata: { apiEndpoint: `http://127.0.0.1:${server.port}/api` },
+            }),
+          })
+
+          // These direct resolutions run under the same injected discovery boundary as recovery.
+          const active = yield* integrations.connection.active(Integration.ID.make("github-copilot"))
+          expect(active).toBeDefined()
+          if (active) {
+            const resolved = yield* integrations.connection.resolve(active)
+            yield* integrations.connection.resolve(active)
+            yield* credentials.update(credential.id, { value: credential.value })
+            yield* integrations.connection.resolve(active)
+            expect(resolved?.type).toBe("oauth")
+          }
+
+          yield* Effect.promise(() => Bun.sleep(100))
+          expect(discoveries).toBe(0)
+
+          // Verify that recovery under this boundary DOES discover and increments count
+          if (active) {
+            yield* integrations.connection.recover({
+              integrationID: Integration.ID.make("github-copilot"),
+              connection: active,
+              status: 401,
+            })
+            expect(discoveries).toBe(1)
+            yield* Effect.promise(() => Bun.sleep(100))
+            yield* integrations.connection.resolve(active)
+            expect(discoveries).toBe(1)
+          }
+        }).pipe(
+          Effect.provideService(
+            CopilotHttp,
+            CopilotHttp.of({
+              fetch: (url, init) => {
+                const parsed = new URL(String(url))
+                return fetch(`http://127.0.0.1:${server.port}${parsed.pathname}`, init)
+              },
+            }),
+          ),
+        )
+      }),
+    )
+
+    it.live("recovers 401 and discovers account-specific apiEndpoint", () =>
+      Effect.gen(function* () {
+        const credentials = yield* Credential.Service
+        const integrations = yield* Integration.Service
+        let server!: ReturnType<typeof Bun.serve>
+        yield* Effect.acquireRelease(
+          Effect.sync(() => {
+            server = Bun.serve({
+              port: 0,
+              fetch: (request) => {
+                const url = new URL(request.url)
+                if (url.pathname === "/copilot_internal/user") {
+                  expect(request.headers.get("authorization")).toBe("Bearer old-token")
+                  return Response.json({
+                    chat_enabled: true,
+                    endpoints: { api: `http://127.0.0.1:${server.port}/custom-api` },
+                  })
+                }
+                return new Response(null, { status: 404 })
+              },
+            })
+            return server
+          }),
+          (server) => Effect.sync(() => server.stop()),
+        )
+
+        yield* addPlugin()
+
+        const cred = yield* credentials.create({
+          integrationID: Integration.ID.make("github-copilot"),
+          value: Credential.OAuth.make({
+            type: "oauth",
+            methodID: Integration.MethodID.make("device"),
+            access: "old-token",
+            refresh: "old-token",
+            expires: 0,
+          }),
+        })
+
+        const recovered = yield* integrations.connection
+          .recover({
+            integrationID: Integration.ID.make("github-copilot"),
+            connection: { type: "credential", id: cred.id, label: "OAuth", method: "oauth" },
+            status: 401,
+          })
+          .pipe(
+            Effect.provideService(
+              CopilotHttp,
+              CopilotHttp.of({
+                fetch: (url, init) => {
+                  const parsed = new URL(String(url))
+                  return fetch(`http://127.0.0.1:${server.port}${parsed.pathname}`, init)
+                },
+              }),
+            ),
+          )
+
+        expect(recovered).toBeDefined()
+        expect(recovered?.type).toBe("oauth")
+        if (recovered?.type === "oauth") {
+          expect(recovered.access).toBe("old-token")
+          expect(recovered.metadata?.apiEndpoint).toBe(`http://127.0.0.1:${server.port}/custom-api`)
+          expect(copilotBaseURL(recovered.metadata)).toBe(`http://127.0.0.1:${server.port}/custom-api`)
+        }
+
+        const updated = yield* credentials.get(cred.id)
+        expect(updated?.id).toBe(cred.id)
+        if (updated?.value.type === "oauth") {
+          expect(updated.value.metadata?.apiEndpoint).toBe(`http://127.0.0.1:${server.port}/custom-api`)
+        }
+      }),
+    )
+
+    it.live("recovers 403 when /copilot_internal/user returns a rotated apiEndpoint", () =>
+      Effect.gen(function* () {
+        const credentials = yield* Credential.Service
+        const integrations = yield* Integration.Service
+        let server!: ReturnType<typeof Bun.serve>
+        yield* Effect.acquireRelease(
+          Effect.sync(() => {
+            server = Bun.serve({
+              port: 0,
+              fetch: (request) => {
+                const url = new URL(request.url)
+                if (url.pathname === "/copilot_internal/user") {
+                  return Response.json({
+                    chat_enabled: true,
+                    endpoints: { api: `http://127.0.0.1:${server.port}/new-endpoint` },
+                  })
+                }
+                return new Response(null, { status: 404 })
+              },
+            })
+            return server
+          }),
+          (server) => Effect.sync(() => server.stop()),
+        )
+
+        yield* addPlugin()
+
+        const cred = yield* credentials.create({
+          integrationID: Integration.ID.make("github-copilot"),
+          value: Credential.OAuth.make({
+            type: "oauth",
+            methodID: Integration.MethodID.make("device"),
+            access: "token",
+            refresh: "token",
+            expires: 0,
+            metadata: {
+              apiEndpoint: "http://127.0.0.1:8080/old-endpoint",
+            },
+          }),
+        })
+
+        const recovered = yield* integrations.connection
+          .recover({
+            integrationID: Integration.ID.make("github-copilot"),
+            connection: { type: "credential", id: cred.id, label: "OAuth", method: "oauth" },
+            status: 403,
+          })
+          .pipe(
+            Effect.provideService(
+              CopilotHttp,
+              CopilotHttp.of({
+                fetch: (url, init) => {
+                  const parsed = new URL(String(url))
+                  return fetch(`http://127.0.0.1:${server.port}${parsed.pathname}`, init)
+                },
+              }),
+            ),
+          )
+
+        expect(recovered).toBeDefined()
+        if (recovered?.type === "oauth") {
+          expect(recovered.metadata?.apiEndpoint).toBe(`http://127.0.0.1:${server.port}/new-endpoint`)
+        }
+      }),
+    )
+    ;["unchanged", "absent", "malformed"].forEach((endpoint) =>
+      it.live(`treats 403 as permanent denial when rediscovered endpoint is ${endpoint}`, () =>
+        Effect.gen(function* () {
+          const credentials = yield* Credential.Service
+          const integrations = yield* Integration.Service
+          let server!: ReturnType<typeof Bun.serve>
+          yield* Effect.acquireRelease(
+            Effect.sync(() => {
+              server = Bun.serve({
+                port: 0,
+                fetch: (request) => {
+                  const url = new URL(request.url)
+                  if (url.pathname === "/copilot_internal/user") {
+                    return Response.json(
+                      endpoint === "malformed"
+                        ? { chat_enabled: "invalid" }
+                        : {
+                            chat_enabled: true,
+                            ...(endpoint === "unchanged"
+                              ? { endpoints: { api: `http://127.0.0.1:${server.port}/same-endpoint` } }
+                              : {}),
+                          },
+                    )
+                  }
+                  return new Response(null, { status: 404 })
+                },
+              })
+              return server
+            }),
+            (server) => Effect.sync(() => server.stop()),
+          )
+
+          yield* addPlugin()
+
+          const cred = yield* credentials.create({
+            integrationID: Integration.ID.make("github-copilot"),
+            value: Credential.OAuth.make({
+              type: "oauth",
+              methodID: Integration.MethodID.make("device"),
+              access: "token",
+              refresh: "token",
+              expires: 0,
+              metadata: {
+                apiEndpoint: `http://127.0.0.1:${server.port}/same-endpoint`,
+              },
+            }),
+          })
+
+          const recovered = yield* integrations.connection
+            .recover({
+              integrationID: Integration.ID.make("github-copilot"),
+              connection: { type: "credential", id: cred.id, label: "OAuth", method: "oauth" },
+              status: 403,
+            })
+            .pipe(
+              Effect.orElseSucceed(() => undefined),
+              Effect.provideService(
+                CopilotHttp,
+                CopilotHttp.of({
+                  fetch: (url, init) => {
+                    const parsed = new URL(String(url))
+                    return fetch(`http://127.0.0.1:${server.port}${parsed.pathname}`, init)
+                  },
+                }),
+              ),
+            )
+
+          expect(recovered).toBeUndefined()
+
+          const active = yield* integrations.connection.active(Integration.ID.make("github-copilot"))
+          expect(active?.status?.status).toBe("needs_auth")
+        }),
+      ),
+    )
+
+    it.live("fails recovery on entitlement denial and marks needs_auth", () =>
+      Effect.gen(function* () {
+        const credentials = yield* Credential.Service
+        const integrations = yield* Integration.Service
+        let server!: ReturnType<typeof Bun.serve>
+        yield* Effect.acquireRelease(
+          Effect.sync(() => {
+            server = Bun.serve({
+              port: 0,
+              fetch: (request) => {
+                const url = new URL(request.url)
+                if (url.pathname === "/copilot_internal/user") {
+                  return Response.json({
+                    chat_enabled: false,
+                    can_signup_for_limited: false,
+                  })
+                }
+                return new Response(null, { status: 404 })
+              },
+            })
+            return server
+          }),
+          (server) => Effect.sync(() => server.stop()),
+        )
+
+        yield* addPlugin()
+
+        const cred = yield* credentials.create({
+          integrationID: Integration.ID.make("github-copilot"),
+          value: Credential.OAuth.make({
+            type: "oauth",
+            methodID: Integration.MethodID.make("device"),
+            access: "token",
+            refresh: "token",
+            expires: 0,
+          }),
+        })
+
+        const recovered = yield* integrations.connection
+          .recover({
+            integrationID: Integration.ID.make("github-copilot"),
+            connection: { type: "credential", id: cred.id, label: "OAuth", method: "oauth" },
+            status: 401,
+          })
+          .pipe(
+            Effect.provideService(
+              CopilotHttp,
+              CopilotHttp.of({
+                fetch: (url, init) => {
+                  const parsed = new URL(String(url))
+                  return fetch(`http://127.0.0.1:${server.port}${parsed.pathname}`, init)
+                },
+              }),
+            ),
+            Effect.orElseSucceed(() => undefined),
+          )
+
+        expect(recovered).toBeUndefined()
+
+        const active = yield* integrations.connection.active(Integration.ID.make("github-copilot"))
+        expect(active?.status?.status).toBe("needs_auth")
+      }),
+    )
+
+    it.live("fails recovery on token revocation (401 on /copilot_internal/user)", () =>
+      Effect.gen(function* () {
+        const credentials = yield* Credential.Service
+        const integrations = yield* Integration.Service
+        let server!: ReturnType<typeof Bun.serve>
+        yield* Effect.acquireRelease(
+          Effect.sync(() => {
+            server = Bun.serve({
+              port: 0,
+              fetch: (request) => {
+                const url = new URL(request.url)
+                if (url.pathname === "/copilot_internal/user") {
+                  return new Response("Unauthorized", { status: 401 })
+                }
+                return new Response(null, { status: 404 })
+              },
+            })
+            return server
+          }),
+          (server) => Effect.sync(() => server.stop()),
+        )
+
+        yield* addPlugin()
+
+        const cred = yield* credentials.create({
+          integrationID: Integration.ID.make("github-copilot"),
+          value: Credential.OAuth.make({
+            type: "oauth",
+            methodID: Integration.MethodID.make("device"),
+            access: "revoked-token",
+            refresh: "revoked-token",
+            expires: 0,
+          }),
+        })
+
+        const recovered = yield* integrations.connection
+          .recover({
+            integrationID: Integration.ID.make("github-copilot"),
+            connection: { type: "credential", id: cred.id, label: "OAuth", method: "oauth" },
+            status: 401,
+          })
+          .pipe(
+            Effect.provideService(
+              CopilotHttp,
+              CopilotHttp.of({
+                fetch: (url, init) => {
+                  const parsed = new URL(String(url))
+                  return fetch(`http://127.0.0.1:${server.port}${parsed.pathname}`, init)
+                },
+              }),
+            ),
+            Effect.orElseSucceed(() => undefined),
+          )
+
+        expect(recovered).toBeUndefined()
+
+        const active = yield* integrations.connection.active(Integration.ID.make("github-copilot"))
+        expect(active?.status?.status).toBe("needs_auth")
+      }),
+    )
+  })
 })

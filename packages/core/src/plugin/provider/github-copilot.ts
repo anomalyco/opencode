@@ -1,6 +1,6 @@
 import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect/integration"
 import type { SessionRequestKind, SessionTitle } from "@opencode/plugin/effect/session"
-import { Effect, Option, Schema, Semaphore, Stream } from "effect"
+import { Context, Effect, Option, Schema, Semaphore, Stream } from "effect"
 import { IntegrationConnection } from "../../integration/connection.js"
 import { Credential } from "../../credential.js"
 import { Bus } from "../../bus.js"
@@ -13,6 +13,13 @@ import { define } from "@opencode/plugin/effect/plugin"
 import { Provider } from "../../provider.js"
 import { SessionAffinity } from "../../session/affinity.js"
 import type { PluginInternal } from "../internal.js"
+
+export class CopilotHttp extends Context.Service<
+  CopilotHttp,
+  {
+    readonly fetch: (input: string | URL | Request, init?: RequestInit) => Promise<Response>
+  }
+>()("@opencode/github-copilot/http") {}
 
 const clientID = "Ov23li8tweQw6odWQebz"
 const apiVersion = "2026-08-01"
@@ -100,17 +107,14 @@ const oauth = (app: App.Info) =>
             Effect.flatMap((token) => {
               if (token.access_token) {
                 const access = token.access_token
-                return request(
-                  `${domain === "github.com" ? "https://api.github.com" : `https://api.${domain}`}/copilot_internal/user`,
-                  {
-                    headers: {
-                      Accept: "application/json",
-                      Authorization: `Bearer ${access}`,
-                      "User-Agent": App.useragent(app),
-                      "X-GitHub-Api-Version": userApiVersion,
-                    },
+                return request(userURL(domain), {
+                  headers: {
+                    Accept: "application/json",
+                    Authorization: `Bearer ${access}`,
+                    "User-Agent": App.useragent(app),
+                    "X-GitHub-Api-Version": userApiVersion,
                   },
-                ).pipe(
+                }).pipe(
                   Effect.map((user) => Option.getOrUndefined(decodeUser(user))),
                   // Only an explicit entitlement answer blocks login; a failed
                   // or malformed lookup must not turn a GitHub hiccup into a denial.
@@ -154,7 +158,67 @@ const oauth = (app: App.Info) =>
           callback: poll(interval),
         }
       }),
+    recover: (credential, status) =>
+      Effect.gen(function* () {
+        if (status === 401) {
+          return yield* refreshUser(credential, app)
+        }
+        if (status === 403) {
+          const updated = yield* refreshUser(credential, app)
+          const currentEndpoint =
+            typeof credential.metadata?.apiEndpoint === "string" ? credential.metadata.apiEndpoint : undefined
+          const nextEndpoint =
+            typeof updated.metadata?.apiEndpoint === "string" ? updated.metadata.apiEndpoint : undefined
+          if (nextEndpoint && nextEndpoint !== currentEndpoint) {
+            return updated
+          }
+          return undefined
+        }
+        return undefined
+      }),
   }) satisfies IntegrationOAuthMethodRegistration
+
+function refreshUser(credential: Credential.OAuth, app: App.Info) {
+  const enterprise =
+    typeof credential.metadata?.enterpriseUrl === "string" ? credential.metadata.enterpriseUrl : undefined
+  const domain = enterprise ? normalizeDomain(enterprise) : "github.com"
+  const access = credential.refresh || credential.access
+  return request(userURL(domain), {
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${access}`,
+      "User-Agent": App.useragent(app),
+      "X-GitHub-Api-Version": userApiVersion,
+    },
+  }).pipe(
+    Effect.map((user) => Option.getOrUndefined(decodeUser(user))),
+    Effect.flatMap((user) => {
+      if (!user)
+        return Effect.fail(
+          new Error("Could not rediscover GitHub Copilot account metadata. Reconnect the integration."),
+        )
+      const denied = copilotEntitlementError(user)
+      if (denied) return Effect.fail(new Error(denied))
+      const apiEndpoint = user?.endpoints?.api?.replace(/\/+$/, "")
+      return Effect.succeed(
+        Credential.OAuth.make({
+          type: "oauth",
+          methodID,
+          refresh: access,
+          access,
+          expires: 0,
+          ...((credential.metadata || enterprise || apiEndpoint) && {
+            metadata: {
+              ...credential.metadata,
+              ...(enterprise ? { enterpriseUrl: domain } : {}),
+              ...(apiEndpoint ? { apiEndpoint } : {}),
+            },
+          }),
+        }),
+      )
+    }),
+  )
+}
 
 export const GithubCopilotPlugin = define({
   id: "opencode.provider.github.copilot",
@@ -266,6 +330,9 @@ export const GithubCopilotPlugin = define({
       Effect.fn(function* (evt) {
         if (evt.model.providerID !== Provider.ID.githubCopilot) return
         if (evt.package !== "@ai-sdk/github-copilot") return
+        if (typeof evt.options.apiEndpoint === "string" && evt.options.apiEndpoint) {
+          evt.options.baseURL = evt.options.apiEndpoint
+        }
         evt.options.fetch = copilotFetch(
           typeof evt.options.apiKey === "string" ? evt.options.apiKey : undefined,
           evt.options.fetch,
@@ -299,7 +366,9 @@ export const GithubCopilotPlugin = define({
         Effect.gen(function* () {
           if (evt.model.providerID !== Provider.ID.githubCopilot) return
           if (!loaded.baseURL || !loaded.token || !loaded.models) return
-          const agent = yield* ctx.agent.get({ agentID: Agent.ID.make("title") }).pipe(Effect.orElseSucceed(() => undefined))
+          const agent = yield* ctx.agent
+            .get({ agentID: Agent.ID.make("title") })
+            .pipe(Effect.orElseSucceed(() => undefined))
           if (agent?.data.model) return
           const model = utilityTitleModels.find((id) => loaded.models?.has(id))
           if (!model) return
@@ -361,6 +430,10 @@ function normalizeDomain(input: string) {
   return input.replace(/^https?:\/\//, "").replace(/\/$/, "")
 }
 
+function userURL(domain: string) {
+  return `${domain === "github.com" ? "https://api.github.com" : `https://api.${domain}`}/copilot_internal/user`
+}
+
 function oauthURLs(domain: string) {
   return {
     device: `https://${domain}/login/device/code`,
@@ -397,13 +470,17 @@ function headers(app: App.Info) {
 }
 
 function request(url: string, init: RequestInit) {
-  return Effect.tryPromise({
-    try: async (signal) => {
-      const response = await fetch(url, { ...init, signal })
-      if (!response.ok) throw new Error(`Request failed: ${response.status}`)
-      return response.json()
-    },
-    catch: (cause) => cause,
+  return Effect.gen(function* () {
+    const custom = yield* Effect.serviceOption(CopilotHttp)
+    const runFetch = Option.isSome(custom) ? custom.value.fetch : fetch
+    return yield* Effect.tryPromise({
+      try: async (signal) => {
+        const response = await runFetch(url, { ...init, signal })
+        if (!response.ok) throw new Error(`Request failed: ${response.status}`)
+        return response.json()
+      },
+      catch: (cause) => cause,
+    })
   })
 }
 

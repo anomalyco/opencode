@@ -400,6 +400,7 @@ export function fromPromise(plugin: Plugin) {
                       update: (input) => {
                         if (!("authorize" in input)) return editor.method.update(input)
                         const refresh = input.refresh
+                        const recover = input.recover
                         editor.method.update({
                           ...input,
                           authorize: (answer) =>
@@ -419,7 +420,16 @@ export function fromPromise(plugin: Plugin) {
                           refresh:
                             refresh === undefined
                               ? undefined
-                              : (credential) => Effect.promise(() => refresh(credential)),
+                              : (credential) =>
+                                  Effect.tryPromise({ try: () => refresh(credential), catch: (cause) => cause }),
+                          recover:
+                            recover === undefined
+                              ? undefined
+                              : (credential, status, response) =>
+                                  Effect.tryPromise({
+                                    try: () => recover(credential, status, response),
+                                    catch: (cause) => cause,
+                                  }),
                         })
                       },
                       remove: editor.method.remove,
@@ -431,6 +441,7 @@ export function fromPromise(plugin: Plugin) {
             connection: {
               active: (id) => Effect.runPromiseWith(runtime)(host.integration.connection.active(id)),
               resolve: (connection) => Effect.runPromiseWith(runtime)(host.integration.connection.resolve(connection)),
+              recover: (input) => Effect.runPromiseWith(runtime)(host.integration.connection.recover(input)),
               status: (input) => run(host.integration.connection.status(input)),
             },
           },

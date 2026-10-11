@@ -31,6 +31,7 @@ import { SessionStep } from "./step.js"
 import { ToolOutput } from "../../tool-output.js"
 import { Plugin } from "../../plugin.js"
 import { MAX_STEPS_PROMPT } from "./max-steps.js"
+import { Integration } from "../../integration.js"
 
 const CONTINUE_AFTER_INCOMPLETE_STREAM =
   "The previous response was interrupted. Continue from where you left off without repeating completed content."
@@ -210,6 +211,7 @@ const layer = Layer.effect(
       let initial: SessionContext.Loaded | undefined = first
       let recoverOverflow = true
       let recoverContinuation = true
+      let recoverAuth = true
       while (true) {
         // Reuse boundary preparation once; retries refresh context without delivering more input.
         const loaded = initial ?? (yield* prepareContext(sessionID).pipe(Effect.flatMap(context.load)))
@@ -259,6 +261,7 @@ const layer = Layer.effect(
               retry: proposed,
             }),
           recoverContinuation,
+          recoverAuth,
           recoverOverflow: Effect.suspend(() =>
             recoverOverflow
               ? compaction
@@ -290,6 +293,9 @@ const layer = Layer.effect(
           }),
           RecoverFull: Effect.fnUntraced(function* () {
             recoverContinuation = false
+          }),
+          RecoverAuth: Effect.fnUntraced(function* () {
+            recoverAuth = false
           }),
         })
         if (completed !== undefined) return completed
@@ -371,5 +377,6 @@ export const node = makeLocationNode({
     Snapshot.node,
     ToolOutput.node,
     Database.node,
+    Integration.node,
   ],
 })

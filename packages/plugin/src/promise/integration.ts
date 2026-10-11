@@ -66,6 +66,11 @@ export type IntegrationOAuthMethodRegistration = {
   readonly method: IntegrationOAuthMethod
   readonly authorize: (answer: Form.Answer) => Promise<IntegrationOAuthAuthorization>
   readonly refresh?: (credential: Credential.OAuth) => Promise<Credential.OAuth>
+  readonly recover?: (
+    credential: Credential.OAuth,
+    status: number,
+    response?: { readonly headers?: Record<string, string>; readonly body?: string },
+  ) => Promise<Credential.OAuth | undefined>
   readonly label?: (credential: Credential.OAuth) => string | undefined
 }
 
@@ -97,6 +102,12 @@ export interface IntegrationDomain extends Omit<IntegrationApi, "wellknown"> {
   readonly connection: {
     readonly active: (integrationID: string) => Promise<ConnectionInfo | undefined>
     readonly resolve: (connection: ConnectionInfo) => Promise<Credential.Value | undefined>
+    readonly recover: (input: {
+      readonly integrationID: string
+      readonly connection: ConnectionInfo
+      readonly status: number
+      readonly response?: { readonly headers?: Record<string, string>; readonly body?: string }
+    }) => Promise<Credential.Value | undefined>
     /** Reports a problem with a connection, such as a required sign-in; `undefined` clears it. */
     readonly status: (input: {
       readonly integrationID: string

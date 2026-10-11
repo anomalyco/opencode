@@ -352,6 +352,16 @@ export const make = Effect.fn("PluginHost.make")(function* (
           integration.connection.resolve(
             connection.type === "credential" ? { ...connection, id: Credential.ID.make(connection.id) } : connection,
           ),
+        recover: (input) =>
+          integration.connection.recover({
+            integrationID: Integration.ID.make(input.integrationID),
+            connection:
+              input.connection.type === "credential"
+                ? { ...input.connection, id: Credential.ID.make(input.connection.id) }
+                : input.connection,
+            status: input.status,
+            response: input.response,
+          }),
         status: (input) =>
           integration.connection.status({
             integrationID: Integration.ID.make(input.integrationID),
@@ -638,6 +648,7 @@ export function storage(kv: KV.Interface, pluginID: string): Plugin.Context["sto
 function methodImplementation(input: IntegrationMethodRegistration): Integration.Implementation {
   if ("authorize" in input) {
     const refresh = input.refresh
+    const recover = input.recover
     return {
       integrationID: Integration.ID.make(input.integrationID),
       method: { ...input.method, id: Integration.MethodID.make(input.method.id) },
@@ -657,6 +668,16 @@ function methodImplementation(input: IntegrationMethodRegistration): Integration
           }),
         ),
       ...(refresh ? { refresh: (value: Credential.OAuth) => refresh(value).pipe(Effect.map(credential)) } : {}),
+      ...(recover
+        ? {
+            recover: (
+              value: Credential.OAuth,
+              status: number,
+              response?: { readonly headers?: Record<string, string>; readonly body?: string },
+            ) =>
+              recover(value, status, response).pipe(Effect.map((result) => (result ? credential(result) : undefined))),
+          }
+        : {}),
       ...(input.label ? { label: input.label } : {}),
     }
   }

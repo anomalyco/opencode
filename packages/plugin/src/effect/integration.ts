@@ -66,6 +66,11 @@ export type IntegrationOAuthMethodRegistration = {
   readonly method: IntegrationOAuthMethod
   readonly authorize: (answer: Form.Answer) => Effect.Effect<IntegrationOAuthAuthorization, unknown, Scope.Scope>
   readonly refresh?: (credential: Credential.OAuth) => Effect.Effect<Credential.OAuth, unknown>
+  readonly recover?: (
+    credential: Credential.OAuth,
+    status: number,
+    response?: { readonly headers?: Record<string, string>; readonly body?: string },
+  ) => Effect.Effect<Credential.OAuth | undefined, unknown>
   readonly label?: (credential: Credential.OAuth) => string | undefined
 }
 export type IntegrationMethodRegistration =
@@ -105,6 +110,12 @@ export interface IntegrationDomain extends Omit<IntegrationApi<unknown>, "wellkn
   readonly connection: {
     readonly active: (integrationID: string) => Effect.Effect<ConnectionInfo | undefined>
     readonly resolve: (connection: ConnectionInfo) => Effect.Effect<Credential.Value | undefined, unknown>
+    readonly recover: (input: {
+      readonly integrationID: string
+      readonly connection: ConnectionInfo
+      readonly status: number
+      readonly response?: { readonly headers?: Record<string, string>; readonly body?: string }
+    }) => Effect.Effect<Credential.Value | undefined, unknown>
     /** Reports a problem with a connection, such as a required sign-in; `undefined` clears it. */
     readonly status: (input: {
       readonly integrationID: string

@@ -21,6 +21,7 @@ import { AnthropicMessages, OpenAIResponses } from "@opencode/ai/protocols"
 import { compileRequest } from "@opencode/ai/route/client"
 import { TestLLM } from "@opencode/ai/testing"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
+import { AISDK } from "@opencode/core/aisdk"
 import { Database } from "@opencode/core/database/database"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -49,6 +50,7 @@ import { SessionExecution } from "@opencode/core/session/execution"
 import { SessionRunCoordinator } from "@opencode/core/session/run-coordinator"
 import { SessionRunner } from "@opencode/core/session/runner/index"
 import { SessionRunnerLLM } from "@opencode/core/session/runner/llm"
+import { MAX_STEPS_PROMPT } from "@opencode/core/session/runner/max-steps"
 import { SessionRunnerModel } from "@opencode/core/session/runner/model"
 import { SessionUsage } from "@opencode/core/session/usage"
 import { PluginSupervisor } from "@opencode/core/plugin/supervisor"
@@ -78,14 +80,20 @@ import { Location } from "@opencode/core/location"
 import { Provider } from "@opencode/core/provider"
 import { Cause, Context, DateTime, Deferred, Effect, Exit, Fiber, Layer, Queue, Schema, Scope, Stream } from "effect"
 import { TestClock } from "effect/testing"
-import { asc, desc, eq, sql } from "drizzle-orm"
+import { and, asc, desc, eq, sql } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 import { promptLocationNode } from "./fixture/prompt-location"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { Expected } from "./lib/session-message"
 import { permissionLayer } from "./lib/permission"
-import { agentHost, modelHost, host, noProviders } from "./plugin/host"
+import { agentHost, modelHost, host, integrationHost, providerHost } from "./plugin/host"
 import { CodeModeInstructions } from "@opencode/core/codemode/instructions"
+import { Credential } from "@opencode/core/credential"
+import { Integration } from "@opencode/core/integration"
+import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { withEnv } from "./fixture/env"
+import { SnowflakeCortexPlugin } from "@opencode/core/plugin/provider/snowflake-cortex"
+import { CopilotHttp, GithubCopilotPlugin } from "@opencode/core/plugin/provider/github-copilot"
 
 const emptyCodeMode = `${CodeModeInstructions.render({ total: 0, shown: 0, namespaces: [] })}\n\n`
 type ToolBarrier = {
@@ -209,6 +217,8 @@ const makeRunnerState = (compaction?: SessionRunnerModel.Resolved["compaction"])
     }).pipe(Effect.andThen(Deferred.succeed(barrier.release, undefined)), Effect.asVoid)
   return {
     currentModel: model,
+    http: false,
+    copilotFetch: undefined as ((input: string | URL | Request, init?: RequestInit) => Promise<Response>) | undefined,
     compaction,
     modelResolveHook: resolvesModel,
     systemBaseline: "Initial context",
@@ -271,7 +281,7 @@ const transformTools = (registry: Tool.Interface, tools: Readonly<Record<string,
   registry.transform((editor) =>
     Object.entries(tools).forEach(([name, tool]) => editor.add({ ...tool, name, options: options ?? tool.options })),
   )
-const layer = Layer.unwrap(
+const runnerLayer = Layer.unwrap(
   Effect.map(RunnerState, (state) => {
     const modelTransport = Layer.succeed(
       SessionModelTransport.Service,
@@ -319,21 +329,24 @@ const layer = Layer.unwrap(
       ),
     )
     const echoNode = makeLocationNode({ name: "test/session-runner-tools", layer: echo, deps: [Tool.node] })
-    const models = Layer.mock(SessionRunnerModel.Service)({
-      resolve: (session) =>
-        state.modelResolveHook.pipe(
-          Effect.map(() => {
-            const selected = session.model?.id === "replacement" ? replacementModel : state.currentModel
-            return SessionRunnerModel.resolved(selected, {
-              capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
-              cost: [],
-              limit: modelLimits.get(String(selected.id)) ?? defaultModelLimit,
-              variant: session.model?.variant,
-              compaction: state.compaction,
-            })
-          }),
-        ),
-    })
+    const models = Layer.succeed(
+      SessionRunnerModel.Service,
+      SessionRunnerModel.Service.of({
+        resolve: (session) =>
+          state.modelResolveHook.pipe(
+            Effect.map(() => {
+              const selected = session.model?.id === "replacement" ? replacementModel : state.currentModel
+              return SessionRunnerModel.resolved(selected, {
+                capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
+                cost: [],
+                limit: modelLimits.get(String(selected.id)) ?? defaultModelLimit,
+                variant: session.model?.variant,
+                compaction: state.compaction,
+              })
+            }),
+          ),
+      }),
+    )
     const systemContextKey = Instructions.Key.make("test/context")
     const systemContext = Layer.mock(InstructionBuiltIns.Service, {
       load: () =>
@@ -409,11 +422,17 @@ const layer = Layer.unwrap(
       available: () => Effect.succeed([]),
       default: () => Effect.undefined,
       small: () => Effect.undefined,
+      transform: () => Effect.succeed({ dispose: Effect.void }),
+      reload: () => Effect.void,
     })
     const replacements: LayerNode.Replacements = [
       Snapshot.node.replace(Snapshot.noopLayer),
-      LayerNodePlatform.llmClient.replace(TestLLM.clientLayer.pipe(Layer.provide(testLLM))),
-      SessionRunnerModel.node.replace(models),
+      ...(state.http
+        ? []
+        : [
+            LayerNodePlatform.llmClient.replace(TestLLM.clientLayer.pipe(Layer.provide(testLLM))),
+            SessionRunnerModel.node.replace(models),
+          ]),
       InstructionBuiltIns.node.replace(systemContext),
       InstructionDiscovery.node.replace(instructionContext),
       Location.node.replace(Location.boundNode({ directory: AbsolutePath.make("/project") })),
@@ -459,11 +478,21 @@ const layer = Layer.unwrap(
         })
       }),
     ).pipe(Layer.provide(runnerLayer), Layer.orDie)
+    const copilotHttp = Layer.succeed(
+      CopilotHttp,
+      CopilotHttp.of({
+        fetch: (input, init) => (state.copilotFetch ? state.copilotFetch(input, init) : fetch(input, init)),
+      }),
+    )
     return AppNodeBuilder.build(
       LayerNode.group([
         Database.node,
         Bus.node,
         Form.node,
+        Credential.node,
+        AISDK.node,
+        Integration.node,
+        Provider.node,
         SessionProjector.node,
         SessionStore.node,
         SessionInbox.node,
@@ -490,13 +519,21 @@ const layer = Layer.unwrap(
         ...replacements,
         Bus.node.replace(Bus.configured({ persist: true })),
         LocationServiceMap.node.replace(promptLocationNode),
-        Model.node.replace(promptModels),
+        ...(state.http ? [] : [Model.node.replace(promptModels)]),
         SessionExecution.node.replace(execution),
       ],
-    )
+    ).pipe(Layer.provideMerge(copilotHttp))
   }),
-).pipe(Layer.provideMerge(Layer.sync(RunnerState, makeRunnerState)), Layer.provideMerge(testLLM))
+)
+const makeRunnerLayer = (http = false) =>
+  runnerLayer.pipe(
+    Layer.provideMerge(Layer.sync(RunnerState, () => ({ ...makeRunnerState(), http }))),
+    Layer.provideMerge(testLLM),
+  )
+
+const layer = makeRunnerLayer()
 const it = testEffect(layer)
+const httpIt = testEffect(makeRunnerLayer(true))
 const sessionID = Session.ID.make("ses_runner_test")
 const otherSessionID = Session.ID.make("ses_runner_other")
 
@@ -524,12 +561,21 @@ const setup = Effect.gen(function* () {
   const sessionInbox = yield* SessionInbox.Service
   const agents = yield* Agent.Service
   const models = yield* Model.Service
+  const providers = yield* Provider.Service
   const hooks = yield* PluginHooks.Service
+  const integrations = yield* Integration.Service
+  const credentials = yield* Credential.Service
+  const session = yield* Session.Service
   const pluginHost = host({
     agent: agentHost(agents),
     model: modelHost(models),
-    provider: noProviders,
-    session: { hook: (name, callback) => hooks.register("session", name, callback) },
+    provider: providerHost(providers),
+    integration: integrationHost(integrations),
+    session: {
+      hook: (name, callback) => hooks.register("session", name, callback),
+      get: (input) => session.get(Session.ID.make(input.sessionID)),
+    },
+    aisdk: { hook: (name, callback) => hooks.register("aisdk", name, callback) },
   })
   yield* Effect.forEach(OptimizePlugin.Plugins, (plugin) => plugin.effect(pluginHost), {
     discard: true,
@@ -554,7 +600,6 @@ const setup = Effect.gen(function* () {
     .pipe(Effect.orDie)
   yield* insertSession(sessionID)
   const state = yield* RunnerState
-  const session = yield* Session.Service
   const llm = yield* TestLLM.Service
   const admit = (text: string) => session.prompt({ sessionID, text, resume: false })
   const resume = session.resume(sessionID)
@@ -564,6 +609,9 @@ const setup = Effect.gen(function* () {
     sessionInbox,
     session,
     llm,
+    integrations,
+    credentials,
+    pluginHost,
     requests: llm.requests,
     admit,
     resume,
@@ -6625,4 +6673,309 @@ describe("SessionRunnerLLM", () => {
     if (!(defect instanceof Error)) return
     expect(defect.message).toBe("Tool input delta before start: call-1")
   })
+
+  describe("Authentication Recovery HTTP", () => {
+    const cases = [
+      { name: "401 succeeds after one recovery", status: 401, repeated: false, rotate: true },
+      { name: "repeated 401 fails after one retry", status: 401, repeated: true, rotate: true },
+      { name: "403 retries at the rediscovered endpoint", status: 403, repeated: false, rotate: true },
+      { name: "policy 403 does not retry and needs authentication", status: 403, repeated: false, rotate: false },
+    ]
+    cases.forEach((fixture) =>
+      httpIt.live(
+        fixture.name,
+        () =>
+          Effect.gen(function* () {
+            const s = yield* setup
+            const paths: string[] = []
+            const authorizations: Array<string | null> = []
+            const bodies: string[] = []
+            const server: ReturnType<typeof Bun.serve> = yield* Effect.acquireRelease(
+              Effect.sync(() =>
+                Bun.serve({
+                  port: 0,
+                  async fetch(request): Promise<Response> {
+                    const pathname = new URL(request.url).pathname
+                    if (pathname === "/copilot_internal/user") {
+                      paths.push(pathname)
+                      expect(request.headers.get("authorization")).toBe("Bearer fixture-token")
+                      return Response.json({
+                        chat_enabled: true,
+                        endpoints: {
+                          api: `${server.url.origin}/${fixture.rotate ? "new" : "old"}`,
+                        },
+                      })
+                    }
+                    if (pathname.endsWith("/models")) return Response.json({ data: [] })
+                    if (pathname.endsWith("/chat/completions")) {
+                      paths.push(pathname)
+                      authorizations.push(request.headers.get("authorization"))
+                      bodies.push(await request.text())
+                      if (pathname.startsWith("/old/") || fixture.repeated) {
+                        return Response.json(
+                          { error: { message: "Authentication rejected", type: "authentication_error" } },
+                          { status: fixture.status },
+                        )
+                      }
+                      const chunks = [
+                        {
+                          id: "fixture",
+                          object: "chat.completion.chunk",
+                          created: 1,
+                          model: "fixture-chat",
+                          choices: [
+                            { index: 0, delta: { role: "assistant", content: "Recovered hello" }, finish_reason: null },
+                          ],
+                        },
+                        {
+                          id: "fixture",
+                          object: "chat.completion.chunk",
+                          created: 1,
+                          model: "fixture-chat",
+                          choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+                        },
+                      ]
+                      return new Response(
+                        chunks.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`).join("") + "data: [DONE]\n\n",
+                        { headers: { "content-type": "text/event-stream" } },
+                      )
+                    }
+                    return new Response(null, { status: 404 })
+                  },
+                }),
+              ),
+              (server) => Effect.sync(() => server.stop(true)),
+            )
+            s.copilotFetch = (input, init) => {
+              const url = new URL(input instanceof Request ? input.url : String(input))
+              expect(url.protocol).toBe("https:")
+              expect(url.hostname).toBe("api.github.com")
+              return fetch(`${server.url.origin}${url.pathname}`, init)
+            }
+            yield* Effect.gen(function* () {
+              const aisdk = yield* AISDK.Service
+              const hooks = yield* PluginHooks.Service
+              // Bridge the fixture's plugin host registrations into the real AISDK service.
+              yield* aisdk.hook.sdk((event) =>
+                hooks.trigger("aisdk", "sdk", { ...event, model: event.model as Model.Info }).pipe(
+                  Effect.tap((output) =>
+                    Effect.sync(() => {
+                      event.sdk = output.sdk
+                    }),
+                  ),
+                  Effect.asVoid,
+                ),
+              )
+              yield* aisdk.hook.language((event) =>
+                hooks.trigger("aisdk", "language", { ...event, model: event.model as Model.Info }).pipe(
+                  Effect.tap((output) =>
+                    Effect.sync(() => {
+                      event.language = output.language
+                    }),
+                  ),
+                  Effect.asVoid,
+                ),
+              )
+              yield* GithubCopilotPlugin.effect(s.pluginHost)
+              const agents = yield* Agent.Service
+              yield* agents.transform((editor) =>
+                editor.update(Agent.defaultID, (agent) => {
+                  agent.steps = 2
+                }),
+              )
+              const providers = yield* Provider.Service
+              const models = yield* Model.Service
+              yield* providers.transform((editor) =>
+                editor.update(Provider.ID.githubCopilot, (provider) => {
+                  provider.activation = "enabled"
+                }),
+              )
+              yield* models.transform((editor) =>
+                editor.update(Provider.ID.githubCopilot, ID.make("fixture-chat"), (model) => {
+                  model.package = Provider.aisdk("@ai-sdk/github-copilot")
+                  model.modelID = ID.make("fixture-chat")
+                  model.settings = { baseURL: `${server.url.origin}/old`, endpoint: "chat" }
+                  model.enabled = true
+                  model.limit = defaultModelLimit
+                  model.capabilities = { tools: true, input: ["text"], output: ["text"] }
+                }),
+              )
+              const credential = yield* s.credentials.create({
+                id: Credential.ID.make("cred_http_auth_recovery"),
+                integrationID: Integration.ID.make("github-copilot"),
+                value: Credential.OAuth.make({
+                  type: "oauth",
+                  methodID: Integration.MethodID.make("device"),
+                  access: "fixture-token",
+                  refresh: "fixture-token",
+                  expires: 0,
+                  metadata: { apiEndpoint: `${server.url.origin}/old` },
+                }),
+              })
+              yield* s.db
+                .update(SessionTable)
+                .set({ model: { providerID: "github-copilot", id: "fixture-chat" } })
+                .where(eq(SessionTable.id, sessionID))
+                .run()
+              const result = yield* s.runPrompt("Hello").pipe(Effect.exit)
+              expect(paths).toEqual(
+                fixture.rotate
+                  ? ["/old/chat/completions", "/copilot_internal/user", "/new/chat/completions"]
+                  : ["/old/chat/completions", "/copilot_internal/user"],
+              )
+              expect(Exit.isFailure(result)).toBe(fixture.repeated || !fixture.rotate)
+              expect(authorizations).toEqual(
+                fixture.rotate ? ["Bearer fixture-token", "Bearer fixture-token"] : ["Bearer fixture-token"],
+              )
+              expect(bodies.every((body) => !body.includes(JSON.stringify(MAX_STEPS_PROMPT).slice(1, -1)))).toBe(true)
+              const started = yield* s.db
+                .select({ data: EventTable.data })
+                .from(EventTable)
+                .where(
+                  and(
+                    eq(EventTable.aggregate_id, sessionID),
+                    eq(
+                      EventTable.type,
+                      Event.versionedType(SessionEvent.Step.Started.type, SessionEvent.Step.Started.durable.version),
+                    ),
+                  ),
+                )
+                .all()
+              expect(new Set(started.map((event) => event.data.assistantMessageID))).toHaveProperty("size", 1)
+              const messages = yield* s.messages
+              const assistant = messages.findLast((message) => message.type === "assistant")
+              expect(assistant?.error !== undefined).toBe(fixture.repeated || !fixture.rotate)
+              if (!fixture.repeated && fixture.rotate) expect(JSON.stringify(messages)).toContain("Recovered hello")
+              const updated = yield* s.credentials.get(credential.id)
+              expect(updated?.value.type === "oauth" && updated.value.metadata?.apiEndpoint).toBe(
+                `${server.url.origin}/${fixture.rotate ? "new" : "old"}`,
+              )
+              expect(yield* s.credentials.list(Integration.ID.make("github-copilot"))).toHaveLength(1)
+              expect(
+                (yield* s.integrations.connection.active(Integration.ID.make("github-copilot")))?.status?.status,
+              ).toBe(fixture.repeated || !fixture.rotate ? "needs_auth" : undefined)
+              if (fixture.repeated || !fixture.rotate) {
+                const before = [...paths]
+                const blocked = yield* s.runPrompt("Try again without reconnecting").pipe(Effect.exit)
+                expect(Exit.isFailure(blocked)).toBe(true)
+                expect(paths).toEqual(before)
+                expect(authorizations).toHaveLength(fixture.rotate ? 2 : 1)
+              }
+            })
+          }),
+        20_000,
+      ),
+    )
+  })
 })
+;[
+  { name: "Snowflake authentication recovery permits only one HTTP retry", status: 401, token: undefined },
+  { name: "Snowflake environment override preserves the unused OAuth connection", status: 403, token: "fixture-env" },
+].forEach((fixture) =>
+  httpIt.live(
+    fixture.name,
+    () =>
+      withEnv(
+        { SNOWFLAKE_ACCOUNT: undefined, SNOWFLAKE_CORTEX_TOKEN: fixture.token, SNOWFLAKE_CORTEX_PAT: undefined },
+        () =>
+          Effect.gen(function* () {
+            const s = yield* setup
+            const paths: string[] = []
+            const auth: Array<string | null> = []
+            let refreshes = 0
+            const server = yield* Effect.acquireRelease(
+              Effect.sync(() =>
+                Bun.serve({
+                  port: 0,
+                  fetch(request) {
+                    const pathname = new URL(request.url).pathname
+                    paths.push(pathname)
+                    if (pathname === "/oauth/token-request") {
+                      refreshes++
+                      return Response.json({
+                        access_token: `new-${refreshes}`,
+                        refresh_token: `refresh-${refreshes}`,
+                        expires_in: 3600,
+                      })
+                    }
+                    if (pathname === "/chat/completions") {
+                      auth.push(request.headers.get("authorization"))
+                      return Response.json(
+                        { error: { message: "Rejected", type: "authentication_error" } },
+                        { status: fixture.status },
+                      )
+                    }
+                    return new Response(null, { status: 404 })
+                  },
+                }),
+              ),
+              (server) => Effect.sync(() => server.stop(true)),
+            )
+            const providerID = Provider.ID.make("snowflake-cortex")
+            const modelID = ID.make("recovery-fixture-model")
+            const providers = yield* Provider.Service
+            const models = yield* Model.Service
+            yield* providers.transform((editor) =>
+              editor.update(providerID, (provider) => {
+                provider.activation = "enabled"
+                provider.package = "@opencode/ai/providers/openai-compatible"
+                provider.settings = { baseURL: server.url.origin }
+              }),
+            )
+            yield* models.transform((editor) =>
+              editor.update(providerID, modelID, (model) => {
+                model.package = "@opencode/ai/providers/openai-compatible"
+                model.modelID = modelID
+                model.settings = { baseURL: server.url.origin }
+                model.enabled = true
+                model.limit = defaultModelLimit
+                model.capabilities = { tools: true, input: ["text"], output: ["text"] }
+              }),
+            )
+            const http = HttpClient.make((request) =>
+              Effect.gen(function* () {
+                expect(request.url).toBe("https://recovery-fixture.snowflakecomputing.com/oauth/token-request")
+                const web = yield* HttpClientRequest.toWeb(request).pipe(Effect.orDie)
+                const response = yield* Effect.promise(() =>
+                  fetch(new Request(`${server.url.origin}/oauth/token-request`, web)),
+                )
+                return HttpClientResponse.fromWeb(request, response)
+              }),
+            )
+            yield* SnowflakeCortexPlugin.effect(s.pluginHost).pipe(Effect.provideService(HttpClient.HttpClient, http))
+            const stored = yield* s.credentials.create({
+              integrationID: Integration.ID.make(providerID),
+              value: Credential.OAuth.make({
+                type: "oauth",
+                methodID: Integration.MethodID.make("browser"),
+                access: "old",
+                refresh: "refresh-old",
+                expires: Date.now() + 3600000,
+                metadata: { account: "recovery-fixture" },
+              }),
+            })
+            yield* s.db
+              .update(SessionTable)
+              .set({ model: { providerID, id: modelID } })
+              .where(eq(SessionTable.id, sessionID))
+              .run()
+            const exit = yield* s.runPrompt("Hello").pipe(Effect.exit)
+            expect(Exit.isFailure(exit)).toBe(true)
+            expect(refreshes).toBe(fixture.token ? 0 : 1)
+            expect(auth).toEqual(fixture.token ? ["Bearer fixture-env"] : ["Bearer old", "Bearer new-1"])
+            expect(paths).toEqual(
+              fixture.token
+                ? ["/chat/completions"]
+                : ["/chat/completions", "/oauth/token-request", "/chat/completions"],
+            )
+            expect((yield* s.credentials.get(stored.id))?.value).toHaveProperty(
+              "access",
+              fixture.token ? "old" : "new-1",
+            )
+            if (fixture.token)
+              expect((yield* s.integrations.connection.active(Integration.ID.make(providerID)))?.status).toBeUndefined()
+          }),
+      ),
+    20_000,
+  ),
+)
