@@ -3,7 +3,8 @@ import { Context, Effect, Layer } from "effect"
 import { Reactivity } from "effect/reactivity"
 import { SqlClient } from "effect/sql"
 import { classifySqliteError, SqlError } from "effect/sql/SqlError"
-import { retryLocked, Sqlite } from "./sqlite.js"
+import { isRecord } from "@opencode/ai/utils/record"
+import { Sqlite } from "./sqlite.js"
 
 const TypeId = "~@opencode/core/database/SqliteNode" as const
 
@@ -23,7 +24,7 @@ interface Config extends Sqlite.ClientConfig {
 }
 
 const isNodeSqliteError = (cause: unknown): cause is Record<string, unknown> =>
-  typeof cause === "object" && cause !== null && typeof cause["errcode"] === "number"
+  isRecord(cause) && typeof cause["errcode"] === "number"
 
 // node:sqlite reports SQLITE_BUSY and its kin as
 // { code: "ERR_SQLITE_ERROR", errcode: 5, errstr: "database is locked" } — no
@@ -47,7 +48,6 @@ const classifyNodeSqliteError = (cause: unknown, operation: string) => {
 const make = (options: Config) =>
   Effect.gen(function* () {
     const native = (yield* Sqlite.Native) as DatabaseSync
-    const retryIfAutocommit = retryLocked(() => native.isTransaction)
 
     const run = (query: string, params: ReadonlyArray<unknown> = []) =>
       Effect.withFiber<Array<Record<string, unknown>>, SqlError>((fiber) => {
@@ -58,7 +58,7 @@ const make = (options: Config) =>
         } catch (cause) {
           return Effect.fail(new SqlError({ reason: classifyNodeSqliteError(cause, "execute") }))
         }
-      }).pipe(retryIfAutocommit)
+      })
 
     const runValues = (query: string, params: ReadonlyArray<unknown> = []) =>
       Effect.withFiber<ReadonlyArray<ReadonlyArray<unknown>>, SqlError>((fiber) => {
@@ -72,7 +72,7 @@ const make = (options: Config) =>
         } catch (cause) {
           return Effect.fail(new SqlError({ reason: classifyNodeSqliteError(cause, "execute") }))
         }
-      }).pipe(retryIfAutocommit)
+      })
 
     const connection = Sqlite.makeConnection(run, runValues, {
       loadExtension: (path: string) =>
