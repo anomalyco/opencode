@@ -261,6 +261,25 @@ test("spells Chat Completions variants for direct providers", () => {
   ])
 })
 
+test("recognizes Claude family metadata for Bedrock inference profile ARNs", () => {
+  for (const family of ["claude-sonnet", "claude"]) {
+    const input = model("@opencode/ai/providers/amazon-bedrock", "arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/opaque") as Model.MutableInfo
+    input.family = Model.Family.make(family)
+
+    expect(resolve(Model.Info.make(input), [{ type: "effort", values: ["high"] }])).toEqual([
+      {
+        id: "high",
+        body: {
+          additionalModelRequestFields: {
+            thinking: { type: "adaptive", display: "summarized" },
+            output_config: { effort: "high" },
+          },
+        },
+      },
+    ])
+  }
+})
+
 test("spells Bedrock Converse Claude budgets as a thinking setting", () => {
   expect(
     resolve(model("@opencode/ai/providers/amazon-bedrock", "us.anthropic.claude-haiku-4-5-20251001-v1:0", 64_000), [
@@ -279,6 +298,22 @@ test("spells Bedrock Converse effort for Grok and Nova", () => {
     { id: "xhigh", body: { additionalModelRequestFields: { reasoning: { effort: "xhigh" } } } },
   ])
   expect(resolve(model("@opencode/ai/providers/amazon-bedrock", "us.amazon.nova-2-lite-v1:0"), supports)).toEqual([
+    {
+      id: "low",
+      body: { additionalModelRequestFields: { reasoningConfig: { type: "enabled", maxReasoningEffort: "low" } } },
+    },
+    {
+      id: "xhigh",
+      body: { additionalModelRequestFields: { reasoningConfig: { type: "enabled", maxReasoningEffort: "xhigh" } } },
+    },
+  ])
+
+  const inferenceProfile = model(
+    "@opencode/ai/providers/amazon-bedrock",
+    "arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/opaque",
+  ) as Model.MutableInfo
+  inferenceProfile.family = Model.Family.make("nova")
+  expect(resolve(Model.Info.make(inferenceProfile), supports)).toEqual([
     {
       id: "low",
       body: { additionalModelRequestFields: { reasoningConfig: { type: "enabled", maxReasoningEffort: "low" } } },

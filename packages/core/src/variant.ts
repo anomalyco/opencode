@@ -420,7 +420,7 @@ const openrouter: Protocol = (model, support) => {
 
 const bedrockConverse: Protocol = (model, support) => {
   const id = modelID(model)
-  const claude = id.includes("anthropic")
+  const claude = id.includes("anthropic") || model.family === "claude" || model.family?.startsWith("claude-")
   const fields = (fields: Record<string, unknown>): Overlay => ({ body: { additionalModelRequestFields: fields } })
   switch (support.type) {
     case "effort":
