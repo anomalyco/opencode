@@ -61,9 +61,7 @@ export function useProviders(directory: Accessor<string | undefined>) {
         .list()
         .filter((integration) => popularProviderSet.has(integration.id))
         .map((integration) => ({ id: integration.id, name: integration.name }))
-
-      const seen = new Set(catalog.map((integration) => integration.id))
-
+      const seen = new Set<string>(catalog.map((integration) => integration.id))
       return pipe(
         providers().all,
         Iterable.map(([, p]) => p),

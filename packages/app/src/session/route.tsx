@@ -1,3 +1,5 @@
+import { Model } from "@opencode/schema/model"
+import { Provider } from "@opencode/schema/provider"
 import { ErrorBoundary, createEffect, createMemo, Show, type ParentProps } from "solid-js"
 import { useParams } from "@solidjs/router"
 import { DataProvider } from "@opencode/session-ui/context"
@@ -73,9 +75,12 @@ function PreparingSession(props: { sessionID: string; pending: PendingSession })
               comments={readPromptPresentation(props.pending.message.metadata)?.comments}
               historicalAgent={props.pending.selection.agent}
               historicalModel={{
-                id: props.pending.selection.model.modelID,
-                providerID: props.pending.selection.model.providerID,
-                variant: props.pending.selection.variant,
+                id: Model.ID.make(props.pending.selection.model.modelID),
+                providerID: Provider.ID.make(props.pending.selection.model.providerID),
+                variant:
+                  props.pending.selection.variant === undefined
+                    ? undefined
+                    : Model.VariantID.make(props.pending.selection.variant),
               }}
             />
             <div

@@ -54,7 +54,7 @@ describe("visibleTimelineMessages", () => {
   test("keeps work above an undelivered steer without adding a thinking row", () => {
     const source = [...messages.slice(0, 3), work]
     const visible = visibleTimelineMessages(source, [steer])
-    expect(visible.map((message) => message.id)).toEqual(["msg_1", "msg_2", "msg_5", "msg_3"])
+    expect<unknown>(visible.map((message) => message.id)).toEqual(["msg_1", "msg_2", "msg_5", "msg_3"])
     expect(source.map((message) => message.id)).toEqual(["msg_1", "msg_2", "msg_3", "msg_5"])
     expect(visible[2]).toBe(work)
 
@@ -76,7 +76,7 @@ describe("visibleTimelineMessages", () => {
         ["TurnGap", "msg_3"],
         ["UserMessage", "msg_3"],
       ])
-      expect(
+      expect<unknown>(
         projection
           .assistantMessagesByParent()
           .get("msg_1")
@@ -91,7 +91,7 @@ describe("visibleTimelineMessages", () => {
         ["msg_1", 1],
         ["msg_3", 3],
       ])
-      expect([...projection.lastAssistantGroupKey()]).toEqual([["msg_1", "context:msg_5:tool_read"]])
+      expect<unknown>([...projection.lastAssistantGroupKey()]).toEqual([["msg_1", "context:msg_5:tool_read"]])
       expect(projection.rowByKey().get("user-message:msg_1")).toBe(projection.rows()[0])
       expect(projection.rowByKey().size).toBe(projection.rows().length)
       dispose()
@@ -148,8 +148,15 @@ describe("visibleTimelineMessages", () => {
     const pendingOrder = visibleTimelineMessages([...messages, noticeMessage, work], [...pending, notice])
 
     // The order the server delivers in: active work, then steers and notices by admission.
-    expect(pendingOrder.map((message) => message.id)).toEqual(["msg_1", "msg_2", "msg_5", "msg_3", "msg_4", "msg_4a"])
-    expect(visibleTimelineMessages(source, pending, "msg_4").map((message) => message.id)).toEqual([
+    expect<unknown>(pendingOrder.map((message) => message.id)).toEqual([
+      "msg_1",
+      "msg_2",
+      "msg_5",
+      "msg_3",
+      "msg_4",
+      "msg_4a",
+    ])
+    expect<unknown>(visibleTimelineMessages(source, pending, "msg_4").map((message) => message.id)).toEqual([
       "msg_1",
       "msg_2",
       "msg_3",
@@ -168,11 +175,15 @@ describe("visibleTimelineMessages", () => {
       },
     ] satisfies SessionInboxInfo[]
 
-    expect(visibleTimelineMessages(messages, pending).map((message) => message.id)).toEqual(["msg_1", "msg_2", "msg_4"])
+    expect<unknown>(visibleTimelineMessages(messages, pending).map((message) => message.id)).toEqual([
+      "msg_1",
+      "msg_2",
+      "msg_4",
+    ])
   })
 
   test("hides the staged revert boundary and later messages", () => {
-    expect(visibleTimelineMessages(messages, [], "msg_4").map((message) => message.id)).toEqual([
+    expect<unknown>(visibleTimelineMessages(messages, [], "msg_4").map((message) => message.id)).toEqual([
       "msg_1",
       "msg_2",
       "msg_3",
