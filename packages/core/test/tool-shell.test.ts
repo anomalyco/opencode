@@ -136,6 +136,7 @@ const shellPluginSupervisor = makeLocationNode({
     Permission.node,
     Session.node,
     Job.node,
+    Location.node,
     Shell.node,
     ShellSelect.node,
     Tool.node,
@@ -1572,6 +1573,12 @@ describe("ShellTool", () => {
             expect(settled.metadata).toMatchObject({ truncated: false })
             expect(shellID).toStartWith("sh_")
 
+            const jobs = yield* Job.Service
+            const location = yield* Location.Service
+            expect(yield* jobs.runningBackgroundShellLocations).toEqual([
+              Location.Ref.make({ directory: location.directory, workspaceID: location.workspaceID }),
+            ])
+
             const shell = yield* Shell.Service
             if (!shellID) return
             const id = ID.make(shellID)
@@ -1588,6 +1595,8 @@ describe("ShellTool", () => {
             ])
             expect((yield* shell.list()).map((info) => info.id)).toContain(id)
             expect((yield* shell.wait(id)).status).toBe("timeout")
+            yield* jobs.wait({ id: shellID })
+            expect(yield* jobs.runningBackgroundShellLocations).toEqual([])
             expect((yield* Fiber.join(admitted)).valueOrUndefined?.data.item.payload).toMatchObject({
               text: expect.stringContaining("Timed out before completion"),
               description: idleCommand,

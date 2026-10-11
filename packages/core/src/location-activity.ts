@@ -2,6 +2,7 @@ export * as LocationActivity from "./location-activity.js"
 
 import { Clock, Context, Duration, Effect, Layer, RcMap, Schema } from "effect"
 import { Bus } from "./bus.js"
+import { Job } from "./job.js"
 import { Location } from "./location.js"
 import { LocationServiceMap } from "./location-service-map.js"
 import { SessionEvent } from "./session/event.js"
@@ -22,6 +23,7 @@ export function layer(options: { readonly timeToLive?: Duration.Input; readonly 
       const locations = yield* LocationServiceMap.Service
       const execution = yield* SessionExecution.Service
       const sessions = yield* SessionStore.Service
+      const jobs = yield* Job.Service
       const timeToLive = Duration.toMillis(options.timeToLive ?? "60 minutes")
       const entries = new Map<string, { readonly ref: Location.Ref; expiresAt: number }>()
       const key = (ref: Location.Ref) => `${LocationServiceMap.canonical(ref).directory}\0${ref.workspaceID ?? ""}`
@@ -29,6 +31,9 @@ export function layer(options: { readonly timeToLive?: Duration.Input; readonly 
         Effect.sync(() => {
           entries.set(key(ref), { ref, expiresAt: clock.currentTimeMillisUnsafe() + timeToLive })
         })
+      const runningShellLocations = jobs.runningBackgroundShellLocations.pipe(
+        Effect.map((running) => new Set(running.map(key))),
+      )
 
       const unsubscribe = yield* bus.listen((event) => {
         if (!isSessionEvent(event)) return Effect.void
@@ -50,11 +55,16 @@ export function layer(options: { readonly timeToLive?: Duration.Input; readonly 
         const now = clock.currentTimeMillisUnsafe()
         const expired = Array.from(entries.values()).filter((entry) => entry.expiresAt <= now)
         if (expired.length === 0) return
+        const shells = yield* runningShellLocations
         const active = yield* Effect.forEach(yield* execution.active, (sessionID) => sessions.get(sessionID))
         yield* Effect.forEach(
           expired,
           (entry) =>
             Effect.gen(function* () {
+              if (shells.has(key(entry.ref))) {
+                yield* touch(entry.ref)
+                return
+              }
               const owners = active.flatMap((session) =>
                 session && key(session.location) === key(entry.ref) ? [session] : [],
               )
@@ -69,8 +79,11 @@ export function layer(options: { readonly timeToLive?: Duration.Input; readonly 
                 },
               )
               const remaining = yield* Effect.forEach(yield* execution.active, (sessionID) => sessions.get(sessionID))
-              // New work admitted during cleanup may now own the cached graph.
-              if (remaining.some((session) => session && key(session.location) === key(entry.ref))) {
+              // New execution or a background shell admitted during cleanup may now own the cached graph.
+              if (
+                remaining.some((session) => session && key(session.location) === key(entry.ref)) ||
+                (yield* runningShellLocations).has(key(entry.ref))
+              ) {
                 yield* touch(entry.ref)
                 return
               }
@@ -92,5 +105,5 @@ export function layer(options: { readonly timeToLive?: Duration.Input; readonly 
 export const node = makeGlobalNode({
   service: Service,
   layer: layer(),
-  deps: [Bus.node, LocationServiceMap.node, SessionExecution.node, SessionStore.node],
+  deps: [Bus.node, LocationServiceMap.node, SessionExecution.node, SessionStore.node, Job.node],
 })
