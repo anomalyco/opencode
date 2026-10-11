@@ -4,7 +4,7 @@ export * from "./session/schema.js"
 import { Effect, Layer, Schema, Context, Stream } from "effect"
 import { LLMClient } from "@opencode/ai"
 import { ListAnchor } from "@opencode/schema/session"
-import { and, desc, eq } from "drizzle-orm"
+import { and, desc, eq, sql } from "drizzle-orm"
 import { Project } from "./project.js"
 import { Model } from "@opencode/schema/model"
 import { Location } from "./location.js"
@@ -182,6 +182,16 @@ export interface Interface {
     sessionID: SessionSchema.ID
     permissions: Permission.Ruleset
   }) => Effect.Effect<void, NotFoundError>
+  /**
+   * Stores the child Session ID on a running subagent tool call. Progress is live-only, so restart
+   * recovery relies on this to tell the parent which child it can continue.
+   */
+  readonly linkSubagent: (input: {
+    sessionID: SessionSchema.ID
+    messageID: SessionMessage.ID
+    callID: string
+    childSessionID: SessionSchema.ID
+  }) => Effect.Effect<void>
   readonly move: SessionMove.Interface["move"]
   readonly prompt: (
     input: Parameters<Session.Handle["prompt"]>[0] & { sessionID: SessionSchema.ID },
@@ -435,6 +445,24 @@ const layer = Layer.effect(
       rename: (input) => sessions.forSession(input.sessionID).rename(input),
       setMetadata: (input) => sessions.forSession(input.sessionID).setMetadata(input),
       setPermissions: (input) => sessions.forSession(input.sessionID).setPermissions(input),
+      // json_set ignores the NULL path produced when no running tool part matches.
+      linkSubagent: (input) =>
+        db
+          .update(SessionMessageTable)
+          .set({
+            data: sql`json_set(${SessionMessageTable.data}, (
+              SELECT '$.content[' || part.key || '].state.metadata.sessionID'
+              FROM json_each(${SessionMessageTable.data}, '$.content') AS part
+              WHERE json_extract(part.value, '$.type') = 'tool'
+                AND json_extract(part.value, '$.id') = ${input.callID}
+                AND json_extract(part.value, '$.state.status') = 'running'
+            ), ${input.childSessionID})`,
+          })
+          .where(
+            and(eq(SessionMessageTable.id, input.messageID), eq(SessionMessageTable.session_id, input.sessionID)),
+          )
+          .run()
+          .pipe(Effect.orDie, Effect.asVoid),
       move: moves.move,
       compact: (input) => sessions.forSession(input.sessionID).compact(input),
       wait: (sessionID) => sessions.forSession(sessionID).wait(),

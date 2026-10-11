@@ -464,6 +464,81 @@ describe("SubagentTool", () => {
     ),
   )
 
+  it.live("persists the child session on the running tool before prompting the child", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+          const sessions = yield* Session.Service
+          const bus = yield* Bus.Service
+          const parent = yield* sessions.create({ location, model: parentModel })
+          yield* withSubagent(parent.location)
+          const locations = yield* LocationServiceMap.Service
+          const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
+          const assistantMessageID = SessionMessage.ID.create()
+          const call = {
+            type: "tool-call" as const,
+            id: "call-linked-subagent",
+            name: SubagentTool.name,
+            input: { agent: "reviewer", description: "review", prompt: "review this" },
+          }
+          yield* bus.publish(SessionEvent.Step.Started, {
+            sessionID: parent.id,
+            assistantMessageID,
+            agent: toolIdentity.agent,
+            model: parentModel,
+            started: 0,
+          })
+          yield* bus.publish(SessionEvent.Tool.Input.Started, {
+            sessionID: parent.id,
+            assistantMessageID,
+            id: call.id,
+            name: call.name,
+          })
+          yield* bus.publish(SessionEvent.Tool.Called, {
+            sessionID: parent.id,
+            assistantMessageID,
+            id: call.id,
+            input: call.input,
+            executed: false,
+          })
+          const toolState = () =>
+            sessions.context(parent.id).pipe(
+              Effect.orDie,
+              Effect.map((messages) =>
+                messages.flatMap((message) =>
+                  message.type === "assistant"
+                    ? message.content.flatMap((part) => (part.type === "tool" ? [part.state] : []))
+                    : [],
+                ),
+              ),
+            )
+          const admitted = yield* Deferred.make<unknown>()
+          yield* bus.project(SessionEvent.InboxEnqueued, (event) =>
+            event.data.sessionID === parent.id
+              ? Effect.void
+              : toolState().pipe(Effect.flatMap((state) => Deferred.succeed(admitted, state))),
+          )
+
+          const settled = yield* executeTool(registry, {
+            sessionID: parent.id,
+            agent: toolIdentity.agent,
+            messageID: assistantMessageID,
+            call,
+          })
+
+          const childID = outputSessionID(settled.metadata)
+          expect(yield* Deferred.await(admitted)).toEqual([
+            { status: "running", input: call.input, metadata: { sessionID: childID } },
+          ])
+        }),
+      ),
+    ),
+  )
+
   it.live("continues an existing child session", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),

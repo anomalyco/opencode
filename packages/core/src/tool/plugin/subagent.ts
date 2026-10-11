@@ -198,6 +198,12 @@ export const Plugin = {
                   ))
 
               const background = input.background === true
+              yield* sessions.linkSubagent({
+                sessionID: context.sessionID,
+                messageID: context.messageID,
+                callID: context.id,
+                childSessionID: child.id,
+              })
               yield* context.progress({ sessionID: child.id, status: "running" })
 
               // Standard prompt admission outside the job: Job.start joining a running child skips
