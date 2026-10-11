@@ -89,8 +89,8 @@ test("scopes sessions to the active session location", async () => {
                   <ToastProvider>
                     <RouteProvider>
                       <ClientProvider api={createApi(calls.fetch)}>
-                        <PermissionProvider>
-                          <DataProvider directory={process.cwd()}>
+                        <DataProvider directory={process.cwd()}>
+                          <PermissionProvider>
                             <LocationProvider>
                               <SessionTabsProvider>
                                 <ThemeProvider mode="dark" source={emptyThemeSource}>
@@ -102,8 +102,8 @@ test("scopes sessions to the active session location", async () => {
                                 </ThemeProvider>
                               </SessionTabsProvider>
                             </LocationProvider>
-                          </DataProvider>
-                        </PermissionProvider>
+                          </PermissionProvider>
+                        </DataProvider>
                       </ClientProvider>
                     </RouteProvider>
                   </ToastProvider>

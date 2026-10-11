@@ -205,7 +205,9 @@ export function Session(props: {
       (sessionID) => data.session.permission.list(sessionID) ?? [],
     )
   })
-  const promptedPermissions = createMemo(() => (local.permission.mode === "autoaccept" ? [] : permissions()))
+  const promptedPermissions = createMemo(() =>
+    local.permission.mode(route.sessionID) === "autoaccept" ? [] : permissions(),
+  )
   const forms = createMemo(() => {
     const global = data.session.form.list("global", location()) ?? []
     if (session()?.parentID) return global
@@ -260,7 +262,7 @@ export function Session(props: {
   const client = useClient()
   const autoApproved = new Set<string>()
   createEffect(() => {
-    if (local.permission.mode !== "autoaccept") return
+    if (local.permission.mode(route.sessionID) !== "autoaccept") return
     permissions().forEach((request) => {
       if (autoApproved.has(request.id)) return
       autoApproved.add(request.id)
@@ -1091,6 +1093,20 @@ export function Session(props: {
           .update((draft) => {
             draft.session = { ...draft.session, verbosity: next }
           })
+          .catch(toast.error)
+        dialog.clear()
+      },
+    },
+    {
+      title:
+        local.permission.mode(route.sessionID) === "autoaccept"
+          ? "Prompt for permissions in this session"
+          : "Auto-accept permissions in this session",
+      id: "session.permissions.toggle",
+      group: "Session",
+      run: () => {
+        void local.permission
+          .set(route.sessionID, local.permission.mode(route.sessionID) === "autoaccept" ? "prompt" : "autoaccept")
           .catch(toast.error)
         dialog.clear()
       },
@@ -2636,7 +2652,7 @@ function useToolPermission(part: () => SessionMessageAssistantTool | undefined) 
   const data = useData()
   const local = useLocal()
   return createMemo(() => {
-    if (local.permission.mode === "autoaccept") return false
+    if (local.permission.mode(ctx.sessionID) === "autoaccept") return false
     const request = data.session.permission.list(ctx.sessionID)?.[0]
     return request?.source?.type === "tool" && request.source.id === part()?.id
   })

@@ -174,7 +174,7 @@ export const Info = Schema.Struct({
         description: "Start new sessions in the TUI launch directory or inherit the active session location",
       }),
       permissions: Schema.optional(Schema.Literals(["prompt", "autoaccept"])).annotate({
-        description: "Prompt for permission requests or accept them automatically",
+        description: "Prompt for permission requests or accept them automatically, unless a session sets its own mode",
       }),
     }),
   ).annotate({ description: "Session transcript presentation settings" }),
