@@ -1,4 +1,8 @@
-export const dict: Record<string, string> = {
+import en from "./en"
+
+type Keys = keyof typeof en
+
+export const dict = {
   "desktop.menu.app": "OpenCode",
   "desktop.menu.file": "ཡིག༌སྣོད",
   "desktop.menu.edit": "ཞུན༌དག",
@@ -294,9 +298,6 @@ export const dict: Record<string, string> = {
   "dialog.server.add.passwordPlaceholder": "གསང༌ཨང",
   "dialog.server.edit.title": "སར་བར་ཞུན་དག་འབད།",
   "dialog.server.menu.edit": "ཞུན༌དག",
-  "dialog.server.menu.default": "སྔོན་སྒྲིག་སྦེ་གཞི་སྒྲིག་འབད།",
-  "dialog.server.menu.defaultRemove": "སྔོན་སྒྲིག་རྩ་བསྐྲད་གཏང་།",
-  "dialog.server.status.default": "འཐུས་ཤོར",
   "dialog.project.edit.title": "ཞུན་དག་ལས་གཞི།",
   "dialog.project.edit.icon": "ངོས་དཔར།",
   "dialog.project.edit.icon.alt": "ལས་འགུལ་ངོས་དཔར།",
@@ -304,10 +305,6 @@ export const dict: Record<string, string> = {
   "dialog.project.edit.color.select": "{{color}}ཚོས་གཞི་སེལ་འཐུ་འབད།",
   "dialog.project.edit.worktree.startup": "ལཱ་གི་ས་སྒོ་འགོ་བཙུགས་ཡིག་ཚུགས་ཚུ།",
   "dialog.project.edit.worktree.startup.placeholder": "e.g. bun བཙུགས།",
-  "dialog.releaseNotes.action.getStarted": "འགོ་བཙུགས།",
-  "dialog.releaseNotes.action.next": "ཤུལ༌མའི",
-  "dialog.releaseNotes.action.hideFuture": "མ་འོངས་པར་འདི་དག་མ་སྟོན།",
-  "dialog.releaseNotes.media.alt": "སྔོན་ལྟ་གསར་བཏོན་འབད།",
   "toast.permissions.autoaccept.on.title": "རང་བཞིན་དང་ལེན་གནང་བ་ཚུ།",
   "toast.permissions.autoaccept.on.description": "གནང་བ་ཞུ་བ་ཚུ་ རང་བཞིན་གྱིས་ ཆ་འཇོག་འབད་འོང་།",
   "toast.permissions.autoaccept.off.title": "རང་བཞིན་དང་ལེན་གནང་བ་ཚུ་ བཀག་བཞག་ཡོདཔ།",
@@ -723,7 +720,6 @@ export const dict: Record<string, string> = {
   "session.view.select": "ལཱ་ཡུན་མཐོང་སྣང་།",
   "session.background.moveRunning": "རྒྱབ་གཞི་ལུ་སྤོ་བཤུད་འབད།",
   "session.timeline.working": "ལཱ་འབད་དོ།",
-  "session.review.wrapLines": "གྲལ་ཐིག་ཚུ་བསྡམས།",
   "session.websearch.title": "ཕྱོགས་གསུམ་པའི་དྲ་རྒྱའི་འཚོལ་ཞིབ།",
   "session.websearch.description": "ཝེབ་འཚོལ་ཞིབ་འབད་ནི་ལུ་ལག་ལེན་འཐབ་མི་ འཚོལ་ཞིབ་བྱིན་མི་ལས་ཚབ་ཚུ་སེལ་འཐུ་འབད།",
   "session.websearch.provider": "འཚོལ་ཞིབ་བྱིན་མི།",
@@ -786,8 +782,6 @@ export const dict: Record<string, string> = {
   "settings.timeline.category.subagents": "ཡན་ལག་ལས་ཚབ་ཚུ།",
   "settings.timeline.category.notices": "གསལ་བསྒྲགས།",
   "settings.timeline.category.tools": "ལག་ཆ་གཞན།",
-  "settings.general.row.mobileDiffWrap.description":
-    "འཕྲེད་ལ་བཤུད་སྒྲིལ་འབད་ནིའི་ཚབ་ལུ་ འགྲུལ་འཕྲིན་ཁྱད་པར་ཚུ་ནང་གྲལ་ཐིག་རིངམོ་ཚུ་བསྡམས།",
   "provider.connect.error.unsupportedFields": "བདེན་བཤད་འབྲི་ཤོག་འདི་ནང་ རྒྱབ་སྐྱོར་མེད་པའི་ས་སྒོ་ཚུ་ཡོདཔ་ཨིན།",
   "settings.about.writtenByNames": "{{names}}གིས་བྲིས།",
   "settings.about.illustratedByNames": "{{names}} གིས་པར་རིས་བཀོད་ཡོད།",
@@ -800,8 +794,6 @@ export const dict: Record<string, string> = {
   "server.connect.button": "མཐུད།",
   "server.connect.address.invalid": "ནུས་ཅན་ HTTP ཡང་ན་ HTTPS སར་བར་ཁ་བྱང་ཅིག་བཙུགས།",
   "server.connect.failed": "མཐུད་མ་ཚུགས། སར་བར་ཁ་བྱང་དང་ཆོག་ཡིག་ཞིབ་དཔྱད་འབད་ཞིནམ་ལས་ ལོག་སྟེ་འབད་རྩོལ་བསྐྱེད།",
-  "server.connect.pair.description":
-    "ཁྱོད་རའི་མཐུད་ལམ་རྒྱས་བཤད་ཚུ་ཐོབ་ནིའི་དོན་ལུ་ ཁྱོད་རའི་གློག་རིག་གུ་བརྡ་བཀོད་འདི་གཡོག་བཀོལ།",
   "server.connect.scan": "QR གསང་གྲངས་པར་བཤུས་",
   "server.connect.scan.description": "ཁྱོད་རའི་པར་ཆས་འདི་ opencode pair གིས་སྟོན་མི་ QR གསང་ཡིག་ལུ་སྟོན་དགོ།",
   "server.connect.scan.invalid":
@@ -810,7 +802,6 @@ export const dict: Record<string, string> = {
   "server.connect.camera.starting": "པར་ཆས་ཁ་ཕྱེ་དོ...",
   "server.connect.mixedContent":
     "HTTPS ཤོག་ལེབ་ཅིག་ལས་ HTTP སར་བར་འདི་ལུ་མཐུད་མ་ཚུགས། དེ་གི་ཚབ་ལུ་ HTTPS སར་བར་ཁ་བྱང་ཅིག་ལག་ལེན་འཐབ།",
-  "server.connect.camera.insecure": "QR པར་ལེན་འབད་ནི་ལུ་ ཤོག་ལེབ་འདི་ HTTPS ཡང་ན་ localhost གུ་ཁ་ཕྱེ་དགོཔ་ཨིན།",
   "server.connect.camera.unavailable": "བརྡ་འཚོལ་འདི་ལུ་པར་ཆས་མེད། ཁྱོད་རའི་མཐུད་ལམ་རྒྱས་བཤད་ཚུ་ལག་ཐོག་ལས་བཙུགས།",
   "server.connect.camera.error":
     "པར་ཆས་ཁ་ཕྱེ་མ་ཚུགས། པར་ཆས་འཛུལ་སྤྱོད་འབད་བཅུགཔ་ ཡང་ན་ ཁྱོད་རའི་མཐུད་ལམ་རྒྱས་བཤད་ཚུ་ལག་ཐོག་ལས་བཙུགས།",
@@ -916,4 +907,4 @@ export const dict: Record<string, string> = {
   "prompt.toast.uploading.percent": "{{percent}}%",
   "prompt.toast.uploading.cancelFile": "{{filename}} སྐྱེལ་བཙུགས་འབད་ནི་ཆ་མེད་བཏང་།",
   "prompt.toast.uploadFailed.title": "སྐྱེལ་བཙུགས་འཐུས་ཤོར།",
-}
+} satisfies Partial<Record<Keys, string>>

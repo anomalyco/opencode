@@ -28,6 +28,7 @@ export interface ScrollViewProps extends ComponentProps<"div"> {
 
 export const scrollKey = (event: Pick<KeyboardEvent, "key" | "altKey" | "ctrlKey" | "metaKey" | "shiftKey">) => {
   if (event.altKey || event.ctrlKey || event.metaKey) return
+
   if (event.shiftKey && event.key !== " ") return
 
   switch (event.key) {
@@ -50,6 +51,7 @@ export const scrollKey = (event: Pick<KeyboardEvent, "key" | "altKey" | "ctrlKey
 
 export function canScrollKey(element: HTMLElement, key: NonNullable<ReturnType<typeof scrollKey>>) {
   const up = key === "up" || key === "page-up" || key === "home"
+
   return up ? element.scrollTop > 0 : element.scrollTop + element.clientHeight < element.scrollHeight
 }
 
@@ -60,16 +62,23 @@ export function scrollKeyOwner(
 ) {
   const element = target instanceof Element ? target : undefined
   const owner = element?.closest<HTMLElement>("[data-scrollable]")
+
   if (!owner || owner === root) return root
+
   if (!root.contains(owner)) return owner
+
   return canScrollKey(owner, key) ? owner : root
 }
 
 export function isScrollKeyTarget(target: EventTarget | null, key: NonNullable<ReturnType<typeof scrollKey>>) {
   const element = target instanceof HTMLElement ? target : undefined
+
   if (!element) return true
+
   if (["INPUT", "TEXTAREA", "SELECT"].includes(element.tagName) || element.isContentEditable) return false
+
   if ((key === "page-up" || key === "page-down") && element.closest('button, a[href], [role="button"]')) return false
+
   return true
 }
 
@@ -106,18 +115,23 @@ export function scrollOffsetFromThumbPointer(input: {
 }) {
   const padding = 8
   const maxThumbStart = input.clientSize - padding * 2 - input.thumbSize
+
   if (maxThumbStart <= 0) return 0
+
   const thumbStart = Math.max(
     0,
     Math.min(input.pointer - input.viewportStart - padding - input.grabOffset, maxThumbStart),
   )
+
   const progress = input.reverse ? 1 - thumbStart / maxThumbStart : thumbStart / maxThumbStart
+
   return progress * Math.max(0, input.scrollSize - (input.scrollClientSize ?? input.clientSize))
 }
 
 export function ScrollView(props: ScrollViewProps) {
   const i18n = useI18n()
   const merged = mergeProps({ orientation: "vertical", thumbVisibility: "hover" }, props)
+
   const [local, events, rest] = splitProps(
     merged,
     [
@@ -165,6 +179,7 @@ export function ScrollView(props: ScrollViewProps) {
     horizontalThumbStart: 0,
     showHorizontalThumb: false,
   })
+
   const isHovered = () => state.isHovered
   const isDragging = () => state.dragging !== undefined
   const isScrolling = () => state.isScrolling
@@ -175,13 +190,16 @@ export function ScrollView(props: ScrollViewProps) {
 
   const markScrolling = () => {
     setState("isScrolling", true)
+
     if (scrollIdleTimer !== undefined) clearTimeout(scrollIdleTimer)
     scrollIdleTimer = setTimeout(() => setState("isScrolling", false), 800)
   }
 
   const thumbVisible = () => {
     if (isDragging()) return true
+
     if (isScrolling()) return true
+
     return local.thumbVisibility === "hover" && isHovered()
   }
 
@@ -198,9 +216,11 @@ export function ScrollView(props: ScrollViewProps) {
       const adjustment = local.verticalScrollAdjustment ?? 0
       const scrollHeight = viewportRef.scrollHeight + adjustment
       const trackSize = Math.max(0, (thumbMount()?.clientHeight || viewportRef.clientHeight) - trackPadding * 2)
+
       const size = trackSize
         ? Math.min(trackSize, Math.max((viewportRef.clientHeight / scrollHeight) * trackSize, minThumbSize))
         : 0
+
       const maxScroll = scrollHeight - viewportRef.clientHeight
       const maxStart = trackSize - size
       setState("showVerticalThumb", maxScroll > 0)
@@ -215,9 +235,11 @@ export function ScrollView(props: ScrollViewProps) {
 
     if (horizontal()) {
       const trackSize = Math.max(0, (thumbMount()?.clientWidth || viewportRef.clientWidth) - trackPadding * 2)
+
       const size = trackSize
         ? Math.min(trackSize, Math.max((viewportRef.clientWidth / viewportRef.scrollWidth) * trackSize, minThumbSize))
         : 0
+
       const maxScroll = viewportRef.scrollWidth - viewportRef.clientWidth
       const maxStart = trackSize - size
       const rtl = getComputedStyle(viewportRef).direction === "rtl"
@@ -262,6 +284,7 @@ export function ScrollView(props: ScrollViewProps) {
 
   createEffect(() => {
     const target = thumbHover()
+
     if (!target) return
 
     const enter = () => setState("isHovered", true)
@@ -288,10 +311,12 @@ export function ScrollView(props: ScrollViewProps) {
     prepareScroll()
     setState("dragging", axis)
     const thumb = axis === "vertical" ? verticalThumbRef : horizontalThumbRef
+
     const grabOffset =
       axis === "vertical"
         ? e.clientY - thumb.getBoundingClientRect().top
         : e.clientX - thumb.getBoundingClientRect().left
+
     const track = thumbMount() ?? viewportRef
 
     thumb.setPointerCapture(e.pointerId)
@@ -300,6 +325,7 @@ export function ScrollView(props: ScrollViewProps) {
       prepareScroll()
       const vertical = axis === "vertical"
       const rtl = !vertical && getComputedStyle(viewportRef).direction === "rtl"
+
       const offset = scrollOffsetFromThumbPointer({
         pointer: vertical ? e.clientY : e.clientX,
         viewportStart: vertical ? track.getBoundingClientRect().top : track.getBoundingClientRect().left,
@@ -310,10 +336,13 @@ export function ScrollView(props: ScrollViewProps) {
         thumbSize: vertical ? state.verticalThumbSize : state.horizontalThumbSize,
         reverse: rtl,
       })
+
       if (vertical) {
         viewportRef.scrollTop = offset
+
         return
       }
+
       viewportRef.scrollLeft = rtl ? -offset : offset
     }
 
@@ -375,7 +404,9 @@ export function ScrollView(props: ScrollViewProps) {
     if (document.activeElement && ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)) {
       return
     }
+
     const next = scrollKey(e)
+
     // Modified navigation (for example Ctrl+Home) stays native, but must read
     // the same reconciled geometry as the keys handled by this component.
     const intent =
@@ -387,11 +418,15 @@ export function ScrollView(props: ScrollViewProps) {
         ctrlKey: false,
         metaKey: false,
       })
+
     if (!intent) return
+
     if (!isScrollKeyTarget(e.target, intent)) return
+
     if (scrollKeyOwner(viewportRef, e.target, intent) !== viewportRef) return
 
     prepareScroll()
+
     if (!next) return
     const scrollAmount = viewportRef.clientHeight * 0.8
     const lineAmount = 40
@@ -446,12 +481,15 @@ export function ScrollView(props: ScrollViewProps) {
         onScroll={(e) => {
           updateThumb()
           markScrolling()
+
           if (typeof events.onScroll === "function") events.onScroll(e as any)
         }}
         onWheel={(e) => {
           markScrolling()
           const handler = events.onWheel
+
           if (typeof handler === "function") handler(e as any)
+
           if (Array.isArray(handler)) handler[0](handler[1], e as any)
         }}
         onTouchStart={events.onTouchStart as any}
@@ -465,6 +503,7 @@ export function ScrollView(props: ScrollViewProps) {
         aria-label={i18n.t("ui.scrollView.ariaLabel")}
         onKeyDown={(e) => {
           onKeyDown(e)
+
           if (typeof events.onKeyDown === "function") events.onKeyDown(e as any)
         }}
       >

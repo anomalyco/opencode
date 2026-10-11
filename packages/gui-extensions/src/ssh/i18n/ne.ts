@@ -34,8 +34,5 @@ export default {
   "form.name": "सर्भर नाम (वैकल्पिक)",
   "form.namePlaceholder": "Localhost",
   "form.add": "सर्भर थप्नुहोस्",
-  "server.default": "पूर्वनिर्धारित",
-  "menu.default": "पूर्वनिर्धारित रूपमा सेट गर्नुहोस्",
-  "menu.defaultRemove": "पूर्वनिर्धारित हटाउनुहोस्",
   "menu.delete": "मेट्नुहोस्",
 }

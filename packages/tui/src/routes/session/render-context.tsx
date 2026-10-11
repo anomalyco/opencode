@@ -1,4 +1,5 @@
 import { createContext, useContext } from "solid-js"
+import type { Renderable } from "@opentui/core"
 import type { ModelInfo } from "@opencode/client"
 import type { SessionInbox } from "@opencode/schema/session-inbox"
 import type { useConfig } from "../../config"
@@ -21,7 +22,8 @@ export const context = createContext<{
   anchors: ReturnType<typeof createTimelineAnchors>
   /** Saved disclosure, falling back to the verbosity default for the group kind. */
   groupExpanded: (groupID: string, kind: GroupKind) => boolean
-  setGroupExpanded: (groupID: string, expanded: boolean) => void
+  /** An anchor keeps its viewport row through the layout change the toggle causes. */
+  setGroupExpanded: (groupID: string, expanded: boolean, anchor?: Renderable | null) => void
   thinkingMode: () => ThinkingMode
   markdownMode: () => "source" | "rendered"
   groupExploration: () => boolean

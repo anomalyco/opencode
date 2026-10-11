@@ -30,13 +30,17 @@ export const SettingsProjects: Component<{
   const context = createMemo(() => global.ensureServerCtx(props.server))
   const projects = createMemo(() => settingsProjects(context()))
   const searchable = createMemo(() => projects().length > 7)
+
   const filtered = createMemo(() => {
     const query = searchable() ? store.filter.trim().toLowerCase() : ""
+
     return query ? projects().filter((project) => displayName(project).toLowerCase().includes(query)) : projects()
   })
+
   createEffect(() => {
     if (!searchable()) setStore("filter", "")
   })
+
   const addProject = () =>
     pickDirectory({
       server: props.server,
@@ -45,11 +49,15 @@ export const SettingsProjects: Component<{
       onSelect: (result) => {
         const directories = homeProjectDirectories(result)
         const directory = addProjects(context(), directories)
+
         if (!directory) return
+
         if (directories.length > 1) return
+
         const project = context()
           .projects.list()
           .find((item) => item.worktree === directory)
+
         if (!project) return
         props.onOpenProject(project)
       },

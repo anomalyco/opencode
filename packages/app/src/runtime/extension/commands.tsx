@@ -39,5 +39,6 @@ export function ExtensionCommands() {
         onSelect: (_source: unknown, input?: string) => item.value.run(input),
       })),
   )
+
   return null
 }

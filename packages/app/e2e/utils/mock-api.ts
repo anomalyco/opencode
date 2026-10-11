@@ -1,16 +1,31 @@
-import { Schema, SchemaGetter } from "effect"
-import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/unstable/httpapi"
+import { Predicate, Schema, SchemaGetter } from "effect"
+import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api"
 import { Pty } from "@opencode/schema/pty"
 import { Worktree } from "@opencode/schema/worktree"
 
+// Handlers answer plain fixture data: undefined properties are dropped, and other non-JSON values become null.
 const Json = Schema.Json.pipe(
   Schema.decodeTo(Schema.Unknown, {
     decode: SchemaGetter.passthrough(),
-    encode: SchemaGetter.transform(jsonValue),
+    encode: SchemaGetter.transform(function json(value): Schema.Json {
+      if (value === null || Predicate.isString(value) || Predicate.isBoolean(value)) return value
+
+      if (Predicate.isNumber(value)) return Number.isFinite(value) ? value : null
+
+      if (Array.isArray(value)) return value.map(json)
+
+      if (!Predicate.isObject(value)) return null
+
+      return Object.fromEntries(
+        Object.entries(value).flatMap(([key, item]) => (item === undefined ? [] : [[key, json(item)]])),
+      )
+    }),
   }),
   HttpApiSchema.asJson(),
 )
+
 const JsonPayload = Schema.Unknown.pipe(HttpApiSchema.asJson())
+
 const Query = Schema.Struct({
   directory: Schema.optional(Schema.String),
   parentID: Schema.optional(Schema.String),
@@ -23,8 +38,11 @@ const Query = Schema.Struct({
   type: Schema.optional(Schema.String),
   mode: Schema.optional(Schema.String),
 })
+
 const SessionParams = { sessionID: Schema.String }
+
 const PtyParams = { ptyID: Pty.ID }
+
 const NoContent = HttpApiSchema.NoContent
 
 export class MockNotFound extends Schema.TaggedError<MockNotFound>()("MockNotFound", {
@@ -45,11 +63,25 @@ export class MockShellNotFound extends Schema.TaggedError<MockShellNotFound>()("
   message: Schema.String,
 }) {}
 
+// The server's error for an unknown PTY, or one owned by another workspace.
+export class MockPtyNotFound extends Schema.TaggedError<MockPtyNotFound>()("PtyNotFoundError", {
+  ptyID: Schema.String,
+  message: Schema.String,
+}) {}
+
+// The server's error for a request without its password.
+export class MockUnauthorized extends Schema.TaggedError<MockUnauthorized>()("UnauthorizedError", {
+  message: Schema.String,
+}) {}
+
 // A mutation the scenario did not configure a handler for.
 export class MockUnsupported extends Schema.TaggedError<MockUnsupported>()("MockUnsupported", {
   message: Schema.String,
 }) {}
+
 const Unsupported = MockUnsupported.pipe(HttpApiSchema.status(501))
+
+const PtyMissing = [MockNotFound.pipe(HttpApiSchema.status(404)), MockPtyNotFound.pipe(HttpApiSchema.status(404))]
 
 const Group = HttpApiGroup.make("mock")
   .add(HttpApiEndpoint.get("info", "/api/info", { success: Json }))
@@ -196,6 +228,12 @@ const Group = HttpApiGroup.make("mock")
     }),
   )
   .add(
+    HttpApiEndpoint.delete("shellRemove", "/api/shell/:id", {
+      params: { id: Schema.String },
+      success: NoContent,
+    }),
+  )
+  .add(
     HttpApiEndpoint.get("ptyList", "/api/pty", {
       success: Json,
       error: MockNotFound.pipe(HttpApiSchema.status(404)),
@@ -212,7 +250,7 @@ const Group = HttpApiGroup.make("mock")
     HttpApiEndpoint.get("ptyGet", "/api/pty/:ptyID", {
       params: PtyParams,
       success: Json,
-      error: MockNotFound.pipe(HttpApiSchema.status(404)),
+      error: PtyMissing,
     }),
   )
   .add(
@@ -220,21 +258,21 @@ const Group = HttpApiGroup.make("mock")
       params: PtyParams,
       payload: Pty.UpdateInput,
       success: Json,
-      error: MockNotFound.pipe(HttpApiSchema.status(404)),
+      error: PtyMissing,
     }),
   )
   .add(
     HttpApiEndpoint.delete("ptyRemove", "/api/pty/:ptyID", {
       params: PtyParams,
       success: NoContent,
-      error: MockNotFound.pipe(HttpApiSchema.status(404)),
+      error: PtyMissing,
     }),
   )
   .add(
     HttpApiEndpoint.post("ptyConnectToken", "/api/pty/:ptyID/connect-token", {
       params: PtyParams,
       success: Json,
-      error: MockNotFound.pipe(HttpApiSchema.status(404)),
+      error: PtyMissing,
     }),
   )
   .add(
@@ -298,6 +336,13 @@ const Group = HttpApiGroup.make("mock")
   )
   .add(
     HttpApiEndpoint.post("sessionPrompt", "/api/session/:sessionID/prompt", {
+      params: SessionParams,
+      payload: JsonPayload,
+      success: Json,
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("sessionCompact", "/api/session/:sessionID/compact", {
       params: SessionParams,
       payload: JsonPayload,
       success: Json,
@@ -369,6 +414,12 @@ const Group = HttpApiGroup.make("mock")
   .add(
     HttpApiEndpoint.post("sessionInterrupt", "/api/session/:sessionID/interrupt", {
       params: SessionParams,
+      success: Json,
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("sessionWait", "/api/experimental/session/:sessionID/wait", {
+      params: SessionParams,
       success: NoContent,
     }),
   )
@@ -409,13 +460,3 @@ const Group = HttpApiGroup.make("mock")
   )
 
 export const MockApi = HttpApi.make("mock").add(Group)
-
-function jsonValue(value: unknown): Schema.Json {
-  if (value === null || typeof value === "string" || typeof value === "boolean") return value
-  if (typeof value === "number") return Number.isFinite(value) ? value : null
-  if (Array.isArray(value)) return value.map(jsonValue)
-  if (!value || typeof value !== "object") return null
-  return Object.fromEntries(
-    Object.entries(value).flatMap(([key, item]) => (item === undefined ? [] : [[key, jsonValue(item)]])),
-  )
-}

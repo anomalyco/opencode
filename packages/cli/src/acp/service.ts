@@ -1,6 +1,5 @@
 import type { OpenCodeClient } from "@opencode/client/effect"
 import { SessionsCursor } from "@opencode/protocol/groups/session"
-import { Model } from "@opencode/schema/model"
 import { AbsolutePath } from "@opencode/schema/schema"
 import { FSUtil } from "@opencode/util/fs-util"
 import { DateTime, Effect, Ref, Schema } from "effect"
@@ -36,9 +35,9 @@ import type {
 } from "@agentclientprotocol/sdk"
 import { OPENCODE_VERSION } from "../version"
 import { ACPCapabilities, type Capabilities } from "./capabilities"
-import type { ACPCatalog, Catalog } from "./catalog"
+import type { ACPCatalog } from "./catalog"
 import { ACPClient } from "./client"
-import { configOptions, currentModel, DEFAULT_VARIANT_VALUE, parseModelSelection } from "./config-option"
+import { configOptions, resolveChange } from "./config-option"
 import type { ACPConnection } from "./connection"
 import { ACPDirectories } from "./directories"
 import { ACPError } from "./error"
@@ -78,42 +77,21 @@ export function make(input: {
     return configOptions(yield* input.catalog.get(attached.cwd), yield* Ref.get(attached.selection))
   })
 
-  const withReload = <A>(attached: Attached, select: Effect.Effect<A, ACPError.Failure>) => {
-    const retry = () => input.catalog.reload(attached.cwd).pipe(Effect.andThen(select))
-    return select.pipe(
+  const withReload = <A>(attached: Attached, attempt: Effect.Effect<A, ACPError.Failure>) => {
+    const retry = () => input.catalog.reload(attached.cwd).pipe(Effect.andThen(attempt))
+    return attempt.pipe(
       Effect.catchTags({ ACPInvalidModelError: retry, ACPInvalidModeError: retry, ACPInvalidEffortError: retry }),
     )
   }
 
-  const selectOption = Effect.fnUntraced(function* (attached: Attached, configId: string, value: string) {
-    const catalog = yield* input.catalog.get(attached.cwd)
-    const current = currentModel(catalog, yield* Ref.get(attached.selection))
-    switch (configId) {
-      case "model":
-        return yield* selectModel(attached, yield* requireModel(catalog, value, current))
-      case "effort":
-        return yield* selectModel(attached, yield* requireEffort(catalog, value, current))
-      case "mode":
-        return yield* selectMode(attached, value)
-      default:
-        return yield* new ACPError.InvalidConfigOptionError({ configId })
-    }
-  })
-
-  // Update selection before switching so the echoed event is a no-op.
-  const selectModel = Effect.fnUntraced(function* (attached: Attached, model: Model.Ref) {
-    yield* Ref.update(attached.selection, (selection) => ({ ...selection, model }))
-    yield* input.client.session.switchModel({ sessionID: attached.id, model }).pipe(Effect.catch(ACPClient.classify))
-  })
-
-  const selectMode = Effect.fnUntraced(function* (attached: Attached, modeID: string) {
-    const catalog = yield* input.catalog.get(attached.cwd)
-    const mode = catalog.modes.find((item) => item.id === modeID)
-    if (!mode) return yield* new ACPError.InvalidModeError({ mode: modeID })
-    yield* Ref.update(attached.selection, (selection) => ({ ...selection, modeID: mode.id }))
-    yield* input.client.session
-      .switchAgent({ sessionID: attached.id, agent: mode.id })
-      .pipe(Effect.catch(ACPClient.classify))
+  const select = Effect.fnUntraced(function* (attached: Attached, configId: string, value: string) {
+    const change = yield* resolveChange(
+      yield* input.catalog.get(attached.cwd),
+      yield* Ref.get(attached.selection),
+      configId,
+      value,
+    )
+    yield* input.sessions.select(attached, change)
   })
 
   const getSession = Effect.fnUntraced(function* (sessionId: string, cwd: string) {
@@ -131,6 +109,7 @@ export function make(input: {
         description: "Run `opencode auth login` in the terminal",
         name: "Login with opencode",
         id: AuthMethodID,
+        ...(params.clientCapabilities?.auth?.terminal ? { type: "terminal" as const, args: ["--login"] } : {}),
       }
       if (params.clientCapabilities?._meta?.["terminal-auth"] === true) {
         authMethod._meta = {
@@ -186,7 +165,9 @@ export function make(input: {
     listSessions: Effect.fnUntraced(function* (params) {
       const page = yield* input.client.session
         .list({
-          ...(params.cwd ? { directory: AbsolutePath.make(params.cwd) } : {}),
+          ...(params.cwd !== undefined && params.cwd !== null
+            ? { directory: yield* ACPDirectories.parseCwd(params.cwd) }
+            : {}),
           order: "desc",
           limit: 100,
           ...(params.cursor ? { cursor: Schema.decodeSync(SessionsCursor)(params.cursor) } : {}),
@@ -210,6 +191,7 @@ export function make(input: {
       }
     }),
     deleteSession: Effect.fnUntraced(function* (params) {
+      yield* input.turn.cancel({ sessionId: params.sessionId })
       yield* ACPClient.decodeSessionID(params.sessionId).pipe(
         Effect.flatMap((sessionID) => input.client.session.remove({ sessionID })),
         Effect.catchTag(["ACPInvalidRequestError", "SessionNotFoundError"], () => Effect.void),
@@ -234,8 +216,8 @@ export function make(input: {
     forkSession: Effect.fnUntraced(function* (params) {
       const directories = yield* ACPDirectories.parse(params.cwd, params.additionalDirectories)
       const mcpServers = yield* supportedMcpServers(params.mcpServers)
-      const sessionID = yield* ACPClient.decodeSessionID(params.sessionId)
-      const forked = yield* input.client.session.fork({ sessionID }).pipe(Effect.catch(ACPClient.classify))
+      const session = yield* getSession(params.sessionId, params.cwd)
+      const forked = yield* input.client.session.fork({ sessionID: session.id }).pipe(Effect.catch(ACPClient.classify))
       // Forks inherit the source's grants; replace them with this request's.
       yield* ACPDirectories.activate(input.client, forked, directories)
       const attachment = yield* input.sessions.attach(forked, forked.location.directory, mcpServers)
@@ -245,12 +227,12 @@ export function make(input: {
       const attached = yield* input.sessions.require(params.sessionId)
       const value = params.value
       if (typeof value !== "string") return yield* new ACPError.InvalidConfigOptionError({ configId: params.configId })
-      yield* withReload(attached, selectOption(attached, params.configId, value))
+      yield* withReload(attached, select(attached, params.configId, value))
       return { configOptions: yield* currentOptions(attached) }
     }),
     setSessionMode: Effect.fnUntraced(function* (params) {
       const attached = yield* input.sessions.require(params.sessionId)
-      yield* withReload(attached, selectMode(attached, params.modeId))
+      yield* withReload(attached, select(attached, "mode", params.modeId))
       return {}
     }),
     prompt: input.turn.prompt,
@@ -268,31 +250,6 @@ const supportedMcpServers = Effect.fnUntraced(function* (servers: readonly McpSe
       field: "mcpServers",
     })
   return supported
-})
-
-const requireModel = Effect.fnUntraced(function* (catalog: Catalog, modelID: string, current: Model.Ref) {
-  const selected = parseModelSelection(modelID, catalog.providers)
-  const model = catalog.models.find(
-    (item) => item.providerID === selected.model.providerID && item.id === selected.model.modelID,
-  )
-  if (!model) return yield* new ACPError.InvalidModelError({ providerId: selected.model.providerID, modelId: modelID })
-  const selectedVariant = model.variants.find((variant) => variant.id === selected.variant)
-  if (selected.variant && !selectedVariant) return yield* new ACPError.InvalidEffortError({ effort: selected.variant })
-  const variant =
-    selectedVariant?.id ??
-    (current.providerID === model.providerID &&
-    current.id === model.id &&
-    (current.variant === DEFAULT_VARIANT_VALUE || model.variants.some((variant) => variant.id === current.variant))
-      ? current.variant
-      : undefined)
-  return { providerID: model.providerID, id: model.id, variant } satisfies Model.Ref
-})
-
-const requireEffort = Effect.fnUntraced(function* (catalog: Catalog, effort: string, current: Model.Ref) {
-  const model = catalog.models.find((item) => item.providerID === current.providerID && item.id === current.id)
-  if (!model || (effort !== DEFAULT_VARIANT_VALUE && !model.variants.some((variant) => variant.id === effort)))
-    return yield* new ACPError.InvalidEffortError({ effort })
-  return { ...current, variant: Model.VariantID.make(effort) } satisfies Model.Ref
 })
 
 export * as ACPService from "./service"

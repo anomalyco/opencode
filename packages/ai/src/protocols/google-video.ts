@@ -1,5 +1,5 @@
 import { Duration, Effect, Schema } from "effect"
-import type { HttpClientResponse } from "effect/unstable/http"
+import type { HttpClientResponse } from "effect/http"
 import type { Status } from "../generation.js"
 import { Media } from "../media.js"
 import { MediaProtocol } from "../route/media-protocol.js"

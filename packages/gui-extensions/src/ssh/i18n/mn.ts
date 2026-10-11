@@ -36,8 +36,5 @@ export default {
   "form.name": "Серверийн нэр (заавал биш)",
   "form.namePlaceholder": "Localhost",
   "form.add": "Сервер нэмэх",
-  "server.default": "Өгөгдмөл",
-  "menu.default": "Өгөгдмөл болгож тохируулах",
-  "menu.defaultRemove": "Өгөгдмөлийг арилгах",
   "menu.delete": "Устгах",
 }

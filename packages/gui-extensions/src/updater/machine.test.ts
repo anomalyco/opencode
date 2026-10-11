@@ -27,6 +27,7 @@ async function setup(input?: {
   const store = { ready: input?.ready }
   const checks = input?.checks ?? ["2.0.0"]
   const cursor = { check: 0 }
+
   const dependencies: Dependencies = {
     currentVersion: input?.currentVersion ?? "1.0.0",
     platform: {
@@ -34,7 +35,9 @@ async function setup(input?: {
         try: () => {
           calls.push("check")
           const version = checks[Math.min(cursor.check++, checks.length - 1)] ?? "2.0.0"
+
           if (version === "offline") throw new Error("offline")
+
           return input?.external
             ? { mode: "external" as const, version, url: `https://files.test/${version}.dmg` }
             : { mode: "restart" as const, version }
@@ -48,6 +51,7 @@ async function setup(input?: {
         }),
       installAndRestart: Effect.suspend(() => {
         calls.push(`install:${store.ready?.version}`)
+
         return Effect.tryPromise({
           try: () => input?.install?.() ?? new Promise<void>(() => {}),
           catch: (error) => error,
@@ -64,6 +68,7 @@ async function setup(input?: {
     restart: (handoff) =>
       Effect.suspend(() => {
         calls.push("prepare")
+
         return handoff
       }),
     persistence: {
@@ -78,9 +83,11 @@ async function setup(input?: {
     },
     changed: (state) => seen.push(state),
   }
+
   const scope = Scope.makeUnsafe()
   scopes.push(scope)
   const updater = await Effect.runPromise(make(dependencies).pipe(Scope.provide(scope)))
+
   return {
     calls,
     seen,
@@ -212,7 +219,9 @@ describe("updater", () => {
 
     app.installFork()
     expect(app.state()).toEqual({ status: "installing", version: "2.0.0" })
+
     if (row.then === "install") app.installFork()
+
     if (row.then === "check") await app.check()
     await tick()
 
@@ -257,10 +266,12 @@ describe("updater", () => {
 
   test("install during a silent refresh waits for the download, then installs the newer version", async () => {
     const download = { slow: false, done: Promise.withResolvers<void>() }
+
     const app = await setup({
       checks: ["2.0.0", "3.0.0"],
       stage: () => (download.slow ? download.done.promise : Promise.resolve()),
     })
+
     await app.start()
 
     download.slow = true
@@ -278,13 +289,17 @@ describe("updater", () => {
 
   test("returns to ready after a failed installation and allows a retry", async () => {
     const attempts = { count: 0 }
+
     const app = await setup({
       install() {
         attempts.count++
+
         if (attempts.count === 1) return Promise.reject(new Error("install failed"))
+
         return new Promise<void>(() => {})
       },
     })
+
     await app.start()
 
     await expect(app.install()).rejects.toThrow("install failed")

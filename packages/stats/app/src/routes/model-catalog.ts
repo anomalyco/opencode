@@ -1,3 +1,4 @@
+import { STEALTH_MODELS, statModel } from "@opencode/stats-core/domain/model-normalization"
 import { query } from "@solidjs/router"
 
 export const modelCatalogSourceUrl = "https://models.opencode.ai/catalog.json"
@@ -24,14 +25,16 @@ export type ModelCatalogEntry = {
   limit?: { context?: number; output?: number }
   modalities: { input: string[]; output: string[] }
   openWeights: boolean
-  reasoning: boolean
-  toolCall: boolean
+  reasoning?: boolean
+  toolCall?: boolean
   attachment: boolean
   temperature: boolean
   cost?: ModelCatalogCost
   weights: { label: string; url: string }[]
   benchmarks: ModelCatalogBenchmark[]
 }
+
+export type ModelCatalogSpecs = Pick<ModelCatalogEntry, "knowledge" | "releaseDate" | "limit" | "modalities">
 
 export type ModelCatalogBenchmark = {
   name: string
@@ -53,10 +56,33 @@ export type ModelCatalogLab = {
 
 export type ModelCatalog = {
   models: ModelCatalogEntry[]
+  aliases?: ModelCatalogEntry[]
   labs: ModelCatalogLab[]
+  // Stealth models stay out of the lab catalog, but their OpenCode listings publish limits and modalities.
+  stealthSpecs: Record<string, ModelCatalogSpecs>
 }
 
-export async function loadModelCatalog() {
+const catalogTtlMs = 5 * 60 * 1000
+let cachedCatalog: { expiresAt: number; value: Promise<ModelCatalog> } | undefined
+
+// The catalog is about 11 MB of JSON to fetch and parse and rarely changes, so share it across requests.
+export function loadModelCatalog() {
+  const now = Date.now()
+  if (cachedCatalog && cachedCatalog.expiresAt > now) return cachedCatalog.value
+  const value = fetchModelCatalog()
+  const entry = { expiresAt: now + catalogTtlMs, value }
+  cachedCatalog = entry
+  // An empty catalog means a source failed, so retry on the next request instead of serving it for the TTL.
+  const evict = () => {
+    if (cachedCatalog === entry) cachedCatalog = undefined
+  }
+  value.then((catalog) => {
+    if (catalog.models.length === 0) evict()
+  }, evict)
+  return value
+}
+
+async function fetchModelCatalog() {
   const [models, pricing, labs] = await Promise.all([
     fetchCatalogPayload(modelCatalogSourceUrl),
     fetchCatalogPayload(modelCatalogPricingUrl),
@@ -71,12 +97,16 @@ export const getModelCatalog = query(async () => {
 }, "getModelCatalog")
 
 export function findModelCatalogEntry(catalog: ModelCatalog, model: string, lab?: string) {
-  const normalizedId = lab ? `${catalogLabSlug(lab)}/${catalogSlug(model)}` : model.trim().toLowerCase()
-  const leaf = catalogSlug(model)
+  const canonicalModel = statModel(model, undefined)
+  const normalizedId = lab
+    ? `${catalogLabSlug(lab)}/${catalogSlug(canonicalModel)}`
+    : canonicalModel.trim().toLowerCase()
+  const leaf = catalogSlug(canonicalModel)
   return (
     catalog.models.find((entry) => entry.id.toLowerCase() === normalizedId) ??
     catalog.models.find((entry) => (lab ? entry.lab === catalogLabSlug(lab) : true) && entry.slug === leaf) ??
-    catalog.models.find((entry) => entry.slug === leaf)
+    catalog.models.find((entry) => entry.slug === leaf) ??
+    catalog.aliases?.find((entry) => (lab ? entry.lab === catalogLabSlug(lab) : true) && entry.slug === leaf)
   )
 }
 
@@ -85,21 +115,56 @@ export function findModelCatalogLab(catalog: ModelCatalog, lab: string) {
   return catalog.labs.find((entry) => entry.id === id)
 }
 
+export function catalogModelPath(entry: Pick<ModelCatalogEntry, "lab" | "slug">) {
+  return `/data/${entry.lab}/${entry.slug}`
+}
+
+export function catalogLabPath(lab: string) {
+  return `/data/${catalogLabSlug(lab)}`
+}
+
+export function canonicalModelEntry(catalog: ModelCatalog, model: string, lab: string) {
+  const entry = findModelCatalogEntry(catalog, model, lab)
+  // A catalog path is only canonical if it resolves back to the same entry, which rules out redirect loops.
+  if (!entry || findModelCatalogEntry(catalog, entry.slug, entry.lab)?.id !== entry.id) return undefined
+  return entry
+}
+
+export function modelPagePath(catalog: ModelCatalog, lab: string, model: string) {
+  const entry = canonicalModelEntry(catalog, model, lab)
+  if (entry) return catalogModelPath(entry)
+  return `/data/${catalogSlug(lab)}/${catalogSlug(model)}`
+}
+
 export function formatCatalogLabName(lab: string) {
   const known: Record<string, string> = {
+    ai21: "AI21",
+    aisingapore: "AI Singapore",
     alibaba: "Alibaba",
     anthropic: "Anthropic",
+    "arcee-ai": "Arcee AI",
+    "bytedance-seed": "ByteDance Seed",
     cohere: "Cohere",
+    deepreinforce: "DeepReinforce",
     deepseek: "DeepSeek",
     google: "Google",
+    ibm: "IBM",
+    inclusionai: "inclusionAI",
     meta: "Meta",
     minimax: "MiniMax",
     mistral: "Mistral",
     moonshotai: "Moonshot",
+    "nex-agi": "Nex AGI",
+    nvidia: "NVIDIA",
     openai: "OpenAI",
+    openbmb: "OpenBMB",
     perplexity: "Perplexity",
+    quiverai: "QuiverAI",
+    sdaia: "SDAIA",
     stepfun: "StepFun",
+    "swiss-ai": "Swiss AI",
     tencent: "Tencent",
+    thinkingmachines: "Thinking Machines",
     xai: "xAI",
     xiaomi: "Xiaomi",
     zai: "Z.ai",
@@ -108,6 +173,16 @@ export function formatCatalogLabName(lab: string) {
     zhipuai: "Zhipu",
   }
   return known[catalogSlug(lab)] ?? lab.replace(/[-_]/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase())
+}
+
+export function isProviderlessLab(lab: string | undefined) {
+  return !lab || catalogSlug(lab) === "unknown"
+}
+
+export function isKnownCatalogLab(lab: string | undefined, catalogLabs: readonly string[]) {
+  if (!lab || isProviderlessLab(lab)) return false
+  const key = catalogSlug(formatCatalogLabName(lab))
+  return catalogLabs.some((candidate) => catalogSlug(formatCatalogLabName(candidate)) === key)
 }
 
 export function catalogSlug(value: string) {
@@ -136,6 +211,25 @@ export function buildModelCatalog(payload: unknown, pricingPayload?: unknown, la
     .toSorted((a, b) => a.lab.localeCompare(b.lab) || displayDateTime(b.releaseDate) - displayDateTime(a.releaseDate))
   return {
     models,
+    // Contributor is a serving tier of these Muse models, with its own pricing.
+    // Keep aliases out of the model population used to normalize benchmark scores.
+    aliases: ["meta/muse-spark-1.2", "meta/muse-spark-1.3"].flatMap((id) => {
+      const model = models.find((entry) => entry.id === id)
+      if (!model) return []
+      const alias = `${id}-contributor`
+      return [
+        {
+          ...model,
+          id: alias,
+          slug: `${model.slug}-contributor`,
+          name: `${model.name} Contributor`,
+          cost:
+            costs.get(catalogIdKey(alias)) ??
+            costs.get(`${model.lab}/${model.slug}-contributor`) ??
+            costs.get(`${model.slug}-contributor`),
+        },
+      ]
+    }),
     labs: Object.values(
       models.reduce<Record<string, ModelCatalogLab>>((result, model) => {
         result[model.lab] = {
@@ -147,7 +241,33 @@ export function buildModelCatalog(payload: unknown, pricingPayload?: unknown, la
         return result
       }, {}),
     ).toSorted((a, b) => a.name.localeCompare(b.name)),
+    stealthSpecs: readStealthModelSpecs(pricingPayload),
   }
+}
+
+function readStealthModelSpecs(payload: unknown): Record<string, ModelCatalogSpecs> {
+  if (!isRecord(payload)) return {}
+  return Object.fromEntries(
+    // Later entries win, so the opencode listing takes precedence over opencode-go.
+    ["opencode-go", "opencode"]
+      .map((provider) => payload[provider])
+      .flatMap((provider) => (isRecord(provider) && isRecord(provider.models) ? Object.entries(provider.models) : []))
+      .flatMap(([id, value]) => {
+        const model = statModel(id, undefined)
+        if (!STEALTH_MODELS.has(model) || !isRecord(value)) return []
+        return [
+          [
+            model,
+            {
+              knowledge: stringValue(value.knowledge),
+              releaseDate: stringValue(value.release_date),
+              limit: readCatalogLimit(value.limit),
+              modalities: readCatalogModalities(value.modalities),
+            },
+          ] as const,
+        ]
+      }),
+  )
 }
 
 function readModelCatalogEntry(value: unknown): ModelCatalogEntry[] {
@@ -171,8 +291,8 @@ function readModelCatalogEntry(value: unknown): ModelCatalogEntry[] {
       limit: readCatalogLimit(value.limit),
       modalities: readCatalogModalities(value.modalities),
       openWeights: booleanValue(value.open_weights),
-      reasoning: booleanValue(value.reasoning),
-      toolCall: booleanValue(value.tool_call),
+      reasoning: typeof value.reasoning === "boolean" ? value.reasoning : undefined,
+      toolCall: typeof value.tool_call === "boolean" ? value.tool_call : undefined,
       attachment: booleanValue(value.attachment),
       temperature: booleanValue(value.temperature),
       cost: readCatalogCost(value.cost),

@@ -30,10 +30,12 @@ function createPool(lineDiffType: "none" | "word-line") {
   )
 
   void pool.initialize()
+
   return pool
 }
 
 let plain: WorkerPoolManager | undefined
+
 let diff: WorkerPoolManager | undefined
 
 export function getWorkerPool(lineDiffType: "none" | "word-line" = "word-line"): WorkerPoolManager | undefined {
@@ -41,15 +43,18 @@ export function getWorkerPool(lineDiffType: "none" | "word-line" = "word-line"):
 
   if (lineDiffType === "none") {
     if (!plain) plain = createPool("none")
+
     return plain
   }
 
   if (!diff) diff = createPool("word-line")
+
   return diff
 }
 
 export function getWorkerPools() {
   const pool = getWorkerPool()
+
   return {
     unified: pool,
     split: pool,

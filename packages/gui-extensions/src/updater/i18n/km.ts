@@ -25,4 +25,8 @@ export default {
   "dialog.ready.title": "ធ្វើបច្ចុប្បន្នភាពរួចរាល់",
   "dialog.restart": "ចាប់ផ្ដើមឡើងវិញ",
   "dialog.later": "ពេលក្រោយ",
+  "releaseNotes.action.getStarted": "ចាប់ផ្តើម",
+  "releaseNotes.action.next": "បន្ទាប់",
+  "releaseNotes.action.hideFuture": "កុំបង្ហាញទាំងនេះនៅពេលអនាគត",
+  "releaseNotes.media.alt": "ចេញផ្សាយការមើលជាមុន",
 }

@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { Rpc, RpcGroup } from "effect/unstable/rpc"
+import { Rpc, RpcGroup } from "effect/rpc"
 import { ExtensionInstalled, ExtensionMenubarItem, ExtensionPayload } from "./extensions"
 
 export class DeepLinksOpened extends Schema.TaggedClass<DeepLinksOpened>()("DeepLinksOpened", {
@@ -30,20 +30,20 @@ export class StorageChanged extends Schema.TaggedClass<StorageChanged>()("Storag
   revision: Schema.Number,
 }) {}
 
-// A main extension's remote state for this window, already encoded with the remote's schema.
+// A main extension's Ipc state for this window, already encoded with the Ipc's schema.
 export class ExtensionState extends Schema.TaggedClass<ExtensionState>()("ExtensionState", {
-  remote: Schema.String,
+  ipc: Schema.String,
   state: ExtensionPayload,
 }) {}
 
 export class ExtensionEvent extends Schema.TaggedClass<ExtensionEvent>()("ExtensionEvent", {
-  remote: Schema.String,
+  ipc: Schema.String,
   name: Schema.String,
   data: ExtensionPayload,
 }) {}
 
 export class ExtensionAvailable extends Schema.TaggedClass<ExtensionAvailable>()("ExtensionAvailable", {
-  remote: Schema.String,
+  ipc: Schema.String,
   available: Schema.Boolean,
 }) {}
 
@@ -51,9 +51,10 @@ export class ExtensionsChanged extends Schema.TaggedClass<ExtensionsChanged>()("
   list: Schema.Array(ExtensionInstalled),
 }) {}
 
-export class ExtensionMenubarChanged extends Schema.TaggedClass<ExtensionMenubarChanged>()("ExtensionMenubarChanged", {
-  items: Schema.Array(ExtensionMenubarItem),
-}) {}
+export class ExtensionMenubarItemsChanged extends Schema.TaggedClass<ExtensionMenubarItemsChanged>()(
+  "ExtensionMenubarItemsChanged",
+  { items: Schema.Array(ExtensionMenubarItem) },
+) {}
 
 export const DesktopEvent = Schema.Union([
   DeepLinksOpened,
@@ -66,9 +67,11 @@ export const DesktopEvent = Schema.Union([
   ExtensionEvent,
   ExtensionAvailable,
   ExtensionsChanged,
-  ExtensionMenubarChanged,
+  ExtensionMenubarItemsChanged,
 ])
+
 export type DesktopEvent = Schema.Schema.Type<typeof DesktopEvent>
 
 export const DesktopEvents = Rpc.make("DesktopEvents", { success: DesktopEvent, stream: true })
+
 export const EventRpcs = RpcGroup.make(DesktopEvents)

@@ -56,10 +56,13 @@ test.each([
   "   ",
 ])("preserves the Markdown parser's meaning for %j", (text) => {
   const expected = createMarkdownBase().parse(text, { async: false })
+
   if (text.includes("indented code")) {
     expect(parseSmallMarkdown(text)).toBeUndefined()
+
     return
   }
+
   expect(parseSmallMarkdown(text)).toBe(expected)
 })
 

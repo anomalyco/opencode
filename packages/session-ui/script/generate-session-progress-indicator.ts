@@ -1,10 +1,15 @@
 import { deflateSync } from "node:zlib"
 
 const size = 16
+
 const frameRate = 30
+
 const duration = 1.2
+
 const frameCount = frameRate * duration
+
 const opacity = [0.2, 0.5, 0.75, 1]
+
 // Each digit selects one dot opacity for one of the eight source key poses.
 const poses = [
   "0000000000003000031000321",
@@ -16,6 +21,7 @@ const poses = [
   "0000100022003330000000000",
   "0000000000003330002200001",
 ].map((pose) => Array.from(pose, (value) => opacity[Number(value)]))
+
 const crcTable = Array.from({ length: 256 }, (_, value) =>
   Array.from({ length: 8 }).reduce<number>((crc) => ((crc & 1) !== 0 ? 0xedb88320 ^ (crc >>> 1) : crc >>> 1), value),
 )
@@ -46,10 +52,13 @@ function apng(scale: number) {
     chunks.push(chunk("fcTL", control))
 
     const data = deflateSync(pixels(scale, frame), { level: 9 })
+
     if (frame === 0) {
       chunks.push(chunk("IDAT", data))
+
       return
     }
+
     const frameData = Buffer.alloc(data.length + 4)
     frameData.writeUInt32BE(sequence.value++, 0)
     data.copy(frameData, 4)
@@ -79,6 +88,7 @@ function pixels(scale: number, frame: number) {
       value + (poses[next][index] - value) * mix,
     )
   })
+
   return pixels
 }
 
@@ -104,15 +114,19 @@ function draw(pixels: Buffer, stride: number, x: number, y: number, size: number
 function easeOut(progress: number) {
   const curve = (value: number, first: number, second: number) => {
     const inverse = 1 - value
+
     return 3 * inverse * inverse * value * first + 3 * inverse * value * value * second + value * value * value
   }
+
   const parameter = Array.from({ length: 16 }).reduce<[number, number]>(
     (range) => {
       const middle = (range[0] + range[1]) / 2
+
       return curve(middle, 0, 0.58) < progress ? [middle, range[1]] : [range[0], middle]
     },
     [0, 1],
   )
+
   return curve((parameter[0] + parameter[1]) / 2, 0, 1)
 }
 
@@ -123,6 +137,7 @@ function chunk(type: string, data: Buffer) {
   name.copy(result, 4)
   data.copy(result, 8)
   result.writeUInt32BE(crc32(Buffer.concat([name, data])), data.length + 8)
+
   return result
 }
 

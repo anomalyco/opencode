@@ -1,7 +1,5 @@
 import { Button } from "@opencode/ui/button"
 import { Dialog, DialogBody, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
-import { Icon } from "@opencode/ui/icon"
-import { IconButton } from "@opencode/ui/icon-button"
 import { Switch } from "@opencode/ui/switch"
 import { TextInput } from "@opencode/ui/text-input"
 import { useFilteredList } from "@opencode/ui/hooks"
@@ -24,23 +22,28 @@ export const DialogManageModels: Component = () => {
   const local = useLocal()
   const language = useLanguage()
   const dialog = useDialog()
-  const [store, setStore] = createStore({ collapsed: {} as Record<string, boolean> })
+  const [store, setStore] = createStore<{ collapsed: Record<string, boolean> }>({ collapsed: {} })
   const directory = () => decode64(local.slug())
 
   const handleConnectProvider = () => {
     void dialog.show(() => <DialogConnectProvider directory={directory()} />)
   }
+
   const providerList = (providerID: string) => local.model.list().filter((x) => x.provider.id === providerID)
+
   const providerVisible = (providerID: string) =>
     providerList(providerID).every((x) => local.model.visible({ modelID: x.id, providerID: x.provider.id }))
+
   const setProviderVisibility = (providerID: string, checked: boolean) => {
     providerList(providerID).forEach((x) => {
       local.model.setVisibility({ modelID: x.id, providerID: x.provider.id }, checked)
     })
   }
+
   const setModelVisibility = (item: ModelItem, checked: boolean) => {
     local.model.setVisibility({ modelID: item.id, providerID: item.provider.id }, checked)
   }
+
   const list = useFilteredList<ModelItem>({
     items: () => local.model.list(),
     key: (x) => `${x.provider.id}:${x.id}`,
@@ -52,12 +55,17 @@ export const DialogManageModels: Component = () => {
       const bRank = popularProviders.indexOf(b.category)
       const aPopular = aRank >= 0
       const bPopular = bRank >= 0
+
       if (aPopular && !bPopular) return -1
+
       if (!aPopular && bPopular) return 1
+
       if (aPopular && bPopular) return aRank - bRank
+
       return a.items[0].provider.name.localeCompare(b.items[0].provider.name)
     },
   })
+
   const managed = createMemo(() => consoleModelGroup(local.model.list()))
   const searching = () => list.filter().length > 0
   const expanded = (key: string) => searching() || !store.collapsed[key]
@@ -97,33 +105,24 @@ export const DialogManageModels: Component = () => {
       </DialogHeader>
       <DialogBody class="flex min-h-0 flex-1 flex-col">
         <div class="px-4 pt-px pb-3">
-          <div class="relative">
-            <TextInput
-              type="search"
-              appearance="base"
-              class="!w-full self-stretch"
-              value={list.filter()}
-              onInput={(event) => list.onInput(event.currentTarget.value)}
-              placeholder={language.t("dialog.model.search.placeholder")}
-              spellcheck={false}
-              autocorrect="off"
-              autocomplete="off"
-              autocapitalize="off"
-              autofocus
-              aria-label={language.t("dialog.model.search.placeholder")}
-            />
-            <Show when={list.filter()}>
-              <IconButton
-                type="button"
-                variant="ghost-muted"
-                size="small"
-                class="settings-tab-search-clear"
-                icon={<Icon name="close" size="large" class="text-v2-icon-icon-muted" />}
-                onClick={() => list.clear()}
-                aria-label={language.t("common.clear")}
-              />
-            </Show>
-          </div>
+          <TextInput
+            type="search"
+            appearance="base"
+            class="!w-full self-stretch"
+            value={list.filter()}
+            onInput={(event) => list.onInput(event.currentTarget.value)}
+            placeholder={language.t("dialog.model.search.placeholder")}
+            spellcheck={false}
+            autocorrect="off"
+            autocomplete="off"
+            autocapitalize="off"
+            autofocus
+            aria-label={language.t("dialog.model.search.placeholder")}
+            showClearButton={!!list.filter()}
+            clearIcon="circle-xmark"
+            clearLabel={language.t("common.clear")}
+            onClearClick={() => list.clear()}
+          />
         </div>
         <div data-slot="manage-models-scroll" class="relative min-h-0 flex-1">
           <div class="settings-panel settings-models h-full px-4 pt-1 pb-4">

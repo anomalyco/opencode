@@ -12,4 +12,6 @@ export default {
   "git.description": "Izseko, pārskati un atsauc izmaiņas šajā projektā",
   loadingChanges: "Notiek izmaiņu ielāde…",
   noChanges: "Nav izmaiņu",
+  "settings.wrapLines.title": "Aplauzt rindas",
+  "settings.wrapLines.description": "Aptiniet garās līnijas mobilajās diffās, nevis ritiniet horizontāli",
 }

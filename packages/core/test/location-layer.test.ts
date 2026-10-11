@@ -1,3 +1,4 @@
+import type { FileSystem } from "@opencode/core/filesystem"
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
@@ -67,7 +68,7 @@ const activityLocations = Layer.effect(
           workspaceID: ref.workspaceID,
           project: { id: Project.ID.global, directory: ref.directory, canonical: ref.directory },
         }),
-      ) as unknown as Layer.Layer<LocationServices>,
+      ) as unknown as Layer.Layer<LocationServices, FileSystem.DirectoryNotFoundError>,
     { idleTimeToLive: Duration.infinity },
   ),
 )

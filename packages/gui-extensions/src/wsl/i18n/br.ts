@@ -53,8 +53,5 @@ export default {
     "O tempo limite da verificação de integridade do sidecar de {{distro}} foi excedido após {{timeout}}ms",
   "error.commandTimeout": "O tempo limite de {{command}} {{args}} foi excedido após {{timeout}}ms",
   "error.failedPort": "Falha ao obter a porta",
-  "server.default": "Padrão",
-  "menu.default": "Definir como padrão",
-  "menu.defaultRemove": "Remover padrão",
   "menu.remove": "Remover",
 }

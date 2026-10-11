@@ -8,6 +8,7 @@ import { Glob } from "./glob.js"
 import { serviceUse } from "./effect/service-use.js"
 import { makeGlobalNode } from "./effect/app-node.js"
 import { filesystem } from "./effect/app-node-platform.js"
+import { sameDirectory } from "./path.js"
 
 export namespace FSUtil {
   export class FileSystemError extends Schema.TaggedError<FileSystemError>()("FileSystemError", {
@@ -178,7 +179,7 @@ export namespace FSUtil {
               if (options.mode === "first") return result
             }
           }
-          if (options.stop === current) break
+          if (options.stop && sameDirectory(options.stop, current)) break
           const parent = dirname(current)
           if (parent === current) break
           current = parent
@@ -198,7 +199,7 @@ export namespace FSUtil {
             Effect.orElseSucceed(() => [] as string[]),
           )
           result.push(...matches)
-          if (stop === current) break
+          if (stop && sameDirectory(stop, current)) break
           const parent = dirname(current)
           if (parent === current) break
           current = parent

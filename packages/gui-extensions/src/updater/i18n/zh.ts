@@ -25,4 +25,8 @@ export default {
   "dialog.ready.title": "更新已就绪",
   "dialog.restart": "重启",
   "dialog.later": "稍后",
+  "releaseNotes.action.getStarted": "开始",
+  "releaseNotes.action.next": "下一步",
+  "releaseNotes.action.hideFuture": "不再显示",
+  "releaseNotes.media.alt": "版本说明预览",
 }

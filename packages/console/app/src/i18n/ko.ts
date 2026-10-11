@@ -3,6 +3,10 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
+  "go.referral.ended.label": "경고",
+  "go.referral.ended":
+    "추천 프로그램이 종료되었습니다. 추천 링크로는 더 이상 본인이나 링크를 공유한 사람에게 크레딧이 지급되지 않습니다.",
+  "go.graph.bonus": "사용량 {{count}}배",
   "nav.github": "GitHub",
   "nav.docs": "문서",
   "nav.changelog": "변경 내역",
@@ -58,6 +62,7 @@ export const dict = {
   "common.cancel": "취소",
   "common.creating": "생성 중...",
   "common.create": "만들기",
+  "common.contactUs": "문의하기",
 
   "common.videoUnsupported": "브라우저가 비디오 태그를 지원하지 않습니다.",
   "common.figure": "그림 {{n}}.",
@@ -222,6 +227,9 @@ export const dict = {
   "zen.faq.q8": "다른 코딩 에이전트와 Zen을 사용할 수 있나요?",
   "zen.faq.a8":
     "Zen은 OpenCode와 훌륭하게 작동하지만, 어떤 에이전트와도 Zen을 사용할 수 있습니다. 선호하는 코딩 에이전트의 설정 지침을 따르세요.",
+  "zen.faq.q9": "환불받을 수 있나요?",
+  "zen.faq.a9":
+    "결제일로부터 14일 이내이며 해당 구매로 받은 크레딧을 전혀 사용하지 않은 경우 환불 대상이 될 수 있습니다. 환불을 요청하려면 {{contact}}를 선택해 주세요.",
 
   "zen.cta.start": "Zen 시작하기",
   "zen.pricing.title": "$20 선불 잔액 추가",
@@ -249,11 +257,11 @@ export const dict = {
     "모든 Zen 모델은 미국에서 호스팅됩니다. 제공자들은 데이터 보존 금지 정책을 따르며 모델 학습에 데이터를 사용하지 않습니다. 단,",
   "zen.privacy.exceptionsLink": "다음 예외",
 
+  "go.promo.step5": "새 모델 Step 5 Preview Free를 한정 기간 무료로 이용할 수 있습니다.",
   "go.title": "OpenCode Go | 모두를 위한 저비용 코딩 모델",
-  "go.banner.text": "DeepSeek V4 Flash 사용 한도가 한시적으로 2배 확대됩니다",
-  "go.meta.description":
-    "Go는 월 $10이며, 넉넉한 사용 한도와 주요 코딩 모델에 대한 안정적인 액세스를 제공합니다.",
+  "go.meta.description": "Go는 월 $10이며, 넉넉한 사용 한도와 주요 코딩 모델에 대한 안정적인 액세스를 제공합니다.",
   "go.hero.title": "모두를 위한 저비용 코딩 모델",
+  "go.hero.tagline": "어떤 에이전트와도 사용할 수 있습니다. 필요하면 크레딧을 충전하세요. 언제든지 취소할 수 있습니다.",
   "go.hero.body":
     "Go는 전 세계 프로그래머들에게 에이전트 코딩을 제공합니다. 가장 유능한 오픈 소스 모델에 대한 넉넉한 한도와 안정적인 액세스를 제공하므로, 비용이나 가용성 걱정 없이 강력한 에이전트로 빌드할 수 있습니다.",
 
@@ -261,12 +269,34 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "Go 구독하기",
   "go.cta.price": "$10/월",
+  "go.plans.month": "/월",
+  "go.plans.plus.cta": "Go Plus 구독하기",
+  "go.plans.plus.description": "Go Plus는 월 $40로 더 높은 사용 한도를 제공합니다.",
+  "go.plans.go.feature1": "엄선된 합리적인 가격의 모델",
+  "go.plans.go.feature2": "에이전트 코딩에 최적화된 테스트",
+  "go.plans.go.feature3": "넉넉한 한도와 안정적인 접근",
+  "go.plans.plus.feature1": "Go의 모든 혜택 포함",
+  "go.plans.plus.feature2": "더 높은 한도로 장시간 코딩에 집중",
+  "go.plans.plus.feature3": "더 크고 복잡한 프로젝트에 적합",
+  "go.plans.limits": "사용 한도",
+  "go.plans.description": "모델별 5시간당 예상 요청 횟수 및 월간 사용 한도",
+  "go.plans.legend": "요금제",
   "go.pricing.body":
     "어떤 에이전트와도 사용할 수 있습니다. 월 $10. 필요하면 크레딧을 충전하세요. 언제든지 취소할 수 있습니다.",
   "go.graph.free": "무료",
   "go.graph.freePill": "Big Pickle 및 무료 모델",
   "go.graph.go": "Go",
   "go.graph.label": "5시간당 요청 수",
+  "go.graph.period": "사용량",
+  "go.graph.model": "모델",
+  "go.graph.requests": "예상 요청 횟수 / 5시간",
+  "go.graph.allowance": "월간 사용량",
+  "go.graph.new": "신규",
+  "go.graph.scale": "요청 수는 비선형 눈금으로 표시됩니다",
+  "go.graph.showAll": "전체 {{count}}개 모델 보기",
+  "go.graph.showLess": "접기",
+  "go.graph.limitedRegions": "일부 지역에서만 제공",
+  "go.graph.limitedTime": "한정된 기간",
   "go.graph.usageLimits": "사용 한도",
   "go.graph.aria": "5시간당 요청 수: {{free}} 대 {{go}}",
 
@@ -340,11 +370,14 @@ export const dict = {
   "go.faq.a5.used": "사용됨",
   "go.faq.a5.notUsed": "사용되지 않음",
   "go.faq.a5.noAgreement": "합의 없음",
+  "go.faq.a5.notZdr": "ZDR 아님",
   "go.faq.a5.grokRetention":
     "ZDR은 저장된 데이터에 의존하는 중요한 API 기능(상태 저장형 Responses API, Files and Collections, Batch API 포함)을 비활성화합니다.",
   "go.faq.a5.gptRetention": "모든 API 기능 사용에 대해 악용 모니터링 로그가 생성되며 최대 30일 동안 보존됩니다.",
+  "go.faq.a5.museRetention":
+    "향후 Meta 모델 학습에 사용자의 프롬프트와 생성 결과를 사용할 수 있도록 허용하는 대신 토큰 가격이 대폭 할인됩니다.",
   "go.faq.a5.learnMore": "자세히 알아보기",
-  "go.faq.a5.deepseekRetention": "ZDR 계약은 매월 갱신됩니다. 현재 계약은 2026년 8월 31일까지 유효합니다.",
+  "go.faq.a5.deepseekRetention": "ZDR 계약은 매월 갱신됩니다. 현재 계약은 2026년 9월 30일까지 유효합니다.",
   "go.faq.a5.beforeExceptions":
     "Go 모델은 미국에서 호스팅됩니다. 제공자들은 데이터 보존 금지 정책을 따르며 모델 학습에 데이터를 사용하지 않습니다. 단,",
   "go.faq.a5.exceptionsLink": "다음 예외",
@@ -357,7 +390,10 @@ export const dict = {
 
   "go.faq.q9": "무료 모델과 Go의 차이점은 무엇인가요?",
   "go.faq.a9":
-    "무료 모델에는 Big Pickle과 당시 사용 가능한 프로모션 모델이 포함되며, 하루 200회 요청 할당량이 적용됩니다. Go는 엄선된 모델 라인업을 제공하며, 롤링 윈도우(5시간, 주간, 월간)에 걸쳐 더 높은 요청 할당량을 적용합니다. 이는 대략 5시간당 $12, 주당 $30, 월 $60에 해당합니다(실제 요청 수는 모델 및 사용량에 따라 다름).",
+    "무료 모델에는 Big Pickle과 당시 사용 가능한 프로모션 모델이 포함되며, 하루 200회 요청 할당량이 적용됩니다. Go는 엄선된 모델 라인업을 제공하며, 이동 기간별 요청 한도는 5시간당 월간 한도의 20%, 주간 50%, 월간 100%입니다. 모델별 한도는 다를 수 있습니다(실제 요청 수는 모델 및 사용량에 따라 다름).",
+  "go.faq.q10": "환불받을 수 있나요?",
+  "go.faq.a10":
+    "결제일로부터 14일 이내이며 해당 결제 기간에 Go 사용 한도를 전혀 사용하지 않은 경우 환불 대상이 될 수 있습니다. 환불을 요청하려면 {{contact}}를 선택해 주세요.",
 
   "zen.api.error.rateLimitExceeded": "속도 제한을 초과했습니다. 나중에 다시 시도해 주세요.",
   "zen.api.error.modelNotSupported": "{{model}} 모델은 지원되지 않습니다",
@@ -383,6 +419,9 @@ export const dict = {
   "zen.api.error.modelDisabled": "모델이 비활성화되었습니다",
   "zen.api.error.regionNotAllowed":
     "이 모델의 최신 버전은 중국에서 호스팅되는 경우에만 사용할 수 있으며, 명시적으로 사용에 동의해야 합니다: {{consoleGoUrl}}",
+  "zen.api.error.countryNotAllowed": "이 모델은 거주 국가에서 사용할 수 없습니다.",
+  "zen.api.error.trainingNotAllowed":
+    "이 모델은 품질 개선에 사용되는 데이터를 수집하며, 사용하려면 명시적으로 동의해야 합니다: {{consoleGoUrl}}",
   "zen.api.error.trialEnded":
     "{{model}}의 무료 프로모션이 종료되었습니다. OpenCode Go를 구독하면 모델을 계속 사용할 수 있습니다 - {{link}}",
 
@@ -618,7 +657,6 @@ export const dict = {
   "workspace.payments.type.subscription": "구독",
   "workspace.payments.view": "보기",
 
-  "workspace.black.loading": "로드 중...",
   "workspace.black.time.day": "일",
   "workspace.black.time.days": "일",
   "workspace.black.time.hour": "시간",
@@ -628,7 +666,8 @@ export const dict = {
   "workspace.black.time.fewSeconds": "몇 초",
   "workspace.black.subscription.title": "구독",
   "workspace.black.subscription.message": "현재 월 ${{plan}} OpenCode Black 플랜을 구독 중입니다.",
-  "workspace.black.subscription.manage": "구독 관리",
+  "workspace.black.subscription.ending":
+    "OpenCode Black은 현재 결제 기간이 끝나면 종료되며 갱신되지 않습니다. 새 콘솔로 옮겨 드리겠습니다.",
   "workspace.black.subscription.rollingUsage": "5시간 사용량",
   "workspace.black.subscription.weeklyUsage": "주간 사용량",
   "workspace.black.subscription.resetsIn": "초기화까지 남은 시간:",
@@ -654,15 +693,24 @@ export const dict = {
   "workspace.lite.time.fewSeconds": "몇 초",
   "workspace.lite.subscription.message": "현재 OpenCode Go를 구독 중입니다.",
   "workspace.lite.subscription.manage": "구독 관리",
-  "workspace.lite.subscription.rollingUsage": "롤링 사용량",
+  "workspace.lite.subscription.rollingUsage": "5시간 사용량",
+  "workspace.lite.subscription.rollingQuota": "5시간 할당량",
   "workspace.lite.subscription.weeklyUsage": "주간 사용량",
+  "workspace.lite.subscription.weeklyQuota": "주간 할당량",
   "workspace.lite.subscription.monthlyUsage": "월간 사용량",
+  "workspace.lite.subscription.monthlyQuota": "월간 할당량",
   "workspace.lite.subscription.resetsIn": "초기화까지 남은 시간:",
+  "workspace.lite.subscription.showDetails": "상세 정보 보기",
+  "workspace.lite.subscription.hideDetails": "상세 정보 숨기기",
+  "workspace.lite.subscription.model": "모델",
+  "workspace.lite.subscription.contribution": "%",
+  "workspace.lite.subscription.total": "합계",
   "workspace.lite.subscription.useBalance": "사용 한도 도달 후에는 보유 잔액 사용",
   "workspace.lite.subscription.selectProvider":
     'Go 모델을 사용하려면 opencode 설정에서 "OpenCode Go"를 공급자로 선택하세요.',
   "workspace.lite.providers.title": "공급자",
   "workspace.lite.providers.description": "라우팅에 사용할 공급자를 제어합니다.",
+  "workspace.lite.providers.allowTraining": "요청 데이터를 학습에 사용하는 모델 허용",
   "workspace.lite.providers.useChina": "중국에서 호스팅되는 모델 활성화",
   "workspace.lite.black.message":
     "현재 OpenCode Black을 구독 중이거나 대기 명단에 등록되어 있습니다. Go로 전환하려면 먼저 구독을 취소해 주세요.",
@@ -761,6 +809,14 @@ export const dict = {
   "enterprise.form.email.placeholder": "name@company.com",
   "enterprise.form.phone.label": "전화번호",
   "enterprise.form.phone.placeholder": "+1 234 567 8900",
+  "enterprise.form.inferenceSpend.label": "귀사의 현재 월간 AI 추론 비용(USD)은 얼마인가요?",
+  "enterprise.form.inferenceSpend.placeholder": "범위 선택 (선택 사항)",
+  "enterprise.form.inferenceSpend.none": "아직 지출 없음",
+  "enterprise.form.inferenceSpend.under1k": "$1K 미만",
+  "enterprise.form.inferenceSpend.1kTo10k": "$1K–$10K",
+  "enterprise.form.inferenceSpend.10kTo50k": "$10K–$50K",
+  "enterprise.form.inferenceSpend.50kTo100k": "$50K–$100K",
+  "enterprise.form.inferenceSpend.over100k": "$100K 이상",
   "enterprise.form.message.label": "어떤 문제를 해결하고 싶으신가요?",
   "enterprise.form.message.placeholder": "도움이 필요한 부분은...",
   "enterprise.form.send": "전송",
@@ -769,6 +825,7 @@ export const dict = {
   "enterprise.form.success.submitted": "양식이 성공적으로 제출되었습니다.",
   "enterprise.form.error.allFieldsRequired": "모든 필드는 필수 항목입니다.",
   "enterprise.form.error.invalidEmailFormat": "유효하지 않은 이메일 형식입니다.",
+  "enterprise.form.error.invalidInferenceSpend": "유효한 추론 비용 범위를 선택하세요.",
   "enterprise.form.error.internalServer": "내부 서버 오류입니다.",
   "enterprise.faq.title": "FAQ",
   "enterprise.faq.q1": "OpenCode 엔터프라이즈란 무엇인가요?",

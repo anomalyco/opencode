@@ -45,6 +45,7 @@ for (const theme of ["light", "dark"]) {
       await expect(shimmer).toHaveCSS("opacity", "0")
       await expect(shimmer).toHaveCSS("mask-position", "0% 0px")
       const settled = await logo.screenshot({ path: testInfo.outputPath("wordmark-settled.png") })
+
       const brightness = await page.evaluate(
         async (screenshots) => {
           const pixels = await Promise.all(
@@ -54,11 +55,14 @@ for (const theme of ["light", "dark"]) {
               await image.decode()
               const canvas = new OffscreenCanvas(image.width, image.height)
               const context = canvas.getContext("2d")
+
               if (!context) throw new Error("Cannot read screenshot pixels")
               context.drawImage(image, 0, 0)
+
               return context.getImageData(0, 0, image.width, image.height).data
             }),
           )
+
           return {
             min: pixels[0].reduce(
               (min, value, index) => (index % 4 === 3 ? min : Math.min(min, value - pixels[1][index])),
@@ -72,6 +76,7 @@ for (const theme of ["light", "dark"]) {
         },
         [swept.toString("base64"), settled.toString("base64")],
       )
+
       expect(brightness.min).toBeGreaterThanOrEqual(0)
       expect(brightness.max).toBeGreaterThanOrEqual(5)
     })

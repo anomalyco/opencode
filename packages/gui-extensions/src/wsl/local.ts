@@ -10,10 +10,12 @@ const execFileAsync = promisify(execFile)
 export async function buildLocalWslCli(input: { version: string; script: string; output: string }) {
   const directory = await mkdtemp(join(tmpdir(), "opencode-wsl-cli-"))
   const root = join(dirname(input.script), "../../..")
+
   const build = async () => {
     const packageManager = (
       JSON.parse(await readFile(join(root, "package.json"), "utf8")) as { packageManager: string }
     ).packageManager
+
     const target = `linux-${process.arch}`
     await execFileAsync("bunx", [packageManager, "install", "--os=*", "--cpu=*", "--frozen-lockfile"], {
       cwd: root,
@@ -33,7 +35,9 @@ export async function buildLocalWslCli(input: { version: string; script: string;
       { cwd: root, env: { ...process.env, OPENCODE_VERSION: input.version }, windowsHide: true },
     )
     await copyFile(join(directory, `cli-${target}`, "bin", "opencode"), input.output)
+
     return input.output
   }
+
   return build().finally(() => rm(directory, { recursive: true, force: true }))
 }

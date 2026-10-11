@@ -265,6 +265,23 @@ context.keymap.layer(() => ({
 }))
 ```
 
+Call `layer` from `setup`, including after an `await`, or from a component. Each layer is removed at the first of these:
+
+- The plugin is disabled, reloaded, or fails setup.
+- The component or reactive computation that created it, such as a slot, route, or dialog, is disposed.
+
+The layer factory must be pure. OpenCode evaluates it once without dependency tracking to validate the initial command shape, then reactively. Initial command-shape errors, such as a palette command without an ID, throw from `layer()`. OpenTUI handles binding-parse errors. Errors from later reactive updates follow Solid's error handling.
+
+```ts
+async setup(context) {
+  const settings = await loadSettings()
+  context.keymap.layer(() => ({
+    mode: "global",
+    commands: [{ id: "acme.sync", title: "Sync Acme", palette: true, run: () => sync(settings) }],
+  }))
+}
+```
+
 A layer may target one OpenTUI renderable and can return `false` from a command to continue keyboard dispatch.
 
 ```ts
@@ -332,6 +349,44 @@ const mode = await context.ui.dialog.select({
   ],
 })
 ```
+
+### Select search
+
+Pass `search` to own matching and result order. It runs for every query, including the empty one, and receives only enabled options. Results are listed in the returned order, with each category shown inline.
+
+```ts
+const project = await context.ui.dialog.select({
+  title: "Projects",
+  options: [
+    { title: "Alpha", value: "alpha", category: "Recent" },
+    { title: "Beta", value: "beta", category: "Pinned" },
+  ],
+  search: (query, options) =>
+    options
+      .filter((option) => option.title.toLowerCase().includes(query.toLowerCase()))
+      .toSorted((left, right) => right.title.localeCompare(left.title)),
+})
+```
+
+### Select actions
+
+Actions appear in the footer and run from their keyboard binding, a click, or Tab focus followed by Enter. By default they receive the selected value and are unavailable without a selection. Use `selection: "none"` for actions that need no selection.
+
+```ts
+await context.ui.dialog.select({
+  title: "Projects",
+  options: [{ title: "Alpha", value: "alpha" }],
+  actions: [
+    { bind: "ctrl+o", title: "Inspect", onTrigger: (value) => context.ui.toast.show({ message: value }) },
+    { bind: "ctrl+a", title: "Close", side: "right", selection: "none", onTrigger: () => context.ui.dialog.clear() },
+  ],
+})
+```
+
+- An action does not close the dialog or settle the promise.
+- Enter or clicking an option resolves the selected value.
+- Escape, `clear()`, or showing another dialog resolves `undefined`.
+- Do not bind `ctrl+n` or `ctrl+p`. The dialog reserves them for navigation, and its own bindings take precedence.
 
 Custom JSX dialogs can set their size and close themselves.
 

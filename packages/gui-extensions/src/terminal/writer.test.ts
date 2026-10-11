@@ -6,13 +6,16 @@ describe("terminalWriter", () => {
     const scheduled: VoidFunction[] = []
     const completions: VoidFunction[] = []
     const events: string[] = []
+
     const writer = terminalWriter(
       (data, done) => {
         events.push(data)
+
         if (done) completions.push(done)
       },
       (flush) => scheduled.push(flush),
     )
+
     writer.push("build started\r\n")
     scheduled.shift()?.()
     writer.push("\x1b[32mPASS\x1b[0m ")

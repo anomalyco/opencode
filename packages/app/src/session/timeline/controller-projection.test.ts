@@ -28,6 +28,7 @@ describe("visibleTimelineMessages", () => {
     delivery: "steer",
     payload: { text: "queued" },
   } satisfies SessionInboxInfo
+
   const work = {
     id: "msg_5",
     type: "assistant",
@@ -65,8 +66,9 @@ describe("visibleTimelineMessages", () => {
         shellToolDefaultOpen: () => false,
         editToolDefaultOpen: () => false,
         timelineDetail: () => timelinePresets[2].value,
-        pendingUserMessageIDs: () => new Set([steer.id]),
+        pendingInputIDs: () => new Set([steer.id]),
       })
+
       expect(projection.activeMessageID()).toBe("msg_1")
       expect(projection.rows().map((row) => [row._tag, row.userMessageID])).toEqual([
         ["UserMessage", "msg_1"],
@@ -113,7 +115,7 @@ describe("visibleTimelineMessages", () => {
     expect(visibleTimelineMessages(delivered, [])).toBe(delivered)
   })
 
-  test("preserves steer order and excludes reverted steers", () => {
+  test("preserves pending input order and excludes reverted steers", () => {
     const source = [...messages, work]
     const pending = [steer, { ...steer, id: "msg_4" }]
     expect(visibleTimelineMessages(source, pending).map((message) => message.id)).toEqual([
@@ -123,6 +125,30 @@ describe("visibleTimelineMessages", () => {
       "msg_3",
       "msg_4",
     ])
+
+    // A notice admitted after the steers, before the next step, sinks with them in admission order. The
+    // server delivers steers in that order and the store moves each delivered input to the end, so the
+    // rendered order does not change at delivery.
+    const notice = {
+      id: "msg_4a",
+      sessionID: "ses_1",
+      time: { created: 4 },
+      type: "synthetic",
+      delivery: "steer",
+      payload: { text: "", description: "Task finished" },
+    } satisfies SessionInboxInfo
+
+    const noticeMessage = {
+      id: notice.id,
+      type: "synthetic",
+      ...notice.payload,
+      time: notice.time,
+    } satisfies SessionMessageInfo
+
+    const pendingOrder = visibleTimelineMessages([...messages, noticeMessage, work], [...pending, notice])
+
+    // The order the server delivers in: active work, then steers and notices by admission.
+    expect(pendingOrder.map((message) => message.id)).toEqual(["msg_1", "msg_2", "msg_5", "msg_3", "msg_4", "msg_4a"])
     expect(visibleTimelineMessages(source, pending, "msg_4").map((message) => message.id)).toEqual([
       "msg_1",
       "msg_2",
@@ -152,6 +178,21 @@ describe("visibleTimelineMessages", () => {
       "msg_3",
     ])
     expect(visibleTimelineMessages(messages, [], "msg_0")).toEqual([])
+  })
+
+  test("keeps a pre-promotion failed idle marker after the pending input that triggered it", () => {
+    const failed = [
+      { id: "msg_3", type: "user", text: "queued", time: { created: 3 } },
+      {
+        id: "msg_idle",
+        type: "idle",
+        outcome: "failed",
+        error: { type: "unknown", message: 'Agent not found: "build"' },
+        time: { created: 4 },
+      },
+    ] satisfies SessionMessageInfo[]
+
+    expect(visibleTimelineMessages(failed, [steer]).map((message) => message.id)).toEqual(["msg_3", "msg_idle"])
   })
 })
 
@@ -185,6 +226,7 @@ describe("applyTimelineMessageHandoff", () => {
       ...handoff,
       files: [{ data: "YQ==", mime: "image/png", source: { type: "inline" } }],
     } satisfies SessionMessageInfo
+
     expect(applyTimelineMessageHandoff([durable], handoff)).toEqual([durable])
   })
 })

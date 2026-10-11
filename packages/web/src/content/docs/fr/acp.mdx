@@ -25,12 +25,15 @@ Vous trouverez ci-dessous des exemples d'éditeurs populaires prenant en charge 
 
 ### Zed
 
-Ajoutez à votre configuration [Zed](https://zed.dev) (`~/.config/zed/settings.json`) :
+Installez OpenCode depuis le [registre ACP de Zed](https://zed.dev/docs/ai/external-agents#registry) en exécutant `zed: acp registry` dans la palette de commandes.
+
+Pour utiliser plutôt un exécutable OpenCode personnalisé, ajoutez-le à votre configuration [Zed](https://zed.dev) (`~/.config/zed/settings.json`) :
 
 ```json title="~/.config/zed/settings.json"
 {
   "agent_servers": {
     "OpenCode": {
+      "type": "custom",
       "command": "opencode",
       "args": ["acp"]
     }

@@ -1,8 +1,6 @@
 import { Meta, Title } from "@solidjs/meta"
 import { ProviderIcon } from "@opencode/ui/provider-icon"
 import {
-  getStatsLabData,
-  getStatsHomeData,
   type LabUsageModelEntry,
   type MarketDay,
   type ModelUsagePoint,
@@ -11,20 +9,24 @@ import {
 import { createAsync, query, useParams } from "@solidjs/router"
 import { createMemo, createSignal, createUniqueId, For, onMount, Show, type JSX } from "solid-js"
 import { getRequestEvent } from "solid-js/web"
+import { breadcrumbList, FormatLinks, JsonLd, LastModified } from "../../component/agent-meta"
+import { ChartDataTable } from "../../component/chart-data-table"
 import { LocaleLinks } from "../../component/locale-links"
+import { NotFoundMeta } from "../../component/not-found-meta"
 import { useI18n } from "../../context/i18n"
 import { useLanguage } from "../../context/language"
+import { fromFirstUsage } from "../../lib/format"
 import { localizedUrl } from "../../lib/language"
+import { loadLabPage, type LabPageData } from "../../lib/page-data"
+import { labSummary } from "../../lib/summaries"
 import {
+  catalogModelPath,
   catalogSlug,
-  findModelCatalogLab,
   formatCatalogLabName,
-  loadModelCatalog,
   type ModelCatalogEntry,
   type ModelCatalogLab,
 } from "../model-catalog"
 import { SectionHeading } from "../section-heading"
-import { runStatsEffect } from "../../stats-runtime"
 import { setStatsPageCacheHeaders } from "../stats-cache"
 import { ComparisonCardsSection, modelRefFromCatalog, uniqueComparisonPairs } from "../compare-cards"
 import { BreadcrumbSelect } from "../breadcrumb-select"
@@ -42,32 +44,11 @@ import {
 
 const statsUnfurlPath = "banner.png"
 
-type RelatedCatalogLab = Pick<ModelCatalogLab, "id" | "name" | "description"> & {
-  models: Pick<ModelCatalogEntry, "name">[]
-}
-
-type LabPageData = {
-  lab: ModelCatalogLab | null
-  labs: RelatedCatalogLab[]
-  market: MarketDay[]
-  stats: StatsLabData | null
-}
+type RelatedCatalogLab = LabPageData["labs"][number]
 
 const getLabPageData = query(async (labParam: string) => {
   "use server"
-  const [catalog, home] = await Promise.all([loadModelCatalog(), runStatsEffect(getStatsHomeData())])
-  const lab = findModelCatalogLab(catalog, labParam) ?? null
-  return {
-    lab,
-    labs: catalog.labs.map((entry) => ({
-      id: entry.id,
-      name: entry.name,
-      description: entry.description,
-      models: entry.models.map((model) => ({ name: model.name })),
-    })),
-    market: home.market["2M"],
-    stats: lab ? await runStatsEffect(getStatsLabData(lab.id)) : null,
-  } satisfies LabPageData
+  return loadLabPage(labParam)
 }, "getStatsLabPageData")
 
 type LabModelTooltipState = {
@@ -88,11 +69,16 @@ export default function StatsLab() {
   const page = createAsync(() => getLabPageData(labParam()))
   const lab = createMemo(() => page()?.lab)
   const stats = createMemo(() => page()?.stats)
+  const modelPaths = createMemo(() => page()?.modelPaths ?? {})
   const githubStars = createAsync(() => getGitHubStars())
   const [themePreference, setThemePreference] = createSignal<ThemePreference>("system")
   const labName = createMemo(() => lab()?.name ?? formatCatalogLabName(labParam()))
   const labTitle = createMemo(() => i18n.t("lab.title", { lab: labName() }))
   const labDescription = createMemo(() => i18n.t("lab.description", { lab: labName() }))
+  const labMetaDescription = createMemo(() => {
+    const data = page()
+    return (data && labSummary(language.locale(), data)) ?? labDescription()
+  })
   const labPath = createMemo(() => `/data/${lab()?.id ?? labParam()}`)
   const labUrl = createMemo(() => localizedUrl(language.locale(), labPath()))
   const statsUnfurlUrl = new URL(statsUnfurlPath, localizedUrl("en", "/data/")).toString()
@@ -106,6 +92,7 @@ export default function StatsLab() {
     { href: `${import.meta.env.BASE_URL}#top-models`, label: i18n.t("nav.topModels") },
     { href: `${import.meta.env.BASE_URL}#market-share`, label: i18n.t("nav.marketShare") },
     { href: `${import.meta.env.BASE_URL}#geo-breakdown`, label: i18n.t("nav.geoBreakdown") },
+    { href: `${import.meta.env.BASE_URL}#methodology`, label: i18n.t("methodology.title") },
   ])
   const updateThemePreference = (preference: ThemePreference) => {
     applyThemePreference(preference)
@@ -124,24 +111,62 @@ export default function StatsLab() {
 
   return (
     <main data-page="stats" data-theme={themePreference()}>
-      <Title>{labTitle()}</Title>
-      <Meta name="description" content={labDescription()} />
-      <LocaleLinks path={labPath()} />
-      <Meta property="og:type" content="website" />
-      <Meta property="og:site_name" content="OpenCode" />
-      <Meta property="og:title" content={labTitle()} />
-      <Meta property="og:description" content={labDescription()} />
-      <Meta property="og:url" content={labUrl()} />
-      <Meta property="og:image" content={statsUnfurlUrl} />
-      <Meta property="og:image:type" content="image/png" />
-      <Meta property="og:image:width" content="1200" />
-      <Meta property="og:image:height" content="630" />
-      <Meta property="og:image:alt" content={i18n.t("app.unfurlAlt")} />
-      <Meta name="twitter:card" content="summary_large_image" />
-      <Meta name="twitter:title" content={labTitle()} />
-      <Meta name="twitter:description" content={labDescription()} />
-      <Meta name="twitter:image" content={statsUnfurlUrl} />
-      <Meta name="twitter:image:alt" content={i18n.t("app.unfurlAlt")} />
+      {/* Server-rendered head tags are never removed, so render them once data has loaded. */}
+      <Show when={page()}>
+        <Title>{labTitle()}</Title>
+        <Meta name="description" content={labMetaDescription()} />
+        <Show when={lab()} fallback={<NotFoundMeta unavailable={page()?.labs.length === 0} />}>
+          {(data) => (
+            <>
+              <LocaleLinks path={labPath()} />
+              <FormatLinks path={labPath()} />
+              <LastModified value={stats()?.updatedAt} />
+              <Meta property="og:type" content="website" />
+              <Meta property="og:site_name" content="OpenCode" />
+              <Meta property="og:title" content={labTitle()} />
+              <Meta property="og:description" content={labDescription()} />
+              <Meta property="og:url" content={labUrl()} />
+              <Meta property="og:image" content={statsUnfurlUrl} />
+              <Meta property="og:image:type" content="image/png" />
+              <Meta property="og:image:width" content="1200" />
+              <Meta property="og:image:height" content="630" />
+              <Meta property="og:image:alt" content={i18n.t("app.unfurlAlt")} />
+              <Meta name="twitter:card" content="summary_large_image" />
+              <Meta name="twitter:title" content={labTitle()} />
+              <Meta name="twitter:description" content={labDescription()} />
+              <Meta name="twitter:image" content={statsUnfurlUrl} />
+              <Meta name="twitter:image:alt" content={i18n.t("app.unfurlAlt")} />
+              <JsonLd
+                data={{
+                  "@context": "https://schema.org",
+                  "@type": "CollectionPage",
+                  name: labTitle(),
+                  description: labMetaDescription(),
+                  url: labUrl(),
+                  ...(stats()?.updatedAt ? { dateModified: stats()?.updatedAt } : {}),
+                  about: { "@type": "Organization", name: data().name },
+                  breadcrumb: breadcrumbList([
+                    { name: "Data", url: localizedUrl(language.locale(), "/data/") },
+                    { name: data().name, url: labUrl() },
+                  ]),
+                  mainEntity: {
+                    "@type": "ItemList",
+                    // Alias entries share another model's page, so list each page once.
+                    itemListElement: data()
+                      .models.filter((model) => modelPaths()[model.id] === catalogModelPath(model))
+                      .map((model, index) => ({
+                        "@type": "ListItem",
+                        position: index + 1,
+                        name: model.name,
+                        url: localizedUrl(language.locale(), catalogModelPath(model)),
+                      })),
+                  },
+                }}
+              />
+            </>
+          )}
+        </Show>
+      </Show>
       <Header
         githubStars={githubStars() ?? githubLink.fallbackStars}
         links={labHeaderLinks()}
@@ -156,7 +181,7 @@ export default function StatsLab() {
                   <LabHero lab={data()} labs={page()?.labs ?? []} />
                   <LabOverview lab={data()} data={stats() ?? null} />
                   <LabUsageSection lab={data()} data={stats() ?? null} />
-                  <LabModelsSection lab={data()} usage={stats()?.models ?? []} />
+                  <LabModelsSection lab={data()} usage={stats()?.models ?? []} paths={modelPaths()} />
                   <LabRelatedSection lab={data()} labs={page()?.labs ?? []} market={page()?.market ?? []} />
                   <ComparisonCardsSection
                     pairs={labComparisonPairs(data(), stats()?.models ?? [])}
@@ -473,13 +498,15 @@ function LabUsageSection(props: { lab: ModelCatalogLab; data: StatsLabData | nul
                     <div data-slot="tooltip-divider" />
                     <p>
                       <span data-slot="tooltip-label">
-                        <i data-kind="tokens" /> {i18n.t("lab.dailyTokens")}
+                        <i data-kind="tokens" />
+                        <span data-slot="tooltip-name">{i18n.t("lab.dailyTokens")}</span>
                       </span>
                       <b>{formatTokens(active.point.tokens)}</b>
                     </p>
                     <p>
                       <span data-slot="tooltip-label">
-                        <i data-kind="users" /> {i18n.t("model.uniqueUsers")}
+                        <i data-kind="users" />
+                        <span data-slot="tooltip-name">{i18n.t("model.uniqueUsers")}</span>
                       </span>
                       <b>{formatUsers(active.point.users)}</b>
                     </p>
@@ -501,12 +528,25 @@ function LabUsageSection(props: { lab: ModelCatalogLab; data: StatsLabData | nul
             </For>
           </div>
         </div>
+        <ChartDataTable
+          caption={i18n.t("lab.dailyTokenChart", { lab: props.lab.name })}
+          headers={[i18n.t("chart.date"), i18n.t("lab.dailyTokens"), i18n.t("model.uniqueUsers")]}
+          rows={fromFirstUsage(usage()).map((point) => [
+            point.date,
+            formatTokens(point.tokens),
+            formatUsers(point.users),
+          ])}
+        />
       </Show>
     </section>
   )
 }
 
-function LabModelsSection(props: { lab: ModelCatalogLab; usage: LabUsageModelEntry[] }) {
+function LabModelsSection(props: {
+  lab: ModelCatalogLab
+  usage: LabUsageModelEntry[]
+  paths: LabPageData["modelPaths"]
+}) {
   const i18n = useI18n()
   const [activeTooltip, setActiveTooltip] = createSignal<LabModelTooltipState>()
   const usageBySlug = createMemo(() => new Map(props.usage.map((item) => [item.slug, item])))
@@ -520,38 +560,47 @@ function LabModelsSection(props: { lab: ModelCatalogLab; usage: LabUsageModelEnt
         </button>
       </div>
       <div data-slot="lab-model-pattern" aria-hidden="true" />
-      <div
-        data-component="lab-model-table"
-        role="table"
-        aria-label={i18n.t("lab.modelsTitle", { lab: props.lab.name })}
-      >
-        <div data-slot="lab-model-table-track">
-          <div data-slot="lab-model-table-head" role="row">
-            <span data-column="model" role="columnheader">
-              {i18n.t("nav.models")}
-            </span>
-            <span data-column="usage" role="columnheader">
-              {i18n.t("lab.usage")}
-            </span>
-            <span data-column="share" role="columnheader">
-              {i18n.t("lab.share")}
-            </span>
-            <span data-column="context" role="columnheader">
-              {i18n.t("model.context")}
-            </span>
-            <span data-column="output" role="columnheader">
-              {i18n.t("model.output")}
-            </span>
-            <span data-column="release" role="columnheader">
-              {i18n.t("model.release")}
-            </span>
-          </div>
-          <For each={props.lab.models}>
-            {(model) => (
-              <LabModelRow model={model} usage={usageBySlug().get(model.slug)} onTooltipChange={setActiveTooltip} />
-            )}
-          </For>
-        </div>
+      <div data-component="lab-model-table">
+        <table
+          data-slot="lab-model-table-track"
+          role="table"
+          aria-label={i18n.t("lab.modelsTitle", { lab: props.lab.name })}
+        >
+          <thead role="rowgroup">
+            <tr data-slot="lab-model-table-head" role="row">
+              <th data-column="model" role="columnheader" scope="col">
+                {i18n.t("nav.models")}
+              </th>
+              <th data-column="usage" role="columnheader" scope="col">
+                {i18n.t("lab.usage")}
+              </th>
+              <th data-column="share" role="columnheader" scope="col">
+                {i18n.t("lab.share")}
+              </th>
+              <th data-column="context" role="columnheader" scope="col">
+                {i18n.t("model.context")}
+              </th>
+              <th data-column="output" role="columnheader" scope="col">
+                {i18n.t("model.output")}
+              </th>
+              <th data-column="release" role="columnheader" scope="col">
+                {i18n.t("model.release")}
+              </th>
+            </tr>
+          </thead>
+          <tbody role="rowgroup">
+            <For each={props.lab.models}>
+              {(model) => (
+                <LabModelRow
+                  model={model}
+                  path={props.paths[model.id] ?? catalogModelPath(model)}
+                  usage={usageBySlug().get(model.slug)}
+                  onTooltipChange={setActiveTooltip}
+                />
+              )}
+            </For>
+          </tbody>
+        </table>
       </div>
       <Show when={activeTooltip()} keyed>
         {(state) => <LabModelTooltip state={state} />}
@@ -562,12 +611,13 @@ function LabModelsSection(props: { lab: ModelCatalogLab; usage: LabUsageModelEnt
 
 function LabModelRow(props: {
   model: ModelCatalogEntry
+  path: string
   onTooltipChange: (state: LabModelTooltipState | undefined) => void
   usage: LabUsageModelEntry | undefined
 }) {
   const i18n = useI18n()
   const language = useLanguage()
-  const showTooltip = (target: HTMLAnchorElement) => {
+  const showTooltip = (target: HTMLElement) => {
     const rect = target.getBoundingClientRect()
     const viewportWidth = typeof window === "undefined" ? 0 : window.innerWidth
     const viewportHeight = typeof window === "undefined" ? 0 : window.innerHeight
@@ -583,21 +633,18 @@ function LabModelRow(props: {
           : rect.top + rect.height / 2,
     })
   }
-  const showPointerTooltip: JSX.EventHandler<HTMLAnchorElement, PointerEvent> = (event) => {
+  const showPointerTooltip: JSX.EventHandler<HTMLTableRowElement, PointerEvent> = (event) => {
     if (event.pointerType === "touch") return
     showTooltip(event.currentTarget)
   }
   const showFocusTooltip: JSX.EventHandler<HTMLAnchorElement, FocusEvent> = (event) => {
-    showTooltip(event.currentTarget)
+    const row = event.currentTarget.closest("tr")
+    if (row) showTooltip(row)
   }
   return (
-    <a
+    <tr
       data-component="lab-model-row"
-      href={language.route(`${import.meta.env.BASE_URL}${props.model.id}`)}
       role="row"
-      aria-label={props.model.name}
-      onBlur={() => props.onTooltipChange(undefined)}
-      onFocus={showFocusTooltip}
       onPointerEnter={showPointerTooltip}
       onPointerDown={() => props.onTooltipChange(undefined)}
       onPointerLeave={(event) => {
@@ -606,28 +653,35 @@ function LabModelRow(props: {
       }}
       onClick={() => props.onTooltipChange(undefined)}
     >
-      <span data-slot="lab-model-cell" data-column="model" role="cell">
+      <th data-slot="lab-model-cell" data-column="model" role="rowheader" scope="row">
         <span data-slot="lab-model-avatar" aria-hidden="true">
           <ProviderIcon id={getProviderIconId(props.model.lab)} />
         </span>
-        <strong>{props.model.name}</strong>
-      </span>
-      <span data-slot="lab-model-cell" data-column="usage" role="cell">
+        <a
+          data-slot="lab-model-link"
+          href={language.route(props.path)}
+          onBlur={() => props.onTooltipChange(undefined)}
+          onFocus={showFocusTooltip}
+        >
+          {props.model.name}
+        </a>
+      </th>
+      <td data-slot="lab-model-cell" data-column="usage" role="cell">
         {props.usage ? formatTokens(props.usage.tokens) : "-"}
-      </span>
-      <span data-slot="lab-model-cell" data-column="share" role="cell">
+      </td>
+      <td data-slot="lab-model-cell" data-column="share" role="cell">
         {props.usage ? formatPercent(props.usage.share) : "-"}
-      </span>
-      <span data-slot="lab-model-cell" data-column="context" role="cell">
+      </td>
+      <td data-slot="lab-model-cell" data-column="context" role="cell">
         {formatCatalogLimit(props.model.limit?.context, i18n.t("home.unknown"))}
-      </span>
-      <span data-slot="lab-model-cell" data-column="output" role="cell">
+      </td>
+      <td data-slot="lab-model-cell" data-column="output" role="cell">
         {formatCatalogLimit(props.model.limit?.output, i18n.t("home.unknown"))}
-      </span>
-      <span data-slot="lab-model-cell" data-column="release" role="cell">
+      </td>
+      <td data-slot="lab-model-cell" data-column="release" role="cell">
         {formatCatalogDate(props.model.releaseDate, language.tag(language.locale()), i18n.t("home.unknown"))}
-      </span>
-    </a>
+      </td>
+    </tr>
   )
 }
 
@@ -651,7 +705,7 @@ function LabModelTooltip(props: { state: LabModelTooltipState }) {
           </span>
           <strong>{props.state.model.name}</strong>
         </div>
-        <p>{props.state.model.description ?? "Recent OpenCode Go usage, share, context, and output limits."}</p>
+        <p>{props.state.model.description ?? "Recent OpenCode usage, share, context, and output limits."}</p>
       </div>
       <div data-slot="tooltip-divider" />
       <div data-slot="lab-model-tooltip-metrics">

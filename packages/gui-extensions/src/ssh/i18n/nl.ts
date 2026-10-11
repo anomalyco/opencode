@@ -38,8 +38,5 @@ export default {
   "form.name": "Servernaam (optioneel)",
   "form.namePlaceholder": "Lokale host",
   "form.add": "Server toevoegen",
-  "server.default": "Standaard",
-  "menu.default": "Als standaard instellen",
-  "menu.defaultRemove": "Standaard verwijderen",
   "menu.delete": "Verwijderen",
 }

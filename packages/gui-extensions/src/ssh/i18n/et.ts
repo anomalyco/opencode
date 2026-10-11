@@ -36,8 +36,5 @@ export default {
   "form.name": "Serveri nimi (valikuline)",
   "form.namePlaceholder": "Localhost",
   "form.add": "Lisa server",
-  "server.default": "Vaikimisi",
-  "menu.default": "Määra vaikeväärtuseks",
-  "menu.defaultRemove": "Eemalda vaikeseade",
   "menu.delete": "Kustuta",
 }

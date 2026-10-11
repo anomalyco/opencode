@@ -14,4 +14,6 @@ export default {
   "git.description": "Отслеживайте, просматривайте и отменяйте изменения в этом проекте",
   loadingChanges: "Загрузка изменений…",
   noChanges: "Нет изменений",
+  "settings.wrapLines.title": "Переносить строки",
+  "settings.wrapLines.description": "Перенос длинных строк в мобильных различиях вместо горизонтальной прокрутки",
 }

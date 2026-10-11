@@ -7,16 +7,21 @@ import { createAnimatedPresence } from "@/runtime/animated-presence"
 export function ComposerDropzone(props: {
   active: boolean
   input?: { image?: boolean; pdf?: boolean }
-  identity?: () => unknown
+  identity?: () => string | undefined
 }) {
   const language = useLanguage()
   const [elements, setElements] = createStore<{ dropzone?: HTMLDivElement }>({})
+
   const label = createMemo(() => {
     if (!props.input?.image && !props.input?.pdf) return language.t("ui.promptInput.dropFiles")
+
     if (!props.input.pdf) return language.t("ui.promptInput.dropFiles.image")
+
     if (!props.input.image) return language.t("ui.promptInput.dropFiles.pdf")
+
     return language.t("ui.promptInput.dropFiles.imagePdf")
   })
+
   const presence = createAnimatedPresence(
     () => (props.active ? label() : undefined),
     () => elements.dropzone ?? null,
@@ -47,7 +52,7 @@ export function ComposerDropzone(props: {
         >
           <div class="absolute inset-0 bg-v2-background-bg-base/25" />
           <div
-            class="absolute inset-y-0 left-1/2 w-full -translate-x-1/2 md:max-w-200 2xl:max-w-[1000px]"
+            class="absolute inset-y-0 left-1/2 w-full -translate-x-1/2 md:max-w-session"
             style={{
               "-webkit-mask-image": "linear-gradient(to right, transparent 0%, black 12%, black 88%, transparent 100%)",
               "mask-image": "linear-gradient(to right, transparent 0%, black 12%, black 88%, transparent 100%)",

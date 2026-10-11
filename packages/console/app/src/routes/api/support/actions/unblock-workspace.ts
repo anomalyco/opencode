@@ -15,7 +15,7 @@ export async function POST(event: APIEvent) {
   if (!body.success) {
     return Response.json({ error: "Invalid request", issues: body.error.issues }, { status: 400 })
   }
-  return Workspace.unblock(body.data.workspaceID)
+  return Workspace.unblock(body.data)
     .then(() => Response.json({ success: true, message: "Workspace unblocked" }))
     .catch((error) => Response.json({ error: error instanceof Error ? error.message : String(error) }, { status: 400 }))
 }

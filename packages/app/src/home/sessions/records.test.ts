@@ -50,6 +50,7 @@ describe("buildHomeSessionRecords", () => {
 
   test("prefers the added project whose directory matches over a sibling entry with the same ID", () => {
     const nested = { id: "project-a", worktree: "/repo/a/packages/app", expanded: true } as LocalProject
+
     const records = buildHomeSessionRecords({
       sessions: () => [session("n", "/repo/a/packages/app", "project-a")],
       projectDirectories: () => undefined,
@@ -64,6 +65,7 @@ describe("buildHomeSessionRecords", () => {
       ...session(id, "/repo/a", "project-a"),
       time: { created: 1, updated },
     })
+
     const records = buildHomeSessionRecords({
       sessions: () => [at("ses_z", 2), at("ses_old", 1), at("ses_a", 2)],
       projectDirectories: () => undefined,

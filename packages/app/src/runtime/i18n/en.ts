@@ -2,6 +2,13 @@ import { DESKTOP_NATIVE_ENGLISH } from "./desktop-native"
 
 export const dict = {
   ...DESKTOP_NATIVE_ENGLISH,
+  "session.location.unavailable": "Session location unavailable",
+  "session.location.description": "Choose another directory to continue this session.",
+  "session.location.choose": "Choose directory",
+  "session.location.worktree": "Choose worktree",
+  "session.location.worktreesFailed": "Failed to load worktrees",
+  "session.location.moving": "Moving session…",
+  "session.location.moveFailed": "Failed to move session",
   "server.action.authenticate": "Authenticate",
   "server.status.connecting": "Connecting over SSH…",
   "server.status.authentication": "Authentication required",
@@ -79,6 +86,7 @@ export const dict = {
   "palette.empty": "No results found",
   "palette.group.commands": "Commands",
   "palette.group.files": "Files",
+  "palette.group.recentSessions": "Recent sessions",
 
   "dialog.provider.search.placeholder": "Search providers",
   "dialog.provider.empty": "No providers found",
@@ -295,6 +303,7 @@ export const dict = {
   "prompt.toast.uploadFailed.title": "Upload failed",
   "prompt.toast.modelAgentRequired.title": "Select an agent and model",
   "prompt.toast.modelAgentRequired.description": "Choose an agent and model before sending a prompt.",
+  "prompt.toast.unqueueable.title": "This prompt cannot be queued",
   "prompt.toast.worktreeCreateFailed.title": "Failed to create worktree",
   "prompt.toast.sessionCreateFailed.title": "Failed to create session",
   "prompt.toast.shellSendFailed.title": "Failed to send shell command",
@@ -332,32 +341,46 @@ export const dict = {
 
   "server.connect.title": "Connect to a server",
   "server.connect.description": "Enter your server address and password to get started.",
+  "server.connect.description.pairing": "Paste the pairing link from the server, or scan its QR code.",
+  "server.connect.link": "Pairing link",
+  "server.connect.link.placeholder": "http://192.168.1.2:4096/auth/connect/…",
+  "server.connect.link.invalid":
+    "Paste the full pairing link from opencode pair, or from Settings → Pairing on the server's computer.",
+  "server.connect.password.prompt": "No pairing link?",
+  "server.connect.password.use": "Use password",
+  "server.connect.password.hint": "To see it, run opencode service get password on the server's computer.",
+  "server.connect.link.prompt": "Have a pairing link?",
+  "server.connect.link.use": "Use pairing link",
   "server.connect.button": "Connect",
   "server.connect.address.invalid": "Enter a valid HTTP or HTTPS server address.",
   "server.connect.failed": "Could not connect. Check the server address and password, then try again.",
-  "server.connect.pair.description": "Run this command on your computer to get your connection details.",
+  "server.connect.pair.link": "Run this command on the server's computer to get a pairing link and QR code.",
   "server.connect.scan": "Scan QR code",
   "server.connect.scan.description": "Point your camera at the QR code shown by opencode pair.",
   "server.connect.scan.invalid": "This is not an OpenCode pairing code. Scan the code shown by opencode pair.",
+  "server.connect.scan.failed": "This browser could not read the QR code. Enter your connection details manually.",
   "server.connect.link.expired": "This pairing link expired or was already used. Run opencode pair to get a new one.",
+  "server.connect.link.unreachable":
+    "Could not reach {{url}}. Check that this device can reach the server, then try again.",
+  "server.connect.link.legacy":
+    "This pairing code is from an older version of OpenCode. Update OpenCode on the server, then run opencode pair again.",
   "server.connect.camera": "Pairing camera",
   "server.connect.camera.starting": "Opening camera…",
   "server.connect.mixedContent":
     "Could not connect to this HTTP server from an HTTPS page. Use an HTTPS server address instead.",
-  "server.connect.camera.insecure": "QR scanning requires opening this page over HTTPS or on localhost.",
+  "server.connect.camera.native": "This page cannot use the camera over HTTP. Paste the pairing link above.",
   "server.connect.camera.unavailable":
     "No camera is available to this browser. Enter your connection details manually.",
   "server.connect.camera.error":
     "Could not open the camera. Allow camera access or enter your connection details manually.",
   "dialog.server.edit.title": "Edit server",
+  "dialog.server.signedOut":
+    "Your sign-in for this server is no longer valid. Paste a new pairing link, or enter the server password.",
 
   "dialog.server.menu.edit": "Edit",
-  "dialog.server.menu.default": "Set as default",
-  "dialog.server.menu.defaultRemove": "Remove default",
   "dialog.server.menu.remove": "Remove",
   "dialog.server.menu.hide": "Hide from project list",
   "dialog.server.menu.show": "Show in project list",
-  "dialog.server.status.default": "Default",
 
   "server.row.incompatible":
     "This server is running OpenCode {{version}}, which isn't compatible with this app. Upgrade it to OpenCode V2 to continue.",
@@ -370,10 +393,6 @@ export const dict = {
   "dialog.project.edit.worktree.startup": "Worktree startup script",
   "dialog.project.edit.worktree.startup.placeholder": "e.g. bun install",
 
-  "dialog.releaseNotes.action.getStarted": "Get started",
-  "dialog.releaseNotes.action.next": "Next",
-  "dialog.releaseNotes.action.hideFuture": "Don't show these in the future",
-  "dialog.releaseNotes.media.alt": "Release preview",
   "dialog.usageExceeded.dontShowAgain": "Don't show again",
 
   "toast.permissions.autoaccept.on.title": "Auto-accepting permissions",
@@ -486,6 +505,7 @@ export const dict = {
   "home.workspaceTip": "Start next session in a new workspace to keep changes isolated",
 
   "session.tab.session": "Session",
+  "session.tab.more": "More...",
   "session.view.select": "Session view",
   "session.tab.add": "Add tab",
   "session.tab.unknown": "Unknown Session",
@@ -507,12 +527,21 @@ export const dict = {
   "session.queue.remove": "Remove",
   "session.queue.undo": "Undo",
   "session.queue.undoShell": "Leave shell mode before undoing a queued prompt",
-  "session.queue.undoUnavailable": "Edit this prompt in the queue to preserve its file context",
   "session.queue.reorder": "Reorder queued prompt",
+  "session.queue.reverted": "Redo the revert before you reorder or edit queued prompts",
   "session.queue.attachments.one": "{{count}} attachment",
   "session.queue.attachments.other": "{{count}} attachments",
   "session.timeline.working": "Working",
-  "session.review.wrapLines": "Wrap lines",
+  "session.running.working.one": "{{count}} working",
+  "session.running.working.other": "{{count}} working",
+  "session.running.running.one": "{{count}} running",
+  "session.running.running.other": "{{count}} running",
+  "session.running.additionalWorking.one": "+{{count}} working",
+  "session.running.additionalWorking.other": "+{{count}} working",
+  "session.running.additionalRunning.one": "+{{count}} running",
+  "session.running.additionalRunning.other": "+{{count}} running",
+  "session.running.stop.subagent": "Interrupt subagent",
+  "session.running.stop.shell": "Kill shell command",
 
   "session.files.selectToOpen": "Select a file to open",
 
@@ -633,6 +662,7 @@ export const dict = {
   "settings.guiExtensions.status.active": "Active",
   "settings.guiExtensions.status.failed": "Failed",
   "settings.guiExtensions.status.disabled": "Disabled",
+  "settings.guiExtensions.status.blocked": "Blocked",
   "settings.tab.about": "About",
   "settings.about.version": "Version {{version}}",
   "settings.about.devVersion": "development",
@@ -647,6 +677,21 @@ export const dict = {
   "settings.about.description": "OpenCode, the open source coding agent",
   "settings.about.trademark": "OpenCode is a registered trademark of Anomaly Innovations, Inc.",
   "settings.about.typeset": "Typeset in Inter and IBM Plex Mono",
+  "settings.about.notices.title": "Third-party notices",
+  "settings.about.notices.description": "OpenCode includes the following open source software.",
+  "settings.about.notices.license": "License text",
+  "settings.about.notices.fonts.title": "Fonts in the Office previews",
+  "settings.about.notices.fonts.description":
+    "Each family is distributed under the SIL Open Font License 1.1, with the copyright lines below.",
+  "settings.about.notices.eigenpal": "Portions of BetterOffice derive from it.",
+  "settings.about.notices.loadFailed": "Could not load the third-party notices",
+  "settings.about.notices.crates.title": "Rust crates in the Office engines",
+  "settings.about.notices.crates.description":
+    "BetterOffice compiles these crates into its Word, Excel and PowerPoint engines. Where a crate offers a choice of licenses, the highlighted license applies.",
+  "settings.about.notices.crates.licenses": "License texts",
+  "settings.about.notices.crates.count.one": "{{count}} crate",
+  "settings.about.notices.crates.count.other": "{{count}} crates",
+  "settings.about.notices.crates.appliesTo": "Applies to {{names}}",
   "settings.about.tagline": "AI can’t build great software, without you",
   "settings.about.copyright": "© Anomaly Innovations, Inc.",
   "settings.preferences.description": "Customize preferences and theme and default behavior",
@@ -763,8 +808,6 @@ export const dict = {
   "settings.general.row.uiFont.description": "Customise the font used throughout the interface",
   "settings.general.row.mobileTitlebarBottom.title": "Bottom navigation",
   "settings.general.row.mobileTitlebarBottom.description": "Place the title bar at the bottom of the screen on mobile",
-  "settings.general.row.mobileDiffWrap.description":
-    "Wrap long lines in mobile diffs instead of scrolling horizontally",
   "settings.general.row.showCustomAgents.title": "Show agent",
   "settings.general.row.showCustomAgents.description":
     "Switch between agents in the composer. When hidden, defaults to Build agent.",

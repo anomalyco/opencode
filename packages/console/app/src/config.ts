@@ -2,6 +2,8 @@
  * Application-wide constants and configuration
  */
 export const config = {
+  consoleMarketingEnabled: import.meta.env.VITE_CONSOLE_MARKETING_ENABLED === "true",
+
   // Base URL
   baseUrl: "https://opencode.ai",
 
@@ -9,8 +11,8 @@ export const config = {
   github: {
     repoUrl: "https://github.com/anomalyco/opencode",
     starsFormatted: {
-      compact: "205K",
-      full: "205,000",
+      compact: "208K",
+      full: "208,000",
     },
   },
 

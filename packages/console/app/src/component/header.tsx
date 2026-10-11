@@ -14,7 +14,7 @@ import copyLogoSvgDark from "../asset/lander/opencode-logo-dark.svg"
 import copyWordmarkSvgLight from "../asset/lander/opencode-wordmark-light.svg"
 import copyWordmarkSvgDark from "../asset/lander/opencode-wordmark-dark.svg"
 import { A, useNavigate } from "@solidjs/router"
-import { createMemo, Match, Show, Switch } from "solid-js"
+import { Match, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createEffect, onCleanup } from "solid-js"
 import { config } from "~/config"
@@ -143,24 +143,46 @@ export function Header(props: { zen?: boolean; go?: boolean; hideGetStarted?: bo
       <nav data-component="nav-desktop">
         <ul>
           <li>
-            <a href={config.github.repoUrl} target="_blank" style="white-space: nowrap;">
+            <a href={`${config.github.repoUrl}/tree/v2`} target="_blank" style="white-space: nowrap;">
               {i18n.t("nav.github")}
             </a>
           </li>
           <li>
-            <a href={language.route("/docs")}>{i18n.t("nav.docs")}</a>
+            <a href="/v2/docs">{i18n.t("nav.docs")}</a>
           </li>
           <li>
             <a href={language.route("/data")}>{i18n.t("nav.data")}</a>
           </li>
           <li>
-            <A href={language.route("/zen")}>{i18n.t("nav.zen")}</A>
+            {/* Console links use a full page load into its separate application. */}
+            <Show
+              when={config.consoleMarketingEnabled}
+              fallback={<A href={language.route("/zen")}>{i18n.t("nav.zen")}</A>}
+            >
+              <a href="/console/models" target="_self">
+                {i18n.t("nav.models")}
+              </a>
+            </Show>
           </li>
           <li>
-            <A href={language.route("/go")}>{i18n.t("nav.go")}</A>
+            <Show
+              when={config.consoleMarketingEnabled}
+              fallback={<A href={language.route("/go")}>{i18n.t("nav.go")}</A>}
+            >
+              <a href="/console/go" target="_self">
+                {i18n.t("nav.go")}
+              </a>
+            </Show>
           </li>
           <li>
-            <A href={language.route("/enterprise")}>{i18n.t("nav.enterprise")}</A>
+            <Show
+              when={config.consoleMarketingEnabled}
+              fallback={<A href={language.route("/enterprise")}>{i18n.t("nav.enterprise")}</A>}
+            >
+              <a href="/console/teams" target="_self">
+                {i18n.t("nav.teams")}
+              </a>
+            </Show>
           </li>
           <Show when={props.zen || props.go}>
             <li>
@@ -243,28 +265,49 @@ export function Header(props: { zen?: boolean; go?: boolean; hideGetStarted?: bo
                   <A href={language.route("/")}>{i18n.t("nav.home")}</A>
                 </li>
                 <li>
-                  <a href={config.github.repoUrl} target="_blank" style="white-space: nowrap;">
+                  <a href={`${config.github.repoUrl}/tree/v2`} target="_blank" style="white-space: nowrap;">
                     {i18n.t("nav.github")}
                   </a>
                 </li>
                 <li>
-                  <a href={language.route("/docs")}>{i18n.t("nav.docs")}</a>
+                  <a href="/v2/docs">{i18n.t("nav.docs")}</a>
                 </li>
                 <li>
                   <a href={language.route("/data")}>{i18n.t("nav.data")}</a>
                 </li>
                 <Show when={!props.zen}>
                   <li>
-                    <A href={language.route("/zen")}>{i18n.t("nav.zen")}</A>
+                    <Show
+                      when={config.consoleMarketingEnabled}
+                      fallback={<A href={language.route("/zen")}>{i18n.t("nav.zen")}</A>}
+                    >
+                      <a href="/console/models" target="_self">
+                        {i18n.t("nav.models")}
+                      </a>
+                    </Show>
                   </li>
                 </Show>
                 <Show when={!props.go}>
                   <li>
-                    <A href={language.route("/go")}>{i18n.t("nav.go")}</A>
+                    <Show
+                      when={config.consoleMarketingEnabled}
+                      fallback={<A href={language.route("/go")}>{i18n.t("nav.go")}</A>}
+                    >
+                      <a href="/console/go" target="_self">
+                        {i18n.t("nav.go")}
+                      </a>
+                    </Show>
                   </li>
                 </Show>
                 <li>
-                  <A href={language.route("/enterprise")}>{i18n.t("nav.enterprise")}</A>
+                  <Show
+                    when={config.consoleMarketingEnabled}
+                    fallback={<A href={language.route("/enterprise")}>{i18n.t("nav.enterprise")}</A>}
+                  >
+                    <a href="/console/teams" target="_self">
+                      {i18n.t("nav.teams")}
+                    </a>
+                  </Show>
                 </li>
                 <Show when={props.zen || props.go}>
                   <li>

@@ -15,7 +15,6 @@ import {
   partUpdated,
   renderedPartID,
   setupTimeline,
-  shell,
   status,
   textPart,
   toolPart,
@@ -25,10 +24,13 @@ import {
 test("streams text through growth, canonical replacement, and completion", async ({ page }, testInfo) => {
   const textID = "prt_text_reconcile"
   const followingID = "prt_text_reconcile_following"
+
   const assistant = assistantMessage([textPart(textID, "Starting"), textPart(followingID, "Following text row")], {
     completed: false,
   })
+
   const timeline = await setupTimeline(page, { messages: [userMessage(), assistant], cpuRate: 4 })
+
   const regions = defineVisualRegions({
     text: {
       selector: `[data-timeline-part-id="${renderedPartID(textID)}"]`,
@@ -39,6 +41,7 @@ test("streams text through growth, canonical replacement, and completion", async
       closest: '[data-timeline-row="AssistantPart"]',
     },
   })
+
   await startVisualProbe(page, regions)
   await timeline.send(partDelta(textID, " streamed content"), 100)
   await timeline.send(partDelta(textID, "\n\n- item one\n- item two\n- item three"), 180)
@@ -68,6 +71,7 @@ test("inserts a completed question between stable rows", async ({ page }, testIn
   const questionID = "prt_question_02_hidden"
   const lastID = "prt_question_03_last"
   const input = { questions: [{ header: "Choice", question: "Keep stable?", options: [] }] }
+
   const timeline = await setupTimeline(page, {
     messages: [
       userMessage(),
@@ -82,7 +86,9 @@ test("inserts a completed question between stable rows", async ({ page }, testIn
     ],
     cpuRate: 4,
   })
+
   await expect(page.locator(`[data-timeline-part-id="${renderedPartID(questionID)}"]`)).toHaveCount(0)
+
   const regions = defineVisualRegions({
     first: {
       selector: `[data-timeline-part-id="${renderedPartID(firstID)}"]`,
@@ -93,6 +99,7 @@ test("inserts a completed question between stable rows", async ({ page }, testIn
       closest: '[data-timeline-row="AssistantPart"]',
     },
   })
+
   await startVisualProbe(page, regions)
   await timeline.send(
     partUpdated(toolPart(questionID, "question", "completed", input, { metadata: { answers: [["Yes"]] } })),
@@ -108,10 +115,12 @@ test("replaces thinking with an assistant error without a blank turn", async ({ 
   const timeline = await setupTimeline(page, { messages: [userMessage(), assistant], cpuRate: 4 })
   await timeline.send(status("busy"), 150)
   await expect(page.locator('[data-timeline-row="Thinking"]')).toBeVisible()
+
   const regions = defineVisualRegions({
     thinking: { selector: '[data-timeline-row="Thinking"]' },
     error: { selector: '[data-timeline-row="Error"]' },
   })
+
   await startVisualProbe(page, regions)
   await timeline.send(
     messageUpdated({
@@ -146,11 +155,14 @@ test("updates retry attempts and long provider messages without remounting the r
     messages: [userMessage(), assistantMessage([], { completed: false })],
     cpuRate: 4,
   })
+
   await timeline.send(status("retry", 1), 120)
   await expect(page.locator('[data-timeline-row="Retry"]')).toBeVisible()
+
   const regions = defineVisualRegions({
     retry: { selector: '[data-timeline-row="Retry"]' },
   })
+
   await startVisualProbe(page, regions)
   await timeline.send(
     event("session.status", {

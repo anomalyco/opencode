@@ -14,7 +14,6 @@ import * as GoogleVertexChat from "../src/providers/google-vertex-chat.js"
 import * as GoogleVertexMessages from "../src/providers/google-vertex-messages.js"
 import * as GoogleVertexResponses from "../src/providers/google-vertex-responses.js"
 import * as OpenAI from "../src/providers/openai.js"
-import * as OpenAICompatible from "../src/providers/openai-compatible.js"
 import * as OpenRouter from "../src/providers/openrouter.js"
 import * as XAI from "../src/providers/xai.js"
 
@@ -30,7 +29,7 @@ type LanguageModel = {
 declare const auth: Auth.Definition
 declare const optionalAuthModel: LanguageModelFactory<BaseOptions, "optional", LanguageModel>
 declare const requiredAuthModel: LanguageModelFactory<BaseOptions, "required", LanguageModel>
-const configApiKey = Config.redacted("OPENAI_API_KEY")
+const configApiKey = Config.Redacted("OPENAI_API_KEY")
 
 OpenAIChat.route.model({ id: "gpt-4.1-mini" })
 

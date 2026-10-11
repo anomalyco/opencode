@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect"
-import { Rpc, RpcGroup } from "effect/unstable/rpc"
+import { Rpc, RpcGroup } from "effect/rpc"
 
 const JsonRpcID = Schema.Union([Schema.String, Schema.Number, Schema.Null])
 const decodeJson = Schema.decodeUnknownSync(Schema.Json)

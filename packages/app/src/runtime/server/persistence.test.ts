@@ -12,6 +12,7 @@ function serverSchema(canonical?: () => string | undefined) {
 describe("server persistence schema", () => {
   test("migrates legacy auth and writes only current server objects", () => {
     const schema = serverSchema()
+
     const input = {
       list: [
         "http://localhost:4096",
@@ -26,6 +27,7 @@ describe("server persistence schema", () => {
       ],
       projects: { local: [{ worktree: "/project", expanded: true }] },
     }
+
     const state = Schema.decodeUnknownSync(schema)(input)
     expect(state).toEqual({
       list: [
@@ -71,6 +73,7 @@ describe("server persistence schema", () => {
 
   test("moves canonical project buckets without changing server keys or unrelated scopes", () => {
     const schema = serverSchema(() => "https://opencode.example.com")
+
     const state = Schema.decodeUnknownSync(schema)({
       list: ["https://opencode.example.com"],
       hidden: { "https://opencode.example.com": true },
@@ -86,6 +89,7 @@ describe("server persistence schema", () => {
       lastProject: { local: "/local", "https://opencode.example.com": "/remote", other: "/other" },
       recentlyClosed: { local: ["/closed"], "https://opencode.example.com": ["/old-closed"] },
     })
+
     expect(state.projects).toEqual({
       local: [
         { worktree: "/local", expanded: false },
@@ -105,10 +109,12 @@ describe("server persistence schema", () => {
     const props: { canonicalLocalServer?: string } = {}
     const schema = serverSchema(() => props.canonicalLocalServer)
     const decode = Schema.decodeUnknownSync(schema)
+
     const input = {
       projects: { remote: [{ worktree: "/project", expanded: true }] },
       lastProject: { remote: "/project" },
     }
+
     expect(decode(input).projects).toEqual(input.projects)
     props.canonicalLocalServer = "remote"
     expect(decode(input).projects).toEqual({ local: [{ worktree: "/project", expanded: true }] })
@@ -126,6 +132,7 @@ describe("model persistence schema", () => {
     const decode = Schema.decodeUnknownSync(Persistence.withInitial(ModelState, { user: [], recent: [], variant: {} }))
     expect(decode({})).toEqual({ user: [], recent: [], variant: {} })
     expect(decode({ user: null, recent: 1, variant: [] })).toEqual({ user: [], recent: [], variant: {} })
+
     const state = decode({
       user: [
         null,
@@ -136,6 +143,7 @@ describe("model persistence schema", () => {
       recent: [false, { providerID: "provider", modelID: "model" }, { providerID: "missing-model" }],
       variant: { model: "high" },
     })
+
     expect(state).toEqual({
       user: [
         { providerID: "provider", modelID: "model", visibility: "show", favorite: true },

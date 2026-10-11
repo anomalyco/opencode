@@ -5,7 +5,7 @@ import { Service, type Endpoint } from "@opencode/client/effect/service"
 import { OpenCode, type SessionInfo } from "@opencode/client"
 import { Global } from "@opencode/util/global"
 import { ClipboardProvider, useClipboard } from "./context/clipboard"
-import { LogProvider, useLog, type LogSink } from "./context/log"
+import { LogProvider, type LogSink } from "./context/log"
 import { ExitProvider, useExit } from "./context/exit"
 import { EpilogueProvider } from "./context/epilogue"
 import { Selection } from "./util/selection"
@@ -73,6 +73,7 @@ import { SessionTabs } from "./component/session-tabs"
 import { clampSessionTabsWidth, sessionTabsFitVertically, SESSION_SIDEBAR_WIDTH } from "./ui/layout"
 import { createPaneResize } from "./ui/pane-resize"
 import { PaneResizeHandle } from "./ui/pane-resize-handle"
+import { clickedLink } from "./ui/link"
 import { ThemeErrorToast } from "./component/theme-error-toast"
 import { createThemeSource, ThemeProvider, useTheme, useThemes } from "./context/theme"
 import { Home } from "./routes/home"
@@ -329,12 +330,6 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                             <TuiTerminalEnvironmentProvider
                               value={{
                                 platform: process.platform,
-                                multiplexer: process.env.TMUX ? "tmux" : process.env.STY ? "screen" : undefined,
-                                displayServer: process.env.WAYLAND_DISPLAY
-                                  ? "wayland"
-                                  : process.env.DISPLAY
-                                    ? "x11"
-                                    : undefined,
                                 variables: input.environment,
                               }}
                             >
@@ -457,7 +452,6 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
 })
 
 function App() {
-  const log = useLog({ component: "app" })
   const app = useTuiApp()
   const startup = useTuiStartup()
   const config = useConfig()
@@ -1338,9 +1332,11 @@ function App() {
         evt.preventDefault()
         evt.stopPropagation()
       }}
-      onMouseUp={
-        copyOnSelectEnabled() ? (event) => Selection.copyOnSelectRelease(event, renderer, toast, clipboard) : undefined
-      }
+      onMouseUp={(event) => {
+        const url = clickedLink(renderer, event)
+        if (url) return void openUrl(url).catch(toast.error)
+        if (copyOnSelectEnabled()) Selection.copyOnSelectRelease(event, renderer, toast, clipboard)
+      }}
     >
       <box
         flexGrow={1}

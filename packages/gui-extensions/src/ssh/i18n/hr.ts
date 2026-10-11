@@ -38,8 +38,5 @@ export default {
   "form.name": "Naziv poslužitelja (neobavezno)",
   "form.namePlaceholder": "Localhost",
   "form.add": "Dodaj poslužitelj",
-  "server.default": "Zadano",
-  "menu.default": "Postavi kao zadano",
-  "menu.defaultRemove": "Ukloni zadano",
   "menu.delete": "Izbriši",
 }

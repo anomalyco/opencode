@@ -52,8 +52,5 @@ export default {
   "error.healthTimeout": "Stranska prikolica za zdravstveni pregled {{distro}} je potekla po {{timeout}}ms",
   "error.commandTimeout": "Časovna omejitev {{command}} {{args}} je potekla po {{timeout}}ms",
   "error.failedPort": "Vrat ni bilo mogoče pridobiti",
-  "server.default": "Privzeto",
-  "menu.default": "Nastavi kot privzeto",
-  "menu.defaultRemove": "Odstrani privzeto",
   "menu.remove": "Odstrani",
 }

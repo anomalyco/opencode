@@ -2,6 +2,7 @@ import { createEffect, For, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 
 const target = ["o", "p", "e", "n", "c", "o", "d", "e"] as const
+
 const choices = ["o", "p", "e", "n", "c", "d"] as const
 
 export function AnimatedWordmark(props: { active: boolean }) {
@@ -14,8 +15,10 @@ export function AnimatedWordmark(props: { active: boolean }) {
       (active) => {
         timers.forEach(clearTimeout)
         timers.clear()
+
         if (!active || matchMedia("(prefers-reduced-motion: reduce)").matches) {
           setState("letters", [...target])
+
           return
         }
 
@@ -34,6 +37,7 @@ export function AnimatedWordmark(props: { active: boolean }) {
             )
             timers.delete(timer)
           }, tick * 75)
+
           timers.add(timer)
         })
       },

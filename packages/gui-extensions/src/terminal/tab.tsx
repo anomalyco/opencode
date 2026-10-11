@@ -1,5 +1,5 @@
 import type { JSX } from "solid-js"
-import { Show, createEffect, onCleanup } from "solid-js"
+import { Show, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useSortable } from "@dnd-kit/solid/sortable"
 import { Tabs } from "@opencode/ui/tabs"
@@ -17,6 +17,7 @@ export function SortableTerminalTab(props: {
   onClose?: () => void
 }): JSX.Element {
   const extension = useExtension()
+
   const sortable = useSortable({
     get id() {
       return props.terminal.id
@@ -25,11 +26,13 @@ export function SortableTerminalTab(props: {
       return props.index
     },
   })
+
   const [store, setStore] = createStore({
     editing: false,
     title: props.terminal.title,
     blurEnabled: false,
   })
+
   let input: HTMLInputElement | undefined
   let blurFrame: number | undefined
   let editRequested = false
@@ -40,6 +43,7 @@ export function SortableTerminalTab(props: {
   const close = () => {
     const count = props.workspace.all().length
     void props.workspace.close(props.terminal.id)
+
     if (count === 1) {
       props.onClose?.()
     }
@@ -49,9 +53,11 @@ export function SortableTerminalTab(props: {
     if (store.editing) return
     props.workspace.requestFocus(props.terminal.id)
     props.workspace.open(props.terminal.id)
+
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
     focusTerminalById(props.terminal.id)
     const input = document.getElementById(`terminal-wrapper-${props.terminal.id}`)?.querySelector("textarea")
+
     if (input === document.activeElement) props.workspace.consumeFocus(props.terminal.id)
   }
 
@@ -61,18 +67,35 @@ export function SortableTerminalTab(props: {
       e.preventDefault()
     }
 
+    const editing = store.editing
+
     setStore("blurEnabled", false)
     setStore("title", props.terminal.title)
     setStore("editing", true)
+
+    // The input mounts with `editing`; a rename already in progress keeps its focus.
+    if (editing || !input) return
+
+    input.focus()
+    input.select()
+
+    if (blurFrame !== undefined) cancelAnimationFrame(blurFrame)
+
+    blurFrame = requestAnimationFrame(() => {
+      blurFrame = undefined
+      setStore("blurEnabled", true)
+    })
   }
 
   const save = () => {
     if (!store.blurEnabled) return
 
     const value = store.title.trim()
+
     if (value && value !== props.terminal.title) {
       props.workspace.update({ id: props.terminal.id, title: value })
     }
+
     setStore("editing", false)
   }
 
@@ -80,25 +103,15 @@ export function SortableTerminalTab(props: {
     if (e.key === "Enter") {
       e.preventDefault()
       save()
+
       return
     }
+
     if (e.key === "Escape") {
       e.preventDefault()
       setStore("editing", false)
     }
   }
-
-  createEffect(() => {
-    if (!store.editing) return
-    if (!input) return
-    input.focus()
-    input.select()
-    if (blurFrame !== undefined) cancelAnimationFrame(blurFrame)
-    blurFrame = requestAnimationFrame(() => {
-      blurFrame = undefined
-      setStore("blurEnabled", true)
-    })
-  })
 
   onCleanup(() => {
     if (blurFrame === undefined) return
@@ -114,6 +127,7 @@ export function SortableTerminalTab(props: {
             onMouseDown={(e) => {
               // Switch on mousedown to shave the press-release delay off tab switches.
               if (e.button !== 0) return
+
               if (store.editing) return
               focus()
             }}

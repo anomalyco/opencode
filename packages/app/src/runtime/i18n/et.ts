@@ -285,9 +285,6 @@ export const dict = {
   "dialog.server.add.passwordPlaceholder": "parool",
   "dialog.server.edit.title": "Muuda serverit",
   "dialog.server.menu.edit": "Muuda",
-  "dialog.server.menu.default": "Määra vaikeväärtuseks",
-  "dialog.server.menu.defaultRemove": "Eemalda vaikeseade",
-  "dialog.server.status.default": "Vaikimisi",
   "dialog.project.edit.title": "Redigeeri projekti",
   "dialog.project.edit.icon": "Ikoon",
   "dialog.project.edit.icon.alt": "Projekti ikoon",
@@ -295,10 +292,6 @@ export const dict = {
   "dialog.project.edit.color.select": "Valige {{color}} värv",
   "dialog.project.edit.worktree.startup": "Tööruumi käivitusskript",
   "dialog.project.edit.worktree.startup.placeholder": "nt. bun install",
-  "dialog.releaseNotes.action.getStarted": "Alustage",
-  "dialog.releaseNotes.action.next": "Edasi",
-  "dialog.releaseNotes.action.hideFuture": "Ärge näidake neid tulevikus",
-  "dialog.releaseNotes.media.alt": "Väljalase eelvaade",
   "toast.permissions.autoaccept.on.title": "Lubade automaatne aktsepteerimine",
   "toast.permissions.autoaccept.on.description": "Loataotlused kinnitatakse automaatselt",
   "toast.permissions.autoaccept.off.title": "Lubade automaatne vastuvõtmine on peatatud",
@@ -709,7 +702,6 @@ export const dict = {
   "session.view.select": "Seansi vaade",
   "session.background.moveRunning": "Liiguta taustale",
   "session.timeline.working": "Töötab",
-  "session.review.wrapLines": "Ridade murdmine",
   "session.websearch.title": "Kolmanda osapoole veebiotsing",
   "session.websearch.description": "Valige otsingupakkuja agendid, mida veebist otsimiseks kasutavad",
   "session.websearch.provider": "Otsi pakkuja",
@@ -768,8 +760,6 @@ export const dict = {
   "settings.timeline.category.subagents": "Alamagendid",
   "settings.timeline.category.notices": "Märkused",
   "settings.timeline.category.tools": "Muud tööriistad",
-  "settings.general.row.mobileDiffWrap.description":
-    "Horisontaalselt kerimise asemel mähkige pikad jooned mobiilidiffidesse",
   "provider.connect.error.unsupportedFields": "See autentimisvorm sisaldab toetamata välju",
   "settings.about.writtenByNames": "Kirjutas {{names}}",
   "settings.about.illustratedByNames": "Illustreerinud {{names}}",
@@ -782,7 +772,6 @@ export const dict = {
   "server.connect.button": "Ühendage",
   "server.connect.address.invalid": "Sisestage kehtiv serveri aadress HTTP või HTTPS.",
   "server.connect.failed": "Ühendust ei õnnestunud luua. Kontrollige serveri aadressi ja parooli ning proovige uuesti.",
-  "server.connect.pair.description": "Ühenduse üksikasjade hankimiseks käivitage see käsk oma arvutis.",
   "server.connect.scan": "Skaneeri QR-kood",
   "server.connect.scan.description": "Suunake oma kaamera koodile QR, mida näitab opencode pair.",
   "server.connect.scan.invalid": "See ei ole OpenCode sidumiskood. Skannige koodi, mida näitab opencode pair.",
@@ -790,7 +779,6 @@ export const dict = {
   "server.connect.camera.starting": "Kaamera avamine…",
   "server.connect.mixedContent":
     "Selle HTTP serveriga ei saanud HTTPS lehelt ühendust luua. Kasutage selle asemel HTTPS serveri aadressi.",
-  "server.connect.camera.insecure": "QR skannimine nõuab selle lehe avamist HTTPS või localhost kaudu.",
   "server.connect.camera.unavailable":
     "Selle brauseri jaoks pole kaamerat saadaval. Sisestage ühenduse üksikasjad käsitsi.",
   "server.connect.camera.error":
