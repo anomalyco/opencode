@@ -164,7 +164,7 @@ export function Header(props: { zen?: boolean; go?: boolean; hideGetStarted?: bo
           </li>
           <Show when={props.zen || props.go}>
             <li>
-              <a href="/auth">{i18n.t("nav.login")}</a>
+              <a href="/console">{i18n.t("nav.login")}</a>
             </li>
           </Show>
           <Show when={!props.hideGetStarted}>
@@ -268,7 +268,7 @@ export function Header(props: { zen?: boolean; go?: boolean; hideGetStarted?: bo
                 </li>
                 <Show when={props.zen || props.go}>
                   <li>
-                    <a href="/auth">{i18n.t("nav.login")}</a>
+                    <a href="/console">{i18n.t("nav.login")}</a>
                   </li>
                 </Show>
                 <Show when={!props.hideGetStarted}>
