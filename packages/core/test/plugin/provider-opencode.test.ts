@@ -522,13 +522,13 @@ describe("OpencodePlugin", () => {
             cost: [{ input: 1, output: 2, cache: { read: 0.1, write: 0 } }],
             limit: { context: 1000, output: 100 },
             package: "@opencode/ai/providers/openai-compatible",
-            settings: { baseURL: `${server.url.origin}/v1`, custom: "value", temperature: 0.5 },
+            settings: { baseURL: `${server.url.origin}/v1`, custom: "value" },
             headers: { "x-org-id": "org" },
+            body: { temperature: 0.5 },
           })
           expect(model.settings).toEqual({
             baseURL: `${server.url.origin}/v1`,
             custom: "value",
-            temperature: 0.5,
             provider: "openai",
           })
           const override = required(yield* models.get(Provider.ID.make("remote"), Model.ID.make("override")))
@@ -543,8 +543,9 @@ describe("OpencodePlugin", () => {
             },
             {
               id: Model.VariantID.make("high"),
-              settings: { temperature: 0.2 },
+              settings: {},
               headers: { "x-variant": "high" },
+              body: { temperature: 0.2 },
             },
           ])
           expect(required(yield* models.get(Provider.ID.make("remote"), Model.ID.make("disabled"))).enabled).toBe(false)

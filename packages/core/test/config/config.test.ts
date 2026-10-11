@@ -895,6 +895,28 @@ describe("Config", () => {
     })
   })
 
+  test("drops disabled v1 variants instead of migrating the flag as a setting", () => {
+    const migrated = migrateV1({
+      provider: {
+        litellm: {
+          npm: "@ai-sdk/openai-compatible",
+          models: {
+            glm: {
+              variants: {
+                high: { disabled: true, reasoningEffort: "high" },
+                low: { disabled: false, reasoningEffort: "low" },
+              },
+            },
+          },
+        },
+      },
+    })
+
+    expect(migrated.providers?.litellm?.models?.glm?.variants).toEqual([
+      { id: "low", settings: { reasoningEffort: "low" } },
+    ])
+  })
+
   test("renames old provider IDs while migrating v1 configuration", () => {
     const migrated = migrateV1({
       model: "azure-cognitive-services/deployment",

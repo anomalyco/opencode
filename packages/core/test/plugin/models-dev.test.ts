@@ -202,10 +202,11 @@ describe("ModelsDevPlugin", () => {
       })
       expect(mutatedProvider.headers).toEqual({ "x-acme": "override" })
       expect(mutatedProvider.body).toEqual({ service_tier: "priority", tags: ["stable", "override"] })
+      // Model edits re-run package translation, which moves settings the generic OpenAI-compatible package
+      // does not read into the request body.
       expect(mutated.settings).toEqual({
         baseURL: "https://models.acme.test/v1",
         thinking: { type: "disabled", display: "summarized" },
-        reasoning: { effort: "high" },
       })
       expect(mutated.headers).toEqual({ "x-acme": "override", "x-mode": "slow" })
       expect(mutated.body).toEqual({
@@ -213,12 +214,13 @@ describe("ModelsDevPlugin", () => {
         tags: ["stable", "override"],
         options: { top_k: 7 },
         stop: ["<end>", "<stop>"],
+        reasoning: { effort: "high" },
       })
       expect(mutated.variants).toEqual([
         {
           id: Model.VariantID.make("low"),
-          settings: { thinking: { type: "disabled", display: "summarized" }, effort: "low" },
-          body: { max_tokens: 4096 },
+          settings: {},
+          body: { max_tokens: 4096, thinking: { type: "disabled", display: "summarized" }, effort: "low" },
         },
       ])
       expect(mutated.capabilities.input).toEqual(["text", "image"])

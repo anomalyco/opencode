@@ -606,6 +606,27 @@ describe("ModelResolver", () => {
     }),
   )
 
+  it.effect("sends unrecognized OpenAI-compatible model settings as request body fields", () =>
+    Effect.gen(function* () {
+      const resolved = yield* ModelResolver.fromCatalogModel(
+        model(Provider.aisdk("@ai-sdk/openai-compatible"), {
+          settings: {
+            apiKey: "secret",
+            baseURL: "https://litellm.example/v1",
+            reasoningEffort: "high",
+            allowed_openai_params: ["reasoning_effort"],
+          },
+          headers: {},
+          body: {},
+        }),
+      )
+      const prepared = yield* compileRequest(LLM.request({ model: resolved, prompt: "Hello" }))
+
+      expect(prepared.body).toMatchObject({ reasoning_effort: "high" })
+      expect(resolved.route.defaults.http?.body).toEqual({ allowed_openai_params: ["reasoning_effort"] })
+    }),
+  )
+
   it.effect("overlays selected OpenAI-compatible variant bodies", () =>
     Effect.gen(function* () {
       const catalog = model(Provider.aisdk("@ai-sdk/openai-compatible"), {

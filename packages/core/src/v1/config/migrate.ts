@@ -1,7 +1,7 @@
 export * as ConfigMigrateV1 from "./migrate.js"
 
 import { ConfigAgent } from "@opencode/schema/config/agent"
-import { Schema } from "effect"
+import { Schema, Struct } from "effect"
 import { ConfigAgentV1 } from "./agent.js"
 import { ConfigCommandV1 } from "./command.js"
 import { ConfigMCPV1 } from "./mcp.js"
@@ -226,10 +226,13 @@ function migrateModel(info: typeof ConfigProviderV1.Model.Type) {
     headers: info.headers,
     variants:
       info.variants &&
-      Object.entries(info.variants).map(([id, options]) => ({
-        id,
-        settings: ConfigProviderOptionsV1.model(options),
-      })),
+      // `disabled` is a v1 variant flag, not a request option.
+      Object.entries(info.variants)
+        .filter(([, options]) => options.disabled !== true)
+        .map(([id, options]) => ({
+          id,
+          settings: ConfigProviderOptionsV1.model(Struct.omit(options, ["disabled"])),
+        })),
     cost: costs,
     disabled: info.status === "deprecated" ? true : undefined,
     limit: info.limit && {
