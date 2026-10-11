@@ -13,7 +13,10 @@ describe("dialog update", () => {
 
   test("skipping an OpenCode 1 version hides it until a newer one ships", () => {
     const now = 1_000_000
-    expect(visibleNotice({ type: "available", version: "1.4.2" }, {}, now)).toEqual({ type: "available", version: "1.4.2" })
+    expect(visibleNotice({ type: "available", version: "1.4.2" }, {}, now)).toEqual({
+      type: "available",
+      version: "1.4.2",
+    })
     expect(visibleNotice({ type: "available", version: "1.4.2" }, { skippedVersion: "1.4.2" }, now)).toBeUndefined()
     expect(visibleNotice({ type: "available", version: "1.4.3" }, { skippedVersion: "1.4.2" }, now)).toEqual({
       type: "available",

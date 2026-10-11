@@ -139,8 +139,8 @@ function UpdateNotification(props: { width: number }) {
               : state.type === "major"
                 ? " to upgrade to OpenCode 2.0"
                 : state.target.type === "major"
-                ? " restart to use OpenCode 2.0"
-                : ` restart to use v${state.target.version}`}
+                  ? " restart to use OpenCode 2.0"
+                  : ` restart to use v${state.target.version}`}
           </text>
         </box>
       )}
