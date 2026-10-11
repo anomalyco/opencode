@@ -1,3 +1,7 @@
+import { Model } from "@opencode/schema/model"
+import { Provider } from "@opencode/schema/provider"
+import { SessionMessage } from "@opencode/schema/session-message"
+import { Agent } from "@opencode/schema/agent"
 import { expect, test } from "bun:test"
 import type { SessionMessageAssistant, SessionMessageAssistantTool, SessionMessageInfo } from "@opencode/client"
 import { activitySummary, busyLabel, summarizeActivity } from "../../../src/routes/session/activity-summary"
@@ -11,7 +15,10 @@ import {
 } from "../../../src/routes/session/grouping/session"
 import { reduceSessionRows } from "../../../src/routes/session/rows"
 
-const model = { id: "model", providerID: "provider" }
+const model = {
+  id: Model.ID.make("model", { disableChecks: true }),
+  providerID: Provider.ID.make("provider", { disableChecks: true }),
+}
 const tool = (
   id: string,
   name: string,
@@ -34,8 +41,8 @@ const assistant = (
   finish?: "stop",
 ): SessionMessageAssistant => ({
   type: "assistant",
-  id,
-  agent: "build",
+  id: SessionMessage.ID.make(id, { disableChecks: true }),
+  agent: Agent.ID.make("build", { disableChecks: true }),
   model,
   time: { created: 1, completed: 2 },
   ...(finish ? { finish } : {}),
@@ -43,7 +50,7 @@ const assistant = (
 })
 const instruction = (id: string, paths: string[]): SessionMessageInfo => ({
   type: "synthetic",
-  id,
+  id: SessionMessage.ID.make(id, { disableChecks: true }),
   text: "Instructions",
   description: `Loaded ${paths.join(", ")}`,
   metadata: { instruction: { paths } },
@@ -72,13 +79,18 @@ test("low wraps tools, thoughts and instruction loads in activity; text and othe
   expect(partPath({ type: "tool", name: "shell" }, "low")).toEqual(["activity"])
   expect(partPath({ type: "text" }, "low")).toEqual([])
   expect(messagePath(instruction("i", ["AGENTS.md"]), "low")).toEqual(["activity", "instructions"])
-  expect(messagePath({ type: "user", id: "u", text: "hi", time: { created: 1 } }, "low")).toEqual([])
+  expect(
+    messagePath(
+      { type: "user", id: SessionMessage.ID.make("u", { disableChecks: true }), text: "hi", time: { created: 1 } },
+      "low",
+    ),
+  ).toEqual([])
   // Shell/subagent completion notices are ordinary synthetic messages without instruction metadata.
   expect(
     messagePath(
       {
         type: "synthetic",
-        id: "s",
+        id: SessionMessage.ID.make("s", { disableChecks: true }),
         text: "done",
         description: "bun test",
         metadata: { source: "shell" },
@@ -91,7 +103,7 @@ test("low wraps tools, thoughts and instruction loads in activity; text and othe
 
 test("low hydration nests subgroups inside one activity group per run", () => {
   const messages: SessionMessageInfo[] = [
-    { type: "user", id: "u", text: "Go", time: { created: 0 } },
+    { type: "user", id: SessionMessage.ID.make("u", { disableChecks: true }), text: "Go", time: { created: 0 } },
     assistant("a", [
       { type: "reasoning", text: "Plan", time: { created: 1, completed: 2 } },
       tool("r1", "read"),
@@ -136,17 +148,47 @@ test("medium hydration keeps production shape plus instruction groups", () => {
 
 test("live appends under low merge into the open activity group", () => {
   const rows: SessionRow[] = []
-  append(rows, { messageID: "a", partID: "reasoning:0" }, { type: "reasoning" }, rows.length, "low")
-  append(rows, { messageID: "a", partID: "r1" }, { type: "tool", name: "read" }, rows.length, "low")
-  append(rows, { messageID: "b", partID: "sh" }, { type: "tool", name: "shell" }, rows.length, "low")
-  append(rows, { messageID: "b", partID: "r2" }, { type: "tool", name: "read" }, rows.length, "low")
+  append(
+    rows,
+    { messageID: SessionMessage.ID.make("a", { disableChecks: true }), partID: "reasoning:0" },
+    { type: "reasoning" },
+    rows.length,
+    "low",
+  )
+  append(
+    rows,
+    { messageID: SessionMessage.ID.make("a", { disableChecks: true }), partID: "r1" },
+    { type: "tool", name: "read" },
+    rows.length,
+    "low",
+  )
+  append(
+    rows,
+    { messageID: SessionMessage.ID.make("b", { disableChecks: true }), partID: "sh" },
+    { type: "tool", name: "shell" },
+    rows.length,
+    "low",
+  )
+  append(
+    rows,
+    { messageID: SessionMessage.ID.make("b", { disableChecks: true }), partID: "r2" },
+    { type: "tool", name: "read" },
+    rows.length,
+    "low",
+  )
   expect(rows).toHaveLength(1)
   const activity = rows[0]
   if (activity.type !== "group") throw new Error("Expected activity")
   expect(activity.kind).toBe("activity")
   expect(activity.size).toBe(4)
   expect(groupRefs(activity).map((ref) => ref.partID)).toEqual(["reasoning:0", "r1", "sh", "r2"])
-  append(rows, { messageID: "b", partID: "text:0" }, { type: "text" }, rows.length, "low")
+  append(
+    rows,
+    { messageID: SessionMessage.ID.make("b", { disableChecks: true }), partID: "text:0" },
+    { type: "text" },
+    rows.length,
+    "low",
+  )
   expect(rows).toHaveLength(2)
   expect(activity.completed).toBe(true)
 })
@@ -161,7 +203,7 @@ test("permission-blocked tools inside an activity group are tracked as pending w
   partitionPending(rows, new Set(["sh"]))
   const activity = rows[0]
   if (activity.type !== "group" || activity.kind !== "activity") throw new Error("Expected activity")
-  expect(activity.pending).toEqual([{ messageID: "a", partID: "sh" }])
+  expect<unknown>(activity.pending).toEqual([{ messageID: "a", partID: "sh" }])
   expect(groupRefs(activity).map((ref) => ref.partID)).toEqual(["r1", "r2"])
   expect(groupRefs(activity, true).map((ref) => ref.partID)).toEqual(["r1", "sh", "r2"])
 })

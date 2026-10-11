@@ -1,3 +1,5 @@
+import { Credential } from "@opencode/schema/credential"
+import { Integration } from "@opencode/schema/integration"
 import { describe, expect, test } from "bun:test"
 import type { IntegrationInfo } from "@opencode/client"
 import {
@@ -15,26 +17,34 @@ const integration = (value: Partial<IntegrationInfo> & Pick<IntegrationInfo, "id
 
 describe("integrationOptions", () => {
   test("keeps popular integrations first and sorts the rest alphabetically", () => {
-    expect(
+    expect<unknown>(
       integrationOptions([
-        integration({ id: "mistral", name: "Mistral" }),
-        integration({ id: "openai", name: "OpenAI" }),
-        integration({ id: "custom-z", name: "Zebra" }),
-        integration({ id: "anthropic", name: "Anthropic" }),
-        integration({ id: "opencode", name: "OpenCode Zen" }),
-        integration({ id: "opencode-go", name: "OpenCode Go" }),
+        integration({ id: Integration.ID.make("mistral", { disableChecks: true }), name: "Mistral" }),
+        integration({ id: Integration.ID.make("openai", { disableChecks: true }), name: "OpenAI" }),
+        integration({ id: Integration.ID.make("custom-z", { disableChecks: true }), name: "Zebra" }),
+        integration({ id: Integration.ID.make("anthropic", { disableChecks: true }), name: "Anthropic" }),
+        integration({ id: Integration.ID.make("opencode", { disableChecks: true }), name: "OpenCode Zen" }),
+        integration({ id: Integration.ID.make("opencode-go", { disableChecks: true }), name: "OpenCode Go" }),
       ]).map((item) => item.id),
     ).toEqual(["opencode-go", "opencode", "openai", "anthropic", "mistral", "custom-z"])
   })
 
   test("keeps MCP integrations above popular integrations without relying on their IDs", () => {
-    expect(
+    expect<unknown>(
       integrationOptions([
-        integration({ id: "openai", name: "OpenAI" }),
-        integration({ id: "linear", name: "Linear", metadata: { source: "mcp" } }),
-        integration({ id: "github", name: "GitHub", metadata: { source: "mcp" } }),
-        integration({ id: "opencode", name: "OpenCode Zen" }),
-        integration({ id: "opencode-go", name: "OpenCode Go" }),
+        integration({ id: Integration.ID.make("openai", { disableChecks: true }), name: "OpenAI" }),
+        integration({
+          id: Integration.ID.make("linear", { disableChecks: true }),
+          name: "Linear",
+          metadata: { source: "mcp" },
+        }),
+        integration({
+          id: Integration.ID.make("github", { disableChecks: true }),
+          name: "GitHub",
+          metadata: { source: "mcp" },
+        }),
+        integration({ id: Integration.ID.make("opencode", { disableChecks: true }), name: "OpenCode Zen" }),
+        integration({ id: Integration.ID.make("opencode-go", { disableChecks: true }), name: "OpenCode Go" }),
       ]).map((item) => item.id),
     ).toEqual(["github", "linear", "opencode-go", "opencode", "openai"])
   })
@@ -45,12 +55,12 @@ describe("connectMethods", () => {
     expect(
       connectMethods(
         integration({
-          id: "example",
+          id: Integration.ID.make("example", { disableChecks: true }),
           name: "Example",
           methods: [
             { type: "env", names: ["EXAMPLE_KEY"] },
             { type: "key", label: "API key" },
-            { type: "oauth", id: "account", label: "Account" },
+            { type: "oauth", id: Integration.MethodID.make("account", { disableChecks: true }), label: "Account" },
           ],
         }),
       ).map((method) => method.type),
@@ -60,14 +70,19 @@ describe("connectMethods", () => {
 
 describe("credentialConnections", () => {
   test("returns removable credential connections only", () => {
-    expect(
+    expect<unknown>(
       credentialConnections(
         integration({
-          id: "example",
+          id: Integration.ID.make("example", { disableChecks: true }),
           name: "Example",
           connections: [
             { type: "env", name: "EXAMPLE_KEY" },
-            { type: "credential", method: "key", id: "cred_1", label: "Work" },
+            {
+              type: "credential",
+              method: "key",
+              id: Credential.ID.make("cred_1", { disableChecks: true }),
+              label: "Work",
+            },
           ],
         }),
       ),
@@ -80,10 +95,15 @@ describe("connectionSummary", () => {
     expect(
       connectionSummary(
         integration({
-          id: "example",
+          id: Integration.ID.make("example", { disableChecks: true }),
           name: "Example",
           connections: [
-            { type: "credential", method: "key", id: "cred_1", label: "Work" },
+            {
+              type: "credential",
+              method: "key",
+              id: Credential.ID.make("cred_1", { disableChecks: true }),
+              label: "Work",
+            },
             { type: "env", name: "EXAMPLE_KEY" },
           ],
         }),

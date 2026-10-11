@@ -1,3 +1,5 @@
+import { Project } from "@opencode/schema/project"
+import { Session } from "@opencode/schema/session"
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
 import { testRender } from "@opentui/solid"
@@ -42,8 +44,11 @@ test("scopes sessions to the active session location", async () => {
     return json({
       data: [
         {
-          id: project === "proj_b" ? "ses_b" : "ses_a",
-          projectID: project,
+          id:
+            project === "proj_b"
+              ? Session.ID.make("ses_b", { disableChecks: true })
+              : Session.ID.make("ses_a", { disableChecks: true }),
+          projectID: Project.ID.make(project, { disableChecks: true }),
           cost: 0,
           tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
           time: { created: 1, updated: 2 },
@@ -64,15 +69,15 @@ test("scopes sessions to the active session location", async () => {
     storage = useStorage()
     onMount(() => {
       data.session.remember({
-        id: "ses_active",
-        projectID: "proj_b",
+        id: Session.ID.make("ses_active", { disableChecks: true }),
+        projectID: Project.ID.make("proj_b", { disableChecks: true }),
         cost: 0,
         tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
         time: { created: 1, updated: 3 },
         title: "Active session",
         location: { directory: active },
       })
-      route.navigate({ type: "session", sessionID: "ses_active" })
+      route.navigate({ type: "session", sessionID: Session.ID.make("ses_active", { disableChecks: true }) })
       dialog.replace(() => <DialogSessionList />)
     })
     return null

@@ -1,3 +1,5 @@
+import { Project } from "@opencode/schema/project"
+import { Session } from "@opencode/schema/session"
 /** @jsxImportSource @opentui/solid */
 import { afterAll, expect, test } from "bun:test"
 import { once } from "node:events"
@@ -2098,7 +2100,7 @@ async function renderDiffViewer(
   }
 }
 
-const startRoute: Route = { type: "session", sessionID: "session-1" }
+const startRoute: Route = { type: "session", sessionID: Session.ID.make("session-1", { disableChecks: true }) }
 
 const baseFixture = { name: "v2", ref: "refs/heads/v2", source: "default" }
 
@@ -2345,7 +2347,7 @@ function findDiffs(root: Renderable): DiffRenderable[] {
 
 const session = {
   id: "session-1",
-  projectID: "project-1",
+  projectID: Project.ID.make("project-1", { disableChecks: true }),
   location: { directory: "/repo/session" },
   title: "Session",
   cost: { currency: "USD", amount: 0 },
@@ -2364,7 +2366,11 @@ test.each([100, 160])("the sidebar source picker switches VCS sources at %i colu
       type: "plugin",
       id: "opencode.diffs",
       name: "diff",
-      data: { mode: "branch", sessionID: "session-1", returnRoute: startRoute },
+      data: {
+        mode: "branch",
+        sessionID: Session.ID.make("session-1", { disableChecks: true }),
+        returnRoute: startRoute,
+      },
     },
   })
   try {

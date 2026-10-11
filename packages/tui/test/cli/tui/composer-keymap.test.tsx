@@ -1,3 +1,6 @@
+import { Agent } from "@opencode/schema/agent"
+import { Project } from "@opencode/schema/project"
+import { Session } from "@opencode/schema/session"
 /** @jsxImportSource @opentui/solid */
 import { testRender } from "@opentui/solid"
 import { afterAll, expect, test } from "bun:test"
@@ -82,13 +85,13 @@ async function renderComposer(
     dispatch = Keymap.use().dispatch
     onMount(() => {
       void Promise.all([
-        data.session.sync("parent"),
-        data.session.sync("child-a"),
-        data.session.sync("child-b"),
-        data.session.sync("child-c"),
+        data.session.sync(Session.ID.make("parent", { disableChecks: true })),
+        data.session.sync(Session.ID.make("child-a", { disableChecks: true })),
+        data.session.sync(Session.ID.make("child-b", { disableChecks: true })),
+        data.session.sync(Session.ID.make("child-c", { disableChecks: true })),
         data.shell.sync(),
       ])
-        .then(() => wait(() => data.session.status("child-a") === "running"))
+        .then(() => wait(() => data.session.status(Session.ID.make("child-a", { disableChecks: true })) === "running"))
         .then(() => ready.resolve(), ready.reject)
     })
     return (
@@ -123,7 +126,12 @@ async function renderComposer(
                 <ClientProvider api={createApi(calls.fetch)}>
                   <DataProvider directory={process.cwd()}>
                     <LocationProvider>
-                      <RouteProvider initialRoute={{ type: "session", sessionID: "parent" }}>
+                      <RouteProvider
+                        initialRoute={{
+                          type: "session",
+                          sessionID: Session.ID.make("parent", { disableChecks: true }),
+                        }}
+                      >
                         <ThemeProvider mode="dark" source={{ discover: async () => ({}) }}>
                           <ToastProvider>
                             <DialogProvider>
@@ -171,7 +179,10 @@ test("disabled subagent bindings have no component fallbacks", async () => {
     composer.app.mockInput.pressKey("d", { ctrl: true })
     await composer.app.renderOnce()
     expect(composer.closed()).toBe(0)
-    expect(composer.route()).toMatchObject({ type: "session", sessionID: "parent" })
+    expect(composer.route()).toMatchObject({
+      type: "session",
+      sessionID: Session.ID.make("parent", { disableChecks: true }),
+    })
     expect(composer.interrupted).toEqual([])
 
     composer.app.mockInput.pressArrow("down")
@@ -290,9 +301,9 @@ test("shell output respects a configured binding with a focused textarea", async
 function session(id: string, title: string, parentID?: string) {
   return {
     id,
-    projectID: "proj_test",
+    projectID: Project.ID.make("proj_test", { disableChecks: true }),
     title,
-    agent: "build",
+    agent: Agent.ID.make("build", { disableChecks: true }),
     location: { directory },
     cost: 0,
     tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
@@ -309,7 +320,7 @@ function shell(id: string, command: string) {
     cwd: directory,
     shell: "/bin/sh",
     file: `/tmp/${id}`,
-    metadata: { sessionID: "parent" },
+    metadata: { sessionID: Session.ID.make("parent", { disableChecks: true }) },
     time: { started: 1 },
   }
 }

@@ -1,3 +1,7 @@
+import { Permission } from "@opencode/schema/permission"
+import { Form } from "@opencode/schema/form"
+import { Session } from "@opencode/schema/session"
+import { Event } from "@opencode/schema/event"
 import { describe, expect, test } from "bun:test"
 import Notifications from "../../../../src/feature-plugins/system/notifications"
 import type { OpenCodeEvent, PermissionAsked } from "@opencode/client"
@@ -5,7 +9,9 @@ import type { AttentionNotifyOptions, Context, Route, ToastOptions } from "@open
 
 type Session = { id: string; title: string; parentID?: string }
 
-async function setup(route: Route = { type: "session", sessionID: "session" }) {
+async function setup(
+  route: Route = { type: "session", sessionID: Session.ID.make("session", { disableChecks: true }) },
+) {
   const notifications: AttentionNotifyOptions[] = []
   const toasts: ToastOptions[] = []
   const handlers = new Map<OpenCodeEvent["type"], ((event: OpenCodeEvent) => void)[]>()
@@ -66,17 +72,20 @@ async function setup(route: Route = { type: "session", sessionID: "session" }) {
 
 function form(id: string, sessionID = "session"): Extract<OpenCodeEvent, { type: "form.created" }>["data"]["form"] {
   return {
-    id,
-    sessionID,
+    id: Form.ID.make(id, { disableChecks: true }),
+    sessionID: Session.ID.make(sessionID, { disableChecks: true }),
     title: "Input requested",
     fields: [{ key: "authorization", type: "external", url: "https://example.com" }],
   }
 }
 
-function permission(id: string, sessionID = "session"): PermissionAsked["data"] {
+function permission(
+  id: string,
+  sessionID = Session.ID.make("session", { disableChecks: true }),
+): PermissionAsked["data"] {
   return {
-    id,
-    sessionID,
+    id: Permission.ID.make(id, { disableChecks: true }),
+    sessionID: Session.ID.make(sessionID, { disableChecks: true }),
     action: "edit",
     resources: [],
     metadata: {},
@@ -90,32 +99,32 @@ function durable(sessionID: string): { aggregateID: string; seq: number; version
 
 function executionStarted(id: string, sessionID = "session"): OpenCodeEvent {
   return {
-    id,
+    id: Event.ID.make(id, { disableChecks: true }),
     created: 0,
     type: "session.execution.started",
     durable: durable(sessionID),
-    data: { sessionID },
+    data: { sessionID: Session.ID.make(sessionID, { disableChecks: true }) },
   }
 }
 
 function executionSucceeded(id: string, sessionID = "session"): OpenCodeEvent {
   return {
-    id,
+    id: Event.ID.make(id, { disableChecks: true }),
     created: 0,
     type: "session.execution.succeeded",
     durable: durable(sessionID),
-    data: { sessionID },
+    data: { sessionID: Session.ID.make(sessionID, { disableChecks: true }) },
   }
 }
 
 function executionFailed(id: string, sessionID = "session"): OpenCodeEvent {
   return {
-    id,
+    id: Event.ID.make(id, { disableChecks: true }),
     created: 0,
     type: "session.execution.failed",
     durable: durable(sessionID),
     data: {
-      sessionID,
+      sessionID: Session.ID.make(sessionID, { disableChecks: true }),
       error: { type: "unknown", message: "boom" },
     },
   }
@@ -151,36 +160,51 @@ describe("internal notifications TUI plugin", () => {
     harness.emit(executionStarted("started"))
     harness.emit(executionFailed("failed"))
     harness.emit(executionFailed("duplicate"))
-    expect(harness.toasts).toEqual([
-      { sessionID: "session", title: "Session failed", message: "boom", variant: "error" },
+    expect<unknown>(harness.toasts).toEqual([
+      {
+        sessionID: "session",
+        title: "Session failed",
+        message: "boom",
+        variant: "error",
+      },
     ])
     harness.emit(executionStarted("retry"))
     harness.emit(executionFailed("failed-again"))
     expect(harness.toasts).toHaveLength(2)
   })
 
-  test.each<Route>([{ type: "home" }, { type: "session", sessionID: "other" }])(
-    "leaves routing of other sessions' failures to the session-scoped toast (%j)",
-    async (route) => {
-      const harness = await setup(route)
-      harness.emit(executionFailed("failed"))
-      expect(harness.toasts).toEqual([
-        { sessionID: "session", title: "Session failed", message: "boom", variant: "error" },
-      ])
-      expect(harness.notifications).toHaveLength(1)
-    },
-  )
+  test.each<Route>([
+    { type: "home" },
+    { type: "session", sessionID: Session.ID.make("other", { disableChecks: true }) },
+  ])("leaves routing of other sessions' failures to the session-scoped toast (%j)", async (route) => {
+    const harness = await setup(route)
+    harness.emit(executionFailed("failed"))
+    expect<unknown>(harness.toasts).toEqual([
+      {
+        sessionID: "session",
+        title: "Session failed",
+        message: "boom",
+        variant: "error",
+      },
+    ])
+    expect(harness.notifications).toHaveLength(1)
+  })
 
   test("notifies for form and permission requests with blurred notifications and always-on sounds", async () => {
     const harness = await setup()
 
     harness.emit({
-      id: "event-1",
+      id: Event.ID.make("event-1", { disableChecks: true }),
       created: 0,
       type: "form.created",
       data: { form: { ...form("form-1"), title: "Confirm deployment" } },
     })
-    harness.emit({ id: "event-3", created: 0, type: "permission.asked", data: permission("permission-1") })
+    harness.emit({
+      id: Event.ID.make("event-3", { disableChecks: true }),
+      created: 0,
+      type: "permission.asked",
+      data: permission("permission-1"),
+    })
 
     expect(harness.notifications).toEqual([titledFormNotification, permissionNotification])
   })
@@ -189,7 +213,7 @@ describe("internal notifications TUI plugin", () => {
     const harness = await setup()
 
     harness.emit({
-      id: "event-1",
+      id: Event.ID.make("event-1", { disableChecks: true }),
       created: 0,
       type: "form.created",
       data: { form: { ...form("form-1", "global"), title: "demo-mcp is requesting input" } },
@@ -201,25 +225,62 @@ describe("internal notifications TUI plugin", () => {
   test("dedupes pending forms and permissions until they are resolved", async () => {
     const harness = await setup()
 
-    harness.emit({ id: "event-1", created: 0, type: "form.created", data: { form: form("form-1") } })
-    harness.emit({ id: "event-2", created: 0, type: "form.created", data: { form: form("form-1") } })
     harness.emit({
-      id: "event-3",
+      id: Event.ID.make("event-1", { disableChecks: true }),
+      created: 0,
+      type: "form.created",
+      data: { form: form("form-1") },
+    })
+    harness.emit({
+      id: Event.ID.make("event-2", { disableChecks: true }),
+      created: 0,
+      type: "form.created",
+      data: { form: form("form-1") },
+    })
+    harness.emit({
+      id: Event.ID.make("event-3", { disableChecks: true }),
       created: 0,
       type: "form.cancelled",
-      data: { sessionID: "session", id: "form-1" },
+      data: {
+        sessionID: Session.ID.make("session", { disableChecks: true }),
+        id: Form.ID.make("form-1", { disableChecks: true }),
+      },
     })
-    harness.emit({ id: "event-4", created: 0, type: "form.created", data: { form: form("form-1") } })
-
-    harness.emit({ id: "event-9", created: 0, type: "permission.asked", data: permission("permission-1") })
-    harness.emit({ id: "event-10", created: 0, type: "permission.asked", data: permission("permission-1") })
     harness.emit({
-      id: "event-11",
+      id: Event.ID.make("event-4", { disableChecks: true }),
+      created: 0,
+      type: "form.created",
+      data: { form: form("form-1") },
+    })
+
+    harness.emit({
+      id: Event.ID.make("event-9", { disableChecks: true }),
+      created: 0,
+      type: "permission.asked",
+      data: permission("permission-1"),
+    })
+    harness.emit({
+      id: Event.ID.make("event-10", { disableChecks: true }),
+      created: 0,
+      type: "permission.asked",
+      data: permission("permission-1"),
+    })
+    harness.emit({
+      id: Event.ID.make("event-11", { disableChecks: true }),
       created: 0,
       type: "permission.replied",
-      data: { sessionID: "session", requestID: "permission-1", reply: "once" },
+      data: {
+        sessionID: Session.ID.make("session", { disableChecks: true }),
+        requestID: Permission.ID.make("permission-1", { disableChecks: true }),
+        reply: "once",
+      },
     })
-    harness.emit({ id: "event-12", created: 0, type: "permission.asked", data: permission("permission-1") })
+    harness.emit({
+      id: Event.ID.make("event-12", { disableChecks: true }),
+      created: 0,
+      type: "permission.asked",
+      data: permission("permission-1"),
+    })
 
     expect(harness.notifications).toEqual([
       formNotification,
@@ -256,7 +317,7 @@ describe("internal notifications TUI plugin", () => {
     const harness = await setup()
 
     harness.emit({
-      id: "event-1",
+      id: Event.ID.make("event-1", { disableChecks: true }),
       created: 0,
       type: "form.created",
       data: { form: { ...form("form-1", "subagent"), title: "Questions" } },

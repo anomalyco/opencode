@@ -1,3 +1,6 @@
+import { Credential } from "@opencode/schema/credential"
+import { Integration } from "@opencode/schema/integration"
+import { Event } from "@opencode/schema/event"
 /** @jsxImportSource @opentui/solid */
 import { InputRenderable, TextareaRenderable } from "@opentui/core"
 import type { FormFields, LocationRef } from "@opencode/client"
@@ -307,10 +310,13 @@ async function renderIntegration(activeLocation?: LocationRef, form?: FormFields
       accounts = [active, ...accounts.filter((account) => account.id !== id)]
       requests.push({ method: request.method, path: url.pathname })
       events.emit({
-        id: `evt_switched_${id}`,
+        id: Event.ID.make(`evt_switched_${id}`, { disableChecks: true }),
         created: Date.now(),
         type: "credential.switched",
-        data: { integrationID: "openai", credentialID: id },
+        data: {
+          integrationID: Integration.ID.make("openai", { disableChecks: true }),
+          credentialID: Credential.ID.make(id, { disableChecks: true }),
+        },
       })
       return new Response(null, { status: 204 })
     }
@@ -320,7 +326,12 @@ async function renderIntegration(activeLocation?: LocationRef, form?: FormFields
       const body = (await request.json()) as { label: string }
       accounts = accounts.map((account) => (account.id === id ? { ...account, label: body.label } : account))
       requests.push({ method: request.method, path: url.pathname, body })
-      events.emit({ id: `evt_updated_${id}`, created: Date.now(), type: "credential.updated", data: {} })
+      events.emit({
+        id: Event.ID.make(`evt_updated_${id}`, { disableChecks: true }),
+        created: Date.now(),
+        type: "credential.updated",
+        data: {},
+      })
       return new Response(null, { status: 204 })
     }
 
@@ -329,13 +340,21 @@ async function renderIntegration(activeLocation?: LocationRef, form?: FormFields
       const active = accounts[0]?.id === id
       accounts = accounts.filter((account) => account.id !== id)
       requests.push({ method: request.method, path: url.pathname })
-      events.emit({ id: `evt_deleted_${id}`, created: Date.now(), type: "credential.updated", data: {} })
+      events.emit({
+        id: Event.ID.make(`evt_deleted_${id}`, { disableChecks: true }),
+        created: Date.now(),
+        type: "credential.updated",
+        data: {},
+      })
       if (active)
         events.emit({
-          id: `evt_switched_${id}`,
+          id: Event.ID.make(`evt_switched_${id}`, { disableChecks: true }),
           created: Date.now(),
           type: "credential.switched",
-          data: { integrationID: "openai", credentialID: accounts[0]?.id ?? null },
+          data: {
+            integrationID: Integration.ID.make("openai", { disableChecks: true }),
+            credentialID: Credential.ID.make(accounts[0]?.id ?? null, { disableChecks: true }),
+          },
         })
       return new Response(null, { status: 204 })
     }

@@ -1,3 +1,5 @@
+import { Session } from "@opencode/schema/session"
+import { Project } from "@opencode/schema/project"
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
 import { InputRenderable } from "@opentui/core"
@@ -33,22 +35,20 @@ test.each([
   const fixture = await renderMove(input)
   try {
     await fixture.data.project.sync()
-    expect(fixture.data.project.get("proj_test")?.canonical).toBe(main)
+    expect(fixture.data.project.get(Project.ID.make("proj_test", { disableChecks: true }))?.canonical).toBe(main)
     if (input.warm) {
-      await fixture.data.session.sync("ses_clone")
+      await fixture.data.session.sync(Session.ID.make("ses_clone", { disableChecks: true }))
       await fixture.data.location.syncInfo({ directory: input.directory })
     }
     if (!input.home && !input.warm) {
-      expect(fixture.data.session.get("ses_clone")).toBeUndefined()
+      expect(fixture.data.session.get(Session.ID.make("ses_clone", { disableChecks: true }))).toBeUndefined()
       expect(fixture.data.location.info({ directory: input.directory })).toBeUndefined()
     }
     if (!input.home) fixture.location.set({ directory: main })
 
     await fixture.create()
 
-    expect(fixture.requests).toEqual([
-      { payload: { projectID: "proj_test", name: "fresh" }, directory: null },
-    ])
+    expect(fixture.requests).toEqual([{ payload: { projectID: "proj_test", name: "fresh" }, directory: null }])
     expect(fixture.data.location.info({ directory: created })?.project.canonical).toBe(clone)
     expect(fixture.reads.locations.filter((directory) => directory === input.directory)).toHaveLength(
       input.home ? 3 : 1,
@@ -78,9 +78,7 @@ test.each([
     expect(fixture.reads.worktrees).toEqual(["proj_test"])
     expect(frame).toContain(clone)
     expect(frame.indexOf(clone)).toBeLessThan(frame.indexOf(main))
-    expect(fixture.requests).toEqual([
-      { payload: { projectID: "proj_test", name: "fresh" }, directory: null },
-    ])
+    expect(fixture.requests).toEqual([{ payload: { projectID: "proj_test", name: "fresh" }, directory: null }])
     expect(fixture.data.location.info(selected)?.project.canonical).toBe(clone)
     expect(fixture.moves).toEqual([])
   } finally {
@@ -104,7 +102,10 @@ test.each([false, true])("selecting a workspace opens Home without moving a sess
     expect(fixture.moves).toEqual([])
     expect(fixture.requests).toEqual([])
     expect(fixture.move.pending()).toBe(false)
-    if (!home) expect(fixture.data.session.get("ses_clone")?.location.directory).toBe(clone)
+    if (!home)
+      expect(fixture.data.session.get(Session.ID.make("ses_clone", { disableChecks: true }))?.location.directory).toBe(
+        clone,
+      )
   } finally {
     fixture.app.renderer.destroy()
   }
@@ -169,7 +170,10 @@ test.each([false, true])("Ctrl+M moves only an existing session (home=%s)", asyn
     }
     await fixture.app.waitFor(() => fixture.moves.length === 1)
     expect(fixture.moves).toEqual([{ directory: linked }])
-    expect(fixture.route.data).toEqual({ type: "session", sessionID: "ses_clone" })
+    expect<unknown>(fixture.route.data).toEqual({
+      type: "session",
+      sessionID: "ses_clone",
+    })
     expect(fixture.requests).toEqual([])
   } finally {
     fixture.app.renderer.destroy()
@@ -189,7 +193,10 @@ test("choosing a directory recovers the session when its location is unavailable
     await fixture.app.waitFor(() => fixture.moves.length === 1)
 
     expect(fixture.moves).toEqual([{ directory: linked }])
-    expect(fixture.route.data).toEqual({ type: "session", sessionID: "ses_clone" })
+    expect<unknown>(fixture.route.data).toEqual({
+      type: "session",
+      sessionID: "ses_clone",
+    })
     expect(fixture.requests).toEqual([])
   } finally {
     fixture.app.renderer.destroy()
@@ -211,7 +218,10 @@ test("creating a worktree recovers the session without reading its removed locat
 
     expect(fixture.requests).toEqual([{ payload: { projectID: "proj_test", name: "fresh" }, directory: null }])
     expect(fixture.moves).toEqual([{ directory: created }])
-    expect(fixture.route.data).toEqual({ type: "session", sessionID: "ses_clone" })
+    expect<unknown>(fixture.route.data).toEqual({
+      type: "session",
+      sessionID: "ses_clone",
+    })
     expect(fixture.reads.locations).not.toContain(clone)
   } finally {
     fixture.app.renderer.destroy()
@@ -219,7 +229,12 @@ test("creating a worktree recovers the session without reading its removed locat
 })
 
 test("failed recovery does not navigate away from the session", async () => {
-  const fixture = await renderMove({ directory: clone, unavailable: "location", showMissingLocation: true, moveFails: true })
+  const fixture = await renderMove({
+    directory: clone,
+    unavailable: "location",
+    showMissingLocation: true,
+    moveFails: true,
+  })
   try {
     await fixture.app.waitForFrame((frame) => frame.includes("Session location unavailable"))
     fixture.app.mockInput.pressEnter()
@@ -231,7 +246,10 @@ test("failed recovery does not navigate away from the session", async () => {
     await fixture.app.waitFor(() => fixture.toast.currentToast !== null)
 
     expect(fixture.moves).toEqual([{ directory: linked }])
-    expect(fixture.route.data).toEqual({ type: "session", sessionID: "ses_clone" })
+    expect<unknown>(fixture.route.data).toEqual({
+      type: "session",
+      sessionID: "ses_clone",
+    })
     expect(fixture.toast.currentToast).toMatchObject({ title: "Failed to move session", variant: "error" })
   } finally {
     fixture.app.renderer.destroy()
@@ -322,8 +340,8 @@ async function renderMove(input: {
       if (input.unavailable === "session") return json({ message: "Session unavailable" }, { status: 404 })
       return json({
         data: {
-          id: "ses_clone",
-          projectID: "proj_test",
+          id: Session.ID.make("ses_clone", { disableChecks: true }),
+          projectID: Project.ID.make("proj_test", { disableChecks: true }),
           location: { directory: input.directory },
           cost: 0,
           tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
@@ -376,11 +394,16 @@ async function renderMove(input: {
     location = useLocation()
     route = useRoute()
     move = usePromptMove({
-      projectID: () => (input.home ? data.location.info()?.project.id : "proj_test"),
-      sessionID: () => (input.home ? undefined : "ses_clone"),
+      projectID: () =>
+        input.home ? data.location.info()?.project.id : Project.ID.make("proj_test", { disableChecks: true }),
+      sessionID: () => (input.home ? undefined : Session.ID.make("ses_clone", { disableChecks: true })),
     })
     return input.showMissingLocation ? (
-      <SessionLocationMissing directory={input.directory} projectID="proj_test" sessionID="ses_clone" />
+      <SessionLocationMissing
+        directory={input.directory}
+        projectID={Project.ID.make("proj_test", { disableChecks: true })}
+        sessionID={Session.ID.make("ses_clone", { disableChecks: true })}
+      />
     ) : null
   }
 
@@ -390,7 +413,13 @@ async function renderMove(input: {
         <ConfigProvider config={createTuiResolvedConfig()}>
           <Keymap.Provider>
             <ToastProvider>
-              <RouteProvider initialRoute={input.home ? { type: "home" } : { type: "session", sessionID: "ses_clone" }}>
+              <RouteProvider
+                initialRoute={
+                  input.home
+                    ? { type: "home" }
+                    : { type: "session", sessionID: Session.ID.make("ses_clone", { disableChecks: true }) }
+                }
+              >
                 <ClientProvider api={createApi(calls.fetch)}>
                   <DataProvider directory={launch}>
                     <LocationProvider>

@@ -1,3 +1,4 @@
+import { SessionMessage } from "@opencode/schema/session-message"
 import { expect, test } from "bun:test"
 import { groupID } from "../../../src/routes/session/anchors"
 import type { GroupKind, SessionEntry, SessionRow } from "../../../src/routes/session/grouping/session"
@@ -6,7 +7,7 @@ import { rowsAfter, rowsBefore, rowWeight } from "../../../src/routes/session/mo
 
 const read = (index: number): SessionEntry => ({
   type: "part",
-  ref: { messageID: `m${index}`, partID: `read-${index}` },
+  ref: { messageID: SessionMessage.ID.make(`m${index}`, { disableChecks: true }), partID: `read-${index}` },
 })
 
 function group(size: number, path: readonly GroupKind[] = ["exploration"]): SessionRow {
@@ -24,11 +25,11 @@ const collapsed = { expanded: () => false, grouped: () => true }
 
 test("with every group collapsed each row costs one, matching the former row-count budget", () => {
   const rows: SessionRow[] = [
-    { type: "message", messageID: "u" },
+    { type: "message", messageID: SessionMessage.ID.make("u", { disableChecks: true }) },
     group(200),
     group(3, ["reasoning"]),
     read(1),
-    { type: "assistant-footer", messageID: "a" },
+    { type: "assistant-footer", messageID: SessionMessage.ID.make("a", { disableChecks: true }) },
   ]
   const weights = rows.map((row) => rowWeight(row, collapsed))
   expect(weights).toEqual([1, 1, 1, 1, 1])

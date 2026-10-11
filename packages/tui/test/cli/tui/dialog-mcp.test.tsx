@@ -1,3 +1,6 @@
+import { WorkspaceID } from "@opencode/schema/workspace-id"
+import { Integration } from "@opencode/schema/integration"
+import { Session } from "@opencode/schema/session"
 /** @jsxImportSource @opentui/solid */
 import { testRender } from "@opentui/solid"
 import { expect, test } from "bun:test"
@@ -35,7 +38,10 @@ test.each(["enter", "space"])("starts OAuth with %s for an MCP server requiring 
 })
 
 test("opens an investigation draft for a failed MCP server at its originating location", async () => {
-  const location = { directory: "/projects/example", workspaceID: "workspace_example" }
+  const location = {
+    directory: "/projects/example",
+    workspaceID: WorkspaceID.make("workspace_example", { disableChecks: true }),
+  }
   const fixture = await renderMcp({ failed: true, location })
 
   try {
@@ -61,7 +67,7 @@ test("opens an investigation draft for a failed MCP server at its originating lo
   }
 })
 
-async function renderMcp(options?: { failed?: boolean; location?: { directory: string; workspaceID?: string } }) {
+async function renderMcp(options?: { failed?: boolean; location?: { directory: string; workspaceID?: WorkspaceID } }) {
   const events = createEventStream()
   let oauth = 0
   let connect = 0
@@ -81,7 +87,7 @@ async function renderMcp(options?: { failed?: boolean; location?: { directory: s
             status: options?.failed
               ? { status: "failed", error: "MCP error -32000: Connection closed" }
               : { status: "needs_auth", error: "Authentication required" },
-            integrationID: "mcp_linear",
+            integrationID: Integration.ID.make("mcp_linear", { disableChecks: true }),
           },
         ],
       })
@@ -141,7 +147,9 @@ async function renderMcp(options?: { failed?: boolean; location?: { directory: s
         <ConfigProvider config={createTuiResolvedConfig()}>
           <Keymap.Provider>
             <ToastProvider>
-              <RouteProvider initialRoute={{ type: "session", sessionID: "ses_existing" }}>
+              <RouteProvider
+                initialRoute={{ type: "session", sessionID: Session.ID.make("ses_existing", { disableChecks: true }) }}
+              >
                 <ClientProvider api={createApi(calls.fetch)}>
                   <DataProvider directory={process.cwd()}>
                     <LocationProvider>

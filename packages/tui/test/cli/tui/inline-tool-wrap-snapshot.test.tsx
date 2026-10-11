@@ -1,3 +1,6 @@
+import { Model } from "@opencode/schema/model"
+import { Provider } from "@opencode/schema/provider"
+import { Session } from "@opencode/schema/session"
 import { afterEach, describe, expect, test } from "bun:test"
 import { For } from "solid-js"
 import { testRender, type JSX } from "@opentui/solid"
@@ -190,7 +193,7 @@ describe("TUI inline tool wrapping", () => {
       executeCallSummary({
         tool: "session.prompt",
         status: "completed",
-        input: { sessionID: "ses_example", notify: true },
+        input: { sessionID: Session.ID.make("ses_example", { disableChecks: true }), notify: true },
       }),
     ).toBe("session.prompt [sessionID=ses_example, notify=true]")
     expect(executeCallSummary({ tool: "session.get", status: "error", input: { nested: { hidden: true } } })).toBe(
@@ -239,7 +242,13 @@ describe("TUI inline tool wrapping", () => {
   })
 
   test("labels only explicit subagent model overrides", () => {
-    const models = [{ providerID: "anthropic", id: "claude-opus-4-1", name: "Claude Opus 4.1" }]
+    const models = [
+      {
+        providerID: Provider.ID.make("anthropic", { disableChecks: true }),
+        id: Model.ID.make("claude-opus-4-1", { disableChecks: true }),
+        name: "Claude Opus 4.1",
+      },
+    ]
     expect(subagentModelLabel(undefined, models)).toBeUndefined()
     expect(subagentModelLabel("anthropic/claude-opus-4-1", models)).toBe("Claude Opus 4.1")
     expect(subagentModelLabel("anthropic/claude-opus-4-1#max", models)).toBe("Claude Opus 4.1 (max)")

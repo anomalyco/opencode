@@ -1,8 +1,9 @@
+import { SessionMessage } from "@opencode/schema/session-message"
 import { expect, test } from "bun:test"
 import { completeGroupBoundary, type SessionRow } from "../../../src/routes/session/rows"
 
 const group: SessionRow = { type: "group", kind: "reasoning", children: [], size: 0, completed: true }
-const prompt: SessionRow = { type: "message", messageID: "msg_user" }
+const prompt: SessionRow = { type: "message", messageID: SessionMessage.ID.make("msg_user", { disableChecks: true }) }
 
 // Each page is the number of older messages it adds and whether it reaches the prompt
 // preceding the group. Pages inside the group merge into the existing first row.

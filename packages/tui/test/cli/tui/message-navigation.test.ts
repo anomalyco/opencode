@@ -1,11 +1,15 @@
+import { Model } from "@opencode/schema/model"
+import { Provider } from "@opencode/schema/provider"
+import { Agent } from "@opencode/schema/agent"
+import { SessionMessage } from "@opencode/schema/session-message"
 import { expect, test } from "bun:test"
 import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode/client"
 import { findMessageBoundary, messageNavigationSlack } from "../../../src/routes/session/message-navigation"
 
 const messages: SessionMessageInfo[] = [
-  { type: "user", id: "user-1", text: "First", time: { created: 0 } },
+  { type: "user", id: SessionMessage.ID.make("user-1", { disableChecks: true }), text: "First", time: { created: 0 } },
   assistant("assistant-1", "Response"),
-  { type: "user", id: "user-2", text: "Second", time: { created: 2 } },
+  { type: "user", id: SessionMessage.ID.make("user-2", { disableChecks: true }), text: "Second", time: { created: 2 } },
 ]
 const children = [
   { id: "user-1", y: 0 },
@@ -19,7 +23,7 @@ test("adds only enough slack to align the selected message", () => {
 })
 
 test("finds the next user message without stopping at an assistant message", () => {
-  expect(
+  expect<unknown>(
     findMessageBoundary({
       direction: "next",
       children,
@@ -32,7 +36,7 @@ test("finds the next user message without stopping at an assistant message", () 
 })
 
 test("finds the previous user message without stopping at an assistant message", () => {
-  expect(
+  expect<unknown>(
     findMessageBoundary({
       direction: "prev",
       children: children.map((child) => ({ ...child, y: child.y - 35 })),
@@ -45,7 +49,7 @@ test("finds the previous user message without stopping at an assistant message",
 })
 
 test("preserves navigation across both user and assistant messages", () => {
-  expect(
+  expect<unknown>(
     findMessageBoundary({
       direction: "next",
       children,
@@ -54,7 +58,7 @@ test("preserves navigation across both user and assistant messages", () => {
       viewportY: 0,
     }),
   ).toEqual({ id: "assistant-1", y: 20, top: 19 })
-  expect(
+  expect<unknown>(
     findMessageBoundary({
       direction: "prev",
       children: children.map((child) => ({ ...child, y: child.y - 35 })),
@@ -66,7 +70,7 @@ test("preserves navigation across both user and assistant messages", () => {
 })
 
 test("uses the selected message when the viewport is too tall to scroll", () => {
-  expect(
+  expect<unknown>(
     findMessageBoundary({
       direction: "next",
       children,
@@ -77,7 +81,7 @@ test("uses the selected message when the viewport is too tall to scroll", () => 
       userOnly: true,
     }),
   ).toEqual({ id: "user-2", y: 40, top: 40 })
-  expect(
+  expect<unknown>(
     findMessageBoundary({
       direction: "prev",
       children,
@@ -155,9 +159,12 @@ test("stops at the first and last message", () => {
 function assistant(id: string, text: string): SessionMessageAssistant {
   return {
     type: "assistant",
-    id,
-    agent: "build",
-    model: { providerID: "test", id: "test" },
+    id: SessionMessage.ID.make(id, { disableChecks: true }),
+    agent: Agent.ID.make("build", { disableChecks: true }),
+    model: {
+      providerID: Provider.ID.make("test", { disableChecks: true }),
+      id: Model.ID.make("test", { disableChecks: true }),
+    },
     content: [{ type: "text", text }],
     time: { created: 1, completed: 1 },
   }
