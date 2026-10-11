@@ -56,6 +56,71 @@ test("tab strip keeps draft tabs as wide as session tabs and navigates on mouse 
   await expectPath(page, sessionHref(b.id))
 })
 
+test("inactive session attention dots share the close control without marking the avatar or active tab", async ({
+  page,
+}) => {
+  await mockWorkspace(page, {
+    name: "Tabs",
+    sessions: [a, b],
+    sessionPermissions: {
+      [b.id]: [
+        { id: "permission-tab-b", sessionID: b.id, action: "shell", resources: ["git status"], metadata: {}, save: [] },
+      ],
+    },
+  })
+
+  await page.goto(sessionHref(a.id))
+  const tabA = page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(a.id)}"])`)
+  const tabB = page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(b.id)}"])`)
+  const dot = tabB.locator('[data-slot="tab-unread-dot"]')
+  const close = tabB.getByRole("button", { name: "Close tab", exact: true })
+  await expect(tabA.locator('[data-slot="tab-title"]')).toHaveText(a.title)
+  await expect(tabB.locator('[data-slot="tab-title"]')).toHaveText(b.title)
+  await page.mouse.move(0, 0)
+  await expect(dot).toBeVisible()
+  await expect(tabB.locator('[data-slot="tab-avatar-unread-dot"]')).toBeHidden()
+  await expect(close).toHaveCSS("opacity", "0")
+  await expect(tabB.locator('[data-slot="project-avatar-unread-dot"]')).toHaveCount(0)
+  await expect
+    .poll(() =>
+      dot.evaluate((element) => {
+        const dot = element.getBoundingClientRect()
+        const slot = element.parentElement!.getBoundingClientRect()
+
+        return (
+          Math.abs(dot.x + dot.width / 2 - slot.x - slot.width / 2) +
+          Math.abs(dot.y + dot.height / 2 - slot.y - slot.height / 2)
+        )
+      }),
+    )
+    .toBeLessThan(1)
+
+  await tabB.hover()
+  await expect(dot).toBeHidden()
+  await expect(close).toHaveCSS("opacity", "1")
+  await page.mouse.move(0, 0)
+  await tabB.locator("[data-titlebar-tab-link]").focus()
+  await page.keyboard.press("Tab")
+  await expect(close).toBeFocused()
+  await expect(dot).toBeHidden()
+  await expect(close).toHaveCSS("opacity", "1")
+  await close.blur()
+  await expect(dot).toBeVisible()
+
+  await tabB.locator("[data-titlebar-tab-link]").click()
+  await expectPath(page, sessionHref(b.id))
+  await expect(tabB).toHaveAttribute("data-active", "true")
+  await expect(dot).toHaveCount(0)
+  await tabA.locator("[data-titlebar-tab-link]").click()
+  await expectPath(page, sessionHref(a.id))
+  await page.mouse.move(0, 0)
+  await expect(dot).toBeVisible()
+  await tabB.hover()
+  await close.click()
+  await expect(tabB).toHaveCount(0)
+  await expectPath(page, sessionHref(a.id))
+})
+
 test("a tab does not reopen its title editor while a rename is saving", async ({ page }) => {
   await mockWorkspace(page, { name: "Tabs", sessions: [a, b] })
   await page.goto(sessionHref(a.id))
@@ -98,42 +163,111 @@ test("keyboard navigation follows the visible tab order and skips unresolved tab
 })
 
 for (const row of [
-  { tabLayout: "horizontal", width: 360 },
-  { tabLayout: "vertical", width: 390 },
+  { tabLayout: "horizontal", width: 360, hasTouch: false, direction: "ltr" },
+  { tabLayout: "vertical", width: 390, hasTouch: true, direction: "rtl" },
 ]) {
-  test(`mobile drawer exposes close controls and navigates between tabs (${row.tabLayout})`, async ({ page }) => {
-    await page.setViewportSize({ width: row.width, height: 720 })
-    await mockWorkspace(page, {
-      name: "Tabs",
-      sessions: [a, b, c],
-      seed: { settings: { appearance: { tabLayout: row.tabLayout } } },
+  test.describe(`mobile drawer (${row.tabLayout})`, () => {
+    test.use({ hasTouch: row.hasTouch })
+    test(`mobile drawer exposes close controls and navigates between tabs (${row.tabLayout})`, async ({ page }) => {
+      await page.setViewportSize({ width: row.width, height: 720 })
+      await mockWorkspace(page, {
+        name: "Tabs",
+        sessions: [a, b, c],
+        sessionPermissions: {
+          [b.id]: [
+            {
+              id: "permission-mobile-b",
+              sessionID: b.id,
+              action: "shell",
+              resources: ["git status"],
+              metadata: {},
+              save: [],
+            },
+          ],
+        },
+        seed: { settings: { appearance: { tabLayout: row.tabLayout } } },
+      })
+      await page.goto(sessionHref(a.id))
+      await page.locator("html").evaluate((element, direction) => element.setAttribute("dir", direction), row.direction)
+      await page.getByRole("button", { name: "Tabs", exact: true }).click()
+
+      const drawer = page.locator('[data-slot="mobile-tabs-drawer"]')
+      const tabA = drawer.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(a.id)}"])`)
+      const tabB = drawer.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(b.id)}"])`)
+      await expect(tabA).toHaveAttribute("data-active", "true")
+      await expect(tabA.locator('[data-slot="tab-close"]')).toBeVisible()
+      await expect(tabB.locator('[data-slot="tab-close"]')).toBeVisible()
+      await expect(tabB.locator('[data-slot="tab-unread-dot"]')).toBeVisible()
+      await expect(tabB.locator('[data-slot="tab-unread-slot"]')).toHaveCSS("width", "20px")
+      await expect(tabB.locator('[data-slot="tab-unread-slot"]')).toHaveCSS("height", "20px")
+      await expect
+        .poll(() =>
+          tabB.evaluate((element) => {
+            const dot = element.querySelector('[data-slot="tab-unread-slot"]')!.getBoundingClientRect()
+            const close = element.querySelector('[data-slot="tab-close"]')!.getBoundingClientRect()
+
+            return dot.right <= close.left || dot.left >= close.right
+          }),
+        )
+        .toBe(true)
+      await expect(tabB.locator('[data-slot="tab-avatar-unread-dot"]')).toBeHidden()
+      await expect(tabB.getByRole("button", { name: "Close tab", exact: true })).toHaveCSS("opacity", "1")
+      await expect(page.locator('[data-slot="vertical-tabs-sidebar"]')).toHaveCount(0)
+
+      await tabB.locator(`a[href="${sessionHref(b.id)}"]`).click()
+
+      await expectPath(page, sessionHref(b.id))
+      await expect(page.getByRole("dialog", { name: "Tabs", exact: true })).toBeHidden()
+
+      if (row.tabLayout !== "vertical") return
+      await page.setViewportSize({ width: 1280, height: 720 })
+      await expect(
+        page
+          .locator('[data-slot="vertical-tabs-sidebar"]')
+          .locator(`[data-titlebar-tab-link][href="${sessionHref(b.id)}"]`),
+      ).toBeVisible()
+      await expect(page.locator('[data-slot="titlebar-tabs"]')).toHaveCount(0)
     })
-    await page.goto(sessionHref(a.id))
-    await page.getByRole("button", { name: "Tabs", exact: true }).click()
-
-    const drawer = page.locator('[data-slot="mobile-tabs-drawer"]')
-    const tabA = drawer.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(a.id)}"])`)
-    const tabB = drawer.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(b.id)}"])`)
-    await expect(tabA).toHaveAttribute("data-active", "true")
-    await expect(tabA.locator('[data-slot="tab-close"]')).toBeVisible()
-    await expect(tabB.locator('[data-slot="tab-close"]')).toBeVisible()
-    await expect(page.locator('[data-slot="vertical-tabs-sidebar"]')).toHaveCount(0)
-
-    await tabB.locator(`a[href="${sessionHref(b.id)}"]`).click()
-
-    await expectPath(page, sessionHref(b.id))
-    await expect(page.getByRole("dialog", { name: "Tabs", exact: true })).toBeHidden()
-
-    if (row.tabLayout !== "vertical") return
-    await page.setViewportSize({ width: 1280, height: 720 })
-    await expect(
-      page
-        .locator('[data-slot="vertical-tabs-sidebar"]')
-        .locator(`[data-titlebar-tab-link][href="${sessionHref(b.id)}"]`),
-    ).toBeVisible()
-    await expect(page.locator('[data-slot="titlebar-tabs"]')).toHaveCount(0)
   })
 }
+
+test("icon-only inactive tabs retain their avatar and attention badge instead of showing a close overlay", async ({
+  page,
+}) => {
+  await mockWorkspace(page, {
+    name: "CompactTabs",
+    sessions: [
+      a,
+      b,
+      ...Array.from({ length: 30 }, (_, index) => ({ id: `ses_compact_${index}`, title: `Compact ${index}` })),
+    ],
+    sessionPermissions: {
+      [b.id]: [
+        {
+          id: "permission-compact-b",
+          sessionID: b.id,
+          action: "shell",
+          resources: ["git status"],
+          metadata: {},
+          save: [],
+        },
+      ],
+    },
+  })
+  await page.goto(sessionHref(a.id))
+  const tabB = page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(b.id)}"])`)
+  await expect(tabB.locator('[data-slot="tab-title"]')).toBeHidden()
+  await expect(tabB.locator('[data-component="project-avatar-v2"]')).toBeVisible()
+  await expect(tabB.locator('[data-slot="tab-avatar-unread-dot"]')).toBeVisible()
+  await expect(tabB.locator('[data-slot="tab-avatar-unread-dot"]')).toHaveCSS("width", "6px")
+  await expect(tabB.locator('[data-slot="tab-avatar-unread-dot"]')).toHaveCSS("height", "6px")
+  await expect(tabB.locator('[data-slot="tab-close"]')).toBeHidden()
+  await tabB.hover()
+  await expect(tabB.locator('[data-slot="tab-close"]')).toBeHidden()
+  await tabB.locator("[data-titlebar-tab-link]").click()
+  await expectPath(page, sessionHref(b.id))
+  await expect(tabB.locator('[data-slot="tab-avatar-unread-dot"]')).toHaveCount(0)
+})
 
 test("vertical tabs resize, scroll, show shortcut hints, and navigate", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 480 })

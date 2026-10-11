@@ -11,7 +11,8 @@ import { useServerCtx } from "@/runtime/server/runtime"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ServerConnection, serverName, useServers } from "@/runtime/server/registry"
 import { displayName } from "@opencode/ui/project-avatar"
-import { SessionTabAvatar } from "@/shell/layout/session-tab-avatar"
+import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
+import { useSessionTabAvatarState } from "@/shell/layout/project-avatar-state"
 import { SessionProgressIndicatorV2 } from "@opencode/session-ui/v2/session-progress-indicator-v2"
 import type { SessionInfo } from "@opencode/client/promise"
 import { sessionTabTitle } from "./tab-title"
@@ -55,6 +56,12 @@ export function TabNavItem(props: {
 
   const servers = useServers()
   const serverCtx = useServerCtx(() => servers.list.find((item) => ServerConnection.key(item) === props.server))
+  const avatar = useSessionTabAvatarState(
+    () => props.server,
+    () => props.session?.id ?? "",
+    () => true,
+  )
+  const unread = () => !!props.session && !props.active && avatar.unread() && !avatar.loading()
 
   const project = createMemo(() => {
     const session = props.session
@@ -232,6 +239,7 @@ export function TabNavItem(props: {
       class="group relative flex h-7 w-full min-w-0 select-none flex-row items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-[6px] px-1.5 [container-type:inline-size]"
       classList={{ invisible: props.hidden }}
       data-active={props.active}
+      data-unread={unread()}
       data-dragging={props.dragging}
       data-state={props.active || props.pressed ? "pressed" : undefined}
       onMouseDown={(event) => {
@@ -298,13 +306,16 @@ export function TabNavItem(props: {
             }
           >
             {(session) => (
-              <SessionTabAvatar
+              <SessionTabAvatarView
                 project={project()}
                 directory={session.location.directory}
-                sessionId={session.id}
-                server={props.server}
+                unread={false}
+                loading={avatar.loading()}
               />
             )}
+          </Show>
+          <Show when={unread()}>
+            <span data-slot="tab-avatar-unread-dot" aria-hidden="true" />
           </Show>
         </span>
         <span
@@ -350,10 +361,15 @@ export function TabNavItem(props: {
       </Menu.Context.Trigger>
 
       <div data-slot="tab-close">
+        <Show when={unread()}>
+          <span data-slot="tab-unread-slot" aria-hidden="true">
+            <span data-slot="tab-unread-dot" />
+          </span>
+        </Show>
         <IconButton
           size="small"
           variant="ghost-muted"
-          class="hover-reveal relative z-10 group-hover:opacity-100 group-data-[active=true]:opacity-100 group-data-[editing=true]:opacity-100"
+          class="hover-reveal relative z-10 group-hover:opacity-100 group-has-[:focus-visible]:opacity-100 group-data-[active=true]:opacity-100 group-data-[editing=true]:opacity-100"
           onPointerDown={(event) => {
             event.preventDefault()
             event.stopPropagation()
