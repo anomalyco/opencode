@@ -126,20 +126,27 @@ const mimeToModality = (mime: string) => {
   if (mime === "application/pdf") return "pdf"
 }
 
-// xAI rejects any other image type (e.g. GIF) with invalid_image, and the stored image would fail every later turn.
-const XAI_IMAGE_MIMES = new Set(["image/png", "image/jpeg", "image/webp"])
+// Grok rejects any other image type (e.g. GIF) with invalid_image, through xAI and through gateways such as
+// OpenCode Zen alike, and the stored image would fail every later turn.
+const GROK_IMAGE_MIMES = new Set(["image/png", "image/jpeg", "image/webp"])
+
+interface Served {
+  readonly provider?: string
+  readonly family?: string
+}
 
 const unsupportedMedia = (
   mime: string,
   name: string | undefined,
   capabilities: Model.Capabilities,
-  provider: string | undefined,
+  model: Served | undefined,
 ) => {
   const modality = mimeToModality(mime)
   if (!modality) return
+  const grok = model?.provider === "xai" || model?.family?.startsWith("grok") === true
   const unsupported = !capabilities.input.some((item) => item.startsWith(modality))
     ? modality
-    : provider === "xai" && modality === "image" && !XAI_IMAGE_MIMES.has(mime.toLowerCase())
+    : grok && modality === "image" && !GROK_IMAGE_MIMES.has(mime.toLowerCase())
       ? mime
       : undefined
   if (!unsupported) return
@@ -180,11 +187,8 @@ const replaceMedia = (
       : new Message({ ...message, content })
   })
 
-export const unsupportedParts = (
-  messages: LLMRequest["messages"],
-  capabilities: Model.Capabilities,
-  provider?: string,
-) => replaceMedia(messages, (media) => unsupportedMedia(media.mime, media.name, capabilities, provider))
+export const unsupportedParts = (messages: LLMRequest["messages"], capabilities: Model.Capabilities, model?: Served) =>
+  replaceMedia(messages, (media) => unsupportedMedia(media.mime, media.name, capabilities, model))
 
 export const boundImages = (messages: LLMRequest["messages"]) => {
   const isImage = (mime: string) => mime.toLowerCase().startsWith("image/")
@@ -294,7 +298,12 @@ export const layer = Layer.effect(
         // TODO: Persist cache lineage so nested forks reuse the root session's cache key.
         promptCacheKey: /^ses_[0-9a-f]{64}$/.test(affinity) ? affinity.slice(4) : affinity,
         system: shaped.system,
-        messages: boundImages(unsupportedParts(shaped.messages, model.capabilities, model.model.provider)),
+        messages: boundImages(
+          unsupportedParts(shaped.messages, model.capabilities, {
+            provider: model.model.provider,
+            family: model.family,
+          }),
+        ),
         tools: Array.from(hooked, ([name, t]) => ({ ...t, name })),
         toolChoice: input.toolChoice,
         generation: Object.keys(generation).length === 0 ? undefined : generation,

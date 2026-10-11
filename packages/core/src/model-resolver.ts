@@ -114,6 +114,8 @@ export interface Resolved {
   readonly ref: Ref
   /** Catalog capabilities used to shape requests before provider lowering. */
   readonly capabilities: Capabilities
+  /** Catalog model family; family-wide input limits apply however the model is served. */
+  readonly family?: Info["family"]
   /** Catalog pricing in dollars per million tokens. */
   readonly cost: Info["cost"]
   /** Catalog token limits used by Core for context management. */
@@ -398,6 +400,7 @@ export const layer = Layer.effect(
           ...(variant === undefined ? {} : { variant }),
         }),
         capabilities: selected.capabilities,
+        family: selected.family,
         cost: selected.cost,
         limit: selected.limit,
         compaction: runtimeInfo.settings?.compaction,

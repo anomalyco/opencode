@@ -140,7 +140,9 @@ const SERVER_CODES = new Set([
   "serviceunavailableexception",
 ])
 // `invalid_request` is the Vercel AI Gateway's code for an upstream request rejection.
+// xAI reports an undecodable image over WebSocket with no status as `invalid_image` under type `api_error`.
 const INVALID_REQUEST_CODES = new Set([
+  "invalid_image",
   "model_not_found",
   "invalid_prompt",
   "invalid_request",
@@ -290,8 +292,10 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
     // Server codes and phrasing only decide when no HTTP status contradicts them:
     // gateways such as OpenCode Zen substitute `server_error` for codes they do
     // not forward, so a 4xx with a server code is still a rejected request.
+    // A specific invalid-request code outranks a generic server code or phrase in the same body.
     ((input.status === undefined || input.status < 400) &&
-      ((!codes.some((code) => INVALID_REQUEST_CODES.has(code)) && SERVER_ERROR_TEXT.test(text)) ||
+      !codes.some((code) => INVALID_REQUEST_CODES.has(code)) &&
+      (SERVER_ERROR_TEXT.test(text) ||
         codes.some((code) => SERVER_CODES.has(code) || code.includes("exhausted") || code.includes("unavailable"))))
   )
     return new ProviderInternalError({

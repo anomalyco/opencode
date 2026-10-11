@@ -380,6 +380,21 @@ describe("provider error classification", () => {
     ).toBe("ProviderInternal")
   })
 
+  test("does not retry an xAI invalid image reported as api_error without a status", () => {
+    // Recorded from the xAI Responses WebSocket after sending a GIF.
+    const body = {
+      error: {
+        message:
+          "gRPC error: code: 'Client specified an invalid argument', message: \"Downloaded response does not contain a valid JPG, PNG, WebP, or ICO image.",
+        type: "api_error",
+        code: "invalid_image",
+      },
+    }
+    expect(classifyProviderFailure({ message: body.error.message, rawBody: JSON.stringify(body) })._tag).toBe(
+      "InvalidRequest",
+    )
+  })
+
   test("classifies nested provider codes when a top-level code is also present", () => {
     expect(
       [
