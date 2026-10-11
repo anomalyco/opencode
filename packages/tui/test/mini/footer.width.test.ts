@@ -1,3 +1,4 @@
+import { Agent } from "@opencode/schema/agent"
 import { describe, expect, test } from "bun:test"
 import { footerStatuslinePolicy, type FooterStatuslineGroup } from "../../src/mini/footer.width"
 import { stringWidth } from "../../src/util/string-width"
@@ -5,7 +6,7 @@ import { stringWidth } from "../../src/util/string-width"
 const screenshot = {
   work: [],
   model: { name: "GPT-5.6 Sol (50% Off)", variant: "max" },
-  agent: "Build",
+  agent: Agent.ID.make("Build", { disableChecks: true }),
   context: { compact: "1% ctx", full: "14.1K (1%)" },
   cost: "$0.04",
   provider: "Anomaly / OpenCode",

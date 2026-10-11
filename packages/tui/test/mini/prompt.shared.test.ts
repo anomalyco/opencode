@@ -1,3 +1,5 @@
+import { Skill } from "@opencode/schema/skill"
+import { SessionMessage } from "@opencode/schema/session-message"
 import { describe, expect, test } from "bun:test"
 import {
   createPromptHistory,
@@ -113,15 +115,15 @@ describe("promptAppend", () => {
     const output = promptAppend(
       prompt("日本", [{ type: "agent", name: "plan", source: { start: 0, end: 4, value: "日本" } }]),
       {
-        messageID: "m-1",
+        messageID: SessionMessage.ID.make("m-1", { disableChecks: true }),
         ...prompt("@a.ts /x", [
           { type: "file", url: "file:///a.ts", source: { type: "file", text: { start: 0, end: 5, value: "@a.ts" } } },
-          { type: "skill", id: "x", source: { start: 6, end: 8, value: "/x" } },
+          { type: "skill", id: Skill.ID.make("x", { disableChecks: true }), source: { start: 6, end: 8, value: "/x" } },
         ]),
       },
     )
 
-    expect(output).toEqual({
+    expect<unknown>(output).toEqual({
       text: "日本\n\n@a.ts /x",
       parts: [
         { type: "agent", name: "plan", source: { start: 0, end: 4, value: "日本" } },

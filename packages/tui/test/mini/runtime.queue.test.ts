@@ -1,3 +1,4 @@
+import { Session } from "@opencode/schema/session"
 import { describe, expect, test } from "bun:test"
 import { runPromptQueue as runPromptQueueBase, type QueueInput } from "../../src/mini/runtime.queue"
 import type { RunPrompt } from "../../src/mini/types"
@@ -254,7 +255,11 @@ describe("run runtime queue", () => {
   test("demo commands own their local input echo", async () => {
     const { createRunDemo } = await import("../../src/mini/demo")
     const ui = createFooterApiFixture()
-    const demo = createRunDemo({ sessionID: "ses_demo", thinking: false, footer: ui.api })
+    const demo = createRunDemo({
+      sessionID: Session.ID.make("ses_demo", { disableChecks: true }),
+      thinking: false,
+      footer: ui.api,
+    })
     expect(await demo.prompt({ text: "ordinary prompt", parts: [] })).toBe(false)
     expect(ui.commits).toEqual([])
     const task = runPromptQueue({

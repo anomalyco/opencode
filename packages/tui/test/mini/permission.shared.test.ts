@@ -1,3 +1,6 @@
+import { SessionMessage } from "@opencode/schema/session-message"
+import { Session } from "@opencode/schema/session"
+import { Permission } from "@opencode/schema/permission"
 import { describe, expect, test } from "bun:test"
 import {
   createPermissionBodyState,
@@ -13,8 +16,8 @@ import { canonicalToolPart } from "./fixture/tool-part"
 
 function req(input: Partial<MiniPermissionRequest> = {}): MiniPermissionRequest {
   return {
-    id: "perm-1",
-    sessionID: "session-1",
+    id: Permission.ID.make("perm-1", { disableChecks: true }),
+    sessionID: Session.ID.make("session-1", { disableChecks: true }),
     action: "read",
     resources: [],
     metadata: {},
@@ -29,9 +32,9 @@ function body() {
 
 describe("run permission shared", () => {
   test("replies immediately for allow once", () => {
-    const out = permissionRun(body(), "perm-1", "once")
+    const out = permissionRun(body(), Permission.ID.make("perm-1", { disableChecks: true }), "once")
 
-    expect(out.reply).toEqual({
+    expect<unknown>(out.reply).toEqual({
       sessionID: "session-1",
       requestID: "perm-1",
       decision: "once",
@@ -39,29 +42,34 @@ describe("run permission shared", () => {
   })
 
   test("requires confirmation for allow always", () => {
-    const next = permissionRun(body(), "perm-1", "always")
+    const next = permissionRun(body(), Permission.ID.make("perm-1", { disableChecks: true }), "always")
     expect(next.state.stage).toBe("always")
     expect(next.state.selected).toBe("confirm")
     expect(next.reply).toBeUndefined()
 
-    expect(permissionRun(next.state, "perm-1", "confirm").reply).toEqual({
+    expect<unknown>(permissionRun(next.state, Permission.ID.make("perm-1", { disableChecks: true }), "confirm").reply).toEqual({
       sessionID: "session-1",
       requestID: "perm-1",
       decision: "always",
     })
 
-    expect(permissionRun(next.state, "perm-1", "cancel").state).toMatchObject({
+    expect(
+      permissionRun(next.state, Permission.ID.make("perm-1", { disableChecks: true }), "cancel").state,
+    ).toMatchObject({
       stage: "permission",
       selected: "always",
     })
   })
 
   test("builds trimmed reject replies and stage transitions", () => {
-    const next = permissionRun(body(), "perm-1", "reject")
+    const next = permissionRun(body(), Permission.ID.make("perm-1", { disableChecks: true }), "reject")
     expect(next.state.stage).toBe("reject")
 
-    const out = permissionReject({ ...next.state, message: "  use rg  " }, "perm-1")
-    expect(out).toEqual({
+    const out = permissionReject(
+      { ...next.state, message: "  use rg  " },
+      Permission.ID.make("perm-1", { disableChecks: true }),
+    )
+    expect<unknown>(out).toEqual({
       sessionID: "session-1",
       requestID: "perm-1",
       decision: "reject",
@@ -89,7 +97,11 @@ describe("run permission shared", () => {
       permissionInfo(
         req({
           action: "shell",
-          source: { type: "tool", messageID: "msg-shell", id: "call-shell" },
+          source: {
+            type: "tool",
+            messageID: SessionMessage.ID.make("msg-shell", { disableChecks: true }),
+            id: "call-shell",
+          },
           tool: canonicalToolPart(
             "shell",
             {
@@ -134,7 +146,11 @@ describe("run permission shared", () => {
         req({
           action: "websearch",
           metadata: { provider: "parallel" },
-          source: { type: "tool", messageID: "msg-search", id: "call-search" },
+          source: {
+            type: "tool",
+            messageID: SessionMessage.ID.make("msg-search", { disableChecks: true }),
+            id: "call-search",
+          },
           tool: canonicalToolPart(
             "websearch",
             {
@@ -157,7 +173,7 @@ describe("run permission shared", () => {
     const request = req({
       action: "edit",
       resources: ["src/index.ts"],
-      source: { type: "tool", messageID: "msg-edit", id: "call-edit" },
+      source: { type: "tool", messageID: SessionMessage.ID.make("msg-edit", { disableChecks: true }), id: "call-edit" },
       tool: canonicalToolPart(
         "edit",
         {

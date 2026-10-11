@@ -1,3 +1,5 @@
+import { Model } from "@opencode/schema/model"
+import { Provider } from "@opencode/schema/provider"
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
 import { OpenCode } from "@opencode/client/promise"
 import { loadRunReferences, runProviders } from "../../src/mini/catalog.shared"
@@ -43,15 +45,15 @@ describe("run catalog shared", () => {
       [
         catalogModel({
           id: "gpt-5",
-          modelID: "openai",
-          providerID: "openai",
+          modelID: Model.ID.make("openai", { disableChecks: true }),
+          providerID: Provider.ID.make("openai", { disableChecks: true }),
           name: "Little Frank",
           variants: ["high"],
         }),
       ],
     )
 
-    expect(providers).toEqual([
+    expect<unknown>(providers).toEqual([
       {
         id: "openai",
         name: "OpenAI",
