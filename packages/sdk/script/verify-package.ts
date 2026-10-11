@@ -203,6 +203,25 @@ for (const module of modules) {
 }
 `,
     ),
+    Bun.write(
+      join(consumer, "imports-default.mjs"),
+      `import { registerHooks } from "node:module"
+
+// Hide the "node" condition from package subpath imports so Node resolves their
+// "default" targets, as condition-less loaders and bundlers do.
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (!specifier.startsWith("#")) return nextResolve(specifier, context)
+    return nextResolve(specifier, {
+      ...context,
+      conditions: context.conditions.filter((condition) => condition !== "node"),
+    })
+  },
+})
+
+await import("./imports.mjs")
+`,
+    ),
   ])
 
   const sdk = archives.get("@opencode/sdk")
@@ -214,6 +233,7 @@ for (const module of modules) {
   }
   await $`bun imports.mjs`.cwd(consumer)
   await $`node imports.mjs`.cwd(consumer)
+  await $`node imports-default.mjs`.cwd(consumer)
   await $`bun --conditions=workerd imports.mjs`.cwd(consumer)
   await $`node_modules/.bin/wrangler deploy --dry-run --config wrangler.jsonc --outdir dist`.cwd(consumer)
 
