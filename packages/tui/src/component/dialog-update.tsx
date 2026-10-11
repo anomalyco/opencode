@@ -6,10 +6,13 @@ import { useDialog } from "../ui/dialog"
 import { useBindings } from "../keymap"
 import { errorMessage } from "../util/error"
 import { Spinner } from "./spinner"
+import { Link } from "../ui/link"
+
+export const V2_ANNOUNCEMENT_URL = "https://opencode.ai/v2"
 
 type Version = { current: string; latest?: string }
 
-// A newer OpenCode 1 release uses the normal update flow; OpenCode 2 is only offered when OpenCode 1 is current.
+// A newer OpenCode 1 release uses the normal update flow; OpenCode 2.0 is only offered when OpenCode 1 is current.
 export function updateTarget(version: Version): UpdateTarget {
   if (version.latest && version.latest !== version.current) return { type: "latest", version: version.latest }
   return { type: "major" }
@@ -19,7 +22,7 @@ export function DialogUpdate(props: {
   check: () => Promise<Version | undefined>
   state: () => UpdateState | undefined
   install: (target: UpdateTarget) => Promise<void>
-  skip: (target: UpdateTarget) => void
+  dismiss: () => void
   restart: () => void
 }) {
   const dialog = useDialog()
@@ -51,18 +54,17 @@ export function DialogUpdate(props: {
   const buttons = createMemo(() => {
     const current = state()
     if (current.type === "checking" || current.type === "installing") return []
-    if (current.type === "installed") return [skip(), { label: "Restart", run: props.restart }]
+    if (current.type === "installed") return [dismiss(), { label: "Restart", run: props.restart }]
     const next = target()
-    if (!next) return [skip()]
-    return [skip(), { label: next.type === "major" ? "Upgrade" : "Update", run: () => props.install(next) }]
+    if (!next) return [dismiss()]
+    return [dismiss(), { label: next.type === "major" ? "Upgrade" : "Update", run: () => props.install(next) }]
   })
 
-  function skip() {
+  function dismiss() {
     return {
-      label: "Skip",
+      label: "Dismiss",
       run: () => {
-        const next = target()
-        if (next && props.state()?.type !== "installed") props.skip(next)
+        if (props.state()?.type !== "installed") props.dismiss()
         dialog.clear()
       },
     }
@@ -115,7 +117,7 @@ export function DialogUpdate(props: {
                 {(installing) => (
                   <Spinner color={theme.text}>
                     {installing.target.type === "major"
-                      ? "Installing OpenCode 2…"
+                      ? "Installing OpenCode 2.0…"
                       : `Installing OpenCode ${installing.target.version}…`}
                   </Spinner>
                 )}
@@ -124,7 +126,7 @@ export function DialogUpdate(props: {
                 {(installed) => (
                   <text fg={theme.textMuted} wrapMode="word">
                     {installed.target.type === "major"
-                      ? "Update successful! A restart is required. Run `opencode` to start OpenCode 2."
+                      ? "Update successful! A restart is required. Run `opencode` to start OpenCode 2.0."
                       : "Update successful! A restart is required."}
                   </text>
                 )}
@@ -132,10 +134,11 @@ export function DialogUpdate(props: {
               <Match when={current.type === "major"}>
                 <box>
                   <text fg={theme.textMuted} wrapMode="word">
-                    OpenCode is already up to date. OpenCode 2 is available.
+                    OpenCode 2.0 is the next major release. Read more about it:
                   </text>
+                  <Link href={V2_ANNOUNCEMENT_URL} fg={theme.primary} />
                   <text fg={theme.textMuted} wrapMode="word">
-                    Upgrading installs OpenCode 2 and removes OpenCode 1.
+                    It contains some breaking changes.
                   </text>
                 </box>
               </Match>

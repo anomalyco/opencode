@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { updateTarget } from "../../src/component/dialog-update"
-import { isVersionGreater } from "../../src/context/update-notification"
+import { DISMISS_DURATION, visibleNotice } from "../../src/context/update-notification"
 
 describe("dialog update", () => {
   test("uses the normal OpenCode 1 update when a newer release exists", () => {
@@ -11,10 +11,13 @@ describe("dialog update", () => {
     expect(updateTarget({ current: "1.4.2", latest: "1.4.2" })).toEqual({ type: "major" })
   })
 
-  test("hides skipped versions until a newer one is released", () => {
-    expect(isVersionGreater("1.4.2", "1.4.2")).toBe(false)
-    expect(isVersionGreater("1.4.3", "1.4.2")).toBe(true)
-    expect(isVersionGreater("1.5.0", "1.10.0")).toBe(false)
-    expect(isVersionGreater("1.4.2", "1.4.2-beta.1")).toBe(true)
+  test("hides the notice for a week after it is dismissed", () => {
+    const notice = { type: "available" as const, version: "1.4.2" }
+    const now = 1_000_000
+    expect(visibleNotice(notice, undefined, now)).toEqual(notice)
+    expect(visibleNotice(notice, now + DISMISS_DURATION, now)).toBeUndefined()
+    expect(visibleNotice({ type: "major" }, now + DISMISS_DURATION, now + DISMISS_DURATION - 1)).toBeUndefined()
+    expect(visibleNotice({ type: "major" }, now + DISMISS_DURATION, now + DISMISS_DURATION)).toEqual({ type: "major" })
+    expect(DISMISS_DURATION).toBe(7 * 24 * 60 * 60 * 1000)
   })
 })

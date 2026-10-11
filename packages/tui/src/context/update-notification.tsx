@@ -13,7 +13,7 @@ export type UpdateState =
   | { readonly type: "installed"; readonly target: UpdateTarget }
   | { readonly type: "failed"; readonly target: UpdateTarget; readonly message: string }
 
-// A newer OpenCode 1 release wins; OpenCode 2 is only suggested once OpenCode 1 is up to date.
+// A newer OpenCode 1 release wins; OpenCode 2.0 is only suggested once OpenCode 1 is up to date.
 export type UpdateNotice = { readonly type: "available"; readonly version: string } | { readonly type: "major" }
 
 // Implemented by the CLI process so checks and installs run against this machine's installation.
@@ -21,6 +21,15 @@ export type UpdateSource = {
   readonly subscribe: (notify: (notice: UpdateNotice) => void) => () => void
   readonly check: () => Promise<{ readonly current: string; readonly latest?: string }>
   readonly apply: (target: UpdateTarget) => Promise<void>
+}
+
+export const DISMISS_DURATION = 7 * 24 * 60 * 60 * 1000
+
+// Dismissing hides the notice for a week, whichever update it was for.
+export function visibleNotice(notice: UpdateNotice | undefined, dismissedUntil: number | undefined, now: number) {
+  if (!notice) return undefined
+  if (dismissedUntil !== undefined && now < dismissedUntil) return undefined
+  return notice
 }
 
 export const MAJOR_INSTRUCTIONS = "https://opencode.ai/v2/docs"
@@ -33,6 +42,9 @@ export const { use: useUpdateNotification, provider: UpdateNotificationProvider 
     const exit = useExit()
     const [available, setAvailable] = createSignal<UpdateNotice>()
     const [state, setState] = createSignal<UpdateState>()
+    const [now, setNow] = createSignal(Date.now())
+    const clock = setInterval(() => setNow(Date.now()), 10 * 60 * 1000)
+    onCleanup(() => clearInterval(clock))
 
     // Checks only announce a version. Installing always goes through /update.
     onMount(() => {
@@ -43,12 +55,7 @@ export const { use: useUpdateNotification, provider: UpdateNotificationProvider 
     const notification = createMemo(() => {
       const current = state()
       if (current?.type === "installed") return current
-      const notice = available()
-      if (!notice) return undefined
-      if (notice.type === "major") return kv.get("skipped_major") ? undefined : notice
-      const skipped = kv.get("skipped_version")
-      if (skipped && !isVersionGreater(notice.version, skipped)) return undefined
-      return notice
+      return visibleNotice(available(), kv.get("update_dismissed_until"), now())
     })
 
     const install = async (target: UpdateTarget) => {
@@ -64,7 +71,7 @@ export const { use: useUpdateNotification, provider: UpdateNotificationProvider 
             target,
             message:
               target.type === "major" && !message.includes(MAJOR_INSTRUCTIONS)
-                ? `${message}\nTo install OpenCode 2 manually, see ${MAJOR_INSTRUCTIONS}`
+                ? `${message}\nTo install OpenCode 2.0 manually, see ${MAJOR_INSTRUCTIONS}`
                 : message,
           })
         },
@@ -79,9 +86,11 @@ export const { use: useUpdateNotification, provider: UpdateNotificationProvider 
           check={updater.check}
           state={state}
           install={install}
-          skip={(target) =>
-            target.type === "major" ? kv.set("skipped_major", true) : kv.set("skipped_version", target.version)
-          }
+          dismiss={() => {
+            const at = Date.now()
+            kv.set("update_dismissed_until", at + DISMISS_DURATION)
+            setNow(at)
+          }}
           restart={() => exit()}
         />
       ))
@@ -93,20 +102,3 @@ export const { use: useUpdateNotification, provider: UpdateNotificationProvider 
     }
   },
 })
-
-export function isVersionGreater(left: string, right: string) {
-  const parse = (value: string) => {
-    const [core, prerelease] = value.replace(/^v/, "").split("-", 2)
-    return { core: core.split(".").map((part) => Number.parseInt(part, 10) || 0), prerelease }
-  }
-  const a = parse(left)
-  const b = parse(right)
-  for (let index = 0; index < Math.max(a.core.length, b.core.length); index++) {
-    const difference = (a.core[index] ?? 0) - (b.core[index] ?? 0)
-    if (difference) return difference > 0
-  }
-  if (a.prerelease === b.prerelease) return false
-  if (!a.prerelease) return true
-  if (!b.prerelease) return false
-  return a.prerelease.localeCompare(b.prerelease, undefined, { numeric: true }) > 0
-}
