@@ -591,6 +591,24 @@ interface IntegrationEditor {
 }
 ```
 
+### Credentials
+
+Activate another saved account. The credential becomes the active connection of its integration for every session.
+
+```ts
+const { data } = await ctx.integration.get({ integrationID: "anthropic" })
+const next = data.connections.find((connection) => connection.type === "credential" && connection.label === "work")
+if (next?.type === "credential") await ctx.credential.activate({ credentialID: next.id })
+```
+
+#### Reference
+
+```ts
+interface CredentialContext {
+  activate(input: CredentialActivateInput, requestOptions?: RequestOptions): Promise<void>
+}
+```
+
 ### MCP
 
 List MCP servers and their current connection state.

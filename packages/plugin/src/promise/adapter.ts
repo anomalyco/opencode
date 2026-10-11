@@ -223,6 +223,7 @@ export function fromPromise(plugin: Plugin) {
         )
         const AgentEndpoints = ClientApi.groups["server.agent"].endpoints
         const CommandEndpoints = ClientApi.groups["server.command"].endpoints
+        const CredentialEndpoints = ClientApi.groups["server.credential"].endpoints
         const ExperimentalEndpoints = ClientApi.groups["server.experimental"].endpoints
         const GenerateEndpoints = ClientApi.groups["server.generate"].endpoints
         const IntegrationEndpoints = ClientApi.groups["server.integration"].endpoints
@@ -320,6 +321,9 @@ export function fromPromise(plugin: Plugin) {
                 ),
               ),
             reload: () => run(host.command.reload()),
+          },
+          credential: {
+            activate: adaptApiMethod(CredentialEndpoints["credential.activate"], host.credential.activate),
           },
           event: {
             subscribe: (options) =>

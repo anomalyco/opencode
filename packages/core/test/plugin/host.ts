@@ -62,6 +62,9 @@ export function host(overrides: Overrides = {}): Plugin.Context {
       transform: () => Effect.die("unused command.transform"),
       reload: () => Effect.die("unused command.reload"),
     },
+    credential: overrides.credential ?? {
+      activate: () => Effect.die("unused credential.activate"),
+    },
     event: overrides.event ?? {
       subscribe: () => Stream.empty,
     },
