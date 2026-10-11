@@ -246,9 +246,23 @@ export const OpenAIChatToolCallDelta = Schema.Struct({
 })
 type OpenAIChatToolCallDelta = Schema.Schema.Type<typeof OpenAIChatToolCallDelta>
 
+// Mistral-style models stream `content` as typed parts instead of a string:
+// `text` parts carry output, and `thinking` parts nest their own text units.
+// Other part types (references, media) carry nothing renderable and are skipped.
+const OpenAIChatThinkingText = Schema.StructWithRest(Schema.Struct({ text: optionalNull(Schema.String) }), [JsonObject])
+
+const OpenAIChatContentPart = Schema.StructWithRest(
+  Schema.Struct({
+    type: Schema.String,
+    text: optionalNull(Schema.String),
+    thinking: optionalNull(Schema.Union([Schema.String, Schema.Array(OpenAIChatThinkingText)])),
+  }),
+  [JsonObject],
+)
+
 export const OpenAIChatDelta = Schema.StructWithRest(
   Schema.Struct({
-    content: optionalNull(Schema.String),
+    content: optionalNull(Schema.Union([Schema.String, Schema.Array(OpenAIChatContentPart)])),
     refusal: optionalNull(Schema.String),
     reasoning_content: optionalNull(Schema.String),
     reasoning: optionalNull(Schema.String),
@@ -953,6 +967,37 @@ const reasoningDelta = (
   return undefined
 }
 
+interface ContentDelta {
+  readonly type: "text" | "reasoning"
+  readonly text: string
+}
+
+// Flattens string or part-array content into ordered text and reasoning deltas.
+const contentDeltas = Effect.fnUntraced(function* (content: Schema.Schema.Type<typeof OpenAIChatDelta>["content"]) {
+  if (!content) return []
+  if (typeof content === "string") return [{ type: "text" as const, text: content }]
+  const deltas: ContentDelta[] = []
+  const skipped: string[] = []
+  for (const part of content) {
+    if (part.type === "text") {
+      if (part.text) deltas.push({ type: "text", text: part.text })
+    } else if (part.type === "thinking") {
+      const text =
+        typeof part.thinking === "string"
+          ? part.thinking
+          : (part.thinking ?? []).map((unit) => unit.text ?? "").join("")
+      if (text) deltas.push({ type: "reasoning", text })
+    } else {
+      skipped.push(part.type)
+    }
+  }
+  if (skipped.length > 0)
+    yield* Effect.logDebug("openai-chat.content_parts_skipped").pipe(
+      Effect.annotateLogs({ types: skipped.join(",") }),
+    )
+  return deltas
+})
+
 const detailText = (details: ReadonlyArray<ReasoningDetail>, hideKimiSummary: boolean) => {
   const text = details.flatMap((detail) => {
     if (detail.type === "reasoning.text") return detail.text ? [detail.text] : []
@@ -1078,8 +1123,9 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
     let lifecycle = state.lifecycle
 
     const reasoning = reasoningDelta(delta, state.reasoningField)
+    const content = yield* contentDeltas(delta?.content)
     const hasLateContent =
-      Boolean(delta?.content) ||
+      content.length > 0 ||
       Boolean(delta?.refusal) ||
       reasoning !== undefined ||
       (Array.isArray(delta?.reasoning_details) && delta.reasoning_details.length > 0) ||
@@ -1109,17 +1155,21 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
     else if (
       reasoningDetailsObserved &&
       !lifecycle.reasoning.has("reasoning-0") &&
-      (Boolean(delta?.content) || Boolean(delta?.refusal) || toolDeltas.length > 0)
+      (content.length > 0 || Boolean(delta?.refusal) || toolDeltas.length > 0)
     )
       lifecycle = Lifecycle.reasoningStart(lifecycle, events, "reasoning-0", deltaMetadata)
-    const reasoningEmitted = state.reasoningEmitted || lifecycle.reasoning.has("reasoning-0")
 
     // Reasoning is one response-wide channel: it stays open alongside text and
     // refusal output so late reasoning deltas and details join the same block,
     // and `finishEvents` closes it once with the complete metadata.
-    if (delta?.content) lifecycle = Lifecycle.textDelta(lifecycle, events, "text-0", delta.content)
+    for (const part of content)
+      lifecycle =
+        part.type === "text"
+          ? Lifecycle.textDelta(lifecycle, events, "text-0", part.text)
+          : Lifecycle.reasoningDelta(lifecycle, events, "reasoning-0", part.text, deltaMetadata)
 
     if (delta?.refusal) lifecycle = Lifecycle.textDelta(lifecycle, events, "text-0", delta.refusal)
+    const reasoningEmitted = state.reasoningEmitted || lifecycle.reasoning.has("reasoning-0")
 
     // Compatible providers may omit indexes. Prefer durable identity, then use
     // batch position for parallel deltas or the latest call for sparse chunks.

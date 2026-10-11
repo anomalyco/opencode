@@ -605,4 +605,123 @@ describe("OpenAI-compatible Chat route", () => {
       })
     }),
   )
+
+  describe("content part arrays", () => {
+    const custom = LLMRequest.update(request, {
+      model: OpenAICompatibleChat.route
+        .with({ provider: "custom", endpoint: { baseURL: "https://api.custom.test/v1" } })
+        .model({ id: "example-model" }),
+    })
+    // Shape recorded from a Mistral-family model served through an
+    // OpenAI-compatible gateway.
+    const partChunk = (content: unknown, finishReason: string | null = null) => ({
+      id: "chunk_fixture",
+      object: "chat.completion.chunk",
+      created: 1791353545,
+      model: "example-model",
+      choices: [{ index: 0, finish_reason: finishReason, logprobs: null, delta: { content } }],
+    })
+    const thinking = (text: string) => ({ type: "thinking", thinking: [{ type: "text", text }] })
+    const generate = (...chunks: ReadonlyArray<unknown>) =>
+      LLMClient.generate(custom).pipe(Effect.provide(fixedResponse(sseEvents(...chunks))))
+
+    it.effect("streams thinking parts as reasoning and text parts as text", () =>
+      Effect.gen(function* () {
+        const response = yield* generate(
+          partChunk([thinking("Let")]),
+          partChunk([thinking(" me think.")]),
+          partChunk([{ type: "text", text: "Hello" }]),
+          partChunk([{ type: "text", text: "!" }]),
+          partChunk(null, "stop"),
+        )
+
+        expect(response.reasoning).toBe("Let me think.")
+        expect(response.text).toBe("Hello!")
+        expect(response.finishReason).toEqual({ normalized: "stop", raw: "stop" })
+        expect(
+          response.events.filter((event) => event.type === "reasoning-delta" || event.type === "text-delta"),
+        ).toMatchObject([
+          { type: "reasoning-delta", id: "reasoning-0", text: "Let" },
+          { type: "reasoning-delta", id: "reasoning-0", text: " me think." },
+          { type: "text-delta", id: "text-0", text: "Hello" },
+          { type: "text-delta", id: "text-0", text: "!" },
+        ])
+
+        const replay = yield* compileRequest(LLM.request({ model: custom.model, messages: [response.message] }))
+        expect(replay.body.messages).toEqual([
+          { role: "assistant", content: "Hello!", reasoning_content: "Let me think." },
+        ])
+      }),
+    )
+
+    it.effect("keeps part order within one chunk", () =>
+      Effect.gen(function* () {
+        const response = yield* generate(
+          partChunk([
+            thinking("Plan"),
+            { type: "thinking", thinking: "ned." },
+            { type: "text", text: "Done" },
+            { type: "text", text: "." },
+          ]),
+          partChunk([], "stop"),
+        )
+
+        expect(response.reasoning).toBe("Planned.")
+        expect(response.text).toBe("Done.")
+        expect(
+          response.events.filter((event) => event.type === "reasoning-delta" || event.type === "text-delta"),
+        ).toMatchObject([
+          { type: "reasoning-delta", text: "Plan" },
+          { type: "reasoning-delta", text: "ned." },
+          { type: "text-delta", text: "Done" },
+          { type: "text-delta", text: "." },
+        ])
+      }),
+    )
+
+    it.effect("skips unknown part types and empty parts", () =>
+      Effect.gen(function* () {
+        const response = yield* generate(
+          partChunk([{ type: "reference", reference_ids: [1, 2] }]),
+          partChunk([
+            {
+              type: "thinking",
+              thinking: [
+                { type: "reference", reference_ids: [3] },
+                { type: "text", text: "Hm" },
+              ],
+            },
+          ]),
+          partChunk([
+            { type: "text", text: "" },
+            { type: "image_url", image_url: { url: "https://x.test/a.png" } },
+          ]),
+          partChunk([{ type: "text", text: "Hi" }]),
+          partChunk(null, "stop"),
+        )
+
+        expect(response.reasoning).toBe("Hm")
+        expect(response.text).toBe("Hi")
+        expect(response.finishReason).toEqual({ normalized: "stop", raw: "stop" })
+      }),
+    )
+
+    it.effect("accepts empty part arrays after the finish reason", () =>
+      Effect.gen(function* () {
+        const response = yield* generate(partChunk([{ type: "text", text: "Hi" }], "stop"), partChunk([]))
+
+        expect(response.text).toBe("Hi")
+      }),
+    )
+
+    it.effect("rejects part content after the finish reason", () =>
+      Effect.gen(function* () {
+        const error = yield* Effect.flip(
+          generate(partChunk("Hi", "stop"), partChunk([{ type: "text", text: " late" }])),
+        )
+
+        expect(error.message).toContain("OpenAI Chat received content after the finish reason")
+      }),
+    )
+  })
 })
