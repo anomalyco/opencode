@@ -17,6 +17,7 @@ export const askpass = Effect.gen(function* () {
     JSON.stringify({
       token: process.env.OPENCODE_SSH_ASKPASS_TOKEN,
       text: process.argv.slice(2).join(" "),
+      pid: process.ppid,
       confirm: process.env.SSH_ASKPASS_PROMPT === "confirm",
     }) + "\n",
   )

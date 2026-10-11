@@ -5,16 +5,25 @@ import { randomUUID } from "node:crypto"
 import { SshFailure } from "./command"
 
 const Request = Schema.fromJsonString(
-  Schema.Struct({ token: Schema.String, text: Schema.String, confirm: Schema.Boolean }),
+  Schema.Struct({
+    token: Schema.String,
+    text: Schema.String,
+    confirm: Schema.Boolean,
+    pid: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))),
+  }),
 )
 
 export const createAskpass = Effect.fn("Ssh.askpass")(function* (input: {
   binary: string
+  reusePassword?: boolean
   prompt: (prompt: { id: string; text: string; confirm: boolean }) => Effect.Effect<void>
   clear: (id: string) => Effect.Effect<void>
 }) {
   const token = randomUUID()
   const pending = new Map<string, Deferred.Deferred<string>>()
+  const passwords = new Map<string, { pid: number; value: string }>()
+  const forget = Effect.sync(() => passwords.clear())
+  yield* Effect.addFinalizer(() => forget)
   const prompts = yield* Semaphore.make(1)
   const server = yield* NodeSocketServer.make({ host: "127.0.0.1", port: 0 }).pipe(Effect.mapError(SshFailure.from))
 
@@ -53,6 +62,24 @@ export const createAskpass = Effect.fn("Ssh.askpass")(function* (input: {
         yield* prompts
           .withPermit(
             Effect.gen(function* () {
+              // Reuse only host-qualified OpenSSH password prompts across commands.
+              // Another challenge from the same process means the credential was rejected.
+              const pid =
+                input.reusePassword && !message.confirm && /^[^\r\n]+@[^\r\n]+'s password:\s*$/.test(message.text)
+                  ? message.pid
+                  : undefined
+
+              const cached = pid === undefined ? undefined : passwords.get(message.text)
+
+              if (pid !== undefined && cached && cached.pid !== pid) {
+                passwords.set(message.text, { pid, value: cached.value })
+                const writer = yield* socket.writer
+                yield* writer.write(JSON.stringify({ value: cached.value }))
+
+                return
+              }
+
+              passwords.delete(message.text)
               const id = randomUUID()
               const response = yield* Deferred.make<string>()
               yield* Effect.acquireRelease(
@@ -61,6 +88,9 @@ export const createAskpass = Effect.fn("Ssh.askpass")(function* (input: {
               )
               yield* input.prompt({ id, text: message.text, confirm: message.confirm })
               const value = yield* Deferred.await(response)
+
+              if (pid !== undefined) passwords.set(message.text, { pid, value })
+
               const writer = yield* socket.writer
               yield* writer.write(JSON.stringify({ value }))
             }).pipe(Effect.scoped),
@@ -85,6 +115,7 @@ export const createAskpass = Effect.fn("Ssh.askpass")(function* (input: {
       OPENCODE_SSH_ASKPASS_TOKEN: token,
     },
     closed: Fiber.join(serving),
+    forget,
     respond: Effect.fn("Ssh.askpass.respond")(function* (id: string, value: string) {
       const response = pending.get(id)
 
