@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { dict } from "../i18n/en"
 import { createUiI18n, localizedListSeparator, pluralCategory, type UiI18nSource } from "./i18n"
 
 const i18n = (locale: string, translated: string) => {
@@ -61,5 +62,23 @@ describe("localizedListSeparator", () => {
     expect(i18n("en-US", "").list(["Read", "Search"])).toBe("Read, Search")
     expect(i18n("en", "").listSeparator(2, 3)).toBe(",")
     expect(i18n("de", "").list(["Lesen", "Suchen"])).toBe("Lesen und Suchen")
+  })
+})
+
+describe("list with entries that have no translation", () => {
+  test("drops them instead of throwing", () => {
+    expect(i18n("th", "").list(["Read", undefined])).toBe("Read")
+    expect(i18n("de", "").list(["Lesen", undefined, "Suchen"])).toBe("Lesen und Suchen")
+  })
+
+  test("drops them for English locale tags too", () => {
+    expect(i18n("en", "").list(["Read", undefined, "List"])).toBe("Read, List")
+    expect(i18n("en", "").list([undefined])).toBe("")
+  })
+})
+
+describe("english dictionary", () => {
+  test("defines the todo title the tool renderer asks for", () => {
+    expect(dict["ui.tool.todos"]).toBe("To-dos")
   })
 })

@@ -190,6 +190,7 @@ const source = {
   "ui.tool.glob": "Glob",
   "ui.tool.grep": "Grep",
   "ui.tool.task": "Task",
+  "ui.tool.todos": "To-dos",
   "ui.tool.browser": "Browser",
   "ui.tool.webfetch": "Webfetch",
   "ui.tool.websearch": "Web Search",
