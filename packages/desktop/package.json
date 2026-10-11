@@ -56,7 +56,8 @@
     "magic-string": "0.30.21",
     "solid-js": "catalog:",
     "typescript": "~5.6.2",
-    "vite": "8.2.2"
+    "vite": "8.2.2",
+    "ws": "8.21.3"
   },
   "optionalDependencies": {
     "@lydell/node-pty-darwin-arm64": "1.2.0-beta.12",
