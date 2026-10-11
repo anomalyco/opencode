@@ -119,6 +119,44 @@ describe("SessionExecution lifecycle", () => {
     }),
   )
 
+  it.effect("retries a failed wake while its durable inbox item remains pending", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const admission = yield* SessionInbox.Service
+      const sessionID = Session.ID.make("ses_retry_pending_wake")
+      yield* seedSessions(database, [sessionID])
+      yield* admission.admit({
+        id: SessionMessage.ID.make("msg_retry_pending_wake"),
+        sessionID,
+        item: { type: "user", payload: { text: "Retry me" }, delivery: "queue" },
+      })
+
+      let runs = 0
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(scope, () =>
+        Effect.sync(() => ++runs).pipe(
+          Effect.flatMap((run) =>
+            run === 1
+              ? Effect.fail(
+                  new AIError({
+                    reason: new TransportError({ message: "Unavailable", transport: "http", operation: "request" }),
+                  }),
+                )
+              : Effect.void,
+          ),
+        ),
+      )
+      const execution = Context.get(context, SessionExecution.Service)
+
+      yield* execution.wake(sessionID)
+      yield* execution.awaitIdle(sessionID)
+
+      expect(runs).toBe(2)
+      expect(yield* SessionInbox.list(database.db, sessionID)).toHaveLength(1)
+    }),
+  )
+
   it.effect("a user interrupt releases the claim so the turn never resurrects", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
