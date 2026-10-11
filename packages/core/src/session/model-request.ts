@@ -51,6 +51,9 @@ const OUTPUT_TOKEN_FALLBACK = 32_000
 const OUTPUT_TOKEN_MAX = 256_000
 // A summary never needs more, and a request asking for more cannot be shrunk to fit a window the catalog overstates.
 const SUMMARY_OUTPUT_MAX = 32_000
+// A title never needs more; without a bound a local thinking model can reason in circles
+// for minutes on the background title request while the user waits (#54401).
+const TITLE_OUTPUT_MAX = 512
 // Prompt text is estimated at about 4 characters per token, which can run low on dense text such as code.
 const ESTIMATE_ERROR = 0.15
 // Never ask for less; only reachable with automatic compaction off, since it keeps the window from filling this far.
@@ -87,11 +90,12 @@ export interface Input {
 /** The default output limit: the catalog limit, fitted to the room the prompt leaves in the context window. */
 const outputLimit = (
   limit: Model.Info["limit"],
-  kind: "primary" | "compaction",
+  kind: "primary" | "compaction" | "title",
   inputTokens?: Input["inputTokens"],
 ) => {
   const model = Math.min(limit.output > 0 ? limit.output : OUTPUT_TOKEN_FALLBACK, OUTPUT_TOKEN_MAX)
-  const requested = kind === "compaction" ? Math.min(model, SUMMARY_OUTPUT_MAX) : model
+  const requested =
+    kind === "compaction" ? Math.min(model, SUMMARY_OUTPUT_MAX) : kind === "title" ? Math.min(model, TITLE_OUTPUT_MAX) : model
   if (inputTokens === undefined || limit.context <= 0) return requested
   const room = limit.context - inputTokens.measured - Math.ceil(inputTokens.estimated * (1 + ESTIMATE_ERROR))
   return Math.min(requested, Math.max(OUTPUT_TOKEN_MIN, room))
@@ -248,8 +252,9 @@ export const layer = Layer.effect(
       const given = new Map(
         tools.definitions.map((t) => [{ description: t.description, input: { ...t.inputSchema } }, t] as const),
       )
-      // Hooks see the default output limit and may change or remove it. Titles and generate keep the provider default,
-      // because their reasoning is hard to budget.
+      // Hooks see the default output limit and may change or remove it. Titles get a small
+      // bound so background thinking-model runs cannot outpace the main request; generate
+      // keeps the provider default, because its reasoning is hard to budget.
       const shaped = yield* shape(
         {
           sessionID: session.id,
@@ -257,7 +262,7 @@ export const layer = Layer.effect(
           system: input.system,
           messages: input.messages,
           options:
-            kind === "primary" || kind === "compaction"
+            kind === "primary" || kind === "compaction" || kind === "title"
               ? { maxTokens: outputLimit(model.limit, kind, input.inputTokens) }
               : {},
         },
