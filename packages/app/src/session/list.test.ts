@@ -44,7 +44,7 @@ describe("listAllSessions", () => {
 
     const result = await listAllSessions(api, { directory: "/repo", limit: 25 })
 
-    expect(result.map((session) => session.id)).toEqual(["session-1"])
+    expect<unknown>(result.map((session) => session.id)).toEqual(["session-1"])
     expect(cursors).toEqual([undefined, "terminal"])
   })
 })

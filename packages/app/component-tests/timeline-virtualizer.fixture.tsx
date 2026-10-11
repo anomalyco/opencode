@@ -1,3 +1,4 @@
+import { SessionMessage } from "@opencode/schema/session-message"
 import { TimelineRow } from "@opencode/session-ui/timeline/projection"
 import { onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -18,7 +19,10 @@ export function mountTimelineVirtualizer(input: { count: number; rowHeight: numb
 
     const rows = Array.from(
       { length: input.count },
-      (_, index) => new TimelineRow.UserMessage({ userMessageID: `message-${index}` }),
+      (_, index) =>
+        new TimelineRow.UserMessage({
+          userMessageID: SessionMessage.ID.make(`message-${index}`, { disableChecks: true }),
+        }),
     )
 
     const rowByKey = new Map(rows.map((row) => [TimelineRow.key(row), row]))

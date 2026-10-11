@@ -1,9 +1,11 @@
+import { Event } from "@opencode/schema/event"
+import { Form } from "@opencode/schema/form"
 import { describe, expect, test } from "bun:test"
 import type { FormAnswer, FormCreated, SessionFormReplyInput, OpenCodeEvent } from "@opencode/client/promise"
 import { replyWebSearch } from "./websearch"
 
 const consent: FormCreated["data"]["form"] = {
-  id: "frm_consent",
+  id: Form.ID.make("frm_consent", { disableChecks: true }),
   sessionID: "ses_child",
   title: "Web Search",
   metadata: { kind: "websearch.provider" },
@@ -12,7 +14,7 @@ const consent: FormCreated["data"]["form"] = {
 
 const provider: FormCreated["data"]["form"] = {
   ...consent,
-  id: "frm_provider",
+  id: Form.ID.make("frm_provider", { disableChecks: true }),
   fields: [
     {
       key: "provider",
@@ -51,20 +53,26 @@ function fixture() {
     reply: async (input: SessionFormReplyInput) => {
       replies.push(input)
     },
-    create: (form = provider) => emit({ id: "evt_create", created: 0, type: "form.created", data: { form } }),
+    create: (form = provider) =>
+      emit({
+        id: Event.ID.make("evt_create", { disableChecks: true }),
+        created: 0,
+        type: "form.created",
+        data: { form },
+      }),
     cancel: (id: string) =>
       emit({
-        id: "evt_cancel",
+        id: Event.ID.make("evt_cancel", { disableChecks: true }),
         created: 0,
         type: "form.cancelled",
-        data: { id, sessionID: consent.sessionID },
+        data: { id: Form.ID.make(id, { disableChecks: true }), sessionID: consent.sessionID },
       }),
     answer: (id: string, answer: FormAnswer) =>
       emit({
-        id: "evt_reply",
+        id: Event.ID.make("evt_reply", { disableChecks: true }),
         created: 0,
         type: "form.replied",
-        data: { id, sessionID: consent.sessionID, answer },
+        data: { id: Form.ID.make(id, { disableChecks: true }), sessionID: consent.sessionID, answer },
       }),
   }
 }

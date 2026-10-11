@@ -1,3 +1,4 @@
+import { SessionMessage } from "@opencode/schema/session-message"
 import { expect, test } from "bun:test"
 import { messageIdFromHash } from "./message-id-from-hash"
 
@@ -6,5 +7,5 @@ test.each([
   ["message-42", "42"],
   ["#review-panel", undefined],
 ])("reads the message ID from %s", (hash, id) => {
-  expect(messageIdFromHash(hash)).toBe(id)
+  expect(messageIdFromHash(hash)).toBe(id ? SessionMessage.ID.make(id, { disableChecks: true }) : undefined)
 })

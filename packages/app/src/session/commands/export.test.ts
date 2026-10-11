@@ -1,3 +1,4 @@
+import { SessionID } from "@opencode/schema/session-id"
 import { describe, expect, test } from "bun:test"
 import type { SessionInfo, SessionMessageInfo } from "@opencode/client/promise"
 import type { ServerApi } from "@/runtime/server/api"
@@ -34,7 +35,7 @@ describe("fetchSessionExport", () => {
       },
     } as unknown as Pick<ServerApi, "session" | "message">
 
-    const result = await fetchSessionExport({ sessionID: "ses_1", api })
+    const result = await fetchSessionExport({ sessionID: SessionID.make("ses_1", { disableChecks: true }), api })
 
     expect(result).toEqual({ info, messages: [first, second] })
     expect(result).not.toHaveProperty("cursor")
