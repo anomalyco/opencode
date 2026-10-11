@@ -489,9 +489,12 @@ export function createComposerEditor(input: {
       // Escaped HTML inserts multiline text once and preserves native selection and undo.
       const normalized = text.replace(/\r\n?/g, "\n")
       const multiline = normalized.includes("\n")
+      // An empty inline box keeps the caret after a final newline without
+      // adding a character to the draft or a separate entry to the undo history.
+      const tail = normalized.endsWith("\n") ? '<span class="composer-paste-tail"></span>' : ""
 
       const value = multiline
-        ? normalized.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
+        ? normalized.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;") + tail
         : normalized
 
       if (
