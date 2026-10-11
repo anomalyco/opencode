@@ -10,6 +10,7 @@ import {
   LLMEvent,
   LLMRequest,
   Message,
+  ToolChoice,
   type ToolEntry,
   UnknownProviderError,
   type Usage,
@@ -288,7 +289,10 @@ export const layer = Layer.effect(
       // template gets one reminder before it counts as a failure.
       const send = (request: LLMRequest) =>
         Effect.gen(function* () {
-          const prompted = LLMRequest.update(request, { messages: [...request.messages, Message.user(prompt)] })
+          const prompted = LLMRequest.update(request, {
+            messages: [...request.messages, Message.user(prompt)],
+            toolChoice: ToolChoice.make("none"),
+          })
           const reply = yield* stream(context, prompted, prepared.options)
           if (filled(reply.text)) return { ...reply, recent: split.recent }
 
