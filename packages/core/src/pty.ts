@@ -6,6 +6,7 @@ import { Context, Effect, Layer, Schema, Types } from "effect"
 import { Pty } from "@opencode/schema/pty"
 import { Bus } from "./bus.js"
 import { Location } from "./location.js"
+import { LocationRetention } from "./location-retention.js"
 import { ShellSelect } from "./shell/select.js"
 import { lazy } from "./util/lazy.js"
 
@@ -27,6 +28,8 @@ type Subscriber = {
 type Active = {
   info: Info
   process: Proc
+  // Whether this session currently pins its location against idle eviction.
+  retained: boolean
   buffer: string
   bufferCursor: number
   cursor: number
@@ -95,9 +98,11 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const bus = yield* Bus.Service
     const location = yield* Location.Service
+    const retention = yield* LocationRetention.Service
     const shell = yield* ShellSelect.Service
     const context = yield* Effect.context()
     const runFork = Effect.runForkWith(context)
+    const ref = Location.Ref.make({ directory: location.directory, workspaceID: location.workspaceID })
     const sessions = new Map<ID, Active>()
     const exitOrder: ID[] = []
 
@@ -126,10 +131,23 @@ const layer = Layer.effect(
     }
 
     yield* Effect.addFinalizer(() =>
-      Effect.sync(() => {
-        for (const session of sessions.values()) teardown(session)
-        sessions.clear()
-        exitOrder.length = 0
+      Effect.gen(function* () {
+        const retained = Array.from(sessions.values()).filter((session) => session.retained)
+        for (const session of retained) session.retained = false
+        const killed = Array.from(sessions.values())
+          .filter((session) => session.info.status === "running")
+          .map((session) => ({ id: session.info.id, pid: session.info.pid }))
+        yield* Effect.sync(() => {
+          for (const session of sessions.values()) teardown(session)
+          sessions.clear()
+          exitOrder.length = 0
+        })
+        if (killed.length > 0)
+          yield* Effect.logInfo("pty sessions killed by location teardown", {
+            directory: location.directory,
+            sessions: killed,
+          })
+        for (const session of retained) yield* retention.release(ref)
       }),
     )
 
@@ -147,6 +165,10 @@ const layer = Layer.effect(
       if (index !== -1) exitOrder.splice(index, 1)
       yield* Effect.logInfo("removing session", { id })
       teardown(session)
+      if (session.retained) {
+        session.retained = false
+        yield* retention.release(ref)
+      }
       yield* bus.publish(Pty.Event.Deleted, { id: session.info.id })
     })
 
@@ -194,6 +216,7 @@ const layer = Layer.effect(
       const session: Active = {
         info,
         process: proc,
+        retained: true,
         buffer: "",
         bufferCursor: 0,
         cursor: 0,
@@ -201,6 +224,7 @@ const layer = Layer.effect(
         listeners: [],
       }
       sessions.set(id, session)
+      yield* retention.retain(ref)
       session.listeners.push(
         proc.onData((chunk) => {
           session.cursor += chunk.length
@@ -229,6 +253,10 @@ const layer = Layer.effect(
           exitOrder.push(id)
           runFork(
             Effect.gen(function* () {
+              if (session.retained) {
+                session.retained = false
+                yield* retention.release(ref)
+              }
               yield* Effect.logInfo("session exited", { id, exitCode })
               yield* bus.publish(Pty.Event.Exited, { id, exitCode })
               while (exitOrder.length > EXITED_LIMIT) {
@@ -317,5 +345,5 @@ const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Bus.node, Location.node, ShellSelect.node],
+  deps: [Bus.node, Location.node, ShellSelect.node, LocationRetention.node],
 })
