@@ -7,6 +7,8 @@ import {
   type SessionComposerRegionViewController,
 } from "@/session/composer/session-composer-region"
 import { SessionPanelFrame, SessionRouteFrame } from "@/session/session-frame"
+import { SessionWorkspaceFooter } from "@/session/composer/workspace-footer"
+import type { PermissionMode } from "@/settings/model"
 import type { FormInfo, PermissionRequest, SessionStatus } from "@opencode/client/promise"
 import type { SessionDocument } from "@opencode/session-ui/document"
 import { CurrentSessionProviders, STORY_MODEL } from "@opencode/session-ui/storybook"
@@ -177,7 +179,9 @@ function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void 
     reviewOpened: boolean
     request: SessionPreviewProps["request"]
     searchProvider: string
+    permissionMode: PermissionMode
   }>({
+    permissionMode: "ask",
     activity: "Ready",
     reviewOpened: props.reviewOpened ?? false,
     request: props.request,
@@ -270,7 +274,20 @@ function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void 
                   </div>
                   <SessionComposerRegion
                     controller={region}
-                    composer={<Composer model={prompt.controller} borderUnderlay />}
+                    composer={
+                      <div class="rounded-xl border border-v2-border-border-base bg-v2-background-bg-deep">
+                        <Composer model={prompt.controller} borderUnderlay />
+                        <SessionWorkspaceFooter
+                          directory="/workspace/opencode"
+                          local
+                          branch="modular-session-ui"
+                          permission={{
+                            mode: state.permissionMode,
+                            onChange: (mode) => setState("permissionMode", mode),
+                          }}
+                        />
+                      </div>
+                    }
                   />
                 </section>
                 <Show when={state.reviewOpened}>

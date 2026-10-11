@@ -2,6 +2,7 @@ import { createEffect, onCleanup } from "solid-js"
 import type { PermissionRequest } from "@opencode/client/promise"
 import type { Data } from "@opencode/client/solid"
 import type { ServerSDK } from "@/runtime/server/client"
+import type { ServerScope } from "@/runtime/server/scope"
 import { useSettings } from "@/settings/model"
 
 const respondedLimit = 1000
@@ -10,16 +11,28 @@ const retryLimit = 2
 
 const retryDelayMs = 1000
 
-// Auto-approves permission requests on one server connection whenever the
-// app-level auto-approve setting is on. The setting lives in the client-local
-// settings store, so it applies to every session, tab, and server at once.
+// Whether a session's permission requests are auto-approved. Subagents follow
+// their root session's mode, which falls back to the app-level setting.
+export function sessionAutoApproves(
+  permissions: ReturnType<typeof useSettings>["permissions"],
+  scope: ServerScope,
+  data: Pick<Data, "session">,
+  sessionID: string,
+) {
+  return permissions.mode(scope, data.session.root(sessionID)) === "auto"
+}
+
+// Auto-approves permission requests on one server connection for sessions
+// whose permission mode is auto. Modes live in the client-local settings
+// store: the app-level setting applies to every session, tab, and server,
+// and a session can override it.
 export function createPermissionAutoApprover(input: { sdk: ServerSDK; data: Data }) {
-  const enabled = useSettings().permissions.autoApprove
+  const permissions = useSettings().permissions
+  const anyAuto = () => permissions.anyAuto(input.sdk.scope)
+  const autoApproves = (sessionID: string) => sessionAutoApproves(permissions, input.sdk.scope, input.data, sessionID)
   const state = { disposed: false, generation: 0, responded: new Set<string>() }
 
-  const unsubscribe = input.sdk.event.on("permission.asked", (event) => {
-    if (enabled()) approve(event.data)
-  })
+  const unsubscribe = input.sdk.event.on("permission.asked", (event) => approve(event.data))
 
   onCleanup(() => {
     state.disposed = true
@@ -27,10 +40,10 @@ export function createPermissionAutoApprover(input: { sdk: ServerSDK; data: Data
   })
 
   // The event stream does not replay requests asked while this client was
-  // disconnected, and requests may already be pending before the setting turns
-  // on, so sweep on every connect while the setting is on.
+  // disconnected, and requests may already be pending before a mode turns
+  // auto, so sweep on every connect while any session can auto-approve.
   createEffect(() => {
-    if (!enabled() || input.sdk.connection.status() !== "connected") return
+    if (!anyAuto() || input.sdk.connection.status() !== "connected") return
     const generation = ++state.generation
     void sweepWithRetry(generation, 0)
   })
@@ -40,7 +53,7 @@ export function createPermissionAutoApprover(input: { sdk: ServerSDK; data: Data
   // and syncs them. Store changes cannot re-trigger the network sweep: it
   // deliberately reads them after an await, outside Solid tracking.
   createEffect(() => {
-    if (!enabled()) return
+    if (!anyAuto()) return
 
     for (const session of input.data.session.list()) {
       for (const request of input.data.session.permission.list(session.id) ?? []) approve(request)
@@ -55,7 +68,7 @@ export function createPermissionAutoApprover(input: { sdk: ServerSDK; data: Data
 
     if (complete || attempt >= retryLimit) return
     setTimeout(() => {
-      if (state.disposed || !enabled() || generation !== state.generation) return
+      if (state.disposed || !anyAuto() || generation !== state.generation) return
       void sweepWithRetry(generation, attempt + 1)
     }, retryDelayMs * (attempt + 1))
   }
@@ -123,16 +136,16 @@ export function createPermissionAutoApprover(input: { sdk: ServerSDK; data: Data
   }
 
   function approve(permission: PermissionRequest, attempt = 0) {
-    // enabled() guards the retry timer path: the user may disable the setting
-    // between a failed reply and its scheduled retry.
-    if (state.disposed || !enabled() || state.responded.has(permission.id)) return
+    // autoApproves() also guards the retry timer path: the user may switch the
+    // session back to ask between a failed reply and its scheduled retry.
+    if (state.disposed || state.responded.has(permission.id) || !autoApproves(permission.sessionID)) return
     remember(permission.id)
     input.sdk.api.permission
       .reply({ sessionID: permission.sessionID, requestID: permission.id, decision: "once" })
       .catch(() => {
         // A reply failure leaves the request pending but invisible (the UI
-        // hides prompts while auto-approve is on), so retry a bounded number
-        // of times. Later sweeps retry it after that.
+        // hides prompts while the session auto-approves), so retry a bounded
+        // number of times. Later sweeps retry it after that.
         state.responded.delete(permission.id)
 
         if (state.disposed || attempt >= retryLimit) return

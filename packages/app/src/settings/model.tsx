@@ -13,6 +13,8 @@ export type WorkspaceDefaultDestination = Settings["workspaces"]["defaultDestina
 
 export type WorkspaceLastUsed = Settings["workspaces"]["lastUsed"][string]
 
+export type PermissionMode = Settings["permissions"]["sessions"][string]
+
 export type TerminalPlacement = Settings["general"]["terminalPlacement"]
 
 export type FollowUpBehavior = Settings["general"]["followUpBehavior"]
@@ -128,6 +130,8 @@ const appearanceSchema = Persistence.struct({
 
 const permissionsSchema = Persistence.struct({
   autoApprove: Schema.Boolean,
+  // Per-session overrides of autoApprove, keyed by server scope and root session ID.
+  sessions: Persistence.record(Schema.Literals(["ask", "auto"])),
 })
 
 const workspacesSchema = Persistence.struct({
@@ -274,7 +278,7 @@ export const defaultSettings: Settings = {
   },
   appearance: { fontSize: 14, mono: "", sans: "", terminal: "", tabLayout: "horizontal" },
   keybinds: {},
-  permissions: { autoApprove: false },
+  permissions: { autoApprove: false, sessions: {} },
   workspaces: { defaultDestination: "last-used", lastUsed: {} },
   notifications: { agent: true, permissions: true, errors: false },
   sounds: {
@@ -399,6 +403,29 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         autoApprove: withFallback(() => store.permissions?.autoApprove, defaultSettings.permissions.autoApprove),
         setAutoApprove(value: boolean) {
           setStore("permissions", "autoApprove", value)
+        },
+        // The session's own choice wins; sessions without one follow autoApprove.
+        mode(scope: ServerScope, sessionID: string): PermissionMode {
+          return (
+            store.permissions?.sessions?.[ScopedKey.from(scope, sessionID)] ??
+            (store.permissions?.autoApprove ? "auto" : "ask")
+          )
+        },
+        setMode(scope: ServerScope, sessionID: string, value: PermissionMode) {
+          setStore("permissions", (current) => ({
+            ...defaultSettings.permissions,
+            ...current,
+            sessions: { ...current?.sessions, [ScopedKey.from(scope, sessionID)]: value },
+          }))
+        },
+        // Whether any session on this server can auto-approve, so a sweep for pending requests is worthwhile.
+        anyAuto(scope: ServerScope) {
+          if (store.permissions?.autoApprove) return true
+          const prefix = ScopedKey.prefix(scope)
+
+          return Object.entries(store.permissions?.sessions ?? {}).some(
+            ([key, value]) => value === "auto" && key.startsWith(prefix),
+          )
         },
       },
       workspaces: {

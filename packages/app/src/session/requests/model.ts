@@ -10,6 +10,7 @@ import { useWorkspaceLocation } from "@/workspaces/location"
 import { sessionPermissionRequest, sessionFormRequest, sessionTreeIDs } from "@/session/requests/session-request-tree"
 import { createWebSearchRequest } from "./websearch"
 import { createSessionBackground } from "@/session/requests/background"
+import { sessionAutoApproves } from "@/session/requests/auto-approve"
 import { useData } from "@/runtime/server/current"
 
 export function createSessionRequestModel() {
@@ -69,9 +70,11 @@ export function createSessionRequestModel() {
   })
 
   const permissionRequest = createMemo((): PermissionRequest | undefined => {
-    if (settings.permissions.autoApprove()) return undefined
+    const id = params.id
 
-    return sessionPermissionRequest(data.session.list(), data.session.permission.list, params.id)
+    if (!id || sessionAutoApproves(settings.permissions, serverSDK.scope, data, id)) return undefined
+
+    return sessionPermissionRequest(data.session.list(), data.session.permission.list, id)
   })
 
   const blocked = createMemo(() => {

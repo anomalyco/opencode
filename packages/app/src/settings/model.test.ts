@@ -105,7 +105,7 @@ describe("settings schema", () => {
         tabLayout: "horizontal",
       },
       keybinds: {},
-      permissions: { autoApprove: false },
+      permissions: { autoApprove: false, sessions: {} },
       workspaces: { defaultDestination: "last-used", lastUsed: {} },
       notifications: { agent: true, permissions: true, errors: false },
       sounds: {

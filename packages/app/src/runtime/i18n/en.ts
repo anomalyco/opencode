@@ -960,6 +960,13 @@ export const dict = {
   "session.delete.button": "Delete session",
 
   "workspace.new": "New worktree",
+  "workspace.move.menu.title": "Move session to",
+  "workspace.move.failed": "Failed to move session",
+  "session.permissions.mode.title": "Permissions",
+  "session.permissions.mode.ask": "Ask for approval",
+  "session.permissions.mode.ask.description": "Review each permission request",
+  "session.permissions.mode.auto": "Auto-accept",
+  "session.permissions.mode.auto.description": "Approve requests in this session",
   "common.viewAll": "View all",
   "session.new.workspace.local.tooltip": "Uses project’s current checkout",
   "session.new.workspace.new.tooltip": "Creates isolated copy from current checkout",

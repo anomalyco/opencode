@@ -201,3 +201,28 @@ test("auto-accept approves a request discovered by opening a session", async ({ 
   await view.enableAutoAccept()
   await expect.poll(() => view.replies).toEqual([reply(sessionA.id, "permission-synced-a")])
 })
+
+test("a session's auto-accept mode covers its subagents but not other sessions", async ({ page }) => {
+  const otherA = session({ id: "ses_server_a_other", directory: directoryA, title: "Server A other" })
+  const view = await setup(page, { tabs: [sessionA.id], a: { sessions: [sessionA, childA, otherA] } })
+  await page.goto(sessionHref(sessionA.id))
+  await expectSessionTitle(page, sessionA.title)
+  await view.transport.waitForConnection()
+
+  await page.locator('[data-action="session-permission-mode"]').click()
+  await page.getByRole("menuitemradio", { name: /Auto-accept/ }).click()
+  await expect(page.locator('[data-action="session-permission-mode"]')).toContainText("Auto-accept")
+
+  // Events are handled in order, so the other session's request would be replied to before the child's.
+  for (const [index, item] of [otherA, childA].entries()) {
+    await view.transport.send({
+      id: `evt_permission_session_mode_${index}`,
+      created: 1700000001000 + index,
+      type: "permission.asked",
+      location: { directory: directoryA },
+      data: { ...pending(`permission-session-mode-${index}`, item.id) },
+    })
+  }
+
+  await expect.poll(() => view.replies).toEqual([reply(childA.id, "permission-session-mode-1")])
+})

@@ -3,6 +3,7 @@ import { useGlobal, useServerCtx } from "@/runtime/server/runtime"
 import { sessionPermissionRequest, sessionFormRequest } from "@/session/requests/session-request-tree"
 import { ServerConnection } from "@/runtime/server/registry"
 import { useSettings } from "@/settings/model"
+import { sessionAutoApproves } from "@/session/requests/auto-approve"
 
 export function useSessionTabAvatarState(
   server: Accessor<ServerConnection.Key>,
@@ -30,10 +31,9 @@ export function useSessionTabAvatarState(
   })
 
   const hasPermissions = createMemo(() => {
-    if (settings.permissions.autoApprove()) return false
     const ctx = serverCtx()
 
-    if (!ctx) return false
+    if (!ctx || sessionAutoApproves(settings.permissions, ctx.sdk.scope, ctx.data, sessionId())) return false
 
     return !!sessionPermissionRequest(sessions(), ctx.data.session.permission.list, sessionId())
   })
