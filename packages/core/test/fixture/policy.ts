@@ -26,6 +26,32 @@ export const registerIntegrationPolicy = Effect.fn(function* (input: {
         transform: () => Effect.succeed({ dispose: Effect.void }),
         reload: () => Effect.void,
       },
+      integration: {
+        list: () => Effect.die("unused integration.list"),
+        get: () => Effect.die("unused integration.get"),
+        transform: () => Effect.succeed({ dispose: Effect.void }),
+        reload: () => Effect.void,
+        connect: {
+          key: () => Effect.die("unused integration.connect.key"),
+          external: () => Effect.die("unused integration.connect.external"),
+        },
+        oauth: {
+          connect: () => Effect.die("unused integration.oauth.connect"),
+          status: () => Effect.die("unused integration.oauth.status"),
+          complete: () => Effect.die("unused integration.oauth.complete"),
+          cancel: () => Effect.die("unused integration.oauth.cancel"),
+        },
+        command: {
+          connect: () => Effect.die("unused integration.command.connect"),
+          status: () => Effect.die("unused integration.command.status"),
+          cancel: () => Effect.die("unused integration.command.cancel"),
+        },
+        connection: {
+          active: () => Effect.die("unused integration.connection.active"),
+          resolve: () => Effect.die("unused integration.connection.resolve"),
+          status: () => Effect.die("unused integration.connection.status"),
+        },
+      },
       mcp: {
         list: () => Effect.die("unused mcp.list"),
         transform: (callback) => input.mcp?.transform(callback) ?? Effect.succeed({ dispose: Effect.void }),

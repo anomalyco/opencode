@@ -720,6 +720,8 @@ describe("ModelsDevPlugin", () => {
         Integration.Info.make({
           id: Integration.ID.make("acme"),
           name: "Acme",
+          // Provider policy reads this identity to remove a denied integration from the registry.
+          metadata: { provider: "acme" },
           methods: [
             { type: "key" },
             {
