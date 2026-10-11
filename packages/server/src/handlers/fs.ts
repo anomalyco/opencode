@@ -58,7 +58,7 @@ export const FileSystemHandler = HttpApiBuilder.group(Api, "server.fs", (handler
 )
 
 function decodeRequestPath(url: string) {
-  const raw = new URL(url, "http://localhost").pathname.slice(13)
+  const raw = new URL(url, "http://localhost").pathname.slice("/api/fs/read/".length)
   return Effect.try({
     try: () => RelativePath.make(decodeURIComponent(raw)),
     catch: () => new FileNotFoundError({ path: raw, message: `File not found: ${raw}` }),

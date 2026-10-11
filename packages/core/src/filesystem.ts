@@ -23,7 +23,7 @@ export const WriteInput = Schema.Struct({
 export type WriteInput = typeof WriteInput.Type
 
 export class NotFoundError extends Schema.TaggedError<NotFoundError>()("FileSystem.NotFoundError", {
-  path: RelativePath,
+  path: Schema.String,
 }) {}
 
 export class DirectoryNotFoundError extends Schema.TaggedError<DirectoryNotFoundError>()(
@@ -139,71 +139,56 @@ const baseLayer = Layer.effect(
           }),
         )
     const resolve = Effect.fnUntraced(function* (input: RelativePath) {
-      if (input.includes("\u0000")) return yield* Effect.fail(new NotFoundError({ path: input }))
+      const missing = new NotFoundError({ path: input })
+      if (input.includes("\u0000")) return yield* missing
       const absolute = path.resolve(location.directory, input)
-      if (!FSUtil.contains(location.directory, absolute)) return yield* Effect.fail(new NotFoundError({ path: input }))
-      const real = yield* fs.realPath(absolute).pipe(
-        Effect.catchReason(
-          "PlatformError",
-          "NotFound",
-          () => Effect.fail(new NotFoundError({ path: input })),
-          (_, error) => Effect.die(error),
-        ),
-      )
-      if (!FSUtil.contains(root, real)) return yield* Effect.fail(new NotFoundError({ path: input }))
-      return { absolute, real, directory: location.directory }
+      if (!FSUtil.contains(location.directory, absolute)) return yield* missing
+      const real = yield* fs.realPath(absolute).pipe(Effect.catch(notFound(missing)))
+      if (!FSUtil.contains(root, real)) return yield* missing
+      return real
     })
     return Service.of({
       find: search.find,
       read: Effect.fn("FileSystem.read")(function* (input) {
-        const target = yield* resolve(input.path)
-        const info = yield* fs.stat(target.real).pipe(
-          Effect.catchReason(
-            "PlatformError",
-            "NotFound",
-            () => Effect.fail(new NotFoundError({ path: input.path })),
-            (_, error) => Effect.die(error),
-          ),
-        )
-        if (info.type !== "File") return yield* Effect.fail(new NotFoundError({ path: input.path }))
+        const real = yield* resolve(input.path)
+        const missing = new NotFoundError({ path: input.path })
+        const info = yield* fs.stat(real).pipe(Effect.catch(notFound(missing)))
+        if (info.type !== "File") return yield* missing
         return {
-          mime: FSUtil.mimeType(target.real),
+          mime: FSUtil.mimeType(real),
           size: Number(info.size),
           mtime: info.mtime,
-          stream: (options) => fs.stream(target.real, options),
+          stream: (options) => fs.stream(real, options),
         }
       }),
       list: Effect.fn("FileSystem.list")(function* (input = {}) {
         // Navigation can leave the cwd without activating another Location.
         const directory = path.resolve(location.directory, input.path ?? ".")
-        const missing = new NotFoundError({ path: RelativePath.make(input.path ?? ".") })
-        const info = yield* fs.stat(directory).pipe(
-          Effect.catchReason(
-            "PlatformError",
-            "NotFound",
-            () => Effect.fail(missing),
-            (_, error) => Effect.die(error),
-          ),
-        )
+        const missing = new NotFoundError({ path: input.path ?? "." })
+        const info = yield* fs.stat(directory).pipe(Effect.catch(notFound(missing)))
         if (info.type !== "Directory") return yield* missing
-        return yield* fs.readDirectoryEntries(directory).pipe(
-          Effect.orDie,
-          Effect.map((items) =>
-            items
-              .flatMap((item) => {
-                if (item.type !== "file" && item.type !== "directory") return []
-                const absolute = path.join(directory, item.name)
-                const relative = path.relative(location.directory, absolute) || "."
-                return [
-                  Entry.make({
-                    path: RelativePath.make(relative + (item.type === "directory" ? path.sep : "")),
-                    type: item.type,
-                  }),
-                ]
-              })
-              .sort((a, b) => (a.type === b.type ? a.path.localeCompare(b.path) : a.type === "directory" ? -1 : 1)),
-          ),
+        const entries = yield* Effect.forEach(
+          yield* fs.readDirectoryEntries(directory).pipe(Effect.orDie),
+          Effect.fnUntraced(function* (item) {
+            const absolute = path.join(directory, item.name)
+            const type =
+              item.type === "symlink"
+                ? yield* fs.stat(absolute).pipe(
+                    Effect.map((target) =>
+                      target.type === "Directory" ? "directory" : target.type === "File" ? "file" : undefined,
+                    ),
+                    Effect.orElseSucceed(() => undefined),
+                  )
+                : item.type
+            if (type !== "file" && type !== "directory") return []
+            const relative = path.relative(location.directory, absolute) || "."
+            return [Entry.make({ path: RelativePath.make(relative + (type === "directory" ? path.sep : "")), type })]
+          }),
+          { concurrency: "unbounded" },
         )
+        return entries
+          .flat()
+          .sort((a, b) => (a.type === b.type ? a.path.localeCompare(b.path) : a.type === "directory" ? -1 : 1))
       }),
       // Unlike read, write reaches outside the location so clients can stage files in the
       // server tmp directory, which the model is already told to prefer and permitted to access.
@@ -221,3 +206,9 @@ export const node = makeLocationNode({
   layer: baseLayer,
   deps: [FSUtil.node, Location.node, FileSystemSearch.node],
 })
+
+// A path through a file (ENOTDIR) or a symlink loop (ELOOP) fails as BadResource, not NotFound.
+function notFound(missing: NotFoundError) {
+  return (error: PlatformError.PlatformError) =>
+    error.reason._tag === "NotFound" || error.reason._tag === "BadResource" ? Effect.fail(missing) : Effect.die(error)
+}

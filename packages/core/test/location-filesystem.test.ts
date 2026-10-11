@@ -32,6 +32,9 @@ const withTmp = <A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>) =>
     (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
   ).pipe(Effect.flatMap((tmp) => f(tmp.path)))
 
+// Windows needs Developer Mode or admin rights to create file symlinks.
+const itWithFileSymlinks = process.platform === "win32" ? it.live.skip : it.live
+
 describe("FileSystem", () => {
   it.live("reads text and binary files", () =>
     withTmp((directory) =>
@@ -63,6 +66,28 @@ describe("FileSystem", () => {
         expect(entries.map((entry) => ({ path: entry.path, type: entry.type }))).toEqual([
           { path: RelativePath.make("src" + path.sep), type: "directory" },
           { path: RelativePath.make("README.md"), type: "file" },
+        ])
+      }).pipe(provide(directory)),
+    ),
+  )
+
+  itWithFileSymlinks("lists symlinks as the type they point to and omits broken links", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(async () => {
+          await fs.mkdir(path.join(directory, "realdir"))
+          await fs.writeFile(path.join(directory, "realfile.txt"), "real")
+          await fs.symlink("realdir", path.join(directory, "linkdir"))
+          await fs.symlink("realfile.txt", path.join(directory, "linkfile"))
+          await fs.symlink("missing", path.join(directory, "broken"))
+        })
+        const filesystem = yield* FileSystem.Service
+        const entries = yield* filesystem.list()
+        expect(entries.map((entry) => ({ path: entry.path, type: entry.type }))).toEqual([
+          { path: RelativePath.make("linkdir" + path.sep), type: "directory" },
+          { path: RelativePath.make("realdir" + path.sep), type: "directory" },
+          { path: RelativePath.make("linkfile"), type: "file" },
+          { path: RelativePath.make("realfile.txt"), type: "file" },
         ])
       }).pipe(provide(directory)),
     ),
@@ -215,10 +240,23 @@ describe("FileSystem", () => {
         yield* Effect.promise(() => fs.writeFile(path.join(directory, "outside.txt"), "outside"))
         yield* Effect.gen(function* () {
           const filesystem = yield* FileSystem.Service
-          const result = yield* filesystem.read({ path: RelativePath.make("../outside.txt") }).pipe(Effect.exit)
-          expect(Exit.isFailure(result)).toBe(true)
+          const escape = yield* Effect.flip(filesystem.read({ path: RelativePath.make("../outside.txt") }))
+          expect(escape).toBeInstanceOf(FileSystem.NotFoundError)
         }).pipe(provide(current))
       }),
+    ),
+  )
+
+  it.live("reports paths through a file as not found", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(() => fs.writeFile(path.join(directory, "file.txt"), "text"))
+        const filesystem = yield* FileSystem.Service
+        const list = yield* Effect.flip(filesystem.list({ path: "file.txt/child" }))
+        expect(list).toBeInstanceOf(FileSystem.NotFoundError)
+        const read = yield* Effect.flip(filesystem.read({ path: RelativePath.make("file.txt/child") }))
+        expect(read).toBeInstanceOf(FileSystem.NotFoundError)
+      }).pipe(provide(directory)),
     ),
   )
 
@@ -233,12 +271,16 @@ describe("FileSystem", () => {
         yield* Effect.promise(() => fs.symlink(outside, path.join(current, "link"), "junction"))
         yield* Effect.gen(function* () {
           const filesystem = yield* FileSystem.Service
+          const parent = yield* filesystem.list()
+          expect(parent.map((entry) => ({ path: entry.path, type: entry.type }))).toEqual([
+            { path: RelativePath.make("link" + path.sep), type: "directory" },
+          ])
           const entries = yield* filesystem.list({ path: RelativePath.make("link") })
           expect(entries.map((entry) => ({ path: entry.path, type: entry.type }))).toEqual([
             { path: RelativePath.make(path.join("link", "file.txt")), type: "file" },
           ])
-          const result = yield* filesystem.read({ path: RelativePath.make("link/file.txt") }).pipe(Effect.exit)
-          expect(Exit.isFailure(result)).toBe(true)
+          const read = yield* Effect.flip(filesystem.read({ path: RelativePath.make("link/file.txt") }))
+          expect(read).toBeInstanceOf(FileSystem.NotFoundError)
         }).pipe(provide(current))
       }),
     ),
