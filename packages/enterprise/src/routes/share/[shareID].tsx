@@ -1,3 +1,4 @@
+import { SessionID } from "@opencode/schema/session-id"
 import { SessionTimeline } from "@opencode/session-ui/timeline"
 import type { SessionDocument } from "@opencode/session-ui/document"
 import type { SessionMessageInfo } from "@opencode/client/promise"
@@ -65,7 +66,7 @@ const getData = query(async (shareID) => {
   if (!share) throw new SessionDataMissingError({ sessionID: shareID })
   const document = await readShareDocument(await Share.data(shareID))
   return {
-    sessionID: share.sessionID,
+    sessionID: SessionID.make(share.sessionID, { disableChecks: true }),
     shareID,
     session: [document.session],
     session_diff: { [share.sessionID]: document.diffs },

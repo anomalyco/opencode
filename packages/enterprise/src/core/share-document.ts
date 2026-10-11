@@ -1,3 +1,6 @@
+import { Agent } from "@opencode/schema/agent"
+import { SessionMessage } from "@opencode/schema/session-message"
+import { VariantID } from "@opencode/schema/model"
 import type {
   FileDiffInfo,
   JsonValue,
@@ -77,8 +80,16 @@ function currentSession(session: typeof SessionV1.SessionInfo.Type, messages: Le
     id: session.id,
     projectID: session.projectID,
     ...(session.parentID ? { parentID: session.parentID } : {}),
-    ...(agent ? { agent } : {}),
-    ...(model ? { model } : {}),
+    ...(agent ? { agent: Agent.ID.make(agent, { disableChecks: true }) } : {}),
+    ...(model
+      ? {
+          model: {
+            id: model.id,
+            providerID: model.providerID,
+            ...(model.variant === undefined ? {} : { variant: VariantID.make(model.variant, { disableChecks: true }) }),
+          },
+        }
+      : {}),
     cost: 0,
     tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
     ...(session.title === undefined ? {} : { title: session.title }),
@@ -103,7 +114,7 @@ function currentMessages(messages: LegacyMessage[], parts: LegacyPart[]): Sessio
         if (compaction?.type === "compaction")
           return [
             {
-              id: message.id,
+              id: SessionMessage.ID.make(message.id, { disableChecks: true }),
               type: "compaction",
               status: "completed",
               reason: compaction.auto ? "auto" : "manual",
@@ -143,17 +154,17 @@ function currentUser(message: typeof SessionV1.User.Type, parts: LegacyPart[]): 
   if (!text && !files.length && !agents.length) return []
   return [
     {
-      id: message.id,
+      id: SessionMessage.ID.make(message.id, { disableChecks: true }),
       type: "user",
       text,
       ...(files.length ? { files } : {}),
       ...(agents.length ? { agents } : {}),
       metadata: {
-        agent: message.agent,
+        agent: Agent.ID.make(message.agent, { disableChecks: true }),
         model: {
           id: message.model.modelID,
           providerID: message.model.providerID,
-          ...(message.model.variant ? { variant: message.model.variant } : {}),
+          ...(message.model.variant ? { variant: VariantID.make(message.model.variant, { disableChecks: true }) } : {}),
         },
       },
       time: { created: message.time.created },
@@ -163,13 +174,13 @@ function currentUser(message: typeof SessionV1.User.Type, parts: LegacyPart[]): 
 
 function currentAssistant(message: typeof SessionV1.Assistant.Type, parts: LegacyPart[]): SessionMessageAssistant {
   return {
-    id: message.id,
+    id: SessionMessage.ID.make(message.id, { disableChecks: true }),
     type: "assistant",
-    agent: message.agent,
+    agent: Agent.ID.make(message.agent, { disableChecks: true }),
     model: {
       id: message.modelID,
       providerID: message.providerID,
-      ...(message.variant ? { variant: message.variant } : {}),
+      ...(message.variant ? { variant: VariantID.make(message.variant, { disableChecks: true }) } : {}),
     },
     content: parts.flatMap((part): SessionMessageAssistant["content"] => {
       if (part.type === "text") return [{ type: "text", text: part.text }]
