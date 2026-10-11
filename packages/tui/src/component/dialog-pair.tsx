@@ -4,7 +4,7 @@ import { createMemo, createResource, createSignal, For, Show } from "solid-js"
 import { renderUnicodeCompact } from "uqr"
 import { useClient } from "../context/client"
 import { useTheme } from "../context/theme"
-import { useDialog } from "../ui/dialog"
+import { dialogWidth, useDialog } from "../ui/dialog"
 import { Link } from "../ui/link"
 import { errorMessage } from "../util/error"
 
@@ -24,11 +24,23 @@ export function DialogPair() {
         const link = (url: string) => new URL(`/auth/connect/${pairing.code}`, url).href
         const local = server.urls[0] ? new URL(server.urls[0]) : undefined
         if (local) local.hostname = "localhost"
+        // Loopback URLs are useless to the scanning device, so the QR code only carries reachable addresses.
+        const remote = server.urls.filter((url) => {
+          const hostname = new URL(url).hostname
+          return !(
+            hostname === "localhost" ||
+            hostname.endsWith(".localhost") ||
+            hostname.startsWith("127.") ||
+            hostname === "[::1]"
+          )
+        })
         return {
           links: server.urls.map(link),
           localhost: local ? link(local.href) : undefined,
           minutes: Math.round(pairing.expires_in / 60),
-          loopback: server.urls.some((url) => ["localhost", "127.0.0.1", "[::1]"].includes(new URL(url).hostname)),
+          qr: remote.length
+            ? renderUnicodeCompact(JSON.stringify({ code: pairing.code, urls: remote }), { border: 1 })
+            : undefined,
         }
       })
       .catch((error) => {
@@ -36,7 +48,10 @@ export function DialogPair() {
         return undefined
       }),
   )
-  const horizontal = createMemo(() => dimensions().width >= 96)
+  // QR rows cannot wrap, so the code is shown only where every row fits: beside the links, else below them.
+  const qrWidth = createMemo(() => info()?.qr?.indexOf("\n") ?? 0)
+  const bodyWidth = createMemo(() => Math.min(dialogWidth("large"), dimensions().width - 2) - 4)
+  const horizontal = createMemo(() => dimensions().width >= 96 && qrWidth() <= bodyWidth() - 31)
   const content = () => {
     const value = info()
     if (!value) return
@@ -66,7 +81,7 @@ export function DialogPair() {
               )}
             </For>
           </box>
-          <Show when={value.loopback}>
+          <Show when={!value.qr}>
             <text fg={theme.text.muted} wrapMode="word">
               Run `opencode service set hostname 0.0.0.0` to access the service remotely.
             </text>
@@ -78,8 +93,19 @@ export function DialogPair() {
           flexShrink={0}
           alignItems={horizontal() ? "flex-end" : "center"}
         >
-          <Show when={value.links[0]}>
-            {(url) => <text fg={theme.text.base}>{renderUnicodeCompact(url(), { border: 1 })}</text>}
+          <Show when={value.qr}>
+            {(qr) => (
+              <Show
+                when={qrWidth() <= bodyWidth()}
+                fallback={
+                  <text fg={theme.text.muted} wrapMode="word">
+                    Widen the terminal to show the QR code.
+                  </text>
+                }
+              >
+                <text fg={theme.text.base}>{qr()}</text>
+              </Show>
+            )}
           </Show>
         </box>
       </box>
