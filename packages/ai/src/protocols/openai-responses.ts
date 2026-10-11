@@ -106,6 +106,8 @@ const OpenAIResponsesToolChoice = Schema.Union([
 
 const OpenAIResponsesCoreFields = {
   ...OpenResponses.coreFields,
+  prompt_cache_retention: Schema.optional(Schema.String),
+  prompt_cache_options: Schema.optional(OpenResponsesOptions.PromptCacheOptions),
   tools: optionalArray(OpenAIResponsesTools),
   tool_choice: Schema.optional(OpenAIResponsesToolChoice),
   context_management: Schema.optional(
@@ -205,6 +207,8 @@ const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request:
   return {
     ...(yield* OpenResponses.lowerConversation(updates.request, adapter)),
     ...OpenResponses.lowerGeneration(request, { ...options, reasoningEffort: updates.effort }),
+    ...(options.promptCacheRetention !== undefined ? { prompt_cache_retention: options.promptCacheRetention } : {}),
+    ...(options.promptCacheOptions !== undefined ? { prompt_cache_options: options.promptCacheOptions } : {}),
     context_management: management?.map((edit) => ({ type: edit.type, compact_threshold: edit.compactThreshold })),
     tools: request.tools.length === 0 ? undefined : yield* lowerTools(request),
     tool_choice:

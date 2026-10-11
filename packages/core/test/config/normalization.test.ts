@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Arbitrary, Duration, Effect, Schema } from "effect"
 import { ConfigNormalize } from "@opencode/core/config/normalize"
+import { ConfigCache } from "@opencode/core/config/cache"
 import { Info } from "@opencode/schema/config"
 
 const options = { errors: "all", onExcessProperty: "ignore" } as const
@@ -107,10 +108,15 @@ describe("ConfigNormalize", () => {
     expect(Duration.toMillis(info.warming.duration ?? Duration.zero)).toBe(1_800_000)
   })
 
-  test("preserves arbitrary JSON-round-tripped native configuration", () => {
+  test("preserves arbitrary JSON-round-tripped native configuration with valid cache rules", () => {
     const result = Effect.runSync(
       Arbitrary.checkEffect(
-        Arbitrary.schema(Info),
+        // Structural schema generation can produce semantically conflicting cache rules.
+        Arbitrary.schema(Info).pipe(
+          Arbitrary.filter((info) =>
+            Object.values(info.cache ?? {}).every((rules) => ConfigCache.validate(rules) === undefined),
+          ),
+        ),
         (info) => {
           const source = JSON.parse(JSON.stringify(Schema.encodeSync(Info)(info)))
           const result = normalized(source)

@@ -2,11 +2,13 @@ export * as ConfigNormalize from "./normalize.js"
 
 import { isDeepStrictEqual } from "node:util"
 import { isRecord } from "@opencode/ai/utils/record"
-import { Option, Schema } from "effect"
+import { Option, Result, Schema } from "effect"
 import { Info } from "@opencode/schema/config"
 import { ConfigAgent } from "@opencode/schema/config/agent"
 import { ConfigCommand } from "@opencode/schema/config/command"
 import { ConfigCompaction } from "@opencode/schema/config/compaction"
+import { ConfigCache } from "@opencode/schema/config/cache"
+import { validate } from "./cache.js"
 import { ConfigFormatter } from "@opencode/schema/config/formatter"
 import { ConfigLSP } from "@opencode/schema/config/lsp"
 import { ConfigMedia } from "@opencode/schema/config/media"
@@ -65,6 +67,7 @@ export function normalize(input: unknown): Result {
 
   const diagnostics: Diagnostic[] = []
   const encoded: Record<string, unknown> = {}
+  if (own(input, "cache")) normalizeCache(input.cache, encoded, diagnostics)
   unsupportedTopLevel.forEach((key) => unsupportedIfPresent(input, key, [key], diagnostics))
 
   const legacySnapshots = own(input, "snapshot")
@@ -227,6 +230,31 @@ export function normalize(input: unknown): Result {
   if (instructions.length || Array.isArray(input.instructions)) encoded.instructions = instructions
 
   return { type: "normalized", encoded, diagnostics }
+}
+
+function normalizeCache(input: unknown, encoded: Record<string, unknown>, diagnostics: Diagnostic[]) {
+  if (!isRecord(input)) {
+    invalid(["cache"], diagnostics)
+    return
+  }
+  encoded.cache = Object.fromEntries(
+    Object.entries(input).map(([provider, raw]) => {
+      // Cache rules reject unknown keys even though ordinary config fields tolerate them.
+      const decoded = Schema.decodeUnknownResult(ConfigCache.Info.value, {
+        ...options,
+        onExcessProperty: "error",
+      })(raw)
+      const issue = Result.isFailure(decoded) ? decoded.failure.message : validate(decoded.success)
+      if (issue)
+        diagnostics.push({
+          kind: "invalid",
+          path: ["cache", provider],
+          message: `disabled this provider's cache rules: ${issue}`,
+        })
+      // Keep the provider key: dropping it would revive lower-priority rules.
+      return [provider, Result.isFailure(decoded) || issue ? [] : decoded.success]
+    }),
+  )
 }
 
 function normalizeSkills(input: Record<string, unknown>, encoded: Record<string, unknown>, diagnostics: Diagnostic[]) {
