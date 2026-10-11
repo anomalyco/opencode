@@ -582,3 +582,20 @@ it.effect("preserves a manual rename completed while generation is in flight", (
     expect((yield* store.get(sessionID))?.title).toBe("Manual title")
   }),
 )
+
+it.effect("bounds the title request with a small output limit (#54401)", () =>
+  Effect.gen(function* () {
+    yield* enableTitleAgent
+    const sessionID = Session.ID.make("ses_title_limit")
+    yield* insertSession(sessionID)
+    yield* prompt(sessionID, "Hello")
+
+    const title = yield* SessionTitle.Service
+    yield* title.generate(sessionID)
+
+    expect(requests).toHaveLength(1)
+    const maxTokens = requests[0]?.generation?.maxTokens
+    expect(maxTokens).toBeDefined()
+    expect(maxTokens!).toBeLessThanOrEqual(512)
+  }),
+)
