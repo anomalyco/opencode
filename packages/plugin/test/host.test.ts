@@ -27,6 +27,67 @@ async function fixture(files: Record<string, string>, installed = false) {
 }
 
 describe("Host.resolve", () => {
+  it("resolves a local package main without a root shim", async () => {
+    await using plugin = await fixture({
+      "package.json": JSON.stringify({ name, type: "module", main: "dist/backend.js" }),
+      "dist/backend.js": source,
+    })
+    assert.deepEqual(Host.resolve(plugin.target), {
+      server: plugin.url("dist/backend.js"),
+      tui: undefined,
+      rpc: undefined,
+    })
+  })
+
+  for (const packageName of [name, undefined]) {
+    it(`honors local conditional exports with ${packageName ?? "no package name"}`, async () => {
+      await using plugin = await fixture({
+        "package.json": JSON.stringify({
+          name: packageName,
+          exports: {
+            ".": "./dist/root.js",
+            "./server": { import: "./dist/backend.js", require: "./dist/wrong.cjs" },
+            "./tui": "./dist/terminal.js",
+            "./rpc": "./dist/contract.js",
+          },
+        }),
+        "dist/root.js": source,
+        "dist/backend.js": source,
+        "dist/terminal.js": source,
+        "dist/contract.js": source,
+      })
+      assert.deepEqual(Host.resolve(plugin.target), {
+        server: plugin.url("dist/backend.js"),
+        tui: plugin.url("dist/terminal.js"),
+        rpc: plugin.url("dist/contract.js"),
+      })
+    })
+  }
+
+  it("uses a local root export and respects deliberately unexported conventional files", async () => {
+    await using plugin = await fixture({
+      "package.json": JSON.stringify({ exports: "./dist/backend.js", main: "wrong.js" }),
+      "dist/backend.js": source,
+      "server.js": source,
+      "tui.js": source,
+    })
+    assert.deepEqual(Host.resolve(plugin.target), {
+      server: plugin.url("dist/backend.js"),
+      tui: undefined,
+      rpc: undefined,
+    })
+  })
+
+  it("rereads changed manifest entrypoints on reload", async () => {
+    await using plugin = await fixture({
+      "package.json": JSON.stringify({ main: "dist/first.js" }),
+      "dist/first.js": source,
+      "dist/next.js": source,
+    })
+    assert.equal(Host.resolve(plugin.target).server, plugin.url("dist/first.js"))
+    await writeFile(path.join(plugin.target.directory, "package.json"), JSON.stringify({ main: "dist/next.js" }))
+    assert.equal(Host.resolve(plugin.target).server, plugin.url("dist/next.js"))
+  })
   it("resolves conventional entrypoints without package.json", async () => {
     await using plugin = await fixture({ "index.ts": source, "tui.tsx": source, "rpc.ts": source })
     assert.deepEqual(Host.resolve(plugin.target), {
