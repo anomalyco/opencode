@@ -6,9 +6,9 @@ import { useDialog } from "../ui/dialog"
 import { useBindings } from "../keymap"
 import { errorMessage } from "../util/error"
 import { Spinner } from "./spinner"
-import { Link } from "../ui/link"
+import { openUrl } from "@opencode-ai/core/open"
 
-export const V2_ANNOUNCEMENT_URL = "https://opencode.ai/v2"
+export const V2_ANNOUNCEMENT_URL = "https://anoma.ly/notes/opencode-2-0"
 
 type Version = { current: string; latest?: string }
 
@@ -22,6 +22,7 @@ export function DialogUpdate(props: {
   check: () => Promise<Version | undefined>
   state: () => UpdateState | undefined
   install: (target: UpdateTarget) => Promise<void>
+  skip: (version: string) => void
   dismiss: () => void
   restart: () => void
 }) {
@@ -54,23 +55,23 @@ export function DialogUpdate(props: {
   const buttons = createMemo(() => {
     const current = state()
     if (current.type === "checking" || current.type === "installing") return []
-    if (current.type === "installed") return [dismiss(), { label: "Restart", run: props.restart }]
     const next = target()
-    if (!next) return [dismiss()]
-    return [dismiss(), { label: next.type === "major" ? "Upgrade" : "Update", run: () => props.install(next) }]
-  })
-
-  function dismiss() {
-    return {
-      label: "Dismiss",
+    const close = {
+      label: next?.type === "major" ? "Dismiss" : "Skip",
       run: () => {
-        if (props.state()?.type !== "installed") props.dismiss()
+        if (current.type !== "installed" && next?.type === "major") props.dismiss()
+        if (current.type !== "installed" && next?.type === "latest") props.skip(next.version)
         dialog.clear()
       },
     }
-  }
+    if (current.type === "installed") return [close, { label: "Restart", run: props.restart }]
+    if (!next) return [close]
+    return [close, { label: next.type === "major" ? "Upgrade" : "Update", run: () => props.install(next) }]
+  })
 
   createEffect(() => setActive(Math.max(0, buttons().length - 1)))
+  // Wide enough to keep the release-notes link on the first line; the dialog still clamps to the terminal width.
+  createEffect(() => dialog.setSize(state().type === "major" ? "xlarge" : "medium"))
 
   const move = (offset: number) => {
     const count = buttons().length
@@ -132,11 +133,19 @@ export function DialogUpdate(props: {
                 )}
               </Match>
               <Match when={current.type === "major"}>
-                <box>
-                  <text fg={theme.textMuted} wrapMode="word">
-                    OpenCode 2.0 is the next major release. Read more about it:
+                <box gap={1}>
+                  <text
+                    fg={theme.textMuted}
+                    wrapMode="word"
+                    onMouseUp={() => {
+                      openUrl(V2_ANNOUNCEMENT_URL).catch(() => {})
+                    }}
+                  >
+                    OpenCode 2.0 is the next major release. Read more about it:{" "}
+                    <a href={V2_ANNOUNCEMENT_URL} style={{ fg: theme.primary }}>
+                      {V2_ANNOUNCEMENT_URL}
+                    </a>
                   </text>
-                  <Link href={V2_ANNOUNCEMENT_URL} fg={theme.primary} />
                   <text fg={theme.textMuted} wrapMode="word">
                     It contains some breaking changes.
                   </text>

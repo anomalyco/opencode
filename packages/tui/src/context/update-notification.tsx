@@ -25,10 +25,16 @@ export type UpdateSource = {
 
 export const DISMISS_DURATION = 7 * 24 * 60 * 60 * 1000
 
-// Dismissing hides the notice for a week, whichever update it was for.
-export function visibleNotice(notice: UpdateNotice | undefined, dismissedUntil: number | undefined, now: number) {
+// Skipping an OpenCode 1 version hides it until a newer one ships; dismissing the OpenCode 2.0 offer hides it for a week.
+export function visibleNotice(
+  notice: UpdateNotice | undefined,
+  hidden: { readonly skippedVersion?: string; readonly dismissedUntil?: number },
+  now: number,
+) {
   if (!notice) return undefined
-  if (dismissedUntil !== undefined && now < dismissedUntil) return undefined
+  if (notice.type === "major")
+    return hidden.dismissedUntil !== undefined && now < hidden.dismissedUntil ? undefined : notice
+  if (hidden.skippedVersion && !isVersionGreater(notice.version, hidden.skippedVersion)) return undefined
   return notice
 }
 
@@ -55,7 +61,11 @@ export const { use: useUpdateNotification, provider: UpdateNotificationProvider 
     const notification = createMemo(() => {
       const current = state()
       if (current?.type === "installed") return current
-      return visibleNotice(available(), kv.get("update_dismissed_until"), now())
+      return visibleNotice(
+        available(),
+        { skippedVersion: kv.get("skipped_version"), dismissedUntil: kv.get("update_dismissed_until") },
+        now(),
+      )
     })
 
     const install = async (target: UpdateTarget) => {
@@ -86,6 +96,7 @@ export const { use: useUpdateNotification, provider: UpdateNotificationProvider 
           check={updater.check}
           state={state}
           install={install}
+          skip={(version) => kv.set("skipped_version", version)}
           dismiss={() => {
             const at = Date.now()
             kv.set("update_dismissed_until", at + DISMISS_DURATION)
@@ -102,3 +113,20 @@ export const { use: useUpdateNotification, provider: UpdateNotificationProvider 
     }
   },
 })
+
+export function isVersionGreater(left: string, right: string) {
+  const parse = (value: string) => {
+    const [core, prerelease] = value.replace(/^v/, "").split("-", 2)
+    return { core: core.split(".").map((part) => Number.parseInt(part, 10) || 0), prerelease }
+  }
+  const a = parse(left)
+  const b = parse(right)
+  for (let index = 0; index < Math.max(a.core.length, b.core.length); index++) {
+    const difference = (a.core[index] ?? 0) - (b.core[index] ?? 0)
+    if (difference) return difference > 0
+  }
+  if (a.prerelease === b.prerelease) return false
+  if (!a.prerelease) return true
+  if (!b.prerelease) return false
+  return a.prerelease.localeCompare(b.prerelease, undefined, { numeric: true }) > 0
+}
