@@ -4,6 +4,7 @@ import { Config } from "../src/config.js"
 import { ConfigAgent } from "../src/config/agent.js"
 import { ConfigMCP } from "../src/config/mcp.js"
 import { ConfigProvider } from "../src/config/provider.js"
+import { ConfigWebSearch } from "../src/config/websearch.js"
 import { Mcp } from "../src/mcp.js"
 import { Provider } from "../src/provider.js"
 import { AbsolutePath } from "../src/schema.js"
@@ -69,6 +70,35 @@ describe("Config.Entry", () => {
     expect(decode({ websearch: false }).websearch).toBe(false)
     expect(decode({ websearch: { provider: "exa" } }).websearch).toEqual({ provider: WebSearch.ID.make("exa") })
     expect(decode({ websearch: { provider: "random" } }).websearch).toEqual({ provider: "random" })
+  })
+
+  test("round-trips per-provider web search endpoints and keys", () => {
+    const input = {
+      websearch: {
+        provider: "exa",
+        providers: {
+          exa: { endpoint: "https://search.example.com/v1/exa/search", apiKey: "secret" },
+        },
+      },
+    } as const
+    const decoded = Schema.decodeUnknownSync(Config.Info)(input)
+
+    expect(decoded.websearch).toEqual({
+      provider: WebSearch.ID.make("exa"),
+      providers: {
+        [WebSearch.ID.make("exa")]: { endpoint: "https://search.example.com/v1/exa/search", apiKey: "secret" },
+      },
+    })
+    expect(Schema.encodeSync(Config.Info)(decoded)).toEqual(input)
+    expect(
+      Schema.decodeUnknownSync(Config.Info)({
+        websearch: { providers: { exa: { endpoint: "https://search.example.com" } } },
+      }).websearch,
+    ).toEqual({ providers: { [WebSearch.ID.make("exa")]: { endpoint: "https://search.example.com" } } })
+    const withoutProviders = Schema.encodeSync(Config.Info)(
+      new Config.Info({ websearch: new ConfigWebSearch.Info({ provider: WebSearch.ID.make("exa") }) }),
+    )
+    expect(withoutProviders).not.toHaveProperty("websearch.providers")
   })
 
   test("round-trips every configuration entry type", () => {

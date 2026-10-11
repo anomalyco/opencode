@@ -552,9 +552,14 @@ export function fromPromise(plugin: Plugin) {
                       editor.add({
                         id: definition.id,
                         name: definition.name,
-                        execute: (input) => attempt((signal) => definition.execute(input, { signal })),
+                        execute: (input, settings) =>
+                          attempt((signal) => definition.execute(input, { signal, settings })),
                       }),
                     default: editor.default,
+                    settings: {
+                      set: (id, settings) => editor.settings.set(id, settings),
+                      clear: editor.settings.clear,
+                    },
                   })
                 }),
               ),

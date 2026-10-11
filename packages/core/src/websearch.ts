@@ -22,6 +22,9 @@ export const Input = WebSearch.Input
 export type Input = WebSearch.Input
 export type ProviderInput = WebSearch.ProviderInput
 
+export const Settings = WebSearch.Settings
+export type Settings = WebSearch.Settings
+
 export const Result = WebSearch.Result
 export type Result = WebSearch.Result
 
@@ -33,7 +36,10 @@ export const Selection = Schema.Union([ID, Schema.Literal("random"), Schema.Lite
 export type Selection = typeof Selection.Type
 
 export interface ProviderImplementation extends Provider {
-  readonly execute: (input: ProviderInput) => Effect.Effect<readonly Result[], unknown>
+  readonly execute: (
+    input: ProviderInput,
+    settings?: WebSearch.Settings,
+  ) => Effect.Effect<readonly Result[], unknown>
 }
 
 export class ProviderRequiredError extends Schema.TaggedError<ProviderRequiredError>()(
@@ -71,6 +77,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/We
 
 type Data = {
   readonly providers: Map<ID, ProviderImplementation>
+  readonly settings: Map<ID, WebSearch.Settings>
   selection?: Selection
 }
 
@@ -79,6 +86,11 @@ export type Editor = {
   default: {
     get: () => Selection | undefined
     set: (selection: Selection) => void
+  }
+  settings: {
+    get: (id: ID) => WebSearch.Settings | undefined
+    set: (id: ID, settings: WebSearch.Settings) => void
+    clear: () => void
   }
 }
 
@@ -100,12 +112,17 @@ const layer = Layer.effect(
       Effect.forkScoped({ startImmediately: true }),
     )
     const state = State.create<Data, Editor>({
-      initial: () => ({ providers: new Map() }),
+      initial: () => ({ providers: new Map(), settings: new Map() }),
       editor: (editor) => ({
         add: (provider) => editor.providers.set(provider.id, provider),
         default: {
           get: () => editor.selection,
           set: (selection) => (editor.selection = selection),
+        },
+        settings: {
+          get: (id) => editor.settings.get(id),
+          set: (id, settings) => editor.settings.set(id, settings),
+          clear: () => editor.settings.clear(),
         },
       }),
       notify: () => bus.publish(WebSearch.Event.Updated, {}).pipe(Effect.asVoid),
@@ -193,7 +210,7 @@ const layer = Layer.effect(
           if (!cooldown || cooldown.until <= (yield* Clock.currentTimeMillis)) {
             attempted.add(provider.id)
             const result = yield* provider
-              .execute({ query: input.query })
+              .execute({ query: input.query }, state.get().settings.get(provider.id))
               .pipe(Effect.flatMap(decodeResults), Effect.result)
             if (result._tag === "Success") return new Response({ providerID: provider.id, results: result.success })
             const cause = result.failure

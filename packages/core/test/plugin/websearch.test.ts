@@ -139,6 +139,153 @@ describe("built-in web search providers", () => {
     }),
   )
 
+  it.effect("uses a configured Exa REST endpoint and key", () =>
+    Effect.gen(function* () {
+      resetWebSearchFixture(
+        JSON.stringify({
+          results: [
+            {
+              url: "https://effect.website",
+              title: "Effect",
+              publishedDate: "2026-07-25T00:00:00.000Z",
+              text: "Effect documentation",
+            },
+          ],
+        }),
+      )
+      const integrations = yield* Integration.Service
+      const websearch = yield* WebSearch.Service
+      const context = host({ integration: integrationHost(integrations), websearch: webSearchHost(websearch) })
+      yield* WebSearchExa.Plugin.effect(context)
+      yield* context.websearch.transform((editor) =>
+        editor.settings.set("exa", {
+          endpoint: "https://search.example.com/v1/exa/search",
+          apiKey: "proxy-secret",
+        }),
+      )
+
+      expect(yield* websearch.query({ query: "effect typescript", providerID: WebSearch.ID.make("exa") })).toEqual(
+        new WebSearch.Response({
+          providerID: WebSearch.ID.make("exa"),
+          results: [
+            {
+              url: "https://effect.website",
+              title: "Effect",
+              content: "Effect documentation",
+              time: { published: Date.parse("2026-07-25T00:00:00.000Z") },
+            },
+          ],
+        }),
+      )
+      expect(requests).toEqual([
+        {
+          url: "https://search.example.com/v1/exa/search",
+          headers: expect.objectContaining({ "x-api-key": "proxy-secret" }),
+          body: {
+            query: "effect typescript",
+            numResults: 8,
+            contents: { text: true },
+          },
+        },
+      ])
+    }),
+  )
+
+  it.effect("does not send the stored credential to a configured endpoint", () =>
+    Effect.gen(function* () {
+      resetWebSearchFixture(JSON.stringify({ results: [{ url: "https://effect.website", title: "Effect" }] }))
+      const integrations = yield* Integration.Service
+      const websearch = yield* WebSearch.Service
+      const context = host({ integration: integrationHost(integrations), websearch: webSearchHost(websearch) })
+      yield* WebSearchExa.Plugin.effect(context)
+      yield* integrations.connection.key({ integrationID: Integration.ID.make("exa"), key: "exa secret" })
+      yield* context.websearch.transform((editor) =>
+        editor.settings.set("exa", { endpoint: "https://search.example.com/v1/exa/search" }),
+      )
+
+      yield* websearch.query({ query: "effect typescript", providerID: WebSearch.ID.make("exa") })
+      expect(requests).toHaveLength(1)
+      expect(requests[0]?.url).toBe("https://search.example.com/v1/exa/search")
+      expect(requests[0]?.headers["x-api-key"]).toBeUndefined()
+      expect(requests[0]?.body).toEqual({ query: "effect typescript", numResults: 8, contents: { text: true } })
+    }),
+  )
+
+  const endpointCases = [
+    { plugin: WebSearchParallel.Plugin, id: "parallel", expected: { authorization: "Bearer proxy-key" } },
+    { plugin: WebSearchFirecrawl.Plugin, id: "firecrawl", expected: { authorization: "Bearer proxy-key" } },
+    { plugin: WebSearchTinyFish.Plugin, id: "tinyfish", expected: { "x-api-key": "proxy-key" } },
+    { plugin: WebSearchTavily.Plugin, id: "tavily", expected: { authorization: "Bearer proxy-key" } },
+  ] as const
+
+  endpointCases.forEach((item) => {
+    it.effect(`${item.id} uses a configured endpoint and key`, () =>
+      Effect.gen(function* () {
+        resetWebSearchFixture(JSON.stringify({ jsonrpc: "2.0", id: 1, result: { content: [], results: [] } }))
+        const integrations = yield* Integration.Service
+        const websearch = yield* WebSearch.Service
+        const context = host({ integration: integrationHost(integrations), websearch: webSearchHost(websearch) })
+        yield* item.plugin.effect(context)
+        yield* integrations.connection.key({ integrationID: Integration.ID.make(item.id), key: "stored-secret" })
+        yield* context.websearch.transform((editor) =>
+          editor.settings.set(item.id, { endpoint: "https://proxy.example.com/search", apiKey: "proxy-key" }),
+        )
+
+        yield* websearch.query({ query: "custom", providerID: WebSearch.ID.make(item.id) }).pipe(Effect.ignore)
+        expect(requests[0]?.url).toBe("https://proxy.example.com/search")
+        expect(requests[0]?.headers).toMatchObject(item.expected)
+        expect(Object.values(requests[0]?.headers ?? {})).not.toContain("stored-secret")
+        expect(Object.values(requests[0]?.headers ?? {})).not.toContain("Bearer stored-secret")
+      }),
+    )
+  })
+
+  it.effect("does not forward a stored credential to a configured endpoint", () =>
+    Effect.gen(function* () {
+      resetWebSearchFixture(JSON.stringify({ jsonrpc: "2.0", id: 1, result: { content: [] } }))
+      const integrations = yield* Integration.Service
+      const websearch = yield* WebSearch.Service
+      const context = host({ integration: integrationHost(integrations), websearch: webSearchHost(websearch) })
+      yield* WebSearchParallel.Plugin.effect(context)
+      yield* integrations.connection.key({ integrationID: Integration.ID.make("parallel"), key: "stored-secret" })
+      yield* context.websearch.transform((editor) =>
+        editor.settings.set("parallel", { endpoint: "https://proxy.example.com/search" }),
+      )
+
+      yield* websearch.query({ query: "custom", providerID: WebSearch.ID.make("parallel") }).pipe(Effect.ignore)
+      expect(requests[0]?.url).toBe("https://proxy.example.com/search")
+      expect(Object.values(requests[0]?.headers ?? {})).not.toContain("Bearer stored-secret")
+    }),
+  )
+
+  it.effect("falls back to the stored credential when the configured key is empty", () =>
+    Effect.gen(function* () {
+      const integrations = yield* Integration.Service
+      const websearch = yield* WebSearch.Service
+      const context = host({ integration: integrationHost(integrations), websearch: webSearchHost(websearch) })
+      yield* WebSearchExa.Plugin.effect(context)
+      yield* integrations.connection.key({ integrationID: Integration.ID.make("exa"), key: "exa secret" })
+      yield* context.websearch.transform((editor) => editor.settings.set("exa", { apiKey: "" }))
+
+      yield* websearch.query({ query: "effect typescript", providerID: WebSearch.ID.make("exa") })
+      expect(requests).toEqual([
+        {
+          url: `${WebSearchExa.endpoint}?exaApiKey=exa+secret`,
+          headers: expect.any(Object),
+          body: {
+            jsonrpc: "2.0",
+            id: 1,
+            method: "tools/call",
+            params: {
+              name: "web_search_exa",
+              arguments: { query: "effect typescript", numResults: 8 },
+            },
+          },
+        },
+      ])
+    }),
+  )
+
   it.effect("registers Parallel and keeps its credential in the authorization header", () =>
     Effect.gen(function* () {
       resetWebSearchFixture(

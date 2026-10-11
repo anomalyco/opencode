@@ -4,6 +4,7 @@ import { define } from "@opencode/plugin/effect/plugin"
 import { Duration, Effect, Schema, Scope } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { App } from "../../app.js"
+import { WebSearchProviderSettings } from "./settings.js"
 
 export const endpoint = "https://api.tavily.com/search"
 
@@ -43,17 +44,16 @@ export const Plugin = define<HttpClient.HttpClient | Scope.Scope>({
       editor.add({
         id: "tavily",
         name: "Tavily",
-        execute: (input) =>
+        execute: (input, settings) =>
           Effect.gen(function* () {
-            const connection = yield* ctx.integration.connection.active("tavily")
-            const credential = connection ? yield* ctx.integration.connection.resolve(connection) : undefined
-            const request = yield* HttpClientRequest.post(endpoint).pipe(
+            const resolved = yield* WebSearchProviderSettings.resolve(ctx.integration, "tavily", settings, endpoint)
+            const request = yield* HttpClientRequest.post(resolved.endpoint).pipe(
               HttpClientRequest.acceptJson,
               HttpClientRequest.setHeaders({
                 "User-Agent": App.useragent(ctx.app),
                 "X-Client-Name": "opencode2",
-                ...(credential?.type === "key"
-                  ? { Authorization: `Bearer ${credential.key}` }
+                ...(resolved.key
+                  ? { Authorization: `Bearer ${resolved.key}` }
                   : { "X-Tavily-Access-Mode": "keyless" }),
               }),
               HttpClientRequest.schemaBodyJson(SearchRequest)({

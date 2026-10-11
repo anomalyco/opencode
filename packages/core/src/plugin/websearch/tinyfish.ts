@@ -5,6 +5,7 @@ import { Effect, Option, Schema, Scope } from "effect"
 import { HttpClient } from "effect/http"
 import { App } from "../../app.js"
 import { WebSearchMcp } from "./mcp.js"
+import { WebSearchProviderSettings } from "./settings.js"
 
 export const endpoint = "https://agent.tinyfish.ai/mcp"
 
@@ -48,20 +49,19 @@ export const Plugin = define<HttpClient.HttpClient | Scope.Scope>({
       editor.add({
         id: "tinyfish",
         name: "TinyFish",
-        execute: (input) =>
+        execute: (input, settings) =>
           Effect.gen(function* () {
-            const connection = yield* ctx.integration.connection.active("tinyfish")
-            const credential = connection ? yield* ctx.integration.connection.resolve(connection) : undefined
+            const resolved = yield* WebSearchProviderSettings.resolve(ctx.integration, "tinyfish", settings, endpoint)
             const result = yield* WebSearchMcp.call(
               http,
-              endpoint,
+              resolved.endpoint,
               "search",
               { input: McpInput, output: McpOutput },
               { query: input.query },
               {
                 "User-Agent": App.useragent(ctx.app),
-                ...(credential?.type === "key"
-                  ? { "X-API-Key": credential.key }
+                ...(resolved.key
+                  ? { "X-API-Key": resolved.key }
                   : { "X-TinyFish-Access-Mode": "keyless" }),
               },
             )

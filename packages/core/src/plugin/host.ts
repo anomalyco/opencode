@@ -509,6 +509,10 @@ export const make = Effect.fn("PluginHost.make")(function* (
                   selection === false || selection === "random" ? selection : WebSearch.ID.make(selection),
                 ),
             },
+            settings: {
+              set: (id, settings) => editor.settings.set(WebSearch.ID.make(id), settings),
+              clear: editor.settings.clear,
+            },
           })
         }),
     },
