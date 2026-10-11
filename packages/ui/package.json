@@ -30,6 +30,7 @@
     "src/assets/icons/app/*",
     "src/assets/fonts/*",
     "src/assets/audio/*",
+    "skills/**",
     "LICENSE"
   ],
   "exports": {
@@ -69,6 +70,7 @@
     "./toast": "./src/feedback/toast/toast.tsx",
     "./tooltip": "./src/overlays/tooltip/tooltip.tsx",
     "./wordmark": "./src/typography/wordmark/wordmark.tsx",
+    "./design-lint": "./src/design-lint/design-lint.ts",
     "./*": "./src/components/*.tsx",
     "./i18n/*": "./src/i18n/*.ts",
     "./hooks": "./src/hooks/index.ts",
@@ -95,7 +97,10 @@
     "test": "bun test src --only-failures",
     "dev": "vite",
     "generate:tailwind": "bun run script/tailwind.ts",
-    "generate:v2-oc2": "bun run script/build-oc2-v2-overrides.ts"
+    "generate:v2-oc2": "bun run script/build-oc2-v2-overrides.ts",
+    "generate:design-lint": "bun script/generate-design-lint-tokens.ts",
+    "lint:design": "bun script/design-lint.ts",
+    "generate:skills": "bun script/generate-skill-references.ts"
   },
   "devDependencies": {
     "@solidjs/meta": "catalog:",

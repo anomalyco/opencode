@@ -12,6 +12,7 @@
       "description": "Contains opencode logs and data",
     },
   },
+  "skills": ["packages/ui/skills"],
   "mcp": {},
   "tools": {
     "github-triage": false,

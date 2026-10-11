@@ -1,16 +1,15 @@
 ## Localization
 
 - NEVER hardcode user-visible English strings in production code. ALWAYS use an i18n key for visible copy, placeholders, accessible labels, tooltips, menus, dialogs, empty states, and displayed errors.
-- Feature work adds English source strings only. Leave non-English keys absent so the runtime English fallback applies; translations land separately after language review.
-- Render count-sensitive copy through `i18n.plural(baseKey, count, params)`. Never select or pass `.zero`, `.one`, `.two`, `.few`, `.many`, or `.other` variants to `i18n.t(...)`; `pluralForm(...)` is reserved for components that animate individual grammatical forms.
-- When migrating existing copy to i18n, preserve the English text byte-for-byte unless the task explicitly requests a copy change.
-- NEVER change existing English text or English keys to facilitate translation. English is intentional, designer-written source copy; adapt locale-specific translations and i18n mechanics around it.
-- Do not translate from model knowledge alone. Verify terminology and grammar with Unicode CLDR locale/plural data, Microsoft Localization Style Guides and terminology, Apple localization/style guidance and localized platform UI, Mozilla localization style guides, Mozilla Pontoon, and the Firefox localization corpus at `github.com/mozilla-l10n/firefox-l10n`.
-- Also use the relevant language authority or official dictionary for the locale (for example RAE/Fundéu, FranceTerme, Duden, TDK, Kotus/Kielitoimiston sanakirja, Språkrådet/Bokmålsordboka, Rada Języka Polskiego/PWN, the Russian and Arabic language academies, the Ukrainian Orthography, Taiwan MOE dictionaries, or the Royal Society of Thailand). Treat the English dictionary as the semantic source of truth and preserve placeholders, code identifiers, product names, and keyboard labels.
+- Feature work adds English source strings only; leave non-English keys absent. Preserve existing English text and keys byte-for-byte unless the task explicitly requests a copy change, and never change English to make translation easier.
+- Render count-sensitive copy through `i18n.plural(baseKey, count, params)`. Never pass plural-category keys (`.one`, `.other`, …) to `i18n.t(...)`. Use `i18n.tDynamic(...)` for runtime-generated English copy; never branch on the active locale.
+- Use logical CSS properties and isolate mixed-direction text; layouts must work in RTL.
+- Do not translate from model knowledge alone; follow the translation process in the skill.
+- Load the `opencode-ui-i18n-rtl` skill (`packages/ui/skills/opencode-ui-i18n-rtl/SKILL.md`) for the full rules, API examples, RTL guidance, and the translation process.
 
 ## Typography
 
-- Use `--line-height-compact` (`16px`) for `13px` transcript, tool, notice, and truncation text. Use `--line-height-base` (`20px`) for body text.
-- Never copy Figma's generated `leading-none` onto text. Inter descenders clip when a solid `13px` line box meets `overflow: hidden`, `overflow: clip`, or truncation.
-- Keep fixed row dimensions explicit; correct inner line metrics do not require transforms, negative margins, or paint-space compensation.
-- `TextShimmer` inherits font metrics, so put typography overrides on its parent.
+- Give `13px` Inter text at least `--line-height-compact` (`16px`); use `--line-height-base` (`20px`) for body text. A solid `13px` line box clips descenders inside truncation and overflow containers.
+- Do not use `line-height: 1` or `leading-none` on text, and do not compensate with transforms, negative margins, or clip-padding hacks.
+- `TextShimmer` inherits font metrics; put typography overrides on its parent.
+- Load the `opencode-ui-typography` skill (`packages/ui/skills/opencode-ui-typography/SKILL.md`) for the type scale, weights, tracking, numeric figures, and truncation rules.

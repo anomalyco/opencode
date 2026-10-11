@@ -1,0 +1,448 @@
+{
+  "packages/app/src/composer/composer.tsx": {
+    "design/no-physical-direction": 2
+  },
+  "packages/app/src/composer/dropzone.tsx": {
+    "design/no-physical-direction": 1
+  },
+  "packages/app/src/composer/editor/editor.tsx": {
+    "design/no-legacy-token": 4
+  },
+  "packages/app/src/home/projects/view.tsx": {
+    "design/no-physical-direction": 17,
+    "design/no-solid-line-height": 1
+  },
+  "packages/app/src/home/sessions/view.tsx": {
+    "design/no-physical-direction": 11
+  },
+  "packages/app/src/index.css": {
+    "design/no-legacy-token": 2,
+    "design/no-physical-direction": 5,
+    "design/no-solid-line-height": 2
+  },
+  "packages/app/src/new-session/project/selector.tsx": {
+    "design/no-physical-direction": 4,
+    "design/no-solid-line-height": 1
+  },
+  "packages/app/src/new-session/view.tsx": {
+    "design/no-physical-direction": 2
+  },
+  "packages/app/src/new-session/wordmark.css": {
+    "design/no-legacy-token": 2
+  },
+  "packages/app/src/new-session/workspace/selector.tsx": {
+    "design/no-physical-direction": 2
+  },
+  "packages/app/src/providers/connect/dialog.tsx": {
+    "design/no-legacy-token": 4,
+    "design/no-physical-direction": 4,
+    "design/no-solid-line-height": 2
+  },
+  "packages/app/src/providers/connect/mcp-dialog.tsx": {
+    "design/no-legacy-token": 2
+  },
+  "packages/app/src/providers/connect/usage-exceeded.tsx": {
+    "design/no-physical-direction": 2
+  },
+  "packages/app/src/providers/credentials/dialog.tsx": {
+    "design/no-legacy-token": 4
+  },
+  "packages/app/src/providers/models/select-dialog.tsx": {
+    "design/no-physical-direction": 3
+  },
+  "packages/app/src/providers/models/tooltip.tsx": {
+    "design/no-legacy-token": 3,
+    "design/no-physical-direction": 2
+  },
+  "packages/app/src/providers/models/unpaid.tsx": {
+    "design/no-physical-direction": 4
+  },
+  "packages/app/src/runtime/extension/panels.tsx": {
+    "design/no-legacy-token": 1
+  },
+  "packages/app/src/runtime/extension/side-region.tsx": {
+    "design/no-legacy-token": 2,
+    "design/no-physical-direction": 1
+  },
+  "packages/app/src/runtime/platform/external-link.tsx": {
+    "design/no-legacy-token": 1
+  },
+  "packages/app/src/servers/registry/row.tsx": {
+    "design/no-legacy-token": 7
+  },
+  "packages/app/src/session/commands/fork-dialog.tsx": {
+    "design/no-legacy-token": 1,
+    "design/no-physical-direction": 1
+  },
+  "packages/app/src/session/composer/location-missing.tsx": {
+    "design/no-legacy-token": 4
+  },
+  "packages/app/src/session/composer/session-composer-region.tsx": {
+    "design/no-legacy-token": 5
+  },
+  "packages/app/src/session/incompatible-server-panel.tsx": {
+    "design/no-legacy-token": 2
+  },
+  "packages/app/src/session/requests/session-permission-dock.tsx": {
+    "design/no-legacy-token": 1
+  },
+  "packages/app/src/session/route-error.tsx": {
+    "design/no-legacy-token": 2
+  },
+  "packages/app/src/session/screen.tsx": {
+    "design/no-physical-direction": 2
+  },
+  "packages/app/src/session/story-model.tsx": {
+    "design/no-legacy-token": 10,
+    "design/no-physical-direction": 1
+  },
+  "packages/app/src/session/timeline/virtualizer.tsx": {
+    "design/no-physical-direction": 2
+  },
+  "packages/app/src/settings/keybinds/keybinds.tsx": {
+    "design/no-legacy-token": 1
+  },
+  "packages/app/src/settings/settings.css": {
+    "design/no-legacy-token": 1,
+    "design/no-physical-direction": 1,
+    "design/no-solid-line-height": 3
+  },
+  "packages/app/src/settings/workspaces/project.css": {
+    "design/no-legacy-token": 1
+  },
+  "packages/app/src/shell/commands/dialog.css": {
+    "design/no-physical-direction": 2
+  },
+  "packages/app/src/shell/errors/error.tsx": {
+    "design/no-legacy-token": 5
+  },
+  "packages/app/src/shell/mobile-drawer.css": {
+    "design/no-physical-direction": 2
+  },
+  "packages/app/src/shell/titlebar/tab-nav.css": {
+    "design/no-physical-direction": 2
+  },
+  "packages/app/src/shell/titlebar/tab-strip.tsx": {
+    "design/no-physical-direction": 2
+  },
+  "packages/app/src/shell/titlebar/titlebar.css": {
+    "design/no-physical-direction": 2
+  },
+  "packages/app/src/shell/titlebar/titlebar.tsx": {
+    "design/no-physical-direction": 1
+  },
+  "packages/app/src/workspaces/selection/dialog.css": {
+    "design/no-physical-direction": 3
+  },
+  "packages/desktop/src/main/windows/defaults.ts": {
+    "design/no-raw-color": 1
+  },
+  "packages/enterprise/src/routes/share/[shareID].tsx": {
+    "design/no-legacy-token": 14,
+    "design/no-physical-direction": 7
+  },
+  "packages/gui-extensions/src/browser/panel.tsx": {
+    "design/no-legacy-token": 2
+  },
+  "packages/gui-extensions/src/btw/panel.tsx": {
+    "design/no-legacy-token": 2
+  },
+  "packages/gui-extensions/src/context/indicator.tsx": {
+    "design/no-legacy-token": 2,
+    "design/no-physical-direction": 2
+  },
+  "packages/gui-extensions/src/context/tab.tsx": {
+    "design/no-legacy-token": 12
+  },
+  "packages/gui-extensions/src/debug/bar.tsx": {
+    "design/no-legacy-token": 8,
+    "design/no-physical-direction": 4,
+    "design/no-solid-line-height": 3
+  },
+  "packages/gui-extensions/src/details/details.css": {
+    "design/no-legacy-token": 3
+  },
+  "packages/gui-extensions/src/file/artifact-view.tsx": {
+    "design/no-legacy-token": 12
+  },
+  "packages/gui-extensions/src/file/browser.tsx": {
+    "design/no-legacy-token": 4
+  },
+  "packages/gui-extensions/src/file/drag.ts": {
+    "design/no-legacy-token": 3
+  },
+  "packages/gui-extensions/src/file/list.tsx": {
+    "design/no-legacy-token": 1
+  },
+  "packages/gui-extensions/src/file/sidebar.tsx": {
+    "design/no-legacy-token": 4
+  },
+  "packages/gui-extensions/src/file/tree.tsx": {
+    "design/no-legacy-token": 15,
+    "design/no-physical-direction": 2
+  },
+  "packages/gui-extensions/src/file/view.tsx": {
+    "design/no-legacy-token": 3
+  },
+  "packages/gui-extensions/src/review/mobile.tsx": {
+    "design/no-legacy-token": 1
+  },
+  "packages/gui-extensions/src/review/panel.tsx": {
+    "design/no-legacy-token": 2
+  },
+  "packages/gui-extensions/src/review/parts.tsx": {
+    "design/no-legacy-token": 2
+  },
+  "packages/gui-extensions/src/ssh/row.tsx": {
+    "design/no-solid-line-height": 1
+  },
+  "packages/gui-extensions/src/ssh/ssh.css": {
+    "design/no-solid-line-height": 1
+  },
+  "packages/gui-extensions/src/terminal/panel.tsx": {
+    "design/no-legacy-token": 6,
+    "design/no-physical-direction": 1
+  },
+  "packages/gui-extensions/src/terminal/terminal.tsx": {
+    "design/no-raw-color": 2
+  },
+  "packages/gui-extensions/src/updater/whats-new.tsx": {
+    "design/no-legacy-token": 5,
+    "design/no-physical-direction": 1
+  },
+  "packages/gui-extensions/src/wsl/dialog.css": {
+    "design/no-physical-direction": 1
+  },
+  "packages/gui-extensions/src/wsl/row.tsx": {
+    "design/no-solid-line-height": 1
+  },
+  "packages/session-ui/src/components/basic-tool.css": {
+    "design/no-legacy-token": 9,
+    "design/no-raw-color": 3
+  },
+  "packages/session-ui/src/components/file-media.tsx": {
+    "design/no-legacy-token": 12
+  },
+  "packages/session-ui/src/components/file-search.tsx": {
+    "design/no-legacy-token": 15,
+    "design/no-physical-direction": 1
+  },
+  "packages/session-ui/src/components/file.css": {
+    "design/no-legacy-token": 4,
+    "design/no-physical-direction": 4
+  },
+  "packages/session-ui/src/components/line-comment-styles.ts": {
+    "design/no-legacy-token": 21
+  },
+  "packages/session-ui/src/components/markdown.css": {
+    "design/no-legacy-token": 3
+  },
+  "packages/session-ui/src/components/message-nav.css": {
+    "design/no-legacy-token": 11,
+    "design/no-physical-direction": 2,
+    "design/no-raw-color": 4
+  },
+  "packages/session-ui/src/components/message-nav.tsx": {
+    "design/no-legacy-token": 7
+  },
+  "packages/session-ui/src/components/message-part.css": {
+    "design/dark-mode-selector": 1,
+    "design/no-legacy-token": 12,
+    "design/no-physical-direction": 8,
+    "design/no-raw-color": 1
+  },
+  "packages/session-ui/src/components/session-review.css": {
+    "design/no-legacy-token": 12,
+    "design/no-physical-direction": 3
+  },
+  "packages/session-ui/src/components/session-review.tsx": {
+    "design/no-legacy-token": 2
+  },
+  "packages/session-ui/src/components/session-turn.css": {
+    "design/no-legacy-token": 8,
+    "design/no-physical-direction": 2
+  },
+  "packages/session-ui/src/components/tool-count-summary.css": {
+    "design/no-physical-direction": 2
+  },
+  "packages/session-ui/src/components/tool-error-card.css": {
+    "design/no-physical-direction": 3
+  },
+  "packages/session-ui/src/components/tool-status-title.css": {
+    "design/no-legacy-token": 1
+  },
+  "packages/session-ui/src/message/message-content.tsx": {
+    "design/no-legacy-token": 4
+  },
+  "packages/session-ui/src/pierre/comment-hover.ts": {
+    "design/no-legacy-token": 2
+  },
+  "packages/session-ui/src/pierre/file-find.ts": {
+    "design/no-legacy-token": 3
+  },
+  "packages/session-ui/src/pierre/index.ts": {
+    "design/no-legacy-token": 2
+  },
+  "packages/session-ui/src/storybook/current-session-story.tsx": {
+    "design/no-legacy-token": 6
+  },
+  "packages/session-ui/src/timeline/session-timeline-row.tsx": {
+    "design/no-legacy-token": 1
+  },
+  "packages/session-ui/src/tools/tool-renderer.tsx": {
+    "design/no-legacy-token": 25
+  },
+  "packages/session-ui/src/v2/components/session-progress-indicator-v2.css": {
+    "design/no-raw-color": 1
+  },
+  "packages/session-ui/src/v2/components/session-review-file-preview-v2.tsx": {
+    "design/no-legacy-token": 1
+  },
+  "packages/session-ui/src/v2/components/session-review-v2.css": {
+    "design/no-legacy-token": 10,
+    "design/no-solid-line-height": 1
+  },
+  "packages/ui/src/actions/button/button.css": {
+    "design/no-physical-direction": 3,
+    "design/no-raw-color": 1
+  },
+  "packages/ui/src/actions/submit.css": {
+    "design/no-raw-color": 1
+  },
+  "packages/ui/src/components/animated-number.css": {
+    "design/no-solid-line-height": 2
+  },
+  "packages/ui/src/components/card.css": {
+    "design/no-physical-direction": 2
+  },
+  "packages/ui/src/components/card.tsx": {
+    "design/no-legacy-token": 3
+  },
+  "packages/ui/src/components/collapsible.css": {
+    "design/no-legacy-token": 3
+  },
+  "packages/ui/src/components/context-menu.css": {
+    "design/no-legacy-token": 9
+  },
+  "packages/ui/src/components/dock-surface.css": {
+    "design/no-legacy-token": 3,
+    "design/no-physical-direction": 2
+  },
+  "packages/ui/src/components/file-icon.css": {
+    "design/no-legacy-token": 1
+  },
+  "packages/ui/src/components/hover-card.css": {
+    "design/no-legacy-token": 2
+  },
+  "packages/ui/src/components/image-preview.css": {
+    "design/no-legacy-token": 1,
+    "design/no-raw-color": 3
+  },
+  "packages/ui/src/components/list.css": {
+    "design/no-legacy-token": 21,
+    "design/no-physical-direction": 5
+  },
+  "packages/ui/src/components/logo.tsx": {
+    "design/no-legacy-token": 20
+  },
+  "packages/ui/src/components/popover.css": {
+    "design/no-legacy-token": 5
+  },
+  "packages/ui/src/components/progress.css": {
+    "design/no-legacy-token": 5
+  },
+  "packages/ui/src/components/scroll-view.css": {
+    "design/dark-mode-selector": 6,
+    "design/no-legacy-token": 5,
+    "design/no-physical-direction": 4
+  },
+  "packages/ui/src/components/sticky-accordion-header.css": {
+    "design/no-legacy-token": 1
+  },
+  "packages/ui/src/components/text-field.css": {
+    "design/no-legacy-token": 14,
+    "design/no-raw-color": 3
+  },
+  "packages/ui/src/context/marked-theme.tsx": {
+    "design/no-legacy-token": 54
+  },
+  "packages/ui/src/data-display/accordion/accordion.css": {
+    "design/no-physical-direction": 6
+  },
+  "packages/ui/src/data-display/avatar/avatar.css": {
+    "design/no-solid-line-height": 1
+  },
+  "packages/ui/src/data-display/badge/badge.css": {
+    "design/no-legacy-token": 3,
+    "design/no-solid-line-height": 1
+  },
+  "packages/ui/src/data-display/diff-changes/diff-changes.css": {
+    "design/no-legacy-token": 2,
+    "design/no-physical-direction": 1,
+    "design/no-solid-line-height": 1
+  },
+  "packages/ui/src/data-display/keybind/keybind.css": {
+    "design/no-solid-line-height": 1
+  },
+  "packages/ui/src/data-display/line-comment/line-comment.css": {
+    "design/no-solid-line-height": 1
+  },
+  "packages/ui/src/data-display/project-avatar/project-avatar.css": {
+    "design/no-physical-direction": 1,
+    "design/no-solid-line-height": 1
+  },
+  "packages/ui/src/feedback/loader/loader.css": {
+    "design/no-raw-color": 1
+  },
+  "packages/ui/src/feedback/progress-circle/progress-circle.css": {
+    "design/no-legacy-token": 2
+  },
+  "packages/ui/src/forms/checkbox/checkbox.css": {
+    "design/no-legacy-token": 10
+  },
+  "packages/ui/src/forms/field/field.css": {
+    "design/no-solid-line-height": 1
+  },
+  "packages/ui/src/forms/inline-input/inline-input.css": {
+    "design/no-legacy-token": 1
+  },
+  "packages/ui/src/forms/radio/radio.css": {
+    "design/no-physical-direction": 2,
+    "design/no-raw-color": 1,
+    "design/no-solid-line-height": 2
+  },
+  "packages/ui/src/forms/switch/switch.css": {
+    "design/no-legacy-token": 14,
+    "design/no-raw-color": 3
+  },
+  "packages/ui/src/navigation/menu/menu.css": {
+    "design/no-legacy-token": 9,
+    "design/no-solid-line-height": 2
+  },
+  "packages/ui/src/navigation/tabs/tabs.css": {
+    "design/no-legacy-token": 44,
+    "design/no-physical-direction": 10
+  },
+  "packages/ui/src/navigation/tabs/tabs.tsx": {
+    "design/no-legacy-token": 1
+  },
+  "packages/ui/src/overlays/tooltip/tooltip.css": {
+    "design/no-legacy-token": 3,
+    "design/no-raw-color": 1
+  },
+  "packages/ui/src/styles/base.css": {
+    "design/no-solid-line-height": 1
+  },
+  "packages/ui/src/styles/file-tree.css": {
+    "design/no-solid-line-height": 1
+  },
+  "packages/ui/src/styles/tailwind/utilities.css": {
+    "design/no-physical-direction": 1
+  },
+  "packages/ui/src/styles/utilities.css": {
+    "design/no-physical-direction": 1
+  },
+  "packages/ui/src/typography/text-shimmer/text-shimmer.css": {
+    "design/no-legacy-token": 3
+  }
+}
