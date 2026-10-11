@@ -1,3 +1,9 @@
+import { Model } from "@opencode/schema/model"
+import { SessionMessage } from "@opencode/schema/session-message"
+import { Agent } from "@opencode/schema/agent"
+import { Provider } from "@opencode/schema/provider"
+import { Project } from "@opencode/schema/project"
+import { Session } from "@opencode/schema/session"
 import { expect, test } from "bun:test"
 import { createTestRenderer } from "@opentui/core/testing"
 import { Effect, FileSystem } from "effect"
@@ -13,26 +19,29 @@ test("clicking a backfilled thought group toggles it", async () => {
   const setup = await createTestRenderer({ width: 112, height: 34, useThread: false, kittyKeyboard: true })
   setup.renderer.start()
   const session = {
-    id: "ses_backfill",
+    id: Session.ID.make("ses_backfill", { disableChecks: true }),
     title: "Backfill",
-    projectID: "proj_test",
+    projectID: Project.ID.make("proj_test", { disableChecks: true }),
     location: { directory },
     cost: 0,
     tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
     time: { created: 0, updated: 0 },
   }
-  const model = { providerID: "fixture", id: "fixture" }
+  const model = {
+    providerID: Provider.ID.make("fixture", { disableChecks: true }),
+    id: Model.ID.make("fixture", { disableChecks: true }),
+  }
   const messages: SessionMessageInfo[] = Array.from({ length: 14 }, (_, i) => [
     {
       type: "user" as const,
-      id: `user-${i}`,
+      id: SessionMessage.ID.make(`user-${i}`, { disableChecks: true }),
       text: `Turn ${String(i).padStart(2, "0")} prompt`,
       time: { created: i * 10 },
     },
     {
       type: "assistant" as const,
-      id: `a-${i}`,
-      agent: "build",
+      id: SessionMessage.ID.make(`a-${i}`, { disableChecks: true }),
+      agent: Agent.ID.make("build", { disableChecks: true }),
       model,
       finish: "stop" as const,
       time: { created: i * 10 + 1, completed: i * 10 + 3 },
@@ -61,7 +70,7 @@ test("clicking a backfilled thought group toggles it", async () => {
       server: { endpoint: { url: server.url.toString() } },
       config: { get: async () => ({ animations: false, tabs: { enabled: false } }), update: async () => ({}) },
       packages: { prepare: async () => ({ directory: "" }) },
-      args: { sessionID: session.id },
+      args: { sessionID: Session.ID.make(session.id, { disableChecks: true }) },
       terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
       log: () => {},
     }).pipe(Effect.provide(Global.layerWith({ state: state.path })), Effect.provide(FileSystem.layerNoop({}))),

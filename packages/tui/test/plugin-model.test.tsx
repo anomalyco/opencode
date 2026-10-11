@@ -1,3 +1,4 @@
+import { Model } from "@opencode/schema/model"
 import { expect, test } from "bun:test"
 import { createPluginContext, type Registry, type usePluginHost } from "../src/plugin/api"
 import { model, renderLocal } from "./fixture/local"
@@ -26,7 +27,7 @@ test("plugins read and select variants of the selected model", async () => {
 
   expect(selected.variant.set("high")).toBe(true)
   expect(selected.current()?.variant).toBe("high")
-  expect(setup.local.model.variant.current()).toBe("high")
+  expect(setup.local.model.variant.current()).toBe(Model.VariantID.make("high", { disableChecks: true }))
 
   expect(selected.variant.set(undefined)).toBe(true)
   expect(selected.current()?.variant).toBeUndefined()

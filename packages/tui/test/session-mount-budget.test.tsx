@@ -1,3 +1,9 @@
+import { Model } from "@opencode/schema/model"
+import { Agent } from "@opencode/schema/agent"
+import { Provider } from "@opencode/schema/provider"
+import { Project } from "@opencode/schema/project"
+import { Session } from "@opencode/schema/session"
+import { SessionMessage } from "@opencode/schema/session-message"
 import { expect, test } from "bun:test"
 import { createTestRenderer } from "@opentui/core/testing"
 import { ScrollBoxRenderable, type Renderable } from "@opentui/core"
@@ -12,40 +18,53 @@ test("an expanded group spends the mounting budget that older rows used", async 
   const setup = await createTestRenderer({ width: 100, height: 30, useThread: false, kittyKeyboard: true })
   setup.renderer.start()
   const session = {
-    id: "ses_budget",
+    id: Session.ID.make("ses_budget", { disableChecks: true }),
     title: "Budget",
-    projectID: "proj_test",
+    projectID: Project.ID.make("proj_test", { disableChecks: true }),
     location: { directory },
     cost: 0,
     tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
     time: { created: 0, updated: 0 },
   }
-  const model = { providerID: "fixture", id: "fixture" }
+  const model = {
+    providerID: Provider.ID.make("fixture", { disableChecks: true }),
+    id: Model.ID.make("fixture", { disableChecks: true }),
+  }
   // 30 plain turns (3 rows each), then one turn whose single step makes 100 reads.
   const messages: SessionMessageInfo[] = [
     ...Array.from({ length: 30 }, (_, index) => [
-      { type: "user" as const, id: `user-${index}`, text: `Turn ${index}`, time: { created: index * 10 } },
+      {
+        type: "user" as const,
+        id: SessionMessage.ID.make(`user-${index}`, { disableChecks: true }),
+        text: `Turn ${index}`,
+        time: { created: index * 10 },
+      },
       {
         type: "assistant" as const,
-        id: `answer-${index}`,
-        agent: "build",
+        id: SessionMessage.ID.make(`answer-${index}`, { disableChecks: true }),
+        agent: Agent.ID.make("build", { disableChecks: true }),
         model,
         finish: "stop" as const,
         time: { created: index * 10 + 1, completed: index * 10 + 2 },
         content: [{ type: "text" as const, text: `Answer ${index}` }],
       },
     ]).flat(),
-    { type: "user", id: "user-explore", text: "Explore", time: { created: 1000 } },
+    {
+      type: "user",
+      id: SessionMessage.ID.make("user-explore", { disableChecks: true }),
+      text: "Explore",
+      time: { created: 1000 },
+    },
     {
       type: "assistant",
-      id: "answer-explore",
-      agent: "build",
+      id: SessionMessage.ID.make("answer-explore", { disableChecks: true }),
+      agent: Agent.ID.make("build", { disableChecks: true }),
       model,
       finish: "stop",
       time: { created: 1001, completed: 1002 },
       content: Array.from({ length: 100 }, (_, index) => ({
         type: "tool" as const,
-        id: `read-${index}`,
+        id: Model.ID.make(`read-${index}`, { disableChecks: true }),
         name: "read",
         time: { created: 1001, completed: 1001 },
         state: {
@@ -79,7 +98,7 @@ test("an expanded group spends the mounting budget that older rows used", async 
         update: async () => ({}),
       },
       packages: { prepare: async () => ({ directory: "" }) },
-      args: { sessionID: session.id },
+      args: { sessionID: Session.ID.make(session.id, { disableChecks: true }) },
       terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
       log: () => {},
     }).pipe(Effect.provide(Global.layerWith({ state: state.path })), Effect.provide(FileSystem.layerNoop({}))),

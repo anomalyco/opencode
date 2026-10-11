@@ -1,3 +1,4 @@
+import { Session } from "@opencode/schema/session"
 import { expect, test } from "bun:test"
 import type { SessionMessageInfo } from "@opencode/client"
 import { createAppFixture } from "./fixture/app"
@@ -8,7 +9,7 @@ import { directory, json } from "./fixture/tui-client"
 // rebuild. The dialog must not read the row's narrowed props.
 
 const session = {
-  id: "ses_dialog_resync",
+  id: Session.ID.make("ses_dialog_resync", { disableChecks: true }),
   title: "Dialog resync",
   projectID: "proj_test",
   location: { directory },

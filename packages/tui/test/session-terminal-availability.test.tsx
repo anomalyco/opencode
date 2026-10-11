@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import { Session } from "@opencode/schema/session"
 import { createTestRenderer } from "@opentui/core/testing"
 import { Effect, FileSystem } from "effect"
 import { Global } from "@opencode/util/global"
@@ -15,7 +16,7 @@ test.each([
   const setup = await createTestRenderer({ width: 120, height: 36, useThread: false, kittyKeyboard: true })
   setup.renderer.start()
   const session = {
-    id: input.id,
+    id: Session.ID.make(input.id, { disableChecks: true }),
     title: "Terminal support fixture",
     projectID: "project",
     location: { directory },

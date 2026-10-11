@@ -1,3 +1,6 @@
+import { Provider } from "@opencode/schema/provider"
+import { Project } from "@opencode/schema/project"
+import { Session } from "@opencode/schema/session"
 import { expect, test } from "bun:test"
 import { createAppFixture } from "./fixture/app"
 import { json } from "./fixture/tui-client"
@@ -13,7 +16,7 @@ function sessionInfo(record: SessionInput) {
   return {
     ...record,
     location: record.location ?? { directory: location.directory },
-    projectID: "project",
+    projectID: Project.ID.make("project", { disableChecks: true }),
     cost: 0,
     tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
     time: { created: 0, updated: 0 },
@@ -26,14 +29,24 @@ async function launch(options: { failCreates?: number } = {}) {
   const prompts: string[] = []
   let failures = options.failCreates ?? 0
   const setup = await createAppFixture({
-    args: { newSessionID: "ses_chosen" },
+    args: { newSessionID: Session.ID.make("ses_chosen", { disableChecks: true }) },
     config: { animations: false, keybinds: { "session.new": "f6" } },
     fetch: async (url, request) => {
       if (url.pathname === "/api/agent")
         return json({ location, data: [{ id: "build", mode: "primary", hidden: false, permissions: [] }] })
       if (url.pathname === "/api/provider") return json({ location, data: [{ id: "demo", name: "Demo" }] })
       if (url.pathname === "/api/model")
-        return json({ location, data: [{ id: "model", providerID: "demo", name: "Demo Model", variants: [] }] })
+        return json({
+          location,
+          data: [
+            {
+              id: "model",
+              providerID: Provider.ID.make("demo", { disableChecks: true }),
+              name: "Demo Model",
+              variants: [],
+            },
+          ],
+        })
       if (url.pathname === "/api/session" && request.method === "POST") {
         const record: SessionInput = await request.json()
         attempts.push(record.id)

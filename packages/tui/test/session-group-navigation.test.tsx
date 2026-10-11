@@ -1,3 +1,9 @@
+import { Project } from "@opencode/schema/project"
+import { Session } from "@opencode/schema/session"
+import { Model } from "@opencode/schema/model"
+import { Provider } from "@opencode/schema/provider"
+import { Agent } from "@opencode/schema/agent"
+import { SessionMessage } from "@opencode/schema/session-message"
 import { expect, test } from "bun:test"
 import { createTestRenderer } from "@opentui/core/testing"
 import { ScrollBoxRenderable, type Renderable } from "@opentui/core"
@@ -20,30 +26,44 @@ test.each([
     const setup = await createTestRenderer({ width, height: 30, useThread: false, kittyKeyboard: true })
     setup.renderer.start()
     const session = {
-      id: "ses_group_navigation",
+      id: Session.ID.make("ses_group_navigation", { disableChecks: true }),
       title: "Grouped navigation",
-      projectID: "proj_test",
+      projectID: Project.ID.make("proj_test", { disableChecks: true }),
       location: { directory },
       cost: 0,
       tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
       time: { created: 0, updated: 0 },
     }
-    const other = { ...session, id: "ses_other", title: "Other session" }
+    const other = { ...session, id: Session.ID.make("ses_other", { disableChecks: true }), title: "Other session" }
     await mkdir(`${state.path}/test/tui`, { recursive: true })
     await Bun.write(
       `${state.path}/test/tui/tabs.json`,
       JSON.stringify({
-        global: { tabs: [{ sessionID: session.id }, { sessionID: other.id }], unread: {} },
+        global: {
+          tabs: [
+            { sessionID: Session.ID.make(session.id, { disableChecks: true }) },
+            { sessionID: Session.ID.make(other.id, { disableChecks: true }) },
+          ],
+          unread: {},
+        },
         cwd: {},
       }),
     )
     const messages: SessionMessageInfo[] = [
-      { type: "user", id: "msg_user", text: "User prompt", time: { created: 0 } },
+      {
+        type: "user",
+        id: SessionMessage.ID.make("msg_user", { disableChecks: true }),
+        text: "User prompt",
+        time: { created: 0 },
+      },
       {
         type: "assistant",
-        id: "msg_a",
-        agent: "build",
-        model: { providerID: "fixture", id: "fixture" },
+        id: SessionMessage.ID.make("msg_a", { disableChecks: true }),
+        agent: Agent.ID.make("build", { disableChecks: true }),
+        model: {
+          providerID: Provider.ID.make("fixture", { disableChecks: true }),
+          id: Model.ID.make("fixture", { disableChecks: true }),
+        },
         time: { created: 1, completed: 3 },
         content: [
           { type: "text", text: "First response" },
@@ -56,9 +76,12 @@ test.each([
       },
       {
         type: "assistant",
-        id: "msg_b",
-        agent: "build",
-        model: { providerID: "fixture", id: "fixture" },
+        id: SessionMessage.ID.make("msg_b", { disableChecks: true }),
+        agent: Agent.ID.make("build", { disableChecks: true }),
+        model: {
+          providerID: Provider.ID.make("fixture", { disableChecks: true }),
+          id: Model.ID.make("fixture", { disableChecks: true }),
+        },
         time: { created: 4, completed: 6 },
         finish: "stop",
         content: [
@@ -72,7 +95,14 @@ test.each([
       if (url.pathname === `/api/session/${other.id}`) return json({ data: other })
       if (url.pathname === `/api/session/${other.id}/message`)
         return json({
-          data: [{ type: "user", id: "msg_other", text: "Other session content", time: { created: 0 } }],
+          data: [
+            {
+              type: "user",
+              id: SessionMessage.ID.make("msg_other", { disableChecks: true }),
+              text: "Other session content",
+              time: { created: 0 },
+            },
+          ],
           cursor: {},
         })
       if (url.pathname === `/api/session/${other.id}/inbox` || url.pathname === `/api/session/${other.id}/permission`)
@@ -101,7 +131,7 @@ test.each([
           update: async () => ({}),
         },
         packages: { prepare: async () => ({ directory: "" }) },
-        args: { sessionID: session.id },
+        args: { sessionID: Session.ID.make(session.id, { disableChecks: true }) },
         terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
         log: () => {},
       }).pipe(Effect.provide(Global.layerWith({ state: state.path })), Effect.provide(FileSystem.layerNoop({}))),
@@ -113,7 +143,8 @@ test.each([
       await setup.waitForFrame((frame) => frame.includes("Thought:"))
       await setup.waitForVisualIdle({ quietFrames: 3 })
       const find = (node: Renderable): ScrollBoxRenderable | undefined =>
-        node instanceof ScrollBoxRenderable && node.getRenderable("msg_b")
+        node instanceof ScrollBoxRenderable &&
+        node.getRenderable(SessionMessage.ID.make("msg_b", { disableChecks: true }))
           ? node
           : node.getChildren().map(find).find(Boolean)
       const initial = find(setup.renderer.root)

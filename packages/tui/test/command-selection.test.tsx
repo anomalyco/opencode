@@ -1,3 +1,8 @@
+import { Session } from "@opencode/schema/session"
+import { Model } from "@opencode/schema/model"
+import { Provider } from "@opencode/schema/provider"
+import { Agent } from "@opencode/schema/agent"
+import { Project } from "@opencode/schema/project"
 import { expect, test } from "bun:test"
 import { InputRenderable, TextareaRenderable } from "@opentui/core"
 import { directory, json } from "./fixture/tui-client"
@@ -12,10 +17,13 @@ test("custom commands commit the captured agent, model and variant before execut
   const location = { directory, project: { id: "project", directory, canonical: directory } }
   const session = {
     id: `ses_${crypto.randomUUID()}`,
-    projectID: "project",
+    projectID: Project.ID.make("project", { disableChecks: true }),
     title: "Command selection fixture",
-    agent: "build",
-    model: { providerID: "demo", id: "first" },
+    agent: Agent.ID.make("build", { disableChecks: true }),
+    model: {
+      providerID: Provider.ID.make("demo", { disableChecks: true }),
+      id: Model.ID.make("first", { disableChecks: true }),
+    },
     location: { directory },
     cost: 0,
     tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
@@ -27,7 +35,7 @@ test("custom commands commit the captured agent, model and variant before execut
       animations: false,
       keybinds: { "agent.cycle": "f6", "variant.cycle": "f7", "model.list": "f8" },
     },
-    args: { sessionID: session.id },
+    args: { sessionID: Session.ID.make(session.id, { disableChecks: true }) },
     fetch: async (url, request) => {
       if (url.pathname === "/api/location") return json(location)
       if (url.pathname === "/api/agent")
@@ -41,7 +49,7 @@ test("custom commands commit the captured agent, model and variant before execut
           location,
           data: ["first", "second"].map((id) => ({
             id,
-            providerID: "demo",
+            providerID: Provider.ID.make("demo", { disableChecks: true }),
             name: `${id} model`,
             variants: [{ id: "low" }, { id: "high" }],
             cost: [],

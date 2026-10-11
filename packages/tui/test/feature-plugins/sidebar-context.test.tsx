@@ -1,3 +1,6 @@
+import { Session } from "@opencode/schema/session"
+import { Model } from "@opencode/schema/model"
+import { Provider } from "@opencode/schema/provider"
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
 import { RGBA } from "@opentui/core"
@@ -20,7 +23,10 @@ function context(options?: { cost?: number; tokens?: number }) {
                   {
                     id: "message",
                     type: "assistant",
-                    model: { providerID: "provider", id: "model" },
+                    model: {
+                      providerID: Provider.ID.make("provider", { disableChecks: true }),
+                      id: Model.ID.make("model", { disableChecks: true }),
+                    },
                     tokens: {
                       input: options.tokens,
                       output: 0,
@@ -40,10 +46,13 @@ function context(options?: { cost?: number; tokens?: number }) {
 }
 
 test("sidebar omits context before usage is available", async () => {
-  const app = await testRender(() => <SidebarContext context={context()} sessionID="session" />, {
-    width: 42,
-    height: 8,
-  })
+  const app = await testRender(
+    () => <SidebarContext context={context()} sessionID={Session.ID.make("session", { disableChecks: true })} />,
+    {
+      width: 42,
+      height: 8,
+    },
+  )
 
   try {
     await app.renderOnce()
@@ -55,10 +64,18 @@ test("sidebar omits context before usage is available", async () => {
 })
 
 test("sidebar shows available context usage", async () => {
-  const app = await testRender(() => <SidebarContext context={context({ tokens: 1234 })} sessionID="session" />, {
-    width: 42,
-    height: 8,
-  })
+  const app = await testRender(
+    () => (
+      <SidebarContext
+        context={context({ tokens: 1234 })}
+        sessionID={Session.ID.make("session", { disableChecks: true })}
+      />
+    ),
+    {
+      width: 42,
+      height: 8,
+    },
+  )
 
   try {
     await app.renderOnce()
