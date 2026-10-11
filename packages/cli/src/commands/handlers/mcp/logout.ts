@@ -1,5 +1,5 @@
 import { EOL } from "node:os"
-import { Effect } from "effect"
+import { Effect, Option } from "effect"
 import { OpenCode } from "@opencode/client"
 import { Commands } from "../../commands"
 import { Runtime } from "../../../framework/runtime"
@@ -12,7 +12,10 @@ const location = { directory: process.cwd() }
 export default Runtime.handler(
   Commands.commands.mcp.commands.logout,
   Effect.fn("cli.mcp.logout")(function* (input) {
-    const { endpoint } = yield* ServerConnection.resolve()
+    const { endpoint } = yield* ServerConnection.resolve({
+      server: Option.getOrUndefined(input.server),
+      standalone: input.standalone,
+    })
     const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) })
 
     const integration = yield* resolveIntegration(client, input.name, location)

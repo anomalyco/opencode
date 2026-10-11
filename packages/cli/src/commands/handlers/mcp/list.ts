@@ -1,5 +1,5 @@
 import { EOL } from "node:os"
-import { Effect } from "effect"
+import { Effect, Option } from "effect"
 import { OpenCode, type McpServer } from "@opencode/client"
 import { Commands } from "../../commands"
 import { Runtime } from "../../../framework/runtime"
@@ -8,8 +8,11 @@ import { ServerConnection } from "../../../services/server-connection"
 
 export default Runtime.handler(
   Commands.commands.mcp.commands.list,
-  Effect.fn("cli.mcp.list")(function* () {
-    const { endpoint } = yield* ServerConnection.resolve()
+  Effect.fn("cli.mcp.list")(function* (input) {
+    const { endpoint } = yield* ServerConnection.resolve({
+      server: Option.getOrUndefined(input.server),
+      standalone: input.standalone,
+    })
     const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) })
     const response = yield* Effect.promise(() => client.mcp.list({ location: { directory: process.cwd() } }))
     const servers = response.data.toSorted((a, b) => a.name.localeCompare(b.name))

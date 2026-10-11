@@ -8,7 +8,10 @@ import { inspect } from "./inventory"
 export default Runtime.handler(
   Commands.commands.plugin.commands.update,
   Effect.fn("cli.plugin.update")(function* (input) {
-    const result = yield* inspect(Option.getOrUndefined(input.target))
+    const result = yield* inspect(
+      { server: Option.getOrUndefined(input.server), standalone: input.standalone },
+      Option.getOrUndefined(input.target),
+    )
     for (const item of result.items) {
       if (!item.error) continue
       process.stderr.write(`Failed to check ${item.runtime} plugin "${item.name}": ${item.error}${EOL}`)
