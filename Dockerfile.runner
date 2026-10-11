@@ -11,8 +11,9 @@
 # - xieyucheng123/oci-ops retry-arm.yml：`command -v oci || pip install ...` 同上缺 pip
 #   （run 37997482405），其余同 rotate
 # - linkseek org runner（hw21-linkseek-org）：暂无独立失败样本，按基线 git/curl/python3 覆盖
+# - ssh 远程运维（云主机直连）：openssh-client（ssh/ssh-keygen/ssh-keyscan，Debian 单包即全）
 # 最小并集：python3 + pip(pip3 兼容 pip 裸命令) + oci-cli（bake，避免运行时 pip）+
-#           nodejs/npm + wrangler + git/curl/jq/bash（base 官方镜像多已自带，显式确保）
+#           nodejs/npm + wrangler + git/curl/jq/bash/openssh-client（base 官方镜像多已自带，显式确保）
 ARG RUNNER_VERSION=2.337.0
 FROM ghcr.io/actions/actions-runner:${RUNNER_VERSION}
 
@@ -22,7 +23,7 @@ SHELL ["/bin/bash", "-c"]
 # 官方 runner 底座为 Ubuntu（apt）。显式安装 job 真实依赖；pip 裸命令兼容（workflow 调的是 pip 不是 pip3）。
 # wrangler>=4 要求 node>=22，Ubuntu 自带 node18 不可用；走 NodeSource 装 node22（含 npm）
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      ca-certificates curl git jq bash gnupg \
+      ca-certificates curl git jq bash gnupg openssh-client \
       python3 python3-pip \
     && mkdir -p /etc/apt/keyrings \
     && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
@@ -44,7 +45,7 @@ RUN npm install -g wrangler \
 
 # 回归冒烟：job 入口命令必须全部存在（对应上面三个 workflow 的真实调用）
 RUN python3 -c "import json; print('py ok')" \
- && pip --version && oci --version && wrangler --version && git --version
+ && pip --version && oci --version && wrangler --version && git --version && ssh -V
 
 # 官方镜像默认以 `runner` 用户运行 job，切回避免 root 运行污染
 USER runner

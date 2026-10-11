@@ -78,3 +78,8 @@ jobs:
         run: |
           tailscale version
           lmnr-cli --help | head -5
+
+      - name: ssh (版本 + 本地 keygen 冒烟, 无需 key)
+        run: |
+          ssh -V
+          ssh-keygen -t ed25519 -f /tmp/ssh-smoke -N "" -q && test -f /tmp/ssh-smoke && rm -f /tmp/ssh-smoke /tmp/ssh-smoke.pub

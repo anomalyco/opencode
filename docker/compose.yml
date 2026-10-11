@@ -19,7 +19,7 @@ services:
     entrypoint:
       - /bin/sh
       - -c
-      - ' yes | hcloud configure set --cli-access-key="$HCLOUD_AK" --cli-secret-key="$HCLOUD_SK" --cli-region=cn-north-4 >/dev/null 2>&1; sed -i "s/\"agreePrivacy\": \"false\"/\"agreePrivacy\": \"true\"/" /root/.hcloud/config.json 2>/dev/null; if [ ! -d /workspace/.git ]; then git init -b main /workspace >/dev/null 2>&1; git -C /workspace config user.name opencode-prod; git -C /workspace config user.email opencode-prod@local; git -C /workspace commit --allow-empty -m init >/dev/null 2>&1; fi; exec opencode "$@" '
+      - ' yes | hcloud configure set --cli-access-key="$HCLOUD_AK" --cli-secret-key="$HCLOUD_SK" --cli-region=cn-north-4 >/dev/null 2>&1; sed -i "s/\"agreePrivacy\": \"false\"/\"agreePrivacy\": \"true\"/" /root/.hcloud/config.json 2>/dev/null; mkdir -p /root/.ssh && chmod 700 /root/.ssh; if [ -n "$SSH_PRIVATE_KEY_B64" ]; then echo "$SSH_PRIVATE_KEY_B64" | base64 -d > /root/.ssh/id_ed25519 && chmod 600 /root/.ssh/id_ed25519 && echo "ssh key installed"; fi; if [ -n "$SSH_KNOWN_HOSTS" ]; then printf "%s\n" "$SSH_KNOWN_HOSTS" > /root/.ssh/known_hosts && chmod 600 /root/.ssh/known_hosts; fi; if [ ! -d /workspace/.git ]; then git init -b main /workspace >/dev/null 2>&1; git -C /workspace config user.name opencode-prod; git -C /workspace config user.email opencode-prod@local; git -C /workspace commit --allow-empty -m init >/dev/null 2>&1; fi; exec opencode "$@" '
       - --
     command: serve --port 4097 --hostname 0.0.0.0
     restart: unless-stopped

@@ -31,3 +31,4 @@ jobs:
           oci --version
           git --version
           bash --version | head -1
+          ssh -V
