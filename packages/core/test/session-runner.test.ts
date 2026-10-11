@@ -7151,9 +7151,7 @@ describe("SessionRunnerLLM", () => {
     expect(votes[0]).toMatchObject({ sessionID, step: 1, continuations: 0 })
     expect(votes[1]).toMatchObject({ sessionID, step: 1, continuations: 1 })
     expect("stepsLimit" in votes[0]).toBe(false)
-    expect((yield* s.context).filter((message) => message.type === "synthetic")).toMatchObject([
-      { text: "Keep going" },
-    ])
+    expect((yield* s.context).filter((message) => message.type === "synthetic")).toMatchObject([{ text: "Keep going" }])
   })
 
   scenario("stops silently after two granted stopping continuations", function* (s) {
