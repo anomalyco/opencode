@@ -1,6 +1,7 @@
 export * as McpClient from "./client.js"
 
 import path from "node:path"
+import { AsyncLocalStorage } from "node:async_hooks"
 import { pathToFileURL } from "node:url"
 import {
   Client,
@@ -96,6 +97,7 @@ export type ElicitationResult = ElicitResult
 export interface ElicitationHandler {
   readonly create: (input: {
     readonly server: string
+    readonly sessionID?: Session.ID
     readonly params: ElicitationParams
     readonly signal: AbortSignal
   }) => Effect.Effect<ElicitationResult, Error>
@@ -151,6 +153,10 @@ export const connect = Effect.fnUntraced(function* (
   elicitation?: ElicitationHandler,
   clientInfo: Implementation = { name: "opencode", version: "unknown" },
 ) {
+  type ToolCall = { readonly sessionID?: Session.ID; readonly signal: AbortSignal }
+  const current = new AsyncLocalStorage<ToolCall>()
+  const calls = new Set<ToolCall>()
+  yield* Effect.addFinalizer(() => Effect.sync(() => current.disable()))
   // The SDK takes list-changed handlers at construction, but consumers register after connect. On a
   // modern connection the SDK opens the subscriptions/listen stream behind these itself.
   const changed = { tools: () => {}, prompts: () => {}, resources: () => {} }
@@ -205,9 +211,22 @@ export const connect = Effect.fnUntraced(function* (
     }
     client.setRequestHandler("roots/list", () => ({ roots: [{ uri: pathToFileURL(directory).href }] }))
     if (elicitation) {
-      client.setRequestHandler("elicitation/create", (request, ctx) =>
-        Effect.runPromise(elicitation.create({ server, params: request.params, signal: ctx.mcpReq.signal })),
-      )
+      client.setRequestHandler("elicitation/create", (request, ctx) => {
+        // HTTP response streams and modern input_required handlers retain the originating call's
+        // async context. Legacy stdio has no such context: only an unambiguous in-flight call is safe.
+        const context = current.getStore()
+        if (context && !calls.has(context)) return { action: "cancel" as const }
+        const call = context ?? (calls.size === 1 ? Array.from(calls)[0] : undefined)
+        if (!call && calls.size > 1) return { action: "cancel" as const }
+        return Effect.runPromise(
+          elicitation.create({
+            server,
+            sessionID: call?.sessionID,
+            params: request.params,
+            signal: call ? AbortSignal.any([ctx.mcpReq.signal, call.signal]) : ctx.mcpReq.signal,
+          }),
+        )
+      })
       client.setNotificationHandler("notifications/elicitation/complete", (notification) =>
         Effect.runPromise(elicitation.complete({ server, elicitationID: notification.params.elicitationId })),
       )
@@ -350,17 +369,27 @@ export const connect = Effect.fnUntraced(function* (
           client.getPrompt({ name: input.name, arguments: input.args ?? {} }, { signal, timeout: execution }),
         ),
       callTool: (input) =>
-        request("call MCP tool", (signal) =>
-          client.callTool(
-            {
-              name: input.name,
-              arguments: input.args ?? {},
-              ...(input.sessionID === undefined ? {} : { _meta: { "ai.opencode/sessionID": input.sessionID } }),
-            },
-            // Requesting progress keeps long calls alive under the SDK's timeout; execution is the hard wall.
-            { signal, timeout: execution, onprogress: () => {} },
-          ),
-        ).pipe(Effect.map(toCallToolResult)),
+        request("call MCP tool", (signal) => {
+          const controller = new AbortController()
+          const call = { sessionID: input.sessionID, signal: AbortSignal.any([signal, controller.signal]) }
+          calls.add(call)
+          return current
+            .run(call, () =>
+              client.callTool(
+                {
+                  name: input.name,
+                  arguments: input.args ?? {},
+                  ...(input.sessionID === undefined ? {} : { _meta: { "ai.opencode/sessionID": input.sessionID } }),
+                },
+                // Requesting progress keeps long calls alive under the SDK's timeout; execution is the hard wall.
+                { signal: call.signal, timeout: execution, onprogress: () => {} },
+              ),
+            )
+            .finally(() => {
+              calls.delete(call)
+              controller.abort()
+            })
+        }).pipe(Effect.map(toCallToolResult)),
       onClose: (callback) => {
         client.onclose = () => callback(lastError ? `Connection closed: ${lastError}` : "Connection closed")
       },
