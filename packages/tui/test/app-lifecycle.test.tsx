@@ -1313,9 +1313,9 @@ test("keeps the prompt display stable while a new location catalog loads", async
   }
 })
 
-test("configured app binding opens settings", async () => {
+test.each([undefined, false, true])("configured app binding opens settings with animations=%s", async (animations) => {
   await using setup = await createAppFixture({
-    config: { animations: false, keybinds: { "opencode.settings": "f6" } },
+    config: { animations, keybinds: { "opencode.settings": "f6" } },
   })
   await setup.ready
   await setup.waitForFrame((frame) => frame.includes("commands"))
@@ -1324,6 +1324,7 @@ test("configured app binding opens settings", async () => {
   const settings = await setup.waitForFrame((frame) => frame.includes("Settings"))
   expect(settings).toContain("Color mode")
   expect(settings).toContain("Animations")
+  expect(settings).toMatch(animations === false ? /Animations\s+off/ : /Animations\s+on/)
 })
 
 test("ctrl+c dismisses autocomplete and shell mode before exiting", async () => {
