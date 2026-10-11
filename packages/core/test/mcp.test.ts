@@ -2317,6 +2317,43 @@ testEffect(Layer.empty).effect("coalesces queued MCP tool notifications after in
   )
 })
 
+testEffect(Layer.empty).effect("refreshes the registry for a change that is still debounced", () =>
+  Effect.gen(function* () {
+    const demoTool = (name: string) =>
+      ({
+        server: Mcp.ServerName.make("demo"),
+        name,
+        codemode: false,
+        inputSchema: { type: "object", properties: {} },
+      }) satisfies Mcp.Tool
+    const catalog = yield* Ref.make<Array<Mcp.Tool>>([demoTool("before")])
+
+    yield* Effect.gen(function* () {
+      const registry = yield* Tool.Service
+      const mcpTool = yield* McpTool.Service
+      const bus = yield* Bus.Service
+      yield* mcpTool.flush
+      expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["demo_before", "execute"])
+
+      // A route that adds a server applies the change and announces it, but the registry only reloads
+      // once the debounce fires. The route awaits `refresh` instead, so a step right after its response
+      // already sees the tools.
+      yield* Ref.set(catalog, [demoTool("after")])
+      yield* bus.publish(McpEvent.ToolsChanged, { server: "demo" })
+      yield* mcpTool.refresh
+      expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["demo_after", "execute"])
+    }).pipe(
+      Effect.provide(
+        AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node, Bus.node]), [
+          Mcp.node.replace(Layer.mock(Mcp.Service, { tools: () => Ref.get(catalog) })),
+          Permission.node.replace(Layer.mock(Permission.Service, { assert: () => Effect.void })),
+          Image.node.replace(imagePassthrough),
+        ]),
+      ),
+    )
+  }),
+)
+
 it.effect("advertises MCP output schemas to Code Mode", () =>
   Effect.gen(function* () {
     const registry = yield* Tool.Service
