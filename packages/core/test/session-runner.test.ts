@@ -7114,4 +7114,228 @@ describe("SessionRunnerLLM", () => {
     if (!(defect instanceof Error)) return
     expect(defect.message).toBe("Tool input delta before start: call-1")
   })
+
+  // experimental.stopping: pre-terminal continuation votes. Voters run at
+  // natural turn end before Complete(); a grant admits a synthetic steer and
+  // loops the drain, capped at two continuations per turn.
+  const stoppingKey = "opencode.stopping.continuations"
+
+  scenario("leaves stopping metadata untouched without registered voters", function* (s) {
+    yield* s.llm.push(TestLLM.text("Done", "text-done"))
+    yield* s.runPrompt("Plain prompt")
+
+    expect(s.requests).toHaveLength(1)
+    expect((yield* s.session.get(sessionID)).metadata?.[stoppingKey]).toBeUndefined()
+  })
+
+  scenario("continues the turn when a stopping voter grants with text", function* (s) {
+    const votes: PluginHooks.Domains["session"]["experimental.stopping"][] = []
+    let granted = false
+    const hooks = yield* PluginHooks.Service
+    yield* hooks.register("session", "experimental.stopping", (event) =>
+      Effect.sync(() => {
+        votes.push({ ...event })
+        expect(event.decision).toEqual({ shouldContinue: false })
+        if (granted) return
+        granted = true
+        event.decision = { shouldContinue: true, text: "Keep going" }
+      }),
+    )
+    yield* s.llm.push(TestLLM.text("First", "text-first"), TestLLM.text("Second", "text-second"))
+    yield* s.runPrompt("Start")
+
+    // The second request exists only because the admitted steer was promoted
+    // through the normal path; the abstained second vote then completes.
+    expect(s.requests).toHaveLength(2)
+    expect(votes).toHaveLength(2)
+    expect(votes[0]).toMatchObject({ sessionID, step: 1, continuations: 0 })
+    expect(votes[1]).toMatchObject({ sessionID, step: 1, continuations: 1 })
+    expect("stepsLimit" in votes[0]).toBe(false)
+    expect((yield* s.context).filter((message) => message.type === "synthetic")).toMatchObject([
+      { text: "Keep going" },
+    ])
+    expect((yield* s.session.get(sessionID)).metadata?.[stoppingKey]).toBe(1)
+  })
+
+  scenario("stops silently after two granted stopping continuations", function* (s) {
+    const continuations: number[] = []
+    const hooks = yield* PluginHooks.Service
+    yield* hooks.register("session", "experimental.stopping", (event) =>
+      Effect.sync(() => {
+        continuations.push(event.continuations)
+        event.decision = { shouldContinue: true, text: `Continue ${event.continuations}` }
+      }),
+    )
+    yield* s.llm.push(
+      TestLLM.text("First", "text-first"),
+      TestLLM.text("Second", "text-second"),
+      TestLLM.text("Third", "text-third"),
+    )
+    yield* s.runPrompt("Start")
+
+    expect(s.requests).toHaveLength(3)
+    // Two grants, then cap exhaustion returns Complete() without a third vote.
+    expect(continuations).toEqual([0, 1])
+    expect((yield* s.session.get(sessionID)).metadata?.[stoppingKey]).toBe(2)
+  })
+
+  scenario("exposes the configured step limit to stopping voters", function* (s) {
+    const agents = yield* Agent.Service
+    yield* agents.transform((editor) =>
+      editor.update(Agent.ID.make("build"), (agent) => {
+        agent.steps = 2
+      }),
+    )
+    let seen: PluginHooks.Domains["session"]["experimental.stopping"] | undefined
+    const hooks = yield* PluginHooks.Service
+    yield* hooks.register("session", "experimental.stopping", (event) =>
+      Effect.sync(() => {
+        seen = { ...event }
+      }),
+    )
+    yield* s.llm.push(TestLLM.text("Done", "text-done"))
+    yield* s.runPrompt("Start")
+
+    expect(s.requests).toHaveLength(1)
+    expect(seen).toMatchObject({ sessionID, step: 1, stepsLimit: 2, continuations: 0 })
+  })
+
+  scenario("stops the turn when a stopping voter throws", function* (s) {
+    const hooks = yield* PluginHooks.Service
+    yield* hooks.register("session", "experimental.stopping", () =>
+      Effect.sync(() => {
+        throw new Error("voter blew up")
+      }),
+    )
+    yield* s.llm.push(TestLLM.text("Done", "text-done"))
+    yield* s.runPrompt("Start")
+
+    expect(s.requests).toHaveLength(1)
+    expect((yield* s.session.get(sessionID)).metadata?.[stoppingKey]).toBeUndefined()
+  })
+
+  scenario("treats an empty stopping grant as abstention", function* (s) {
+    const hooks = yield* PluginHooks.Service
+    yield* hooks.register("session", "experimental.stopping", (event) =>
+      Effect.sync(() => {
+        event.decision = { shouldContinue: true, text: "   " }
+      }),
+    )
+    yield* s.llm.push(TestLLM.text("Done", "text-done"))
+    yield* s.runPrompt("Start")
+
+    expect(s.requests).toHaveLength(1)
+    expect((yield* s.session.get(sessionID)).metadata?.[stoppingKey]).toBeUndefined()
+  })
+
+  scenario("gives the last registered stopping voter the final word", function* (s) {
+    const hooks = yield* PluginHooks.Service
+    yield* hooks.register("session", "experimental.stopping", (event) =>
+      Effect.sync(() => {
+        event.decision = { shouldContinue: true, text: "First voter says go" }
+      }),
+    )
+    yield* hooks.register("session", "experimental.stopping", (event) =>
+      Effect.sync(() => {
+        event.decision = { shouldContinue: false }
+      }),
+    )
+    yield* s.llm.push(TestLLM.text("Done", "text-done"))
+    yield* s.runPrompt("Start")
+
+    expect(s.requests).toHaveLength(1)
+    expect((yield* s.session.get(sessionID)).metadata?.[stoppingKey]).toBeUndefined()
+  })
+
+  scenario("continues when the last registered stopping voter grants", function* (s) {
+    const hooks = yield* PluginHooks.Service
+    yield* hooks.register("session", "experimental.stopping", (event) =>
+      Effect.sync(() => {
+        event.decision = { shouldContinue: false }
+      }),
+    )
+    let granted = false
+    yield* hooks.register("session", "experimental.stopping", (event) =>
+      Effect.sync(() => {
+        if (granted) return
+        granted = true
+        event.decision = { shouldContinue: true, text: "Last voter says go" }
+      }),
+    )
+    yield* s.llm.push(TestLLM.text("First", "text-first"), TestLLM.text("Second", "text-second"))
+    yield* s.runPrompt("Start")
+
+    expect(s.requests).toHaveLength(2)
+    expect((yield* s.session.get(sessionID)).metadata?.[stoppingKey]).toBe(1)
+  })
+
+  scenario("does not consult stopping voters when a move control is pending", function* (s) {
+    let votes = 0
+    const hooks = yield* PluginHooks.Service
+    yield* hooks.register("session", "experimental.stopping", () =>
+      Effect.sync(() => {
+        votes++
+      }),
+    )
+    yield* s.sessionInbox.admit({
+      id: SessionMessage.ID.create(),
+      sessionID,
+      item: {
+        type: "move",
+        payload: {
+          location: Location.Ref.make({ directory: AbsolutePath.make("/project") }),
+          projectID: Project.ID.global,
+        },
+        delivery: "steer",
+      },
+    })
+    const runner = yield* SessionRunner.Service
+    const result = yield* runner.drain({ sessionID, force: false })
+
+    expect(result._tag).toBe("Moved")
+    expect(votes).toBe(0)
+  })
+
+  scenario("resets the stopping counter on a fresh turn", function* (s) {
+    let granted = false
+    const hooks = yield* PluginHooks.Service
+    yield* hooks.register("session", "experimental.stopping", (event) =>
+      Effect.sync(() => {
+        if (granted) return
+        granted = true
+        event.decision = { shouldContinue: true, text: "One more" }
+      }),
+    )
+    yield* s.llm.push(TestLLM.text("First", "text-first"), TestLLM.text("Second", "text-second"))
+    yield* s.runPrompt("First turn")
+    expect((yield* s.session.get(sessionID)).metadata?.[stoppingKey]).toBe(1)
+
+    yield* s.llm.push(TestLLM.text("Third", "text-third"))
+    yield* s.runPrompt("Second turn")
+    expect(s.requests).toHaveLength(3)
+    // Fresh-drain entry cleared the durable counter; the abstained second-turn
+    // vote then left nothing behind.
+    expect((yield* s.session.get(sessionID)).metadata?.[stoppingKey]).toBeUndefined()
+  })
+
+  scenario("drops the stopping counter with the session", function* (s) {
+    let granted = false
+    const hooks = yield* PluginHooks.Service
+    yield* hooks.register("session", "experimental.stopping", (event) =>
+      Effect.sync(() => {
+        if (granted) return
+        granted = true
+        event.decision = { shouldContinue: true, text: "One more" }
+      }),
+    )
+    yield* s.llm.push(TestLLM.text("First", "text-first"), TestLLM.text("Second", "text-second"))
+    yield* s.runPrompt("Start")
+    expect((yield* s.session.get(sessionID)).metadata?.[stoppingKey]).toBe(1)
+
+    yield* s.session.remove(sessionID)
+    expect(yield* s.session.get(sessionID).pipe(Effect.flip)).toMatchObject({
+      _tag: "Session.NotFoundError",
+      sessionID,
+    })
+  })
 })

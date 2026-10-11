@@ -40,6 +40,16 @@ const CONTINUE_AFTER_INCOMPLETE_STREAM =
 const CONTINUE_AFTER_OUTPUT_LIMIT =
   "Your last response hit the output token limit (stop reason: length). Do not apologize, recap, or repeat yourself. Break the remaining work into smaller pieces."
 
+const STOPPING_CONTINUATIONS_KEY = "opencode.stopping.continuations"
+// A grant funds a fresh agent budget, so C=2 bounds a user turn at 3×N model
+// steps: one recovery plus one follow-through past a failure.
+const STOPPING_MAX_CONTINUATIONS = 2
+
+const stoppingContinuations = (metadata: SessionSchema.Metadata | undefined) => {
+  const value = metadata?.[STOPPING_CONTINUATIONS_KEY]
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : 0
+}
+
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -53,6 +63,7 @@ const layer = Layer.effect(
     const plugins = yield* Plugin.Service
     const hooks = yield* PluginHooks.Service
     const jobs = yield* Job.Service
+    const admission = yield* SessionInbox.Service
     const title = yield* SessionTitle.Service
     const steps = yield* SessionStep.make
     // Title generation starts once input is visible and must not delay model execution.
@@ -63,14 +74,32 @@ const layer = Layer.effect(
       let force = input.force
       let continuing = input.continuation !== undefined
       let step = input.continuation?.step ?? 1
+      // Model steps executed this turn: mirrors the drain's turn segmentation
+      // (init from continuation.step, restart on fresh-input step resets) so
+      // the stopping vote reports budget-consistent counts. The drain-local
+      // `step` cannot serve: the would-be-idle observation resets it to 1
+      // just before a mid-work vote.
+      let executedSteps = step - 1
       let entering = true
       let stepped = input.stepped ?? false
       const promotable = input.promotable ?? "input"
+      // Fresh drains start a new turn for the stopping counter. Hook
+      // continuations never start a drain (they loop in-drain), so this
+      // cannot self-reset. Not gated on `force`: resume() starts forced
+      // drains, and a stale counter must not leak into the fresh turn.
+      if (!continuing) yield* resetStoppingContinuations(sessionID)
       if (!force && !continuing && !stepped) {
         const pending = yield* SessionInbox.nextPromotable(db, sessionID, "input")
-        if (!pending) return DrainResult.Complete()
-        const control = pending.type === "compaction" || pending.type === "move"
-        if (promotable === "steer" && pending.delivery === "queue" && !control) return DrainResult.Complete()
+        const control = pending !== undefined && (pending.type === "compaction" || pending.type === "move")
+        if (!pending || (promotable === "steer" && pending.delivery === "queue" && !control)) {
+          // Pre-terminal vote before Complete(): a granted continuation falls
+          // through to activation, where the normal promote path picks up the
+          // admitted steer. Uninterruptible so trigger+admit stays atomic; the
+          // mid-work site is already inside advanceToStep's mask, and an
+          // interrupt landing mid-vote there would face the same delay.
+          const continued = yield* Effect.uninterruptible(maybeContinueStopping(sessionID, executedSteps))
+          if (!continued) return DrainResult.Complete()
+        }
       }
       yield* plugins.awaitActivation
       yield* settleStaleCompactions(sessionID)
@@ -118,6 +147,10 @@ const layer = Layer.effect(
               if (!continuing && pending?.delivery !== "steer") {
                 entering = true
                 step = 1
+                // Fresh input starts a new turn; an empty inbox is the
+                // would-be-idle observation just before a vote, which must
+                // keep the count of the turn that ran.
+                if (pending !== undefined) executedSteps = 0
               }
               if (pending?.type === "move")
                 return DrainResult.Moved({
@@ -170,6 +203,11 @@ const layer = Layer.effect(
                 continue
               }
               if (!force && !continuing && (!pending || (pending.delivery === "queue" && promotable === "steer"))) {
+                // Already inside advanceToStep's uninterruptible mask. Like the
+                // compaction precedent below, continue loops back to promotion.
+                // Runs before the idle hook: a granted vote continues
+                // immediately, so the idle boundary never fires for it.
+                if (yield* maybeContinueStopping(sessionID, executedSteps)) continue
                 // Control-only drains such as a manual compaction never ran the model, so they skip the hook.
                 if (pending || !stepped) return DrainResult.Complete()
                 // The Session would go idle; a plugin may admit input to keep this execution working.
@@ -196,7 +234,10 @@ const layer = Layer.effect(
                     yield* FiberMap.run(titles, sessionID, title.generate(sessionID), {
                       onlyIfMissing: true,
                     })
-                  if (promoted > 0) step = 1
+                  if (promoted > 0) {
+                    step = 1
+                    executedSteps = 0
+                  }
                   return { _tag: "Ready" as const, context: yield* context.load(selected) }
                 }),
               )
@@ -212,6 +253,7 @@ const layer = Layer.effect(
         continuing = yield* runStep(next.context, step)
         stepped = true
         step++
+        executedSteps++
         force = false
         entering = false
       }
@@ -376,6 +418,83 @@ const layer = Layer.effect(
       }
     })
 
+    // Fresh-drain reset only: hook continuations loop in-drain, so the
+    // `promoted > 0` step reset must never clear this (uncapped loop).
+    const resetStoppingContinuations = Effect.fn("SessionRunner.resetStoppingContinuations")(function* (
+      sessionID: SessionSchema.ID,
+    ) {
+      if (!(yield* hooks.has("session", "experimental.stopping"))) return
+      const session = yield* store.get(sessionID)
+      if (session?.metadata?.[STOPPING_CONTINUATIONS_KEY] === undefined) return
+      const metadata = Object.fromEntries(
+        Object.entries(session.metadata).filter(([key]) => key !== STOPPING_CONTINUATIONS_KEY),
+      )
+      yield* bus.publish(SessionEvent.MetadataUpdated, { sessionID, metadata })
+    })
+
+    /**
+     * Pre-terminal continuation vote at natural turn end. Returns true when a
+     * voter granted a continuation: a synthetic steer is admitted and the
+     * counter incremented, so the caller must not complete. Fail-closed
+     * throughout — abstention, silent cap exhaustion, and voter or infra
+     * failure all preserve natural exit. Interrupts still propagate.
+     */
+    const maybeContinueStopping = Effect.fn("SessionRunner.maybeContinueStopping")(function* (
+      sessionID: SessionSchema.ID,
+      // Model steps executed this turn (0 at fresh entry); mirrors the
+      // drain's turn segmentation so voters reason against the same budget
+      // the `step >= steps` check enforces.
+      step: number,
+    ) {
+      if (!(yield* hooks.has("session", "experimental.stopping"))) return false
+      return yield* Effect.gen(function* () {
+        const selected = yield* context.select(sessionID)
+        const continuations = stoppingContinuations(selected.session.metadata)
+        // Cap exhaustion is silent by design: no voter call, natural exit.
+        if (continuations >= STOPPING_MAX_CONTINUATIONS) return false
+        const stepsLimit = selected.agent.info.steps
+        const event: PluginHooks.Domains["session"]["experimental.stopping"] = {
+          sessionID,
+          step,
+          ...(stepsLimit !== undefined ? { stepsLimit } : {}),
+          continuations,
+          decision: { shouldContinue: false },
+        }
+        const triggered = yield* hooks.trigger("session", "experimental.stopping", event)
+        // An empty grant would spend a capped continuation and a model step on
+        // nothing, so a buggy voter's empty text abstains (fail-closed).
+        if (!triggered.decision.shouldContinue || triggered.decision.text.trim() === "") return false
+        // Counter before admit: a failed admit after the increment self-heals
+        // on the next fresh-drain reset, while an admitted steer without its
+        // increment would loop past the cap.
+        const metadata = selected.session.metadata ?? {}
+        yield* bus.publish(SessionEvent.MetadataUpdated, {
+          sessionID,
+          metadata: { ...metadata, [STOPPING_CONTINUATIONS_KEY]: continuations + 1 },
+        })
+        yield* admission.admit({
+          id: SessionMessage.ID.create(),
+          sessionID,
+          item: {
+            type: "synthetic",
+            payload: SessionInbox.SyntheticPayload.make({ text: triggered.decision.text }),
+            delivery: SessionInbox.Delivery.make("steer"),
+          },
+        })
+        return true
+      }).pipe(
+        // A throwing voter surfaces as a defect, never a typed failure (all
+        // session-hook failure channels are `never`), so `catchAll` alone
+        // would miss it and fail the drain into `Execution.Failed`.
+        // Interrupts still propagate (the `move.ts` fail-closed idiom).
+        Effect.catchCause((cause) =>
+          Cause.hasInterrupts(cause)
+            ? Effect.failCause(Cause.fromReasons<never>(cause.reasons.filter(Cause.isInterruptReason)))
+            : Effect.succeed(false),
+        ),
+      )
+    })
+
     const settleStaleCompactions = Effect.fn("SessionRunner.settleStaleCompactions")(function* (
       sessionID: SessionSchema.ID,
     ) {
@@ -446,6 +565,7 @@ export const node = makeLocationNode({
     SessionModelTransport.node,
     SessionStore.node,
     SessionCompaction.node,
+    SessionInbox.node,
     Plugin.node,
     PluginHooks.node,
     Job.node,
