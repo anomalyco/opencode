@@ -79,6 +79,52 @@ const itWithActivity = testEffect(
 )
 
 describe("LocationServiceMap", () => {
+  testEffect(Layer.empty).live("releases a reloaded graph after its last borrower without evicting its replacement", () =>
+    Effect.gen(function* () {
+      const builds = { started: 0 }
+      const finalized: number[] = []
+      const layer = AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, LocationServiceMap.node]), [
+        Global.node.replace(tempGlobalLayer),
+        offlineModels,
+        LocationWatcher.node.replace(
+          LocationWatcher.node.mapLayer((layer) =>
+            layer.pipe(
+              Layer.tap(() =>
+                Effect.gen(function* () {
+                  const build = ++builds.started
+                  yield* Effect.addFinalizer(() => Effect.sync(() => finalized.push(build)))
+                }),
+              ),
+            ),
+          ),
+        ),
+      ])
+      yield* Effect.gen(function* () {
+        const dir = yield* tmpdirScoped()
+        const ref = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+        const locations = yield* LocationServiceMap.Service
+        const first = yield* Scope.make()
+        const second = yield* Scope.make()
+        yield* Effect.addFinalizer(() => Scope.close(first, Exit.void))
+        yield* Effect.addFinalizer(() => Scope.close(second, Exit.void))
+        yield* locations.contextEffect(ref).pipe(Scope.provide(first))
+        yield* locations.contextEffect(ref).pipe(Scope.provide(second))
+        yield* LocationServiceMap.reload()
+        const replacement = yield* locations.contextEffect(ref)
+        expect(builds.started).toBe(2)
+        expect(finalized).toEqual([])
+        yield* Scope.close(first, Exit.void)
+        expect(finalized).toEqual([])
+        yield* Scope.close(second, Exit.void)
+        expect(finalized).toEqual([1])
+        expect(yield* locations.contextEffect(ref)).toBe(replacement)
+        expect(builds.started).toBe(2)
+      }).pipe(Effect.provide(layer))
+      expect(finalized).toEqual([1, 2])
+    }),
+    60000,
+  )
+
   for (const failure of ["file", "permissions", "config reference"] as const) {
     for (const invalidate of [false, true]) {
       // The file-path fixture boots on Windows rather than failing during
