@@ -34,7 +34,7 @@ runtime package, endpoint, and first model together.
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/v2/config.json",
   "providers": {
     "acme": {
       "name": "Acme",
@@ -73,7 +73,7 @@ models, and connection still apply.
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/v2/config.json",
   "providers": {
     "anthropic": {
       "settings": {
@@ -92,7 +92,7 @@ Use `headers` for additional HTTP headers and `body` for JSON fields that should
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/v2/config.json",
   "providers": {
     "openai": {
       "headers": {
@@ -112,7 +112,7 @@ Both fields can also be set on a model or variant when only part of a provider's
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/v2/config.json",
   "providers": {
     "openai": {
       "models": {
@@ -163,7 +163,7 @@ implement the OpenAI request format.
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/v2/config.json",
   "providers": {
     "acme": {
       "package": "@opencode/ai/providers/openai-compatible",
@@ -207,7 +207,7 @@ You can also use an npm package such as `@acme/opencode-provider` or an absolute
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/v2/config.json",
   "providers": {
     "acme": {
       "package": "@acme/opencode-provider",
@@ -224,7 +224,7 @@ ID sent to the provider.
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/v2/config.json",
   "model": "openai/coding",
   "providers": {
     "openai": {
@@ -265,7 +265,7 @@ once, then connect an API key or use the Microsoft Entra ID session from the Azu
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/v2/config.json",
   "providers": {
     "azure": {
       "settings": {
@@ -336,7 +336,7 @@ kept.
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/v2/config.json",
   "providers": {
     "azure": {
       "models": {
@@ -375,7 +375,7 @@ identity token file, or container credential URI activates the provider; a regio
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/v2/config.json",
   "providers": {
     "amazon-bedrock": {
       "settings": {
@@ -392,7 +392,7 @@ VPC endpoint, set `baseURL` while keeping the same profile and region.
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/v2/config.json",
   "providers": {
     "amazon-bedrock": {
       "settings": {
@@ -419,7 +419,7 @@ gcloud auth application-default login
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/v2/config.json",
   "providers": {
     "google-vertex": {
       "settings": {
@@ -489,7 +489,7 @@ model requests.
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/v2/config.json",
   "providers": {
     "ollama": {
       "settings": {
@@ -511,7 +511,7 @@ LM Studio and vLLM also have built-in local discovery. Their default endpoints a
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/v2/config.json",
   "providers": {
     "lmstudio": {
       "settings": { "baseURL": "http://gpu-host:1234/v1" },
@@ -534,7 +534,7 @@ OpenRouter account, then refer to models with the full OpenRouter model ID after
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/v2/config.json",
   "model": "openrouter/anthropic/claude-sonnet-4",
 }
 ```
@@ -544,7 +544,7 @@ This preserves OpenRouter request and reasoning behavior.
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/v2/config.json",
   "providers": {
     "openrouter": {
       "settings": {
@@ -563,7 +563,7 @@ The configuration key becomes the provider prefix and each `models` key becomes 
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/v2/config.json",
   "model": "company/coder",
   "providers": {
     "company": {
@@ -607,7 +607,7 @@ sessions.
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/v2/config.json",
   "providers": {
     "openai": {
       "settings": { "transport": "http" },

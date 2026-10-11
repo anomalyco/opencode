@@ -6,6 +6,7 @@ The standard Astro website for OpenCode. The only deployment-specific path is th
 - `src/docs/` is the self-contained documentation feature rendered under `/docs`.
 - `/install` proxies the current installer.
 - `/openapi.json` serves the generated OpenAPI specification.
+- `/config.json` serves the generated V2 `opencode.json` schema.
 
 The deployment currently sets `base: "/v2"`. The `v2.opencode.ai` alias is handled by a Cloudflare Redirect Rule outside this project.
 

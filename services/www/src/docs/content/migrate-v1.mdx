@@ -69,12 +69,24 @@ The recommended migration path is to ask OpenCode to update the configuration fo
 
 ```text
 Migrate my OpenCode configuration, including file-based definitions, from the V1 format to the native V2 format.
-Preserve its behavior and all unrelated settings.
+Preserve its behavior and all unrelated settings. When a config file is fully converted, update its $schema to
+https://opencode.ai/v2/config.json.
 ```
 
 OpenCode can inspect the complete file, apply the relevant changes below, and avoid rewriting settings that do not need to
 change. Conversion does not need to happen all at once: supported V1 and native V2 fields may coexist at the top level.
 When both forms set the same canonical value, a valid native V2 value takes precedence regardless of JSON key order.
+
+Keep `https://opencode.ai/config.json` in files that still use V1 syntax. The native V2 schema validates native V2 fields,
+not legacy fields retained for runtime compatibility; a partially converted file may not validate against either schema.
+Once a file is fully converted, use:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/v2/config.json",
+  "permissions": [{ "action": "shell", "resource": "git push *", "effect": "ask" }],
+}
+```
 
 Nested mixing is intentionally bounded. OpenCode recognizes mixed V1 and V2 members within `mcp`, `compaction`, and
 `experimental`, but it does not recursively infer formats inside individual agents, providers, commands, or models. Keep
