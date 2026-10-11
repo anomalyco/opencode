@@ -4,12 +4,14 @@ import { useLocation } from "@solidjs/router"
 import { createEffect, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLayout } from "@/shell/state/layout"
+import { useData } from "@/runtime/server/current"
 import type { SessionModel } from "../model"
 import { useSessionHashScroll } from "../use-session-hash-scroll"
 import { createTimelineModel } from "./model"
 
 export function createSessionTimelineInteraction(session: SessionModel) {
   const layout = useLayout()
+  const data = useData()
   const location = useLocation<{ reveal?: string }>()
   const timeline = createTimelineModel({ session })
 
@@ -189,6 +191,27 @@ export function createSessionTimelineInteraction(session: SessionModel) {
     scrollToMessage(messages[target], "auto")
   }
 
+  // Loaded history is one contiguous tail, so a turn outside it pages older history until it arrives.
+  const revealTurn = async (id: string) => {
+    const owner = session.ownership.capture()
+    const sessionID = session.identity.params.id
+    const loaded = () => visibleUserMessages().find((item) => item.id === id)
+
+    const load = async (): Promise<void> => {
+      if (loaded() || !sessionID || !owner.current() || !timeline.history.more()) return
+      await data.session.message.loadMore(sessionID)
+
+      return load()
+    }
+
+    await load()
+    const message = loaded()
+
+    if (!message || !owner.current()) return
+    unpin()
+    scrollToMessage(message, "auto")
+  }
+
   // A gesture inside a nested scrollable region scrolls that region, not the timeline.
   const markUserScroll = (target?: EventTarget | null) => {
     if (!scroller) return
@@ -361,6 +384,7 @@ export function createSessionTimelineInteraction(session: SessionModel) {
   return {
     actions: {
       navigateMessage,
+      revealTurn,
       revealMessage: (id: string, partID?: string) => revealMessage(id, partID),
       resume,
       setActiveMessage,

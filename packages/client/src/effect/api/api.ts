@@ -1358,6 +1358,7 @@ export type MessageListInput = {
   readonly limit?: number | undefined
   readonly order?: "asc" | "desc" | undefined
   readonly cursor?: string | undefined
+  readonly before?: SessionMessage.ID | undefined
   readonly type?:
     | "agent-switched"
     | "model-switched"

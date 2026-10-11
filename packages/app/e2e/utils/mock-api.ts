@@ -36,6 +36,7 @@ const Query = Schema.Struct({
   path: Schema.optional(Schema.String),
   query: Schema.optional(Schema.String),
   type: Schema.optional(Schema.String),
+  before: Schema.optional(Schema.String),
   mode: Schema.optional(Schema.String),
 })
 

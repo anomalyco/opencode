@@ -20,6 +20,10 @@ export const SessionMessagesQuery = Schema.Struct({
         "Opaque pagination cursor returned as cursor.previous or cursor.next in the previous response. Do not combine with order.",
     }),
   ),
+  before: Schema.optional(SessionMessage.ID).annotate({
+    description:
+      "Return only messages that precede this message in the timeline, newest first. Cannot be combined with cursor or ascending order; the returned cursors continue from the page.",
+  }),
   type: Schema.optional(
     Schema.Literals([
       "agent-switched",

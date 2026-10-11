@@ -34,6 +34,8 @@ export const MessageHandler = HttpApiBuilder.group(Api, "server.message", (handl
       Effect.fn(function* (ctx) {
         if (ctx.query.cursor && ctx.query.order !== undefined)
           return yield* new InvalidCursorError({ message: "Cursor cannot be combined with order" })
+        if (ctx.query.before && (ctx.query.cursor || ctx.query.order === "asc"))
+          return yield* new InvalidCursorError({ message: "Before cannot be combined with cursor or ascending order" })
         const decoded = yield* Effect.try({
           try: () => (ctx.query.cursor ? cursor.decode(ctx.query.cursor) : undefined),
           catch: () => new InvalidCursorError({ message: "Invalid cursor" }),
@@ -45,7 +47,12 @@ export const MessageHandler = HttpApiBuilder.group(Api, "server.message", (handl
             limit: ctx.query.limit ?? DefaultMessagesLimit,
             order,
             type: ctx.query.type,
-            cursor: decoded ? { id: decoded.id, direction: decoded.direction } : undefined,
+            // Descending past an anchor yields exactly the messages before it.
+            cursor: decoded
+              ? { id: decoded.id, direction: decoded.direction }
+              : ctx.query.before
+                ? { id: ctx.query.before, direction: "next" }
+                : undefined,
           })
           .pipe(
             Effect.catchTag("Session.NotFoundError", missingSession),

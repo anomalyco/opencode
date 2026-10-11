@@ -256,6 +256,7 @@ export async function setupTimeline(
     sessions,
     sessionStatus: input.sessionStatus ?? { [sessionID]: initialStatus },
     pageMessages: input.pageMessages ?? (() => ({ items: messages })),
+    messageIndex: (id) => (id === sessionID ? messages : []),
   })
 
   if (input.tabs) await seed(page, { tabs: input.tabs })

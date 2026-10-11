@@ -1,6 +1,6 @@
 import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode/client/promise"
 import { expect, test, type Page } from "@playwright/test"
-import { seed, sessionHref } from "../utils/app"
+import { pageMessagesFrom, seed, sessionHref } from "../utils/app"
 import { trackPageErrors } from "../utils/errors"
 import { fixture, installTimelineSettings, mockStressTimeline } from "../utils/session-fixture"
 import {
@@ -11,6 +11,7 @@ import {
   status,
   textPart,
   userMessage,
+  userText,
 } from "../utils/timeline"
 import { expectSessionTitle } from "../utils/waits"
 
@@ -67,6 +68,57 @@ test.describe("timeline history", () => {
     // The older page has landed above the visible rows.
     await expect.poll(() => scroller.evaluate((element) => element.scrollHeight)).toBeGreaterThan(height)
     await expect.poll(positions).toEqual(before)
+  })
+
+  test("navigates every turn from the user index and previews unloaded replies on hover", async ({ page }) => {
+    const messages = Array.from({ length: 40 }, (_, index) => {
+      const value = String(index).padStart(4, "0")
+      const id = `msg_0${value}_turn_a_user`
+
+      return [
+        userMessage([userText(`Prompt number ${index}`, { id: `prt_0${value}_turn_prompt` })], {
+          id,
+          created: 1690000000000 + index * 10_000,
+        }),
+        assistantMessage([{ id: `prt_0${value}_turn_text`, type: "text", text: `Response number ${index}` }], {
+          id: `msg_0${value}_turn_b_assistant`,
+          parentID: id,
+          created: 1690000001000 + index * 10_000,
+        }),
+      ]
+    }).flat()
+    const loads: (string | undefined)[] = []
+    await setupTimeline(page, {
+      sessionMessages: messages,
+      pageMessages: pageMessagesFrom({ [sessionID]: messages }),
+      onMessages: (request) => {
+        if (request.phase === "start") loads.push(request.before)
+      },
+    })
+
+    const navigator = page.locator('[data-component="session-turn-navigator"]')
+    const turns = navigator.locator("[data-turn]")
+    const preview = navigator.locator('[data-slot="session-turn-navigator-preview"]')
+    // The index lists every turn without paging the transcript.
+    await expect(turns).toHaveCount(40)
+    expect(loads).toEqual([undefined])
+
+    await turns.nth(39).hover()
+    await expect(preview).toContainText("Prompt number 39")
+    await expect(preview).toContainText("Response number 39")
+
+    // An unloaded turn fetches only its own latest reply, not the transcript around it.
+    await turns.nth(0).hover()
+    await expect(preview).toContainText("Prompt number 0")
+    await expect(preview).toContainText("Response number 0")
+    await expect(preview).not.toContainText("Response number 1")
+    expect(loads).toEqual([undefined])
+
+    await turns.nth(0).click()
+    await expect(page.locator("#message-msg_00000_turn_a_user")).toBeInViewport()
+    await timelineScroller(page).hover()
+    await expect(turns.nth(0)).toHaveAttribute("data-state", "active")
+    expect(loads.length).toBeGreaterThan(1)
   })
 
   test("mounts every part once and in order while paging to the start", async ({ page }) => {

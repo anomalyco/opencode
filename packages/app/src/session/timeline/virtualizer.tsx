@@ -39,6 +39,9 @@ const endEpsilon = 0.5
 
 const upwardKeys = new Set(["up", "page-up", "home"])
 
+// The reading line, below the sticky title, whose row names the current turn.
+const activeTurnLine = 100
+
 const cache = new Map<
   string,
   {
@@ -84,6 +87,7 @@ type Input = {
 
 type ViewProps = {
   header: JSX.Element
+  navigator?: JSX.Element
   bottomSpacer?: JSX.Element
   workspaceSession: Accessor<boolean>
   deferred: (row: TimelineRow.TimelineRow) => boolean
@@ -191,6 +195,7 @@ export function createTimelineVirtualizer(input: Input) {
   let reportOffset: ((offset: number, scrolling: boolean) => void) | undefined
   let reportRect: ((rect: { width: number; height: number }) => void) | undefined
   let batchingColdSizes = false
+  const [activeUserMessageID, setActiveUserMessageID] = createSignal<string>()
 
   const virtualizer = createVirtualizer<HTMLDivElement, HTMLDivElement>({
     get count() {
@@ -766,6 +771,8 @@ export function createTimelineVirtualizer(input: Input) {
     settleColdBottom()
     input.onScheduleScrollState(root)
     input.onHistoryScroll()
+    const item = virtualizer.getVirtualItemForOffset(scrollTop + activeTurnLine)
+    setActiveUserMessageID(item ? rows()[item.index]?.userMessageID : undefined)
   }
 
   function View(props: ViewProps) {
@@ -874,6 +881,7 @@ export function createTimelineVirtualizer(input: Input) {
             </svg>
           </button>
         </div>
+        {props.navigator}
         <ScrollView
           data-slot="session-timeline-scroll"
           viewportRef={bindListRoot}
@@ -941,6 +949,7 @@ export function createTimelineVirtualizer(input: Input) {
   })
 
   return {
+    activeUserMessageID,
     disclosure: {
       patchGroupKeys,
       value: (key: string) => toolOpen[key],

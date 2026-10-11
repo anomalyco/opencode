@@ -71,6 +71,8 @@ export interface MockServerConfig {
     items: SessionMessageInfo[]
     cursor?: string
   }
+  // The session's whole transcript for type-filtered message lists; without it they list nothing.
+  messageIndex?: (sessionID: string) => SessionMessageInfo[]
   vcs?: { current: string; default: string }
   // Initializes the mock project's VCS; without a handler this mutation answers 501.
   onVcsInit?: (input: { directory: string; provider?: string }) => void
@@ -1344,6 +1346,31 @@ function mockHandlers(
           }),
         messageList: (ctx) => {
           const token = ctx.query.cursor
+          const type = ctx.query.type
+
+          // A type filter pages the session's matching messages in their own order, like the server's index;
+          // `before` keeps only messages preceding that one.
+          if (type) {
+            const [order, offset] = token?.startsWith("typed:")
+              ? [token.split(":")[1], Number(token.split(":")[2])]
+              : [ctx.query.order ?? "desc", 0]
+            const transcript = config.messageIndex?.(ctx.params.sessionID) ?? []
+            const end = ctx.query.before
+              ? Math.max(
+                  0,
+                  transcript.findIndex((item) => item.id === ctx.query.before),
+                )
+              : transcript.length
+            const typed = transcript.slice(0, end).filter((item) => item.type === type)
+            const ordered = order === "asc" ? typed : typed.toReversed()
+            const limit = ctx.query.limit ?? 50
+
+            return Effect.succeed({
+              data: ordered.slice(offset, offset + limit),
+              cursor: { next: offset + limit < ordered.length ? `typed:${order}:${offset + limit}` : undefined },
+            })
+          }
+
           const before = token ? state.cursors.get(token) : undefined
 
           if (token && !before) return Effect.fail(new MockBadRequest({ message: "Invalid cursor" }))

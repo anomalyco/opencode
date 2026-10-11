@@ -831,7 +831,13 @@ const EndpointMessageList = (raw: RawClient["server.message"]) => (input: Messag
   preserveEffect<MessageListOutput>()(
     raw["session.messages"]({
       params: { sessionID: input["sessionID"] },
-      query: { limit: input["limit"], order: input["order"], cursor: input["cursor"], type: input["type"] },
+      query: {
+        limit: input["limit"],
+        order: input["order"],
+        cursor: input["cursor"],
+        before: input["before"],
+        type: input["type"],
+      },
     }).pipe(Effect.mapError(mapClientError)),
   )
 
