@@ -1,5 +1,5 @@
 import { Database, type SQLQueryBindings } from "bun:sqlite"
-import { Context, Effect, Layer } from "effect"
+import { Context, Effect, Layer, Schedule } from "effect"
 import { Reactivity } from "effect/reactivity"
 import { SqlClient } from "effect/sql"
 import { classifySqliteError, SqlError } from "effect/sql/SqlError"
@@ -90,9 +90,26 @@ const nativeLayer = (config: Config) =>
         create: config.create ?? true,
       })
       yield* Effect.addFinalizer(() => Effect.sync(() => native.close()))
-      if (config.disableWAL !== true) native.run("PRAGMA journal_mode = WAL;")
+      if (config.disableWAL !== true) yield* switchToWAL(native)
       return native
     }),
+  )
+
+// Switching a fresh file to WAL takes an exclusive lock, and SQLite does not run the busy handler
+// for a journal-mode change, so a second process opening the same new database at the same moment
+// gets an immediate SQLITE_BUSY rather than waiting. Retry until the other connection finishes its
+// switch; once the file is WAL the pragma reports that mode without taking the lock.
+const switchToWAL = (native: Database) =>
+  Effect.try({
+    try: () => native.run("PRAGMA journal_mode = WAL;"),
+    catch: (cause) => cause,
+  }).pipe(
+    Effect.retry({
+      while: (cause) => cause instanceof Error && Sqlite.isBusy(cause),
+      times: 50,
+      schedule: Schedule.spaced("10 millis"),
+    }),
+    Effect.orDie,
   )
 
 const clientLayer = (config: Config) => Layer.effect(SqlClient.SqlClient, make(config))

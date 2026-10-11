@@ -8,6 +8,11 @@ import type { SqlError } from "effect/sql/SqlError"
 
 export class Native extends Context.Service<Native, unknown>()("@opencode/core/database/SqliteNative") {}
 
+// SQLITE_BUSY (5) means another connection holds the lock this operation needs. bun reports the
+// result code as `errno`, node:sqlite as `errcode`.
+export const isBusy = (cause: Error) =>
+  ("errno" in cause && cause.errno === 5) || ("errcode" in cause && cause.errcode === 5)
+
 export interface ClientConfig {
   readonly spanAttributes?: Record<string, unknown>
   readonly transformResultNames?: (str: string) => string
