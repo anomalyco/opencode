@@ -654,16 +654,22 @@ function VerticalSessionTabs(props: {
     if (index === -1 || index === Math.min(pending.index, tabs.tabs().length - 1)) setPreview(undefined)
   })
 
+  // Reveal the active tab when it, the rail shape, or the terminal changes, not on every list change:
+  // closing or reordering other tabs must not yank a manually scrolled rail back to the active tab.
+  let revealed: string | undefined
   createEffect(() => {
     if (!scroll) return
-    dimensions()
+    const size = dimensions()
     const index = newTab() ? items().length : items().findIndex((tab) => tab.sessionID === activeID())
     if (index === -1) return
+    const target = `${newTab() ? "" : activeID()}:${compact()}:${size.width}x${size.height}`
+    if (target === revealed) return
     const top = index * stride()
     const height = compact() ? 3 : newTab() ? 1 : 2
     // Scroll after layout: newly opened tabs do not contribute to the scroll range yet.
     const reveal = () => {
       if (!scroll) return
+      revealed = target
       if (top < scroll.scrollTop) return scroll.scrollTo(top)
       if (top + height > scroll.scrollTop + scroll.viewport.height) {
         scroll.scrollTo(top + height - scroll.viewport.height)

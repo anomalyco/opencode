@@ -123,3 +123,61 @@ test("compact rail renders and controls session tabs", async () => {
     app.renderer.destroy()
   }
 })
+
+test("closing an off-screen tab keeps the rail scroll position", async () => {
+  const [items, setItems] = createSignal<SessionTab[]>(
+    Array.from({ length: 40 }, (_, index) => ({ sessionID: `tab-${index + 1}`, title: `Session ${index + 1}` })),
+  )
+  const controller = {
+    tabs: items,
+    current: () => "tab-40",
+    select() {},
+    close() {},
+    move() {},
+    status: () => EMPTY_SESSION_TAB_STATUS,
+  } satisfies SessionTabsController
+  const app = await testRender(
+    () => (
+      <TestTuiContexts>
+        <ConfigProvider config={createTuiResolvedConfig({ tabs: { indicators: "numbers" } })}>
+          <Keymap.Provider>
+            <ThemeProvider mode="dark" source={emptyThemeSource}>
+              <box width="100%" height="100%" flexDirection="row">
+                <SessionTabs
+                  controller={controller}
+                  orientation="vertical"
+                  animations={false}
+                  indicators="numbers"
+                  width={SESSION_TABS_COMPACT_WIDTH}
+                />
+                <text>transcript</text>
+              </box>
+            </ThemeProvider>
+          </Keymap.Provider>
+        </ConfigProvider>
+      </TestTuiContexts>
+    ),
+    { width: 80, height: 24 },
+  )
+  const labels = () =>
+    app
+      .captureCharFrame()
+      .split("\n")
+      .map((line) => line.slice(0, 5).trim())
+      .filter((label) => /^\d+$/.test(label))
+
+  try {
+    app.renderer.start()
+    await app.waitForFrame(() => labels().includes("40"))
+    for (let i = 0; i < 100; i++) await app.mockMouse.scroll(2, 10, "up")
+    await app.mockMouse.moveTo(40, 0)
+    await app.waitForFrame(() => labels()[0] === "1")
+
+    setItems((items) => items.filter((tab) => tab.sessionID !== "tab-3"))
+    for (let i = 0; i < 5; i++) await app.renderOnce()
+    expect(labels()[0]).toBe("1")
+    expect(labels()).not.toContain("39")
+  } finally {
+    app.renderer.destroy()
+  }
+})
