@@ -727,7 +727,7 @@ Inspect or resolve pending permission requests.
 ```ts
 const pending = await ctx.permission.list({ sessionID })
 const request = await ctx.permission.get({ sessionID, requestID })
-await ctx.permission.reply({ sessionID, requestID, reply: "once" })
+await ctx.permission.reply({ sessionID, requestID, decision: "once" })
 ```
 
 Replace the session-scoped permission rules. They are evaluated after the agent's rules, and the
@@ -766,7 +766,7 @@ const command = await ctx.session.command({ sessionID, command: "review", argume
 const synthetic = await ctx.session.synthetic({ sessionID, text: "Deployment completed" })
 ```
 
-Rename, interrupt, or wait for a session.
+Update, interrupt, or wait for a session.
 
 ```ts
 await ctx.session.update({ sessionID, title: "Review" })
@@ -785,6 +785,14 @@ the next step boundary by default. Pass `delivery: "queue"` to preserve queue or
 
 ```ts
 const compaction = await ctx.session.compact({ sessionID })
+```
+
+Answer `question` tool forms from an external system. A form appears when the agent asks a
+question; replying settles it and unblocks the turn.
+
+```ts
+const pending = await ctx.session.form.list({ sessionID })
+await ctx.session.form.reply({ sessionID, formID: pending[0].id, answer: { choice: "yes" } })
 ```
 
 #### Reference
@@ -808,7 +816,15 @@ interface SessionContext {
   compact(input: SessionCompactInput, requestOptions?: RequestOptions): Promise<SessionInboxCompaction>
   synthetic(input: SessionSyntheticInput, requestOptions?: RequestOptions): Promise<SessionInboxSynthetic>
   interrupt(input: SessionInterruptInput, requestOptions?: RequestOptions): Promise<void>
+  update(input: SessionUpdateInput, requestOptions?: RequestOptions): Promise<void>
   wait(input: SessionWaitInput, requestOptions?: RequestOptions): Promise<void>
+  form: {
+    list(input: SessionFormListInput, requestOptions?: RequestOptions): Promise<readonly FormInfo[]>
+    create(input: SessionFormCreateInput, requestOptions?: RequestOptions): Promise<FormInfo>
+    get(input: SessionFormGetInput, requestOptions?: RequestOptions): Promise<FormDetail>
+    reply(input: SessionFormReplyInput, requestOptions?: RequestOptions): Promise<void>
+    cancel(input: SessionFormCancelInput, requestOptions?: RequestOptions): Promise<void>
+  }
 }
 ```
 
