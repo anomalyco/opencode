@@ -759,8 +759,6 @@ export const dict = {
     "Bütün fəaliyyəti ayrı-ayrılıqda göstər. Shell çıxışını, redaktələri və düşünməni genişləndir.",
   "settings.timeline.description.detailed":
     "Shell çıxışını və redaktələri genişləndir. Alt-agentləri ayrıca göstər, digər fəaliyyəti «İstifadə edildi» bölməsində qruplaşdır.",
-  "settings.timeline.description.compact":
-    "Bütün fəaliyyəti təfərrüatlar yığılmış halda «İstifadə edildi» bölməsində qruplaşdır.",
   "settings.timeline.description.quiet":
     "Redaktələri və alt-agentləri «İstifadə edildi» bölməsində qruplaşdır. Digər fəaliyyəti gizlət.",
   "settings.timeline.description.text-only": "Bütün fəaliyyəti gizlət. Yalnız mesajları göstər.",

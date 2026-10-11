@@ -762,7 +762,6 @@ export const dict = {
     "Hiển thị tất cả hoạt động riêng biệt. Mở rộng đầu ra, chỉnh sửa và suy nghĩ của shell.",
   "settings.timeline.description.detailed":
     "Mở rộng đầu ra và chỉnh sửa shell. Hiển thị các tác nhân phụ một cách riêng biệt và nhóm hoạt động khác vào Đã sử dụng.",
-  "settings.timeline.description.compact": "Nhóm tất cả hoạt động vào Đã sử dụng với thông tin chi tiết được thu gọn.",
   "settings.timeline.description.quiet": "Chỉnh sửa nhóm và đại lý phụ trong Đã sử dụng. Ẩn hoạt động khác.",
   "settings.timeline.description.text-only": "Ẩn tất cả hoạt động. Chỉ hiển thị tin nhắn.",
   "settings.timeline.description.custom":

@@ -163,7 +163,6 @@ export const dict = {
   "settings.timeline.description.everything": "Vis al aktivitet separat. Udvid shell-output, redigeringer og tænkning.",
   "settings.timeline.description.detailed":
     "Udvid shell-output og redigeringer. Vis underagenter separat, og gruppér anden aktivitet under Brugt.",
-  "settings.timeline.description.compact": "Gruppér al aktivitet under Brugt med detaljer skjult.",
   "settings.timeline.description.quiet": "Gruppér redigeringer og underagenter under Brugt. Skjul anden aktivitet.",
   "settings.timeline.description.text-only": "Skjul al aktivitet. Vis kun beskeder.",
   "settings.timeline.description.custom":

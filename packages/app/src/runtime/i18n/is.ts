@@ -754,7 +754,6 @@ export const dict = {
     "Sýna alla starfsemi sérstaklega. Stækkaðu skel framleiðsla, breytingar og hugsun.",
   "settings.timeline.description.detailed":
     "Stækkaðu skel framleiðsla og breytingar. Sýndu undirefni sérstaklega og flokkaðu aðra virkni í Notað.",
-  "settings.timeline.description.compact": "Flokkaðu alla virkni í Notað með smáatriði hrundið saman.",
   "settings.timeline.description.quiet": "Flokkaðu breytingar og undirefni í Notað. Fela aðra starfsemi.",
   "settings.timeline.description.text-only": "Fela alla starfsemi. Sýna aðeins skilaboð.",
   "settings.timeline.description.custom": "Notaðu valda staðsetningu þína og upplýsingar fyrir hvern athafnaflokk.",

@@ -758,7 +758,6 @@ export const dict = {
     "Afișați separat toate activitățile. Extindeți rezultatul shell-ului, editările și gândirea.",
   "settings.timeline.description.detailed":
     "Extindeți output-ul și editările shell. Afișați subagenții separat și grupați alte activități în Utilizat.",
-  "settings.timeline.description.compact": "Grupați toată activitatea în Folosit cu detaliile restrânse.",
   "settings.timeline.description.quiet": "Grupați editările și subagenții în Utilizat. Ascundeți alte activități.",
   "settings.timeline.description.text-only": "Ascundeți toată activitatea. Afișați numai mesajele.",
   "settings.timeline.description.custom":

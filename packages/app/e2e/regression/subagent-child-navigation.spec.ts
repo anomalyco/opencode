@@ -59,7 +59,6 @@ test("keeps the parent title anchored when opening a subagent", async ({ page })
 
     const start = await titleInlineStart(page.locator("[data-session-title]").getByRole("heading", { name: parentTitle }))
 
-    await page.getByRole("button", { name: "Used 1 Agent", exact: true }).click()
     await page.locator(`a[href="${sessionHref(childID)}"]`).click()
     await expectSessionTitle(page, taskDescription)
 
@@ -78,7 +77,7 @@ test("keeps the parent title anchored when opening a subagent", async ({ page })
 test("navigates from a running subagent card and hides background controls in the child", async ({ page }) => {
   const runningChildID = "ses_running_child"
   await setupTimeline(page, {
-    settings: { timelineDetail: { ...timelinePresets[2].value, subagents: { placement: "separate" } } },
+    settings: { timelineDetail: timelinePresets[2].value },
     sessionMessages: [
       { id: "msg_user", type: "user", text: "Run it", time: { created: 1 } },
       {
@@ -181,7 +180,6 @@ test("shows parent lineage while the child timeline loads", async ({ page }) => 
 
   await page.goto(sessionHref(parentID))
   await expectSessionTitle(page, parentTitle)
-  await page.getByRole("button", { name: "Used 1 Agent", exact: true }).click()
   await page.locator(`a[href="${sessionHref(childID)}"]`).click()
   await Promise.all([requested.promise, expect(page).toHaveURL(sessionHref(childID))])
   await Promise.all([
@@ -206,7 +204,6 @@ test("keeps the parent visible while the child session resolves", async ({ page 
   await page.goto(sessionHref(parentID))
   await expectSessionTitle(page, parentTitle)
 
-  await page.getByRole("button", { name: "Used 1 Agent", exact: true }).click()
   await page.locator(`a[href="${sessionHref(childID)}"]`).click()
   await requested.promise
   await Promise.all([expect(page).toHaveURL(sessionHref(parentID)), expectSessionTitle(page, parentTitle)]).finally(
@@ -370,7 +367,6 @@ function titleInlineStart(title: Locator) {
 async function openChildFromParent(page: Page) {
   await page.goto(sessionHref(parentID))
   await expectSessionTitle(page, parentTitle)
-  await page.getByRole("button", { name: "Used 1 Agent", exact: true }).click()
 
   const card = page.locator(`a[href="${sessionHref(childID)}"]`)
   await expect(card).toBeVisible()

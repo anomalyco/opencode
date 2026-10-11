@@ -769,7 +769,6 @@ export const dict = {
     "Rodyti visą veiklą atskirai. Išplėskite apvalkalo išvestį, redagavimus ir mąstymą.",
   "settings.timeline.description.detailed":
     "Išplėskite apvalkalo išvestį ir redagavimus. Rodyti antrinius agentus atskirai ir sugrupuoti kitą veiklą skiltyje Naudota.",
-  "settings.timeline.description.compact": "Grupuokite visą veiklą skiltyje Naudojama su sutraukta informacija.",
   "settings.timeline.description.quiet": "Grupiniai redagavimai ir subagentai Naudoti. Slėpti kitą veiklą.",
   "settings.timeline.description.text-only": "Slėpti visą veiklą. Rodyti tik pranešimus.",
   "settings.timeline.description.custom":

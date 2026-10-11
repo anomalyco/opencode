@@ -757,8 +757,6 @@ export const dict = {
     "Barcha faoliyatni alohida ko‘rsatish. Shell chiqishi, tahrirlar va mulohazani kengaytirish.",
   "settings.timeline.description.detailed":
     "Shell chiqishi va tahrirlarni kengaytirish. Subagentlarni alohida ko‘rsatish va boshqa faoliyatni «Ishlatildi» bo‘limida guruhlash.",
-  "settings.timeline.description.compact":
-    "Barcha faoliyatni tafsilotlari yig‘ilgan holda «Ishlatildi» bo‘limida guruhlash.",
   "settings.timeline.description.quiet":
     "Tahrirlar va subagentlarni «Ishlatildi» bo‘limida guruhlash. Boshqa faoliyatni yashirish.",
   "settings.timeline.description.text-only": "Barcha faoliyatni yashirish. Faqat xabarlarni ko‘rsatish.",

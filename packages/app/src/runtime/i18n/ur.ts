@@ -764,7 +764,6 @@ export const dict = {
   "settings.timeline.description.everything": "تمام سرگرمیاں الگ الگ دکھائیں۔ شیل آؤٹ پٹ، ترامیم اور سوچ کو پھیلائیں۔",
   "settings.timeline.description.detailed":
     "شیل آؤٹ پٹ اور ترامیم پھیلائیں۔ ذیلی ایجنٹس الگ دکھائیں اور دوسری سرگرمی کو ’استعمال شدہ‘ میں گروپ کریں۔",
-  "settings.timeline.description.compact": "تمام سرگرمی کو ’استعمال شدہ‘ میں گروپ کریں اور تفصیلات سمیٹی رکھیں۔",
   "settings.timeline.description.quiet": "ترامیم اور ذیلی ایجنٹس کو ’استعمال شدہ‘ میں گروپ کریں۔ دوسری سرگرمی چھپائیں۔",
   "settings.timeline.description.text-only": "تمام سرگرمی چھپائیں۔ صرف پیغامات دکھائیں۔",
   "settings.timeline.description.custom": "ہر سرگرمی کے زمرے کے لیے اپنی منتخب کردہ جگہ اور تفصیلات استعمال کریں۔",

@@ -764,7 +764,6 @@ export const dict = {
   "settings.timeline.description.everything": "הצג כל פעילות בנפרד. הרחב פלט מעטפת, עריכות וחשיבה.",
   "settings.timeline.description.detailed":
     "הרחב פלט מעטפת ועריכות. הצג סוכני משנה בנפרד וקבץ פעילות אחרת תחת „כלים שנעשה בהם שימוש”.",
-  "settings.timeline.description.compact": "קבץ את כל הפעילות תחת „כלים שנעשה בהם שימוש” כשהפרטים מכווצים.",
   "settings.timeline.description.quiet": "קבץ עריכות וסוכני משנה תחת „כלים שנעשה בהם שימוש”. הסתר פעילות אחרת.",
   "settings.timeline.description.text-only": "הסתר את כל הפעילות. הצג הודעות בלבד.",
   "settings.timeline.description.custom": "השתמש במיקום ובפירוט שבחרת לכל קטגוריית פעילות.",

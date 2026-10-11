@@ -822,7 +822,6 @@ export const dict = {
     "Prikaži sve aktivnosti zasebno. Proširite izlaz školjke, uređivanja i razmišljanja.",
   "settings.timeline.description.detailed":
     "Proširivanje izlaza ljuske i uređivanja. Prikaži podagente odvojeno i grupiši ostale aktivnosti u Korišteno.",
-  "settings.timeline.description.compact": "Grupacija svih aktivnosti u Korišteno s detaljima je srušena.",
   "settings.timeline.description.quiet": "Grupni uređivači i subagenti u Korišteno. Sakrij drugu aktivnost.",
   "settings.timeline.description.text-only": "Sakrij sve aktivnosti. Prikaži samo poruke.",
   "settings.timeline.description.custom": "Koristite odabrani položaj i detalje za svaku kategoriju aktivnosti.",

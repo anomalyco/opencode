@@ -751,8 +751,6 @@ export const dict = {
   "settings.timeline.description.everything": "បង្ហាញសកម្មភាពទាំងអស់ដោយឡែកពីគ្នា។ ពង្រីកលទ្ធផលសែល កែសម្រួល និងការគិត។",
   "settings.timeline.description.detailed":
     "ពង្រីកលទ្ធផលសែល និងកែសម្រួល។ បង្ហាញភ្នាក់ងាររងដោយឡែកពីគ្នា និងដាក់ជាក្រុមសកម្មភាពផ្សេងទៀតនៅក្នុងការប្រើប្រាស់។",
-  "settings.timeline.description.compact":
-    "ដាក់​ក្រុម​សកម្មភាព​ទាំងអស់​ក្នុង​បាន​ប្រើ​ជាមួយ​ព័ត៌មាន​លម្អិត​បាន​បង្រួម។",
   "settings.timeline.description.quiet": "ការកែសម្រួលក្រុម និងភ្នាក់ងាររងក្នុងការប្រើប្រាស់។ លាក់សកម្មភាពផ្សេងទៀត។",
   "settings.timeline.description.text-only": "លាក់សកម្មភាពទាំងអស់។ បង្ហាញតែសារប៉ុណ្ណោះ។",
   "settings.timeline.description.custom":

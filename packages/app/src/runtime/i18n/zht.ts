@@ -803,7 +803,6 @@ export const dict = {
   "settings.timeline.preset.text-only": "僅文字",
   "settings.timeline.description.everything": "單獨顯示所有活動。 展開shell輸出、編輯和思考。",
   "settings.timeline.description.detailed": "展開shell輸出和編輯。 分別顯示子代理，並在已使用中將其他活動分組。",
-  "settings.timeline.description.compact": "將「已使用」中的所有活動分組，並收起詳細資訊。",
   "settings.timeline.description.quiet": "在「已使用」中對編輯內容和子代理進行分組。隱藏其他活動。",
   "settings.timeline.description.text-only": "隱藏所有活動。僅顯示訊息。",
   "settings.timeline.description.custom": "使用您為每個活動類別選擇的位置和詳細資料。",

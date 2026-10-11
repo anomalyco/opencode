@@ -747,7 +747,6 @@ export const dict = {
     "Kuva kõik tegevused eraldi. Laiendage kesta väljundit, redigeerimisi ja mõtlemist.",
   "settings.timeline.description.detailed":
     "Laienda kesta väljundit ja redigeerimisi. Kuva alamagendid eraldi ja muud tegevused grupeerige jaotises Kasutatud.",
-  "settings.timeline.description.compact": "Grupeeri kõik tegevused jaotises Kasutatud koos ahendatud üksikasjadega.",
   "settings.timeline.description.quiet": "Grupitöötlused ja alamagendid jaotises Kasutatud. Peida muu tegevus.",
   "settings.timeline.description.text-only": "Peida kogu tegevus. Kuva ainult sõnumid.",
   "settings.timeline.description.custom": "Kasutage iga tegevuskategooria jaoks valitud paigutust ja üksikasju.",

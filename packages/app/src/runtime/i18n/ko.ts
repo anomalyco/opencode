@@ -765,7 +765,6 @@ export const dict = {
   "settings.timeline.description.everything": "모든 활동을 별도로 표시합니다. 쉘 출력, 편집 및 사고를 확장하십시오.",
   "settings.timeline.description.detailed":
     "셸 출력 및 편집을 확장합니다. 하위 에이전트를 별도로 표시하고 다른 활동을 사용됨으로 그룹화합니다.",
-  "settings.timeline.description.compact": "세부정보가 접힌 상태에서 사용됨의 모든 활동을 그룹화합니다.",
   "settings.timeline.description.quiet": "사용됨의 그룹 편집 및 하위 에이전트. 다른 활동을 숨깁니다.",
   "settings.timeline.description.text-only": "모든 활동을 숨깁니다. 메시지만 표시합니다.",
   "settings.timeline.description.custom": "각 활동 카테고리에 대해 선택한 배치와 세부정보를 사용하세요.",

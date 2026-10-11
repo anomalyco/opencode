@@ -814,7 +814,6 @@ export const dict = {
   "settings.timeline.description.everything": "แสดงกิจกรรมทั้งหมดแยกกัน ขยายเอาต์พุตเชลล์ การแก้ไข และการคิด",
   "settings.timeline.description.detailed":
     "ขยายเอาต์พุตเชลล์และการแก้ไข แสดงตัวแทนย่อยแยกกันและจัดกลุ่มกิจกรรมอื่นๆ ในกลุ่มที่ใช้แล้ว",
-  "settings.timeline.description.compact": "จัดกลุ่มกิจกรรมทั้งหมดใน ใช้แล้ว โดยมีรายละเอียดยุบอยู่",
   "settings.timeline.description.quiet": "การแก้ไขกลุ่มและตัวแทนย่อยใน Used ซ่อนกิจกรรมอื่น ๆ",
   "settings.timeline.description.text-only": "ซ่อนกิจกรรมทั้งหมด แสดงเฉพาะข้อความ",
   "settings.timeline.description.custom": "ใช้ตำแหน่งและรายละเอียดที่คุณเลือกสำหรับแต่ละหมวดหมู่กิจกรรม",

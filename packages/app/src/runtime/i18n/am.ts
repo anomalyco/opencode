@@ -738,7 +738,6 @@ export const dict = {
   "settings.timeline.description.everything": "ሁሉንም እንቅስቃሴ ለየብቻ አሳይ። የshell ውጤትን፣ አርትዖቶችን እና ማመዛዘንን ዘርጋ።",
   "settings.timeline.description.detailed":
     "የshell ውጤትን እና አርትዖቶችን ዘርጋ። ንዑስ ወኪሎችን ለየብቻ አሳይ እና ሌላ እንቅስቃሴን በ«ጥቅም ላይ የዋለ» ውስጥ ሰብስብ።",
-  "settings.timeline.description.compact": "ሁሉንም እንቅስቃሴ ዝርዝሮቹ ተደብቀው በ«ጥቅም ላይ የዋለ» ውስጥ ሰብስብ።",
   "settings.timeline.description.quiet": "አርትዖቶችን እና ንዑስ ወኪሎችን በ«ጥቅም ላይ የዋለ» ውስጥ ሰብስብ። ሌላ እንቅስቃሴን ደብቅ።",
   "settings.timeline.description.text-only": "ሁሉንም እንቅስቃሴ ደብቅ። መልዕክቶችን ብቻ አሳይ።",
   "settings.timeline.description.custom": "ለእያንዳንዱ የእንቅስቃሴ ምድብ የመረጡትን አቀማመጥ እና ዝርዝር ይጠቀሙ።",

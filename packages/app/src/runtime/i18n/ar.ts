@@ -803,7 +803,6 @@ export const dict = {
     "إظهار كل نشاط على حدة. توسيع مخرجات \u2068shell\u2069 والتعديلات والتفكير.",
   "settings.timeline.description.detailed":
     "توسيع مخرجات \u2068shell\u2069 والتعديلات. إظهار الوكلاء الفرعيين على حدة وتجميع بقية النشاط ضمن «الأدوات المستخدمة».",
-  "settings.timeline.description.compact": "تجميع كل النشاط ضمن «الأدوات المستخدمة» مع طي التفاصيل.",
   "settings.timeline.description.quiet":
     "تجميع التعديلات والوكلاء الفرعيين ضمن «الأدوات المستخدمة». إخفاء بقية النشاط.",
   "settings.timeline.description.text-only": "إخفاء كل النشاط. إظهار الرسائل فقط.",

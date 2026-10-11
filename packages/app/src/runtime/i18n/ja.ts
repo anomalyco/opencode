@@ -768,8 +768,6 @@ export const dict = {
     "すべてのアクティビティを個別に表示します。 シェルの出力、編集、思考を展開します。",
   "settings.timeline.description.detailed":
     "シェルの出力と編集を展開します。 サブエージェントを個別に表示し、他のアクティビティを[使用済み]にグループ化します。",
-  "settings.timeline.description.compact":
-    "すべてのアクティビティをグループ化します。詳細は折りたたまれた状態で使用されます。",
   "settings.timeline.description.quiet":
     "使用中の編集とサブエージェントをグループ化します。他のアクティビティを非表示にします。",
   "settings.timeline.description.text-only": "すべてのアクティビティを非表示にします。メッセージのみを表示します。",

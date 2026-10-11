@@ -757,7 +757,6 @@ export const dict = {
     "सभी गतिविधियाँ अलग-अलग दिखाएँ। शेल आउटपुट, संपादन और विचार विस्तृत करें।",
   "settings.timeline.description.detailed":
     "शेल आउटपुट और संपादन विस्तृत करें। सबएजेंट अलग दिखाएँ और अन्य गतिविधियाँ ‘उपयोग किया’ में समूहित करें।",
-  "settings.timeline.description.compact": "सभी गतिविधियाँ ‘उपयोग किया’ में समूहित करें और विवरण संकुचित रखें।",
   "settings.timeline.description.quiet": "संपादन और सबएजेंट ‘उपयोग किया’ में समूहित करें। अन्य गतिविधियाँ छिपाएँ।",
   "settings.timeline.description.text-only": "सभी गतिविधियाँ छिपाएँ। केवल संदेश दिखाएँ।",
   "settings.timeline.description.custom": "हर गतिविधि श्रेणी के लिए चुने गए स्थान और विवरण का उपयोग करें।",

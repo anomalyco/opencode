@@ -847,7 +847,6 @@ export const dict = {
     "Показати всю активність окремо. Розширте вихід оболонки, редагування та мислення.",
   "settings.timeline.description.detailed":
     "Розгорнути виведення та редагування оболонки. Показати субагенти окремо та згрупувати іншу діяльність у Використано.",
-  "settings.timeline.description.compact": "Згрупуйте всі дії в Використано зі згорнутими деталями.",
   "settings.timeline.description.quiet": "Згрупуйте редагування та субагенти в Використано. Приховати інші дії.",
   "settings.timeline.description.text-only": "Приховати всю активність. Показувати лише повідомлення.",
   "settings.timeline.description.custom":

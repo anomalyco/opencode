@@ -777,7 +777,6 @@ export const dict = {
     "Prikaži vse dejavnosti ločeno. Razširite izpis lupine, urejanje in razmišljanje.",
   "settings.timeline.description.detailed":
     "Razširi izpis lupine in urejanje. Ločeno prikaži podagente in združi druge dejavnosti v Uporabljeno.",
-  "settings.timeline.description.compact": "Združi vse dejavnosti v Uporabljeno s strnjenimi podrobnostmi.",
   "settings.timeline.description.quiet": "Skupinska urejanja in podagenti v Uporabljeno. Skrij drugo dejavnost.",
   "settings.timeline.description.text-only": "Skrij vse dejavnosti. Pokaži samo sporočila.",
   "settings.timeline.description.custom": "Uporabite izbrano lokacijo in podrobnosti za vsako kategorijo dejavnosti.",

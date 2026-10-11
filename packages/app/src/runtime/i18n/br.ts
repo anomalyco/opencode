@@ -176,7 +176,6 @@ export const dict = {
     "Mostrar cada atividade separadamente. Expandir a saída do shell, as edições e o raciocínio.",
   "settings.timeline.description.detailed":
     "Expandir a saída do shell e as edições. Mostrar subagentes separadamente e agrupar outras atividades em Usado.",
-  "settings.timeline.description.compact": "Agrupar todas as atividades em Usado com os detalhes recolhidos.",
   "settings.timeline.description.quiet": "Agrupar edições e subagentes em Usado. Ocultar outras atividades.",
   "settings.timeline.description.text-only": "Ocultar todas as atividades. Mostrar somente mensagens.",
   "settings.timeline.description.custom":

@@ -162,7 +162,6 @@ export const dict = {
     "Näytä kaikki toiminta erikseen. Laajenna shell-tuloste, muokkaukset ja pohdinta.",
   "settings.timeline.description.detailed":
     "Laajenna shell-tuloste ja muokkaukset. Näytä aliagentit erikseen ja ryhmittele muu toiminta Käytetty-ryhmään.",
-  "settings.timeline.description.compact": "Ryhmittele kaikki toiminta Käytetty-ryhmään ja supista tiedot.",
   "settings.timeline.description.quiet": "Ryhmittele muokkaukset ja aliagentit Käytetty-ryhmään. Piilota muu toiminta.",
   "settings.timeline.description.text-only": "Piilota kaikki toiminta. Näytä vain viestit.",
   "settings.timeline.description.custom": "Käytä valittua sijoittelua ja tietoja jokaiselle toimintoluokalle.",

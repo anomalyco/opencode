@@ -757,7 +757,6 @@ export const dict = {
     "Tunjukkan semua aktiviti secara berasingan. Kembangkan output shell, suntingan dan pemikiran.",
   "settings.timeline.description.detailed":
     "Kembangkan output dan pengeditan shell. Tunjukkan subagen secara berasingan dan kumpulan aktiviti lain dalam Digunakan.",
-  "settings.timeline.description.compact": "Himpunkan semua aktiviti dalam Digunakan dengan butiran runtuh.",
   "settings.timeline.description.quiet": "Suntingan kumpulan dan subagen dalam Digunakan. Sembunyikan aktiviti lain.",
   "settings.timeline.description.text-only": "Sembunyikan semua aktiviti. Tunjukkan mesej sahaja.",
   "settings.timeline.description.custom": "Gunakan peletakan dan butiran pilihan anda untuk setiap kategori aktiviti.",

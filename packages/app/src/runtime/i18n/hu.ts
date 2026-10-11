@@ -762,8 +762,6 @@ export const dict = {
     "Minden tevékenység külön-külön megjelenítése. Bővítse a shell kimenetet, a szerkesztéseket és a gondolkodást.",
   "settings.timeline.description.detailed":
     "A shell kimenetének és szerkesztéseinek bővítése. Az alágensek külön megjelenítése és az egyéb tevékenységek csoportosítása a Használt mezőben.",
-  "settings.timeline.description.compact":
-    "Csoportosítsa az összes tevékenységet a Használt kategóriában, a részletek összecsukva.",
   "settings.timeline.description.quiet":
     "Csoportszerkesztések és alágensek a Használtban. Egyéb tevékenység elrejtése.",
   "settings.timeline.description.text-only": "Minden tevékenység elrejtése. Csak üzenetek megjelenítése.",

@@ -781,7 +781,7 @@ test.describe("Working", () => {
 test.describe("background shortcut", () => {
   test("offers a standalone running subagent to the background with Ctrl+B", async ({ page }) => {
     await setupTimeline(page, {
-      settings: { timelineDetail: { ...detailed, subagents: { placement: "separate" } } },
+      settings: { timelineDetail: detailed },
       sessionMessages: [user, runningSubagent()],
     })
     const card = page.locator('[data-component="task-tool-card"]')
@@ -808,7 +808,7 @@ test.describe("background shortcut", () => {
     test(`keeps Working and the shortcut for a grouped running ${name}`, async ({ page }) => {
       await setupTimeline(page, {
         viewport: { width: name === "shell" ? 390 : 1400, height: 900 },
-        settings: { timelineDetail: detailed },
+        settings: { timelineDetail: { ...detailed, subagents: { placement: "grouped" } } },
         messages: [
           userMessage(),
           assistantMessage(
@@ -861,7 +861,7 @@ test.describe("background shortcut", () => {
     const blockingID = "ses_background_blocking"
 
     const timeline = await setupTimeline(page, {
-      settings: { timelineDetail: detailed },
+      settings: { timelineDetail: { ...detailed, subagents: { placement: "grouped" } } },
       sessionMessages: [
         user,
         {

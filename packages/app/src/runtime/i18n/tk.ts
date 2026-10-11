@@ -751,8 +751,6 @@ export const dict = {
     "Ähli işjeňligi aýratyn görkez. Shell çykyşyny, redaktirlemeleri we pikir ýöretmäni giňelt.",
   "settings.timeline.description.detailed":
     "Shell çykyşyny we redaktirlemeleri giňelt. Kiçi agentleri aýratyn görkez we beýleki işjeňligi «Ulanyldy» bölüminde toparla.",
-  "settings.timeline.description.compact":
-    "Ähli işjeňligi jikme-jikleri ýygnalan görnüşde «Ulanyldy» bölüminde toparla.",
   "settings.timeline.description.quiet":
     "Redaktirlemeleri we kiçi agentleri «Ulanyldy» bölüminde toparla. Beýleki işjeňligi gizle.",
   "settings.timeline.description.text-only": "Ähli işjeňligi gizle. Diňe habarlary görkez.",

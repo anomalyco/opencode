@@ -759,7 +759,6 @@ export const dict = {
     "Покажи цялата дейност отделно. Разширете изхода на shell, редакциите и мисленето.",
   "settings.timeline.description.detailed":
     "Разширете изхода и редакциите на обвивката. Покажете подагенти отделно и групирайте друга дейност в Използвани.",
-  "settings.timeline.description.compact": "Групирайте цялата активност в Използвани със свити подробности.",
   "settings.timeline.description.quiet": "Групови редакции и подагенти в Използвани. Скриване на друга дейност.",
   "settings.timeline.description.text-only": "Скриване на цялата активност. Показване само на съобщения.",
   "settings.timeline.description.custom":

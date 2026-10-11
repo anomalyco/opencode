@@ -47,7 +47,7 @@ export const timelinePresets = [
       shell: { placement: "grouped", details: "collapsed" },
       edit: { placement: "grouped", details: "collapsed" },
       thinking: { placement: "grouped", details: "collapsed" },
-      subagents: { placement: "grouped" },
+      subagents: { placement: "separate" },
       notices: { placement: "grouped" },
       tools: { placement: "grouped" },
     },

@@ -756,7 +756,6 @@ export const dict = {
     "Прикажи ја целата активност одделно. Проширете го излезот на школка, уредувањата и размислувањето.",
   "settings.timeline.description.detailed":
     "Проширете го излезот и уредувањата на школка. Покажете ги субагентите одделно и групирајте друга активност во Користено.",
-  "settings.timeline.description.compact": "Групирајте ја целата активност во Користено со скриени детали.",
   "settings.timeline.description.quiet": "Групни уредувања и субагенти во Користено. Сокриј друга активност.",
   "settings.timeline.description.text-only": "Сокриј ја целата активност. Прикажи само пораки.",
   "settings.timeline.description.custom":

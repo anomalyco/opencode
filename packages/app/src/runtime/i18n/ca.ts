@@ -762,7 +762,6 @@ export const dict = {
     "Mostra totes les activitats per separat. Amplia la sortida de l'intèrpret d'ordres, les edicions i el pensament.",
   "settings.timeline.description.detailed":
     "Expandeix la sortida i les edicions de l'shell. Mostra els subagents per separat i agrupa altres activitats a Usat.",
-  "settings.timeline.description.compact": "Agrupa tota l'activitat a Usat amb els detalls col·lapsats.",
   "settings.timeline.description.quiet": "Edicions de grup i subagents a Usat. Amaga una altra activitat.",
   "settings.timeline.description.text-only": "Amaga tota l'activitat. Mostra només els missatges.",
   "settings.timeline.description.custom":

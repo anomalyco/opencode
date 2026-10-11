@@ -178,7 +178,6 @@ export const dict = {
     "Alle Aktivitäten separat anzeigen. Shell-Ausgabe, Bearbeitungen und Gedankengänge ausklappen.",
   "settings.timeline.description.detailed":
     "Shell-Ausgabe und Bearbeitungen ausklappen. Unteragenten separat anzeigen und andere Aktivitäten unter Verwendet gruppieren.",
-  "settings.timeline.description.compact": "Alle Aktivitäten unter Verwendet gruppieren und Details einklappen.",
   "settings.timeline.description.quiet":
     "Bearbeitungen und Unteragenten unter Verwendet gruppieren. Andere Aktivitäten ausblenden.",
   "settings.timeline.description.text-only": "Alle Aktivitäten ausblenden. Nur Nachrichten anzeigen.",

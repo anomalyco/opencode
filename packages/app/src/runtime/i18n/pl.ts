@@ -776,7 +776,6 @@ export const dict = {
     "Pokaż całą aktywność osobno. Rozszerzaj wyniki powłoki, edycje i myślenie.",
   "settings.timeline.description.detailed":
     "Rozszerzanie wyników powłoki i edycji. Pokaż subagentów osobno i zgrupuj inne działania w Użyte.",
-  "settings.timeline.description.compact": "Grupuj całą aktywność w Użyte ze zwiniętymi szczegółami.",
   "settings.timeline.description.quiet": "Edycje grupowe i subagenci w Użyte. Ukryj inną aktywność.",
   "settings.timeline.description.text-only": "Ukryj całą aktywność. Pokaż tylko wiadomości.",
   "settings.timeline.description.custom":

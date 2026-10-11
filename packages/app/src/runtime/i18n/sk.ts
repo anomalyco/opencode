@@ -778,7 +778,6 @@ export const dict = {
     "Zobraziť všetky aktivity samostatne. Rozšírte výstup shellu, úpravy a myslenie.",
   "settings.timeline.description.detailed":
     "Rozšírte výstup shellu a úpravy. Zobrazte podagentov samostatne a zoskupte inú aktivitu v Použité.",
-  "settings.timeline.description.compact": "Zoskupte všetku aktivitu v Použité so zbalenými podrobnosťami.",
   "settings.timeline.description.quiet": "Skupinové úpravy a podagenti v Použité. Skryť inú aktivitu.",
   "settings.timeline.description.text-only": "Skryť všetku aktivitu. Zobraziť iba správy.",
   "settings.timeline.description.custom": "Použite vybraté umiestnenie a podrobnosti pre každú kategóriu aktivity.",

@@ -751,7 +751,6 @@ export const dict = {
     "Vís alt virksemið hvør sær. Víðka um skelútflutningin, rættingar og hugsan.",
   "settings.timeline.description.detailed":
     "Víðka skelútflutning og rættingar. Vís undirevni hvør sær og bólka annað virksemi í Brúkt.",
-  "settings.timeline.description.compact": "Bólka alt virksemi í Brúkt við smálutum samanlagdum.",
   "settings.timeline.description.quiet": "Bólkaritgerðir og undirumboð í Brúkt. Goym annað virksemi.",
   "settings.timeline.description.text-only": "Goym alt virksemi. Vís bara boð.",
   "settings.timeline.description.custom": "Brúka tína valdu plasering og smálutir fyri hvønn virksemisflokk.",

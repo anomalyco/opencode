@@ -759,7 +759,6 @@ export const dict = {
     "Rādīt visas darbības atsevišķi. Paplašiniet čaulas izvadi, labojumus un domāšanu.",
   "settings.timeline.description.detailed":
     "Paplašināt čaulas izvadi un labojumus. Rādīt apakšaģentus atsevišķi un grupēt citas darbības sadaļā Lietots.",
-  "settings.timeline.description.compact": "Grupējiet visas darbības sadaļā Lietotas ar sakļautu informāciju.",
   "settings.timeline.description.quiet": "Grupu labojumi un apakšaģenti lietotnē. Slēpt citas darbības.",
   "settings.timeline.description.text-only": "Slēpt visas darbības. Rādīt tikai ziņas.",
   "settings.timeline.description.custom":

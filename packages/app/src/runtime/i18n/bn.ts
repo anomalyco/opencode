@@ -756,7 +756,6 @@ export const dict = {
     "সব কার্যকলাপ আলাদাভাবে দেখান। শেল আউটপুট, সম্পাদনা ও চিন্তা প্রসারিত করুন।",
   "settings.timeline.description.detailed":
     "শেল আউটপুট ও সম্পাদনা প্রসারিত করুন। সাবএজেন্ট আলাদাভাবে দেখান এবং অন্য কার্যকলাপ ‘ব্যবহৃত’ অংশে গোষ্ঠীবদ্ধ করুন।",
-  "settings.timeline.description.compact": "সব কার্যকলাপ ‘ব্যবহৃত’ অংশে গোষ্ঠীবদ্ধ করে বিস্তারিত সংকুচিত রাখুন।",
   "settings.timeline.description.quiet": "সম্পাদনা ও সাবএজেন্ট ‘ব্যবহৃত’ অংশে গোষ্ঠীবদ্ধ করুন। অন্য কার্যকলাপ লুকান।",
   "settings.timeline.description.text-only": "সব কার্যকলাপ লুকান। শুধু বার্তা দেখান।",
   "settings.timeline.description.custom":

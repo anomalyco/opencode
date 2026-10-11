@@ -763,7 +763,6 @@ export const dict = {
     "Zobrazit všechny aktivity samostatně. Rozšiřte výstup shellu, úpravy a myšlení.",
   "settings.timeline.description.detailed":
     "Rozšiřte výstup shellu a úpravy. Zobrazit podagenty samostatně a seskupit další aktivity v Použito.",
-  "settings.timeline.description.compact": "Seskupit veškerou aktivitu v Použito se sbalenými podrobnostmi.",
   "settings.timeline.description.quiet": "Úpravy skupin a subagenti v Použito. Skrýt jinou aktivitu.",
   "settings.timeline.description.text-only": "Skrýt veškerou aktivitu. Zobrazit pouze zprávy.",
   "settings.timeline.description.custom": "Použijte zvolené umístění a podrobnosti pro každou kategorii aktivity.",

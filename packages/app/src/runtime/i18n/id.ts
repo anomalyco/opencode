@@ -824,7 +824,6 @@ export const dict = {
     "Tampilkan semua aktivitas secara terpisah. Perluas keluaran shell, pengeditan, dan pemikiran.",
   "settings.timeline.description.detailed":
     "Perluas keluaran dan pengeditan shell. Tampilkan subagen secara terpisah dan kelompokkan aktivitas lain di Digunakan.",
-  "settings.timeline.description.compact": "Kelompokkan semua aktivitas di Digunakan dengan detail diciutkan.",
   "settings.timeline.description.quiet": "Pengeditan grup dan subagen di Bekas. Sembunyikan aktivitas lainnya.",
   "settings.timeline.description.text-only": "Sembunyikan semua aktivitas. Tampilkan hanya pesan.",
   "settings.timeline.description.custom": "Gunakan penempatan dan detail pilihan Anda untuk setiap kategori aktivitas.",

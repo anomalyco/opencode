@@ -171,7 +171,6 @@ export const dict = {
     "Alle activiteit afzonderlijk tonen. Shell-uitvoer, bewerkingen en denkwerk uitvouwen.",
   "settings.timeline.description.detailed":
     "Shell-uitvoer en bewerkingen uitvouwen. Subagents afzonderlijk tonen en andere activiteit groeperen onder Gebruikt.",
-  "settings.timeline.description.compact": "Alle activiteit groeperen onder Gebruikt met ingeklapte details.",
   "settings.timeline.description.quiet":
     "Bewerkingen en subagents groeperen onder Gebruikt. Andere activiteit verbergen.",
   "settings.timeline.description.text-only": "Alle activiteit verbergen. Alleen berichten tonen.",

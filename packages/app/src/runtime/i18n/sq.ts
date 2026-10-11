@@ -752,7 +752,6 @@ export const dict = {
     "Shfaq të gjitha aktivitetet veç e veç. Zgjero prodhimin e guaskës, modifikimet dhe të menduarit.",
   "settings.timeline.description.detailed":
     "Zgjero prodhimin dhe modifikimet e guaskës. Shfaq nënagjentët veç e veç dhe grupo aktivitete të tjera në U përdorën.",
-  "settings.timeline.description.compact": "Gruponi të gjithë aktivitetin në U përdorën me detaje të palosur.",
   "settings.timeline.description.quiet": "Gruponi modifikimet dhe nënagjentët në U përdorën. Fshih aktivitetin tjetër.",
   "settings.timeline.description.text-only": "Fshih të gjithë aktivitetin. Shfaq vetëm mesazhe.",
   "settings.timeline.description.custom":

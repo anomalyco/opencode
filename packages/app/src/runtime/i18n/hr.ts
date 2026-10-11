@@ -765,7 +765,6 @@ export const dict = {
     "Prikaži sve aktivnosti zasebno. Proširite izlaz ljuske, uređivanja i razmišljanje.",
   "settings.timeline.description.detailed":
     "Proširi izlaz i uređivanja ljuske. Prikaži odvojeno subagente i grupiraj ostale aktivnosti u Korišteno.",
-  "settings.timeline.description.compact": "Grupirajte sve aktivnosti u Korišteno sa sažetim detaljima.",
   "settings.timeline.description.quiet": "Grupna uređivanja i subagenti u Korišteno. Sakrij druge aktivnosti.",
   "settings.timeline.description.text-only": "Sakrij sve aktivnosti. Prikaži samo poruke.",
   "settings.timeline.description.custom": "Koristite svoje odabrano mjesto i detalje za svaku kategoriju aktivnosti.",

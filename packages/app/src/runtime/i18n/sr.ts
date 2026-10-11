@@ -766,7 +766,6 @@ export const dict = {
     "Прикажи све активности одвојено. Проширите излаз шкољке, измене и размишљање.",
   "settings.timeline.description.detailed":
     "Проширите излаз и измене љуске. Прикажи подагенте одвојено и групиши остале активности у Коришћено.",
-  "settings.timeline.description.compact": "Групирајте све активности у Коришћено са срушеним детаљима.",
   "settings.timeline.description.quiet": "Групне измене и субагенти у Коришћено. Сакриј другу активност.",
   "settings.timeline.description.text-only": "Сакриј све активности. Прикажи само поруке.",
   "settings.timeline.description.custom": "Користите одабрано место и детаље за сваку категорију активности.",

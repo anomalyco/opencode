@@ -177,7 +177,6 @@ export const dict = {
     "Mostra tutte le attività separatamente. Espandi l’output della shell, le modifiche e il ragionamento.",
   "settings.timeline.description.detailed":
     "Espandi l’output della shell e le modifiche. Mostra i subagenti separatamente e raggruppa le altre attività in Utilizzati.",
-  "settings.timeline.description.compact": "Raggruppa tutte le attività in Utilizzati con i dettagli compressi.",
   "settings.timeline.description.quiet": "Raggruppa modifiche e subagenti in Utilizzati. Nascondi le altre attività.",
   "settings.timeline.description.text-only": "Nascondi tutte le attività. Mostra solo i messaggi.",
   "settings.timeline.description.custom":

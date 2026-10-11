@@ -166,7 +166,6 @@ export const dict = {
     "Visa all aktivitet separat. Expandera shell-utdata, redigeringar och tänkande.",
   "settings.timeline.description.detailed":
     "Expandera shell-utdata och redigeringar. Visa underagenter separat och gruppera annan aktivitet under Använt.",
-  "settings.timeline.description.compact": "Gruppera all aktivitet under Använt med detaljerna komprimerade.",
   "settings.timeline.description.quiet": "Gruppera redigeringar och underagenter under Använt. Dölj annan aktivitet.",
   "settings.timeline.description.text-only": "Dölj all aktivitet. Visa endast meddelanden.",
   "settings.timeline.description.custom": "Använd vald placering och valda detaljer för varje aktivitetskategori.",

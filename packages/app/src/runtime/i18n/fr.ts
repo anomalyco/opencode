@@ -179,7 +179,6 @@ export const dict = {
     "Afficher chaque activité séparément. Développer la sortie du shell, les modifications et le raisonnement.",
   "settings.timeline.description.detailed":
     "Développer la sortie du shell et les modifications. Afficher les sous-agents séparément et regrouper les autres activités dans Utilisé.",
-  "settings.timeline.description.compact": "Regrouper toutes les activités dans Utilisé avec les détails réduits.",
   "settings.timeline.description.quiet":
     "Regrouper les modifications et les sous-agents dans Utilisé. Masquer les autres activités.",
   "settings.timeline.description.text-only": "Masquer toutes les activités. Afficher uniquement les messages.",

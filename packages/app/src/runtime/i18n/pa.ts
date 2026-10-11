@@ -763,7 +763,6 @@ export const dict = {
   "settings.timeline.description.everything": "ساری سرگرمی وکھ وکھ وکھاؤ۔ شیل آؤٹ پٹ، تبدیلیاں تے سوچ نوں کھولو۔",
   "settings.timeline.description.detailed":
     "شیل آؤٹ پٹ تے تبدیلیاں کھولو۔ سب ایجنٹ وکھرے وکھاؤ تے ہور سرگرمی نوں ’ورتی گئی‘ وچ گروپ کرو۔",
-  "settings.timeline.description.compact": "ساری سرگرمی نوں ’ورتی گئی‘ وچ گروپ کرو تے تفصیل بند رکھو۔",
   "settings.timeline.description.quiet": "تبدیلیاں تے سب ایجنٹ نوں ’ورتی گئی‘ وچ گروپ کرو۔ ہور سرگرمی لُکاؤ۔",
   "settings.timeline.description.text-only": "ساری سرگرمی لُکاؤ۔ صرف سنیہے وکھاؤ۔",
   "settings.timeline.description.custom": "ہر سرگرمی دی قسم لئی اپنی چُݨی تھان تے تفصیل ورتو۔",

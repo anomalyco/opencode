@@ -765,7 +765,7 @@ export const dict = {
   "settings.timeline.description.everything": "Show all activity separately. Expand shell output, edits, and thinking.",
   "settings.timeline.description.detailed":
     "Expand shell output and edits. Show subagents separately and group other activity.",
-  "settings.timeline.description.compact": "Group all activity with details collapsed.",
+  "settings.timeline.description.compact": "Show subagents separately. Group other activity with details collapsed.",
   "settings.timeline.description.quiet": "Group edits and subagents. Hide other activity.",
   "settings.timeline.description.text-only": "Hide all activity.",
   "settings.timeline.description.custom": "Uses advanced settings.",
