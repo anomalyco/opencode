@@ -9,6 +9,7 @@ import { ACPCompaction } from "./compaction"
 import { ACPError } from "./error"
 import {
   completedToolUpdate,
+  planUpdate,
   errorToolUpdate,
   pendingToolCall,
   runningToolUpdate,
@@ -369,22 +370,26 @@ function sessionEvent(
     case "session.tool.success": {
       const key = toolKey(event.data.sessionID, event.data.id)
       const tool = state.tools.get(key) ?? newTool(event.data.sessionID, event.data.id)
+      const plan = planUpdate(event.data.metadata)
       return {
         state: { ...state, tools: without(state.tools, key) },
-        outputs: send({
-          sessionUpdate: "tool_call_update",
-          ...completedToolUpdate({
-            toolCallId: event.data.id,
-            toolName: tool.name,
-            input: tool.input,
-            metadata: event.data.metadata,
-            content: event.data.content,
-            cwd: ctx.cwd,
-          }),
-        }).map((output) => ({
-          ...output,
-          diff: { toolName: tool.name, input: tool.input, metadata: event.data.metadata },
-        })),
+        outputs: [
+          ...send({
+            sessionUpdate: "tool_call_update",
+            ...completedToolUpdate({
+              toolCallId: event.data.id,
+              toolName: tool.name,
+              input: tool.input,
+              metadata: event.data.metadata,
+              content: event.data.content,
+              cwd: ctx.cwd,
+            }),
+          }).map((output) => ({
+            ...output,
+            diff: { toolName: tool.name, input: tool.input, metadata: event.data.metadata },
+          })),
+          ...(plan && (!child || ctx.childUpdates) ? send(plan) : []),
+        ],
       }
     }
     case "session.tool.failed": {
