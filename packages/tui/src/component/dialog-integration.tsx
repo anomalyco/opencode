@@ -17,6 +17,7 @@ import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show }
 import { createStore } from "solid-js/store"
 import { useClipboard } from "../context/clipboard"
 import { useData } from "../context/data"
+import { useProgramStatus } from "../context/program-status"
 import { useClient } from "../context/client"
 import { Keymap } from "../context/keymap"
 import { useLocation } from "../context/location"
@@ -346,6 +347,7 @@ function ExternalStarting(props: {
   answer?: FormAnswer
   onConnected?: OnIntegrationConnected
 }) {
+  useProgramStatus().authentication()
   const data = useData()
   const dialog = useDialog()
   const client = useClient()
@@ -541,6 +543,7 @@ function KeyMethod(props: {
   answer?: FormAnswer
   onConnected?: OnIntegrationConnected
 }) {
+  useProgramStatus().authentication()
   const data = useData()
   const dialog = useDialog()
   const client = useClient()
@@ -649,6 +652,7 @@ function OAuthAuto(props: {
   location: LocationRef
   onConnected?: OnIntegrationConnected
 }) {
+  useProgramStatus().authentication()
   const data = useData()
   const dialog = useDialog()
   const client = useClient()
@@ -746,6 +750,7 @@ function OAuthCode(props: {
   location: LocationRef
   onConnected?: OnIntegrationConnected
 }) {
+  useProgramStatus().authentication()
   const data = useData()
   const dialog = useDialog()
   const client = useClient()

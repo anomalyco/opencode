@@ -1,13 +1,14 @@
 /** @jsxImportSource @opentui/solid */
 import { testRender } from "@opentui/solid"
 import { expect, test } from "bun:test"
-import { onMount } from "solid-js"
+import { onCleanup, onMount } from "solid-js"
 import { DialogMcp } from "../../../src/component/dialog-mcp"
 import { ConfigProvider } from "../../../src/config"
 import { ClientProvider } from "../../../src/context/client"
 import { DataProvider, useData } from "../../../src/context/data"
 import { Keymap } from "../../../src/context/keymap"
 import { LocationProvider, useLocation } from "../../../src/context/location"
+import { ProgramStatusContext } from "../../../src/context/program-status"
 import { RouteProvider, useRoute } from "../../../src/context/route"
 import { ThemeProvider } from "../../../src/context/theme"
 import { DialogProvider, useDialog } from "../../../src/ui/dialog"
@@ -29,9 +30,11 @@ test.each(["enter", "space"])("starts OAuth with %s for an MCP server requiring 
 
     expect(fixture.oauth).toBe(1)
     expect(fixture.connect).toBe(0)
+    expect(fixture.authentication()).toBe(true)
   } finally {
     fixture.app.renderer.destroy()
   }
+  expect(fixture.authentication()).toBe(false)
 })
 
 test("opens an investigation draft for a failed MCP server at its originating location", async () => {
@@ -65,6 +68,7 @@ async function renderMcp(options?: { failed?: boolean; location?: { directory: s
   const events = createEventStream()
   let oauth = 0
   let connect = 0
+  let authentication = false
   let route!: ReturnType<typeof useRoute>
   const calls = createFetch((url, request) => {
     const location = {
@@ -146,9 +150,22 @@ async function renderMcp(options?: { failed?: boolean; location?: { directory: s
                   <DataProvider directory={process.cwd()}>
                     <LocationProvider>
                       <ThemeProvider mode="dark" source={emptyThemeSource}>
-                        <DialogProvider>
-                          <Probe />
-                        </DialogProvider>
+                        <ProgramStatusContext.Provider
+                          value={{
+                            authentication() {
+                              onMount(() => {
+                                authentication = true
+                              })
+                              onCleanup(() => {
+                                authentication = false
+                              })
+                            },
+                          }}
+                        >
+                          <DialogProvider>
+                            <Probe />
+                          </DialogProvider>
+                        </ProgramStatusContext.Provider>
                       </ThemeProvider>
                     </LocationProvider>
                   </DataProvider>
@@ -164,6 +181,7 @@ async function renderMcp(options?: { failed?: boolean; location?: { directory: s
   app.renderer.start()
   return {
     app,
+    authentication: () => authentication,
     get route() {
       return route
     },
