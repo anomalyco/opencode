@@ -58,7 +58,7 @@ export const rpc = {
   },
   async checkUpgrade(input: { directory: string }) {
     await InstanceRuntime.load({ directory: input.directory })
-    await upgrade().catch(() => {})
+    return upgrade().catch(() => undefined)
   },
   async reload() {
     await AppRuntime.runPromise(
