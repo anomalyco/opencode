@@ -1,16 +1,20 @@
+import { SessionID } from "@opencode/schema/session-id"
+import { Permission } from "@opencode/schema/permission"
+import { WorkspaceID } from "@opencode/schema/workspace-id"
+import { Event } from "@opencode/schema/event"
 import { describe, expect, test } from "bun:test"
 import type { OpenCodeEvent } from "@opencode/client/promise"
 import { createRoot } from "solid-js"
 import { createOpenCodeEventSource, createServerTransport } from "./client"
 
 const permission = {
-  id: "evt_permission",
+  id: Event.ID.make("evt_permission", { disableChecks: true }),
   created: 1,
   type: "permission.asked",
-  location: { directory: "/repo", workspaceID: "workspace_1" },
+  location: { directory: "/repo", workspaceID: WorkspaceID.make("workspace_1", { disableChecks: true }) },
   data: {
-    id: "perm_1",
-    sessionID: "ses_1",
+    id: Permission.ID.make("perm_1", { disableChecks: true }),
+    sessionID: SessionID.make("ses_1", { disableChecks: true }),
     action: "read",
     resources: ["src/**"],
     source: { type: "tool", messageID: "msg_1", id: "call_1" },
@@ -47,7 +51,7 @@ describe("server event stream", () => {
     let workspaceID: string | undefined
 
     const global = {
-      id: "evt_connected",
+      id: Event.ID.make("evt_connected", { disableChecks: true }),
       type: "server.connected",
       data: {},
     } satisfies Extract<OpenCodeEvent, { type: "server.connected" }>

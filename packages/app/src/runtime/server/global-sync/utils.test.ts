@@ -1,3 +1,7 @@
+import { ProjectID } from "@opencode/schema/project-id"
+import { Model } from "@opencode/schema/model"
+import { Provider } from "@opencode/schema/provider"
+import { Agent } from "@opencode/schema/agent"
 import { describe, expect, test } from "bun:test"
 import type { AgentListOutput, ModelListOutput, Project, ProviderListOutput } from "@opencode/client/promise"
 import { directoryKey, normalizeAgentList, normalizeProjectInfo, normalizeProviderList } from "./utils"
@@ -6,19 +10,23 @@ describe("normalizeAgentList", () => {
   test("adapts current agents to the app agent shape", () => {
     const result = normalizeAgentList([
       {
-        id: "build",
+        id: Agent.ID.make("build"),
         name: "Build",
         mode: "primary",
         hidden: false,
         color: "primary",
-        model: { id: "gpt-5", providerID: "openai", variant: "high" },
+        model: {
+          id: Model.ID.make("gpt-5"),
+          providerID: Provider.ID.make("openai"),
+          variant: Model.VariantID.make("high"),
+        },
         request: { settings: { temperature: 0.2, topP: 0.9 }, headers: {}, body: {} },
         system: "Build software",
         permissions: [{ action: "read", resource: "*", effect: "allow" }],
       },
     ] as AgentListOutput["data"])
 
-    expect(result).toEqual([
+    expect<unknown>(result).toEqual([
       {
         name: "build",
         description: undefined,
@@ -28,8 +36,11 @@ describe("normalizeAgentList", () => {
         topP: 0.9,
         color: "primary",
         permission: [{ permission: "read", pattern: "*", action: "allow" }],
-        model: { providerID: "openai", modelID: "gpt-5" },
-        variant: "high",
+        model: {
+          providerID: "openai",
+          modelID: "gpt-5",
+        },
+        variant: Model.VariantID.make("high", { disableChecks: true }),
         prompt: "Build software",
         options: { temperature: 0.2, topP: 0.9 },
         steps: undefined,
@@ -44,9 +55,9 @@ describe("normalizeProviderList", () => {
       [{ id: "openai", name: "OpenAI", package: "@ai-sdk/openai" }] as ProviderListOutput["data"],
       [
         {
-          id: "gpt-5",
+          id: Model.ID.make("gpt-5"),
           modelID: "gpt-5",
-          providerID: "openai",
+          providerID: Provider.ID.make("openai"),
           name: "GPT-5",
           capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
           variants: [{ id: "high" }],
@@ -59,7 +70,7 @@ describe("normalizeProviderList", () => {
         {
           id: "gpt-old",
           modelID: "gpt-old",
-          providerID: "openai",
+          providerID: Provider.ID.make("openai"),
           name: "GPT Old",
           capabilities: { tools: false, input: ["text"], output: ["text"] },
           variants: [],
@@ -75,7 +86,7 @@ describe("normalizeProviderList", () => {
     expect(result.connected).toEqual(["openai"])
     expect(result.default).toEqual({ openai: "gpt-5" })
     expect(result.all.get("openai")?.models["gpt-old"]).toBeUndefined()
-    expect(result.all.get("openai")?.models["gpt-5"]).toMatchObject({
+    expect<unknown>(result.all.get("openai")?.models["gpt-5"]).toMatchObject({
       id: "gpt-5",
       providerID: "openai",
       capabilities: { toolcall: true, attachment: true },
@@ -87,7 +98,12 @@ describe("normalizeProviderList", () => {
 
 describe("normalizeProjectInfo", () => {
   test("keeps the project VCS backend", () => {
-    const project = { id: "prj", canonical: "/repo", time: { created: 1, updated: 1, active: 1 }, sandboxes: [] }
+    const project = {
+      id: ProjectID.make("prj", { disableChecks: true }),
+      canonical: "/repo",
+      time: { created: 1, updated: 1, active: 1 },
+      sandboxes: [],
+    }
     expect(normalizeProjectInfo({ ...project, vcs: "git" } as Project).vcs).toBe("git")
     expect(normalizeProjectInfo({ ...project, vcs: "hg" } as Project).vcs).toBe("hg")
     expect(normalizeProjectInfo(project as Project).vcs).toBeUndefined()

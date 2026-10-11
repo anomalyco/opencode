@@ -1,3 +1,4 @@
+import { SessionID } from "@opencode/schema/session-id"
 import { describe, expect, test } from "bun:test"
 import { ScopedKey, ServerScope, SessionRouteKey, SessionStateKey } from "./scope"
 
@@ -25,7 +26,7 @@ describe("ServerScope", () => {
 
 describe("SessionStateKey", () => {
   test("combines local and remote scope with route identity and extracts the route again", () => {
-    const route = SessionRouteKey.fromRoute("cmVwbw", "session-1")
+    const route = SessionRouteKey.fromRoute("cmVwbw", SessionID.make("session-1", { disableChecks: true }))
     expect(String(SessionStateKey.from(ServerScope.local, route))).toBe("local\0cmVwbw/session-1")
     expect(String(SessionStateKey.from("https://windows.example" as ServerScope, route))).toBe(
       "https://windows.example\0cmVwbw/session-1",

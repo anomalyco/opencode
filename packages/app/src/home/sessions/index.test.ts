@@ -1,3 +1,5 @@
+import { ProjectID } from "@opencode/schema/project-id"
+import { SessionID } from "@opencode/schema/session-id"
 import { describe, expect, test } from "bun:test"
 import type { SessionInfo } from "@opencode/client/promise"
 import { SESSION_RECENT_LIMIT, SESSION_RECENT_WINDOW } from "@/runtime/server/global-sync/types"
@@ -14,7 +16,7 @@ import {
 const session = (id: string, input: Partial<SessionInfo> = {}) =>
   ({
     id,
-    projectID: "project",
+    projectID: ProjectID.make("project", { disableChecks: true }),
     title: id,
     time: { created: 1, updated: 1 },
     location: { directory: "/repo" },
@@ -84,7 +86,7 @@ describe("Home session index", () => {
 
     const live = history("/repo", 10).map((item) => ({
       ...item,
-      id: `live-${item.id}`,
+      id: SessionID.make(`live-${item.id}`, { disableChecks: true }),
       time: { created: item.time.created - 300 * minute, updated: item.time.updated - 300 * minute },
     }))
 
@@ -93,10 +95,10 @@ describe("Home session index", () => {
   })
 
   test("keeps only visible roots", () => {
-    expect(
+    expect<unknown>(
       parseHomeSessionIndex([
         session("root"),
-        session("child", { parentID: "root" }),
+        session("child", { parentID: SessionID.make("root", { disableChecks: true }) }),
         session("archived", { time: { created: 1, updated: 1, archived: 2 } }),
       ]).map((item) => item.id),
     ).toEqual(["root"])
@@ -136,9 +138,9 @@ describe("Home session index parity with the complete index", () => {
 
     const result = view(await loaded(), known)
     expect(result).toEqual(view(complete, known))
-    expect(result).toContain("a-fresh")
+    expect<unknown>(result).toContain("a-fresh")
     expect(result).toContain(complete[300].id)
-    expect(result).toContain("d-new")
+    expect<unknown>(result).toContain("d-new")
   })
 
   test("with pending removals up to the recent-window bucket size", async () => {

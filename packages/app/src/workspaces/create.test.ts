@@ -1,3 +1,4 @@
+import { ProjectID } from "@opencode/schema/project-id"
 import { describe, expect, test } from "bun:test"
 import { OpenCode } from "@opencode/client/promise"
 import { createData } from "@opencode/client/solid"
@@ -28,7 +29,11 @@ describe("worktree creation", () => {
       },
     ].flatMap((input) => [true, false].map((cached) => ({ ...input, cached }))),
   )("uses the server destination and clone-local main for $name (cached: $cached)", async (input) => {
-    const project = { id: "proj_clone", directory: input.root, canonical: input.canonical }
+    const project = {
+      id: ProjectID.make("proj_clone", { disableChecks: true }),
+      directory: input.root,
+      canonical: input.canonical,
+    }
     const requests: Request[] = []
 
     const api = OpenCode.make({

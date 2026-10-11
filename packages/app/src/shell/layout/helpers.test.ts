@@ -1,3 +1,5 @@
+import { ProjectID } from "@opencode/schema/project-id"
+import { SessionID } from "@opencode/schema/session-id"
 import { describe, expect, test } from "bun:test"
 import type { SessionInfo } from "@opencode/client/promise"
 import { closeHomeProject, errorMessage, projectForSession, toggleHomeProjectSelection } from "./helpers"
@@ -7,7 +9,7 @@ const serverKey = ServerConnection.Key.make
 
 const session = (input: Partial<SessionInfo> & Pick<SessionInfo, "id"> & { directory: string }) =>
   ({
-    projectID: "project",
+    projectID: ProjectID.make("project", { disableChecks: true }),
     title: "",
     cost: 0,
     tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
@@ -41,7 +43,13 @@ const enriched: { name: string; project: Project }[] = [
 describe("layout workspace helpers", () => {
   test.each(enriched)("keeps the enriched project for a nested workspace session ($name)", ({ project }) => {
     expect(
-      projectForSession(session({ id: "feature", directory: "/workspaces/feature/packages/app" }), [project]),
+      projectForSession(
+        session({
+          id: SessionID.make("feature", { disableChecks: true }),
+          directory: "/workspaces/feature/packages/app",
+        }),
+        [project],
+      ),
     ).toBe(project)
   })
 

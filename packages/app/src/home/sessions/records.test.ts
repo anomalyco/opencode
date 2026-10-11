@@ -34,7 +34,7 @@ describe("buildHomeSessionRecords", () => {
       projects: () => [opened],
     })
 
-    expect(records.map((record) => record.session.id)).toEqual(["a"])
+    expect<unknown>(records.map((record) => record.session.id)).toEqual(["a"])
   })
 
   test("labels a worktree session with its project before that project's inventory has loaded", () => {

@@ -1,3 +1,4 @@
+import { Model } from "@opencode/schema/model"
 import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
 import { ModelState, serverState } from "./persistence"
@@ -143,14 +144,27 @@ describe("model persistence schema", () => {
       recent: [false, { providerID: "provider", modelID: "model" }, { providerID: "missing-model" }],
       variant: { model: "high" },
     })
-
-    expect(state).toEqual({
+    expect<unknown>(state).toEqual({
       user: [
-        { providerID: "provider", modelID: "model", visibility: "show", favorite: true },
-        { providerID: "provider", modelID: "hidden", visibility: "hide" },
+        {
+          providerID: "provider",
+          modelID: "model",
+          visibility: "show",
+          favorite: true,
+        },
+        {
+          providerID: "provider",
+          modelID: "hidden",
+          visibility: "hide",
+        },
       ],
-      recent: [{ providerID: "provider", modelID: "model" }],
-      variant: { model: "high" },
+      recent: [
+        {
+          providerID: "provider",
+          modelID: "model",
+        },
+      ],
+      variant: { model: Model.VariantID.make("high", { disableChecks: true }) },
     })
     expect(Schema.encodeSync(ModelState)(state)).toEqual(state)
   })

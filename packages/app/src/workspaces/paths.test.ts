@@ -1,3 +1,4 @@
+import { ProjectID } from "@opencode/schema/project-id"
 import { describe, expect, test } from "bun:test"
 import type { SessionInfo } from "@opencode/client/promise"
 import {
@@ -35,7 +36,7 @@ describe("isWorkspaceDirectory", () => {
 
   const inventoried = withWorktreeInventory(
     normalizeProjectInfo({
-      id: "project",
+      id: ProjectID.make("project", { disableChecks: true }),
       canonical: root,
       time: { created: 1, updated: 1, active: 1 },
       sandboxes: [],
