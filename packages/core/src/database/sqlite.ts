@@ -31,16 +31,31 @@ type RunValues = (
 // Only autocommit statements are retried. Inside a transaction the same error
 // repeats until the transaction is rolled back and restarted (SQLITE_BUSY_SNAPSHOT
 // on a deferred transaction whose read snapshot went stale), so it surfaces at once.
+//
+// The budget and backoff curve are the policy in one place:
+//   50ms doubling to 250ms, jittered, giving up after LOCK_BUDGET_MS total.
+// Note the sleep runs inside the statement's connection lease (SqlClient
+// acquires the single connection for the whole attempt), so a contended
+// write back-pressures other statements on the same client for the duration;
+// the budget bounds that hold per statement, and a caller with N serial
+// statements can spend N times it before surfacing.
+const LOCK_RETRY_INITIAL_MS = 50
+const LOCK_RETRY_FACTOR = 2
+const LOCK_RETRY_MAX_MS = 250
+const LOCK_RETRY_BUDGET_MS = 30_000
+
 export const retryLocked =
   (inTransaction: () => boolean) =>
   <A, E>(effect: Effect.Effect<A, E, never>) =>
     effect.pipe(
       Effect.retry({
         while: (error) => isSqlError(error) && error.reason._tag === "LockTimeoutError" && !inTransaction(),
-        schedule: Schedule.min([Schedule.exponential(50, 2), Schedule.spaced(250)]).pipe(
-          Schedule.jittered,
-          Schedule.while((meta) => meta.elapsed < 30_000),
-        ),
+        schedule: Schedule.min([
+          Schedule.exponential(LOCK_RETRY_INITIAL_MS, LOCK_RETRY_FACTOR),
+          Schedule.spaced(LOCK_RETRY_MAX_MS),
+        ])
+          .pipe(Schedule.jittered)
+          .pipe(Schedule.upTo(LOCK_RETRY_BUDGET_MS)),
       }),
     )
 
