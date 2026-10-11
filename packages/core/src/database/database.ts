@@ -11,17 +11,30 @@ import { isAbsolute, join } from "path"
 import { DatabaseMigration } from "./migration.js"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 
-const makeDatabase = EffectDrizzleSqlite.makeWithDefaults()
-type DatabaseShape = Effect.Success<typeof makeDatabase>
+const makeDatabase = (prefix: string) => EffectDrizzleSqlite.makeWithDefaults({ tablePrefix: prefix })
+type DatabaseShape = Effect.Success<ReturnType<typeof makeDatabase>>
 
 export interface Interface {
   db: DatabaseShape
+  /** Prepended to every OpenCode table and index name; empty by default. */
+  prefix: string
 }
+
+// A plain identifier, since raw migration SQL splices it into quoted names.
+// SQLite reserves names that start with `sqlite_`.
+const prefixPattern = /^(?!sqlite_)[a-z][a-z0-9_]*$/i
 
 export const Options = Schema.Struct({
   path: Schema.optional(Schema.String),
+  /**
+   * Stores every OpenCode table and index as `<prefix><name>` so the database
+   * can be shared with tables OpenCode does not own. Changing it later starts
+   * from an empty namespace; existing tables are not renamed.
+   */
+  prefix: Schema.optional(Schema.String.check(Schema.isPattern(prefixPattern))),
 })
 export type Options = typeof Options.Type
+export type ClientOptions = Pick<Options, "prefix">
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/storage/Database") {}
 
@@ -30,11 +43,13 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/st
 // releasing a shared semaphore resumes the waiting object's fiber inside the
 // releasing object's I/O context, where its first storage call is rejected as
 // cross-object I/O.
-const databaseLayer = (lock: Effect.Effect<Semaphore.Semaphore>) =>
+const databaseLayer = (lock: Effect.Effect<Semaphore.Semaphore>, prefix = "") =>
   Layer.effect(
     Service,
     Effect.gen(function* () {
-      const db = yield* makeDatabase
+      if (prefix !== "" && !prefixPattern.test(prefix))
+        return yield* Effect.die(new Error(`Invalid database table prefix ${JSON.stringify(prefix)}`))
+      const db = yield* makeDatabase(prefix)
 
       if (supportsTuningPragmas) {
         yield* db.run("PRAGMA journal_mode = WAL")
@@ -46,9 +61,9 @@ const databaseLayer = (lock: Effect.Effect<Semaphore.Semaphore>) =>
       // Durable Object SQLite always enforces foreign keys and rejects the pragma.
       if (supportsForeignKeyToggle) yield* db.run("PRAGMA foreign_keys = ON")
       const semaphore = yield* lock
-      yield* semaphore.withPermit(DatabaseMigration.apply(db))
+      yield* semaphore.withPermit(DatabaseMigration.apply(db, prefix))
 
-      return { db }
+      return { db, prefix }
     }).pipe(Effect.orDie),
   )
 
@@ -68,9 +83,10 @@ export function layer(options: Options = { path: ":memory:" }) {
   return Layer.unwrap(
     Effect.gen(function* () {
       const provide = (filename: string) =>
-        databaseLayer(filename === ":memory:" ? Semaphore.make(1) : Effect.succeed(lockFor(filename))).pipe(
-          Layer.provide(sqliteLayer({ filename })),
-        )
+        databaseLayer(
+          filename === ":memory:" ? Semaphore.make(1) : Effect.succeed(lockFor(filename)),
+          options.prefix,
+        ).pipe(Layer.provide(sqliteLayer({ filename })))
       const filename = options.path ?? ":memory:"
       if (filename === ":memory:") return provide(filename)
       const file = isAbsolute(filename) ? filename : join((yield* Global.Service).data, filename)
@@ -102,19 +118,21 @@ async function restrictToOwner(filename: string) {
 // here still goes through the pragma guards and migrations; Global is required
 // because migrations may read it (the v1 import). The lock is created per build
 // because every Durable Object builds this layer over its own storage.
-export const layerFromClient: Layer.Layer<Service, never, SqlClient.SqlClient | Global.Service> = databaseLayer(
-  Semaphore.make(1),
-)
+export function layerFromClient(
+  options: ClientOptions = {},
+): Layer.Layer<Service, never, SqlClient.SqlClient | Global.Service> {
+  return databaseLayer(Semaphore.make(1), options.prefix)
+}
 
 export function configured(options?: Options) {
   return makeGlobalNode({ service: Service, layer: layer(options), deps: [Global.node] })
 }
 
 /** `configured`, but over an injected SqlClient layer instead of a filesystem path. */
-export function configuredClient(client: Layer.Layer<SqlClient.SqlClient>) {
+export function configuredClient(client: Layer.Layer<SqlClient.SqlClient>, options?: ClientOptions) {
   return makeGlobalNode({
     service: Service,
-    layer: layerFromClient.pipe(Layer.provide(client)),
+    layer: layerFromClient(options).pipe(Layer.provide(client)),
     deps: [Global.node],
   })
 }

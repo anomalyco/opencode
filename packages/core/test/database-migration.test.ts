@@ -146,12 +146,12 @@ describe("DatabaseMigration", () => {
         const gate = yield* Deferred.make<void>()
         // Park the first database inside its bootstrap, after it holds its lock.
         const parked = yield* Effect.forkScoped(
-          Layer.build(Database.layerFromClient.pipe(Layer.provide(parkedClient(arrived, gate)))),
+          Layer.build(Database.layerFromClient().pipe(Layer.provide(parkedClient(arrived, gate)))),
         )
         yield* Deferred.await(arrived)
 
         yield* Layer.build(
-          Database.layerFromClient.pipe(Layer.provide(SqliteClient.layer({ filename: ":memory:", disableWAL: true }))),
+          Database.layerFromClient().pipe(Layer.provide(SqliteClient.layer({ filename: ":memory:", disableWAL: true }))),
         ).pipe(Effect.timeout("2 seconds"))
 
         expect(parked.pollUnsafe()).toBeUndefined()

@@ -38,6 +38,13 @@ import type { ServerOptions } from "./options"
 export interface Options {
   /** Durable Object storage whose SQLite database backs the opencode database. */
   readonly storage: DurableObjectStorage
+  /**
+   * `prefix` stores every opencode table and index as `<prefix><name>`, so the
+   * object's own tables never collide with them and bootstrap ignores them.
+   * Set it before the first boot: changing it later starts from an empty
+   * namespace, and existing tables are not renamed.
+   */
+  readonly database?: { readonly prefix?: string }
   readonly app?: ServerOptions["app"]
   readonly password?: string
   /** Inline opencode config content (JSON), same as `ServerOptions.config.content`. */
@@ -75,7 +82,9 @@ export function serverOptions(options: Options): ServerOptions {
 /** The workerd replacement graph, applied after the standard server replacements. */
 export function replacements(options: Options): LayerNode.Replacements {
   return [
-    Database.node.replace(Database.configuredClient(sqliteLayer({ storage: options.storage }))),
+    Database.node.replace(
+      Database.configuredClient(sqliteLayer({ storage: options.storage }), { prefix: options.database?.prefix }),
+    ),
     CrossSpawnSpawner.node.replace(EnvironmentUnavailable.layer),
     Snapshot.node.replace(Snapshot.noopLayer),
     Vcs.node.replace(vcsLayer),

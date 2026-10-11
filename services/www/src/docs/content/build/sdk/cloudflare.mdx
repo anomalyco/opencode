@@ -55,6 +55,25 @@ a Durable Object without running cleanup, so correctness does not depend on `clo
 }
 ```
 
+## Share the database
+
+OpenCode's tables live in the Durable Object's SQLite database. If the object stores its own tables there too, give
+OpenCode a table prefix so its tables and indexes never collide with yours:
+
+```ts
+OpenCodeWorkerd.create({
+  storage: state.storage,
+  database: { prefix: "opencode_" },
+})
+```
+
+Every table and index OpenCode creates, including its migration journal, is stored as `<prefix><name>`, and OpenCode
+ignores tables outside the prefix. Without a prefix, OpenCode expects the database's unprefixed tables to be its own and
+refuses to boot over a database that already has other tables in it, apart from names that start with `_`.
+
+Choose the prefix before the object first boots. OpenCode does not rename existing tables, so adding or changing the
+prefix later starts from an empty namespace and leaves the earlier data in the old tables.
+
 ## Customize
 
 Customize your OpenCode instance by registering plugins bundled with your

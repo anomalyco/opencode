@@ -105,6 +105,8 @@ export class OpenCodeDO {
 
 `blockConcurrencyWhile` keeps every Durable Object event out until the host is ready and resets the object if initialization fails. The retained Promise gives request handlers direct access to the same host after startup. Configuration is a typed JavaScript object, and plugins are imported values bundled with the Worker.
 
+When the object keeps its own tables in the same SQLite database, pass `database: { prefix: "opencode_" }`. OpenCode then stores every table and index, including its migration journal, as `<prefix><name>` and ignores tables outside the prefix. Choose the prefix before the first boot: existing tables are not renamed, so changing it later starts from an empty namespace. `OpenCode.create` accepts the same `database.prefix` for a shared `database.path`.
+
 ## Effect
 
 The Effect-native API remains available from `@opencode/sdk/effect`:

@@ -5,6 +5,8 @@ import os from "os"
 import path from "path"
 import { pathToFileURL } from "url"
 import { parseArgs } from "util"
+import { getTableColumns, getTableName, is } from "drizzle-orm"
+import { SQLiteTable } from "drizzle-orm/sqlite-core"
 
 const root = path.resolve(import.meta.dirname, "../../..")
 const snapshot = path.join(root, "packages/core/schema.json")
@@ -53,7 +55,7 @@ async function generate() {
 
     await fs.mkdir(full)
     await drizzle(temporary, full, "schema")
-    await Bun.write(schema, await formatTypescript(renderSchema(await generatedSql(full))))
+    await Bun.write(schema, await formatTypescript(await renderSchema(await generatedSql(full))))
     await Bun.write(registry, await formatTypescript(renderRegistry(await typescriptMigrations())))
   } finally {
     await fs.rm(temporary, { recursive: true, force: true })
@@ -77,7 +79,7 @@ async function check() {
 
     await fs.mkdir(full)
     await drizzle(temporary, full, "schema")
-    if ((await Bun.file(schema).text()) !== (await formatTypescript(renderSchema(await generatedSql(full))))) {
+    if ((await Bun.file(schema).text()) !== (await formatTypescript(await renderSchema(await generatedSql(full))))) {
       throw new Error("Current database schema is stale. Run `bun script/migration.ts` from packages/core.")
     }
 
@@ -129,14 +131,16 @@ async function typescriptMigrations() {
 }
 
 function renderMigration(name: string, sql: string) {
-  return `import { Effect } from "effect"
+  return `import { sql } from "drizzle-orm"
+import { Effect } from "effect"
+import { prefixedIdentifier } from "../drizzle.js"
 import type { DatabaseMigration } from "../migration.js"
 
 const migration: DatabaseMigration.Migration = {
   id: ${JSON.stringify(name)},
   up(tx) {
     return Effect.gen(function* () {
-${renderStatements(sql)}
+${renderStatements(sql, { table: (table) => `prefixedIdentifier(${JSON.stringify(table)})` })}
     })
   },
 }
@@ -145,14 +149,41 @@ export default migration
 `
 }
 
-function renderSchema(sql: string) {
-  return `import { Effect } from "effect"
+async function renderSchema(sql: string) {
+  const tables = await tableDeclarations()
+  const names: Names = {
+    table: (name) => declaration(tables, name).name,
+    column: (table, column) => {
+      const found = declaration(tables, table)
+      const key = Object.entries(getTableColumns(found.table)).find((entry) => entry[1].name === column)?.[0]
+      if (key === undefined) throw new Error(`Column ${table}.${column} has no declaration.`)
+      return `${found.name}.${key}`
+    },
+  }
+  const body = renderStatements(sql, names)
+  const modules = Map.groupBy(
+    [...tables.values()].filter((table) => body.includes(`\${${table.name}`)),
+    (table) => table.module,
+  )
+  return `import { sql } from "drizzle-orm"
+import { Effect } from "effect"
+import { prefixedIdentifier } from "./drizzle.js"
 import type { DatabaseMigration } from "./migration.js"
+${[...modules.entries()]
+  .sort((a, b) => a[0].localeCompare(b[0]))
+  .map(
+    ([module, declared]) =>
+      `import { ${declared
+        .map((table) => table.name)
+        .sort()
+        .join(", ")} } from ${JSON.stringify(module)}`,
+  )
+  .join("\n")}
 
 const schema: Omit<DatabaseMigration.Migration, "id"> = {
   up(tx) {
     return Effect.gen(function* () {
-${renderStatements(sql)}
+${body}
     })
   },
 }
@@ -161,19 +192,84 @@ export default schema
 `
 }
 
-function renderStatements(sql: string) {
+// How generated SQL names OpenCode's tables. The current schema references
+// the table declarations; migrations are snapshots, so they name tables by
+// string and stay correct when a declaration is later renamed or removed.
+type Names = {
+  table: (name: string) => string
+  column?: (table: string, column: string) => string
+}
+
+// Every exported table declaration the Drizzle config's schema globs see, by
+// table name, with the module the generated schema imports it from.
+async function tableDeclarations() {
+  const files = (
+    await Promise.all(
+      ["src/**/sql.ts", "src/**/*.sql.ts"].map((pattern) =>
+        Array.fromAsync(new Bun.Glob(pattern).scan({ cwd: path.join(root, "packages/core") })),
+      ),
+    )
+  ).flat()
+  const declarations = await Promise.all(
+    files.map(async (file) =>
+      Object.entries(await import(path.join(root, "packages/core", file))).flatMap(([name, value]) =>
+        is(value, SQLiteTable)
+          ? [
+              {
+                name,
+                table: value,
+                module: path.relative("src/database", file).replace(/\.ts$/, ".js"),
+              },
+            ]
+          : [],
+      ),
+    ),
+  )
+  return new Map(declarations.flat().map((declaration) => [getTableName(declaration.table), declaration]))
+}
+
+function declaration<T>(tables: Map<string, T>, name: string) {
+  const found = tables.get(name)
+  if (found === undefined) throw new Error(`Table ${name} has no declaration.`)
+  return found
+}
+
+function renderStatements(sql: string, names: Names) {
   return sql
     .split("--> statement-breakpoint")
     .map((statement) => statement.trim())
     .filter((statement) => statement.length > 0)
-    .map(renderRun)
+    .map((statement) => renderRun(statement, names))
     .join("\n")
 }
 
-function renderRun(statement: string) {
+function renderRun(statement: string, names: Names) {
   const lines = statement.replaceAll("\t", "  ").split("\n")
-  if (lines.length === 1) return `      yield* tx.run(\`${escapeTemplate(lines[0])}\`)`
-  return `      yield* tx.run(\`\n${lines.map((line) => `        ${escapeTemplate(line)}`).join("\n")}\n      \`)`
+  if (lines.length === 1) return `      yield* tx.run(sql\`${renderLine(lines[0], names)}\`)`
+  return `      yield* tx.run(sql\`\n${lines.map((line) => `        ${renderLine(line, names)}`).join("\n")}\n      \`)`
+}
+
+// Drizzle Kit quotes every name. Index names follow `INDEX`, table names follow
+// the other keywords, and tables qualify columns in index expressions; those
+// become interpolations that the prefixed dialect renders under the prefix.
+function renderLine(line: string, names: Names) {
+  const expressions: string[] = []
+  const hole = (expression: string) => `\0${expressions.push(expression) - 1}\0`
+  const marked = line
+    .replace(
+      /\b(INDEX) `(\w+)`/g,
+      (_, keyword: string, name: string) => `${keyword} ${hole(`prefixedIdentifier(${JSON.stringify(name)})`)}`,
+    )
+    .replace(
+      /\b(TABLE|REFERENCES|INTO|FROM|RENAME TO|ON) `(\w+)`/g,
+      (_, keyword: string, name: string) => `${keyword} ${hole(names.table(name))}`,
+    )
+    .replace(/([`"])(\w+)\1\.([`"])(\w+)\3/g, (_, quote: string, table: string, columnQuote: string, column: string) =>
+      names.column
+        ? hole(names.column(table, column))
+        : `${hole(names.table(table))}.${columnQuote}${column}${columnQuote}`,
+    )
+  return escapeTemplate(marked).replace(/\0(\d+)\0/g, (_, index: string) => `\${${expressions[Number(index)]}}`)
 }
 
 function escapeTemplate(line: string) {

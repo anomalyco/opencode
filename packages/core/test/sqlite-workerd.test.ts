@@ -83,7 +83,7 @@ describe("sqlite.workerd", () => {
     await Effect.runPromise(
       Effect.scoped(
         Layer.build(
-          core.Database.layerFromClient.pipe(Layer.provide(sqliteLayer({ storage })), Layer.provide(tempGlobalLayer)),
+          core.Database.layerFromClient().pipe(Layer.provide(sqliteLayer({ storage })), Layer.provide(tempGlobalLayer)),
         ),
       ),
     )

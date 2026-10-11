@@ -492,8 +492,9 @@ export function transformSession(input: TransformInput): TransformResult {
 
 export function status(): Effect.Effect<Status, never, Database.Service> {
   return Effect.gen(function* () {
-    const db = (yield* Database.Service).db
-    if (!(yield* hasLegacySessions(db))) return { status: "completed" as const }
+    const database = yield* Database.Service
+    const db = database.db
+    if (!(yield* hasLegacySessions(database))) return { status: "completed" as const }
     const state = yield* readState(db)
     if (runtimeState.status === "running") return runtimeState
     if (runtimeState.status === "error") return runtimeState
@@ -534,11 +535,12 @@ function updateProgress(progress: Progress) {
 export function run(options: Options = {}): Effect.Effect<RunResult, never, Database.Service | Global.Service> {
   return lock.withPermit(
     Effect.gen(function* () {
-      const db = (yield* Database.Service).db
+      const database = yield* Database.Service
+      const db = database.db
       const global = yield* Global.Service
       const state = yield* readState(db)
       if (state?.phase === "completed") return { status: "completed" as const }
-      if (!(yield* hasLegacySessions(db))) return { status: "completed" as const }
+      if (!(yield* hasLegacySessions(database))) return { status: "completed" as const }
       const now = Date.now()
       yield* db.run(sql`
           INSERT OR IGNORE INTO project (id, worktree, time_created, time_updated, time_active, sandboxes)
@@ -1127,8 +1129,11 @@ function parseState(input: unknown): MigrationState | undefined {
   if (typeof input.cursor === "string") return { phase: "sessions", cursor: input.cursor }
 }
 
-function hasLegacySessions(db: Database.Interface["db"]) {
-  return db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'session'`).pipe(
+// A prefixed database is shared with tables OpenCode does not own, so an
+// unprefixed `session` table is never a v1 install.
+function hasLegacySessions(database: Database.Interface) {
+  if (database.prefix !== "") return Effect.succeed(false)
+  return database.db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'session'`).pipe(
     Effect.map((row) => row !== undefined),
     Effect.orDie,
   )

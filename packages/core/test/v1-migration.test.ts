@@ -882,7 +882,7 @@ describe("V1Migration database workflow", () => {
         const db = yield* makeDb
         yield* DatabaseMigration.apply(db)
         yield* createLegacyTables(db)
-        return yield* effect.pipe(Effect.provideService(Database.Service, { db }))
+        return yield* effect.pipe(Effect.provideService(Database.Service, { db, prefix: "" }))
       }),
     )
 
