@@ -27,6 +27,7 @@ import { type SessionSummary, useData } from "../context"
 import { useFileComponent } from "@opencode/ui/context/file"
 import { type UiI18n, useI18n } from "@opencode/ui/context/i18n"
 import { BasicTool, GenericTool } from "../components/basic-tool"
+import { ToolElapsed } from "../components/tool-elapsed"
 import { createDisclosure } from "../components/disclosure"
 import { FileIcon } from "@opencode/ui/file-icon"
 import { Icon } from "@opencode/ui/icon"
@@ -1843,6 +1844,7 @@ ToolRegistry.register({
         >
           <SessionProgressIndicatorV2 />
           <span class="min-w-0 truncate">{i18n.t("ui.tool.agent.delegating")}</span>
+          <ToolElapsed time={props.time} running />
         </div>
       </Show>
     )
@@ -2359,12 +2361,28 @@ export function SessionShellMessage(props: {
         }}
         output={props.message.output?.output}
         status={props.message.status === "running" ? "running" : "completed"}
+        time={{
+          created: props.message.time.created,
+          ran: props.message.time.created,
+          completed: props.message.time.completed,
+        }}
         defaultOpen={props.defaultOpen}
         open={props.open}
         onOpenChange={props.onOpenChange}
       />
       <Show when={error()}>
-        {(error) => <ToolErrorCard tool="shell" error={error()} subtitle={props.message.command} />}
+        {(error) => (
+          <ToolErrorCard
+            tool="shell"
+            error={error()}
+            subtitle={props.message.command}
+            time={{
+              created: props.message.time.created,
+              ran: props.message.time.created,
+              completed: props.message.time.completed,
+            }}
+          />
+        )}
       </Show>
     </div>
   )
@@ -2463,12 +2481,14 @@ ToolRegistry.register({
     const path = createMemo(() => toolInput(props.input).path ?? "")
     const content = createMemo(() => toolInput(props.input).content ?? "")
     const diagnostics = createMemo(() => getDiagnostics(toolMetadata(props.metadata).diagnostics, path()))
+    const running = () => props.status === "running"
 
     return (
       <div data-component="write-tool">
         <Show when={content() && path()}>
           <ToolFileAccordion
             path={path()}
+            actions={<ToolElapsed time={props.time} running={running()} />}
             defaultOpen={props.defaultOpen}
             open={props.open}
             onOpenChange={props.onOpenChange}
@@ -2524,77 +2544,81 @@ ToolRegistry.register({
     return (
       <div data-component="apply-patch-tool">
         <Show when={files().length > 0} fallback={<FileTool {...props} title={title()} count={0} />}>
-          <FileAccordionGroup>
-            <Index each={files()}>
-              {(file) => {
-                // Each file opens on its own: the owner's `fileOpen` controls it, otherwise it keeps its own state.
-                const disclosure = createDisclosure({
-                  open: () => (props.fileOpen ? props.fileOpen(file().path) === true : undefined),
-                  defer: () => props.deferContent !== false,
-                  onOpenChange: (open) => props.onFileOpenChange?.(file().path, open),
-                })
+          <FileTool {...props} title={title()} count={files().length}>
+            <FileAccordionGroup>
+              <Index each={files()}>
+                {(file) => {
+                  // Each file opens on its own: the owner's `fileOpen` controls it, otherwise it keeps its own state.
+                  const disclosure = createDisclosure({
+                    open: () => (props.fileOpen ? props.fileOpen(file().path) === true : undefined),
+                    defer: () => props.deferContent !== false,
+                    onOpenChange: (open) => props.onFileOpenChange?.(file().path, open),
+                  })
 
-                return (
-                  <FileAccordionItem
-                    open={disclosure.open()}
-                    onOpenChange={disclosure.setOpen}
-                    type={file().type}
-                    header={
-                      <div data-slot="apply-patch-trigger-content">
-                        <div data-slot="apply-patch-file-info">
-                          <FileIcon node={{ path: file().path, type: "file" }} />
-                          <div data-slot="apply-patch-file-name-container">
-                            <Show when={file().path.includes("/")}>
-                              <span data-slot="apply-patch-directory">{`\u202A${displayDirectory(file().path)}\u202C`}</span>
-                            </Show>
-                            <span data-slot="apply-patch-filename">{getFilename(file().path)}</span>
+                  return (
+                    <FileAccordionItem
+                      open={disclosure.open()}
+                      onOpenChange={disclosure.setOpen}
+                      type={file().type}
+                      header={
+                        <div data-slot="apply-patch-trigger-content">
+                          <div data-slot="apply-patch-file-info">
+                            <FileIcon node={{ path: file().path, type: "file" }} />
+                            <div data-slot="apply-patch-file-name-container">
+                              <Show when={file().path.includes("/")}>
+                                <span data-slot="apply-patch-directory">{`\u202A${displayDirectory(file().path)}\u202C`}</span>
+                              </Show>
+                              <span data-slot="apply-patch-filename">{getFilename(file().path)}</span>
+                            </div>
+                          </div>
+                        }
+                      >
+                          <div data-slot="apply-patch-trigger-actions">
+                            <Switch>
+                              <Match when={file().type === "add"}>
+                                <span data-slot="apply-patch-change" data-type="added">
+                                  {i18n.t("ui.patch.action.created")}
+                                </span>
+                              </Match>
+                              <Match when={file().type === "delete"}>
+                                <span data-slot="apply-patch-change" data-type="removed">
+                                  {i18n.t("ui.patch.action.deleted")}
+                                </span>
+                              </Match>
+                              <Match when={true}>
+                                <DiffChanges
+                                  appearance="standard"
+                                  changes={{ additions: file().additions, deletions: file().deletions }}
+                                />
+                              </Match>
+                            </Switch>
+                            <Icon name="chevron-grabber-vertical" size="small" />
                           </div>
                         </div>
-                        <div data-slot="apply-patch-trigger-actions">
-                          <Switch>
-                            <Match when={file().type === "add"}>
-                              <span data-slot="apply-patch-change" data-type="added">
-                                {i18n.t("ui.patch.action.created")}
-                              </span>
-                            </Match>
-                            <Match when={file().type === "delete"}>
-                              <span data-slot="apply-patch-change" data-type="removed">
-                                {i18n.t("ui.patch.action.deleted")}
-                              </span>
-                            </Match>
-                            <Match when={true}>
-                              <DiffChanges
-                                appearance="standard"
-                                changes={{ additions: file().additions, deletions: file().deletions }}
+                      }
+                    >
+                      <Show when={disclosure.mounted()}>
+                        <For each={file().views}>
+                          {(view) => (
+                            <div data-component="apply-patch-file-diff">
+                              <Dynamic
+                                component={fileComponent}
+                                mode="diff"
+                                virtualize={props.virtualizeDiff}
+                                fileDiff={view.fileDiff}
+                                hunkSeparators={view.fileDiff.isPartial ? "simple" : "line-info-basic"}
+                                onRendered={props.onContentRendered}
                               />
-                            </Match>
-                          </Switch>
-                          <Icon name="chevron-grabber-vertical" size="small" />
-                        </div>
-                      </div>
-                    }
-                  >
-                    <Show when={disclosure.mounted()}>
-                      <For each={file().views}>
-                        {(view) => (
-                          <div data-component="apply-patch-file-diff">
-                            <Dynamic
-                              component={fileComponent}
-                              mode="diff"
-                              virtualize={props.virtualizeDiff}
-                              fileDiff={view.fileDiff}
-                              hunkSeparators={view.fileDiff.isPartial ? "simple" : "line-info-basic"}
-                              onRendered={props.onContentRendered}
-                            />
-                          </div>
-                        )}
-                      </For>
-                    </Show>
-                  </FileAccordionItem>
-                )
-              }}
-            </Index>
-          </FileAccordionGroup>
+                            </div>
+                          )}
+                        </For>
+                      </Show>
+                    </FileAccordionItem>
+                  )
+                }}
+              </Index>
+            </FileAccordionGroup>
+          </FileTool>
         </Show>
       </div>
     )
@@ -2676,6 +2700,7 @@ ToolRegistry.register({
             <span data-slot="tool-loaded-value" aria-hidden="true">
               <TextShimmer as="span" text={name()} active={running()} />
             </span>
+            <ToolElapsed time={props.time} running={running()} />
             <Show when={parts()[1]?.trim()}>
               {(suffix) => (
                 <span data-slot="tool-loaded-kind" aria-hidden="true">

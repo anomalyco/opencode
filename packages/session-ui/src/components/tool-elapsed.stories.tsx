@@ -26,6 +26,23 @@ export const RunningAndFinished = {
         ...storyTool("elapsed_error", "shell", "error", { command: "failed command" }, { error: "Command failed" }),
         time: { created: started - 5000, ran: started, completed: started + 1234 },
       },
+      {
+        ...storyTool("elapsed_write", "write", state.completed === undefined ? "running" : "completed", {
+          path: "src/index.ts",
+          content: "hello",
+        }),
+        time: { created: started - 5000, ran: started, completed: state.completed },
+      },
+      {
+        ...storyTool(
+          "elapsed_skill",
+          "skill",
+          state.completed === undefined ? "running" : "completed",
+          { name: "review" },
+          { metadata: { name: "review" } },
+        ),
+        time: { created: started - 5000, ran: started, completed: state.completed },
+      },
       { ...storyTool("elapsed_pending", "plugin_tool", "streaming", {}), time: { created: started } },
     ]
     const message = (): SessionMessageAssistant => ({
