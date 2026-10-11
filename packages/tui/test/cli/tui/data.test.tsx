@@ -1,3 +1,13 @@
+import { Integration } from "@opencode/schema/integration"
+import { Credential } from "@opencode/schema/credential"
+import { Model } from "@opencode/schema/model"
+import { Provider } from "@opencode/schema/provider"
+import { Agent } from "@opencode/schema/agent"
+import { Form } from "@opencode/schema/form"
+import { Permission } from "@opencode/schema/permission"
+import { Shell } from "@opencode/schema/shell"
+import { Session } from "@opencode/schema/session"
+import { Project } from "@opencode/schema/project"
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
 import { testRender } from "@opentui/solid"
@@ -144,7 +154,7 @@ test("syncs VCS info and applies branch updates", async () => {
   try {
     await wait(() => data.location.vcs.info()?.branch.current === "main")
     emitEvent(events, {
-      id: "evt_vcs_branch",
+      id: Event.ID.make("evt_vcs_branch", { disableChecks: true }),
       created: Date.now(),
       type: "vcs.branch.updated",
       data: { branch: "feature" },
@@ -197,8 +207,8 @@ test("proactively syncs project metadata most recently active first", async () =
   ))
 
   try {
-    await wait(() => data.project.get("proj_test") !== undefined)
-    expect(data.project.list()).toEqual([
+    await wait(() => data.project.get(Project.ID.make("proj_test", { disableChecks: true })) !== undefined)
+    expect<unknown>(data.project.list()).toEqual([
       {
         id: "proj_old",
         canonical: "/old/project",
@@ -287,7 +297,7 @@ test("syncs MCP status when a connection settles during bootstrap", async () => 
   try {
     await wait(() => data.location.mcp.server.list()?.[0]?.status.status === "pending")
     emitEvent(events, {
-      id: "evt_mcp_connected",
+      id: Event.ID.make("evt_mcp_connected", { disableChecks: true }),
       created: 1,
       type: "mcp.status.changed",
       data: { server: "context7" },
@@ -310,8 +320,8 @@ test("refreshes resources into reactive getters", async () => {
     if (url.pathname === "/api/session/ses_test")
       return json({
         data: {
-          id: "ses_test",
-          projectID: "proj_test",
+          id: Session.ID.make("ses_test", { disableChecks: true }),
+          projectID: Project.ID.make("proj_test", { disableChecks: true }),
           cost: 0,
           tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
           time: { created: 0, updated: 0 },
@@ -322,8 +332,20 @@ test("refreshes resources into reactive getters", async () => {
     if (url.pathname === "/api/session/ses_test/message")
       return json({
         data: [
-          { id: "msg_second", created: 0, type: "user", text: "Second", time: { created: 2 } },
-          { id: "msg_first", created: 0, type: "user", text: "First", time: { created: 1 } },
+          {
+            id: SessionMessage.ID.make("msg_second", { disableChecks: true }),
+            created: 0,
+            type: "user",
+            text: "Second",
+            time: { created: 2 },
+          },
+          {
+            id: SessionMessage.ID.make("msg_first", { disableChecks: true }),
+            created: 0,
+            type: "user",
+            text: "First",
+            time: { created: 1 },
+          },
         ],
         cursor: {},
       })
@@ -345,7 +367,14 @@ test("refreshes resources into reactive getters", async () => {
   function Probe() {
     data = useData()
     onMount(ready)
-    return <text>{data.session.message.get("ses_test", "msg_second")?.id ?? "missing"}</text>
+    return (
+      <text>
+        {data.session.message.get(
+          Session.ID.make("ses_test", { disableChecks: true }),
+          SessionMessage.ID.make("msg_second", { disableChecks: true }),
+        )?.id ?? "missing"}
+      </text>
+    )
   }
 
   const app = await testRender(() => (
@@ -363,22 +392,29 @@ test("refreshes resources into reactive getters", async () => {
   try {
     await mounted
     expect(data.location.default()).toEqual({ directory: process.cwd() })
-    expect(data.session.get("ses_test")).toBeUndefined()
+    expect(data.session.get(Session.ID.make("ses_test", { disableChecks: true }))).toBeUndefined()
     expect(data.location.agent.list(location)).toBeUndefined()
 
-    await data.session.sync("ses_test")
-    await data.session.message.sync("ses_test")
+    await data.session.sync(Session.ID.make("ses_test", { disableChecks: true }))
+    await data.session.message.sync(Session.ID.make("ses_test", { disableChecks: true }))
     await data.location.agent.sync()
     await data.location.websearch.refresh()
 
-    expect(data.session.get("ses_test")?.title).toBe("Test session")
-    expect(data.session.message.list("ses_test").map((message) => message.id)).toEqual(["msg_first", "msg_second"])
-    expect(data.session.message.get("ses_test", "msg_second")?.id).toBe("msg_second")
+    expect(data.session.get(Session.ID.make("ses_test", { disableChecks: true }))?.title).toBe("Test session")
+    expect<unknown>(
+      data.session.message.list(Session.ID.make("ses_test", { disableChecks: true })).map((message) => message.id),
+    ).toEqual(["msg_first", "msg_second"])
+    expect<unknown>(
+      data.session.message.get(
+        Session.ID.make("ses_test", { disableChecks: true }),
+        SessionMessage.ID.make("msg_second", { disableChecks: true }),
+      )?.id,
+    ).toBe("msg_second")
     await app.renderOnce()
-    expect(app.captureCharFrame()).toContain("msg_second")
+    expect<unknown>(app.captureCharFrame()).toContain("msg_second")
     expect(data.location.default()).toEqual({ directory, workspaceID: undefined })
-    expect(data.location.agent.list(location)?.map((agent) => agent.id)).toEqual(["build"])
-    expect(data.location.websearch.list(location)).toEqual([{ id: "standalone", name: "Standalone" }])
+    expect<unknown>(data.location.agent.list(location)?.map((agent) => agent.id)).toEqual(["build"])
+    expect<unknown>(data.location.websearch.list(location)).toEqual([{ id: "standalone", name: "Standalone" }])
   } finally {
     app.renderer.destroy()
   }
@@ -386,13 +422,13 @@ test("refreshes resources into reactive getters", async () => {
 
 test("applies absolute usage events to session info", async () => {
   const events = createEventStream()
-  const sessionID = "ses_usage_refresh"
+  const sessionID = Session.ID.make("ses_usage_refresh", { disableChecks: true })
   const calls = createFetch((url) => {
     if (url.pathname === `/api/session/${sessionID}`)
       return json({
         data: {
           id: sessionID,
-          projectID: "proj_test",
+          projectID: Project.ID.make("proj_test", { disableChecks: true }),
           cost: 0,
           tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
           time: { created: 0, updated: 0 },
@@ -423,11 +459,11 @@ test("applies absolute usage events to session info", async () => {
   try {
     await data.session.sync(sessionID)
     emitEvent(events, {
-      id: "evt_usage_2",
+      id: Event.ID.make("evt_usage_2", { disableChecks: true }),
       created: 2,
       type: "session.usage.updated",
       data: {
-        sessionID,
+        sessionID: Session.ID.make(sessionID, { disableChecks: true }),
         cost: 0.5,
         tokens: { input: 5, output: 2, reasoning: 1, cache: { read: 1, write: 1 } },
       },
@@ -441,11 +477,11 @@ test("applies absolute usage events to session info", async () => {
     })
 
     emitEvent(events, {
-      id: "evt_usage_3",
+      id: Event.ID.make("evt_usage_3", { disableChecks: true }),
       created: 3,
       type: "session.usage.updated",
       data: {
-        sessionID,
+        sessionID: Session.ID.make(sessionID, { disableChecks: true }),
         cost: 1,
         tokens: { input: 10, output: 4, reasoning: 1, cache: { read: 1, write: 1 } },
       },
@@ -454,11 +490,11 @@ test("applies absolute usage events to session info", async () => {
     expect(data.session.get(sessionID)?.title).toBe("Usage")
 
     emitEvent(events, {
-      id: "evt_usage_deleted",
+      id: Event.ID.make("evt_usage_deleted", { disableChecks: true }),
       created: 9,
       type: "session.deleted",
       durable: durable(sessionID, 9, 2),
-      data: { sessionID },
+      data: { sessionID: Session.ID.make(sessionID, { disableChecks: true }) },
     })
     await wait(() => data.session.get(sessionID) === undefined)
   } finally {
@@ -468,7 +504,7 @@ test("applies absolute usage events to session info", async () => {
 
 test("truncates committed revert messages without changing lifetime usage", async () => {
   const events = createEventStream()
-  const sessionID = "ses_revert_usage"
+  const sessionID = Session.ID.make("ses_revert_usage", { disableChecks: true })
   let cost = 0
   let tokens = { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
   const calls = createFetch((url) => {
@@ -477,7 +513,7 @@ test("truncates committed revert messages without changing lifetime usage", asyn
     return json({
       data: {
         id: sessionID,
-        projectID: "proj_test",
+        projectID: Project.ID.make("proj_test", { disableChecks: true }),
         cost,
         tokens,
         time: { created: 0, updated: 0 },
@@ -508,95 +544,111 @@ test("truncates committed revert messages without changing lifetime usage", asyn
   try {
     await data.session.sync(sessionID)
     emitEvent(events, {
-      id: "evt_revert_boundary_started",
+      id: Event.ID.make("evt_revert_boundary_started", { disableChecks: true }),
       created: 1,
       type: "session.step.started",
       durable: durable(sessionID, 1),
       data: {
         started: 1,
-        sessionID,
-        assistantMessageID: "msg_revert_boundary",
-        agent: "build",
-        model: { providerID: "provider", id: "model" },
+        sessionID: Session.ID.make(sessionID, { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_revert_boundary", { disableChecks: true }),
+        agent: Agent.ID.make("build", { disableChecks: true }),
+        model: {
+          providerID: Provider.ID.make("provider", { disableChecks: true }),
+          id: Model.ID.make("model", { disableChecks: true }),
+        },
       },
     })
     cost = 0.5
     tokens = { input: 5, output: 2, reasoning: 1, cache: { read: 1, write: 1 } }
     emitEvent(events, {
-      id: "evt_revert_boundary_ended",
+      id: Event.ID.make("evt_revert_boundary_ended", { disableChecks: true }),
       created: 2,
       type: "session.step.ended",
       durable: durable(sessionID, 2),
       data: {
-        sessionID,
-        assistantMessageID: "msg_revert_boundary",
+        sessionID: Session.ID.make(sessionID, { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_revert_boundary", { disableChecks: true }),
         finish: "stop",
         cost: 0.5,
         tokens,
       },
     })
     emitEvent(events, {
-      id: "evt_revert_boundary_usage",
+      id: Event.ID.make("evt_revert_boundary_usage", { disableChecks: true }),
       created: 2,
       type: "session.usage.updated",
-      data: { sessionID, cost, tokens },
+      data: { sessionID: Session.ID.make(sessionID, { disableChecks: true }), cost, tokens },
     })
     await wait(() => data.session.get(sessionID)?.cost === 0.5)
 
     emitEvent(events, {
-      id: "evt_revert_later_started",
+      id: Event.ID.make("evt_revert_later_started", { disableChecks: true }),
       created: 3,
       type: "session.step.started",
       durable: durable(sessionID, 3),
       data: {
         started: 3,
-        sessionID,
-        assistantMessageID: "msg_revert_later",
-        agent: "build",
-        model: { providerID: "provider", id: "model" },
+        sessionID: Session.ID.make(sessionID, { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_revert_later", { disableChecks: true }),
+        agent: Agent.ID.make("build", { disableChecks: true }),
+        model: {
+          providerID: Provider.ID.make("provider", { disableChecks: true }),
+          id: Model.ID.make("model", { disableChecks: true }),
+        },
       },
     })
     cost = 0.75
     tokens = { input: 8, output: 3, reasoning: 1, cache: { read: 1, write: 1 } }
     emitEvent(events, {
-      id: "evt_revert_later_ended",
+      id: Event.ID.make("evt_revert_later_ended", { disableChecks: true }),
       created: 4,
       type: "session.step.ended",
       durable: durable(sessionID, 4),
       data: {
-        sessionID,
-        assistantMessageID: "msg_revert_later",
+        sessionID: Session.ID.make(sessionID, { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_revert_later", { disableChecks: true }),
         finish: "stop",
         cost: 0.25,
         tokens: { input: 3, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
       },
     })
     emitEvent(events, {
-      id: "evt_revert_later_usage",
+      id: Event.ID.make("evt_revert_later_usage", { disableChecks: true }),
       created: 4,
       type: "session.usage.updated",
-      data: { sessionID, cost, tokens },
+      data: { sessionID: Session.ID.make(sessionID, { disableChecks: true }), cost, tokens },
     })
     await wait(() => data.session.get(sessionID)?.cost === 0.75)
     emitEvent(events, {
-      id: "evt_revert_staged",
+      id: Event.ID.make("evt_revert_staged", { disableChecks: true }),
       created: 5,
       type: "session.revert.staged",
       durable: durable(sessionID, 5),
-      data: { sessionID, revert: { messageID: "msg_revert_later" } },
+      data: {
+        sessionID: Session.ID.make(sessionID, { disableChecks: true }),
+        revert: { messageID: SessionMessage.ID.make("msg_revert_later", { disableChecks: true }) },
+      },
     })
-    await wait(() => data.session.get(sessionID)?.revert?.messageID === "msg_revert_later")
+    await wait(
+      () =>
+        data.session.get(sessionID)?.revert?.messageID ===
+        SessionMessage.ID.make("msg_revert_later", { disableChecks: true }),
+    )
 
     emitEvent(events, {
-      id: "evt_revert_committed",
+      id: Event.ID.make("evt_revert_committed", { disableChecks: true }),
       created: 6,
       type: "session.revert.committed",
       durable: durable(sessionID, 6),
-      data: { sessionID, to: "msg_revert_later" },
+      data: {
+        sessionID: Session.ID.make(sessionID, { disableChecks: true }),
+        to: SessionMessage.ID.make("msg_revert_later", { disableChecks: true }),
+      },
     })
     await wait(() => data.session.message.list(sessionID).length === 1)
     expect(data.session.get(sessionID)?.cost).toBe(0.75)
-    expect(data.session.message.list(sessionID).map((message) => message.id)).toEqual(["msg_revert_boundary"])
+    expect<unknown>(data.session.message.list(sessionID).map((message) => message.id)).toEqual(["msg_revert_boundary"])
     expect(data.session.get(sessionID)?.revert).toBeUndefined()
     expect(data.session.get(sessionID)?.tokens).toEqual(tokens)
   } finally {
@@ -611,8 +663,8 @@ test("updates session location when moved", async () => {
     if (url.pathname === "/api/session/ses_test")
       return json({
         data: {
-          id: "ses_test",
-          projectID: "proj_test",
+          id: Session.ID.make("ses_test", { disableChecks: true }),
+          projectID: Project.ID.make("proj_test", { disableChecks: true }),
           cost: 0,
           tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
           time: { created: 0, updated: 0 },
@@ -647,31 +699,33 @@ test("updates session location when moved", async () => {
 
   try {
     await mounted
-    await data.session.sync("ses_test")
+    await data.session.sync(Session.ID.make("ses_test", { disableChecks: true }))
     emitEvent(events, {
-      id: "evt_moved_1",
+      id: Event.ID.make("evt_moved_1", { disableChecks: true }),
       created: 1,
       type: "session.moved",
-      durable: durable("ses_test"),
+      durable: durable(Session.ID.make("ses_test", { disableChecks: true })),
       data: {
-        sessionID: "ses_test",
+        sessionID: Session.ID.make("ses_test", { disableChecks: true }),
         location: { directory: destination },
-        projectID: "project-moved",
+        projectID: Project.ID.make("project-moved", { disableChecks: true }),
         subpath: "packages/cli",
       },
     })
-    await wait(() => data.session.get("ses_test")?.location.directory === destination)
-    expect(data.session.get("ses_test")?.projectID).toBe("project-moved")
-    expect(data.session.get("ses_test")?.subpath).toBe("packages/cli")
-    expect(data.session.message.list("ses_test")).toContainEqual({
-      id: "msg_moved_1",
+    await wait(
+      () => data.session.get(Session.ID.make("ses_test", { disableChecks: true }))?.location.directory === destination,
+    )
+    expect<unknown>(data.session.get(Session.ID.make("ses_test", { disableChecks: true }))?.projectID).toBe("project-moved")
+    expect(data.session.get(Session.ID.make("ses_test", { disableChecks: true }))?.subpath).toBe("packages/cli")
+    expect(data.session.message.list(Session.ID.make("ses_test", { disableChecks: true }))).toContainEqual({
+      id: SessionMessage.ID.make("msg_moved_1", { disableChecks: true }),
       type: "location-switched",
       location: { directory: destination },
-      projectID: "project-moved",
+      projectID: Project.ID.make("project-moved", { disableChecks: true }),
       subpath: "packages/cli",
       previous: {
         location: { directory },
-        projectID: "proj_test",
+        projectID: Project.ID.make("proj_test", { disableChecks: true }),
       },
       time: { created: 1 },
     })
@@ -719,22 +773,30 @@ test("restores running manual compaction before applying live deltas", async () 
   ))
 
   try {
-    await data.session.message.sync("session-compaction")
-    expect(data.session.message.get("session-compaction", "message-compaction")).toMatchObject({
+    await data.session.message.sync(Session.ID.make("session-compaction", { disableChecks: true }))
+    expect(
+      data.session.message.get(
+        Session.ID.make("session-compaction", { disableChecks: true }),
+        SessionMessage.ID.make("message-compaction", { disableChecks: true }),
+      ),
+    ).toMatchObject({
       type: "compaction",
       status: "running",
       summary: "Existing ",
     })
 
     emitEvent(events, {
-      id: "evt_compaction_delta",
+      id: Event.ID.make("evt_compaction_delta", { disableChecks: true }),
       created: 2,
       type: "session.compaction.delta",
-      data: { sessionID: "session-compaction", text: "summary" },
+      data: { sessionID: Session.ID.make("session-compaction", { disableChecks: true }), text: "summary" },
     })
 
     await wait(() => {
-      const message = data.session.message.get("session-compaction", "message-compaction")
+      const message = data.session.message.get(
+        Session.ID.make("session-compaction", { disableChecks: true }),
+        SessionMessage.ID.make("message-compaction", { disableChecks: true }),
+      )
       return message?.type === "compaction" && message.status === "running" && message.summary === "Existing summary"
     })
   } finally {
@@ -777,7 +839,7 @@ test("reconnects the event stream and resyncs active data", async () => {
       data: [
         {
           id: `model-${requests.model}`,
-          providerID: "provider",
+          providerID: Provider.ID.make("provider", { disableChecks: true }),
           name: `Model ${requests.model}`,
           api: { type: "native" },
           capabilities: { tools: false, input: [], output: [] },
@@ -814,9 +876,14 @@ test("reconnects the event stream and resyncs active data", async () => {
 
   try {
     await wait(() => data.location.model.list()?.[0]?.id === "model-1")
-    await wait(() => data.session.status("session-stale") === "running")
-    await data.session.message.sync("session-stale")
-    expect(data.session.message.get("session-stale", "message-stale")?.id).toBe("message-stale")
+    await wait(() => data.session.status(Session.ID.make("session-stale", { disableChecks: true })) === "running")
+    await data.session.message.sync(Session.ID.make("session-stale", { disableChecks: true }))
+    expect<unknown>(
+      data.session.message.get(
+        Session.ID.make("session-stale", { disableChecks: true }),
+        SessionMessage.ID.make("message-stale", { disableChecks: true }),
+      )?.id,
+    ).toBe("message-stale")
     expect(client.connection.status()).toBe("connected")
     expect(client.connection.attempt()).toBe(0)
 
@@ -827,21 +894,37 @@ test("reconnects the event stream and resyncs active data", async () => {
 
     await wait(() => requests.active === 2 && client.connection.status() === "connected", 4000)
     resolveActive(json({ data: { "session-new": { type: "running" } } }))
-    void data.session.message.sync("session-stale")
+    void data.session.message.sync(Session.ID.make("session-stale", { disableChecks: true }))
 
     await wait(() => data.location.model.list()?.[0]?.id === "model-2", 4000)
-    await wait(() => data.session.status("session-stale") === "idle")
+    await wait(() => data.session.status(Session.ID.make("session-stale", { disableChecks: true })) === "idle")
     await wait(() => requests.message === 2)
-    expect(data.session.message.get("session-stale", "message-stale")?.id).toBe("message-stale")
+    expect<unknown>(
+      data.session.message.get(
+        Session.ID.make("session-stale", { disableChecks: true }),
+        SessionMessage.ID.make("message-stale", { disableChecks: true }),
+      )?.id,
+    ).toBe("message-stale")
     resolveMessages(
       json({
         data: [{ id: "message-fresh", type: "user", text: "Fresh", time: { created: 2 } }],
         cursor: {},
       }),
     )
-    await wait(() => data.session.message.get("session-stale", "message-fresh") !== undefined)
-    expect(data.session.message.get("session-stale", "message-stale")).toBeUndefined()
-    await wait(() => data.session.status("session-new") === "running")
+    await wait(
+      () =>
+        data.session.message.get(
+          Session.ID.make("session-stale", { disableChecks: true }),
+          SessionMessage.ID.make("message-fresh", { disableChecks: true }),
+        ) !== undefined,
+    )
+    expect(
+      data.session.message.get(
+        Session.ID.make("session-stale", { disableChecks: true }),
+        SessionMessage.ID.make("message-stale", { disableChecks: true }),
+      ),
+    ).toBeUndefined()
+    await wait(() => data.session.status(Session.ID.make("session-new", { disableChecks: true })) === "running")
     expect(requests.event).toBe(2)
     expect(requests.message).toBe(2)
     expect(client.connection.status()).toBe("connected")
@@ -854,7 +937,7 @@ test("reconnects the event stream and resyncs active data", async () => {
 
 test("completes exploration and keeps live rows when a queued prompt is promoted", async () => {
   const events = createEventStream()
-  const sessionID = "session-promotion"
+  const sessionID = Session.ID.make("session-promotion", { disableChecks: true })
   const calls = createFetch((url) => {
     if (url.pathname === `/api/session/${sessionID}/message`) return json({ data: [], cursor: {} })
   }, events)
@@ -891,40 +974,56 @@ test("completes exploration and keeps live rows when a queued prompt is promoted
     // as they do live; otherwise those rebuilds, not the live append, create the part rows.
     await wait(() => synced)
     emitEvent(events, {
-      id: "evt_step_started",
+      id: Event.ID.make("evt_step_started", { disableChecks: true }),
       created: 1,
       type: "session.step.started",
       durable: durable(sessionID),
       data: {
         started: 1,
-        sessionID,
-        assistantMessageID: "message-assistant",
-        agent: "build",
-        model: { id: "model", providerID: "provider" },
+        sessionID: Session.ID.make(sessionID, { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("message-assistant", { disableChecks: true }),
+        agent: Agent.ID.make("build", { disableChecks: true }),
+        model: {
+          id: Model.ID.make("model", { disableChecks: true }),
+          providerID: Provider.ID.make("provider", { disableChecks: true }),
+        },
       },
     })
-    await wait(() => data.session.message.get(sessionID, "message-assistant") !== undefined)
+    await wait(
+      () =>
+        data.session.message.get(sessionID, SessionMessage.ID.make("message-assistant", { disableChecks: true })) !==
+        undefined,
+    )
     emitEvent(events, {
-      id: "evt_text_started",
+      id: Event.ID.make("evt_text_started", { disableChecks: true }),
       created: 1,
       type: "session.text.started",
       durable: durable(sessionID, 1),
-      data: { sessionID, assistantMessageID: "message-assistant", ordinal: 0 },
+      data: {
+        sessionID,
+        assistantMessageID: SessionMessage.ID.make("message-assistant", { disableChecks: true }),
+        ordinal: 0,
+      },
     })
     emitEvent(events, {
-      id: "evt_text_delta",
+      id: Event.ID.make("evt_text_delta", { disableChecks: true }),
       created: 1,
       type: "session.text.delta",
-      data: { sessionID, assistantMessageID: "message-assistant", ordinal: 0, delta: "Looking" },
+      data: {
+        sessionID,
+        assistantMessageID: SessionMessage.ID.make("message-assistant", { disableChecks: true }),
+        ordinal: 0,
+        delta: "Looking",
+      },
     })
     emitEvent(events, {
-      id: "evt_tool_started",
+      id: Event.ID.make("evt_tool_started", { disableChecks: true }),
       created: 2,
       type: "session.tool.input.started",
       durable: durable(sessionID, 2),
       data: {
-        sessionID,
-        assistantMessageID: "message-assistant",
+        sessionID: Session.ID.make(sessionID, { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("message-assistant", { disableChecks: true }),
         id: "call-read",
         name: "read",
       },
@@ -933,13 +1032,13 @@ test("completes exploration and keeps live rows when a queued prompt is promoted
     const text = rows.find((row) => row.type === "part")
 
     emitEvent(events, {
-      id: "evt_prompt_admitted",
+      id: Event.ID.make("evt_prompt_admitted", { disableChecks: true }),
       created: 3,
       type: "session.inbox.enqueued",
       durable: durable(sessionID, 3),
       data: {
-        sessionID,
-        inboxID: "message-user",
+        sessionID: Session.ID.make(sessionID, { disableChecks: true }),
+        inboxID: SessionMessage.ID.make("message-user", { disableChecks: true }),
         item: { type: "user", payload: { text: "Continue" }, delivery: "steer" },
       },
     })
@@ -947,13 +1046,13 @@ test("completes exploration and keeps live rows when a queued prompt is promoted
     expect(rows.find((row) => row.type === "group")?.completed).toBe(false)
 
     emitEvent(events, {
-      id: "evt_prompt_promoted",
+      id: Event.ID.make("evt_prompt_promoted", { disableChecks: true }),
       created: 4,
       type: "session.inbox.delivered",
       durable: durable(sessionID, 4),
       data: {
-        sessionID,
-        inboxID: "message-user",
+        sessionID: Session.ID.make(sessionID, { disableChecks: true }),
+        inboxID: SessionMessage.ID.make("message-user", { disableChecks: true }),
       },
     })
     await wait(() => rows.find((row) => row.type === "group")?.completed === true)
@@ -968,7 +1067,7 @@ test("completes exploration and keeps live rows when a queued prompt is promoted
 
 test("updates and removes queued inputs from durable lifecycle events", async () => {
   const events = createEventStream()
-  const sessionID = "session-queue-management"
+  const sessionID = Session.ID.make("session-queue-management", { disableChecks: true })
   const calls = createFetch((url) => {
     if (url.pathname === `/api/session/${sessionID}/message`) return json({ data: [], cursor: {} })
   }, events)
@@ -998,13 +1097,13 @@ test("updates and removes queued inputs from durable lifecycle events", async ()
   try {
     await wait(() => client.connection.status() === "connected")
     emitEvent(events, {
-      id: "evt_queue_admitted",
+      id: Event.ID.make("evt_queue_admitted", { disableChecks: true }),
       created: 1,
       type: "session.inbox.enqueued",
       durable: durable(sessionID),
       data: {
-        sessionID,
-        inboxID: "message-queued",
+        sessionID: Session.ID.make(sessionID, { disableChecks: true }),
+        inboxID: SessionMessage.ID.make("message-queued", { disableChecks: true }),
         item: { type: "user", payload: { text: "Steer me" }, delivery: "queue" },
       },
     })
@@ -1012,11 +1111,15 @@ test("updates and removes queued inputs from durable lifecycle events", async ()
     expect(rows).not.toContainEqual(expect.objectContaining({ type: "message", messageID: "message-queued" }))
 
     emitEvent(events, {
-      id: "evt_queue_steered",
+      id: Event.ID.make("evt_queue_steered", { disableChecks: true }),
       created: 2,
       type: "session.inbox.delivery.changed",
       durable: durable(sessionID, 1),
-      data: { sessionID, inboxID: "message-queued", delivery: "steer" },
+      data: {
+        sessionID: Session.ID.make(sessionID, { disableChecks: true }),
+        inboxID: SessionMessage.ID.make("message-queued", { disableChecks: true }),
+        delivery: "steer",
+      },
     })
     await wait(() =>
       data.session.pending
@@ -1026,11 +1129,15 @@ test("updates and removes queued inputs from durable lifecycle events", async ()
     expect(rows).toContainEqual(expect.objectContaining({ type: "message", messageID: "message-queued" }))
 
     emitEvent(events, {
-      id: "evt_queue_restored",
+      id: Event.ID.make("evt_queue_restored", { disableChecks: true }),
       created: 3,
       type: "session.inbox.delivery.changed",
       durable: durable(sessionID, 2),
-      data: { sessionID, inboxID: "message-queued", delivery: "queue" },
+      data: {
+        sessionID: Session.ID.make(sessionID, { disableChecks: true }),
+        inboxID: SessionMessage.ID.make("message-queued", { disableChecks: true }),
+        delivery: "queue",
+      },
     })
     await wait(() =>
       data.session.pending
@@ -1040,27 +1147,34 @@ test("updates and removes queued inputs from durable lifecycle events", async ()
     expect(rows).not.toContainEqual(expect.objectContaining({ type: "message", messageID: "message-queued" }))
 
     emitEvent(events, {
-      id: "evt_cancel_admitted",
+      id: Event.ID.make("evt_cancel_admitted", { disableChecks: true }),
       created: 4,
       type: "session.inbox.enqueued",
       durable: durable(sessionID, 3),
       data: {
-        sessionID,
-        inboxID: "message-cancelled",
+        sessionID: Session.ID.make(sessionID, { disableChecks: true }),
+        inboxID: SessionMessage.ID.make("message-cancelled", { disableChecks: true }),
         item: { type: "user", payload: { text: "Delete me" }, delivery: "queue" },
       },
     })
     await wait(() => data.session.pending.list(sessionID).length === 2)
     emitEvent(events, {
-      id: "evt_queue_cancelled",
+      id: Event.ID.make("evt_queue_cancelled", { disableChecks: true }),
       created: 5,
       type: "session.inbox.cancelled",
       durable: durable(sessionID, 4),
-      data: { sessionID, inboxID: "message-cancelled" },
+      data: {
+        sessionID: Session.ID.make(sessionID, { disableChecks: true }),
+        inboxID: SessionMessage.ID.make("message-cancelled", { disableChecks: true }),
+      },
     })
-    await wait(() => !data.session.input.has(sessionID, "message-cancelled"))
-    expect(data.session.pending.list(sessionID).map((item) => item.id)).toEqual(["message-queued"])
-    expect(data.session.message.get(sessionID, "message-cancelled")).toBeUndefined()
+    await wait(
+      () => !data.session.input.has(sessionID, SessionMessage.ID.make("message-cancelled", { disableChecks: true })),
+    )
+    expect<unknown>(data.session.pending.list(sessionID).map((item) => item.id)).toEqual(["message-queued"])
+    expect(
+      data.session.message.get(sessionID, SessionMessage.ID.make("message-cancelled", { disableChecks: true })),
+    ).toBeUndefined()
   } finally {
     app.renderer.destroy()
   }
@@ -1068,7 +1182,7 @@ test("updates and removes queued inputs from durable lifecycle events", async ()
 
 test("classifies live tool rows independently of their call ID", async () => {
   const events = createEventStream()
-  const sessionID = "session-tool-call-id"
+  const sessionID = Session.ID.make("session-tool-call-id", { disableChecks: true })
   const calls = createFetch((url) => {
     if (url.pathname === `/api/session/${sessionID}/message`) return json({ data: [], cursor: {} })
   }, events)
@@ -1096,13 +1210,13 @@ test("classifies live tool rows independently of their call ID", async () => {
   try {
     await wait(() => client.connection.status() === "connected")
     emitEvent(events, {
-      id: "evt_tool_started",
+      id: Event.ID.make("evt_tool_started", { disableChecks: true }),
       created: 1,
       type: "session.tool.input.started",
       durable: durable(sessionID),
       data: {
-        sessionID,
-        assistantMessageID: "message-assistant",
+        sessionID: Session.ID.make(sessionID, { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("message-assistant", { disableChecks: true }),
         id: "reasoning:0",
         name: "bash",
       },
@@ -1119,15 +1233,20 @@ test("classifies live tool rows independently of their call ID", async () => {
 
 test("loads older pages until the oldest exploration group is complete before reporting sync and keeps existing rows", async () => {
   const events = createEventStream()
-  const sessionID = "session-boundary"
-  const model = { id: "model", providerID: "provider" }
+  const sessionID = Session.ID.make("session-boundary", { disableChecks: true })
+  const model = { id: "model", providerID: Provider.ID.make("provider", { disableChecks: true }) }
   // One prompt, 50 single-read steps, then an answer: the 20-message first page cuts the group.
   const history = [
-    { type: "user", id: "msg_000", text: "Explore", time: { created: 0 } },
+    {
+      type: "user",
+      id: SessionMessage.ID.make("msg_000", { disableChecks: true }),
+      text: "Explore",
+      time: { created: 0 },
+    },
     ...Array.from({ length: 50 }, (_, index) => ({
       type: "assistant",
       id: `msg_${String(index + 1).padStart(3, "0")}`,
-      agent: "build",
+      agent: Agent.ID.make("build", { disableChecks: true }),
       model,
       time: { created: index + 1, completed: index + 1 },
       finish: "tool-calls",
@@ -1200,7 +1319,10 @@ test("loads older pages until the oldest exploration group is complete before re
     const group = rows[1]
     if (group?.type !== "group") throw new Error("Expected exploration group")
     expect(group.size).toBe(50)
-    expect(groupRefs(group)[0]).toEqual({ messageID: "msg_001", partID: "read-0" })
+    expect<unknown>(groupRefs(group)[0]).toEqual({
+      messageID: "msg_001",
+      partID: "read-0",
+    })
     // The transcript keys rows by store object, so a new object would remount the answer.
     expect(answer()).toBe(mounted)
   } finally {
@@ -1210,7 +1332,7 @@ test("loads older pages until the oldest exploration group is complete before re
 
 test("removes committed revert messages from local state", async () => {
   const events = createEventStream()
-  const sessionID = "session-revert"
+  const sessionID = Session.ID.make("session-revert", { disableChecks: true })
   const calls = createFetch((url) => {
     if (url.pathname === `/api/session/${sessionID}/message`) return json({ data: [], cursor: {} })
   }, events)
@@ -1234,13 +1356,21 @@ test("removes committed revert messages from local state", async () => {
   ))
 
   try {
-    for (const [seq, inboxID] of ["msg_001", "msg_002", "msg_003"].entries()) {
+    for (const [seq, inboxID] of [
+      SessionMessage.ID.make("msg_001", { disableChecks: true }),
+      SessionMessage.ID.make("msg_002", { disableChecks: true }),
+      SessionMessage.ID.make("msg_003", { disableChecks: true }),
+    ].entries()) {
       emitEvent(events, {
         id: Event.ID.create(),
         created: seq,
         type: "session.inbox.enqueued",
         durable: durable(sessionID, seq),
-        data: { sessionID, inboxID, item: { type: "user", payload: { text: inboxID }, delivery: "steer" } },
+        data: {
+          sessionID: Session.ID.make(sessionID, { disableChecks: true }),
+          inboxID,
+          item: { type: "user", payload: { text: inboxID }, delivery: "steer" },
+        },
       })
     }
     await wait(() => data.session.message.list(sessionID).length === 3)
@@ -1250,17 +1380,24 @@ test("removes committed revert messages from local state", async () => {
       created: 3,
       type: "session.revert.committed",
       durable: durable(sessionID, 3),
-      data: { sessionID, to: "msg_002" },
+      data: {
+        sessionID: Session.ID.make(sessionID, { disableChecks: true }),
+        to: SessionMessage.ID.make("msg_002", { disableChecks: true }),
+      },
     })
 
     await wait(() => data.session.message.list(sessionID).length === 1)
-    expect(data.session.message.list(sessionID).map((message) => message.id)).toEqual(["msg_001"])
-    expect(data.session.message.get(sessionID, "msg_002")).toBeUndefined()
-    expect(data.session.message.get(sessionID, "msg_003")).toBeUndefined()
+    expect<unknown>(data.session.message.list(sessionID).map((message) => message.id)).toEqual(["msg_001"])
+    expect(
+      data.session.message.get(sessionID, SessionMessage.ID.make("msg_002", { disableChecks: true })),
+    ).toBeUndefined()
+    expect(
+      data.session.message.get(sessionID, SessionMessage.ID.make("msg_003", { disableChecks: true })),
+    ).toBeUndefined()
     // The projector also drops inbox items enqueued at or after the boundary, without a cancel event.
-    expect(data.session.pending.list(sessionID).map((item) => item.id)).toEqual(["msg_001"])
-    expect(data.session.input.list(sessionID)).toEqual(["msg_001"])
-    expect(data.session.input.has(sessionID, "msg_002")).toBe(false)
+    expect<unknown>(data.session.pending.list(sessionID).map((item) => item.id)).toEqual(["msg_001"])
+    expect<unknown>(data.session.input.list(sessionID)).toEqual(["msg_001"])
+    expect(data.session.input.has(sessionID, SessionMessage.ID.make("msg_002", { disableChecks: true }))).toBe(false)
   } finally {
     app.renderer.destroy()
   }
@@ -1281,7 +1418,7 @@ test("distinguishes initial connection from reconnection", async () => {
   const connect = () =>
     stream?.enqueue(
       encoder.encode(
-        `data: ${JSON.stringify({ id: "evt_connected", created: 0, type: "server.connected", data: {} })}\n\n`,
+        `data: ${JSON.stringify({ id: Event.ID.make("evt_connected", { disableChecks: true }), created: 0, type: "server.connected", data: {} })}\n\n`,
       ),
     )
   const disconnect = () => {
@@ -1334,7 +1471,7 @@ test("tracks session status from active sessions and execution events", async ()
       return json({
         data: {
           id: "session-live",
-          projectID: "proj_test",
+          projectID: Project.ID.make("proj_test", { disableChecks: true }),
           cost: settled ? 0.75 : 0,
           tokens: settled
             ? { input: 10, output: 4, reasoning: 2, cache: { read: 3, write: 1 } }
@@ -1348,7 +1485,7 @@ test("tracks session status from active sessions and execution events", async ()
       return json({
         data: {
           id: "session-failed",
-          projectID: "proj_test",
+          projectID: Project.ID.make("proj_test", { disableChecks: true }),
           cost: 0.25,
           tokens: { input: 5, output: 1, reasoning: 1, cache: { read: 1, write: 0 } },
           time: { created: 0, updated: 0 },
@@ -1363,8 +1500,8 @@ test("tracks session status from active sessions and execution events", async ()
 
   function Probe() {
     data = useData()
-    rows = createSessionRows(() => "session-retry")
-    manualRows = createSessionRows(() => "session-manual")
+    rows = createSessionRows(() => Session.ID.make("session-retry", { disableChecks: true }))
+    manualRows = createSessionRows(() => Session.ID.make("session-manual", { disableChecks: true }))
     return <box />
   }
 
@@ -1381,275 +1518,331 @@ test("tracks session status from active sessions and execution events", async ()
   ))
 
   try {
-    await wait(() => data.session.status("session-active") === "running")
-    expect(data.session.status("session-idle")).toBe("idle")
-    await data.session.sync("session-live")
+    await wait(() => data.session.status(Session.ID.make("session-active", { disableChecks: true })) === "running")
+    expect(data.session.status(Session.ID.make("session-idle", { disableChecks: true }))).toBe("idle")
+    await data.session.sync(Session.ID.make("session-live", { disableChecks: true }))
 
     settled = true
     emitEvent(events, {
-      id: "evt_execution_started",
+      id: Event.ID.make("evt_execution_started", { disableChecks: true }),
       created: 0,
       type: "session.execution.started",
       durable: durable("session-live"),
-      data: { sessionID: "session-live" },
+      data: { sessionID: Session.ID.make("session-live", { disableChecks: true }) },
     })
-    await wait(() => data.session.status("session-live") === "running")
+    await wait(() => data.session.status(Session.ID.make("session-live", { disableChecks: true })) === "running")
 
     emitEvent(events, {
-      id: "evt_step_started",
+      id: Event.ID.make("evt_step_started", { disableChecks: true }),
       created: 0,
       type: "session.step.started",
       durable: durable("session-live"),
       data: {
         started: 0,
-        sessionID: "session-live",
-        assistantMessageID: "message-live",
-        agent: "build",
-        model: { id: "model", providerID: "provider" },
+        sessionID: Session.ID.make("session-live", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("message-live", { disableChecks: true }),
+        agent: Agent.ID.make("build", { disableChecks: true }),
+        model: {
+          id: Model.ID.make("model", { disableChecks: true }),
+          providerID: Provider.ID.make("provider", { disableChecks: true }),
+        },
       },
     })
     emitEvent(events, {
-      id: "evt_step_ended",
+      id: Event.ID.make("evt_step_ended", { disableChecks: true }),
       created: 0,
       type: "session.step.ended",
       durable: durable("session-live", 1),
       data: {
-        sessionID: "session-live",
-        assistantMessageID: "message-live",
+        sessionID: Session.ID.make("session-live", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("message-live", { disableChecks: true }),
         finish: "stop",
         cost: 0.75,
         tokens: { input: 10, output: 4, reasoning: 2, cache: { read: 3, write: 1 } },
       },
     })
     emitEvent(events, {
-      id: "evt_step_usage",
+      id: Event.ID.make("evt_step_usage", { disableChecks: true }),
       created: 0,
       type: "session.usage.updated",
       data: {
-        sessionID: "session-live",
+        sessionID: Session.ID.make("session-live", { disableChecks: true }),
         cost: 0.75,
         tokens: { input: 10, output: 4, reasoning: 2, cache: { read: 3, write: 1 } },
       },
     })
     await wait(() => {
-      const assistant = data.session.message.get("session-live", "message-live")
+      const assistant = data.session.message.get(
+        Session.ID.make("session-live", { disableChecks: true }),
+        SessionMessage.ID.make("message-live", { disableChecks: true }),
+      )
       return assistant?.type === "assistant" && assistant.finish === "stop"
     })
-    await wait(() => data.session.get("session-live")?.cost === 0.75)
-    expect(data.session.status("session-live")).toBe("running")
-    expect(data.session.get("session-live")).toMatchObject({
+    await wait(() => data.session.get(Session.ID.make("session-live", { disableChecks: true }))?.cost === 0.75)
+    expect(data.session.status(Session.ID.make("session-live", { disableChecks: true }))).toBe("running")
+    expect(data.session.get(Session.ID.make("session-live", { disableChecks: true }))).toMatchObject({
       cost: 0.75,
       tokens: { input: 10, output: 4, reasoning: 2, cache: { read: 3, write: 1 } },
     })
 
     emitEvent(events, {
-      id: "evt_execution_succeeded",
+      id: Event.ID.make("evt_execution_succeeded", { disableChecks: true }),
       created: 0,
       type: "session.execution.succeeded",
       durable: durable("session-live", 1),
-      data: { sessionID: "session-live" },
+      data: { sessionID: Session.ID.make("session-live", { disableChecks: true }) },
     })
-    await wait(() => data.session.status("session-live") === "idle")
+    await wait(() => data.session.status(Session.ID.make("session-live", { disableChecks: true })) === "idle")
 
-    await data.session.sync("session-failed")
+    await data.session.sync(Session.ID.make("session-failed", { disableChecks: true }))
     emitEvent(events, {
-      id: "evt_failed_execution_started",
+      id: Event.ID.make("evt_failed_execution_started", { disableChecks: true }),
       created: 0,
       type: "session.execution.started",
       durable: durable("session-failed"),
-      data: { sessionID: "session-failed" },
+      data: { sessionID: Session.ID.make("session-failed", { disableChecks: true }) },
     })
-    await wait(() => data.session.status("session-failed") === "running")
+    await wait(() => data.session.status(Session.ID.make("session-failed", { disableChecks: true })) === "running")
 
     emitEvent(events, {
-      id: "evt_failed_step_started",
+      id: Event.ID.make("evt_failed_step_started", { disableChecks: true }),
       created: 0,
       type: "session.step.started",
       durable: durable("session-failed"),
       data: {
         started: 0,
-        sessionID: "session-failed",
-        assistantMessageID: "message-failed",
-        agent: "build",
-        model: { id: "model", providerID: "provider" },
+        sessionID: Session.ID.make("session-failed", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("message-failed", { disableChecks: true }),
+        agent: Agent.ID.make("build", { disableChecks: true }),
+        model: {
+          id: Model.ID.make("model", { disableChecks: true }),
+          providerID: Provider.ID.make("provider", { disableChecks: true }),
+        },
       },
     })
     emitEvent(events, {
-      id: "evt_step_failed",
+      id: Event.ID.make("evt_step_failed", { disableChecks: true }),
       created: 0,
       type: "session.step.failed",
       durable: durable("session-failed", 1),
       data: {
-        sessionID: "session-failed",
-        assistantMessageID: "message-failed",
+        sessionID: Session.ID.make("session-failed", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("message-failed", { disableChecks: true }),
         error: { type: "provider.content-filter", message: "Provider blocked the response" },
         cost: 0.25,
         tokens: { input: 5, output: 1, reasoning: 1, cache: { read: 1, write: 0 } },
       },
     })
     emitEvent(events, {
-      id: "evt_failed_step_usage",
+      id: Event.ID.make("evt_failed_step_usage", { disableChecks: true }),
       created: 0,
       type: "session.usage.updated",
       data: {
-        sessionID: "session-failed",
+        sessionID: Session.ID.make("session-failed", { disableChecks: true }),
         cost: 0.25,
         tokens: { input: 5, output: 1, reasoning: 1, cache: { read: 1, write: 0 } },
       },
     })
     await wait(() => {
-      const assistant = data.session.message.get("session-failed", "message-failed")
+      const assistant = data.session.message.get(
+        Session.ID.make("session-failed", { disableChecks: true }),
+        SessionMessage.ID.make("message-failed", { disableChecks: true }),
+      )
       return (
         assistant?.type === "assistant" &&
         assistant.finish === "error" &&
         assistant.error?.type === "provider.content-filter"
       )
     })
-    await wait(() => data.session.get("session-failed")?.cost === 0.25)
-    expect(data.session.get("session-failed")?.tokens).toEqual({
+    await wait(() => data.session.get(Session.ID.make("session-failed", { disableChecks: true }))?.cost === 0.25)
+    expect(data.session.get(Session.ID.make("session-failed", { disableChecks: true }))?.tokens).toEqual({
       input: 5,
       output: 1,
       reasoning: 1,
       cache: { read: 1, write: 0 },
     })
-    expect(data.session.status("session-failed")).toBe("running")
+    expect(data.session.status(Session.ID.make("session-failed", { disableChecks: true }))).toBe("running")
 
     emitEvent(events, {
-      id: "evt_failed_execution_failed",
+      id: Event.ID.make("evt_failed_execution_failed", { disableChecks: true }),
       created: 0,
       type: "session.execution.failed",
       durable: durable("session-failed", 1),
       data: {
-        sessionID: "session-failed",
+        sessionID: Session.ID.make("session-failed", { disableChecks: true }),
         error: { type: "provider.content-filter", message: "Provider blocked the response" },
       },
     })
-    await wait(() => data.session.status("session-failed") === "idle")
+    await wait(() => data.session.status(Session.ID.make("session-failed", { disableChecks: true })) === "idle")
 
     emitEvent(events, {
-      id: "evt_retry_execution_started",
+      id: Event.ID.make("evt_retry_execution_started", { disableChecks: true }),
       created: 0,
       type: "session.execution.started",
       durable: durable("session-retry"),
-      data: { sessionID: "session-retry" },
+      data: { sessionID: Session.ID.make("session-retry", { disableChecks: true }) },
     })
     emitEvent(events, {
-      id: "evt_retry_step_started",
+      id: Event.ID.make("evt_retry_step_started", { disableChecks: true }),
       created: 0,
       type: "session.step.started",
       durable: durable("session-retry", 1),
       data: {
         started: 0,
-        sessionID: "session-retry",
-        assistantMessageID: "message-retry",
-        agent: "build",
-        model: { id: "model", providerID: "provider" },
+        sessionID: Session.ID.make("session-retry", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("message-retry", { disableChecks: true }),
+        agent: Agent.ID.make("build", { disableChecks: true }),
+        model: {
+          id: Model.ID.make("model", { disableChecks: true }),
+          providerID: Provider.ID.make("provider", { disableChecks: true }),
+        },
       },
     })
     emitEvent(events, {
-      id: "evt_retry_scheduled",
+      id: Event.ID.make("evt_retry_scheduled", { disableChecks: true }),
       created: 0,
       type: "session.retry.scheduled",
       durable: durable("session-retry", 1),
       data: {
-        sessionID: "session-retry",
-        assistantMessageID: "message-retry",
+        sessionID: Session.ID.make("session-retry", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("message-retry", { disableChecks: true }),
         attempt: 2,
         at: 2_000,
         error: { type: "provider.transport", message: "Disconnected" },
       },
     })
     await wait(() => {
-      const assistant = data.session.message.get("session-retry", "message-retry")
+      const assistant = data.session.message.get(
+        Session.ID.make("session-retry", { disableChecks: true }),
+        SessionMessage.ID.make("message-retry", { disableChecks: true }),
+      )
       return assistant?.type === "assistant" && assistant.retry?.attempt === 2
     })
     await wait(() => rows.some((row) => row.type === "assistant-footer" && row.messageID === "message-retry"))
     emitEvent(events, {
-      id: "evt_retry_next_step",
+      id: Event.ID.make("evt_retry_next_step", { disableChecks: true }),
       created: 2_000,
       type: "session.step.started",
       durable: durable("session-retry", 1),
       data: {
         started: 2_000,
-        sessionID: "session-retry",
-        assistantMessageID: "message-retry",
-        agent: "build",
-        model: { id: "model", providerID: "provider" },
+        sessionID: Session.ID.make("session-retry", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("message-retry", { disableChecks: true }),
+        agent: Agent.ID.make("build", { disableChecks: true }),
+        model: {
+          id: Model.ID.make("model", { disableChecks: true }),
+          providerID: Provider.ID.make("provider", { disableChecks: true }),
+        },
       },
     })
     await wait(() => {
-      const assistant = data.session.message.get("session-retry", "message-retry")
+      const assistant = data.session.message.get(
+        Session.ID.make("session-retry", { disableChecks: true }),
+        SessionMessage.ID.make("message-retry", { disableChecks: true }),
+      )
       return assistant?.type === "assistant" && assistant.retry === undefined
     })
     await wait(() => !rows.some((row) => row.type === "assistant-footer" && row.messageID === "message-retry"))
-    expect(data.session.message.list("session-retry").filter((message) => message.type === "assistant")).toHaveLength(1)
+    expect(
+      data.session.message
+        .list(Session.ID.make("session-retry", { disableChecks: true }))
+        .filter((message) => message.type === "assistant"),
+    ).toHaveLength(1)
     emitEvent(events, {
-      id: "evt_retry_scheduled_again",
+      id: Event.ID.make("evt_retry_scheduled_again", { disableChecks: true }),
       created: 2_000,
       type: "session.retry.scheduled",
       durable: durable("session-retry", 1),
       data: {
-        sessionID: "session-retry",
-        assistantMessageID: "message-retry",
+        sessionID: Session.ID.make("session-retry", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("message-retry", { disableChecks: true }),
         attempt: 3,
         at: 6_000,
         error: { type: "provider.transport", message: "Disconnected again" },
       },
     })
     await wait(() => {
-      const assistant = data.session.message.get("session-retry", "message-retry")
+      const assistant = data.session.message.get(
+        Session.ID.make("session-retry", { disableChecks: true }),
+        SessionMessage.ID.make("message-retry", { disableChecks: true }),
+      )
       return assistant?.type === "assistant" && assistant.retry?.attempt === 3
     })
     emitEvent(events, {
-      id: "evt_retry_interrupted",
+      id: Event.ID.make("evt_retry_interrupted", { disableChecks: true }),
       created: 2_000,
       type: "session.execution.interrupted",
       durable: durable("session-retry", 1),
-      data: { sessionID: "session-retry", reason: "shutdown" },
+      data: { sessionID: Session.ID.make("session-retry", { disableChecks: true }), reason: "shutdown" },
     })
-    await wait(() => data.session.status("session-retry") === "idle")
-    expect(data.session.message.get("session-retry", "message-retry")).not.toHaveProperty("retry")
+    await wait(() => data.session.status(Session.ID.make("session-retry", { disableChecks: true })) === "idle")
+    expect(
+      data.session.message.get(
+        Session.ID.make("session-retry", { disableChecks: true }),
+        SessionMessage.ID.make("message-retry", { disableChecks: true }),
+      ),
+    ).not.toHaveProperty("retry")
 
     emitEvent(events, {
-      id: "evt_manual_compaction_admitted",
+      id: Event.ID.make("evt_manual_compaction_admitted", { disableChecks: true }),
       created: 0,
       type: "session.inbox.enqueued",
       durable: durable("session-manual", 1),
       data: {
-        sessionID: "session-manual",
-        inboxID: "message-compaction",
+        sessionID: Session.ID.make("session-manual", { disableChecks: true }),
+        inboxID: SessionMessage.ID.make("message-compaction", { disableChecks: true }),
         item: { type: "compaction", payload: {}, delivery: "queue" },
       },
     })
-    await wait(() => data.session.pending.list("session-manual").some((item) => item.id === "message-compaction"))
+    await wait(() =>
+      data.session.pending
+        .list(Session.ID.make("session-manual", { disableChecks: true }))
+        .some((item) => item.id === "message-compaction"),
+    )
     emitEvent(events, {
-      id: "evt_manual_compaction_started",
+      id: Event.ID.make("evt_manual_compaction_started", { disableChecks: true }),
       created: 1,
       type: "session.compaction.started",
       durable: durable("session-manual", 2),
-      data: { sessionID: "session-manual", reason: "manual", recent: "", inputID: "message-compaction" },
+      data: {
+        sessionID: Session.ID.make("session-manual", { disableChecks: true }),
+        reason: "manual",
+        recent: "",
+        inputID: SessionMessage.ID.make("message-compaction", { disableChecks: true }),
+      },
     })
     emitEvent(events, {
-      id: "evt_manual_compaction_delta",
+      id: Event.ID.make("evt_manual_compaction_delta", { disableChecks: true }),
       created: 2,
       type: "session.compaction.delta",
-      data: { sessionID: "session-manual", text: "Streamed summary" },
+      data: { sessionID: Session.ID.make("session-manual", { disableChecks: true }), text: "Streamed summary" },
     })
     await wait(() => {
-      const message = data.session.message.get("session-manual", "message-compaction")
+      const message = data.session.message.get(
+        Session.ID.make("session-manual", { disableChecks: true }),
+        SessionMessage.ID.make("message-compaction", { disableChecks: true }),
+      )
       return message?.type === "compaction" && message.status === "running" && message.summary === "Streamed summary"
     })
-    expect(data.session.pending.list("session-manual")).toEqual([])
+    expect(data.session.pending.list(Session.ID.make("session-manual", { disableChecks: true }))).toEqual([])
     const compactionRow = manualRows.find((row) => row.type === "message" && row.messageID === "message-compaction")
     emitEvent(events, {
-      id: "evt_manual_compaction_ended",
+      id: Event.ID.make("evt_manual_compaction_ended", { disableChecks: true }),
       created: 3,
       type: "session.compaction.ended",
       durable: durable("session-manual", 4),
-      data: { sessionID: "session-manual", reason: "manual", text: "Streamed summary", recent: "recent" },
+      data: {
+        sessionID: Session.ID.make("session-manual", { disableChecks: true }),
+        reason: "manual",
+        text: "Streamed summary",
+        recent: "recent",
+      },
     })
     await wait(() => {
-      const message = data.session.message.get("session-manual", "message-compaction")
+      const message = data.session.message.get(
+        Session.ID.make("session-manual", { disableChecks: true }),
+        SessionMessage.ID.make("message-compaction", { disableChecks: true }),
+      )
       return message?.type === "compaction" && message.status === "completed"
     })
     expect(manualRows.filter((row) => row.type === "message")).toMatchObject([
@@ -1660,50 +1853,80 @@ test("tracks session status from active sessions and execution events", async ()
     )
 
     emitEvent(events, {
-      id: "evt_compaction_started",
+      id: Event.ID.make("evt_compaction_started", { disableChecks: true }),
       created: 0,
       type: "session.compaction.started",
       durable: durable("session-live", 2),
-      data: { sessionID: "session-live", reason: "auto", recent: "" },
+      data: { sessionID: Session.ID.make("session-live", { disableChecks: true }), reason: "auto", recent: "" },
     })
     emitEvent(events, {
-      id: "evt_compaction_delta_1",
+      id: Event.ID.make("evt_compaction_delta_1", { disableChecks: true }),
       created: 0,
       type: "session.compaction.delta",
-      data: { sessionID: "session-live", text: "Live " },
+      data: { sessionID: Session.ID.make("session-live", { disableChecks: true }), text: "Live " },
     })
     emitEvent(events, {
-      id: "evt_compaction_delta_2",
+      id: Event.ID.make("evt_compaction_delta_2", { disableChecks: true }),
       created: 0,
       type: "session.compaction.delta",
-      data: { sessionID: "session-live", text: "summary" },
+      data: { sessionID: Session.ID.make("session-live", { disableChecks: true }), text: "summary" },
     })
     await wait(() => {
-      const message = data.session.message.get("session-live", "msg_compaction_started")
+      const message = data.session.message.get(
+        Session.ID.make("session-live", { disableChecks: true }),
+        SessionMessage.ID.make("msg_compaction_started", { disableChecks: true }),
+      )
       return message?.type === "compaction" && message.status === "running" && message.summary === "Live summary"
     })
-    const autoCompactionRow = rows.find((row) => row.type === "message" && row.messageID === "msg_compaction_started")
+    const autoCompactionRow = rows.find(
+      (row) =>
+        row.type === "message" &&
+        row.messageID === SessionMessage.ID.make("msg_compaction_started", { disableChecks: true }),
+    )
 
     emitEvent(events, {
-      id: "evt_compaction_ended",
+      id: Event.ID.make("evt_compaction_ended", { disableChecks: true }),
       created: 0,
       type: "session.compaction.ended",
       durable: durable("session-live", 5),
-      data: { sessionID: "session-live", reason: "auto", text: "Live summary", recent: "recent" },
+      data: {
+        sessionID: Session.ID.make("session-live", { disableChecks: true }),
+        reason: "auto",
+        text: "Live summary",
+        recent: "recent",
+      },
     })
     await wait(() => {
-      const message = data.session.message.get("session-live", "msg_compaction_started")
+      const message = data.session.message.get(
+        Session.ID.make("session-live", { disableChecks: true }),
+        SessionMessage.ID.make("msg_compaction_started", { disableChecks: true }),
+      )
       return message?.type === "compaction" && message.status === "completed"
     })
-    expect(data.session.message.get("session-live", "msg_compaction_started")).toMatchObject({
+    expect(
+      data.session.message.get(
+        Session.ID.make("session-live", { disableChecks: true }),
+        SessionMessage.ID.make("msg_compaction_started", { disableChecks: true }),
+      ),
+    ).toMatchObject({
       type: "compaction",
       status: "completed",
       summary: "Live summary",
     })
-    expect(rows.find((row) => row.type === "message" && row.messageID === "msg_compaction_started")).toBe(
-      autoCompactionRow,
-    )
-    expect(rows.some((row) => row.type === "message" && row.messageID === "msg_compaction_ended")).toBeFalse()
+    expect(
+      rows.find(
+        (row) =>
+          row.type === "message" &&
+          row.messageID === SessionMessage.ID.make("msg_compaction_started", { disableChecks: true }),
+      ),
+    ).toBe(autoCompactionRow)
+    expect(
+      rows.some(
+        (row) =>
+          row.type === "message" &&
+          row.messageID === SessionMessage.ID.make("msg_compaction_ended", { disableChecks: true }),
+      ),
+    ).toBeFalse()
   } finally {
     app.renderer.destroy()
   }
@@ -1711,7 +1934,7 @@ test("tracks session status from active sessions and execution events", async ()
 
 test.each(["before", "between", "after"])("shows compaction admitted %s steers in execution order", async (order) => {
   const events = createEventStream()
-  const sessionID = "session-compaction-priority"
+  const sessionID = Session.ID.make("session-compaction-priority", { disableChecks: true })
   const calls = createFetch((url) => {
     if (url.pathname === `/api/session/${sessionID}/message`) return json({ data: [], cursor: {} })
     return undefined
@@ -1740,13 +1963,13 @@ test.each(["before", "between", "after"])("shows compaction admitted %s steers i
     await wait(() => client?.connection.status() === "connected")
     admissions.forEach((id, index) =>
       emitEvent(events, {
-        id: `evt_admit_${id}`,
+        id: Event.ID.make(`evt_admit_${id}`, { disableChecks: true }),
         created: index + 1,
         type: "session.inbox.enqueued",
         durable: durable(sessionID, index + 1),
         data: {
-          sessionID,
-          inboxID: id,
+          sessionID: Session.ID.make(sessionID, { disableChecks: true }),
+          inboxID: SessionMessage.ID.make(id, { disableChecks: true }),
           item:
             id === "compact"
               ? { type: "compaction", payload: {}, delivery: "steer" }
@@ -1761,28 +1984,41 @@ test.each(["before", "between", "after"])("shows compaction admitted %s steers i
       { type: "message", messageID: "b" },
     ])
     emitEvent(events, {
-      id: "evt_compaction_started",
+      id: Event.ID.make("evt_compaction_started", { disableChecks: true }),
       created: 4,
       type: "session.compaction.started",
       durable: durable(sessionID, 4),
-      data: { sessionID, reason: "manual", recent: "", inputID: "compact" },
+      data: {
+        sessionID: Session.ID.make(sessionID, { disableChecks: true }),
+        reason: "manual",
+        recent: "",
+        inputID: SessionMessage.ID.make("compact", { disableChecks: true }),
+      },
     })
     await wait(() => rows[0]?.type === "message")
     expect(unwrap(rows)).toMatchObject(["compact", "a", "b"].map((messageID) => ({ type: "message", messageID })))
     emitEvent(events, {
-      id: "evt_compaction_ended",
+      id: Event.ID.make("evt_compaction_ended", { disableChecks: true }),
       created: 5,
       type: "session.compaction.ended",
       durable: durable(sessionID, 5),
-      data: { sessionID, reason: "manual", text: "## Objective\n- Checkpoint", recent: "" },
+      data: {
+        sessionID: Session.ID.make(sessionID, { disableChecks: true }),
+        reason: "manual",
+        text: "## Objective\n- Checkpoint",
+        recent: "",
+      },
     })
     for (const [index, id] of ["a", "b"].entries()) {
       emitEvent(events, {
-        id: `evt_deliver_${id}`,
+        id: Event.ID.make(`evt_deliver_${id}`, { disableChecks: true }),
         created: index + 6,
         type: "session.inbox.delivered",
         durable: durable(sessionID, index + 6),
-        data: { sessionID, inboxID: id },
+        data: {
+          sessionID: Session.ID.make(sessionID, { disableChecks: true }),
+          inboxID: SessionMessage.ID.make(id, { disableChecks: true }),
+        },
       })
     }
     await app.renderOnce()
@@ -1794,11 +2030,11 @@ test.each(["before", "between", "after"])("shows compaction admitted %s steers i
 
 test("restores queued compaction from durable pending input", async () => {
   const events = createEventStream()
-  const sessionID = "session-compaction-queued"
+  const sessionID = Session.ID.make("session-compaction-queued", { disableChecks: true })
   let pending = [
     {
       id: "message-compaction-queued",
-      sessionID,
+      sessionID: Session.ID.make(sessionID, { disableChecks: true }),
       time: { created: 1 },
       type: "compaction" as const,
       payload: {},
@@ -1806,7 +2042,7 @@ test("restores queued compaction from durable pending input", async () => {
     },
     {
       id: "message-compaction-later",
-      sessionID,
+      sessionID: Session.ID.make(sessionID, { disableChecks: true }),
       time: { created: 2 },
       type: "compaction" as const,
       payload: {},
@@ -1843,7 +2079,7 @@ test("restores queued compaction from durable pending input", async () => {
   try {
     await wait(() => client.connection.status() === "connected")
     await wait(() => data.session.pending.list(sessionID).length === 2)
-    expect(data.session.pending.list(sessionID).map((item) => item.id)).toEqual([
+    expect<unknown>(data.session.pending.list(sessionID).map((item) => item.id)).toEqual([
       "message-compaction-queued",
       "message-compaction-later",
     ])
@@ -1854,37 +2090,40 @@ test("restores queued compaction from durable pending input", async () => {
     ])
 
     emitEvent(events, {
-      id: "evt_step_started",
+      id: Event.ID.make("evt_step_started", { disableChecks: true }),
       created: 2,
       type: "session.step.started",
       durable: durable(sessionID, 3),
       data: {
         started: 2,
-        sessionID,
-        assistantMessageID: "message-assistant",
-        agent: "build",
-        model: { id: "model", providerID: "provider" },
+        sessionID: Session.ID.make(sessionID, { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("message-assistant", { disableChecks: true }),
+        agent: Agent.ID.make("build", { disableChecks: true }),
+        model: {
+          id: Model.ID.make("model", { disableChecks: true }),
+          providerID: Provider.ID.make("provider", { disableChecks: true }),
+        },
       },
     })
     emitEvent(events, {
-      id: "evt_text_started",
+      id: Event.ID.make("evt_text_started", { disableChecks: true }),
       created: 2,
       type: "session.text.started",
       durable: durable(sessionID, 4),
       data: {
-        sessionID,
-        assistantMessageID: "message-assistant",
+        sessionID: Session.ID.make(sessionID, { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("message-assistant", { disableChecks: true }),
         ordinal: 0,
       },
     })
     emitEvent(events, {
-      id: "evt_text_ended",
+      id: Event.ID.make("evt_text_ended", { disableChecks: true }),
       created: 2,
       type: "session.text.ended",
       durable: durable(sessionID, 5),
       data: {
-        sessionID,
-        assistantMessageID: "message-assistant",
+        sessionID: Session.ID.make(sessionID, { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("message-assistant", { disableChecks: true }),
         ordinal: 0,
         text: "Active output",
       },
@@ -1893,28 +2132,33 @@ test("restores queued compaction from durable pending input", async () => {
     expect(rows.map((row) => row.type)).toEqual(["part", "compaction-queued", "compaction-queued"])
 
     emitEvent(events, {
-      id: "evt_compaction_started",
+      id: Event.ID.make("evt_compaction_started", { disableChecks: true }),
       created: 2,
       type: "session.compaction.started",
       durable: durable(sessionID, 6),
       data: {
-        sessionID,
+        sessionID: Session.ID.make(sessionID, { disableChecks: true }),
         reason: "manual",
         recent: "",
-        inputID: "message-compaction-queued",
+        inputID: SessionMessage.ID.make("message-compaction-queued", { disableChecks: true }),
       },
     })
     await wait(() => data.session.pending.list(sessionID).length === 1)
-    expect(data.session.pending.list(sessionID).map((item) => item.id)).toEqual(["message-compaction-later"])
+    expect<unknown>(data.session.pending.list(sessionID).map((item) => item.id)).toEqual(["message-compaction-later"])
 
     emitEvent(events, {
-      id: "evt_compaction_ended",
+      id: Event.ID.make("evt_compaction_ended", { disableChecks: true }),
       created: 3,
       type: "session.compaction.ended",
       durable: durable(sessionID, 7),
-      data: { sessionID, reason: "manual", text: "Summary", recent: "" },
+      data: {
+        sessionID: Session.ID.make(sessionID, { disableChecks: true }),
+        reason: "manual",
+        text: "Summary",
+        recent: "",
+      },
     })
-    expect(data.session.pending.list(sessionID).map((item) => item.id)).toEqual(["message-compaction-later"])
+    expect<unknown>(data.session.pending.list(sessionID).map((item) => item.id)).toEqual(["message-compaction-later"])
 
     pending = []
     data.session.pending.invalidate(sessionID)
@@ -1984,17 +2228,25 @@ test("refreshes integrations after integration updates", async () => {
     expect(data.location.integration.list()).toEqual([])
     const before = { ...requests }
 
-    emitEvent(events, { id: "evt_integration", created: 0, type: "integration.updated", data: {} })
+    emitEvent(events, {
+      id: Event.ID.make("evt_integration", { disableChecks: true }),
+      created: 0,
+      type: "integration.updated",
+      data: {},
+    })
     await wait(() => data.location.integration.list()?.length === 1)
     await wait(() => requests.model > before.model && requests.provider > before.provider)
     expect(data.location.integration.list()?.[0]).toMatchObject({ id: "openai", name: "OpenAI" })
 
     const previous = { ...requests }
     events.emit({
-      id: "evt_credential",
+      id: Event.ID.make("evt_credential", { disableChecks: true }),
       created: 0,
       type: "credential.switched",
-      data: { credentialID: "cred_openai", integrationID: "openai" },
+      data: {
+        credentialID: Credential.ID.make("cred_openai", { disableChecks: true }),
+        integrationID: Integration.ID.make("openai", { disableChecks: true }),
+      },
     })
     await wait(() => requests.model > previous.model && requests.provider > previous.provider)
     expect(requests.integration).toBe(previous.integration)
@@ -2050,7 +2302,7 @@ test("refreshes MCP resources after catalog updates", async () => {
     expect(data.location.mcp.resource.list()).toEqual([])
 
     emitEvent(events, {
-      id: "evt_mcp_resources",
+      id: Event.ID.make("evt_mcp_resources", { disableChecks: true }),
       created: 0,
       type: "mcp.resources.changed",
       data: { server: "docs" },
@@ -2096,11 +2348,21 @@ test("refreshes provider and model data independently after domain updates", asy
   try {
     await wait(() => requests.model > 0 && requests.provider > 0)
     const before = { ...requests }
-    emitEvent(events, { id: "evt_provider", created: 0, type: "provider.updated", data: {} })
+    emitEvent(events, {
+      id: Event.ID.make("evt_provider", { disableChecks: true }),
+      created: 0,
+      type: "provider.updated",
+      data: {},
+    })
     await wait(() => requests.provider > before.provider)
     expect(requests).toEqual({ model: before.model, provider: before.provider + 1 })
 
-    emitEvent(events, { id: "evt_model", created: 0, type: "model.updated", data: {} })
+    emitEvent(events, {
+      id: Event.ID.make("evt_model", { disableChecks: true }),
+      created: 0,
+      type: "model.updated",
+      data: {},
+    })
     await wait(() => requests.model > before.model)
     expect(requests).toEqual({ model: before.model + 1, provider: before.provider + 1 })
   } finally {
@@ -2148,7 +2410,12 @@ test("refreshes agents after agent updates", async () => {
 
   try {
     await wait(() => data.location.agent.list()?.[0]?.id === "build")
-    emitEvent(events, { id: "evt_agent", created: 0, type: "agent.updated", data: {} })
+    emitEvent(events, {
+      id: Event.ID.make("evt_agent", { disableChecks: true }),
+      created: 0,
+      type: "agent.updated",
+      data: {},
+    })
     await wait(() => data.location.agent.list()?.[0]?.id === "reviewer")
   } finally {
     app.renderer.destroy()
@@ -2193,7 +2460,12 @@ test("refreshes references after updates", async () => {
   try {
     await mounted
     await wait(() => requests === 1)
-    emitEvent(events, { id: "evt_reference_1", created: 0, type: "reference.updated", data: {} })
+    emitEvent(events, {
+      id: Event.ID.make("evt_reference_1", { disableChecks: true }),
+      created: 0,
+      type: "reference.updated",
+      data: {},
+    })
     await wait(() => data.location.reference.list()?.length === 1)
     expect(data.location.reference.list()?.[0]?.name).toBe("docs")
   } finally {
@@ -2219,13 +2491,16 @@ test("keeps shell state scoped to location", async () => {
       },
       data: [
         {
-          id: requestDirectory === other ? "sh_other" : "sh_default",
+          id:
+            requestDirectory === other
+              ? Shell.ID.make("sh_other", { disableChecks: true })
+              : Shell.ID.make("sh_default", { disableChecks: true }),
           status: "running",
           command: requestDirectory === other ? "pnpm dev" : "bun test",
           cwd: requestDirectory ?? directory,
           shell: "/bin/sh",
           file: "/tmp/opencode-shell",
-          metadata: { sessionID: "ses_shared" },
+          metadata: { sessionID: Session.ID.make("ses_shared", { disableChecks: true }) },
           time: { started: 1 },
         },
       ],
@@ -2237,12 +2512,18 @@ test("keeps shell state scoped to location", async () => {
   function Probe() {
     data = useData()
     return (
-      <RouteProvider initialRoute={{ type: "session", sessionID: "ses_shared" }}>
+      <RouteProvider
+        initialRoute={{ type: "session", sessionID: Session.ID.make("ses_shared", { disableChecks: true }) }}
+      >
         <Keymap.Provider>
           <ThemeProvider mode="dark" source={emptyThemeSource}>
             <ToastProvider>
               <DialogProvider>
-                <Composer sessionID="ses_shared" open={true} defaultTab="shell" />
+                <Composer
+                  sessionID={Session.ID.make("ses_shared", { disableChecks: true })}
+                  open={true}
+                  defaultTab="shell"
+                />
               </DialogProvider>
             </ToastProvider>
           </ThemeProvider>
@@ -2269,12 +2550,18 @@ test("keeps shell state scoped to location", async () => {
   app.renderer.start()
 
   try {
-    await wait(() => data.shell.list().some((shell) => shell.id === "sh_default"))
+    await wait(() =>
+      data.shell.list().some((shell) => shell.id === Shell.ID.make("sh_default", { disableChecks: true })),
+    )
     await data.shell.sync({ directory: other })
 
-    expect(data.shell.list().map((shell) => shell.id)).toEqual(["sh_default"])
-    expect(data.shell.list({ directory: other }).map((shell) => shell.id)).toEqual(["sh_other"])
-    expect(data.shell.listBySession("ses_shared").map((shell) => [shell.id, shell.location.directory])).toEqual([
+    expect<unknown>(data.shell.list().map((shell) => shell.id)).toEqual(["sh_default"])
+    expect<unknown>(data.shell.list({ directory: other }).map((shell) => shell.id)).toEqual(["sh_other"])
+    expect(
+      data.shell
+        .listBySession(Session.ID.make("ses_shared", { disableChecks: true }))
+        .map((shell) => [shell.id, shell.location.directory]),
+    ).toEqual([
       ["sh_default", directory],
       ["sh_other", other],
     ])
@@ -2287,27 +2574,33 @@ test("keeps shell state scoped to location", async () => {
     expect(removed?.searchParams.has("location[workspace]")).toBe(false)
 
     events.emit({
-      id: "evt_shell_created",
+      id: Event.ID.make("evt_shell_created", { disableChecks: true }),
       created: 0,
       type: "shell.created",
       location: { directory: other },
       data: {
         info: {
-          id: "sh_live_other",
+          id: Shell.ID.make("sh_live_other", { disableChecks: true }),
           status: "running",
           command: "npm run watch",
           cwd: other,
           shell: "/bin/sh",
           file: "/tmp/opencode-shell-live",
-          metadata: { sessionID: "ses_shared" },
+          metadata: { sessionID: Session.ID.make("ses_shared", { disableChecks: true }) },
           time: { started: 2 },
         },
       },
     })
-    await wait(() => data.shell.list({ directory: other }).some((shell) => shell.id === "sh_live_other"))
-    expect(data.shell.list().map((shell) => shell.id)).toEqual(["sh_default"])
+    await wait(() =>
+      data.shell
+        .list({ directory: other })
+        .some((shell) => shell.id === Shell.ID.make("sh_live_other", { disableChecks: true })),
+    )
+    expect<unknown>(data.shell.list().map((shell) => shell.id)).toEqual(["sh_default"])
     expect(
-      data.shell.listBySession("ses_shared").find((shell) => shell.id === "sh_live_other")?.location.directory,
+      data.shell
+        .listBySession(Session.ID.make("ses_shared", { disableChecks: true }))
+        .find((shell) => shell.id === Shell.ID.make("sh_live_other", { disableChecks: true }))?.location.directory,
     ).toBe(other)
   } finally {
     app.renderer.destroy()
@@ -2341,45 +2634,53 @@ test("adds and dismisses permission requests from live events", async () => {
   try {
     await wait(() => client.connection.status() === "connected")
     emitEvent(events, {
-      id: "evt_permission_asked_1",
+      id: Event.ID.make("evt_permission_asked_1", { disableChecks: true }),
       created: 0,
       type: "permission.asked",
       data: {
-        id: "per_1",
-        sessionID: "ses_1",
+        id: Permission.ID.make("per_1", { disableChecks: true }),
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
         action: "bash",
         resources: ["bun test"],
       },
     })
     emitEvent(events, {
-      id: "evt_permission_asked_2",
+      id: Event.ID.make("evt_permission_asked_2", { disableChecks: true }),
       created: 0,
       type: "permission.asked",
       data: {
-        id: "per_2",
-        sessionID: "ses_1",
+        id: Permission.ID.make("per_2", { disableChecks: true }),
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
         action: "read",
         resources: [".env"],
       },
     })
-    await wait(() => data.session.permission.list("ses_1")?.length === 2)
+    await wait(() => data.session.permission.list(Session.ID.make("ses_1", { disableChecks: true }))?.length === 2)
 
     emitEvent(events, {
-      id: "evt_permission_replied_1",
+      id: Event.ID.make("evt_permission_replied_1", { disableChecks: true }),
       created: 0,
       type: "permission.replied",
-      data: { sessionID: "ses_1", requestID: "per_1", reply: "once" },
+      data: {
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        requestID: Permission.ID.make("per_1", { disableChecks: true }),
+        reply: "once",
+      },
     })
-    await wait(() => data.session.permission.list("ses_1")?.length === 1)
-    expect(data.session.permission.list("ses_1")?.[0]?.id).toBe("per_2")
+    await wait(() => data.session.permission.list(Session.ID.make("ses_1", { disableChecks: true }))?.length === 1)
+    expect<unknown>(data.session.permission.list(Session.ID.make("ses_1", { disableChecks: true }))?.[0]?.id).toBe("per_2")
 
     emitEvent(events, {
-      id: "evt_permission_replied_2",
+      id: Event.ID.make("evt_permission_replied_2", { disableChecks: true }),
       created: 0,
       type: "permission.replied",
-      data: { sessionID: "ses_1", requestID: "per_2", reply: "reject" },
+      data: {
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        requestID: Permission.ID.make("per_2", { disableChecks: true }),
+        reply: "reject",
+      },
     })
-    await wait(() => data.session.permission.list("ses_1")?.length === 0)
+    await wait(() => data.session.permission.list(Session.ID.make("ses_1", { disableChecks: true }))?.length === 0)
   } finally {
     app.renderer.destroy()
   }
@@ -2388,8 +2689,18 @@ test("adds and dismisses permission requests from live events", async () => {
 test("reconciles active session permissions when the event stream reconnects", async () => {
   const events = createEventStream()
   let requests = [
-    { id: "per_old", sessionID: "ses_active", action: "read", resources: ["old.txt"] },
-    { id: "per_keep", sessionID: "ses_active", action: "shell", resources: ["bun test"] },
+    {
+      id: "per_old",
+      sessionID: Session.ID.make("ses_active", { disableChecks: true }),
+      action: "read",
+      resources: ["old.txt"],
+    },
+    {
+      id: "per_keep",
+      sessionID: Session.ID.make("ses_active", { disableChecks: true }),
+      action: "shell",
+      resources: ["bun test"],
+    },
   ]
   let calls = 0
   const fetch = createFetch((url) => {
@@ -2404,7 +2715,7 @@ test("reconciles active session permissions when the event stream reconnects", a
     const client = useClient()
     createEffect(() => {
       if (client.connection.status() !== "connected") return
-      void data.session.permission.sync("ses_active")
+      void data.session.permission.sync(Session.ID.make("ses_active", { disableChecks: true }))
     })
     return <box />
   }
@@ -2422,12 +2733,23 @@ test("reconciles active session permissions when the event stream reconnects", a
   ))
 
   try {
-    await wait(() => data.session.permission.list("ses_active")?.length === 2)
+    await wait(() => data.session.permission.list(Session.ID.make("ses_active", { disableChecks: true }))?.length === 2)
 
-    requests = [{ id: "per_new", sessionID: "ses_active", action: "edit", resources: ["new.txt"] }]
+    requests = [
+      {
+        id: "per_new",
+        sessionID: Session.ID.make("ses_active", { disableChecks: true }),
+        action: "edit",
+        resources: ["new.txt"],
+      },
+    ]
     events.disconnect()
 
-    await wait(() => calls === 2 && data.session.permission.list("ses_active")?.[0]?.id === "per_new")
+    await wait(
+      () =>
+        calls === 2 &&
+        data.session.permission.list(Session.ID.make("ses_active", { disableChecks: true }))?.[0]?.id === "per_new",
+    )
   } finally {
     app.renderer.destroy()
   }
@@ -2435,7 +2757,12 @@ test("reconciles active session permissions when the event stream reconnects", a
 
 test("dismisses a permission that expired before its reply", async () => {
   const events = createEventStream()
-  const request = { id: "per_stale", sessionID: "ses_active", action: "read", resources: ["old.txt"] }
+  const request = {
+    id: Permission.ID.make("per_stale", { disableChecks: true }),
+    sessionID: Session.ID.make("ses_active", { disableChecks: true }),
+    action: "read",
+    resources: ["old.txt"],
+  }
   let replies = 0
   const calls = createFetch((url, init) => {
     if (url.pathname === "/api/session/ses_active/permission/per_stale/reply" && init.method === "POST") {
@@ -2443,7 +2770,7 @@ test("dismisses a permission that expired before its reply", async () => {
       return json(
         {
           _tag: "PermissionNotFoundError",
-          requestID: request.id,
+          requestID: Permission.ID.make(request.id, { disableChecks: true }),
           message: `Permission request not found: ${request.id}`,
         },
         { status: 404 },
@@ -2471,7 +2798,7 @@ test("dismisses a permission that expired before its reply", async () => {
 
   try {
     emitEvent(events, {
-      id: "evt_permission_asked_stale",
+      id: Event.ID.make("evt_permission_asked_stale", { disableChecks: true }),
       created: 0,
       type: "permission.asked",
       data: request,
@@ -2479,8 +2806,8 @@ test("dismisses a permission that expired before its reply", async () => {
     await wait(() => data.session.permission.list(request.sessionID)?.length === 1)
 
     await data.session.permission.reply({
-      sessionID: request.sessionID,
-      requestID: request.id,
+      sessionID: Session.ID.make(request.sessionID, { disableChecks: true }),
+      requestID: Permission.ID.make(request.id, { disableChecks: true }),
       decision: "once",
     })
 
@@ -2496,7 +2823,14 @@ test("adds, dismisses, and refreshes form requests", async () => {
   const calls = createFetch((url) => {
     if (url.pathname !== "/api/session/ses_1/form") return
     return json({
-      data: [{ id: "frm_remote", sessionID: "ses_1", title: "Input requested", fields: formFields }],
+      data: [
+        {
+          id: Form.ID.make("frm_remote", { disableChecks: true }),
+          sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+          title: "Input requested",
+          fields: formFields,
+        },
+      ],
     })
   }, events)
   let data!: ReturnType<typeof useData>
@@ -2523,43 +2857,73 @@ test("adds, dismisses, and refreshes form requests", async () => {
   try {
     await wait(() => client.connection.status() === "connected")
     emitEvent(events, {
-      id: "evt_form_created_1",
+      id: Event.ID.make("evt_form_created_1", { disableChecks: true }),
       created: 0,
       type: "form.created",
-      data: { form: { id: "frm_1", sessionID: "ses_1", title: "Input requested", fields: formFields } },
+      data: {
+        form: {
+          id: Form.ID.make("frm_1", { disableChecks: true }),
+          sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+          title: "Input requested",
+          fields: formFields,
+        },
+      },
     })
     emitEvent(events, {
-      id: "evt_form_created_duplicate",
+      id: Event.ID.make("evt_form_created_duplicate", { disableChecks: true }),
       created: 1,
       type: "form.created",
-      data: { form: { id: "frm_1", sessionID: "ses_1", title: "Input requested", fields: formFields } },
+      data: {
+        form: {
+          id: Form.ID.make("frm_1", { disableChecks: true }),
+          sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+          title: "Input requested",
+          fields: formFields,
+        },
+      },
     })
-    await wait(() => data.session.form.list("ses_1")?.length === 1)
+    await wait(() => data.session.form.list(Session.ID.make("ses_1", { disableChecks: true }))?.length === 1)
 
     emitEvent(events, {
-      id: "evt_form_replied_1",
+      id: Event.ID.make("evt_form_replied_1", { disableChecks: true }),
       created: 2,
       type: "form.replied",
-      data: { sessionID: "ses_1", id: "frm_1", answer: {} },
+      data: {
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        id: Form.ID.make("frm_1", { disableChecks: true }),
+        answer: {},
+      },
     })
-    await wait(() => data.session.form.list("ses_1")?.length === 0)
+    await wait(() => data.session.form.list(Session.ID.make("ses_1", { disableChecks: true }))?.length === 0)
 
     emitEvent(events, {
-      id: "evt_form_created_2",
+      id: Event.ID.make("evt_form_created_2", { disableChecks: true }),
       created: 3,
       type: "form.created",
-      data: { form: { id: "frm_2", sessionID: "ses_1", title: "Input requested", fields: formFields } },
+      data: {
+        form: {
+          id: Form.ID.make("frm_2", { disableChecks: true }),
+          sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+          title: "Input requested",
+          fields: formFields,
+        },
+      },
     })
     emitEvent(events, {
-      id: "evt_form_cancelled_2",
+      id: Event.ID.make("evt_form_cancelled_2", { disableChecks: true }),
       created: 4,
       type: "form.cancelled",
-      data: { sessionID: "ses_1", id: "frm_2" },
+      data: {
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        id: Form.ID.make("frm_2", { disableChecks: true }),
+      },
     })
-    await wait(() => data.session.form.list("ses_1")?.length === 0)
+    await wait(() => data.session.form.list(Session.ID.make("ses_1", { disableChecks: true }))?.length === 0)
 
-    await data.session.form.sync("ses_1")
-    expect(data.session.form.list("ses_1")?.map((form) => form.id)).toEqual(["frm_remote"])
+    await data.session.form.sync(Session.ID.make("ses_1", { disableChecks: true }))
+    expect<unknown>(data.session.form.list(Session.ID.make("ses_1", { disableChecks: true }))?.map((form) => form.id)).toEqual([
+      "frm_remote",
+    ])
   } finally {
     app.renderer.destroy()
   }
@@ -2593,12 +2957,17 @@ test("tracks global forms by location", async () => {
   try {
     await wait(() => client.connection.status() === "connected")
     events.emit({
-      id: "evt_form_created_global_other",
+      id: Event.ID.make("evt_form_created_global_other", { disableChecks: true }),
       created: 0,
       location: other,
       type: "form.created",
       data: {
-        form: { id: "frm_other", sessionID: "global", title: "Input requested", fields: formFields },
+        form: {
+          id: Form.ID.make("frm_other", { disableChecks: true }),
+          sessionID: Session.ID.make("global", { disableChecks: true }),
+          title: "Input requested",
+          fields: formFields,
+        },
       },
     })
 
@@ -2606,25 +2975,34 @@ test("tracks global forms by location", async () => {
     expect(data.session.form.list("global", { directory }) ?? []).toEqual([])
 
     events.emit({
-      id: "evt_form_created_global_default",
+      id: Event.ID.make("evt_form_created_global_default", { disableChecks: true }),
       created: 1,
       location: { directory },
       type: "form.created",
       data: {
-        form: { id: "frm_default", sessionID: "global", title: "Input requested", fields: formFields },
+        form: {
+          id: Form.ID.make("frm_default", { disableChecks: true }),
+          sessionID: Session.ID.make("global", { disableChecks: true }),
+          title: "Input requested",
+          fields: formFields,
+        },
       },
     })
     await wait(() => data.session.form.list("global", { directory })?.length === 1)
 
     events.emit({
-      id: "evt_form_replied_global_other",
+      id: Event.ID.make("evt_form_replied_global_other", { disableChecks: true }),
       created: 2,
       location: other,
       type: "form.replied",
-      data: { id: "frm_other", sessionID: "global", answer: {} },
+      data: {
+        id: Form.ID.make("frm_other", { disableChecks: true }),
+        sessionID: Session.ID.make("global", { disableChecks: true }),
+        answer: {},
+      },
     })
     await wait(() => data.session.form.list("global", other)?.length === 0)
-    expect(data.session.form.list("global", { directory })?.map((form) => form.id)).toEqual(["frm_default"])
+    expect<unknown>(data.session.form.list("global", { directory })?.map((form) => form.id)).toEqual(["frm_default"])
   } finally {
     app.renderer.destroy()
   }
@@ -2645,8 +3023,11 @@ test("syncs global forms once for each requested location", async () => {
       },
       data: [
         {
-          id: requestedDirectory === other.directory ? "frm_other" : "frm_default",
-          sessionID: "global",
+          id:
+            requestedDirectory === other.directory
+              ? Form.ID.make("frm_other", { disableChecks: true })
+              : Form.ID.make("frm_default", { disableChecks: true }),
+          sessionID: Session.ID.make("global", { disableChecks: true }),
           title: "Input requested",
           fields: formFields,
         },
@@ -2684,8 +3065,8 @@ test("syncs global forms once for each requested location", async () => {
     expect(requests).toHaveLength(1)
     expect(requests[0]?.searchParams.get("location[directory]")).toBe(other.directory)
     expect(requests[0]?.searchParams.has("location[workspace]")).toBe(false)
-    expect(data.session.form.list("global", other)?.map((form) => form.id)).toEqual(["frm_other"])
-    expect(data.session.form.list("global", { directory })?.map((form) => form.id)).toEqual(["frm_default"])
+    expect<unknown>(data.session.form.list("global", other)?.map((form) => form.id)).toEqual(["frm_other"])
+    expect<unknown>(data.session.form.list("global", { directory })?.map((form) => form.id)).toEqual(["frm_default"])
 
     data.session.form.invalidate("global", other)
     await data.session.form.sync("global", other)
@@ -2707,9 +3088,24 @@ test("resyncs global forms only for the active location after reconnect", async 
     if (url.pathname === "/api/session")
       return json({
         data: [
-          { id: "ses_default", title: "Default", location: home, time: { created: 0, updated: 0 } },
-          { id: "ses_other_1", title: "Other one", location: other, time: { created: 0, updated: 0 } },
-          { id: "ses_other_2", title: "Other two", location: other, time: { created: 0, updated: 0 } },
+          {
+            id: Session.ID.make("ses_default", { disableChecks: true }),
+            title: "Default",
+            location: home,
+            time: { created: 0, updated: 0 },
+          },
+          {
+            id: Session.ID.make("ses_other_1", { disableChecks: true }),
+            title: "Other one",
+            location: other,
+            time: { created: 0, updated: 0 },
+          },
+          {
+            id: Session.ID.make("ses_other_2", { disableChecks: true }),
+            title: "Other two",
+            location: other,
+            time: { created: 0, updated: 0 },
+          },
         ],
         cursor: {},
       })
@@ -2726,7 +3122,7 @@ test("resyncs global forms only for the active location after reconnect", async 
       data: [
         {
           id: `frm_${requestedDirectory === other.directory ? "other" : "default"}_${count}`,
-          sessionID: "global",
+          sessionID: Session.ID.make("global", { disableChecks: true }),
           title: "Input requested",
           fields: formFields,
         },
@@ -2753,16 +3149,21 @@ test("resyncs global forms only for the active location after reconnect", async 
   ))
 
   try {
-    await wait(() => data.session.form.list("global", home)?.[0]?.id === "frm_default_1")
+    await wait(
+      () => data.session.form.list("global", home)?.[0]?.id === Form.ID.make("frm_default_1", { disableChecks: true }),
+    )
     await data.session.form.sync("global", other)
-    expect(data.session.form.list("global", other)?.[0]?.id).toBe("frm_other_1")
+    expect<unknown>(data.session.form.list("global", other)?.[0]?.id).toBe("frm_other_1")
     expect(requests).toHaveLength(2)
     requests.length = 0
 
     events.disconnect()
 
-    await wait(() => data.session.form.list("global", home)?.[0]?.id === "frm_default_2", 4000)
-    expect(data.session.form.list("global", other)?.[0]?.id).toBe("frm_other_1")
+    await wait(
+      () => data.session.form.list("global", home)?.[0]?.id === Form.ID.make("frm_default_2", { disableChecks: true }),
+      4000,
+    )
+    expect<unknown>(data.session.form.list("global", other)?.[0]?.id).toBe("frm_other_1")
     expect(requests).toHaveLength(1)
     expect(requests.map((url) => url.searchParams.get("location[directory]") ?? directory)).toEqual([home.directory])
   } finally {
@@ -2773,10 +3174,15 @@ test("resyncs global forms only for the active location after reconnect", async 
 test("reconciles active session forms when the event stream reconnects", async () => {
   const events = createEventStream()
   let requests = [
-    { id: "frm_old", sessionID: "ses_active", title: "Input requested", fields: formFields },
     {
-      id: "frm_keep",
-      sessionID: "ses_active",
+      id: Form.ID.make("frm_old", { disableChecks: true }),
+      sessionID: Session.ID.make("ses_active", { disableChecks: true }),
+      title: "Input requested",
+      fields: formFields,
+    },
+    {
+      id: Form.ID.make("frm_keep", { disableChecks: true }),
+      sessionID: Session.ID.make("ses_active", { disableChecks: true }),
       title: "Input requested",
       fields: [{ key: "authorization", type: "external" as const, url: "https://example.com" }],
     },
@@ -2794,7 +3200,7 @@ test("reconciles active session forms when the event stream reconnects", async (
     const client = useClient()
     createEffect(() => {
       if (client.connection.status() !== "connected") return
-      void data.session.form.sync("ses_active")
+      void data.session.form.sync(Session.ID.make("ses_active", { disableChecks: true }))
     })
     return <box />
   }
@@ -2812,12 +3218,24 @@ test("reconciles active session forms when the event stream reconnects", async (
   ))
 
   try {
-    await wait(() => data.session.form.list("ses_active")?.length === 2)
+    await wait(() => data.session.form.list(Session.ID.make("ses_active", { disableChecks: true }))?.length === 2)
 
-    requests = [{ id: "frm_new", sessionID: "ses_active", title: "Input requested", fields: formFields }]
+    requests = [
+      {
+        id: Form.ID.make("frm_new", { disableChecks: true }),
+        sessionID: Session.ID.make("ses_active", { disableChecks: true }),
+        title: "Input requested",
+        fields: formFields,
+      },
+    ]
     events.disconnect()
 
-    await wait(() => calls === 2 && data.session.form.list("ses_active")?.[0]?.id === "frm_new")
+    await wait(
+      () =>
+        calls === 2 &&
+        data.session.form.list(Session.ID.make("ses_active", { disableChecks: true }))?.[0]?.id ===
+          Form.ID.make("frm_new", { disableChecks: true }),
+    )
   } finally {
     app.renderer.destroy()
   }
@@ -2829,10 +3247,18 @@ test("settles pending tools when a live failure arrives", async () => {
     if (url.pathname === "/api/session/session-1/message/msg_model_1")
       return json({
         data: {
-          id: "msg_model_1",
+          id: SessionMessage.ID.make("msg_model_1", { disableChecks: true }),
           type: "model-switched",
-          previous: { id: "model-1", providerID: "provider-1", variant: "medium" },
-          model: { id: "model-1", providerID: "provider-1", variant: "high" },
+          previous: {
+            id: "model-1",
+            providerID: Provider.ID.make("provider-1", { disableChecks: true }),
+            variant: "medium",
+          },
+          model: {
+            id: Model.ID.make("model-1", { disableChecks: true }),
+            providerID: Provider.ID.make("provider-1", { disableChecks: true }),
+            variant: "high",
+          },
           time: { created: 0 },
         },
       })
@@ -2864,55 +3290,65 @@ test("settles pending tools when a live failure arrives", async () => {
   try {
     await mounted
     emitEvent(events, {
-      id: "evt_agent_1",
+      id: Event.ID.make("evt_agent_1", { disableChecks: true }),
       created: 0,
       type: "session.agent.selected",
       durable: durable("session-1"),
-      data: { sessionID: "session-1", agent: "build" },
+      data: {
+        sessionID: Session.ID.make("session-1", { disableChecks: true }),
+        agent: Agent.ID.make("build", { disableChecks: true }),
+      },
     })
     emitEvent(events, {
-      id: "evt_model_1",
+      id: Event.ID.make("evt_model_1", { disableChecks: true }),
       created: 0,
       type: "session.model.selected",
       durable: durable("session-1", 1),
       data: {
-        sessionID: "session-1",
-        model: { id: "model-1", providerID: "provider-1", variant: "high" },
+        sessionID: Session.ID.make("session-1", { disableChecks: true }),
+        model: {
+          id: Model.ID.make("model-1", { disableChecks: true }),
+          providerID: Provider.ID.make("provider-1", { disableChecks: true }),
+          variant: Model.VariantID.make("high", { disableChecks: true }),
+        },
       },
     })
     emitEvent(events, {
-      id: "evt_step_started_1",
+      id: Event.ID.make("evt_step_started_1", { disableChecks: true }),
       created: 0,
       type: "session.step.started",
       durable: durable("session-1", 2),
       data: {
         started: 0,
-        sessionID: "session-1",
-        assistantMessageID: "msg_explicit_assistant_9",
-        agent: "build",
-        model: { id: "model-1", providerID: "provider-1" },
+        sessionID: Session.ID.make("session-1", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_explicit_assistant_9", { disableChecks: true }),
+        agent: Agent.ID.make("build", { disableChecks: true }),
+        model: {
+          id: Model.ID.make("model-1", { disableChecks: true }),
+          providerID: Provider.ID.make("provider-1", { disableChecks: true }),
+        },
       },
     })
     emitEvent(events, {
-      id: "evt_input_1",
+      id: Event.ID.make("evt_input_1", { disableChecks: true }),
       created: 0,
       type: "session.tool.input.started",
       durable: durable("session-1", 3),
       data: {
-        sessionID: "session-1",
-        assistantMessageID: "msg_explicit_assistant_9",
+        sessionID: Session.ID.make("session-1", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_explicit_assistant_9", { disableChecks: true }),
         id: "call-1",
         name: "bash",
       },
     })
     emitEvent(events, {
-      id: "evt_called_1",
+      id: Event.ID.make("evt_called_1", { disableChecks: true }),
       created: 0,
       type: "session.tool.called",
       durable: durable("session-1", 4),
       data: {
-        sessionID: "session-1",
-        assistantMessageID: "msg_explicit_assistant_9",
+        sessionID: Session.ID.make("session-1", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_explicit_assistant_9", { disableChecks: true }),
         id: "call-1",
         input: {},
         executed: false,
@@ -2920,19 +3356,22 @@ test("settles pending tools when a live failure arrives", async () => {
       },
     })
     emitEvent(events, {
-      id: "evt_progress_1",
+      id: Event.ID.make("evt_progress_1", { disableChecks: true }),
       created: 0,
       type: "session.tool.progress",
       data: {
-        sessionID: "session-1",
-        assistantMessageID: "msg_explicit_assistant_9",
+        sessionID: Session.ID.make("session-1", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_explicit_assistant_9", { disableChecks: true }),
         id: "call-1",
-        metadata: { sessionID: "session-child", status: "running" },
+        metadata: { sessionID: Session.ID.make("session-child", { disableChecks: true }), status: "running" },
       },
     })
 
     await wait(() => {
-      const assistant = sync.session.message.get("session-1", "msg_explicit_assistant_9")
+      const assistant = sync.session.message.get(
+        Session.ID.make("session-1", { disableChecks: true }),
+        SessionMessage.ID.make("msg_explicit_assistant_9", { disableChecks: true }),
+      )
       return (
         assistant?.type === "assistant" &&
         assistant.content[0]?.type === "tool" &&
@@ -2942,13 +3381,13 @@ test("settles pending tools when a live failure arrives", async () => {
     })
 
     emitEvent(events, {
-      id: "evt_failed_1",
+      id: Event.ID.make("evt_failed_1", { disableChecks: true }),
       created: 0,
       type: "session.tool.failed",
       durable: durable("session-1", 6, 2),
       data: {
-        sessionID: "session-1",
-        assistantMessageID: "msg_explicit_assistant_9",
+        sessionID: Session.ID.make("session-1", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_explicit_assistant_9", { disableChecks: true }),
         id: "call-1",
         error: { type: "unknown", message: "aborted" },
         executed: false,
@@ -2957,7 +3396,10 @@ test("settles pending tools when a live failure arrives", async () => {
     })
 
     await wait(() => {
-      const assistant = sync.session.message.get("session-1", "msg_explicit_assistant_9")
+      const assistant = sync.session.message.get(
+        Session.ID.make("session-1", { disableChecks: true }),
+        SessionMessage.ID.make("msg_explicit_assistant_9", { disableChecks: true }),
+      )
       return (
         assistant?.type === "assistant" &&
         assistant.content[0]?.type === "tool" &&
@@ -2965,10 +3407,13 @@ test("settles pending tools when a live failure arrives", async () => {
       )
     })
 
-    const assistant = sync.session.message.get("session-1", "msg_explicit_assistant_9")
+    const assistant = sync.session.message.get(
+      Session.ID.make("session-1", { disableChecks: true }),
+      SessionMessage.ID.make("msg_explicit_assistant_9", { disableChecks: true }),
+    )
     expect(assistant?.type).toBe("assistant")
     if (assistant?.type !== "assistant") return
-    expect(assistant.id).toBe("msg_explicit_assistant_9")
+    expect<unknown>(assistant.id).toBe("msg_explicit_assistant_9")
     const tool = assistant.content[0]
     expect(tool?.type).toBe("tool")
     if (tool?.type !== "tool") return
@@ -2981,12 +3426,15 @@ test("settles pending tools when a live failure arrives", async () => {
     expect(tool.executed).toBe(false)
     expect(tool.providerState).toEqual({ call: true })
     expect(tool.providerResultState).toEqual({ result: true })
-    expect(sync.session.message.list("session-1").map((message) => message.type)).toEqual([
-      "agent-switched",
-      "model-switched",
-      "assistant",
-    ])
-    expect(sync.session.message.get("session-1", "msg_model_1")).toMatchObject({
+    expect(
+      sync.session.message.list(Session.ID.make("session-1", { disableChecks: true })).map((message) => message.type),
+    ).toEqual(["agent-switched", "model-switched", "assistant"])
+    expect(
+      sync.session.message.get(
+        Session.ID.make("session-1", { disableChecks: true }),
+        SessionMessage.ID.make("msg_model_1", { disableChecks: true }),
+      ),
+    ).toMatchObject({
       type: "model-switched",
       previous: { id: "model-1", providerID: "provider-1", variant: "medium" },
       model: { id: "model-1", providerID: "provider-1", variant: "high" },
@@ -2998,8 +3446,8 @@ test("settles pending tools when a live failure arrives", async () => {
 
 test("renders admitted prompts immediately and tracks them until promoted", async () => {
   const events = createEventStream()
-  const sessionID = "session-1"
-  const messageID = "msg_user_1"
+  const sessionID = Session.ID.make("session-1", { disableChecks: true })
+  const messageID = SessionMessage.ID.make("msg_user_1", { disableChecks: true })
   const calls = createFetch((url) => {
     if (url.pathname === `/api/session/${sessionID}/message`)
       return json({
@@ -3036,13 +3484,13 @@ test("renders admitted prompts immediately and tracks them until promoted", asyn
     const received: string[] = []
     const unsubscribe = sync.listen((event) => received.push(event.name))
     emitEvent(events, {
-      id: "evt_admitted_1",
+      id: Event.ID.make("evt_admitted_1", { disableChecks: true }),
       created: 0,
       type: "session.inbox.enqueued",
       durable: durable(sessionID),
       data: {
-        sessionID,
-        inboxID: messageID,
+        sessionID: Session.ID.make(sessionID, { disableChecks: true }),
+        inboxID: SessionMessage.ID.make(messageID, { disableChecks: true }),
         item: { type: "user", payload: { text: "hello" }, delivery: "steer" },
       },
     })
@@ -3053,7 +3501,7 @@ test("renders admitted prompts immediately and tracks them until promoted", asyn
     expect(sync.session.pending.list(sessionID)).toEqual([
       {
         id: messageID,
-        sessionID,
+        sessionID: sessionID,
         time: { created: 0 },
         type: "user",
         payload: { text: "hello" },
@@ -3066,13 +3514,13 @@ test("renders admitted prompts immediately and tracks them until promoted", asyn
     expect(sync.session.message.list(sessionID)?.[0]?.metadata).toBeUndefined()
 
     emitEvent(events, {
-      id: "evt_prompted_1",
+      id: Event.ID.make("evt_prompted_1", { disableChecks: true }),
       created: 0,
       type: "session.inbox.delivered",
       durable: durable(sessionID, 1),
       data: {
-        sessionID,
-        inboxID: messageID,
+        sessionID: Session.ID.make(sessionID, { disableChecks: true }),
+        inboxID: SessionMessage.ID.make(messageID, { disableChecks: true }),
       },
     })
 
@@ -3087,9 +3535,11 @@ test("renders admitted prompts immediately and tracks them until promoted", asyn
     expect(sync.session.pending.list(sessionID)).toEqual([])
     expect(sync.session.input.list(sessionID)).toEqual([])
     expect(sync.session.message.list(sessionID).map((message) => message.id)).toEqual([messageID])
-    expect(sync.session.message.list("missing")).toEqual([])
+    expect(sync.session.message.list(Session.ID.make("missing", { disableChecks: true }))).toEqual([])
     expect(sync.session.message.get(sessionID, messageID)).toBe(message)
-    expect(sync.session.message.get(sessionID, "missing")).toBeUndefined()
+    expect(
+      sync.session.message.get(sessionID, SessionMessage.ID.make("missing", { disableChecks: true })),
+    ).toBeUndefined()
     expect(received).toHaveLength(3)
   } finally {
     app.renderer.destroy()
@@ -3126,42 +3576,46 @@ test("skips initial instruction state and projects later updates with their mess
   try {
     await mounted
     emitEvent(events, {
-      id: "evt_instructions_1",
+      id: Event.ID.make("evt_instructions_1", { disableChecks: true }),
       created: 0,
       type: "session.instructions.updated",
       durable: durable("session-1", 0, 2),
       metadata: { instructions: { initial: true } },
       data: {
-        sessionID: "session-1",
+        sessionID: Session.ID.make("session-1", { disableChecks: true }),
         delta: { "core/date": "0".repeat(64) },
       },
     })
     emitEvent(events, {
-      id: "evt_instructions_2",
+      id: Event.ID.make("evt_instructions_2", { disableChecks: true }),
       created: 1,
       type: "session.instructions.updated",
       durable: durable("session-1", 1, 2),
       data: {
-        sessionID: "session-1",
+        sessionID: Session.ID.make("session-1", { disableChecks: true }),
         delta: { "core/date": "1".repeat(64) },
       },
     })
     emitEvent(events, {
-      id: "evt_instructions_3",
+      id: Event.ID.make("evt_instructions_3", { disableChecks: true }),
       created: 2,
       type: "session.instructions.updated",
       durable: durable("session-1", 2, 2),
       data: {
-        sessionID: "session-1",
+        sessionID: Session.ID.make("session-1", { disableChecks: true }),
         delta: { "core/date": "2".repeat(64) },
         text: "The current date has changed.",
       },
     })
 
-    await wait(() => sync.session.message.list("session-1")?.some((message) => message.time.created === 2))
-    expect(sync.session.message.list("session-1")).toHaveLength(1)
-    expect(sync.session.message.list("session-1")?.[0]).toMatchObject({
-      id: SessionMessage.ID.fromEvent(Event.ID.make("evt_instructions_3")),
+    await wait(() =>
+      sync.session.message
+        .list(Session.ID.make("session-1", { disableChecks: true }))
+        ?.some((message) => message.time.created === 2),
+    )
+    expect(sync.session.message.list(Session.ID.make("session-1", { disableChecks: true }))).toHaveLength(1)
+    expect<unknown>(sync.session.message.list(Session.ID.make("session-1", { disableChecks: true }))?.[0]).toMatchObject({
+      id: "msg_instructions_3",
       type: "system",
       text: "The current date has changed.",
       description: "Instructions updated: core/date",
@@ -3176,7 +3630,7 @@ function sessionInfo(id: string, parentID: string | undefined, cost = 0) {
   return {
     id,
     parentID,
-    projectID: "proj_test",
+    projectID: Project.ID.make("proj_test", { disableChecks: true }),
     cost,
     tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
     time: { created: 0, updated: 0 },
@@ -3230,12 +3684,12 @@ async function mountData(parents: Record<string, string>, costs: Record<string, 
 test("syncs direct child session info with a navigated root", async () => {
   const { data, app } = await mountData({ child: "root", sibling: "root", grandchild: "child" })
   try {
-    await data.session.sync("root", { children: true })
-    expect(data.session.get("root")?.id).toBe("root")
-    expect(data.session.get("child")?.parentID).toBe("root")
-    expect(data.session.get("sibling")?.parentID).toBe("root")
-    expect(data.session.get("grandchild")).toBeUndefined()
-    expect(data.session.family("root")).toEqual(["root", "child", "sibling"])
+    await data.session.sync(Session.ID.make("root", { disableChecks: true }), { children: true })
+    expect<unknown>(data.session.get(Session.ID.make("root", { disableChecks: true }))?.id).toBe("root")
+    expect<unknown>(data.session.get(Session.ID.make("child", { disableChecks: true }))?.parentID).toBe("root")
+    expect<unknown>(data.session.get(Session.ID.make("sibling", { disableChecks: true }))?.parentID).toBe("root")
+    expect(data.session.get(Session.ID.make("grandchild", { disableChecks: true }))).toBeUndefined()
+    expect(data.session.family(Session.ID.make("root", { disableChecks: true }))).toEqual(["root", "child", "sibling"])
   } finally {
     app.renderer.destroy()
   }
@@ -3244,17 +3698,17 @@ test("syncs direct child session info with a navigated root", async () => {
 test("groups an orphan child under its missing parent until the root arrives", async () => {
   const { data, app } = await mountData({ child: "root" })
   try {
-    await data.session.sync("child")
+    await data.session.sync(Session.ID.make("child", { disableChecks: true }))
     // Parent info is absent, so the missing parent is the furthest-known ancestor.
-    expect(data.session.root("child")).toBe("root")
-    expect(data.session.family("child")).toEqual(["child"])
-    expect(data.session.family("root")).toEqual(["child"])
+    expect(data.session.root(Session.ID.make("child", { disableChecks: true }))).toBe("root")
+    expect(data.session.family(Session.ID.make("child", { disableChecks: true }))).toEqual(["child"])
+    expect(data.session.family(Session.ID.make("root", { disableChecks: true }))).toEqual(["child"])
 
-    await data.session.sync("root")
-    expect(data.session.root("root")).toBe("root")
+    await data.session.sync(Session.ID.make("root", { disableChecks: true }))
+    expect(data.session.root(Session.ID.make("root", { disableChecks: true }))).toBe("root")
     // The tentative root entry folds into the now-known root's family.
-    expect(data.session.family("child")).toEqual(["child", "root"])
-    expect(data.session.family("root")).toEqual(["child", "root"])
+    expect(data.session.family(Session.ID.make("child", { disableChecks: true }))).toEqual(["child", "root"])
+    expect(data.session.family(Session.ID.make("root", { disableChecks: true }))).toEqual(["child", "root"])
   } finally {
     app.renderer.destroy()
   }
@@ -3263,20 +3717,24 @@ test("groups an orphan child under its missing parent until the root arrives", a
 test("indexes arbitrarily deep nesting under a single root", async () => {
   const { data, app } = await mountData({ grandchild: "child", child: "root" })
   try {
-    await data.session.sync("grandchild")
-    expect(data.session.root("grandchild")).toBe("child")
-    expect(data.session.family("grandchild")).toEqual(["grandchild"])
+    await data.session.sync(Session.ID.make("grandchild", { disableChecks: true }))
+    expect(data.session.root(Session.ID.make("grandchild", { disableChecks: true }))).toBe("child")
+    expect(data.session.family(Session.ID.make("grandchild", { disableChecks: true }))).toEqual(["grandchild"])
 
-    await data.session.sync("child")
+    await data.session.sync(Session.ID.make("child", { disableChecks: true }))
     // grandchild's tentative family (keyed by the missing "child") merges up
     // toward the still-missing "root".
-    expect(data.session.root("child")).toBe("root")
-    expect(data.session.family("grandchild")).toEqual(["grandchild", "child"])
+    expect(data.session.root(Session.ID.make("child", { disableChecks: true }))).toBe("root")
+    expect(data.session.family(Session.ID.make("grandchild", { disableChecks: true }))).toEqual(["grandchild", "child"])
 
-    await data.session.sync("root")
-    expect(data.session.root("grandchild")).toBe("root")
-    expect(data.session.root("child")).toBe("root")
-    expect(data.session.family("root")).toEqual(["grandchild", "child", "root"])
+    await data.session.sync(Session.ID.make("root", { disableChecks: true }))
+    expect(data.session.root(Session.ID.make("grandchild", { disableChecks: true }))).toBe("root")
+    expect(data.session.root(Session.ID.make("child", { disableChecks: true }))).toBe("root")
+    expect<unknown>(data.session.family(Session.ID.make("root", { disableChecks: true }))).toEqual([
+      "grandchild",
+      "child",
+      "root",
+    ])
   } finally {
     app.renderer.destroy()
   }
@@ -3285,13 +3743,13 @@ test("indexes arbitrarily deep nesting under a single root", async () => {
 test("totals family cost for roots and keeps subagent cost scoped", async () => {
   const { data, app } = await mountData({ grandchild: "child", child: "root" }, { root: 1, child: 2, grandchild: 3 })
   try {
-    await data.session.sync("grandchild")
-    await data.session.sync("child")
-    await data.session.sync("root")
+    await data.session.sync(Session.ID.make("grandchild", { disableChecks: true }))
+    await data.session.sync(Session.ID.make("child", { disableChecks: true }))
+    await data.session.sync(Session.ID.make("root", { disableChecks: true }))
 
-    expect(data.session.cost("root")).toBe(6)
-    expect(data.session.cost("child")).toBe(2)
-    expect(data.session.cost("grandchild")).toBe(3)
+    expect(data.session.cost(Session.ID.make("root", { disableChecks: true }))).toBe(6)
+    expect(data.session.cost(Session.ID.make("child", { disableChecks: true }))).toBe(2)
+    expect(data.session.cost(Session.ID.make("grandchild", { disableChecks: true }))).toBe(3)
   } finally {
     app.renderer.destroy()
   }
@@ -3300,17 +3758,17 @@ test("totals family cost for roots and keeps subagent cost scoped", async () => 
 test("re-registering an existing session is idempotent", async () => {
   const { data, app } = await mountData({ grandchild: "child", child: "root" })
   try {
-    await data.session.sync("grandchild")
-    await data.session.sync("child")
-    await data.session.sync("root")
-    const before = data.session.family("root")
+    await data.session.sync(Session.ID.make("grandchild", { disableChecks: true }))
+    await data.session.sync(Session.ID.make("child", { disableChecks: true }))
+    await data.session.sync(Session.ID.make("root", { disableChecks: true }))
+    const before = data.session.family(Session.ID.make("root", { disableChecks: true }))
     expect(before).toEqual(["grandchild", "child", "root"])
 
-    await data.session.sync("child")
-    await data.session.sync("root")
-    await data.session.sync("grandchild")
-    expect(data.session.family("root")).toEqual(before)
-    expect(data.session.family("root")).toHaveLength(3)
+    await data.session.sync(Session.ID.make("child", { disableChecks: true }))
+    await data.session.sync(Session.ID.make("root", { disableChecks: true }))
+    await data.session.sync(Session.ID.make("grandchild", { disableChecks: true }))
+    expect(data.session.family(Session.ID.make("root", { disableChecks: true }))).toEqual(before)
+    expect(data.session.family(Session.ID.make("root", { disableChecks: true }))).toHaveLength(3)
   } finally {
     app.renderer.destroy()
   }
@@ -3319,11 +3777,11 @@ test("re-registering an existing session is idempotent", async () => {
 test("stops at the last non-repeating ancestor on a parent cycle", async () => {
   const { data, app } = await mountData({ x: "y", y: "x" })
   try {
-    await data.session.sync("x")
-    await data.session.sync("y")
+    await data.session.sync(Session.ID.make("x", { disableChecks: true }))
+    await data.session.sync(Session.ID.make("y", { disableChecks: true }))
     // Does not hang; walking up from "y" stops before re-entering "x".
-    expect(data.session.root("y")).toBe("x")
-    expect(data.session.family("y")).toEqual(["x", "y"])
+    expect(data.session.root(Session.ID.make("y", { disableChecks: true }))).toBe("x")
+    expect(data.session.family(Session.ID.make("y", { disableChecks: true }))).toEqual(["x", "y"])
   } finally {
     app.renderer.destroy()
   }
@@ -3331,7 +3789,7 @@ test("stops at the last non-repeating ancestor on a parent cycle", async () => {
 
 test("admits prompts optimistically and reconciles with the durable echo", async () => {
   const events = createEventStream()
-  const sessionID = "session-1"
+  const sessionID = Session.ID.make("session-1", { disableChecks: true })
   let release!: (response: Response) => void
   const deferred = new Promise<Response>((resolve) => {
     release = resolve
@@ -3367,7 +3825,10 @@ test("admits prompts optimistically and reconciles with the durable echo", async
 
   try {
     await mounted
-    const promise = sync.session.prompt({ sessionID, text: "hello" })
+    const promise = sync.session.prompt({
+      sessionID: Session.ID.make(sessionID, { disableChecks: true }),
+      text: "hello",
+    })
     const settled = promise.then(
       () => undefined,
       (error) => error,
@@ -3375,9 +3836,14 @@ test("admits prompts optimistically and reconciles with the durable echo", async
 
     // Optimistic: the row renders before the server responds.
     const optimistic = sync.session.pending.list(sessionID)[0]
-    expect(optimistic).toMatchObject({ sessionID, type: "user", payload: { text: "hello" }, delivery: "steer" })
+    expect(optimistic).toMatchObject({
+      sessionID: sessionID,
+      type: "user",
+      payload: { text: "hello" },
+      delivery: "steer",
+    })
     const messageID = optimistic!.id
-    expect(messageID.startsWith("msg_")).toBe(true)
+    expect(messageID.startsWith(SessionMessage.ID.make("msg_", { disableChecks: true }))).toBe(true)
     expect(sync.session.input.list(sessionID)).toEqual([messageID])
     expect(sync.session.message.list(sessionID).map((message) => message.id)).toEqual([messageID])
 
@@ -3392,13 +3858,13 @@ test("admits prompts optimistically and reconciles with the durable echo", async
     const unsubscribe = sync.listen((event) => received.push(event.name))
     const echoFile = { data: "aGVsbG8=", mime: "text/plain", source: { type: "uri" as const, uri: "file:///a.txt" } }
     emitEvent(events, {
-      id: "evt_echo_1",
+      id: Event.ID.make("evt_echo_1", { disableChecks: true }),
       created: 5,
       type: "session.inbox.enqueued",
       durable: durable(sessionID),
       data: {
-        sessionID,
-        inboxID: messageID,
+        sessionID: Session.ID.make(sessionID, { disableChecks: true }),
+        inboxID: SessionMessage.ID.make(messageID, { disableChecks: true }),
         item: { type: "user", payload: { text: "hello", files: [echoFile] }, delivery: "steer" },
       },
     })
@@ -3407,7 +3873,7 @@ test("admits prompts optimistically and reconciles with the durable echo", async
     expect(sync.session.pending.list(sessionID)).toEqual([
       {
         id: messageID,
-        sessionID,
+        sessionID: sessionID,
         time: { created: 5 },
         type: "user",
         payload: { text: "hello", files: [echoFile] },
@@ -3432,10 +3898,10 @@ test("admits prompts optimistically and reconciles with the durable echo", async
 })
 
 test("hydrates durable pending prompts into the visible transcript", async () => {
-  const sessionID = "session-1"
+  const sessionID = Session.ID.make("session-1", { disableChecks: true })
   const item = {
-    id: "msg_pending_1",
-    sessionID,
+    id: SessionMessage.ID.make("msg_pending_1", { disableChecks: true }),
+    sessionID: Session.ID.make(sessionID, { disableChecks: true }),
     time: { created: 5 },
     type: "user" as const,
     payload: { text: "waiting" },
@@ -3485,11 +3951,11 @@ test("hydrates durable pending prompts into the visible transcript", async () =>
 
 test("keeps the row when the response lands before the echo", async () => {
   const events = createEventStream()
-  const sessionID = "session-1"
-  const messageID = "msg_early_1"
+  const sessionID = Session.ID.make("session-1", { disableChecks: true })
+  const messageID = SessionMessage.ID.make("msg_early_1", { disableChecks: true })
   const admission = {
     id: messageID,
-    sessionID,
+    sessionID: Session.ID.make(sessionID, { disableChecks: true }),
     time: { created: 1 },
     type: "user",
     payload: { text: "hello" },
@@ -3527,7 +3993,11 @@ test("keeps the row when the response lands before the echo", async () => {
 
   try {
     await mounted
-    await sync.session.prompt({ sessionID, id: messageID, text: "hello" })
+    await sync.session.prompt({
+      sessionID: Session.ID.make(sessionID, { disableChecks: true }),
+      id: messageID,
+      text: "hello",
+    })
 
     // POST resolved but the echo has not arrived: racing pending and message
     // re-fetches still cannot wipe the row.
@@ -3547,7 +4017,7 @@ test("keeps the row when the response lands before the echo", async () => {
 
 test("rolls back an optimistic prompt the server rejected", async () => {
   const events = createEventStream()
-  const sessionID = "session-1"
+  const sessionID = Session.ID.make("session-1", { disableChecks: true })
   const calls = createFetch((url) => {
     if (url.pathname === `/api/session/${sessionID}/prompt`)
       return json({ _tag: "InvalidRequestError", message: "invalid" }, { status: 400 })
@@ -3578,7 +4048,10 @@ test("rolls back an optimistic prompt the server rejected", async () => {
 
   try {
     await mounted
-    const promise = sync.session.prompt({ sessionID, text: "rejected" })
+    const promise = sync.session.prompt({
+      sessionID: Session.ID.make(sessionID, { disableChecks: true }),
+      text: "rejected",
+    })
     expect(sync.session.message.list(sessionID)).toHaveLength(1)
 
     await expect(promise).rejects.toThrow()
@@ -3592,11 +4065,11 @@ test("rolls back an optimistic prompt the server rejected", async () => {
 
 test("a retry under the same client-minted ID cannot duplicate rows", async () => {
   const events = createEventStream()
-  const sessionID = "session-1"
-  const messageID = "msg_retry_1"
+  const sessionID = Session.ID.make("session-1", { disableChecks: true })
+  const messageID = SessionMessage.ID.make("msg_retry_1", { disableChecks: true })
   const admission = {
     id: messageID,
-    sessionID,
+    sessionID: Session.ID.make(sessionID, { disableChecks: true }),
     time: { created: 1 },
     type: "user",
     payload: { text: "hello" },
@@ -3637,10 +4110,18 @@ test("a retry under the same client-minted ID cannot duplicate rows", async () =
 
   try {
     await mounted
-    await sync.session.prompt({ sessionID, id: messageID, text: "hello" })
+    await sync.session.prompt({
+      sessionID: Session.ID.make(sessionID, { disableChecks: true }),
+      id: messageID,
+      text: "hello",
+    })
     // Retry with the identical payload: server admission is idempotent per ID,
     // and the local dedupe keeps a single row.
-    await sync.session.prompt({ sessionID, id: messageID, text: "hello" })
+    await sync.session.prompt({
+      sessionID: Session.ID.make(sessionID, { disableChecks: true }),
+      id: messageID,
+      text: "hello",
+    })
 
     expect(posts).toEqual([messageID, messageID])
     expect(sync.session.pending.list(sessionID).map((item) => item.id)).toEqual([messageID])
@@ -3652,16 +4133,26 @@ test("a retry under the same client-minted ID cannot duplicate rows", async () =
     const received: string[] = []
     const unsubscribe = sync.listen((event) => received.push(event.name))
     emitEvent(events, {
-      id: "evt_ack_1",
+      id: Event.ID.make("evt_ack_1", { disableChecks: true }),
       created: 2,
       type: "session.inbox.enqueued",
       durable: durable(sessionID),
-      data: { sessionID, inboxID: messageID, item: { type: "user", payload: { text: "hello" }, delivery: "steer" } },
+      data: {
+        sessionID: Session.ID.make(sessionID, { disableChecks: true }),
+        inboxID: SessionMessage.ID.make(messageID, { disableChecks: true }),
+        item: { type: "user", payload: { text: "hello" }, delivery: "steer" },
+      },
     })
     await wait(() => received.includes("session.inbox.enqueued"))
     unsubscribe()
     fail = true
-    await expect(sync.session.prompt({ sessionID, id: messageID, text: "hello" })).rejects.toThrow()
+    await expect(
+      sync.session.prompt({
+        sessionID: Session.ID.make(sessionID, { disableChecks: true }),
+        id: messageID,
+        text: "hello",
+      }),
+    ).rejects.toThrow()
     expect(sync.session.pending.list(sessionID).map((item) => item.id)).toEqual([messageID])
     expect(sync.session.message.list(sessionID).map((message) => message.id)).toEqual([messageID])
   } finally {
