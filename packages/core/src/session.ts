@@ -46,6 +46,8 @@ import { SessionInbox } from "./session/inbox.js"
 import { InstructionState } from "./session/instruction-state.js"
 import { SessionGenerate } from "./session/generate.js"
 import { SessionCommand } from "./session/command.js"
+import { Plugin } from "./plugin/service.js"
+import { PluginHooks } from "./plugin/hooks.js"
 import {
   SessionMove,
   DestinationNotFoundError,
@@ -459,7 +461,22 @@ const layer = Layer.effect(
       }),
       resume: (sessionID) => sessions.forSession(sessionID).resume(),
       synthetic: (input) => sessions.forSession(input.sessionID).synthetic(input),
-      interrupt: (sessionID, options) => sessions.forSession(sessionID).interrupt(options),
+      interrupt: Effect.fn("Session.interrupt")(function* (sessionID, options) {
+        const interrupted = yield* sessions.forSession(sessionID).interrupt(options)
+        const session = yield* result
+          .get(sessionID)
+          .pipe(Effect.catchTag("Session.NotFoundError", () => Effect.succeed(undefined)))
+        if (!session) return interrupted
+        yield* Effect.gen(function* () {
+          yield* Plugin.awaitActivation
+          const hooks = yield* PluginHooks.Service
+          yield* hooks.trigger("session", "interrupt", { sessionID })
+        }).pipe(
+          instances.provide(session),
+          Effect.catchCause((cause) => Effect.logWarning("Session interrupt hook failed", cause)),
+        )
+        return interrupted
+      }),
       revert: {
         stage: (input) => sessions.forSession(input.sessionID).revert.stage(input),
         clear: (sessionID) => sessions.forSession(sessionID).revert.clear(),
