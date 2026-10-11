@@ -164,7 +164,15 @@ function expandHome(resource: string, home: string) {
 function discover(fs: FSUtil.Interface, directory: string) {
   return Effect.forEach(legacySources, (source) =>
     fs
-      .scan(source.pattern, { cwd: directory, absolute: true, dot: true, symlink: true })
+      .scan(source.pattern, {
+        cwd: directory,
+        absolute: true,
+        dot: true,
+        symlink: true,
+        // Prune dependency trees during traversal so a Markdown README inside a
+        // nested node_modules never surfaces as an agent.
+        ignore: ["**/node_modules/**"],
+      })
       .pipe(
         Effect.map((files) => files.toSorted().map((filepath) => ({ directory, filepath, primary: source.primary }))),
       ),
