@@ -37,6 +37,27 @@ describe("settings timeline detail migration", () => {
 })
 
 describe("settings schema", () => {
+  test("recovers invalid typography without losing independent preferences and round trips valid values", () => {
+    const valid = decode({ appearance: { fontSize: 24, lineHeight: 30 } })
+    expect(valid.appearance).toMatchObject({ fontSize: 24, lineHeight: 30 })
+    expect(decode(encode(valid))).toEqual(valid)
+
+    for (const fontSize of [9, 25, 14.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(decode({ appearance: { fontSize, lineHeight: 24, sans: "Custom Sans" } }).appearance).toMatchObject({
+        fontSize: 14,
+        lineHeight: 24,
+        sans: "Custom Sans",
+      })
+    }
+
+    for (const lineHeight of [19, 31, 20.5, "large", Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(decode({ appearance: { fontSize: 18, lineHeight } }).appearance).toMatchObject({
+        fontSize: 18,
+        lineHeight: 20,
+      })
+    }
+  })
+
   test("keeps the values plugins copy out once and discards retired preferences", () => {
     const settings = decode({
       general: {
@@ -103,6 +124,7 @@ describe("settings schema", () => {
       },
       appearance: {
         fontSize: 14,
+        lineHeight: 20,
         mono: "",
         sans: "",
         terminal: "",
@@ -158,6 +180,7 @@ describe("settings schema", () => {
     })
     expect(settings.appearance).toEqual({
       fontSize: 14,
+      lineHeight: 20,
       mono: "Custom Mono",
       sans: "",
       terminal: "",

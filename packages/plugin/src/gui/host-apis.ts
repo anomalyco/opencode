@@ -1161,6 +1161,13 @@ export interface Appearance {
    */
   font(kind: "mono"): string
   /**
+   * The base font size in CSS pixels. Defaults to 14 before the app interface mounts. Reactive.
+   *
+   * @example
+   * const size = ctx.appearance.fontSize()
+   */
+  fontSize(): number
+  /**
    * The color scheme the interface shows: the user's choice in Settings › Appearance, with "System" resolved to the
    * system's current scheme. Before the app interface mounts, the system's scheme. Reactive.
    * - `light`: dark text on light backgrounds.

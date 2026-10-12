@@ -381,6 +381,48 @@ for (const locale of ["en", "ar"]) {
   })
 }
 
+test("font size and line height scale controls independently and survive refresh", async ({ page }) => {
+  const { settings } = await open(page)
+  await settings.getByRole("tab", { name: "Appearance", exact: true }).click()
+  const size = settings.getByRole("spinbutton", { name: "Font size", exact: true })
+  const height = settings.getByRole("spinbutton", { name: "Line height", exact: true })
+  await expect(size).toHaveValue("14")
+  await expect(height).toHaveValue("20")
+
+  await size.fill("24")
+  await size.press("Tab")
+  await expect(size).toHaveValue("24")
+  await expect
+    .poll(() => size.evaluate((element) => parseFloat(getComputedStyle(element).fontSize)))
+    .toBeCloseTo((13 * 24) / 14, 2)
+
+  await height.fill("30")
+  await height.press("Tab")
+  await expect(height).toHaveValue("30")
+  // More line spacing must not enlarge glyphs or clip them inside the input's explicit height.
+  await expect
+    .poll(() => size.evaluate((element) => parseFloat(getComputedStyle(element).fontSize)))
+    .toBeCloseTo((13 * 24) / 14, 2)
+  await expect
+    .poll(() => size.evaluate((element) => {
+      const style = getComputedStyle(element)
+
+      return element.getBoundingClientRect().height - parseFloat(style.lineHeight)
+    }))
+    .toBeGreaterThanOrEqual(0)
+
+  await page.reload()
+  await expect(size).toHaveValue("24")
+  await expect(height).toHaveValue("30")
+
+  await size.fill("100")
+  await size.press("Tab")
+  await expect(size).toHaveValue("24")
+  await height.fill("")
+  await height.press("Tab")
+  await expect(height).toHaveValue("30")
+})
+
 test("another server's settings page survives refresh", async ({ page }) => {
   await mockRemoteServer(page, { directory: "/remote/settings-demo" })
   const { settings } = await open(page)

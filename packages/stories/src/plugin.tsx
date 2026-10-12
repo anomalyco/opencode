@@ -108,7 +108,7 @@ export function createStoryHostApis(platform: App["platform"]) {
     setDirection: language.setDirection,
   }
   const theme = useTheme()
-  const appearance: Appearance = { font: () => "var(--font-family-mono)", mode: theme.mode }
+  const appearance: Appearance = { font: () => "var(--font-family-mono)", mode: theme.mode, fontSize: () => 14 }
   const router: Router = { routing: () => false, path: () => "/" }
   const keybinds: Keybinds = { keybind: () => [], keys: () => [], matches: () => false }
   const servers: Servers = { list: () => [], get: () => undefined }

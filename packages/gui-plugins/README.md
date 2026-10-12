@@ -293,7 +293,7 @@ to the displayed repository or worktree instead of adding a second menu item.
 | `ctx.ui`                     | `Ui`                                                                               | The app's icons, buttons, menus, dialog frame, Markdown and code |
 | `ctx.app`                    | `App`                                                                              | Version, channel, platform, packaged                             |
 | `ctx.locale`                 | `Locale`                                                                           | Locale and writing direction                                     |
-| `ctx.appearance`             | `Appearance`                                                                       | The user's mono font, and the light or dark scheme               |
+| `ctx.appearance`             | `Appearance`                                                                       | The user's mono font, base font size, and light or dark scheme    |
 | `ctx.router`                 | `Router`                                                                           | The route path, and whether it is changing                       |
 | `ctx.keybinds`               | `Keybinds`                                                                         | Display and matching of command keybinds                         |
 | `ctx.servers`                | `Servers`                                                                          | The servers the app lists, and each one's live `ServerRef`       |

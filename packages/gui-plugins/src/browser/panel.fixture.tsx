@@ -914,7 +914,7 @@ export function mountBrowserRegion(input: RegionHost) {
 
     const about: App = { name: "opencode", version: "", channel: "dev", platform: "desktop", packaged: false }
     const locale: Locale = { locale: () => "en", direction: () => "ltr" }
-    const appearance: Appearance = { font: () => "monospace", mode: () => "light" }
+    const appearance: Appearance = { font: () => "monospace", mode: () => "light", fontSize: () => 14 }
     const router: Router = { routing: () => false, path: () => "/" }
     const keybinds: Keybinds = { keybind: () => [], keys: (bind) => bind.split("+"), matches: () => false }
     const servers: Servers = { list: () => [server.id], get: () => undefined }
