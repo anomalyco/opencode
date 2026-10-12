@@ -20,10 +20,13 @@ services:
       - ./config/home/.oci:/root/.oci:ro
       # 宿主机业务目录映射（无此目录的机器会自动建空目录，老会话缺目录会降级显示）：
       - /root/workspace:/old-workspace
+    # SSH：私钥走 SSH_PRIVATE_KEY_B64 注入；SSH_KNOWN_HOSTS 可写死指纹；
+    # SSH_TARGETS（空格分隔）启动时自动 ssh-keyscan 补 known_hosts；
+    # 1.21/1.41 是 192.168.1.21/192.168.1.41 短名（自动写 ~/.ssh/config 映射）。
     entrypoint:
       - /bin/sh
       - -c
-      - ' yes | hcloud configure set --cli-access-key="$HCLOUD_AK" --cli-secret-key="$HCLOUD_SK" --cli-region=cn-north-4 >/dev/null 2>&1; sed -i "s/\"agreePrivacy\": \"false\"/\"agreePrivacy\": \"true\"/" /root/.hcloud/config.json 2>/dev/null; mkdir -p /root/.ssh && chmod 700 /root/.ssh; if [ -n "$SSH_PRIVATE_KEY_B64" ]; then echo "$SSH_PRIVATE_KEY_B64" | base64 -d > /root/.ssh/id_ed25519 && chmod 600 /root/.ssh/id_ed25519 && echo "ssh key installed"; fi; if [ -n "$SSH_KNOWN_HOSTS" ]; then printf "%s\n" "$SSH_KNOWN_HOSTS" > /root/.ssh/known_hosts && chmod 600 /root/.ssh/known_hosts; fi; if [ ! -d /workspace/.git ]; then git init -b main /workspace >/dev/null 2>&1; git -C /workspace config user.name opencode-prod; git -C /workspace config user.email opencode-prod@local; git -C /workspace commit --allow-empty -m init >/dev/null 2>&1; fi; exec opencode "$@" '
+      - ' yes | hcloud configure set --cli-access-key="$HCLOUD_AK" --cli-secret-key="$HCLOUD_SK" --cli-region=cn-north-4 >/dev/null 2>&1; sed -i "s/\"agreePrivacy\": \"false\"/\"agreePrivacy\": \"true\"/" /root/.hcloud/config.json 2>/dev/null; mkdir -p /root/.ssh && chmod 700 /root/.ssh; if [ -n "$SSH_PRIVATE_KEY_B64" ]; then echo "$SSH_PRIVATE_KEY_B64" | base64 -d > /root/.ssh/id_ed25519 && chmod 600 /root/.ssh/id_ed25519 && echo "ssh key installed"; fi; if [ -n "$SSH_KNOWN_HOSTS" ]; then printf "%s\n" "$SSH_KNOWN_HOSTS" > /root/.ssh/known_hosts && chmod 600 /root/.ssh/known_hosts; fi; grep -q "^Host 1\.21$" /root/.ssh/config 2>/dev/null || printf "Host 1.21\n  HostName 192.168.1.21\n  HostKeyAlias 192.168.1.21\nHost 1.41\n  HostName 192.168.1.41\n  HostKeyAlias 192.168.1.41\n" >> /root/.ssh/config; chmod 600 /root/.ssh/config 2>/dev/null || true; if [ -n "$SSH_TARGETS" ] && command -v ssh-keyscan >/dev/null 2>&1; then touch /root/.ssh/known_hosts && chmod 600 /root/.ssh/known_hosts; for h in $SSH_TARGETS; do hn="$h"; case "$h" in 1.21) hn="192.168.1.21";; 1.41) hn="192.168.1.41";; esac; ssh-keygen -F "$h" -f /root/.ssh/known_hosts >/dev/null 2>&1 || ssh-keygen -F "$hn" -f /root/.ssh/known_hosts >/dev/null 2>&1 || ssh-keyscan -T 5 "$hn" >> /root/.ssh/known_hosts 2>/dev/null || true; done; fi; if [ ! -d /workspace/.git ]; then git init -b main /workspace >/dev/null 2>&1; git -C /workspace config user.name opencode-prod; git -C /workspace config user.email opencode-prod@local; git -C /workspace commit --allow-empty -m init >/dev/null 2>&1; fi; exec opencode "$@" '
       - --
     command: serve --port 4097 --hostname 0.0.0.0
     restart: unless-stopped
