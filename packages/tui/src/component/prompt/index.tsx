@@ -563,7 +563,7 @@ export function Prompt(props: PromptProps) {
               data.location.default().directory ||
               paths.cwd,
           })
-          if (!content) return
+          if (content === undefined) return
           const normalized = normalizePromptContent(content)
 
           input.setText(normalized)
