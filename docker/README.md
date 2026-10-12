@@ -88,6 +88,23 @@ agent-browser --cdp "$BROWSER_CDP_URL" snapshot -i
 - 浏览器镜像同样走 digest pin 跟版（`BROWSER_IMAGE=...@sha256:...`），与 tools 镜像同流程。
 - 禁止在 tools 镜像里 `agent-browser install`（Chrome 只来自 sidecar，不进 tools 镜像）。
 
+## 上线记录：browser sidecar（2026-10-12）
+
+- 改动分支：`browser-sidecar`（`feat(docker): agent-browser CLI + browser sidecar over CDP`）。
+- 构建：`tools-image` 流水线 `force=true`（run 38262363507，success），产物 GHCR + SWR
+  `opencode-tools:2.0.26` / `:latest`。
+- 部署检查单：`.env` 补 `BROWSER_IMAGE` / `BROWSER_CDP_URL`（LITELLM 在宿主机上则换
+  `host.docker.internal`）→ `compose pull && up -d` → 容器内 `curl http://browser:9222/json/version`
+  → `agent-browser --cdp … open/snapshot` → 回归 4097/LiteLLM/send-mail → digest pin + `stable` 前移。
+- 决策：Lightpanda 不用（见下）。
+
+## 备选评估：Lightpanda（结论：不用）
+
+Lightpanda（36k stars，2026-10-02 发 1.0.0，Zig、无渲染、兼容 CDP）看着对口，但：
+官方联调走 `--engine`（本地拉起）而非 `--cdp` 远程，远程路径无人背书；截图只返回占位图，
+无持久登录（`--profile` / `--state` 不支持），跟 AGENTS.md 工作流对不上；且 AGPL-3.0。
+结论：chrome-cjk sidecar 继续当主力；以后如需批量只读加速再试点（换 `BROWSER_IMAGE` 一行即可）。
+
 ## 跟版
 
 改 `compose.yml` 里 `image:` 的 digest 一行并提交，`docker compose pull && docker compose up -d`。`stable` 标签只在验证后手动前移（标记作用）。
