@@ -1,4 +1,5 @@
 import type { ModelInfo } from "@opencode/client"
+import * as fuzzysort from "fuzzysort"
 import { For, Show } from "solid-js"
 import { useTheme } from "../context/theme"
 import { modelPreferenceKey } from "../model-preference"
@@ -14,6 +15,24 @@ export function prioritizeFavorites<T extends { value: { providerID: string; mod
 
 // The server owns model order (`Model.available()`: preferred free models first when signed out, newest first
 // otherwise). This only applies the picker's grouping and keeps the server's order for everything else.
+// Names that contain the query rank above scattered-letter matches, so "opus" finds
+// Claude Opus before MiMo-V2.6-Pro-UltraSpeed. Each tier keeps the ungrouped order
+// sortModelOptions gives it: free models first, otherwise the server's order.
+export function searchModelOptions<
+  T extends { title: string; category?: string; providerID?: string; providerName?: string; free?: boolean },
+>(needle: string, options: T[]) {
+  const query = needle.toLowerCase()
+  const matches = fuzzysort.go(needle, options, { keys: ["title", "category"] }).map((item) => item.obj)
+  const contains = (option: T) => option.title.toLowerCase().includes(query)
+  return [
+    ...sortModelOptions(matches.filter(contains), false),
+    ...sortModelOptions(
+      matches.filter((option) => !contains(option)),
+      false,
+    ),
+  ]
+}
+
 export function sortModelOptions<
   T extends {
     providerID?: string
