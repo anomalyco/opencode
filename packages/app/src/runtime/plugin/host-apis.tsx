@@ -50,7 +50,7 @@ import { playSoundById } from "@/shell/notifications/sound"
 import { showToast } from "@/shell/notifications/toast"
 import { useCurrentRoute, useLayout } from "@/shell/state/layout"
 import { sessionPaneTab, sessionTabPane, type SessionPane } from "@/shell/state/session-tabs"
-import { terminalFontFamily, useSettings } from "@/settings/model"
+import { defaultSettings, terminalFontFamily, useSettings } from "@/settings/model"
 import { useSettingsSurface } from "@/settings/surface"
 import { formatKeybindParts, useCommand } from "@/shell/commands/command"
 import { createMediaQuery } from "@solid-primitives/media"
@@ -116,6 +116,7 @@ type Attached = {
   notify: (plugin: string, options: NotifyOptions) => Promise<NotifyResult>
   font: Accessor<string>
   mode: Accessor<"light" | "dark">
+  fontSize: Accessor<number>
   routing: Accessor<boolean>
   path: Accessor<string>
   keybind: (command: string) => readonly string[]
@@ -356,10 +357,11 @@ export function createHostApis() {
       direction: language.direction,
       setDirection: language.setDirection,
     }),
-    // Before the interface mounts, the default mono font and the system's color scheme.
+    // Before the interface mounts, use the default typography and the system's color scheme.
     appearance: () => ({
       font: () => current()?.font() ?? terminalFontFamily(undefined),
       mode: () => current()?.mode() ?? (systemDark() ? "dark" : "light"),
+      fontSize: () => current()?.fontSize() ?? defaultSettings.appearance.fontSize,
     }),
     router: () => ({
       routing: () => current()?.routing() ?? false,
@@ -1154,6 +1156,7 @@ export function createPluginAttachment(apis: HostApis) {
     },
     command: (id) => void run(id),
     font: () => terminalFontFamily(settings.appearance.terminalFont()),
+    fontSize: settings.appearance.fontSize,
     routing: useIsRouting(),
     path: () => `${location.pathname}${location.search}`,
     keybind: command.keybindParts,

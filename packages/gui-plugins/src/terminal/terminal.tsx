@@ -272,7 +272,17 @@ export const Terminal = (props: TerminalProps) => {
     },
   )
 
-  // A new zoom remeasures; the pane ignores it until the terminal opened.
+  // Canvas glyphs do not inherit CSS font sizes; update their renderer and PTY dimensions together.
+  createKeyed(appearance.fontSize, (size) => {
+    const term = paneTerm(untrack(paneState))
+
+    if (!term) return
+
+    setOptionIfSupported(term, "fontSize", size)
+    measure()
+  })
+
+  // A new zoom remeasures; the first value finds no fit addon yet.
   createKeyed(
     () => desktop?.zoom(),
     () => measure(),
@@ -436,7 +446,7 @@ export const Terminal = (props: TerminalProps) => {
     const t = new mod.Terminal({
       cursorBlink: true,
       cursorStyle: "bar",
-      fontSize: 14,
+      fontSize: appearance.fontSize(),
       fontFamily: appearance.font("mono"),
       allowTransparency: false,
       convertEol: false,
