@@ -111,6 +111,10 @@ RUN ARCH="$(uname -m)"; case "$ARCH" in x86_64) TF_ARCH=amd64;; aarch64) TF_ARCH
 # - AGENTS.md：agent 使用说明（直连模型通用版）
 # 注意：部署侧不要再挂载这两个文件，否则会盖住烘入的版本。
 COPY docker/opencode.jsonc docker/AGENTS.md /root/.config/opencode/
+# - git：gh 托管鉴权（GH_TOKEN 走 compose env，helper 运行时委托，密钥不进镜像；
+#   修：容器重建后 git push 曾因缺 helper 报无权限）
+RUN git config --system credential.helper "!gh auth git-credential" \
+ && git config --system --list | grep -i credential
 # - send-mail：msmtp 薄包装（配置全走 SMTP_* 环境变量，见 docker/send-mail.sh）
 COPY docker/send-mail.sh /usr/local/bin/send-mail
 RUN chmod +x /usr/local/bin/send-mail && msmtp --version && send-mail --help >/dev/null
