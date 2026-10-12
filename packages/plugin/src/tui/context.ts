@@ -487,11 +487,17 @@ export interface Keymap {
   }
 }
 
+export type PermissionMode = "prompt" | "autoaccept"
+
 export interface UI {
   readonly dialog: Dialog
   readonly toast: Toast
   readonly format: {
     path(value: string): string
+  }
+  readonly permission: {
+    /** The active permission mode. Reactive when read in a Solid computation. */
+    mode(): PermissionMode
   }
   readonly router: {
     register(page: Page): () => void

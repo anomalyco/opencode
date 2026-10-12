@@ -207,6 +207,9 @@ export function createPluginContext(input: {
       format: {
         path: (value) => abbreviateHome(value, host.paths.home),
       },
+      permission: {
+        mode: () => host.local.permission.mode,
+      },
       router: {
         register(page) {
           if (input.registry.has("routes", page.name)) throw new Error(`Route already registered: ${page.name}`)
