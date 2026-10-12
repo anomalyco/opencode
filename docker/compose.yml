@@ -44,11 +44,11 @@ services:
       - browser
   browser:
     # 独立浏览器 sidecar（CDP 协议，opencode-prod 经 agent-browser --cdp 连它）。
-    # 默认用自研 chrome-cjk（chromedp/headless-shell + 中文字体，中/日/韩截图不乱码）：
-    #   https://github.com/xieyucheng123/chrome-cjk-docker
+    # 默认 north-9 的自研 chrome-cjk（chromedp/headless-shell + 中文字体，中/日/韩截图不乱码），
+    # 由 https://github.com/xieyucheng123/chrome-cjk-docker 双推（north-4/north-9），部署机只登 north-9。
     # 备选：chromedp/headless-shell:latest（Docker Hub 公开，但缺 CJK 字体）。
     # 要锁版本就在 .env 写 digest pin，compose 文件无需再改。
-    image: ${BROWSER_IMAGE:-swr.cn-north-4.myhuaweicloud.com/hwstaff_l00392796/chrome-cjk:latest}
+    image: ${BROWSER_IMAGE:-swr.cn-north-9.myhuaweicloud.com/xieyucheng123/chrome-cjk:latest}
     pull_policy: always
     container_name: opencode-browser
     networks:
