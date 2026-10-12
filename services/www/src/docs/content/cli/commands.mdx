@@ -80,6 +80,67 @@ View all subcommands and flags.
 $ opencode run --help
 ```
 
+### JSON output
+
+With `--format json`, `run` writes one JSON object per line to stdout; warnings stay on stderr. Each record has `type`, `timestamp` (Unix milliseconds), `sessionID`, and a `part`, or an `error` for errors.
+
+```bash
+$ opencode run --format json "Reply with exactly: OK"
+```
+
+Output, with fields trimmed:
+
+```json
+{"type":"step_start","timestamp":1760000000000,"sessionID":"ses_example","part":{"type":"step-start","messageID":"msg_example"}}
+{"type":"text","timestamp":1760000001200,"sessionID":"ses_example","part":{"type":"text","messageID":"msg_example","text":"OK"}}
+{"type":"step_finish","timestamp":1760000001210,"sessionID":"ses_example","part":{"type":"step-finish","messageID":"msg_example","reason":"stop","tokens":{"input":100,"output":1,"reasoning":0,"cache":{"read":0,"write":0}},"cost":0}}
+```
+
+| Type          | Emitted when                                   | Useful fields                                                                                        |
+| ------------- | ---------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `step_start`  | A model step begins                            | `part.messageID`                                                                                     |
+| `text`        | A block of text is complete                    | `part.text`                                                                                          |
+| `reasoning`   | Reasoning is available and `--thinking` is set | `part.text`                                                                                          |
+| `tool_use`    | A tool call completes or fails                 | `part.tool`, `part.state.input`, `part.state.status`, then `part.state.output` or `part.state.error` |
+| `step_finish` | A model step finishes                          | `part.reason` (such as `stop`, `tool-calls`, `length`), `part.tokens`, `part.cost`                   |
+| `error`       | A step or the run fails                        | `error.type`, `error.message`                                                                        |
+
+Group records by `part.messageID`. To print only the text:
+
+```bash
+$ opencode run --format json "Reply with exactly: OK" | jq -r 'select(.type == "text") | .part.text'
+```
+
+### Exit codes
+
+Check the exit status to tell whether the run succeeded; a failed tool call alone does not fail the run.
+
+| Code  | Meaning                                                           |
+| ----- | ----------------------------------------------------------------- |
+| `0`   | The run completed. Individual tool calls may still have failed.   |
+| `1`   | The run failed. With `--format json`, an `error` record says why. |
+| `130` | Interrupted with Ctrl+C.                                          |
+
+```bash
+$ opencode run --format json --model deepseek/no-such-model "hi"; echo "exit=$?"
+{"type":"error","timestamp":1760000000000,"sessionID":"ses_example","error":{"type":"provider.no-route","message":"Model unavailable: deepseek/no-such-model"}}
+exit=1
+```
+
+### Permissions
+
+`run` cannot ask for approval, so it handles requests that would [ask](/permissions) without you.
+
+| Mode     | Behavior                                                                                                               |
+| -------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Default  | The request is rejected and the model is told to continue without it. The call shows up as a failed `tool_use` record. |
+| `--auto` | The request is approved.                                                                                               |
+| Either   | `deny` rules still apply.                                                                                              |
+
+```bash
+$ opencode run --auto "Update the snapshots and run the tests"
+```
+
 ## mini
 
 Starts the minimal interactive interface instead of the full-screen TUI.
