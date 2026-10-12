@@ -64,6 +64,7 @@ test("treats uppercase, userinfo, and IPv6 loopback URLs as local", () => {
   expect(ServerConnection.local({ type: "http", http: { url: "http://[::1]:4096" } })).toBe(true)
   expect(ServerConnection.local({ type: "http", http: { url: "http://LOCALHOST.evil.test" } })).toBe(false)
   expect(ServerConnection.local({ type: "http", http: { url: "http://[::2]:4096" } })).toBe(false)
+  expect(ServerConnection.local({ type: "http", http: { url: "http://localhost:pw@evil.test" } })).toBe(false)
 })
 
 test("keeps exact persisted server identities and prevents removing provided servers", () => {
