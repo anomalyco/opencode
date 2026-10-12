@@ -106,15 +106,20 @@ RUN ARCH="$(uname -m)"; case "$ARCH" in x86_64) TF_ARCH=amd64;; aarch64) TF_ARCH
  && chmod +x /usr/local/bin/terraform \
  && rm -f /tmp/terraform.zip \
  && terraform version
+# agent-browser：Vercel Labs 出的 agent 浏览器 CLI（Rust 原生，经 CDP 驱浏览器）。
+# 来源：https://github.com/vercel-labs/agent-browser
+# 注意：只装 CLI，不运行 `agent-browser install`（那会把 Chrome 烘进 tools 镜像）。
+# 浏览器由 compose 里独立的 browser sidecar 提供（chrome-cjk 镜像），CLI 经 --cdp 连它。
+# release 自带 linux-musl 二进制（agent-browser-linux-musl-x64），Alpine 底座可用。
+ARG AGENT_BROWSER_VERSION=0.39.0
+RUN npm install -g "agent-browser@${AGENT_BROWSER_VERSION}" \
+  && agent-browser --version
+
 # 非涉密默认配置烘入镜像（各机器行为一致；密钥仍走 env/挂载，不进镜像）：
 # - opencode.jsonc：默认模型走 LiteLLM 网关，地址/key 由 {env:} 注入
 # - AGENTS.md：agent 使用说明（直连模型通用版）
 # 注意：部署侧不要再挂载这两个文件，否则会盖住烘入的版本。
 COPY docker/opencode.jsonc docker/AGENTS.md /root/.config/opencode/
-# - git：gh 托管鉴权（GH_TOKEN 走 compose env，helper 运行时委托，密钥不进镜像；
-#   修：容器重建后 git push 曾因缺 helper 报无权限）
-RUN git config --system credential.helper "!gh auth git-credential" \
- && git config --system --list | grep -i credential
 # - send-mail：msmtp 薄包装（配置全走 SMTP_* 环境变量，见 docker/send-mail.sh）
 COPY docker/send-mail.sh /usr/local/bin/send-mail
 RUN chmod +x /usr/local/bin/send-mail && msmtp --version && send-mail --help >/dev/null

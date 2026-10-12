@@ -10,7 +10,14 @@ services:
     image: ${TOOLS_IMAGE:-swr.cn-north-9.myhuaweicloud.com/xieyucheng123/opencode-tools:latest}
     pull_policy: always
     container_name: opencode-prod
-    network_mode: host
+    networks:
+      - opencode-net
+    # bridge 下容器 localhost 不再是宿主机：宿主机本地服务（如 LiteLLM 网关跑在宿主机上）
+    # 请把 LITELLM_BASE_URL 写成 http://host.docker.internal:<port>，不要写 127.0.0.1。
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "4097:4097"
     env_file:
       - .env
     volumes:
@@ -33,6 +40,30 @@ services:
       - --
     command: serve --port 4097 --hostname 0.0.0.0
     restart: unless-stopped
+    depends_on:
+      - browser
+  browser:
+    # 独立浏览器 sidecar（CDP 协议，opencode-prod 经 agent-browser --cdp 连它）。
+    # 默认用自研 chrome-cjk（chromedp/headless-shell + 中文字体，中/日/韩截图不乱码）：
+    #   https://github.com/xieyucheng123/chrome-cjk-docker
+    # 备选：chromedp/headless-shell:latest（Docker Hub 公开，但缺 CJK 字体）。
+    # 要锁版本就在 .env 写 digest pin，compose 文件无需再改。
+    image: ${BROWSER_IMAGE:-swr.cn-north-4.myhuaweicloud.com/hwstaff_l00392796/chrome-cjk:latest}
+    pull_policy: always
+    container_name: opencode-browser
+    networks:
+      - opencode-net
+    # 9222 只绑宿主机回环：宿主机 curl http://127.0.0.1:9222/json/version 调试用；
+    # 容器间走服务名，见 BROWSER_CDP_URL（默认 http://browser:9222）。
+    ports:
+      - "127.0.0.1:9222:9222"
+    # headless-shell 官方要求：shm 太小会 BUS_ADRERR 崩溃；init 回收僵尸进程。
+    # 来源：https://github.com/chromedp/docker-headless-shell
+    shm_size: 2gb
+    init: true
+    restart: unless-stopped
+networks:
+  opencode-net:
 volumes:
   prod-data:
   prod-work:

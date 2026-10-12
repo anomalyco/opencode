@@ -62,6 +62,32 @@ docker run --rm -v opencode-prod_prod-data:/d -v ./backup:/b alpine tar xzf /b/p
 docker compose restart
 ```
 
+## 浏览器 sidecar（agent-browser CLI + 独立 browser 容器，CDP 连接）
+
+`agent-browser` CLI 已烘进 tools 镜像（见 `Dockerfile.tools`，pin 版本，只装 CLI 不装 Chrome）。
+浏览器跑在独立的 `browser` 服务里（默认自研 chrome-cjk：headless-shell + 中文字体），经 CDP 连：
+
+```
+# 浏览器是否在线（opencode 容器内执行）
+curl -s http://browser:9222/json/version
+# 宿主机调试用（只绑回环）
+curl -s http://127.0.0.1:9222/json/version
+
+# agent 用法（每次必带 --cdp；先拉配套说明，不要靠记忆）
+agent-browser skills get core
+agent-browser --cdp "$BROWSER_CDP_URL" open https://example.com
+agent-browser --cdp "$BROWSER_CDP_URL" snapshot -i
+```
+
+说明：
+
+- compose 已切 bridge 网络（`opencode-net`），容器间用服务名寻址（`browser:9222`）。
+- bridge 下容器 `localhost` 不再是宿主机：跑在宿主机上的服务（如 LiteLLM 网关）请用
+  `http://host.docker.internal:<port>`（`.env` 里 `LITELLM_BASE_URL` 不要填 `127.0.0.1`）。
+- `browser` 服务要 `shm_size: 2gb` + `init: true`（headless-shell 官方要求，否则崩溃/僵尸进程）。
+- 浏览器镜像同样走 digest pin 跟版（`BROWSER_IMAGE=...@sha256:...`），与 tools 镜像同流程。
+- 禁止在 tools 镜像里 `agent-browser install`（Chrome 只来自 sidecar，不进 tools 镜像）。
+
 ## 跟版
 
 改 `compose.yml` 里 `image:` 的 digest 一行并提交，`docker compose pull && docker compose up -d`。`stable` 标签只在验证后手动前移（标记作用）。
