@@ -28,13 +28,28 @@ curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:4097/
 docker compose down   # 停机（卷保留，数据不丢）
 ```
 
-## .env（7 个 key）
+## .env（7 个 key + 邮件 6 个 key）
 
 - `LITELLM_BASE_URL` / `LITELLM_API_KEY`：模型网关
 - `GH_TOKEN`：GitHub
 - `OPENCODE_SERVER_PASSWORD`：Web 登录密码
 - `CLOUDFLARE_API_TOKEN`
 - `HCLOUD_AK` / `HCLOUD_SK`：华为云（entrypoint 内自动 configure）
+- `SMTP_HOST` / `SMTP_PORT`(默认587) / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` / `MAIL_DEFAULT_TO`(可选)：邮件通知（msmtp 经 SMTP 发信，密码/授权码不进镜像）
+
+## 邮件通知（V1：msmtp）
+
+`send-mail` 已烘进 tools 镜像（见 `Dockerfile.tools` + `docker/send-mail.sh`），配置走 `.env`，agent 与 cron 通用：
+
+```
+# .env 里填好 SMTP_* 后重启容器生效（chmod 600 .env）
+send-mail "对方@xxx.com" "主题" "正文"
+send-mail "a@x.com,b@x.com" "主题" "正文"          # 多个收件人逗号分隔
+echo "长正文..." | send-mail "对方@xxx.com" "主题"  # 管道正文
+send-mail "对方@xxx.com" "主题" -f /workspace/report.txt
+```
+
+说明：465 端口走隐式 TLS，其余端口走 STARTTLS；QQ/163/Gmail 用授权码而非登录密码；缺配置时命令会明确报错缺哪个变量。
 
 ## 备份 / 恢复（带历史）
 
