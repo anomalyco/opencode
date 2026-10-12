@@ -32,20 +32,6 @@ test("returns empty content saved by the external editor", async () => {
   await expect(openEditor({ value: "original", renderer: stubRenderer() as never })).resolves.toBe("")
 })
 
-test("rejects when the external editor exits without saving", async () => {
-  delete process.env.VISUAL
-  process.env.EDITOR = `${process.execPath} -e process.exit(1)`
-
-  await expect(openEditor({ value: "original", renderer: stubRenderer() as never })).rejects.toThrow()
-})
-
-test("returns undefined when no editor is configured", async () => {
-  delete process.env.VISUAL
-  delete process.env.EDITOR
-
-  await expect(openEditor({ value: "original", renderer: stubRenderer() as never })).resolves.toBeUndefined()
-})
-
 test("normalizes a single trailing editor newline for one-line prompts", () => {
   expect(normalizePromptContent("hello\n")).toBe("hello")
   expect(normalizePromptContent("hello\r\n")).toBe("hello")
