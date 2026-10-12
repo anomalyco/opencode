@@ -1,10 +1,14 @@
 name: opencode-prod
 services:
   opencode-prod:
-    # 生产 pin digest（CI 推送的 manifest 双 registry 同 digest；跟版时改这一行）
-    image: swr.cn-north-9.myhuaweicloud.com/xieyucheng123/opencode-tools@sha256:ae6cda29d4746b180b09b65a9e40dbc6d70927012b919aa248bc9e9492fd1e4c
-    # GHCR 同 digest 备选（需先 docker login ghcr.io）：
-    # image: ghcr.io/xieyucheng123/opencode-tools@sha256:ae6cda29d4746b180b09b65a9e40dbc6d70927012b919aa248bc9e9492fd1e4c
+    # 镜像由参数 TOOLS_IMAGE 传入（docker/.env 或命令行环境变量），默认追 latest；
+    # compose 文件此后无需再改：要锁版本就在 .env 写 digest pin，要最新就写 :latest。
+    # 例：TOOLS_IMAGE=swr.cn-north-9.myhuaweicloud.com/xieyucheng123/opencode-tools:latest
+    #     TOOLS_IMAGE=swr.cn-north-9.myhuaweicloud.com/xieyucheng123/opencode-tools@sha256:aa5f271a82a3b5dc0d8939c3d18b26b3ba76b74105be6b61d3934e46b8416238
+    # GHCR 备选（需先 docker login ghcr.io）：
+    #     TOOLS_IMAGE=ghcr.io/xieyucheng123/opencode-tools:latest
+    image: ${TOOLS_IMAGE:-swr.cn-north-9.myhuaweicloud.com/xieyucheng123/opencode-tools:latest}
+    pull_policy: always
     container_name: opencode-prod
     network_mode: host
     env_file:
