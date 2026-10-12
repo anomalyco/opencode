@@ -17,6 +17,7 @@ SHELL ["/bin/sh", "-c"]
 
 # 基础运行时：node（npx 类 MCP）+ python+pip（uvx/pip 类 MCP）+ ca 证书 + git（opencode 会话 checkpoint 必需）
 # + openssh-client（ssh 远程运维；私钥走 compose env 注入，不进镜像）
+# + msmtp（邮件通知；SMTP 账号密码走 compose .env 注入，不进镜像，见 docker/send-mail.sh）
 # 同时兼容 apt（debian/ubuntu）和 apk（alpine）
 # 官方底座已实测：Alpine 3.24.2（musl），自带 apk + libgcc/libstdc++。
 # apk 注意：v3.24 起 openssh 拆包，openssh-client 为虚拟包（由 openssh-client-default 提供，
@@ -25,10 +26,10 @@ SHELL ["/bin/sh", "-c"]
 # 本地 workerd 调试跑不起来，要本地 dev 请改走 Debian sidecar）。
 RUN if command -v apt-get >/dev/null 2>&1; then \
       apt-get update && apt-get install -y --no-install-recommends \
-        ca-certificates curl git python3 python3-pip nodejs npm openssh-client \
+        ca-certificates curl git python3 python3-pip nodejs npm openssh-client msmtp \
       && rm -rf /var/lib/apt/lists/*; \
     elif command -v apk >/dev/null 2>&1; then \
-      apk add --no-cache ca-certificates curl git python3 py3-pip nodejs npm gcompat openssh-client; \
+      apk add --no-cache ca-certificates curl git python3 py3-pip nodejs npm gcompat openssh-client msmtp; \
     else echo "unsupported base OS" && exit 1; fi \
  && git --version && ssh -V
 
@@ -110,6 +111,9 @@ RUN ARCH="$(uname -m)"; case "$ARCH" in x86_64) TF_ARCH=amd64;; aarch64) TF_ARCH
 # - AGENTS.md：agent 使用说明（直连模型通用版）
 # 注意：部署侧不要再挂载这两个文件，否则会盖住烘入的版本。
 COPY docker/opencode.jsonc docker/AGENTS.md /root/.config/opencode/
+# - send-mail：msmtp 薄包装（配置全走 SMTP_* 环境变量，见 docker/send-mail.sh）
+COPY docker/send-mail.sh /usr/local/bin/send-mail
+RUN chmod +x /usr/local/bin/send-mail && msmtp --version && send-mail --help >/dev/null
 # - markitdown：local stdio，command ["markitdown-mcp"]（已随上一步装好）
 # - cloudflare：远端 Code Mode server（官方 recommended），https://mcp.cloudflare.com/mcp
 # - tailscale：官方远端 https://tailscale.mcp.kapa.ai/（零安装，见 https://tailscale.com/docs/develop-with-ai）

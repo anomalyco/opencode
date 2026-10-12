@@ -10,6 +10,13 @@
 - `oci compute instance list --compartment-id <ocid> --all`：甲骨文云实例
 - `tailscale status`：查看 tailnet 节点状态
 
+邮件通知（`send-mail` + msmtp 已烘入镜像，SMTP 配置走 `.env` 的 `SMTP_*`，密钥不进镜像）：
+
+- `send-mail <收件人> <主题> <正文>`：收件人多个用逗号分隔，如 `send-mail "a@x.com,b@x.com" "主题" "正文"`。
+- 正文长时：`echo "..." | send-mail <收件人> <主题>` 或 `send-mail <收件人> <主题> -f <文件>`。
+- 用户说“发邮件给我/他”时直接用此命令；长任务完成或失败后主动发一封告知结果；定时巡检（宿主机 cron/systemd 调 `opencode run`）输出摘要后发。
+- 发前确认收件人正确；缺配置时按报错补 `.env` 后重启容器生效，不要向用户索取密码。
+
 工作区说明：
 
 - `/workspace` 为默认工作目录（git 仓库，改动前会自动 checkpoint）。
