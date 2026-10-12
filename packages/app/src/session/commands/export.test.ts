@@ -18,6 +18,12 @@ describe("sessionExportFilename", () => {
     expect(filename).toBe(`${"a".repeat(250)}.json`)
     expect(filename.length).toBeLessThanOrEqual(255)
   })
+
+  test("trims a separator left trailing by the length cap", () => {
+    expect(sessionExportFilename({ id: "ses_123", title: `${"a".repeat(249)} bcd` })).toBe(
+      `${"a".repeat(249)}.json`,
+    )
+  })
 })
 
 describe("fetchSessionExport", () => {
