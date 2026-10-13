@@ -48,7 +48,7 @@ describe("normalizeProviderList", () => {
           modelID: "gpt-5",
           providerID: "openai",
           name: "GPT-5",
-          capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
+          capabilities: { tools: true, reasoning: true, input: ["text", "image"], output: ["text"] },
           variants: [{ id: "high" }],
           time: { released: 1 },
           cost: [{ input: 1, output: 2, cache: { read: 0.1, write: 0.2 } }],
@@ -69,6 +69,19 @@ describe("normalizeProviderList", () => {
           enabled: true,
           limit: { context: 1, output: 1 },
         },
+        {
+          id: "gpt-classic",
+          modelID: "gpt-classic",
+          providerID: "openai",
+          name: "GPT Classic",
+          capabilities: { tools: true, input: ["text"], output: ["text"] },
+          variants: [],
+          time: { released: 0 },
+          cost: [],
+          status: "active",
+          enabled: true,
+          limit: { context: 1, output: 1 },
+        },
       ] as ModelListOutput["data"],
     )
 
@@ -78,10 +91,12 @@ describe("normalizeProviderList", () => {
     expect(result.all.get("openai")?.models["gpt-5"]).toMatchObject({
       id: "gpt-5",
       providerID: "openai",
-      capabilities: { toolcall: true, attachment: true },
+      capabilities: { toolcall: true, attachment: true, reasoning: true },
       cost: { input: 1, output: 2 },
       variants: { high: {} },
     })
+    // Models without a catalog reasoning flag map to false instead of being hardcoded
+    expect(result.all.get("openai")?.models["gpt-classic"]?.capabilities.reasoning).toBe(false)
   })
 })
 

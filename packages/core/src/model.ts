@@ -30,9 +30,10 @@ export type Capabilities = Model.Capabilities
 
 /** Merges partial config capabilities onto a base model's capabilities, defaulting unset fields. */
 export const mergeCapabilities = (config: Partial<Capabilities>, base: Capabilities | undefined) => {
-  const fallback = base ?? Capabilities.default()
+  const fallback: Capabilities = base ?? Capabilities.default()
   return {
     tools: config.tools ?? fallback.tools,
+    reasoning: config.reasoning ?? fallback.reasoning,
     input: [...(config.input ?? fallback.input)],
     output: [...(config.output ?? fallback.output)],
     temperature: config.temperature ?? base?.temperature,
