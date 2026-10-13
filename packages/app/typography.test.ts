@@ -1,67 +1,56 @@
 import { expect, test } from "bun:test"
-import { build } from "vite"
+import { createRequire } from "node:module"
 import { typography } from "./typography.js"
 
-test("builds scalable typography and control geometry without rewriting viewport bounds or resource URLs", async () => {
-  const result = await build({
-    configFile: false,
-    logLevel: "silent",
-    css: { postcss: { plugins: [typography()] } },
-    plugins: [{
-      name: "typography-fixture",
-      resolveId(id) {
-        if (id === "typography-fixture" || id === "/typography-fixture.css") {
-          return id
-        }
-      },
-      load(id) {
-        if (id === "typography-fixture") {
-          return 'import "/typography-fixture.css"'
-        }
+// Use the same PostCSS implementation that runs the plugin in Vite.
+const postcss = createRequire(import.meta.resolve("vite"))("postcss")
 
-        if (id === "/typography-fixture.css") {
-          return `
-            :root { --font-size-small: 13px; --line-height-compact: 16px; --spacing: 0.25rem; }
-            .row { font-size: 13px; height: 28px; padding: 4px 8px; gap: 0.5rem; line-height: 1.5; }
-            .relative { font-size: 0.75rem; line-height: var(--line-height-compact); min-height: 1.75rem; }
-            .viewport { height: 100dvh; width: 100%; margin: 0; background: url("/14px.png"); }
-            .copy::after { content: "14px"; }
-            @media (min-width: 768px) { .row { width: 160px; } }
-          `
-        }
-      },
-    }],
-    build: {
-      write: false,
-      copyPublicDir: false,
-      minify: false,
-      cssMinify: false,
-      rolldownOptions: { input: "typography-fixture" },
-    },
+test("scales typography while preserving explicit geometry and decorations", () => {
+  const root = postcss.parse(`
+    :root { --font-size-small: 13px; --line-height-compact: 16px; --spacing: 0.25rem; --text-sm: 0.875rem; --text-sm--line-height: 1.5; }
+    .row { font-size: 13px; height: 28px; padding: 4px 8px; gap: 0.5rem; line-height: 1.5; }
+    .relative { font-size: 0.75rem; line-height: var(--line-height-compact); min-height: 1.75rem; }
+    .square { width: 20px; height: 20px; border: 1px solid; border-radius: 4px; box-shadow: 0 1px 2px black; }
+    .lines { line-height: 120%; --line-height-normal: 1.5em; }
+    .viewport { height: 100dvh; width: 100%; margin: 0; background: url("/14px.png"); }
+    .copy::after { content: "14px"; }
+    @media (min-width: 768px) { .row { width: 160px; } }
+  `)
+
+  typography().OnceExit(root)
+  const values: Record<string, string[]> = {}
+  root.walkDecls((declaration: { prop: string; value: string }) => {
+    ;(values[declaration.prop] ??= []).push(declaration.value)
   })
 
-  if (!("output" in result)) {
-    throw new Error("Expected a single typography build")
-  }
-
-  const css = result.output.find(file => file.type === "asset" && file.fileName.endsWith(".css"))
-
-  if (!css || css.type !== "asset") {
-    throw new Error("Expected the built typography stylesheet")
-  }
-
-  const text = String(css.source)
-
-  expect(text).toContain("--font-size-small: 0.8125rem")
-  expect(text).toContain("height: calc(1.75rem * var(--app-line-height-scale, 1))")
-  expect(text).toContain("gap: calc(0.5rem * var(--app-line-height-scale, 1))")
-  expect(text).toContain("line-height: calc(1.5 * var(--app-line-height-scale, 1))")
-  expect(text).toContain("font-size: 0.75rem")
-  expect(text).toContain("line-height: var(--line-height-compact)")
-  expect(text).toContain("height: 100dvh")
-  expect(text).toContain("width: 100%")
-  expect(text).toContain("margin: 0")
-  expect(text).toContain("14px.png")
-  expect(text).toContain('content: "14px"')
-  expect(text).toContain("min-width: 768px")
+  expect(values["font-size"]).toEqual([
+    "calc(13px * var(--app-font-size-scale, 1))",
+    "calc(0.75rem * var(--app-font-size-scale, 1))",
+  ])
+  expect(values["--font-size-small"]).toEqual(["calc(13px * var(--app-font-size-scale, 1))"])
+  expect(values["--text-sm"]).toEqual(["calc(0.875rem * var(--app-font-size-scale, 1))"])
+  expect(values["--line-height-compact"]).toEqual([
+    "calc(16px * var(--app-font-size-scale, 1) * var(--app-line-height-scale, 1))",
+  ])
+  expect(values["line-height"]).toEqual([
+    "calc(1.5 * var(--app-line-height-scale, 1))",
+    "var(--line-height-compact)",
+    "calc(120% * var(--app-line-height-scale, 1))",
+  ])
+  expect(values["--text-sm--line-height"]).toEqual(["calc(1.5 * var(--app-line-height-scale, 1))"])
+  expect(values["--line-height-normal"]).toEqual(["calc(1.5em * var(--app-line-height-scale, 1))"])
+  expect(values.height).toEqual(["28px", "20px", "100dvh"])
+  expect(values.width).toEqual(["20px", "100%", "160px"])
+  expect(values["min-height"]).toEqual(["1.75rem"])
+  expect(values.padding).toEqual(["4px 8px"])
+  expect(values.gap).toEqual(["0.5rem"])
+  expect(values["--spacing"]).toEqual(["0.25rem"])
+  expect(values.border).toEqual(["1px solid"])
+  expect(values["border-radius"]).toEqual(["4px"])
+  expect(values["box-shadow"]).toEqual(["0 1px 2px black"])
+  expect(values.background).toEqual(['url("/14px.png")'])
+  expect(values.content).toEqual(['"14px"'])
+  root.walkAtRules("media", (rule: { params: string }) => {
+    expect(rule.params).toBe("(min-width: 768px)")
+  })
 })
