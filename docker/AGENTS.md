@@ -16,10 +16,10 @@
 
 浏览器自动化（`agent-browser` CLI 已烘入镜像 + 独立 `browser` sidecar，经 CDP 连接；浏览器不在本镜像内）：
 
-- 每次调用必须带 `--cdp "$BROWSER_CDP_URL"`（entrypoint 启动时自动解析为 sidecar 容器 IP，如 `http://172.19.0.2:9222`；直连 `http://browser:9222` 会被浏览器的 Host 头校验拒绝）。
+- 每次调用必须带 `--cdp "$BROWSER_CDP_URL"`（固定 `http://172.17.0.1:9222`，即 docker0 网关 IP；headless-shell 拒绝非 IP/localhost 的 Host 头，`http://browser:9222` 这种服务名直连会被拒）。
 - 动手前先拉与安装版本配套的用法：`agent-browser skills get core`（不要靠记忆拼命令）。
 - 典型流程：`agent-browser --cdp "$BROWSER_CDP_URL" open <url>` → `snapshot -i` → `click @e2` / `fill @e3 "文本"` → `screenshot` → `close`。
-- 先确认浏览器在线：`curl -s "$BROWSER_CDP_URL/json/version"`（不要用服务名直连，会被 Host 头校验拒绝）。
+- 先确认浏览器在线：`curl -s "$BROWSER_CDP_URL/json/version"`（固定 IP，直连可用）。
 - 禁止在本容器内运行 `agent-browser install`（Chrome 由 browser sidecar 提供，不要装进 tools 镜像）。
 
 邮件通知（`send-mail` + msmtp 已烘入镜像，SMTP 配置走 `.env` 的 `SMTP_*`，密钥不进镜像）：
