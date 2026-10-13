@@ -362,8 +362,11 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         return
       }
 
-      // Rem-based text and control geometry grow together; viewport units remain unchanged.
-      document.documentElement.style.fontSize = `${(16 * fontSize()) / defaultSettings.appearance.fontSize}px`
+      // Keep rem-based layout and JavaScript measurements on their original scale.
+      document.documentElement.style.setProperty(
+        "--app-font-size-scale",
+        `${fontSize() / defaultSettings.appearance.fontSize}`,
+      )
       document.documentElement.style.setProperty(
         "--app-line-height-scale",
         `${lineHeight() / defaultSettings.appearance.lineHeight}`,
