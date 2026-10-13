@@ -153,20 +153,31 @@ const reminders = Effect.gen(function* () {
   const planRun = yield* run()
   yield* planRun.contextHook(request(plan, []))
   const buildRun = yield* run()
-  yield* buildRun.contextHook(request(build, [Message.user(planRun.persisted[0]!)]))
-  return { enter: planRun.persisted[0]!, leave: buildRun.persisted[0]! }
+  const messages = [Message.user(planRun.persisted[0]!)]
+  yield* buildRun.contextHook(request(build, messages))
+  const part = messages[0]?.content[0]
+  if (part?.type !== "text") return yield* Effect.die("plan plugin did not inject a leave reminder")
+  return { enter: planRun.persisted[0]!, leave: part.text }
 })
 
 describe("plan plugin reminders", () => {
-  it.effect("injects enter and leave reminders on agent switches", () =>
+  it.effect("injects enter reminders on Plan selection and reconciles leave reminders in context", () =>
     Effect.gen(function* () {
       const { persisted } = yield* run([agentSelected(plan, build), agentSelected(build, plan)])
-      yield* settle(persisted, 2)
+      yield* settle(persisted, 1)
       expect(persisted[0]).toContain("You are in Plan mode")
       expect(persisted[0]).toContain("Do not create or update plan files unless the user explicitly asks you to")
       expect(persisted[0]).toContain(planDirectory)
       expect(persisted[0]).toContain("Do not modify any other files")
-      expect(persisted[1]).toContain("NO LONGER in Plan mode")
+      const { contextHook } = yield* run()
+      const messages = [Message.user(persisted[0]!)]
+      yield* contextHook(request(build, messages))
+      expect(messages).toHaveLength(2)
+      expect(messages[0]?.content[0]).toMatchObject({
+        type: "text",
+        text: expect.stringContaining("NO LONGER in Plan mode"),
+      })
+      expect(persisted).toHaveLength(1)
     }),
   )
 
@@ -194,7 +205,7 @@ describe("plan plugin reminders", () => {
     }),
   )
 
-  it.effect("reconciles a stale enter reminder with a leave reminder", () =>
+  it.effect("reconciles a stale enter reminder with an in-context leave reminder", () =>
     Effect.gen(function* () {
       const { enter } = yield* reminders
       const { persisted, contextHook } = yield* run()
@@ -203,7 +214,7 @@ describe("plan plugin reminders", () => {
       expect(messages).toHaveLength(3)
       const middle = messages[1]?.content[0]
       expect(middle?.type === "text" && middle.text).toContain("NO LONGER in Plan mode")
-      expect(persisted).toHaveLength(1)
+      expect(persisted).toHaveLength(0)
     }),
   )
 

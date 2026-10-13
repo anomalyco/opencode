@@ -152,6 +152,7 @@ export const Plugin = define({
       // Before the user's prompt, matching where agent-switch reminders land.
       const at = event.messages.at(-1)?.role === "user" ? event.messages.length - 1 : event.messages.length
       event.messages.splice(at, 0, Message.user(text))
+      if (stale) return Effect.void
       return ctx.session
         .synthetic({ sessionID: event.sessionID, text, resume: false })
         .pipe(
@@ -163,6 +164,9 @@ export const Plugin = define({
 
     yield* ctx.event.subscribe({ types: ["session.created", "session.agent.selected"] }).pipe(
       Stream.runForEach((event) => {
+        // The context hook reconciles this reminder on the next request. Persisting it here
+        // as well while a run is active queues an extra steered model step after approval.
+        if (event.type === "session.agent.selected" && event.data.previous === plan) return Effect.void
         const text = switchReminder(event, enterReminder)
         if (!text) return Effect.void
         return ctx.session

@@ -1218,6 +1218,7 @@ describe("SessionRunnerLLM", () => {
         return
       }
       expect(exit._tag).toBe("Success")
+      expect(s.requests).toHaveLength(2)
       expect(userTexts(s.requests[1])).toContain("Implement the agreed plan")
       expect(s.requests[1]?.tools.some((tool) => tool.name === "plan_exit")).toBe(decision !== "approve")
       expect(userTexts(s.requests[1]).join("\n")).toContain(
