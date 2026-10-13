@@ -629,6 +629,7 @@ const installPlan = Effect.fnUntraced(function* (s: Scenario) {
       event: { subscribe: () => s.bus.subscribe([SessionEvent.Created, SessionEvent.AgentSelected]) },
       session: {
         get: (input) => s.session.get(input.sessionID),
+        context: (input) => s.session.context(input.sessionID),
         switchAgent: s.session.switchAgent,
         synthetic: s.session.synthetic,
         hook: (name, callback) => hooks.register("session", name, callback),
@@ -1224,8 +1225,45 @@ describe("SessionRunnerLLM", () => {
       expect(userTexts(s.requests[1]).join("\n")).toContain(
         decision === "approve" ? "NO LONGER in Plan mode" : "You are in Plan mode",
       )
+      if (decision === "approve") {
+        const texts = userTexts(s.requests[1])
+        expect(texts.filter((text) => text.includes("NO LONGER in Plan mode"))).toHaveLength(1)
+        expect(yield* s.inbox).toEqual([])
+
+        yield* s.llm.push(TestLLM.text("Still in Build", "text-build"))
+        yield* s.runPrompt("Continue in Build")
+        expect(s.requests).toHaveLength(3)
+        expect(userTexts(s.requests[2])).toEqual([...texts, "Continue in Build"])
+        expect(yield* s.inbox).toEqual([])
+      }
     })
   }
+
+  scenario("persists a manual Plan exit without queuing work or repeating the reminder", function* (s) {
+    yield* installPlan(s)
+    const reminders = yield* s.bus
+      .subscribe(SessionEvent.Synthetic)
+      .pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
+    yield* s.session.switchAgent({ sessionID, agent: Agent.ID.make("plan") })
+    yield* s.session.switchAgent({ sessionID, agent: Agent.ID.make("build") })
+    expect(Array.from(yield* Fiber.join(reminders)).map((event) => event.data.text)).toEqual([
+      expect.stringContaining("You are in Plan mode"),
+      expect.stringContaining("NO LONGER in Plan mode"),
+    ])
+    expect(yield* s.inbox).toEqual([])
+    expect(s.requests).toHaveLength(0)
+
+    yield* s.llm.push(TestLLM.text("First Build reply", "text-build-first"))
+    yield* s.runPrompt("Implement after the manual switch")
+    const texts = userTexts(s.requests[0])
+    expect(texts.filter((text) => text.includes("NO LONGER in Plan mode"))).toHaveLength(1)
+
+    yield* s.llm.push(TestLLM.text("Second Build reply", "text-build-second"))
+    yield* s.runPrompt("Continue in Build")
+    expect(s.requests).toHaveLength(2)
+    expect(userTexts(s.requests[1])).toEqual([...texts, "Continue in Build"])
+    expect(yield* s.inbox).toEqual([])
+  })
 
   for (const target of ["missing", "hidden", "subagent"] as const) {
     scenario(`plan_exit rejects a ${target} Build agent without asking for approval`, function* (s) {

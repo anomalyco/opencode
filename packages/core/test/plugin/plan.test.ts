@@ -4,6 +4,8 @@ import { DateTime, Effect, Layer, Option, Stream, Types } from "effect"
 import type { SessionContext } from "@opencode/plugin/effect/session"
 import type { ToolHooks } from "@opencode/plugin/effect/tool"
 import { Agent } from "@opencode/core/agent"
+import { Bus } from "@opencode/core/bus"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Environment } from "@opencode/core/environment/index"
 import { Form } from "@opencode/core/form"
 import { Event } from "@opencode/schema/event"
@@ -13,12 +15,11 @@ import { Permission } from "@opencode/core/permission"
 import { Provider } from "@opencode/core/provider"
 import { Session } from "@opencode/core/session"
 import { SessionEvent } from "@opencode/core/session/event"
-import { SessionInbox } from "@opencode/core/session/inbox"
 import { SessionMessage } from "@opencode/core/session/message"
 import { Tool } from "@opencode/schema/tool"
 import { Global } from "@opencode/util/global"
 import path from "path"
-import { it } from "../lib/effect"
+import { testEffect } from "../lib/effect"
 import { host } from "./host"
 import { permissionLayer } from "../lib/permission"
 
@@ -27,6 +28,7 @@ const plan = Agent.ID.make("plan")
 const build = Agent.ID.make("build")
 const home = "/home/plan-test"
 const planDirectory = path.join(home, ".opencode", "plan")
+const it = testEffect(AppNodeBuilder.build(Bus.node))
 
 const agentSelected = (agent: Agent.ID, previous: Agent.ID): SessionEvent.AgentSelected => ({
   id: Event.ID.create(),
@@ -39,6 +41,12 @@ const agentSelected = (agent: Agent.ID, previous: Agent.ID): SessionEvent.AgentS
 /** Runs the plan plugin against stubbed domains, capturing persisted reminders and the context hook. */
 const run = Effect.fnUntraced(function* (events: ReadonlyArray<SessionEvent.AgentSelected> = []) {
   const persisted = new Array<string>()
+  const bus = yield* Bus.Service
+  yield* bus.project(SessionEvent.Synthetic, (event) =>
+    Effect.sync(() => {
+      persisted.push(event.data.text)
+    }),
+  )
   let contextHook: ((input: SessionContext) => Effect.Effect<void>) | undefined
   let toolHook: ((input: ToolHooks["execute.after"]) => Effect.Effect<void>) | undefined
   const defaults = Agent.Info.default(plan)
@@ -83,22 +91,20 @@ const run = Effect.fnUntraced(function* (events: ReadonlyArray<SessionEvent.Agen
         subscribe: () => Stream.fromIterable(events),
       },
       session: {
+        context: () =>
+          Effect.succeed(
+            persisted.map((text, index) =>
+              SessionMessage.Synthetic.make({
+                id: SessionMessage.ID.make(`msg_plan_test_${index}`),
+                type: "synthetic",
+                text,
+                time: { created: DateTime.makeUnsafe(0) },
+              }),
+            ),
+          ),
         hook: (name, callback) => {
           if (name === "context") contextHook = callback as (input: SessionContext) => Effect.Effect<void>
           return Effect.succeed({ dispose: Effect.void })
-        },
-        synthetic: (input) => {
-          persisted.push(input.text)
-          return Effect.succeed(
-            SessionInbox.Synthetic.make({
-              id: SessionMessage.ID.make("msg_plan_test"),
-              sessionID,
-              time: { created: DateTime.makeUnsafe(0) },
-              type: "synthetic",
-              payload: { text: input.text },
-              delivery: "steer",
-            }),
-          )
         },
       },
     }),
@@ -161,23 +167,15 @@ const reminders = Effect.gen(function* () {
 })
 
 describe("plan plugin reminders", () => {
-  it.effect("injects enter reminders on Plan selection and reconciles leave reminders in context", () =>
+  it.effect("persists enter and leave reminders on agent switches", () =>
     Effect.gen(function* () {
       const { persisted } = yield* run([agentSelected(plan, build), agentSelected(build, plan)])
-      yield* settle(persisted, 1)
+      yield* settle(persisted, 2)
       expect(persisted[0]).toContain("You are in Plan mode")
       expect(persisted[0]).toContain("Do not create or update plan files unless the user explicitly asks you to")
       expect(persisted[0]).toContain(planDirectory)
       expect(persisted[0]).toContain("Do not modify any other files")
-      const { contextHook } = yield* run()
-      const messages = [Message.user(persisted[0]!)]
-      yield* contextHook(request(build, messages))
-      expect(messages).toHaveLength(2)
-      expect(messages[0]?.content[0]).toMatchObject({
-        type: "text",
-        text: expect.stringContaining("NO LONGER in Plan mode"),
-      })
-      expect(persisted).toHaveLength(1)
+      expect(persisted[1]).toContain("NO LONGER in Plan mode")
     }),
   )
 
@@ -205,7 +203,7 @@ describe("plan plugin reminders", () => {
     }),
   )
 
-  it.effect("reconciles a stale enter reminder with an in-context leave reminder", () =>
+  it.effect("reconciles and persists a stale enter reminder with a leave reminder", () =>
     Effect.gen(function* () {
       const { enter } = yield* reminders
       const { persisted, contextHook } = yield* run()
@@ -214,7 +212,7 @@ describe("plan plugin reminders", () => {
       expect(messages).toHaveLength(3)
       const middle = messages[1]?.content[0]
       expect(middle?.type === "text" && middle.text).toContain("NO LONGER in Plan mode")
-      expect(persisted).toHaveLength(0)
+      expect(persisted).toHaveLength(1)
     }),
   )
 

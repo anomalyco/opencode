@@ -3,10 +3,13 @@ export * as PlanPlugin from "./plan.js"
 import { Message, ToolFailure } from "@opencode/ai/effect"
 import { define } from "@opencode/plugin/effect/plugin"
 import { Agent } from "@opencode/schema/agent"
-import type { SessionEvent } from "@opencode/schema/session-event"
+import type { Session } from "@opencode/schema/session"
+import { SessionEvent } from "@opencode/schema/session-event"
 import { Global } from "@opencode/util/global"
 import { Effect, Schema, Stream } from "effect"
 import path from "path"
+import { Bus } from "../bus.js"
+import { KeyedMutex } from "../effect/keyed-mutex.js"
 import { Form } from "../form.js"
 import { Permission } from "../permission.js"
 import { QuestionTool } from "../tool/plugin/question.js"
@@ -32,10 +35,29 @@ export const Plugin = define({
   id: "opencode.plan",
   effect: Effect.fn(function* (ctx) {
     const global = yield* Global.Service
+    const bus = yield* Bus.Service
     const forms = yield* Form.Service
     const permission = yield* Permission.Service
     const directory = path.join(global.home, ".opencode", "plan")
     const enterReminder = enter(directory)
+    const reminderLocks = yield* KeyedMutex.make<Session.ID>()
+    const persistReminder = Effect.fn("Plan.persistReminder")((sessionID: Session.ID, text: string) =>
+      Effect.gen(function* () {
+        // The switch subscriber and context hook can observe the same transition concurrently.
+        const history = yield* ctx.session.context({ sessionID })
+        const saved = history.reduce<string | undefined>((found, message) => {
+          if (message.type !== "synthetic") return found
+          return message.text === enterReminder || message.text === leave ? message.text : found
+        }, undefined)
+        if (saved === text) return
+
+        // Reminders are history, not new work: inbox admission would schedule another model step.
+        yield* bus.publish(SessionEvent.Synthetic, { sessionID, text })
+      }).pipe(
+        reminderLocks.withLock(sessionID),
+        Effect.catchCause((cause) => Effect.logWarning("failed to persist Plan mode reminder", { sessionID, cause })),
+      ),
+    )
     yield* ctx.agent.transform((editor) => {
       editor.update(plan, (item) => {
         item.name = Agent.Name.make("Plan")
@@ -152,34 +174,14 @@ export const Plugin = define({
       // Before the user's prompt, matching where agent-switch reminders land.
       const at = event.messages.at(-1)?.role === "user" ? event.messages.length - 1 : event.messages.length
       event.messages.splice(at, 0, Message.user(text))
-      if (stale) return Effect.void
-      return ctx.session
-        .synthetic({ sessionID: event.sessionID, text, resume: false })
-        .pipe(
-          Effect.catchCause((cause) =>
-            Effect.logWarning("failed to persist Plan mode reminder", { sessionID: event.sessionID, cause }),
-          ),
-        )
+      return persistReminder(event.sessionID, text)
     })
 
     yield* ctx.event.subscribe({ types: ["session.created", "session.agent.selected"] }).pipe(
       Stream.runForEach((event) => {
-        // The context hook reconciles this reminder on the next request. Persisting it here
-        // as well while a run is active queues an extra steered model step after approval.
-        if (event.type === "session.agent.selected" && event.data.previous === plan) return Effect.void
         const text = switchReminder(event, enterReminder)
         if (!text) return Effect.void
-        return ctx.session
-          .synthetic({
-            sessionID: event.data.sessionID,
-            text,
-            resume: false,
-          })
-          .pipe(
-            Effect.catchCause((cause) =>
-              Effect.logWarning("failed to inject Plan mode reminder", { sessionID: event.data.sessionID, cause }),
-            ),
-          )
+        return persistReminder(event.data.sessionID, text)
       }),
       Effect.forkScoped({ startImmediately: true }),
     )
