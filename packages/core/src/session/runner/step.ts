@@ -24,6 +24,7 @@ import { SessionSchema } from "../schema.js"
 import { toSessionError } from "../to-session-error.js"
 import { SessionUsage } from "../usage.js"
 import { SessionRunnerModel } from "./model.js"
+import { SessionRunnerHealth } from "./provider-health.js"
 import { createLLMEventPublisher } from "./publish-llm-event.js"
 import { SessionRunnerRetry } from "./retry.js"
 
@@ -69,6 +70,23 @@ export const make = Effect.gen(function* () {
   const toolOutput = yield* ToolOutput.Service
 
   const attempt = Effect.fn("SessionStep.attempt")(function* (input: Input) {
+    // Provider health is shared across sessions (#55075): while the circuit is open
+    // or a shared Retry-After is in effect, this attempt waits in the existing retry
+    // channel instead of burning another doomed request. The gate never records the
+    // outcome of the attempt it blocks; in-flight attempts settle their own record.
+    const healthKey = SessionRunnerHealth.key(
+      input.model.model.provider,
+      input.model.model.route.providerMetadataKey,
+    )
+    const gate = SessionRunnerHealth.canAttempt(healthKey, yield* Clock.currentTimeMillis)
+    if (!gate.allowed)
+      return Outcome.Retry({
+        error: {
+          type: "provider.unavailable",
+          message: `Provider temporarily unavailable, retrying in ${Math.ceil(gate.retryInMs / 1000)}s`,
+        },
+        decision: { retry: true, attempt: 1, delay: gate.retryInMs },
+      })
     // The start snapshot only has to exist before local tools run, which cannot happen before Step.Started,
     // so it is captured while the provider request is in flight instead of delaying it.
     const pendingStartSnapshot = yield* snapshots.capture().pipe(Effect.forkScoped)
@@ -211,6 +229,10 @@ export const make = Effect.gen(function* () {
         if (llmFailure && llmError && retry?.retry && !recorded.outputStarted) {
           // Retry state projects onto the existing assistant, even before it has produced output.
           yield* publisher.startAssistant()
+          // A clean pre-output failure is a provider-level signal; partial-stream
+          // failures (Continue/RecoverFull) are not recorded, since a client-side
+          // transport break would otherwise blame a healthy provider.
+          SessionRunnerHealth.recordFailure(healthKey, yield* Clock.currentTimeMillis, llmFailure)
           return Outcome.Retry({ error: llmError, decision: retry })
         }
         if (llmError) yield* publisher.failAssistant(llmError)
@@ -256,7 +278,9 @@ export const make = Effect.gen(function* () {
               : undefined
           const usage = record.finish ? SessionUsage.record(record.finish.usage, input.model.cost) : undefined
           if (record.failure) yield* publisher.publishStepFailure({ ...usage, snapshot, files })
-          if (record.finish && usage && !record.failure)
+          if (record.finish && usage && !record.failure) {
+            // A settled provider response clears the health record (#55075).
+            SessionRunnerHealth.recordSuccess(healthKey)
             yield* bus.publish(SessionEvent.Step.Ended, {
               sessionID: input.sessionID,
               assistantMessageID: yield* publisher.startAssistant(),
@@ -267,6 +291,7 @@ export const make = Effect.gen(function* () {
               snapshot,
               files,
             })
+          }
         }
 
         if (
