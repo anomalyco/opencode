@@ -43,6 +43,9 @@ if [ -z "$SUBJECT" ]; then
   echo "send-mail: 缺少主题" >&2
   exit 2
 fi
+# 主题去换行（防 header 注入）+ RFC2047 编码（中文主题裸 UTF-8 易被严格网关拒收/乱码）
+SUBJECT="$(printf '%s' "$SUBJECT" | tr -d '\r\n')"
+SUBJECT_ENC="=?UTF-8?B?$(printf '%s' "$SUBJECT" | base64 | tr -d '\n')?="
 
 # 正文来源：-f 文件 > 剩余参数 > stdin(非终端时)
 BODY_FILE=""
@@ -64,6 +67,7 @@ fi
 PORT="${SMTP_PORT:-587}"
 
 command -v msmtp >/dev/null 2>&1 || { echo "send-mail: 镜像缺 msmtp（需重打包含 msmtp 的 tools 镜像）" >&2; exit 127; }
+command -v base64 >/dev/null 2>&1 || { echo "send-mail: 缺少 base64" >&2; exit 127; }
 
 # 465 为隐式 TLS，其余端口用 STARTTLS
 STARTTLS="on"
@@ -91,19 +95,23 @@ password $SMTP_PASS
 EOF
 chmod 600 "$CFG"
 
-# 组装邮件（stdin 正文避免参数过长；主题中文无需转码，msmtp 按 UTF-8 透传）
+# 邮件头：From / Subject(RFC2047) / Date(缺 Date 易加垃圾分) / Content-Type
+mail_headers() {
+  printf 'From: %s\n' "$SMTP_FROM"
+  printf 'Subject: %s\n' "$SUBJECT_ENC"
+  printf 'Date: %s\n' "$(date -R)"
+  printf 'Content-Type: text/plain; charset=utf-8\n\n'
+}
+
+# 组装邮件（stdin 正文避免参数过长）
 if [ -n "$BODY_FILE" ]; then
   {
-    printf 'From: %s\n' "$SMTP_FROM"
-    printf 'Subject: %s\n' "$SUBJECT"
-    printf 'Content-Type: text/plain; charset=utf-8\n\n'
+    mail_headers
     cat "$BODY_FILE"
   } | msmtp -C "$CFG" -- $TO
 elif [ "$#" -gt 0 ]; then
   {
-    printf 'From: %s\n' "$SMTP_FROM"
-    printf 'Subject: %s\n' "$SUBJECT"
-    printf 'Content-Type: text/plain; charset=utf-8\n\n'
+    mail_headers
     printf '%s' "$*"
     printf '\n'
   } | msmtp -C "$CFG" -- $TO
@@ -113,9 +121,7 @@ else
     exit 2
   fi
   {
-    printf 'From: %s\n' "$SMTP_FROM"
-    printf 'Subject: %s\n' "$SUBJECT"
-    printf 'Content-Type: text/plain; charset=utf-8\n\n'
+    mail_headers
     cat
   } | msmtp -C "$CFG" -- $TO
 fi

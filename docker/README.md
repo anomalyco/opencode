@@ -28,7 +28,7 @@ curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:4097/
 docker compose down   # 停机（卷保留，数据不丢）
 ```
 
-## .env（7 个 key + 邮件 6 个 key）
+## .env 配置项
 
 - `LITELLM_BASE_URL` / `LITELLM_API_KEY`：模型网关
 - `GH_TOKEN`：GitHub
