@@ -62,6 +62,49 @@ docker run --rm -v opencode-prod_prod-data:/d -v ./backup:/b alpine tar xzf /b/p
 docker compose restart
 ```
 
+## 浏览器 sidecar（agent-browser CLI + 独立 browser 容器，CDP 连接）
+
+`agent-browser` CLI 已烘进 tools 镜像（见 `Dockerfile.tools`，pin 版本，只装 CLI 不装 Chrome）。
+浏览器跑在独立的 `browser` 服务里（默认自研 chrome-cjk：headless-shell + 中文字体），经 CDP 连：
+
+```
+# 浏览器是否在线（opencode 容器内执行）
+curl -s http://browser:9222/json/version
+# 宿主机调试用（只绑回环）
+curl -s http://127.0.0.1:9222/json/version
+
+# agent 用法（每次必带 --cdp；先拉配套说明，不要靠记忆）
+agent-browser skills get core
+agent-browser --cdp "$BROWSER_CDP_URL" open https://example.com
+agent-browser --cdp "$BROWSER_CDP_URL" snapshot -i
+```
+
+说明：
+
+- compose 已切 bridge 网络（`opencode-net`），容器间用服务名寻址（`browser:9222`）。
+- bridge 下容器 `localhost` 不再是宿主机：跑在宿主机上的服务（如 LiteLLM 网关）请用
+  `http://host.docker.internal:<port>`（`.env` 里 `LITELLM_BASE_URL` 不要填 `127.0.0.1`）。
+- `browser` 服务要 `shm_size: 2gb` + `init: true`（headless-shell 官方要求，否则崩溃/僵尸进程）。
+- 浏览器镜像同样走 digest pin 跟版（`BROWSER_IMAGE=...@sha256:...`），与 tools 镜像同流程。
+- 禁止在 tools 镜像里 `agent-browser install`（Chrome 只来自 sidecar，不进 tools 镜像）。
+
+## 上线记录：browser sidecar（2026-10-12）
+
+- 改动分支：`browser-sidecar`（`feat(docker): agent-browser CLI + browser sidecar over CDP`）。
+- 构建：`tools-image` 流水线 `force=true`（run 38262363507，success），产物 GHCR + SWR
+  `opencode-tools:2.0.26` / `:latest`。
+- 部署检查单：`.env` 补 `BROWSER_IMAGE` / `BROWSER_CDP_URL`（LITELLM 在宿主机上则换
+  `host.docker.internal`）→ `compose pull && up -d` → 容器内 `curl http://browser:9222/json/version`
+  → `agent-browser --cdp … open/snapshot` → 回归 4097/LiteLLM/send-mail → digest pin + `stable` 前移。
+- 决策：Lightpanda 不用（见下）。
+
+## 备选评估：Lightpanda（结论：不用）
+
+Lightpanda（36k stars，2026-10-02 发 1.0.0，Zig、无渲染、兼容 CDP）看着对口，但：
+官方联调走 `--engine`（本地拉起）而非 `--cdp` 远程，远程路径无人背书；截图只返回占位图，
+无持久登录（`--profile` / `--state` 不支持），跟 AGENTS.md 工作流对不上；且 AGPL-3.0。
+结论：chrome-cjk sidecar 继续当主力；以后如需批量只读加速再试点（换 `BROWSER_IMAGE` 一行即可）。
+
 ## 跟版
 
 改 `compose.yml` 里 `image:` 的 digest 一行并提交，`docker compose pull && docker compose up -d`。`stable` 标签只在验证后手动前移（标记作用）。
