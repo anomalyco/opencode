@@ -141,6 +141,13 @@ OpenCode includes these visible agents:
 | **General** (`general`) | `subagent` | Handles research and multi-step work with broad tool access, but cannot launch more subagents. |
 | **Explore** (`explore`) | `subagent` | Searches and reads code or web sources without editing files. |
 
+When a plan is ready, Plan can call `plan_exit` to request approval in the UI:
+
+- **Approve and switch to Build** continues implementation in the same session, preserving its history and selected model.
+- **Keep planning** leaves the session in Plan. Dismissing the request stops the current execution without switching agents.
+
+The handoff requires an available primary Build agent and does not require a plan file. Ordinary answers to the `question` tool never switch agents.
+
 Override a built-in by using the same ID:
 
 ```jsonc
