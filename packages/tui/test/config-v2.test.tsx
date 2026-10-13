@@ -47,6 +47,12 @@ test("validates the session tabs setting", () => {
   expect(() => decode({ session: { new_location: "current" } })).toThrow()
 })
 
+test("validates the prompt history scope setting", () => {
+  expect(decodeInfo({ prompt: { history_scope: "global" } })).toEqual({ prompt: { history_scope: "global" } })
+  expect(decodeInfo({ prompt: { history_scope: "session" } })).toEqual({ prompt: { history_scope: "session" } })
+  expect(() => decodeInfo({ prompt: { history_scope: "tab" } })).toThrow()
+})
+
 test("resolves nested config and keybind defaults", () => {
   const config = resolve(
     {

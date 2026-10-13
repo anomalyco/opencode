@@ -19,8 +19,8 @@ describe("prompt history", () => {
   test("recovers valid JSONL entries around corruption", () => {
     const control = entry("a\u001b[31mb\fc\0d\r\n")
     expect(parsePromptHistory(`${JSON.stringify(control)}\nnot-json\n${JSON.stringify(entry("two"))}\n`)).toEqual([
-      control,
-      entry("two"),
+      { sessionID: undefined, prompt: control },
+      { sessionID: undefined, prompt: entry("two") },
     ])
   })
 
@@ -34,7 +34,7 @@ describe("prompt history", () => {
     ).join("\n")
     const result = parsePromptHistory(input)
     expect(result).toHaveLength(MAX_HISTORY_ENTRIES)
-    expect(result[0]?.text).toBe("5")
+    expect(result[0]?.prompt.text).toBe("5")
   })
 
   test("dedupes only identical consecutive entries", () => {
@@ -64,6 +64,11 @@ describe("prompt history", () => {
       },
     ])
 
+    expect(parsePromptHistory(JSON.stringify(value))).toEqual([{ sessionID: undefined, prompt: value }])
+  })
+
+  test("preserves the session scope", () => {
+    const value = { sessionID: "session-a", prompt: entry("hello") }
     expect(parsePromptHistory(JSON.stringify(value))).toEqual([value])
   })
 
