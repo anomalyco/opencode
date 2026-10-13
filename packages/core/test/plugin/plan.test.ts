@@ -1,10 +1,11 @@
 import { describe, expect } from "bun:test"
 import { Message, ToolFailure } from "@opencode/ai/effect"
-import { DateTime, Effect, Option, Stream, Types } from "effect"
+import { DateTime, Effect, Layer, Option, Stream, Types } from "effect"
 import type { SessionContext } from "@opencode/plugin/effect/session"
 import type { ToolHooks } from "@opencode/plugin/effect/tool"
 import { Agent } from "@opencode/core/agent"
 import { Environment } from "@opencode/core/environment/index"
+import { Form } from "@opencode/core/form"
 import { Event } from "@opencode/schema/event"
 import { Model } from "@opencode/core/model"
 import { PlanPlugin } from "@opencode/core/plugin/plan"
@@ -19,6 +20,7 @@ import { Global } from "@opencode/util/global"
 import path from "path"
 import { it } from "../lib/effect"
 import { host } from "./host"
+import { permissionLayer } from "../lib/permission"
 
 const sessionID = Session.ID.make("ses_plan_test")
 const plan = Agent.ID.make("plan")
@@ -65,7 +67,7 @@ const run = Effect.fnUntraced(function* (events: ReadonlyArray<SessionEvent.Agen
         },
       },
       tool: {
-        transform: () => Effect.die("unused tool.transform"),
+        transform: () => Effect.succeed({ dispose: Effect.void }),
         reload: () => Effect.die("unused tool.reload"),
         list: () => Effect.die("unused tool.list"),
         hook: (name, callback) => {
@@ -101,6 +103,7 @@ const run = Effect.fnUntraced(function* (events: ReadonlyArray<SessionEvent.Agen
       },
     }),
   ).pipe(
+    Effect.provide(Layer.merge(Layer.mock(Form.Service, {}), permissionLayer())),
     Effect.provideService(Global.Service, Global.Service.of({ ...Global.make(), home })),
     Effect.provideService(
       Environment.Service,
