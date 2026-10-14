@@ -38,21 +38,21 @@ describe("settings timeline detail migration", () => {
 
 describe("settings schema", () => {
   test("recovers invalid typography without losing independent preferences and round trips valid values", () => {
-    const valid = decode({ appearance: { fontSize: 24, lineHeight: 30 } })
-    expect(valid.appearance).toMatchObject({ fontSize: 24, lineHeight: 30 })
+    const valid = decode({ appearance: { fontSize: 16, lineHeight: 22 } })
+    expect(valid.appearance).toMatchObject({ fontSize: 16, lineHeight: 22 })
     expect(decode(encode(valid))).toEqual(valid)
 
-    for (const fontSize of [9, 25, 14.5, Number.NaN, Number.POSITIVE_INFINITY]) {
-      expect(decode({ appearance: { fontSize, lineHeight: 24, sans: "Custom Sans" } }).appearance).toMatchObject({
+    for (const fontSize of [9, 17, 24, 14.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(decode({ appearance: { fontSize, lineHeight: 22, sans: "Custom Sans" } }).appearance).toMatchObject({
         fontSize: 14,
-        lineHeight: 24,
+        lineHeight: 22,
         sans: "Custom Sans",
       })
     }
 
-    for (const lineHeight of [19, 31, 20.5, "large", Number.NaN, Number.POSITIVE_INFINITY]) {
-      expect(decode({ appearance: { fontSize: 18, lineHeight } }).appearance).toMatchObject({
-        fontSize: 18,
+    for (const lineHeight of [19, 23, 30, 20.5, "large", Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(decode({ appearance: { fontSize: 16, lineHeight } }).appearance).toMatchObject({
+        fontSize: 16,
         lineHeight: 20,
       })
     }
@@ -95,7 +95,7 @@ describe("settings schema", () => {
     const initial = {
       ...defaultSettings,
       general: { ...defaultSettings.general, timelineDetail: timelinePresets[4].value, autoSave: false },
-      appearance: { ...defaultSettings.appearance, fontSize: 20 },
+      appearance: { ...defaultSettings.appearance, fontSize: 16 },
     }
 
     const restore = Schema.decodeUnknownSync(Persistence.withInitial(settingsPersistence, initial))
@@ -202,7 +202,7 @@ describe("settings schema", () => {
       expect(
         decode({
           general: invalid,
-          appearance: { fontSize: 18 },
+          appearance: { fontSize: 16 },
           keybinds: invalid,
           permissions: invalid,
           workspaces: invalid,
@@ -211,7 +211,7 @@ describe("settings schema", () => {
         }),
       ).toEqual({
         ...defaults,
-        appearance: { ...defaults.appearance, fontSize: 18 },
+        appearance: { ...defaults.appearance, fontSize: 16 },
       })
     },
   )

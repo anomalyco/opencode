@@ -389,17 +389,17 @@ test("font size and line height survive refresh", async ({ page }) => {
   await expect(size).toHaveValue("14")
   await expect(height).toHaveValue("20")
 
-  await size.fill("24")
+  await size.fill("16")
   await size.press("Tab")
-  await expect(size).toHaveValue("24")
+  await expect(size).toHaveValue("16")
 
-  await height.fill("30")
+  await height.fill("22")
   await height.press("Tab")
-  await expect(height).toHaveValue("30")
+  await expect(height).toHaveValue("22")
 
   await page.reload()
-  await expect(size).toHaveValue("24")
-  await expect(height).toHaveValue("30")
+  await expect(size).toHaveValue("16")
+  await expect(height).toHaveValue("22")
 })
 
 test("another server's settings page survives refresh", async ({ page }) => {

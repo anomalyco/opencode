@@ -42,11 +42,12 @@ export const terminalDefault = "JetBrainsMono Nerd Font Mono"
 
 export const fontSizeMinimum = 10
 
-export const fontSizeMaximum = 24
+// Leave room for text inside the app's explicit 20–28px control and row heights.
+export const fontSizeMaximum = 16
 
 export const lineHeightMinimum = 20
 
-export const lineHeightMaximum = 30
+export const lineHeightMaximum = 22
 
 const monoFallback =
   '"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
