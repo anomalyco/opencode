@@ -70,6 +70,18 @@ export function appendPrompt(prompt: PromptInfo, following: PromptInfo, widthMet
 
 export const MAX_HISTORY_ENTRIES = 50
 
+// Returns the next cursor position, or undefined when the move is not allowed: the composer
+// must hold the current item (or be empty) to start navigating, and the cursor never passes
+// the oldest entry or the newest one (0 is the empty draft).
+function nextIndex(items: PromptInfo[], index: number, direction: 1 | -1, input: string) {
+  const current = items.at(index)
+  if (!current) return undefined
+  if (current.text !== input && input.length) return undefined
+  const next = index + direction
+  if (Math.abs(next) > items.length || next > 0) return undefined
+  return next
+}
+
 export function parsePromptHistory(text: string) {
   return text
     .split("\n")
@@ -77,15 +89,13 @@ export function parsePromptHistory(text: string) {
     .map((line) => {
       try {
         const value: unknown = JSON.parse(line)
-        const input = value && typeof value === "object" ? (value as Record<string, unknown>) : undefined
-        if (!input) return
-        const sessionID = typeof input.sessionID === "string" ? input.sessionID : undefined
-        // Persisted entries stay flat (`{ ...prompt, sessionID? }`) so older readers keep
+        if (!value || typeof value !== "object") return
+        // Persisted entries are flat (`{ ...prompt, sessionID? }`) so older readers keep
         // working; only the in-memory entry is split.
-        delete input.sessionID
-        const prompt = parsePromptInfo(input)
-        if (!prompt) return
-        return { sessionID, prompt }
+        const { sessionID, ...prompt } = value as Record<string, unknown>
+        const info = parsePromptInfo(prompt)
+        if (!info) return
+        return { sessionID: typeof sessionID === "string" ? sessionID : undefined, prompt: info }
       } catch {
         return undefined
       }
@@ -130,27 +140,17 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
     return {
       move(sessionID: string | undefined, direction: 1 | -1, input: string, scope: PromptHistoryScope) {
         if (scope === "session") {
-          const items = store.history.filter((entry) => entry.sessionID === sessionID)
-          if (!items.length) return undefined
-          const index = sessionIndices.get(sessionID) ?? 0
-          const current = items.at(index)?.prompt
-          if (!current) return undefined
-          if (current.text !== input && input.length) return
-          const next = index + direction
-          if (Math.abs(next) > items.length || next > 0) return
+          const items = store.history.filter((entry) => entry.sessionID === sessionID).map((entry) => entry.prompt)
+          const next = nextIndex(items, sessionIndices.get(sessionID) ?? 0, direction, input)
+          if (next === undefined) return undefined
           sessionIndices.set(sessionID, next)
-          if (next === 0) return emptyPrompt()
-          return items.at(next)?.prompt
+          return next === 0 ? emptyPrompt() : items.at(next)
         }
-        if (!store.history.length) return undefined
-        const current = store.history.at(store.index)?.prompt
-        if (!current) return undefined
-        if (current.text !== input && input.length) return
-        const next = store.index + direction
-        if (Math.abs(next) > store.history.length || next > 0) return
+        const items = store.history.map((entry) => entry.prompt)
+        const next = nextIndex(items, store.index, direction, input)
+        if (next === undefined) return undefined
         setStore("index", next)
-        if (next === 0) return emptyPrompt()
-        return store.history.at(next)?.prompt
+        return next === 0 ? emptyPrompt() : items.at(next)
       },
       append(sessionID: string | undefined, item: PromptInfo, scope: PromptHistoryScope) {
         const entry = { sessionID, prompt: structuredClone(unwrap(item)) }
