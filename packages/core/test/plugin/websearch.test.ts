@@ -423,4 +423,38 @@ describe("built-in web search providers", () => {
       expect(requests[0]?.body).toBeUndefined()
     }),
   )
+
+  it.effect("keeps Scrape.do results without snippets and treats missing results as empty", () =>
+    Effect.gen(function* () {
+      resetWebSearchFixture(
+        JSON.stringify({
+          organic_results: [
+            { title: "Effect", link: "https://effect.website", snippet: "Effect documentation" },
+            { title: "Effect PDF", link: "https://effect.website/guide.pdf" },
+          ],
+        }),
+      )
+      const integrations = yield* Integration.Service
+      const websearch = yield* WebSearch.Service
+      yield* WebSearchScrapeDo.Plugin.effect(
+        host({ integration: integrationHost(integrations), websearch: webSearchHost(websearch) }),
+      )
+      yield* integrations.connection.key({
+        integrationID: Integration.ID.make("scrapedo"),
+        key: "scrapedo-secret",
+      })
+
+      expect(
+        (yield* websearch.query({ query: "effect", providerID: WebSearch.ID.make("scrapedo") })).results,
+      ).toEqual([
+        { url: "https://effect.website", title: "Effect", content: "Effect documentation", time: {} },
+        { url: "https://effect.website/guide.pdf", title: "Effect PDF", time: {} },
+      ])
+
+      resetWebSearchFixture(JSON.stringify({}))
+      expect(
+        (yield* websearch.query({ query: "nothing", providerID: WebSearch.ID.make("scrapedo") })).results,
+      ).toEqual([])
+    }),
+  )
 })

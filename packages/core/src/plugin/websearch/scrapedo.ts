@@ -8,12 +8,14 @@ import { App } from "../../app.js"
 export const endpoint = "https://api.scrape.do/plugin/google/search"
 
 const SearchResponse = Schema.Struct({
-  organic_results: Schema.Array(
-    Schema.Struct({
-      title: Schema.String,
-      link: Schema.String,
-      snippet: Schema.String,
-    }),
+  organic_results: Schema.optional(
+    Schema.Array(
+      Schema.Struct({
+        title: Schema.String,
+        link: Schema.String,
+        snippet: Schema.optional(Schema.String),
+      }),
+    ),
   ),
 })
 
@@ -59,7 +61,7 @@ export const Plugin = define<HttpClient.HttpClient | Scope.Scope>({
                   orElse: () => Effect.fail(new Error("Scrape.do web search request timed out")),
                 }),
               )
-            return response.organic_results.map((item) => ({
+            return (response.organic_results ?? []).map((item) => ({
               url: item.link,
               title: item.title,
               ...(item.snippet ? { content: item.snippet } : {}),
