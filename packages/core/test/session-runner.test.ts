@@ -7388,11 +7388,13 @@ describe("SessionRunnerLLM", () => {
 
   scenario("keeps the stopping cap when a queued prompt is parked behind a steer-only drain", function* (s) {
     const seen: number[] = []
+    const steps: number[] = []
     let grants = 0
     const hooks = yield* PluginHooks.Service
     yield* hooks.register("session", "experimental.stopping", (event) =>
       Effect.sync(() => {
         seen.push(event.continuations)
+        steps.push(event.step)
         if (grants >= 3) return
         grants++
         event.decision = { shouldContinue: true, text: `Continue ${event.continuations}` }
@@ -7412,9 +7414,11 @@ describe("SessionRunnerLLM", () => {
 
     // The parked queued prompt never promotes in a steer-only drain, so it
     // must not reset the counter — otherwise every vote would see 0 and the
-    // cap of 2 would never apply.
+    // cap of 2 would never apply. The vote still reports the turn's actual
+    // model steps, exactly like an idle vote after the same history.
     expect(result._tag).toBe("Complete")
     expect(seen).toEqual([0, 1])
+    expect(steps).toEqual([1, 1])
     expect(s.requests).toHaveLength(3)
   })
 

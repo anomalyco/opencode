@@ -151,9 +151,14 @@ const layer = Layer.effect(
                 // keep the count of the turn that ran. Moves and compactions
                 // carry the count across the handoff, and granted steers never
                 // reach here (delivery "steer"). A queued prompt parked
-                // behind a steer-only drain never promotes here either, so it
-                // must not reset the count — otherwise every grant would see 0
-                // and the per-turn cap would never apply.
+                // behind a steer-only drain never promotes here either, so the
+                // whole block is skipped: resetting would fake a new turn the
+                // vote input cannot see (the parked vote must report the same
+                // step and continuations as an idle vote after the same
+                // history). The skipped entering/step resets are subsumed —
+                // promotion re-sets step before any runStep, entering is
+                // unobservable on this path, and captures are undefined
+                // while !continuing.
                 if (pending !== undefined) executedSteps = 0
                 if (pending !== undefined && pending.type !== "move" && pending.type !== "compaction")
                   stoppingContinuations = 0
