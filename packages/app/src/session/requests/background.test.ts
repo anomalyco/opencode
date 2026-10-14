@@ -102,4 +102,20 @@ describe("subagent background tasks", () => {
 
     expect(background([assistant("m1", [shell], true)]).tasks).toEqual([{ id: "sh-1", type: "shell", label: "ls" }])
   })
+
+  test("running shell parts block only from the latest message", () => {
+    const live = tool(
+      { status: "running", input: { command: "tail -f x" }, metadata: { shellID: "sh-live" } },
+      { id: "live", name: "shell" },
+    )
+
+    const stale = tool(
+      { status: "running", input: { command: "sleep 99" }, metadata: { shellID: "sh-old" } },
+      { id: "old", name: "shell" },
+    )
+
+    const model = background([assistant("m1", [stale], true), assistant("m2", [live], false)])
+
+    expect(model.blocking).toEqual([{ type: "shell", partID: "live", id: "sh-live", label: "tail -f x" }])
+  })
 })
