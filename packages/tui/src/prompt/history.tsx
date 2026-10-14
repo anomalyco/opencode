@@ -78,18 +78,24 @@ export function parsePromptHistory(text: string) {
       try {
         const value: unknown = JSON.parse(line)
         const input = value && typeof value === "object" ? (value as Record<string, unknown>) : undefined
-        const prompt = parsePromptInfo(input?.prompt ?? value)
+        if (!input) return
+        const sessionID = typeof input.sessionID === "string" ? input.sessionID : undefined
+        // Persisted entries stay flat (`{ ...prompt, sessionID? }`) so older readers keep
+        // working; only the in-memory entry is split.
+        delete input.sessionID
+        const prompt = parsePromptInfo(input)
         if (!prompt) return
-        return {
-          sessionID: typeof input?.sessionID === "string" ? input.sessionID : undefined,
-          prompt,
-        }
+        return { sessionID, prompt }
       } catch {
         return undefined
       }
     })
     .filter((line): line is PromptHistoryEntry => line !== undefined)
     .slice(-MAX_HISTORY_ENTRIES)
+}
+
+export function serializeHistoryEntry(entry: PromptHistoryEntry): string {
+  return JSON.stringify({ ...entry.prompt, sessionID: entry.sessionID })
 }
 
 export function isDuplicateEntry(previous: PromptInfo | undefined, next: PromptInfo): boolean {
@@ -115,7 +121,7 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
 
       // Rewrite valid retained entries to self-heal corruption and enforce the limit.
       if (lines.length > 0)
-        writeText(historyPath, lines.map((line) => JSON.stringify(line)).join("\n") + "\n").catch(() => {})
+        writeText(historyPath, lines.map(serializeHistoryEntry).join("\n") + "\n").catch(() => {})
     })
 
     const [store, setStore] = createStore({ index: 0, history: [] as PromptHistoryEntry[] })
@@ -152,29 +158,36 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
           scope === "session"
             ? store.history.findLast((existing) => existing.sessionID === sessionID)?.prompt
             : store.history.at(-1)?.prompt
-        if (isDuplicateEntry(previous, entry.prompt)) {
-          sessionIndices.set(sessionID, 0)
-          setStore("index", 0)
-          return
-        }
+        // Every submit returns every composer to its draft position, including the home
+        // composer that submitted under a session it just created.
+        sessionIndices.clear()
+        setStore("index", 0)
+        if (isDuplicateEntry(previous, entry.prompt)) return
         let trimmed = false
         setStore(
           produce((draft) => {
             draft.history.push(entry)
             if (draft.history.length > MAX_HISTORY_ENTRIES) {
-              draft.history = draft.history.slice(-MAX_HISTORY_ENTRIES)
+              // In session scope the active session's prompts are trimmed last: other
+              // sessions must not push them out of a scoped recall.
+              if (scope === "session") {
+                while (draft.history.length > MAX_HISTORY_ENTRIES) {
+                  const oldestOther = draft.history.findIndex((existing) => existing.sessionID !== sessionID)
+                  draft.history.splice(oldestOther === -1 ? 0 : oldestOther, 1)
+                }
+              } else {
+                draft.history = draft.history.slice(-MAX_HISTORY_ENTRIES)
+              }
               trimmed = true
             }
-            draft.index = 0
           }),
         )
-        sessionIndices.set(sessionID, 0)
 
         if (trimmed) {
-          writeText(historyPath, store.history.map((line) => JSON.stringify(line)).join("\n") + "\n").catch(() => {})
+          writeText(historyPath, store.history.map(serializeHistoryEntry).join("\n") + "\n").catch(() => {})
           return
         }
-        appendText(historyPath, JSON.stringify(entry) + "\n").catch(() => {})
+        appendText(historyPath, serializeHistoryEntry(entry) + "\n").catch(() => {})
       },
     }
   },

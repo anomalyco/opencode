@@ -5,6 +5,7 @@ import {
   isDuplicateEntry,
   MAX_HISTORY_ENTRIES,
   parsePromptHistory,
+  serializeHistoryEntry,
   type PromptInfo,
 } from "../../src/prompt/history"
 
@@ -67,9 +68,11 @@ describe("prompt history", () => {
     expect(parsePromptHistory(JSON.stringify(value))).toEqual([{ sessionID: undefined, prompt: value }])
   })
 
-  test("preserves the session scope", () => {
-    const value = { sessionID: "session-a", prompt: entry("hello") }
-    expect(parsePromptHistory(JSON.stringify(value))).toEqual([value])
+  test("preserves the session scope and keeps persisted entries flat", () => {
+    const value = { ...entry("hello"), sessionID: "session-a" }
+    expect(parsePromptHistory(JSON.stringify(value))).toEqual([{ sessionID: "session-a", prompt: entry("hello") }])
+    expect(serializeHistoryEntry({ sessionID: "session-a", prompt: entry("hello") })).toBe(JSON.stringify(value))
+    expect(serializeHistoryEntry({ sessionID: undefined, prompt: entry("hello") })).toBe(JSON.stringify(entry("hello")))
   })
 
   test.each(["wcwidth", "unicode"] as const)("appends a prompt and shifts ranges by the %s offset", (widthMethod) => {
