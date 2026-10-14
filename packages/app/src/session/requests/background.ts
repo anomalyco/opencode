@@ -1,4 +1,4 @@
-import type { SessionInfo, SessionMessageAssistant, SessionMessageInfo, ShellInfo } from "@opencode/client/promise"
+import type { SessionInfo, SessionMessageInfo, ShellInfo } from "@opencode/client/promise"
 import { scanSubagentTranscript } from "@opencode/session-ui/subagent-transcript"
 import { Predicate } from "effect"
 import { createMemo } from "solid-js"
@@ -46,14 +46,13 @@ export function createSessionBackground(input: {
       ]
     })
 
-    const assistant = messages.reduce<SessionMessageAssistant | undefined>((latest, message) => {
-      if (message.type === "synthetic") return latest
+    for (const message of messages) {
+      if (message.type !== "assistant") continue
 
-      if (message.type !== "assistant") return latest
-      message.content.forEach((part) => {
-        if (part.type !== "tool" || part.name !== "shell") return
+      for (const part of message.content) {
+        if (part.type !== "tool" || part.name !== "shell") continue
 
-        if (part.state.status !== "completed" || part.state.metadata?.status !== "running") return
+        if (part.state.status !== "completed" || part.state.metadata?.status !== "running") continue
 
         const shellID = part.state.metadata.shellID
         const command = part.state.input.command
@@ -65,10 +64,40 @@ export function createSessionBackground(input: {
             label: Predicate.isString(command) ? command : part.id,
           },
         })
-      })
+      }
+    }
 
-      return message.time.completed === undefined ? message : latest
-    }, undefined)
+    // Live foreground calls, from the shared scan so the header and the panel
+    // agree on what counts as live. Legacy task parts surface as subagents.
+    const blocking = [
+      ...scan.calls.flatMap((call) => {
+        if (!call.live || call.status !== "running") return []
+
+        return [
+          {
+            type: "subagent" as const,
+            partID: call.partID,
+            id: call.childID,
+            label: call.description,
+          },
+        ]
+      }),
+      ...(scan.live?.content.flatMap((part) => {
+        if (part.type !== "tool" || part.name !== "shell" || part.state.status !== "running") return []
+
+        const shellID = part.state.metadata.shellID
+        const command = part.state.input.command
+
+        return [
+          {
+            type: "shell" as const,
+            partID: part.id,
+            id: Predicate.isString(shellID) ? shellID : undefined,
+            label: Predicate.isString(command) ? command : undefined,
+          },
+        ]
+      }) ?? []),
+    ]
 
     return {
       // Backgrounded calls stay listed until their synthetic completion notice lands (filtered at construction).
@@ -76,25 +105,7 @@ export function createSessionBackground(input: {
       shells: shells.flatMap((item) =>
         !completed.has(item.partID) && !completed.has(item.task.id) ? [item.task] : [],
       ),
-      blocking:
-        assistant?.content.flatMap((part) => {
-          if (part.type !== "tool" || part.state.status !== "running") return []
-
-          if (part.name !== "shell" && part.name !== "subagent") return []
-          const value = part.name === "shell" ? part.state.metadata.shellID : part.state.metadata.sessionID
-          const label = part.name === "shell" ? part.state.input.command : part.state.input.description
-
-          return [
-            {
-              // SAFETY: the guard above leaves only "shell" and "subagent" names.
-              // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- see SAFETY above
-              type: part.name as "shell" | "subagent",
-              partID: part.id,
-              id: Predicate.isString(value) ? value : undefined,
-              label: Predicate.isString(label) ? label : undefined,
-            },
-          ]
-        }) ?? [],
+      blocking,
     }
   })
 
