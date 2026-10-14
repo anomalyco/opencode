@@ -16,16 +16,12 @@ import {
   formatTokens,
   latestActivity,
   lastResponse,
-  partBackgrounded,
   sortAgents,
   stripSubagentSuffix,
   subagentDescriptions,
-  subagentTasks,
-  taskStatus,
   tokenTotal,
   treeCost,
   childrenCost,
-  toolSessionID,
 } from "./status"
 
 function tool(
@@ -52,141 +48,6 @@ function assistant(parts: SessionMessageAssistantTool[]) {
     time: { created: 1 },
   }
 }
-
-function completedMessage(parts: SessionMessageAssistantTool[]) {
-  return { ...assistant(parts), time: { created: 1, completed: 2 } }
-}
-
-describe("taskStatus", () => {
-  test("running and streaming parts are running", () => {
-    expect(taskStatus(tool({ status: "running", input: {}, metadata: {} }))).toBe("running")
-    expect(taskStatus(tool({ status: "streaming", input: "..." }))).toBe("running")
-  })
-  test("completed parts are completed", () => {
-    expect(taskStatus(tool({ status: "completed", input: {}, content: [{ type: "text", text: "done" }] }))).toBe(
-      "completed",
-    )
-  })
-  test("aborted errors are cancelled", () => {
-    expect(taskStatus(tool({ status: "error", input: {}, error: { type: "aborted", message: "stopped" } }))).toBe(
-      "cancelled",
-    )
-  })
-  test("interrupted metadata is cancelled", () => {
-    expect(
-      taskStatus(
-        tool({
-          status: "error",
-          input: {},
-          error: { type: "failed", message: "x" },
-          metadata: { interrupted: true },
-        }),
-      ),
-    ).toBe("cancelled")
-  })
-  test("other errors are errors", () => {
-    expect(taskStatus(tool({ status: "error", input: {}, error: { type: "failed", message: "boom" } }))).toBe("error")
-  })
-})
-
-describe("partBackgrounded", () => {
-  test("completed parts with a running metadata status are backgrounded", () => {
-    expect(
-      partBackgrounded(
-        tool({
-          status: "completed",
-          input: {},
-          content: [{ type: "text", text: "x" }],
-          metadata: { status: "running" },
-        }),
-      ),
-    ).toBe(true)
-    expect(partBackgrounded(tool({ status: "completed", input: {}, content: [{ type: "text", text: "x" }] }))).toBe(
-      false,
-    )
-    expect(partBackgrounded(tool({ status: "running", input: {}, metadata: {} }))).toBe(false)
-  })
-})
-
-describe("toolSessionID", () => {
-  test("reads sessionID then the legacy sessionId spelling", () => {
-    expect(toolSessionID(tool({ status: "running", input: {}, metadata: { sessionID: "child-1" } }))).toBe("child-1")
-    expect(toolSessionID(tool({ status: "running", input: {}, metadata: { sessionId: "child-2" } }))).toBe("child-2")
-  })
-  test("missing and blank ids are undefined", () => {
-    expect(toolSessionID(tool({ status: "streaming", input: "..." }))).toBeUndefined()
-    expect(toolSessionID(tool({ status: "running", input: {}, metadata: { sessionID: "  " } }))).toBeUndefined()
-  })
-})
-
-describe("subagentTasks", () => {
-  test("keys terminal parts by child id with last write winning", () => {
-    const first = tool({ status: "running", input: {}, metadata: { sessionID: "child" } }, { id: "a" })
-
-    const second = tool(
-      {
-        status: "completed",
-        input: {},
-        content: [{ type: "text", text: "done" }],
-        metadata: { sessionID: "child" },
-      },
-      { id: "b" },
-    )
-
-    const shell = tool({ status: "running", input: {}, metadata: {} }, { id: "c", name: "shell" })
-    const tasks = subagentTasks([completedMessage([first]), assistant([shell, second])])
-    expect(tasks.parts.get("child")).toBe(second)
-    expect(tasks.parts.has("c")).toBe(false)
-  })
-  test("running parts outside the latest uncompleted message are stale", () => {
-    const stale = tool({ status: "running", input: {}, metadata: { sessionID: "old" } })
-    const tasks = subagentTasks([completedMessage([stale]), assistant([])])
-    expect(tasks.parts.has("old")).toBe(false)
-    expect(tasks.blocking).toEqual([])
-  })
-  test("running parts surface as blocking calls", () => {
-    const claimed = tool(
-      { status: "running", input: { description: "Explore" }, metadata: { sessionID: "child" } },
-      { id: "a" },
-    )
-
-    const unclaimed = tool({ status: "running", input: { description: "Fresh call" }, metadata: {} }, { id: "b" })
-    const tasks = subagentTasks([assistant([claimed, unclaimed])])
-    expect(tasks.parts.get("child")).toBe(claimed)
-    expect(tasks.blocking).toEqual([
-      { partID: "a", childID: "child", label: "Explore" },
-      { partID: "b", childID: undefined, label: "Fresh call" },
-    ])
-  })
-  test("backgrounded completions drop once the synthetic notice lands", () => {
-    const backgrounded = tool(
-      {
-        status: "completed",
-        input: {},
-        content: [{ type: "text", text: "done" }],
-        metadata: { sessionID: "child", status: "running" },
-      },
-      { id: "a" },
-    )
-
-    const notice = {
-      id: "n1",
-      type: "synthetic",
-      metadata: { source: "subagent", childID: "child" },
-      text: "",
-      time: { created: 2 },
-    } as const
-
-    expect(subagentTasks([completedMessage([backgrounded])]).parts.has("child")).toBe(true)
-    expect(subagentTasks([completedMessage([backgrounded]), notice]).parts.has("child")).toBe(false)
-  })
-  test("legacy task parts join too", () => {
-    const legacy = tool({ status: "running", input: {}, metadata: { sessionID: "old" } }, { name: "task" })
-    const tasks = subagentTasks([assistant([legacy])])
-    expect(tasks.parts.has("old")).toBe(true)
-    expect(tasks.blocking).toHaveLength(1)
-  })
-})
 
 describe("subagentDescriptions", () => {
   test("maps child ids to task descriptions", () => {

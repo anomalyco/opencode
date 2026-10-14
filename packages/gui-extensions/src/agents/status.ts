@@ -1,82 +1,21 @@
 import { Match, Predicate } from "effect"
 import { base64Encode } from "@opencode/util/encode"
+import {
+  partBackgrounded,
+  scanSubagentTranscript,
+  taskStatus,
+  text,
+  type SubagentTaskStatus,
+} from "@opencode/session-ui/subagent-transcript"
 import type {
-  JsonValue,
   SessionInfo,
   SessionMessageAssistantTool,
   SessionMessageInfo,
   TokenUsageInfo,
 } from "@opencode/client/promise"
 
-/** What a parent session's subagent tool part reports for one child session. */
-export type TaskStatus = "running" | "completed" | "cancelled" | "error"
-
 /** Row states the agents panel renders. */
 export type DerivedStatus = "idle" | "busy" | "cancelled" | "completed" | "error"
-
-/** Tool names that spawn a child session, current first for the common case. */
-const subagentNames = ["subagent", "task"]
-
-export function text(value: JsonValue | undefined): string | undefined {
-  if (!Predicate.isString(value)) return undefined
-
-  const trimmed = value.trim()
-
-  if (!trimmed) return undefined
-
-  return trimmed
-}
-
-function toolMetadata(part: SessionMessageAssistantTool, key: string): JsonValue | undefined {
-  if (!("metadata" in part.state)) return undefined
-
-  return part.state.metadata?.[key]
-}
-
-/** The child session id a tool part spawned, accepting both metadata key spellings. */
-export function toolSessionID(part: SessionMessageAssistantTool): string | undefined {
-  return text(toolMetadata(part, "sessionID")) ?? text(toolMetadata(part, "sessionId"))
-}
-
-function toolDescription(part: SessionMessageAssistantTool): string | undefined {
-  if (!("input" in part.state) || Predicate.isString(part.state.input)) return undefined
-
-  return text(part.state.input.description)
-}
-
-function isSubagentPart(part: SessionMessageAssistantTool): boolean {
-  return subagentNames.includes(part.name)
-}
-
-/**
- * The terminal state of one child session from its parent tool part. A completed part
- * is done; an error part is only a cancellation when the runner marked it interrupted
- * or aborted, mirroring core's structured abort errors.
- */
-export function taskStatus(part: SessionMessageAssistantTool): TaskStatus {
-  if (part.state.status === "completed") return "completed"
-
-  if (part.state.status === "error") {
-    if (toolMetadata(part, "interrupted") === true) return "cancelled"
-
-    if (part.state.error.type === "aborted") return "cancelled"
-
-    return "error"
-  }
-
-  return "running"
-}
-
-/**
- * A completed part whose child is still active in the background: the runner
- * settles the call while the subagent keeps running, and a synthetic completion
- * notice lands when it actually finishes.
- */
-export function partBackgrounded(part: SessionMessageAssistantTool): boolean {
-  if (part.state.status !== "completed" || !("metadata" in part.state)) return false
-
-  return part.state.metadata?.status === "running"
-}
 
 /** A running foreground subagent call, with a child session once one exists. */
 export interface BlockingSubagent {
@@ -91,65 +30,36 @@ export interface SubagentTasks {
   readonly blocking: BlockingSubagent[]
 }
 
-function completedChildIDs(messages: SessionMessageInfo[]): Set<string> {
-  const completed = new Set<string>()
-
-  for (const message of messages) {
-    if (message.type !== "synthetic" || message.metadata?.source !== "subagent") continue
-    const childID = text(message.metadata?.childID)
-
-    if (childID) completed.add(childID)
-  }
-
-  return completed
-}
-
-function latestUncompleted(messages: SessionMessageInfo[]): SessionMessageInfo | undefined {
-  let latest: SessionMessageInfo | undefined
-
-  for (const message of messages) {
-    if (message.type !== "assistant" || message.time.completed !== undefined) continue
-
-    latest = message
-  }
-
-  return latest
-}
-
 /**
  * The joinable tool parts plus the live foreground calls of a parent transcript,
- * mirroring the header's background-task reader: a running part only counts inside
- * the latest uncompleted assistant message (older ones are stale), and a
- * backgrounded completion only counts until its synthetic notice lands.
+ * over the shared reader the header background tasks use: a running part only
+ * counts inside the latest uncompleted assistant message (older ones are stale),
+ * and a backgrounded completion only counts until its synthetic notice lands.
  */
 export function subagentTasks(messages: SessionMessageInfo[]): SubagentTasks {
+  const scan = scanSubagentTranscript(messages, ["subagent", "task"])
   const parts = new Map<string, SessionMessageAssistantTool>()
   const blocking: BlockingSubagent[] = []
-  const finished = completedChildIDs(messages)
-  const live = latestUncompleted(messages)
 
-  for (const message of messages) {
-    if (message.type !== "assistant") continue
+  for (const call of scan.calls) {
+    if (call.status === "running") {
+      if (!call.live) continue
+      blocking.push({
+        partID: call.partID,
+        childID: call.childID,
+        label: call.description ?? call.childID ?? call.partID,
+      })
 
-    for (const part of message.content) {
-      if (part.type !== "tool" || !isSubagentPart(part)) continue
-      const childID = toolSessionID(part)
+      if (call.childID) parts.set(call.childID, call.part)
 
-      if (part.state.status === "running") {
-        if (message !== live) continue
-        blocking.push({ partID: part.id, childID, label: toolDescription(part) ?? childID ?? part.id })
-
-        if (childID) parts.set(childID, part)
-
-        continue
-      }
-
-      if (!childID) continue
-
-      if (part.state.status === "completed" && partBackgrounded(part) && finished.has(childID)) continue
-
-      parts.set(childID, part)
+      continue
     }
+
+    if (!call.childID) continue
+
+    if (call.status === "completed" && call.backgrounded && scan.completed.has(call.childID)) continue
+
+    parts.set(call.childID, call.part)
   }
 
   return { parts, blocking }
@@ -159,16 +69,8 @@ export function subagentTasks(messages: SessionMessageInfo[]): SubagentTasks {
 export function subagentDescriptions(messages: SessionMessageInfo[]): Map<string, string> {
   const descriptions = new Map<string, string>()
 
-  for (const message of messages) {
-    if (message.type !== "assistant") continue
-
-    for (const part of message.content) {
-      if (part.type !== "tool" || !isSubagentPart(part)) continue
-      const childID = toolSessionID(part)
-      const description = toolDescription(part)
-
-      if (childID && description) descriptions.set(childID, description)
-    }
+  for (const call of scanSubagentTranscript(messages, ["subagent", "task"]).calls) {
+    if (call.childID && call.description) descriptions.set(call.childID, call.description)
   }
 
   return descriptions
@@ -185,7 +87,7 @@ export function childrenOf<T extends { id: string; parentID?: string }>(sessions
  * otherwise the outcome is ground truth, then the part's terminal state.
  */
 export function deriveStatus(input: {
-  part: TaskStatus | undefined
+  part: SubagentTaskStatus | undefined
   backgrounded: boolean
   running: boolean
   outcome: SessionInfo["outcome"]
