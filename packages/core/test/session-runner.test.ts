@@ -7386,6 +7386,38 @@ describe("SessionRunnerLLM", () => {
     expect(seen).toEqual([0, 0])
   })
 
+  scenario("keeps the stopping cap when a queued prompt is parked behind a steer-only drain", function* (s) {
+    const seen: number[] = []
+    let grants = 0
+    const hooks = yield* PluginHooks.Service
+    yield* hooks.register("session", "experimental.stopping", (event) =>
+      Effect.sync(() => {
+        seen.push(event.continuations)
+        if (grants >= 3) return
+        grants++
+        event.decision = { shouldContinue: true, text: `Continue ${event.continuations}` }
+      }),
+    )
+    yield* s.session.prompt({ sessionID, text: "Parked queued", resume: false, delivery: "queue" })
+    yield* s.admit("Parked steer")
+    yield* s.llm.push(
+      TestLLM.text("First", "text-first"),
+      TestLLM.text("Second", "text-second"),
+      TestLLM.text("Third", "text-third"),
+      TestLLM.text("Fourth", "text-fourth"),
+      TestLLM.text("Fifth", "text-fifth"),
+    )
+    const runner = yield* SessionRunner.Service
+    const result = yield* runner.drain({ sessionID, force: false, promotable: "steer" })
+
+    // The parked queued prompt never promotes in a steer-only drain, so it
+    // must not reset the counter — otherwise every vote would see 0 and the
+    // cap of 2 would never apply.
+    expect(result._tag).toBe("Complete")
+    expect(seen).toEqual([0, 1])
+    expect(s.requests).toHaveLength(3)
+  })
+
   scenario("never writes the stopping counter into session metadata", function* (s) {
     const hooks = yield* PluginHooks.Service
     yield* hooks.register("session", "experimental.stopping", (event) =>

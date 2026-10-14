@@ -133,14 +133,27 @@ const layer = Layer.effect(
                   return next
                 }),
               )
-              if (!continuing && pending?.delivery !== "steer") {
+              if (
+                !continuing &&
+                pending?.delivery !== "steer" &&
+                !(
+                  pending !== undefined &&
+                  pending.delivery === "queue" &&
+                  promotable === "steer" &&
+                  pending.type !== "move" &&
+                  pending.type !== "compaction"
+                )
+              ) {
                 entering = true
                 step = 1
                 // Fresh input starts a new turn; an empty inbox is the
                 // would-be-idle observation just before a vote, which must
                 // keep the count of the turn that ran. Moves and compactions
                 // carry the count across the handoff, and granted steers never
-                // reach here (delivery "steer").
+                // reach here (delivery "steer"). A queued prompt parked
+                // behind a steer-only drain never promotes here either, so it
+                // must not reset the count — otherwise every grant would see 0
+                // and the per-turn cap would never apply.
                 if (pending !== undefined) executedSteps = 0
                 if (pending !== undefined && pending.type !== "move" && pending.type !== "compaction")
                   stoppingContinuations = 0
