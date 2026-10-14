@@ -243,17 +243,6 @@ check_version() {
     fi
 }
 
-unbuffered_sed() {
-    if echo | sed -u -e "" >/dev/null 2>&1; then
-        sed -nu "$@"
-    elif echo | sed -l -e "" >/dev/null 2>&1; then
-        sed -nl "$@"
-    else
-        local pad="$(printf "\n%512s" "")"
-        sed -ne "s/$/\\${pad}/" "$@"
-    fi
-}
-
 print_progress() {
     local bytes="$1"
     local length="$2"
@@ -285,52 +274,56 @@ download_with_progress() {
 
     local tmp_dir=${TMPDIR:-/tmp}
     local basename="${tmp_dir}/opencode_install_$$"
-    local tracefile="${basename}.trace"
+    local headers="${basename}.headers"
+    local status="${basename}.status"
 
-    rm -f "$tracefile"
-    mkfifo "$tracefile"
+    rm -f "$headers" "$status"
 
     # Hide cursor
     printf "\033[?25l" >&4
 
-    trap "trap - RETURN; rm -f \"$tracefile\"; printf '\033[?25h' >&4; exec 4>&-" RETURN
+    trap "trap - RETURN; rm -f \"$headers\" \"$status\"; printf '\033[?25h' >&4; exec 4>&-" RETURN
 
+    # Dump the response headers on the download request itself, so the total
+    # size is known without a second request or a trace of the whole body.
+    # The status file marks completion: a finished background job can linger as
+    # a zombie, and `kill -0` still succeeds for a zombie.
     (
-        curl --trace-ascii "$tracefile" -fsL -o "$output" "$url"
+        set +e
+        curl -fsL -D "$headers" -o "$output" "$url"
+        echo $? > "$status"
     ) &
     local curl_pid=$!
 
-    unbuffered_sed \
-        -e 'y/ACDEGHLNORTV/acdeghlnortv/' \
-        -e '/^0000: content-length:/p' \
-        -e '/^<= recv data/p' \
-        "$tracefile" | \
-    {
-        local length=0
-        local bytes=0
-
-        while IFS=" " read -r -a line; do
-            [ "${#line[@]}" -lt 2 ] && continue
-            local tag="${line[0]} ${line[1]}"
-
-            if [ "$tag" = "0000: content-length:" ]; then
-                length="${line[2]}"
-                length=$(echo "$length" | tr -d '\r')
-                bytes=0
-            elif [ "$tag" = "<= recv" ]; then
-                local size="${line[3]}"
-                bytes=$(( bytes + size ))
-                if [ "$length" -gt 0 ]; then
-                    print_progress "$bytes" "$length"
-                fi
-            fi
-        done
-    }
-
+    local length=0
+    local bytes=0
+    while [ ! -f "$status" ]; do
+        # The header file holds every response in the `-L` chain, so the last
+        # `content-length` in it is the one that counts; re-read it on every poll
+        # rather than keeping the first non-zero value, which a redirect can set.
+        if [ -s "$headers" ]; then
+            local total
+            total=$(sed -n 's/^[Cc]ontent-[Ll]ength:[[:space:]]*\([0-9][0-9]*\).*$/\1/p' "$headers" | tail -n 1)
+            [ -n "$total" ] && length="$total"
+        fi
+        if [ -f "$output" ]; then
+            bytes=$(wc -c < "$output" | tr -cd '0-9')
+        fi
+        print_progress "$bytes" "$length"
+        # A fractional sleep keeps the redraw smooth; fall back for shells whose
+        # sleep only accepts integers.
+        sleep 0.1 2>/dev/null || sleep 1
+    done
     wait $curl_pid
-    local ret=$?
+    local ret
+    ret=$(cat "$status")
+
+    if [ "$ret" -eq 0 ]; then
+        bytes=$(wc -c < "$output" | tr -cd '0-9')
+        print_progress "$bytes" "$length"
+    fi
     echo "" >&4
-    return $ret
+    return "${ret:-1}"
 }
 
 download_and_install() {
