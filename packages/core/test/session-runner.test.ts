@@ -7351,6 +7351,41 @@ describe("SessionRunnerLLM", () => {
     expect(seen).toEqual([0, 1, 0])
   })
 
+  scenario("resets the stopping counter when fresh input lands mid-drain", function* (s) {
+    const seen: number[] = []
+    let grants = 0
+    const hooks = yield* PluginHooks.Service
+    yield* hooks.register("session", "experimental.stopping", (event) =>
+      Effect.sync(() => {
+        seen.push(event.continuations)
+        if (grants >= 1) return
+        grants++
+        event.decision = { shouldContinue: true, text: "One more" }
+      }),
+    )
+    yield* s.admit("First turn")
+    yield* s.llm.push(
+      TestLLM.text("First", "text-first"),
+      TestLLM.tool("call-blocked", "echo", { text: "granted steer work" }),
+      TestLLM.text("Second", "text-second"),
+      TestLLM.text("Third", "text-third"),
+    )
+    const tools = yield* s.blockTools()
+    const runner = yield* SessionRunner.Service
+    const run = yield* runner.drain({ sessionID, force: false }).pipe(Effect.forkChild)
+    yield* tools.started
+    yield* s.session.prompt({ sessionID, text: "Second turn", resume: false, delivery: "queue" })
+    yield* tools.release
+    const result = yield* Fiber.join(run)
+
+    // Grant at the end of turn A, then fresh input arrives mid-drain while the
+    // granted steer runs. The same drain promotes it as a new turn with a
+    // reset counter — without the in-drain reset the second vote would see 1.
+    expect(result._tag).toBe("Complete")
+    expect(s.requests).toHaveLength(4)
+    expect(seen).toEqual([0, 0])
+  })
+
   scenario("never writes the stopping counter into session metadata", function* (s) {
     const hooks = yield* PluginHooks.Service
     yield* hooks.register("session", "experimental.stopping", (event) =>

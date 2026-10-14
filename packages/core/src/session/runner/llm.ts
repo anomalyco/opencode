@@ -79,7 +79,7 @@ const layer = Layer.effect(
       // and compactions carry it when the turn continues across the handoff,
       // and hook continuations loop in-drain so they can never leak across
       // turns. A crash loses the count while an already-admitted steer
-      // survives — one free steer per crash, bounded and self-limiting.
+      // survives — up to two fresh grants per crash, bounded and self-limiting.
       let stoppingContinuations = input.continuation?.stoppingContinuations ?? 0
       let entering = true
       let stepped = input.stepped ?? false
