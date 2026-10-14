@@ -287,6 +287,14 @@ export const settings: Setting[] = [
     keywords: ["attachments", "clipboard", "images", "prompt"],
   },
   {
+    title: "History scope",
+    category: "Input",
+    path: ["prompt", "history_scope"],
+    default: "global",
+    values: ["global", "session"],
+    keywords: ["prompt history", "recall", "history"],
+  },
+  {
     title: "Leader timeout",
     category: "Input",
     path: ["leader", "timeout"],

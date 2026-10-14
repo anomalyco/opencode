@@ -119,6 +119,15 @@ test("shows resolved tab defaults in settings", () => {
   })
 })
 
+test("shows the prompt history scope in settings", () => {
+  expect(settings.find((setting) => setting.path.join(".") === "prompt.history_scope")).toMatchObject({
+    title: "History scope",
+    category: "Input",
+    default: "global",
+    values: ["global", "session"],
+  })
+})
+
 test("shows the new session location default in settings", () => {
   expect(settings.find((setting) => setting.path.join(".") === "session.new_location")?.default).toBe("launch")
 })

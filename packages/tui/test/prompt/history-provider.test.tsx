@@ -9,6 +9,21 @@ import { tmpdir } from "../fixture/fixture"
 
 const prompt = (text: string) => ({ text, files: [], agents: [], pasted: [] })
 
+test("down rejects at the newest history item with an empty prompt", async () => {
+  await using tmp = await tmpdir()
+  const setup = await renderHistory(tmp.path)
+  try {
+    await Bun.sleep(20)
+    setup.history.append("session-a", prompt("previous"), "global")
+
+    expect(setup.history.move("session-a", 1, "", "global")).toBeUndefined()
+    expect(setup.history.move("session-a", -1, "", "global")?.text).toBe("previous")
+    expect(setup.history.move("session-a", 1, "previous", "global")?.text).toBe("")
+  } finally {
+    setup.app.renderer.destroy()
+  }
+})
+
 test("global scope shares prompt history across sessions and the home composer", async () => {
   await using tmp = await tmpdir()
   const setup = await renderHistory(tmp.path)

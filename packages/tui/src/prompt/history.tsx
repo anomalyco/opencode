@@ -33,7 +33,7 @@ export type PromptPartRef = {
 
 export type PromptHistoryScope = "global" | "session"
 
-type PromptHistoryEntry = {
+export type PromptHistoryEntry = {
   sessionID: string | undefined
   prompt: PromptInfo
 }
@@ -154,6 +154,9 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
       },
       append(sessionID: string | undefined, item: PromptInfo, scope: PromptHistoryScope) {
         const entry = { sessionID, prompt: structuredClone(unwrap(item)) }
+        // Session scope dedupes against the session's own last prompt, because the recall
+        // pool is the session's history and not the file's; global scope keeps the old
+        // whole-file behavior.
         const previous =
           scope === "session"
             ? store.history.findLast((existing) => existing.sessionID === sessionID)?.prompt
