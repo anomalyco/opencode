@@ -1418,9 +1418,11 @@ Stopping hooks follow these rules:
 - Multiple hooks run in registration order, and later hooks see the current decision. A gate needing the final word registers last.
 - At most two continuations are granted per turn. Cap exhaustion stops the turn silently without calling hooks.
 - `continuations` is the pre-increment count, so hooks can enforce a tighter limit against it.
-- `step` is the model steps executed this turn; `stepsLimit` is the agent's configured step limit, when set.
-- A throwing hook stops the turn instead of failing it; interruption still propagates. An empty or whitespace-only `text` abstains and the turn ends.
+- `step` is the model steps executed this turn relative to the current step budget: a manual compaction resets the count, mirroring the agent step budget, so a vote right after one can report `step: 0`. `stepsLimit` is the agent's configured step limit, when set.
+- A throwing hook stops the turn instead of failing it, and the failure is logged; interruption still propagates. An empty or whitespace-only `text` abstains and the turn ends.
 - Provider scoping is unavailable for `experimental.stopping`: the event carries no model, so a `providerID` voter would never fire.
+- The vote fires only when no fresh input is waiting: a queued prompt (or pending move) at the boundary starts a new turn instead, with no vote for the finished turn.
+- A location reload or session move landing exactly on the turn boundary ends the turn without a vote. The successor drain starts fresh with the counter at 0 — a missed continuation, never an extra one. A process crash at the same point behaves the same way.
 
 This hook is experimental and its name or shape may change.
 

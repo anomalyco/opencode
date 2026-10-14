@@ -447,12 +447,17 @@ const layer = Layer.unwrap(
           sessionID: Session.ID,
           force: boolean,
           continuation?: SessionRunner.Continuation,
+          promotable?: SessionInbox.Promotable,
         ): Effect.Effect<void, SessionRunner.RunError> {
           return sessionRunner
-            .drain({ sessionID, force, continuation })
+            .drain({ sessionID, force, continuation, promotable })
             .pipe(
               Effect.flatMap((result) =>
-                result._tag === "Complete" ? Effect.void : drain(sessionID, false, result.continuation),
+                result._tag === "Complete"
+                  ? Effect.void
+                  : result._tag === "Reloaded"
+                    ? drain(sessionID, result.force, result.continuation, promotable)
+                    : drain(sessionID, false, result.continuation, promotable),
               ),
             )
         }
@@ -7207,6 +7212,34 @@ describe("SessionRunnerLLM", () => {
     yield* s.runPrompt("Start")
 
     expect(s.requests).toHaveLength(1)
+  })
+
+  scenario("stays interruptible during a stopping vote without admitting a steer", function* (s) {
+    let votes = 0
+    const entered = yield* Deferred.make<void>()
+    const hooks = yield* PluginHooks.Service
+    yield* hooks.register("session", "experimental.stopping", () =>
+      Effect.sync(() => {
+        votes++
+      }).pipe(Effect.andThen(Deferred.succeed(entered, undefined)), Effect.andThen(Effect.never)),
+    )
+    yield* s.llm.push(TestLLM.text("Done", "text-done"))
+    yield* s.admit("Start")
+    const running = yield* s.resume.pipe(Effect.forkChild)
+    yield* Deferred.await(entered)
+    yield* s.session.interrupt(sessionID)
+    const exit = yield* Fiber.await(running)
+
+    // The vote must not stall abort: without an interruptible vote region
+    // the drain would hang here until teardown instead of settling. This pins
+    // delivery, not branch selection — with a non-granting voter, absorbing
+    // vs propagating are observationally identical at the drain level (an
+    // abstention completes terminally and the coordinator settles stopping
+    // executions as interrupted either way).
+    expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBeTrue()
+    expect(votes).toBe(1)
+    expect(s.requests).toHaveLength(1)
+    expect((yield* s.context).filter((message) => message.type === "synthetic")).toHaveLength(0)
   })
 
   scenario("treats an empty stopping grant as abstention", function* (s) {

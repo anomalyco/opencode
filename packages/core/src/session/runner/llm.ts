@@ -80,6 +80,9 @@ const layer = Layer.effect(
       // and hook continuations loop in-drain so they can never leak across
       // turns. A crash loses the count while an already-admitted steer
       // survives — up to two fresh grants per crash, bounded and self-limiting.
+      // An idle-boundary move or location reload drops the continuation the
+      // same way (the successor starts fresh and the turn ends without a
+      // vote); fail-closed, documented in the hook docs.
       let stoppingContinuations = input.continuation?.stoppingContinuations ?? 0
       let entering = true
       let stepped = input.stepped ?? false
@@ -483,10 +486,12 @@ const layer = Layer.effect(
         // session-hook failure channels are `never`), so `catchAll` alone
         // would miss it and fail the drain into `Execution.Failed`.
         // Interrupts still propagate (the `move.ts` fail-closed idiom).
+        // Thrown failures are logged: without this a failing voter would
+        // stop every turn silently and be painful to debug.
         Effect.catchCause((cause) =>
           Cause.hasInterrupts(cause)
             ? Effect.failCause(Cause.fromReasons<never>(cause.reasons.filter(Cause.isInterruptReason)))
-            : Effect.succeed(false),
+            : Effect.logWarning("stopping voter failed", { sessionID, cause }).pipe(Effect.as(false)),
         ),
       )
     })
