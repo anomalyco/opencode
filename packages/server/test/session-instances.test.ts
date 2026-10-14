@@ -99,6 +99,11 @@ it.live(
                               })
                             yield* ctx.session.hook("context", tune)
                             yield* ctx.session.hook("generate", tune)
+                            yield* ctx.session.hook("title", (event) =>
+                              Effect.sync(() => {
+                                event.result = `${config.tool} title`
+                              }),
+                            )
                             yield* ctx.permission.hook("evaluate", (event) =>
                               Effect.sync(() => {
                                 event.effect = event.action === "instance-test" ? "ask" : "allow"
@@ -213,6 +218,17 @@ it.live(
         yield* sessions.resume(config.id)
       }
       expect(executed).toEqual([first.id, second.id])
+
+      // Regenerating a title runs in the Session's instance, so its title hook decides the result.
+      yield* Effect.forEach(
+        configs,
+        (config) =>
+          Effect.gen(function* () {
+            yield* sessions.update({ sessionID: config.id, title: "" })
+            expect((yield* sessions.get(config.id)).title).toBe(`${config.tool} title`)
+          }),
+        { discard: true },
+      )
 
       for (const config of configs) {
         yield* llm.push(TestLLM.text(`generated ${config.id}`, config.tool))
