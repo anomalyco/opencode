@@ -1,5 +1,9 @@
 type Entry = { method: string; url: string; at: number; slow: boolean; priority: number }
 
+type RequestTiming = { method: string; url: string; ms: number }
+
+export type RequestQueueLog = { limit: number; inflight: RequestTiming[]; queued: RequestTiming[] }
+
 // Chromium allows six connections per origin. The event stream holds one for the life of the
 // connection and health probes use their own fetch, so the app's API calls stay below that or
 // a burst stalls probes and user actions inside the browser where nothing can observe it.
@@ -40,7 +44,7 @@ export function createRequestQueue(input: {
   stallMs?: number
   headersTimeoutMs?: number
   setupHeadersTimeoutMs?: number
-  log?: (message: string, data: Record<string, unknown>) => void
+  log?: (message: string, data: RequestQueueLog) => void
   now?: () => number
 }) {
   const limit = input.limit ?? requestQueueLimit

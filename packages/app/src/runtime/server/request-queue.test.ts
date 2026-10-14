@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { createRequestQueue } from "./request-queue"
+import { createRequestQueue, type RequestQueueLog } from "./request-queue"
 
 function setup(input?: {
   limit?: number
@@ -9,7 +9,7 @@ function setup(input?: {
   setupHeadersTimeoutMs?: number
 }) {
   const pending: Array<{ url: string; signal: AbortSignal; resolve: () => void }> = []
-  const logs: Array<{ message: string; data: Record<string, unknown> }> = []
+  const logs: Array<{ message: string; data: RequestQueueLog }> = []
   let clock = 0
 
   const queue = createRequestQueue({
@@ -152,10 +152,13 @@ describe("createRequestQueue", () => {
   test("MCP discovery cannot occupy every slot ahead of chat reads", async () => {
     for (const path of ["/api/command", "/api/mcp", "/api/mcp/resource"]) {
       const input = setup({ limit: 4, slowLimit: 2 })
+
       const discovery = Array.from({ length: 4 }, (_, index) =>
         input.queue.fetch(`http://server${path}?location[directory]=%2Fproject-${index}`),
       )
+
       const chat = input.queue.fetch("http://server/api/session/ses_1/message")
+
       try {
         expect(input.pending.map((item) => new URL(item.url).pathname)).toEqual([
           path,
@@ -170,6 +173,7 @@ describe("createRequestQueue", () => {
         input.pending.forEach((item) => item.resolve())
         await Promise.all([...discovery, chat])
       }
+
       expect(input.queue.inflight()).toBe(0)
       expect(input.queue.queued()).toBe(0)
     }
@@ -204,6 +208,7 @@ describe("createRequestQueue", () => {
     expect(input.queue.queued()).toBe(1)
     const error = await dead.catch((cause: unknown) => cause)
     expect(error).toBeInstanceOf(DOMException)
+    // SAFETY: the preceding assertion throws unless the rejection is a DOMException.
     expect((error as DOMException).name).toBe("TimeoutError")
     expect(input.pending.map((item) => new URL(item.url).pathname)).toEqual(["/api/dead", "/api/next"])
     input.pending[1]!.resolve()
@@ -222,6 +227,7 @@ describe("createRequestQueue", () => {
     ]
 
     const errors = await Promise.all(others.map((request) => request.catch((cause: unknown) => cause)))
+    // SAFETY: these fixture requests reject with the DOMException supplied by the queue's header timer.
     expect(errors.map((error) => (error as DOMException).name)).toEqual([
       "TimeoutError",
       "TimeoutError",
