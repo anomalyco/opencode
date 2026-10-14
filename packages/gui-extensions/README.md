@@ -662,6 +662,7 @@ export default setup
  */
 export const builtins = Extension.compose(
   context,
+  agents,
   btw,
   { ...debug, main: () => import("./debug/main") },
   terminal,
@@ -688,6 +689,7 @@ The window list adds each window entry, loaded with the app:
  */
 export const builtins = Extension.compose(
   { ...context, renderer: eager(contextRenderer) },
+  { ...agents, renderer: eager(agentsRenderer) },
   { ...btw, renderer: eager(btwRenderer) },
   { ...debug, renderer: eager(debugRenderer) },
   { ...terminal, renderer: eager(terminalRenderer) },

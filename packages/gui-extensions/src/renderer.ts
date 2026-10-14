@@ -1,6 +1,8 @@
 import { Extension, type Definition } from "./sdk"
 import context from "./context"
 import contextRenderer from "./context/renderer"
+import agents from "./agents"
+import agentsRenderer from "./agents/renderer"
 import btw from "./btw"
 import btwRenderer from "./btw/renderer"
 import debug from "./debug"
@@ -37,6 +39,7 @@ const eager = (setup: Awaited<ReturnType<NonNullable<Definition["renderer"]>>>["
  */
 export const builtins = Extension.compose(
   { ...context, renderer: eager(contextRenderer) },
+  { ...agents, renderer: eager(agentsRenderer) },
   { ...btw, renderer: eager(btwRenderer) },
   { ...debug, renderer: eager(debugRenderer) },
   { ...terminal, renderer: eager(terminalRenderer) },
