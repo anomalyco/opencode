@@ -135,9 +135,11 @@ for (const server of [SERVER, REMOTE_SERVER]) {
       sessions: [b],
       seed: { tabs: [a.id, { session: b.id, server }] },
     })
+
     if (server === REMOTE_SERVER) {
       await mockRemoteServer(page, { sessions: [session({ ...b, directory: "/remote/project" })] })
     }
+
     await page.route(
       (url) => url.origin === SERVER && url.pathname === `/api/session/${a.id}`,
       (route) => route.fulfill({ status: 504, json: { message: "Fixture metadata timeout" } }),
@@ -164,6 +166,7 @@ test("session metadata failure can be retried without reloading or looping", asy
     (url) => url.origin === SERVER && url.pathname === `/api/session/${a.id}`,
     (route) => {
       state.requests++
+
       return route.fulfill(
         state.fail
           ? { status: 504, json: { message: "Fixture metadata timeout" } }
