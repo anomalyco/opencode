@@ -1,4 +1,6 @@
 import type { SessionInfo, SessionMessageAssistant, SessionMessageInfo, ShellInfo } from "@opencode/client/promise"
+import { scanSubagentTranscript } from "@opencode/session-ui/subagent-transcript"
+import { Predicate } from "effect"
 import { createMemo } from "solid-js"
 
 type Task =
@@ -14,54 +16,53 @@ export function createSessionBackground(input: {
 }) {
   const history = createMemo(() => {
     const completed = new Set<string>()
-    const subagents: { id: string; type: "subagent"; label: string; agent: string | undefined }[] = []
     const shells: { partID: string; task: { id: string; type: "shell"; label: string } }[] = []
     const id = input.sessionID()
+    const messages = id ? input.messages(id) : []
+    const scan = scanSubagentTranscript(messages)
 
-    const assistant = (id ? input.messages(id) : []).reduce<SessionMessageAssistant | undefined>((latest, message) => {
-      if (message.type === "synthetic") {
-        if (message.metadata?.source === "subagent" && typeof message.metadata.childID === "string")
-          completed.add(message.metadata.childID)
+    for (const childID of scan.completed) completed.add(childID)
 
-        if (message.metadata?.source === "shell") {
-          if (typeof message.metadata.shellID === "string") completed.add(message.metadata.shellID)
+    for (const message of messages) {
+      if (message.type !== "synthetic") continue
 
-          if (typeof message.metadata.jobID === "string") completed.add(message.metadata.jobID)
-        }
+      if (message.metadata?.source === "shell") {
+        if (Predicate.isString(message.metadata.shellID)) completed.add(message.metadata.shellID)
 
-        return latest
+        if (Predicate.isString(message.metadata.jobID)) completed.add(message.metadata.jobID)
       }
+    }
+
+    const subagents = scan.calls.flatMap((call) => {
+      if (!call.backgrounded || !call.childID || completed.has(call.childID)) return []
+
+      return [
+        {
+          id: call.childID,
+          type: "subagent" as const,
+          label: call.description ?? call.childID,
+          agent: call.agent,
+        },
+      ]
+    })
+
+    const assistant = messages.reduce<SessionMessageAssistant | undefined>((latest, message) => {
+      if (message.type === "synthetic") return latest
 
       if (message.type !== "assistant") return latest
       message.content.forEach((part) => {
-        if (part.type !== "tool" || (part.name !== "subagent" && part.name !== "shell")) return
+        if (part.type !== "tool" || part.name !== "shell") return
 
         if (part.state.status !== "completed" || part.state.metadata?.status !== "running") return
-
-        if (part.name === "subagent") {
-          const sessionID = part.state.metadata.sessionID
-
-          if (typeof sessionID !== "string") return
-          const description = part.state.input.description
-          const agent = part.state.input.agent
-          subagents.push({
-            id: sessionID,
-            type: "subagent",
-            label: typeof description === "string" ? description : sessionID,
-            agent: typeof agent === "string" ? agent : undefined,
-          })
-
-          return
-        }
 
         const shellID = part.state.metadata.shellID
         const command = part.state.input.command
         shells.push({
           partID: part.id,
           task: {
-            id: typeof shellID === "string" ? shellID : part.id,
+            id: Predicate.isString(shellID) ? shellID : part.id,
             type: "shell",
-            label: typeof command === "string" ? command : part.id,
+            label: Predicate.isString(command) ? command : part.id,
           },
         })
       })
@@ -70,11 +71,11 @@ export function createSessionBackground(input: {
     }, undefined)
 
     return {
-      // Completion notices can identify the shell or its original tool call.
-      subagents: subagents.filter((task) => !completed.has(task.id)),
-      shells: shells
-        .filter((item) => !completed.has(item.partID) && !completed.has(item.task.id))
-        .map((item) => item.task),
+      // Backgrounded calls stay listed until their synthetic completion notice lands (filtered at construction).
+      subagents,
+      shells: shells.flatMap((item) =>
+        !completed.has(item.partID) && !completed.has(item.task.id) ? [item.task] : [],
+      ),
       blocking:
         assistant?.content.flatMap((part) => {
           if (part.type !== "tool" || part.state.status !== "running") return []
@@ -85,10 +86,12 @@ export function createSessionBackground(input: {
 
           return [
             {
+              // SAFETY: the guard above leaves only "shell" and "subagent" names.
+              // oxlint-disable-next-line anti-slop/require-safety-comment-for-type-assertion -- see SAFETY above
               type: part.name as "shell" | "subagent",
               partID: part.id,
-              id: typeof value === "string" ? value : undefined,
-              label: typeof label === "string" ? label : undefined,
+              id: Predicate.isString(value) ? value : undefined,
+              label: Predicate.isString(label) ? label : undefined,
             },
           ]
         }) ?? [],
