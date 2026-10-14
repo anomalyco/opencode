@@ -59,6 +59,7 @@ import { llmClient } from "./effect/app-node-platform.js"
 import { Snapshot } from "./snapshot.js"
 import { Session } from "./session/session.js"
 import { SessionDiff, TurnRangeError } from "./session/diff.js"
+import { SessionTitle } from "./session/title.js"
 import { LocationServiceMap } from "./location-service-map.js"
 import { FSUtil } from "@opencode/util/fs-util"
 import type { EventLog } from "@opencode/schema/event-log"
@@ -206,6 +207,13 @@ export interface Interface {
     sessionID: SessionSchema.ID
     permissions: Permission.Ruleset
   }) => Effect.Effect<void, NotFoundError>
+  /** Applies the given properties; an empty `title` asks for a generated one, as `/rename` with no argument does. */
+  readonly update: (input: {
+    sessionID: SessionSchema.ID
+    title?: string | undefined
+    metadata?: SessionSchema.Metadata | undefined
+    permissions?: Permission.Ruleset | undefined
+  }) => Effect.Effect<void, NotFoundError | FileSystem.DirectoryNotFoundError>
   readonly move: SessionMove.Interface["move"]
   readonly prompt: (
     input: Parameters<Session.Handle["prompt"]>[0] & { sessionID: SessionSchema.ID },
@@ -506,6 +514,16 @@ const layer = Layer.effect(
       unarchive: (sessionID) => sessions.forSession(sessionID).unarchive(),
       setMetadata: (input) => sessions.forSession(input.sessionID).setMetadata(input),
       setPermissions: (input) => sessions.forSession(input.sessionID).setPermissions(input),
+      update: Effect.fn("Session.update")(function* (input) {
+        const session = yield* result.get(input.sessionID)
+        if (input.title) yield* result.rename({ sessionID: input.sessionID, title: input.title })
+        if (input.title === "")
+          yield* SessionTitle.Service.use((titles) => titles.generate(input.sessionID)).pipe(instances.provide(session))
+        if (input.metadata !== undefined)
+          yield* result.setMetadata({ sessionID: input.sessionID, metadata: input.metadata })
+        if (input.permissions !== undefined)
+          yield* result.setPermissions({ sessionID: input.sessionID, permissions: input.permissions })
+      }),
       move: moves.move,
       compact: (input) => sessions.forSession(input.sessionID).compact(input),
       wait: (sessionID) => sessions.forSession(sessionID).wait(),
