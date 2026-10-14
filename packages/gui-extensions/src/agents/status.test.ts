@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test"
-import type { JsonValue, SessionMessageAssistant, SessionMessageAssistantTool, SessionMessageInfo } from "@opencode/client/promise"
+import type {
+  JsonValue,
+  SessionMessageAssistant,
+  SessionMessageAssistantTool,
+  SessionMessageInfo,
+} from "@opencode/client/promise"
 import {
   childHref,
   childrenOf,
@@ -58,14 +63,14 @@ describe("taskStatus", () => {
     expect(taskStatus(tool({ status: "streaming", input: "..." }))).toBe("running")
   })
   test("completed parts are completed", () => {
-    expect(
-      taskStatus(tool({ status: "completed", input: {}, content: [{ type: "text", text: "done" }] })),
-    ).toBe("completed")
+    expect(taskStatus(tool({ status: "completed", input: {}, content: [{ type: "text", text: "done" }] }))).toBe(
+      "completed",
+    )
   })
   test("aborted errors are cancelled", () => {
-    expect(
-      taskStatus(tool({ status: "error", input: {}, error: { type: "aborted", message: "stopped" } })),
-    ).toBe("cancelled")
+    expect(taskStatus(tool({ status: "error", input: {}, error: { type: "aborted", message: "stopped" } }))).toBe(
+      "cancelled",
+    )
   })
   test("interrupted metadata is cancelled", () => {
     expect(
@@ -88,12 +93,17 @@ describe("partBackgrounded", () => {
   test("completed parts with a running metadata status are backgrounded", () => {
     expect(
       partBackgrounded(
-        tool({ status: "completed", input: {}, content: [{ type: "text", text: "x" }], metadata: { status: "running" } }),
+        tool({
+          status: "completed",
+          input: {},
+          content: [{ type: "text", text: "x" }],
+          metadata: { status: "running" },
+        }),
       ),
     ).toBe(true)
-    expect(
-      partBackgrounded(tool({ status: "completed", input: {}, content: [{ type: "text", text: "x" }] })),
-    ).toBe(false)
+    expect(partBackgrounded(tool({ status: "completed", input: {}, content: [{ type: "text", text: "x" }] }))).toBe(
+      false,
+    )
     expect(partBackgrounded(tool({ status: "running", input: {}, metadata: {} }))).toBe(false)
   })
 })
@@ -159,7 +169,14 @@ describe("subagentTasks", () => {
       { id: "a" },
     )
 
-    const notice = { id: "n1", type: "synthetic", metadata: { source: "subagent", childID: "child" }, text: "", time: { created: 2 } } as const
+    const notice = {
+      id: "n1",
+      type: "synthetic",
+      metadata: { source: "subagent", childID: "child" },
+      text: "",
+      time: { created: 2 },
+    } as const
+
     expect(subagentTasks([completedMessage([backgrounded])]).parts.has("child")).toBe(true)
     expect(subagentTasks([completedMessage([backgrounded]), notice]).parts.has("child")).toBe(false)
   })
@@ -193,16 +210,26 @@ describe("deriveStatus", () => {
     expect(deriveStatus({ part: "completed", backgrounded: true, running: false, outcome: undefined })).toBe("busy")
   })
   test("the outcome settles everything else", () => {
-    expect(deriveStatus({ part: "completed", backgrounded: true, running: false, outcome: "succeeded" })).toBe("completed")
+    expect(deriveStatus({ part: "completed", backgrounded: true, running: false, outcome: "succeeded" })).toBe(
+      "completed",
+    )
     expect(deriveStatus({ part: "completed", backgrounded: false, running: false, outcome: "failed" })).toBe("error")
     expect(deriveStatus({ part: undefined, running: true, outcome: undefined, backgrounded: false })).toBe("busy")
-    expect(deriveStatus({ part: "cancelled", backgrounded: false, running: false, outcome: "succeeded" })).toBe("completed")
+    expect(deriveStatus({ part: "cancelled", backgrounded: false, running: false, outcome: "succeeded" })).toBe(
+      "completed",
+    )
   })
   test("terminal parts and outcomes fall through in order", () => {
-    expect(deriveStatus({ part: "completed", backgrounded: false, running: false, outcome: undefined })).toBe("completed")
-    expect(deriveStatus({ part: undefined, running: false, outcome: "interrupted", backgrounded: false })).toBe("cancelled")
+    expect(deriveStatus({ part: "completed", backgrounded: false, running: false, outcome: undefined })).toBe(
+      "completed",
+    )
+    expect(deriveStatus({ part: undefined, running: false, outcome: "interrupted", backgrounded: false })).toBe(
+      "cancelled",
+    )
     expect(deriveStatus({ part: undefined, running: false, outcome: "failed", backgrounded: false })).toBe("error")
-    expect(deriveStatus({ part: undefined, running: false, outcome: "succeeded", backgrounded: false })).toBe("completed")
+    expect(deriveStatus({ part: undefined, running: false, outcome: "succeeded", backgrounded: false })).toBe(
+      "completed",
+    )
     expect(deriveStatus({ part: undefined, running: false, outcome: undefined, backgrounded: false })).toBe("idle")
   })
 })
@@ -254,9 +281,27 @@ describe("formatting", () => {
 
 describe("sortAgents", () => {
   const sessions = [
-    { id: "a", cost: 3, tokens: { input: 1, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }, title: "Zulu", time: { created: 1000 } },
-    { id: "b", cost: 1, tokens: { input: 9, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }, title: "Alpha", time: { created: 3000 } },
-    { id: "c", cost: 2, tokens: { input: 5, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }, title: "Mike", time: { created: 2000 } },
+    {
+      id: "a",
+      cost: 3,
+      tokens: { input: 1, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      title: "Zulu",
+      time: { created: 1000 },
+    },
+    {
+      id: "b",
+      cost: 1,
+      tokens: { input: 9, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      title: "Alpha",
+      time: { created: 3000 },
+    },
+    {
+      id: "c",
+      cost: 2,
+      tokens: { input: 5, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      title: "Mike",
+      time: { created: 2000 },
+    },
   ]
 
   const name = (id: string) => sessions.find((session) => session.id === id)?.title ?? id
@@ -294,7 +339,14 @@ describe("sortAgents", () => {
 
 describe("filterAgents", () => {
   const sessions = [
-    { id: "abc", cost: 0, tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }, title: "Explore auth", time: { created: 1 }, model: { id: "m1", providerID: "test" } },
+    {
+      id: "abc",
+      cost: 0,
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      title: "Explore auth",
+      time: { created: 1 },
+      model: { id: "m1", providerID: "test" },
+    },
   ]
 
   test("matches titles, models and ids case-insensitively", () => {
@@ -321,22 +373,24 @@ describe("clocks", () => {
 })
 
 describe("transcript detail", () => {
-  const activityPart = (id: string, name: string, input: { [x: string]: JsonValue }, at: number) => ({
-    type: "tool",
-    id,
-    name,
-    state: { status: "completed", input, content: [{ type: "text", text: "x" }] },
-    time: { created: at, completed: at },
-  }) satisfies SessionMessageAssistantTool
+  const activityPart = (id: string, name: string, input: { [x: string]: JsonValue }, at: number) =>
+    ({
+      type: "tool",
+      id,
+      name,
+      state: { status: "completed", input, content: [{ type: "text", text: "x" }] },
+      time: { created: at, completed: at },
+    }) satisfies SessionMessageAssistantTool
 
-  const assistantMessage = (id: string, content: SessionMessageAssistant["content"], at: number, done: boolean) => ({
-    id,
-    type: "assistant",
-    agent: "build",
-    model: { id: "m", providerID: "p" },
-    content,
-    time: done ? { created: at, completed: at + 500 } : { created: at },
-  }) satisfies SessionMessageInfo
+  const assistantMessage = (id: string, content: SessionMessageAssistant["content"], at: number, done: boolean) =>
+    ({
+      id,
+      type: "assistant",
+      agent: "build",
+      model: { id: "m", providerID: "p" },
+      content,
+      time: done ? { created: at, completed: at + 500 } : { created: at },
+    }) satisfies SessionMessageInfo
 
   test("latest activity walks newest tool calls first", () => {
     const messages = [

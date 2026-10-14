@@ -163,7 +163,12 @@ export default function SessionAgentsPanel(props: { session: MountedSession }) {
   const sorted = createMemo(() => sortAgents(filtered(), { sort: sort(), ascending: ascending(), name: nameOf }))
 
   const busyIDs = createMemo(
-    () => new Set(sorted().filter((child) => statusOf(child.id) === "busy").map((child) => child.id)),
+    () =>
+      new Set(
+        sorted()
+          .filter((child) => statusOf(child.id) === "busy")
+          .map((child) => child.id),
+      ),
   )
 
   const running = createMemo(() => sorted().filter((child) => busyIDs().has(child.id)))
@@ -172,18 +177,26 @@ export default function SessionAgentsPanel(props: { session: MountedSession }) {
   const runningCount = createMemo(() => running().length + unclaimed().length)
 
   // Message detail for the few running children; history rows sync on expand instead.
+  // Already-synced children stay out: membership churn must not refetch the survivors.
+  const [synced, setSynced] = createSignal<ReadonlySet<string>>(new Set())
+
   const runningKey = createMemo(() => {
     const ids = children()
       .filter((child) => statusOf(child.id) === "busy")
       .map((child) => child.id)
       .sort()
 
-    return ids.length > 0 ? ids.join("\0") : undefined
+    return ids.length > 0 ? ids.join(" ") : undefined
   })
 
   createKeyed(runningKey, (key) => {
     const store = props.session.server.data
-    void Promise.all(key.split("\0").map((id) => store.session.message.sync(id))).catch(() => undefined)
+    const fresh = key.split(" ").filter((id) => !synced().has(id))
+
+    if (fresh.length === 0) return
+
+    setSynced((prev) => new Set([...prev, ...fresh]))
+    void Promise.all(fresh.map((id) => store.session.message.sync(id))).catch(() => undefined)
   })
 
   const toggle = (child: SessionInfo, defaultOpen: boolean) => {
@@ -191,7 +204,10 @@ export default function SessionAgentsPanel(props: { session: MountedSession }) {
     setExpanded(child.id, !open)
 
     if (!open && !loaded[child.id]) {
-      void data().session.message.sync(child.id).then(() => setLoaded(child.id, true)).catch(() => undefined)
+      void data()
+        .session.message.sync(child.id)
+        .then(() => setLoaded(child.id, true))
+        .catch(() => undefined)
     }
   }
 
@@ -212,9 +228,7 @@ export default function SessionAgentsPanel(props: { session: MountedSession }) {
   }
 
   const showSections = () =>
-    visibleRunning().length + visibleUnclaimed().length + visibleHistory().length > 0 ||
-    tab() !== "all" ||
-    searching()
+    visibleRunning().length + visibleUnclaimed().length + visibleHistory().length > 0 || tab() !== "all" || searching()
 
   return (
     <ScrollView class="h-full">
@@ -276,15 +290,27 @@ export default function SessionAgentsPanel(props: { session: MountedSession }) {
         </div>
 
         <div class="flex items-center gap-4">
-          <TabButton active={tab() === "all"} onClick={() => setTab("all")} label={ctx.t("tab.all")} count={children().length + unclaimed().length} />
-          <TabButton active={tab() === "running"} onClick={() => setTab("running")} label={ctx.t("tab.running")} count={runningCount()} />
-          <TabButton active={tab() === "history"} onClick={() => setTab("history")} label={ctx.t("tab.history")} count={history().length} />
+          <TabButton
+            active={tab() === "all"}
+            onClick={() => setTab("all")}
+            label={ctx.t("tab.all")}
+            count={children().length + unclaimed().length}
+          />
+          <TabButton
+            active={tab() === "running"}
+            onClick={() => setTab("running")}
+            label={ctx.t("tab.running")}
+            count={runningCount()}
+          />
+          <TabButton
+            active={tab() === "history"}
+            onClick={() => setTab("history")}
+            label={ctx.t("tab.history")}
+            count={history().length}
+          />
         </div>
 
-        <Show
-          when={showSections()}
-          fallback={<div class="text-12-regular text-text-weak">{emptyText()}</div>}
-        >
+        <Show when={showSections()} fallback={<div class="text-12-regular text-text-weak">{emptyText()}</div>}>
           <Show when={visibleRunning().length + visibleUnclaimed().length > 0}>
             <div class="flex flex-col gap-2">
               <Show when={tab() === "all"}>
@@ -324,11 +350,7 @@ export default function SessionAgentsPanel(props: { session: MountedSession }) {
             </div>
           </Show>
 
-          <Show
-            when={
-              visibleRunning().length + visibleUnclaimed().length + visibleHistory().length === 0
-            }
-          >
+          <Show when={visibleRunning().length + visibleUnclaimed().length + visibleHistory().length === 0}>
             <div class="text-12-regular text-text-weak">{emptyText()}</div>
           </Show>
         </Show>
@@ -415,9 +437,7 @@ export default function SessionAgentsPanel(props: { session: MountedSession }) {
         <Show when={!(open() && status() === "busy")}>
           <div class="text-12-regular text-text-weak truncate pl-8">
             {statusLabel(status(), ctx.t)}
-            <Show when={props.child.model}>
-              {(model) => <> · {model().id}</>}
-            </Show>
+            <Show when={props.child.model}>{(model) => <> · {model().id}</>}</Show>
           </div>
         </Show>
 
@@ -449,9 +469,7 @@ export default function SessionAgentsPanel(props: { session: MountedSession }) {
                     <Show when={entry.target}>
                       <span class="text-text-weak truncate min-w-0 flex-1">{entry.target}</span>
                     </Show>
-                    <span class="text-text-faint shrink-0">
-                      {formatRelative(entry.at, now(), i18n.locale())}
-                    </span>
+                    <span class="text-text-faint shrink-0">{formatRelative(entry.at, now(), i18n.locale())}</span>
                   </div>
                 )}
               </For>
@@ -462,7 +480,14 @@ export default function SessionAgentsPanel(props: { session: MountedSession }) {
         <Show when={open() && status() !== "busy"}>
           <div class="flex flex-col gap-1 pt-1 pl-8">
             <div class="text-12-regular text-text-weak">{ctx.t("lastResponse")}</div>
-            <Show when={response()} fallback={<Show when={!ready()}><SessionProgressIndicatorV2 class="size-3.5" /></Show>}>
+            <Show
+              when={response()}
+              fallback={
+                <Show when={!ready()}>
+                  <SessionProgressIndicatorV2 class="size-3.5" />
+                </Show>
+              }
+            >
               {(text) => (
                 <div class="rounded-md border border-[var(--v2-border-border-base)] px-3 py-2 text-12-regular text-text-strong whitespace-pre-wrap break-words">
                   {text()}

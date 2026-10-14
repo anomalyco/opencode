@@ -21,7 +21,8 @@ const setup: Setup<typeof definition> = (ctx) => {
         <AgentsTabIcon session={state.session} />
         <span>{ctx.t("tab.title")}</span>
       </div>
-    ),    draggable: false,
+    ),
+    draggable: false,
     closable: "compact",
   }
 

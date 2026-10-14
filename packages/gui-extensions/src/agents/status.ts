@@ -175,10 +175,7 @@ export function subagentDescriptions(messages: SessionMessageInfo[]): Map<string
 }
 
 /** Direct children of one session, oldest first by id. */
-export function childrenOf<T extends { id: string; parentID?: string }>(
-  sessions: readonly T[],
-  parentID: string,
-): T[] {
+export function childrenOf<T extends { id: string; parentID?: string }>(sessions: readonly T[], parentID: string): T[] {
   return sessions.filter((session) => session.parentID === parentID).sort((a, b) => (a.id < b.id ? -1 : 1))
 }
 
@@ -286,9 +283,7 @@ function compareKeys(a: number | string, b: number | string): number {
 }
 
 /** Sorted children: recent means newest first unless ascending flips it. */
-export function sortAgents<
-  T extends { id: string; cost: number; tokens: TokenUsageInfo; time: { created: number } },
->(
+export function sortAgents<T extends { id: string; cost: number; tokens: TokenUsageInfo; time: { created: number } }>(
   sessions: readonly T[],
   options: { sort: AgentSort; ascending: boolean; name: (sessionID: string) => string },
 ): T[] {
@@ -344,19 +339,20 @@ export function formatElapsed(started: number, now: number): string {
   return `${rest}s`
 }
 
-/** Short relative stamp: 2s ago, 18m ago, 3h ago, older falls back to the clock. */
+/** Short relative stamp in the active locale: 2s ago, 18m ago, 3h ago, older falls back to the clock. */
 export function formatRelative(when: number, now: number, locale: string): string {
+  const format = new Intl.RelativeTimeFormat(locale, { numeric: "auto", style: "narrow" })
   const seconds = Math.max(0, Math.floor((now - when) / 1000))
 
-  if (seconds < 60) return `${seconds}s ago`
+  if (seconds < 60) return format.format(-seconds, "second")
 
   const minutes = Math.floor(seconds / 60)
 
-  if (minutes < 60) return `${minutes}m ago`
+  if (minutes < 60) return format.format(-minutes, "minute")
 
   const hours = Math.floor(minutes / 60)
 
-  if (hours < 24) return `${hours}h ago`
+  if (hours < 24) return format.format(-hours, "hour")
 
   return formatTime(when, locale)
 }
