@@ -7,6 +7,9 @@
     </picture>
   </a>
 </p>
+
+> **仓库即将落幕（Sunset notice）**：本 fork 的构建与部署职责正在迁移——镜像构建 → `link-seek/docker-images`（glibc 线），部署控制 → `link-seek/infra`，进度见 [docker-images#2](https://github.com/link-seek/docker-images/issues/2)。生产 HW21 不受影响（照常用旧镜像）；新功能与文档请直接去新仓，**不要再往本仓提 PR**。归档后本仓只读保留（含 Discussions）。
+> **This fork is being sunset**: builds move to `link-seek/docker-images`, deploys to `link-seek/infra` (tracking: docker-images#2). Prod is unaffected. Please open new PRs in the new repos, not here.
 <p align="center">The open source AI coding agent.</p>
 <p align="center">
   <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
