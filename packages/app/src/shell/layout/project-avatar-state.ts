@@ -4,6 +4,8 @@ import { sessionPermissionRequest, sessionFormRequest } from "@/session/requests
 import { ServerConnection } from "@/runtime/server/registry"
 import { useSettings } from "@/settings/model"
 
+type ServerData = ReturnType<ReturnType<typeof useGlobal>["ensureServerCtx"]>["data"]
+
 export function useSessionTabAvatarState(
   server: Accessor<ServerConnection.Key>,
   sessionId: Accessor<string>,
@@ -14,39 +16,15 @@ export function useSessionTabAvatarState(
   const connection = createMemo(() => global.servers.list().find((item) => ServerConnection.key(item) === server()))
   const serverCtx = useServerCtx(connection)
 
-  const sessions = createMemo(() => {
+  const requests = createMemo(() => {
     const data = serverCtx()?.data
 
-    if (!data) return []
+    if (!data) return { permission: false, form: false }
 
-    if (!root?.()) return data.session.list()
-    const id = sessionId()
-
-    return [...new Set([id, ...data.session.family(id)])].flatMap((id) => {
-      const info = data.session.get(id)
-
-      return info ? [info] : []
-    })
+    return sessionRequests(data, sessionId(), !!root?.(), settings.permissions.autoApprove())
   })
 
-  const hasPermissions = createMemo(() => {
-    if (settings.permissions.autoApprove()) return false
-    const ctx = serverCtx()
-
-    if (!ctx) return false
-
-    return !!sessionPermissionRequest(sessions(), ctx.data.session.permission.list, sessionId())
-  })
-
-  const hasForms = createMemo(() => {
-    const data = serverCtx()?.data
-
-    if (!data) return false
-
-    return !!sessionFormRequest(sessions(), data.session.form.list, sessionId())
-  })
-
-  const needsAttention = createMemo(() => hasPermissions() || hasForms())
+  const needsAttention = createMemo(() => requests().permission || requests().form)
 
   const unread = createMemo(
     () => needsAttention() || (serverCtx()?.notification.session.unseenCount(sessionId()) ?? 0) > 0,
@@ -59,15 +37,37 @@ export function useSessionTabAvatarState(
 
     if (needsAttention()) return false
 
-    // Like the TUI, work waiting in the inbox counts as busy; parked synthetic context does not.
-    const busy = (id: string) =>
-      data.session.status(id) === "running" || data.session.pending.list(id).some((item) => item.type !== "synthetic")
-
     if (root?.())
-      return data.session.list().some((session) => data.session.root(session.id) === sessionId() && busy(session.id))
+      return data.session
+        .list()
+        .some((session) => data.session.root(session.id) === sessionId() && sessionBusy(data, session.id))
 
-    return busy(sessionId())
+    return sessionBusy(data, sessionId())
   })
 
   return { unread, loading }
+}
+
+// Pending permission and form requests anywhere in the session (or its family, for roots).
+export function sessionRequests(data: ServerData, sessionId: string, root: boolean, autoApprove: boolean) {
+  const sessions = root
+    ? [...new Set([sessionId, ...data.session.family(sessionId)])].flatMap((id) => {
+        const info = data.session.get(id)
+
+        return info ? [info] : []
+      })
+    : data.session.list()
+
+  return {
+    permission: !autoApprove && !!sessionPermissionRequest(sessions, data.session.permission.list, sessionId),
+    form: !!sessionFormRequest(sessions, data.session.form.list, sessionId),
+  }
+}
+
+// Like the TUI, work waiting in the inbox counts as busy; parked synthetic context does not.
+export function sessionBusy(data: ServerData, sessionId: string) {
+  return (
+    data.session.status(sessionId) === "running" ||
+    data.session.pending.list(sessionId).some((item) => item.type !== "synthetic")
+  )
 }

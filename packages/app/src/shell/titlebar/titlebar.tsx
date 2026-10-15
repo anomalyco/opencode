@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createResource, Match, Show, Switch, untrack } from "solid-js"
+import { createEffect, createMemo, createResource, For, Match, Show, Switch, untrack } from "solid-js"
 import { createStore, unwrap } from "solid-js/store"
 import { Dynamic, Portal } from "solid-js/web"
 import { useLocation, useNavigate } from "@solidjs/router"
@@ -15,6 +15,7 @@ import { useSettings } from "@/settings/model"
 import { WindowsAppMenu } from "./windows-menu"
 import { applyPath, backPath, forwardPath, type HistoryLocation } from "./history"
 import { TitlebarTabStrip } from "@/shell/titlebar/tab-strip"
+import { SidebarInbox } from "@/shell/titlebar/inbox"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createMediaQuery } from "@solid-primitives/media"
 import { readSessionTabsRemovedDetail, SESSION_TABS_REMOVED_EVENT } from "@/shell/titlebar/session-events"
@@ -730,27 +731,66 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                             />
                             <div class="h-4 w-full shrink-0" aria-hidden="true" />
                             <div class="flex min-h-0 flex-1 flex-col gap-1">
-                              <TitlebarTabStrip
-                                orientation="vertical"
-                                tabs={tabsStore}
-                                currentTab={currentTab()}
-                                onNavigate={(tab, el) => {
-                                  tabs.select(tab)
-                                  el?.scrollIntoView({ behavior: "instant", block: "nearest" })
-                                }}
-                                onClose={(tab) => {
-                                  const index = tabsStore.findIndex((item) => tabKey(item) === tabKey(tab))
+                              <Show
+                                when={settings.appearance.sidebarMode() === "inbox"}
+                                fallback={
+                                  <TitlebarTabStrip
+                                    orientation="vertical"
+                                    tabs={tabsStore}
+                                    currentTab={currentTab()}
+                                    onNavigate={(tab, el) => {
+                                      tabs.select(tab)
+                                      el?.scrollIntoView({ behavior: "instant", block: "nearest" })
+                                    }}
+                                    onClose={(tab) => {
+                                      const index = tabsStore.findIndex((item) => tabKey(item) === tabKey(tab))
 
-                                  if (index !== -1) tabsStoreActions.closeTab(index)
-                                }}
-                                onReorder={(keys) => tabsStoreActions.reorder(keys)}
-                              />
+                                      if (index !== -1) tabsStoreActions.closeTab(index)
+                                    }}
+                                    onReorder={(keys) => tabsStoreActions.reorder(keys)}
+                                  />
+                                }
+                              >
+                                <SidebarInbox />
+                              </Show>
                             </div>
-                            <Show when={titlebarItems.ids().length > 0}>
-                              <div data-slot="vertical-tabs-footer" class="mt-2 flex w-full shrink-0 flex-col">
+                            <div data-slot="vertical-tabs-footer" class="mt-2 mb-2 flex w-full shrink-0 flex-col gap-1">
+                              <Show when={titlebarItems.ids().length > 0}>
                                 <TitlebarItems items={titlebarItems} vertical />
+                              </Show>
+                              <div
+                                data-slot="vertical-sidebar-mode"
+                                role="radiogroup"
+                                class="flex h-7 w-full items-center gap-0.5 rounded-[6px] bg-v2-background-bg-layer-01 p-0.5 [app-region:no-drag]"
+                              >
+                                <For each={["tabs", "inbox"] as const}>
+                                  {(mode) => (
+                                    <Tooltip
+                                      placement="top"
+                                      value={mode === "inbox" ? language.t("sidebar.mode.experimental") : undefined}
+                                      inactive={mode !== "inbox"}
+                                      class="flex h-full min-w-0 flex-1"
+                                    >
+                                      <button
+                                        type="button"
+                                        role="radio"
+                                        aria-checked={settings.appearance.sidebarMode() === mode}
+                                        data-state={settings.appearance.sidebarMode() === mode ? "active" : undefined}
+                                        class="flex h-full min-w-0 flex-1 items-center justify-center gap-1 rounded-[4px] px-1.5 text-[12px] leading-4 text-v2-text-text-faint hover:text-v2-text-text-base data-[state=active]:bg-v2-background-bg-layer-02 data-[state=active]:text-v2-text-text-base focus-visible:outline-none"
+                                        onClick={() => settings.appearance.setSidebarMode(mode)}
+                                      >
+                                        <Icon
+                                          name={mode === "inbox" ? "bullet-list" : "sidebar"}
+                                          size="small"
+                                          class="shrink-0"
+                                        />
+                                        <span class="min-w-0 truncate">{language.t(`sidebar.mode.${mode}`)}</span>
+                                      </button>
+                                    </Tooltip>
+                                  )}
+                                </For>
                               </div>
-                            </Show>
+                            </div>
                           </Portal>
                         )}
                       </Show>

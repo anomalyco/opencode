@@ -36,7 +36,7 @@ export function SessionTabAvatarView(props: {
   project?: LocalProject
   directory: string
   unread: boolean
-  loading: boolean
+  loading?: boolean
 }) {
   return (
     <Show
