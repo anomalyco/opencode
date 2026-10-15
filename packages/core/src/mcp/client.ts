@@ -185,7 +185,11 @@ export const connect = Effect.fnUntraced(function* (
     const runFork = Effect.runForkWith(yield* Effect.context())
     const client = new Client(clientInfo, {
       capabilities: {
-        ...(elicitation ? { elicitation: { form: { applyDefaults: true }, url: {} } } : {}),
+        // Advertise the capability exactly as the specification defines it: `form` and `url` are
+        // empty object schemas. Strict servers reject vendor fields such as the SDK's
+        // `applyDefaults`, and the form service applies each schema `default` when it renders, so
+        // we do not need it. See https://github.com/anomalyco/opencode/issues/52319.
+        ...(elicitation ? { elicitation: { form: {}, url: {} } } : {}),
         // Legacy era only: roots are deprecated as of 2026-07-28 and modern servers cannot request them.
         // Some legacy servers refuse to run without one (https://github.com/anomalyco/opencode/issues/2308).
         roots: {},
