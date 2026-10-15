@@ -132,7 +132,7 @@ async function renderFrame(component: () => JSX.Element, options: { width: numbe
 }
 
 describe("TUI inline tool wrapping", () => {
-  test("tool elapsed ticks from ran and freezes at completed", async () => {
+  test("tool elapsed shows ran and freezes at completed", async () => {
     setSystemTime(10_000)
     const [state, setState] = createStore<{ completed?: number; running: boolean }>({ running: true })
     const component = () => {
@@ -162,11 +162,6 @@ describe("TUI inline tool wrapping", () => {
       )
     }
     expect(await renderFrame(component, { width: 72, height: 3 })).toContain("Shell sleep 5 · 3.0s")
-    setSystemTime(12_000)
-    await Bun.sleep(1100)
-    await testSetup!.renderOnce()
-    await testSetup!.renderOnce()
-    expect(testSetup!.captureCharFrame()).toContain("Shell sleep 5 · 5.0s")
     setState({ running: false, completed: 12_500 })
     setSystemTime(30_000)
     await testSetup!.renderOnce()

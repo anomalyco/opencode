@@ -2544,8 +2544,7 @@ ToolRegistry.register({
     return (
       <div data-component="apply-patch-tool">
         <Show when={files().length > 0} fallback={<FileTool {...props} title={title()} count={0} />}>
-          <FileTool {...props} title={title()} count={files().length}>
-            <FileAccordionGroup>
+          <FileAccordionGroup>
               <Index each={files()}>
                 {(file) => {
                   // Each file opens on its own: the owner's `fileOpen` controls it, otherwise it keeps its own state.
@@ -2592,6 +2591,7 @@ ToolRegistry.register({
                                 />
                               </Match>
                             </Switch>
+                            <ToolElapsed time={props.time} running={props.status === "running"} />
                             <Icon name="chevron-grabber-vertical" size="small" />
                           </div>
                         </div>
@@ -2618,7 +2618,6 @@ ToolRegistry.register({
                 }}
               </Index>
             </FileAccordionGroup>
-          </FileTool>
         </Show>
       </div>
     )
