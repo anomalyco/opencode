@@ -113,8 +113,9 @@ export function AnimatedNumber(props: { value: number; class?: string }) {
   const width = createMemo(() => `${digits().length}ch`)
 
   return (
-    <span data-component="animated-number" class={props.class} aria-label={label()}>
-      <span data-slot="animated-number-value" style={{ "--animated-number-width": width() }}>
+    <span data-component="animated-number" class={props.class}>
+      <span class="sr-only">{label()}</span>
+      <span data-slot="animated-number-value" aria-hidden="true" style={{ "--animated-number-width": width() }}>
         <Index each={digits()}>{(digit) => <Digit value={digit()} direction={direction()} />}</Index>
       </span>
     </span>
