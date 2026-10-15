@@ -79,6 +79,52 @@ it.live(
 )
 
 it.live(
+  "finds direct children outside the location through the path query",
+  () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      const current = path.join(tmp.path, "root", "current")
+      const sibling = path.join(tmp.path, "root", "sibling")
+      yield* Effect.promise(async () => {
+        await fs.mkdir(path.join(current, "nested"), { recursive: true })
+        await fs.mkdir(path.join(sibling, "sub"), { recursive: true })
+        await fs.writeFile(path.join(sibling, "alpha.txt"), "alpha")
+        await fs.writeFile(path.join(sibling, ".hidden.txt"), "hidden")
+        await fs.writeFile(path.join(sibling, "sub", "deep.txt"), "deep")
+      })
+      const server = yield* startServer(path.join(tmp.path, "config"))
+      const find = (query: string, findPath: string) =>
+        Effect.promise(async () => {
+          const url = new URL("/api/fs/find", server.base)
+          url.searchParams.set("location[directory]", current)
+          url.searchParams.set("query", query)
+          url.searchParams.set("path", findPath)
+          const response = await fetch(url, { headers: server.headers })
+          expect(response.status).toBe(200)
+          const result = await response.json()
+          expect(result.location.directory).toBe(current)
+          return result.data
+        })
+
+      const all = yield* find("", "../sibling")
+      expect(all).toEqual([
+        { path: path.join("..", "sibling", "sub") + "/", type: "directory" },
+        { path: path.join("..", "sibling", "alpha.txt"), type: "file" },
+      ])
+      expect(yield* find("", sibling)).toEqual(all)
+      expect(yield* find("alp", "../sibling")).toEqual([
+        { path: path.join("..", "sibling", "alpha.txt"), type: "file" },
+      ])
+      expect(yield* find("deep", "../sibling")).toEqual([])
+      expect(yield* find("", "../missing")).toEqual([])
+      expect(yield* find("", ".")).toEqual([
+        { path: "nested/", type: "directory" },
+      ])
+    }),
+  15_000,
+)
+
+it.live(
   "streams files with Range, conditional requests, confinement, and multi-megabyte byte integrity",
   () =>
     Effect.gen(function* () {

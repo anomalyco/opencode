@@ -1,12 +1,15 @@
 export * as FileSystem from "./filesystem.js"
 
 import { makeLocationNode } from "@opencode/util/effect/app-node"
+import os from "os"
 import path from "path"
 import { Context, Effect, Layer, type Option, type PlatformError, Schema, type Stream } from "effect"
+import fuzzysort from "fuzzysort"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Location } from "./location.js"
 import { AbsolutePath, PositiveInt, RelativePath } from "./schema.js"
 import { FileSystemSearch } from "./filesystem/search.js"
+import { Protected } from "./filesystem/protected.js"
 import { Entry, FileSystem, FindInput, Write } from "@opencode/schema/filesystem"
 export { Entry, Match, Submatch } from "@opencode/schema/filesystem"
 
@@ -60,6 +63,8 @@ export type Content = typeof Content.Type
 export interface ListInput {
   readonly path?: string
 }
+
+type DirectoryItem = { readonly name: string; readonly type: "File" | "Directory" }
 
 export { FindInput, Write }
 
@@ -145,8 +150,49 @@ const baseLayer = Layer.effect(
       if (!FSUtil.contains(root, real)) return yield* Effect.fail(new NotFoundError({ path: input }))
       return { absolute, real, directory: location.directory }
     })
+    const findBase = (input: string) =>
+      input === "~" || input.startsWith(`~${path.sep}`)
+        ? path.resolve(os.homedir(), input.slice(2))
+        : path.resolve(location.directory, input)
+    const outsideEntry = (base: string, item: DirectoryItem) => {
+      const absolute = path.join(base, item.name)
+      const type = item.type === "Directory" ? "directory" : "file"
+      const relative = path.relative(location.directory, absolute) + (type === "directory" ? path.sep : "")
+      return Entry.make({
+        path: RelativePath.make(relative),
+        type,
+      })
+    }
+    const findOutside = (
+      input: FindInput,
+      base: string,
+      items: ReadonlyArray<{ readonly name: string; readonly type: string }>,
+    ) => {
+      const fragment = input.query.trim()
+      const home = Protected.isHome(base)
+      const selected = items
+        .filter((item): item is DirectoryItem => item.type === "File" || item.type === "Directory")
+        .filter((item) => input.type === undefined || item.type === (input.type === "file" ? "File" : "Directory"))
+        .filter((item) => !item.name.startsWith(".") || fragment.startsWith("."))
+        .filter((item) => !(home && Protected.names().has(item.name)))
+      if (!fragment)
+        return selected
+          .sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === "Directory" ? -1 : 1))
+          .slice(0, input.limit ?? 50)
+          .map((item) => outsideEntry(base, item))
+      const result = fuzzysort.go(fragment, selected, { key: "name", limit: input.limit ?? 50 })
+      fuzzysort.cleanup()
+      return result.map((match) => outsideEntry(base, match.obj))
+    }
     return Service.of({
-      find: search.find,
+      find: Effect.fn("FileSystem.find")(function* (input) {
+        if (!input.path) return yield* search.find(input)
+        const base = findBase(input.path)
+        const info = yield* fs.stat(base).pipe(Effect.catch(() => Effect.void))
+        if (info?.type !== "Directory") return []
+        const items = yield* fs.readDirectoryEntries(base).pipe(Effect.catch(() => Effect.succeed([])))
+        return findOutside(input, base, items)
+      }),
       read: Effect.fn("FileSystem.read")(function* (input) {
         const target = yield* resolve(input.path)
         const info = yield* fs.stat(target.real).pipe(

@@ -1,8 +1,15 @@
-import { describe, test, expect } from "bun:test"
+import { describe, test, expect, spyOn } from "bun:test"
+import os from "os"
 import { Effect, FileSystem, Layer } from "effect"
 import { LayerNodePlatform } from "@opencode/util/effect/app-node-platform"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { FSUtil } from "@opencode/util/fs-util"
+import { FileSystemSearch } from "@opencode/core/filesystem/search"
+import { node, Service } from "@opencode/core/filesystem"
+import type { FindInput } from "@opencode/core/filesystem"
+import { Location } from "@opencode/core/location"
+import { AbsolutePath, RelativePath } from "@opencode/core/schema"
+import { location } from "../fixture/location"
 import { testEffect } from "../lib/effect"
 import path from "path"
 
@@ -411,4 +418,217 @@ describe("FSUtil", () => {
       if (process.platform === "win32") expect(FSUtil.overlaps("C:\\a", "D:\\b")).toBe(false)
     })
   })
+})
+
+describe("FileSystem.find", () => {
+  const searchLayer = Layer.succeed(
+    FileSystemSearch.Service,
+    FileSystemSearch.Service.of({ find: () => Effect.succeed([]) }),
+  )
+
+  const provide = (directory: string, search: Layer.Layer<FileSystemSearch.Service> = searchLayer) =>
+    Effect.provide(
+      LayerNode.compile(node, {
+        replacements: [
+          Location.node.replace(
+            Layer.succeed(
+              Location.Service,
+              Location.Service.of(location({ directory: AbsolutePath.make(directory) })),
+            ),
+          ),
+          FileSystemSearch.node.replace(search),
+        ],
+      }),
+    )
+
+  const prepare = Effect.gen(function* () {
+    const filesys = yield* FileSystem.FileSystem
+    const tmp = yield* filesys.makeTempDirectoryScoped()
+    yield* filesys.makeDirectory(path.join(tmp, "current"))
+    yield* filesys.makeDirectory(path.join(tmp, "sibling", "sub"), { recursive: true })
+    yield* filesys.writeFileString(path.join(tmp, "sibling", "alpha.txt"), "a")
+    yield* filesys.writeFileString(path.join(tmp, "sibling", "beta.txt"), "b")
+    yield* filesys.writeFileString(path.join(tmp, "sibling", ".secret.txt"), "s")
+    yield* filesys.writeFileString(path.join(tmp, "sibling", "sub", "deep.txt"), "d")
+    return tmp
+  })
+
+  it(
+    "lists direct children of an absolute directory outside the location",
+    prepare.pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const filesystem = yield* Service
+          const entries = yield* filesystem.find({ query: "", path: path.join(tmp, "sibling") })
+          expect(entries.map((entry) => ({ path: entry.path, type: entry.type }))).toEqual([
+            { path: RelativePath.make(path.join("..", "sibling", "sub") + path.sep), type: "directory" },
+            { path: RelativePath.make(path.join("..", "sibling", "alpha.txt")), type: "file" },
+            { path: RelativePath.make(path.join("..", "sibling", "beta.txt")), type: "file" },
+          ])
+        }).pipe(provide(path.join(tmp, "current"))),
+      ),
+    ),
+  )
+
+  it(
+    "accepts a relative path outside the location and honors the limit",
+    prepare.pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const filesystem = yield* Service
+          const sibling = yield* filesystem.find({ query: "", path: "../sibling" })
+          const limited = yield* filesystem.find({ query: "", path: "../sibling", limit: 2 })
+          expect(limited).toEqual(sibling.slice(0, 2))
+        }).pipe(provide(path.join(tmp, "current"))),
+      ),
+    ),
+  )
+
+  it(
+    "applies the type filter to direct children",
+    prepare.pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const filesystem = yield* Service
+          const files = yield* filesystem.find({ query: "", type: "file", path: path.join(tmp, "sibling") })
+          expect(files.map((entry) => ({ path: entry.path, type: entry.type }))).toEqual([
+            { path: RelativePath.make(path.join("..", "sibling", "alpha.txt")), type: "file" },
+            { path: RelativePath.make(path.join("..", "sibling", "beta.txt")), type: "file" },
+          ])
+          const directories = yield* filesystem.find({ query: "", type: "directory", path: "../sibling" })
+          expect(directories.map((entry) => ({ path: entry.path, type: entry.type }))).toEqual([
+            { path: RelativePath.make(path.join("..", "sibling", "sub") + path.sep), type: "directory" },
+          ])
+        }).pipe(provide(path.join(tmp, "current"))),
+      ),
+    ),
+  )
+
+  it(
+    "hides dot entries unless the fragment opts into them",
+    prepare.pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const filesystem = yield* Service
+          expect(yield* filesystem.find({ query: "secret", path: "../sibling" })).toEqual([])
+          const visible = yield* filesystem.find({ query: ".secret", path: "../sibling" })
+          expect(visible.map((entry) => ({ path: entry.path, type: entry.type }))).toEqual([
+            { path: RelativePath.make(path.join("..", "sibling", ".secret.txt")), type: "file" },
+          ])
+        }).pipe(provide(path.join(tmp, "current"))),
+      ),
+    ),
+  )
+
+  it(
+    "fuzzy-ranks direct children by basename",
+    prepare.pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const filesystem = yield* Service
+          const entries = yield* filesystem.find({ query: "lpha", path: "../sibling" })
+          expect(entries.map((entry) => ({ path: entry.path, type: entry.type }))).toEqual([
+            { path: RelativePath.make(path.join("..", "sibling", "alpha.txt")), type: "file" },
+          ])
+        }).pipe(provide(path.join(tmp, "current"))),
+      ),
+    ),
+  )
+
+  it(
+    "returns empty results for a missing or non-directory base",
+    prepare.pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const filesys = yield* FileSystem.FileSystem
+          yield* filesys.writeFileString(path.join(tmp, "plain.txt"), "not a directory")
+          const filesystem = yield* Service
+          expect(yield* filesystem.find({ query: "", path: path.join(tmp, "missing") })).toEqual([])
+          expect(yield* filesystem.find({ query: "", path: path.join(tmp, "plain.txt") })).toEqual([])
+        }).pipe(provide(path.join(tmp, "current"))),
+      ),
+    ),
+  )
+
+  it(
+    "expands a `~/`-prefixed path to the server home",
+    Effect.gen(function* () {
+      const filesys = yield* FileSystem.FileSystem
+      const home = yield* filesys.makeTempDirectoryScoped()
+      yield* filesys.makeDirectory(path.join(home, "project"))
+      yield* filesys.makeDirectory(path.join(home, "remotedir"))
+      yield* filesys.writeFileString(path.join(home, "remotedir", "homefile.txt"), "h")
+      yield* filesys.writeFileString(path.join(home, "project", "inside.txt"), "i")
+      const spy = spyOn(os, "homedir").mockReturnValue(home)
+      yield* Effect.gen(function* () {
+        const filesystem = yield* Service
+        const entries = yield* filesystem.find({ query: "homefile", path: "~/remotedir" })
+        expect(entries.map((entry) => ({ path: entry.path, type: entry.type }))).toEqual([
+          { path: RelativePath.make(path.join("..", "remotedir", "homefile.txt")), type: "file" },
+        ])
+        const inside = yield* filesystem.find({ query: "inside", path: "~/project" })
+        expect(inside.map((entry) => ({ path: entry.path, type: entry.type }))).toEqual([
+          { path: RelativePath.make("inside.txt"), type: "file" },
+        ])
+      }).pipe(
+        Effect.ensuring(Effect.sync(() => spy.mockRestore())),
+        provide(path.join(home, "project")),
+      )
+    }),
+  )
+
+  it(
+    "applies direct-children semantics to a provided path inside the location",
+    Effect.gen(function* () {
+      let observed: FindInput | undefined
+      const recorded = Layer.succeed(
+        FileSystemSearch.Service,
+        FileSystemSearch.Service.of({
+          find: (input) => {
+            observed = input
+            return Effect.succeed([])
+          },
+        }),
+      )
+      const tmp = yield* prepare
+      const filesys = yield* FileSystem.FileSystem
+      yield* filesys.writeFileString(path.join(tmp, "current", "here.txt"), "h")
+      yield* filesys.makeDirectory(path.join(tmp, "current", "nested"))
+      yield* Effect.gen(function* () {
+        const filesystem = yield* Service
+        const entries = yield* filesystem.find({ query: "", path: "." })
+        expect(entries.map((entry) => ({ path: entry.path, type: entry.type }))).toEqual([
+          { path: RelativePath.make("nested" + path.sep), type: "directory" },
+          { path: RelativePath.make("here.txt"), type: "file" },
+        ])
+        observed = undefined
+        const outside = yield* filesystem.find({ query: "", path: "../sibling" })
+        expect(observed).toBeUndefined()
+        expect(outside.length).toBe(3)
+      }).pipe(Effect.scoped, provide(path.join(tmp, "current"), recorded))
+    }),
+  )
+
+  it(
+    "delegates searches without a path to the index service",
+    Effect.gen(function* () {
+      let observed: FindInput | undefined
+      const recorded = Layer.succeed(
+        FileSystemSearch.Service,
+        FileSystemSearch.Service.of({
+          find: (input) => {
+            observed = input
+            return Effect.succeed([])
+          },
+        }),
+      )
+      const tmp = yield* prepare
+      yield* Effect.gen(function* () {
+        const filesystem = yield* Service
+        expect(yield* filesystem.find({ query: "fragment" })).toEqual([])
+        expect(observed?.query).toBe("fragment")
+        expect(observed?.path).toBeUndefined()
+      }).pipe(Effect.scoped, provide(path.join(tmp, "current"), recorded))
+    }),
+  )
 })

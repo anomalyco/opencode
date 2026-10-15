@@ -51,6 +51,7 @@ import {
   pushPromptHistory,
 } from "./prompt.shared"
 import { parseFileLineRange, parseSlashHead, stripFileLineRange } from "../prompt/parse"
+import { mentionFileSearch } from "../prompt/directory-completion"
 import { Keymap } from "../context/keymap"
 import { realignEditorPromptParts, resolveEditorSlashValue } from "./prompt.editor"
 import { FOOTER_COMPACT_WIDTH, FOOTER_MENU_ROWS, createFooterMenuState, type RunFooterMenuItem } from "./footer.menu"
@@ -457,12 +458,14 @@ export function createPromptState(input: PromptInput): PromptState {
       }
 
       const next = parseFileLineRange(value)
+      const mention = mentionFileSearch(next.base)
       const list = await input.findFiles(next.base)
       return list.map((item): Auto => {
         const url = pathToFileURL(path.resolve(input.directory(), item))
-        let filename = item
+        const name = mention ? mention.prefix + path.basename(item) + (item.endsWith("/") ? "/" : "") : item
+        let filename = name
         if (next.lineRange && !item.endsWith("/")) {
-          filename = `${item}#${next.lineRange.startLine}${next.lineRange.endLine ? `-${next.lineRange.endLine}` : ""}`
+          filename = `${name}#${next.lineRange.startLine}${next.lineRange.endLine ? `-${next.lineRange.endLine}` : ""}`
           url.searchParams.set("start", String(next.lineRange.startLine))
           if (next.lineRange.endLine !== undefined) {
             url.searchParams.set("end", String(next.lineRange.endLine))
