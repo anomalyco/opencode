@@ -50,6 +50,19 @@ export function slashArgumentAutocomplete(
   }
 }
 
+export function mentionFileSearch(query: string) {
+  if (!query) return
+  const outside = query.startsWith("/") || query.startsWith("~") || /(?:^|\/)\.\.(?:\/|$)/.test(query)
+  if (!outside) return
+  const separator = query.lastIndexOf("/")
+  const base = separator === -1 || query.slice(separator + 1) === ".." ? query : query.slice(0, separator) || "/"
+  return {
+    path: base,
+    prefix: base.endsWith("/") ? base : base + "/",
+    fragment: base === query ? "" : query.slice(separator + 1),
+  }
+}
+
 export function directoryAutocompleteSearch(query: string, directory: string, home: string) {
   if (query === "~") return { directory: home, prefix: "~/", query: "" }
   if (query.startsWith("~/")) return directorySearch(query.slice(2), home, "~/")

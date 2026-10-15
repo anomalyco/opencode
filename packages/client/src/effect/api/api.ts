@@ -1977,6 +1977,7 @@ export type FileFindInput = {
   readonly query: string
   readonly type?: "file" | "directory" | undefined
   readonly limit?: number | undefined
+  readonly path?: string | undefined
 }
 export type FileFindOutput = { readonly location: Location.PublicRef; readonly data: ReadonlyArray<FileSystem.Entry> }
 export type FileFindOperation<E = never> = (input: FileFindInput) => Effect.Effect<FileFindOutput, E>
