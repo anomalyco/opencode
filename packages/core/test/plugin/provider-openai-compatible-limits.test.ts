@@ -41,7 +41,7 @@ function eventually<A>(
   })
 }
 
-function configuration(id: string, baseURL: string, models: Record<string, unknown>): Entry {
+function configuration(id: string, baseURL: string, models: Record<string, unknown>, apiKey = "secret"): Entry {
   return new Document({
     type: "document",
     info: decode({
@@ -49,7 +49,7 @@ function configuration(id: string, baseURL: string, models: Record<string, unkno
         [id]: {
           name: "Proxy",
           package: "@opencode/ai/providers/openai-compatible",
-          settings: { baseURL, apiKey: "secret" },
+          settings: { baseURL, apiKey },
           models,
         },
       },
@@ -177,6 +177,35 @@ describe("OpenAICompatibleLimitsPlugin", () => {
           }),
         ({ server }) => Effect.promise(() => server.stop(true)),
       ),
+  )
+
+  it.live("treats an empty apiKey as absent and sends no authorization header", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const authorizations: Array<string | null> = []
+        const server = Bun.serve({
+          port: 0,
+          fetch: (request) => {
+            authorizations.push(request.headers.get("authorization"))
+            return Response.json({ data: [{ id: "open-model", context_length: 300_000 }] })
+          },
+        })
+        return { authorizations, server }
+      }),
+      ({ authorizations, server }) =>
+        Effect.gen(function* () {
+          const modelState = yield* Model.Service
+          yield* addPlugins([configuration("open-proxy", `${server.url.origin}/v1`, { "open-model": {} }, "")])
+
+          yield* eventually(
+            modelState.get(Provider.ID.make("open-proxy"), Model.ID.make("open-model")),
+            (model) => model?.limit.context === 300_000,
+          )
+          expect(authorizations.length).toBeGreaterThan(0)
+          expect(authorizations.every((value) => value === null)).toBe(true)
+        }),
+      ({ server }) => Effect.promise(() => server.stop(true)),
+    ),
   )
 
   it.live("fails open on erroring endpoints and still applies live ones", () =>

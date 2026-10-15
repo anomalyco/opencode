@@ -147,7 +147,8 @@ const bearerFrom = (credential: CredentialValue | undefined) => {
   return undefined
 }
 
-const bearerKey = (apiKey: string | undefined) => (apiKey === undefined ? undefined : `Bearer ${apiKey}`)
+// An empty key is absent, matching local providers, so the probe sends no bare `Bearer ` header.
+const bearerKey = (apiKey: string | undefined) => (apiKey ? `Bearer ${apiKey}` : undefined)
 
 export const OpenAICompatibleLimitsPlugin = define({
   id: "opencode.provider.openai-compatible-limits",
