@@ -127,9 +127,18 @@ export const LANGUAGE_EXTENSIONS: Record<string, string> = {
   ".typc": "typst",
 }
 
+// Installed by util/languages so this module stays free of OpenTUI for the CLI's non-interactive output.
+let registered: (extension: string) => string | undefined = () => undefined
+
+/** Consults extensions registered at runtime before the built-in table. */
+export function setRegisteredExtensions(lookup: (extension: string) => string | undefined) {
+  registered = lookup
+}
+
 export function filetype(input?: string) {
   if (!input) return "none"
-  const language = LANGUAGE_EXTENSIONS[path.extname(input)]
+  const extension = path.extname(input)
+  const language = registered(extension) ?? LANGUAGE_EXTENSIONS[extension]
   if (["typescriptreact", "javascriptreact", "javascript"].includes(language)) return "typescript"
   return language
 }
