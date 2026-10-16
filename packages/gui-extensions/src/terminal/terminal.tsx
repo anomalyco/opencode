@@ -13,7 +13,7 @@ import type { TerminalModel } from "./model"
 import type { LocalPTY } from "./state"
 import { SerializeAddon } from "./serialize"
 import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "./runtime-adapters"
-import { terminalKeyInput } from "./terminal-key-event"
+import { consumeTerminalMetaKey, terminalKeyInput } from "./terminal-key-event"
 import { terminalWriter } from "./writer"
 
 // Serialization on unmount is a synchronous O(rows x cols) walk on the main thread and the
@@ -481,7 +481,12 @@ export const Terminal = (props: TerminalProps) => {
         }
 
         // allow for toggle terminal keybinds in parent
-        return keybinds.matches("terminal.toggle", event)
+        if (keybinds.matches("terminal.toggle", event)) return true
+
+        return consumeTerminalMetaKey(event, {
+          paste: () => void document.execCommand("paste"),
+          copy: () => t.hasSelection() && (document.execCommand("copy") || t.copySelection()),
+        })
       })
 
       const fit = new mod.FitAddon()

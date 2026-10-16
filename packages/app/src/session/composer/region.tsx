@@ -133,20 +133,23 @@ export function createActiveSessionRegion(input: {
     return current instanceof HTMLElement ? current : undefined
   }
 
+  const shouldIgnoreAutoFocus = (
+    path: EventTarget[],
+    target: HTMLElement | undefined,
+    current: HTMLElement | undefined,
+  ) =>
+    path.some((item) => item instanceof HTMLElement && item.closest("[data-prevent-autofocus]") !== null) ||
+    editable(target) ||
+    Boolean(current && (current.closest("[data-prevent-autofocus]") || editable(current))) ||
+    Boolean(dialog.active)
+
   const handleKeyDown = (event: KeyboardEvent) => {
     if (event.defaultPrevented) return
     const path = event.composedPath()
     const target = path.find((item): item is HTMLElement => item instanceof HTMLElement)
-    const active = activeElement()
+    const current = activeElement()
 
-    if (
-      path.some((item) => item instanceof HTMLElement && item.closest("[data-prevent-autofocus]") !== null) ||
-      editable(target) ||
-      (active && (active.closest("[data-prevent-autofocus]") || editable(active))) ||
-      dialog.active
-    ) {
-      return
-    }
+    if (shouldIgnoreAutoFocus(path, target, current)) return
 
     if (event.key === "Escape" && input.session.data.isChild()) {
       event.preventDefault()
@@ -155,7 +158,7 @@ export function createActiveSessionRegion(input: {
       return
     }
 
-    if (active === promptRef) {
+    if (current === promptRef) {
       if (event.key === "Escape") promptRef?.blur()
 
       return
@@ -181,7 +184,34 @@ export function createActiveSessionRegion(input: {
     setCursorPosition(promptRef, prompt.cursor() ?? promptLength(prompt.current()))
   }
 
-  onMount(() => makeEventListener(document, "keydown", handleKeyDown))
+  const handlePaste = (event: ClipboardEvent) => {
+    if (event.defaultPrevented) return
+    const path = event.composedPath()
+    const target = path.find((item): item is HTMLElement => item instanceof HTMLElement)
+
+    if (shouldIgnoreAutoFocus(path, target, activeElement())) return
+    const controller = active()
+
+    if (
+      state.blocked() ||
+      input.session.data.isChild() ||
+      !controller ||
+      !promptRef ||
+      !promptRef.isConnected ||
+      !promptRef.isContentEditable
+    ) {
+      return
+    }
+
+    promptRef.focus()
+    setCursorPosition(promptRef, prompt.cursor() ?? promptLength(prompt.current()))
+    controller.composer.onPaste(event)
+  }
+
+  onMount(() => {
+    makeEventListener(document, "keydown", handleKeyDown)
+    makeEventListener(document, "paste", handlePaste)
+  })
 
   const revert = createSessionRevert({
     session: input.session,

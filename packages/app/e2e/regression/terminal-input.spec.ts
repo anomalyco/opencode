@@ -8,15 +8,40 @@ const workspace = { name: "TerminalInput", pty: {} } satisfies WorkspaceInput
 
 test.use({ viewport: { width: 1440, height: 900 } })
 
-test("clears the terminal line with Command+Delete", async ({ page }) => {
+test("clears the terminal line with Command+Delete and suppresses printable Command chords", async ({ page }) => {
   const { pty } = await openSession(page, workspace)
   const terminal = page.locator('[data-component="terminal"]')
   await page.keyboard.press("Control+Backquote")
   await expect(terminal.locator("textarea")).toHaveCount(1)
   await expect.poll(() => pty.sockets.length).toBe(1)
 
+  await page.keyboard.press("Meta+k")
+  await page.keyboard.press("Meta+a")
+  await page.keyboard.press("Meta+v")
+  await terminal.locator("textarea").evaluate((textarea) => {
+    textarea.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "v",
+        code: "Period",
+        metaKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    )
+    const clipboardData = new DataTransfer()
+    clipboardData.setData("text/plain", "echo pasted")
+    textarea.dispatchEvent(
+      new ClipboardEvent("paste", {
+        clipboardData,
+        bubbles: true,
+        cancelable: true,
+      }),
+    )
+  })
+  await expect.poll(() => pty.sockets[0]!.input.join("")).toBe("echo pasted")
+
   await page.keyboard.press("Meta+Backspace")
-  await expect.poll(() => pty.sockets[0]!.input.join("")).toBe("\x15")
+  await expect.poll(() => pty.sockets[0]!.input.join("")).toBe("echo pasted\x15")
 })
 
 test("reveals the terminal after its first output and hides the native caret", async ({ page }) => {
@@ -50,10 +75,26 @@ test("routes typing to the composer unless the open terminal is focused", async 
   await expect(terminal).toHaveCSS("opacity", "1")
   await page.evaluate(() => {
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
+
+    const clipboardData = new DataTransfer()
+    clipboardData.setData("text/plain", "pasted ")
+    document.body.dispatchEvent(
+      new ClipboardEvent("paste", {
+        clipboardData,
+        bubbles: true,
+        cancelable: true,
+      }),
+    )
+  })
+  await expect(editor).toBeFocused()
+  await expect(editor).toHaveText("pasted ")
+
+  await page.evaluate(() => {
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
   })
   await page.keyboard.type("a")
   await expect(editor).toBeFocused()
-  await expect(editor).toHaveText("a")
+  await expect(editor).toHaveText("pasted a")
 })
 
 for (const mount of ["cached", "explicit"] as const) {
