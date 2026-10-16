@@ -112,6 +112,10 @@ Configure mouse capture, scrolling, editor context, pastes, and prompt image pre
 
 </div>
 
+`prompt.history_scope` scopes recall, not storage: every session's prompts still persist in the
+shared `prompt-history.jsonl` in both modes. It is not a data-retention or privacy control,
+though with `session` another session can no longer recall a prompt entered in this one.
+
 ## Sessions
 
 Configure how full-screen TUI sessions are presented and where new sessions start:
