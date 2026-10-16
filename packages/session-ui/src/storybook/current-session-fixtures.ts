@@ -562,6 +562,31 @@ export const executeCodeDocument = document([
         output: "[]",
         metadata: { toolCalls: [{ tool: "browser.tabs.list", status: "completed" }] },
       }),
+      completedTool({
+        id: "tool_execute_long_args",
+        name: "execute",
+        offset: 52_700,
+        args: {
+          code: 'return await tools.slack.conversations.history({ channel: "C0BFS9520BG", oldest: "1791520000.000000", limit: 200, include_all_metadata: true, thought: "Read the full #gooey history since the beta announcement so the reply can link every related thread." })',
+        },
+        output: "[]",
+        metadata: {
+          toolCalls: [
+            {
+              tool: "slack.conversations.history",
+              status: "completed",
+              input: {
+                channel: "C0BFS9520BG",
+                oldest: "1791520000.000000",
+                limit: 200,
+                include_all_metadata: true,
+                thought:
+                  "Read the full #gooey history since the beta announcement so the reply can link every related thread.",
+              },
+            },
+          ],
+        },
+      }),
     ],
   }),
 ] satisfies SessionMessageInfo[])

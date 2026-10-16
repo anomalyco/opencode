@@ -179,6 +179,26 @@ story("opens an execution's code and output from its View code action", async ({
   await expect(dialog.getByRole("button", { name: "Copy output" })).toBeVisible()
 })
 
+story("truncates a long Code Mode call's arguments inside the execution row", async ({ mount }) => {
+  const timeline = await mount("current-session-terminal-work--execute-code")
+  const execution = timeline.locator('[data-timeline-part-id="tool_execute_long_args"]')
+  await expect(execution.locator('[data-slot="execute-tool-call-args"]')).toBeVisible()
+
+  // The arguments stay on one line, so they must ellipsize within the execution rather than run past it.
+  const layout = await execution.evaluate((root) => {
+    const row = root.querySelector('[data-slot="execute-tool-call"]')!.getBoundingClientRect()
+    const args = root.querySelector('[data-slot="execute-tool-call-args"]')!
+
+    return {
+      overflow: row.right - root.getBoundingClientRect().right,
+      truncated: args.scrollWidth > args.clientWidth,
+    }
+  })
+
+  expect(layout.overflow).toBeLessThanOrEqual(0)
+  expect(layout.truncated).toBe(true)
+})
+
 story("shows a failed execution's error in place of its output", async ({ mount }) => {
   const timeline = await mount("current-session-terminal-work--execute-failed")
   await timeline.getByRole("button", { name: /^Used 5 / }).click()

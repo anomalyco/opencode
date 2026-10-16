@@ -190,8 +190,10 @@
     }
   }
 
+  /* As a flex item the content would otherwise grow to its widest unwrapped line, so nothing inside could truncate. */
   > [data-slot="collapsible-content"] {
     flex-basis: 100%;
+    min-width: 0;
   }
 }
 
