@@ -154,6 +154,8 @@ it.live("maps imported message-ID collisions to 409 without creating the session
       resource: second,
       message: `Session messages already exist: ${second}`,
     })
+    // The rejected import must not have created the destination session (the
+    // failure mode when the constraint fires mid-publication).
     expect(yield* request(`/api/session/${second}`, undefined, 404)).toMatchObject({
       _tag: "SessionNotFoundError",
       sessionID: second,
