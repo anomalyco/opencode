@@ -19,6 +19,7 @@ async function setup(copyOnSelect = false) {
     read: async () => undefined,
     write: async (text) => {
       writes.push(text)
+      return "written" as const
     },
   }
   app.renderer.keyInput.on("keypress", (event) =>

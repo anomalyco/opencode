@@ -20,6 +20,15 @@ import { CpuProfile } from "./cpu-profile"
 
 ensurePluginRuntime()
 
+if (process.env.OPENCODE_CLIPBOARD_HELPER === "1") {
+  const { runClipboardProcess } = await import("@opencode/tui/clipboard-process")
+  await runClipboardProcess().catch((error: unknown) => {
+    process.stderr.write((error instanceof Error ? error.message : String(error)) + "\n")
+    process.exit(1)
+  })
+  process.exit(0)
+}
+
 if (process.env.OPENCODE_SSH_ASKPASS_PORT) {
   const { askpass } = await import("./ssh-askpass")
   process.exit(await Effect.runPromise(askpass.pipe(Effect.provide(NodeServices.layer))))

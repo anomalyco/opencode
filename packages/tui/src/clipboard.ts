@@ -7,16 +7,32 @@ import {
   type RendererClipboardBoundary,
 } from "@opentui/core"
 import type { ClipboardContent, ClipboardService } from "./context/clipboard"
+import { createTmuxClipboard } from "./clipboard/tmux"
+import { createClipboardProcess } from "./clipboard/process"
 
 export type OwnedClipboardService = Required<ClipboardService> & Readonly<{ dispose(): Promise<void> }>
 
-export function createTuiClipboard(renderer: RendererClipboardBoundary): OwnedClipboardService {
-  return createClipboardAdapter(
-    createClipboard({
-      host: createHostClipboard(),
-      terminal: createRendererClipboardAdapter(renderer),
-    }),
+export function createTuiClipboard(
+  renderer: RendererClipboardBoundary,
+  command?: ReadonlyArray<string>,
+): OwnedClipboardService {
+  const host = command ? createClipboardProcess(command) : undefined
+  const clipboard = createTmuxClipboard(
+    createClipboardAdapter(
+      createClipboard({
+        host: createHostClipboard(),
+        terminal: createRendererClipboardAdapter(renderer),
+      }),
+    ),
+    process.env,
+    host,
   )
+  return {
+    ...clipboard,
+    async dispose() {
+      await Promise.all([clipboard.dispose(), host?.dispose()])
+    },
+  }
 }
 
 export function createClipboardAdapter(clipboard: CoreClipboardService): OwnedClipboardService {
@@ -56,7 +72,8 @@ export function createClipboardAdapter(clipboard: CoreClipboardService): OwnedCl
         destination: "all-available",
         selection: "clipboard",
       })
-      if (result.host.status === "written" || result.terminal.status === "attempted") return
+      if (result.host.status === "written") return "written"
+      if (result.terminal.status === "attempted") return "attempted"
       if (result.host.status === "failed") throw result.host.error
       throw new Error(`Clipboard write failed (host: ${result.host.status}, terminal: ${result.terminal.status})`)
     },

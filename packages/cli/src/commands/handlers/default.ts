@@ -15,11 +15,14 @@ import { Service } from "@opencode/client/effect/service"
 import { OpenCode } from "@opencode/client/promise"
 import { findSession } from "../../session-target"
 import { errorMessage } from "../../util/error"
+import { selfCommand } from "../../util/process"
+import { fileURLToPath } from "node:url"
 
 export default Runtime.handler(Commands, (input) =>
   Effect.gen(function* () {
     const requestedDirectory = Option.getOrUndefined(input.directory)
     const requestedServer = Option.getOrUndefined(input.server)
+    const command = selfCommand()
     if (requestedDirectory !== undefined) process.chdir(requestedDirectory)
     const preflight = UpdatePreflight.make()
     yield* Effect.addFinalizer(() => Effect.promise(() => preflight.close()))
@@ -56,7 +59,10 @@ export default Runtime.handler(Commands, (input) =>
       session !== undefined &&
       (yield* Effect.tryPromise({
         try: () =>
-          findSession(OpenCode.make({ baseUrl: server.endpoint.url, headers: Service.headers(server.endpoint) }), session),
+          findSession(
+            OpenCode.make({ baseUrl: server.endpoint.url, headers: Service.headers(server.endpoint) }),
+            session,
+          ),
         catch: (cause) => new Error(errorMessage(cause)),
       })) !== undefined
     const updater = yield* Updater.Service
@@ -141,6 +147,11 @@ export default Runtime.handler(Commands, (input) =>
         prepare: (spec, install = true) => runPromise(install ? npm.add(spec) : npm.resolve(spec)),
       },
       environment: requestedServer === undefined ? Env.session() : undefined,
+      // Source-mode helpers need the CLI's bunfig and JSX configuration after chdir.
+      clipboardCommand:
+        command.length === 2 && process.versions.bun
+          ? [command[0], "--cwd", fileURLToPath(new URL("../../../", import.meta.url)), command[1]]
+          : command,
       terminalHandoff: () => preflight.finish(),
       log: (level, message, tags) => {
         const effect =

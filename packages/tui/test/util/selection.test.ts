@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import type { SelectionBehavior } from "@opentui/core"
-import type { ClipboardService } from "../../src/context/clipboard"
+import type { ClipboardService, ClipboardWriteResult } from "../../src/context/clipboard"
 import { Selection, copy, copyOnSelectRelease } from "../../src/util/selection"
 
 function renderer() {
@@ -22,6 +22,7 @@ function setup(text: string, isStart: boolean, behavior: SelectionBehavior = "ce
     read: async () => undefined,
     write: async (value) => {
       writes.push(value)
+      return "written" as const
     },
   }
   const renderer = {
@@ -54,7 +55,9 @@ test("copy writes selected text without clearing the highlight", () => {
       async read() {
         return undefined
       },
-      async write() {},
+      async write() {
+        return "written"
+      },
     },
   )
   expect(copied).toBe(true)
@@ -69,6 +72,7 @@ test("copy-on-select ignores a later non-drag release", () => {
     },
     async write(value: string) {
       writes.push(value)
+      return "written" as const
     },
   }
   const toast = { show: () => {}, error: () => {} }
@@ -112,4 +116,19 @@ test("copies a non-empty dragged selection without clearing its highlight", asyn
   await Promise.resolve()
   expect(value.clears()).toBe(0)
   expect(value.writes).toEqual(["selected"])
+})
+
+test.each<ClipboardWriteResult>(["written", "attempted"])("reports a %s clipboard write accurately", async (result) => {
+  const feedback = Promise.withResolvers<{ message: string; variant: string }>()
+  expect(
+    copy(
+      renderer(),
+      { show: feedback.resolve, error: feedback.reject },
+      { read: async () => undefined, write: async () => result },
+    ),
+  ).toBeTrue()
+  expect(await feedback.promise).toEqual({
+    message: result === "written" ? "Copied to clipboard" : "Copy sent to terminal (requires OSC 52 support)",
+    variant: "info",
+  })
 })
