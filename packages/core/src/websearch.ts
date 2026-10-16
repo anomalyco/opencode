@@ -108,8 +108,17 @@ const layer = Layer.effect(
           set: (selection) => (editor.selection = selection),
         },
       }),
-      notify: () => bus.publish(WebSearch.Event.Updated, {}).pipe(Effect.asVoid),
+      notify: State.changes(
+        (data) => providers(data),
+        () => bus.publish(WebSearch.Event.Updated, {}).pipe(Effect.asVoid),
+      ),
     })
+
+    const providers = (data: Data) =>
+      Array.from(data.providers.values(), (provider) => ({
+        id: provider.id,
+        name: provider.name,
+      })).toSorted((a, b) => a.name.localeCompare(b.name))
 
     const requireProvider = (providers: Map<ID, ProviderImplementation>, providerID: ID) => {
       const provider = providers.get(providerID)
@@ -162,10 +171,7 @@ const layer = Layer.effect(
       transform: state.transform,
       reload: state.reload,
       providers: Effect.fn("WebSearch.providers")(function* () {
-        return Array.from(state.get().providers.values(), (provider) => ({
-          id: provider.id,
-          name: provider.name,
-        })).toSorted((a, b) => a.name.localeCompare(b.name))
+        return providers(state.get())
       }),
       default: Effect.fn("WebSearch.defaultInfo")(function* () {
         const provider = yield* defaultProvider(yield* selection())

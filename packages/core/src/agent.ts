@@ -69,12 +69,14 @@ const layer = Layer.effect(
           editor.agents.delete(id)
         },
       }),
-      notify: () => bus.publish(Agent.Event.Updated, {}).pipe(Effect.asVoid),
+      notify: State.changes(
+        (data) => list(data),
+        () => bus.publish(Agent.Event.Updated, {}).pipe(Effect.asVoid),
+      ),
     })
     const selectable = (agent: Info | undefined) =>
       agent && agent.mode !== "subagent" && !agent.hidden ? agent : undefined
-    const selectedDefault = () => {
-      const data = state.get()
+    const selectedDefault = (data: Data) => {
       const configured = data.default ? selectable(data.agents.get(data.default)) : undefined
       if (configured) return configured
       const build = selectable(data.agents.get(ID.make("build")))
@@ -83,6 +85,12 @@ const layer = Layer.effect(
         const fallback = selectable(agent)
         if (fallback) return fallback
       }
+    }
+    const list = (data: Data) => {
+      const agents = Array.fromIterable(data.agents.values())
+      const selected = selectedDefault(data)
+      if (!selected) return agents
+      return [selected, ...agents.filter((agent) => agent.id !== selected.id)]
     }
 
     return Service.of({
@@ -93,21 +101,18 @@ const layer = Layer.effect(
       }),
       resolve: Effect.fnUntraced(function* (id) {
         if (id !== undefined) return state.get().agents.get(ID.make(id))
-        return selectedDefault()
+        return selectedDefault(state.get())
       }),
       select: Effect.fn("Agent.select")(function* (id) {
         if (id !== undefined) {
           const selected = ID.make(id)
           return { id: selected, info: state.get().agents.get(selected) }
         }
-        const info = selectedDefault()
+        const info = selectedDefault(state.get())
         return { id: info?.id ?? defaultID, info }
       }),
       list: Effect.fn("Agent.list")(function* () {
-        const agents = Array.fromIterable(state.get().agents.values())
-        const selected = selectedDefault()
-        if (!selected) return agents
-        return [selected, ...agents.filter((agent) => agent.id !== selected.id)]
+        return list(state.get())
       }),
     })
   }),

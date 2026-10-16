@@ -40,6 +40,10 @@ const layer = Layer.effect(
     const pendingFailures = yield* Queue.unbounded<PendingFailure>()
     let discovered: readonly Failure[] = []
     let inventory: Plugin.Info[] = []
+    const publish = State.changes(
+      (items: readonly Plugin.Info[]) => items,
+      () => bus.publish(Plugin.Event.Updated, {}).pipe(Effect.asVoid),
+    )
     const list = Effect.fn("Plugin.list")(function* () {
       return inventory
     })
@@ -115,10 +119,8 @@ const layer = Layer.effect(
                 if (entry) active.set(definition.id, { ...entry, plugin: definition })
               }
               if (prefix === definitions.length && active.size === definitions.length) {
-                const nextInventory = [...Array.from(active.values()).map(slotInfo), ...failures]
-                if (JSON.stringify(inventory) === JSON.stringify(nextInventory)) return
-                inventory = nextInventory
-                yield* bus.publish(Plugin.Event.Updated, {})
+                inventory = [...Array.from(active.values()).map(slotInfo), ...failures]
+                yield* publish(inventory)
                 return
               }
 
@@ -172,7 +174,7 @@ const layer = Layer.effect(
                   inventory = [...Array.from(active.values()).map(slotInfo), ...failures]
                 }),
               )
-              yield* bus.publish(Plugin.Event.Updated, {})
+              yield* publish(inventory)
             }),
           ),
         (release) => release,
@@ -195,7 +197,7 @@ const layer = Layer.effect(
               // cannot disable a replacement and teardown need not wait for this worker.
               inventory = [...Array.from(active.values()).map(slotInfo), ...discovered]
               const refreshed = yield* State.batch(item.refresh).pipe(Effect.exit)
-              yield* bus.publish(Plugin.Event.Updated, {})
+              yield* publish(inventory)
               if (Exit.isFailure(refreshed))
                 yield* Effect.logWarning("failed to refresh state after disabling plugin", {
                   "plugin.id": item.plugin.id,

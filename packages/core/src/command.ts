@@ -60,7 +60,10 @@ export const layer = Layer.effect(
       editor: (editor) => ({
         add: (definition) => editor.set(definition.name, definition),
       }),
-      notify: () => bus.publish(Command.Event.Updated, {}).pipe(Effect.asVoid),
+      notify: State.changes(
+        (commands) => Array.from(commands.values(), info),
+        () => bus.publish(Command.Event.Updated, {}).pipe(Effect.asVoid),
+      ),
     })
     const info = (definition: Definition) =>
       Info.make({

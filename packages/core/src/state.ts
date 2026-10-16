@@ -1,5 +1,6 @@
 export * as State from "./state.js"
 
+import { createHash } from "node:crypto"
 import { Cause, Context, Effect, Exit, Fiber, Scope } from "effect"
 
 /**
@@ -124,6 +125,27 @@ export function reconcile(
     if (Exit.isFailure(exit) && root.state._tag === "Closed" && Cause.hasInterruptsOnly(exit.cause)) return
     yield* exit
   })
+}
+
+/**
+ * Runs `notify` only when the serialized fingerprint of `project(state)` differs from the last
+ * notified value. The first notification always runs so a freshly booted Location announces its
+ * current catalog even when empty.
+ */
+export function changes<State>(
+  project: (state: State) => unknown,
+  notify: (state: State) => Effect.Effect<void>,
+): (state: State) => Effect.Effect<void> {
+  let published: string | undefined
+  return (state) =>
+    Effect.suspend(() => {
+      const next = createHash("sha1")
+        .update(JSON.stringify(project(state)) ?? "")
+        .digest("hex")
+      if (next === published) return Effect.void
+      published = next
+      return notify(state)
+    })
 }
 
 export const inherit = Effect.fnUntraced(function* () {

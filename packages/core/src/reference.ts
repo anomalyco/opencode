@@ -101,11 +101,12 @@ const layer = Layer.effect(
         list: () => Array.from(editor.sources),
         get: (name) => editor.sources.get(name),
       }),
-      notify: () =>
+      notify: State.changes(list, () =>
         Effect.gen(function* () {
           yield* refresh().pipe(Effect.forkIn(scope))
           yield* bus.publish(Reference.Event.Updated, {})
         }),
+      ),
     })
 
     // Check independently of session activity; the shared cache throttles Git work daily.
