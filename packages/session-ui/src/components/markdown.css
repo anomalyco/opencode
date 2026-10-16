@@ -109,37 +109,26 @@
     text-underline-offset: 2px;
   }
 
-  a.external-link:is(
-      [href="https://github.com" i],
-      [href^="https://github.com/" i],
-      [href="http://github.com" i],
-      [href^="http://github.com/" i]
-    ):not(:has(img))::before {
-    content: "";
-    display: inline-block;
-    width: 14px;
-    height: 14px;
-    margin-inline-end: 4px;
-    vertical-align: -0.125em;
-    background: currentColor;
-    mask: url("./markdown-github.svg") center / contain no-repeat;
-  }
-
+  /* An atomic inline such as inline-block leaves a line break opportunity before the label, so the icon stays an
+     empty inline box with out-of-flow artwork, which keeps it on the line of the label's first word. */
   .markdown-link-favicon {
     position: relative;
-    display: inline-block;
-    width: 14px;
-    height: 14px;
+    padding-inline-start: 14px;
     margin-inline-end: 4px;
-    vertical-align: -0.125em;
   }
 
   .markdown-link-favicon::before {
     content: "";
     position: absolute;
     inset: 0;
+    height: 14px;
+    margin: auto 0;
     background: currentColor;
     mask: url("./markdown-globe.svg") center / contain no-repeat;
+  }
+
+  .markdown-link-favicon[data-github]::before {
+    mask-image: url("./markdown-github.svg");
   }
 
   .markdown-link-favicon img {
@@ -148,7 +137,7 @@
     display: block;
     width: 14px;
     height: 14px;
-    margin: 0;
+    margin: auto 0;
     border-radius: 2px;
     cursor: inherit;
     opacity: 0;

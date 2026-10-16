@@ -197,16 +197,16 @@ story("shows a stable GitHub mark without changing link text or other sites", as
   const github = markdown.getByRole("link", { name: "#540" })
   await expect(github).toHaveAttribute("href", "https://github.com/anomalyco/opencode/pull/540")
   await expect(github).toHaveText("#540")
-  expect(await github.evaluate((link) => getComputedStyle(link, "::before").width)).toBe("14px")
-  expect(await github.evaluate((link) => getComputedStyle(link, "::before").maskImage)).toContain("data:image/svg+xml")
-  expect(
-    await markdown.getByRole("link", { name: "GitHub" }).evaluate((link) => getComputedStyle(link, "::before").content),
-  ).toBe('""')
+  const mark = github.locator(".markdown-link-favicon[data-github]")
+  expect(await mark.evaluate((icon) => getComputedStyle(icon, "::before").width)).toBe("14px")
+  expect(await mark.evaluate((icon) => getComputedStyle(icon, "::before").maskImage)).toContain("data:image/svg+xml")
+  await expect(mark.locator("img")).toHaveCount(0)
+  await expect(markdown.getByRole("link", { name: "GitHub" }).locator(".markdown-link-favicon[data-github]")).toHaveCount(
+    1,
+  )
 
   for (const name of ["other site", "lookalike"]) {
-    expect(
-      await markdown.getByRole("link", { name }).evaluate((link) => getComputedStyle(link, "::before").content),
-    ).toBe("none")
+    await expect(markdown.getByRole("link", { name }).locator(".markdown-link-favicon[data-github]")).toHaveCount(0)
   }
 })
 
@@ -242,7 +242,7 @@ story("keeps favicon space stable across loading and failure without fetching pr
   const image = docs.locator(".markdown-link-favicon img")
   await expect.poll(() => requested.some((url) => url.includes("developer.mozilla.org"))).toBe(true)
   await expect(image).toHaveCSS("opacity", "0")
-  await expect(docs.locator(".markdown-link-favicon")).toHaveCSS("width", "14px")
+  expect((await docs.locator(".markdown-link-favicon").boundingBox())?.width).toBe(14)
   // A late web font swap also changes the link width; measure after fonts settle.
   await page.evaluate(() => document.fonts.ready.then(() => undefined))
   const width = await docs.evaluate((link) => link.getBoundingClientRect().width)
@@ -253,18 +253,69 @@ story("keeps favicon space stable across loading and failure without fetching pr
   expect(await image.evaluate((favicon) => favicon.onclick)).toBeNull()
   expect(await docs.evaluate((link) => link.getBoundingClientRect().width)).toBe(width)
   expect(
-    await image.evaluate(
-      (favicon) => favicon.getBoundingClientRect().top - favicon.parentElement!.getBoundingClientRect().top,
-    ),
+    await image.evaluate((favicon) => {
+      const image = favicon.getBoundingClientRect()
+      const box = favicon.parentElement!.getBoundingClientRect()
+
+      return image.top + image.height / 2 - (box.top + box.height / 2)
+    }),
   ).toBe(0)
 
   await expect(
     markdown.getByRole("link", { name: "missing" }).locator(".markdown-link-favicon img"),
   ).not.toHaveAttribute("data-loaded", "")
   await expect(markdown.getByRole("link", { name: "private" }).locator(".markdown-link-favicon img")).toHaveCount(0)
-  await expect(markdown.getByRole("link", { name: "GitHub" }).locator(".markdown-link-favicon")).toHaveCount(0)
+  await expect(markdown.getByRole("link", { name: "GitHub" }).locator(".markdown-link-favicon img")).toHaveCount(0)
   expect(requested).toHaveLength(2)
   expect(requested.every((url) => !url.includes("localhost") && !url.includes("github.com"))).toBe(true)
+})
+
+story("keeps link icons on the same line as the start of their label", async ({ page }) => {
+  await page.route("https://www.google.com/s2/favicons?**", (route) =>
+    route.fulfill({ status: 200, contentType: "image/png", body: png }),
+  )
+  await page.evaluate(async (fixture) => {
+    const { mountMarkdown } = await import(fixture)
+    await mountMarkdown({
+      text: [
+        "Read the [MDN reference](https://developer.mozilla.org/docs) and",
+        "[#540](https://github.com/anomalyco/opencode/pull/540) then",
+        "https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/white-space/long-path",
+      ].join(" "),
+      cached: true,
+    })
+  }, fixture)
+  const markdown = page.getByTestId("markdown-fixture").locator('[data-component="markdown"]')
+  await expect(markdown).toHaveAttribute("data-markdown-ready", "")
+  await expect(markdown.locator(".markdown-link-favicon img")).toHaveCount(2)
+  await page.evaluate(() => document.fonts.ready.then(() => undefined))
+
+  const result = await markdown.evaluate((root: HTMLElement) => {
+    const links = Array.from(root.querySelectorAll<HTMLAnchorElement>("a.external-link"))
+
+    // An icon is orphaned when the link's first line fragment, which holds the icon, sits above the label's first glyph.
+    const orphaned = (link: HTMLAnchorElement) => {
+      const text = document.createTreeWalker(link, NodeFilter.SHOW_TEXT).nextNode()!
+      const range = document.createRange()
+      range.setStart(text, 0)
+      range.setEnd(text, 1)
+
+      return range.getBoundingClientRect().top - link.getClientRects()[0].top > 1
+    }
+
+    const widths = Array.from({ length: 400 }, (_, index) => 120 + index).filter((width) => {
+      root.style.width = `${width}px`
+
+      return links.some(orphaned)
+    })
+
+    root.style.width = "160px"
+
+    return { widths, long: links[2].getClientRects().length }
+  })
+
+  expect(result.widths).toEqual([])
+  expect(result.long).toBeGreaterThan(1)
 })
 
 async function resolvedColor(page: Page, token: string) {

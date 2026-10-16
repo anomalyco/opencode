@@ -339,14 +339,13 @@ function markExternalLinkFavicons(root: HTMLDivElement) {
 
     if (url.protocol !== "http:" && url.protocol !== "https:") return
 
-    if (url.hostname.toLowerCase() === "github.com") return
-
     const favicon = document.createElement("span")
     favicon.className = "markdown-link-favicon"
     favicon.setAttribute("aria-hidden", "true")
     const host = url.hostname.toLowerCase()
 
-    if (
+    if (host === "github.com") favicon.dataset.github = ""
+    else if (
       publicFaviconHost.test(host) &&
       !privateFaviconSuffix.test(host) &&
       host !== "home.arpa" &&
