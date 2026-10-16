@@ -90,7 +90,7 @@ export const prepare = Effect.fn("SessionPrompt.prepare")(function* (request: {
   }).pipe(instances.provide(request.session))
 })
 
-const materializeAttachment = Effect.fn("SessionPrompt.materializeAttachment")(function* (
+export const materializeAttachment = Effect.fn("SessionPrompt.materializeAttachment")(function* (
   input: PromptInput.FileAttachment,
 ) {
   const label = attachmentLabel(input)

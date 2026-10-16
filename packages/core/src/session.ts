@@ -190,6 +190,7 @@ export interface Interface {
   readonly generate: (input: {
     sessionID: SessionSchema.ID
     prompt: string
+    files?: PromptInput.Prompt["files"]
   }) => Effect.Effect<string, NotFoundError | SessionGenerate.Error>
   readonly command: (input: {
     sessionID: SessionSchema.ID
@@ -243,6 +244,7 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const app = yield* App.Metadata
     const database = yield* Database.Service
+    const fs = yield* FSUtil.Service
     const db = database.db
     const bus = yield* Bus.Service
     const projects = yield* Project.Service
@@ -416,7 +418,8 @@ const layer = Layer.effect(
       prompt: (input) => sessions.forSession(input.sessionID).prompt(input),
       generate: Effect.fn("Session.generate")(function* (input) {
         const session = yield* result.get(input.sessionID)
-        return yield* SessionGenerate.generate({ session, prompt: input.prompt }).pipe(
+        return yield* SessionGenerate.generate({ session, prompt: input.prompt, files: input.files }).pipe(
+          Effect.provideService(FSUtil.Service, fs),
           Effect.provideService(Instance.Service, instances),
           Effect.provideService(Database.Service, database),
           Effect.provideService(LLMClient.Service, llm),

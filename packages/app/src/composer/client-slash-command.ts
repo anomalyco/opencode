@@ -2,6 +2,7 @@ type ClientSlashCommand = {
   id: string
   trigger: string
   arguments?: boolean
+  images?: boolean
   type: "builtin" | "custom"
 }
 
@@ -24,5 +25,6 @@ export function parseClientSlashCommand(options: readonly ClientSlashCommand[], 
   return {
     id: option.id,
     input: command.input,
+    images: option.images,
   }
 }

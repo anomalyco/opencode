@@ -80,7 +80,7 @@ function submitInput(
   mode: "normal" | "shell" = "normal",
   commands: () => readonly { name: string }[] | undefined = () => [],
   history: string[] = [],
-  clientCommand?: (text: string) => (() => void | Promise<void>) | undefined,
+  clientCommand?: Parameters<typeof createComposerSubmit>[0]["clientCommand"],
   delivery: ComposerDelivery = "steer",
 ) {
   return createComposerSubmit({
@@ -172,6 +172,52 @@ function session(input: {
 }
 
 describe("Composer submission", () => {
+  test.each(["accepted", "failed", "followup"] as const)(
+    "captures client command images and handles %s drafts",
+    async (mode) => {
+      const state = createMemoryComposerState().capture()
+
+      const image = {
+        type: "image" as const,
+        id: "image",
+        filename: "diagram.png",
+        mime: "image/png",
+        blob: { id: "image", url: "data:image/png;base64,YQ==" },
+      }
+
+      const prompt: Prompt = [{ type: "text", content: "/btw explain", start: 0, end: 12 }, image]
+
+      const followup: Prompt = [
+        { type: "text", content: "next question", start: 0, end: 13 },
+        { ...image, id: "next" },
+      ]
+
+      state.set(prompt)
+      state.context.add({ type: "file", path: "unrelated.ts" })
+      let received: unknown
+      await submitInput(active(state, session({ calls: [] })), undefined, "normal", undefined, [], () => ({
+        images: true,
+        run: (files) => {
+          received = files
+
+          if (mode === "failed") throw new Error("Rejected")
+
+          if (mode === "followup") state.set([...followup, image])
+        },
+      })).submit(new Event("submit"))
+
+      const expected = {
+        accepted: [{ type: "text" as const, content: "", start: 0, end: 0 }],
+        failed: prompt,
+        followup,
+      }
+
+      expect(received).toEqual([{ uri: image.blob.url, name: image.filename }])
+      expect(state.current()).toEqual(expected[mode])
+      expect(state.context.items()).toHaveLength(1)
+    },
+  )
+
   test("applies the selection and runs a client argument command without admitting it to the session", async () => {
     const state = createMemoryComposerState().capture()
 
@@ -191,8 +237,10 @@ describe("Composer submission", () => {
     await submitInput(active(state, session({ calls })), undefined, "normal", undefined, history, (text) => {
       expect(text).toBe("/btw why this approach?")
 
-      return () => {
-        calls.push("btw")
+      return {
+        run: () => {
+          calls.push("btw")
+        },
       }
     }).submit(new Event("submit"))
 

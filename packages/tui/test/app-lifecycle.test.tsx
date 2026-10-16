@@ -10,6 +10,80 @@ import { createAppFixture } from "./fixture/app"
 import { waitForHighlightedFrame } from "./fixture/frame"
 import type { PluginInfo } from "@opencode/client"
 
+test.each(["answer", "restore", "followup"])(
+  "/btw releases the composer before generation completes (%s)",
+  async (mode) => {
+    await using files = await tmpdir()
+    const image = path.join(files.path, "diagram.png")
+    await Bun.write(
+      image,
+      Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=",
+        "base64",
+      ),
+    )
+    const response = Promise.withResolvers<Response>()
+    const requested = Promise.withResolvers<unknown>()
+    const sessionID = `ses_btw_${mode}`
+    await using setup = await createAppFixture({
+      args: { sessionID },
+      fetch: async (url, request) => {
+        if (url.pathname === `/api/session/${sessionID}`)
+          return json({
+            data: {
+              id: sessionID,
+              projectID: "proj_fixture",
+              title: "Side question",
+              location: { directory },
+              cost: 0,
+              tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+              time: { created: 0, updated: 0 },
+            },
+          })
+        if (url.pathname === `/api/session/${sessionID}/message`) return json({ data: [], cursor: {} })
+        if (url.pathname === `/api/session/${sessionID}/inbox`) return json({ data: [] })
+        if (url.pathname === `/api/session/${sessionID}/generate`) {
+          requested.resolve(await request.json())
+          return response.promise
+        }
+        return undefined
+      },
+    })
+    try {
+      await setup.ready
+      await setup.waitFor(() => !!setup.renderer.currentFocusedEditor)
+      await setup.mockInput.typeText("/btw explain ")
+      await setup.mockInput.pasteBracketedText(image)
+      await setup.waitForFrame((frame) => frame.includes("[Image 1]"))
+      const submitted = setup.renderer.currentFocusedEditor?.plainText
+      setup.mockInput.pressEnter()
+      expect(await requested.promise).toMatchObject({ files: [expect.objectContaining({ name: "diagram.png" })] })
+      await setup.waitFor(() => setup.renderer.currentFocusedEditor?.plainText === "")
+      if (mode === "followup") await setup.mockInput.typeText("keep my next question")
+      response.resolve(
+        mode === "answer"
+          ? json({ data: { text: "Image answer" } })
+          : json({ _tag: "ServiceUnavailableError", message: "Generation unavailable" }, { status: 503 }),
+      )
+      if (mode === "answer") {
+        await setup.waitForFrame((frame) => frame.includes("Image answer"))
+        setup.mockInput.pressEscape()
+        await setup.waitFor(() => setup.renderer.currentFocusedEditor?.plainText === "")
+      }
+      if (mode === "restore") {
+        await setup.waitFor(() => setup.renderer.currentFocusedEditor?.plainText === submitted)
+        expect(setup.captureCharFrame()).toContain("[Image 1]")
+      }
+      if (mode === "followup") {
+        await setup.waitForFrame((frame) => frame.includes("Generation unavailable"))
+        expect(setup.renderer.currentFocusedEditor?.plainText).toBe("keep my next question")
+      }
+    } finally {
+      response.resolve(new Response("Unavailable", { status: 503 }))
+    }
+  },
+)
+
 test.each([100, 44])("Ctrl-O is immediate, dismissible, and prunes cached deletions at width %s", async (width) => {
   await using state = await tmpdir()
   const requested = Promise.withResolvers<void>()

@@ -54,26 +54,33 @@ export default Plugin.define({
               description: "One-shot answer from the session's context without adding to the conversation",
               group: "Session",
               palette: true,
-              slash: { name: "btw", arguments: true },
-              async run(input) {
+              slash: { name: "btw", arguments: true, images: true },
+              async run(input, _event, files) {
                 const route = context.ui.router.current()
                 if (route.type !== "session") {
                   toast.show({ message: "Open a session first", variant: "warning" })
+                  if (files !== undefined) throw new Error("Open a session first")
                   return
                 }
                 const question =
                   input?.trim() || (await context.ui.dialog.prompt({ title: "/btw", placeholder: "Ask anything" }))
-                if (!question) return
+                if (!question) {
+                  if (files !== undefined) throw new Error("Question is required")
+                  return
+                }
                 setPending((count) => count + 1)
                 await context.client.session
-                  .generate({ sessionID: route.sessionID, prompt: [instructions, question].join("\n\n") })
+                  .generate({ sessionID: route.sessionID, prompt: [instructions, question].join("\n\n"), files })
                   .then((result) => {
                     context.ui.dialog.show(() => (
                       <Answer question={question} answer={result.text.trim()} markdown={plugins.markdown} />
                     ))
                     context.ui.dialog.set({ size: "large", centered: true })
                   })
-                  .catch((cause: unknown) => toast.error(cause))
+                  .catch((cause: unknown) => {
+                    toast.error(cause)
+                    if (files !== undefined) throw cause
+                  })
                   .finally(() => setPending((count) => count - 1))
               },
             },

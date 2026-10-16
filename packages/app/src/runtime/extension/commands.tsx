@@ -26,6 +26,7 @@ export function ExtensionCommands() {
         keybind: item.value.bind,
         slash: item.value.slash?.name,
         slashArguments: item.value.slash?.arguments,
+        slashImages: item.value.slash?.images,
         slashAfter: item.value.slash?.after,
         suggested: item.value.suggested,
         featured: item.value.featured,
@@ -34,9 +35,9 @@ export function ExtensionCommands() {
         editable: item.value.editable,
         when: item.value.scope
           ? (event: KeyboardEvent) =>
-              event.target instanceof Element && !!event.target.closest(item.value.scope as string)
+              event.target instanceof Element && !!item.value.scope && !!event.target.closest(item.value.scope)
           : undefined,
-        onSelect: (_source: unknown, input?: string) => item.value.run(input),
+        onSelect: (_source, input, files) => item.value.run(input, files),
       })),
   )
 

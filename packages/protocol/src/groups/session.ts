@@ -707,7 +707,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     .add(
       HttpApiEndpoint.post("session.generate", "/api/session/:sessionID/generate", {
         params: { sessionID: Session.ID },
-        payload: Schema.Struct({ prompt: Schema.String }),
+        payload: Schema.Struct({ prompt: Schema.String, files: PromptInput.Prompt.fields.files }),
         success: Schema.Struct({
           data: Schema.Struct({ text: Schema.String }),
         }).annotate({ identifier: "SessionGenerateResponse" }),

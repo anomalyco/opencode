@@ -414,7 +414,11 @@ export type SessionInstructionsEntryRemoveOperation<E = never> = (
   input: SessionInstructionsEntryRemoveInput,
 ) => Effect.Effect<SessionInstructionsEntryRemoveOutput, E>
 
-export type SessionGenerateInput = { readonly sessionID: Session.ID; readonly prompt: string }
+export type SessionGenerateInput = {
+  readonly sessionID: Session.ID
+  readonly prompt: string
+  readonly files?: ReadonlyArray<PromptInput.FileAttachment> | undefined
+}
 export type SessionGenerateOutput = { readonly text: string }
 export type SessionGenerateOperation<E = never> = (
   input: SessionGenerateInput,

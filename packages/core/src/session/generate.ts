@@ -8,14 +8,18 @@ import { Instance } from "../instance/service.js"
 import { Plugin } from "../plugin/service.js"
 import type { Instructions } from "../instructions/index.js"
 import { SessionContext } from "./context.js"
-import type { AgentNotFoundError } from "./error.js"
+import type { AgentNotFoundError, AttachmentError } from "./error.js"
 import { SessionHistory } from "./history.js"
 import { SessionProviderContext } from "./provider-context.js"
 import { SessionModelRequest } from "./model-request.js"
 import type { SessionRunnerModel } from "./runner/model.js"
 import type { SessionSchema } from "./schema.js"
+import type { PromptInput } from "@opencode/schema/prompt-input"
+import { SessionPrompt } from "./prompt.js"
+import { userAttachmentContent } from "./runner/to-llm-message.js"
 
 export type Error =
+  | AttachmentError
   | AgentNotFoundError
   | Instructions.InitializationBlocked
   | SessionRunnerModel.Error
@@ -26,6 +30,7 @@ export type Error =
 export const generate = Effect.fn("SessionGenerate.generate")(function* (input: {
   session: SessionSchema.Info
   prompt: string
+  files?: PromptInput.Prompt["files"]
 }) {
   const instances = yield* Instance.Service
   const database = yield* Database.Service
@@ -36,6 +41,7 @@ export const generate = Effect.fn("SessionGenerate.generate")(function* (input: 
     const context = yield* SessionContext.Service
     const selection = yield* context.select(input.session.id)
     const model = yield* context.resolveModel(selection.session)
+    const files = yield* Effect.forEach(input.files ?? [], SessionPrompt.materializeAttachment, { concurrency: 8 })
     const history = yield* SessionHistory.preview(
       database.db,
       selection.session.id,
@@ -58,7 +64,7 @@ export const generate = Effect.fn("SessionGenerate.generate")(function* (input: 
       messages: [
         ...transcript.messages,
         ...(history.instructionUpdate ? [Message.system(history.instructionUpdate)] : []),
-        Message.user(input.prompt),
+        Message.user([Message.text(input.prompt), ...userAttachmentContent(files)]),
       ],
     })
     yield* Effect.logInfo("sending session generation request", {

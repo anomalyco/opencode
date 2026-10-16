@@ -1,4 +1,5 @@
 import type { JSX } from "solid-js"
+import type { PromptInput } from "@opencode/schema/prompt-input"
 import type { IconName } from "@opencode/ui/icons/catalog"
 import { Registry } from "./core"
 import type { SessionRef, MountedSession, SessionScreen } from "./host-apis"
@@ -37,6 +38,8 @@ export interface Command {
     readonly name: string
     /** The text after the name is passed to `run`. */
     readonly arguments?: true
+    /** Passes attached images to `run` and consumes them after acceptance. Omitted commands retain their images. */
+    readonly images?: true
     /** Lists this entry right after the slash entry with this name, e.g. "open", when one is present. */
     readonly after?: string
   }
@@ -59,8 +62,9 @@ export interface Command {
    * Runs the command from the palette, the keybind or the slash command.
    *
    * @param input - The slash command's arguments, when `slash.arguments` is set.
+   * @param files - Captured image attachments when `slash.images` is set; absent for palette and keybind calls.
    */
-  run(input?: string): void | Promise<void>
+  run(input?: string, files?: PromptInput.Prompt["files"]): void | Promise<void>
 }
 
 /** The fields every `MenuItem` has, whichever menu it is in. */
