@@ -1,6 +1,5 @@
 export * as GenUISession from "./session.js"
 
-import { Message } from "@opencode/ai"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import type { Session } from "@opencode/schema/session"
 import { Effect, Stream } from "effect"
@@ -22,25 +21,17 @@ export const register = Effect.fn("GenUISession.register")(function* (ctx: {
   readonly session: Pick<Context["session"], "hook" | "synthetic">
   readonly event: Context["event"]
 }) {
-  // In memory only: after a restart a session counts as unknown, not left, until its next prompt.
+  // In memory only: after a restart a session counts as unknown, so its next app prompt repeats the reminder once.
   const available = new Map<Session.ID, boolean>()
 
-  yield* ctx.session.hook("prompt", (event) =>
-    Effect.sync(() => {
-      available.set(event.sessionID, event.metadata?.genui === true)
-    }),
-  )
-
-  yield* ctx.session.hook("context", (event) => {
-    const offered = available.get(event.sessionID)
-    if (offered !== true) delete event.tools[GenUI.RENDER_TOOL]
-    const reminder = lastReminder(event.messages)
-    const text =
-      offered === true && reminder !== enter ? enter : offered === false && reminder === enter ? leave : undefined
+  yield* ctx.session.hook("prompt", (event) => {
+    const previous = available.get(event.sessionID)
+    const offered = event.metadata?.genui === true
+    available.set(event.sessionID, offered)
+    const text = offered && previous !== true ? enter : !offered && previous === true ? leave : undefined
     if (!text) return Effect.void
-    // Before the user's prompt and near the tail, like Plan mode's reminders, so the cached prefix stays warm.
-    const at = event.messages.at(-1)?.role === "user" ? event.messages.length - 1 : event.messages.length
-    event.messages.splice(at, 0, Message.user(text))
+    // The prompt hook runs before its prompt is admitted, so the reminder is admitted just ahead of it and both reach
+    // the model in one step. Sent from the context hook instead, it arrives after the step and runs another one.
     return ctx.session
       .synthetic({ sessionID: event.sessionID, text, resume: false })
       .pipe(
@@ -49,6 +40,12 @@ export const register = Effect.fn("GenUISession.register")(function* (ctx: {
         ),
       )
   })
+
+  yield* ctx.session.hook("context", (event) =>
+    Effect.sync(() => {
+      if (available.get(event.sessionID) !== true) delete event.tools[GenUI.RENDER_TOOL]
+    }),
+  )
 
   yield* ctx.event.subscribe().pipe(
     Stream.filter((event) => event.type === "session.deleted"),
@@ -60,11 +57,3 @@ export const register = Effect.fn("GenUISession.register")(function* (ctx: {
     Effect.forkScoped({ startImmediately: true }),
   )
 })
-
-function lastReminder(messages: ReadonlyArray<Message>) {
-  return messages.reduce<string | undefined>((found, message) => {
-    const part = message.role === "user" && message.content.length === 1 ? message.content[0] : undefined
-    if (part?.type !== "text") return found
-    return part.text === enter || part.text === leave ? part.text : found
-  }, undefined)
-}
