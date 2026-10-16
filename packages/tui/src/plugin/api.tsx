@@ -4,6 +4,7 @@ import type {
   Context,
   Dialog,
   DialogSelectOptions,
+  LanguageDefinition,
   Page,
   SlotClaim,
   SlotMap,
@@ -13,6 +14,8 @@ import type {
 import type { Placement, PlacementKind } from "./structure"
 import { infoStringToFiletype, type MarkdownCodeBlockRenderer } from "@opentui/core"
 import { useRenderer } from "@opentui/solid"
+import { Schema } from "effect"
+import { Config } from "../config"
 import { useClient } from "../context/client"
 import { useData } from "../context/data"
 import { Keymap } from "../context/keymap"
@@ -32,6 +35,7 @@ import { useSessionTabs } from "../context/session-tabs"
 import { useOptionalPanel } from "../context/panel"
 import { useLocal } from "../context/local"
 import { abbreviateHome } from "../util/path-format"
+import { Languages } from "../util/languages"
 
 export type Dispose = () => Promise<void>
 
@@ -51,13 +55,16 @@ const placements = ["prepend", "append", "before", "after", "replace"] as const 
 // route/slot registration lands there, but ordering and lifecycle stay owned
 // by the provider.
 export type Registry = {
-  has(kind: "routes" | "slots" | "markdown", name: string): boolean
+  has(kind: "routes" | "slots" | "markdown" | "languages", name: string): boolean
   set(kind: "routes", name: string, page: Page): void
   set(kind: "slots", name: string, claim: RegisteredSlot): void
   set(kind: "markdown", name: string, render: MarkdownCodeBlockRenderer): void
-  remove(kind: "routes" | "slots" | "markdown", name: string): void
+  set(kind: "languages", name: string, language: LanguageDefinition): void
+  remove(kind: "routes" | "slots" | "markdown" | "languages", name: string): void
   active(): boolean
 }
+
+const decodeLanguage = Schema.decodeUnknownSync(Schema.Struct({ id: Schema.NonEmptyString, ...Config.Language.fields }))
 
 // The host services a plugin context adapts. Collected once by the provider
 // (hooks must run during component setup) and shared by every activation.
@@ -132,7 +139,7 @@ export function createPluginContext(input: {
   }
   // Unregistering after deactivation is a no-op: deactivate already resets
   // the registration's routes and slots wholesale.
-  const registration = (kind: "routes" | "slots" | "markdown", name: string) => {
+  const registration = (kind: "routes" | "slots" | "markdown" | "languages", name: string) => {
     let registered = true
     const unregister = () => {
       if (!registered) return
@@ -174,6 +181,16 @@ export function createPluginContext(input: {
         }
         input.registry.set("markdown", name, render)
         return registration("markdown", name)
+      },
+    },
+    languages: {
+      register(definition) {
+        const language = Languages.resolve(decodeLanguage(definition))
+        if (input.registry.has("languages", language.id)) {
+          throw new Error(`Language already registered: ${language.id}`)
+        }
+        input.registry.set("languages", language.id, language)
+        return registration("languages", language.id)
       },
     },
     keymap: {

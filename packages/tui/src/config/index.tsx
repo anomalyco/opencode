@@ -54,6 +54,22 @@ export const Plugin = Schema.Union([
   }),
 ])
 
+export const Language = Schema.Struct({
+  extensions: Schema.optional(Schema.Array(Schema.String.check(Schema.isPattern(/^\.[^./\\\s]+$/u)))).annotate({
+    description: "File extensions that use this language, including the leading dot",
+  }),
+  wasm: Schema.String.check(Schema.isNonEmpty()).annotate({
+    description: "Compiled tree-sitter parser: an http(s) URL or a path relative to this file",
+  }),
+  highlights: Schema.NonEmptyArray(Schema.String).annotate({
+    description: "Highlight queries (highlights.scm), concatenated in order: URLs or paths relative to this file",
+  }),
+  injections: Schema.optional(Schema.Array(Schema.String)).annotate({
+    description: "Injection queries (injections.scm): URLs or paths relative to this file",
+  }),
+})
+export type Language = Schema.Schema.Type<typeof Language>
+
 export const DiffSource = Schema.Union([Vcs.Mode, Schema.Literal("turn")])
 export type DiffSource = Schema.Schema.Type<typeof DiffSource>
 
@@ -75,6 +91,10 @@ export const Info = Schema.Struct({
       }),
     }),
   ).annotate({ description: "Color theme settings" }),
+  languages: Schema.optional(Schema.Record(Schema.String, Language)).annotate({
+    description:
+      "Tree-sitter languages to highlight, keyed by language ID. The ID is also the Markdown code-fence name, and an existing ID replaces the built-in parser",
+  }),
   keybinds: Schema.optional(TuiKeybind.KeybindOverrides).annotate({ description: "Custom key bindings" }),
   plugins: Schema.optional(Schema.Array(Plugin)).annotate({
     description: "Ordered plugin enablement directives and external package declarations",

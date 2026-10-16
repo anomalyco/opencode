@@ -394,6 +394,38 @@ Load terminal-only plugins in order:
 
 See [Plugins](/cli/plugins) for package forms, local discovery, wildcards, and disable directives.
 
+## Languages
+
+Highlight more languages with tree-sitter grammars:
+
+```json title="cli.json"
+{
+  "languages": {
+    "elm": {
+      "extensions": [".elm"],
+      "wasm": "./languages/elm/tree-sitter-elm.wasm",
+      "highlights": ["./languages/elm/highlights.scm"]
+    }
+  }
+}
+```
+
+<div class="docs-table-scroll" role="region" aria-label="Language settings" tabIndex={0}>
+
+| Setting                  | Values          | Description                                                                |
+| ------------------------ | --------------- | -------------------------------------------------------------------------- |
+| `languages.*`            | object          | Defines a language. Its key is also the Markdown code-fence name.          |
+| `languages.*.extensions` | array of string | Lists file extensions that use the language, including the leading dot.    |
+| `languages.*.wasm`       | string          | Sets the compiled tree-sitter parser.                                      |
+| `languages.*.highlights` | array of string | Sets highlight queries, concatenated in order.                             |
+| `languages.*.injections` | array of string | Sets injection queries.                                                    |
+
+</div>
+
+Sources are URLs or paths relative to `cli.json`. Highlight queries should use nvim-treesitter capture names such
+as `keyword`, `type` and `string`, which themes color. A built-in key such as `python` replaces that parser. Plugins
+can register languages too; see [CLI plugins](/build/plugins/cli#languages).
+
 ## Debug and experimental
 
 Enable diagnostics or opt in to a currently available experiment:
