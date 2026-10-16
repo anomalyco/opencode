@@ -779,16 +779,7 @@ export default function SessionBrowserPane(props: {
           </Popover.Portal>
         </Popover>
         <div class="flex shrink-0 items-center gap-1">
-          <Tooltip
-            placement="top"
-            value={
-              <div class="flex flex-col gap-1">
-                {tip(extension.t("inspect"), keybinds.keybind("browser.inspect"))}
-                {/* The page claims Chromium's picker chord itself; the app leaves it to the terminal. */}
-                {tip(extension.t("inspect.pageShortcut"), keybinds.keys("mod+shift+c"))}
-              </div>
-            }
-          >
+          <Tooltip placement="top" value={tip(extension.t("inspect"), keybinds.keybind("browser.inspect"))}>
             {/* The ghost variant sets the button color, so the active accent needs precedence over it. */}
             <IconButton
               variant="ghost-muted"

@@ -123,6 +123,23 @@ const setup: Setup<typeof Terminal> = (ctx) => {
     }),
   )
 
+  ctx.add(
+    Command,
+    (): Command => ({
+      id: "copy",
+      title: "",
+      section: "terminal",
+      bind: "ctrl+shift+c",
+      hidden: true,
+      editable: true,
+      scope: '[data-component="terminal"]',
+      enabled: routed(),
+      run() {
+        document.execCommand("copy")
+      },
+    }),
+  )
+
   const TerminalPanel = lazy(() => import("./panel"))
 
   // Warms the panel chunk so the first dock open has no blank frame. ghostty-web still loads on the first terminal.

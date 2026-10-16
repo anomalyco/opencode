@@ -15,6 +15,8 @@ const modules = {
   browserPanel: source("../../gui-extensions/src/browser/panel.tsx"),
   file: source("../../gui-extensions/src/file/index.ts"),
   fileRenderer: source("../../gui-extensions/src/file/renderer.tsx"),
+  terminal: source("../../gui-extensions/src/terminal/index.ts"),
+  terminalRenderer: source("../../gui-extensions/src/terminal/renderer.tsx"),
   commands: source("../src/shell/commands/command.tsx"),
   sdk: source("../../gui-extensions/src/sdk/index.ts"),
   render: source("../src/runtime/extension/render.tsx"),
@@ -34,6 +36,7 @@ story.beforeEach(async ({ mount, page }) => {
       language,
       browser,
       file,
+      terminal,
       commands,
       sdk,
       renderer,
@@ -47,6 +50,7 @@ story.beforeEach(async ({ mount, page }) => {
       import(modules.language),
       import(modules.browser),
       import(modules.file),
+      import(modules.terminal),
       import(modules.commands),
       import(modules.sdk),
       import(modules.render),
@@ -65,6 +69,7 @@ story.beforeEach(async ({ mount, page }) => {
       definitions: [
         { ...browser.default, renderer: () => import(modules.browserRenderer) },
         { ...file.default, renderer: () => import(modules.fileRenderer) },
+        { ...terminal.default, renderer: () => import(modules.terminalRenderer) },
       ],
       Shell: (props: ParentProps) =>
         solid.createComponent(platform.PlatformProvider, {
@@ -145,6 +150,47 @@ story("closes a blank browser tab from its address field without closing the ses
   await expect(root.getByRole("tab", { name: "New tab", exact: true })).toHaveCount(0)
   await expect(root.getByTestId("browser-closes")).toHaveText('["tab_33333333-3333-3333-3333-333333333333"]')
   await expect(root.getByTestId("session-state")).toHaveText("open")
+})
+
+story("toggles the element picker from the shortcut outside the page while leaving terminal copy alone", async ({ page }) => {
+  const root = page.getByTestId("browser-region-fixture")
+  const outside = root.getByRole("button", { name: "Beta", exact: true })
+  await expect(root.getByText("Registrations: 1", { exact: true })).toBeVisible()
+  await outside.click()
+  await expect(root.getByText("Registrations: 2", { exact: true })).toBeVisible()
+
+  await root.getByRole("button", { name: "Blank page", exact: true }).click()
+  const inspect = root.getByRole("button", { name: "Select an element to comment on", exact: true })
+  await expect(inspect).toBeDisabled()
+  await outside.press("Control+Shift+c")
+  await expect(root.getByTestId("browser-inspects")).toHaveText("[]")
+
+  await root.getByRole("button", { name: "First inventory", exact: true }).click()
+  await expect(inspect).toBeEnabled()
+
+  await outside.focus()
+  await outside.press("Control+Shift+c")
+  await expect(inspect).toHaveAttribute("aria-pressed", "true")
+  await expect(root.getByTestId("browser-inspects")).toHaveText(
+    '[{"tabID":"tab_33333333-3333-3333-3333-333333333333","enabled":true}]',
+  )
+
+  const address = root.getByRole("combobox", { name: "Browser address", exact: true })
+  await address.click()
+  await expect(address).toBeFocused()
+  await address.press("Control+Shift+c")
+  await expect(inspect).toHaveAttribute("aria-pressed", "false")
+  await expect(root.getByTestId("browser-inspects")).toHaveText(
+    '[{"tabID":"tab_33333333-3333-3333-3333-333333333333","enabled":true},{"tabID":"tab_33333333-3333-3333-3333-333333333333","enabled":false}]',
+  )
+
+  const terminal = root.getByRole("textbox", { name: "Terminal input", exact: true })
+  await terminal.focus()
+  await terminal.press("Control+Shift+c")
+  await expect(inspect).toHaveAttribute("aria-pressed", "false")
+  await expect(root.getByTestId("browser-inspects")).toHaveText(
+    '[{"tabID":"tab_33333333-3333-3333-3333-333333333333","enabled":true},{"tabID":"tab_33333333-3333-3333-3333-333333333333","enabled":false}]',
+  )
 })
 
 story("keeps a restored browser tab selected and undrawn until the desktop's first inventory", async ({ page }) => {

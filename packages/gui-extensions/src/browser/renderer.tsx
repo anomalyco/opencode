@@ -107,7 +107,7 @@ const setup: Setup<typeof definition> = (ctx) => {
     }
   })
 
-  // Ctrl+Shift+C copies in the terminal, so only the focused page claims it, as in Chromium.
+  // While the page has focus, the page claims it itself; here it covers focus elsewhere while the pane is in view.
   ctx.add(Command, (): Command | undefined => {
     const pane = model()?.pane()
 
@@ -117,6 +117,8 @@ const setup: Setup<typeof definition> = (ctx) => {
       id: "inspect",
       title: ctx.t("command.inspect"),
       group: ctx.t("command.category.view"),
+      bind: "mod+shift+c",
+      editable: true,
       enabled: pane.visible() && pane.inspectable(),
       run: pane.inspect,
     }
