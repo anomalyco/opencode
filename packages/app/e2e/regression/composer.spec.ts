@@ -100,9 +100,11 @@ test("an existing session's model waits for its agent instead of showing a fallb
     await agents.promise
     await route.fallback()
   })
+
   const catalog = ["/api/model", "/api/provider", "/api/config"].map((path) =>
     page.waitForResponse((response) => new URL(response.url()).pathname === path),
   )
+
   await page.goto(sessionHref(sessionID))
   await Promise.all(catalog)
   await expect(page.locator('[data-component="composer-editor"]')).toBeEditable()
@@ -121,6 +123,7 @@ test("names a Console-managed provider without its workspace unless a direct con
     { id: "ses_managed_root", model: { id: "alpha", providerID: "opencode" } },
     { id: "ses_managed_openai", model: { id: "gpt", providerID: "console-openai" } },
   ]
+
   const managed = { integrationID: "opencode" }
   await openSession(page, {
     name: "ManagedProvider",
@@ -498,10 +501,16 @@ test("marks a Console provider with its workspace only when it is also connected
     },
   })
 
-  await page.locator('[data-component="composer"] [data-action="composer-model"]').click()
-  const menu = page.getByRole("menu")
-  await expect(menu.getByRole("menuitemradio", { name: "Direct Gemini", exact: true })).toBeVisible()
-  const headings = menu.locator('[data-slot="menu-v2-group-label"]')
+  const trigger = page.locator('[data-component="composer"] [data-action="composer-model"]')
+  await trigger.hover()
+  const details = page.getByRole("tooltip")
+  await expect(details.getByText("Console Model", { exact: true })).toBeVisible()
+  await expect(details.getByText("OpenCode", { exact: true })).toBeVisible()
+  await expect(details.getByText(/Anomaly \//)).toHaveCount(0)
+  await trigger.click()
+  const menu = page.getByRole("dialog", { name: "Select model", exact: true })
+  await expect(menu.getByRole("button", { name: "Direct Gemini", exact: true })).toBeVisible()
+  const headings = menu.locator('[data-slot="model-dialog-group-title"]')
   await expect(headings).toHaveCount(4)
   await expect(headings.filter({ hasText: /^GoogleAnomaly$/ })).toHaveCount(1)
   await expect(headings.filter({ hasText: /^Google$/ })).toHaveCount(1)

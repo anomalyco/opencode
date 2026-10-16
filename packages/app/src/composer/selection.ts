@@ -17,6 +17,7 @@ export function createComposerControls(input: { model?: ModelSelection } = {}) {
   const sdk = useWorkspaceLocation()
   const data = useData()
   const providers = useProviders(() => sdk().directory)
+
   const canonical = (provider: { id: string; canonical?: string }) =>
     provider.canonical ?? provider.id.replace(/^console-/, "")
 
@@ -123,6 +124,13 @@ export function createComposerModelSelection(input: {
       .filter((item): item is NonNullable<typeof item> => !!item),
   )
 
+  const favoriteModels = createMemo(() =>
+    models.favorite
+      .list()
+      .map(models.find)
+      .filter((item): item is NonNullable<typeof item> => !!item),
+  )
+
   const selection = {
     trackSessionCommit: local.model.trackSessionCommit,
     remembered: () => Object.fromEntries(Object.entries(remembered).map(([name, model]) => [name, { model }])),
@@ -130,6 +138,7 @@ export function createComposerModelSelection(input: {
     key,
     current,
     recent: recentModels,
+    favorite: { list: favoriteModels, toggle: models.favorite.toggle },
     list: models.list,
     cycle(direction: 1 | -1) {
       const items = recentModels()
@@ -163,9 +172,8 @@ export function createComposerModelSelection(input: {
     visible: models.visible,
     setVisibility: models.setVisibility,
     variant: {
-      configured() {
+      configured(model = current()) {
         const item = input.agent()
-        const model = current()
 
         if (!item || !model) return
         const global = configuredModel()
@@ -186,13 +194,14 @@ export function createComposerModelSelection(input: {
 
         return model && valid(model) ? model.variant : undefined
       },
-      current() {
-        const model = current()
+      current(item?: ModelKey) {
+        const model = item ? models.find(item) : current()
+        const same = !item || (current()?.provider.id === item.providerID && current()?.id === item.modelID)
 
         return resolveModelVariant({
-          variants: this.list(),
-          selected: this.selected(),
-          configured: this.configured(),
+          variants: Object.keys(model?.variants ?? {}),
+          selected: same ? this.selected() : undefined,
+          configured: this.configured(model),
           preferred: model ? models.variant.get({ providerID: model.provider.id, modelID: model.id }) : undefined,
         })
       },

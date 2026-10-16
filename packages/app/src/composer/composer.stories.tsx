@@ -82,6 +82,7 @@ function ComposerStory(props: {
     key: () => ({ providerID: modelOption().provider.id, modelID: modelOption().id }),
     current: () => modelOption(),
     recent: () => [modelOption()],
+    favorite: { list: () => [], toggle() {} },
     list: () => [modelOption()],
     cycle() {},
     set() {},

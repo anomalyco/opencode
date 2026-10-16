@@ -25,6 +25,7 @@ const selection = {
   key: () => ({ providerID: "provider-1", modelID: "model-1" }),
   current: () => selectedModel,
   recent: () => [selectedModel],
+  favorite: { list: () => [], toggle() {} },
   list: () => [selectedModel],
   cycle() {},
   set() {},

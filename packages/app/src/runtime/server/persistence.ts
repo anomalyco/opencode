@@ -110,6 +110,7 @@ export const ModelState = Persistence.struct({
     }),
   ),
   recent: Persistence.array(Persistence.struct({ providerID: Schema.String, modelID: Schema.String })),
+  favorite: Persistence.array(Persistence.struct({ providerID: Schema.String, modelID: Schema.String })),
   variant: Schema.Record(
     Schema.String,
     Schema.mutableKey(

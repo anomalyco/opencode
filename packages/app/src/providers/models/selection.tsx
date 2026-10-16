@@ -290,9 +290,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       return models.find(item)
     })
 
-    const configured = () => {
+    const configured = (model = current()) => {
       const item = agent.current()
-      const model = current()
 
       if (!item || !model) return
       const global = configuredModel()
@@ -350,6 +349,15 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     }
 
     const recent = createMemo(() => models.recent.list().filter(validModel).map(models.find).filter(Boolean))
+
+    const favorite = createMemo(() =>
+      models.favorite
+        .list()
+        .filter(validModel)
+        .map(models.find)
+        .filter((item): item is NonNullable<typeof item> => !!item),
+    )
+
     const pending = new Map<string, State>()
 
     const sameSelection = (a: State, b: State) =>
@@ -393,6 +401,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       key,
       current,
       recent,
+      favorite: { list: favorite, toggle: models.favorite.toggle },
       list: models.list,
       trackSessionCommit(sessionID: string, selection: { agent: string; model: ModelKey; variant?: string }) {
         pending.set(sessionID, selection)
@@ -446,13 +455,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       variant: {
         configured,
         selected,
-        current() {
-          const model = current()
+        current(item?: ModelKey) {
+          const model = item ? models.find(item) : current()
+          const same = !item || (current()?.provider.id === item.providerID && current()?.id === item.modelID)
 
           return resolveModelVariant({
-            variants: this.list(),
-            selected: this.selected(),
-            configured: this.configured(),
+            variants: Object.keys(model?.variants ?? {}),
+            selected: same ? this.selected() : undefined,
+            configured: configured(model),
             preferred: model ? models.variant.get({ providerID: model.provider.id, modelID: model.id }) : undefined,
           })
         },

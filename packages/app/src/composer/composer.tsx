@@ -4,9 +4,12 @@ import { Button } from "@opencode/ui/button"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { Icon } from "@opencode/ui/icon"
 import { Keybind } from "@opencode/ui/keybind"
+import { consoleModelGroup } from "@/providers/models/provider-group"
+import { consoleProviderName } from "@/providers/catalog/console"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { ComposerEditor } from "./editor/editor"
-import { ModelSelectorPopover } from "@/providers/models/select-dialog"
+import { DialogSelectModel, ModelSelectorDrawer } from "@/providers/models/select-dialog"
+import { ModelDetails } from "@/providers/models/details"
 import { DialogSelectModelUnpaid } from "@/providers/models/unpaid"
 import { formatKeybind, useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -22,6 +25,7 @@ export function Composer(props: {
   const dialog = useDialog()
   const command = useCommand()
   const language = useLanguage()
+
   const modelName = () => {
     const selection = props.model.model.selection
     const model = selection.current()
@@ -78,6 +82,16 @@ function ComposerModelControl(props: {
 }) {
   const shouldAnimate = createMemo<boolean>((previous) => previous ?? props.loading)
   const mobile = createMediaQuery("(max-width: 767px)")
+  const dialog = useDialog()
+  const managed = createMemo(() => consoleModelGroup(props.model.list()))
+
+  const providerName = (provider: { id: string; name: string }) => {
+    const group = managed()
+
+    return group?.providers.some((item) => item.id === provider.id)
+      ? consoleProviderName(group, provider.name)
+      : provider.name
+  }
 
   const content = () => (
     <>
@@ -102,17 +116,33 @@ function ComposerModelControl(props: {
     <Show when={!props.loading}>
       <Tooltip
         inactive={mobile()}
+        contentClass={props.model.current() ? "!p-0 rounded-md" : undefined}
         placement="top"
         gutter={4}
         value={
-          <>
-            {props.title}
-            <Keybind keys={props.keybind} variant="neutral" />
-          </>
+          <Show
+            when={props.model.current()}
+            fallback={
+              <>
+                {props.title}
+                <Keybind keys={props.keybind} variant="neutral" />
+              </>
+            }
+          >
+            {(model) => (
+              <div class="flex w-[188px] max-w-[calc(100vw-24px)] flex-col">
+                <ModelDetails model={model()} provider={providerName(model().provider)} />
+                <div class="flex h-7 min-w-0 items-center gap-2 border-t-[0.5px] border-v2-border-border-base px-2">
+                  <span class="min-w-0 flex-1 truncate text-v2-text-text-faint">{props.title}</span>
+                  <Keybind keys={props.keybind} variant="neutral" />
+                </div>
+              </div>
+            )}
+          </Show>
         }
       >
         <Show
-          when={props.paid || mobile()}
+          when={mobile()}
           fallback={
             <Button
               data-action="composer-model"
@@ -122,13 +152,16 @@ function ComposerModelControl(props: {
               class="min-w-0 max-w-[60cqw] justify-start ![font-weight:440]"
               classList={{ "animate-in fade-in": shouldAnimate() }}
               style={{ height: "28px" }}
-              onClick={props.onUnpaidClick}
+              onClick={() => {
+                if (!props.paid) return props.onUnpaidClick()
+                void dialog.show(() => <DialogSelectModel model={props.model} />, props.onClose)
+              }}
             >
               {content()}
             </Button>
           }
         >
-          <ModelSelectorPopover
+          <ModelSelectorDrawer
             model={props.model}
             unpaid={!props.paid}
             trigger={(triggerProps) => (
@@ -140,7 +173,7 @@ function ComposerModelControl(props: {
                 class="min-w-0 max-w-[60cqw] justify-start ![font-weight:440]"
                 classList={{ "animate-in fade-in": shouldAnimate() }}
                 data-action="composer-model"
-                data-control-type={mobile() ? "drawer" : "popover"}
+                data-control-type="drawer"
               >
                 {content()}
               </Button>

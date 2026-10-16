@@ -39,7 +39,7 @@ export function TargetSessionRouteContent() {
   return (
     <>
       <MarkSessionViewed sessionID={() => params.id} />
-      <ModelsProvider directory={directory}>
+      <ModelsProvider directory={directory()}>
         <TargetSessionSettingsCommand />
         <SessionRouteErrorBoundary sessionID={params.id} serverKey={requireServerKey(params.serverKey)}>
           <Show when={tabs.pendingSession(server.key, params.id)} fallback={<ResolvedTargetSessionRoute />}>

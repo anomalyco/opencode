@@ -106,8 +106,8 @@ describe("server persistence schema", () => {
   })
 
   test("reads the latest canonical local prop on each decode", () => {
-    const props: { canonicalLocalServer?: string } = {}
-    const schema = serverSchema(() => props.canonicalLocalServer)
+    let canonical: string | undefined
+    const schema = serverSchema(() => canonical)
     const decode = Schema.decodeUnknownSync(schema)
 
     const input = {
@@ -116,22 +116,30 @@ describe("server persistence schema", () => {
     }
 
     expect(decode(input).projects).toEqual(input.projects)
-    props.canonicalLocalServer = "remote"
+    canonical = "remote"
     expect(decode(input).projects).toEqual({ local: [{ worktree: "/project", expanded: true }] })
     expect(decode(input).lastProject).toEqual({ local: "/project" })
-    props.canonicalLocalServer = "local"
+    canonical = "local"
     expect(decode(input).projects).toEqual(input.projects)
     expect(input.lastProject).toEqual({ remote: "/project" })
-    props.canonicalLocalServer = "remote"
+    canonical = "remote"
     expect(decode({ lastProject: { remote: "/project" } })).toEqual({ ...initial, lastProject: { local: "/project" } })
   })
 })
 
 describe("model persistence schema", () => {
   test("defaults missing state and keeps valid entries beside malformed entries", () => {
-    const decode = Schema.decodeUnknownSync(Persistence.withInitial(ModelState, { user: [], recent: [], variant: {} }))
-    expect(decode({})).toEqual({ user: [], recent: [], variant: {} })
-    expect(decode({ user: null, recent: 1, variant: [] })).toEqual({ user: [], recent: [], variant: {} })
+    const decode = Schema.decodeUnknownSync(
+      Persistence.withInitial(ModelState, { user: [], recent: [], favorite: [], variant: {} }),
+    )
+
+    expect(decode({})).toEqual({ user: [], recent: [], favorite: [], variant: {} })
+    expect(decode({ user: null, recent: 1, favorite: "x", variant: [] })).toEqual({
+      user: [],
+      recent: [],
+      favorite: [],
+      variant: {},
+    })
 
     const state = decode({
       user: [
@@ -141,6 +149,7 @@ describe("model persistence schema", () => {
         { providerID: "provider", modelID: "hidden", visibility: "hide" },
       ],
       recent: [false, { providerID: "provider", modelID: "model" }, { providerID: "missing-model" }],
+      favorite: [{ providerID: "provider", modelID: "model" }, { modelID: "missing-provider" }],
       variant: { model: "high" },
     })
 
@@ -150,6 +159,7 @@ describe("model persistence schema", () => {
         { providerID: "provider", modelID: "hidden", visibility: "hide" },
       ],
       recent: [{ providerID: "provider", modelID: "model" }],
+      favorite: [{ providerID: "provider", modelID: "model" }],
       variant: { model: "high" },
     })
     expect(Schema.encodeSync(ModelState)(state)).toEqual(state)

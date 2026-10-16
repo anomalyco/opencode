@@ -116,6 +116,7 @@ function createGlobalModels() {
   const [store, setStore, _, ready] = persisted(Persist.global("model"), ModelState, {
     user: [],
     recent: [],
+    favorite: [],
     variant: {},
   })
 
@@ -135,6 +136,11 @@ function createGlobalModels() {
       loaded()
 
       return store.recent
+    },
+    favorite: () => {
+      loaded()
+
+      return store.favorite
     },
     // Marks models visible in the picker regardless of the "latest per family" default.
     show(models: ReadonlyArray<{ providerID: string; modelID: string }>) {
