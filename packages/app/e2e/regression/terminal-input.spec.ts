@@ -8,6 +8,23 @@ const workspace = { name: "TerminalInput", pty: {} } satisfies WorkspaceInput
 
 test.use({ viewport: { width: 1440, height: 900 } })
 
+test("toggles the terminal open and closed with Mod+J and Control+Backquote while focused", async ({ page }) => {
+  const { pty } = await openSession(page, workspace)
+  const terminal = page.locator('[data-component="terminal"]')
+
+  for (const shortcut of ["ControlOrMeta+j", "Control+Backquote"] as const) {
+    await page.keyboard.press(shortcut)
+    await expect(terminal).toBeVisible()
+    await expect(terminal.locator("textarea")).toHaveCount(1)
+    await expect.poll(() => pty.sockets.length).toBe(1)
+    await expect.poll(() => terminal.evaluate((element) => element.contains(document.activeElement))).toBe(true)
+
+    await page.keyboard.press(shortcut)
+    await expect(terminal).toBeHidden()
+    expect(pty.sockets[0]!.input).toEqual([])
+  }
+})
+
 test("clears the terminal line with Command+Delete", async ({ page }) => {
   const { pty } = await openSession(page, workspace)
   const terminal = page.locator('[data-component="terminal"]')
