@@ -121,6 +121,11 @@ export function errorFormat(error: unknown): string {
 export function errorMessage(error: unknown): string {
   if (error instanceof Error) {
     if (error.message) return error.message
+    // Effect's Schema.TaggedError leaves `message` empty and carries the tag in
+    // `name`, so the actionable detail exists only on `cause` — an npm ERESOLVE
+    // would otherwise surface as a bare "NpmInstallFailedError".
+    const cause = causeMessage(error)
+    if (cause) return cause
     if (error.name) return error.name
   }
 
@@ -138,4 +143,14 @@ export function errorMessage(error: unknown): string {
   const formatted = errorFormat(error)
   if (formatted) return formatted
   return "unknown error"
+}
+
+// Bounded so a cause chain that loops back on itself terminates.
+function causeMessage(error: Error, depth = 5): string | undefined {
+  if (depth <= 0) return undefined
+  const cause = (error as { cause?: unknown }).cause
+  if (!cause || cause === error) return undefined
+  if (!(cause instanceof Error)) return undefined
+  if (cause.message) return cause.message
+  return causeMessage(cause, depth - 1)
 }
