@@ -40,11 +40,12 @@ describe("command palette sessions", () => {
     const searches: string[] = []
     const gets: string[] = []
 
-    const result = await new Promise<Awaited<ReturnType<ReturnType<typeof createServerSessionEntries>>>>(
+    const result = await new Promise<Awaited<ReturnType<ReturnType<typeof createServerSessionEntries>["search"]>>>(
       (resolve, reject) => {
         createRoot((dispose) => {
           const search = createServerSessionEntries({
             server,
+            known: () => [],
             opened: () => [opened],
             stored: () => [{ ...stored, icon: { url: "stored-project-avatar" } }],
             load: async (text) => {
@@ -61,10 +62,11 @@ describe("command palette sessions", () => {
             },
             untitled: () => "Untitled",
             category: () => "Sessions",
+            recentCategory: () => "Recent sessions",
           })
 
-          const first = search("palette")
-          const second = search("palette session")
+          const first = search.search("palette")
+          const second = search.search("palette session")
           Promise.all([first, second])
             .then(([cancelled, entries]) => {
               expect(cancelled).toEqual([])
@@ -92,11 +94,12 @@ describe("command palette sessions", () => {
     const exact = { ...session, id: "ses_12345678901234567890123456", title: "Exact session" }
     const gets: string[] = []
 
-    const result = await new Promise<Awaited<ReturnType<ReturnType<typeof createServerSessionEntries>>>>(
+    const result = await new Promise<Awaited<ReturnType<ReturnType<typeof createServerSessionEntries>["search"]>>>(
       (resolve, reject) => {
         createRoot((dispose) => {
           const search = createServerSessionEntries({
             server: ServerConnection.Key.make("selected-server"),
+            known: () => [],
             opened: () => [],
             stored: () => [stored],
             load: async () => ({ data: [] }),
@@ -107,9 +110,10 @@ describe("command palette sessions", () => {
             },
             untitled: () => "Untitled",
             category: () => "Sessions",
+            recentCategory: () => "Recent sessions",
           })
 
-          search(exact.id).then(resolve, reject).finally(dispose)
+          search.search(exact.id).then(resolve, reject).finally(dispose)
         })
       },
     )

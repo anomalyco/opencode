@@ -1,6 +1,6 @@
 import { expect, type Page } from "@playwright/test"
 import { NO_PROVIDER, project, sessionHref } from "./app"
-import { mockOpenCodeServer } from "./mock-server"
+import { mockOpenCodeServer, type MockSession } from "./mock-server"
 import { APP_READY_TIMEOUT } from "./waits"
 
 export const paletteSession = {
@@ -25,12 +25,18 @@ export function captureConsoleWarnings(page: Page) {
   return warnings
 }
 
-export async function openCommandPalette(page: Page, home = false) {
+export async function openCommandPalette(
+  page: Page,
+  home = false,
+  sessions: MockSession[] = [paletteSession],
+  // oxlint-disable-next-line anti-slop/no-unknown-returns -- Setup callbacks may return a route disposable; only completion is used.
+  beforeOpen?: () => Promise<unknown>,
+) {
   const mock = await mockOpenCodeServer(page, {
     directory: paletteSession.directory,
     project: project({ id: paletteSession.projectID, directory: paletteSession.directory, name: "command-palette" }),
     provider: NO_PROVIDER,
-    sessions: [paletteSession],
+    sessions,
     pageMessages: () => ({ items: [] }),
     findFiles: () => [],
   })
@@ -47,6 +53,7 @@ export async function openCommandPalette(page: Page, home = false) {
     await expect(page.locator('[data-component="composer-editor"]')).toBeEditable({ timeout: APP_READY_TIMEOUT })
   }
 
+  await beforeOpen?.()
   await page.keyboard.press("ControlOrMeta+Shift+P")
   const dialog = page.getByRole("dialog")
   const input = dialog.getByRole("textbox")

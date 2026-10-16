@@ -3,9 +3,11 @@ import type { Project } from "@/runtime/server/types"
 import type { SessionInfo } from "@opencode/client/promise"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { createMemo, onCleanup } from "solid-js"
+import { createStore } from "solid-js/store"
+import { useQueryClient } from "@tanstack/solid-query"
 import { commandPaletteOptions, useCommand, type CommandOption } from "@/shell/commands/command"
 import { useFile } from "@/workspaces/files/model"
-import { useGlobal } from "@/runtime/server/runtime"
+import { useGlobal, type ServerCtx } from "@/runtime/server/runtime"
 import { useLanguage } from "@/runtime/i18n/language"
 import type { LocalProject } from "@/shell/state/layout"
 import { ServerConnection } from "@/runtime/server/registry"
@@ -16,6 +18,7 @@ import { resolveProjectForSession } from "@/shell/layout/helpers"
 import { useExtensionHost } from "@/runtime/extension/host"
 import { useExtensionAttachment } from "@/runtime/extension/host-apis"
 import { looksLikeSessionID } from "@/session/search"
+import { mergeHomeSessionIndex } from "@/home/sessions/index"
 
 export type CommandPaletteEntry = {
   id: string
@@ -142,6 +145,7 @@ export function createCommandPaletteModel(props: { filesOnly?: () => boolean; on
 
   const sessions = createServerSessionEntries({
     server: ServerConnection.key(serverSDK.server),
+    known: createKnownServerSessions(serverCtx),
     opened: serverCtx.projects.list,
     stored: () => serverCtx.sync.data.project,
     load: (search, signal) => serverSDK.api.session.list({ parentID: null, search, limit: 50 }, { signal }),
@@ -227,6 +231,7 @@ export function createCommandPaletteCommandEntry(option: CommandOption, category
 
 export function createServerSessionEntries(props: {
   server: ServerConnection.Key
+  known: () => SessionInfo[]
   opened: () => LocalProject[]
   stored: () => Project[]
   load: (search: string, signal: AbortSignal) => Promise<{ data: SessionInfo[] }>
@@ -236,10 +241,45 @@ export function createServerSessionEntries(props: {
   recentCategory: () => string
 }) {
   let abort: AbortController | undefined
+  const [store, setStore] = createStore<{ loaded: SessionInfo[] }>({ loaded: [] })
+
+  // Let the newest metadata win duplicates before ranking the merged sessions newest-first.
+  const known = createMemo(() =>
+    mergeHomeSessionIndex(
+      [],
+      [...props.known(), ...store.loaded].toSorted((a, b) => a.time.updated - b.time.updated),
+    ).toSorted((a, b) => b.time.updated - a.time.updated),
+  )
 
   onCleanup(() => abort?.abort())
 
-  return async (text: string): Promise<CommandPaletteEntry[]> => {
+  const entries = (sessions: SessionInfo[], search: string): CommandPaletteEntry[] => {
+    const opened = props.opened()
+    const stored = props.stored().map((project) => ({ ...project, expanded: false }))
+    const category = search ? props.category() : props.recentCategory()
+
+    return sessions.flatMap((session) => {
+      if (session.time.archived !== undefined) return []
+      const project = resolveProjectForSession(session, opened, stored)
+
+      return [
+        {
+          id: `session:${props.server}:${session.id}`,
+          type: "session" as const,
+          title: session.title || props.untitled(),
+          description: project ? displayName(project) : getFilename(session.location.directory),
+          category,
+          directory: session.location.directory,
+          sessionID: session.id,
+          server: props.server,
+          project,
+          updated: session.time.updated,
+        },
+      ]
+    })
+  }
+
+  const search = async (text: string): Promise<CommandPaletteEntry[]> => {
     const search = text.trim()
 
     abort?.abort()
@@ -260,14 +300,11 @@ export function createServerSessionEntries(props: {
     })
 
     if (current.signal.aborted) return []
-    const opened = props.opened()
-    const stored = props.stored().map((project) => ({ ...project, expanded: false }))
-    const category = search ? props.category() : props.recentCategory()
 
-    const entries = await Promise.all([
+    const [listed, exact] = await Promise.all([
       props.load(search, current.signal).then(
-        (result) => result.data,
-        () => [],
+        (result) => ({ items: result.data, failed: false }),
+        () => ({ items: [], failed: true }),
       ),
       looksLikeSessionID(search)
         ? props.get(search, current.signal).then(
@@ -275,31 +312,45 @@ export function createServerSessionEntries(props: {
             () => [],
           )
         : Promise.resolve([]),
-    ]).then(([listed, exact]) =>
-      [...new Map([...exact, ...listed].map((session) => [session.id, session] as const)).values()].flatMap(
-        (session) => {
-          if (session.time.archived) return []
+    ])
 
-          const project = resolveProjectForSession(session, opened, stored)
+    if (current.signal.aborted) return []
 
-          return [
-            {
-              id: `session:${props.server}:${session.id}`,
-              type: "session" as const,
-              title: session.title || props.untitled(),
-              description: project ? displayName(project) : getFilename(session.location.directory),
-              category,
-              directory: session.location.directory,
-              sessionID: session.id,
-              server: props.server,
-              project,
-              updated: session.time.updated,
-            },
-          ]
-        },
-      ),
-    )
+    if (listed.failed && exact.length === 0) throw new Error("Session search failed")
 
-    return search ? entries : entries.slice(0, ENTRY_LIMIT)
+    const loaded = [...new Map([...exact, ...listed.items].map((session) => [session.id, session])).values()]
+    // Keep names learned while this palette is open available to subsequent keystrokes.
+    setStore("loaded", (previous) => [
+      ...new Map([...previous, ...loaded].map((session) => [session.id, session])).values(),
+    ])
+
+    // The local collection owns the recent rows, including newly loaded ones.
+    return search ? entries(loaded, search) : []
   }
+
+  return {
+    search,
+    items(text: string) {
+      const search = text.trim().toLowerCase()
+
+      const matches = known()
+        .filter(
+          (session) =>
+            !search ||
+            session.id.toLowerCase() === search ||
+            (session.title || props.untitled()).toLowerCase().includes(search),
+        )
+        .slice(0, 50)
+
+      return entries(matches, search)
+    },
+  }
+}
+
+export function createKnownServerSessions(server: ServerCtx) {
+  // Reuse the Home index already loaded before opening the palette; do not fetch an index for search.
+  const cached =
+    useQueryClient().getQueryData<SessionInfo[]>(["home-sessions", ServerConnection.key(server.sdk.server)]) ?? []
+
+  return () => server.data.session.apply(mergeHomeSessionIndex(cached, server.data.session.list()))
 }

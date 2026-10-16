@@ -109,6 +109,47 @@ describe("command palette search", () => {
 
     await settled.promise
     expect(root.search.items()).toEqual([copy, file])
+    expect(root.search.failed()).toBe(true)
+    root.dispose()
+  })
+
+  test("obsolete completions and failures cannot replace the current query or its loading state", async () => {
+    const old = Promise.withResolvers<CommandPaletteEntry[]>()
+    const obsolete = Promise.withResolvers<CommandPaletteEntry[]>()
+    const current = Promise.withResolvers<CommandPaletteEntry[]>()
+    const settled = Promise.withResolvers<void>()
+
+    const root = createRoot((dispose) => {
+      const [query, setQuery] = createSignal("old")
+
+      const search = createCommandPaletteSearch({
+        query,
+        items: (text) => (text === "copy" ? [copy] : []),
+        sources: [
+          (text) => (text === "old" ? old.promise : current.promise),
+          (text) => (text === "old" ? obsolete.promise : current.promise),
+        ],
+      })
+
+      createComputed(() => {
+        if (!search.loading()) settled.resolve()
+      })
+
+      return { search, setQuery, dispose }
+    })
+
+    root.setQuery("copy")
+    old.reject(new Error("obsolete failure"))
+    obsolete.resolve([session])
+    // Drain the obsolete promise callbacks while the current requests remain deliberately unresolved.
+    await new Promise<void>(setImmediate)
+    expect(root.search.items()).toEqual([copy])
+    expect(root.search.loading()).toBe(true)
+    expect(root.search.failed()).toBe(false)
+    current.resolve([copy, file])
+    await settled.promise
+    expect(root.search.items()).toEqual([copy, file])
+    expect(root.search.failed()).toBe(false)
     root.dispose()
   })
 })

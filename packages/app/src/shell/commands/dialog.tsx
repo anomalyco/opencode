@@ -34,9 +34,12 @@ export function DialogCommandPalette(props: { onOpenFile?: (path: string) => voi
   const palette = createCommandPaletteModel(props)
 
   const items = (q: string) => {
-    if (!q) return [...palette.preferredCommandEntries(), ...palette.recentFileEntries()]
+    if (!q) return [...palette.preferredCommandEntries(), ...palette.recentFileEntries(), ...palette.sessions.items(q)]
 
-    return palette.commandEntries().filter((entry) => matchesCommandPaletteEntry(entry, q))
+    return [
+      ...palette.commandEntries().filter((entry) => matchesCommandPaletteEntry(entry, q)),
+      ...palette.sessions.items(q),
+    ]
   }
 
   return (
@@ -44,7 +47,7 @@ export function DialogCommandPalette(props: { onOpenFile?: (path: string) => voi
       placeholder={palette.language.t("palette.search.placeholder")}
       items={items}
       sources={[
-        palette.sessions,
+        palette.sessions.search,
         async (query, signal) => {
           if (!query) return []
           const files = await palette.file.searchFiles(query, { signal })
@@ -162,7 +165,11 @@ export function CommandPaletteView(props: {
               when={visibleEntries().length > 0}
               fallback={
                 <div class="command-palette-state">
-                  {search.loading() ? language.t("common.loading") : language.t("palette.empty")}
+                  {search.loading()
+                    ? language.t("common.loading")
+                    : search.failed()
+                      ? language.t("common.requestFailed")
+                      : language.t("palette.empty")}
                 </div>
               }
             >

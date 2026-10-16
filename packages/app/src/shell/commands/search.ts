@@ -20,18 +20,21 @@ export function createCommandPaletteSearch(props: {
         const current = new AbortController()
         abort = current
 
-        return { query, items: await load(query, current.signal).catch(() => []) }
+        return load(query, current.signal).then(
+          (items) => ({ query, items, failed: false }),
+          () => ({ query, items: [], failed: true }),
+        )
       },
       // Remote searches must not suspend the dialog's local results on first render.
-      { initialValue: { query: "", items: [] as CommandPaletteEntry[] } },
+      { initialValue: { query: "", items: [], failed: false } },
     )
 
     return result
   })
 
   return {
-    items: createMemo(() =>
-      uniqueCommandPaletteEntries([
+    items: createMemo(() => {
+      const entries = uniqueCommandPaletteEntries([
         ...local(),
         ...sources.flatMap((source) => {
           // Never keep results for an older query selectable while the next one loads.
@@ -39,8 +42,18 @@ export function createCommandPaletteSearch(props: {
 
           return result.query === query() ? result.items : []
         }),
-      ]),
-    ),
+      ])
+
+      if (!query()) return entries
+      const order = { command: 0, session: 1, file: 2 }
+
+      return entries.sort(
+        (a, b) =>
+          order[a.type] - order[b.type] ||
+          (a.type === "session" && b.type === "session" ? (b.updated ?? 0) - (a.updated ?? 0) : 0),
+      )
+    }),
     loading: () => sources.some((source) => source.loading),
+    failed: () => sources.some((source) => source.latest.query === query() && source.latest.failed),
   }
 }
