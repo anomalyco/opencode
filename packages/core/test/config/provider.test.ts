@@ -1254,6 +1254,48 @@ describe("ConfigProviderPlugin.Plugin", () => {
       }),
     ),
   )
+  it.effect("keeps migrated Vertex Anthropic filters from creating models or disabling Gemini", () =>
+    Effect.gen(function* () {
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
+      const providerID = Provider.ID.make("google-vertex")
+      const claude = Model.ID.make("claude")
+      const gemini = Model.ID.make("gemini")
+      yield* providers.transform((editor) => {
+        editor.update(providerID, () => {})
+        editor.models.update(providerID, claude, () => {})
+        editor.models.update(providerID, gemini, () => {})
+      })
+      const result = ConfigNormalize.normalize({
+        provider: {
+          "google-vertex-anthropic": {
+            whitelist: ["claude"],
+            blacklist: ["claude", "missing"],
+            models: { claude: { name: "Configured Claude" } },
+          },
+        },
+      })
+      if (result.type !== "normalized") throw new Error("Expected normalized config")
+      expect(result.diagnostics).toEqual([
+        {
+          kind: "unsupported",
+          path: ["provider", "google-vertex-anthropic", "whitelist"],
+          message: "omitted unsupported legacy setting",
+        },
+      ])
+      yield* addPlugin([new Document({ type: "document", info: decode(result.encoded) })])
+
+      expect((yield* providers.get(providerID))?.activation).toBe("enabled")
+      expect(required(yield* models.get(providerID, gemini)).enabled).toBe(true)
+      const configured = required(yield* models.get(providerID, claude))
+      expect(configured.enabled).toBe(false)
+      expect(configured.name).toBe("Configured Claude")
+      expect(configured.package).toBe("@opencode/ai/providers/google-vertex/messages")
+      expect(yield* models.get(providerID, Model.ID.make("missing"))).toBeUndefined()
+      expect(yield* models.get(providerID, Model.ID.make("*"))).toBeUndefined()
+    }),
+  )
+
   it.effect("applies a wildcard model override before explicit models", () =>
     Effect.gen(function* () {
       const providers = yield* Provider.Service
