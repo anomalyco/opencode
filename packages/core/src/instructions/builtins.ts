@@ -3,6 +3,7 @@ export * as InstructionBuiltIns from "./builtins.js"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Context, DateTime, Effect, Layer, Schema } from "effect"
 import { Global } from "@opencode/util/global"
+import { App } from "../app.js"
 import { Location } from "../location.js"
 import { Instructions } from "./index.js"
 
@@ -15,6 +16,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/In
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
+    const app = yield* App.Metadata
     const global = yield* Global.Service
     const location = yield* Location.Service
     return Service.of({
@@ -40,6 +42,7 @@ const layer = Layer.effect(
                   `  Workspace root folder: ${location.project.directory}`,
                   `  Is directory a git repo: ${location.vcs?.type === "git" ? "yes" : "no"}`,
                   `  Platform: ${process.platform}`,
+                  `  OpenCode version: ${app.version}`,
                   `  Prefer ${global.tmp} over generic system temporary directories such as /tmp; it is pre-created and approved for external access.`,
                   "</env>",
                 ].join("\n"),
@@ -57,4 +60,4 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [Global.node, Location.node] })
+export const node = makeLocationNode({ service: Service, layer, deps: [App.node, Global.node, Location.node] })
