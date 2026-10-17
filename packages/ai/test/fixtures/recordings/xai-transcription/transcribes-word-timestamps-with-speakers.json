@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "metadata": {
+    "tags": [
+      "prefix:xai-transcription",
+      "provider:xai",
+      "protocol:xai-transcription"
+    ],
+    "name": "xai-transcription/transcribes-a-file",
+    "recordedAt": "2026-10-16T11:35:34.769Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.x.ai/v1/stt",
+        "headers": {
+          "content-type": "multipart/form-data; boundary=----WebKitFormBoundaryaf258fddf59d4164a90f5e202909f6f6"
+        },
+        "body": "--BOUNDARY\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\ngrok-voice-transcribe-2.0\r\n--BOUNDARY\r\nContent-Disposition: form-data; name=\"language\"\r\n\r\nen\r\n--BOUNDARY\r\nContent-Disposition: form-data; name=\"diarize\"\r\n\r\ntrue\r\n--BOUNDARY\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.mp3\"\r\nContent-Type: audio/mpeg\r\n\r\n[audio]\r\n--BOUNDARY--\r\n"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"text\":\"Hello from OpenCode!\",\"language\":\"en\",\"duration\":1.54,\"words\":[{\"text\":\"Hello\",\"start\":0.24,\"end\":0.48,\"speaker\":0},{\"text\":\"from\",\"start\":0.48,\"end\":0.96,\"speaker\":0},{\"text\":\"OpenCode!\",\"start\":0.96,\"end\":1.54,\"speaker\":0}]}"
+      }
+    }
+  ]
+}
