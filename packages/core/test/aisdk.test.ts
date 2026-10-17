@@ -6,6 +6,7 @@ import { SessionRunnerRetry } from "@opencode/core/session/runner/retry"
 import { toSessionError } from "@opencode/core/session/to-session-error"
 import { Model } from "@opencode/core/model"
 import { Provider } from "@opencode/core/provider"
+import { Money } from "@opencode/schema/money"
 import {
   Media,
   LLM,
@@ -62,6 +63,49 @@ const usage = {
   outputTokens: { total: 1, text: 0, reasoning: 0 },
 } as const
 
+for (const fixture of [
+  { name: "top-level billing", raw: { copilot_usage: { total_nano_aiu: 25_000_000_000 } }, cost: Money.USD.make(0.25) },
+  {
+    name: "Responses billing",
+    raw: { response: { copilot_usage: { total_nano_aiu: 50_000_000_000 } } },
+    cost: Money.USD.make(0.5),
+  },
+  { name: "zero billing", raw: { copilot_usage: { total_nano_aiu: 0 } }, cost: Money.USD.zero },
+  { name: "negative billing", raw: { copilot_usage: { total_nano_aiu: -1 } }, cost: undefined },
+  { name: "nonfinite billing", raw: { copilot_usage: { total_nano_aiu: Infinity } }, cost: undefined },
+  { name: "nonnumeric billing", raw: { copilot_usage: { total_nano_aiu: "100" } }, cost: undefined },
+  { name: "missing billing", raw: { unrelated: true }, cost: undefined },
+]) {
+  it.effect(`normalizes Copilot ${fixture.name} into typed usage`, () =>
+    Effect.gen(function* () {
+      const aisdk = yield* AISDK.Service
+      const language = streamModel([
+        { type: "raw", rawValue: fixture.raw },
+        { type: "finish", finishReason: { unified: "stop", raw: "stop" }, usage },
+      ])
+      yield* aisdk.hook.sdk((event) => {
+        event.sdk = {
+          languageModel: () => ({
+            ...language,
+            doStream: (options: Parameters<LanguageModelV3["doStream"]>[0]) => {
+              expect(options.includeRawChunks).toBe(true)
+              return language.doStream(options)
+            },
+          }),
+        }
+      })
+      const resolved = yield* aisdk.model(model("@ai-sdk/github-copilot"))
+      const response = yield* LLMClient.generate(LLM.request({ model: resolved, prompt: "Hello" })).pipe(
+        Effect.provide(client),
+      )
+
+      expect(response.usage?.billedCost).toBe(fixture.cost)
+      expect(response.usage?.nonCachedInputTokens).toBe(1)
+      expect(response.events.filter(LLMEvent.is.stepFinish)[0]?.usage?.billedCost).toBe(fixture.cost)
+    }),
+  )
+}
+
 const client = LLMClient.layer.pipe(
   Layer.provide(
     Layer.succeed(
@@ -71,6 +115,89 @@ const client = LLMClient.layer.pipe(
       }),
     ),
   ),
+)
+
+it.effect("retains the latest valid Copilot charge only for its own physical request", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    const chunks: LanguageModelV3StreamPart[][] = [
+      [
+        { type: "raw", rawValue: { copilot_usage: { total_nano_aiu: 10_000_000_000 } } },
+        { type: "raw", rawValue: { copilot_usage: { total_nano_aiu: 25_000_000_000 } } },
+        { type: "raw", rawValue: { copilot_usage: { total_nano_aiu: -1 } } },
+        { type: "finish", finishReason: { unified: "stop", raw: "stop" }, usage },
+      ],
+      [{ type: "finish", finishReason: { unified: "stop", raw: "stop" }, usage }],
+    ]
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = {
+        languageModel: () => ({
+          ...streamModel([]),
+          doStream: (options: Parameters<LanguageModelV3["doStream"]>[0]) =>
+            streamModel(chunks.shift() ?? []).doStream(options),
+        }),
+      }
+    })
+    const resolved = yield* aisdk.model(model("@ai-sdk/github-copilot"))
+    for (const cost of [Money.USD.make(0.25), undefined]) {
+      const response = yield* LLMClient.generate(LLM.request({ model: resolved, prompt: "Hello" })).pipe(
+        Effect.provide(client),
+      )
+      expect(response.usage?.billedCost).toBe(cost)
+    }
+  }),
+)
+
+it.effect("does not treat another provider's raw chunks as Copilot billing", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    const language = streamModel([
+      { type: "raw", rawValue: { copilot_usage: { total_nano_aiu: 25_000_000_000 } } },
+      { type: "finish", finishReason: { unified: "stop", raw: "stop" }, usage },
+    ])
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = { languageModel: () => language }
+    })
+    const resolved = yield* aisdk.model(model("@ai-sdk/openai"))
+    const response = yield* LLMClient.generate(LLM.request({ model: resolved, prompt: "Hello" })).pipe(
+      Effect.provide(client),
+    )
+    expect(response.usage?.billedCost).toBeUndefined()
+  }),
+)
+
+it.effect("extracts billed cost through the shipped Copilot chat decoder", () =>
+  Effect.gen(function* () {
+    const { createOpenaiCompatible } = yield* Effect.promise(() =>
+      import("@opencode/core/github-copilot/copilot-provider"),
+    )
+    const aisdk = yield* AISDK.Service
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = createOpenaiCompatible({
+        baseURL: "https://example.test/v1",
+        fetch: Object.assign(
+          async () => new Response(`data: ${JSON.stringify({
+            id: "response-billed",
+            object: "chat.completion.chunk",
+            created: 0,
+            model: "api-model",
+            choices: [{ index: 0, delta: { content: "Hello" }, finish_reason: "stop" }],
+            usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 },
+            copilot_usage: { total_nano_aiu: 25_000_000_000 },
+          })}\n\ndata: [DONE]\n\n`, { headers: { "content-type": "text/event-stream" } }),
+          { preconnect: fetch.preconnect },
+        ),
+      })
+    })
+    const resolved = yield* aisdk.model(model("@ai-sdk/github-copilot"))
+    const response = yield* LLMClient.generate(LLM.request({ model: resolved, prompt: "Hello" })).pipe(
+      Effect.provide(client),
+    )
+
+    expect(response.text).toBe("Hello")
+    expect(response.usage?.billedCost).toBe(Money.USD.make(0.25))
+    expect(response.usage?.inputTokens).toBe(10)
+  }),
 )
 
 it.effect("rejects native provider compaction rather than silently dropping replay state", () =>

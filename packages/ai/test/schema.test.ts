@@ -118,6 +118,14 @@ describe("ToolResultValue", () => {
 })
 
 describe("AI.Usage", () => {
+  test("decodes nonnegative finite provider-reported USD charges", () => {
+    const decode = Schema.decodeUnknownSync(Usage)
+    expect(decode({ billedCost: 0 }).billedCost).toBe(0)
+    expect(decode({ billedCost: 0.25 }).billedCost).toBe(0.25)
+    expect(decode({}).billedCost).toBeUndefined()
+    for (const billedCost of [-1, NaN, Infinity, "0.25"]) expect(() => decode({ billedCost })).toThrow()
+  })
+
   test("subtractTokens clamps non-sensical breakdowns to zero", () => {
     // Defense against a provider reporting cached_tokens > prompt_tokens or
     // reasoning_tokens > completion_tokens — the negative would otherwise
