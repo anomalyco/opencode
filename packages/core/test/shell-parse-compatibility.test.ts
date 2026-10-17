@@ -42,6 +42,9 @@ describe("portable shell parser compatibility", () => {
     ["pwsh", "Set-Location $HOME; Set-Location $PWD; Set-Location $target", { HOME: "/session-home" }],
     ["pwsh", "Set-Item Env:T /outside; Set-Location $env:T", { T: "/workspace" }],
     ["pwsh", "sl /outside; Microsoft.PowerShell.Management\\Set-Location /outside", {}],
+    ["pwsh", "Get-ChildItem\rRemove-Item victim", {}],
+    ["pwsh", "git\tstatus", {}],
+    ["pwsh", "Set-Location a,b", {}],
   ] as const)(
     "matches supported legacy resources, saved prefixes, and directories natively: %s %s %j",
     async (shell, command, env) => {
@@ -196,38 +199,11 @@ describe("current native and legacy parity gaps", () => {
       native: { commands: [], directories: ["before\\\nafter"] },
     },
     {
-      name: "native recognizes PowerShell carriage-return separators omitted by the legacy AST",
-      shell: "pwsh",
-      command: "Get-ChildItem\rRemove-Item victim",
-      legacy: { commands: [], directories: [] },
-      native: {
-        commands: [
-          { resource: "Get-ChildItem", save: "Get-ChildItem *" },
-          { resource: "Remove-Item victim", save: "Remove-Item *" },
-        ],
-        directories: [],
-      },
-    },
-    {
-      name: "native recognizes tab-separated PowerShell commands omitted by the legacy AST",
-      shell: "pwsh",
-      command: "git\tstatus",
-      legacy: { commands: [], directories: [] },
-      native: { commands: [{ resource: "git\tstatus", save: "git\tstatus *" }], directories: [] },
-    },
-    {
       name: "native preserves complete PowerShell flag=value resources",
       shell: "pwsh",
       command: "git --flag=value",
       legacy: { commands: [{ resource: "git --flag", save: "git --flag *" }], directories: [] },
       native: { commands: [{ resource: "git --flag=value", save: "git --flag=value *" }], directories: [] },
-    },
-    {
-      name: "native does not split comma-separated PowerShell directory operands",
-      shell: "pwsh",
-      command: "Set-Location a,b",
-      legacy: { commands: [], directories: ["a", ",b"] },
-      native: { commands: [], directories: ["a,b"] },
     },
   ]) {
     test(fixture.name, async () => {
