@@ -177,4 +177,88 @@ describe("ShellParse", () => {
     )
     expect(powershell.directories).toEqual(["/workspace/src", "/usr/local/bin"])
   })
+
+  test("extracts absolute redirect targets as candidate paths for bash", async () => {
+    for (const scan of [ShellParse.scan, (c: string, s: string, d: string) => ShellParse.scan(c, s, d, { portable: true })]) {
+      const result = await Effect.runPromise(scan("echo x > /tmp/out/shell.txt", "/bin/bash", "/workspace"))
+      expect(result.paths).toContain("/tmp/out/shell.txt")
+      expect(result.commands).toHaveLength(1)
+
+      const append = await Effect.runPromise(scan("echo x >> /tmp/out/shell.txt", "/bin/bash", "/workspace"))
+      expect(append.paths).toContain("/tmp/out/shell.txt")
+    }
+  })
+
+  test("extracts absolute argument paths from bash file-access commands", async () => {
+    for (const scan of [ShellParse.scan, (c: string, s: string, d: string) => ShellParse.scan(c, s, d, { portable: true })]) {
+      const result = await Effect.runPromise(
+        scan("cp /etc/hostname /tmp/out/copied.txt; touch /tmp/out/new.txt", "/bin/bash", "/workspace"),
+      )
+      expect(result.paths).toContain("/etc/hostname")
+      expect(result.paths).toContain("/tmp/out/copied.txt")
+      expect(result.paths).toContain("/tmp/out/new.txt")
+    }
+  })
+
+  test("extracts PowerShell absolute argument paths (issue #56288)", async () => {
+    for (const scan of [
+      ShellParse.scan,
+      (c: string, s: string, d: string) => ShellParse.scan(c, s, d, { portable: true }),
+    ]) {
+      const result = await Effect.runPromise(
+        scan('Set-Content "C:\\Users\\user\\Desktop\\out\\a.txt" "x" -Encoding utf8', "pwsh", "C:\\workspace"),
+      )
+      expect(result.paths).toContain("C:\\Users\\user\\Desktop\\out\\a.txt")
+
+      const redir = await Effect.runPromise(
+        scan("echo x > C:\\Users\\user\\Desktop\\out\\a.txt", "pwsh", "C:\\workspace"),
+      )
+      expect(redir.paths).toContain("C:\\Users\\user\\Desktop\\out\\a.txt")
+    }
+  })
+
+  test("does not flag relative or internal-like paths as candidate paths", async () => {
+    for (const scan of [
+      ShellParse.scan,
+      (c: string, s: string, d: string) => ShellParse.scan(c, s, d, { portable: true }),
+    ]) {
+      const result = await Effect.runPromise(scan("cp src/a.ts src/b.ts", "/bin/bash", "/workspace"))
+      expect(result.paths ?? []).toHaveLength(0)
+    }
+  })
+
+  test("does not flag standard device redirects or descriptor redirections as candidate paths", async () => {
+    for (const scan of [
+      ShellParse.scan,
+      (c: string, s: string, d: string) => ShellParse.scan(c, s, d, { portable: true }),
+    ]) {
+      const bashDev = await Effect.runPromise(scan("ls 2>/dev/null 2>&1", "/bin/bash", "/workspace"))
+      expect(bashDev.paths ?? []).toHaveLength(0)
+
+      const devOut = await Effect.runPromise(scan("echo x > /dev/null", "/bin/bash", "/workspace"))
+      expect(devOut.paths ?? []).toHaveLength(0)
+
+      const pwshNull = await Effect.runPromise(scan("Get-ChildItem > $null", "pwsh", "C:\\workspace"))
+      expect(pwshNull.paths ?? []).toHaveLength(0)
+
+      const pwshNul = await Effect.runPromise(scan("Get-ChildItem > NUL", "pwsh", "C:\\workspace"))
+      expect(pwshNul.paths ?? []).toHaveLength(0)
+    }
+  })
+
+  test("does not flag regex patterns or arbitrary command arguments as candidate paths", async () => {
+    for (const scan of [
+      ShellParse.scan,
+      (c: string, s: string, d: string) => ShellParse.scan(c, s, d, { portable: true }),
+    ]) {
+      const grep = await Effect.runPromise(scan("grep -rn '/api/v1' src", "/bin/bash", "/workspace"))
+      expect(grep.paths ?? []).toHaveLength(0)
+
+      const awk = await Effect.runPromise(scan("awk '/foo/ {print}' a.txt", "/bin/bash", "/workspace"))
+      expect(awk.paths ?? []).toHaveLength(0)
+
+      const sed = await Effect.runPromise(scan("sed 's/foo/bar/' a.txt", "/bin/bash", "/workspace"))
+      expect(sed.paths ?? []).toHaveLength(0)
+    }
+  })
 })

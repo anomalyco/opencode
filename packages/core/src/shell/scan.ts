@@ -21,6 +21,7 @@ type Command = {
   declaration?: true
   // Words after a trailing redirect are destinations in the legacy command span.
   redirectWordCount?: number
+  redirectTargets?: string[]
 }
 
 // Opaque describes a parsing limitation, not a permission decision.
@@ -192,6 +193,7 @@ type BashState = {
   dangling: boolean
   // Receives each word's literal text when the list is a command substitution, whose output it stands in for.
   outer: BashText | undefined
+  redirectTargets: string[]
 }
 
 // A word's cooked text, the literal text it decodes to apart from its expansions, and the literal text of its
@@ -259,6 +261,7 @@ function finishBashWord(state: BashState) {
     state.invalid ??= "dynamic-execution"
   if (evaluation && bashEvaluatesExpansion(state, evaluation, state.context)) state.invalid ??= "dynamic-execution"
   if (state.outer) state.outer.output += ` ${state.literal} ${state.output}`
+  if (state.redirectTarget && !state.hereString && state.word) state.redirectTargets.push(state.word)
   const structure = state.structures.at(-1)
   const repeatHeader = structure?.kind === "repeat" && structure.phase === "header"
   if (!state.redirectTarget && repeatHeader) structure.phase = "do"
@@ -363,8 +366,10 @@ function finishBashCommand(state: BashState, boundary = false) {
       ...(state.redirectWordCount !== undefined && state.redirectWordCount < state.words.length
         ? { redirectWordCount: state.redirectWordCount - name }
         : {}),
+      ...(state.redirectTargets.length > 0 ? { redirectTargets: [...state.redirectTargets] } : {}),
     }
     state.commands.push(command)
+    state.redirectTargets = []
     const builtin = bashBuiltinIndex(state)
     const builtinName = state.words[builtin]
     const builtinArgs = state.words.slice(builtin + 1)
@@ -414,6 +419,11 @@ function finishBashCommand(state: BashState, boundary = false) {
     state.invalid ??= "invalid-structure"
   if (state.words.length > (state.ampersandRedirectWords ?? Infinity)) state.invalid ??= "invalid-redirect"
   state.commands.push(...state.nestedCommands.splice(0))
+  if (state.redirectTargets.length > 0) {
+    const last = state.commands.at(-1)
+    if (last) last.redirectTargets = [...(last.redirectTargets ?? []), ...state.redirectTargets]
+    state.redirectTargets = []
+  }
   if (!inHeader && (state.words.length > 0 || state.hasRedirect)) bashStatement(state)
   state.words.length = 0
   state.rawWords.length = 0
@@ -468,6 +478,7 @@ function scanBash(
     compoundEnd: false,
     dangling: false,
     outer,
+    redirectTargets: [],
   }
   for (let index = start; index < input.length; index++) {
     if (--context.remaining < 0) return { kind: "opaque", reason: "invalid-structure" }
@@ -1771,6 +1782,7 @@ function scanPowerShellList(
   let redirectTarget = false
   let dangling = false
   let invocation = false
+  const redirectTargets: string[] = []
 
   const finishWord = (end: number) => {
     if (!started) return
@@ -1792,6 +1804,8 @@ function scanPowerShellList(
       rawWords.push(input.slice(wordStart, end))
       wordEnds.push(end)
       dangling = false
+    } else if (word) {
+      redirectTargets.push(word)
     }
     commandEnd = end
     redirectTarget = false
@@ -1807,6 +1821,7 @@ function scanPowerShellList(
         rawWords: [...rawWords],
         wordEnds: wordEnds.map((value) => value - segment),
         ...(statementHead && !invocation ? { statementHead: true as const } : {}),
+        ...(redirectTargets.length ? { redirectTargets: [...redirectTargets] } : {}),
       })
     else if (
       (!expression && !clause && invocation) ||
@@ -1815,10 +1830,15 @@ function scanPowerShellList(
     )
       invalid = true
     if (redirectTarget) invalid = true
+    if (redirectTargets.length && nestedCommands.length) {
+      const last = nestedCommands.at(-1)
+      if (last) last.redirectTargets = [...(last.redirectTargets ?? []), ...redirectTargets]
+    }
     commands.push(...nestedCommands.splice(0))
     words.length = 0
     rawWords.length = 0
     wordEnds.length = 0
+    redirectTargets.length = 0
     redirectTarget = false
     invocation = false
     expression = initialExpression
