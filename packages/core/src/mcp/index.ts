@@ -116,6 +116,12 @@ export interface Interface extends State.Transformable<Editor> {
   readonly connect: (server: ServerName | string) => Effect.Effect<void, NotFoundError>
   readonly disconnect: (server: ServerName | string) => Effect.Effect<void, NotFoundError>
   readonly remove: (server: ServerName | string) => Effect.Effect<void, NotFoundError>
+  /**
+   * Closes every connection for good when the Location shuts down. Running steps can keep an invalidated
+   * Location's graph (and so its scope) alive long after shutdown, so without this its stdio servers
+   * outlive it. Later starts, such as event-driven reconnects, are refused.
+   */
+  readonly shutdown: Effect.Effect<void>
   readonly tools: () => Effect.Effect<Tool[]>
   readonly callTool: (input: {
     readonly server: ServerName | string
@@ -164,6 +170,7 @@ export const layer = (options?: Options) =>
       const fork = yield* FiberSet.makeRuntime<never, void, never>()
 
       const entries = new Map<ServerName, ServerEntry>()
+      let closed = false
       // Serializes lifecycle operations per server. Anything taking this lock from a connection
       // callback must stay forked: lifecycle operations close scopes while holding it, firing onClose.
       const locks = KeyedMutex.makeUnsafe<ServerName>()
@@ -426,6 +433,8 @@ export const layer = (options?: Options) =>
 
       const startServer = (name: ServerName, entry: ServerEntry) =>
         Effect.gen(function* () {
+          // A shut-down Location must not respawn servers (for example on a credential reconnect).
+          if (closed) return
           // Announce the handshake so connect() and credential reconnects don't show a stale
           // disabled/failed status for the duration of the connection attempt.
           entry.status = { status: "pending" }
@@ -654,6 +663,19 @@ export const layer = (options?: Options) =>
             yield* bus.publish(McpEvent.StatusChanged, { server: name })
           }).pipe(locks.withLock(name))
         }),
+        shutdown: Effect.gen(function* () {
+          closed = true
+          yield* Effect.forEach(
+            Array.from(entries),
+            ([name, entry]) =>
+              Effect.gen(function* () {
+                yield* stopServer(name, entry)
+                entry.status = { status: "disabled" }
+                yield* bus.publish(McpEvent.StatusChanged, { server: name })
+              }).pipe(locks.withLock(name)),
+            { discard: true, concurrency: "unbounded" },
+          )
+        }).pipe(Effect.withSpan("MCP.shutdown")),
         remove: Effect.fn("MCP.remove")(function* (server) {
           const name = ServerName.make(server)
           yield* requireServer(name)
