@@ -3,6 +3,9 @@ import type {
   ServerPairOutput,
   ServerConnectInput,
   ServerConnectOutput,
+  ServerRestartRequestOutput,
+  ServerRestartResolveInput,
+  ServerRestartResolveOutput,
   LocationGetInput,
   LocationGetOutput,
   LocationReloadOutput,
@@ -445,6 +448,31 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
+      restart: {
+        request: (requestOptions?: RequestOptions) =>
+          request<ServerRestartRequestOutput>(
+            {
+              method: "POST",
+              path: `/api/server/restart/request`,
+              successStatus: 200,
+              declaredStatuses: [400, 401],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        resolve: (input: ServerRestartResolveInput, requestOptions?: RequestOptions) =>
+          request<ServerRestartResolveOutput>(
+            {
+              method: "POST",
+              path: `/api/server/restart/resolve`,
+              body: { decision: input["decision"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401],
+              empty: false,
+            },
+            requestOptions,
+          ),
+      },
     },
     location: {
       get: (input?: LocationGetInput, requestOptions?: RequestOptions) =>

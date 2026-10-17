@@ -15,6 +15,7 @@ import { EventHandler } from "./handlers/event"
 import { AgentHandler } from "./handlers/agent"
 import { PluginHandler } from "./handlers/plugin"
 import { ServerHandler } from "./handlers/server"
+import { RestartIntent } from "./restart-intent"
 import { DebugHandler } from "./handlers/debug"
 import { PtyHandler } from "./handlers/pty"
 import { PersistentPtyHandler } from "./handlers/persistent-pty"
@@ -33,7 +34,7 @@ import { MigrationHandler } from "./handlers/migration"
 import { ConfigHandler } from "./handlers/config"
 
 export const handlers = Layer.mergeAll(
-  ServerHandler,
+  ServerHandler.pipe(Layer.provide(RestartIntent.layer)),
   DebugHandler,
   MigrationHandler,
   LocationHandler,

@@ -1,6 +1,8 @@
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api"
-import { UnauthorizedError } from "../errors.js"
+import { ServiceEvent } from "@opencode/schema/service-event"
+import { Session } from "@opencode/schema/session"
+import { InvalidRequestError, UnauthorizedError } from "../errors.js"
 
 export const ServerInfo = Schema.Struct({
   version: Schema.String,
@@ -72,6 +74,38 @@ export const ServerGroup = HttpApiGroup.make("server.server")
         summary: "Redeem pairing code",
         description:
           "Redeem a pairing code. Browsers receive a session cookie and a redirect to the web app; requests that accept JSON receive a session token to use as the password.",
+      }),
+    ),
+  )
+  .add(
+    HttpApiEndpoint.post("server.restart.request", "/api/server/restart/request", {
+      success: Schema.Struct({
+        active: Schema.Array(Session.ID),
+      }),
+    }).annotateMerge(
+      OpenApi.annotations({
+        identifier: "server.restart.request",
+        summary: "Request service restart approval",
+        description:
+          "Register a pending service restart. Returns the sessions with running agents so the requester can seek approval. Resolving the request is reported through server.restart events.",
+      }),
+    ),
+  )
+  .add(
+    HttpApiEndpoint.post("server.restart.resolve", "/api/server/restart/resolve", {
+      payload: Schema.Struct({
+        decision: ServiceEvent.Decision,
+      }),
+      success: Schema.Struct({
+        decision: ServiceEvent.Decision,
+      }),
+      error: InvalidRequestError,
+    }).annotateMerge(
+      OpenApi.annotations({
+        identifier: "server.restart.resolve",
+        summary: "Resolve pending service restart",
+        description:
+          "Approve the pending service restart (now or once sessions go idle) or cancel it. Only the first resolution wins.",
       }),
     ),
   )

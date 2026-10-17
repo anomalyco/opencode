@@ -27,6 +27,7 @@ import { Worktree } from "./worktree.js"
 import { Pty } from "./pty.js"
 import { Reference } from "./reference.js"
 import { ServerEvent } from "./server-event.js"
+import { ServiceEvent } from "./service-event.js"
 import { Shell } from "./shell.js"
 import { Skill } from "./skill.js"
 import { SessionCompactionEvent } from "./session-compaction-event.js"
@@ -73,6 +74,7 @@ export const ServerDefinitions = Event.inventory(
   ...featureDefinitions,
   // Current events the TUI consumes from the public stream.
   ...SessionStatusEvent.Definitions,
+  ...ServiceEvent.Definitions,
   ...TuiEvent.Definitions,
   ...InstallationEvent.Definitions,
   ...VcsEvent.Definitions,
@@ -94,6 +96,7 @@ export const Definitions = Event.inventory(
   ...FileSystemV1.Event.Definitions,
   ...SessionStatusEvent.Definitions,
   ...SessionCompactionEvent.Definitions,
+  ...ServiceEvent.Definitions,
   ...VcsEvent.Definitions,
   ...WorkspaceEvent.Definitions,
   ...WorktreeEvent.Definitions,

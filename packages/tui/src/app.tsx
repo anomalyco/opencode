@@ -94,6 +94,7 @@ import { PromptRefProvider, usePromptRef } from "./context/prompt"
 import { Config, ConfigProvider, useConfig } from "./config"
 import { newSessionLocation } from "./config/new-session-location"
 import { UpdateNotificationProvider, useUpdateNotification, type UpdateSource } from "./context/update-notification"
+import { RestartApprovalProvider } from "./context/restart-approval"
 import { PluginProvider, usePlugin, type PackageSource } from "./plugin/context"
 import { localPluginDirectories } from "./plugin/discovery"
 import { PluginRoute, Slot } from "./plugin/render"
@@ -398,7 +399,8 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                                           <UpdateNotificationProvider
                                                                             updater={input.updater}
                                                                           >
-                                                                            <PanelProvider>
+                                                                            <RestartApprovalProvider>
+                                                                              <PanelProvider>
                                                                               <PluginProvider
                                                                                 packages={input.packages}
                                                                                 directories={pluginDirectories}
@@ -406,6 +408,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                                                 <App />
                                                                               </PluginProvider>
                                                                             </PanelProvider>
+                                                                            </RestartApprovalProvider>
                                                                           </UpdateNotificationProvider>
                                                                         </AttentionProvider>
                                                                       </EditorContextProvider>
@@ -1046,12 +1049,93 @@ function App() {
                 const restart = client.restart
                 if (!restart) return
                 dialog.clear()
-                toast.show({ variant: "info", message: "Restarting service…", duration: 30000 })
-                // restart resolves once the replacement service is healthy; the
-                // event stream reattaches through the reconnect loop.
-                await restart()
-                  .then(() => toast.show({ variant: "success", message: "Service restarted" }))
-                  .catch(toast.error)
+                const restartNow = () => {
+                  toast.show({ variant: "info", message: "Restarting service…", duration: 30000 })
+                  // restart resolves once the replacement service is healthy; the
+                  // event stream reattaches through the reconnect loop.
+                  return restart()
+                    .then(() => toast.show({ variant: "success", message: "Service restarted" }))
+                    .catch(toast.error)
+                }
+                const waitForIdle = async () => {
+                  for (;;) {
+                    const active = await client.api.session.active().catch(() => undefined)
+                    if (!active || Object.keys(active).length === 0) return
+                    await new Promise((resolve) => setTimeout(resolve, 2000))
+                  }
+                }
+                const watchDecision = () => {
+                  let armed = false
+                  let pending: "now" | "idle" | "cancel" | undefined
+                  let settle: ((decision: "now" | "idle" | "cancel") => void) | undefined
+                  const dispose = event.on("server.restart.resolved", (evt) => {
+                    if (!armed) return
+                    pending ??= evt.data.decision
+                    settle?.(evt.data.decision)
+                  })
+                  return {
+                    arm() {
+                      armed = true
+                    },
+                    wait() {
+                      return new Promise<"now" | "idle" | "cancel">((resolve, reject) => {
+                        if (pending !== undefined) return resolve(pending)
+                        const timer = setTimeout(
+                          () => reject(new Error("Restart request expired with no approver")),
+                          120000,
+                        )
+                        settle = (decision) => {
+                          clearTimeout(timer)
+                          resolve(decision)
+                        }
+                      })
+                    },
+                    dispose,
+                  }
+                }
+                const active = await client.api.session.active().catch(() => undefined)
+                if (!active || Object.keys(active).length === 0) {
+                  await restartNow()
+                  return
+                }
+                let requested
+                const watch = watchDecision()
+                try {
+                  requested = await client.api.server.restart.request()
+                } catch {
+                  // Servers older than restart intents cannot approve; fall back.
+                  toast.show({
+                    variant: "warning",
+                    message: "Server does not support restart approval; restarting directly…",
+                  })
+                  await restartNow()
+                  return
+                }
+                watch.arm()
+                if (Object.keys(requested.active).length === 0) {
+                  await restartNow()
+                  return
+                }
+                toast.show({
+                  variant: "info",
+                  message: `Waiting for restart approval (${Object.keys(requested.active).length} running)…`,
+                  duration: 120000,
+                })
+                let winner: "now" | "idle" | "cancel"
+                try {
+                  winner = await watch.wait()
+                } catch {
+                  await client.api.server.restart.resolve({ decision: "cancel" }).catch(() => undefined)
+                  winner = "cancel"
+                } finally {
+                  watch.dispose()
+                }
+                if (winner === "now") await restartNow()
+                else if (winner === "idle") {
+                  toast.show({ variant: "info", message: "Restart queued; waiting for sessions to finish…" })
+                  await waitForIdle()
+                  await restartNow()
+                } else toast.show({ variant: "info", message: "Restart cancelled" })
               },
               category: "System",
             },

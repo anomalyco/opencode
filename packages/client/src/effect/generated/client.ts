@@ -9,6 +9,9 @@ import type {
   ServerPairOutput,
   ServerConnectInput,
   ServerConnectOutput,
+  ServerRestartRequestOutput,
+  ServerRestartResolveInput,
+  ServerRestartResolveOutput,
   LocationGetInput,
   LocationGetOutput,
   LocationReloadOutput,
@@ -312,10 +315,19 @@ const EndpointServerConnect = (raw: RawClient["server.server"]) => (input: Serve
     raw["server.connect"]({ params: { code: input["code"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
+const EndpointServerRestartRequest = (raw: RawClient["server.server"]) => () =>
+  preserveEffect<ServerRestartRequestOutput>()(raw["server.restart.request"]({}).pipe(Effect.mapError(mapClientError)))
+
+const EndpointServerRestartResolve = (raw: RawClient["server.server"]) => (input: ServerRestartResolveInput) =>
+  preserveEffect<ServerRestartResolveOutput>()(
+    raw["server.restart.resolve"]({ payload: { decision: input["decision"] } }).pipe(Effect.mapError(mapClientError)),
+  )
+
 const adaptGroupServer = (raw: RawClient["server.server"]) => ({
   info: EndpointServerInfo(raw),
   pair: EndpointServerPair(raw),
   connect: EndpointServerConnect(raw),
+  restart: { request: EndpointServerRestartRequest(raw), resolve: EndpointServerRestartResolve(raw) },
 })
 
 const EndpointLocationGet = (raw: RawClient["server.location"]) => (input?: LocationGetInput) =>
