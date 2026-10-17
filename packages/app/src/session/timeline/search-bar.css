@@ -12,3 +12,13 @@
   box-shadow: inset 0 0 0 1px var(--v2-border-border-focus);
   outline: none;
 }
+
+[data-component="timeline-search-bar"] [data-slot="text-input-v2-leading-icon"] {
+  transition: color 85ms ease-out;
+}
+
+[data-component="timeline-search-bar"]
+  [data-component="text-input-v2"]:hover
+  [data-slot="text-input-v2-leading-icon"] {
+  color: var(--v2-icon-icon-base);
+}

@@ -64,15 +64,17 @@ export function TimelineSearchBar(props: { controller: TimelineSearchController 
               {c.result.count() > 0 ? c.result.activeIndex() + 1 : 0}/{c.result.count()}
             </span>
           </Show>
-          <button
-            type="button"
-            class="-me-1 flex size-5 shrink-0 self-center items-center justify-center rounded-[2px] border-0 bg-transparent p-0 text-v2-icon-icon-muted outline outline-1 outline-transparent hover:bg-v2-overlay-simple-overlay-hover active:bg-v2-overlay-simple-overlay-pressed focus-visible:outline-v2-border-border-focus"
-            aria-label={c.query.placeholder()}
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={() => c.query.close()}
-          >
-            <Icon name="xmark-small" />
-          </button>
+          <Show when={c.query.value()}>
+            <button
+              type="button"
+              class="-me-1 flex size-5 shrink-0 self-center items-center justify-center border-0 bg-transparent p-0 text-v2-icon-icon-muted transition-colors duration-150 ease-in-out hover:text-v2-icon-icon-base focus-visible:outline focus-visible:outline-1 focus-visible:outline-v2-border-border-focus"
+              aria-label={c.query.clearLabel()}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => c.query.setValue("")}
+            >
+              <Icon name="circle-xmark" />
+            </button>
+          </Show>
         </div>
       </div>
     </Show>
