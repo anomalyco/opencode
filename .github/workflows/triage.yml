@@ -32,13 +32,9 @@ jobs:
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Setup Bun
-        if: steps.author.outputs.skip != 'true'
-        uses: ./.github/actions/setup-bun
-
       - name: Install opencode
         if: steps.author.outputs.skip != 'true'
-        run: curl -fsSL https://opencode.ai/install | bash
+        run: curl -fsSL https://opencode.ai/v2/install | bash
 
       - name: Triage issue
         if: steps.author.outputs.skip != 'true'
@@ -49,7 +45,8 @@ jobs:
           ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_BODY: ${{ github.event.issue.body }}
         run: |
-          opencode run --agent triage "The following issue was just opened, triage it:
+          # `opencode run` does not apply the agent's `model`, so pass it explicitly.
+          opencode run --standalone --agent triage --model opencode/gpt-6-luna#high "The following issue was just opened, triage it:
 
           Title: $ISSUE_TITLE
 

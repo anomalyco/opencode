@@ -1,5 +1,4 @@
-/// <reference path="../env.d.ts" />
-import { tool } from "@opencode/plugin"
+import { Plugin } from "@opencode/plugin"
 
 const TEAM = {
   tui: ["kommander", "simonklee"],
@@ -35,26 +34,41 @@ async function githubFetch(endpoint: string, options: RequestInit = {}) {
   return response.json()
 }
 
-export default tool({
-  description: `Use this tool to assign a GitHub issue.
+export default Plugin.define({
+  id: "github-triage",
+  async setup(ctx) {
+    await ctx.tool.transform((editor) => {
+      editor.add({
+        name: "github-triage",
+        description: `Use this tool to assign a GitHub issue.
 
 Provide the team that should own the issue. This tool picks a random assignee from that team and does not apply labels.`,
-  args: {
-    team: tool.schema
-      .enum(Object.keys(TEAM) as [keyof typeof TEAM, ...(keyof typeof TEAM)[]])
-      .describe("The owning team"),
-  },
-  async execute(args) {
-    const issue = getIssueNumber()
-    const owner = "anomalyco"
-    const repo = "opencode"
-    const assignee = pick(TEAM[args.team])
+        input: {
+          type: "object",
+          properties: {
+            team: { type: "string", enum: Object.keys(TEAM), description: "The owning team" },
+          },
+          required: ["team"],
+          additionalProperties: false,
+        },
+        // The triage agent denies every other tool, including Code Mode's `execute`.
+        options: { codemode: false },
+        async execute(input, context) {
+          const team = (input as { team: keyof typeof TEAM }).team
+          const issue = getIssueNumber()
+          const owner = "anomalyco"
+          const repo = "opencode"
+          const assignee = pick(TEAM[team])
 
-    await githubFetch(`/repos/${owner}/${repo}/issues/${issue}/assignees`, {
-      method: "POST",
-      body: JSON.stringify({ assignees: [assignee] }),
+          await githubFetch(`/repos/${owner}/${repo}/issues/${issue}/assignees`, {
+            method: "POST",
+            body: JSON.stringify({ assignees: [assignee] }),
+            signal: context.signal,
+          })
+
+          return { content: `Assigned @${assignee} from ${team} to issue #${issue}` }
+        },
+      })
     })
-
-    return `Assigned @${assignee} from ${args.team} to issue #${issue}`
   },
 })

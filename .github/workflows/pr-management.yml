@@ -27,17 +27,9 @@ jobs:
             echo "is_team=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Setup Bun
-        if: steps.team-check.outputs.is_team != 'true'
-        uses: ./.github/actions/setup-bun
-
-      - name: Install dependencies
-        if: steps.team-check.outputs.is_team != 'true'
-        run: bun install
-
       - name: Install opencode
         if: steps.team-check.outputs.is_team != 'true'
-        run: curl -fsSL https://opencode.ai/install | bash
+        run: curl -fsSL https://opencode.ai/v2/install | bash
 
       - name: Build prompt
         if: steps.team-check.outputs.is_team != 'true'
@@ -63,9 +55,12 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          COMMENT=$(bun script/duplicate-pr.ts -f pr_info.txt "Check the attached file for PR details and search for duplicates")
+          # `opencode run` does not apply the agent's `model`, so pass it explicitly.
+          opencode run --standalone --agent duplicate-pr --model opencode/gpt-6-luna --format json \
+            --file pr_info.txt "Check the attached file for PR details and search for duplicates" > duplicate-pr.jsonl
+          COMMENT=$(jq -rs '[.[] | select(.type == "text") | .part.text] | last // "" | gsub("^\\s+|\\s+$"; "")' duplicate-pr.jsonl)
 
-          if [ "$COMMENT" != "No duplicate PRs found" ]; then
+          if [ -n "$COMMENT" ] && [ "$COMMENT" != "No duplicate PRs found" ]; then
             gh pr comment "$PR_NUMBER" --body "_The following comment was made by an LLM, it may be inaccurate:_
 
           $COMMENT"
