@@ -15,7 +15,10 @@ export const cleanup = Effect.fn("FileRetention.cleanup")(function* (
       Effect.gen(function* () {
         const info = yield* fs.stat(file).pipe(Effect.orElseSucceed(() => undefined))
         const mtime = info && Option.getOrUndefined(info.mtime)
-        if (!mtime || mtime.getTime() >= cutoff) return
+        const modified = mtime?.getTime()
+        // workerd reports mtime as the unix epoch for every file, including output
+        // that was just written. A non-positive mtime is not an age.
+        if (modified === undefined || modified <= 0 || modified >= cutoff) return
         yield* fs.remove(file).pipe(Effect.ignore)
       }),
     { concurrency: 8, discard: true },
