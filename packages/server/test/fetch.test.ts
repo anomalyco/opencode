@@ -179,6 +179,32 @@ it.live("activates credentials through the HttpApi", () =>
   }),
 )
 
+it.live("adds and removes MCP servers with long names through the HttpApi", () =>
+  Effect.gen(function* () {
+    const config = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-mcp-names-")))
+    const handler = yield* ServerFetch.make({ ...options, config: { project: false, directory: config.path } })
+
+    yield* Effect.forEach([100, 101, 512], (length) =>
+      Effect.gen(function* () {
+        const url = `http://opencode.local/api/experimental/mcp/${"s".repeat(length)}?directory=${encodeURIComponent(config.path)}`
+        const added = yield* Effect.promise(() =>
+          handler(
+            new Request(url, {
+              method: "PUT",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ config: { type: "local", command: ["unused"], disabled: true } }),
+            }),
+          ),
+        )
+        expect({ length, status: added.status }).toEqual({ length, status: 204 })
+
+        const removed = yield* Effect.promise(() => handler(new Request(url, { method: "DELETE" })))
+        expect({ length, status: removed.status }).toEqual({ length, status: 204 })
+      }),
+    )
+  }),
+)
+
 it.live("serves unauthenticated and answers CORS preflight when no password is configured", () =>
   Effect.gen(function* () {
     const handler = yield* ServerFetch.make(options)
