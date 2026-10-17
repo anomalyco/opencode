@@ -1,4 +1,6 @@
-import { expect } from "bun:test"
+import { expect, test } from "bun:test"
+import { EventEmitter } from "node:events"
+import type { Server } from "node:http"
 import { Effect } from "effect"
 import { HttpServer, HttpServerRequest, HttpServerResponse } from "effect/http"
 import { it } from "../../core/test/lib/effect"
@@ -259,3 +261,27 @@ it.live("server info lists remote URLs alongside local addresses while they are 
     expect((yield* info()).urls).toEqual([base])
   }),
 )
+
+function abortedResponse(writableEnded: boolean) {
+  const response = {
+    writableEnded,
+    destroyed: false,
+    destroy() {
+      this.destroyed = true
+    },
+  }
+  const server = new EventEmitter() as unknown as Server
+  const request = new EventEmitter()
+  ServerProcess.bridgeSseDisconnect(server)
+  server.emit("request", request, response)
+  request.emit("aborted")
+  return response
+}
+
+test("destroys the response when a Bun request aborts before it finishes", () => {
+  expect(abortedResponse(false).destroyed).toBe(true)
+})
+
+test("leaves a finished response alone when a Bun request aborts", () => {
+  expect(abortedResponse(true).destroyed).toBe(false)
+})
