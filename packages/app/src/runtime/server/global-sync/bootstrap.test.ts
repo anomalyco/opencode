@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { QueryClient } from "@tanstack/solid-query"
 import { OpenCode } from "@opencode/client/promise"
 import { createStore } from "solid-js/store"
-import { bootstrapGlobal, loadPathQuery, loadProjectsQuery } from "./bootstrap"
+import { bootstrapGlobal, inferHomeDirectory, loadPathQuery, loadProjectsQuery } from "./bootstrap"
 import { ServerScope } from "@/runtime/server/scope"
 import type { ServerApi } from "@/runtime/server/api"
 import { createServerTransport } from "@/runtime/server/client"
@@ -131,6 +131,10 @@ describe("query keys", () => {
 
     expect(calls).toEqual([{ location: { directory: "/repo/subpath" } }])
     expect(result).toMatchObject({ directory: "/repo/subpath", worktree: "/repo" })
+    expect(inferHomeDirectory("/Users/kamil/Developer/opencode")).toBe("/Users/kamil")
+    expect(inferHomeDirectory("/home/ubuntu/workspace/repo")).toBe("/home/ubuntu")
+    expect(inferHomeDirectory("C:\\Users\\luke\\repo")).toBe("C:\\Users\\luke")
+    expect(inferHomeDirectory("/repo/subpath")).toBe("")
   })
 
   test("loads project metadata without enumerating any project's worktrees", async () => {

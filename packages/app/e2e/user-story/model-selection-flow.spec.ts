@@ -76,7 +76,7 @@ test("creates a session in a new project and selects its model", async ({ page }
   await expectAppVisible(addProject)
   await addProject.click()
   const picker = page.getByRole("dialog", { name: "Open project", exact: true })
-  await expect(picker.getByRole("combobox")).toHaveValue("C:\\OpenCode\\NewProject")
+  await expect(picker.getByRole("combobox")).toHaveValue("")
 
   const listing = page.waitForRequest((request) => {
     const url = new URL(request.url())

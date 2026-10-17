@@ -123,27 +123,14 @@ export function pickerRelativePath(base: string | undefined, path: string) {
   return targetPath.slice(prefix.length)
 }
 
-export function currentPickerSuggestions<T>(result: { query: string; items: readonly T[] } | undefined, query: string) {
-  if (result?.query !== query) return []
-
-  return result.items
-}
-
-export function preloadTreeDirectories(
-  parent: string,
-  nodes: ReadonlyArray<{ name: string; type: "file" | "directory" }>,
+export function currentPickerSuggestions<T>(
+  result: { query: string; items: readonly T[] } | undefined,
+  query: string,
+  loading = false,
 ) {
-  return treeEntries(
-    parent,
-    nodes.filter((node) => node.type === "directory"),
-  )
-}
+  if (result?.query !== query && !loading) return []
 
-export function advanceTreePreload(advanced: Set<string>, path: string) {
-  if (advanced.has(path)) return false
-  advanced.add(path)
-
-  return true
+  return result?.items ?? []
 }
 
 export function activeTreeNavigation(request: number, current: number) {
@@ -382,6 +369,36 @@ export function displayPickerPath(path: string, input: string, home: string) {
   if (/^[A-Za-z]:\//.test(trimPickerPath(home)) || /^[A-Za-z]:\//.test(value)) return value.replaceAll("/", "\\")
 
   return pickerTilde(value, home) || value
+}
+
+export function shortenPickerRecentPath(path: string, home: string) {
+  const display = displayPickerPath(path, "", home)
+
+  if (display.startsWith("~/")) {
+    const parts = display.slice(2).split("/").filter(Boolean)
+
+    if (parts.length <= 2) return display
+
+    return `~/…/${parts.slice(-2).join("/")}`
+  }
+
+  if (display.startsWith("/") && !display.startsWith("//")) {
+    const parts = display.slice(1).split("/").filter(Boolean)
+
+    if (parts.length <= 2) return display
+
+    return `/${parts[0]}/…/${parts.slice(-2).join("/")}`
+  }
+
+  if (/^[A-Za-z]:\\/.test(display)) {
+    const parts = display.split("\\").filter(Boolean)
+
+    if (parts.length <= 3) return display
+
+    return `${parts[0]}\\…\\${parts.slice(-2).join("\\")}`
+  }
+
+  return display
 }
 
 export async function listPickerDirectory(

@@ -2,12 +2,10 @@ import { expect, test } from "bun:test"
 import {
   absoluteTreePath,
   activeTreeNavigation,
-  advanceTreePreload,
   nextSuggestionIndex,
   nextTreeScrollTop,
   pickerFileSearchQuery,
   pickerMode,
-  preloadTreeDirectories,
   selectedTreePath,
   treeEntries,
   treePathWithin,
@@ -16,6 +14,7 @@ import {
   createPriorityTaskQueue,
   listPickerDirectory,
   displayPickerPath,
+  shortenPickerRecentPath,
   pickerParent,
   pickerRoot,
   pickerAbsoluteInput,
@@ -114,6 +113,12 @@ test.each([
   ["relative input", pickerAbsoluteInput("src", "C:/Users/luke", "C:/Users/luke/repo"), "C:/Users/luke/repo/src"],
   ["file search", pickerFileSearchQuery("/home/luke/repos", "/home/luke/repos/src/in", "/home/luke"), "src/in"],
   ["file search", pickerFileSearchQuery("/home/luke", "~/repos/op", "/home/luke"), "repos/op"],
+  ["recent short 2-level tilde", shortenPickerRecentPath("/home/luke/Developer/opencode", "/home/luke"), "~/Developer/opencode"],
+  ["recent deep tilde", shortenPickerRecentPath("/home/luke/workspaces/anomalyco/opencode/packages/app", "/home/luke"), "~/…/packages/app"],
+  ["recent short 2-level root", shortenPickerRecentPath("/workspace/billing-api", "/home/luke"), "/workspace/billing-api"],
+  ["recent deep root", shortenPickerRecentPath("/srv/clients/acme/services/payments-gateway", "/home/luke"), "/srv/…/services/payments-gateway"],
+  ["recent short Windows", shortenPickerRecentPath("C:/OpenCode/NewProject", ""), "C:\\OpenCode\\NewProject"],
+  ["recent deep Windows", shortenPickerRecentPath("C:/Users/luke/work/acme/repo", "C:/Users/luke"), "C:\\…\\acme\\repo"],
 ])("uses the selected server path format for %s: %p", (_name, actual, expected) => {
   expect(actual).toBe(expected)
 })
@@ -122,6 +127,7 @@ test("exposes autocomplete results only for their source query", () => {
   const result = { query: "/repo/src", items: ["/repo/src/index.ts"] }
   expect(currentPickerSuggestions(result, "/repo/src")).toEqual(result.items)
   expect(currentPickerSuggestions(result, "/repo/test")).toEqual([])
+  expect(currentPickerSuggestions(result, "/repo/test", true)).toEqual(result.items)
 })
 
 test("resolves directory autocomplete from the browser root without changing location", async () => {
@@ -388,21 +394,6 @@ test("searches from an absolute root without a default base", async () => {
 
   expect(await search("/")).toEqual(["/Users", "/tmp"])
   expect(directories).toEqual(["/"])
-})
-
-test("identifies the next directory level to preload once for every expanded directory", () => {
-  expect(
-    preloadTreeDirectories("src/", [
-      { name: "components", type: "directory" },
-      { name: "index.ts", type: "file" },
-      { name: "utils", type: "directory" },
-    ]),
-  ).toEqual(["src/components/", "src/utils/"])
-
-  const advanced = new Set<string>()
-  expect(advanceTreePreload(advanced, "")).toBeTrue()
-  expect(advanceTreePreload(advanced, "")).toBeFalse()
-  expect(advanceTreePreload(advanced, "repos/")).toBeTrue()
 })
 
 test("limits background tasks and prioritizes newly requested work", async () => {
