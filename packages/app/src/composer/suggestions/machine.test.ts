@@ -145,3 +145,32 @@ test.each<{
   if (row.command) expect(result.commands).toContainEqual(row.command)
   expect(result.handled).toBe(row.handled ?? false)
 })
+
+test("ignores Enter while IME composition is active", () => {
+  const state: Partial<ComposerInteractionState> = {
+    popover: { type: "context", query: "", activeID: "first" },
+  }
+  const result = transitionComposer(
+    { ...createComposerInteractionState(), ...state },
+    { type: "key.down", key: "Enter", ctrl: false, composing: true, ids: ["first"] },
+    persisted(),
+  )
+
+  expect(result.handled).toBeFalse()
+  expect(result.commands).toEqual([])
+  expect(result.state.popover).toEqual({ type: "context", query: "", activeID: "first" })
+})
+
+test("selects the active suggestion with Enter after composition ends", () => {
+  const state: Partial<ComposerInteractionState> = {
+    popover: { type: "context", query: "", activeID: "first" },
+  }
+  const result = transitionComposer(
+    { ...createComposerInteractionState(), ...state },
+    { type: "key.down", key: "Enter", ctrl: false, composing: false, ids: ["first"] },
+    persisted(),
+  )
+
+  expect(result.handled).toBeTrue()
+  expect(result.commands).toContainEqual({ type: "suggestion.select", id: "first" })
+})
