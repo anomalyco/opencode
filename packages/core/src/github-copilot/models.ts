@@ -7,6 +7,7 @@ import { Provider } from "../provider.js"
 
 const RemoteModel = Schema.Struct({
   model_picker_enabled: Schema.Boolean,
+  is_chat_fallback: Schema.optional(Schema.Boolean),
   id: Schema.String,
   name: Schema.String,
   version: Schema.String,
@@ -14,6 +15,8 @@ const RemoteModel = Schema.Struct({
   policy: Schema.optional(Schema.Struct({ state: Schema.optional(Schema.String) })),
   billing: Schema.optional(
     Schema.Struct({
+      // Present on models that Copilot's auto router may select.
+      auto_discount: Schema.optional(Schema.Number),
       token_prices: Schema.optional(
         Schema.Struct({
           batch_size: Schema.Number,
@@ -114,7 +117,38 @@ export function derive(baseURL: string, remote: Snapshot, existing: readonly Mod
     result.set(key, build(key, model, baseURL))
   }
 
+  const candidates = Array.from(remote.values()).filter((model) => model.billing?.auto_discount !== undefined)
+  if (candidates.length > 0 && !remote.has(auto)) result.set(auto, router(baseURL, candidates))
+
   return result
+}
+
+/** Copilot's auto router. Plans limited to auto selection hide every other model from the picker. */
+export const auto = Model.ID.make("auto")
+
+// The router serves each Session with one of the candidates, so advertise only what all of them support.
+function router(baseURL: string, candidates: UsableModel[]) {
+  return Model.Info.make({
+    ...Model.Info.default(Provider.ID.githubCopilot, auto),
+    family: Model.Family.make("auto"),
+    name: "Auto",
+    package: Provider.aisdk("@ai-sdk/github-copilot"),
+    settings: { baseURL },
+    capabilities: {
+      tools: true,
+      input: candidates.some((model) => model.capabilities.supports.vision) ? ["text", "image"] : ["text"],
+      output: ["text"],
+    },
+    limit: {
+      context: Math.min(
+        ...candidates.map(
+          (model) => model.capabilities.limits.max_context_window_tokens ?? model.capabilities.limits.max_prompt_tokens,
+        ),
+      ),
+      input: Math.min(...candidates.map((model) => model.capabilities.limits.max_prompt_tokens)),
+      output: Math.min(...candidates.map((model) => model.capabilities.limits.max_output_tokens)),
+    },
+  })
 }
 
 function usable(model: RemoteModel): model is UsableModel {

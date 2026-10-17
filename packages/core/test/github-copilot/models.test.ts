@@ -148,9 +148,63 @@ test("prices cache reads from either token price spelling", async () => {
 
   try {
     const models = await CopilotModels.get(server.url.origin, {}, [])
-    expect(models.get(Model.ID.make("renamed"))?.cost[0]).toMatchObject({ input: 2.5, output: 15, cache: { read: 0.25 } })
-    expect(models.get(Model.ID.make("legacy"))?.cost[0]).toMatchObject({ input: 2.5, output: 15, cache: { read: 0.25 } })
+    expect(models.get(Model.ID.make("renamed"))?.cost[0]).toMatchObject({
+      input: 2.5,
+      output: 15,
+      cache: { read: 0.25 },
+    })
+    expect(models.get(Model.ID.make("legacy"))?.cost[0]).toMatchObject({
+      input: 2.5,
+      output: 15,
+      cache: { read: 0.25 },
+    })
     expect(models.get(Model.ID.make("unpriced"))?.cost[0]).toMatchObject({ cache: { read: 0 } })
+  } finally {
+    await server.stop(true)
+  }
+})
+
+test("advertises Copilot's auto router when it has candidates", async () => {
+  // Student and Free plans hide every model from the picker and route through auto instead.
+  const item = (id: string, limits: Record<string, number>, billing?: Record<string, unknown>, vision = false) => ({
+    model_picker_enabled: false,
+    id,
+    name: id,
+    version: `${id}-2026-08-01`,
+    supported_endpoints: ["/chat/completions"],
+    ...(billing ? { billing } : {}),
+    capabilities: { family: id, limits, supports: { tool_calls: true, vision } },
+  })
+  const server = Bun.serve({
+    port: 0,
+    fetch: (request) =>
+      Response.json({
+        data: [
+          item(
+            "large",
+            { max_context_window_tokens: 400_000, max_prompt_tokens: 272_000, max_output_tokens: 128_000 },
+            { auto_discount: 0.1 },
+            true,
+          ),
+          item("small", { max_prompt_tokens: 128_000, max_output_tokens: 64_000 }, { auto_discount: 0.1 }),
+          item("excluded", { max_prompt_tokens: 8_000, max_output_tokens: 1_000 }),
+        ].filter((model) => new URL(request.url).pathname === "/auto/models" || !model.billing),
+      }),
+  })
+
+  try {
+    const models = await CopilotModels.get(`${server.url.origin}/auto`, {}, [])
+    expect(models.get(CopilotModels.auto)).toMatchObject({
+      id: "auto",
+      modelID: "auto",
+      providerID: Provider.ID.githubCopilot,
+      name: "Auto",
+      enabled: true,
+      capabilities: { tools: true, input: ["text", "image"] },
+      limit: { context: 128_000, input: 128_000, output: 64_000 },
+    })
+    expect(models.get(Model.ID.make("large"))?.enabled).toBe(false)
+    expect((await CopilotModels.get(server.url.origin, {}, [])).has(CopilotModels.auto)).toBe(false)
   } finally {
     await server.stop(true)
   }
