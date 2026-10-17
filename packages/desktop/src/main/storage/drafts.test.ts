@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, setSystemTime, test } from "bun:test"
+import { mkdtemp, rm, stat } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import path from "node:path"
 import { sql } from "drizzle-orm"
 import { openDatabase } from "./database"
 import { blobGrace, createDraftStore } from "./drafts"
@@ -12,9 +15,15 @@ const clock = (ms: number) => setSystemTime(new Date(start + ms))
 const text = (...ids: string[]) =>
   JSON.stringify({ prompt: [{ type: "text", content: { blob: { kind: "text", ids } } }] })
 
+const roots: string[] = []
+
 beforeEach(() => clock(0))
 
-afterEach(() => setSystemTime())
+afterEach(async () => {
+  setSystemTime()
+  // Bun's node:sqlite shim pins the WAL files on Windows after close(); tolerate the leftover here only.
+  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }).catch(() => undefined)))
+})
 
 describe("draft store", () => {
   test("queues documents and reads them back before and after flush", () => {
@@ -144,4 +153,34 @@ describe("draft store", () => {
     drafts.flush()
     expect(drafts.getBlob(image)).not.toBeNull()
   })
+
+  test("a cleared draft gives its pages back instead of pinning the file at its high-water mark", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "opencode-drafts-reclaim-"))
+    roots.push(root)
+    const file = path.join(root, "drafts.sqlite")
+    const database = openDatabase(file)
+    const drafts = createDraftStore(database.db, { collectDelay: 0 })
+    const chunk = drafts.putBlob(new Uint8Array(8 * 1024 * 1024))
+    drafts.set("doc", text(chunk))
+    drafts.flush()
+    expect(await fileSize(database, file)).toBeGreaterThan(8 * 1024 * 1024)
+
+    // Clearing the draft retires the chunk, and the next due batch collects it. Its pages are what
+    // the file would keep forever without `reclaim`.
+    drafts.set("doc", null)
+    clock(blobGrace + collectInterval + 1)
+    drafts.set("other", "{}")
+    drafts.flush()
+    expect(drafts.getBlob(chunk)).toBeNull()
+
+    expect(await fileSize(database, file)).toBeLessThan(1024 * 1024)
+    database.close()
+  })
 })
+
+/** The file's bytes with the WAL folded back, which is where a truncation reaches the disk. */
+async function fileSize(database: ReturnType<typeof openDatabase>, file: string) {
+  database.db.$client.exec("PRAGMA wal_checkpoint(TRUNCATE)")
+
+  return (await stat(file)).size
+}

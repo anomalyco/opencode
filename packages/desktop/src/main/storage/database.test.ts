@@ -1,5 +1,7 @@
-import { describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "bun:test"
 import { DatabaseSync } from "node:sqlite"
+import { mkdtemp, rm, stat } from "node:fs/promises"
+import { tmpdir } from "node:os"
 import path from "node:path"
 import { sql } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/node-sqlite"
@@ -12,6 +14,13 @@ const tables = (db: ReturnType<typeof drizzle>) =>
     .map((row) => row.name)
 
 const expected = ["blob", "document", "extension", "extension_file", "migration", "state"]
+
+const roots: string[] = []
+
+// Bun's node:sqlite shim pins the WAL files on Windows after close(); tolerate the leftover here only.
+afterEach(() =>
+  Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }).catch(() => undefined))),
+)
 
 describe("database", () => {
   test("bootstraps every table on a fresh database and is idempotent", () => {
@@ -42,6 +51,29 @@ describe("database", () => {
     expect(db.all(sql`SELECT id FROM migration`)).toEqual([])
     expect(db.all(sql`SELECT value FROM state`)).toEqual([{ value: "kept" }])
     native.close()
+  })
+
+  test("adopts a file written before auto_vacuum and returns the pages it had stranded", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "opencode-storage-reclaim-"))
+    roots.push(root)
+    const file = path.join(root, "drafts.sqlite")
+
+    // A file as the release before this one left it: the default mode, with a large row already
+    // deleted and a small one still live.
+    const legacy = new DatabaseSync(file)
+    legacy.exec("PRAGMA journal_mode=WAL; CREATE TABLE retired (kind TEXT NOT NULL, data BLOB NOT NULL)")
+    const insert = legacy.prepare("INSERT INTO retired VALUES (?, ?)")
+    insert.run("large", Buffer.alloc(8 * 1024 * 1024))
+    insert.run("kept", Buffer.from("kept"))
+    legacy.exec("DELETE FROM retired WHERE kind = 'large'")
+    legacy.close()
+
+    const database = openDatabase(file)
+    expect(database.db.all(sql`SELECT kind FROM retired`)).toEqual([{ kind: "kept" }])
+    expect(database.db.all(sql`PRAGMA auto_vacuum`)).toEqual([{ auto_vacuum: 2 }])
+    database.db.$client.exec("PRAGMA wal_checkpoint(TRUNCATE)")
+    expect((await stat(file)).size).toBeLessThan(1024 * 1024)
+    database.close()
   })
 
   test("rendered registry matches the drizzle-kit output on disk", async () => {

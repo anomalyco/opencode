@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto"
 import { eq, sql } from "drizzle-orm"
-import type { Database } from "./database"
+import { reclaim, type Database } from "./database"
 import { blobs, document } from "./schema"
 import { createWriteBehind } from "./write-behind"
 
@@ -145,4 +145,8 @@ function collectBlobs(db: Database, before: number) {
           AND json_type(node.value, '$.ids') = 'array'
       )
   `)
+
+  // A retired chunk is the only thing in this store large enough to matter, and this is the one
+  // place that retires them, so the pages it held go back before the write batch returns.
+  reclaim(db)
 }
