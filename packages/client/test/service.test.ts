@@ -14,6 +14,7 @@ import { accelerate } from "./fixture/service-timing"
 
 const ensure = accelerate(Service.ensure)
 const stop = accelerate(Service.stop)
+const serviceStatus = accelerate(Service.status)
 
 test("a concurrent same-version start cannot invalidate a resolved endpoint", async () => {
   await using fixture = await serviceFixture()
@@ -175,28 +176,25 @@ test("reports a failed registered service without spawning", async () => {
   expect(process.exitCode).toBe(null)
 })
 
-test("evicts an unresponsive registered service before starting its replacement", async () => {
+test("does not kill a live process when its health endpoint is unresponsive", async () => {
   await using fixture = await serviceFixture()
   const registration = fixture.registration
   const existing = fixture.spawn("hanging")
   await fixture.waitForFile()
   const original = await Bun.file(registration).json()
 
-  const endpoint = await run(
+  await expect(run(
     ensure({
       file: registration,
       version: "test",
       command: fixture.command("delayed", "10"),
     }),
-  )
-  const replacement = await Bun.file(registration).json()
-  fixture.track(replacement.pid)
+  )).rejects.toThrow("Timed out waiting for the background service to start")
 
-  expect((await Bun.file(registration + ".requests").text()).trim().split("\n")).toHaveLength(3)
-  expect(await existing.exited).toBe(stoppedExitCode)
-  expect(replacement.pid).not.toBe(original.pid)
-  expect(endpoint.url).toBe(replacement.url)
-  expect(await status(endpoint.url)).toMatchObject({ version: "test", pid: replacement.pid })
+  expect((await Bun.file(registration + ".requests").text()).trim().split("\n").length).toBeGreaterThan(0)
+  expect(existing.exitCode).toBe(null)
+  expect((await run(serviceStatus({ file: registration })))?.url).toBe(original.url)
+  expect((await run(serviceStatus({ file: registration })))?.state).toBe("busy")
 })
 
 test("signals an unresponsive registered service process", async () => {

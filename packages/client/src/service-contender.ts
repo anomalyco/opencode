@@ -66,6 +66,10 @@ export function contenderPool(timing: EnsureTiming) {
   return {
     /** The first startup failure seen since the last eviction. */
     failure: () => failure,
+    /** Whether a registered process was started by this ensure call. */
+    owns(pid: number) {
+      return [...contenders].some((item) => item.child.pid === pid && !contenderFinished(item))
+    },
     /** A registered service answered, so the next attempt waits the base delay again. */
     serviceAnswered() {
       spawnDelay = timing.spawnDelay

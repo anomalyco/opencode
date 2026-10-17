@@ -28,10 +28,10 @@ export function Reconnecting(props: { managed?: boolean }) {
         paddingRight={2}
         gap={1}
       >
-        <Spinner color={theme.text.base}>{props.managed ? "Restarting service…" : "Connection lost…"}</Spinner>
+        <Spinner color={theme.text.base}>{props.managed ? "Reconnecting to service…" : "Connection lost…"}</Spinner>
         <text fg={theme.text.muted}>
           {props.managed
-            ? "Your session will resume automatically."
+            ? "The service may be starting or busy. Your session will resume automatically."
             : "Reconnecting to the server automatically."}
         </text>
       </box>

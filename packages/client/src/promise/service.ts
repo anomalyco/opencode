@@ -4,7 +4,7 @@ import { contenderPool, spawnServiceContender } from "../service-contender.js"
 import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
 import { matchesVersion } from "../service-version.js"
 import { PtyHandoff } from "../pty-handoff.js"
-import { decide, fallback, headers, probeResult, same } from "../service-probe.js"
+import { decide, fallback, headers, probeResult, same, status as serviceStatus } from "../service-probe.js"
 
 export * from "../service.js"
 export { headers }
@@ -24,12 +24,20 @@ export async function discover(options: DiscoverOptions = {}) {
   return found.endpoint
 }
 
+/** Report a registered process even when its health endpoint is busy. */
+export async function status(options: DiscoverOptions = {}) {
+  const info = await read(options.file)
+  const found = info === undefined ? undefined : (await probeResult(info, 250)).service
+  if (found !== undefined && !matchesVersion(found.version, options)) return undefined
+  return serviceStatus(found)
+}
+
 /** Ensure a healthy, compatible local service is running. */
 export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
   const timing = ensureTiming(options)
   const deadline = Date.now() + timing.promiseTimeout
   const pool = contenderPool(timing)
-  let timeouts: { readonly info: Info; readonly count: number } | undefined
+  let stalled: { readonly info: Info; readonly count: number } | undefined
   let announced = false
 
   const announce = (reason: "missing" | "version-mismatch", previousVersion?: string) => {
@@ -52,22 +60,20 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
       if (Date.now() >= deadline)
         throw pool.failure() ?? new Error("Timed out waiting for the background service to start")
       const registration = await registered(options.file, timing.requestTimeout)
-      if (registration.timedOut && registration.info !== undefined) {
-        timeouts = {
+      if (registration.timedOut && registration.info !== undefined && pool.owns(registration.info.pid)) {
+        stalled = {
           info: registration.info,
-          count: timeouts !== undefined && same(timeouts.info, registration.info) ? timeouts.count + 1 : 1,
+          count: stalled !== undefined && same(stalled.info, registration.info) ? stalled.count + 1 : 1,
         }
-        if (timeouts.count >= 3) {
-          announce("missing")
-          console.warn("Background service is unresponsive; recovery cannot preserve persistent terminals")
+        if (stalled.count >= 3) {
+          console.warn("Background service contender is unresponsive; replacing the owned startup attempt")
           await PtyHandoff.clear(options.file ?? fallback())
           await terminate(registration.info, options, timing)
           pool.evict(registration.info.pid)
           pool.recruitNow()
-          timeouts = undefined
+          stalled = undefined
         }
-      } else timeouts = undefined
-
+      } else stalled = undefined
       if (registration.service !== undefined) {
         pool.serviceAnswered()
         const service = registration.service
@@ -76,6 +82,9 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
         if (decision._tag === "reuse") {
           await PtyHandoff.complete(options.file ?? fallback(), service.info)
           return service.endpoint
+        }
+        if (decision._tag === "wait" && service.state === "busy") {
+          await delay(Math.max(timing.pollInterval, Math.min(timing.requestTimeout, 1_000)))
         }
         if (decision._tag === "replace") {
           announce("version-mismatch", service.version)
@@ -170,4 +179,4 @@ function delay(milliseconds: number) {
 }
 
 /** Promise-based local service lifecycle operations. */
-export const Service = { discover, ensure, stop, headers }
+export const Service = { discover, status, ensure, stop, headers }

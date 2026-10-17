@@ -1,4 +1,5 @@
 import { isRecord } from "./record"
+import { ClientError } from "@opencode/client/promise"
 
 type ConfigIssue = { message: string; path: string[] }
 
@@ -119,6 +120,19 @@ export function errorFormat(error: unknown): string {
 }
 
 export function errorMessage(error: unknown): string {
+  if (error instanceof ClientError) {
+    if (error.reason === "Transport") {
+      const code = transportCode(error.cause)
+      if (code === "ECONNREFUSED") return "OpenCode refused the connection. The service may be stopped or overloaded."
+      if (isTimeout(error.cause)) return "OpenCode did not respond before the request timed out. The service may be busy."
+      return "Could not reach the OpenCode service. It may be busy or unavailable."
+    }
+    if (error.reason === "UnexpectedStatus") {
+      const status = isRecord(error.cause) && typeof error.cause.status === "number" ? error.cause.status : undefined
+      if (status !== undefined) return `OpenCode returned HTTP ${status}.`
+    }
+  }
+
   if (error instanceof Error) {
     if (error.message) return error.message
     if (error.name) return error.name
@@ -138,4 +152,24 @@ export function errorMessage(error: unknown): string {
   const formatted = errorFormat(error)
   if (formatted) return formatted
   return "unknown error"
+}
+
+function transportCode(input: unknown): string | undefined {
+  let current = input
+  for (let depth = 0; depth < 4; depth += 1) {
+    if (!isRecord(current)) return undefined
+    if (typeof current.code === "string") return current.code
+    current = current.cause
+  }
+  return undefined
+}
+
+function isTimeout(input: unknown): boolean {
+  let current = input
+  for (let depth = 0; depth < 4; depth += 1) {
+    if (!isRecord(current)) return false
+    if (current.name === "TimeoutError" || current.name === "AbortError" || current.code === "ETIMEDOUT" || current.code === "UND_ERR_CONNECT_TIMEOUT") return true
+    current = current.cause
+  }
+  return false
 }

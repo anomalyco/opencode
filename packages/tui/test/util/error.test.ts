@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { errorFormat, errorMessage } from "../../src/util/error"
+import { ClientError } from "@opencode/client/promise"
 
 describe("util.error", () => {
   test("formats native Error instances", () => {
@@ -32,5 +33,16 @@ describe("util.error", () => {
     }
 
     expect(errorMessage(err)).toBe("ResolveMessage: Cannot resolve module")
+  })
+
+  test("explains refused and timed out service transports", () => {
+    expect(errorMessage(new ClientError("Transport", { cause: Object.assign(new Error("refused"), { code: "ECONNREFUSED" }) })))
+      .toContain("stopped or overloaded")
+    expect(errorMessage(new ClientError("Transport", { cause: Object.assign(new Error("deadline"), { name: "TimeoutError" }) })))
+      .toContain("request timed out")
+  })
+
+  test("shows HTTP status for server responses", () => {
+    expect(errorMessage(new ClientError("UnexpectedStatus", { cause: { status: 503 }, detail: "503" }))).toBe("OpenCode returned HTTP 503.")
   })
 })

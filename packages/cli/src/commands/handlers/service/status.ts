@@ -9,7 +9,7 @@ export default Runtime.handler(
   Commands.commands.service.commands.status,
   Effect.fn("cli.service.status")(function* () {
     const options = yield* ServiceConfig.options()
-    const found = yield* Service.discover({ ...options, version: undefined })
+    const found = yield* Service.status({ ...options, version: undefined })
     process.stdout.write((found?.url ?? "stopped") + EOL)
   }),
 )

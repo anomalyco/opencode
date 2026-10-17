@@ -11,8 +11,15 @@ export type LocalService = {
   readonly info: Info
   readonly endpoint: Endpoint
   readonly version?: string
-  readonly state: "ready" | "waiting" | "failed"
+  readonly state: "ready" | "waiting" | "busy" | "failed"
   readonly compatible: boolean
+}
+
+export type Status = Readonly<{ url: string; state: "ready" | "starting" | "busy" | "failed" }>;
+
+export function status(service: LocalService | undefined): Status | undefined {
+  if (service === undefined) return undefined
+  return { url: service.endpoint.url, state: service.state === "waiting" ? "starting" : service.state }
 }
 
 /**
@@ -58,7 +65,13 @@ export async function probeResult(info: Info, timeout = defaultEnsureTiming.requ
       body: response.status === 404 ? undefined : ((await response.json()) as unknown),
     }))
     .catch(() => undefined)
-  if (result === undefined) return { service: undefined, timedOut: signal.aborted }
+  if (result === undefined) {
+    if (!processAlive(info.pid)) return { service: undefined, timedOut: signal.aborted }
+    return {
+      service: { info, endpoint, version: info.version, state: "busy", compatible: true } satisfies LocalService,
+      timedOut: signal.aborted,
+    }
+  }
   const response = result.response
   // A missing health endpoint identifies protocol incompatibility, not an older
   // version. Only an unmet version requirement lets ensure replace this owner.
@@ -74,7 +87,13 @@ export async function probeResult(info: Info, timeout = defaultEnsureTiming.requ
       timedOut: false,
     }
   const serverInfo = decodeInfo(result.body)
-  if (serverInfo === undefined) return { service: undefined, timedOut: false }
+  if (serverInfo === undefined) {
+    if (!processAlive(info.pid)) return { service: undefined, timedOut: false }
+    return {
+      service: { info, endpoint, version: info.version, state: "busy", compatible: true } satisfies LocalService,
+      timedOut: false,
+    }
+  }
   if (serverInfo.pid !== info.pid) return { service: undefined, timedOut: false }
   if (info.version !== undefined && serverInfo.version !== info.version) return { service: undefined, timedOut: false }
   return {
@@ -86,6 +105,16 @@ export async function probeResult(info: Info, timeout = defaultEnsureTiming.requ
       compatible: true,
     } satisfies LocalService,
     timedOut: false,
+  }
+}
+
+/** A slow health request is not evidence that a registered process is dead. */
+export function processAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    return error instanceof Error && "code" in error && error.code === "EPERM"
   }
 }
 

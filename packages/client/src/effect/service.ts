@@ -4,7 +4,7 @@ import { contenderPool, spawnServiceContender } from "../service-contender.js"
 import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
 import { matchesVersion } from "../service-version.js"
 import { PtyHandoff } from "../pty-handoff.js"
-import { decide, fallback, headers, probeResult, same } from "../service-probe.js"
+import { decide, fallback, headers, probeResult, same, status as serviceStatus } from "../service-probe.js"
 
 export * from "../service.js"
 export { headers }
@@ -30,6 +30,14 @@ export const discover = Effect.fn("service.discover")(function* (options: Discov
   return found.endpoint
 })
 
+/** Report a registered process even when its health endpoint is busy. */
+export const status = Effect.fn("service.status")(function* (options: DiscoverOptions = {}) {
+  const info = yield* read(options.file)
+  const found = info === undefined ? undefined : (yield* Effect.promise(() => probeResult(info, 250))).service
+  if (found !== undefined && !matchesVersion(found.version, options)) return undefined
+  return serviceStatus(found)
+})
+
 /** Recognize an authenticated compatible service bound to an expected URL, including while it starts or fails. */
 export const incumbent = Effect.fn("service.incumbent")(function* (
   options: DiscoverOptions & { readonly url: string },
@@ -49,7 +57,7 @@ export const incumbent = Effect.fn("service.incumbent")(function* (
 export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOptions = {}) {
   const timing = ensureTiming(options)
   const pool = contenderPool(timing)
-  let timeouts: { readonly info: Info; readonly count: number } | undefined
+  let stalled: { readonly info: Info; readonly count: number } | undefined
   let announced = false
   const announce = (reason: "missing" | "version-mismatch", previousVersion?: string) =>
     Effect.sync(() => {
@@ -72,21 +80,17 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
     const registration = yield* registered(options.file, timing.requestTimeout)
     const info = registration.info
     const service = registration.service
-    if (registration.timedOut && info !== undefined) {
-      timeouts = {
-        info,
-        count: timeouts !== undefined && same(timeouts.info, info) ? timeouts.count + 1 : 1,
-      }
-      if (timeouts.count >= 3) {
-        yield* announce("missing")
-        yield* Effect.logWarning("Background service is unresponsive; recovery cannot preserve persistent terminals")
+    if (registration.timedOut && info !== undefined && pool.owns(info.pid)) {
+      stalled = { info, count: stalled !== undefined && same(stalled.info, info) ? stalled.count + 1 : 1 }
+      if (stalled.count >= 3) {
+        yield* Effect.logWarning("Background service contender is unresponsive; replacing the owned startup attempt")
         yield* Effect.tryPromise(() => PtyHandoff.clear(options.file ?? fallback()))
         yield* terminate(info, options, timing)
         pool.evict(info.pid)
         pool.recruitNow()
-        timeouts = undefined
+        stalled = undefined
       }
-    } else timeouts = undefined
+    } else stalled = undefined
     if (service !== undefined) {
       pool.serviceAnswered()
       const decision = decide(service, options)
@@ -94,6 +98,9 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
       if (decision._tag === "reuse") {
         yield* Effect.tryPromise(() => PtyHandoff.complete(options.file ?? fallback(), service.info))
         return Option.some(service)
+      }
+      if (decision._tag === "wait" && service.state === "busy") {
+        yield* Effect.sleep(Math.max(timing.pollInterval, Math.min(timing.requestTimeout, 1_000)))
       }
       if (decision._tag === "replace") {
         yield* announce("version-mismatch", service.version)
@@ -197,4 +204,4 @@ const terminate = Effect.fnUntraced(function* (info: Info, options: { readonly f
 })
 
 /** Effect-based local service lifecycle operations. */
-export const Service = { discover, incumbent, ensure, stop, headers, Info }
+export const Service = { discover, status, incumbent, ensure, stop, headers, Info }
