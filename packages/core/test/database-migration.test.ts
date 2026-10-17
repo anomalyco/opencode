@@ -4,7 +4,7 @@ import { fileURLToPath } from "url"
 import path from "path"
 import { SqliteClient } from "@effect/sql-sqlite-bun"
 import { EffectDrizzleSqlite } from "@opencode/core/database/drizzle"
-import { Deferred, Effect, Fiber, Layer } from "effect"
+import { Deferred, Effect, Fiber, Layer, Schema } from "effect"
 import { Reactivity } from "effect/reactivity"
 import { SqlClient, Statement } from "effect/sql"
 import { sql } from "drizzle-orm"
@@ -21,6 +21,9 @@ import executionClaimsMigration from "@opencode/core/database/migration/20260811
 import sessionInboxMigration from "@opencode/core/database/migration/20260812181746_session_inbox"
 import sessionViewedStateMigration from "@opencode/core/database/migration/20260819222447_session_viewed_state"
 import azureCliCredentialMigration from "@opencode/core/database/migration/20261007190000_azure_cli_external_credential"
+import legacyMCPCredentialsMigration from "@opencode/core/database/migration/20261013150000_import_legacy_mcp_credentials"
+import { McpOAuth } from "@opencode/core/mcp/oauth"
+import { Credential } from "@opencode/schema/credential"
 import { Global } from "@opencode/util/global"
 
 const run = <A, E>(
@@ -527,6 +530,157 @@ describe("DatabaseMigration", () => {
         yield* DatabaseMigration.applyOnly(db, [legacyCredentialsMigration])
 
         expect(yield* db.all(sql`SELECT id FROM credential`)).toEqual([])
+      }),
+      Global.make({ data: tmp.path }),
+    )
+  })
+
+  test("imports legacy remote MCP credentials against the integration the configured server registers", async () => {
+    await using tmp = await tmpdir()
+    const source = path.join(tmp.path, "mcp-auth.json")
+    const content = JSON.stringify({
+      cloudflare: {
+        tokens: {
+          accessToken: "cloudflare-access",
+          refreshToken: "cloudflare-refresh",
+          expiresAt: 1_800_000_000.75,
+          scope: "offline_access",
+        },
+        clientInfo: { clientId: "cloudflare-client", clientSecret: "cloudflare-secret" },
+        codeVerifier: "abandoned-flow",
+        oauthState: "abandoned-state",
+        serverUrl: "https://mcp.cloudflare.com/mcp",
+      },
+      bindings: {
+        tokens: { accessToken: "bindings-access", refreshToken: "bindings-refresh" },
+        serverUrl: "https://bindings.mcp.cloudflare.com/mcp",
+      },
+      "half-login": { clientInfo: { clientId: "half-login" }, serverUrl: "https://example.com/mcp" },
+      "no-url": { tokens: { accessToken: "orphan" } },
+      invalid: "not-an-entry",
+    })
+    await Bun.write(source, content)
+
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        // Bootstrapped before the legacy file exists, so the import below is the only thing that can insert.
+        yield* DatabaseMigration.apply(db)
+        yield* db.run(sql`
+          INSERT INTO credential (id, integration_id, label, value, time_created, time_updated)
+          VALUES (
+            'existing', 'mcp_6da02b0f80b8eecc', 'OAuth',
+            ${JSON.stringify({
+              type: "oauth",
+              methodID: "mcp_6da02b0f80b8eecc",
+              access: "current-access",
+              refresh: "current-refresh",
+              expires: 0,
+            })},
+            ${Date.now()}, ${Date.now()}
+          )
+        `)
+
+        yield* db.run(sql`DELETE FROM migration WHERE id = ${legacyMCPCredentialsMigration.id}`)
+        yield* DatabaseMigration.applyOnly(db, [legacyMCPCredentialsMigration])
+
+        const rows = yield* db.all<{ integration_id: string; label: string; value: string }>(
+          sql`SELECT integration_id, label, value FROM credential ORDER BY integration_id, id`,
+        )
+        // `bindings` already holds a newer V2 login, and the two unusable entries are dropped: a name and url
+        // V2 no longer derives an integration for has nothing to attach to.
+        expect(rows.map((row) => ({ ...row, value: JSON.parse(row.value) }))).toEqual([
+          {
+            integration_id: "mcp_1439b8168d0cbac4",
+            label: "OAuth",
+            value: {
+              type: "oauth",
+              methodID: "mcp_1439b8168d0cbac4",
+              access: "cloudflare-access",
+              refresh: "cloudflare-refresh",
+              expires: 1_800_000_000_750,
+              metadata: {
+                serverUrl: "https://mcp.cloudflare.com/mcp",
+                tokenType: "Bearer",
+                scope: "offline_access",
+                client: { client_id: "cloudflare-client", client_secret: "cloudflare-secret" },
+              },
+            },
+          },
+          {
+            integration_id: "mcp_6da02b0f80b8eecc",
+            label: "OAuth",
+            value: {
+              type: "oauth",
+              methodID: "mcp_6da02b0f80b8eecc",
+              access: "current-access",
+              refresh: "current-refresh",
+              expires: 0,
+            },
+          },
+        ])
+
+        // The connect-time provider reads the row back through these two helpers, so pin what it would see.
+        const stored = Schema.decodeUnknownSync(Credential.OAuth)(JSON.parse(rows[0]!.value))
+        expect(McpOAuth.toTokens(stored)).toEqual({
+          access_token: "cloudflare-access",
+          token_type: "Bearer",
+          refresh_token: "cloudflare-refresh",
+          expires_in: expect.any(Number),
+          scope: "offline_access",
+        })
+        expect(McpOAuth.clientFromCredential(stored)).toEqual({
+          client_id: "cloudflare-client",
+          client_secret: "cloudflare-secret",
+        })
+      }),
+      Global.make({ data: tmp.path }),
+    )
+
+    expect(await Bun.file(source).text()).toBe(content)
+  })
+
+  test("skips the legacy MCP credential import when the source file is absent", async () => {
+    await using tmp = await tmpdir()
+
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* DatabaseMigration.apply(db)
+        yield* db.run(sql`DELETE FROM migration WHERE id = ${legacyMCPCredentialsMigration.id}`)
+        yield* DatabaseMigration.applyOnly(db, [legacyMCPCredentialsMigration])
+
+        expect(yield* db.all(sql`SELECT id FROM credential`)).toEqual([])
+      }),
+      Global.make({ data: tmp.path }),
+    )
+  })
+
+  test("skips a corrupt legacy MCP credential file instead of failing the migration", async () => {
+    await using tmp = await tmpdir()
+    const source = path.join(tmp.path, "mcp-auth.json")
+
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* DatabaseMigration.apply(db)
+        const now = Date.now()
+        yield* db.run(sql`
+          INSERT INTO credential (id, integration_id, label, value, time_created, time_updated)
+          VALUES ('kept', 'openai', 'OAuth', ${JSON.stringify({ type: "key", key: "secret" })}, ${now}, ${now})
+        `)
+
+        // Unparseable, and parseable but not an object: neither is a reason to hold the database shut, because
+        // the migration re-runs on every startup and the user cannot see this file.
+        for (const content of ["{ not json", '"a string"']) {
+          yield* Effect.promise(() => Bun.write(source, content))
+          yield* db.run(sql`DELETE FROM migration WHERE id = ${legacyMCPCredentialsMigration.id}`)
+          yield* DatabaseMigration.applyOnly(db, [legacyMCPCredentialsMigration])
+
+          expect(yield* db.all(sql`SELECT id FROM credential`)).toEqual([{ id: "kept" }])
+          // Left in place for the user to repair, exactly as a well-formed import leaves it.
+          expect(yield* Effect.promise(() => Bun.file(source).text())).toBe(content)
+        }
       }),
       Global.make({ data: tmp.path }),
     )
