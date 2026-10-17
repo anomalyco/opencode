@@ -66,7 +66,8 @@ export const McpGroup = HttpApiGroup.make("server.mcp")
         OpenApi.annotations({
           identifier: "experimental.mcp.connect",
           summary: "Connect MCP server",
-          description: "Connect an MCP server at runtime, overriding a disabled configuration until restart.",
+          description:
+            "Connect an MCP server and clear its disabled flag in the config file that defines it. Servers without a config file stay enabled until restart.",
         }),
       ),
   )
@@ -82,7 +83,8 @@ export const McpGroup = HttpApiGroup.make("server.mcp")
         OpenApi.annotations({
           identifier: "experimental.mcp.disconnect",
           summary: "Disconnect MCP server",
-          description: "Disconnect an MCP server at runtime, removing its tools until reconnected.",
+          description:
+            "Disconnect an MCP server in any state and set its disabled flag in the config file that defines it. Servers without a config file stay disabled until restart.",
         }),
       ),
   )

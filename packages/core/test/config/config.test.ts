@@ -1,5 +1,6 @@
 import path from "path"
 import fs from "fs/promises"
+import { parse } from "jsonc-parser"
 import { describe, expect, test } from "bun:test"
 import { Arbitrary, Effect, Fiber, Layer, Logger, Schema, Stream } from "effect"
 import { Config } from "@opencode/core/config"
@@ -1975,6 +1976,90 @@ describe("Config", () => {
             ),
           )
         })
+      }),
+    ),
+  )
+})
+
+describe("Config.setMcpDisabled", () => {
+  it.live("leaves servers defined by managed config untouched", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) => {
+        const global = path.join(tmp.path, "global")
+        const project = path.join(tmp.path, "project")
+        const system = path.join(tmp.path, "system")
+        const managed = JSON.stringify({ mcp: { servers: { admin: { type: "local", command: ["admin-mcp"] } } } })
+        return Effect.promise(async () => {
+          await Promise.all([global, project, system].map((dir) => fs.mkdir(dir, { recursive: true })))
+          await fs.writeFile(path.join(system, "opencode.json"), managed)
+          await fs.writeFile(path.join(global, "opencode.json"), managed)
+        }).pipe(
+          Effect.andThen(
+            Effect.gen(function* () {
+              const config = yield* Config.Service
+              expect(yield* config.setMcpDisabled!("admin", true)).toBe(false)
+              expect(yield* Effect.promise(() => fs.readFile(path.join(system, "opencode.json"), "utf8"))).toBe(managed)
+              expect(yield* Effect.promise(() => fs.readFile(path.join(global, "opencode.json"), "utf8"))).toBe(managed)
+            }).pipe(
+              Effect.provide(
+                testLayer(project, global, project, undefined, undefined, emptyCredentialNode, emptyWellknownNode, {
+                  system,
+                }),
+              ),
+            ),
+          ),
+        )
+      }),
+    ),
+  )
+
+  it.live("toggles native and V1 MCP servers in the file that defines them, preserving JSONC", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) => {
+        const global = path.join(tmp.path, "global")
+        const project = path.join(tmp.path, "project")
+        const globalFile = path.join(global, "opencode.json")
+        const projectFile = path.join(project, "opencode.jsonc")
+        return Effect.promise(async () => {
+          await fs.mkdir(global, { recursive: true })
+          await fs.mkdir(project, { recursive: true })
+          await fs.writeFile(
+            globalFile,
+            JSON.stringify({ mcp: { legacy: { type: "local", command: ["legacy-mcp"] } } }, null, 2),
+          )
+          await fs.writeFile(
+            projectFile,
+            `{
+  // keep this comment
+  "mcp": { "servers": { "docs": { "type": "remote", "url": "https://example.com/mcp" } } }
+}
+`,
+          )
+        }).pipe(
+          Effect.andThen(
+            Effect.gen(function* () {
+              const config = yield* Config.Service
+              expect(yield* config.setMcpDisabled!("docs", true)).toBe(true)
+              expect(yield* config.setMcpDisabled!("legacy", true)).toBe(true)
+              expect(yield* config.setMcpDisabled!("missing", true)).toBe(false)
+
+              const disabled = yield* Effect.promise(() => fs.readFile(projectFile, "utf8"))
+              expect(disabled).toContain("// keep this comment")
+              expect(parse(disabled).mcp.servers.docs.disabled).toBe(true)
+              expect(parse(yield* Effect.promise(() => fs.readFile(globalFile, "utf8"))).mcp.legacy.enabled).toBe(false)
+
+              expect(yield* config.setMcpDisabled!("docs", false)).toBe(true)
+              expect(yield* config.setMcpDisabled!("legacy", false)).toBe(true)
+              expect(yield* config.setMcpDisabled!("docs", false)).toBe(false)
+              const enabled = yield* Effect.promise(() => fs.readFile(projectFile, "utf8"))
+              expect(enabled).toContain("// keep this comment")
+              expect(parse(enabled).mcp.servers.docs).not.toHaveProperty("disabled")
+              expect(parse(yield* Effect.promise(() => fs.readFile(globalFile, "utf8"))).mcp.legacy).not.toHaveProperty(
+                "enabled",
+              )
+            }).pipe(Effect.provide(testLayer(project, global))),
+          ),
+        )
       }),
     ),
   )

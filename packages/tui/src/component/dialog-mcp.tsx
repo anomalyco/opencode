@@ -83,11 +83,10 @@ export function DialogMcp(props: { initialServer?: string; details?: boolean } =
   const focusedServer = createMemo(() => servers().find((server) => server.name === focused()))
 
   const toggleTitle = createMemo(() => {
-    const status = focusedServer()?.status.status
-    if (status === "connected") return "disconnect"
-    if (status === "failed") return "retry"
-    if (status === "needs_auth") return "sign in"
-    return "connect"
+    const server = focusedServer()
+    if (server?.status.status === "disabled") return "enable"
+    if (server?.status.status === "needs_auth" && server.integrationID) return "sign in"
+    return "disable"
   })
 
   const focusedError = createMemo(() => {
@@ -108,12 +107,13 @@ export function DialogMcp(props: { initialServer?: string; details?: boolean } =
     setDetail(server)
   }
 
-  // Auth-gated servers enter the integration flow; other inactive states retry the connection.
+  // Auth-gated servers enter the integration flow; disabled servers connect; every other state,
+  // including failed and still-connecting servers, is disabled. The server persists the choice in config.
   // The mcp.status.changed event refreshes the list, so no manual sync is needed.
   const toggle = (name: string) => {
     if (loading().has(name)) return
     const server = servers().find((entry) => entry.name === name)
-    if (!server || server.status.status === "pending") return
+    if (!server) return
     if (server.status.status === "needs_auth" && server.integrationID) {
       select(name)
       return
@@ -121,7 +121,7 @@ export function DialogMcp(props: { initialServer?: string; details?: boolean } =
     setLoading((prev) => new Set(prev).add(name))
     const target = current()
     const input = { server: name, location: { directory: target.directory } }
-    const call = server.status.status === "connected" ? client.api.mcp.disconnect(input) : client.api.mcp.connect(input)
+    const call = server.status.status === "disabled" ? client.api.mcp.connect(input) : client.api.mcp.disconnect(input)
     void call.catch(toast.error).finally(() =>
       setLoading((prev) => {
         const next = new Set(prev)

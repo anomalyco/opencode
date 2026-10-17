@@ -42,6 +42,12 @@ export interface Interface {
   readonly changes: () => Stream.Stream<Watcher.Update>
   /** Updates supported global config fields while preserving unrelated JSONC content. */
   readonly update?: (patch: Patch) => Effect.Effect<void, FSUtil.Error>
+  /**
+   * Writes an MCP server's disabled flag into the user config file whose definition of the server
+   * wins, preserving unrelated JSONC content. Returns false when the winning definition is managed
+   * or not a JSON/JSONC file, or when nothing changed.
+   */
+  readonly setMcpDisabled?: (server: string, disabled: boolean) => Effect.Effect<boolean, FSUtil.Error>
 }
 
 export const Options = Schema.Struct({
@@ -402,6 +408,37 @@ export const layer = (options?: Options) =>
         (effect) => updateLock.withPermit(effect),
       )
 
+      const isManaged = (filepath: string) =>
+        filepath === sources.preferences ||
+        (sources.system?.present === true && path.dirname(filepath) === sources.system.path)
+
+      const setMcpDisabled = Effect.fn("Config.setMcpDisabled")(
+        function* (server: string, disabled: boolean) {
+          const filepath = configs.findLast(
+            (entry): entry is Document => entry.type === "document" && entry.info.mcp?.servers?.[server] !== undefined,
+          )?.path
+          // The winning definition replaces lower ones, so a managed or non-file definition stays runtime-only.
+          if (!filepath || !/\.jsonc?$/.test(filepath) || isManaged(filepath)) return false
+          const text = yield* fs.readFileStringSafe(filepath)
+          if (text === undefined) return false
+          const edit = mcpDisabledEdit(parse(text, [], { allowTrailingComma: true }), server, disabled)
+          if (!edit) return false
+          const updated = yield* Effect.try({
+            try: () =>
+              applyEdits(
+                text,
+                modify(text, edit.path, edit.value, { formattingOptions: { tabSize: 2, insertSpaces: true } }),
+              ),
+            catch: (cause) => new FSUtil.FileSystemError({ method: "config.setMcpDisabled", cause }),
+          })
+          if (updated === text) return false
+          yield* fs.writeWithDirs(filepath, updated)
+          yield* requestReload
+          return true
+        },
+        (effect) => updateLock.withPermit(effect),
+      )
+
       return Service.of({
         entries: Effect.fnUntraced(function* () {
           return configs
@@ -413,6 +450,7 @@ export const layer = (options?: Options) =>
           }),
         changes: () => Stream.fromPubSub(updates),
         update,
+        setMcpDisabled,
       })
     }),
   )
@@ -435,3 +473,22 @@ export function configured(options?: Options) {
 }
 
 export const node = configured()
+
+// Native servers live under mcp.servers and use `disabled`; V1 servers sit directly under mcp and use `enabled`.
+// Enabling removes the flag instead of writing its default.
+function mcpDisabledEdit(input: unknown, server: string, disabled: boolean) {
+  const mcp = isRecord(input) ? input.mcp : undefined
+  if (!isRecord(mcp)) return
+  const servers = mcp.servers
+  if (isRecord(servers) && !isLegacyMcpServer(servers) && isRecord(servers[server]))
+    return { path: ["mcp", "servers", server, "disabled"], value: disabled ? true : undefined }
+  if (isLegacyMcpServer(mcp[server])) return { path: ["mcp", server, "enabled"], value: disabled ? false : undefined }
+}
+
+function isLegacyMcpServer(value: unknown) {
+  return isRecord(value) && (value.type === "local" || value.type === "remote")
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}

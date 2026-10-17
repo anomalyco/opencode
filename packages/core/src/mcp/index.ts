@@ -6,7 +6,21 @@ import { ephemeral } from "@opencode/schema/event"
 import type { Session } from "@opencode/schema/session"
 import { createHash } from "node:crypto"
 import { isDeepStrictEqual } from "node:util"
-import { Cause, Context, Effect, Exit, FiberSet, Latch, Layer, Schema, Scope, Semaphore, Stream, Types } from "effect"
+import {
+  Cause,
+  Context,
+  Effect,
+  Exit,
+  Fiber,
+  FiberSet,
+  Latch,
+  Layer,
+  Schema,
+  Scope,
+  Semaphore,
+  Stream,
+  Types,
+} from "effect"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Credential } from "../credential.js"
 import { Bus } from "../bus.js"
@@ -80,6 +94,8 @@ type ServerEntry = {
   status: Status
   readonly startup: Latch.Latch
   scope?: Scope.Closeable
+  // The in-flight connection attempt, so disconnect can interrupt it instead of waiting out its timeouts.
+  connecting?: Fiber.Fiber<unknown, unknown>
   client?: McpClient.Connection
   tools?: ReadonlyArray<Tool>
   prompts?: ReadonlyArray<Prompt>
@@ -449,9 +465,13 @@ export const layer = (options?: Options) =>
             Effect.provideService(Environment.Service, environment),
             Scope.provide(scope),
           )
-          const result = yield* (
+          const attempt = yield* (
             entry.config.type === "remote" ? endpointLoads.withLock(entry.config.url)(load) : load
-          ).pipe(Effect.exit)
+          ).pipe(Effect.forkChild({ startImmediately: true }))
+          entry.connecting = attempt
+          const result = yield* Fiber.await(attempt).pipe(
+            Effect.ensuring(Effect.sync(() => (entry.connecting = undefined))),
+          )
           if (Exit.isSuccess(result)) {
             entry.client = result.value.connection
             entry.tools = result.value.tools.map((tool) => toTool(name, entry, tool))
@@ -468,6 +488,8 @@ export const layer = (options?: Options) =>
           }
           yield* Scope.close(scope, Exit.void)
           entry.scope = undefined
+          // Interrupted by disconnect, which sets the final status; reporting failed here would flicker.
+          if (Cause.hasInterruptsOnly(result.cause)) return
           const error = Cause.squash(result.cause)
           entry.status =
             error instanceof McpClient.NeedsAuthError
@@ -647,6 +669,9 @@ export const layer = (options?: Options) =>
         }),
         disconnect: Effect.fn("MCP.disconnect")(function* (server) {
           const name = ServerName.make(server)
+          // A pending connect holds the server lock until it settles; interrupt it so disabling is immediate.
+          const pending = entries.get(name)?.connecting
+          if (pending) yield* Fiber.interrupt(pending)
           yield* Effect.gen(function* () {
             const target = yield* requireServer(name)
             yield* stopServer(name, target.entry)

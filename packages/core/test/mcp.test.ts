@@ -2048,6 +2048,44 @@ test("serializes concurrent MCP lifecycle operations", async () => {
   )
 })
 
+testEffect(Layer.empty).live("disconnect interrupts a pending MCP connect instead of waiting for its timeout", () =>
+  Effect.gen(function* () {
+    const requested = yield* Deferred.make<void>()
+    const server = yield* Effect.acquireRelease(
+      Effect.sync(() =>
+        Bun.serve({
+          port: 0,
+          fetch: () => {
+            Deferred.doneUnsafe(requested, Exit.void)
+            return new Promise<Response>(() => {})
+          },
+        }),
+      ),
+      (server) => Effect.promise(() => server.stop(true)),
+    )
+    yield* Effect.gen(function* () {
+      const service = yield* Mcp.Service
+      yield* Deferred.await(requested)
+      expect((yield* service.servers())[0]?.status).toEqual({ status: "pending" })
+
+      yield* service.disconnect("resources").pipe(Effect.timeout("5 seconds"))
+      expect((yield* service.servers())[0]?.status).toEqual({ status: "disabled" })
+      expect(yield* service.tools()).toEqual([])
+    }).pipe(
+      Effect.provide(
+        resourceMcpLayer(
+          new ConfigMCP.Remote({
+            type: "remote",
+            url: server.url.href,
+            oauth: false,
+            timeout: { startup: 60_000 },
+          }),
+        ),
+      ),
+    )
+  }),
+)
+
 testEffect(Layer.empty).live("preserves plugin transforms through MCP catalog updates", () =>
   Effect.gen(function* () {
     const tool = (server: string, name: string, description = name) =>
