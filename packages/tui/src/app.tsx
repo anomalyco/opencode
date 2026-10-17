@@ -205,6 +205,7 @@ export type TuiInput = {
     | undefined
   >
   log?: LogSink
+  stdin?: NodeJS.ReadStream
 }
 
 export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
@@ -248,6 +249,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
         consoleOptions: {
           keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
         },
+        stdin: input.stdin,
       } satisfies CliRendererConfig
       const renderer = yield* Effect.gen(function* () {
         if (handoff) {
