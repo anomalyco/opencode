@@ -92,7 +92,9 @@ type Options = {
   readonly nextDatabasePath?: string
 }
 
-type MigrationState = { readonly phase: "sessions"; readonly cursor?: string } | { readonly phase: "completed" }
+type MigrationState =
+  | { readonly phase: "sessions"; readonly cursor?: string }
+  | { readonly phase: "completed"; readonly watermark?: string }
 
 type RuntimeState =
   | { readonly status: "idle" }
@@ -497,7 +499,11 @@ export function status(): Effect.Effect<Status, never, Database.Service> {
     const state = yield* readState(db)
     if (runtimeState.status === "running") return runtimeState
     if (runtimeState.status === "error") return runtimeState
-    if (state?.phase === "completed") return { status: "completed" as const }
+    if (state?.phase === "completed") {
+      if (state.watermark === undefined) return { status: "completed" as const }
+      if (!(yield* hasPendingLegacySessions(db, state.watermark))) return { status: "completed" as const }
+      return { status: "required" as const }
+    }
     return { status: "required" as const }
   })
 }
@@ -536,9 +542,20 @@ export function run(options: Options = {}): Effect.Effect<RunResult, never, Data
     Effect.gen(function* () {
       const db = (yield* Database.Service).db
       const global = yield* Global.Service
-      const state = yield* readState(db)
-      if (state?.phase === "completed") return { status: "completed" as const }
+      let state = yield* readState(db)
       if (!(yield* hasLegacySessions(db))) return { status: "completed" as const }
+      let catchUp = false
+      if (state?.phase === "completed") {
+        if (state.watermark === undefined) {
+          const watermark = yield* minLegacySessionID(db)
+          if (watermark !== undefined) yield* writeMigrationState(db, { phase: "completed", watermark })
+          return { status: "completed" as const }
+        }
+        if (!(yield* hasPendingLegacySessions(db, state.watermark))) return { status: "completed" as const }
+        catchUp = true
+        yield* writeMigrationState(db, { phase: "sessions", cursor: state.watermark })
+        state = { phase: "sessions", cursor: state.watermark }
+      }
       const now = Date.now()
       yield* db.run(sql`
           INSERT OR IGNORE INTO project (id, worktree, time_created, time_updated, time_active, sandboxes)
@@ -574,9 +591,10 @@ export function run(options: Options = {}): Effect.Effect<RunResult, never, Data
           : 0
       const denominator = sourceTotal + legacyTotal
       updateProgress({ label: "Migrating sessions", numerator: migrated, denominator })
-      yield* importNextDatabase(db, nextPath(options, global.data), (completed) => {
-        updateProgress({ label: "Migrating sessions", numerator: migrated + completed, denominator })
-      })
+      if (!catchUp)
+        yield* importNextDatabase(db, nextPath(options, global.data), (completed) => {
+          updateProgress({ label: "Migrating sessions", numerator: migrated + completed, denominator })
+        })
       updateProgress({ label: "Migrating sessions", numerator: migrated + sourceTotal, denominator })
       const projects = new Set(
         (yield* db.all<{ id: string }>(sql`SELECT id FROM project`)).map((project) => project.id),
@@ -601,6 +619,10 @@ export function run(options: Options = {}): Effect.Effect<RunResult, never, Data
                   set: { value: { phase: "sessions", cursor: nextID.id }, time_updated: Date.now() },
                 })
                 .run()
+              const alreadyMigrated = yield* tx.get<{ value: number }>(
+                sql`SELECT 1 AS value FROM session_v2 WHERE id = ${nextID.id}`,
+              )
+              if (alreadyMigrated) return
               const projectID = projects.has(nextID.project_id) ? nextID.project_id : Project.ID.global
               if (projectID !== nextID.project_id)
                 yield* Effect.logWarning("Reassigned V1 session with missing project", {
@@ -680,20 +702,11 @@ export function run(options: Options = {}): Effect.Effect<RunResult, never, Data
           }
         yield* Effect.yieldNow
       }
-      yield* db
-        .transaction((tx) =>
-          Effect.gen(function* () {
-            yield* tx
-              .insert(KVTable)
-              .values({ key: MIGRATION_STATE_KEY, value: { phase: "completed" } })
-              .onConflictDoUpdate({
-                target: KVTable.key,
-                set: { value: { phase: "completed" }, time_updated: Date.now() },
-              })
-              .run()
-          }),
-        )
-        .pipe(Effect.orDie)
+      const watermark = yield* minLegacySessionID(db)
+      yield* writeMigrationState(
+        db,
+        watermark === undefined ? { phase: "completed" } : { phase: "completed", watermark },
+      )
       return { status: "completed" as const }
     }).pipe(Effect.orDie),
   )
@@ -1121,7 +1134,10 @@ function readState(db: Database.Interface["db"]): Effect.Effect<MigrationState |
 
 function parseState(input: unknown): MigrationState | undefined {
   if (!input || typeof input !== "object" || !("phase" in input)) return
-  if (input.phase === "completed") return { phase: "completed" }
+  if (input.phase === "completed")
+    return "watermark" in input && typeof input.watermark === "string"
+      ? { phase: "completed", watermark: input.watermark }
+      : { phase: "completed" }
   if (input.phase !== "sessions") return
   if (!("cursor" in input) || input.cursor === undefined) return { phase: "sessions" }
   if (typeof input.cursor === "string") return { phase: "sessions", cursor: input.cursor }
@@ -1132,4 +1148,38 @@ function hasLegacySessions(db: Database.Interface["db"]) {
     Effect.map((row) => row !== undefined),
     Effect.orDie,
   )
+}
+
+function minLegacySessionID(db: Database.Interface["db"]) {
+  return db
+    .get<{ id: string }>(sql`SELECT id FROM session ORDER BY id ASC LIMIT 1`)
+    .pipe(
+      Effect.map((row) => row?.id),
+      Effect.orDie,
+    )
+}
+
+// Session ids descend with time, so a V1 session created after the migration
+// completed sorts below the lowest id that was already migrated.
+function hasPendingLegacySessions(db: Database.Interface["db"], watermark: string) {
+  return db
+    .get<{ value: number }>(sql`SELECT 1 AS value FROM session WHERE id < ${watermark} LIMIT 1`)
+    .pipe(
+      Effect.map((row) => row !== undefined),
+      Effect.orDie,
+    )
+}
+
+function writeMigrationState(db: Database.Interface["db"], value: MigrationState) {
+  return db
+    .transaction((tx) =>
+      Effect.gen(function* () {
+        yield* tx
+          .insert(KVTable)
+          .values({ key: MIGRATION_STATE_KEY, value })
+          .onConflictDoUpdate({ target: KVTable.key, set: { value, time_updated: Date.now() } })
+          .run()
+      }),
+    )
+    .pipe(Effect.orDie)
 }
