@@ -2,7 +2,7 @@ export * as ToolInputRepairPlugin from "./tool-input-repair.js"
 
 import { define } from "@opencode/plugin/effect/plugin"
 import { Effect, JsonSchema, Option, Predicate, Schema } from "effect"
-import { definition } from "../tool/runtime.js"
+import { CapturedTool, definition } from "../tool/runtime.js"
 
 // Repairs apply only when the input schema unambiguously supports them:
 // - Stringified root or nested object: '{"limit":"20"}' -> { limit: 20 }
@@ -25,8 +25,8 @@ export const Plugin = define({
       Effect.gen(function* () {
         // The outer Code Mode tool is built per snapshot rather than registered, so it cannot be
         // looked up here. Its `{ code }` input is trivial; the tools it calls are repaired normally.
-        if (event.tool === "execute") return
-        const tool = (yield* ctx.tool.list()).find((tool) => tool.id === event.tool)
+        const captured = yield* CapturedTool
+        const tool = captured(event.tool)
         if (!tool) return
         const schema = definition(tool).inputSchema
         if (schema.type !== "object") return

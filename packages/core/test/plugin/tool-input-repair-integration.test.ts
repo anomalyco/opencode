@@ -16,6 +16,43 @@ const identity = {
   messageID: SessionMessage.ID.make("msg_repair"),
 }
 
+for (const codemode of [false, true]) {
+  it.effect(`repairs against the captured schema after a registry update (${codemode ? "Code Mode" : "direct"})`, () =>
+    Effect.gen(function* () {
+      const plugins = yield* Plugin.Service
+      const registry = yield* Tool.Service
+      const executed: unknown[] = []
+      yield* plugins.activate([{ ...ToolInputRepairPlugin.Plugin, revision: "1" }])
+      yield* registry.transform((draft) =>
+        draft.add({
+          name: "record",
+          options: { codemode },
+          description: "Record a value",
+          input: Schema.Struct({ value: Schema.String }),
+          execute: (input) => Effect.sync(() => executed.push(input)).pipe(Effect.as({ content: "ok" })),
+        }),
+      )
+      const snapshot = yield* registry.snapshot()
+      yield* registry.transform((draft) =>
+        draft.update("record", (tool) => {
+          tool.input = Schema.Struct({ value: Schema.Boolean })
+        }),
+      )
+      const result = yield* snapshot.execute({
+        ...identity,
+        call: {
+          type: "tool-call",
+          id: "call-captured",
+          name: codemode ? "execute" : "record",
+          input: codemode ? { code: 'return await tools.record({ value: "false" })' } : { value: "false" },
+        },
+      })
+      expect(result.content).toEqual([{ type: "text", text: "ok" }])
+      expect(executed).toEqual([{ value: "false" }])
+    }),
+  )
+}
+
 it.effect("repairs tool input before validating its original schema", () =>
   Effect.gen(function* () {
     const plugins = yield* Plugin.Service

@@ -15,7 +15,7 @@ import { PluginHooks } from "./plugin/hooks.js"
 import { SessionMessage } from "./session/message.js"
 import { SessionSchema } from "./session/schema.js"
 import { State } from "./state.js"
-import { definition, effectiveName, execute, normalizedName, normalizeContent } from "./tool/runtime.js"
+import { CapturedTool, definition, effectiveName, execute, normalizedName, normalizeContent } from "./tool/runtime.js"
 import { Wildcard } from "./util/wildcard.js"
 
 export class RegistrationError extends Schema.TaggedError<RegistrationError>()("Tool.RegistrationError", {
@@ -100,15 +100,22 @@ const layer = Layer.effect(
       ]
     })
 
-    const beforeExecute = (name: string, input: unknown, context: Tool.Context) =>
-      hooks.trigger("tool", "execute.before", {
-        tool: name,
-        sessionID: context.sessionID,
-        agent: context.agent,
-        messageID: context.messageID,
-        id: context.id,
-        input,
-      })
+    const beforeExecute = (
+      name: string,
+      input: unknown,
+      context: Tool.Context,
+      captured: (name: string) => Tool.Info | undefined,
+    ) =>
+      hooks
+        .trigger("tool", "execute.before", {
+          tool: name,
+          sessionID: context.sessionID,
+          agent: context.agent,
+          messageID: context.messageID,
+          id: context.id,
+          input,
+        })
+        .pipe(Effect.provideService(CapturedTool, captured))
 
     const executeTool = Effect.fn("Tool.execute")(function* (
       tool: Tool.Info,
@@ -238,7 +245,7 @@ const layer = Layer.effect(
           const codeModeEnabled = !whollyDisabled("execute", rules)
           const codeModeTool = codeModeEnabled
             ? CodeModeTool.create(codeModeInventory, (name, tool, input, context) =>
-                beforeExecute(name, input, context).pipe(
+                beforeExecute(name, input, context, () => tool).pipe(
                   Effect.flatMap((event) => executeTool(tool, name, event.input, context)),
                 ),
               )
@@ -268,7 +275,10 @@ const layer = Layer.effect(
                 id: Tool.CallID.make(input.call.id),
                 progress: input.progress ?? (() => Effect.void),
               }
-              const event = yield* beforeExecute(input.call.name, input.call.input, context)
+              // Hooks may correct the tool name, so resolve whichever name they ask about.
+              const event = yield* beforeExecute(input.call.name, input.call.input, context, (name) =>
+                direct.get(input.definitions?.get(name)?.name ?? name),
+              )
               const requested = input.definitions?.get(event.tool)
               // Preserve session context removal and alias resolution, now after the repair hook.
               if (!requested && input.definitions && (direct.has(event.tool) || codeModeTool?.name === event.tool))
