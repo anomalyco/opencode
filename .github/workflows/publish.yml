@@ -477,8 +477,41 @@ jobs:
           OPENCODE_CLI_TARGET: ${{ matrix.settings.target }}
           OPENCODE_CLI_DIST: ${{ github.workspace }}/packages/cli/dist
 
+      # A transient download, signing timestamp or notarization error in one leg fails the whole release, so a failed
+      # Package retries once below. Keep the retry identical to this step.
       - name: Package
+        id: package
         if: needs.version.outputs.release
+        continue-on-error: true
+        run: npx electron-builder ${{ matrix.settings.platform_flag }} --publish never --config electron-builder.config.ts
+        working-directory: packages/desktop
+        timeout-minutes: 60
+        env:
+          OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
+          OPENCODE_CLI_TARGET: ${{ matrix.settings.target }}
+          GH_TOKEN: ${{ steps.committer.outputs.token }}
+          CSC_KEYCHAIN: build.keychain
+          APPLE_API_KEY: ${{ runner.temp }}/apple-api-key.p8
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+
+      # Only dist holds electron-builder output. It copies out/ (the app build) and resources/ (the CLI from Prepare)
+      # into dist rather than changing them, so the retry reuses both.
+      - name: Clean up failed Package
+        if: steps.package.outcome == 'failure'
+        shell: bash
+        run: |
+          echo "::warning::Package failed for ${{ matrix.settings.target }}; retrying once in 90 seconds"
+          rm -rf packages/desktop/dist
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            for volume in /Volumes/OpenCode*; do
+              [ -d "$volume" ] && hdiutil detach "$volume" -force || true
+            done
+          fi
+          sleep 90
+
+      - name: Package (retry)
+        if: steps.package.outcome == 'failure'
         run: npx electron-builder ${{ matrix.settings.platform_flag }} --publish never --config electron-builder.config.ts
         working-directory: packages/desktop
         timeout-minutes: 60
