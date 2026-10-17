@@ -123,17 +123,12 @@ const baseLayer = Layer.effect(
     const root = location.workspaceID
       ? location.directory
       : yield* fs.realPath(location.directory).pipe(
+          // Linux realpath succeeds on an unreadable directory, so probe readability explicitly.
+          Effect.tap((real) => fs.access(real, { readable: true })),
           Effect.catch((cause): Effect.Effect<never, DirectoryNotFoundError | DirectoryAccessDeniedError> => {
             if (cause.reason._tag === "NotFound")
               return Effect.fail(new DirectoryNotFoundError({ directory: location.directory, cause }))
-            // macOS privacy denials arrive as Unknown with an EPERM cause.
-            if (
-              cause.reason._tag === "PermissionDenied" ||
-              (cause.reason._tag === "Unknown" &&
-                cause.reason.cause instanceof Error &&
-                "code" in cause.reason.cause &&
-                cause.reason.cause.code === "EPERM")
-            )
+            if (FSUtil.isAccessDenied(cause))
               return Effect.fail(new DirectoryAccessDeniedError({ directory: location.directory, cause }))
             return Effect.die(cause)
           }),

@@ -58,7 +58,11 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
           ),
         )
   const global = yield* Global.Service
-  if (options.mode === "service") yield* Effect.sync(() => process.chdir(global.home))
+  // A sandbox may deny $HOME; the service then keeps the cwd it was launched from.
+  if (options.mode === "service")
+    yield* Effect.try(() => process.chdir(global.home)).pipe(
+      Effect.catch((cause) => Effect.logWarning("failed to change service directory to home", { cause })),
+    )
   return yield* Effect.scoped(
     Effect.gen(function* () {
       const foreground = options.mode === "default"

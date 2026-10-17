@@ -33,6 +33,7 @@ import { tmpdir } from "../fixture/tmpdir"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(Layer.empty)
+const itWithPermissions = process.platform === "win32" || process.getuid?.() === 0 ? it.live.skip : it.live
 const selection = Schema.decodeUnknownSync(ConfigModel.Selection)
 const decodeInfo = Schema.decodeUnknownSync(Info, { errors: "all", onExcessProperty: "ignore" })
 const encodeInfo = Schema.encodeSync(Info)
@@ -210,6 +211,41 @@ describe("Config", () => {
         )
       }),
     ),
+  )
+
+  // Filesystem sandboxes deny reads outside the project. Simulate a denied discovery root with a
+  // symlink into an unsearchable directory, which makes realpath fail with EACCES.
+  itWithPermissions(
+    "treats unreadable discovery roots as absent",
+    () =>
+      Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+        Effect.flatMap((tmp) => {
+          const global = path.join(tmp.path, "global")
+          const home = path.join(global, "home")
+          const project = path.join(home, "project")
+          const locked = path.join(tmp.path, "locked")
+          return Effect.promise(async () => {
+            await fs.mkdir(path.join(locked, "agents"), { recursive: true })
+            await fs.mkdir(project, { recursive: true })
+            await fs.writeFile(path.join(project, "opencode.json"), JSON.stringify({ shell: "project" }))
+            await fs.symlink(path.join(locked, "agents"), path.join(home, ".agents"))
+            await fs.symlink(path.join(locked, "agents"), path.join(project, ".opencode"))
+            await fs.chmod(locked, 0o000)
+          }).pipe(
+            Effect.andThen(Effect.addFinalizer(() => Effect.promise(() => fs.chmod(locked, 0o755)))),
+            Effect.andThen(
+              Effect.gen(function* () {
+                const config = yield* Config.Service
+                const entries = yield* config.entries()
+                expect(entries.flatMap((entry) => (entry.type === "document" ? [entry.info.shell] : []))).toEqual([
+                  "project",
+                ])
+              }).pipe(Effect.provide(testLayer(project, global))),
+            ),
+            Effect.scoped,
+          )
+        }),
+      ),
   )
 
   it.live("discovers the global config directory once when the project walk reaches it", () =>

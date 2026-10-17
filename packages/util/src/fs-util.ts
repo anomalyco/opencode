@@ -71,10 +71,11 @@ export namespace FSUtil {
       })
 
       const readFileStringSafe = Effect.fn("FileSystem.readFileStringSafe")(function* (path: string) {
-        return yield* fs.readFileString(path).pipe(
-          Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined),
-          Effect.catchReason("PlatformError", "PermissionDenied", () => Effect.undefined),
-        )
+        return yield* fs
+          .readFileString(path)
+          .pipe(
+            Effect.catchIf((error) => error.reason._tag === "NotFound" || isAccessDenied(error), () => Effect.undefined),
+          )
       })
 
       const isDir = Effect.fn("FileSystem.isDir")(function* (path: string) {
@@ -104,8 +105,12 @@ export namespace FSUtil {
 
       const resolve = Effect.fn("FileSystem.resolve")(function* (input: string) {
         const resolved = path.resolve(windowsPath(input))
+        // Sandboxes deny reads outside granted paths; canonicalize what we can see.
         return yield* fs.realPath(resolved).pipe(
-          Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(resolved)),
+          Effect.catchIf(
+            (error) => error.reason._tag === "NotFound" || isAccessDenied(error),
+            () => Effect.succeed(resolved),
+          ),
           Effect.orDie,
         )
       })
@@ -230,6 +235,18 @@ export namespace FSUtil {
 
   export const node = makeGlobalNode({ service: Service, layer: layer, deps: [filesystem] })
 
+  /** Permission denial, including macOS sandbox and privacy denials that surface as Unknown with an EPERM cause. */
+  export function isAccessDenied(error: PlatformError) {
+    if (error.reason._tag === "PermissionDenied") return true
+    const cause = error.reason.cause
+    return (
+      error.reason._tag === "Unknown" &&
+      cause instanceof globalThis.Error &&
+      "code" in cause &&
+      cause.code === "EPERM"
+    )
+  }
+
   // Pure helpers that don't need Effect (path manipulation, sync operations)
   export function mimeType(p: string): string {
     return lookup(p) || "application/octet-stream"
@@ -259,7 +276,7 @@ export namespace FSUtil {
     try {
       return normalizePath(realpathSync(resolved))
     } catch (e: any) {
-      if (e?.code === "ENOENT" || e?.code === "ENOTDIR") return normalizePath(resolved)
+      if (["ENOENT", "ENOTDIR", "EPERM", "EACCES"].includes(e?.code)) return normalizePath(resolved)
       throw e
     }
   }
