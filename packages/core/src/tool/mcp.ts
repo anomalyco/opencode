@@ -17,7 +17,7 @@ export const namespace = (server: string) => server.replace(/[^a-zA-Z0-9_-]/g, "
 export const name = (server: string, tool: string) => `${namespace(server)}_${tool.replace(/[^a-zA-Z0-9_-]/g, "_")}`
 
 export interface Interface {
-  /** Wait for the initial MCP tool registration to settle. */
+  /** Refresh connected MCP tools before a session takes its tool snapshot. */
   readonly flush: Effect.Effect<void>
 }
 
@@ -123,7 +123,9 @@ export const layer = Layer.effect(
       .pipe(Effect.forkScoped)
     const reconcile = lock.withPermit(
       Effect.gen(function* () {
-        discovered = yield* mcp.tools()
+        const next = yield* mcp.tools()
+        if (next.length === discovered.length && next.every((tool, index) => tool === discovered[index])) return
+        discovered = next
         yield* tools.reload()
       }),
     )
@@ -141,7 +143,7 @@ export const layer = Layer.effect(
       Stream.runForEach(() => reconcile),
       Effect.forkScoped({ startImmediately: true }),
     )
-    return Service.of({ flush: Effect.asVoid(Fiber.await(initial)) })
+    return Service.of({ flush: Fiber.await(initial).pipe(Effect.andThen(reconcile)) })
   }),
 )
 
