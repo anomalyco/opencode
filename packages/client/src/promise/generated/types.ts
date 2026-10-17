@@ -134,6 +134,22 @@ export type InstructionHash = string
 
 export type SessionInboxSyntheticPayload1 = { text: string; description?: string; metadata?: { [x: string]: any } }
 
+export type SessionGoalID = string
+
+export type SessionGoalReason = { code: string; message: string }
+
+export type SessionGoalTodoInput = {
+  content: string
+  status: "pending" | "in_progress" | "completed" | "cancelled"
+  acceptance?: string
+}
+
+export type SessionGoalTodoVerification = {
+  position: number
+  status: "pending" | "in_progress" | "completed" | "cancelled"
+  feedback: string
+}
+
 export type SessionMessageProviderState1 = { [x: string]: any }
 
 export type ToolFileContent1 = { type: "file"; uri: string; mime: string; name?: string | undefined }
@@ -366,15 +382,6 @@ export type SessionForkBoundary =
   | { type: "before"; messageID: SessionMessageID }
   | { type: "through"; messageID: SessionMessageID }
 
-export type SessionMessageAgentSelected = {
-  id: SessionMessageID
-  metadata?: { [x: string]: JsonValue }
-  time: { created: number }
-  type: "agent-switched"
-  agent: AgentID
-  previous?: AgentID
-}
-
 export type SessionMessageSynthetic = {
   id: SessionMessageID
   metadata?: { [x: string]: JsonValue }
@@ -404,7 +411,14 @@ export type SessionMessageCompactionRunning = {
   recent: string
 }
 
-export type FileSystemEntry = { path: RelativePath; type: "file" | "directory" }
+export type SessionMessageAgentSelected = {
+  id: SessionMessageID
+  metadata?: { [x: string]: JsonValue }
+  time: { created: number }
+  type: "agent-switched"
+  agent: AgentID
+  previous?: AgentID
+}
 
 export type SessionRevert = {
   messageID: SessionMessageID
@@ -503,6 +517,8 @@ export type ToolContent = ToolTextContent | ToolFileContent
 
 export type SessionMessageAssistantRetry = { attempt: number; at: number; error: SessionStructuredError }
 
+export type FileSystemEntry = { path: RelativePath; type: "file" | "directory" }
+
 export type SessionMessageCompactionFailed = {
   type: "compaction"
   id: SessionMessageID
@@ -546,9 +562,16 @@ export type InstructionEntryInfo = { key: InstructionEntryKey; value: JsonValue 
 
 export type InstructionEntrySnapshot = Array<{ key: InstructionEntryKey; value: JsonValue; removed: boolean }>
 
-export type EventLogSynced = { type: "log.synced"; aggregateID: string; seq?: EventSeq }
-
 export type LocationRef = { directory: AbsolutePath; workspaceID?: WorkspaceID }
+
+export type SessionGoalSnapshot = {
+  id: SessionGoalID
+  revision: number
+  objective: string
+  phase: "active" | "paused" | "blocked" | "complete"
+  blockedReason?: SessionGoalReason
+  maxGoalRounds: number
+}
 
 export type SessionMessageAssistantText1 = { type: "text"; text: string; state?: SessionMessageProviderState1 }
 
@@ -560,6 +583,8 @@ export type SessionMessageAssistantReasoning1 = {
 }
 
 export type ToolContent1 = ToolTextContent | ToolFileContent1
+
+export type EventLogSynced = { type: "log.synced"; aggregateID: string; seq?: EventSeq }
 
 export type FormNumberField = {
   key: string
@@ -986,16 +1011,6 @@ export type SessionModelSelected = {
   data: { sessionID: SessionID; model: ModelRef; previous?: ModelRef }
 }
 
-export type SessionMoved = {
-  id: EventID
-  created: number
-  metadata?: { [x: string]: any }
-  type: "session.moved"
-  durable: { aggregateID: string; seq: EventSeq; version: 1 }
-  location?: LocationRef
-  data: { sessionID: SessionID; location: LocationRef; projectID: ProjectID; subpath?: RelativePath }
-}
-
 export type SessionRenamed = {
   id: EventID
   created: number
@@ -1061,8 +1076,6 @@ export type SessionInboxDelivered = {
   location?: LocationRef
   data: { sessionID: SessionID; inboxID: SessionMessageID }
 }
-
-export type SessionInboxMovePayload1 = { location: LocationRef; projectID: ProjectID; subpath?: RelativePath }
 
 export type SessionInboxCancelled = {
   id: EventID
@@ -1132,6 +1145,36 @@ export type SessionInstructionsUpdated = {
   durable: { aggregateID: string; seq: EventSeq; version: 2 }
   location?: LocationRef
   data: { sessionID: SessionID; delta: { [x: string]: InstructionHash | "removed" }; text?: string }
+}
+
+export type SessionGoalCleared = {
+  id: EventID
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.goal.cleared"
+  durable: { aggregateID: string; seq: EventSeq; version: 1 }
+  location?: LocationRef
+  data: { sessionID: SessionID; goalID: SessionGoalID; revision: number }
+}
+
+export type SessionTodoUpdated = {
+  id: EventID
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.todo.updated"
+  durable: { aggregateID: string; seq: EventSeq; version: 1 }
+  location?: LocationRef
+  data: { sessionID: SessionID; revision: number; todos: Array<SessionGoalTodoInput> }
+}
+
+export type SessionTodoVerified = {
+  id: EventID
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.todo.verified"
+  durable: { aggregateID: string; seq: EventSeq; version: 1 }
+  location?: LocationRef
+  data: { sessionID: SessionID; revision: number; items: Array<SessionGoalTodoVerification> }
 }
 
 export type SessionSynthetic = {
@@ -1862,6 +1905,28 @@ export type McpResourcesChanged = {
   data: { server: string }
 }
 
+export type SessionMoved = {
+  id: EventID
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.moved"
+  durable: { aggregateID: string; seq: EventSeq; version: 1 }
+  location?: LocationRef
+  data: { sessionID: SessionID; location: LocationRef; projectID: ProjectID; subpath?: RelativePath }
+}
+
+export type SessionInboxMovePayload1 = { location: LocationRef; projectID: ProjectID; subpath?: RelativePath }
+
+export type SessionGoalUpdated = {
+  id: EventID
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.goal.updated"
+  durable: { aggregateID: string; seq: EventSeq; version: 1 }
+  location?: LocationRef
+  data: { sessionID: SessionID; snapshot: SessionGoalSnapshot }
+}
+
 export type SessionToolSuccess = {
   id: EventID
   created: number
@@ -2105,6 +2170,16 @@ export type AgentInfo = {
   permissions: PermissionRuleset
 }
 
+export type SessionPermissions = {
+  id: EventID
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.permissions"
+  durable: { aggregateID: string; seq: EventSeq; version: 1 }
+  location?: LocationRef
+  data: { sessionID: SessionID; permissions: PermissionRuleset }
+}
+
 export type SessionInfo = {
   id: SessionID
   parentID?: SessionID
@@ -2145,16 +2220,6 @@ export type SessionCreated = {
     permissions?: PermissionRuleset
     version: string
   }
-}
-
-export type SessionPermissions = {
-  id: EventID
-  created: number
-  metadata?: { [x: string]: any }
-  type: "session.permissions"
-  durable: { aggregateID: string; seq: EventSeq; version: 1 }
-  location?: LocationRef
-  data: { sessionID: SessionID; permissions: PermissionRuleset }
 }
 
 export type ConfigEntry =
@@ -2526,6 +2591,10 @@ export type SessionEventDurable =
   | SessionExecutionFailed
   | SessionExecutionInterrupted
   | SessionInstructionsUpdated
+  | SessionGoalUpdated
+  | SessionGoalCleared
+  | SessionTodoUpdated
+  | SessionTodoVerified
   | SessionSynthetic
   | SessionSkillActivated
   | SessionShellStarted
@@ -2590,6 +2659,10 @@ export type V2Event =
   | SessionExecutionFailed
   | SessionExecutionInterrupted
   | SessionInstructionsUpdated
+  | SessionGoalUpdated
+  | SessionGoalCleared
+  | SessionTodoUpdated
+  | SessionTodoVerified
   | SessionSynthetic
   | SessionSkillActivated
   | SessionShellStarted
