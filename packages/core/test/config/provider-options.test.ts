@@ -38,10 +38,30 @@ describe("ConfigProviderOptionsV1", () => {
         allowed_openai_params: ["reasoning_effort"],
         chat_template_kwargs: { enable_thinking: true },
       },
+      maxTokens: undefined,
     })
     expect(ConfigProviderOptionsV1.compatibleModel({ reasoningEffort: "low" })).toEqual({
       settings: { reasoningEffort: "low" },
       body: undefined,
+      maxTokens: undefined,
+    })
+  })
+
+  test("reports openai-compatible max-token options instead of sending them in the body", () => {
+    expect(ConfigProviderOptionsV1.compatibleModel({ reasoningEffort: "high", max_tokens: 262144 })).toEqual({
+      settings: { reasoningEffort: "high" },
+      body: undefined,
+      maxTokens: 262144,
+    })
+    expect(ConfigProviderOptionsV1.compatibleModel({ max_completion_tokens: 32000, user: "me" })).toEqual({
+      settings: { user: "me" },
+      body: undefined,
+      maxTokens: 32000,
+    })
+    expect(ConfigProviderOptionsV1.compatibleModel({ maxTokens: 8192, chat_template_kwargs: { a: true } })).toEqual({
+      settings: {},
+      body: { chat_template_kwargs: { a: true } },
+      maxTokens: 8192,
     })
   })
 

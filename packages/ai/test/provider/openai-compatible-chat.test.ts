@@ -99,6 +99,36 @@ describe("OpenAI-compatible Chat route", () => {
     }),
   )
 
+  it.effect("leaves the max-token field to a body overlay that already sets one", () =>
+    LLMClient.generate(
+      LLM.request({
+        model: OpenAICompatibleChat.route
+          .with({
+            provider: "custom",
+            endpoint: { baseURL: "https://api.custom.test/v1/" },
+            auth: Auth.bearer("test-key"),
+          })
+          .model({ id: "custom-model", defaults: { http: { body: { max_tokens: 262144 } } } }),
+        prompt: "Say hello.",
+        generation: { maxTokens: 256000 },
+      }),
+    ).pipe(
+      Effect.provide(
+        dynamicResponse((input) =>
+          Effect.gen(function* () {
+            const body = decodeJson(input.text) as Record<string, unknown>
+
+            expect(body.max_tokens).toBe(262144)
+            expect(body).not.toHaveProperty("max_completion_tokens")
+            return input.respond(sseEvents(deltaChunk({}, "stop")), {
+              headers: { "content-type": "text/event-stream" },
+            })
+          }),
+        ),
+      ),
+    ),
+  )
+
   it.effect("places cache breakpoints only when compatibility declares the format", () =>
     Effect.gen(function* () {
       const prepare = (cacheFormat: "anthropic" | "alibaba" | undefined) =>

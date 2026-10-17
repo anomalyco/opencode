@@ -203,7 +203,7 @@ function migrateModel(info: typeof ConfigProviderV1.Model.Type, npm: string | un
   const split = (input: Record<string, unknown>) =>
     compatible
       ? ConfigProviderOptionsV1.compatibleModel(input)
-      : { settings: ConfigProviderOptionsV1.model(input), body: undefined }
+      : { settings: ConfigProviderOptionsV1.model(input), body: undefined, maxTokens: undefined }
   const migrated = options && split(options)
   const settings = migrated?.settings
   const compatibility = Model.compatibility(info.interleaved)
@@ -247,14 +247,31 @@ function migrateModel(info: typeof ConfigProviderV1.Model.Type, npm: string | un
     body: migrated?.body,
     variants:
       info.variants &&
-      Object.entries(info.variants).map(([id, options]) => ({ id, ...split(options) })),
+      Object.entries(info.variants).map(([id, options]) => {
+        const { maxTokens, ...variant } = split(options)
+        // Variants carry no limit of their own, so a variant-level max-token option stays in the
+        // body under v1's own key; the request builder then leaves that field to it.
+        if (maxTokens === undefined) return { id, ...variant }
+        return {
+          id,
+          ...variant,
+          body: { ...variant.body, [ConfigProviderOptionsV1.MAX_TOKENS_BODY_KEY]: int(maxTokens) },
+        }
+      }),
     cost: costs,
     disabled: info.status === "deprecated" ? true : undefined,
-    limit: info.limit && {
-      context: int(info.limit.context),
-      input: info.limit.input === undefined ? undefined : int(info.limit.input),
-      output: int(info.limit.output),
-    },
+    limit: migrateLimit(info.limit, migrated?.maxTokens),
+  }
+}
+
+// v1's `max_tokens` model option is the model's max output, so it becomes the output limit the
+// request builder already derives its single max-token field from.
+function migrateLimit(limit: typeof ConfigProviderV1.Model.Type.limit, maxTokens: number | undefined) {
+  if (!limit && maxTokens === undefined) return undefined
+  return {
+    context: limit === undefined ? undefined : int(limit.context),
+    input: limit?.input === undefined ? undefined : int(limit.input),
+    output: maxTokens === undefined ? (limit === undefined ? undefined : int(limit.output)) : int(maxTokens),
   }
 }
 

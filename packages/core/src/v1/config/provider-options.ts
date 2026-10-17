@@ -48,11 +48,23 @@ const COMPATIBLE_KEYS = new Set([
   "strictJsonSchema",
 ])
 
+// v1 treated these as the model's max output and sent a single max-token field. Left in the body
+// they would sit next to the one the request builder derives from the output limit, and strict
+// endpoints reject a body carrying both, so they are reported separately instead.
+const MAX_TOKENS_KEYS = ["max_tokens", "max_completion_tokens", "maxTokens"]
+
+export const MAX_TOKENS_BODY_KEY = "max_tokens"
+
 export function compatibleModel(options: Options) {
-  const entries = Object.entries(options)
+  const maxTokens = MAX_TOKENS_KEYS.map((key) => options[key]).find((value) => typeof value === "number")
+  // Anything the model cannot use as a limit keeps v1's behavior and goes out in the body.
+  const entries = Object.entries(options).filter(
+    ([key, value]) => !(MAX_TOKENS_KEYS.includes(key) && typeof value === "number"),
+  )
   const body = Object.fromEntries(entries.filter(([key]) => !COMPATIBLE_KEYS.has(key)))
   return {
     settings: Object.fromEntries(entries.filter(([key]) => COMPATIBLE_KEYS.has(key))),
     body: Object.keys(body).length ? body : undefined,
+    maxTokens,
   }
 }

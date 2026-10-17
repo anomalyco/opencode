@@ -714,6 +714,15 @@ const detectMaxTokensField = (
   return "max_completion_tokens"
 }
 
+// A merged `http.body` overlay can carry its own max-token field: v1 `max_tokens` model options
+// migrate into the body, and users set either field through provider `body` config. The overlay is
+// applied after this builder, so emitting ours too leaves both fields in the request, which strict
+// endpoints reject. Let the overlay own the field. `undefined` values are dropped by the overlay
+// merge, so they leave the field to us.
+const MAX_TOKENS_FIELDS = ["max_tokens", "max_completion_tokens"] as const
+const overlaysMaxTokens = (body: Record<string, unknown> | undefined) =>
+  body !== undefined && MAX_TOKENS_FIELDS.some((field) => body[field] !== undefined)
+
 const detectSupportsStore = (provider: string, baseURL: string | undefined): boolean => {
   const p = provider.toLowerCase()
   const url = (baseURL ?? "").toLowerCase()
@@ -842,9 +851,11 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
     stream: true as const,
     ...(supportsUsageInStreaming ? { stream_options: { include_usage: true } } : {}),
     ...(zaiToolStream && hasActiveTools ? { tool_stream: true } : {}),
-    ...(maxTokensField === "max_completion_tokens"
-      ? { max_completion_tokens: generation?.maxTokens }
-      : { max_tokens: generation?.maxTokens }),
+    ...(overlaysMaxTokens(request.http?.body)
+      ? {}
+      : maxTokensField === "max_completion_tokens"
+        ? { max_completion_tokens: generation?.maxTokens }
+        : { max_tokens: generation?.maxTokens }),
     temperature: generation?.temperature,
     top_p: generation?.topP,
     frequency_penalty: generation?.frequencyPenalty,

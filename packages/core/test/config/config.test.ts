@@ -1750,6 +1750,11 @@ describe("Config", () => {
                         options: { reasoningEffort: "high", allowed_openai_params: ["reasoning_effort"] },
                         variants: { thinking: { chat_template_kwargs: { enable_thinking: true } } },
                       },
+                      "glm-5.3-fast": {
+                        limit: { context: 1048544, output: 200000 },
+                        options: { max_tokens: 262144 },
+                        variants: { long: { max_tokens: 131072 } },
+                      },
                     },
                   },
                 },
@@ -1834,6 +1839,12 @@ describe("Config", () => {
               body: { allowed_openai_params: ["reasoning_effort"] },
               variants: [{ id: "thinking", settings: {}, body: { chat_template_kwargs: { enable_thinking: true } } }],
             })
+            const maxTokensModel = documents[0]?.info.providers?.litellm?.models?.["glm-5.3-fast"]
+            expect(maxTokensModel).toMatchObject({
+              limit: { context: 1048544, output: 262144 },
+              variants: [{ id: "long", settings: {}, body: { max_tokens: 131072 } }],
+            })
+            expect(maxTokensModel?.body).toBeUndefined()
             expect(documents[0]?.info.compaction).toEqual({
               auto: true,
               keep: { tokens: 2000 },
