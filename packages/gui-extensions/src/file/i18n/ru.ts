@@ -24,6 +24,7 @@ export default {
   "open.app.xcode": "Xcode",
   "open.app.androidStudio": "Android Studio",
   "open.app.powershell": "PowerShell",
+  "open.app.powershell7": "PowerShell 7",
   "open.app.sublimeText": "Sublime Text",
   selectToOpen: "Выберите файл, чтобы открыть",
   "open.finder": "Finder",
