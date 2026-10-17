@@ -1,4 +1,8 @@
 import { describe, expect } from "bun:test"
+import { HttpOptions, LLMRequest, mergeHttpOptions } from "@opencode/ai"
+import { Auth } from "@opencode/ai/route/auth"
+import { Endpoint } from "@opencode/ai/route/endpoint"
+import { jsonRequestParts } from "@opencode/ai/route/transport/http"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { Agent } from "@opencode/schema/agent"
 import { Money } from "@opencode/schema/money"
@@ -40,6 +44,67 @@ const transport = SessionModelTransport.Service.of({
 })
 
 describe("SessionModelRequest HTTP hooks", () => {
+  it.effect("applies raw agent body overlays and protects runtime headers for every request kind", () =>
+    Effect.gen(function* () {
+      const hooks = yield* PluginHooks.Service
+      yield* hooks.register("session", "context", (event) =>
+        Effect.sync(() => {
+          expect(event.options.temperature).toBeUndefined()
+          event.options.temperature = 0.2
+        }),
+      )
+      yield* hooks.register("session", "model.request", (event) =>
+        Effect.sync(() => {
+          expect(event.headers["x-agent"]).toBe("reviewer")
+          event.headers["x-agent"] = "hook"
+        }),
+      )
+      const requests = yield* SessionModelRequest.Service.pipe(Effect.provide(SessionModelRequest.layer))
+      for (const kind of KINDS) {
+        const prepared = yield* requests[kind]({
+          session,
+          agent: Agent.ID.make("reviewer"),
+          agentRequest: {
+            settings: {},
+            body: { temperature: 0.7, top_p: 0.8, service_tier: "flex", maxTokens: 5, nested: { agent: true } },
+            headers: { "x-agent": "reviewer", "X-OPENCODE-SESSION-ID": "wrong", "X-Session-Affinity": "wrong" },
+          },
+          model,
+          system: [],
+          messages: [],
+        })
+        expect(prepared.request.generation?.temperature).toBe(kind === "primary" ? 0.2 : undefined)
+        expect(prepared.request.generation?.maxTokens).toBe(
+          kind === "primary" || kind === "compaction" ? 32_000 : undefined,
+        )
+        const request = LLMRequest.update(prepared.request, {
+          http: mergeHttpOptions(
+            new HttpOptions({ body: { temperature: 0.9, nested: { model: true } } }),
+            prepared.request.http,
+          ),
+        })
+        const body = yield* OpenAIChat.fromRequest(request)
+        const sent = yield* jsonRequestParts({
+          request,
+          body,
+          endpoint: Endpoint.path("https://example.test/v1/chat/completions"),
+          auth: Auth.bearer("test"),
+          encodeBody: JSON.stringify,
+        })
+        const json = JSON.parse(sent.bodyText)
+        expect(json.temperature).toBe(0.7)
+        expect(json.top_p).toBe(0.8)
+        expect(json.service_tier).toBe("flex")
+        expect(json.nested).toEqual({ model: true, agent: true })
+        expect(prepared.request.http?.headers?.["x-agent"]).toBe("hook")
+        expect(prepared.request.http?.headers?.["x-opencode-session-id"]).toBe(session.id)
+        expect(prepared.request.http?.headers?.["X-OPENCODE-SESSION-ID"]).toBeUndefined()
+        expect(prepared.request.http?.headers?.["X-Session-Affinity"]).toBeUndefined()
+
+      }
+    }).pipe(Effect.provideService(SessionModelTransport.Service, transport)),
+  )
+
   it.effect("tags every Session request kind on http.request and http.response", () =>
     Effect.gen(function* () {
       const hooks = yield* PluginHooks.Service
