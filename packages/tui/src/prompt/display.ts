@@ -59,3 +59,10 @@ export function slashTriggerIndex(value: string, offset = promptOffsetWidth(valu
     return promptOffsetWidth(text.slice(0, index))
   }
 }
+
+/** Source badge for a server-provided slash command. MCP prompts follow the `server:prompt`
+ * naming convention from mcpCommandName; everything else from the command registry is
+ * config-defined. Built-in keymap commands never reach this and stay unbadged. */
+export function slashCommandKind(name: string): "mcp" | "custom" {
+  return name.includes(":") ? "mcp" : "custom"
+}

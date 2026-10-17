@@ -10,6 +10,7 @@ import {
   directoryRecentValue,
   slashArgumentAutocomplete,
 } from "../../src/prompt/directory-completion"
+import { slashCommandKind } from "../../src/prompt/display"
 
 describe("directoryAutocomplete", () => {
   test("lists parents and siblings without changing location", async () => {
@@ -219,5 +220,17 @@ describe("directoryRecentValue", () => {
 
   test("keeps paths outside home absolute", () => {
     expect(directoryRecentValue("/project/recent", "/home/user")).toBe("/project/recent")
+  })
+})
+
+describe("slashCommandKind", () => {
+  test("badges MCP prompts by the server:prompt naming convention", () => {
+    expect(slashCommandKind("github:create_issue")).toBe("mcp")
+    expect(slashCommandKind("my_server:my_prompt")).toBe("mcp")
+  })
+
+  test("badges config-defined commands as custom", () => {
+    expect(slashCommandKind("review-changes")).toBe("custom")
+    expect(slashCommandKind("adapt")).toBe("custom")
   })
 })
