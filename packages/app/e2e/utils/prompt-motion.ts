@@ -5,11 +5,11 @@ export type PromptPosition = { frame: number; top: number | null }
 // Records painted compositor frames; the returned stop function reads the prompt position in each frame.
 export async function capturePromptMotion(page: Page, view: { x: number; y: number; width: number }) {
   const session = await page.context().newCDPSession(page)
-  const frames: string[] = []
+  const frames: { data: string; timestamp?: number }[] = []
   const acknowledgements: Promise<unknown>[] = []
 
-  const onFrame = (frame: { data: string; sessionId: number }) => {
-    frames.push(frame.data)
+  const onFrame = (frame: { data: string; sessionId: number; metadata: { timestamp?: number } }) => {
+    frames.push({ data: frame.data, timestamp: frame.metadata.timestamp })
     acknowledgements.push(session.send("Page.screencastFrameAck", { sessionId: frame.sessionId }))
   }
 
@@ -29,7 +29,17 @@ export async function capturePromptMotion(page: Page, view: { x: number; y: numb
     await Promise.all(acknowledgements)
     await session.detach()
 
-    return { positions: await readPromptPositions(page, frames, view), frames }
+    // Chromium stamps each frame when it is captured, then JPEG-encodes up to three at once on unsequenced
+    // thread-pool tasks and emits each one when its encode finishes, so a slow encode arrives after newer frames.
+    const stamped = frames.filter(
+      (frame): frame is { data: string; timestamp: number } => frame.timestamp !== undefined,
+    )
+
+    if (stamped.length !== frames.length) throw new Error("Screencast frame without a timestamp")
+
+    const ordered = stamped.toSorted((a, b) => a.timestamp - b.timestamp).map((frame) => frame.data)
+
+    return { positions: await readPromptPositions(page, ordered, view), frames: ordered }
   }
 }
 
@@ -41,10 +51,10 @@ export async function readPromptPositions(
 ): Promise<PromptPosition[]> {
   return page.evaluate(
     async ({ frames, view, viewport }) => {
-      const positions: { frame: number; top: number | null }[] = []
+      const positions: PromptPosition[] = []
 
       for (const [frame, encoded] of frames.entries()) {
-        const position = { frame, top: null as number | null }
+        const position: PromptPosition = { frame, top: null }
 
         const image = await createImageBitmap(
           new Blob([Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0))], { type: "image/jpeg" }),

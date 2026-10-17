@@ -117,6 +117,7 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
       await devtools.send("Input.dispatchTouchEvent", {
         type: "touchStart",
         touchPoints: [{ x: bounds.x + 120, y: bounds.y + 5 }],
+        timestamp: restingTimestamp(),
       })
       image.resolve()
 
@@ -134,13 +135,18 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
         await devtools.send("Input.dispatchTouchEvent", {
           type: "touchMove",
           touchPoints: [{ x: bounds.x + 120, y: bounds.y + 5 + step * 30 }],
+          timestamp: restingTimestamp(),
         })
         await expect
           .poll(() => reading.anchor.evaluate((element) => element.getBoundingClientRect().top))
           .toBeCloseTo(before + step * 30 - 15, 0)
       }
 
-      await devtools.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] })
+      await devtools.send("Input.dispatchTouchEvent", {
+        type: "touchEnd",
+        touchPoints: [],
+        timestamp: Date.now() / 1000,
+      })
       await expect(reading.timeline.locator('[data-orientation="vertical"][data-visible="false"]')).toHaveCount(1)
       expect(await reading.anchor.evaluate((element) => element.getBoundingClientRect().top)).toBeCloseTo(
         before + 615,
@@ -252,11 +258,18 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
         if (nestedStart) {
           await page.evaluate(() => document.fonts.ready)
           const position = await tail.evaluate((element) => element.getBoundingClientRect().top)
-          await nested.evaluate((element) => (element.scrollTop = 500))
+          await nested.evaluate((element) => {
+            element.scrollTop = 500
+            // Control+End animates, and Chromium drops a key scroll that starts after that animation reaches
+            // the end but before it finishes. Wait for the scroll to end there, not only for its offset.
+            element.addEventListener("scrollend", function settled() {
+              if (element.scrollHeight - element.clientHeight - element.scrollTop >= 1) return
+              element.dataset.endSettled = ""
+              element.removeEventListener("scrollend", settled)
+            })
+          })
           await nested.press("Control+End")
-          await expect
-            .poll(() => nested.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop))
-            .toBeLessThan(1)
+          await expect(nested).toHaveAttribute("data-end-settled")
           await nested.press("Control+Home")
           await expect(nested).toHaveJSProperty("scrollTop", 0)
           expect(await tail.evaluate((element) => element.getBoundingClientRect().top)).toBeCloseTo(position, 0)
@@ -705,15 +718,21 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
             await devtools.send("Input.dispatchTouchEvent", {
               type: "touchStart",
               touchPoints: [{ x: bounds.x + 100, y: bounds.y + 70 }],
+              timestamp: restingTimestamp(),
             })
 
             for (let step = 1; step <= 23; step++)
               await devtools.send("Input.dispatchTouchEvent", {
                 type: "touchMove",
                 touchPoints: [{ x: bounds.x + 100, y: bounds.y + 70 + step * 30 }],
+                timestamp: restingTimestamp(),
               })
             await expect(touched).not.toBeInViewport()
-            await devtools.send("Input.dispatchTouchEvent", { type: release, touchPoints: [] })
+            await devtools.send("Input.dispatchTouchEvent", {
+              type: release,
+              touchPoints: [],
+              timestamp: Date.now() / 1000,
+            })
             await expect(hidden).toHaveCount(1)
             await expect(touched).toHaveCount(0)
           }
@@ -870,4 +889,13 @@ async function readFrom(page: Page, text: string) {
   await expect(anchor).toBeInViewport()
 
   return { timeline, scroller, anchor, start }
+}
+
+// Chromium flings a touchEnd that lands within 80 ms of a touchMove made within 40 ms of the previous one
+// (ui/events/velocity_tracker), and CDP stamps an unstamped event when it arrives. A drag released as soon
+// as a quick check passed then carried momentum past the position it asserts. Stamping the drag's
+// touchStart and touchMoves 100 ms early, and its release from the same clock, makes the finger always
+// rest at least 100 ms before it lifts.
+function restingTimestamp() {
+  return (Date.now() - 100) / 1000
 }
