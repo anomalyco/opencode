@@ -61,8 +61,11 @@ export const layer = Layer.effect(
           }),
         ),
       )
+    let previous: Info | undefined
     const load = Effect.fnUntraced(function* (migration?: Info) {
-      return merge(migration ?? Option.getOrUndefined(decode(yield* readJson())), content)
+      const config = migration ?? Option.getOrUndefined(decode(yield* readJson()))
+      if (config !== undefined) previous = config
+      return merge(previous, content)
     })
 
     const get = Effect.fn("cli.config.get")(() =>
@@ -104,6 +107,7 @@ export const layer = Layer.effect(
           const config = Option.getOrUndefined(decode(parse(updated, errors, { allowTrailingComma: true })))
           if (errors.length || config === undefined) return yield* Effect.fail(new Error("Invalid CLI config update"))
           yield* write(updated.endsWith("\n") ? updated : updated + "\n")
+          previous = config
           return merge(config, content)
         }),
       ).pipe(Effect.mapError((cause) => new Error("Failed to update CLI config", { cause }))),

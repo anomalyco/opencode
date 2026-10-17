@@ -89,7 +89,9 @@ function Provider(props: ParentProps<{ config?: KeymapConfig }>) {
     registerBaseLayoutFallback(keymap),
     registerEscapeClearsPendingSequence(keymap),
     registerBackspacePopsPendingSequence(keymap),
-    registerManagedTextareaLayer(keymap, renderer, {
+  ]
+  createComputed(() => {
+    const dispose = registerManagedTextareaLayer(keymap, renderer, {
       enabled: () => {
         const editor = renderer.currentFocusedEditor
         return editor instanceof TextareaRenderable && !(editor instanceof InputRenderable)
@@ -132,18 +134,24 @@ function Provider(props: ParentProps<{ config?: KeymapConfig }>) {
         "input.select.all",
         "input.submit",
       ].flatMap((command) => config.keybinds.get(command)),
-    }),
-  ]
-  const leader = config.keybinds.get("leader")?.[0]?.key
-  if (leader) {
-    dispose.push(
+    })
+    onCleanup(dispose)
+  })
+  const leader = createMemo(() => config.keybinds.get("leader")?.[0]?.key)
+  const leaderTimeout = createMemo(
+    () => config.leader?.timeout ?? ("leader_timeout" in config ? config.leader_timeout : undefined) ?? 2000,
+  )
+  createComputed(() => {
+    const trigger = leader()
+    if (!trigger) return
+    onCleanup(
       registerTimedLeader(keymap, {
-        trigger: leader,
+        trigger,
         name: "leader",
-        timeoutMs: config.leader?.timeout ?? ("leader_timeout" in config ? config.leader_timeout : undefined) ?? 2000,
+        timeoutMs: leaderTimeout(),
       }),
     )
-  }
+  })
   onCleanup(() => {
     dispose.reverse().forEach((item) => item())
     mode.dispose()
@@ -186,8 +194,10 @@ export interface Keymap {
 function use(): Keymap {
   const value = useValue()
   const enabled = useInteractivity()
-  const leader = value.config.keybinds.get("leader")?.[0]?.key
-  const isLeader = leader ? value.keymap.createKeyMatcher(leader) : () => false
+  const isLeader = createMemo(() => {
+    const leader = value.config.keybinds.get("leader")?.[0]?.key
+    return leader ? value.keymap.createKeyMatcher(leader) : () => false
+  })
   return {
     dispatch(id, input) {
       value.dispatch(id, input)
@@ -197,7 +207,7 @@ function use(): Keymap {
       push: (mode) => value.mode.push(mode, resolveInteractivity(enabled)),
     },
     intercept: value.keymap.intercept.bind(value.keymap),
-    isLeader,
+    isLeader: (event) => isLeader()(event),
   }
 }
 

@@ -14,7 +14,11 @@ export async function discoverThemes(directories: string[]) {
       .map((entry) => path.join(themeDirectory, entry.name))
       .sort()
     for (const file of files) {
-      result[path.basename(file, ".json")] = JSON.parse(await readFile(file, "utf8")) as unknown
+      // Keep the name present during an incomplete save so reconciliation can
+      // retain its last valid theme, while absent files are removed.
+      result[path.basename(file, ".json")] = await readFile(file, "utf8")
+        .then((text): unknown => JSON.parse(text))
+        .catch(() => undefined)
     }
   }
   return result
