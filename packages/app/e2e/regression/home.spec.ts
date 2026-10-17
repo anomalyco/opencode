@@ -1,4 +1,6 @@
 import { expect, test, type Page } from "@playwright/test"
+import type { SessionNotFoundError } from "@opencode/client/promise"
+import { Data } from "effect"
 import { expectPath, holdRoute, NO_PROVIDER, project, REMOTE_SERVER, seed, sessionHref } from "../utils/app"
 import { mockOpenCodeServer } from "../utils/mock-server"
 import { fixture, mockStressTimeline } from "../utils/session-fixture"
@@ -75,6 +77,42 @@ test("the session context menu renames, exports, and deletes a Home session", as
   await dialog.getByRole("button", { name: "Delete session" }).click()
   await removed
   await expect(renamedRow).toBeHidden()
+})
+
+test("deleting an already missing Home session closes its tab and stays gone after reload", async ({ page }) => {
+  const sessions = fixture.sessions.map((item) => ({ ...item }))
+  await seed(page, { tabs: [fixture.targetID] })
+  await openHome(page, {
+    sessions,
+    onSessionRemove: (sessionID) => {
+      expect(sessionID).toBe(fixture.targetID)
+      sessions.splice(
+        sessions.findIndex((item) => item.id === sessionID),
+        1,
+      )
+
+      return {
+        status: 404,
+        body: Data.taggedEnum<SessionNotFoundError>().SessionNotFoundError({ sessionID, message: "Session not found" }),
+      }
+    },
+  })
+  const target = row(page, fixture.expected.targetTitle)
+  const tab = page.locator(`[data-slot="titlebar-tabs"] a[href="${sessionHref(fixture.targetID)}"]`)
+  await expect(target).toBeVisible()
+  await expect(tab).toBeVisible()
+  await target.click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Delete…" }).click()
+  const dialog = page.getByRole("dialog")
+  await dialog.getByRole("button", { name: "Delete session" }).click()
+  await expect(dialog).toBeHidden()
+  await expect(page.getByText("Failed to delete session", { exact: true })).toHaveCount(0)
+  await expect(target).toHaveCount(0)
+  await expect(tab).toHaveCount(0)
+  await page.reload()
+  await expect(row(page, fixture.expected.sourceTitle)).toBeVisible()
+  await expect(target).toHaveCount(0)
+  await expect(tab).toHaveCount(0)
 })
 
 test("the Home shortcut focuses session search, and the Home button leaves focus alone", async ({ page }) => {
