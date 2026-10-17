@@ -376,6 +376,20 @@ function pickerTilde(absolute: string, home: string) {
   return ""
 }
 
+export function pickerDisplaySeparator(value: string) {
+  return value.includes("\\") ? "\\" : "/"
+}
+
+export function withPickerSeparator(value: string) {
+  if (!value || value.endsWith("/") || value.endsWith("\\")) return value
+
+  return value + pickerDisplaySeparator(value)
+}
+
+export function stripPickerTrailingSeparator(value: string) {
+  return value.replace(/[/\\]+$/, "")
+}
+
 export function displayPickerPath(path: string, input: string, home: string) {
   const value = trimPickerPath(path)
 
