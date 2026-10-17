@@ -2,6 +2,7 @@ import { dialog } from "electron"
 import { Effect, Exit, Scope } from "effect"
 import { MenubarItem, type MainSetup } from "../sdk/main"
 import { Updater } from "./contract"
+import { updaterEnabled } from "./enabled"
 import type definition from "./index"
 import { logContext } from "./log"
 import { make } from "./machine"
@@ -9,7 +10,7 @@ import { make } from "./machine"
 const setup: MainSetup<typeof definition> = async (ctx) => {
   const build = ctx.build
   const lifecycle = ctx.lifecycle
-  const enabled = build.packaged && build.channel !== "dev"
+  const enabled = updaterEnabled(build)
   // Holds no resources, so it needs no cleanup.
   const context = logContext(ctx.log.write)
   const runPromise = Effect.runPromiseWith(context)

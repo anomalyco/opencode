@@ -122,7 +122,9 @@ stdenv.mkDerivation (finalAttrs: {
   + lib.optionalString stdenv.hostPlatform.isDarwin ''
     mkdir -p $out/Applications
     mv dist/mac*/*.app $out/Applications
-    makeWrapper "$out/Applications/OpenCode.app/Contents/MacOS/OpenCode" $out/bin/opencode-desktop
+    # Nix owns this install, so the bundled updater must not replace it.
+    makeWrapper "$out/Applications/OpenCode.app/Contents/MacOS/OpenCode" $out/bin/opencode-desktop \
+      --set OPENCODE_DISABLE_AUTOUPDATE 1
   ''
   + lib.optionalString stdenv.hostPlatform.isLinux ''
     mkdir -p $out/opt/opencode-desktop
@@ -142,6 +144,7 @@ stdenv.mkDerivation (finalAttrs: {
     makeWrapper ${lib.getExe electron} $out/bin/opencode-desktop \
      --inherit-argv0 \
      --set ELECTRON_FORCE_IS_PACKAGED 1 \
+     --set OPENCODE_DISABLE_AUTOUPDATE 1 \
      --add-flags $out/opt/opencode-desktop/resources/app.asar \
      --add-flags "\''${NIXOS_OZONE_WL:+\''${WAYLAND_DISPLAY:+--ozone-platform-hint=auto --enable-features=WaylandWindowDecorations --enable-wayland-ime=true}}"
   ''
