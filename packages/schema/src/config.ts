@@ -129,7 +129,15 @@ export class Directory extends Schema.Class<Directory>("Config.Directory")({
   path: AbsolutePath,
 }) {}
 
-export const Entry = Schema.Union([Document, Directory]).annotate({
+// A user-authored config file that could not be parsed or validated. Kept in
+// the entry list so clients can report exactly what was ignored and why.
+export class Rejected extends Schema.Class<Rejected>("Config.Rejected")({
+  type: Schema.Literal("rejected"),
+  path: AbsolutePath,
+  reason: Schema.String,
+}) {}
+
+export const Entry = Schema.Union([Document, Directory, Rejected]).annotate({
   identifier: "Config.Entry",
 })
 export type Entry = typeof Entry.Type

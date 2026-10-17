@@ -99,6 +99,30 @@ it.live("updates the global shell without replacing unrelated JSONC", () =>
   }),
 )
 
+it.live("reports rejected config files instead of dropping them", () =>
+  Effect.gen(function* () {
+    const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-config-rejected-")))
+    const global = path.join(tmp.path, "global")
+    const project = path.join(tmp.path, "project")
+    const config = path.join(project, "opencode.json")
+    yield* Effect.promise(() =>
+      Promise.all([fs.mkdir(global, { recursive: true }), fs.mkdir(project, { recursive: true })]),
+    )
+    yield* Effect.promise(() => fs.writeFile(config, "{"))
+    const server = yield* startServer(global)
+    const url = new URL("/api/config", server.base)
+    url.searchParams.set("location[directory]", project)
+    const response = yield* Effect.promise(() => fetch(url, { headers: server.headers }))
+    const body: unknown = yield* Effect.promise(() => response.json())
+    const entries = Schema.decodeUnknownSync(Schema.Array(Config.Entry))(body)
+
+    expect(response.status).toBe(200)
+    const rejected = entries.find((entry): entry is Config.Rejected => entry.type === "rejected")
+    expect(rejected?.path).toBe(AbsolutePath.make(config))
+    expect(rejected?.reason).toContain("CloseBraceExpected")
+  }),
+)
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
 }

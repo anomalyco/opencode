@@ -39,16 +39,35 @@ export const resolve = Effect.fn("cli.server-connection.resolve")(function* (arg
     return { endpoint } satisfies Resolved
   }
   if (args.standalone || (yield* ServiceConfig.read()).disabled === true) {
-    return { endpoint: yield* Standalone.start() } satisfies Resolved
+    const endpoint = yield* Standalone.start()
+    yield* warnRejectedConfigs(endpoint)
+    return { endpoint } satisfies Resolved
   }
 
   const mismatch = args.mismatch ?? "ignore"
   const options = yield* ServiceConfig.options({ checkVersion: mismatch !== "ignore" })
+  const endpoint = yield* resolveManaged({ ...options, onStart: args.onStart }, mismatch)
+  yield* warnRejectedConfigs(endpoint)
   return {
-    endpoint: yield* resolveManaged({ ...options, onStart: args.onStart }, mismatch),
+    endpoint,
     service: managedService(options),
   } satisfies Resolved
 })
+
+// A rejected config file is otherwise only visible in the server log, so every
+// server-backed command reports the files the loader ignored and why.
+const warnRejectedConfigs = (endpoint: Endpoint) =>
+  Effect.gen(function* () {
+    const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) })
+    const entries = yield* Effect.tryPromise(() => client.config.get({ location: { directory: process.cwd() } })).pipe(
+      Effect.orElseSucceed((): [] => []),
+    )
+    if (!Array.isArray(entries)) return
+    for (const entry of entries) {
+      if (entry.type !== "rejected") continue
+      process.stderr.write(`Warning: Config file at ${entry.path} was ignored: ${entry.reason}\n`)
+    }
+  })
 
 function managedService(options: EnsureOptions) {
   const reconnectOptions = { ...options, version: undefined }

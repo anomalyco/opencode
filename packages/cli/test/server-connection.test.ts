@@ -56,6 +56,51 @@ test("resolution groups Effect-native lifecycle operations only for the managed 
   }
 })
 
+test("reports rejected config files when resolving the managed service", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-rejected-config-"))
+  const id = "server-rejected-config-test"
+  const rejected = {
+    type: "rejected",
+    path: "/tmp/opencode.json",
+    reason: "CloseBraceExpected at line 1, column 2",
+  }
+  const server = Bun.serve({
+    port: 0,
+    fetch(request) {
+      const url = new URL(request.url)
+      if (url.pathname === "/api/config") return Response.json([rejected])
+      return Response.json({ version: OPENCODE_VERSION, pid: process.pid, urls: [] })
+    },
+  })
+  const registration = path.join(root, "state", ServiceConfig.filename())
+  const layer = Global.layerWith({ config: path.join(root, "config"), state: path.join(root, "state") })
+  const runPromise = <A, E>(effect: Effect.Effect<A, E, Global.Service | FileSystem.FileSystem | Scope.Scope>) =>
+    Effect.runPromise(effect.pipe(Effect.provide(layer), Effect.provide(NodeFileSystem.layer), Effect.scoped))
+  const original = process.stderr.write
+  const output: Array<string> = []
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    output.push(String(chunk))
+    return true
+  }) as typeof process.stderr.write
+
+  try {
+    await fs.mkdir(path.dirname(registration), { recursive: true })
+    await fs.writeFile(
+      registration,
+      JSON.stringify({ id, version: OPENCODE_VERSION, url: server.url.toString(), pid: process.pid }),
+    )
+    await runPromise(ServerConnection.resolve())
+
+    expect(output.join("")).toContain(
+      "Warning: Config file at /tmp/opencode.json was ignored: CloseBraceExpected at line 1, column 2",
+    )
+  } finally {
+    process.stderr.write = original
+    await server.stop(true)
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})
+
 test("service options only require a matching version when requested", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-options-"))
   const layer = Global.layerWith({ config: path.join(root, "config"), state: path.join(root, "state") })
