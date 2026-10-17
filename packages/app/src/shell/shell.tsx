@@ -33,11 +33,11 @@ export default function Layout(props: ParentProps) {
         style={{
           // Mobile panels only need clearance for their outer border.
           "--shell-inline-inset": mobile() ? "1px" : "8px",
-          // A bottom mobile titlebar leaves main's top edge to the safe area. Native Windows chrome supplies the gap;
+          // A bottom mobile titlebar leaves main's top edge to the safe area. Native caption overlays supply the gap;
           // retain outer-outline clearance.
           "--shell-top-inset": bottomTitlebar()
             ? "0px"
-            : platform.platform === "desktop" && platform.os === "windows"
+            : platform.platform === "desktop" && (platform.os === "windows" || platform.os === "linux")
               ? "1px"
               : "8px",
           "--shell-bottom-inset": bottomTitlebar()
