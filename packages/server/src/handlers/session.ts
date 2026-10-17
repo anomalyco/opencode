@@ -128,6 +128,16 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                       resource: error.sessionID,
                     }),
                 ),
+                Effect.catchTag(
+                  "SessionTransfer.MessageConflictError",
+                  // Only the message IDs exist (under another session); the destination
+                  // session row was never created.
+                  (error) =>
+                    new ConflictError({
+                      message: `Session messages already exist: ${error.sessionID}`,
+                      resource: error.sessionID,
+                    }),
+                ),
               ),
           }
         }),
