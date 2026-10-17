@@ -102,6 +102,7 @@ import { COMMAND_PALETTE_COMMAND, Keymap, type KeymapCommand } from "./context/k
 
 import { DialogVariant } from "./component/dialog-variant"
 import { destroyRenderer } from "./util/renderer"
+import { registerDuplicateKeyGuard } from "./util/key-dedupe"
 import { cliErrorMessage, errorFormat } from "./util/error"
 import { AttentionProvider } from "./context/attention"
 import { StorageProvider, useStorage } from "./context/storage"
@@ -269,6 +270,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
         )
       })
       renderer.setMaxListeners(15)
+      registerDuplicateKeyGuard(renderer)
       const clipboard = yield* Effect.acquireRelease(
         Effect.sync(() => createTuiClipboard(renderer)),
         (clipboard) =>
