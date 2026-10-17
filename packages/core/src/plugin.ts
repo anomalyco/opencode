@@ -43,8 +43,10 @@ const layer = Layer.effect(
     const list = Effect.fn("Plugin.list")(function* () {
       return inventory
     })
-    const host = yield* PluginHost.make({ list })
+    const builtinHost = yield* PluginHost.make({ list })
+    const pluginHost = yield* PluginHost.make({ list }, "test", { authorizeTools: true })
     const load = Effect.fnUntraced(function* (plugin: Generation) {
+      const host = plugin.source?.type === "builtin" ? builtinHost : pluginHost
       const activation: Activation = { plugin, scope: yield* Scope.fork(scope) }
       const inherit = yield* State.inherit()
       const grouped = State.group((failure, refresh) => {
