@@ -177,6 +177,11 @@ export interface PanelInput {
   readonly toggleFullscreen: () => void
 }
 
+/** One layout of the session tab bar. The host owns its width and visibility; ui.tabs has the tabs. */
+export interface SessionTabsInput {
+  readonly width: number
+}
+
 /**
  * The host UI's slot tree. Every path is one slot: a named boundary a plugin
  * may render around, inside, or take over. Paths are absolute and
@@ -197,6 +202,8 @@ export interface SlotMap {
   readonly "prompt.footer.file": PromptFooterInput
   readonly "session.composer.top": { readonly sessionID: string }
   readonly "session.panel": PanelInput
+  readonly "session.tabs.horizontal": SessionTabsInput
+  readonly "session.tabs.vertical": SessionTabsInput
   readonly "sidebar.content": { readonly sessionID: string }
   readonly "sidebar.footer": { readonly sessionID: string }
 }
