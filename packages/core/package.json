@@ -40,31 +40,31 @@
       "workerd": "./src/pty/pty.workerd.ts",
       "bun": "./src/pty/pty.bun.ts",
       "node": "./src/pty/pty.node.ts",
-      "default": "./src/pty/pty.bun.ts"
+      "default": "./src/pty/pty.node.ts"
     },
     "#persistent-pty-binary": {
       "workerd": "./src/persistent-pty/binary.workerd.ts",
       "bun": "./src/persistent-pty/binary.bun.ts",
       "node": "./src/persistent-pty/binary.node.ts",
-      "default": "./src/persistent-pty/binary.bun.ts"
+      "default": "./src/persistent-pty/binary.node.ts"
     },
     "#fff": {
       "workerd": "./src/filesystem/fff.workerd.ts",
       "bun": "./src/filesystem/fff.bun.ts",
       "node": "./src/filesystem/fff.node.ts",
-      "default": "./src/filesystem/fff.bun.ts"
+      "default": "./src/filesystem/fff.node.ts"
     },
     "#photon-wasm": {
       "workerd": "./src/image/photon-wasm.workerd.ts",
       "bun": "./src/image/photon-wasm.bun.ts",
       "node": "./src/image/photon-wasm.node.ts",
-      "default": "./src/image/photon-wasm.bun.ts"
+      "default": "./src/image/photon-wasm.node.ts"
     },
     "#shell-parser-wasm": {
       "workerd": "./src/shell/parser-wasm.workerd.ts",
       "bun": "./src/shell/parser-wasm.bun.ts",
       "node": "./src/shell/parser-wasm.node.ts",
-      "default": "./src/shell/parser-wasm.bun.ts"
+      "default": "./src/shell/parser-wasm.node.ts"
     },
     "#v1-migration": {
       "types": "./src/database/v1-migration.bun.ts",

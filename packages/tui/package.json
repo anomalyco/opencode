@@ -29,17 +29,17 @@
     "#attention-sounds": {
       "bun": "./src/attention-sounds.bun.ts",
       "node": "./src/attention-sounds.node.ts",
-      "default": "./src/attention-sounds.bun.ts"
+      "default": "./src/attention-sounds.node.ts"
     },
     "#string-width": {
       "bun": "./src/util/string-width.bun.ts",
       "node": "./src/util/string-width.node.ts",
-      "default": "./src/util/string-width.bun.ts"
+      "default": "./src/util/string-width.node.ts"
     },
     "#zed-sqlite": {
       "bun": "./src/editor-zed-sqlite.bun.ts",
       "node": "./src/editor-zed-sqlite.node.ts",
-      "default": "./src/editor-zed-sqlite.bun.ts"
+      "default": "./src/editor-zed-sqlite.node.ts"
     },
     "#runtime-plugin-support": {
       "bun": "./src/plugin/runtime-plugin-support.bun.ts",
