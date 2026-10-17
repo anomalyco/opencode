@@ -123,3 +123,56 @@ test("compact rail renders and controls session tabs", async () => {
     app.renderer.destroy()
   }
 })
+
+test("vertical rail pulse spans the tab instead of a fixed 10 columns", async () => {
+  const [items] = createSignal<SessionTab[]>([
+    { sessionID: "first", title: "First session" },
+    { sessionID: "second", title: "Second session" },
+  ])
+  const [status] = createSignal({ ...EMPTY_SESSION_TAB_STATUS, busy: true })
+  const controller = {
+    tabs: items,
+    current: () => "first",
+    add() {},
+    search() {},
+    select() {},
+    close() {},
+    move() {},
+    detail: () => undefined,
+    status: (sessionID: string) => (sessionID === "first" ? status() : EMPTY_SESSION_TAB_STATUS),
+  } satisfies SessionTabsController
+  const app = await testRender(
+    () => (
+      <TestTuiContexts>
+        <ConfigProvider config={createTuiResolvedConfig({ tabs: { indicators: "status" } })}>
+          <Keymap.Provider>
+            <ThemeProvider mode="dark" source={emptyThemeSource}>
+              <box width="100%" height="100%" flexDirection="row">
+                <SessionTabs controller={controller} orientation="vertical" indicators="status" width={24} />
+                <text>transcript</text>
+              </box>
+            </ThemeProvider>
+          </Keymap.Provider>
+        </ConfigProvider>
+      </TestTuiContexts>
+    ),
+    { width: 80, height: 24 },
+  )
+
+  try {
+    app.renderer.start()
+    await app.waitForFrame((frame) => frame.includes("Second session"))
+    const row = app.captureSpans().lines.find((line) => line.spans.some((span) => span.text.includes("▄")))!
+    expect(row).toBeDefined()
+    const starts: number[] = []
+    let column = 0
+    for (const span of row.spans) {
+      starts.push(column)
+      column += span.width
+    }
+    // The pulse strip used to stop at column 10, leaving a stray stripe on a wide rail.
+    expect(starts).not.toContain(10)
+  } finally {
+    app.renderer.destroy()
+  }
+})
