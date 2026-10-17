@@ -13,6 +13,7 @@ export function useSettingsCommand() {
   const command = useCommand()
   const language = useLanguage()
   const show = useSettingsDialog()
+  const about = useSettingsDialog("about")
 
   command.register("settings", () => [
     {
@@ -21,6 +22,12 @@ export function useSettingsCommand() {
       category: language.t("command.category.settings"),
       keybind: "mod+comma",
       onSelect: show,
+    },
+    {
+      id: "settings.about",
+      title: language.t("desktop.menu.about"),
+      hidden: true,
+      onSelect: about,
     },
   ])
 

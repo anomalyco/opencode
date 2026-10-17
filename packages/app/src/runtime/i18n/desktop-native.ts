@@ -278,6 +278,7 @@ export const DESKTOP_NATIVE_ENGLISH = {
   "desktop.menu.supportForum": "Support Forum",
   "desktop.menu.shareFeedback": "Share Feedback",
   "desktop.menu.reportBug": "Report a Bug",
+  "desktop.menu.about": "About",
   "desktop.menu.ariaLabel": "OpenCode menu",
 
   "desktop.cli.installed.title": "CLI Installed",

@@ -43,6 +43,7 @@ export function mount(input: { server: string }) {
     const platform: Platform = {
       platform: "desktop",
       os: "windows",
+      version: "2.0.0-test",
       windowID: "windows-menu-test",
       openExternal: () => undefined,
       openDirectoryPickerDialog: async () => null,
