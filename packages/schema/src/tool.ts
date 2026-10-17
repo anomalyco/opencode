@@ -27,6 +27,12 @@ export interface Namespace {
 interface BaseOptions {
   readonly namespace?: string
   readonly permission?: string
+  /**
+   * Absolute execution deadline in milliseconds enforced at the shared tool
+   * execution boundary. `undefined` inherits the default. `false` opts out
+   * for tools that own their deadline or legitimately wait on the user.
+   */
+  readonly timeoutMs?: number | false
 }
 
 export type Options = BaseOptions &
