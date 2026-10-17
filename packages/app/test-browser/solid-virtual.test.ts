@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { createVirtualizer, defaultRangeExtractor, Virtualizer } from "@tanstack/solid-virtual"
 import { createRoot, createSignal } from "solid-js"
-import { filterVirtualIndexes } from "@/session/timeline/virtual-items"
+import { Predicate } from "effect"
 
 test("end anchoring survives consecutive resizes when the first scroll write is clamped", () => {
   const writes: { offset: number; adjustments?: number }[] = []
@@ -196,7 +196,7 @@ test("stale pinned indexes do not produce missing virtual items after count shri
       estimateSize: () => 60,
       initialRect: { width: 800, height: 600 },
       rangeExtractor: (range) =>
-        filterVirtualIndexes([...new Set([...defaultRangeExtractor(range), ...pinned])], range.count),
+        [...new Set([...defaultRangeExtractor(range), ...pinned])].filter((index) => index >= 0 && index < range.count),
     })
 
     expect(virtualizer.getVirtualItems().map((item) => item.index)).toEqual([0, 1])
@@ -227,9 +227,9 @@ test("snapshots materialize only measured rows and restore their current geometr
   virtualizer.getMeasurements = () =>
     new Proxy(measurements, {
       get(target, key, receiver) {
-        if (typeof key === "string" && /^\d+$/.test(key)) reads.push(Number(key))
+        if (Predicate.isString(key) && /^\d+$/.test(key)) reads.push(Number(key))
 
-        // oxlint-disable-next-line no-restricted-globals -- Proxy forwarding requires receiver-aware property access.
+        // oxlint-disable-next-line no-restricted-globals, anti-slop/no-reflect-get -- Proxy forwarding requires receiver-aware property access.
         return Reflect.get(target, key, receiver)
       },
     })

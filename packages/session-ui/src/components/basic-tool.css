@@ -36,21 +36,6 @@
     }
   }
 
-  [data-slot="basic-tool-tool-spinner"] {
-    width: 16px;
-    height: 16px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    color: var(--v2-text-text-faint);
-
-    [data-component="spinner"] {
-      width: 16px;
-      height: 16px;
-    }
-  }
-
   [data-slot="icon-svg"] {
     flex-shrink: 0;
   }

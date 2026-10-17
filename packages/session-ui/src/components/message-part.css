@@ -1,12 +1,3 @@
-[data-component="assistant-message"] {
-  content-visibility: auto;
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 12px;
-}
-
 [data-component="user-message"] {
   --user-message-mention-prefix-color: var(--v2-blue-500);
 
@@ -86,44 +77,6 @@
     width: 100%;
     height: 100%;
     object-fit: cover;
-  }
-
-  [data-slot="user-message-attachment-icon"] {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--icon-weak);
-
-    [data-slot="icon-svg"] {
-      width: 20px;
-      height: 20px;
-    }
-  }
-
-  [data-slot="user-message-attachment-file"] {
-    width: 100%;
-    min-width: 0;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-
-    [data-component="file-icon"] {
-      width: 20px;
-      height: 20px;
-      flex: none;
-    }
-  }
-
-  [data-slot="user-message-attachment-name"] {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    color: var(--v2-text-text-muted);
-    font-size: var(--font-size-small);
-    line-height: var(--line-height-large);
   }
 
   [data-slot="user-message-body"] {
@@ -629,15 +582,6 @@
   [data-component="checkbox"] {
     --checkbox-align: flex-start;
     --checkbox-offset: 0.5px;
-  }
-
-  [data-slot="message-part-todo-content"] {
-    line-height: var(--line-height-normal);
-
-    &[data-completed="completed"] {
-      text-decoration: line-through;
-      color: var(--v2-text-text-faint);
-    }
   }
 }
 

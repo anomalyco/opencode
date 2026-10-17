@@ -570,9 +570,4 @@
       animation-range: 0 0.1px;
     }
   }
-
-  :root body [data-slot="session-turn-diffs-header"] {
-    height: 24px;
-    padding-block: 0;
-  }
 }

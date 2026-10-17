@@ -20,10 +20,9 @@ import { fetchSessionExport, saveSessionExport, sessionExportFilename } from "@/
 import { showToast } from "@/shell/notifications/toast"
 import { usePlatform } from "@/runtime/platform/platform"
 import { applyTimelineMessageHandoff, timelineChildTitle, visibleTimelineMessages } from "./controller-projection"
-import { createTimelineProjection } from "./projection"
 import { useServer } from "@/runtime/server/current"
 import { getSessionMessageHandoff } from "@/session/handoff"
-import type { ReasoningMode } from "@opencode/session-ui/timeline/projection"
+import { createReactiveTimelineProjection, type ReasoningMode } from "@opencode/session-ui/timeline/projection"
 
 const emptyMessages: SessionMessageInfo[] = []
 
@@ -171,7 +170,7 @@ export function createTimelineController(input: { session: TimelineSessionSource
   const shellToolPartsExpanded = () => timelineDetail().shell.details === "expanded"
   const editToolPartsExpanded = () => timelineDetail().edit.details === "expanded"
 
-  const projection = createTimelineProjection({
+  const projection = createReactiveTimelineProjection({
     sessionMessages: projectedMessages,
     status: input.session.data.status,
     reasoningMode,
