@@ -11,7 +11,7 @@ import {
   mergeProviderOptions,
 } from "../src/index.js"
 import { AnthropicMessages, OpenAIChat, OpenAIResponses } from "../src/protocols.js"
-import { Auth, LLMClient } from "../src/route.js"
+import { Auth, Endpoint, Framing, LLMClient, Route } from "../src/route.js"
 import { compileRequest } from "../src/route/client.js"
 import { it } from "./lib/effect.js"
 import { dynamicResponse } from "./lib/http.js"
@@ -423,6 +423,36 @@ describe("request option precedence", () => {
         ),
       ),
     ),
+  )
+
+  it.effect("preserves well-formed message instances and repairs only changed messages", () =>
+    Effect.gen(function* () {
+      const prepared: LLMRequest[] = []
+      const route = Route.make({
+        id: "sanitize-identity",
+        provider: "openai",
+        protocol: OpenAIChat.protocol,
+        endpoint: Endpoint.path("/chat/completions", { baseURL: "https://api.openai.test/v1/" }),
+        auth: Auth.bearer("test"),
+        framing: Framing.sse,
+        headers: ({ request }) => {
+          prepared.push(request)
+          return {}
+        },
+      })
+      const messages = [
+        Message.user("first"),
+        Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: { query: "valid \u{1F600}" } })]),
+        Message.tool({ id: "call_1", name: "lookup", result: { output: "done" } }),
+        Message.user("broken \uD800"),
+      ]
+      yield* compileRequest(LLM.request({ model: route.model({ id: "gpt-4o-mini" }), messages }))
+
+      prepared[0].messages.slice(0, 3).forEach((message, index) => expect(message).toBe(messages[index]))
+      expect(prepared[0].messages[3]).not.toBe(messages[3])
+      expect(prepared[0].messages[3]).toBeInstanceOf(Message)
+      expect(prepared[0].messages[3].content).toEqual([Message.text("broken \uFFFD")])
+    }),
   )
 
   it.effect("applies raw body overlays after protocol lowering", () =>
