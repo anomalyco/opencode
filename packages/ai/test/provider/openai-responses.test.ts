@@ -2641,6 +2641,36 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("replays opaque alphanumeric item ids that have no prefix", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.user("hello"),
+            Message.assistant([
+              {
+                type: "reasoning",
+                text: "Greeting.",
+                providerMetadata: { openai: { itemId: "8a482c218291d43b", reasoningEncryptedContent: null } },
+              },
+              { type: "text", text: "Hi.", providerMetadata: { openai: { itemId: "ac5aef8d9aadc3ee" } } },
+            ]),
+            Message.user("again"),
+          ],
+          providerOptions: { store: false },
+        }),
+      )
+
+      expect(prepared.body.input).toMatchObject([
+        { role: "user" },
+        { type: "reasoning", id: "8a482c218291d43b", summary: [{ type: "summary_text", text: "Greeting." }] },
+        { type: "message", id: "ac5aef8d9aadc3ee", role: "assistant", status: "completed" },
+        { role: "user" },
+      ])
+    }),
+  )
+
   it.effect("falls back to item ids when an output index was not registered", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(request).pipe(

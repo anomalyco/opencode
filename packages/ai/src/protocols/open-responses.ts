@@ -465,9 +465,13 @@ export const lowerToolChoice = (protocolName: string, toolChoice: NonNullable<LL
 
 // Server-issued item ids need a nonempty prefix and suffix, but the prefix is
 // provider-defined and does not necessarily identify the item's semantic type.
+// The spec defines ids as opaque strings, and some gateways issue bare
+// alphanumeric tokens (e.g. hex) that strict servers then require on replayed
+// reasoning items, so those are kept too.
 const itemID = (providerMetadata: ProviderMetadata | undefined, providerMetadataKey: string) => {
   const metadata = providerMetadata?.[providerMetadataKey]
   if (!ProviderShared.isRecord(metadata) || typeof metadata.itemId !== "string") return undefined
+  if (/^[A-Za-z0-9]+$/.test(metadata.itemId)) return metadata.itemId
   const separator = metadata.itemId.indexOf("_")
   return separator > 0 && separator < metadata.itemId.length - 1 ? metadata.itemId : undefined
 }
