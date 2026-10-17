@@ -1,6 +1,6 @@
 export * as VcsPatch from "./patch.js"
 
-import { formatPatch, structuredPatch } from "diff"
+import { formatPatch, parsePatch, structuredPatch } from "diff"
 
 // Effectively "full file" context; adapters use it when no context is requested.
 export const PATCH_CONTEXT_LINES = 2_147_483_647
@@ -22,13 +22,18 @@ export const deletePatch = (file: string, content: string) =>
 
 /** Count changed lines in a unified diff, ignoring `+++`/`---` file headers. */
 export const countPatch = (patch: string) => {
-  let additions = 0
-  let deletions = 0
-  for (const line of patch.split("\n")) {
-    if (line.startsWith("+") && !line.startsWith("+++")) additions++
-    else if (line.startsWith("-") && !line.startsWith("---")) deletions++
-  }
-  return { additions, deletions }
+  return parsePatch(patch)
+    .flatMap((file) => file.hunks)
+    .reduce(
+      (counts, hunk) => {
+        for (const line of hunk.lines) {
+          if (line.startsWith("+")) counts.additions++
+          if (line.startsWith("-")) counts.deletions++
+        }
+        return counts
+      },
+      { additions: 0, deletions: 0 },
+    )
 }
 
 const parseQuotedPath = (value: string) => {

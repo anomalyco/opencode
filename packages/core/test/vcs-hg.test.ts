@@ -91,6 +91,24 @@ it.live("Mercurial rejects unsupported review modes and bases without requiring 
 )
 
 describeHg("Vcs mercurial", () => {
+  it.live("counts changed content that resembles unified diff headers", () =>
+    withHg((directory) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(async () => {
+          await fs.writeFile(path.join(directory, "counter.txt"), "--counter\n-- heading\n")
+          await commitAll(directory, "initial")
+          await fs.writeFile(path.join(directory, "counter.txt"), "++counter\n++ heading\n")
+        })
+        const vcs = yield* Vcs.Service
+        expect(yield* vcs.status()).toEqual([{ file: "counter.txt", additions: 2, deletions: 2, status: "modified" }])
+        const diff = yield* vcs.diff("working")
+        expect(diff[0]).toMatchObject({ file: "counter.txt", additions: 2, deletions: 2 })
+        expect(diff[0].patch).toContain("+++counter")
+        expect(diff[0].patch).toContain("---counter")
+      }),
+    ),
+  )
+
   it.live("reports modified, missing, and untracked files", () =>
     withHg((directory) =>
       Effect.gen(function* () {
