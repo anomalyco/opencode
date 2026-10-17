@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { Npm } from "@opencode/util/npm"
 import { errorFormat, errorMessage } from "../../src/util/error"
 
 describe("util.error", () => {
@@ -6,6 +7,15 @@ describe("util.error", () => {
     const err = new Error("boom")
     expect(errorMessage(err)).toBe("boom")
     expect(errorFormat(err)).toContain("boom")
+  })
+
+  test("includes install failure causes in plugin reconciliation messages", () => {
+    const cause = new Error("unable to resolve dependency tree")
+    const error = new Npm.InstallFailedError({ add: ["fixture-plugin@1.0.0"], dir: "/cache/npm", cause })
+
+    expect(errorMessage(error)).toContain("fixture-plugin@1.0.0")
+    expect(errorMessage(error)).toContain(cause.message)
+    expect(error.cause).toBe(cause)
   })
 
   test("extracts message from record-like values", () => {
