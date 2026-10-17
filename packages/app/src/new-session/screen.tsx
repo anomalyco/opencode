@@ -67,6 +67,7 @@ export default function NewSessionPage(props: { draftId: string }) {
 
   useNewSessionCommands({
     restoreFocus: model.restoreFocus,
+    mcp,
     project: {
       empty: project.empty,
       open: () => project.setOpen(true),
