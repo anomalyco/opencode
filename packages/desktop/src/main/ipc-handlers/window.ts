@@ -1,8 +1,9 @@
-import { BrowserWindow } from "electron"
+import { app, BrowserWindow } from "electron"
 import { Effect } from "effect"
 import { WindowRpcs } from "../../shared/ipc-rpc"
 import { IpcPortHandoff } from "../ipc-transport"
 import { getPinchZoomEnabled, setPinchZoomEnabled, setTitlebar, setWindowThemeReady, updateTitlebar } from "../windows"
+import { focusWindow, showWindow } from "../windows/focus"
 import { sender } from "./context"
 
 export const windowHandlers = WindowRpcs.toLayer(
@@ -22,9 +23,9 @@ export const windowHandlers = WindowRpcs.toLayer(
       WindowGetFullscreen: (_args, context) =>
         Effect.sync(() => BrowserWindow.fromWebContents(sender(handoff, context))?.isFullScreen() ?? false),
       WindowSetFocus: (_args, context) =>
-        Effect.sync(() => BrowserWindow.fromWebContents(sender(handoff, context))?.focus()),
+        Effect.sync(() => focusWindow(BrowserWindow.fromWebContents(sender(handoff, context)), app)),
       WindowShow: (_args, context) =>
-        Effect.sync(() => BrowserWindow.fromWebContents(sender(handoff, context))?.show()),
+        Effect.sync(() => showWindow(BrowserWindow.fromWebContents(sender(handoff, context)))),
       WindowGetZoomFactor: (_args, context) => Effect.sync(() => sender(handoff, context).getZoomFactor()),
       WindowSetZoomFactor: ({ factor }, context) =>
         Effect.sync(() => {
