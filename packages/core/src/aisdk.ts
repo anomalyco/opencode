@@ -38,6 +38,7 @@ import { HttpClientRequest, HttpClientResponse } from "effect/http"
 import { AsyncLocalStorage } from "node:async_hooks"
 import type { ID, RuntimeInfo } from "./model.js"
 import { Provider } from "./provider.js"
+import { UndiciFetch } from "./util/undici-fetch.js"
 import { State } from "./state.js"
 
 type SDK = any
@@ -159,7 +160,7 @@ function prepareOptions(model: RuntimeInfo, pkg: string) {
       }
     }
 
-    const send: Fetch = typeof customFetch === "function" ? customFetch : fetch
+    const send: Fetch = typeof customFetch === "function" ? customFetch : (UndiciFetch.shared() ?? fetch)
     const middleware = httpMiddleware.getStore()
     const res = await (
       middleware

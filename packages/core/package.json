@@ -134,6 +134,7 @@
     "tree-sitter-powershell": "0.25.10",
     "web-tree-sitter": "0.25.10",
     "which": "6.0.1",
+    "undici": "8.11.2",
     "zod": "catalog:"
   }
 }
