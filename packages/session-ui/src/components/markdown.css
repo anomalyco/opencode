@@ -1,6 +1,6 @@
 [data-component="markdown"] {
   --markdown-inline-code-path-color: var(--v2-text-text-code-path);
-  --markdown-inline-code-color: var(--v2-text-text-code-accent);
+  --markdown-link-color: var(--v2-text-text-code-accent);
   --markdown-inline-code-bg-mix: 8%;
   --markdown-shell-code-background: var(--v2-background-bg-layer-02);
   --markdown-shell-code-border: var(--v2-border-border-muted);
@@ -99,7 +99,7 @@
 
   /* Links */
   a {
-    color: var(--text-interactive-base);
+    color: var(--markdown-link-color);
     text-decoration: none;
     font-weight: inherit;
   }
@@ -119,7 +119,7 @@
     display: inline-block;
     width: 14px;
     height: 14px;
-    margin-inline-end: 4px;
+    margin-inline-end: 5px;
     vertical-align: -0.125em;
     background: currentColor;
     mask: url("./markdown-github.svg") center / contain no-repeat;
@@ -130,8 +130,14 @@
     display: inline-block;
     width: 14px;
     height: 14px;
-    margin-inline-end: 4px;
+    margin-inline-end: 5px;
     vertical-align: -0.125em;
+  }
+
+  /* Only GitHub links generate this ::before, so other links are unaffected. */
+  p .markdown-link-favicon,
+  p a.external-link::before {
+    margin-inline-start: 2px;
   }
 
   .markdown-link-favicon::before {
@@ -167,7 +173,7 @@
     padding: 0;
     border: 0;
     background: none;
-    color: var(--text-interactive-base);
+    color: var(--markdown-link-color);
     font: inherit;
     cursor: pointer;
   }
@@ -386,10 +392,11 @@
   }
 
   a.external-link > code[data-inline-code-kind="url"] {
-    color: var(--markdown-inline-code-color);
+    color: var(--markdown-link-color);
+    padding: 0;
     background: none;
     text-decoration: underline;
-    text-decoration-color: color-mix(in oklch, var(--markdown-inline-code-color) 25%, transparent);
+    text-decoration-color: color-mix(in oklch, var(--markdown-link-color) 25%, transparent);
     text-underline-offset: 2px;
   }
 

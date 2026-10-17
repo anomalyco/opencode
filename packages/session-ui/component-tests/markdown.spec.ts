@@ -267,6 +267,42 @@ story("keeps favicon space stable across loading and failure without fetching pr
   expect(requested.every((url) => !url.includes("localhost") && !url.includes("github.com"))).toBe(true)
 })
 
+story("spaces link icons and matches link, code URL, and icon colors", async ({ page }) => {
+  await page.evaluate(async (fixture) => {
+    const { mountMarkdown } = await import(fixture)
+    await mountMarkdown({
+      text: "[private](http://localhost:8080) and `http://localhost:4096` and [repo](https://github.com/anomalyco/opencode)",
+      cached: true,
+    })
+  }, fixture)
+
+  const markdown = page.getByTestId("markdown-fixture").locator('[data-component="markdown"]')
+  await expect(markdown).toHaveAttribute("data-markdown-ready", "")
+  const color = await resolvedColor(page, "--v2-text-text-code-accent")
+  const link = markdown.getByRole("link", { name: "private" })
+  const code = markdown.locator('a.external-link > code[data-inline-code-kind="url"]')
+  await expect(link).toHaveCSS("color", color)
+  await expect(code).toHaveCSS("color", color)
+  await expect(code).toHaveCSS("padding-inline-start", "0px")
+  await expect(markdown.locator(".markdown-link-favicon")).toHaveCount(2)
+
+  for (const favicon of await markdown.locator(".markdown-link-favicon").all()) {
+    await expect(favicon).toHaveCSS("margin-inline-end", "5px")
+    await expect(favicon).toHaveCSS("margin-inline-start", "2px")
+    await expect(favicon).toHaveCSS("color", color)
+  }
+
+  const github = markdown.getByRole("link", { name: "repo" })
+  await expect(github).toHaveCSS("color", color)
+  expect(
+    await github.evaluate((link) => {
+      const style = getComputedStyle(link, "::before")
+
+      return [style.marginInlineStart, style.marginInlineEnd]
+    }),
+  ).toEqual(["2px", "5px"])
+})
+
 async function resolvedColor(page: Page, token: string) {
   return page.evaluate((token) => {
     const probe = document.createElement("span")
