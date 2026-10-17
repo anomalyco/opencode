@@ -6,6 +6,7 @@ import type { useConfig } from "../../config"
 import type { ThinkingMode } from "../../context/thinking"
 import type { createTimelineAnchors } from "./anchors"
 import type { GroupKind } from "./grouping/session"
+import type { MarkdownImages } from "./markdown-image"
 
 export type PendingAction = "steer" | "queue" | "cancel"
 
@@ -26,6 +27,7 @@ export const context = createContext<{
   setGroupExpanded: (groupID: string, expanded: boolean, anchor?: Renderable | null) => void
   thinkingMode: () => ThinkingMode
   markdownMode: () => "source" | "rendered"
+  markdownImages?: MarkdownImages
   groupExploration: () => boolean
   diffWrapMode: () => "word" | "none"
   models: () => ModelInfo[]

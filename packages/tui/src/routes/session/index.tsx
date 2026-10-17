@@ -95,7 +95,6 @@ import { Keymap, type KeymapCommand } from "../../context/keymap"
 import { usePathFormatter } from "../../context/path-format"
 import { useLocation } from "../../context/location"
 import { Slot } from "../../plugin/render"
-import { usePlugin } from "../../plugin/context"
 import {
   cacheReuseDrop,
   completeGroupBoundary,
@@ -122,7 +121,15 @@ import { SessionLocationMissing } from "./location-missing"
 import { isRecord } from "../../util/record"
 import { createHistoryPrepend } from "./history"
 import { context, use, type PendingAction } from "./render-context"
-import { INLINE_TOOL_ICON_WIDTH, InlineToolRow, ReasoningPart, TextPart, toolDisplay } from "./message-parts"
+import {
+  INLINE_TOOL_ICON_WIDTH,
+  InlineToolRow,
+  ReasoningPart,
+  TextPart,
+  toolDisplay,
+  useMarkdownRenderNode,
+} from "./message-parts"
+import { createMarkdownImages } from "./markdown-image"
 import { defaultVerbosity, type GroupKind, type SessionEntry } from "./grouping/session"
 import { SessionGroupView } from "./group-view"
 import { useEntryAnchor } from "./anchor-view"
@@ -258,6 +265,11 @@ export function Session(props: {
   const scrollAcceleration = createMemo(() => getScrollAcceleration(config))
   const toast = useToast()
   const client = useClient()
+  const markdownImages = createMarkdownImages({
+    read: (request, options) => client.api.file.read(request, options),
+    directory: () => location()?.directory,
+  })
+  onCleanup(() => markdownImages.dispose())
   const autoApproved = new Set<string>()
   createEffect(() => {
     if (local.permission.mode !== "autoaccept") return
@@ -1369,6 +1381,7 @@ export function Session(props: {
         sessionID: route.sessionID,
         thinkingMode,
         markdownMode,
+        markdownImages,
         groupExploration,
         diffWrapMode,
         models,
@@ -2033,7 +2046,7 @@ function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type:
   const ctx = use()
   const theme = useTheme()
   const { currentSyntax: syntax } = useThemes()
-  const plugins = usePlugin()
+  const renderNode = useMarkdownRenderNode()
   const status = () => props.message.status
   const cancelled = () => props.message.status === "failed" && props.message.error.type === "aborted"
   const text = () =>
@@ -2082,7 +2095,7 @@ function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type:
         <box paddingTop={1} paddingLeft={3}>
           <markdown
             syntaxStyle={syntax()}
-            renderNode={plugins.markdown()}
+            renderNode={renderNode()}
             streaming={true}
             internalBlockMode="top-level"
             content={content()}
@@ -2762,9 +2775,7 @@ function BlockTool(props: BlockToolProps) {
               <Show
                 when={props.spinner}
                 fallback={
-                  <text
-                    fg={permission() ? theme.text.feedback.warning.base : (props.headerColor ?? theme.text.muted)}
-                  >
+                  <text fg={permission() ? theme.text.feedback.warning.base : (props.headerColor ?? theme.text.muted)}>
                     {title()}
                   </text>
                 }
@@ -2952,11 +2963,7 @@ function ShellDisplay(props: {
           <Show
             when={isRunning()}
             fallback={
-              <text
-                fg={theme.text.base}
-                wrapMode={expanded() ? "word" : "char"}
-                maxHeight={expanded() ? undefined : 2}
-              >
+              <text fg={theme.text.base} wrapMode={expanded() ? "word" : "char"} maxHeight={expanded() ? undefined : 2}>
                 {limitedInput()}
               </text>
             }
@@ -3057,7 +3064,9 @@ function Read(props: ToolProps) {
         Read {pathFormatter.format(stringValue(props.input.path))}
         <Show when={props.input.offset !== undefined || props.input.limit !== undefined}>
           :{finiteNumber(props.input.offset) || 1}-
-          {props.input.limit ? (finiteNumber(props.input.offset) || 1) + (finiteNumber(props.input.limit) || 0) - 1 : ""}
+          {props.input.limit
+            ? (finiteNumber(props.input.offset) || 1) + (finiteNumber(props.input.limit) || 0) - 1
+            : ""}
         </Show>
       </InlineTool>
       <For each={loaded()}>
