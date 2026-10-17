@@ -17,6 +17,7 @@ describe("provider error classification", () => {
       "Too many tokens",
       "Input validation error: `inputs` tokens + `max_new_tokens` must be <= 131073. Given: 600035 `inputs` tokens and 16 `max_new_tokens`",
       "Token limit exceeded",
+      "litellm.ContextWindowExceededError: litellm.BadRequestError: Context Window exceeded for given call. No models have context window large enough for this call.",
     ]
 
     expect(messages.every(isContextOverflow)).toBe(true)

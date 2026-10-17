@@ -37,6 +37,8 @@ const patterns = [
   /greater than the context length/i,
   // Hugging Face Text Generation Inference, e.g. Together
   /`inputs` tokens \+ `max_new_tokens` must be <= \d+/i,
+  // litellm ContextWindowExceededError wraps the upstream message.
+  /context window exceeded/i,
   /context window exceeds limit/i,
   /exceeded model token limit/i,
   /context[_ ]length[_ ]exceeded/i,
