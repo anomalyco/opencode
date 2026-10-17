@@ -56,7 +56,8 @@
           }
         }
         &:focus-visible {
-          outline: none;
+          outline: 2px solid var(--v2-border-border-focus);
+          outline-offset: -2px;
         }
         &[data-disabled] {
           cursor: not-allowed;

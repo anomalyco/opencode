@@ -430,7 +430,7 @@ function ModelSelectorDrawer(props: {
                     <span class="min-w-0 flex-1 truncate">{language.t("dialog.model.chatgptPlan")}</span>
                     <ExternalLink
                       href="https://chatgpt.com/settings/usage"
-                      class="flex shrink-0 items-center gap-1 rounded-sm text-v2-text-text-muted no-underline hover:text-v2-text-text-base focus-visible:outline focus-visible:outline-2"
+                      class="flex shrink-0 items-center gap-1 rounded-sm text-v2-text-text-muted no-underline hover:text-v2-text-text-base"
                     >
                       {language.t("dialog.model.chatgptManageUsage")}
                       <Icon name="arrow-up-right" size="small" />
@@ -783,7 +783,7 @@ export function ModelSelectorPopoverView(props: {
               <span class="min-w-0 flex-1 truncate">{language.t("dialog.model.chatgptPlan")}</span>
               <ExternalLink
                 href="https://chatgpt.com/settings/usage"
-                class="flex shrink-0 items-center gap-1 rounded-sm text-v2-text-text-muted no-underline hover:text-v2-text-text-base focus-visible:outline focus-visible:outline-2"
+                class="flex shrink-0 items-center gap-1 rounded-sm text-v2-text-text-muted no-underline hover:text-v2-text-text-base"
               >
                 {language.t("dialog.model.chatgptManageUsage")}
                 <Icon name="arrow-up-right" size="small" />
@@ -827,7 +827,7 @@ export const DialogSelectModel: Component<{ provider?: string; model?: ModelStat
         <div class="shrink-0 border-t border-v2-border-border-muted px-4 py-3">
           <button
             type="button"
-            class="flex h-9 w-full items-center gap-2 rounded-md px-3 text-left text-[13px] font-[530] leading-text-compact tracking-[-0.04px] text-v2-text-text-base hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
+            class="flex h-9 w-full items-center gap-2 rounded-md px-3 text-left text-[13px] font-[530] leading-text-compact tracking-[-0.04px] text-v2-text-text-base hover:bg-v2-overlay-simple-overlay-hover focus-visible:outline-offset-[-2px]"
             onClick={manage}
           >
             <Icon name="outline-sliders" size="small" />

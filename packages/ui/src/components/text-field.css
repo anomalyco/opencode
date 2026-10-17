@@ -48,23 +48,18 @@
       padding-inline-end: 4px;
 
       border-radius: var(--radius-md);
-      border: 1px solid var(--border-weak-base);
+      border: 1px solid transparent;
+      box-shadow: inset 0 0 0 1px var(--border-weak-base);
       background: var(--input-base);
+      background-clip: padding-box;
 
-      &:focus-within:not(:has([data-readonly])) {
-        border-color: transparent;
-        /* border/shadow-xs/select */
-        box-shadow:
-          0 0 0 3px var(--border-weak-selected),
-          0 0 0 1px var(--border-selected),
-          0 1px 2px -1px rgba(19, 16, 16, 0.25),
-          0 1px 2px 0 rgba(19, 16, 16, 0.08),
-          0 1px 3px 0 rgba(19, 16, 16, 0.12);
+      &:focus-within:not(:has([data-readonly], [data-invalid])) {
+        box-shadow: inset 0 0 0 1px var(--v2-border-border-focus);
       }
 
       &:has([data-invalid]) {
-        background: var(--surface-critical-weak);
-        border: 1px solid var(--border-critical-selected);
+        background-color: var(--surface-critical-weak);
+        box-shadow: inset 0 0 0 1px var(--border-critical-selected);
       }
 
       &:not(:has([data-slot="input-copy-button"])) {

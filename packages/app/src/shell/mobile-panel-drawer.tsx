@@ -79,7 +79,7 @@ export function MobilePanelDrawer(
                     <Button
                       variant="ghost"
                       icon="arrow-left"
-                      class="mb-2 !justify-start"
+                      class="mb-2 !justify-start focus-visible:outline-offset-[-2px]"
                       aria-label={language.t("common.goBack")}
                       onClick={navigation.back}
                     >

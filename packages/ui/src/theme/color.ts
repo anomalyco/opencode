@@ -1,4 +1,4 @@
-import type { HexColor, OklchColor } from "./types"
+import type { HexColor, OklchColor, RgbaColor } from "./types"
 
 function clamp(v: number, min: number, max: number) {
   return Math.max(min, Math.min(max, v))
@@ -8,7 +8,7 @@ function hue(v: number) {
   return ((v % 360) + 360) % 360
 }
 
-export function hexToRgb(hex: HexColor): { r: number; g: number; b: number } {
+export function hexToRgb(hex: HexColor) {
   const h = hex.replace("#", "")
 
   const full =
@@ -78,7 +78,7 @@ export function rgbToOklch(r: number, g: number, b: number): OklchColor {
   return { l: L, c: C, h: H }
 }
 
-export function oklchToRgb(oklch: OklchColor): { r: number; g: number; b: number } {
+export function oklchToRgb(oklch: OklchColor) {
   const { l: L, c: C, h: H } = oklch
 
   const a = C * Math.cos((H * Math.PI) / 180)
@@ -319,7 +319,7 @@ export function darken(color: HexColor, amount: number): HexColor {
   })
 }
 
-export function withAlpha(color: HexColor, alpha: number): string {
+export function withAlpha(color: HexColor, alpha: number): RgbaColor {
   const { r, g, b } = hexToRgb(color)
 
   return `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${alpha})`

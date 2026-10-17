@@ -55,8 +55,9 @@
     /*   background-color: var(--surface-base); */
     /* } */
     &:focus-visible {
-      outline: none;
-      background-color: var(--surface-raised-base-hover);
+      border-radius: var(--radius-sm);
+      outline: 2px solid var(--v2-border-border-focus);
+      outline-offset: 2px;
     }
     &[data-disabled] {
       cursor: not-allowed;
@@ -113,8 +114,9 @@
       /*   color: var(--text-strong); */
       /* } */
       &:focus-visible {
-        outline: none;
-        background-color: var(--surface-raised-base-hover);
+        border-radius: var(--radius-sm);
+        outline: 2px solid var(--v2-border-border-focus);
+        outline-offset: 2px;
       }
       &[data-disabled] {
         cursor: not-allowed;

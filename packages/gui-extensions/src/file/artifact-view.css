@@ -65,8 +65,7 @@
   color: #ffffff;
 }
 
-[data-slot="artifact-video-fullscreen"]:hover > span,
-[data-slot="artifact-video-fullscreen"]:focus-visible > span {
+[data-slot="artifact-video-fullscreen"]:hover > span {
   background-color: rgb(0 0 0 / 0.55);
 }
 

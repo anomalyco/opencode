@@ -59,8 +59,6 @@
   height: 28px;
   border: 0;
   border-radius: 6px;
-  outline: 1px solid transparent;
-  outline-offset: 0;
   background:
     linear-gradient(180deg, var(--v2-alpha-light-2) 0%, var(--v2-alpha-light-0) 100%), var(--v2-background-bg-base);
   box-shadow: var(--v2-elevation-button-neutral);
@@ -85,17 +83,19 @@
   background:
     linear-gradient(0deg, var(--v2-overlay-simple-overlay-hover), var(--v2-overlay-simple-overlay-hover)),
     linear-gradient(180deg, var(--v2-alpha-light-2) 0%, var(--v2-alpha-light-0) 100%), var(--v2-background-bg-base);
-  outline-color: transparent;
 }
 
-[data-component="select-v2"]:where(:focus-within):not([data-disabled], [data-invalid]):not([data-expanded]) {
-  outline-color: var(--v2-border-border-focus);
-  box-shadow: none;
+[data-component="select-v2"]:where(:focus-within):not(
+    [data-disabled],
+    [data-invalid],
+    [data-expanded],
+    [data-appearance="inline"]
+  ) {
+  box-shadow: inset 0 0 0 1px var(--v2-border-border-focus);
 }
 
-[data-component="select-v2"]:where([data-invalid]):not([data-disabled]) {
-  outline-color: var(--v2-state-fg-danger);
-  box-shadow: none;
+[data-component="select-v2"]:where([data-invalid]):not([data-disabled], [data-appearance="inline"]) {
+  box-shadow: inset 0 0 0 1px var(--v2-state-fg-danger);
 }
 
 [data-component="select-v2"]:where([data-disabled]) {
@@ -191,7 +191,8 @@
   border-radius: 4px;
   background: transparent;
   box-shadow: none;
-  outline: none;
+  /* `outline: none` would fade the focus ring in from currentColor. */
+  outline-color: transparent;
   align-self: auto;
 }
 
@@ -203,7 +204,7 @@
 
 [data-component="select-v2"][data-appearance="inline"]:where([data-expanded]):not([data-disabled], [data-invalid]) {
   background: var(--v2-overlay-simple-overlay-hover);
-  outline: none;
+  outline-color: transparent;
   box-shadow: none;
 }
 
@@ -211,6 +212,11 @@
     [data-expanded]
   ) {
   background: var(--v2-overlay-simple-overlay-pressed);
+}
+
+[data-component="select-v2"][data-appearance="inline"]:focus-visible:not([data-expanded]) {
+  outline: 2px solid var(--v2-border-border-focus);
+  outline-offset: 2px;
 }
 
 [data-component="select-v2"][data-appearance="inline"] [data-slot="select-v2-value-text"] {

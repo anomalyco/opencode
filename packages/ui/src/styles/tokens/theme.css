@@ -42,6 +42,7 @@
     --v2-border-border-strong: var(--v2-alpha-dark-20);
     --v2-border-border-inverse: var(--v2-grey-1000);
     --v2-border-border-focus: var(--v2-blue-500);
+    --v2-border-border-selected: var(--v2-blue-600);
 
     /* ── Overlay ── */
     --v2-overlay-simple-overlay-hover: var(--v2-alpha-dark-4);
@@ -179,6 +180,7 @@
       --v2-border-border-strong: var(--v2-alpha-light-20);
       --v2-border-border-inverse: var(--v2-grey-100);
       --v2-border-border-focus: var(--v2-blue-500);
+      --v2-border-border-selected: var(--v2-blue-600);
 
       --v2-overlay-simple-overlay-hover: var(--v2-alpha-light-6);
       --v2-overlay-simple-overlay-pressed: var(--v2-alpha-light-10);
@@ -296,6 +298,7 @@
     --v2-border-border-strong: var(--v2-alpha-dark-20);
     --v2-border-border-inverse: var(--v2-grey-1000);
     --v2-border-border-focus: var(--v2-blue-500);
+    --v2-border-border-selected: var(--v2-blue-600);
 
     --v2-overlay-simple-overlay-hover: var(--v2-alpha-dark-4);
     --v2-overlay-simple-overlay-pressed: var(--v2-alpha-dark-8);
@@ -422,6 +425,7 @@
     --v2-border-border-strong: var(--v2-alpha-light-20);
     --v2-border-border-inverse: var(--v2-grey-100);
     --v2-border-border-focus: var(--v2-blue-500);
+    --v2-border-border-selected: var(--v2-blue-600);
 
     --v2-overlay-simple-overlay-hover: var(--v2-alpha-light-6);
     --v2-overlay-simple-overlay-pressed: var(--v2-alpha-light-10);

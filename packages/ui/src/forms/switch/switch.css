@@ -98,9 +98,9 @@
     border-radius: 3px;
   }
 
-  &:not([data-readonly]) [data-slot="switch-input"]:focus-visible ~ [data-slot="switch-control"] {
+  [data-slot="switch-input"]:focus-visible ~ [data-slot="switch-control"] {
     outline: 2px solid var(--v2-border-border-focus);
-    outline-offset: 1px;
+    outline-offset: 2px;
   }
 
   &[data-checked] [data-slot="switch-control"] {
@@ -223,12 +223,6 @@
   &:hover:not([data-disabled], [data-readonly]) [data-slot="switch-thumb"] {
     width: 14px;
     border-radius: 2px;
-  }
-
-  &:not([data-readonly]) [data-slot="switch-input"]:focus-visible ~ [data-slot="switch-control"] {
-    border-color: var(--border-focus);
-    outline: none;
-    box-shadow: var(--shadow-xs-border-focus);
   }
 
   &[data-checked] [data-slot="switch-control"] {

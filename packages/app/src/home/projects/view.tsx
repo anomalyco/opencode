@@ -98,7 +98,7 @@ export function HomeProjectsView(props: HomeProjectsViewProps) {
         <Popover.Trigger
           data-component="home-projects-dropdown"
           aria-label={props.language.t("home.projects")}
-          class="flex h-10 w-full min-w-0 items-center gap-2 rounded-[6px] bg-v2-background-bg-base px-1.5 text-start text-v2-text-text-base outline-none hover:bg-v2-background-bg-layer-01"
+          class="flex h-10 w-full min-w-0 items-center gap-2 rounded-[6px] bg-v2-background-bg-base px-1.5 text-start text-v2-text-text-base hover:bg-v2-background-bg-layer-01"
         >
           <Show when={selected()} fallback={<Icon name="folder" size="small" />}>
             {(project) => <HomeProjectAvatar project={project()} />}
@@ -173,7 +173,7 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
         props.dropdown
           ? "flex max-h-[min(60dvh,calc(var(--kb-popper-content-available-height)-12px))] min-h-0 min-w-0 flex-col overflow-hidden"
           : `
-        mt-6 flex min-h-0 min-w-0 flex-col gap-4 overflow-hidden
+        mt-5 flex min-h-0 min-w-0 flex-col gap-4 overflow-hidden pt-1
         lg:sticky lg:top-14 lg:mt-14 lg:h-[calc(100cqh-56px)] lg:self-start lg:pt-[52px]
       `
       }
@@ -202,7 +202,10 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
           </Show>
         </div>
       </Show>
-      <ScrollView data-slot="home-projects-scroll" class="min-h-0 min-w-0 shrink">
+      <ScrollView
+        data-slot="home-projects-scroll"
+        class={`min-h-0 min-w-0 shrink [--scroll-view-focus-radius:6px] ${props.dropdown ? "" : "[--scroll-view-focus-inset-end:12px]"}`}
+      >
         <Show when={props.dropdown && props.servers.length === 1}>
           <HomeProjectNavButton
             type="button"
@@ -226,7 +229,7 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
           fallback={
             <Show when={props.servers[0]}>
               {(server) => (
-                <div class={props.dropdown ? "" : "pr-3"}>
+                <div class={props.dropdown ? "" : "pe-3"}>
                   <Show
                     when={props.projects.length > 0}
                     fallback={<HomeProjectEmpty {...props} server={server()} items={props.recentlyClosed} />}
@@ -250,7 +253,7 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
             </Show>
           }
         >
-          <div class={`flex min-w-0 flex-col ${props.dropdown ? "gap-1" : "gap-4 pr-3"}`}>
+          <div class={`flex min-w-0 flex-col ${props.dropdown ? "gap-1" : "gap-4 pe-3"}`}>
             <For each={props.servers}>
               {(item) => {
                 const projects = () => props.projectsForServer(item)
@@ -673,9 +676,15 @@ function HomeProjectRow(
   })
 
   return (
+    // The selected row would cover the reorder handle's own outline.
     <div
       ref={sortable.ref}
-      class="group/project relative flex h-7 min-w-0 items-center rounded-[6px]"
+      class={`
+        group/project relative flex h-7 min-w-0 items-center rounded-[6px] focus-visible:outline-transparent focus-visible:outline-offset-[-2px]
+        focus-visible:after:pointer-events-none focus-visible:after:absolute focus-visible:after:inset-0
+        focus-visible:after:rounded-[inherit] focus-visible:after:shadow-[inset_0_0_0_2px_var(--v2-border-border-focus)]
+        focus-visible:after:content-['']
+      `}
       classList={{ "z-10": sortable.isDragSource() }}
       data-home-row
       data-dimmed={serverUnreachable()}
@@ -819,8 +828,7 @@ function HomeProjectNavButton(props: JSX.ButtonHTMLAttributes<HTMLButtonElement>
         hover:bg-v2-background-bg-layer-01 hover:text-v2-text-text-base
         data-[selected]:bg-v2-background-bg-layer-03 data-[selected]:text-v2-text-text-base
         data-[selected]:hover:bg-v2-background-bg-layer-03
-        focus-visible:bg-v2-background-bg-layer-01 focus-visible:text-v2-text-text-base focus-visible:outline-none
-        focus-visible:[box-shadow:inset_0_0_0_0.5px_var(--v2-border-border-muted)]
+        focus-visible:outline-offset-[-2px]
         ${local.class ?? ""}
       `}
       classList={local.classList}

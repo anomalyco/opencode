@@ -53,7 +53,8 @@
       "v2-text-text-accent-hover": "var(--v2-green-700)",
       "v2-icon-icon-accent": "var(--v2-green-600)",
       "v2-icon-icon-accent-hover": "var(--v2-green-700)",
-      "v2-border-border-focus": "var(--v2-green-500)"
+      "v2-border-border-focus": "var(--v2-green-500)",
+      "v2-border-border-selected": "var(--v2-green-600)"
     }
   },
   "dark": {
@@ -107,7 +108,8 @@
       "v2-text-text-accent-hover": "var(--v2-green-300)",
       "v2-icon-icon-accent": "var(--v2-green-400)",
       "v2-icon-icon-accent-hover": "var(--v2-green-300)",
-      "v2-border-border-focus": "var(--v2-green-500)"
+      "v2-border-border-focus": "var(--v2-green-500)",
+      "v2-border-border-selected": "var(--v2-green-600)"
     }
   }
 }

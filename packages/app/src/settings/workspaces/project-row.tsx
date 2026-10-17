@@ -20,9 +20,9 @@ export function SettingsProjectRow(props: {
   const language = useLanguage()
   const global = useGlobal()
 
-  const [store, setStore] = createStore({
+  const [store, setStore] = createStore<{ menu: boolean; editor: { draft: string; saving: boolean } | undefined }>({
     menu: false,
-    editor: undefined as { draft: string; saving: boolean } | undefined,
+    editor: undefined,
   })
 
   let button: HTMLButtonElement | undefined
@@ -132,7 +132,7 @@ export function SettingsProjectRow(props: {
             type="button"
             aria-label={displayName(props.project)}
             title={props.project.worktree}
-            class="flex h-full min-w-0 flex-1 items-center gap-2 rounded-[4px] bg-transparent text-start focus-visible:outline-none focus-visible:[box-shadow:inset_0_0_0_1px_var(--v2-border-border-focus)]"
+            class="flex h-full min-w-0 flex-1 items-center gap-2 rounded-[4px] bg-transparent text-start focus-visible:outline-offset-[-2px]"
             onClick={() => props.onOpen(props.project)}
           >
             <ProjectIcon project={props.project} class="shrink-0" />

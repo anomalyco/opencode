@@ -19,7 +19,7 @@ export function FileSearchBar(props: {
   return (
     <Portal>
       <div
-        class="fixed z-50 flex h-8 items-center gap-2 rounded-md border border-border-base bg-background-base px-3 shadow-md"
+        class="fixed z-50 flex h-8 items-center gap-2 rounded-md border border-transparent bg-background-base bg-clip-padding px-3 shadow-md inset-ring inset-ring-border-base has-[input:focus]:inset-ring-v2-border-border-focus"
         style={{
           top: `${props.pos.top}px`,
           right: `${props.pos.right}px`,
@@ -33,7 +33,7 @@ export function FileSearchBar(props: {
           value={props.query}
           class="w-40 bg-transparent outline-none text-14-regular text-text-strong placeholder:text-text-weak"
           onInput={(e) => props.onInput(e.currentTarget.value)}
-          onKeyDown={(e) => props.onKeyDown(e as KeyboardEvent)}
+          onKeyDown={(e) => props.onKeyDown(e)}
         />
         <div class="shrink-0 text-12-regular text-text-weak tabular-nums text-right" style={{ width: "10ch" }}>
           {props.count ? `${props.index + 1}/${props.count}` : "0/0"}
