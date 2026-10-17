@@ -750,6 +750,11 @@ export function createTimelineVirtualizer(input: Input) {
   // Following resumes by arriving at the end, either by scrolling there or by content shrinking
   // under a viewport that was already there. Merely resting near the end is not enough, otherwise
   // a later scroll would overwrite an upward intent expressed a pixel short of the bottom.
+  // The distance to the end is what separates that arrival from a move away from it: a measurement
+  // adjustment moves the offset and the scroll range together and leaves the distance alone, while
+  // any move away from the end grows it — thumb drag, autoscroll or a key alike, so no input device
+  // has to be named. The custom thumb swallows its own pointer-down, and some scrolls produce no
+  // wheel or pointer event at all, which is why naming devices left those gestures following the end.
   const handleListScroll = (event: Event & { currentTarget: HTMLDivElement }) => {
     if (!active()) return
     const root = event.currentTarget
@@ -759,10 +764,11 @@ export function createTimelineVirtualizer(input: Input) {
     maxScroll = root.scrollHeight - root.clientHeight
     const atEnd = maxScroll - scrollTop <= endEpsilon
     const arrived = scrollTop > previousTop + endEpsilon || maxScroll < previousMaxScroll
+    const movedAway = maxScroll - scrollTop > previousMaxScroll - previousTop + endEpsilon
 
     // An anchor holds its tool even when reaching it lands at the end; only the user's own scroll lets it go.
     if (maxScroll <= 1 || (atEnd && arrived && !rendering.anchor)) input.onPin()
-    else if ((pointerHeld || touchScrolling) && scrollTop < previousTop - endEpsilon) input.onUnpin()
+    else if (movedAway || ((pointerHeld || touchScrolling) && scrollTop < previousTop - endEpsilon)) input.onUnpin()
     settleColdBottom()
     input.onScheduleScrollState(root)
     input.onHistoryScroll()
