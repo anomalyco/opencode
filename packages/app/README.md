@@ -78,7 +78,7 @@ The `deploy` GitHub Actions workflow uses SST to deploy the web app to `beta.ope
 force-push it. Each push also runs the `publish` workflow, which ships the same commit as the OpenCode Beta desktop app
 (see `packages/desktop/README.md`).
 
-The beta SST stage deploys only the web app, using the `WebApp` StaticSite definition in `infra/webapp.ts`. It sets
+The beta SST stage deploys only the web app, using the `WebApp` StaticSiteV2 definition in `infra/webapp.ts`. It sets
 the build channel and Sentry environment to `beta` without deploying the API, console, database, or billing
 infrastructure.
 
