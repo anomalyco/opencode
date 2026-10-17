@@ -1,5 +1,5 @@
 import { EOL } from "os"
-import { Effect } from "effect"
+import { Effect, Option } from "effect"
 import { OpenCode } from "@opencode/client"
 import { Commands } from "../../commands"
 import { Runtime } from "../../../framework/runtime"
@@ -8,8 +8,11 @@ import { ServerConnection } from "../../../services/server-connection"
 
 export default Runtime.handler(
   Commands.commands.debug.commands.agents,
-  Effect.fn("cli.debug.agents")(function* () {
-    const { endpoint } = yield* ServerConnection.resolve()
+  Effect.fn("cli.debug.agents")(function* (input) {
+    const { endpoint } = yield* ServerConnection.resolve({
+      server: Option.getOrUndefined(input.server),
+      standalone: input.standalone,
+    })
     const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) })
     const response = yield* Effect.promise(() => client.agent.list({ location: { directory: process.cwd() } }))
     process.stdout.write(

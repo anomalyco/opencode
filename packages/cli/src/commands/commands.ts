@@ -115,8 +115,8 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
     Spec.make("debug", {
       description: "Debugging and troubleshooting tools",
       commands: [
-        Spec.make("agents", { description: "List all agents" }),
-        Spec.make("config", { description: "List configuration sources" }),
+        Spec.make("agents", { description: "List all agents", params: ServerParams }),
+        Spec.make("config", { description: "List configuration sources", params: ServerParams }),
         Spec.make("paths", {
           description: "Show global paths (data, config, cache, state)",
           params: {
@@ -222,7 +222,7 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
     Spec.make("mcp", {
       description: "Manage MCP (Model Context Protocol) servers",
       commands: [
-        Spec.make("list", { description: "List configured MCP servers and their status" }),
+        Spec.make("list", { description: "List configured MCP servers and their status", params: ServerParams }),
         Spec.make("add", {
           description: "Add an MCP server to your configuration",
           params: {
@@ -249,12 +249,16 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
         Spec.make("auth", {
           description: "Authenticate with an OAuth-capable remote MCP server",
           params: {
+            ...ServerParams,
             name: Argument.String("name").pipe(Argument.withDescription("Name of the MCP server"), Argument.optional),
           },
         }),
         Spec.make("logout", {
           description: "Remove stored OAuth credentials for an MCP server",
-          params: { name: Argument.String("name").pipe(Argument.withDescription("Name of the MCP server")) },
+          params: {
+            ...ServerParams,
+            name: Argument.String("name").pipe(Argument.withDescription("Name of the MCP server")),
+          },
         }),
       ],
     }),
@@ -264,6 +268,7 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
         Spec.make("list", {
           description: "List plugins",
           params: {
+            ...ServerParams,
             builtin: Flag.Boolean("builtin").pipe(
               Flag.withDescription("Include built-in server plugins"),
               Flag.withDefault(false),
@@ -279,6 +284,7 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
         Spec.make("check", {
           description: "Check package plugins for updates",
           params: {
+            ...ServerParams,
             target: Argument.String("target").pipe(
               Argument.withDescription("Configured package target"),
               Argument.optional,
@@ -288,6 +294,7 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
         Spec.make("update", {
           description: "Update package plugins",
           params: {
+            ...ServerParams,
             target: Argument.String("target").pipe(
               Argument.withDescription("Configured package target; omit to update all outdated plugins"),
               Argument.optional,
