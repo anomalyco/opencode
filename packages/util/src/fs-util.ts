@@ -59,8 +59,6 @@ export namespace FSUtil {
 
   export const use = serviceUse(Service)
 
-  // Exported so simulation can wrap this layer and override the methods that
-  // bypass the injected FileSystem (readDirectoryEntries, scan, globUp).
   export const layer = Layer.effect(
     Service,
     Effect.gen(function* () {
