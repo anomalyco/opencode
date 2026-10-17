@@ -99,6 +99,7 @@ it.live("authenticates API requests behind the frontend transform while allowing
       }),
     )
     expect(event.status).toBe(200)
+    expect(event.headers.get("cache-control")).toBe("no-store, no-transform")
     expect(event.headers.get("content-encoding")).toBeNull()
     const body = event.body
     if (!body) return yield* Effect.die(new Error("Event response has no body"))
