@@ -153,6 +153,17 @@ export const docsSections: DocsSection[] = [
         ],
       },
       {
+        title: "Harnesses",
+        items: [
+          { title: "Overview", slug: "console/harnesses" },
+          { title: "Claude Code", slug: "console/harnesses/claude-code" },
+          { title: "Codex", slug: "console/harnesses/codex" },
+          { title: "Hermes", slug: "console/harnesses/hermes" },
+          { title: "Pi", slug: "console/harnesses/pi" },
+          { title: "Raycast", slug: "console/harnesses/raycast" },
+        ],
+      },
+      {
         title: "API",
         items: [
           { title: "Overview", slug: "console/api" },

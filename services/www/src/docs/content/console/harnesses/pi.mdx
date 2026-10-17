@@ -1,0 +1,66 @@
+---
+title: "Pi"
+description: "Use Console and Go models from the Pi coding agent."
+---
+
+[Pi](https://pi.dev) includes OpenCode providers for pay-as-you-go and Go. It picks the right API for each model, so
+every Console model works.
+
+| Provider      | Plan          |
+| ------------- | ------------- |
+| `opencode`    | Pay-as-you-go |
+| `opencode-go` | Go            |
+
+## Configure
+
+Both providers read the key from `OPENCODE_API_KEY`. Create it under **Keys** in the
+[Console](https://opencode.ai/console).
+
+```bash
+export OPENCODE_API_KEY="oc_sk_..."
+pi --model opencode/claude-sonnet-5-5
+```
+
+You can also run `/login` in Pi and select the provider. Pi stores the key in `~/.pi/agent/auth.json`.
+
+```text
+/login opencode
+```
+
+## Go
+
+Use the `opencode-go` provider with a key from a workspace with a [Go](/console/go) subscription.
+
+```bash
+pi --model opencode-go/kimi-k3
+```
+
+## Models
+
+Select a model as `<provider>/<model-id>`, using IDs from the [Console](/console/models#endpoints) or
+[Go](/console/go#endpoints) table. List the models Pi knows about with `--list-models`.
+
+```bash
+pi --list-models opencode-go
+```
+
+Set a default in `~/.pi/agent/settings.json`, or press `Ctrl+S` in the `/model` picker.
+
+```json title="~/.pi/agent/settings.json"
+{
+  "defaultProvider": "opencode-go",
+  "defaultModel": "kimi-k3"
+}
+```
+
+Run `pi update --models` when a new Console model doesn't appear yet.
+
+## Console MCP
+
+Pi v0.99.0 and later support MCP. Add the [Console MCP](/console/harnesses#console-mcp) server, then sign in from the
+browser.
+
+```bash
+pi mcp add opencode-console --url https://opencode.ai/console/mcp
+pi mcp login opencode-console
+```
