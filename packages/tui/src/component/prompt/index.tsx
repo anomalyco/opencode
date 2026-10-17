@@ -1307,7 +1307,9 @@ export function Prompt(props: PromptProps) {
     if (currentMode === "shell") {
       move.startSubmit()
       const send = () => client.api.session.shell({ sessionID: target, command: inputText })
-      void (newSession ? newSession.gate.then(send).catch(newSession.recover) : send())
+      void (newSession ? newSession.gate.then(send) : send()).catch((error) =>
+        newSession ? newSession.recover(error) : fail("Failed to run shell command", error),
+      )
       setStore("mode", "normal")
     } else if (slashHead && isCommand) {
       const send = async () => {
