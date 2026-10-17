@@ -125,6 +125,20 @@ yield *
   )
 ```
 
+Each provider turn of the agent loop may be routed to another model. The change applies to that
+turn only; the Session keeps its selected model, and an unavailable model is ignored:
+
+```ts
+import { Model } from "@opencode/schema/model"
+
+yield *
+  ctx.session.hook("model.select", (event) =>
+    Effect.sync(() => {
+      if (event.step > 1) event.model = { providerID: event.model.providerID, id: Model.ID.make("claude-haiku-4-5") }
+    }),
+  )
+```
+
 ## Reloading A Domain
 
 When data captured by a transform changes, reload the affected domain:
