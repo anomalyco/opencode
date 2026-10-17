@@ -15,6 +15,17 @@ test("custom origins extend the defaults without allowing other origins", () => 
   expect(isAllowedCorsOrigin("null", options)).toBe(false)
 })
 
+test("loopback and desktop renderer origin checks", () => {
+  expect(isAllowedCorsOrigin("http://localhost")).toBe(true)
+  expect(isAllowedCorsOrigin("http://127.0.0.1")).toBe(true)
+  expect(isAllowedCorsOrigin("http://[::1]:3000")).toBe(true)
+  expect(isAllowedCorsOrigin("https://localhost:3000")).toBe(true)
+  expect(isAllowedCorsOrigin("oc://renderer")).toBe(true)
+  expect(isAllowedCorsOrigin("oc://renderer.attacker.com")).toBe(false)
+  expect(isAllowedCorsOrigin("http://localhost.evil.com")).toBe(false)
+  expect(isAllowedCorsOrigin("http://127.0.0.1.evil.com")).toBe(false)
+})
+
 test("PTY origin checks use the same allowlist and retain same-host access", () => {
   const options = { cors: ["http://192.168.1.10:3001"] }
   expect(isAllowedRequestOrigin("http://192.168.1.10:3001", "192.168.1.10:1029")).toBe(false)
