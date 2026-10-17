@@ -9,6 +9,7 @@ import {
   Message,
   ToolCallPart,
   ToolDefinition,
+  ToolResultPart,
   Usage,
   Media,
 } from "../../src/index.js"
@@ -857,6 +858,119 @@ describe("Anthropic Messages route", () => {
       ).pipe(Effect.flip)
 
       expect(error.message).toContain("Anthropic Messages does not support media type audio/mpeg")
+    }),
+  )
+
+  // Regression #53633: a history started on claude-code's native `read` tool
+  // (providerExecuted: true) must still lower when continued on an Anthropic
+  // Messages route, which only recognizes web_search/code_execution/web_fetch
+  // as server tools.
+  it.effect("degrades an unrecognized provider-executed tool call and result to text", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          id: "req_unknown_provider_tool",
+          model,
+          messages: [
+            Message.user("Read the file."),
+            Message.assistant([
+              ToolCallPart.make({
+                id: "call_1",
+                name: "read",
+                input: { filePath: "shot.png" },
+                providerExecuted: true,
+              }),
+              ToolResultPart.make({
+                id: "call_1",
+                name: "read",
+                resultType: "text",
+                result: "file contents",
+                providerExecuted: true,
+              }),
+            ]),
+          ],
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        { role: "user", content: [{ type: "text", text: "Read the file." }] },
+        {
+          role: "assistant",
+          content: [
+            { type: "text", text: expect.stringContaining("read") },
+            { type: "text", text: "file contents" },
+          ],
+        },
+      ])
+    }),
+  )
+
+  // Session history stores any completed tool output that is not a single text
+  // part as a `content` result, so a provider-executed read of an image would
+  // otherwise JSON-encode its base64 payload into one text block.
+  it.effect("names media in a degraded content result instead of inlining base64", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          id: "req_unknown_provider_tool_content",
+          model,
+          messages: [
+            Message.assistant([
+              ToolResultPart.make({
+                id: "call_1",
+                name: "read",
+                resultType: "content",
+                result: [
+                  { type: "text", text: "Image read successfully" },
+                  { type: "file", uri: "data:image/png;base64,AAECAw==", mime: "image/png", name: "shot.png" },
+                  { type: "file", uri: "data:application/pdf;base64,JVBERi0xLjQ=", mime: "application/pdf" },
+                ],
+                providerExecuted: true,
+              }),
+            ]),
+          ],
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "assistant",
+          content: [
+            { type: "text", text: "Image read successfully\n[shot.png: image/png]\n[application/pdf]" },
+          ],
+        },
+      ])
+      expect(JSON.stringify(prepared.body)).not.toContain("JVBERi0xLjQ=")
+    }),
+  )
+
+  // Anthropic rejects an empty text block, so a result that degrades to nothing
+  // must be dropped rather than emitted.
+  it.effect("drops a degraded provider-executed result that has no text to carry", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          id: "req_unknown_provider_tool_empty",
+          model,
+          messages: [
+            Message.user("Read it."),
+            Message.assistant([
+              ToolResultPart.make({
+                id: "call_1",
+                name: "read",
+                resultType: "content",
+                result: [{ type: "text", text: "   " }],
+                providerExecuted: true,
+              }),
+            ]),
+          ],
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([{ role: "user", content: [{ type: "text", text: "Read it." }] }])
     }),
   )
 
@@ -2219,9 +2333,9 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
-  it.effect("rejects round-trip for unknown server tool names", () =>
+  it.effect("degrades an unknown server tool result to text instead of rejecting the request", () =>
     Effect.gen(function* () {
-      const error = yield* compileRequest(
+      const prepared = yield* compileRequest(
         LLM.request({
           id: "req_unknown_server_tool",
           model,
@@ -2231,15 +2345,17 @@ describe("Anthropic Messages route", () => {
                 type: "tool-result",
                 id: "srvtoolu_abc",
                 name: "future_server_tool",
-                result: { type: "json", value: {} },
+                result: { type: "json", value: { ok: true } },
                 providerExecuted: true,
               },
             ]),
           ],
         }),
-      ).pipe(Effect.flip)
+      )
 
-      expect(error.message).toContain("future_server_tool")
+      expect(prepared.body.messages).toEqual([
+        { role: "assistant", content: [{ type: "text", text: expect.stringContaining("ok") }] },
+      ])
     }),
   )
 

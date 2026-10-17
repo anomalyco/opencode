@@ -602,19 +602,46 @@ const serverToolResultType = (name: string): AnthropicServerToolResultType | und
   return undefined
 }
 
-const lowerServerToolResult = Effect.fnUntraced(function* (part: ToolResultPart, providerMetadataKey: string) {
+// A history may start on a provider that executes its own tools natively
+// (e.g. claude-code's `read`) and continue on Anthropic Messages, which only
+// recognizes the three server tools above — the API rejects a `server_tool_use`
+// block for any other name. Degrade both the call and its result to plain text
+// instead of failing the request.
+const lowerUnknownServerToolCall = (part: ToolCallPart): AnthropicTextBlock => ({
+  type: "text",
+  text: `Called provider tool \`${part.name}\` with input ${ProviderShared.encodeJson(part.input)}`,
+})
+
+const lowerServerToolResult = (part: ToolResultPart, providerMetadataKey: string) => {
   const wireType = serverToolResultType(part.name)
-  if (!wireType)
-    return yield* invalid(`Anthropic Messages does not know how to round-trip server tool result for ${part.name}`)
+  if (!wireType) {
+    const text = unknownServerToolResultText(part)
+    // Anthropic rejects an empty text block, so a result that degrades to
+    // nothing is dropped instead of emitted.
+    return text.length === 0 ? undefined : ({ type: "text", text } satisfies AnthropicTextBlock)
+  }
   // Prefer the provider-owned replay payload; fall back to the result value for
   // histories constructed directly from provider events.
-  const payload = part.providerMetadata?.[providerMetadataKey]?.["result"] ?? part.result.value
   return {
     type: wireType,
     tool_use_id: scrubToolCallID(part.id),
-    content: payload,
+    content: part.providerMetadata?.[providerMetadataKey]?.["result"] ?? part.result.value,
   } satisfies AnthropicServerToolResultBlock
-})
+}
+
+// Session history stores any completed tool output that is not a single text
+// part as a `content` result, so encoding the whole value would inline base64
+// media into the prompt. Assistant content has no image or document block to
+// pass that media through, so name it instead.
+const unknownServerToolResultText = (part: ToolResultPart) => {
+  if (part.result.type !== "content") return ProviderShared.toolResultText(part)
+  // Preserve the narrowed array element type when compiled through a consumer package.
+  const content: ReadonlyArray<Tool.Content> = part.result.value
+  return content
+    .map((item) => (item.type === "text" ? item.text : `[${item.name ? `${item.name}: ` : ""}${item.mime}]`))
+    .filter((text) => text.trim().length > 0)
+    .join("\n")
+}
 
 const fileIdFromMetadata = (metadata: MediaPart["metadata"]): string | undefined => {
   if (!ProviderShared.isRecord(metadata)) return undefined
@@ -960,11 +987,18 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, breakpoi
           continue
         }
         if (part.type === "tool-call") {
-          content.push(part.providerExecuted ? lowerServerToolCall(part) : lowerToolCall(part))
+          content.push(
+            part.providerExecuted
+              ? serverToolResultType(part.name)
+                ? lowerServerToolCall(part)
+                : lowerUnknownServerToolCall(part)
+              : lowerToolCall(part),
+          )
           continue
         }
         if (part.type === "tool-result" && part.providerExecuted) {
-          content.push(yield* lowerServerToolResult(part, providerMetadataKey))
+          const block = lowerServerToolResult(part, providerMetadataKey)
+          if (block) content.push(block)
           continue
         }
         return yield* invalid(
