@@ -122,7 +122,12 @@ export const Plugin = define({
           .pipe(Effect.orElseSucceed(() => [] as string[]))
         for (const filepath of files.toSorted()) {
           const resolved = yield* fs.realPath(filepath).pipe(Effect.orElseSucceed(() => filepath))
-          if (!roots.some((root) => FSUtil.contains(root, resolved))) yield* watch(path.dirname(resolved), "directory")
+          if (!roots.some((root) => FSUtil.contains(root, resolved))) {
+            const parent = yield* fs.realPath(path.dirname(filepath)).pipe(Effect.orElseSucceed(() => undefined))
+            // Keep discovery behind directory symlinks, but do not recursively watch
+            // a shared store just because an individual skill file resolves there.
+            yield* parent && FSUtil.contains(parent, resolved) ? watch(parent, "directory") : watch(resolved, "file")
+          }
           const content = yield* fs.readFileStringSafe(filepath).pipe(Effect.orElseSucceed(() => undefined))
           if (!content) continue
           const parsed = SkillFile.parse(directory, filepath, content)

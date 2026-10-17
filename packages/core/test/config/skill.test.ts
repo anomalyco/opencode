@@ -357,6 +357,58 @@ describe("ConfigSkillPlugin.Plugin", () => {
           yield* Effect.promise(() => fs.writeFile(file, "---\nname: bro\ndescription: Updated\n---\n# bro"))
           yield* emitAndWait({ type: "update", path: file })
           expect((yield* skill.list()).find((item) => item.id === "bro")?.description).toBe("Updated")
+
+          yield* Effect.promise(async () => {
+            await fs.mkdir(path.join(target, "review"))
+            await write(target, "review", "Review")
+          })
+          yield* emitAndWait({ type: "create", path: path.join(target, "review", "SKILL.md") })
+          expect((yield* skill.list()).find((item) => item.id === "review")?.description).toBe("Review")
+        }),
+      ),
+    ),
+  )
+
+  it.live("bounds watches for skill files symlinked into a shared store", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const source = path.join(tmp.path, "skills")
+          const store = path.join(tmp.path, "store")
+          const file = path.join(store, "hm-expert-SKILL.md")
+          const link = path.join(source, "expert", "SKILL.md")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(path.dirname(link), { recursive: true })
+            await fs.mkdir(path.join(store, "unrelated", "nested"), { recursive: true })
+            await fs.writeFile(file, "---\nname: expert\ndescription: Initial\n---\n# expert")
+            await fs.symlink(file, link)
+          })
+
+          const skill = yield* start([source], tmp.path)
+          const watcher = yield* Watcher.Test
+          expect(yield* watcher.subscriptions()).toEqual([
+            { path: source, type: "directory" },
+            { path: file, type: "file" },
+          ])
+          expect((yield* skill.list()).find((item) => item.id === "expert")?.description).toBe("Initial")
+
+          yield* Effect.promise(async () => {
+            await fs.writeFile(`${file}.new`, "---\nname: expert\ndescription: Replaced\n---\n# expert")
+            await fs.rename(`${file}.new`, file)
+          })
+          yield* emitAndWait({ type: "update", path: file })
+          expect((yield* skill.list()).find((item) => item.id === "expert")?.description).toBe("Replaced")
+
+          const second = path.join(store, "hm-expert-new-SKILL.md")
+          yield* Effect.promise(async () => {
+            await fs.writeFile(second, "---\nname: expert\ndescription: Retargeted\n---\n# expert")
+            await fs.unlink(link)
+            await fs.symlink(second, link)
+          })
+          yield* emitAndWait({ type: "update", path: link })
+          expect((yield* skill.list()).find((item) => item.id === "expert")?.description).toBe("Retargeted")
+          expect(yield* watcher.subscriptions()).toContainEqual({ path: second, type: "file" })
+          expect(yield* watcher.subscriptions()).not.toContainEqual({ path: store, type: "directory" })
         }),
       ),
     ),
