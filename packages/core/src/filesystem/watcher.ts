@@ -246,22 +246,34 @@ function subscribeDirectory(
       Effect.as(undefined),
     )
   }
-  const callback: ParcelWatcher.SubscribeCallback = (error, updates) => {
-    if (error) Effect.runFork(Effect.logError("watcher callback failed", { error }))
-    for (const update of updates) publish(update)
-  }
-  // Copy `ignore`: it aliases the RcMap key, whose structural hash is cached,
-  // so the array handed to native code must never be the mutable original.
-  const pending = native.subscribe(directory, callback, { ignore: [...ignore], backend })
-  return Effect.promise(() => pending).pipe(
-    Effect.map((subscription) => ({ unsubscribe: () => subscription.unsubscribe(), backend })),
-    // Interruption (including the timeout below) abandons the pending native
-    // subscription, so close it once it eventually resolves.
-    Effect.onInterrupt(() =>
-      Effect.sync(() => {
-        pending.then((subscription) => subscription.unsubscribe()).catch(() => {})
-      }),
-    ),
+  return Effect.suspend(() => {
+    // Parcel's FSEvents backend emits canonical paths and resolves ignorePaths
+    // before realpathing the watched root; resolve upfront and rebase onto `directory`.
+    const resolved = FSUtil.resolve(directory)
+    const callback: ParcelWatcher.SubscribeCallback = (error, updates) => {
+      if (error) Effect.runFork(Effect.logError("watcher callback failed", { error }))
+      for (const update of updates) {
+        publish(
+          resolved !== directory && FSUtil.contains(resolved, update.path)
+            ? { ...update, path: path.join(directory, path.relative(resolved, update.path)) }
+            : update,
+        )
+      }
+    }
+    // Copy `ignore`: it aliases the RcMap key, whose structural hash is cached,
+    // so the array handed to native code must never be the mutable original.
+    const pending = native.subscribe(resolved, callback, { ignore: [...ignore], backend })
+    return Effect.promise(() => pending).pipe(
+      Effect.map((subscription) => ({ unsubscribe: () => subscription.unsubscribe(), backend })),
+      // Interruption (including the timeout below) abandons the pending native
+      // subscription, so close it once it eventually resolves.
+      Effect.onInterrupt(() =>
+        Effect.sync(() => {
+          pending.then((subscription) => subscription.unsubscribe()).catch(() => {})
+        }),
+      ),
+    )
+  }).pipe(
     Effect.timeout(SUBSCRIBE_TIMEOUT_MS),
     Effect.catchCause((cause) =>
       Effect.logError("failed to subscribe", {
