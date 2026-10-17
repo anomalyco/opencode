@@ -18,6 +18,7 @@ export const Responded = Context.Reference<Effect.Effect<void>>("@opencode/cli/a
 })
 
 export interface Interface {
+  readonly signal?: AbortSignal
   readonly sessionUpdate: (params: SessionNotification) => Effect.Effect<void, RequestError>
   readonly requestPermission: (
     params: RequestPermissionRequest,
@@ -50,6 +51,7 @@ export function make(app: AgentApp, stream: Stream) {
   return {
     agent,
     connection: {
+      signal: agent.signal,
       sessionUpdate: (params) => promise(() => agent.client.notify(methods.client.session.update, params)),
       requestPermission: (params) =>
         promise((signal) =>

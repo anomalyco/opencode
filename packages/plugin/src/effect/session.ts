@@ -136,6 +136,8 @@ export interface SessionRetry {
 }
 
 export interface SessionHooks {
+  /** Explicit session interruption, including an idle session. Not emitted for transport disposal. */
+  readonly interrupt: { readonly sessionID: Session.ID }
   readonly prompt: SessionPrompt
   readonly context: SessionContext
   readonly compaction: SessionCompaction
