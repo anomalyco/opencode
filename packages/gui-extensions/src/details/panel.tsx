@@ -50,6 +50,11 @@ export default function SessionDetailsPanel(props: DetailsPanelProps) {
   // A subagent shares its parent's workspace, so it shows where it runs but cannot move on its own.
   const subagent = () => !!data().session.get(props.session.id)?.parentID
 
+  // Worktrees belong to a git project. Creating, switching and returning to Local all
+  // work from the project's own checkouts, so nothing about the session's directory
+  // gates the menu.
+  const movable = () => props.project.vcs === "git"
+
   const workspace = () => (
     <>
       <Icon name={props.session.local ? "monitor" : "outline-worktree"} class="shrink-0 text-v2-icon-icon-muted" />
@@ -70,7 +75,7 @@ export default function SessionDetailsPanel(props: DetailsPanelProps) {
           expanded={props.disclosure.project()}
           onExpandedChange={props.disclosure.setProject}
         >
-          <Show when={!subagent()} fallback={<div class="session-summary-row">{workspace()}</div>}>
+          <Show when={!subagent() && movable()} fallback={<div class="session-summary-row">{workspace()}</div>}>
             <SessionWorkspaceMenu
               session={props.session}
               project={props.project}
@@ -131,6 +136,7 @@ export default function SessionDetailsPanel(props: DetailsPanelProps) {
         <Show
           when={
             !subagent() &&
+            movable() &&
             props.disclosure.project() &&
             props.session.local &&
             props.diffs?.length &&
