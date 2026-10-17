@@ -324,7 +324,7 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest) {
     pendingMedia = undefined
   }
 
-  for (const message of request.messages) {
+  for (const [messageIndex, message] of request.messages.entries()) {
     if (message.role !== "tool") flushMedia()
     if (message.role === "system") {
       const part = yield* ProviderShared.wrappedSystemUpdate("Gemini", message)
@@ -398,9 +398,14 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest) {
     }
 
     const parts: Array<Schema.Schema.Type<typeof GeminiContentPart>> = []
-    for (const part of message.content) {
+    for (const [partIndex, part] of message.content.entries()) {
       if (!ProviderShared.supportsContent(part, ["tool-result"]))
-        return yield* ProviderShared.unsupportedContent("Gemini", "tool", ["tool-result"])
+        return yield* ProviderShared.unsupportedContent(
+          "Gemini",
+          "tool",
+          ["tool-result"],
+          ProviderShared.contentLocation(part, messageIndex, partIndex),
+        )
       if (part.result.type !== "content") {
         parts.push({
           functionResponse: {

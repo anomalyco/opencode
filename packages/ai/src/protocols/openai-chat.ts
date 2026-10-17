@@ -501,12 +501,15 @@ const lowerAssistantMessage = Effect.fnUntraced(function* (
 const lowerToolMessages = Effect.fnUntraced(function* (
   message: OpenAIChatRequestMessage,
   options: LoweringOptions,
+  messageIndex?: number,
 ) {
   const messages: OpenAIChatMessage[] = []
   const attachments: OpenAIChatUserContent[] = []
-  for (const part of message.content) {
-    if (!ProviderShared.supportsContent(part, ["tool-result"]))
-      return yield* ProviderShared.unsupportedContent("OpenAI Chat", "tool", ["tool-result"])
+  for (const [partIndex, part] of message.content.entries()) {
+    if (!ProviderShared.supportsContent(part, ["tool-result"])) {
+      const detail = ProviderShared.contentLocation(part, messageIndex, partIndex)
+      return yield* ProviderShared.unsupportedContent("OpenAI Chat", "tool", ["tool-result"], detail)
+    }
     if (part.result.type !== "content") {
       messages.push(
         toolMessage(
@@ -601,7 +604,7 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, options:
     bridgeTools()
     messages.push({ role: "user", content: pendingAttachments.splice(0) })
   }
-  for (const message of request.messages) {
+  for (const [messageIndex, message] of request.messages.entries()) {
     if (message.role === "user") bridgeTools()
     if (message.role === "system") {
       const part = yield* ProviderShared.wrappedSystemUpdate("OpenAI Chat", message)
@@ -652,7 +655,7 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, options:
     )
       continue
     if (message.role === "tool") {
-      const lowered = yield* lowerToolMessages(message, lowering)
+      const lowered = yield* lowerToolMessages(message, lowering, messageIndex)
       messages.push(...lowered.messages)
       pendingAttachments.push(...lowered.attachments)
       continue
