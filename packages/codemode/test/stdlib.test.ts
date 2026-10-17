@@ -36,6 +36,26 @@ const error = async (code: string) => {
 }
 
 describe("Number and Math", () => {
+  test("Number.toString truncates the radix before checking its range", async () => {
+    expect(
+      await value(`return [36.1, 36.9, "36.9", { valueOf() { return 36.9 } }].map(radix => (35).toString(radix))`),
+    ).toEqual(["z", "z", "z", "z"])
+  })
+
+  test("Number.toString keeps invalid radixes catchable as RangeError", async () => {
+    expect(
+      await value(`return [0, 1.9, 37, NaN, Infinity, -Infinity].map(radix => {
+        try { return (35).toString(radix) }
+        catch (error) { return error instanceof RangeError }
+      })`),
+    ).toEqual([true, true, true, true, true, true])
+    expect(await value(`return [(35).toString(), (35).toString(undefined), (35).toString(2.9)]`)).toEqual([
+      "35",
+      "35",
+      "100011",
+    ])
+  })
+
   test("Math.random returns a number in [0, 1)", async () => {
     expect(await value(`const n = Math.random(); return typeof n === "number" && n >= 0 && n < 1`)).toBe(true)
   })

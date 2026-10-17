@@ -426,6 +426,8 @@ reject }` object.
       `Number.parseInt`, and `Number.parseFloat`.
 - [x] Number formatting: `toFixed`, `toPrecision`, `toExponential`, `toString`, `valueOf`, and `toLocaleString`, which
       always formats as `en-US` (`"1,234.5"`) so output does not depend on the host.
+- [x] `Number.prototype.toString` truncates a fractional radix before validating the 2–36 range; invalid radixes
+      throw a catchable `RangeError`.
 - [x] Number constants: `MAX_SAFE_INTEGER`, `MIN_SAFE_INTEGER`, `MAX_VALUE`, `MIN_VALUE`, `EPSILON`, `NaN`,
       `POSITIVE_INFINITY`, and `NEGATIVE_INFINITY`.
 - [x] Math constants: `PI`, `E`, `LN2`, `LN10`, `LOG2E`, `LOG10E`, `SQRT2`, and `SQRT1_2`.
