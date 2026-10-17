@@ -516,6 +516,124 @@ describe("Bus", () => {
     }),
   )
 
+  for (const batch of [false, true]) {
+    it.effect(`recovers a stale durable sequence before publishing ${batch ? "a batch" : "an event"}`, () =>
+      Effect.gen(function* () {
+        const bus = yield* Bus.Service
+        const { db } = yield* Database.Service
+        const aggregateID = Event.ID.create()
+        yield* bus.publish(SyncMessage, { id: aggregateID, text: "first" })
+        yield* bus.publish(SyncMessage, { id: aggregateID, text: "second" })
+        yield* bus.claim(aggregateID, "owner-a")
+        const original = yield* db.select().from(EventTable).where(eq(EventTable.aggregate_id, aggregateID)).all()
+        yield* db
+          .update(EventSequenceTable)
+          .set({ seq: 0 })
+          .where(eq(EventSequenceTable.aggregate_id, aggregateID))
+          .run()
+        const committed = new Array<number>()
+        const options = { commit: (seq: number) => Effect.sync(() => committed.push(seq)) }
+
+        const failed = { commit: () => Effect.die("commit failed") }
+        const exit = batch
+          ? yield* bus
+              .publishAll([
+                [SyncMessage, { id: aggregateID, text: "rolled back" }],
+                [SyncMessage, { id: aggregateID, text: "failed" }, failed],
+              ])
+              .pipe(Effect.exit)
+          : yield* bus.publish(SyncMessage, { id: aggregateID, text: "failed" }, failed).pipe(Effect.exit)
+        expect(String(exit)).toContain("commit failed")
+        expect(yield* db.select().from(EventTable).where(eq(EventTable.aggregate_id, aggregateID)).all()).toEqual(
+          original,
+        )
+        expect(
+          yield* db
+            .select({ seq: EventSequenceTable.seq })
+            .from(EventSequenceTable)
+            .where(eq(EventSequenceTable.aggregate_id, aggregateID))
+            .get(),
+        ).toEqual({ seq: 0 })
+
+        const events = batch
+          ? yield* bus.publishAll([
+              [SyncMessage, { id: aggregateID, text: "recovered" }, options],
+              [SyncMessage, { id: aggregateID, text: "continued" }, options],
+            ])
+          : [yield* bus.publish(SyncMessage, { id: aggregateID, text: "recovered" }, options)]
+        const rows = yield* db.select().from(EventTable).where(eq(EventTable.aggregate_id, aggregateID)).all()
+        const sequence = yield* db
+          .select({ seq: EventSequenceTable.seq, ownerID: EventSequenceTable.owner_id })
+          .from(EventSequenceTable)
+          .where(eq(EventSequenceTable.aggregate_id, aggregateID))
+          .get()
+
+        expect(events.map((event) => event.durable?.seq)).toEqual(
+          (batch ? [2, 3] : [2]).map((seq) => Event.Seq.make(seq)),
+        )
+        expect(committed).toEqual(batch ? [2, 3] : [2])
+        expect(rows.slice(0, 2)).toEqual(original)
+        expect(rows.map((row) => row.seq)).toEqual(batch ? [0, 1, 2, 3] : [0, 1, 2])
+        expect(sequence).toEqual({ seq: batch ? 3 : 2, ownerID: "owner-a" })
+      }),
+    )
+
+    it.effect(`preserves a reserved durable sequence before publishing ${batch ? "a batch" : "an event"}`, () =>
+      Effect.gen(function* () {
+        const bus = yield* Bus.Service
+        const { db } = yield* Database.Service
+        const aggregateID = Event.ID.create()
+        yield* bus.publish(SyncMessage, { id: aggregateID, text: "first" })
+        yield* Bus.reserveSequence(db, aggregateID, 10)
+
+        const events = batch
+          ? yield* bus.publishAll([
+              [SyncMessage, { id: aggregateID, text: "next" }],
+              [SyncMessage, { id: aggregateID, text: "last" }],
+            ])
+          : [yield* bus.publish(SyncMessage, { id: aggregateID, text: "next" })]
+
+        expect(events.map((event) => event.durable?.seq)).toEqual(
+          (batch ? [11, 12] : [11]).map((seq) => Event.Seq.make(seq)),
+        )
+        expect(yield* Bus.latestSequence(db, aggregateID)).toBe(batch ? 12 : 11)
+      }),
+    )
+  }
+
+  itWithoutPersistence.effect("recovers retained event history when persistence is disabled", () =>
+    Effect.gen(function* () {
+      const bus = yield* Bus.Service
+      const { db } = yield* Database.Service
+      const aggregateID = Event.ID.create()
+      const retained = yield* bus.publish(SyncMessage, { id: aggregateID, text: "retained" })
+      yield* db.insert(EventTable).values({
+        id: retained.id,
+        aggregate_id: aggregateID,
+        seq: 1,
+        created: retained.created,
+        type: Bus.versionedType(SyncMessage.type, 1),
+        data: retained.data,
+      })
+
+      expect(yield* Bus.latestSequence(db, aggregateID)).toBe(1)
+      const event = yield* bus.publish(SyncMessage, { id: aggregateID, text: "recovered" })
+      const batch = yield* bus.publishAll([
+        [SyncMessage, { id: aggregateID, text: "next" }],
+        [SyncMessage, { id: aggregateID, text: "last" }],
+      ])
+
+      expect(event.durable?.seq).toBe(Event.Seq.make(2))
+      expect(batch.map((event) => event.durable.seq)).toEqual([Event.Seq.make(3), Event.Seq.make(4)])
+      expect(
+        (yield* db.select().from(EventTable).where(eq(EventTable.aggregate_id, aggregateID)).all()).map(
+          (row) => row.seq,
+        ),
+      ).toEqual([1])
+      expect(yield* Bus.latestSequence(db, aggregateID)).toBe(4)
+    }),
+  )
+
   it.effect("rolls back every batch event when a projector fails", () =>
     Effect.gen(function* () {
       const bus = yield* Bus.Service

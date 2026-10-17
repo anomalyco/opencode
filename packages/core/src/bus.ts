@@ -3,7 +3,7 @@ export * as Bus from "./bus.js"
 import { Cause, Clock, Context, Effect, Layer, Option, PubSub, Schema, Stream } from "effect"
 import { Event } from "@opencode/schema/event"
 import type { EventLog } from "@opencode/schema/event-log"
-import { and, asc, eq, gt, lte, sql } from "drizzle-orm"
+import { and, asc, desc, eq, gt, lte, sql } from "drizzle-orm"
 import { Database } from "./database/database.js"
 import { EventSequenceTable, EventTable } from "./event/sql.js"
 import type { Location } from "@opencode/schema/location"
@@ -26,6 +26,21 @@ export const latestSequence = Effect.fn("Bus.latestSequence")(function* (
     .select({ seq: EventSequenceTable.seq })
     .from(EventSequenceTable)
     .where(eq(EventSequenceTable.aggregate_id, aggregateID))
+    .get()
+    .pipe(Effect.orDie)
+  return Math.max(row?.seq ?? -1, yield* latestEventSequence(db, aggregateID))
+})
+
+const latestEventSequence = Effect.fn("Bus.latestEventSequence")(function* (
+  db: Database.Interface["db"],
+  aggregateID: string,
+) {
+  const row = yield* db
+    .select({ seq: EventTable.seq })
+    .from(EventTable)
+    .where(eq(EventTable.aggregate_id, aggregateID))
+    .orderBy(desc(EventTable.seq))
+    .limit(1)
     .get()
     .pipe(Effect.orDie)
   return row?.seq ?? -1
@@ -324,7 +339,11 @@ export function configured(options?: Options) {
                           .where(eq(EventSequenceTable.aggregate_id, aggregateID))
                           .get()
                           .pipe(Effect.orDie)
-                        const latest = row?.seq ?? -1
+                        // Local writes recover retained history without lowering reserved fork prefixes.
+                        // Replay still validates the supplied sequence against its stored cursor.
+                        const latest = input
+                          ? (row?.seq ?? -1)
+                          : Math.max(row?.seq ?? -1, yield* latestEventSequence(db, aggregateID))
                         const encoded = Schema.encodeUnknownSync(definition.data)(event.data) as Record<string, unknown>
                         if (input?.strictOwner && row?.ownerID && row.ownerID !== input.ownerID) {
                           yield* Effect.die(
@@ -579,13 +598,7 @@ export function configured(options?: Options) {
                     .transaction(
                       () =>
                         Effect.gen(function* () {
-                          const row = yield* db
-                            .select({ seq: EventSequenceTable.seq })
-                            .from(EventSequenceTable)
-                            .where(eq(EventSequenceTable.aggregate_id, aggregateID))
-                            .get()
-                            .pipe(Effect.orDie)
-                          const firstSeq = (row?.seq ?? -1) + 1
+                          const firstSeq = (yield* latestSequence(db, aggregateID)) + 1
                           const finalSeq = firstSeq + payloads.length - 1
                           const queued = payloads.map((item, index) => ({
                             ...item.event,
