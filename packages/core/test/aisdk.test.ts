@@ -561,11 +561,19 @@ it.effect("normalizes file data across AI SDK prompt parts", () =>
           Message.user([
             { type: "media", media: Media.bytes(bytes, "image/png"), filename: "bytes.png" },
             { type: "media", media: Media.base64("AAAA", "image/png"), filename: "base64.png" },
-            { type: "media", media: Media.fromDataUrl("data:image/png;charset=utf-8;base64,AQID"), filename: "inline.png" },
+            {
+              type: "media",
+              media: Media.fromDataUrl("data:image/png;charset=utf-8;base64,AQID"),
+              filename: "inline.png",
+            },
             { type: "media", media: Media.url("https://example.com/image.png", { mediaType: "image/png" }) },
             { type: "media", media: Media.base64("s3://bucket/image.png", "image/png") },
           ]),
-          Message.assistant({ type: "media", media: Media.url("http://example.com/document.pdf", { mediaType: "application/pdf" }), filename: "document.pdf" }),
+          Message.assistant({
+            type: "media",
+            media: Media.url("http://example.com/document.pdf", { mediaType: "application/pdf" }),
+            filename: "document.pdf",
+          }),
           Message.tool({
             id: "call_1",
             name: "screenshot",
@@ -748,12 +756,7 @@ it.effect("routes AI SDK requests and responses through HTTP hook middleware", (
     expect(sent[0]?.headers.get("x-hook")).toBe("applied")
     expect(sent[0]?.headers.get("authorization")).toBe("Bearer test")
     expect(JSON.parse(sent[0]?.body ?? "")).toMatchObject({ model: "api-model" })
-    expect(seen).toEqual([
-      "POST https://example.test/v1/chat/completions",
-      sent[0]?.body,
-      sent[0]?.body,
-      "status 200",
-    ])
+    expect(seen).toEqual(["POST https://example.test/v1/chat/completions", sent[0]?.body, sent[0]?.body, "status 200"])
     expect(response.events.filter(LLMEvent.is.textDelta).map((event) => event.text)).toEqual(["rewritten"])
   }),
 )
@@ -848,6 +851,45 @@ it.effect("emits malformed AI SDK tool input without executing it", () =>
     expect(response.events.some(LLMEvent.is.toolInputEnd)).toBeTrue()
     expect(response.events.some(LLMEvent.is.toolCall)).toBeFalse()
     expect(response.finishReason).toEqual({ normalized: "tool-calls", raw: "tool_calls" })
+  }),
+)
+
+it.effect("keeps usage and finish reason from a LanguageModelV2 provider", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    // AI SDK V2 providers report a bare finish reason and flat token counts. Before this
+    // fix both were read as the nested V3 shapes and silently dropped (#50338).
+    const language = {
+      specificationVersion: "v2",
+      provider: "test",
+      modelId: "test",
+      supportedUrls: {},
+      doGenerate: () => Promise.reject(new Error("Unexpected non-streaming request")),
+      doStream: () =>
+        Promise.resolve({
+          stream: new ReadableStream({
+            start(controller) {
+              controller.enqueue({
+                type: "finish",
+                finishReason: "stop",
+                usage: { inputTokens: 82_057, outputTokens: 4, totalTokens: 82_061 },
+              })
+              controller.close()
+            },
+          }),
+        }),
+    }
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = { languageModel: () => language as unknown as LanguageModelV3 }
+    })
+
+    const resolved = yield* aisdk.model(model("test-ai-sdk"))
+    const response = yield* LLMClient.generate(LLM.request({ model: resolved, prompt: "Hello" })).pipe(
+      Effect.provide(client),
+    )
+
+    expect(response.finishReason).toEqual({ normalized: "stop", raw: "stop" })
+    expect(response.usage).toMatchObject({ inputTokens: 82_057, outputTokens: 4, totalTokens: 82_061 })
   }),
 )
 
