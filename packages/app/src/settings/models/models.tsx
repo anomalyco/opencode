@@ -69,6 +69,12 @@ export const SettingsModels: Component<{
   const searching = () => list.filter().length > 0
   const expanded = (key: string) => searching() || !store.collapsed[key]
 
+  const providerVisible = (providerID: string) =>
+    models
+      .list()
+      .filter((item) => item.provider.id === providerID)
+      .every((item) => models.visible({ providerID, modelID: item.id }))
+
   const setProviderVisibility = (providerID: string, visible: boolean) =>
     models
       .list()
@@ -186,6 +192,16 @@ export const SettingsModels: Component<{
               onExpandedChange={(key, value) => setStore("collapsed", key, !value)}
               onSetVisibility={setProviderVisibility}
               ref={(providerID, element) => sections.set(providerID, element)}
+              action={(group) => (
+                <Switch
+                  class="me-6"
+                  checked={providerVisible(group.category)}
+                  onChange={(checked) => setProviderVisibility(group.category, checked)}
+                  hideLabel
+                >
+                  {group.items[0].provider.name}
+                </Switch>
+              )}
               rows={(items) => <ModelRows items={items} />}
             />
           </Show>
