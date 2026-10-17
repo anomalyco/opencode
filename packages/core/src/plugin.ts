@@ -79,11 +79,22 @@ const layer = Layer.effect(
         Effect.exit,
       )
       if (activation.failure || Exit.isSuccess(exit)) return { activation } as const
+      const ref = `err_${crypto.randomUUID().slice(0, 8)}`
+      const error = Cause.squash(exit.cause)
       yield* Effect.logWarning("failed to load plugin", {
         "plugin.id": plugin.id,
+        ref,
         cause: exit.cause,
       })
-      return { error: Cause.pretty(exit.cause) } as const
+      return {
+        failure: {
+          error:
+            error instanceof Error && error.message.trim()
+              ? error.message
+              : "Plugin failed to set up. Check server logs for details.",
+          ref,
+        },
+      } as const
     })
 
     const activate = Effect.fn("Plugin.activate")(function* (
@@ -151,7 +162,7 @@ const layer = Layer.effect(
                       })
                       continue
                     }
-                    active.set(definition.id, { plugin: definition, error: result.error })
+                    active.set(definition.id, { plugin: definition, failure: result.failure })
 
                     const fallback = slot?.activation
                     if (!fallback || fallback.failure) continue
@@ -160,7 +171,7 @@ const layer = Layer.effect(
                       active.set(definition.id, {
                         plugin: definition,
                         activation: restored.activation,
-                        error: result.error,
+                        failure: result.failure,
                       })
                       continue
                     }
@@ -262,7 +273,7 @@ const layer = Layer.effect(
 type Slot = {
   readonly plugin: Generation
   readonly activation?: Activation
-  readonly error?: string
+  readonly failure?: { readonly error: string; readonly ref: string }
 }
 
 // Share the activation across slot snapshots so teardown sees failures synchronously,
@@ -283,7 +294,7 @@ type PendingFailure = {
 }
 
 function slotInfo(slot: Slot): Plugin.Info {
-  const failure = slot.activation?.failure ?? (slot.error === undefined ? undefined : { error: slot.error })
+  const failure = slot.activation?.failure ?? slot.failure
   return {
     id: Plugin.ID.make(slot.plugin.id),
     source: slot.plugin.source ?? { type: "builtin" },
