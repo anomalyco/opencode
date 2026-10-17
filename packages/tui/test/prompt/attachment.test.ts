@@ -64,6 +64,11 @@ describe("prompt attachments", () => {
     expect(promptAttachmentLabel(files, { uri: "data:application/pdf;base64,BBB" })).toBe("[PDF 1]")
   })
 
+  test("labels local file:// image and PDF attachments", () => {
+    expect(promptAttachmentLabel([], { uri: "file:///tmp/photo.png", name: "photo.png" })).toBe("[Image 1]")
+    expect(promptAttachmentLabel([], { uri: "file:///tmp/doc.pdf", name: "doc.pdf" })).toBe("[PDF 1]")
+  })
+
   test("does not reuse a label when attachment metadata differs", () => {
     const uri = "data:image/png;base64,AAA"
     const files = [{ uri, name: "one.png", mention: { start: 0, end: 9, text: "[Image 1]" } }]

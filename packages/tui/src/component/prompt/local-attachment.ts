@@ -50,10 +50,13 @@ export async function resolvePastedAttachments(text: string, platform: string) {
     if (item.attachment.type === "text") {
       return { type: "text" as const, content: item.attachment.content, filename }
     }
+    // Embed bytes at paste time (remote servers / ephemeral paths) and carry
+    // the absolute path in description for model-visible location text.
     return {
       type: "file" as const,
       uri: `data:${item.attachment.mime};base64,${Buffer.from(item.attachment.content).toString("base64")}`,
       filename,
+      description: item.filepath,
     }
   })
 }

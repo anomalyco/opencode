@@ -61,6 +61,7 @@ import { Slot } from "../../plugin/render"
 import type { SessionInbox } from "@opencode/schema/session-inbox"
 import {
   deduplicatePromptImages,
+  isPromptImageUri,
   preserveMentionlessPromptAttachments,
   promptAttachmentLabel,
 } from "../../prompt/attachment"
@@ -392,7 +393,7 @@ export function Prompt(props: PromptProps) {
   }
 
   const imageAttachments = createMemo(() =>
-    (deduplicatePromptImages(store.prompt.files) ?? []).filter((file) => file.uri.startsWith("data:image/")),
+    (deduplicatePromptImages(store.prompt.files) ?? []).filter((file) => isPromptImageUri(file.uri)),
   )
   const imagePreviewHeight = createMemo(() => Math.max(4, Math.min(8, Math.floor(dimensions().height / 4))))
   const imagePreviewWidth = createMemo(() => imagePreviewHeight() * 2)
@@ -1476,10 +1477,14 @@ export function Prompt(props: PromptProps) {
     }, 0)
   }
 
-  function pasteAttachment(file: { filename?: string; uri: string }) {
+  function pasteAttachment(file: { filename?: string; uri: string; description?: string }) {
     const currentOffset = input.cursorOffset
     const extmarkStart = currentOffset
-    const virtualText = promptAttachmentLabel(store.prompt.files, { uri: file.uri, name: file.filename })
+    const virtualText = promptAttachmentLabel(store.prompt.files, {
+      uri: file.uri,
+      name: file.filename,
+      description: file.description,
+    })
     const extmarkEnd = extmarkStart + virtualText.length
     const textToInsert = virtualText + " "
 
@@ -1496,6 +1501,7 @@ export function Prompt(props: PromptProps) {
     const part: NonNullable<PromptInfo["files"]>[number] = {
       uri: file.uri,
       name: file.filename,
+      description: file.description,
       mention: {
         start: extmarkStart,
         end: extmarkEnd,
