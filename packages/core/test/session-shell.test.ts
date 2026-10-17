@@ -1,10 +1,12 @@
 import { describe, expect, setDefaultTimeout } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, Option, Schedule, Stream } from "effect"
+import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, Option, RcMap, Schedule, Stream } from "effect"
+import { TestClock } from "effect/testing"
 import { Bus } from "@opencode/core/bus"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Location } from "@opencode/core/location"
+import { LocationActivity } from "@opencode/core/location-activity"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
@@ -13,6 +15,8 @@ import { SessionExecution } from "@opencode/core/session/execution"
 import { SessionRunCoordinator } from "@opencode/core/session/run-coordinator"
 import { Shell } from "@opencode/core/shell"
 import { LayerNode } from "@opencode/util/effect/layer-node"
+import { Global } from "@opencode/util/global"
+import { tempGlobalLayer } from "./fixture/global"
 import { location } from "./fixture/location"
 import { offlineModels } from "./fixture/models"
 import { tmpdirScoped } from "./fixture/tmpdir"
@@ -62,6 +66,18 @@ const it = testEffect(
     SessionExecution.node.replace(executionLayer.pipe(Layer.provide(controlLayer))),
     offlineModels,
   ]).pipe(Layer.provideMerge(controlLayer)),
+)
+
+const idleIt = testEffect(
+  AppNodeBuilder.build(
+    LayerNode.group([Bus.node, Session.node, SessionExecution.node, LocationServiceMap.node, LocationActivity.node]),
+    [
+      Global.node.replace(tempGlobalLayer),
+      Bus.node.replace(Bus.configured({ persist: true })),
+      SessionExecution.node.replace(executionLayer.pipe(Layer.provide(controlLayer))),
+      offlineModels,
+    ],
+  ).pipe(Layer.provideMerge(controlLayer)),
 )
 
 const setup = Effect.gen(function* () {
@@ -195,27 +211,46 @@ describe("Session.shell", () => {
     }),
   )
 
-  it.live("does not suppress a normal prompt wake while a shell is running or wake again when it completes", () =>
-    Effect.gen(function* () {
-      const fixture = yield* setup
-      const command = yield* launch(fixture, "prompt")
+  idleIt.effect(
+    "keeps a quiet shell's Session and location alive without suppressing prompt wakes or waking on completion",
+    () =>
+      Effect.gen(function* () {
+        const fixture = yield* setup
+        const locations = yield* LocationServiceMap.Service
+        const ref = LocationServiceMap.canonical(fixture.created.location)
+        const command = yield* launch(fixture, "prompt").pipe(TestClock.withLive)
 
-      const prompt = yield* fixture.session.prompt({ sessionID: fixture.created.id, text: "Continue while this runs" })
-      yield* Deferred.await(fixture.control.started).pipe(Effect.timeout("5 seconds"))
-      expect(fixture.control.wakes).toEqual([fixture.created.id])
-      expect(command.caller.pollUnsafe()).toBeUndefined()
-      yield* Deferred.succeed(fixture.control.release, undefined)
-      yield* fixture.execution.awaitIdle(fixture.created.id)
+        const prompt = yield* fixture.session.prompt({
+          sessionID: fixture.created.id,
+          text: "Continue while this runs",
+        })
+        yield* Deferred.await(fixture.control.started).pipe(Effect.timeout("5 seconds"))
+        expect(fixture.control.wakes).toEqual([fixture.created.id])
+        expect(command.caller.pollUnsafe()).toBeUndefined()
+        // The real process emits nothing while waiting on the file gate; advance only inactivity time.
+        yield* TestClock.adjust("1 minute")
+        yield* TestClock.adjust("62 minutes")
+        expect((yield* fixture.execution.active).has(fixture.created.id)).toBe(true)
+        expect(yield* RcMap.has(locations.rcMap, ref)).toBe(true)
+        yield* Deferred.succeed(fixture.control.release, undefined)
+        yield* fixture.execution.awaitIdle(fixture.created.id)
+        yield* TestClock.adjust("62 minutes")
+        expect(yield* RcMap.has(locations.rcMap, ref)).toBe(true)
+        expect((yield* fixture.shell.get(command.shellID)).status).toBe("running")
 
-      yield* command.release
-      yield* Fiber.join(command.caller).pipe(Effect.timeout("5 seconds"))
-      expect(fixture.control.wakes).toEqual([fixture.created.id])
-      expect(yield* fixture.execution.active).toEqual(new Set())
-      expect(yield* fixture.session.inbox(fixture.created.id)).toMatchObject([
-        { id: prompt.id, type: "user" },
-        { type: "synthetic", payload: { metadata: { source: "shell" } } },
-      ])
-    }),
+        yield* command.release
+        yield* Fiber.join(command.caller).pipe(Effect.timeout("5 seconds"), TestClock.withLive)
+        expect(fixture.control.wakes).toEqual([fixture.created.id])
+        expect(yield* fixture.execution.active).toEqual(new Set())
+        expect(yield* fixture.session.inbox(fixture.created.id)).toMatchObject([
+          { id: prompt.id, type: "user" },
+          { type: "synthetic", payload: { metadata: { source: "shell" } } },
+        ])
+        yield* TestClock.adjust("59 minutes")
+        expect(yield* RcMap.has(locations.rcMap, ref)).toBe(true)
+        yield* TestClock.adjust("2 minutes")
+        expect(yield* RcMap.has(locations.rcMap, ref)).toBe(false)
+      }),
   )
 
   for (const exit of [0, 7]) {

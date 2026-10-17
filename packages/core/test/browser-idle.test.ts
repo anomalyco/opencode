@@ -13,6 +13,7 @@ import { LocationServiceMap } from "@opencode/core/location-services"
 import { Plugin } from "@opencode/core/plugin"
 import { Rpc } from "@opencode/core/rpc"
 import { AbsolutePath } from "@opencode/core/schema"
+import { Inactivity } from "@opencode/core/inactivity"
 import { Session } from "@opencode/core/session"
 import { SessionExecution } from "@opencode/core/session/execution"
 import { SessionStore } from "@opencode/core/session/store"
@@ -21,7 +22,7 @@ import { offlineModels } from "./fixture/models"
 import { tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
-// LocationActivity measures idleness on this clock. Its sweep still sleeps in real time, but only the test moves the
+// Inactivity measures idleness on this clock. The sweep still sleeps in real time, but only the test moves the
 // clock past the TTL, so slow plugin activation on a busy machine cannot evict the location before the browser
 // attachment exists, as a short real TTL could.
 const timeToLive = Duration.minutes(1)
@@ -43,13 +44,14 @@ const it = testEffect(
     [
       Global.node.replace(tempGlobalLayer),
       offlineModels,
+      Inactivity.node.replace(
+        Inactivity.node.mapLayer((layer) => layer.pipe(Layer.provide(Layer.succeed(Clock.Clock, activityClock)))),
+      ),
       LocationActivity.node.replace(
         makeGlobalNode({
           service: LocationActivity.Service,
-          layer: LocationActivity.layer({ timeToLive, sweepInterval: "100 millis" }).pipe(
-            Layer.provide(Layer.succeed(Clock.Clock, activityClock)),
-          ),
-          deps: [Bus.node, LocationServiceMap.node, SessionExecution.node, SessionStore.node],
+          layer: LocationActivity.layer({ timeToLive, sweepInterval: "100 millis" }),
+          deps: [Bus.node, LocationServiceMap.node, SessionExecution.node, SessionStore.node, Inactivity.node],
         }),
       ),
     ],

@@ -5,6 +5,7 @@ import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { KV } from "./kv.js"
 import { SessionMessage } from "./session/message.js"
 import { SessionSchema } from "./session/schema.js"
+import { Inactivity } from "./inactivity.js"
 
 const Background = Schema.Struct({
   id: Schema.String,
@@ -177,6 +178,7 @@ function decrementSession(input: Map<SessionSchema.ID, number>, sessionID: Sessi
  */
 export const make = Effect.gen(function* () {
   const kv = yield* KV.Service
+  const inactivity = yield* Inactivity.Service
   const state: State = {
     jobs: yield* SynchronizedRef.make(new Map()),
     scope: yield* Scope.Scope,
@@ -285,7 +287,13 @@ export const make = Effect.gen(function* () {
           }),
         )
         if ("scope" in result)
-          yield* restore(input.run).pipe(
+          yield* restore(
+            Effect.gen(function* () {
+              if (input.recovery?.kind === "subagent")
+                yield* inactivity.hold({ sessionID: input.recovery.parentSessionID })
+              return yield* input.run
+            }).pipe(Effect.scoped),
+          ).pipe(
             Effect.exit,
             Effect.flatMap((exit) => settle(input.id, result.scope, exit)),
             Effect.asVoid,
@@ -477,4 +485,4 @@ export const make = Effect.gen(function* () {
 
 const layer = Layer.effect(Service, make)
 
-export const node = makeGlobalNode({ service: Service, layer, deps: [KV.node] })
+export const node = makeGlobalNode({ service: Service, layer, deps: [KV.node, Inactivity.node] })
