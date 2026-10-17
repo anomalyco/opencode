@@ -59,6 +59,8 @@ export interface CaptureInput {
    */
   readonly ignores?: Repository
   readonly maximumUntrackedFileBytes?: number
+  /** Paths that are never listed, so they are neither added nor updated. */
+  readonly excludes?: readonly RelativePath[]
 }
 
 export class OperationError extends Schema.TaggedError<OperationError>()("Git.OperationError", {
@@ -459,16 +461,22 @@ const layer = Layer.effect(
      * Both commands only read the index, so they never take `index.lock`. Two parallel processes beat one combined
      * `ls-files -m -o`, whose lstat pass is not threaded like diff-files'.
      */
-    const listChanges = Effect.fnUntraced(function* (repository: Repository, scope: RelativePath, index?: string) {
+    const listChanges = Effect.fnUntraced(function* (
+      repository: Repository,
+      scope: RelativePath,
+      index?: string,
+      excludes: readonly RelativePath[] = [],
+    ) {
       const list = (args: string[]) =>
         repositoryOperation("refresh", repository, args, { index }).pipe(
           // Embedded repositories are listed as `dir/`; update-index records them as gitlinks.
           Effect.map((result) => nuls(result.text).map((file) => RelativePath.make(file.replace(/\/$/, "")))),
         )
+      const pathspecs = [literalPathspec(scope), ...excludes.map((file) => `:(exclude,literal)${file}`)]
       const [tracked, untracked] = yield* Effect.all(
         [
-          list(["diff-files", "--name-only", "-z", "--", literalPathspec(scope)]),
-          list(["ls-files", "--others", "--exclude-standard", "-z", "--", literalPathspec(scope)]),
+          list(["diff-files", "--name-only", "-z", "--", ...pathspecs]),
+          list(["ls-files", "--others", "--exclude-standard", "-z", "--", ...pathspecs]),
         ],
         { concurrency: 2 },
       )
@@ -682,10 +690,31 @@ const layer = Layer.effect(
     const attemptCapture = Effect.fnUntraced(function* (input: CaptureInput) {
       const result = yield* withTemporaryIndex(input.repository, (index) =>
         Effect.gen(function* () {
+          // Entries recorded before these paths were excluded would otherwise stay in every tree.
+          const stale = input.excludes?.length
+            ? yield* repositoryOperation(
+                "refresh",
+                input.repository,
+                ["ls-files", "-z", "--", ...input.excludes.map(literalPathspec)],
+                { index },
+              ).pipe(Effect.map((result) => nuls(result.text)))
+            : []
+          if (stale.length)
+            yield* repositoryOperation(
+              "refresh",
+              input.repository,
+              ["update-index", "--force-remove", "-z", "--stdin"],
+              {
+                stdin: stale.join("\0") + "\0",
+                index,
+              },
+            )
           const scanned = yield* indexFingerprint(index)
-          const changes = yield* Effect.forEach(input.scopes, (scope) => listChanges(input.repository, scope, index), {
-            concurrency: "unbounded",
-          })
+          const changes = yield* Effect.forEach(
+            input.scopes,
+            (scope) => listChanges(input.repository, scope, index, input.excludes),
+            { concurrency: "unbounded" },
+          )
           const last = lastCaptures.get(input.repository.gitDirectory)
           const untracked = changes.flatMap((change) => change.untracked)
           // Paths the source ignores are listed as untracked on every scan; they leave the index unchanged.
