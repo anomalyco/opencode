@@ -4,7 +4,6 @@ title: "Intro"
 
 OpenCode is an open source AI coding agent. It’s available as a terminal-based interface, desktop app, or web app.
 
-
 ## CLI
 
 <CodeTabs
@@ -29,6 +28,24 @@ older versions install OpenCode 1.
 
 Windows package managers are not supported.
 
+### Installer options
+
+The curl installer writes to `$HOME/.opencode/bin`. It does not support `OPENCODE_INSTALL_DIR` or `XDG_BIN_DIR` overrides.
+To skip shell configuration changes, pass `--no-modify-path` and add the directory to your `PATH` yourself:
+
+```bash
+curl -fsSL https://opencode.ai/v2/install | bash -s -- --no-modify-path
+export PATH="$HOME/.opencode/bin:$PATH"
+```
+
+| Option                  | Description                                    |
+| ----------------------- | ---------------------------------------------- |
+| `-h`, `--help`          | Show installer usage.                          |
+| `-v`, `--version <tag>` | Install a specific version.                    |
+| `-b`, `--binary <path>` | Install a local binary instead of downloading. |
+| `--no-modify-path`      | Leave shell configuration files unchanged.     |
+
+### Standalone binaries
 
 Download a standalone CLI binary for your platform.
 
@@ -46,7 +63,6 @@ Download the latest OpenCode Desktop build for your platform.
 - **Linux (.deb):** [x64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-linux-amd64.deb) · [ARM64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-linux-arm64.deb)
 - **Linux (.rpm):** [x64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-linux-x86_64.rpm) · [ARM64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-linux-aarch64.rpm)
 - **Linux (AppImage):** [x64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-linux-x86_64.AppImage) · [ARM64](https://opencode.ai/update/api/latest/desktop/opencode/opencode-desktop-linux-arm64.AppImage)
-
 
 ## Web
 

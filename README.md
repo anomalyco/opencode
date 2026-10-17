@@ -47,7 +47,7 @@
 
 ```bash
 # YOLO
-curl -fsSL https://opencode.ai/install | bash
+curl -fsSL https://opencode.ai/v2/install | bash
 
 # Package managers
 npm i -g @opencode/cli@latest      # or bun/pnpm/yarn
@@ -84,18 +84,21 @@ scoop bucket add extras; scoop install extras/opencode-desktop
 
 #### Installation Directory
 
-The install script respects the following priority order for the installation path:
+The install script installs to `$HOME/.opencode/bin`. It does not support `OPENCODE_INSTALL_DIR` or `XDG_BIN_DIR` overrides.
 
-1. `$OPENCODE_INSTALL_DIR` - Custom installation directory
-2. `$XDG_BIN_DIR` - XDG Base Directory Specification compliant path
-3. `$HOME/bin` - Standard user binary directory (if it exists or can be created)
-4. `$HOME/.opencode/bin` - Default fallback
+To leave your shell configuration unchanged, pass `--no-modify-path` and add `$HOME/.opencode/bin` to your `PATH` yourself:
 
 ```bash
-# Examples
-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
+curl -fsSL https://opencode.ai/v2/install | bash -s -- --no-modify-path
+export PATH="$HOME/.opencode/bin:$PATH"
 ```
+
+| Option                  | Description                                    |
+| ----------------------- | ---------------------------------------------- |
+| `-h`, `--help`          | Show installer usage.                          |
+| `-v`, `--version <tag>` | Install a specific version.                    |
+| `-b`, `--binary <path>` | Install a local binary instead of downloading. |
+| `--no-modify-path`      | Leave shell configuration files unchanged.     |
 
 ### Agents
 
