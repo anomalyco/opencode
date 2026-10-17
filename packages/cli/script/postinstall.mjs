@@ -21,13 +21,28 @@ const arch =
   platform === "windows" && nodeArch === "x64" && process.env.PROCESSOR_IDENTIFIER?.startsWith("ARM")
     ? "arm64"
     : nodeArch
-// Windows cannot spawn npm's .cmd shim directly, so reuse the npm CLI that runs this script.
-const npm = process.env.npm_execpath?.endsWith("npm-cli.js") ? [process.execPath, process.env.npm_execpath] : ["npm"]
+// Windows cannot spawn npm's .cmd shim directly, so reuse the npm CLI that runs this script. Build tools that restrict
+// child process permissions keep this Node path, so a source checkout installs under `bun install` as well.
+const npm = ["npm"]
+// A failed spawn says why npm never ran, while a failed install says only that npm tried and failed.
+const npmFailure = (result) => `npm could not be started: ${result.error.code ?? result.error.message}`
 const sourceBinary = platform === "windows" ? `${sourceCommand}.exe` : sourceCommand
 const targetBinary = path.resolve(directory, packageJson.bin[command])
 const dependencies = packageJson.optionalDependencies ?? {}
 const base = Object.keys(dependencies).find((name) => name.endsWith(`-${platform}-${arch}`))
 if (!base) throw new Error(`OpenCode does not provide a binary for ${platform}-${arch}`)
+
+function installWithNode() {
+  if (platform !== "windows") return
+  const npmCli = [
+    process.env.npm_execpath,
+    path.join(path.dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js"),
+  ].find((candidate) => candidate?.endsWith("npm-cli.js") && fs.existsSync(candidate))
+  if (!npmCli) return
+  npm.unshift(process.execPath, npmCli)
+}
+
+installWithNode()
 
 function supportsAvx2() {
   if (arch !== "x64") return false
@@ -152,6 +167,8 @@ function installPackage(name) {
       ],
       { stdio: "inherit", windowsHide: true },
     )
+    // Only a spawn that never reached npm says why; an npm run that failed on its own reports nothing useful.
+    if (result.error) throw new Error(npmFailure(result))
     if (result.status !== 0) return false
     copyBinary(path.join(temp, "node_modules", name, "bin", sourceBinary))
     return true
