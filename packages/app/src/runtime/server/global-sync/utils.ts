@@ -81,7 +81,12 @@ export function normalizeProviderList(
       family: model.family,
       capabilities: {
         temperature: false,
-        reasoning: false,
+        // 目录没标 reasoning 时（自定义供应商、目录未收录的模型）用服务端本来就带着的
+        // 两个信号兜底：compatibility.reasoningField 或已解析出的 variants。
+        // 目录里显式标了值就以目录为准。
+        reasoning:
+          model.capabilities.reasoning ??
+          (model.compatibility?.reasoningField !== undefined || model.variants.some((variant) => variant.id !== "none")),
         attachment: model.capabilities.input.some((item) => item !== "text"),
         toolcall: model.capabilities.tools,
         input: {

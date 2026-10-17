@@ -67,6 +67,7 @@ export const Overlays = {
 export interface Capabilities extends Schema.Schema.Type<typeof Capabilities> {}
 export const Capabilities = Schema.Struct({
   tools: Schema.Boolean,
+  reasoning: optional(Schema.Boolean),
   input: Schema.Array(Schema.String),
   output: Schema.Array(Schema.String),
   /** Whether the model accepts a sampling temperature. Unknown when unset. */

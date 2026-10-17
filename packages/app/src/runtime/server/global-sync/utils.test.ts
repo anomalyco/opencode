@@ -48,7 +48,7 @@ describe("normalizeProviderList", () => {
           modelID: "gpt-5",
           providerID: "openai",
           name: "GPT-5",
-          capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
+          capabilities: { tools: true, reasoning: true, input: ["text", "image"], output: ["text"] },
           variants: [{ id: "high" }],
           time: { released: 1 },
           cost: [{ input: 1, output: 2, cache: { read: 0.1, write: 0.2 } }],
@@ -69,6 +69,85 @@ describe("normalizeProviderList", () => {
           enabled: true,
           limit: { context: 1, output: 1 },
         },
+        {
+          id: "gpt-classic",
+          modelID: "gpt-classic",
+          providerID: "openai",
+          name: "GPT Classic",
+          capabilities: { tools: true, input: ["text"], output: ["text"] },
+          variants: [],
+          time: { released: 0 },
+          cost: [],
+          status: "active",
+          enabled: true,
+          limit: { context: 1, output: 1 },
+        },
+        {
+          id: "gpt-variants-only",
+          modelID: "gpt-variants-only",
+          providerID: "openai",
+          name: "GPT Variants Only",
+          capabilities: { tools: true, input: ["text"], output: ["text"] },
+          variants: [{ id: "high" }],
+          time: { released: 0 },
+          cost: [],
+          status: "active",
+          enabled: true,
+          limit: { context: 1, output: 1 },
+        },
+        {
+          id: "gpt-none-only",
+          modelID: "gpt-none-only",
+          providerID: "openai",
+          name: "GPT None Only",
+          capabilities: { tools: true, input: ["text"], output: ["text"] },
+          variants: [{ id: "none", settings: { reasoningEffort: "none" } }],
+          time: { released: 0 },
+          cost: [],
+          status: "active",
+          enabled: true,
+          limit: { context: 1, output: 1 },
+        },
+        {
+          id: "gpt-none-and-high",
+          modelID: "gpt-none-and-high",
+          providerID: "openai",
+          name: "GPT None And High",
+          capabilities: { tools: true, input: ["text"], output: ["text"] },
+          variants: [{ id: "none" }, { id: "high" }],
+          time: { released: 0 },
+          cost: [],
+          status: "active",
+          enabled: true,
+          limit: { context: 1, output: 1 },
+        },
+        {
+          id: "gpt-field-only",
+          modelID: "gpt-field-only",
+          providerID: "openai",
+          name: "GPT Field Only",
+          compatibility: { reasoningField: "reasoning_content" },
+          capabilities: { tools: true, input: ["text"], output: ["text"] },
+          variants: [],
+          time: { released: 0 },
+          cost: [],
+          status: "active",
+          enabled: true,
+          limit: { context: 1, output: 1 },
+        },
+        {
+          id: "gpt-off-with-variants",
+          modelID: "gpt-off-with-variants",
+          providerID: "openai",
+          name: "GPT Off With Variants",
+          capabilities: { tools: true, reasoning: false, input: ["text"], output: ["text"] },
+          variants: [{ id: "high" }],
+          time: { released: 0 },
+          cost: [],
+          status: "active",
+          enabled: true,
+          limit: { context: 1, output: 1 },
+        },
       ] as ModelListOutput["data"],
     )
 
@@ -78,10 +157,21 @@ describe("normalizeProviderList", () => {
     expect(result.all.get("openai")?.models["gpt-5"]).toMatchObject({
       id: "gpt-5",
       providerID: "openai",
-      capabilities: { toolcall: true, attachment: true },
+      capabilities: { toolcall: true, attachment: true, reasoning: true },
       cost: { input: 1, output: 2 },
       variants: { high: {} },
     })
+    // 目录未标注 reasoning 的模型映射为 false，而不是被硬编码覆盖
+    expect(result.all.get("openai")?.models["gpt-classic"]?.capabilities.reasoning).toBe(false)
+    // 目录没标 reasoning 时，用服务端已有的两个信号兜底：
+    // 已解析出的 variants、或 compatibility.reasoningField
+    expect(result.all.get("openai")?.models["gpt-variants-only"]?.capabilities.reasoning).toBe(true)
+    // A disabled-only variant is not evidence of reasoning support.
+    expect(result.all.get("openai")?.models["gpt-none-only"]?.capabilities.reasoning).toBe(false)
+    expect(result.all.get("openai")?.models["gpt-none-and-high"]?.capabilities.reasoning).toBe(true)
+    expect(result.all.get("openai")?.models["gpt-field-only"]?.capabilities.reasoning).toBe(true)
+    // 目录显式标 false 时以目录为准，不被兜底信号覆盖
+    expect(result.all.get("openai")?.models["gpt-off-with-variants"]?.capabilities.reasoning).toBe(false)
   })
 })
 
