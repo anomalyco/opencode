@@ -18,3 +18,10 @@ test("rolls the compact form over at the rounding boundary", () => {
   expect(Locale.number(999950)).toBe("1.0M")
   expect(Locale.number(1000000)).toBe("1.0M")
 })
+
+test("truncates text in the middle and handles small maxLength correctly", () => {
+  expect(Locale.truncateMiddle("abcdefgh", 5)).toBe("ab…gh")
+  expect(Locale.truncateMiddle("abcdefgh", 1)).toBe("…")
+  expect(Locale.truncateMiddle("abcdefgh", 2)).toBe("a…")
+  expect(Locale.truncateMiddle("abcdefgh", 3)).toBe("a…h")
+})
