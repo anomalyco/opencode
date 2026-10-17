@@ -22,6 +22,9 @@ export const resolve = Effect.fn("cli.server-connection.resolve")(function* (arg
   if (args.server !== undefined && args.standalone)
     return yield* Effect.fail(new Error("--server and --standalone cannot be combined"))
   if (args.server !== undefined) {
+    const url = URL.parse(args.server)
+    if (!url || (url.protocol !== "http:" && url.protocol !== "https:"))
+      return yield* Effect.fail(new Error("Invalid --server URL; include http:// or https://."))
     const password = yield* Env.password
     const endpoint = {
       url: args.server,
