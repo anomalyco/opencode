@@ -155,7 +155,7 @@ export const extensionGlobals = <R>(
         return settle(Effect.fail(reason))
       }
       if (!(result instanceof Promise)) return settle(Effect.succeed(result))
-      return ctx.pending.create(settle(Effect.tryPromise({ try: () => result, catch: (reason) => reason })))
+      return ctx.pending.createHost(settle(Effect.tryPromise({ try: () => result, catch: (reason) => reason })))
     })
 
   return extensions.flatMap((extension) =>

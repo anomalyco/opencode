@@ -419,9 +419,11 @@ class Frame<R> {
     }).pipe(Effect.ensuring(Effect.sync(() => self.scopes.pop())))
   }
 
-  // Fork at the call site so admission and hooks occur when the call is made.
+  // Fork at the call site so admission and hooks occur when the call is made. Arguments cross on the caller's turn,
+  // since `toJSON` is program code; the host call runs without it, so tool calls stay concurrent.
   private createToolCallPromise(path: ReadonlyArray<string>, args: Array<Value>): Effect.Effect<PromiseObj, never, R> {
-    return this.ctx.pending.create(this.ctx.tool((json) => this.ctx.tools.execute(path, json), args))
+    const pending = this.ctx.pending
+    return pending.create(this.ctx.tool((json) => pending.turn.leave(this.ctx.tools.execute(path, json)), args))
   }
 
   // Fiber exits make settlement idempotent; yielding prevents inline continuation.
@@ -429,8 +431,15 @@ class Frame<R> {
     const pending = this.ctx.pending
     return Effect.suspend(() => {
       pending.markObserved(promise)
-      return Effect.flatMap(pending.await(promise), (exit) => Effect.andThen(Effect.yieldNow, exit))
+      return Effect.flatten(
+        pending.turn.suspend(Effect.flatMap(pending.await(promise), (exit) => Effect.as(Effect.yieldNow, exit))),
+      )
     })
+  }
+
+  // End this job; the program continues in a later one, after the jobs already waiting.
+  nextJob(): Effect.Effect<void> {
+    return this.ctx.pending.turn.suspend(Effect.yieldNow)
   }
 
   private evaluateStatement(node: Statement | ModuleDeclaration): Effect.Effect<StatementResult, unknown, R> {
@@ -730,7 +739,7 @@ class Frame<R> {
         iterator
           ? self.closeIterator(iterator, node, awaiting)
           : awaiting
-            ? Effect.andThen(cursor?.close ?? Effect.void, Effect.yieldNow)
+            ? Effect.andThen(cursor?.close ?? Effect.void, self.nextJob())
             : (cursor?.close ?? Effect.void)
 
       if (left.type === "RestElement" || left.type === "AssignmentPattern") {
@@ -887,7 +896,7 @@ class Frame<R> {
 
       const called = yield* Effect.exit(self.call(iterator.next, iterator.iterator, [], node))
       if (!Exit.isSuccess(called)) {
-        if (awaiting) yield* Effect.yieldNow
+        if (awaiting) yield* self.nextJob()
         return yield* Effect.failCause(called.cause)
       }
       const captured = yield* Effect.exit(
@@ -897,7 +906,7 @@ class Frame<R> {
         }),
       )
       if (!Exit.isSuccess(captured)) {
-        if (awaiting) yield* Effect.yieldNow
+        if (awaiting) yield* self.nextJob()
         return yield* Effect.failCause(captured.cause)
       }
       return {
@@ -915,7 +924,9 @@ class Frame<R> {
     awaiting = true,
   ): Effect.Effect<void, unknown, R> {
     const close = get(iterator.iterator, "return")
-    if (close === undefined || close === null) return iterator.asynchronous || !awaiting ? Effect.void : Effect.yieldNow
+    if (close === undefined || close === null) {
+      return iterator.asynchronous || !awaiting ? Effect.void : this.nextJob()
+    }
     const self = this
     return Effect.gen(function* () {
       const method = self.requireIteratorMethod(close, "Iterator return", node)
@@ -930,14 +941,14 @@ class Frame<R> {
 
       const called = yield* Effect.exit(self.call(method, iterator.iterator, [], node))
       if (!Exit.isSuccess(called)) {
-        if (awaiting) yield* Effect.yieldNow
+        if (awaiting) yield* self.nextJob()
         return yield* Effect.failCause(called.cause)
       }
       const captured = yield* Effect.exit(
         Effect.sync(() => get(self.requireIteratorObject(called.value, "Iterator return() result", node), "value")),
       )
       if (!Exit.isSuccess(captured)) {
-        if (awaiting) yield* Effect.yieldNow
+        if (awaiting) yield* self.nextJob()
         return yield* Effect.failCause(captured.cause)
       }
       if (awaiting) yield* self.awaitValue(captured.value)
@@ -1814,14 +1825,22 @@ class Frame<R> {
     invocation.generatorAsync = asynchronous
     const builtins = this.ctx.builtins
     const result = (value: Value, done: boolean) => record(builtins.Object, { value, done })
+    const turn = this.ctx.pending.turn
     const request = (kind: GeneratorRequestKind, value: Value) => {
       const request = { kind, value, response: Deferred.makeUnsafe<Value, unknown>() }
+      // A body that ran on the caller's turn has answered or suspended when it hands the turn back. An answer still
+      // pending can only be an async generator's: its promise settles when the body answers, without the turn.
+      const answer = Effect.suspend(() =>
+        Deferred.isDoneUnsafe(request.response)
+          ? Deferred.await(request.response)
+          : turn.leave(Deferred.await(request.response)),
+      )
       if (!asynchronous && state.active) return Effect.die(typeError("Generator is already running."))
       if (asynchronous && (state.completed || (!state.started && kind !== "next"))) {
         state.started = true
         state.completed = true
         state.pending.push(request)
-        if (state.draining) return Deferred.await(request.response)
+        if (state.draining) return answer
         state.draining = true
         return Effect.andThen(
           this.ctx.pending.fork(
@@ -1829,7 +1848,7 @@ class Frame<R> {
               .completeGeneratorRequests(state, true)
               .pipe(Effect.ensuring(Effect.sync(() => (state.draining = false)))),
           ),
-          Deferred.await(request.response),
+          answer,
         )
       }
       if (state.completed) {
@@ -1844,9 +1863,13 @@ class Frame<R> {
 
       state.pending.push(request)
       if (state.available) {
+        // The body is parked waiting for a request: it runs this step on the caller's turn.
         const available = state.available
         state.available = undefined
-        Deferred.doneUnsafe(available, Exit.succeed(undefined))
+        return Effect.andThen(
+          turn.handOff(Effect.sync(() => Deferred.doneUnsafe(available, Exit.succeed(undefined)))),
+          answer,
+        )
       }
       if (!state.started) {
         state.started = true
@@ -1872,9 +1895,9 @@ class Frame<R> {
           yield* invocation.completeGeneratorRequests(state, asynchronous)
           state.completed = true
         })
-        return Effect.andThen(this.ctx.pending.fork(body), Deferred.await(request.response))
+        return Effect.andThen(this.ctx.pending.fork(body), answer)
       }
-      return Deferred.await(request.response)
+      return answer
     }
     const proto = get(fn, "prototype")
     return new GeneratorObj(proto instanceof Obj ? proto : builtins.Generator, asynchronous, request)
@@ -1912,7 +1935,7 @@ class Frame<R> {
     if (next) return Effect.succeed(next)
     state.available = Deferred.makeUnsafe<void>()
     return Effect.andThen(
-      Deferred.await(state.available),
+      this.ctx.pending.turn.park(Deferred.await(state.available)),
       Effect.sync(() => this.dequeueGeneratorRequest(state)!),
     )
   }

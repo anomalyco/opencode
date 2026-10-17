@@ -1342,3 +1342,61 @@ describe("promise construction", () => {
     ).toEqual({ kind: "function" })
   })
 })
+
+describe("jobs run to completion", () => {
+  // Effect preempts a fiber after 2,048 operations; these loops are long enough to be preempted mid-job.
+  test("updates to shared state between awaits are not lost", async () => {
+    expect(
+      await value(`
+        let total = 0
+        const work = async () => {
+          await null
+          for (let i = 0; i < 1000; i++) total = total + 1
+        }
+        await Promise.all([work(), work()])
+        return total
+      `),
+    ).toBe(2000)
+  })
+
+  test("an async function runs to its first await before its caller continues", async () => {
+    expect(
+      await value(`
+        let count = 0
+        const work = async () => {
+          for (let i = 0; i < 1000; i++) count = count + 1
+          await null
+        }
+        work()
+        return count
+      `),
+    ).toBe(1000)
+  })
+
+  test("a combinator's reaction runs after the continuations a preempted job queued first", async () => {
+    for (const op of ["race", "any", "all", "allSettled"]) {
+      expect(
+        await value(`
+          const burn = () => { for (let i = 0; i < 400; i++) {} }
+          const log = []
+          const settled = Promise.${op}([{ then(resolve) { burn(); resolve(1) } }]).then(() => log.push("result"))
+          const job = (async () => { await null; burn(); log.push("b0"); await null; log.push("b1") })()
+          await Promise.all([settled, job])
+          return log
+        `),
+      ).toEqual(["b0", "b1", "result"])
+    }
+  })
+
+  test("a job that never awaits still times out while other jobs wait for it", async () => {
+    const failure = await error(
+      `
+        const spin = async () => { await null; while (true) {} }
+        const quick = async () => { await null; return 1 }
+        return await Promise.all([spin(), quick(), quick()])
+      `,
+      { limits: { timeoutMs: 100 } },
+    )
+    expect(failure.kind).toBe("TimeoutExceeded")
+  })
+})
