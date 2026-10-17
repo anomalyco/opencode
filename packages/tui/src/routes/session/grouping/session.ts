@@ -90,10 +90,15 @@ export function partPath(part: AppendPart, verbosity: Verbosity): readonly Group
   return activity
 }
 
-/** Instruction loads group; other messages stand alone. */
+/** Instruction loads group; instruction updates join Low activity without hiding their details. */
 export function messagePath(message: SessionMessageInfo, verbosity: Verbosity): readonly GroupKind[] {
+  if (isInstructionUpdate(message)) return verbosity === "low" ? ["activity"] : []
   if (instructionPaths(message).length === 0) return []
   return verbosity === "low" ? ["activity", "instructions"] : ["instructions"]
+}
+
+export function isInstructionUpdate(message: SessionMessageInfo | undefined) {
+  return message?.type === "system" && message.metadata?.notice === "instructions"
 }
 
 /** Files loaded by an instruction message; one load can carry several. */

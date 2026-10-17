@@ -161,7 +161,7 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
     on(
       () =>
         data.session.message.list(sessionID()).flatMap((message) =>
-          message.type === "user" || message.type === "synthetic"
+          message.type === "user" || message.type === "synthetic" || message.type === "system"
             ? [
                 {
                   id: message.id,
@@ -191,6 +191,10 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
         if (draft.some((row) => row.type === "message" && row.messageID === messageID)) return
         const pending = isPending(messageID)
         const message = data.session.message.get(sessionID(), messageID)
+        if (message && messagePath(message, verbosity()).length) {
+          draft.splice(0, draft.length, ...reduce())
+          return
+        }
         const index =
           message?.type === "compaction" && pending ? queuedStart(draft) : pending ? draft.length : queuedStart(draft)
         if (!pending) completePrevious(draft, index)

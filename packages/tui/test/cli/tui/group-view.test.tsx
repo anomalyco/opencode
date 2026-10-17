@@ -300,6 +300,49 @@ test("failed low activity uses a disclosure icon and keeps details expandable", 
   }
 })
 
+test("low activity shows an update in its summary and reveals the changed sources on expansion", async () => {
+  const anchors = createTimelineAnchors()
+  const [expanded, setExpanded] = createStore<Record<string, boolean>>({})
+  const update: SessionMessageInfo = {
+    id: "updated",
+    type: "system",
+    text: "Updated instructions",
+    description: "Instructions updated: core/codemode, core/mcp-guidance",
+    metadata: { notice: "instructions", instructionSources: ["core/codemode", "core/mcp-guidance"] },
+    time: { created: 1 },
+  }
+  const row: SessionGroup = {
+    type: "group",
+    kind: "activity",
+    size: 1,
+    completed: true,
+    pending: [],
+    children: [{ type: "entry", size: 1, entry: { type: "message", messageID: update.id } }],
+  }
+  const app = await mount({
+    row,
+    anchors,
+    config: createTuiResolvedConfig({ animations: false, session: { verbosity: "low" } }),
+    expanded: (id) => expanded[id],
+    setExpanded: (id, value) => setExpanded(id, value),
+    message: () => update,
+    entry: () => <text>{update.description}</text>,
+  })
+  try {
+    app.renderer.start()
+    await app.waitForFrame((frame) => frame.includes("1 other"))
+    expect(app.captureCharFrame()).toContain("+ 1 other")
+    expect(app.captureCharFrame()).not.toContain("core/codemode")
+    await app.mockMouse.click(4, anchors.get({ type: "group", groupID: groupID(row, 0)! })?.node.y ?? -1)
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("− 1 other")
+    expect(app.captureCharFrame()).toContain("Instructions updated: core/codemode,")
+    expect(app.captureCharFrame()).toContain("core/mcp-guidance")
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 function mount(input: {
   row: SessionGroup
   anchors: ReturnType<typeof createTimelineAnchors>
