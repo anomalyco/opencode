@@ -47,6 +47,7 @@ export interface FilesImpl {
   readonly remove: (path: string) => Effect.Effect<void, Failed>
   readonly move: (from: string, to: string) => Effect.Effect<void, NotFound | Failed>
   readonly mkdir: (path: string) => Effect.Effect<void, Failed>
+  readonly realPath: (path: string) => Effect.Effect<string, NotFound | Failed>
 }
 
 export interface Files extends FilesImpl {}

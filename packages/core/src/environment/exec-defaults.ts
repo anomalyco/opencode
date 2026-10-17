@@ -64,6 +64,17 @@ ${loadMetadata()}
 mv -- "$1" "$2"
 `
 
+const realPathScript = `
+{
+  err=$(realpath -z -e -- "$1" 2>&1 1>&3) || {
+    case "$err" in
+      *'No such file or directory'*|*'Not a directory'*) exit ${NOT_FOUND} ;;
+      *) printf '%s' "$err" >&2; exit ${FAILED} ;;
+    esac
+  }
+} 3>&1
+`
+
 interface Result {
   readonly exitCode: number
   readonly stdout: Uint8Array
@@ -144,7 +155,14 @@ export const execDefaults = (spawner: ChildProcessSpawner["Service"]): FilesImpl
     move: (from, to) =>
       run(from, moveScript, [to]).pipe(Effect.flatMap((result) => classifyPlain(from, result, () => undefined))),
     mkdir: (path) => run(path, `mkdir -p -- "$1"`).pipe(Effect.flatMap((result) => complete(path, result))),
+    realPath: (path) =>
+      run(path, realPathScript).pipe(Effect.flatMap((result) => classifyPlain(path, result, parseRealPath))),
   }
+}
+
+const parseRealPath = (bytes: Uint8Array): string => {
+  const length = bytes.length > 0 && bytes[bytes.length - 1] === 0 ? bytes.length - 1 : bytes.length
+  return new TextDecoder().decode(bytes.subarray(0, length))
 }
 
 /** `classify` for scripts whose protocol never reports WrongKind. */
