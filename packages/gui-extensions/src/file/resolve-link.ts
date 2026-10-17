@@ -7,9 +7,9 @@ export type ParsedFileLink = {
   readonly selection?: LineRange
 }
 
-/** What a relative path names in the workspace: one file, or several to pick from. */
+/** What a relative path names in the workspace: one path, or several to pick from. */
 export type FileLinkTarget =
-  | { readonly kind: "file"; readonly path: string }
+  | { readonly kind: "path"; readonly path: string }
   | { readonly kind: "picker"; readonly query: string }
 
 /**
@@ -29,8 +29,8 @@ export function isAbsoluteLink(path: string) {
 }
 
 /**
- * The workspace files a relative path names: the literal path when it exists, else every file whose path ends with
- * it. One file opens; several open the picker.
+ * The workspace paths a relative path names: the literal path when it exists, else every file or directory whose path ends with
+ * it. One path opens; several open the picker.
  */
 export async function findFileLink(input: {
   readonly files: Pick<Files, "search">
@@ -41,19 +41,19 @@ export async function findFileLink(input: {
 
   if (!query) return
 
-  const results = await input.files.search(query, { limit: 200, signal: input.signal }).catch(() => [])
+  const results = await input.files.search(query, { kind: "any", limit: 200, signal: input.signal }).catch(() => [])
   const matches = [...new Set(results)].filter((file) => file === query || file.endsWith(`/${query}`))
   const literal = matches.find((file) => file === query)
 
-  if (literal) return { kind: "file", path: literal }
+  if (literal) return { kind: "path", path: literal }
 
-  if (matches.length === 1 && matches[0]) return { kind: "file", path: matches[0] }
+  if (matches.length === 1 && matches[0]) return { kind: "path", path: matches[0] }
 
   if (matches.length > 1) return { kind: "picker", query }
 }
 
 /**
- * Whether a path named in a message is a file, without reading it: absolute paths by listing their directory,
+ * Whether a path named in a message exists, without reading it: absolute paths by listing their parent,
  * workspace paths by the search index.
  */
 export async function checkFileLinkExists(input: {

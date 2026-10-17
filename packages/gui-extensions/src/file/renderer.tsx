@@ -12,7 +12,7 @@ import {
 } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { Icon } from "@opencode/ui/icon"
-import { encodeFilePath, getFilename } from "@opencode/util/path"
+import { encodeFilePath, getDirectory, getFilename } from "@opencode/util/path"
 import {
   createKeyed,
   bindExtension,
@@ -521,7 +521,7 @@ const setup: Setup<typeof File> = (ctx) => {
       .catch(() => false)
   }
 
-  // Opens files the agent references as side panel tabs, inside or outside the workspace, or as
+  // Opens file and directory paths the agent references, inside or outside the workspace, or as
   // a browser tab for HTML when the desktop can load the file directly.
   ctx.add(LinkHandler, {
     match: () => true,
@@ -593,6 +593,56 @@ const setup: Setup<typeof File> = (ctx) => {
         })
       }
 
+      const openResolvedDirectory = async (targetPath: string) => {
+        const latest = stillCurrent()
+
+        if (!latest) return
+
+        if (files.absolute(targetPath)) {
+          if (ctx.desktop) await ctx.desktop.launch(targetPath).catch(() => undefined)
+
+          return
+        }
+
+        const segments = targetPath.replaceAll("\\", "/").split("/").filter(Boolean)
+
+        if (segments.length === 0) return
+
+        batch(() => {
+          updateFilter(latest.key, { text: "", browsing: false })
+          shared.tree.setTab("all")
+          layout.open(`file:${OPEN}`, latest, { background: link.background })
+
+          if (layout.narrow() && !layout.side.opened(latest)) layout.side.toggle(latest)
+        })
+
+        await files.tree.sync("")
+
+        let current = ""
+
+        for (const segment of segments) {
+          current = current ? `${current}/${segment}` : segment
+          await files.tree.sync(current)
+          files.tree.expand(current, { list: false })
+        }
+      }
+
+      const openResolvedPath = async (targetPath: string, selection?: LineRange) => {
+        const parent = getDirectory(targetPath)
+        await files.tree.sync(parent, { force: true })
+        const expected = targetPath.replaceAll("\\", "/")
+        const directory =
+          files.tree
+            .list(parent)
+            .find((entry) => entry.path.replaceAll("\\", "/") === expected)?.type === "directory"
+
+        if (!stillCurrent()) return
+        // Directories have no file tab; show workspace folders in the tree or launch external folders.
+        if (directory) return openResolvedDirectory(targetPath)
+
+        await openResolvedFile(targetPath, selection)
+      }
+
       void (async () => {
         const { findFileLink, isAbsoluteLink, parseFileLink } = await import("./resolve-link")
 
@@ -605,7 +655,7 @@ const setup: Setup<typeof File> = (ctx) => {
 
         // Absolute paths, links written relative to a document, and agent previews name one exact file.
         if (isAbsoluteLink(parsed.path) || link.base !== undefined || link.background) {
-          await openResolvedFile(direct, parsed.selection)
+          await openResolvedPath(direct, parsed.selection)
 
           return
         }
@@ -622,7 +672,7 @@ const setup: Setup<typeof File> = (ctx) => {
         }
 
         // With no match, the literal path still covers files the search index skips, such as an ignored `.env`.
-        await openResolvedFile(target?.path ?? direct, parsed.selection)
+        await openResolvedPath(target?.path ?? direct, parsed.selection)
       })()
     },
   })

@@ -17,13 +17,13 @@ const fileNames = new Set([
 ])
 
 /**
- * `url` for an http(s) URL, `path` for anything that could name a file. A `path` only becomes a link once the host
- * confirms the file exists, so this stays a cheap syntax check.
+ * `url` for an http(s) URL, `path` for anything that could name a path. A `path` only becomes a link once the host
+ * confirms the path exists, so this stays a cheap syntax check.
  */
 export function inlineCodeKind(text: string): "path" | "url" | undefined {
   if (/^https?:\/\//i.test(text)) return "url"
 
-  if (!text || /\s/.test(text) || /^[a-z][a-z0-9+.-]*:\/\//i.test(text)) return
+  if (!text || /^[a-z][a-z0-9+.-]*:\/\//i.test(text)) return
 
   // Code, globs and markup, not paths.
   if (/[{}<>"'`;=|&*,]/.test(text)) return

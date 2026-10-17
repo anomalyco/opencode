@@ -206,10 +206,10 @@ export interface Files {
     },
   ): Promise<void>
   /**
-   * Whether a file exists, checked by listing its directory without reading the file.
+   * Whether a file or directory exists, checked by listing its parent without reading file contents.
    *
    * @param path - A workspace-relative or absolute path.
-   * @returns False when the file is missing or its directory cannot be listed.
+   * @returns False when the path is missing or its parent cannot be listed.
    */
   exists(path: string): Promise<boolean>
   /**
