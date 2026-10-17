@@ -29,6 +29,7 @@ const selection = {
   set() {},
   visible: () => true,
   setVisibility() {},
+  setProviderVisibility() {},
   variant: {
     configured: () => undefined,
     selected: () => "balanced",

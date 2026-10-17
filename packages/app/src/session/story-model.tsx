@@ -65,6 +65,7 @@ const modelSelection = {
   set() {},
   visible: () => true,
   setVisibility() {},
+  setProviderVisibility() {},
   variant: {
     configured: () => STORY_MODEL.variant,
     selected: () => STORY_MODEL.variant,
