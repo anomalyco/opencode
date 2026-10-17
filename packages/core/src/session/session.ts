@@ -1,10 +1,11 @@
 export * as Session from "./session.js"
 
-import { DateTime, Effect, Fiber, Scope } from "effect"
+import { DateTime, Effect, Fiber, Scope, Semaphore } from "effect"
 import type { Agent } from "@opencode/schema/agent"
 import type { Model } from "@opencode/schema/model"
 import type { Permission } from "@opencode/schema/permission"
 import { Event } from "@opencode/schema/event"
+import { SessionStatusEvent } from "@opencode/schema/session-status-event"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Bus } from "../bus.js"
 import { Database } from "../database/database.js"
@@ -29,6 +30,7 @@ import { SessionShell } from "./shell.js"
 import { SessionSkill } from "./skill.js"
 import { SessionSchema } from "./schema.js"
 import { SessionStore } from "./store.js"
+import { readiness } from "../readiness.js"
 
 type PromptRequest = SessionPrompt.Input & {
   id?: SessionMessage.ID
@@ -48,6 +50,11 @@ export const make = Effect.fn("Session.make")(function* () {
   const admission = yield* SessionInbox.Service
   const fs = yield* FSUtil.Service
   const scope = yield* Scope.Scope
+  const preparing = new Map<SessionSchema.ID, number>()
+  // Sessions with a settlement waiter already in flight: at most one per busy period.
+  const settling = new Set<SessionSchema.ID>()
+  // Serialize only status bookkeeping/publication, never location boot or preparation.
+  const statusLock = Semaphore.makeUnsafe(1)
 
   const get = Effect.fn("Session.get")(function* (sessionID: SessionSchema.ID) {
     const session = yield* store.get(sessionID)
@@ -143,8 +150,9 @@ export const make = Effect.fn("Session.make")(function* () {
     Effect.uninterruptible,
   )
   const prompt = Effect.fn("Session.prompt")((sessionID: SessionSchema.ID, input: PromptRequest) =>
-    Effect.uninterruptibleMask((restore) =>
-      Effect.gen(function* () {
+    Effect.uninterruptibleMask((restore) => {
+      let accepted: SessionSchema.Info | undefined
+      return Effect.gen(function* () {
         const session = yield* get(sessionID)
         const messageID = input.id ?? SessionMessage.ID.create()
         const admitted = yield* Effect.gen(function* () {
@@ -155,8 +163,15 @@ export const make = Effect.fn("Session.make")(function* () {
             delivery: input.delivery ?? "steer",
           })
           if (existing) return existing
+          // Ephemeral only: do not claim durable execution before admission succeeds.
+          yield* statusLock.withPermit(Effect.gen(function* () {
+            preparing.set(sessionID, (preparing.get(sessionID) ?? 0) + 1)
+            accepted = session
+            yield* Effect.logInfo("runtime prompt accepted before activation", { sessionID, messageID, statusSerialized: true })
+            yield* bus.publish(SessionStatusEvent.Status, { sessionID, status: { type: "busy" } }, { location: session.location })
+          }))
           const item = yield* restore(
-            SessionPrompt.prepare({ session, messageID, input }).pipe(
+            readiness("prompt.prepare", { sessionID, messageID, directory: session.location.directory }, SessionPrompt.prepare({ session, messageID, input })).pipe(
               Effect.provideService(Instance.Service, instances),
               Effect.provideService(FSUtil.Service, fs),
             ),
@@ -173,8 +188,34 @@ export const make = Effect.fn("Session.make")(function* () {
         )
         if (input.resume !== false) yield* execution.wake(sessionID)
         return admitted
-      }),
-    ),
+      }).pipe(Effect.ensuring(statusLock.withPermit(Effect.gen(function* () {
+        if (!accepted) return
+        const remaining = (preparing.get(sessionID) ?? 1) - 1
+        if (remaining > 0) {
+          preparing.set(sessionID, remaining)
+          return
+        }
+        preparing.delete(sessionID)
+        if (yield* execution.isActive(sessionID)) {
+          // A woken execution owns the busy period now; clear the status once it settles.
+          if (settling.has(sessionID)) return
+          settling.add(sessionID)
+          const location = accepted.location
+          yield* Effect.gen(function* () {
+            yield* execution.awaitIdle(sessionID)
+            yield* statusLock.withPermit(Effect.gen(function* () {
+              settling.delete(sessionID)
+              // A newer preparation or execution owns the busy period; its own cleanup publishes idle.
+              if (preparing.has(sessionID)) return
+              if (yield* execution.isActive(sessionID)) return
+              yield* bus.publish(SessionStatusEvent.Status, { sessionID, status: { type: "idle" } }, { location })
+            }))
+          }).pipe(Effect.forkIn(scope, { startImmediately: true }))
+          return
+        }
+        yield* bus.publish(SessionStatusEvent.Status, { sessionID, status: { type: "idle" } }, { location: accepted.location })
+      }))))
+    }),
   )
   const shell = Effect.fn("Session.shell")(function* (
     sessionID: SessionSchema.ID,
