@@ -139,7 +139,7 @@ describe("current native and legacy parity gaps", () => {
       name: "native omits the legacy empty command-name node for an assignment with redirection",
       shell: "bash",
       command: "FOO=bar > output",
-      legacy: { commands: [{ resource: "FOO=bar > output", save: " *" }], directories: [] },
+      legacy: { commands: [{ resource: "FOO=bar > output" }], directories: [] },
       native: { commands: [], directories: [] },
     },
     {
@@ -147,10 +147,7 @@ describe("current native and legacy parity gaps", () => {
       shell: "bash",
       command: "FOO=$(printf value) > output",
       legacy: {
-        commands: [
-          { resource: "FOO=$(printf value) > output", save: " *" },
-          { resource: "printf value", save: "printf *" },
-        ],
+        commands: [{ resource: "FOO=$(printf value) > output" }, { resource: "printf value", save: "printf *" }],
         directories: [],
       },
       native: { commands: [{ resource: "printf value", save: "printf *" }], directories: [] },

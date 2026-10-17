@@ -17,6 +17,8 @@ type Command = {
   rawWords: string[]
   // Exclusive raw-token ends relative to resource, for source-shaped permission prefixes.
   wordEnds?: number[]
+  // Executable offset within resource for assignment-prefixed commands.
+  commandOffset?: number
   statementHead?: true
   declaration?: true
   // Words after a trailing redirect are destinations in the legacy command span.
@@ -175,6 +177,7 @@ type BashState = {
   wordStart: number
   wordEnd: number
   commandStart: number | undefined
+  executableStart: number | undefined
   commandEnd: number
   resourceEnd: number | undefined
   redirectWordCount: number | undefined
@@ -263,7 +266,10 @@ function finishBashWord(state: BashState) {
   const repeatHeader = structure?.kind === "repeat" && structure.phase === "header"
   if (!state.redirectTarget && repeatHeader) structure.phase = "do"
   if (!state.redirectTarget && !repeatHeader) {
-    if (!state.assignmentWord && state.commandWordIndex < 0) state.commandWordIndex = state.words.length
+    if (!state.assignmentWord && state.commandWordIndex < 0) {
+      state.commandWordIndex = state.words.length
+      state.executableStart = state.wordStart
+    }
     state.commandStart ??= state.wordStart
     state.words.push(state.word)
     // Unquoted trailing continuations are ignored syntax, not part of the raw token.
@@ -350,13 +356,17 @@ function finishBashCommand(state: BashState, boundary = false) {
   const inHeader = bashInHeader(state)
   if (name >= 0 && !state.words[name]) state.invalid ??= "invalid-structure"
   if (name >= 0 && !inHeader) {
-    const resource = state.input
-      .slice(state.commandStart, state.resourceEnd ?? state.wordEnd)
-      .replace(/^[ \t\n]+|[ \t\n]+$/g, "")
+    const raw = state.input.slice(state.commandStart, state.resourceEnd ?? state.wordEnd)
+    const resource = raw.replace(/^[ \t\n]+|[ \t\n]+$/g, "")
+    const offset =
+      state.executableStart === undefined || state.commandStart === undefined
+        ? 0
+        : state.executableStart - (state.commandStart + (/^[ \t\n]*/.exec(raw)?.[0].length ?? 0))
     const command: Command = {
       resource,
       words: state.words.slice(name),
       rawWords: state.rawWords.slice(name),
+      ...(name > 0 && offset > 0 && offset <= resource.length ? { commandOffset: offset } : {}),
       ...(name === 0 && BASH_DECLARATIONS.has(state.rawWords[0]) && resource.startsWith(state.rawWords[0])
         ? { declaration: true as const }
         : {}),
@@ -419,6 +429,7 @@ function finishBashCommand(state: BashState, boundary = false) {
   state.rawWords.length = 0
   state.commandWordIndex = -1
   state.commandStart = undefined
+  state.executableStart = undefined
   state.hasRedirect = false
   state.resourceEnd = undefined
   state.redirectWordCount = undefined
@@ -454,6 +465,7 @@ function scanBash(
     wordStart: start,
     wordEnd: start,
     commandStart: undefined,
+    executableStart: undefined,
     commandEnd: start,
     resourceEnd: undefined,
     redirectWordCount: undefined,

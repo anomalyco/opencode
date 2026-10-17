@@ -289,6 +289,75 @@ const runPermissionCommand = (
     return { exit, requests }
   }).pipe(Effect.scoped, Effect.timeout(Duration.seconds(5)))
 
+// Real approval lifecycle shared by the scoped env-prefix and bash here-string cases: an `always` reply stores the
+// literal proposal, repeats stay unprompted, out-of-scope commands still ask, and a raw deny then blocks the command.
+const scopedApprovalRoundTrip = (
+  registry: Tool.Interface,
+  fixture: { active: string },
+  scenario: {
+    command: string
+    proposal: string
+    repeats: ReadonlyArray<readonly [string, string]>
+    negatives: ReadonlyArray<string>
+  },
+) =>
+  Effect.gen(function* () {
+    const saved = yield* PermissionSaved.Service
+    const marker = path.join(fixture.active, "marker")
+    const first = yield* runPermissionCommand(registry, scenario.command, marker, ["always"])
+    expect(first.exit).toMatchObject({
+      _tag: "Success",
+      value: { status: "completed", metadata: { exit: 0 } },
+    })
+    expect(yield* Effect.promise(() => Bun.file(marker).text())).toBe("hello")
+
+    for (const [approved, output] of scenario.repeats) {
+      yield* Effect.promise(() => fs.rm(marker, { force: true }))
+      const repeat = yield* runPermissionCommand(registry, approved, marker, [])
+      expect(repeat.requests, approved).toEqual([])
+      expect(repeat.exit, approved).toMatchObject({
+        _tag: "Success",
+        value: { status: "completed", metadata: { exit: 0 } },
+      })
+      expect(yield* Effect.promise(() => Bun.file(marker).text()), approved).toBe(output)
+    }
+
+    // Deferred so a regression fails as an unexpected repeat prompt, not only as a proposal mismatch.
+    expect(first.requests).toMatchObject([
+      { action: "shell", resources: [scenario.command], save: [scenario.proposal] },
+    ])
+    expect((yield* saved.list()).map((item) => item.resource)).toEqual([scenario.proposal])
+
+    yield* Effect.promise(() => fs.rm(marker, { force: true }))
+    for (const negative of scenario.negatives) {
+      const result = yield* runPermissionCommand(registry, negative, marker, ["reject"])
+      expect(result.requests, negative).toHaveLength(1)
+      expect(result.requests[0]?.resources, negative).toEqual([negative])
+      expect(Exit.isFailure(result.exit), negative).toBe(true)
+      expect(yield* Effect.promise(() => Bun.file(marker).exists()), negative).toBe(false)
+    }
+  })
+
+// Applied after the scoped grant exists, so this proves raw resource authority still outranks it.
+const blockedByRawDeny = (registry: Tool.Interface, fixture: { active: string }, command: string) =>
+  Effect.gen(function* () {
+    const marker = path.join(fixture.active, "marker")
+    const agents = yield* Agent.Service
+    yield* agents.transform((editor) =>
+      editor.update(toolIdentity.agent, (agent) => {
+        agent.permissions = [{ action: "shell", resource: command, effect: "deny" }]
+      }),
+    )
+    yield* Effect.promise(() => fs.rm(marker, { force: true }))
+    const denied = yield* runPermissionCommand(registry, command, marker, [])
+    expect(denied.requests).toEqual([])
+    expect(denied.exit).toMatchObject({
+      _tag: "Success",
+      value: { status: "error", error: { message: expect.stringContaining("Permission denied: shell") } },
+    })
+    expect(yield* Effect.promise(() => Bun.file(marker).exists())).toBe(false)
+  })
+
 // Directory cases still document inherited limitations; fixed scanner cases require matching behavior.
 describe("ShellTool scanner permissions", () => {
   const test = isWindows || !Bun.which("sh") ? permissionIt.live.skip : permissionIt.live
@@ -523,6 +592,87 @@ describe("ShellTool scanner permissions", () => {
             expect(yield* Effect.promise(() => Bun.file(marker).text())).toBe("reached")
           }
         }),
+      ))
+
+    test(`${scanner}: environment prefixes persist scoped approval and preserve raw deny`, () =>
+      withScanner(portable, (registry, fixture) =>
+        Effect.gen(function* () {
+          const saved = yield* PermissionSaved.Service
+          const location = yield* Location.Service
+          const marker = path.join(fixture.active, "marker")
+          yield* scopedApprovalRoundTrip(registry, fixture, {
+            command: "FOO=bar printf hello > marker",
+            proposal: "FOO=bar printf *",
+            repeats: [
+              ["FOO=bar printf hello > marker", "hello"],
+              ["FOO=bar printf bye > marker", "bye"],
+            ],
+            negatives: [
+              "FOO=bar BAZ=qux printf hello > marker",
+              "FOO=bar echo hello > marker",
+              "printf hello > marker",
+            ],
+          })
+
+          yield* saved.add({ projectID: location.project.id, action: "shell", resources: ["printf *"] })
+          const changed = yield* runPermissionCommand(registry, "FOO=baz printf hello > marker", marker, ["once"])
+          expect(changed.requests).toHaveLength(1)
+          expect(changed.exit).toMatchObject({
+            _tag: "Success",
+            value: { status: "completed", metadata: { exit: 0 } },
+          })
+
+          yield* blockedByRawDeny(registry, fixture, "FOO=bar printf hello > marker")
+        }),
+      ))
+
+    test(`${scanner}: environment prefixes with unsafe characters omit save without skipping authorization`, () =>
+      withScanner(portable, (registry, fixture) =>
+        Effect.gen(function* () {
+          const saved = yield* PermissionSaved.Service
+          const marker = path.join(fixture.active, "marker")
+          const command = 'FOO="a*b" printf hello > marker'
+          const first = yield* runPermissionCommand(registry, command, marker, ["always"])
+          expect(first.requests).toMatchObject([{ action: "shell", resources: [command], save: [] }])
+          expect(first.exit).toMatchObject({
+            _tag: "Success",
+            value: { status: "completed", metadata: { exit: 0 } },
+          })
+          expect(yield* Effect.promise(() => Bun.file(marker).text())).toBe("hello")
+          expect(yield* saved.list()).toEqual([])
+
+          yield* Effect.promise(() => fs.rm(marker, { force: true }))
+          const second = yield* runPermissionCommand(registry, command, marker, ["reject"])
+          expect(second.requests).toMatchObject([{ action: "shell", resources: [command], save: [] }])
+          expect(Exit.isFailure(second.exit)).toBe(true)
+          expect(yield* Effect.promise(() => Bun.file(marker).exists())).toBe(false)
+          expect(yield* saved.list()).toEqual([])
+        }),
+      ))
+  }
+})
+
+describe("ShellTool bash here-string approvals", () => {
+  const test = isWindows || !Bun.which("bash") ? permissionIt.live.skip : permissionIt.live
+  for (const portable of [false, true]) {
+    const scanner = portable ? "native" : "legacy"
+    test(`${scanner}: a quoted here-string separator persists scoped approval and preserves raw deny`, () =>
+      withScanner(
+        portable,
+        (registry, fixture) =>
+          Effect.gen(function* () {
+            yield* scopedApprovalRoundTrip(registry, fixture, {
+              command: "A=x <<<';' printf hello > marker",
+              proposal: "A=x <<<';' printf *",
+              repeats: [
+                ["A=x <<<';' printf hello > marker", "hello"],
+                ["A=x <<<';' printf bye > marker", "bye"],
+              ],
+              negatives: ["A=y <<<';' printf hello > marker", "printf hello > marker"],
+            })
+            yield* blockedByRawDeny(registry, fixture, "A=x <<<';' printf hello > marker")
+          }),
+        "bash",
       ))
   }
 })
