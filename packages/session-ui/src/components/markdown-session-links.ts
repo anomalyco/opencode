@@ -22,6 +22,7 @@ export function markSessionLinks(root: HTMLElement) {
   const nodes: Text[] = []
 
   while (walker.nextNode()) {
+    // SAFETY: this walker only visits text nodes (NodeFilter.SHOW_TEXT).
     const node = walker.currentNode as Text
 
     if (node.parentElement?.closest("a, button, code, pre")) continue
@@ -42,6 +43,8 @@ export function markSessionLinks(root: HTMLElement) {
     fragment.append(node.data.slice(start))
     node.replaceWith(fragment)
   })
+
+  return nodes.length > 0
 }
 
 function sessionButton(id: string) {
