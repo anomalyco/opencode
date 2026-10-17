@@ -10,6 +10,7 @@ export default {
   mcp: "MCP",
   "mcp.title": "已設定的 MCP 伺服器",
   "mcp.empty": "尚未設定任何 MCP 伺服器",
+  "mcp.onCreation": "建立工作樹時套用",
   plugins: "外掛程式",
   "plugins.configured": "已設定的外掛程式",
   "plugins.empty": "尚未設定任何外掛程式",

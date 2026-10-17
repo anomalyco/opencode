@@ -10,6 +10,7 @@ export default {
   mcp: "MCP",
   "mcp.title": "Sozlangan MCP serverlari",
   "mcp.empty": "Hech qanday MCP serveri sozlanmagan",
+  "mcp.onCreation": "Ish daraxti yaratilganda qo'llaniladi",
   plugins: "Plaginlar",
   "plugins.configured": "Sozlangan plaginlar",
   "plugins.empty": "Hech qanday plagin sozlanmagan",

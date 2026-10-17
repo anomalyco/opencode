@@ -10,6 +10,7 @@ export default {
   mcp: "MCP",
   "mcp.title": "Konfigurirani MCP poslužitelji",
   "mcp.empty": "Nema konfiguriranih MCP poslužitelja",
+  "mcp.onCreation": "Primjenjuje se pri kreiranju radna stabla",
   plugins: "Dodaci",
   "plugins.configured": "Konfigurirani dodaci",
   "plugins.empty": "Nema konfiguriranih dodataka",

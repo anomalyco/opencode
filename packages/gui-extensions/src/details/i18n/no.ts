@@ -10,6 +10,7 @@ export default {
   mcp: "MCP",
   "mcp.title": "Konfigurerte MCP-servere",
   "mcp.empty": "Ingen MCP-servere er konfigurert",
+  "mcp.onCreation": "Gjelder når arbeidsområdet er opprettet",
   plugins: "Plugins",
   "plugins.configured": "Konfigurerte plugins",
   "plugins.empty": "Ingen plugins er konfigurert",

@@ -10,6 +10,7 @@ export default {
   mcp: "MCP",
   "mcp.title": "Konfigureeritud MCP serverid",
   "mcp.empty": "MCP servereid pole konfigureeritud",
+  "mcp.onCreation": "Kehtib tööpuu loomisel",
   plugins: "Pluginad",
   "plugins.configured": "Konfigureeritud pluginad",
   "plugins.empty": "Ühtegi pluginat pole seadistatud",

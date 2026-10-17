@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test"
 import type { OpenCodeEvent, WorktreeDirectory } from "@opencode/client/promise"
 import { draftHref, expectPath, provider, sessionHref } from "../utils/app"
-import type { MockAnswer } from "../utils/mock-server"
+import type { MockServerConfig } from "../utils/mock-server"
 import { openDraft, openSession, openWorktreeDraft, type WorkspaceInput } from "../utils/workspace"
 
 const directory = "C:/OpenCode/WorkspacePending"
@@ -37,7 +37,7 @@ const pendingDraft = {
   createdSessionTitle: "Created workspace session",
 } satisfies WorkspaceInput & { draftID: string }
 
-const failFirstCreate = (_: unknown, attempt: number): MockAnswer | undefined =>
+const failFirstCreate: NonNullable<MockServerConfig["onSessionCreate"]> = (_, attempt) =>
   attempt === 1 ? { status: 500, body: { message: "Session creation failed in the fixture" } } : undefined
 
 test.use({
@@ -46,9 +46,65 @@ test.use({
   permissions: ["clipboard-read", "clipboard-write"],
 })
 
-test("the new session screen does not show session details", async ({ page }) => {
-  await openDraft(page, { name: "Summary" })
-  await expect(page.getByRole("button", { name: "Session details", exact: true })).toHaveCount(0)
+test("session details on the new session screen toggle an MCP server in the draft's directory", async ({ page }) => {
+  const writes: { path: string; directory: string | null }[] = []
+  page.on("request", (request) => {
+    const url = new URL(request.url())
+
+    if (request.method() !== "POST" || !url.pathname.startsWith("/api/experimental/mcp/")) return
+    writes.push({ path: url.pathname, directory: url.searchParams.get("location[directory]") })
+  })
+  const draft = await openDraft(page, { name: "Summary", mcp: [{ name: "figma", status: { status: "disabled" } }] })
+  await page.getByRole("button", { name: "Session details", exact: true }).click()
+  await expect(page.getByRole("dialog", { name: "Session details", exact: true })).toBeVisible()
+  await page.getByRole("button", { name: "MCP", exact: true }).click()
+  const toggle = page.getByRole("dialog", { name: "MCP", exact: true }).getByRole("switch", { name: "figma", exact: true })
+  await expect(toggle).not.toBeChecked()
+  await expect(toggle).toBeEnabled()
+
+  await toggle.press("Space")
+
+  await expect(toggle).toBeChecked()
+  await expect(toggle).toBeEnabled()
+  expect(writes).toEqual([{ path: "/api/experimental/mcp/figma/connect", directory: draft.directory }])
+})
+
+test("MCP choices for a new worktree apply in the created worktree before the session starts", async ({ page }) => {
+  const order: string[] = []
+  page.on("request", (request) => {
+    const url = new URL(request.url())
+
+    if (request.method() !== "POST") return
+
+    if (url.pathname.startsWith("/api/experimental/mcp/"))
+      order.push(`${url.pathname} ${url.searchParams.get("location[directory]")}`)
+
+    if (url.pathname === "/api/session") order.push("session")
+  })
+  const mock = await openWorktreeDraft(page, { ...pendingDraft, mcp: [{ name: "figma", status: { status: "connected" } }] })
+  await page.getByRole("button", { name: "Session details", exact: true }).click()
+  const details = page.getByRole("dialog", { name: "Session details", exact: true })
+  await expect(details.getByText("New worktree", { exact: true })).toBeVisible()
+  await details.getByRole("button", { name: "MCP", exact: true }).click()
+  const submenu = page.getByRole("dialog", { name: "MCP", exact: true })
+  const toggle = submenu.getByRole("switch", { name: "figma", exact: true })
+  await expect(toggle).toHaveAccessibleDescription("Applies when the worktree is created")
+  await expect(toggle).toBeChecked()
+
+  await toggle.press("Space")
+
+  await expect(toggle).not.toBeChecked()
+  await page.keyboard.press("Escape")
+  await expect(submenu).toBeHidden()
+  await page.keyboard.press("Escape")
+  await expect(details).toBeHidden()
+  expect(order).toEqual([])
+
+  await submitPending(page, mock)
+  mock.worktree.resolve({ status: 200, json: { directory: workspace } })
+
+  await expect.poll(() => mock.prompts.length).toBe(1)
+  expect(order).toEqual([`/api/experimental/mcp/figma/disconnect ${workspace}`, "session"])
 })
 
 test("the dark new session panel exposes no lighter background at its rounded corners", async ({ page }) => {
@@ -396,7 +452,7 @@ test("executes a selected slash command after creating its worktree", async ({ p
         inboxID: "msg_workspace_review",
         item: { type: "user", payload: { text: expanded }, delivery: "steer" },
       },
-    } as OpenCodeEvent,
+    } satisfies OpenCodeEvent,
   ])
   await expect(pending.shimmer).toHaveCount(0)
   await expect(page.locator('[data-slot="user-message-text"]')).toHaveText(expanded)
@@ -482,7 +538,7 @@ for (const row of [
         type: "worktree.updated",
         data: { projectID: "proj_workspaceaccent" },
       },
-    ] as OpenCodeEvent[])
+    ] satisfies OpenCodeEvent[])
     expect((await refreshed).ok()).toBe(true)
     await expect(page).toHaveURL(url)
     await expect(view.editor).toHaveText("Inspect this fixture workspace.")
@@ -495,7 +551,7 @@ for (const row of [
         durable: { aggregateID: "ses_workspace_accent", seq: 1, version: 1 },
         data: { sessionID: "ses_workspace_accent" },
       },
-    ] as OpenCodeEvent[])
+    ] satisfies OpenCodeEvent[])
     await view.editor.fill("")
     const stop = composer.getByRole("button", { name: "Stop", exact: true })
     await expect(stop).toBeEnabled()
@@ -511,7 +567,7 @@ function renamed(sessionID: string) {
     location: { directory: workspace },
     durable: { aggregateID: sessionID, seq: 1, version: 1 },
     data: { sessionID, title: "Generated session title" },
-  } as OpenCodeEvent
+  } satisfies OpenCodeEvent
 }
 
 async function draftFollowUp(page: Page) {

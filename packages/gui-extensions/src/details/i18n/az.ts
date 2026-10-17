@@ -10,6 +10,7 @@ export default {
   mcp: "MCP",
   "mcp.title": "Konfiqurasiya edilmiş MCP serverləri",
   "mcp.empty": "MCP serverləri konfiqurasiya edilməyib",
+  "mcp.onCreation": "İş ağacı yaradıldıqda tətbiq olunur",
   plugins: "Pluginlər",
   "plugins.configured": "Konfiqurasiya edilmiş pluginlər",
   "plugins.empty": "Heç bir plagin qurulmayıb",

@@ -10,6 +10,7 @@ export default {
   mcp: "MCP",
   "mcp.title": "কনফিগার করা MCP সার্ভার",
   "mcp.empty": "কোনো MCP সার্ভার কনফিগার করা হয়নি৷",
+  "mcp.onCreation": "ওয়ার্কট্রি তৈরি হলে প্রযোজ্য",
   plugins: "প্লাগইন",
   "plugins.configured": "কনফিগার করা প্লাগইন",
   "plugins.empty": "কোনো প্লাগইন কনফিগার করা নেই",

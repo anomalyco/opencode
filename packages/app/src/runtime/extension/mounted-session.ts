@@ -17,19 +17,18 @@ import type {
   Composer,
   Files,
   LineRange,
-  ServerRef,
   MountedSession,
   SessionScreen,
 } from "@opencode/gui-extensions/sdk"
 import { useComments } from "@/composer/comments"
 import { useComposerState } from "@/composer/persistence"
 import { useServer } from "@/runtime/server/current"
-import { ServerConnection, serverName } from "@/runtime/server/registry"
 import { sessionInWorkspace, sessionProject, type SessionModel } from "@/session/model"
 import { useFile } from "@/workspaces/files/model"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { pathKey } from "@/workspaces/path-key"
 import { useExtensionAttachment } from "./host-apis"
+import { createRouteServerRef } from "./server-ref"
 
 const noTasks: readonly BackgroundTask[] = []
 
@@ -50,38 +49,7 @@ export function createMountedSession(session: SessionModel) {
   // The composer region owns background tasks and is created after the view.
   const [background, setBackground] = createSignal<Accessor<readonly BackgroundTask[]>>()
 
-  const serverRef: ServerRef = {
-    get id() {
-      return server.key
-    },
-    get name() {
-      return serverName(server.conn) || server.key
-    },
-    get url() {
-      return server.ctx.sdk.url
-    },
-    get password() {
-      return server.conn.http.password
-    },
-    get client() {
-      return server.ctx.sdk.api
-    },
-    get data() {
-      return server.ctx.data
-    },
-    get local() {
-      return server.isLocal
-    },
-    get builtin() {
-      return ServerConnection.builtin(server.conn)
-    },
-    get compatible() {
-      return !server.health?.incompatible
-    },
-    get connected() {
-      return server.ctx.sdk.connection.status() === "connected"
-    },
-  }
+  const serverRef = createRouteServerRef()
 
   const files: Files = {
     get root() {

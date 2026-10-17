@@ -10,6 +10,7 @@ export default {
   mcp: "MCP",
   "mcp.title": "Конфигурисани MCP сервери",
   "mcp.empty": "Нема конфигурисаних MCP сервера",
+  "mcp.onCreation": "Примењује се при стварању радног стабла",
   plugins: "Додаци",
   "plugins.configured": "Конфигурисани додаци",
   "plugins.empty": "Нема конфигурисаних додатака",

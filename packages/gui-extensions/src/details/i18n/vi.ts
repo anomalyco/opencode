@@ -10,6 +10,7 @@ export default {
   mcp: "MCP",
   "mcp.title": "Máy chủ MCP đã cấu hình",
   "mcp.empty": "Chưa cấu hình máy chủ MCP nào",
+  "mcp.onCreation": "Áp dụng khi worktree được tạo",
   plugins: "Tiện ích",
   "plugins.configured": "Tiện ích đã cấu hình",
   "plugins.empty": "Chưa cấu hình tiện ích nào",

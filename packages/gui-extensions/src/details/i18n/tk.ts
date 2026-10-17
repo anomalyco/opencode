@@ -10,6 +10,7 @@ export default {
   mcp: "MCP",
   "mcp.title": "Sazlanan MCP serwerleri",
   "mcp.empty": "Hiç hili MCP serweri düzülmedi",
+  "mcp.onCreation": "Iş agajy döredilende ulanylýar",
   plugins: "Pluginler",
   "plugins.configured": "Sazlanan pluginler",
   "plugins.empty": "Hiç hili plugin düzülmedi",

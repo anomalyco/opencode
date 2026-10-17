@@ -10,6 +10,7 @@ export default {
   mcp: "MCP",
   "mcp.title": "Серверҳои танзимшудаи MCP",
   "mcp.empty": "Ягон сервери MCP танзим карда нашудааст",
+  "mcp.onCreation": "Ҳангоми сохтани дарахти корӣ татбиқ мешавад",
   plugins: "Плагинҳо",
   "plugins.configured": "Плагинҳои танзимшуда",
   "plugins.empty": "Ягон плагинҳо танзим карда нашудаанд",

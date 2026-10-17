@@ -10,6 +10,7 @@ export default {
   mcp: "MCP",
   "mcp.title": "कॉन्फ़िगर किए गए MCP सर्वर",
   "mcp.empty": "कोई MCP सर्वर कॉन्फ़िगर नहीं किया गया",
+  "mcp.onCreation": "वर्कट्री बनने पर लागू होता है",
   plugins: "प्लग-इन",
   "plugins.configured": "कॉन्फ़िगर किए गए प्लगइन्स",
   "plugins.empty": "कोई प्लगइन्स कॉन्फ़िगर नहीं किया गया",

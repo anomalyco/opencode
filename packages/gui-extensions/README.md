@@ -133,6 +133,7 @@ flowchart LR
 - Renders stay mounted. The host hands them the next object through a reactive getter, so read `props.session` (panels), `input.session` (slots) or `state.session` (tab labels) where you use it, and never copy it into a variable.
 - The workspace files, line comments and composer follow the route, so they belong to the session screen. An action through it targets the session routed at that moment. Read it inside a render or a handler, not once in setup. Key per-screen state, such as cached tab objects, by the screen; key per-session state by `session.key`.
 - `ctx.screen.current()` and `ctx.sessions.current()` are published together in one batched effect after the screen's first render, with v2's original session-mount timing. Renders already receive their owning screen and session directly. Both public accessors are undefined during the first render, on Home, on a draft, before the interface mounts and once the route leaves the mounted screen. The screen has no `session` property.
+- A draft on the new-session screen has neither. The `draft.header` slot gets a `Draft` instead: the server, project, directory, workspace and branch the session will start with, and its MCP choices, which apply when it starts. Its fields are getters that follow the user's selection; read `input.draft` where you use it.
 - All panel callbacks take one named input: `list({ session, screen, open })`, `render({ tab, session, screen })`, `focus({ tab, session, screen, restored })`, `close({ tab, session, screen })`, `normalize({ id, session, screen })`. Session fields are getters; the screen is the constant owning screen. Render tab fields are live getters too; lifecycle callbacks receive their event's tab. Stored ids and `restored` describe that call. Do not destructure live getters. Every `session.*` slot gets a non-null `screen`; `window.bottom` does not.
 - Render effects can run before public publication too: change-list views call `Changes.watch(input.screen, source)`, not `ctx.screen.current()`, so their first demand is never lost.
 - `fallback: true` opts a tab into selection when the stored selection is missing or cannot be selected; false or omission opts out. The host takes the first eligible regular tab, then a `first` tab, then a pinned tab, preserving order within each tier. Closing a tab still selects its neighbour.
@@ -213,18 +214,18 @@ SDK icon fields use `IconName` from `@opencode/ui/icons/catalog`, a dependency-f
 
 ### Registries
 
-| Registry                                | Process | What an item is                                                                             |
-| --------------------------------------- | ------- | ------------------------------------------------------------------------------------------- |
-| [`Command`](src/sdk/registries.ts)      | window  | A palette command with an optional keybind and slash command                                |
-| [`MenuItem`](src/sdk/registries.ts)     | window  | An item of a host menu: the side panel + menu, Add server, a server row                     |
-| [`Panel`](src/sdk/registries.ts)        | window  | Tabs in the session's side region, or the dock                                              |
-| [`SettingsPage`](src/sdk/registries.ts) | window  | A settings page, a section on a host page, or rows in a host section                        |
-| [`Server`](src/sdk/registries.ts)       | window  | A source of servers, such as SSH hosts                                                      |
-| [`LinkHandler`](src/sdk/registries.ts)  | window  | Opens local links, such as file paths in messages, and says whether their target exists     |
-| [`TitlebarItem`](src/sdk/registries.ts) | window  | A titlebar pill, or the dev channel badge as a toggle                                       |
-| [`Slot`](src/sdk/registries.ts)         | window  | Content for `window.bottom`, `session.header`, `session.panel.end`, `session.panel.sidebar` |
-| [`Style`](src/sdk/registries.ts)        | window  | CSS imported with `?inline`                                                                 |
-| [`MenubarItem`](src/sdk/main.ts)        | main    | An item of the native app menu                                                              |
+| Registry                                | Process | What an item is                                                                                             |
+| --------------------------------------- | ------- | ----------------------------------------------------------------------------------------------------------- |
+| [`Command`](src/sdk/registries.ts)      | window  | A palette command with an optional keybind and slash command                                                |
+| [`MenuItem`](src/sdk/registries.ts)     | window  | An item of a host menu: the side panel + menu, Add server, a server row                                     |
+| [`Panel`](src/sdk/registries.ts)        | window  | Tabs in the session's side region, or the dock                                                              |
+| [`SettingsPage`](src/sdk/registries.ts) | window  | A settings page, a section on a host page, or rows in a host section                                        |
+| [`Server`](src/sdk/registries.ts)       | window  | A source of servers, such as SSH hosts                                                                      |
+| [`LinkHandler`](src/sdk/registries.ts)  | window  | Opens local links, such as file paths in messages, and says whether their target exists                     |
+| [`TitlebarItem`](src/sdk/registries.ts) | window  | A titlebar pill, or the dev channel badge as a toggle                                                       |
+| [`Slot`](src/sdk/registries.ts)         | window  | Content for `window.bottom`, `session.header`, `draft.header`, `session.panel.end`, `session.panel.sidebar` |
+| [`Style`](src/sdk/registries.ts)        | window  | CSS imported with `?inline`                                                                                 |
+| [`MenubarItem`](src/sdk/main.ts)        | main    | An item of the native app menu                                                                              |
 
 ### Host APIs
 

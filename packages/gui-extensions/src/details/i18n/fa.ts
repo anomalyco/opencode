@@ -10,6 +10,7 @@ export default {
   mcp: "MCP",
   "mcp.title": "سرورهای MCP پیکربندی‌شده",
   "mcp.empty": "هیچ سرور MCPای پیکربندی نشده است",
+  "mcp.onCreation": "هنگام ایجاد درخت‌کار اعمال می‌شود",
   plugins: "افزونه‌ها",
   "plugins.configured": "افزونه‌های پیکربندی‌شده",
   "plugins.empty": "هیچ افزونه‌ای پیکربندی نشده است",

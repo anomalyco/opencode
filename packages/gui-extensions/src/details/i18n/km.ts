@@ -10,6 +10,7 @@ export default {
   mcp: "MCP",
   "mcp.title": "ម៉ាស៊ីនមេ MCP ដែលបានកំណត់រចនាសម្ព័ន្ធ",
   "mcp.empty": "មិនមានម៉ាស៊ីន​បម្រើ MCP ត្រូវបានកំណត់",
+  "mcp.onCreation": "អនុវត្តនៅពេល worktree ត្រូវបានបង្កើត",
   plugins: "ផ្លុយអ៊ីន",
   "plugins.configured": "ផ្លុយអ៊ីនដែលបានកំណត់រចនាសម្ព័ន្ធ",
   "plugins.empty": "មិនមានផ្លាតថ្ន័ណាមួយត្រូវបានកំណត់",

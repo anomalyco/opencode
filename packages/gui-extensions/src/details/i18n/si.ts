@@ -10,6 +10,7 @@ export default {
   mcp: "MCP",
   "mcp.title": "MCP සේවාදායක වින්‍යාස කර ඇත",
   "mcp.empty": "MCP සේවාදායක වින්‍යාස කර නැත",
+  "mcp.onCreation": "වැඩ ගස නිර්මාණය කරන විට අදාළ වේ",
   plugins: "ප්ලගීන",
   "plugins.configured": "වින්‍යාසගත ප්ලගීන",
   "plugins.empty": "ප්ලගින වින්‍යාස කර නැත",

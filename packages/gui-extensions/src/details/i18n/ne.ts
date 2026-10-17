@@ -10,6 +10,7 @@ export default {
   mcp: "MCP",
   "mcp.title": "कन्फिगर गरिएको MCP सर्भरहरू",
   "mcp.empty": "कुनै MCP सर्भरहरू कन्फिगर गरिएको छैन",
+  "mcp.onCreation": "worktree सिर्जना हुँदा लागू हुन्छ",
   plugins: "प्लगइनहरू",
   "plugins.configured": "कन्फिगर गरिएका प्लगइनहरू",
   "plugins.empty": "कुनै प्लगइनहरू कन्फिगर गरिएको छैन",

@@ -10,6 +10,7 @@ export default {
   mcp: "MCP",
   "mcp.title": "Тохируулагдсан MCP серверүүд",
   "mcp.empty": "MCP серверүүд тохируулагдаагүй",
+  "mcp.onCreation": "Ажиллаж буй модыг үүсгэсэн үед хэрэглэнэ",
   plugins: "Плагинууд",
   "plugins.configured": "Тохируулагдсан нэмэлт програмууд",
   "plugins.empty": "Плагинууд тохируулагдаагүй",

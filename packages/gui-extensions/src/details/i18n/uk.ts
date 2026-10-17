@@ -10,6 +10,7 @@ export default {
   mcp: "MCP",
   "mcp.title": "Налаштовані сервери MCP",
   "mcp.empty": "Не налаштовано серверів MCP",
+  "mcp.onCreation": "Застосовується при створенні робочого дерева",
   plugins: "Плагіни",
   "plugins.configured": "Налаштовані плагіни",
   "plugins.empty": "Не налаштовано плагінів",

@@ -10,6 +10,7 @@ export default {
   mcp: "MCP",
   "mcp.title": "Konfigurierte MCP-Server",
   "mcp.empty": "Keine MCP-Server konfiguriert",
+  "mcp.onCreation": "Gilt, wenn der Arbeitsbereich erstellt wird",
   plugins: "Plugins",
   "plugins.configured": "Konfigurierte Plugins",
   "plugins.empty": "Keine Plugins konfiguriert",

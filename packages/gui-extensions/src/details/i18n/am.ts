@@ -10,6 +10,7 @@ export default {
   mcp: "MCP",
   "mcp.title": "የተዋቀሩ MCP አገልጋዮች",
   "mcp.empty": "ምንም የMCP አገልጋዮች አልተዋቀሩም",
+  "mcp.onCreation": "የስራ ዛፉ ሲፈጠር ተፈጻሚ ይሆናል",
   plugins: "ተሰኪዎች",
   "plugins.configured": "የተዋቀሩ ተሰኪዎች",
   "plugins.empty": "ምንም ተሰኪዎች አልተዋቀሩ",

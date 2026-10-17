@@ -10,6 +10,7 @@ export default {
   mcp: "MCP",
   "mcp.title": "Konfiguroidut MCP-palvelimet",
   "mcp.empty": "MCP-palvelimia ei ole määritetty",
+  "mcp.onCreation": "Pätee, kun työtila luodaan",
   plugins: "Plugins",
   "plugins.configured": "Määritetyt laajennukset",
   "plugins.empty": "Mitään laajennuksia ei ole määritetty",

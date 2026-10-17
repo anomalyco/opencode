@@ -10,6 +10,7 @@ export default {
   mcp: "MCP",
   "mcp.title": "კონფიგურირებული MCP სერვერები",
   "mcp.empty": "MCP სერვერები კონფიგურირებული არაა",
+  "mcp.onCreation": "გამოიყენება, როდესაც სამუშაო ხე შეწყდება",
   plugins: "პულგინები",
   "plugins.configured": "კონფიგურირებული პულგინები",
   "plugins.empty": "პლაგინები არაა კონფიგურებული",

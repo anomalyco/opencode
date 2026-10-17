@@ -4,6 +4,7 @@ import { Icon } from "@opencode/ui/icon"
 import { Show, createMemo, createSignal } from "solid-js"
 import { Schema } from "effect"
 import createPresence from "solid-presence"
+import type { Draft } from "@opencode/gui-extensions/sdk"
 import { Composer } from "@/composer/composer"
 import { ComposerDropzone } from "@/composer/dropzone"
 import type { ComposerModel } from "@/composer/model"
@@ -17,6 +18,7 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useProviders } from "@/providers/catalog/providers"
 import { NEW_SESSION_CONTENT_WIDTH } from "@/new-session/layout"
+import { ExtensionSlot } from "@/runtime/extension/render"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
 import type { NewSessionWorkspaceController } from "./workspace/controller"
@@ -38,6 +40,7 @@ export function NewSessionView(props: {
   composer: ComposerModel
   project: PromptProjectController
   workspace: NewSessionWorkspaceController
+  draft: Draft
 }) {
   const [onboarding, setOnboarding, , onboardingReady] = persisted(
     Persist.global("workspace-onboarding"),
@@ -100,6 +103,10 @@ export function NewSessionView(props: {
               </Show>
             </div>
           </div>
+        </div>
+        {/* The session title row's height and end padding, so header popovers line up as they do in a session. */}
+        <div class="absolute end-0 top-0 flex h-12 items-center gap-2 pe-3">
+          <ExtensionSlot at="draft.header" input={{ draft: props.draft }} />
         </div>
         <NewSessionTips
           selection={props.composer.model.selection}
