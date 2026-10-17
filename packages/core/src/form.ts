@@ -106,6 +106,7 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const bus = yield* Bus.Service
     let closed = false
+    const settling = new Set<ID>()
     const forms = yield* Cache.makeWith<ID, Entry>(
       () => Effect.die(new Error("Form cache must be used via set/getSuccess, never get")),
       {
@@ -177,21 +178,36 @@ export const layer = Layer.effect(
       return (yield* requireEntry(id)).state
     })
 
+    const settle = Effect.fn("Form.settle")((entry: Entry, next: TerminalState) =>
+      Effect.uninterruptible(
+        Effect.gen(function* () {
+          const id = entry.form.id
+          if (entry.state.status !== "pending" || settling.has(id)) return yield* new AlreadySettledError({ id })
+          // Listeners run inline, so claim the entry before publication can suspend.
+          settling.add(id)
+          yield* Effect.gen(function* () {
+            if (next.status === "answered") {
+              yield* bus.publish(Form.Event.Replied, { id, sessionID: entry.form.sessionID, answer: next.answer })
+            }
+            if (next.status === "cancelled") {
+              yield* bus.publish(Form.Event.Cancelled, { id, sessionID: entry.form.sessionID })
+            }
+            yield* Cache.set(forms, id, { ...entry, state: next })
+            yield* Deferred.succeed(entry.deferred, next)
+          }).pipe(Effect.ensuring(Effect.sync(() => settling.delete(id))))
+        }),
+      ),
+    )
+
     const reply = Effect.fn("Form.reply")((input: ReplyInput) =>
       Effect.uninterruptible(
         Effect.gen(function* () {
           const entry = yield* requireEntry(input.id)
-          if (entry.state.status !== "pending") return yield* new AlreadySettledError({ id: input.id })
+          if (entry.state.status !== "pending" || settling.has(input.id))
+            return yield* new AlreadySettledError({ id: input.id })
           const invalid = validateAnswer(entry.form.fields, input.answer)
           if (invalid) return yield* new InvalidAnswerError({ id: input.id, message: invalid })
-          const next: TerminalState = { status: "answered", answer: input.answer }
-          yield* bus.publish(Form.Event.Replied, {
-            id: input.id,
-            sessionID: entry.form.sessionID,
-            answer: input.answer,
-          })
-          yield* Cache.set(forms, input.id, { ...entry, state: next })
-          yield* Deferred.succeed(entry.deferred, next)
+          yield* settle(entry, { status: "answered", answer: input.answer })
         }),
       ),
     )
@@ -200,14 +216,10 @@ export const layer = Layer.effect(
       Effect.uninterruptible(
         Effect.gen(function* () {
           const entry = yield* requireEntry(id)
-          if (entry.state.status !== "pending") return yield* new AlreadySettledError({ id })
-          const next: TerminalState = {
+          yield* settle(entry, {
             status: "cancelled",
             ...(options?.message === undefined ? {} : { message: options.message }),
-          }
-          yield* bus.publish(Form.Event.Cancelled, { id, sessionID: entry.form.sessionID })
-          yield* Cache.set(forms, id, { ...entry, state: next })
-          yield* Deferred.succeed(entry.deferred, next)
+          })
         }),
       ),
     )

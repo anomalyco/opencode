@@ -19,6 +19,46 @@ const input = {
 } satisfies Form.CreateInput
 
 describe("Form", () => {
+  for (const first of ["reply", "cancel"] as const) {
+    for (const second of ["reply", "cancel"] as const) {
+      it.effect(`settles once when ${second} races a publishing ${first}`, () =>
+        Effect.gen(function* () {
+          const service = yield* Form.Service
+          const bus = yield* Bus.Service
+          yield* service.create(input)
+          const publishing = yield* Deferred.make<void>()
+          const release = yield* Deferred.make<void>()
+          const events: string[] = []
+          const unsubscribe = yield* bus.listen((event) => {
+            if (event.type !== Form.Event.Replied.type && event.type !== Form.Event.Cancelled.type) return Effect.void
+            events.push(event.type)
+            if (events.length !== 1) return Effect.void
+            return Deferred.succeed(publishing, undefined).pipe(Effect.andThen(Deferred.await(release)))
+          })
+          yield* Effect.addFinalizer(() => unsubscribe)
+          const submit = (operation: "reply" | "cancel", name: string) =>
+            operation === "reply" ? service.reply({ id: formID, answer: { name } }) : service.cancel(formID)
+          const fiber = yield* submit(first, "Ava").pipe(Effect.forkScoped)
+          yield* Deferred.await(publishing)
+          const result = yield* submit(second, "Ben").pipe(Effect.exit)
+          yield* Deferred.succeed(release, undefined)
+          yield* Fiber.join(fiber)
+
+          expect(Exit.isFailure(result)).toBe(true)
+          if (Exit.isFailure(result))
+            expect(result.cause.reasons).toMatchObject([
+              { _tag: "Fail", error: new Form.AlreadySettledError({ id: formID }) },
+            ])
+          expect(events).toEqual([first === "reply" ? Form.Event.Replied.type : Form.Event.Cancelled.type])
+          expect(yield* service.list()).toEqual([])
+          expect(yield* service.state(formID)).toEqual(
+            first === "reply" ? { status: "answered", answer: { name: "Ava" } } : { status: "cancelled" },
+          )
+        }),
+      )
+    }
+  }
+
   it.effect("validates absolute URI formats without restricting schemes", () =>
     Effect.sync(() => {
       const fields = [{ key: "uri", type: "string", format: "uri" }] satisfies ReadonlyArray<Form.Field>
@@ -336,22 +376,32 @@ describe("Form", () => {
     }),
   )
 
-  it.effect("keeps forms pending when reply event publication fails", () =>
-    Effect.gen(function* () {
-      const service = yield* Form.Service
-      const bus = yield* Bus.Service
-      yield* service.create(input)
-      const unsubscribe = yield* bus.listen((event) =>
-        event.type === Form.Event.Replied.type ? Effect.die("reply listener failed") : Effect.void,
-      )
-      yield* Effect.addFinalizer(() => unsubscribe)
+  for (const operation of ["reply", "cancel"] as const) {
+    it.effect(`keeps forms pending when ${operation} event publication fails`, () =>
+      Effect.gen(function* () {
+        const service = yield* Form.Service
+        const bus = yield* Bus.Service
+        yield* service.create(input)
+        const unsubscribe = yield* bus.listen((event) =>
+          event.type === (operation === "reply" ? Form.Event.Replied.type : Form.Event.Cancelled.type)
+            ? Effect.die("settlement listener failed")
+            : Effect.void,
+        )
+        yield* Effect.addFinalizer(() => unsubscribe)
 
-      expect(Exit.isFailure(yield* Effect.exit(service.reply({ id: formID, answer: { name: "Ava" } })))).toBe(true)
-      expect(yield* service.state(formID)).toEqual({ status: "pending" })
+        expect(
+          Exit.isFailure(
+            yield* Effect.exit(
+              operation === "reply" ? service.reply({ id: formID, answer: { name: "Ava" } }) : service.cancel(formID),
+            ),
+          ),
+        ).toBe(true)
+        expect(yield* service.state(formID)).toEqual({ status: "pending" })
 
-      yield* unsubscribe
-      yield* service.reply({ id: formID, answer: { name: "Ava" } })
-      expect(yield* service.state(formID)).toEqual({ status: "answered", answer: { name: "Ava" } })
-    }),
-  )
+        yield* unsubscribe
+        yield* service.reply({ id: formID, answer: { name: "Ava" } })
+        expect(yield* service.state(formID)).toEqual({ status: "answered", answer: { name: "Ava" } })
+      }),
+    )
+  }
 })
