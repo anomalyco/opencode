@@ -1,3 +1,4 @@
+import { Session } from "@opencode/schema/session"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
 import { run } from "@opencode/tui"
@@ -50,7 +51,8 @@ export default Runtime.handler(Commands, (input) =>
         Effect.promise(() => preflight.fail("OpenCode update could not start the new background service")),
       ),
     )
-    const session = Option.getOrUndefined(input.session)
+    const sessionValue = Option.getOrUndefined(input.session)
+    const session = sessionValue === undefined ? undefined : Session.ID.make(sessionValue, { disableChecks: true })
     // A missing --session ID becomes the ID of the session the first prompt creates.
     const sessionExists =
       session !== undefined &&

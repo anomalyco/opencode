@@ -1,3 +1,4 @@
+import { Project } from "@opencode/schema/project"
 import { ClientError, OpenCode, type SessionStatsInfo } from "@opencode/client"
 import { Service } from "@opencode/client/effect/service"
 import { TokenUsage } from "@opencode/schema/token-usage"
@@ -36,7 +37,7 @@ const handler = Effect.fn("cli.stats")(function* (input: Runtime.Input<typeof Co
       {
         from: range.from,
         to: range.to,
-        project: projectID,
+        project: projectID === undefined ? undefined : Project.ID.make(projectID),
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
         tools: input.json || input.tools || input.full ? "detail" : details ? "none" : "summary",
       },

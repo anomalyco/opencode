@@ -1,3 +1,4 @@
+import { Session } from "@opencode/schema/session"
 import { autocomplete, cancel, intro, isCancel, log, outro } from "@clack/prompts"
 import { OpenCode } from "@opencode/client"
 import { Service } from "@opencode/client/effect/service"
@@ -71,7 +72,11 @@ export default Runtime.handler(
           })
       if (!sessionID) return
       const data = yield* Effect.tryPromise({
-        try: () => client.session.export({ sessionID, sanitize: input.sanitize }),
+        try: () =>
+          client.session.export({
+            sessionID: Session.ID.make(sessionID, { disableChecks: true }),
+            sanitize: input.sanitize,
+          }),
         catch: (cause) => cause,
       })
       process.stdout.write(JSON.stringify(data, null, 2) + EOL)
