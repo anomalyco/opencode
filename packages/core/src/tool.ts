@@ -69,6 +69,7 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const hooks = yield* PluginHooks.Service
     const image = yield* Image.Service
+    const permission = yield* Permission.Service
 
     type NormalizedItem = Tool.Content | "decode" | "size"
     const normalizeImages = Effect.fnUntraced(function* (content: ReadonlyArray<Tool.Content>) {
@@ -237,10 +238,25 @@ const layer = Layer.effect(
           const codeModeInventory = { tools: codeModeTools, namespaces }
           const codeModeEnabled = !whollyDisabled("execute", rules)
           const codeModeTool = codeModeEnabled
-            ? CodeModeTool.create(codeModeInventory, (name, tool, input, context) =>
-                beforeExecute(name, input, context).pipe(
-                  Effect.flatMap((event) => executeTool(tool, name, event.input, context)),
-                ),
+            ? CodeModeTool.create(
+                codeModeInventory,
+                (name, tool, input, context) =>
+                  beforeExecute(name, input, context).pipe(
+                    Effect.flatMap((event) => executeTool(tool, name, event.input, context)),
+                  ),
+                (url, context) => {
+                  const protocol = URL.parse(url)?.protocol
+                  if (protocol !== "http:" && protocol !== "https:") return Effect.void
+                  return permission.assert({
+                    action: "webfetch",
+                    resources: [url],
+                    save: ["*"],
+                    metadata: { url },
+                    sessionID: context.sessionID,
+                    agent: context.agent,
+                    source: { type: "tool", messageID: context.messageID, id: context.id },
+                  })
+                },
               )
             : undefined
           const names = Array.from(codeModeTools.keys()).join("\0")
@@ -328,5 +344,5 @@ function namespaceError(name: string) {
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [PluginHooks.node, Image.node],
+  deps: [PluginHooks.node, Image.node, Permission.node],
 })

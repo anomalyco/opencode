@@ -40,13 +40,22 @@ const http = Layer.succeed(
   ),
 )
 const permission = permissionLayer({ assert: (input) => Effect.sync(() => assertions.push(input)) })
-const toolLayer = (replacements: LayerNode.Replacements = []) =>
+const denial = permissionLayer({
+  assert: (input) =>
+    Effect.sync(() => assertions.push(input)).pipe(
+      Effect.andThen(
+        Effect.fail(new Permission.BlockedError({ rules: [], permission: input.action, resources: input.resources })),
+      ),
+    ),
+})
+const toolLayer = (replacements: LayerNode.Replacements = [], permissionImpl = permission) =>
   AppNodeBuilder.build(LayerNode.group([Tool.node, webFetchToolNode]), [
-    Permission.node.replace(permission),
+    Permission.node.replace(permissionImpl),
     Image.node.replace(imagePassthrough),
     ...replacements,
   ])
 const it = testEffect(toolLayer([LayerNodePlatform.httpClient.replace(http)]))
+const itDenied = testEffect(toolLayer([LayerNodePlatform.httpClient.replace(http)], denial))
 const live = testEffect(toolLayer())
 
 const reset = () => {
@@ -660,6 +669,56 @@ describe("WebFetchTool registration", () => {
         status: "error",
         error: { type: "unknown", message: "Request timed out" },
       })
+    }),
+  )
+})
+
+describe("Code Mode fetch permission", () => {
+  itDenied.effect("denies a Code Mode fetch the webfetch permission blocks", () =>
+    Effect.gen(function* () {
+      reset()
+      const registry = yield* Tool.Service
+      const url = "https://example.com/blocked"
+
+      const result = yield* executeTool(registry, {
+        sessionID,
+        ...toolIdentity,
+        call: {
+          type: "tool-call" as const,
+          id: "call-execute-denied",
+          name: "execute",
+          input: { code: `return await fetch("${url}")` },
+        },
+      })
+
+      expect(assertions).toMatchObject([
+        { sessionID, action: "webfetch", resources: [url], save: ["*"], metadata: { url } },
+      ])
+      expect(result.output).toMatchObject({ error: true })
+      expect(result.output.output).toContain("Permission denied: webfetch")
+      expect(requests).toEqual([])
+    }),
+  )
+
+  it.effect("leaves the filesystem guard to the Code Mode runtime", () =>
+    Effect.gen(function* () {
+      reset()
+      const registry = yield* Tool.Service
+
+      const result = yield* executeTool(registry, {
+        sessionID,
+        ...toolIdentity,
+        call: {
+          type: "tool-call" as const,
+          id: "call-execute-files",
+          name: "execute",
+          input: { code: 'return await fetch("file:///blocked.txt")' },
+        },
+      })
+
+      expect(assertions).toEqual([])
+      expect(result.output).toMatchObject({ error: true })
+      expect(result.output.output).toContain("fetch cannot be used for filesystem access.")
     }),
   )
 })

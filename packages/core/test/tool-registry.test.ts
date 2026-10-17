@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Agent } from "@opencode/core/agent"
-import type { Permission } from "@opencode/core/permission"
+import { Permission } from "@opencode/core/permission"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Image } from "@opencode/core/image"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
@@ -14,6 +14,7 @@ import { codeModeListings, executeTool, toolDefinitions } from "./lib/tool"
 import { Deferred, Effect, Exit, Fiber, Layer, Logger, Schema, SchemaGetter, SchemaIssue, Scope } from "effect"
 import { z } from "zod"
 import { testEffect } from "./lib/effect"
+import { permissionLayer } from "./lib/permission"
 
 const imageStore = Layer.mock(Image.Service, {
   normalize: (resource, content) => {
@@ -39,6 +40,7 @@ const imageStore = Layer.mock(Image.Service, {
 })
 const registryLayer = AppNodeBuilder.build(LayerNode.group([Tool.node, PluginHooks.node]), [
   Image.node.replace(imageStore),
+  Permission.node.replace(permissionLayer()),
 ])
 const it = testEffect(registryLayer)
 const identity = {

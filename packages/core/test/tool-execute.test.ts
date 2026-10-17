@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
 import { CodeModeTool } from "@opencode/core/codemode/tool"
+import { Permission } from "@opencode/core/permission"
 import { Tool } from "@opencode/core/tool"
 import { execute } from "@opencode/core/tool/runtime"
 import { Agent } from "@opencode/schema/agent"
@@ -16,8 +17,10 @@ const context = {
   progress: () => Effect.void,
 }
 
-const createCodeMode = (tools: ReadonlyMap<string, Info>) =>
-  CodeModeTool.create({ tools }, (_, tool, input, context) => execute(tool, input, context))
+const createCodeMode = (
+  tools: ReadonlyMap<string, Info>,
+  guardFetch: (url: string, context: Tool.Context) => Effect.Effect<void, unknown> = () => Effect.void,
+) => CodeModeTool.create({ tools }, (_, tool, input, context) => execute(tool, input, context), guardFetch)
 
 test("execute describes invariant Code Mode behavior", () => {
   expect(createCodeMode(new Map()).description).toBe(
@@ -39,6 +42,80 @@ test("execute rejects filesystem fetches", async () => {
 
   expect(result.output.error).toBe(true)
   expect(result.output.output).toContain("fetch cannot be used for filesystem access.")
+})
+
+test("execute denies a fetch the host guard refuses", async () => {
+  const hits: Array<string> = []
+  const server = Bun.serve({
+    port: 0,
+    hostname: "127.0.0.1",
+    fetch: (request) => {
+      hits.push(request.url)
+      return new Response("secret")
+    },
+  })
+  const url = `http://127.0.0.1:${server.port}/probe`
+  const seen: Array<string> = []
+  try {
+    const result = await Effect.runPromise(
+      createCodeMode(new Map(), (input) => {
+        seen.push(input)
+        return Effect.fail(new Permission.BlockedError({ rules: [], permission: "webfetch", resources: [input] }))
+      }).execute({ code: `return await fetch(${JSON.stringify(url)})` }, context),
+    )
+
+    expect(result.output.error).toBe(true)
+    expect(result.output.output).toContain("Permission denied: webfetch")
+    expect(seen).toEqual([url])
+  } finally {
+    server.stop(true)
+  }
+  expect(hits).toEqual([])
+})
+
+test("interrupting execute interrupts a fetch permission check that is still waiting", async () => {
+  let entered: () => void = () => {}
+  const waiting = new Promise<void>((resolve) => (entered = resolve))
+  const interrupted = Promise.withResolvers<void>()
+  const tool = createCodeMode(new Map(), () =>
+    Effect.gen(function* () {
+      entered()
+      yield* Effect.never
+    }).pipe(Effect.onInterrupt(() => Effect.sync(interrupted.resolve))),
+  )
+
+  const abort = new AbortController()
+  const executed = Effect.runPromise(
+    tool.execute({ code: 'return await fetch("https://example.com/probe")' }, context),
+    { signal: abort.signal },
+  )
+  await waiting
+  abort.abort()
+  await executed.then(
+    () => undefined,
+    () => undefined,
+  )
+  await interrupted.promise
+})
+
+test("execute reaches the network when the host guard allows the fetch", async () => {
+  const server = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: () => new Response("secret") })
+  const url = `http://127.0.0.1:${server.port}/probe`
+  const seen: Array<string> = []
+  try {
+    const result = await Effect.runPromise(
+      createCodeMode(new Map(), (url) => Effect.sync(() => void seen.push(url))).execute(
+        { code: `const response = await fetch("${url}")\nreturn await response.text()` },
+        context,
+      ),
+    )
+
+    expect(result.output.error).toBeUndefined()
+    expect(result.output.output).toContain("secret")
+  } finally {
+    server.stop(true)
+  }
+  expect(seen).toEqual([url])
 })
 
 test("canonical execution distinguishes declared, model-only, and raw schema outputs", async () => {

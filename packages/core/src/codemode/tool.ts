@@ -71,14 +71,19 @@ const description = [
 export const create = (
   inventory: Inventory,
   executeTool: (name: string, tool: Info, input: unknown, context: Context) => Effect.Effect<Result, Error>,
+  /** Runs before a Code Mode `fetch` reaches the network; a failure denies the call. */
+  guardFetch: (url: string, context: Context) => Effect.Effect<void, unknown>,
 ) => {
   return {
     name: "execute",
     description,
     input: CodeMode.Input,
     output: ExecuteOutput,
-    execute: ({ code }, context) =>
-      Effect.gen(function* () {
+    execute: ({ code }, context) => {
+      // The call's own lifetime, so a pending permission check is cancelled with the call that
+      // started it instead of staying detached from it.
+      const lifetime = new AbortController()
+      return Effect.gen(function* () {
         const callIndex = yield* Ref.make(0)
         const files = yield* Ref.make<Array<CollectedFiles>>([])
         const calls = yield* Ref.make<Array<ExecuteCall>>([])
@@ -105,6 +110,8 @@ export const create = (
               return text === "" ? null : text
             }),
           progressHooks(record),
+          (url) => guardFetch(url, context),
+          lifetime.signal,
         ).execute(code)
         const toolCalls = yield* Ref.get(calls)
         const collected = (yield* Ref.get(files))
@@ -135,7 +142,8 @@ export const create = (
           content,
           metadata,
         }
-      }),
+      }).pipe(Effect.ensuring(Effect.sync(() => lifetime.abort())))
+    },
   } satisfies Info
 }
 
@@ -222,6 +230,8 @@ function runtime(
   inventory: Inventory,
   executeTool: (name: string, tool: Info, input: unknown) => Effect.Effect<unknown, unknown>,
   hooks?: CodeMode.Hooks,
+  guardFetch: (url: string) => Effect.Effect<void, unknown> = () => Effect.void,
+  lifetime?: AbortSignal,
 ) {
   // A path may carry namespace metadata, a callable tool, child tools, or all three.
   const root: ToolNode = { children: new Map() }
@@ -236,7 +246,7 @@ function runtime(
     })
   }
   const tools = renderTools(root)
-  return CodeMode.make<typeof tools>({ tools, extensions: [CodeModeWeb.extension], hooks })
+  return CodeMode.make<typeof tools>({ tools, extensions: [CodeModeWeb.extension(guardFetch, lifetime)], hooks })
 }
 
 function getNode<T>(root: Node<T>, path: string) {
