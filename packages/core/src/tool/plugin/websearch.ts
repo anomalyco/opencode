@@ -69,9 +69,9 @@ export const Plugin = {
                     .withPermit(
                       Effect.gen(function* () {
                         if (yield* websearch.default()) return
-                        const providers = (yield* ctx.websearch.providers()).data
-                        const defaultProvider = providers[0]
-                        if (!defaultProvider) return yield* new WebSearch.ProviderRequiredError()
+                        const all = (yield* ctx.websearch.providers()).data
+                        if (all.length === 0) return yield* new WebSearch.ProviderRequiredError()
+                        const providers = all.filter((provider) => !WebSearch.isMcp(provider.id))
                         const response = yield* forms.ask({
                           sessionID: context.sessionID,
                           title: "Web Search",
@@ -84,14 +84,24 @@ export const Plugin = {
                               required: true,
                               custom: false,
                               options: [
-                                {
-                                  value: "allow",
-                                  label: `Allow search via ${providers.map((provider) => provider.name).join(", ")}`,
-                                },
-                                {
-                                  value: "choose",
-                                  label: "Choose another provider",
-                                },
+                                ...(providers.length
+                                  ? [
+                                      {
+                                        value: "allow",
+                                        label: `Allow search via ${providers.map((provider) => provider.name).join(", ")}`,
+                                      },
+                                      {
+                                        value: "choose",
+                                        label: "Choose another provider",
+                                      },
+                                    ]
+                                  : []),
+                                ...all
+                                  .filter((provider) => WebSearch.isMcp(provider.id))
+                                  .map((provider) => ({
+                                    value: provider.id,
+                                    label: `Search with MCP tool ${provider.name}`,
+                                  })),
                                 { value: "disable", label: "Disable web search" },
                               ],
                             },
@@ -126,12 +136,14 @@ export const Plugin = {
                             : undefined
                         if (selection?.status === "cancelled")
                           return yield* Effect.fail(new Error("Web search cancelled"))
-                        const providerID = selection?.answer.provider ?? "random"
+                        const providerID =
+                          selection?.answer.provider ??
+                          (response.answer.choice === "allow" ? "random" : response.answer.choice)
                         if (providerID === "random") {
                           yield* websearch.select("random")
                           return
                         }
-                        const provider = providers.find((provider) => provider.id === providerID)
+                        const provider = all.find((provider) => provider.id === providerID)
                         if (!provider) return yield* new WebSearch.ProviderRequiredError()
                         yield* websearch.select(provider.id)
                         return provider.id

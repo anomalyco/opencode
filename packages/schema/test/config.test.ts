@@ -63,12 +63,15 @@ describe("Config.Entry", () => {
     })
   })
 
-  test("accepts disabled, fixed, and random web search selection", () => {
+  test("accepts disabled, fixed, random, and MCP web search selection", () => {
     const decode = Schema.decodeUnknownSync(Config.Info)
 
     expect(decode({ websearch: false }).websearch).toBe(false)
     expect(decode({ websearch: { provider: "exa" } }).websearch).toEqual({ provider: WebSearch.ID.make("exa") })
     expect(decode({ websearch: { provider: "random" } }).websearch).toEqual({ provider: "random" })
+    expect(decode({ websearch: { mcp: { server: "searxng", tool: "search" } } }).websearch).toEqual({
+      mcp: { server: "searxng", tool: "search" },
+    })
   })
 
   test("round-trips every configuration entry type", () => {
