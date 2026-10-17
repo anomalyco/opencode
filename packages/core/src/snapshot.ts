@@ -106,9 +106,10 @@ const layer = Layer.effect(
     const repository = repositoryFiber.pipe(Effect.uninterruptible, Effect.flatMap(Fiber.join))
 
     const scope = Effect.fnUntraced(function* (worktree: AbsolutePath) {
-      if (!FSUtil.contains(worktree, location.directory))
+      const directory = AbsolutePath.make(yield* fs.realPath(location.directory).pipe(Effect.orDie))
+      if (!FSUtil.contains(worktree, directory))
         return yield* new Error({ operation: "capture", message: "Location is outside the project" })
-      return RelativePath.make(path.relative(worktree, location.directory).replaceAll("\\", "/") || ".")
+      return RelativePath.make(path.relative(worktree, directory).replaceAll("\\", "/") || ".")
     })
 
     const enabled = () => location.vcs?.type === "git" && state.get().enabled
