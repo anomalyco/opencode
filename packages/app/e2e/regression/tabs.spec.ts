@@ -24,6 +24,105 @@ const c = { id: "ses_tab_c", title: "Tab C session" }
 
 test.use({ serviceWorkers: "block" })
 
+test("recently closed shows ten sessions and searches older closures in close order", async ({ page }) => {
+  const sessions = Array.from({ length: 100 }, (_, index) => ({
+    id: `ses_closed_${index}`,
+    title: `Closed session ${index}`,
+  }))
+  await mockWorkspace(page, {
+    name: "ClosedTabs",
+    sessions,
+    seed: {
+      servers: [SERVER],
+      tabs: [sessions[0]!.id],
+      storage: {
+        "opencode.window.browser.dat:tabs.closed": sessions.slice(1).map((session, index) => ({
+          tab: { type: "session", server: SERVER, sessionId: session.id },
+          index,
+          info: { title: session.title, directory: "C:/OpenCode/ClosedTabs", prompted: true },
+        })),
+      },
+    },
+  })
+  await page.goto(sessionHref(sessions[0]!.id))
+  await expect(page.locator("[data-titlebar-tab-title]")).toHaveText("Closed session 0")
+  const trigger = page.getByRole("button", { name: "New session", exact: true })
+  await trigger.click({ button: "right" })
+  const menu = page.getByRole("menu")
+  const items = menu.getByRole("menuitem")
+  const search = menu.getByRole("searchbox", { name: "Search recently closed" })
+  await expect(search).toBeFocused()
+  await expect(items).toHaveText(Array.from({ length: 10 }, (_, index) => `CClosed session ${99 - index}`))
+  await search.pressSequentially("SESSION 2")
+  await expect(search).toHaveValue("SESSION 2")
+  await expect(items).toHaveText(Array.from({ length: 10 }, (_, index) => `CClosed session ${29 - index}`))
+  await search.fill("not found")
+  await expect(menu.getByRole("status")).toHaveText("No matches")
+  await expect(items).toHaveCount(0)
+  await menu.getByRole("button", { name: "Clear", exact: true }).click()
+  await expect(search).toHaveValue("")
+  await expect(search).toBeFocused()
+  await expect(items).toHaveCount(10)
+  await search.fill("session 1")
+  await expect(items).toHaveText(Array.from({ length: 10 }, (_, index) => `CClosed session ${19 - index}`))
+  await search.press("ArrowDown")
+  await expect(menu.getByRole("menuitem", { name: "C Closed session 19", exact: true })).toBeFocused()
+  await page.keyboard.press("Enter")
+  await expectPath(page, sessionHref("ses_closed_19"))
+  await expect(menu).toBeHidden()
+  await trigger.click({ button: "right" })
+  await expect(search).toHaveValue("")
+  await expect(items).toHaveCount(10)
+  await search.press("Escape")
+  await expect(menu).toBeHidden()
+})
+
+test("recently closed fills remaining slots in Home order without open or duplicate sessions", async ({ page }) => {
+  const sessions = Array.from({ length: 12 }, (_, index) => ({
+    id: `ses_other_${index}`,
+    title: `Other session ${index}`,
+    time: { created: 1700000000000, updated: 1700000000000 + (12 - index) * 1000 },
+  }))
+  await mockWorkspace(page, {
+    name: "OtherTabs",
+    sessions: [
+      ...sessions,
+      { id: "ses_other_archived", title: "Archived session", time: { created: Date.now(), archived: Date.now() } },
+      { id: "ses_other_child", title: "Child session", parentID: sessions[0]!.id },
+    ],
+    seed: {
+      servers: [SERVER],
+      tabs: [sessions[0]!.id, sessions[2]!.id],
+      storage: {
+        "opencode.window.browser.dat:tabs.closed": sessions.slice(10).map((session, index) => ({
+          tab: { type: "session", server: SERVER, sessionId: session.id },
+          index,
+          info: { title: session.title, directory: "C:/OpenCode/OtherTabs", prompted: true },
+        })),
+      },
+    },
+  })
+  await page.goto(sessionHref(sessions[0]!.id))
+  await expect(page.locator("[data-titlebar-tab-title]")).toHaveText(["Other session 0", "Other session 2"])
+  const trigger = page.getByRole("button", { name: "New session", exact: true })
+  await trigger.click({ button: "right" })
+  const menu = page.getByRole("menu")
+  const items = menu.getByRole("menuitem")
+  await expect(items).toHaveText([11, 10, 1, 3, 4, 5, 6, 7, 8, 9].map((index) => `OOther session ${index}`))
+  await expect(menu.getByRole("group", { name: "Recently closed", exact: true }).getByRole("menuitem")).toHaveText([
+    "OOther session 11",
+    "OOther session 10",
+  ])
+  await expect(menu.getByRole("group", { name: "Recent sessions", exact: true }).getByRole("menuitem")).toHaveCount(8)
+  await menu.getByRole("menuitem", { name: "O Other session 1", exact: true }).click()
+  await expectPath(page, sessionHref("ses_other_1"))
+  await expect(menu).toBeHidden()
+  await trigger.click({ button: "right" })
+  await expect(items).toHaveText([11, 10, 3, 4, 5, 6, 7, 8, 9].map((index) => `OOther session ${index}`))
+  await menu.getByRole("searchbox", { name: "Search recently closed" }).fill("session 9")
+  await expect(items).toHaveText(["OOther session 9"])
+})
+
 test("tab strip keeps draft tabs as wide as session tabs and navigates on mouse down", async ({ page }) => {
   const workspace = await mockWorkspace(page, {
     name: "Tabs",

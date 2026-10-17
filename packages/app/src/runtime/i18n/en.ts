@@ -508,6 +508,8 @@ export const dict = {
   "home.project.missing.title": "Project folder not found",
   "home.project.missing.description": "The folder for {{name}} no longer exists.",
   "home.recentlyClosed": "Recently closed",
+  "session.tabs.closed.search": "Search recently closed",
+  "session.tabs.closed.empty": "No recently closed sessions",
   "home.server.collapse": "Collapse server projects",
   "home.server.expand": "Expand server projects",
   "home.sessions.search.placeholder": "Search sessions",

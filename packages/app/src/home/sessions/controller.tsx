@@ -2,16 +2,11 @@ import type { SessionInfo } from "@opencode/client/promise"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { Button } from "@opencode/ui/button"
 import { DialogFooter, DialogHeader, DialogTitleGroup, Dialog } from "@opencode/ui/dialog"
-import { skipToken, useQuery, useQueryClient } from "@tanstack/solid-query"
+import { useQuery, useQueryClient } from "@tanstack/solid-query"
 import { type Accessor, createEffect, createMemo, type JSX, startTransition, untrack } from "solid-js"
 import { notifySessionTabsRemoved } from "@/shell/titlebar/session-events"
 import { useCommand } from "@/shell/commands/command"
-import {
-  HOME_SESSION_LIMIT,
-  loadHomeSessionIndex,
-  mergeHomeSessionIndex,
-  retainHomeSessions,
-} from "@/home/sessions/index"
+import { HOME_SESSION_LIMIT, mergeHomeSessionIndex, retainHomeSessions } from "@/home/sessions/index"
 import type { LocalProject } from "@/shell/state/layout"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ServerConnection } from "@/runtime/server/registry"
@@ -25,13 +20,11 @@ import { usePlatform } from "@/runtime/platform/platform"
 import { sessionLabel, sessionTitle } from "@/session/title"
 import { showToast } from "@/shell/notifications/toast"
 import { archiveHomeSession } from "./archive"
+import { homeSessionsQuery } from "./queries"
 import type { HomeController } from "../model"
 import { buildHomeSessionRecords, homeProjectForSession, homeSessionLocation, type HomeSessionRecord } from "./records"
 
 export type { HomeSessionRecord } from "./records"
-
-// Keep the immutable result opaque so Solid Query does not recursively unwrap every session on mount.
-const selectSessions = (sessions: SessionInfo[]) => () => sessions
 
 export type HomeSessionGroup = {
   id: "today" | "yesterday" | "older"
@@ -63,16 +56,8 @@ export function createHomeSessionsController(home: HomeController) {
     const conn = home.server.focused()
 
     return {
-      queryKey: ["home-sessions", conn] as const,
+      ...homeSessionsQuery(conn, ctx),
       enabled: !!ctx && ctx.sdk.connection.status() === "connected",
-      queryFn: ctx
-        ? ({ signal }) => loadHomeSessionIndex((input, options) => ctx.sdk.api.session.list(input, options), signal)
-        : skipToken,
-      retry: false,
-      staleTime: 30_000,
-      refetchOnMount: true,
-      refetchOnReconnect: true,
-      select: selectSessions,
     }
   })
 
@@ -408,7 +393,8 @@ function groupSessions(records: HomeSessionRecord[], language: ReturnType<typeof
   const now = new Date()
   const today = localDay(now)
   const yesterday = localDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1))
-  const day = (record: HomeSessionRecord) => localDay(new Date(record.session.time.updated ?? record.session.time.created))
+  const day = (record: HomeSessionRecord) =>
+    localDay(new Date(record.session.time.updated ?? record.session.time.created))
   const todaySessions = records.filter((record) => day(record) === today)
   const yesterdaySessions = records.filter((record) => day(record) === yesterday)
   const olderSessions = records.filter((record) => day(record) !== today && day(record) !== yesterday)
