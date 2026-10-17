@@ -244,9 +244,16 @@ export function createHomeSessionsController(home: HomeController) {
 
     if (!conn || !ctx) return false
     const ids = sessionTreeIDs(ctx.data.session.list(), session.id)
+    const rows = homeRowTops()
+    // session.deleted clears the local hide mutation before the refetch lands,
+    // so the cached index must drop the row now or it briefly reappears.
+    queryClient.setQueryData<SessionInfo[]>(["home-sessions", conn], (current) =>
+      current?.filter((item) => item.id !== session.id),
+    )
+    const request = ctx.data.session.remove(session.id)
+    animateHomeRowsUp(rows)
 
-    return ctx.data.session
-      .remove(session.id)
+    return request
       .then(() => {
         notifySessionTabsRemoved({
           server: ServerConnection.key(conn),
@@ -273,8 +280,8 @@ export function createHomeSessionsController(home: HomeController) {
     const name = () => sessionTitle(props.session.title) ?? language.t("command.session.new")
 
     const confirm = async () => {
-      await remove(props.server, props.session)
       dialog.close()
+      await remove(props.server, props.session)
     }
 
     return (
@@ -393,6 +400,31 @@ export function createHomeSessionsController(home: HomeController) {
 
 function directories(project: LocalProject) {
   return [project.worktree, ...(project.sandboxes ?? [])]
+}
+
+const HOME_ROW_SELECTOR = '[data-component="home-session-row-container"]'
+
+function homeRowTops() {
+  return new Map(
+    Array.from(document.querySelectorAll<HTMLElement>(HOME_ROW_SELECTOR), (row) => {
+      return [row.dataset.sessionId, row.getBoundingClientRect().top] as const
+    }),
+  )
+}
+
+// FLIP: rows below a removed row jump up in layout; play the difference back as a short transform.
+function animateHomeRowsUp(tops: Map<string | undefined, number>) {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return
+
+  document.querySelectorAll<HTMLElement>(HOME_ROW_SELECTOR).forEach((row) => {
+    const before = tops.get(row.dataset.sessionId)
+    const delta = before === undefined ? 0 : before - row.getBoundingClientRect().top
+    if (delta === 0) return
+    row.animate([{ transform: `translateY(${delta}px)` }, { transform: "translateY(0)" }], {
+      duration: 180,
+      easing: "cubic-bezier(0.645, 0.045, 0.355, 1)",
+    })
+  })
 }
 
 export function homeSessionSearchKey(record: HomeSessionRecord) {
