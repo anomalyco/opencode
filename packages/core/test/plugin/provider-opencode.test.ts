@@ -19,6 +19,7 @@ import { ModelResolver } from "@opencode/core/model-resolver"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { PluginHost } from "@opencode/core/plugin/host"
+import { OpenAIPlugin } from "@opencode/core/plugin/provider/openai"
 import { OpencodePlugin } from "@opencode/core/plugin/provider/opencode"
 import { Provider } from "@opencode/core/provider"
 import { Session } from "@opencode/core/session"
@@ -1946,6 +1947,53 @@ describe("OpencodePlugin", () => {
         expect(required(yield* catalog.get(Provider.ID.openai)).settings?.apiKey).toBeUndefined()
         expect(required(yield* models.get(Provider.ID.openai, Model.ID.make("paid"))).enabled).toBe(true)
       }),
+    ),
+  )
+
+  it.effect("leaves openai to a ChatGPT login when Console BYOK lists it", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() =>
+        Bun.serve({
+          port: 0,
+          fetch: () => Response.json({ providers: { openai: { settings: { baseURL: "https://zen.example/v1" } } } }),
+        }),
+      ),
+      (server) =>
+        Effect.gen(function* () {
+          const catalog = yield* Provider.Service
+          const credentials = yield* Credential.Service
+          const plugin = yield* Plugin.Service
+          yield* catalog.transform((catalog) => {
+            catalog.update(Provider.ID.openai, (draft) => {
+              draft.package = "@opencode/ai/providers/openai"
+            })
+            catalog.models.update(Provider.ID.openai, Model.ID.make("gpt-5.5"), () => {})
+          })
+          yield* credentials.create({
+            integrationID: Integration.ID.make("opencode"),
+            value: Credential.Key.make({ type: "key", key: "zen-key", metadata: { server: server.url.origin } }),
+          })
+          yield* credentials.create({
+            integrationID: Integration.ID.make("openai"),
+            value: Credential.OAuth.make({
+              type: "oauth",
+              methodID: Integration.MethodID.make("chatgpt-headless"),
+              access: "chatgpt-token",
+              refresh: "refresh",
+              expires: Date.now() + 60_000,
+            }),
+          })
+          // Same order as ProviderPlugins.
+          yield* addPlugin()
+          const host = yield* PluginHost.make(plugin)
+          yield* OpenAIPlugin.effect(host)
+
+          const provider = required(yield* catalog.get(Provider.ID.openai))
+          expect(provider.integrationID).not.toBe(Integration.ID.make("opencode"))
+          expect(provider.settings).toMatchObject({ baseURL: "https://chatgpt.com/backend-api/codex" })
+          expect((yield* catalog.available()).map((item) => item.id)).toContain(Provider.ID.openai)
+        }),
+      (server) => Effect.promise(() => server.stop(true)),
     ),
   )
 })

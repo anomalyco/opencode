@@ -206,8 +206,19 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Manag
     // Status last reported for the active connection, so inference failures can name the fix.
     let reported: IntegrationConnection.Status | undefined
     let explainers: Effect.Success<ReturnType<typeof ctx.session.hook>>[] = []
+    // An OAuth login on the OpenAI integration is a ChatGPT account. Console BYOK may also list `openai`, but
+    // binding it here would send the Console credential to the ChatGPT backend, which rejects API keys.
+    let chatgpt = false
+    const openaiLogin = Effect.fn("OpencodePlugin.openaiLogin")(function* () {
+      const connection = yield* ctx.integration.connection.active("openai")
+      const credential = connection
+        ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.orElseSucceed(() => undefined))
+        : undefined
+      chatgpt = credential?.type === "oauth"
+    })
 
     const load = Effect.fn("OpencodePlugin.load")(function* () {
+      yield* openaiLogin()
       const connection = yield* ctx.integration.connection.active("opencode")
       if (!connection) {
         reported = undefined
@@ -265,6 +276,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Manag
     yield* publish(snapshot)
     yield* ctx.provider.transform((providers) => {
       for (const [providerID, item] of Object.entries(snapshot.config?.providers ?? {})) {
+        if (providerID === Provider.ID.openai && chatgpt) continue
         const source = providers.get(item.canonical ?? providerID)
         providers.update(providerID, (provider) => {
           if (source && source.provider !== provider)
@@ -479,13 +491,23 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Manag
     const guard = Effect.fn("OpencodePlugin.guard")(function* (next: typeof snapshot) {
       yield* Effect.forEach(explainers, (registration) => registration.dispose, { discard: true })
       explainers = yield* Effect.forEach(
-        next.connection ? new Set([Provider.ID.opencode, ...Object.keys(next.config?.providers ?? {})]) : [],
+        next.connection
+          ? new Set(
+              [Provider.ID.opencode, ...Object.keys(next.config?.providers ?? {})].filter(
+                (providerID) => providerID !== Provider.ID.openai || !chatgpt,
+              ),
+            )
+          : [],
         (providerID) => ctx.session.hook("http.response", explain, { providerID }).pipe(Scope.provide(scope)),
       )
     })
     yield* guard(snapshot)
     yield* bus.subscribe(Credential.Event.Switched).pipe(
-      Stream.filter((event) => event.data.integrationID === Integration.ID.make("opencode")),
+      Stream.filter(
+        (event) =>
+          event.data.integrationID === Integration.ID.make("opencode") ||
+          event.data.integrationID === Integration.ID.make("openai"),
+      ),
       Stream.runForEach(refresh),
       Effect.forkScoped({ startImmediately: true }),
     )
