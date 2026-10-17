@@ -12,6 +12,7 @@ import {
   mergeHomeSessionIndex,
   retainHomeSessions,
 } from "@/home/sessions/index"
+import { HOME_SESSION_INDEX_REFETCH } from "@/home/sessions/refetch"
 import type { LocalProject } from "@/shell/state/layout"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ServerConnection } from "@/runtime/server/registry"
@@ -69,9 +70,7 @@ export function createHomeSessionsController(home: HomeController) {
         ? ({ signal }) => loadHomeSessionIndex((input, options) => ctx.sdk.api.session.list(input, options), signal)
         : skipToken,
       retry: false,
-      staleTime: 30_000,
-      refetchOnMount: true,
-      refetchOnReconnect: true,
+      ...HOME_SESSION_INDEX_REFETCH,
       select: selectSessions,
     }
   })
