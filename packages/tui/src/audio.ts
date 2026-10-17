@@ -1,7 +1,9 @@
 import { Audio, type AudioErrorContext, type AudioPlayOptions, type AudioSound } from "@opentui/core"
 import { readFile } from "node:fs/promises"
+import { createAudioIdleRelease } from "./audio-idle"
 
 let audio: Audio | null | undefined
+let idle: ReturnType<typeof createAudioIdleRelease> | undefined
 const sounds = new Map<string, Promise<AudioSound | null>>()
 
 function getAudio() {
@@ -12,6 +14,7 @@ function getAudio() {
       console.debug("tui audio error", { error, context })
     })
     audio = next
+    idle = createAudioIdleRelease(next)
     return next
   } catch (error) {
     console.debug("failed to create tui audio", { error })
@@ -39,10 +42,13 @@ export function play(sound: AudioSound, options?: AudioPlayOptions) {
   const current = getAudio()
   if (!current) return null
   if (!current.isStarted() && !current.start()) return null
+  idle?.watch()
   return current.play(sound, options)
 }
 
 export function dispose() {
+  idle?.dispose()
+  idle = undefined
   audio?.dispose()
   audio = undefined
   sounds.clear()
