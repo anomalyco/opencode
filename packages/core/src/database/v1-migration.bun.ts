@@ -10,10 +10,13 @@ import { KVTable } from "../kv/sql.js"
 import { EventSequenceTable } from "../event/sql.js"
 import { eq, sql } from "drizzle-orm"
 import { Global } from "@opencode/util/global"
+import { FSUtil } from "@opencode/util/fs-util"
 import { existsSync } from "node:fs"
 import path from "node:path"
 import type { Database as SQLiteDatabase } from "bun:sqlite"
-import { Project } from "@opencode/schema/project"
+import { Project } from "../project.js"
+import { AbsolutePath } from "../schema.js"
+import { ProjectTable } from "../project/sql.js"
 
 export type SourceMessage = {
   readonly id: string
@@ -531,7 +534,9 @@ function updateProgress(progress: Progress) {
   if (runtimeState.status === "running") runtimeState = { status: "running", progress }
 }
 
-export function run(options: Options = {}): Effect.Effect<RunResult, never, Database.Service | Global.Service> {
+export function run(
+  options: Options = {},
+): Effect.Effect<RunResult, never, Database.Service | Global.Service | Project.Service | FSUtil.Service> {
   return lock.withPermit(
     Effect.gen(function* () {
       const db = (yield* Database.Service).db
@@ -581,15 +586,30 @@ export function run(options: Options = {}): Effect.Effect<RunResult, never, Data
       const projects = new Set(
         (yield* db.all<{ id: string }>(sql`SELECT id FROM project`)).map((project) => project.id),
       )
+      const directories = new Map<string, { project: Project.Resolved; path: string } | undefined>()
       while (true) {
         const state = yield* readState(db)
         const cursorValue = state?.phase === "sessions" ? state.cursor : undefined
-        const nextID = yield* db.get<{ id: string; project_id: string }>(
+        const nextID = yield* db.get<{
+          id: string
+          project_id: string
+          workspace_id: string | null
+          directory: string
+          path: string | null
+        }>(
           cursorValue === undefined
-            ? sql`SELECT id, project_id FROM session ORDER BY id DESC LIMIT 1`
-            : sql`SELECT id, project_id FROM session WHERE id < ${cursorValue} ORDER BY id DESC LIMIT 1`,
+            ? sql`SELECT id, project_id, workspace_id, directory, path FROM session ORDER BY id DESC LIMIT 1`
+            : sql`SELECT id, project_id, workspace_id, directory, path FROM session WHERE id < ${cursorValue} ORDER BY id DESC LIMIT 1`,
         )
         if (!nextID) break
+        const projectID = projects.has(nextID.project_id) ? nextID.project_id : Project.ID.global
+        const local = projectID === Project.ID.global && nextID.workspace_id === null
+        if (local && !directories.has(nextID.directory)) {
+          const owner = yield* resolveDirectory(nextID.directory)
+          directories.set(nextID.directory, owner)
+          if (owner) projects.add(owner.project.id)
+        }
+        const owner = local ? directories.get(nextID.directory) : undefined
         yield* db
           .transaction((tx) =>
             Effect.gen(function* () {
@@ -601,12 +621,22 @@ export function run(options: Options = {}): Effect.Effect<RunResult, never, Data
                   set: { value: { phase: "sessions", cursor: nextID.id }, time_updated: Date.now() },
                 })
                 .run()
-              const projectID = projects.has(nextID.project_id) ? nextID.project_id : Project.ID.global
               if (projectID !== nextID.project_id)
                 yield* Effect.logWarning("Reassigned V1 session with missing project", {
                   sessionID: nextID.id,
                   projectID: nextID.project_id,
                 })
+              if (owner)
+                yield* tx
+                  .insert(ProjectTable)
+                  .values({
+                    id: owner.project.id,
+                    worktree: owner.project.canonical,
+                    vcs: owner.project.vcs?.type,
+                    sandboxes: [],
+                  })
+                  .onConflictDoNothing()
+                  .run()
               yield* tx.run(sql`
                   INSERT OR IGNORE INTO session_v2 (
                     id, project_id, workspace_id, parent_id, slug, directory, path, title, version, share_url,
@@ -615,7 +645,7 @@ export function run(options: Options = {}): Effect.Effect<RunResult, never, Data
                     revert, permission, agent, model, time_created, time_updated, time_compacting, time_archived
                   )
                   SELECT
-                    id, ${projectID}, workspace_id, parent_id, slug, directory, path, title, version, share_url,
+                    id, ${owner?.project.id ?? projectID}, workspace_id, parent_id, slug, directory, ${owner?.path ?? nextID.path}, title, version, share_url,
                     summary_additions, summary_deletions, summary_files, summary_diffs, metadata, cost,
                     tokens_input, tokens_output, tokens_reasoning, tokens_cache_read, tokens_cache_write,
                     revert, NULL, agent, model, time_created, time_updated, time_compacting, time_archived
@@ -697,6 +727,25 @@ export function run(options: Options = {}): Effect.Effect<RunResult, never, Data
       return { status: "completed" as const }
     }).pipe(Effect.orDie),
   )
+}
+
+// V1 grouped non-git sessions under global; V2 resolves an owner for each directory.
+// Discovery must not publish adoption events for sessions already stored in V2.
+function resolveDirectory(directory: string) {
+  return Effect.gen(function* () {
+    if (!directory) return
+    const fs = yield* FSUtil.Service
+    const normalized = yield* fs
+      .realPath(path.resolve(FSUtil.windowsPath(directory)))
+      .pipe(Effect.orElseSucceed(() => undefined))
+    if (!normalized || !(yield* fs.isDir(normalized))) return
+    const projects = yield* Project.Service
+    const project = yield* projects.resolve(AbsolutePath.make(normalized), { persist: false })
+    return {
+      project,
+      path: path.relative(project.directory, normalized).replaceAll("\\", "/"),
+    }
+  })
 }
 
 function nextPath(options: Options, data: string) {

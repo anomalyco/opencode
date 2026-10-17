@@ -10,6 +10,9 @@ import { SessionTable } from "@opencode/core/session/sql"
 import { Project } from "@opencode/core/project"
 import { ProjectTable } from "@opencode/core/project/sql"
 import { AbsolutePath } from "@opencode/core/schema"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import { Effect, Fiber, Layer, Logger, Schedule, Schema, Scope } from "effect"
 import { eq, sql } from "drizzle-orm"
@@ -876,13 +879,21 @@ describe("V1Migration database workflow", () => {
     `)
   })
 
-  const database = <A, E>(effect: Effect.Effect<A, E, Database.Service | Global.Service | Scope.Scope>) =>
+  const database = <A, E>(
+    effect: Effect.Effect<A, E, Database.Service | Global.Service | Scope.Scope | Project.Service | FSUtil.Service>,
+  ) =>
     run(
       Effect.gen(function* () {
         const db = yield* makeDb
         yield* DatabaseMigration.apply(db)
         yield* createLegacyTables(db)
-        return yield* effect.pipe(Effect.provideService(Database.Service, { db }))
+        return yield* effect.pipe(
+          Effect.provide(
+            AppNodeBuilder.build(LayerNode.group([Project.node, Database.node, FSUtil.node]), [
+              Database.node.replace(Layer.succeed(Database.Service, { db })),
+            ]),
+          ),
+        )
       }),
     )
 
