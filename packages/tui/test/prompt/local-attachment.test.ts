@@ -177,4 +177,33 @@ describe("prompt local attachments", () => {
     expect(await resolvePastedAttachments(Array(32).fill(file).join(" "), process.platform)).toHaveLength(32)
     expect(await resolvePastedAttachments(Array(33).fill(file).join(" "), process.platform)).toBeUndefined()
   })
+
+  test("recovers Finder copies pasted as bare file names from the macOS pasteboard", async () => {
+    await using tmp = await tmpdir()
+    const one = path.join(tmp.path, "Screenshot at 7.34.34\u202fAM.png")
+    const two = path.join(tmp.path, "two.webp")
+    await Bun.write(one, new Uint8Array([1, 2, 3]))
+    await Bun.write(two, new Uint8Array([4, 5, 6]))
+    const pasteboard = async () => [one, two]
+
+    expect(await resolvePastedAttachments(`two.webp\r${path.basename(one)}`, "darwin", pasteboard)).toEqual([
+      { type: "file", uri: "data:image/png;base64,AQID", filename: path.basename(one) },
+      { type: "file", uri: "data:image/webp;base64,BAUG", filename: "two.webp" },
+    ])
+    expect(await resolvePastedAttachments("two.webp", "darwin", pasteboard)).toBeUndefined()
+    expect(await resolvePastedAttachments(`two.webp\n${path.basename(one)}`, "linux", pasteboard)).toBeUndefined()
+  })
+
+  test("reads the pasteboard only for pasted attachment file names", async () => {
+    let reads = 0
+    const pasteboard = async () => {
+      reads++
+      return []
+    }
+
+    for (const input of ["hello world", "notes.txt", "src/image.png"]) {
+      expect(await resolvePastedAttachments(input, "darwin", pasteboard)).toBeUndefined()
+    }
+    expect(reads).toBe(0)
+  })
 })
