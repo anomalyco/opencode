@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { define, hidden, Native, Arr, ErrorObj, Obj, type Value } from "./objects.js"
+import { Arr, define, ErrorObj, hidden, Native, Obj, readOnly, type Value } from "./objects.js"
 
 export const errorTypes = [
   "Error",
@@ -41,6 +41,8 @@ const builtins = [
   "AsyncIterator",
   "Generator",
   "AsyncGenerator",
+  "GeneratorFunction",
+  "AsyncGeneratorFunction",
 ] as const
 
 /**
@@ -79,6 +81,15 @@ export const createBuiltins = (): Builtins => {
   }
   const iterator = plain()
   const asyncIterator = plain()
+  // %GeneratorFunction.prototype% is an ordinary object linked both ways with %GeneratorPrototype%.
+  const generatorFunction = (generator: Obj) => {
+    const proto = new Obj(fn)
+    define(proto, "prototype", generator, readOnly)
+    define(generator, "constructor", proto, readOnly)
+    return proto
+  }
+  const generator = new Obj(iterator)
+  const asyncGenerator = new Obj(asyncIterator)
   return {
     Object: object,
     Function: fn,
@@ -102,8 +113,10 @@ export const createBuiltins = (): Builtins => {
     Iterator: iterator,
     IteratorHelper: new Obj(iterator),
     AsyncIterator: asyncIterator,
-    Generator: new Obj(iterator),
-    AsyncGenerator: new Obj(asyncIterator),
+    Generator: generator,
+    AsyncGenerator: asyncGenerator,
+    GeneratorFunction: generatorFunction(generator),
+    AsyncGeneratorFunction: generatorFunction(asyncGenerator),
     Error: error,
     TypeError: derived("TypeError"),
     RangeError: derived("RangeError"),
