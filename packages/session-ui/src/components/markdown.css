@@ -448,6 +448,44 @@
   unicode-bidi: plaintext;
 }
 
+/* A block only resolves a direction from its own first strong character when it is the element
+   carrying `unicode-bidi: plaintext`; the property does not inherit, so the `> *` rule above never
+   reaches nested blocks. Without this, a list, table or blockquote inside a message whose first
+   strong character is Latin inherits the container's `dir="auto"` direction and renders RTL
+   content left-to-right. `div` is deliberately absent: the code block and Mermaid wrappers are
+   divs, and they must keep `direction: ltr; unicode-bidi: isolate`. */
+[data-component="markdown"]
+  :where(
+    ul,
+    ol,
+    menu,
+    li,
+    dl,
+    dt,
+    dd,
+    table,
+    caption,
+    thead,
+    tbody,
+    tfoot,
+    tr,
+    td,
+    th,
+    blockquote,
+    figure,
+    figcaption,
+    summary,
+    p,
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6
+  ) {
+  unicode-bidi: plaintext;
+}
+
 :root body [data-component="markdown"] {
   [data-slot="markdown-copy-button"]::after {
     box-sizing: border-box;

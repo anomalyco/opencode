@@ -811,3 +811,105 @@ story("loads file URLs and Windows paths, and leaves unreadable images as alt te
   await harness.getByLabel("Markdown text").fill("Still usable")
   await expect(harness.locator('[data-component="markdown"]')).toHaveText("Still usable")
 })
+
+story("resolves the direction of nested blocks from their own first strong character", async ({ page }) => {
+  // The container resolves `dir="auto"` from the first strong character of the whole message, so a
+  // reply that opens with a Latin heading is LTR for every block nested inside it.
+  const text = `## Project setup
+
+- گام اول: دانلود ابزار از سایت رسمی
+- the English item stays left
+
+> توجه: این مرحله را حتماً قبل از اجرا انجام دهید.
+
+| نام | مقدار |
+| --- | --- |
+| نسخه | 2.0.22 |
+
+\`\`\`ts
+const value = 42
+\`\`\`
+`
+
+  await page.evaluate(
+    async ({ fixture, text }) => {
+      const { mountMarkdown } = await import(fixture)
+      await mountMarkdown({ text })
+    },
+    { fixture, text },
+  )
+  await expect(page.getByTestId("markdown-fixture").locator('[data-component="markdown"]')).toHaveAttribute(
+    "data-markdown-ready",
+    "",
+  )
+
+  const measured = await page.evaluate(() => {
+    const markdown = document.querySelector('[data-testid="markdown-fixture"] [data-component="markdown"]')!
+
+    const edge = (element: Element, side: "first" | "last") => {
+      const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
+      const nodes: Text[] = []
+
+      while (walker.nextNode()) {
+        // SAFETY: a SHOW_TEXT walker only ever yields Text nodes, so the cast narrows nothing away.
+        const text = walker.currentNode as Text
+        nodes.push(text)
+      }
+
+      const node = side === "first" ? nodes[0] : nodes[nodes.length - 1]
+
+      if (!node?.textContent) return undefined
+
+      const offset = side === "first" ? 0 : node.textContent.length - 1
+      const range = document.createRange()
+      range.setStart(node, offset)
+      range.setEnd(node, offset + 1)
+
+      return range.getBoundingClientRect()
+    }
+
+    const blocks = (
+      [
+        ["list item", "ul > li:nth-of-type(1)"],
+        ["latin list item", "ul > li:nth-of-type(2)"],
+        ["blockquote paragraph", "blockquote > p"],
+        ["table cell", "td:nth-of-type(1)"],
+      ] as const
+    ).map(([name, selector]) => {
+      const element = markdown.querySelector(selector)!
+      const style = getComputedStyle(element)
+      const first = edge(element, "first")!
+      const last = edge(element, "last")!
+
+      return {
+        name,
+        // `direction` stays inherited from the container, so `plaintext` is what makes a block
+        // resolve its own direction — and what `text-align: start` then follows.
+        bidi: style.unicodeBidi,
+        direction: style.direction,
+        order: first.left > last.left ? "rtl" : "ltr",
+      }
+    })
+
+    const code = [...markdown.querySelectorAll('[data-component="markdown-code"]')].map((element) => {
+      const style = getComputedStyle(element)
+
+      return {
+        name: element.getAttribute("data-component"),
+        bidi: style.unicodeBidi,
+        direction: style.direction,
+      }
+    })
+
+    return { blocks, code }
+  })
+
+  expect(measured.blocks).toEqual([
+    { name: "list item", bidi: "plaintext", direction: "ltr", order: "rtl" },
+    { name: "latin list item", bidi: "plaintext", direction: "ltr", order: "ltr" },
+    { name: "blockquote paragraph", bidi: "plaintext", direction: "ltr", order: "rtl" },
+    { name: "table cell", bidi: "plaintext", direction: "ltr", order: "rtl" },
+  ])
+  // The fenced code block wrapper is a div, which the nested-block rule does not cover.
+  expect(measured.code).toEqual([{ name: "markdown-code", bidi: "isolate", direction: "ltr" }])
+})
