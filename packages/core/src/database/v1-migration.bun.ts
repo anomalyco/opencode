@@ -537,8 +537,14 @@ export function run(options: Options = {}): Effect.Effect<RunResult, never, Data
       const db = (yield* Database.Service).db
       const global = yield* Global.Service
       const state = yield* readState(db)
-      if (state?.phase === "completed") return { status: "completed" as const }
       if (!(yield* hasLegacySessions(db))) return { status: "completed" as const }
+      if (state?.phase === "completed") {
+        // A completed migration may still have parked sessions under the global
+        // pseudo-project before their directory had an owner. Attribute them now
+        // that it does, so the project-scoped V2 listing shows them again.
+        yield* attributeDirectories(db)
+        return { status: "completed" as const }
+      }
       const now = Date.now()
       yield* db.run(sql`
           INSERT OR IGNORE INTO project (id, worktree, time_created, time_updated, time_active, sandboxes)
@@ -680,6 +686,7 @@ export function run(options: Options = {}): Effect.Effect<RunResult, never, Data
           }
         yield* Effect.yieldNow
       }
+      yield* attributeDirectories(db)
       yield* db
         .transaction((tx) =>
           Effect.gen(function* () {
@@ -1132,4 +1139,79 @@ function hasLegacySessions(db: Database.Interface["db"]) {
     Effect.map((row) => row !== undefined),
     Effect.orDie,
   )
+}
+
+type DirectoryOwner = {
+  readonly projectID: string
+  readonly directory: string
+}
+
+/**
+ * V1 listed sessions by directory and left the ones without a registered
+ * project under the `global` pseudo-project. V2 lists per project, so a row
+ * that keeps `global` disappears from the directory V1 showed it in. The runtime
+ * re-owns such a row once its directory's project is resolved (SessionProjector
+ * on Worktree.Event.Resolved); the migration applies the same directory
+ * ownership to the rows it writes, and to rows an earlier migration already
+ * wrote before the directory had an owner.
+ */
+function attributeDirectories(db: Database.Interface["db"]) {
+  return Effect.gen(function* () {
+    const sessions = yield* db
+      .all<{ id: string; directory: string }>(
+        sql`SELECT id, directory FROM session_v2 WHERE project_id = ${Project.ID.global} AND workspace_id IS NULL`,
+      )
+      .pipe(Effect.orDie)
+    if (sessions.length === 0) return
+    const owners = yield* db
+      .all<DirectoryOwner>(sql`
+        SELECT project_id AS "projectID", directory FROM worktree WHERE project_id <> ${Project.ID.global}
+        UNION
+        SELECT id AS "projectID", worktree AS directory FROM project WHERE id <> ${Project.ID.global}
+      `)
+      .pipe(Effect.orDie)
+    if (owners.length === 0) return
+    yield* Effect.forEach(
+      sessions,
+      (session) => {
+        const owner = ownerDirectory(owners, session.directory)
+        if (!owner) return Effect.void
+        return db
+          .run(
+            sql`UPDATE session_v2 SET project_id = ${owner.projectID}, path = ${owner.subpath} WHERE id = ${session.id}`,
+          )
+          .pipe(Effect.orDie)
+      },
+      { discard: true },
+    )
+  })
+}
+
+/** The most specific known project directory containing `directory`, with the subpath it implies. */
+function ownerDirectory(owners: readonly DirectoryOwner[], directory: string) {
+  const target = normalizeDirectory(directory)
+  if (!target) return undefined
+  return owners.reduce<{ readonly projectID: string; readonly subpath: string; readonly depth: number } | undefined>(
+    (best, owner) => {
+      const root = normalizeDirectory(owner.directory)
+      if (!root || !containsDirectory(root, target)) return best
+      if (best && root.length <= best.depth) return best
+      return {
+        projectID: owner.projectID,
+        subpath: target === root ? "" : target.slice(root.length + 1),
+        depth: root.length,
+      }
+    },
+    undefined,
+  )
+}
+
+function normalizeDirectory(value: string) {
+  const normalized = value.replaceAll("\\", "/")
+  return normalized.length > 1 ? normalized.replace(/\/+$/, "") : normalized
+}
+
+function containsDirectory(root: string, directory: string) {
+  if (directory === root) return true
+  return directory.startsWith(root.endsWith("/") ? root : `${root}/`)
 }
