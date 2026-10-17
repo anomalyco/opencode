@@ -474,6 +474,8 @@ jobs:
         env:
           OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
           OPENCODE_CLI_TARGET: ${{ matrix.settings.target }}
+          # fpm overrides XZ_OPT with the deb level; XZ_DEFAULTS still adds threads to xz.
+          XZ_DEFAULTS: -T0
           GH_TOKEN: ${{ steps.committer.outputs.token }}
           CSC_KEYCHAIN: build.keychain
           APPLE_API_KEY: ${{ runner.temp }}/apple-api-key.p8
@@ -488,6 +490,7 @@ jobs:
         env:
           OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
           OPENCODE_CLI_TARGET: ${{ matrix.settings.target }}
+          XZ_DEFAULTS: -T0
 
       - name: Create macOS .app.tar.gz
         if: runner.os == 'macOS' && needs.version.outputs.release
