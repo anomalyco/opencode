@@ -33,6 +33,10 @@ Object.assign(globalThis, { ImageBitmap: StandInBitmap })
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
+// Tells the test a handler is running, so it aborts a running call rather than one the worker has not loaded yet. The
+// client ignores this message: it carries no call id.
+const started = (method: string) => self.postMessage({ started: method })
+
 serveWorker<FixtureMethods>({
   echo: (input) => {
     log.ran.push(`echo:${input}`)
@@ -47,6 +51,7 @@ serveWorker<FixtureMethods>({
   },
   spin: (input) => {
     log.ran.push("spin")
+    started("spin")
 
     const until = performance.now() + input
 
@@ -61,15 +66,20 @@ serveWorker<FixtureMethods>({
   hold: (_, signal) => {
     log.ran.push("hold")
 
-    return new Promise((resolve) =>
+    const done = new Promise<undefined>((resolve) =>
       signal.addEventListener("abort", () => {
         log.aborted.push("hold")
         resolve(undefined)
       }),
     )
+
+    started("hold")
+
+    return done
   },
   paint: async (input) => {
     log.ran.push("paint")
+    started("paint")
     await sleep(input)
 
     const bitmap = new ImageBitmap()

@@ -35,9 +35,10 @@ describe("worker rpc", () => {
   test("an aborted running call aborts its handler's signal", async () => {
     const client = start()
     const controller = new AbortController()
+    const running = client.started("hold")
     const call = client.call("hold", undefined, { signal: controller.signal })
 
-    await Bun.sleep(30)
+    await running
     controller.abort()
     await expect(call).rejects.toBeInstanceOf(WorkerClosedError)
     expect(await client.call("log", undefined)).toEqual({ ran: ["hold"], aborted: ["hold"], closed: 0 })
@@ -46,9 +47,10 @@ describe("worker rpc", () => {
   test("a handler that finishes after its call was aborted closes its bitmaps instead of replying", async () => {
     const client = start()
     const controller = new AbortController()
-    const call = client.call("paint", 50, { signal: controller.signal })
+    const running = client.started("paint")
+    const call = client.call("paint", 200, { signal: controller.signal })
 
-    await Bun.sleep(20)
+    await running
     controller.abort()
     await expect(call).rejects.toBeInstanceOf(WorkerClosedError)
     // The stand-in bitmap cannot be posted, so a reply would fail in the worker before it counted a close.
@@ -58,9 +60,10 @@ describe("worker rpc", () => {
   test("a reply that crosses its call's cancel is dropped", async () => {
     const client = start()
     const controller = new AbortController()
+    const running = client.started("spin")
     const call = client.call("spin", 100, { signal: controller.signal })
 
-    await Bun.sleep(30)
+    await running
     controller.abort()
     await expect(call).rejects.toBeInstanceOf(WorkerClosedError)
     // The worker replied before it read the cancel, and the window's next calls still settle with their own replies.
@@ -78,12 +81,21 @@ describe("worker rpc", () => {
   })
 })
 
+// Each test starts its own worker, so a fixed delay before an abort can land before the worker has loaded and the cancel
+// would withdraw a call that never ran. `started` resolves once the fixture reports that the method's handler is running.
 function start() {
-  const client = createWorkerClient<FixtureMethods>(
-    new Worker(new URL("./worker-rpc.fixture.ts", import.meta.url), { type: "module" }),
-  )
+  const worker = new Worker(new URL("./worker-rpc.fixture.ts", import.meta.url), { type: "module" })
+  const client = createWorkerClient<FixtureMethods>(worker)
 
   clients.push(client)
 
-  return client
+  return {
+    ...client,
+    started: (method: keyof FixtureMethods) =>
+      new Promise<void>((resolve) =>
+        worker.addEventListener("message", (event: MessageEvent<{ readonly started?: string }>) => {
+          if (event.data.started === method) resolve()
+        }),
+      ),
+  }
 }
