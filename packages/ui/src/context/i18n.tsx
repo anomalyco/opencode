@@ -32,7 +32,8 @@ export type UiI18nSource = {
 export type UiI18n = UiI18nSource & {
   /** Preserve runtime-generated English copy while using the keyed dictionary for every other locale. */
   tDynamic: (key: UiI18nOrdinaryKey, source: string, params?: UiI18nParams) => string
-  list: (items: readonly string[]) => string
+  /** Entries may be `undefined`: a dictionary key that has no translation reaches a list as `undefined`. */
+  list: (items: readonly (string | undefined)[]) => string
   listSeparator: (index: number, count: number) => string
 }
 
@@ -90,10 +91,14 @@ export function createUiI18n(source: UiI18nSource): UiI18n {
     tDynamic: (key, value, params) =>
       source.locale().toLowerCase().split("-")[0] === "en" ? resolveTemplate(value, params) : source.t(key, params),
     // English tool labels intentionally use comma-only lists; the animated count labels use the same punctuation.
-    list: (items) =>
-      source.locale().toLowerCase().split("-")[0] === "en"
-        ? items.join(", ")
-        : new Intl.ListFormat(source.locale(), { style: "long", type: "conjunction" }).format(items),
+    // Intl.ListFormat rejects a non-string entry, so drop the ones that have no translation instead of letting a
+    // single missing dictionary key take the whole renderer down with it.
+    list: (items) => {
+      const values = items.filter((item): item is string => typeof item === "string")
+      return source.locale().toLowerCase().split("-")[0] === "en"
+        ? values.join(", ")
+        : new Intl.ListFormat(source.locale(), { style: "long", type: "conjunction" }).format(values)
+    },
     listSeparator: (index, count) =>
       source.locale().toLowerCase().split("-")[0] === "en"
         ? index > 0 && index < count
