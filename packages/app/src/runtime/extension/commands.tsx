@@ -36,7 +36,17 @@ export function ExtensionCommands() {
           ? (event: KeyboardEvent) =>
               event.target instanceof Element && !!event.target.closest(item.value.scope as string)
           : undefined,
-        onSelect: (_source: unknown, input?: string) => item.value.run(input),
+        onSelect: (source?: "palette" | "keybind" | "slash", input?: string) => {
+          if (
+            (source === "keybind" || source === "palette") &&
+            input === undefined &&
+            item.value.slash?.arguments &&
+            command.options.some((option) => option.id === "input.command")
+          )
+            return command.trigger("input.command", source, `${item.extension}.${item.value.id}`)
+
+          return item.value.run(input)
+        },
       })),
   )
 

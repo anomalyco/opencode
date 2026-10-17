@@ -437,6 +437,19 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
 
   command.register("composer-editor", () => [
     {
+      id: "input.command",
+      title: language.t("command.input.focus"),
+      hidden: true,
+      onSelect: (_source, id) => {
+        const item = commands().find((item) => item.id === id)
+
+        if (!item) return
+        controller.dispatch({ type: "mode.normal" })
+        controller.dispatch({ type: "commands.open" })
+        controller.dispatch({ type: "popover.select", item })
+      },
+    },
+    {
       id: "file.attach",
       title: language.t("prompt.action.attachFile"),
       category: language.t("command.category.file"),
