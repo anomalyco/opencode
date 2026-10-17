@@ -154,6 +154,32 @@ serviceTest(
 )
 
 serviceTest(
+  "waits for an unregistered service that still owns the managed port",
+  async () => {
+    await using home = await serviceHome()
+    await ensure(home)
+    const original = await settled(home)
+
+    signal(original.pid, "SIGSTOP")
+    await fs.rm(home.registration)
+    const starting = cli(home, "service", "start")
+    await until(async () => {
+      const running = await servers(home)
+      return running.length === 1 && running[0] === original.pid ? true : undefined
+    }, 2_500)
+    expect(await servers(home)).toEqual([original.pid])
+
+    signal(original.pid, "SIGCONT")
+    await starting
+    const replacement = await settled(home)
+    expect(replacement.pid).not.toBe(original.pid)
+    await exited(original.pid)
+    await stopped(home)
+  },
+  120_000,
+)
+
+serviceTest(
   "a server that fails to boot reports the failure without respawning",
   async () => {
     await using home = await serviceHome({ failBoot: true })

@@ -4,7 +4,7 @@ import { contenderPool, spawnServiceContender } from "../service-contender.js"
 import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
 import { matchesVersion } from "../service-version.js"
 import { PtyHandoff } from "../pty-handoff.js"
-import { decide, fallback, headers, probeResult, same } from "../service-probe.js"
+import { decide, fallback, headers, marker, portInUse, probeResult, same } from "../service-probe.js"
 
 export * from "../service.js"
 export { headers }
@@ -69,10 +69,12 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
     })
   })
   const found = yield* Effect.gen(function* () {
-    const registration = yield* registered(options.file, timing.requestTimeout)
+    const registrationFile = options.file ?? fallback()
+    const registrationPresent = (yield* read(registrationFile)) !== undefined
+    const registration = yield* registered(registrationFile, timing.requestTimeout, marker(options.file))
     const info = registration.info
     const service = registration.service
-    if (registration.timedOut && info !== undefined) {
+    if ((registrationPresent || registration.markerOnly) && registration.timedOut && info !== undefined) {
       timeouts = {
         info,
         count: timeouts !== undefined && same(timeouts.info, info) ? timeouts.count + 1 : 1,
@@ -81,7 +83,7 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
         yield* announce("missing")
         yield* Effect.logWarning("Background service is unresponsive; recovery cannot preserve persistent terminals")
         yield* Effect.tryPromise(() => PtyHandoff.clear(options.file ?? fallback()))
-        yield* terminate(info, options, timing)
+        yield* terminate(info, options, timing, registration.markerOnly ? marker(options.file) : undefined)
         pool.evict(info.pid)
         pool.recruitNow()
         timeouts = undefined
@@ -89,6 +91,7 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
     } else timeouts = undefined
     if (service !== undefined) {
       pool.serviceAnswered()
+      if (registration.markerOnly) return Option.none()
       const decision = decide(service, options)
       if (decision._tag === "fail") return yield* Effect.fail(decision.error)
       if (decision._tag === "reuse") {
@@ -157,10 +160,15 @@ const read = Effect.fnUntraced(function* (file?: string) {
   return yield* decode(text.value).pipe(Effect.option, Effect.map(Option.getOrUndefined))
 })
 
-const registered = Effect.fnUntraced(function* (file?: string, timeout?: number) {
+const registered = Effect.fnUntraced(function* (file?: string, timeout?: number, markerFile?: string) {
   const info = yield* read(file)
-  if (info === undefined) return { info: undefined, service: undefined, timedOut: false }
-  return { info, ...(yield* Effect.promise(() => probeResult(info, timeout))) }
+  if (info === undefined && markerFile !== undefined) {
+    const markerInfo = yield* read(markerFile)
+    if (markerInfo !== undefined)
+      return { markerOnly: true, info: markerInfo, ...(yield* Effect.promise(() => probeResult(markerInfo, timeout))) }
+  }
+  if (info === undefined) return { markerOnly: false, info: undefined, service: undefined, timedOut: false }
+  return { markerOnly: false, info, ...(yield* Effect.promise(() => probeResult(info, timeout))) }
 })
 
 // 50ms cadence bounded at ~5s, shared by stop escalation and each ensure
@@ -179,9 +187,29 @@ const stopped = Effect.fnUntraced(function* (pid: number) {
   return yield* Effect.fail(new Error(`Server process ${pid} is still running`))
 })
 
-const terminate = Effect.fnUntraced(function* (info: Info, options: { readonly file?: string }, timing: EnsureTiming) {
-  const current = yield* read(options.file)
+const running = (pid: number) =>
+  Effect.try({ try: () => process.kill(pid, 0), catch: () => false }).pipe(Effect.orElseSucceed(() => false))
+
+const terminate = Effect.fnUntraced(function* (
+  info: Info,
+  options: { readonly file?: string },
+  timing: EnsureTiming,
+  markerFile?: string,
+) {
+  const current = yield* read(options.file).pipe(
+    Effect.flatMap((value) => (value === undefined && markerFile !== undefined ? read(markerFile) : Effect.succeed(value))),
+  )
   if (current === undefined || !same(current, info)) return
+  if (markerFile !== undefined) {
+    const owner = yield* Effect.promise(() => probeResult(info, timing.requestTimeout))
+    if (
+      owner.service === undefined &&
+      (!owner.timedOut ||
+        !(yield* running(info.pid)) ||
+        !(yield* Effect.promise(() => portInUse(info.url, timing.requestTimeout))))
+    )
+      return
+  }
   yield* signal(info.pid, "SIGTERM")
   const done = yield* stopped(info.pid).pipe(Effect.retry(poll(timing)), Effect.option)
   // The registration can disappear or change hands before this process exits. Only the PID we
@@ -190,10 +218,10 @@ const terminate = Effect.fnUntraced(function* (info: Info, options: { readonly f
     yield* signal(info.pid, "SIGKILL")
     yield* stopped(info.pid).pipe(Effect.retry(poll(timing)))
   }
-  const latest = yield* read(options.file)
+  const latest = yield* read(markerFile ?? options.file)
   if (latest === undefined || !same(latest, info)) return
   const fs = yield* FileSystem.FileSystem
-  yield* fs.remove(options.file ?? fallback()).pipe(Effect.ignore)
+  yield* fs.remove(markerFile ?? options.file ?? fallback()).pipe(Effect.ignore)
 })
 
 /** Effect-based local service lifecycle operations. */
