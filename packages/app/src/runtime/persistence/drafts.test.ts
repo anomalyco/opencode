@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test"
-import { createDraftStore, draftTextChunk, draftTextThreshold, resolveBlobUrl } from "./drafts"
+import {
+  createBrowserDraftStore,
+  createDraftStore,
+  draftTextChunk,
+  draftTextThreshold,
+  resilientDatabase,
+  resolveBlobUrl,
+} from "./drafts"
 
 function memoryDriver() {
   const documents = new Map<string, string>()
@@ -335,5 +342,260 @@ describe("draft store image retention", () => {
   test("a reference to bytes the store no longer holds resolves to nothing", async () => {
     fresh()
     expect(await resolveBlobUrl({ id: "gone" })).toBeUndefined()
+  })
+})
+
+describe("browser draft store connection", () => {
+  // Stands in for IDBDatabase: `transaction` throws exactly as a browser does once the connection is
+  // closing, and `close`/`versionchange` are dispatched the way a browser or another context does.
+  function stubDatabase() {
+    const listeners = new Map<string, Array<() => void>>()
+    let closed = false
+
+    return {
+      get closed() {
+        return closed
+      },
+      addEventListener(type: string, handler: () => void) {
+        listeners.set(type, [...(listeners.get(type) ?? []), handler])
+      },
+      close() {
+        closed = true
+      },
+      dispatch(type: string) {
+        for (const handler of listeners.get(type) ?? []) handler()
+      },
+      transaction() {
+        if (closed) throw Object.assign(new Error("The database connection is closing."), { name: "InvalidStateError" })
+
+        return {}
+      },
+    }
+  }
+
+  function connection() {
+    const databases: ReturnType<typeof stubDatabase>[] = []
+
+    const open = async () => {
+      const database = stubDatabase()
+      databases.push(database)
+
+      return database
+    }
+
+    return { databases, withDatabase: resilientDatabase(open) }
+  }
+
+  const touch = (database: ReturnType<typeof stubDatabase>) => database.transaction()
+
+  test("an operation on a closing connection reopens once and retries", async () => {
+    const { databases, withDatabase } = connection()
+    await withDatabase(touch)
+    expect(databases).toHaveLength(1)
+
+    // The browser reclaimed the connection without this module seeing a close event.
+    databases[0]!.close()
+    await withDatabase(touch)
+
+    expect(databases).toHaveLength(2)
+  })
+
+  test("a close event drops the cached connection", async () => {
+    const { databases, withDatabase } = connection()
+    await withDatabase(touch)
+    databases[0]!.dispatch("close")
+    await withDatabase(touch)
+
+    expect(databases).toHaveLength(2)
+  })
+
+  test("a versionchange closes the connection so another context can upgrade", async () => {
+    const { databases, withDatabase } = connection()
+    await withDatabase(touch)
+    databases[0]!.dispatch("versionchange")
+
+    expect(databases[0]!.closed).toBe(true)
+    await withDatabase(touch)
+    expect(databases).toHaveLength(2)
+  })
+
+  test("an error that is not a closing connection is not retried", async () => {
+    const { databases, withDatabase } = connection()
+
+    await expect(
+      withDatabase(() => {
+        throw new Error("boom")
+      }),
+    ).rejects.toThrow("boom")
+    expect(databases).toHaveLength(1)
+  })
+
+  test("a failed open is not cached, so the next operation opens again", async () => {
+    let attempts = 0
+
+    const withDatabase = resilientDatabase(async () => {
+      attempts++
+
+      if (attempts === 1) throw new Error("open failed")
+
+      return stubDatabase()
+    })
+
+    await expect(withDatabase(touch)).rejects.toThrow("open failed")
+    await withDatabase(touch)
+
+    expect(attempts).toBe(2)
+  })
+})
+
+describe("createBrowserDraftStore", () => {
+  // happy-dom provides no IndexedDB, so this shim models only what the browser store uses and, like a
+  // real connection, throws `InvalidStateError` from `transaction` once it is closed.
+  class FakeEventTarget {
+    listeners = new Map<string, Array<() => void>>()
+
+    addEventListener(type: string, handler: () => void) {
+      this.listeners.set(type, [...(this.listeners.get(type) ?? []), handler])
+    }
+
+    fire(type: string) {
+      for (const handler of [...(this.listeners.get(type) ?? [])]) handler()
+    }
+  }
+
+  class FakeRequest<T> extends FakeEventTarget {
+    result: T
+
+    constructor(result: T, schedule = true) {
+      super()
+      this.result = result
+
+      if (schedule) queueMicrotask(() => this.fire("success"))
+    }
+  }
+
+  class FakeTransaction extends FakeEventTarget {
+    constructor(readonly stores: Map<string, Map<string, string | Blob>>) {
+      super()
+      queueMicrotask(() => this.fire("complete"))
+    }
+
+    objectStore(name: string) {
+      return new FakeStore(this.stores.get(name)!)
+    }
+  }
+
+  class FakeStore {
+    constructor(readonly data: Map<string, string | Blob>) {}
+
+    get(key: string) {
+      return new FakeRequest(this.data.get(key))
+    }
+
+    getKey(key: string) {
+      return new FakeRequest(this.data.has(key) ? key : undefined)
+    }
+
+    getAll() {
+      return new FakeRequest([...this.data.values()])
+    }
+
+    openKeyCursor() {
+      return new FakeRequest(null)
+    }
+
+    put(value: string | Blob, key: string) {
+      this.data.set(key, value)
+    }
+
+    delete(key: string) {
+      this.data.delete(key)
+    }
+  }
+
+  class FakeDatabase extends FakeEventTarget {
+    closed = false
+
+    constructor(readonly stores: Map<string, Map<string, string | Blob>>) {
+      super()
+    }
+
+    createObjectStore(name: string) {
+      if (!this.stores.has(name)) this.stores.set(name, new Map())
+    }
+
+    close() {
+      this.closed = true
+    }
+
+    transaction(_names: string | string[]) {
+      if (this.closed)
+        throw Object.assign(new Error("The database connection is closing."), { name: "InvalidStateError" })
+
+      return new FakeTransaction(this.stores)
+    }
+  }
+
+  function fakeIndexedDB() {
+    const connections: FakeDatabase[] = []
+    // One database per name, shared by every connection, so a reopen sees the stored documents.
+    const stores = new Map<string, Map<string, string | Blob>>()
+
+    const indexedDB = {
+      open() {
+        const database = new FakeDatabase(stores)
+        connections.push(database)
+        const request = new FakeRequest(database, false)
+
+        queueMicrotask(() => {
+          request.fire("upgradeneeded")
+          request.fire("success")
+        })
+
+        return request
+      },
+    }
+
+    return { indexedDB, connections }
+  }
+
+  const document = JSON.stringify({ prompt: [{ type: "text", content: "hi" }] })
+  const restored = { prompt: [{ type: "text", content: "hi" }] }
+
+  test("a read after the browser force-closes the connection reopens instead of rejecting", async () => {
+    const fake = fakeIndexedDB()
+    Object.assign(globalThis, { indexedDB: fake.indexedDB })
+
+    const store = createBrowserDraftStore()
+    await store.setItem("doc", document)
+    expect(fake.connections).toHaveLength(1)
+
+    // The browser reclaimed the connection without this module seeing a close event.
+    fake.connections[0]!.close()
+    expect(JSON.parse((await store.getItem("doc"))!)).toEqual(restored)
+    expect(fake.connections).toHaveLength(2)
+  })
+
+  test("a close event drops the cached connection so the next read opens a new one", async () => {
+    const fake = fakeIndexedDB()
+    Object.assign(globalThis, { indexedDB: fake.indexedDB })
+
+    const store = createBrowserDraftStore()
+    await store.setItem("doc", document)
+    fake.connections[0]!.fire("close")
+    expect(JSON.parse((await store.getItem("doc"))!)).toEqual(restored)
+    expect(fake.connections).toHaveLength(2)
+  })
+
+  test("a versionchange closes the connection so another context can upgrade", async () => {
+    const fake = fakeIndexedDB()
+    Object.assign(globalThis, { indexedDB: fake.indexedDB })
+
+    const store = createBrowserDraftStore()
+    await store.setItem("doc", document)
+    fake.connections[0]!.fire("versionchange")
+    expect(fake.connections[0]!.closed).toBe(true)
+    expect(JSON.parse((await store.getItem("doc"))!)).toEqual(restored)
+    expect(fake.connections).toHaveLength(2)
   })
 })

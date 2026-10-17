@@ -439,92 +439,150 @@ function split(text: string) {
   return pieces
 }
 
-export function createBrowserDraftStore(): DraftStore {
-  const request = indexedDB.open("opencode-drafts", 1)
-  request.addEventListener("upgradeneeded", () => {
-    request.result.createObjectStore("documents")
-    request.result.createObjectStore("blobs")
-  })
+// The browser closes a connection itself when the document is torn down or its storage is evicted,
+// and a version upgrade from another context supersedes it. A transaction on a connection past its
+// close throws `InvalidStateError` before it starts. `open` is called again after either so callers
+// keep working instead of rejecting: the cached handle is dropped on `close`/`versionchange`,
+// and an operation that still hits a closing connection reopens once and retries. Only that
+// synchronous start failure is retried; transaction errors still reject.
+type Reopenable = {
+  addEventListener(type: "close" | "versionchange", handler: () => void): void
+  close(): void
+}
 
-  const db = new Promise<IDBDatabase>((resolve, reject) => {
-    request.addEventListener("success", () => {
-      const database = request.result
-      const transaction = database.transaction(["documents", "blobs"], "readwrite")
-      const documents = transaction.objectStore("documents").getAll()
-      documents.addEventListener("success", () => {
-        const used = referenced(`[${documents.result.join(",")}]`)
-        const store = transaction.objectStore("blobs")
-        const blobs = store.openKeyCursor()
-        blobs.addEventListener("success", () => {
-          const cursor = blobs.result
+export function resilientDatabase<Database extends Reopenable>(open: () => Promise<Database>) {
+  let connection: Promise<Database> | undefined
 
-          if (!cursor) return
+  const connect = () => {
+    if (connection) return connection
+    const next = open()
+    connection = next
 
-          if (!used.has(String(cursor.key))) store.delete(cursor.key)
-          cursor.continue()
+    const forget = () => {
+      if (connection === next) connection = undefined
+    }
+
+    void next.then(
+      (database) => {
+        database.addEventListener("close", forget)
+        database.addEventListener("versionchange", () => {
+          database.close()
+          forget()
         })
+      },
+      () => forget(),
+    )
+
+    return next
+  }
+
+  return async <T>(operation: (database: Database) => T): Promise<Awaited<T>> => {
+    try {
+      return await operation(await connect())
+    } catch (error) {
+      // SAFETY: IndexedDB reports a closing connection as a DOMException whose `name` is the only
+      // field read here; any other failure is rethrown untouched.
+      if ((error as { name?: string } | undefined)?.name !== "InvalidStateError") throw error
+      connection = undefined
+
+      return await operation(await connect())
+    }
+  }
+}
+
+export function createBrowserDraftStore(): DraftStore {
+  const open = () => {
+    const request = indexedDB.open("opencode-drafts", 1)
+    request.addEventListener("upgradeneeded", () => {
+      request.result.createObjectStore("documents")
+      request.result.createObjectStore("blobs")
+    })
+
+    return new Promise<IDBDatabase>((resolve, reject) => {
+      request.addEventListener("success", () => {
+        const database = request.result
+        const transaction = database.transaction(["documents", "blobs"], "readwrite")
+        const documents = transaction.objectStore("documents").getAll()
+        documents.addEventListener("success", () => {
+          const used = referenced(`[${documents.result.join(",")}]`)
+          const store = transaction.objectStore("blobs")
+          const blobs = store.openKeyCursor()
+          blobs.addEventListener("success", () => {
+            const cursor = blobs.result
+
+            if (!cursor) return
+
+            if (!used.has(String(cursor.key))) store.delete(cursor.key)
+            cursor.continue()
+          })
+        })
+        transaction.addEventListener("complete", () => resolve(database))
+        transaction.addEventListener("abort", () => resolve(database))
       })
-      transaction.addEventListener("complete", () => resolve(database))
-      transaction.addEventListener("abort", () => resolve(database))
-    })
-    request.addEventListener("error", () => reject(request.error))
-  })
-
-  const get = async (store: string, key: string) => {
-    const result = (await db).transaction(store).objectStore(store).get(key)
-
-    return new Promise<unknown>((resolve, reject) => {
-      result.addEventListener("success", () => resolve(result.result))
-      result.addEventListener("error", () => reject(result.error))
+      request.addEventListener("error", () => reject(request.error))
     })
   }
 
-  const write = async (store: string, key: string, value?: unknown) => {
-    const transaction = (await db).transaction(store, "readwrite")
+  const withDatabase = resilientDatabase(open)
 
-    if (value === undefined) transaction.objectStore(store).delete(key)
-    else transaction.objectStore(store).put(value, key)
+  const get = (store: string, key: string) =>
+    withDatabase((database) => {
+      const result = database.transaction(store).objectStore(store).get(key)
 
-    return new Promise<void>((resolve, reject) => {
-      transaction.addEventListener("complete", () => resolve())
-      transaction.addEventListener("error", () => reject(transaction.error))
+      return new Promise<unknown>((resolve, reject) => {
+        result.addEventListener("success", () => resolve(result.result))
+        result.addEventListener("error", () => reject(result.error))
+      })
     })
-  }
+
+  const write = (store: string, key: string, value?: unknown) =>
+    withDatabase((database) => {
+      const transaction = database.transaction(store, "readwrite")
+
+      if (value === undefined) transaction.objectStore(store).delete(key)
+      else transaction.objectStore(store).put(value, key)
+
+      return new Promise<void>((resolve, reject) => {
+        transaction.addEventListener("complete", () => resolve())
+        transaction.addEventListener("error", () => reject(transaction.error))
+      })
+    })
 
   return createDraftStore({
     get: async (key) => ((await get("documents", key)) as string | undefined) ?? null,
-    set: async (key, value, strict) => {
-      // One readwrite transaction over both stores: IndexedDB serialises overlapping readwrite
-      // transactions in creation order, so a later save or removal cannot commit between the
-      // reference check and this write. The put is issued from the last lookup's callback so the
-      // transaction is never left without a pending request.
-      const ids = [...referenced(value)]
-      const transaction = (await db).transaction(["blobs", "documents"], "readwrite")
-      const missing: string[] = []
+    set: (key, value, strict) =>
+      withDatabase((database) => {
+        // One readwrite transaction over both stores: IndexedDB serialises overlapping readwrite
+        // transactions in creation order, so a later save or removal cannot commit between the
+        // reference check and this write. The put is issued from the last lookup's callback so the
+        // transaction is never left without a pending request.
+        const ids = [...referenced(value)]
+        const transaction = database.transaction(["blobs", "documents"], "readwrite")
+        const missing: string[] = []
 
-      const publish = () => {
-        if (!strict || missing.length === 0) transaction.objectStore("documents").put(value, key)
-      }
+        const publish = () => {
+          if (!strict || missing.length === 0) transaction.objectStore("documents").put(value, key)
+        }
 
-      let remaining = ids.length
+        let remaining = ids.length
 
-      if (remaining === 0) publish()
+        if (remaining === 0) publish()
 
-      for (const id of ids) {
-        const lookup = transaction.objectStore("blobs").getKey(id)
-        lookup.addEventListener("success", () => {
-          if (lookup.result === undefined) missing.push(id)
+        for (const id of ids) {
+          const lookup = transaction.objectStore("blobs").getKey(id)
+          lookup.addEventListener("success", () => {
+            if (lookup.result === undefined) missing.push(id)
 
-          if (--remaining === 0) publish()
+            if (--remaining === 0) publish()
+          })
+        }
+
+        return new Promise<string[]>((resolve, reject) => {
+          transaction.addEventListener("complete", () => resolve(missing))
+          transaction.addEventListener("error", () => reject(transaction.error))
+          transaction.addEventListener("abort", () => reject(transaction.error))
         })
-      }
-
-      return new Promise<string[]>((resolve, reject) => {
-        transaction.addEventListener("complete", () => resolve(missing))
-        transaction.addEventListener("error", () => reject(transaction.error))
-        transaction.addEventListener("abort", () => reject(transaction.error))
-      })
-    },
+      }),
     remove: (key) => write("documents", key),
     putBlob: async (blob) => {
       const id = await blobID(blob)
