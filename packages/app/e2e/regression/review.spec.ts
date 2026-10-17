@@ -522,13 +522,13 @@ test("a restored file tab keeps the file tree on Files Changed", async ({ page }
   await treeTab("All files").click()
   await tree.getByRole("button", { name: "README.md" }).click()
   await expect(readme).toHaveAttribute("aria-selected", "true")
-  await treeTab("Files Changed 1").click()
-  await expect(treeTab("Files Changed 1")).toHaveAttribute("aria-selected", "true")
+  await treeTab("1 File Changed").click()
+  await expect(treeTab("1 File Changed")).toHaveAttribute("aria-selected", "true")
 
   await page.reload()
   await expect(readme).toHaveAttribute("aria-selected", "true")
   await expect(panel.getByText("contents:README.md", { exact: true })).toBeVisible()
-  await expect(treeTab("Files Changed 1")).toHaveAttribute("aria-selected", "true")
+  await expect(treeTab("1 File Changed")).toHaveAttribute("aria-selected", "true")
 
   // Selecting a file tab after load still shows it among all files.
   await panel.locator("#session-side-panel-review-tab").click()
