@@ -4,7 +4,7 @@ import * as OpenAIChat from "../src/protocols/openai-chat.js"
 import { AIError, HttpContext, InvalidProviderOutputError, LLM } from "../src/index.js"
 import { Anthropic } from "../src/providers.js"
 import { Auth, Framing, HttpTransport, LLMClient, Route } from "../src/route.js"
-import { fixedResponse, truncatedStream } from "./lib/http.js"
+import { dynamicResponse, fixedResponse, truncatedStream } from "./lib/http.js"
 import { sseEvents } from "./lib/sse.js"
 import { it } from "./lib/effect.js"
 
@@ -227,4 +227,31 @@ describe("Route diagnostics", () => {
       expect(error.reason.body).toBeUndefined()
     }),
   )
+})
+
+describe("process-wide request admission", () => {
+  it.effect("increases concurrency after successful requests without a fixed ceiling", () => {
+    let active = 0
+    let peak = 0
+    const body = sseEvents(
+      { choices: [{ index: 0, delta: { content: "ok" }, finish_reason: null }] },
+      { choices: [{ index: 0, delta: {}, finish_reason: "stop" }] },
+    )
+    const layer = dynamicResponse(({ respond }) =>
+      Effect.gen(function* () {
+        active++
+        peak = Math.max(peak, active)
+        yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 5)))
+        active--
+        return respond(body, { headers: { "content-type": "text/event-stream" } })
+      }),
+    )
+    const model = OpenAIChat.route.with({ endpoint: { baseURL: "https://admission.test/v1" } }).model({ id: "admission-test" })
+    const request = LLM.request({ model, prompt: "hello" })
+    return Effect.gen(function* () {
+      for (let index = 0; index < 4; index++) yield* LLMClient.generate(request)
+      yield* Effect.forEach(Array.from({ length: 8 }, () => LLMClient.generate(request)), effect => effect, { concurrency: "unbounded" })
+      expect(peak).toBe(8)
+    }).pipe(Effect.provide(layer))
+  })
 })

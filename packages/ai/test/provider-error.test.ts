@@ -59,8 +59,17 @@ describe("provider error classification", () => {
         "Request rate increased too quickly",
         "Rate limit exceeded, please try again later",
         "Too many requests, please slow down",
+        "Too many pending requests",
       ].map((message) => classifyProviderFailure({ message })._tag),
-    ).toEqual(["RateLimit", "RateLimit", "RateLimit"])
+    ).toEqual(["RateLimit", "RateLimit", "RateLimit", "RateLimit"])
+  })
+
+  test("classifies an empty provider account pool as non-retryable authentication failure", () => {
+    expect(
+      [undefined, 429].map((status) =>
+        classifyProviderFailure({ message: "No available accounts: no available accounts", status })._tag,
+      ),
+    ).toEqual(["Authentication", "Authentication"])
   })
 
   test("classifies V1 JSON rate limit fallbacks", () => {

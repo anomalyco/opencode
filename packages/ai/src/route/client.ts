@@ -1,4 +1,4 @@
-import { Cause, Context, Effect, Layer, Schema, Stream } from "effect"
+import { Cause, Context, Effect, Layer, Schema, Semaphore, Stream } from "effect"
 import { Auth } from "./auth.js"
 import { Endpoint, type EndpointPatch } from "./endpoint.js"
 import { RequestExecutor } from "./executor.js"
@@ -599,13 +599,54 @@ export const compileRequest = Effect.fn("LLM.compileRequest")(function* (request
   }
 })
 
-const streamRequestWith = (runtime: TransportRuntime) => (request: LLMRequest, options?: StreamOptions) =>
-  Stream.unwrap(
-    Effect.gen(function* () {
-      const compiled = yield* compile(request, options)
-      return compiled.route.streamPrepared(compiled.prepared, compiled.request, runtime, options)
-    }),
-  )
+const streamRequestWith = (
+  runtime: TransportRuntime,
+  admission: {
+    readonly semaphore: Semaphore.Semaphore
+    readonly succeeded: () => Effect.Effect<void>
+    readonly rateLimited: (retryAfterMs?: number) => Effect.Effect<void>
+  },
+) =>
+  (request: LLMRequest, options?: StreamOptions) =>
+    Stream.unwrap(
+      Effect.gen(function* () {
+        const compiled = yield* compile(request, options)
+        return Stream.fromEffect(admission.semaphore.take(1)).pipe(
+          Stream.flatMap(() => {
+            let finished = false
+            let limited = false
+            return compiled.route
+              .streamPrepared(compiled.prepared, compiled.request, runtime, options)
+              .pipe(
+                Stream.tap((event) => {
+                  if (LLMEvent.is.finish(event)) finished = true
+                  if (
+                    LLMEvent.is.providerError(event) &&
+                    /\b429\b|concurrency limit exceeded|rate[-_\s]?limit|too many (?:pending )?requests/i.test(
+                      event.message,
+                    )
+                  ) {
+                    limited = true
+                    return admission.rateLimited()
+                  }
+                  return Effect.void
+                }),
+                Stream.tapError((error) => {
+                  if (error.reason._tag !== "RateLimit") return Effect.void
+                  limited = true
+                  return admission.rateLimited(error.reason.retryAfterMs)
+                }),
+                Stream.ensuring(
+                  Effect.gen(function* () {
+                    if (finished && !limited) yield* admission.succeeded()
+                    yield* Semaphore.release(admission.semaphore, 1)
+                  }),
+                ),
+              )
+          }),
+        )
+      }),
+    )
 
 const generateWith = (stream: Interface["stream"]) =>
   Effect.fn("LLM.generate")(function* (request: LLMRequest, options?: StreamOptions) {
@@ -658,7 +699,39 @@ export const layer: Layer.Layer<Service, never, RequestExecutor.Service> = Layer
   Service,
   Effect.gen(function* () {
     const executor = yield* RequestExecutor.Service
-    const stream = streamRequestWith({ http: executor })
+    const semaphore = yield* Semaphore.make(4)
+    let window = 4
+    let cooldownUntil = 0
+    const admission = {
+      semaphore,
+      succeeded: () =>
+        Effect.suspend(() => {
+          window += 1
+          return semaphore.resize(Date.now() < cooldownUntil ? 0 : window)
+        }),
+      rateLimited: (retryAfterMs?: number) =>
+        Effect.suspend(() => {
+          window = Math.max(1, Math.floor(window / 2))
+          const retryAfter = Number.isFinite(retryAfterMs)
+            ? Math.max(retryAfterMs ?? 0, 1_000)
+            : 1_000
+          cooldownUntil = Math.max(cooldownUntil, Date.now() + retryAfter)
+          const blockedUntil = cooldownUntil
+          const cooldown = Effect.gen(function* () {
+            yield* Effect.sleep(Math.max(0, blockedUntil - Date.now()))
+            if (Date.now() >= cooldownUntil) yield* semaphore.resize(window)
+          }).pipe(Effect.forkDetach, Effect.asVoid)
+          return semaphore.resize(0).pipe(Effect.andThen(cooldown))
+        }),
+    }
+    const stream = streamRequestWith({ http: executor }, admission)
+    const compactWithAdmission = <A>(operation: Effect.Effect<A, AIError>) =>
+      semaphore.withPermit(operation).pipe(
+        Effect.tap(() => admission.succeeded()),
+        Effect.tapError((error) =>
+          error.reason._tag === "RateLimit" ? admission.rateLimited(error.reason.retryAfterMs) : Effect.void,
+        ),
+      )
     function compact(
       request: CompactionRequest,
       options?: EndpointCompactOptions,
@@ -670,9 +743,9 @@ export const layer: Layer.Layer<Service, never, RequestExecutor.Service> = Layer
     function compact(request: LLMRequest, options?: EndpointCompactOptions | TriggerCompactOptions) {
       return Effect.suspend((): Effect.Effect<CompactionResponse | CompactionCheckpointResponse, AIError> => {
         if (options?.mechanism === "trigger" && canCompact(request, options))
-          return request.model.route.compact.trigger(prepareRequest(request), executor, options)
+          return compactWithAdmission(request.model.route.compact.trigger(prepareRequest(request), executor, options))
         if ((options?.mechanism === undefined || options.mechanism === "endpoint") && canCompact(request))
-          return request.model.route.compact.endpoint(prepareRequest(request), executor, options)
+          return compactWithAdmission(request.model.route.compact.endpoint(prepareRequest(request), executor, options))
         return unsupportedCompaction(request, options?.mechanism)
       })
     }
