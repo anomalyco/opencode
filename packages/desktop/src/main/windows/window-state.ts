@@ -1,6 +1,7 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
-import path from "node:path"
+import { existsSync, readFileSync } from "node:fs"
 import type { BrowserWindow, Rectangle } from "electron"
+
+import { writeFileAtomic } from "../storage/atomic-write"
 
 // Remembers a window's bounds and maximized / fullscreen flags across launches in the same JSON
 // file electron-window-state wrote, so existing profiles restore where they were.
@@ -100,9 +101,7 @@ export function manageWindowState(win: BrowserWindow, file: string, initial: Win
     win.off("move", changed)
     win.off("close", update)
     win.off("closed", closed)
-    mkdirSync(path.dirname(file), { recursive: true })
-    writeFileSync(`${file}.tmp`, JSON.stringify(state))
-    renameSync(`${file}.tmp`, file)
+    writeFileAtomic(file, JSON.stringify(state))
   }
 
   win.on("resize", changed)
