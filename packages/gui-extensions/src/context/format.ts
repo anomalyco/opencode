@@ -1,3 +1,11 @@
+// Prompt cache hit rate as a percentage of read tokens over all input-side
+// tokens (read + uncached input) for the session, or null when nothing was sent.
+export function cacheHitRate(read: number, input: number): number | null {
+  const total = read + input
+  if (total <= 0) return null
+  return Math.round((read / total) * 100)
+}
+
 export function createSessionContextFormatter(locale: string) {
   // The fields luxon's DATETIME_MED preset passed to Intl; output is identical.
   const dateTime = new Intl.DateTimeFormat(locale, {

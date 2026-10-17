@@ -15,7 +15,7 @@ import { lastAssistantWithUsage } from "@opencode/client/solid"
 import { createKeyed, useExtension, type MountedSession } from "../sdk"
 import { catalogModel, syncCatalog } from "./catalog"
 import { fetchSessionExport, sessionExportFilename } from "./export"
-import { createSessionContextFormatter } from "./format"
+import { cacheHitRate, createSessionContextFormatter } from "./format"
 
 function Stat(props: { label: string; value: JSX.Element }) {
   return (
@@ -135,6 +135,19 @@ export default function SessionContextTab(props: { session: MountedSession }) {
     }
   })
 
+  // Session-wide prompt cache hit rate: cached reads vs uncached input across
+  // every assistant message, not just the last request.
+  const hitRate = createMemo(() => {
+    const totals = messages().reduce(
+      (acc, message) =>
+        message.type === "assistant" && message.tokens
+          ? { read: acc.read + message.tokens.cache.read, input: acc.input + message.tokens.input }
+          : acc,
+      { read: 0, input: 0 },
+    )
+    return cacheHitRate(totals.read, totals.input)
+  })
+
   const formatter = createMemo(() => createSessionContextFormatter(i18n.locale()))
 
   // A root session's cost includes its subagent sessions, as in the TUI.
@@ -195,6 +208,7 @@ export default function SessionContextTab(props: { session: MountedSession }) {
       value: () =>
         `${formatter().number(context()?.tokens.cache.read)} / ${formatter().number(context()?.tokens.cache.write)}`,
     },
+    { label: "stats.cacheHitRate", value: () => formatter().percent(hitRate()) },
     { label: "stats.userMessages", value: () => counts().user.toLocaleString(i18n.locale()) },
     { label: "stats.assistantMessages", value: () => counts().assistant.toLocaleString(i18n.locale()) },
     { label: "stats.totalCost", value: cost },
