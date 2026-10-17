@@ -62,10 +62,11 @@ export function permissionInfo(request: MiniPermissionRequest, directory?: strin
     ...info,
     icon: monoPrefix(info.icon, true),
     lines: [
-      ...(info.diff || info.patch ? [info.diff ?? info.patch!] : []),
+      ...(info.files ? info.files.map((item) => item.diff) : info.diff || info.patch ? [info.diff ?? info.patch!] : []),
       ...info.lines.map((line) => monoPrefix(line, true)),
     ],
     diff: undefined,
+    files: undefined,
     patch: undefined,
   }
 }

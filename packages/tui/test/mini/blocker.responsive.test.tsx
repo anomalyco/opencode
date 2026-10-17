@@ -497,6 +497,55 @@ test("form review scrolls from the first answer to the last", async () => {
   }
 })
 
+test("multi-file edit permissions label each diff with its file", async () => {
+  const app = await testRender(
+    () => (
+      <RunPermissionBody
+        request={{
+          ...permission,
+          action: "edit",
+          resources: ["/project/src/old.ts", "/project/src/new.ts", "/project/src/other.ts"],
+          metadata: {
+            files: [
+              {
+                file: "/project/src/new.ts",
+                patch: "@@ -1 +1 @@\n-one\n+FIRST_DIFF\n",
+                additions: 1,
+                deletions: 1,
+                status: "modified",
+              },
+              {
+                file: "/project/src/other.ts",
+                patch: "@@ -1 +1 @@\n-two\n+SECOND_DIFF\n",
+                additions: 1,
+                deletions: 1,
+                status: "modified",
+              },
+            ],
+          },
+        }}
+        directory={() => "/project"}
+        theme={RUN_THEME_FALLBACK.footer}
+        block={RUN_THEME_FALLBACK.block}
+        onReply={() => {}}
+      />
+    ),
+    { width: 100, height: 30 },
+  )
+  try {
+    await settle(app)
+    const frame = app.captureCharFrame()
+    expect(frame).toContain("Edit 2 files")
+    expect(frame).toContain("src/new.ts")
+    expect(frame).toContain("src/other.ts")
+    expect(frame).not.toContain("old.ts")
+    expect(frame).toContain("FIRST_DIFF")
+    expect(frame).toContain("SECOND_DIFF")
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("long permission paths, diffs and persistent scopes remain keyboard accessible", async () => {
   const app = await testRender(
     () => (
