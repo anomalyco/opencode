@@ -58,6 +58,15 @@ test("treats WSL sidecars as remote server connections", () => {
   expect(ServerConnection.local({ type: "http", http: { url: "https://server.example.test" } })).toBe(false)
 })
 
+test("treats uppercase, userinfo, and IPv6 loopback URLs as local", () => {
+  expect(ServerConnection.local({ type: "http", http: { url: "http://LOCALHOST:4096" } })).toBe(true)
+  expect(ServerConnection.local({ type: "http", http: { url: "http://user@localhost:4096" } })).toBe(true)
+  expect(ServerConnection.local({ type: "http", http: { url: "http://[::1]:4096" } })).toBe(true)
+  expect(ServerConnection.local({ type: "http", http: { url: "http://LOCALHOST.evil.test" } })).toBe(false)
+  expect(ServerConnection.local({ type: "http", http: { url: "http://[::2]:4096" } })).toBe(false)
+  expect(ServerConnection.local({ type: "http", http: { url: "http://localhost:pw@evil.test" } })).toBe(false)
+})
+
 test("keeps exact persisted server identities and prevents removing provided servers", () => {
   const stored = Schema.decodeUnknownSync(serverSchema())({
     list: ["http://localhost:4096", "http://localhost:4096/", "http://127.0.0.1:4096"],
