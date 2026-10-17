@@ -64,9 +64,7 @@ const startEntries = Effect.fnUntraced(function* (
   yield* ConfigCompatibilityPlugin.Plugin.effect(pluginHost).pipe(
     Effect.provide(Config.testLayer(entries, compatibility)),
   )
-  yield* ConfigSkillPlugin.Plugin.effect(
-    pluginHost,
-  ).pipe(
+  yield* ConfigSkillPlugin.Plugin.effect(pluginHost).pipe(
     Effect.provide(Config.testLayer(entries, compatibility)),
     Effect.provideService(SkillDiscovery.Service, discovery),
     Effect.provideService(Global.Service, Global.Service.of({ ...Global.make(), home })),
@@ -130,9 +128,9 @@ describe("SkillFile.parse", () => {
     expect(parse("disable-model-invocation: yes")).toMatchObject({ skill: { autoinvoke: false } })
     expect(parse("disable-model-invocation: false")).not.toMatchObject({ skill: { autoinvoke: expect.anything() } })
     expect(parse("disable-model-invocation: maybe")).not.toMatchObject({ skill: { autoinvoke: expect.anything() } })
-    expect(
-      parse("disable-model-invocation: true\nmetadata:\n  opencode/autoinvoke: true"),
-    ).toMatchObject({ skill: { autoinvoke: true } })
+    expect(parse("disable-model-invocation: true\nmetadata:\n  opencode/autoinvoke: true")).toMatchObject({
+      skill: { autoinvoke: true },
+    })
   })
 
   test("parses root and nested skill ids and metadata flags", () => {
@@ -175,6 +173,122 @@ metadata:
 })
 
 describe("ConfigSkillPlugin.Plugin", () => {
+  for (const compatibility of [false, true]) {
+    const scanner = compatibility ? "compatibility" : "configured"
+    const loadRoots = (roots: string[], directory: string) =>
+      compatibility
+        ? startEntries([], directory, directory, emptyDiscovery, {
+            claude: roots.map((root) => AbsolutePath.make(path.dirname(root))),
+            agents: [],
+          })
+        : start(roots, directory)
+
+    it.live(`${scanner} skills exclude dependency trees but keep nested and dot-directory skills`, () =>
+      Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+        Effect.flatMap((tmp) =>
+          Effect.gen(function* () {
+            const root = path.join(tmp.path, "skills")
+            const kept = ["kept", "kept/nested", ".custom/hidden"]
+            const excluded = ["node_modules", ".git", "dist", ".cache"].flatMap((name) => [
+              `${name}/root-excluded`,
+              `kept/${name}/nested-excluded`,
+            ])
+            yield* Effect.promise(async () => {
+              for (const name of [...kept, ...excluded]) {
+                await fs.mkdir(path.join(root, name), { recursive: true })
+                await write(root, name, name)
+              }
+              await fs.writeFile(path.join(root, "manual.md"), "# manual")
+            })
+            const real = yield* FSUtil.Service
+            const reads: string[] = []
+            const skill = yield* loadRoots([root], tmp.path).pipe(
+              Effect.provideService(
+                FSUtil.Service,
+                FSUtil.Service.of({
+                  ...real,
+                  readFileStringSafe: (file) => {
+                    reads.push(file)
+                    return real.readFileStringSafe(file)
+                  },
+                }),
+              ),
+            )
+            expect((yield* skill.list()).map((item) => item.id).toSorted()).toEqual([
+              Skill.ID.make("hidden"),
+              Skill.ID.make("kept"),
+              Skill.ID.make("manual"),
+              Skill.ID.make("nested"),
+            ])
+            expect(reads).toHaveLength(4)
+          }),
+        ),
+      ),
+    )
+
+    it.live(`${scanner} skills scan aliased roots once per refresh without changing later-source precedence`, () =>
+      Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+        Effect.flatMap((tmp) =>
+          Effect.gen(function* () {
+            const first = path.join(tmp.path, "first", "skills")
+            const second = path.join(tmp.path, "second", "skills")
+            const alias = compatibility ? path.join(tmp.path, "alias", "skills") : path.join(tmp.path, "alias-root")
+            yield* Effect.promise(async () => {
+              await fs.mkdir(path.join(first, "review"), { recursive: true })
+              await fs.mkdir(path.join(second, "review"), { recursive: true })
+              await write(first, "review", "First")
+              await write(second, "review", "Second")
+              await fs.writeFile(path.join(first, "SKILL.md"), "# root")
+              await fs.writeFile(path.join(first, "manual.md"), "# manual")
+              await fs.symlink(
+                compatibility ? path.dirname(first) : first,
+                compatibility ? path.dirname(alias) : alias,
+                process.platform === "win32" ? "junction" : undefined,
+              )
+            })
+            const real = yield* FSUtil.Service
+            const scans: string[] = []
+            const reads: string[] = []
+            const skill = yield* loadRoots([first, second, alias], tmp.path).pipe(
+              Effect.provideService(
+                FSUtil.Service,
+                FSUtil.Service.of({
+                  ...real,
+                  scan: (pattern, options) => {
+                    scans.push(options!.cwd!)
+                    return real.scan(pattern, options)
+                  },
+                  readFileStringSafe: (file) => {
+                    reads.push(file)
+                    return real.readFileStringSafe(file)
+                  },
+                }),
+              ),
+            )
+            const listed = yield* skill.list()
+            expect(listed.find((item) => item.id === "review")).toMatchObject({
+              description: "First",
+              path: path.join(compatibility ? first : alias, "review", "SKILL.md"),
+            })
+            expect(listed.map((item) => item.id).toSorted()).toEqual(
+              (compatibility ? ["manual", "review", "skills"] : ["alias-root", "manual", "review", "skills"]).map(
+                (id) => Skill.ID.make(id),
+              ),
+            )
+            expect(scans).toHaveLength(2)
+            expect(reads).toHaveLength(4)
+
+            yield* Effect.promise(() => write(first, "review", "Updated"))
+            yield* emitAndWait({ type: "update", path: path.join(first, "review", "SKILL.md") })
+            expect((yield* skill.list()).find((item) => item.id === "review")?.description).toBe("Updated")
+            expect(scans).toHaveLength(4)
+            expect(reads).toHaveLength(8)
+          }),
+        ),
+      ),
+    )
+  }
+
   it.live("maps config entry types to skill directories", () =>
     Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>
@@ -357,6 +471,62 @@ describe("ConfigSkillPlugin.Plugin", () => {
           yield* Effect.promise(() => fs.writeFile(file, "---\nname: bro\ndescription: Updated\n---\n# bro"))
           yield* emitAndWait({ type: "update", path: file })
           expect((yield* skill.list()).find((item) => item.id === "bro")?.description).toBe("Updated")
+        }),
+      ),
+    ),
+  )
+
+  it.live("keeps external skill updates that arrive during loading", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const source = path.join(tmp.path, "source")
+          const target = path.join(tmp.path, "target", "bro")
+          const file = path.join(target, "SKILL.md")
+          const linked = path.join(source, "bro", "SKILL.md")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(source, { recursive: true })
+            await fs.mkdir(target, { recursive: true })
+            await write(path.dirname(target), "bro", "Initial")
+            await fs.symlink(target, path.join(source, "bro"), process.platform === "win32" ? "junction" : undefined)
+          })
+          const real = yield* FSUtil.Service
+          const watcher = yield* Watcher.Test
+          const bus = yield* Bus.Service
+          const skill = yield* Skill.Service
+          const updated = yield* Deferred.make<void>()
+          yield* bus.subscribe(Skill.Event.Updated).pipe(
+            Stream.runForEach(() =>
+              skill
+                .get(Skill.ID.make("bro"))
+                .pipe(
+                  Effect.flatMap((current) =>
+                    current?.description === "Updated" ? Deferred.succeed(updated, undefined) : Effect.void,
+                  ),
+                ),
+            ),
+            Effect.forkScoped,
+          )
+          yield* Effect.yieldNow
+          yield* start([source], tmp.path).pipe(
+            Effect.provideService(
+              FSUtil.Service,
+              FSUtil.Service.of({
+                ...real,
+                readFileStringSafe: (filepath) =>
+                  Effect.gen(function* () {
+                    const content = yield* real.readFileStringSafe(filepath)
+                    if (filepath === linked && content?.includes("description: Initial")) {
+                      yield* Effect.promise(() => write(path.dirname(target), "bro", "Updated"))
+                      yield* watcher.emit({ type: "update", path: file })
+                    }
+                    return content
+                  }),
+              }),
+            ),
+          )
+          yield* Deferred.await(updated).pipe(Effect.timeout("2 seconds"))
+          expect((yield* skill.get(Skill.ID.make("bro")))?.description).toBe("Updated")
         }),
       ),
     ),

@@ -15,6 +15,7 @@ import { SkillDiscovery } from "../../skill/discovery.js"
 import { SkillFile } from "./skill-file.js"
 
 type Source = Skill.DirectorySource | Skill.UrlSource
+type ScannedFile = { relative: string; resolved: string; content: string | undefined }
 
 export const Plugin = define({
   id: "opencode.config.skill",
@@ -102,7 +103,7 @@ export const Plugin = define({
       return result
     }
 
-    const load = Effect.fn("ConfigSkillPlugin.load")(function* (source: Source) {
+    const load = Effect.fn("ConfigSkillPlugin.load")(function* (source: Source, scanned: Map<string, ScannedFile[]>) {
       const directories =
         source.type === "directory"
           ? [source.path]
@@ -117,15 +118,43 @@ export const Plugin = define({
       const roots = (yield* Effect.forEach(directories, watchDirectory)).flat()
       const skills: Skill.Info[] = []
       for (const directory of directories) {
-        const files = yield* fs
-          .scan("{*.md,**/SKILL.md}", { cwd: directory, absolute: true, include: "file", symlink: true, dot: true })
-          .pipe(Effect.orElseSucceed(() => [] as string[]))
-        for (const filepath of files.toSorted()) {
-          const resolved = yield* fs.realPath(filepath).pipe(Effect.orElseSucceed(() => filepath))
-          if (!roots.some((root) => FSUtil.contains(root, resolved))) yield* watch(path.dirname(resolved), "directory")
-          const content = yield* fs.readFileStringSafe(filepath).pipe(Effect.orElseSucceed(() => undefined))
-          if (!content) continue
-          const parsed = SkillFile.parse(directory, filepath, content)
+        const canonical = yield* fs.realPath(directory).pipe(Effect.orElseSucceed(() => directory))
+        if (!scanned.has(canonical)) {
+          const files = yield* fs
+            .scan("{*.md,**/SKILL.md}", {
+              cwd: directory,
+              absolute: true,
+              include: "file",
+              symlink: true,
+              dot: true,
+              // Trailing /** lets glob prune these directories before descending.
+              ignore: ["**/node_modules/**", "**/.git/**", "**/dist/**", "**/.cache/**"],
+            })
+            .pipe(Effect.orElseSucceed(() => [] as string[]))
+          scanned.set(
+            canonical,
+            yield* Effect.forEach(files.toSorted(), (filepath) =>
+              Effect.gen(function* () {
+                const resolved = yield* fs.realPath(filepath).pipe(Effect.orElseSucceed(() => filepath))
+                if (!roots.some((root) => FSUtil.contains(root, resolved)))
+                  yield* watch(path.dirname(resolved), "directory")
+                return {
+                  relative: path.relative(directory, filepath),
+                  resolved,
+                  content: yield* fs.readFileStringSafe(filepath).pipe(Effect.orElseSucceed(() => undefined)),
+                }
+              }),
+            ),
+          )
+        }
+        // Rebind cached files to each advertised root, preserving its paths, IDs and precedence.
+        for (const file of scanned.get(canonical)!) {
+          if (!roots.some((root) => FSUtil.contains(root, file.resolved))) {
+            yield* watch(path.dirname(file.resolved), "directory")
+          }
+          if (!file.content) continue
+          const filepath = path.join(directory, file.relative)
+          const parsed = SkillFile.parse(directory, filepath, file.content)
           if (parsed._tag === "Skipped") {
             yield* Effect.logDebug("skill file skipped", {
               filepath,
@@ -150,9 +179,10 @@ export const Plugin = define({
       function* (file?: string) {
         yield* FiberMap.clear(watches)
         const skills = new Map<Skill.ID, Skill.Info>()
+        const scanned = new Map<string, ScannedFile[]>()
         const current = sources()
         for (const source of current) {
-          for (const skill of yield* load(source)) skills.set(skill.id, skill)
+          for (const skill of yield* load(source, scanned)) skills.set(skill.id, skill)
         }
         loaded.skills = Array.from(skills.values())
         if (file) {

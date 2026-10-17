@@ -6,7 +6,7 @@ import path from "path"
 import { Effect, FiberMap, PubSub, Semaphore, Stream } from "effect"
 import { Config } from "../../config.js"
 import { Watcher } from "../../filesystem/watcher.js"
-import { Skill } from "../../skill.js"
+import type { Skill } from "../../skill.js"
 import { SkillFile } from "./skill-file.js"
 
 export const Plugin = define({
@@ -20,10 +20,7 @@ export const Plugin = define({
     const lock = Semaphore.makeUnsafe(1)
     const skills: Skill.Info[] = []
 
-    const watch = Effect.fn("ConfigCompatibilityPlugin.watch")(function* (
-      target: string,
-      type: "file" | "directory",
-    ) {
+    const watch = Effect.fn("ConfigCompatibilityPlugin.watch")(function* (target: string, type: "file" | "directory") {
       const updates = yield* watcher.subscribe({ path: target, type })
       yield* FiberMap.run(
         watches,
@@ -39,19 +36,34 @@ export const Plugin = define({
         const roots = config.compatibility ? yield* config.compatibility() : { claude: [], agents: [] }
         const directories = [...roots.claude, ...roots.agents].map((root) => path.join(root, "skills"))
         const loaded = new Map<Skill.ID, Skill.Info>()
+        const scanned = new Map<string, Skill.Info[]>()
         for (const directory of directories) {
           const resolved = yield* fs.realPath(directory).pipe(Effect.orElseSucceed(() => undefined))
           if (!resolved) continue
           yield* watch(resolved, "directory")
-          const files = yield* fs
-            .scan("{*.md,**/SKILL.md}", { cwd: resolved, absolute: true, include: "file", symlink: true, dot: true })
-            .pipe(Effect.orElseSucceed(() => [] as string[]))
-          for (const filepath of files.toSorted()) {
-            const content = yield* fs.readFileStringSafe(filepath).pipe(Effect.orElseSucceed(() => undefined))
-            if (!content) continue
-            const parsed = SkillFile.parse(resolved, filepath, content)
-            if (parsed._tag === "Parsed") loaded.set(parsed.skill.id, parsed.skill)
+          if (!scanned.has(resolved)) {
+            const skills: Skill.Info[] = []
+            const files = yield* fs
+              .scan("{*.md,**/SKILL.md}", {
+                cwd: resolved,
+                absolute: true,
+                include: "file",
+                symlink: true,
+                dot: true,
+                // Trailing /** lets glob prune these directories before descending.
+                ignore: ["**/node_modules/**", "**/.git/**", "**/dist/**", "**/.cache/**"],
+              })
+              .pipe(Effect.orElseSucceed(() => [] as string[]))
+            for (const filepath of files.toSorted()) {
+              const content = yield* fs.readFileStringSafe(filepath).pipe(Effect.orElseSucceed(() => undefined))
+              if (!content) continue
+              const parsed = SkillFile.parse(resolved, filepath, content)
+              if (parsed._tag === "Parsed") skills.push(parsed.skill)
+            }
+            scanned.set(resolved, skills)
           }
+          // Replay aliases in source order so a later alias still wins over intervening roots.
+          for (const skill of scanned.get(resolved)!) loaded.set(skill.id, skill)
         }
         skills.splice(0, skills.length, ...loaded.values())
       },
