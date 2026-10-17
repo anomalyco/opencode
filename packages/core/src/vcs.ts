@@ -244,7 +244,10 @@ const layer = Layer.effect(
         let total = 0
         return rows.map((row) => {
           const bytes = Buffer.byteLength(row.patch)
-          if (total + bytes > MAX_TOTAL_PATCH_BYTES) return { ...row, patch: emptyPatch(row.file) }
+          // The total check already uses UTF-8 bytes; a withheld patch keeps
+          // filename/status/counts and exposes truncated: true.
+          if (total + bytes > MAX_TOTAL_PATCH_BYTES)
+            return { ...row, patch: emptyPatch(row.file), truncated: true as const }
           total += bytes
           return row
         })
