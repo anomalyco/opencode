@@ -240,7 +240,8 @@ export function createServerNotificationState(input: {
     })
   }
 
-  const handleSessionError = (sessionID: string, eventID: string) => {
+  const handleSessionError = (sessionID: string, eventID: string, error?: { message?: string }) => {
+    const errorDescription = error?.message
     void lookup(sessionID).then((session) => {
       if (disposed.value) return
 
@@ -252,7 +253,7 @@ export function createServerNotificationState(input: {
         void input.coordinator.sound(`${input.key}\0${eventID}`, () => playSoundById(settings.sounds.errors()))
       }
 
-      const description = session?.title ?? language.t("notification.session.error.fallbackDescription")
+      const description = errorDescription ?? session?.title ?? language.t("notification.session.error.fallbackDescription")
 
       if (hasOpenTab && settings.notifications.errors()) {
         void input.coordinator.system(`${input.key}\0${eventID}`, () =>
@@ -266,7 +267,7 @@ export function createServerNotificationState(input: {
 
   const unsub = input.sdk.event.listen((event) => {
     if (event.type === "session.execution.failed") {
-      handleSessionError(event.data.sessionID, event.id)
+      handleSessionError(event.data.sessionID, event.id, event.data.error)
 
       return
     }
