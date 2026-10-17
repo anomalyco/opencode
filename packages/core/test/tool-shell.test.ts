@@ -31,6 +31,7 @@ import { SessionStore } from "@opencode/core/session/store"
 import { Permission } from "@opencode/core/permission"
 import { PermissionSaved } from "@opencode/core/permission/saved"
 import { Plugin } from "@opencode/core/plugin"
+import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { PluginSupervisor } from "@opencode/core/plugin/supervisor"
 import { Shell } from "@opencode/core/shell"
 import { ShellSelect } from "@opencode/core/shell/select"
@@ -978,6 +979,39 @@ describe("ShellTool", () => {
               expect(settled.status).toBe("completed")
               expect(settled.content?.[0]).toEqual({ type: "text", text: `1|1|opencode|${sessionID}` })
             }),
+          )
+        },
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+      ),
+    { timeout: 15_000 },
+  )
+
+  productionIt.live(
+    "tells shell hooks the agent tool started the command and applies their environment",
+    () =>
+      Effect.acquireUseRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => {
+          reset()
+          return withSession(tmp.path, (registry) =>
+            Effect.gen(function* () {
+              const hooks = yield* PluginHooks.Service
+              const sources: unknown[] = []
+              yield* hooks.register("shell", "create.before", (event) =>
+                Effect.sync(() => {
+                  sources.push(event.source)
+                  event.env.OPENCODE_HOOK_TEST = "from-hook"
+                }),
+              )
+              const command = isWindows
+                ? "[Console]::Out.Write($env:OPENCODE_HOOK_TEST)"
+                : 'printf %s "$OPENCODE_HOOK_TEST"'
+              const settled = yield* executeTool(registry, call({ command }))
+
+              expect(settled.status).toBe("completed")
+              expect(settled.content?.[0]).toEqual({ type: "text", text: "from-hook" })
+              expect(sources).toEqual([{ type: "tool", sessionID }])
+            }).pipe(Effect.scoped),
           )
         },
         (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
