@@ -115,7 +115,10 @@ function occupy(port: number, cancel = false) {
   })
 }
 
-const connectOpenAI = (handler: Handler) =>
+const connectOpenAI = (
+  handler: Handler,
+  input: { methodID: string; credentialID?: string } = { methodID: "chatgpt-browser" },
+) =>
   Effect.gen(function* () {
     // Catalog endpoints no longer wait for plugin initialization.
     yield* Effect.gen(function* () {
@@ -127,7 +130,7 @@ const connectOpenAI = (handler: Handler) =>
       return body.data.some(
         (integration) =>
           integration.id === "openai" &&
-          integration.methods.some((method) => method.type === "oauth" && method.id === "chatgpt-browser"),
+          integration.methods.some((method) => method.type === "oauth" && method.id === input.methodID),
       )
     }).pipe(
       Effect.filterOrFail((ready) => ready),
@@ -139,7 +142,7 @@ const connectOpenAI = (handler: Handler) =>
         new Request("http://opencode.local/api/integration/openai/connect/oauth", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ methodID: "chatgpt-browser" }),
+          body: JSON.stringify(input),
         }),
       ),
     )
@@ -176,6 +179,51 @@ it.live("activates credentials through the HttpApi", () =>
       handler(new Request("http://opencode.local/api/credential/cred_missing/activate", { method: "POST" })),
     )
     expect(response.status).toBe(204)
+  }),
+)
+
+it.live("forwards the OAuth credentialID from the HttpApi payload to ChatGPT authorization", () =>
+  Effect.gen(function* () {
+    const handler = yield* ServerFetch.make(options)
+    const created = yield* Effect.promise(() =>
+      handler(
+        new Request("http://opencode.local/api/credential", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            id: "cred_wire_target",
+            integrationID: "openai",
+            value: {
+              type: "oauth",
+              methodID: "chatgpt-token-sharing",
+              access: "wire-access",
+              refresh: "wire-refresh",
+              expires: Date.now() + 60 * 60_000,
+              metadata: { clientID: "oaiapp_wire_target" },
+            },
+          }),
+        }),
+      ),
+    )
+    expect(created.status).toBe(200)
+
+    const response = yield* connectOpenAI(handler, {
+      methodID: "chatgpt-token-sharing",
+      credentialID: "cred_wire_target",
+    })
+    expect(response.status).toBe(200)
+    const body = Schema.decodeUnknownSync(Schema.Struct({ data: Integration.Attempt }))(
+      yield* Effect.promise(() => response.json()),
+    )
+    expect(new URL(body.data.url).searchParams.get("client_id")).toBe("oaiapp_wire_target")
+    const cancelled = yield* Effect.promise(() =>
+      handler(
+        new Request(`http://opencode.local/api/integration/openai/connect/oauth/${body.data.attemptID}`, {
+          method: "DELETE",
+        }),
+      ),
+    )
+    expect(cancelled.status).toBe(204)
   }),
 )
 

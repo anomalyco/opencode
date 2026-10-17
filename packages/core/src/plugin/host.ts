@@ -303,6 +303,7 @@ export const make = Effect.fn("PluginHost.make")(function* (
             integration.oauth.connect({
               integrationID: Integration.ID.make(input.integrationID),
               methodID: Integration.MethodID.make(input.methodID),
+              credentialID: input.credentialID === undefined ? undefined : Credential.ID.make(input.credentialID),
               answer: input.answer,
               label: input.label,
             }),
@@ -654,8 +655,8 @@ function methodImplementation(input: IntegrationMethodRegistration): Integration
     return {
       integrationID: Integration.ID.make(input.integrationID),
       method: { ...input.method, id: Integration.MethodID.make(input.method.id) },
-      authorize: (answer) =>
-        input.authorize(answer).pipe(
+      authorize: (answer, context) =>
+        input.authorize(answer, context).pipe(
           Effect.map((authorization) => {
             if (authorization.mode === "auto") {
               return {

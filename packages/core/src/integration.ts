@@ -75,7 +75,10 @@ export type OAuthAuthorization = {
 export interface OAuthImplementation {
   readonly integrationID: ID
   readonly method: OAuthMethod
-  readonly authorize: (answer: Form.Answer) => Effect.Effect<OAuthAuthorization, unknown, Scope.Scope>
+  readonly authorize: (
+    answer: Form.Answer,
+    context?: { readonly credential?: Credential.OAuth },
+  ) => Effect.Effect<OAuthAuthorization, unknown, Scope.Scope>
   readonly refresh?: (credential: Credential.OAuth) => Effect.Effect<Credential.OAuth, unknown>
   readonly label?: (credential: Credential.OAuth) => string | undefined
 }
@@ -225,6 +228,7 @@ export interface Interface extends State.Transformable<Editor> {
     readonly connect: (input: {
       readonly integrationID: ID
       readonly methodID: MethodID
+      readonly credentialID?: Credential.ID
       readonly answer?: Form.Answer
       readonly label?: string
     }) => Effect.Effect<Attempt, AuthorizationError>
@@ -585,6 +589,7 @@ const layer = Layer.effect(
     const connectOAuth = Effect.fn("Integration.oauth.connect")(function* (input: {
       readonly integrationID: ID
       readonly methodID: MethodID
+      readonly credentialID?: Credential.ID
       readonly answer?: Form.Answer
       readonly label?: string
     }) {
@@ -592,13 +597,26 @@ const layer = Layer.effect(
       if (!method) {
         return yield* Effect.die(new Error(`OAuth method not found: ${input.integrationID}/${input.methodID}`))
       }
+      const credential = yield* Effect.gen(function* () {
+        if (input.credentialID === undefined) return undefined
+        // Reauthorization uses the requested stored value without resolving or refreshing it.
+        const saved = yield* credentials.get(input.credentialID)
+        if (!saved) return yield* new AuthorizationError({ cause: new Error("OAuth credential not found") })
+        if (saved.integrationID !== input.integrationID)
+          return yield* new AuthorizationError({ cause: new Error("OAuth credential belongs to another integration") })
+        if (saved.value.type !== "oauth")
+          return yield* new AuthorizationError({ cause: new Error("Credential is not an OAuth credential") })
+        // Choosing another OAuth method starts a new connection without reusing the old registration.
+        if (saved.value.methodID !== input.methodID) return undefined
+        return saved.value
+      })
       const answer = input.answer ?? {}
       if (method.method.form) {
         const invalid = Form.validateFields(method.method.form) ?? Form.validateAnswer(method.method.form, answer)
         if (invalid) return yield* new AuthorizationError({ cause: new Error(invalid) })
       }
       const attemptScope = yield* Scope.fork(scope)
-      const authorization = yield* authorize(method.authorize(answer)).pipe(
+      const authorization = yield* authorize(method.authorize(answer, credential ? { credential } : undefined)).pipe(
         Scope.provide(attemptScope),
         Effect.onExit((exit) => (Exit.isFailure(exit) ? Scope.close(attemptScope, exit) : Effect.void)),
       )

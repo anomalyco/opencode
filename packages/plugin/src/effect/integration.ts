@@ -64,7 +64,10 @@ export type IntegrationOAuthAuthorization = {
 export type IntegrationOAuthMethodRegistration = {
   readonly integrationID: string
   readonly method: IntegrationOAuthMethod
-  readonly authorize: (answer: Form.Answer) => Effect.Effect<IntegrationOAuthAuthorization, unknown, Scope.Scope>
+  readonly authorize: (
+    answer: Form.Answer,
+    context?: { readonly credential?: Credential.OAuth },
+  ) => Effect.Effect<IntegrationOAuthAuthorization, unknown, Scope.Scope>
   readonly refresh?: (credential: Credential.OAuth) => Effect.Effect<Credential.OAuth, unknown>
   readonly label?: (credential: Credential.OAuth) => string | undefined
 }

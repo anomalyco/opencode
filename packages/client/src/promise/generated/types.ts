@@ -5896,16 +5896,25 @@ export type IntegrationOauthConnectInput = {
   readonly location?: { readonly location?: { readonly directory?: string | undefined } | undefined }["location"]
   readonly methodID: {
     readonly methodID: string
+    readonly credentialID?: string | undefined
     readonly answer?: { readonly [x: string]: string | number | boolean | ReadonlyArray<string> } | undefined
     readonly label?: string | undefined
   }["methodID"]
+  readonly credentialID?: {
+    readonly methodID: string
+    readonly credentialID?: string | undefined
+    readonly answer?: { readonly [x: string]: string | number | boolean | ReadonlyArray<string> } | undefined
+    readonly label?: string | undefined
+  }["credentialID"]
   readonly answer?: {
     readonly methodID: string
+    readonly credentialID?: string | undefined
     readonly answer?: { readonly [x: string]: string | number | boolean | ReadonlyArray<string> } | undefined
     readonly label?: string | undefined
   }["answer"]
   readonly label?: {
     readonly methodID: string
+    readonly credentialID?: string | undefined
     readonly answer?: { readonly [x: string]: string | number | boolean | ReadonlyArray<string> } | undefined
     readonly label?: string | undefined
   }["label"]

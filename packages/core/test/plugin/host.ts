@@ -351,8 +351,8 @@ export function integrationHost(integration: Integration.Interface): Plugin.Cont
                 editor.method.update({
                   integrationID: Integration.ID.make(input.integrationID),
                   method: { ...input.method, id: methodID },
-                  authorize: (answer) =>
-                    input.authorize(answer).pipe(
+                  authorize: (answer, context) =>
+                    input.authorize(answer, context).pipe(
                       Effect.map((authorization) => {
                         if (authorization.mode === "auto") {
                           return {

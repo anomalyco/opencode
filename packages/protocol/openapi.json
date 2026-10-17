@@ -6334,6 +6334,16 @@
                   "methodID": {
                     "$ref": "#/components/schemas/Integration.MethodID"
                   },
+                  "credentialID": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Credential.ID"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
                   "answer": {
                     "anyOf": [
                       {

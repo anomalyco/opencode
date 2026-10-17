@@ -113,6 +113,7 @@ export const IntegrationHandler = HttpApiBuilder.group(Api, "server.integration"
               service.oauth.connect({
                 integrationID: ctx.params.integrationID,
                 methodID: ctx.payload.methodID,
+                credentialID: ctx.payload.credentialID,
                 answer: ctx.payload.answer,
                 label: ctx.payload.label,
               }),

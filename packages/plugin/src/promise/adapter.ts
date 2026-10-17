@@ -408,8 +408,8 @@ export function fromPromise(plugin: Plugin) {
                         const refresh = input.refresh
                         editor.method.update({
                           ...input,
-                          authorize: (answer) =>
-                            Effect.promise(() => input.authorize(answer)).pipe(
+                          authorize: (answer, context) =>
+                            Effect.promise(() => input.authorize(answer, context)).pipe(
                               Effect.map((authorization) =>
                                 authorization.mode === "auto"
                                   ? {
