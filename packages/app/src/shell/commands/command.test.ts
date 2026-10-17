@@ -92,6 +92,11 @@ describe("command keybinds", () => {
     { config: "mod+alt+[", event: { key: "[", metaKey: true, altKey: true }, match: false },
     // macOS Option turns L into ¬; the physical key still matches.
     { config: "meta+alt+l", event: { key: "¬", code: "KeyL", metaKey: true, altKey: true }, match: true },
+    // Dead-key layouts report the backtick key as Dead; the physical key still matches.
+    { config: "ctrl+`", event: { key: "Dead", code: "Backquote", ctrlKey: true }, match: true },
+    { config: "ctrl+`", event: { key: "Unidentified", code: "Backquote", ctrlKey: true }, match: true },
+    { config: "ctrl+[", event: { key: "Dead", code: "BracketLeft", ctrlKey: true }, match: true },
+    { config: "ctrl+`", event: { key: "Dead", code: "Quote", ctrlKey: true }, match: false },
   ])("matchKeybind $config with $event.key is $match", (row) => {
     expect(matchKeybind(parseKeybind(row.config), new KeyboardEvent("keydown", row.event))).toBe(row.match)
   })
