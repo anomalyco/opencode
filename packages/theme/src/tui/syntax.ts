@@ -1,13 +1,13 @@
-import { SyntaxStyle, type RGBA, type ThemeTokenStyle } from "@opentui/core"
+import { SyntaxStyle, type NativeResourceOwner, type RGBA, type ThemeTokenStyle } from "@opentui/core"
 import type { ResolvedThemeTokens } from "./index.js"
 
-export function generateSyntax(theme: ResolvedThemeTokens) {
+export function generateSyntax(theme: ResolvedThemeTokens, owner: NativeResourceOwner) {
   const step = 200
   const syntax = theme.syntax
   const markdown = theme.markdown
   const feedback = theme.text.feedback
 
-  return SyntaxStyle.fromTheme([
+  const rules = [
     rule(["default"], theme.text.base),
     rule(["prompt"], theme.hue.accent[step]),
     rule(["extmark.file"], feedback.warning.base, { bold: true }),
@@ -82,7 +82,8 @@ export function generateSyntax(theme: ResolvedThemeTokens) {
     rule(["error"], feedback.error.base, { bold: true }),
     rule(["warning"], feedback.warning.base, { bold: true }),
     rule(["info"], feedback.info.base),
-  ])
+  ]
+  return SyntaxStyle.fromTheme(rules, owner)
 }
 
 function rule(

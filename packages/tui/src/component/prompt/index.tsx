@@ -5,6 +5,8 @@ import {
   MouseEvent,
   PasteEvent,
   decodePasteBytes,
+  measureEditText,
+  stripAnsiSequences,
   type KeyEvent,
 } from "@opentui/core"
 import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show, Switch, Match, For } from "solid-js"
@@ -25,10 +27,8 @@ import { useEvent } from "../../context/event"
 import { editorSelectionKey, useEditorContext, type EditorSelection } from "../../context/editor"
 import { normalizePromptContent, openEditor } from "../../editor"
 import { useExit } from "../../context/exit"
-import { promptOffsetWidth } from "../../prompt/display"
 import { expandPromptInputPastedText, realignPromptInputMentions } from "../../prompt/mention"
 import { parseSlashHead } from "../../prompt/parse"
-import { stringWidth } from "../../util/string-width"
 import { createStore, produce, unwrap } from "solid-js/store"
 import { emptyPrompt, usePromptHistory, type PromptInfo, type PromptPartRef } from "../../prompt/history"
 import { saveDraft, takeDraft } from "./draft-stash"
@@ -213,6 +213,7 @@ export function Prompt(props: PromptProps) {
   const stash = usePromptStash()
   const keymap = Keymap.use()
   const renderer = useRenderer()
+  const measure = (text: string) => measureEditText(text, { widthMethod: renderer.widthMethod })
   const exit = useExit()
   const dimensions = useTerminalDimensions()
   const theme = useTheme()
@@ -342,7 +343,7 @@ export function Prompt(props: PromptProps) {
     setTimeout(() => {
       // setTimeout is a workaround and needs to be addressed properly
       if (!input || input.isDestroyed) return
-      input.getLayoutNode().markDirty()
+      input.invalidateIntrinsicSize()
       input.gotoBufferEnd()
       renderer.requestRender()
     }, 0)
@@ -553,7 +554,7 @@ export function Prompt(props: PromptProps) {
         run: async () => {
           dialog.clear()
 
-          const editorPrompt = expandPromptInputPastedText(store.prompt, store.prompt.pasted)
+          const editorPrompt = expandPromptInputPastedText(store.prompt, store.prompt.pasted, renderer.widthMethod)
           const value = editorPrompt.text
           const content = await openEditor({
             renderer,
@@ -571,11 +572,11 @@ export function Prompt(props: PromptProps) {
           input.setText(normalized)
 
           setStore("prompt", {
-            ...realignPromptInputMentions(normalized, editorPrompt),
+            ...realignPromptInputMentions(normalized, editorPrompt, renderer.widthMethod),
             pasted: [],
           })
           restoreExtmarksFromPrompt(store.prompt)
-          input.cursorOffset = stringWidth(normalized)
+          input.cursorOffset = measure(normalized)
         },
       },
       {
@@ -591,10 +592,11 @@ export function Prompt(props: PromptProps) {
                 if (store.prompt.skills?.some((item) => item.id === skill)) return
                 const text = `@${skill}`
                 const start = input.cursorOffset
+                const end = start + measure(text)
                 input.insertText(text + " ")
                 const extmarkId = input.extmarks.create({
                   start,
-                  end: start + promptOffsetWidth(text),
+                  end,
                   virtual: true,
                   styleId: skillStyleId,
                   typeId: promptPartTypeId,
@@ -606,7 +608,7 @@ export function Prompt(props: PromptProps) {
                     const index = skills.length
                     skills.push({
                       id: Skill.ID.make(skill),
-                      mention: { start, end: start + promptOffsetWidth(text), text },
+                      mention: { start, end, text },
                     })
                     draft.extmarkToPart.set(extmarkId, { type: "skill", index })
                   }),
@@ -720,7 +722,7 @@ export function Prompt(props: PromptProps) {
       input.setText(saved.prompt.text)
       setStore("prompt", saved.prompt)
       restoreExtmarksFromPrompt(saved.prompt)
-      input.cursorOffset = saved.cursor
+      input.cursorOffset = Math.min(saved.cursor, measure(saved.prompt.text))
     }
   })
 
@@ -1065,12 +1067,13 @@ export function Prompt(props: PromptProps) {
           title: "Next prompt history",
           group: "Prompt",
           run() {
-            if (input.cursorOffset !== input.plainText.length) {
+            const end = measure(input.plainText)
+            if (input.cursorOffset !== end) {
               if (
                 input.scrollY + input.visualCursor.visualRow ===
                 Math.max(0, input.editorView.getTotalVirtualLineCount() - 1)
               ) {
-                input.cursorOffset = input.plainText.length
+                input.cursorOffset = end
                 return
               }
               input.moveCursorDown()
@@ -1083,7 +1086,7 @@ export function Prompt(props: PromptProps) {
             setStore("prompt", item)
             setStore("mode", item.mode ?? "normal")
             restoreExtmarksFromPrompt(item)
-            input.cursorOffset = input.plainText.length
+            input.cursorOffset = measure(item.text)
           },
         },
       ],
@@ -1131,6 +1134,7 @@ export function Prompt(props: PromptProps) {
         if (!part) return []
         return [{ start: extmark.start, end: extmark.end, text: part.text }]
       }),
+      renderer.widthMethod,
     )
     const slash = argumentSlash(inputText, keymapCommands())
     if (delivery === "queue" && (store.mode === "shell" || exitWord || slash)) {
@@ -1191,7 +1195,7 @@ export function Prompt(props: PromptProps) {
       setStore("prompt", entry)
       setStore("mode", entry.mode ?? "normal")
       restoreExtmarksFromPrompt(entry)
-      input.cursorOffset = entry.text.length
+      input.cursorOffset = measure(entry.text)
     }
     const fail = (title: string, error: unknown) => {
       toast.show({ title, message: errorMessage(error), variant: "error" })
@@ -1259,8 +1263,8 @@ export function Prompt(props: PromptProps) {
             route.data.type === "session" && route.data.sessionID === created.id ? promptRef.current : undefined
           const current = active?.current
           const draft = current?.text
-            ? { prompt: { ...unwrap(current) }, cursor: current.text.length }
-            : (takeDraft(created.id) ?? { prompt: entry, cursor: entry.text.length })
+            ? { prompt: { ...unwrap(current) }, cursor: Infinity }
+            : (takeDraft(created.id) ?? { prompt: entry, cursor: Infinity })
           saveDraft(undefined, draft)
           active?.reset()
           if (sessionTabs.enabled()) {
@@ -1399,7 +1403,7 @@ export function Prompt(props: PromptProps) {
   function pasteText(text: string, virtualText: string) {
     const currentOffset = input.cursorOffset
     const extmarkStart = currentOffset
-    const extmarkEnd = extmarkStart + promptOffsetWidth(virtualText)
+    const extmarkEnd = extmarkStart + measure(virtualText)
 
     input.insertText(virtualText + " ")
 
@@ -1437,7 +1441,7 @@ export function Prompt(props: PromptProps) {
   }
 
   async function pasteInputText(text: string, changed: () => boolean) {
-    const normalizedText = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
+    const normalizedText = stripAnsiSequences(text).replace(/\r\n?/g, "\n")
     const pastedContent = normalizedText.trim()
     const attachments = await resolvePastedAttachments(pastedContent, terminalEnvironment.platform)
     if (changed()) return
@@ -1471,7 +1475,7 @@ export function Prompt(props: PromptProps) {
 
     setTimeout(() => {
       if (!input || input.isDestroyed) return
-      input.getLayoutNode().markDirty()
+      input.invalidateIntrinsicSize()
       renderer.requestRender()
     }, 0)
   }

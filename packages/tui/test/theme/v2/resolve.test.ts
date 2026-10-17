@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { RGBA } from "@opentui/core"
+import { ResourceContext, RGBA } from "@opentui/core"
 import {
   generateSyntax,
   resolveTheme,
@@ -109,10 +109,15 @@ test("validates hue relationships in every provided mode while parsing", () => {
 
 test("generates syntax with one categorical hue", () => {
   const theme = resolveSource(complete("light", { categorical: ["red"] }), "light")
-  const syntax = generateSyntax(theme)
+  const owner = new ResourceContext({ objectCapacity: 1, renderCellsMax: 1 })
+  const syntax = generateSyntax(theme, owner)
 
-  expect(syntax.getStyleId("extmark.skill")).not.toBeNull()
-  syntax.destroy()
+  try {
+    expect(syntax.getStyleId("extmark.skill")).not.toBeNull()
+  } finally {
+    syntax.destroy()
+    owner.destroy()
+  }
 })
 
 test("rejects incomplete themes instead of merging defaults", () => {

@@ -73,7 +73,8 @@ const running: SessionMessageInfo[] = [
 
 async function withSession(run: (setup: Setup) => Promise<void>, history = messages) {
   await using state = await tmpdir()
-  const setup = await createTestRenderer({ width: 100, height: 30, useThread: false, kittyKeyboard: true })
+  const setup = await createTestRenderer({ width: 100, height: 30, kittyKeyboard: true })
+  await setup.renderer.setupTerminal()
   setup.renderer.start()
   const calls = createFetch((url) => {
     if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })

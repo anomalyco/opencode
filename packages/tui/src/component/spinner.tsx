@@ -3,13 +3,11 @@ import { useTheme } from "../context/theme"
 import { useConfig } from "../config"
 import type { JSX } from "@opentui/solid"
 import type { RGBA } from "@opentui/core"
-import { registerOpencodeSpinner } from "./register-spinner"
+import "./spinner-renderable"
 import { SPINNER_FRAMES } from "./spinner-frames"
 import { ShimmerText } from "./shimmer-text"
 
 export { SPINNER_FRAMES } from "./spinner-frames"
-
-registerOpencodeSpinner()
 
 export function Spinner(props: { children?: JSX.Element; color?: RGBA; shimmer?: RGBA }) {
   const theme = useTheme()

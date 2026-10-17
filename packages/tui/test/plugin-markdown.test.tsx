@@ -12,7 +12,7 @@ import { createRoot, createSignal } from "solid-js"
 import { createMarkdownRenderer } from "../src/plugin/markdown"
 
 test("unrelated plugin toggles preserve mounted Markdown blocks", async () => {
-  const output = await createTestRenderer({ width: 80, height: 12, remote: true, useThread: false })
+  const output = await createTestRenderer({ width: 80, height: 12, remote: true })
   const handler: MarkdownCodeBlockRenderer = () =>
     new TextRenderable(output.renderer, { content: "Custom fence", height: 1 })
   const [sources, setSources] = createSignal<ReadonlyArray<Readonly<Record<string, MarkdownCodeBlockRenderer>>>>([
@@ -23,7 +23,7 @@ test("unrelated plugin toggles preserve mounted Markdown blocks", async () => {
     const renderNode = createMarkdownRenderer(sources)
     return (
       <markdown
-        syntaxStyle={SyntaxStyle.fromStyles({ default: { fg: "#ffffff" } })}
+        syntaxStyle={SyntaxStyle.fromStyles({ default: { fg: "#ffffff" } }, output.renderer.nativeScene)}
         renderNode={renderNode()}
         content={"A plain paragraph.\n\n```example\nFence content\n```"}
         streaming={false}
@@ -80,7 +80,7 @@ test("effective mappings preserve identity through reordered and shadowed contri
 })
 
 test("changing and removing a Markdown handler refreshes existing messages", async () => {
-  const output = await createTestRenderer({ width: 80, height: 12, remote: true, useThread: false })
+  const output = await createTestRenderer({ width: 80, height: 12, remote: true })
   const first: MarkdownCodeBlockRenderer = () =>
     new TextRenderable(output.renderer, { content: "First renderer", height: 1 })
   const second: MarkdownCodeBlockRenderer = () =>
@@ -92,7 +92,7 @@ test("changing and removing a Markdown handler refreshes existing messages", asy
     const renderNode = createMarkdownRenderer(sources)
     return (
       <markdown
-        syntaxStyle={SyntaxStyle.fromStyles({ default: { fg: "#ffffff" } })}
+        syntaxStyle={SyntaxStyle.fromStyles({ default: { fg: "#ffffff" } }, output.renderer.nativeScene)}
         renderNode={renderNode()}
         content={"```example\nFence content\n```"}
         streaming={false}

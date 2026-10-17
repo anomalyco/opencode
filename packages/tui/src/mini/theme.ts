@@ -297,7 +297,12 @@ export async function resolveRunTheme(
     ? ansiPalette.map((color, index) => (colors.palette[index] ? RGBA.fromIndex(index, colors.palette[index]!) : color))
     : ansiPalette
   return {
-    ...map(theme, indexed, generateSyntax(theme), name === "system" && resolved !== undefined),
+    ...map(
+      theme,
+      indexed,
+      renderer.isDestroyed ? undefined : generateSyntax(theme, renderer.nativeScene),
+      name === "system" && resolved !== undefined,
+    ),
     background: RGBA.defaultBackground(colors?.defaultBackground ?? theme.background.base),
   }
 }

@@ -11,8 +11,8 @@
 // The diff view (when available) uses the same diff component as scrollback
 // tool snapshots.
 /** @jsxImportSource @opentui/solid */
-import { TextAttributes, type ScrollBoxRenderable, type TextareaRenderable } from "@opentui/core"
-import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
+import { TextAttributes, measureEditText, type ScrollBoxRenderable, type TextareaRenderable } from "@opentui/core"
+import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { For, Match, Show, Switch, createEffect, createMemo, createSignal } from "solid-js"
 import {
   createPermissionBodyState,
@@ -84,6 +84,7 @@ export function RejectField(props: {
   onConfirm: () => void
   onCancel: () => void
 }) {
+  const renderer = useRenderer()
   let area: TextareaRenderable | undefined
 
   createEffect(() => {
@@ -93,7 +94,7 @@ export function RejectField(props: {
 
     if (area.plainText !== props.text) {
       area.setText(props.text)
-      area.cursorOffset = props.text.length
+      area.cursorOffset = measureEditText(props.text, { widthMethod: renderer.widthMethod })
     }
 
     queueMicrotask(() => {

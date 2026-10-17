@@ -36,6 +36,7 @@ type Props = Omit<JSX.IntrinsicElements["diff"], "diff" | "lineNumberBg" | "ref"
 }
 
 export function PatchDiff(props: Props) {
+  const renderer = useRenderer()
   const [local, diffProps] = splitProps(props, ["diff", "hunkFg", "lineNumberBg", "ref", "scroll", "gutterPadding"])
   const hunks = createMemo(() => splitPatchHunks(local.diff))
   const chunks = createMemo(() => {
@@ -60,7 +61,7 @@ export function PatchDiff(props: Props) {
     },
   })
   const syncGutters = (attempt = 0) => {
-    requestAnimationFrame(() => {
+    renderer.requestAnimationFrame(() => {
       const sides = [...nodes.values()]
         .filter((item) => !item.isDestroyed)
         .flatMap((item) => item.getChildren().filter((side) => side instanceof LineNumberRenderable))

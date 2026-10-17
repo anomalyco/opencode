@@ -61,8 +61,8 @@ class FadeInTextRenderable extends MaskedTextRenderable {
     this.matrix[11] = this._backdrop.b
   }
 
-  override render(buffer: OptimizedBuffer, deltaTime: number) {
-    if (!this._enabled || this.elapsed >= DURATION) return super.render(buffer, deltaTime)
+  protected override renderSelf(buffer: OptimizedBuffer, deltaTime = 0) {
+    if (!this._enabled || this.elapsed >= DURATION) return super.renderSelf(buffer)
     if (!this.visible || this.isDestroyed || !Number.isFinite(this.width) || this.width <= 0 || this.height <= 0) return
     this.elapsed = Math.min(DURATION, this.elapsed + deltaTime)
     this.renderMasked(buffer, 1, (end) => {
