@@ -20,6 +20,10 @@ export const make = Effect.gen(function* () {
       return { directory: yield* canonical(fs, input.directory) }
     }),
     remove: Effect.fn("Worktree.Git.remove")(function* (input) {
+      // A checkout always contains `.git`. An empty directory is what remains when Git removed the
+      // checkout but could not delete its root, for example because Windows still had it in use.
+      if ((yield* fs.readDirectory(input.directory)).length === 0)
+        return yield* fs.remove(input.directory, { recursive: true })
       const repository = yield* git.repo.discover(input.directory)
       if (!repository) return yield* new DirectoryUnavailableError({ directory: input.directory })
       yield* git.worktree.remove({ repository, directory: input.directory, force: input.force })

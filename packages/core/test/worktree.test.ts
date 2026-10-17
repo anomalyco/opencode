@@ -3,7 +3,7 @@ import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
 import { and, eq, isNull } from "drizzle-orm"
-import { Context, Effect, Exit, Fiber, Layer, Queue, Scope, Stream } from "effect"
+import { Context, Duration, Effect, Exit, Fiber, Layer, LayerMap, Queue, RcMap, Scope, Stream } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { AbsolutePath } from "@opencode/core/schema"
@@ -18,6 +18,7 @@ import { WorktreeDirectory } from "@opencode/core/worktree/directory"
 import { WorktreeTable } from "@opencode/core/worktree/sql"
 import { WorktreeGit } from "@opencode/core/worktree/git"
 import { Location } from "@opencode/core/location"
+import { LocationServiceMap, type LocationServices } from "@opencode/core/location-services"
 import { Global } from "@opencode/util/global"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Config } from "@opencode/core/config"
@@ -57,6 +58,7 @@ function worktreeLayer(
   bus: Bus.Interface,
   data: string,
   workspaceID?: Workspace.ID,
+  replacements: LayerNode.Replacements = [],
 ) {
   return AppNodeBuilder.build(
     LayerNode.group([Worktree.node, WorktreeStrategies.node, Git.node, FSUtil.node, Location.node, Global.node]),
@@ -74,6 +76,7 @@ function worktreeLayer(
           }),
         ),
       ),
+      ...replacements,
     ],
   ).pipe(Layer.fresh)
 }
@@ -100,6 +103,51 @@ const fixtureWorktree = Effect.fnUntraced(function* () {
     remove: (options: Omit<Worktree.RemoveInput, "projectID">) =>
       service.remove({ projectID: input.projectID, ...options }, strategies),
     refresh: () => service.refresh({ projectID: input.projectID }, strategies),
+  }
+})
+
+// Serve the worktree service a location cache that records which cached locations it released.
+const cachedLocations = Effect.fnUntraced(function* () {
+  const input = yield* Fixture
+  const database = yield* Database.Service
+  const bus = yield* Bus.Service
+  const released: string[] = []
+  const locations = yield* LayerMap.make(
+    (ref: Location.Ref) =>
+      // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
+      Layer.effect(
+        Location.Service,
+        Effect.acquireRelease(
+          Effect.succeed(
+            Location.Service.of({
+              directory: ref.directory,
+              project: { id: input.projectID, directory: ref.directory, canonical: input.sourceDirectory },
+            }),
+          ),
+          () => Effect.sync(() => released.push(ref.directory)),
+        ),
+      ) as unknown as Layer.Layer<LocationServices>,
+    { idleTimeToLive: Duration.infinity },
+  )
+  const context = yield* Layer.build(
+    worktreeLayer(input.sourceDirectory, input.projectID, database, bus, input.root.path, undefined, [
+      LocationServiceMap.node.replace(Layer.succeed(LocationServiceMap.Service, locations)),
+    ]),
+  )
+  return {
+    released,
+    worktrees: Context.get(context, Worktree.Service),
+    strategies: Context.get(context, WorktreeStrategies.Service),
+    // Boot and release each location so only its idle cached graph remains, like a finished request.
+    boot: (directories: AbsolutePath[]) =>
+      Effect.forEach(
+        directories,
+        (directory) =>
+          Location.Service.pipe(Effect.provide(locations.get(Location.Ref.make({ directory }))), Effect.scoped),
+        { discard: true },
+      ),
+    cached: () =>
+      RcMap.keys(locations.rcMap).pipe(Effect.map((refs) => Array.from(refs, (ref) => ref.directory).toSorted())),
   }
 })
 
@@ -492,6 +540,169 @@ describe("Worktree", () => {
 
       yield* worktree.remove({ directory: created.directory, force: true })
       expect(yield* Effect.promise(() => Bun.file(created.directory).exists())).toBe(false)
+    }),
+  )
+
+  it.live("remove releases idle locations inside the worktree after a failure force cannot fix", () =>
+    Effect.gen(function* () {
+      const input = yield* setup()
+      const git = yield* WorktreeGit.make
+      const cache = yield* cachedLocations()
+      const attempts: string[][] = []
+      yield* cache.strategies.transform((editor) =>
+        editor.add({
+          ...git,
+          id: Worktree.StrategyID.make("in-use"),
+          remove: (options) =>
+            Effect.gen(function* () {
+              attempts.push(cache.released.toSorted())
+              // Fail like Windows does while a cached location still runs a process inside the directory.
+              if (attempts.length === 1)
+                return yield* new Git.WorktreeError({
+                  operation: "remove",
+                  directory: options.directory,
+                  message: `error: failed to delete '${options.directory}': Permission denied`,
+                })
+              yield* git.remove(options)
+            }),
+        }),
+      )
+      const temp = yield* Effect.promise(() => fs.realpath(path.dirname(input.root.path)))
+      const parent = abs(path.join(temp, path.basename(input.root.path) + "-worktree-locations"))
+      yield* Effect.addFinalizer(() => Effect.promise(() => fs.rm(parent, { recursive: true, force: true })))
+      const created = yield* cache.worktrees.create(
+        { projectID: input.projectID, directory: parent, name: "worktree" },
+        cache.strategies,
+      )
+      const nested = abs(path.join(created.directory, "src"))
+      const sibling = abs(`${created.directory}-sibling`)
+      yield* cache.boot([created.directory, nested, sibling, input.sourceDirectory])
+
+      yield* cache.worktrees.remove(
+        { projectID: input.projectID, directory: created.directory, force: false },
+        cache.strategies,
+      )
+
+      expect(attempts).toEqual([[], [created.directory, nested].toSorted()])
+      expect(yield* cache.cached()).toEqual([input.sourceDirectory, sibling].toSorted())
+      expect(yield* stored(input.projectID)).toEqual([{ directory: input.sourceDirectory, strategy: null }])
+    }),
+  )
+
+  it.live("remove keeps cached locations when git refuses a dirty worktree", () =>
+    Effect.gen(function* () {
+      const input = yield* setup()
+      const cache = yield* cachedLocations()
+      const temp = yield* Effect.promise(() => fs.realpath(path.dirname(input.root.path)))
+      const parent = abs(path.join(temp, path.basename(input.root.path) + "-worktree-refused"))
+      yield* Effect.addFinalizer(() => Effect.promise(() => fs.rm(parent, { recursive: true, force: true })))
+      const created = yield* cache.worktrees.create(
+        { projectID: input.projectID, directory: parent, name: "worktree" },
+        cache.strategies,
+      )
+      yield* cache.boot([created.directory])
+      yield* Effect.promise(() => Bun.write(path.join(created.directory, "dirty.txt"), "dirty"))
+
+      const error = yield* cache.worktrees
+        .remove({ projectID: input.projectID, directory: created.directory, force: false }, cache.strategies)
+        .pipe(Effect.flip)
+
+      expect(error).toBeInstanceOf(Git.WorktreeError)
+      if (error instanceof Git.WorktreeError) expect(error.forceRequired).toBe(true)
+      expect(cache.released).toEqual([])
+      expect(yield* cache.cached()).toEqual([created.directory])
+    }),
+  )
+
+  it.live("remove keeps cached locations when a plugin strategy requires force", () =>
+    Effect.gen(function* () {
+      const input = yield* setup()
+      const git = yield* WorktreeGit.make
+      const cache = yield* cachedLocations()
+      const calls = { remove: 0 }
+      yield* cache.strategies.transform((editor) =>
+        editor.add({
+          ...git,
+          id: Worktree.StrategyID.make("refusing"),
+          remove: () =>
+            Effect.suspend(() => {
+              calls.remove++
+              return Effect.fail(new Worktree.OperationError({ message: "has local changes", forceRequired: true }))
+            }),
+        }),
+      )
+      const temp = yield* Effect.promise(() => fs.realpath(path.dirname(input.root.path)))
+      const parent = abs(path.join(temp, path.basename(input.root.path) + "-worktree-plugin-refused"))
+      yield* Effect.addFinalizer(() => Effect.promise(() => fs.rm(parent, { recursive: true, force: true })))
+      const created = yield* cache.worktrees.create(
+        { projectID: input.projectID, directory: parent, name: "worktree" },
+        cache.strategies,
+      )
+      yield* cache.boot([created.directory])
+
+      const error = yield* cache.worktrees
+        .remove({ projectID: input.projectID, directory: created.directory, force: false }, cache.strategies)
+        .pipe(Effect.flip)
+
+      expect(error).toBeInstanceOf(Worktree.OperationError)
+      expect(calls.remove).toBe(1)
+      expect(cache.released).toEqual([])
+      expect(yield* cache.cached()).toEqual([created.directory])
+    }),
+  )
+
+  for (const placement of ["outside", "inside"] as const) {
+    it.live(`remove clears the empty directory a partial git removal left ${placement} the repository`, () =>
+      Effect.gen(function* () {
+        const input = yield* setup()
+        const worktree = yield* fixtureWorktree()
+        const temp = yield* Effect.promise(() => fs.realpath(path.dirname(input.root.path)))
+        const parent =
+          placement === "inside"
+            ? abs(path.join(input.sourceDirectory, ".lane"))
+            : abs(path.join(temp, path.basename(input.root.path) + "-worktree-leftover"))
+        yield* Effect.addFinalizer(() => Effect.promise(() => fs.rm(parent, { recursive: true, force: true })))
+        const created = yield* worktree.create({ directory: parent, name: "worktree" })
+        // Git removed the checkout and its administrative entry, but could not delete the root directory.
+        yield* Effect.promise(() =>
+          $`git worktree remove --force ${created.directory}`.cwd(input.sourceDirectory).quiet(),
+        )
+        yield* Effect.promise(() => fs.mkdir(created.directory))
+
+        yield* worktree.remove({ directory: created.directory, force: false })
+
+        expect(yield* stored(input.projectID)).toEqual([{ directory: input.sourceDirectory, strategy: null }])
+        expect(
+          yield* Effect.promise(() =>
+            fs.stat(created.directory).then(
+              () => true,
+              () => false,
+            ),
+          ),
+        ).toBe(false)
+      }),
+    )
+  }
+
+  it.live("remove keeps a non-empty directory that is no longer a git worktree", () =>
+    Effect.gen(function* () {
+      const input = yield* setup()
+      const worktree = yield* fixtureWorktree()
+      const temp = yield* Effect.promise(() => fs.realpath(path.dirname(input.root.path)))
+      const parent = abs(path.join(temp, path.basename(input.root.path) + "-worktree-leftover-files"))
+      yield* Effect.addFinalizer(() => Effect.promise(() => fs.rm(parent, { recursive: true, force: true })))
+      const created = yield* worktree.create({ directory: parent, name: "worktree" })
+      yield* Effect.promise(() =>
+        $`git worktree remove --force ${created.directory}`.cwd(input.sourceDirectory).quiet(),
+      )
+      yield* Effect.promise(() => fs.mkdir(created.directory))
+      yield* Effect.promise(() => Bun.write(path.join(created.directory, "notes.txt"), "keep"))
+
+      const error = yield* worktree.remove({ directory: created.directory, force: true }).pipe(Effect.flip)
+
+      expect(error).toBeInstanceOf(WorktreeDirectory.DirectoryUnavailableError)
+      expect(yield* stored(input.projectID)).toContainEqual({ directory: created.directory, strategy: "git" })
+      expect(yield* Effect.promise(() => Bun.file(path.join(created.directory, "notes.txt")).text())).toBe("keep")
     }),
   )
 

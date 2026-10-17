@@ -1,6 +1,6 @@
 export * as Worktree from "./worktree.js"
 
-import { Context, Effect, Layer, Schema } from "effect"
+import { Context, Effect, Layer, RcMap, Schema } from "effect"
 import { and, asc, desc, eq, isNull, sql } from "drizzle-orm"
 import path from "path"
 import { AbsolutePath } from "./schema.js"
@@ -129,6 +129,19 @@ const layer = Layer.effect(
 
     const changed = Effect.fnUntraced(function* (projectID: Project.ID, update: boolean) {
       if (update) yield* bus.publish(Event.Updated, { projectID })
+    })
+
+    // Workspace-qualified locations run elsewhere, so only local ones can hold the directory open.
+    const release = Effect.fnUntraced(function* (directory: AbsolutePath) {
+      const inside = yield* Effect.filter(yield* RcMap.keys(locations.rcMap), (ref) =>
+        ref.workspaceID
+          ? Effect.succeed(false)
+          : fs.realPath(ref.directory).pipe(
+              Effect.orElseSucceed(() => ref.directory),
+              Effect.map((resolved) => FSUtil.contains(directory, resolved)),
+            ),
+      )
+      yield* Effect.forEach(inside, (ref) => locations.invalidate(ref), { discard: true, concurrency: "unbounded" })
     })
 
     const ops = {
@@ -261,12 +274,30 @@ const layer = Layer.effect(
       if (!stored?.strategy) return yield* new InvalidDirectoryError({ directory: worktreeDirectory })
       const settings = yield* load(row.worktree, current)
       const strategy = yield* getStrategy(StrategyID.make(stored.strategy), settings.strategies)
-      yield* strategy
+      const attempt = strategy
         .remove({
           directory: worktreeDirectory,
           force: input.force,
         })
         .pipe(Effect.mapError((error) => operationError(strategy.id, "remove", error)))
+      yield* attempt.pipe(
+        // A cached location can keep a process such as a local MCP server running with its cwd in the
+        // worktree, and Windows refuses to delete a directory in use. Release those locations only after
+        // a failure that force would not fix, so a refused removal leaves them running, then retry once
+        // and report the original failure if something else still holds the directory.
+        Effect.catchIf(
+          (error) =>
+            !((error instanceof Git.WorktreeError || error instanceof Worktree.OperationError) && error.forceRequired),
+          (error) =>
+            release(worktreeDirectory).pipe(
+              Effect.andThen(attempt),
+              Effect.tapError((retry) =>
+                Effect.logWarning("worktree removal retry failed", { directory: worktreeDirectory, error: retry }),
+              ),
+              Effect.mapError(() => error),
+            ),
+        ),
+      )
       yield* changed(input.projectID, yield* ops.remove(input.projectID, worktreeDirectory))
     }, Effect.scoped)
 
