@@ -526,10 +526,23 @@ jobs:
             }
           }
 
+      # publish merges these artifacts into OPENCODE_DESKTOP_DIST, and packages/desktop/scripts/publish.ts ships only
+      # its top-level *.{exe,blockmap,dmg,zip,AppImage,deb,rpm,app.tar.gz} files. @actions/glob has no brace expansion,
+      # so keep one line per extension in step with that glob. The installers are already compressed.
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: opencode-desktop-${{ matrix.settings.target }}
-          path: packages/desktop/dist/*
+          path: |
+            packages/desktop/dist/*.exe
+            packages/desktop/dist/*.blockmap
+            packages/desktop/dist/*.dmg
+            packages/desktop/dist/*.zip
+            packages/desktop/dist/*.AppImage
+            packages/desktop/dist/*.deb
+            packages/desktop/dist/*.rpm
+            packages/desktop/dist/*.app.tar.gz
+          compression-level: 0
+          if-no-files-found: error
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: needs.version.outputs.release
