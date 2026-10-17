@@ -53,10 +53,18 @@ export function terminal(exit: Exit.Exit<void, SessionRunner.RunError>, reason?:
   return { type: "failed" as const, error: toSessionError(Cause.squash(exit.cause)) }
 }
 
+export interface Options {
+  /** Whether another server may recover executions after this process dies. */
+  readonly recoverable?: boolean
+}
+
+const Recovery = Context.Reference<boolean>("@opencode/SessionExecution/Recovery", { defaultValue: () => true })
+
 /** Process-local execution: drains run in this process using the selected instance. */
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
+    const recoverable = yield* Recovery
     const store = yield* SessionStore.Service
     const instances = yield* Instance.Service
     const bus = yield* Bus.Service
@@ -75,11 +83,11 @@ export const layer = Layer.effect(
       )
     // Write-ahead claim: starting records the durable intent that a turn is in flight, in the same
     // transaction as the started event. Terminals release it — except shutdown interruption, which
-    // preserves the claim so the next server start resumes the turn. A claim that survives with no
+    // preserves the claim for recovery when its owner allows it. A claim that survives with no
     // terminal is the signature of a process that died without teardown (crash, SIGKILL, eviction);
     // recovery is a property of the database, never of a shutdown hook that may not run.
     const claimOnCommit = (sessionID: SessionSchema.ID) => ({
-      commit: () => store.claim(sessionID),
+      commit: () => store.claim(sessionID, { recoverable }),
     })
     const releaseOnCommit = (sessionID: SessionSchema.ID) => ({
       commit: () => store.release(sessionID),
@@ -175,11 +183,17 @@ export const layer = Layer.effect(
   }),
 )
 
-export const node = makeGlobalNode({
-  service: Service,
-  layer,
-  deps: [SessionStore.node, Instance.node, Bus.node, Database.node, Job.node],
-})
+export const layerWith = (options?: Options) =>
+  layer.pipe(Layer.provide(Layer.succeed(Recovery, options?.recoverable ?? true)))
+
+export const configured = (options?: Options) =>
+  makeGlobalNode({
+    service: Service,
+    layer: layerWith(options),
+    deps: [SessionStore.node, Instance.node, Bus.node, Database.node, Job.node],
+  })
+
+export const node = configured()
 
 /** Low-level compatibility layer for callers that only need durable Session recording. */
 export const noopLayer = Layer.succeed(

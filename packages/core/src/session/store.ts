@@ -1,6 +1,21 @@
 export * as SessionStore from "./store.js"
 
-import { and, asc, desc, eq, gt, isNotNull, isNull, like, lt, notInArray, or, sql, type SQL } from "drizzle-orm"
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNotNull,
+  isNull,
+  like,
+  lt,
+  notInArray,
+  or,
+  sql,
+  type SQL,
+} from "drizzle-orm"
 import { Context, Effect, Layer, Schema } from "effect"
 import { Project } from "@opencode/schema/project"
 import { Workspace } from "@opencode/schema/workspace"
@@ -59,17 +74,19 @@ export interface Interface {
     messageID: SessionMessage.ID,
   ) => Effect.Effect<{ readonly sessionID: Session.ID; readonly message: SessionMessage.Info } | undefined>
   /**
-   * Top-level Sessions holding an execution claim. Recoverable background
+   * Top-level Sessions holding a recoverable execution claim. Recoverable background
    * children are resumed separately through their durable Job records.
    */
   readonly listSuspended: () => Effect.Effect<ReadonlyArray<Session.ID>>
+  /** Sessions whose execution cannot be recovered with this process's configuration. */
+  readonly unrecoverable: (sessionIDs: ReadonlyArray<Session.ID>) => Effect.Effect<ReadonlySet<Session.ID>>
   /**
    * Records the execution claim: the durable write-ahead intent that a turn is
    * (or was) in flight. Set when execution starts; a claim that survives to the
    * next boot marks a turn that never completed — its process crashed or shut
    * down mid-turn.
    */
-  readonly claim: (sessionID: Session.ID) => Effect.Effect<void>
+  readonly claim: (sessionID: Session.ID, options?: { readonly recoverable?: boolean }) => Effect.Effect<void>
   /** Releases the claim and resets resume accounting. Terminal events call this on commit. */
   readonly release: (sessionID: Session.ID) => Effect.Effect<void>
   /**
@@ -195,22 +212,42 @@ const layer = Layer.effect(
         return yield* db
           .select({ sessionID: SessionTable.id })
           .from(SessionTable)
-          .where(and(isNotNull(SessionTable.time_suspended), isNull(SessionTable.parent_id)))
+          .where(
+            and(
+              isNotNull(SessionTable.time_suspended),
+              isNull(SessionTable.parent_id),
+              eq(SessionTable.execution_recoverable, true),
+            ),
+          )
           .all()
           .pipe(
             Effect.orDie,
             Effect.map((rows) => rows.map((row) => row.sessionID)),
           )
       }),
-      claim: Effect.fn("SessionStore.claim")(function* (sessionID) {
-        // The null guard makes re-claiming a still-claimed Session a zero-row
-        // no-op (a resumed turn re-claims through the same started hook).
+      unrecoverable: Effect.fn("SessionStore.unrecoverable")(function* (sessionIDs) {
+        if (sessionIDs.length === 0) return new Set<Session.ID>()
+        const rows = yield* db
+          .select({ sessionID: SessionTable.id })
+          .from(SessionTable)
+          .where(and(inArray(SessionTable.id, Array.from(sessionIDs)), eq(SessionTable.execution_recoverable, false)))
+          .all()
+          .pipe(Effect.orDie)
+        return new Set(rows.map((row) => row.sessionID))
+      }),
+      claim: Effect.fn("SessionStore.claim")(function* (sessionID, options) {
+        // Explicitly continuing an orphan adopts the new process's recovery policy;
+        // automatic recovery preserves the original timestamp and attempt count.
         // Claim bookkeeping never counts as user activity: time_updated is
         // pinned so session ordering only moves on real changes.
         yield* db
           .update(SessionTable)
-          .set({ time_suspended: Date.now(), time_updated: sql`${SessionTable.time_updated}` })
-          .where(and(eq(SessionTable.id, sessionID), isNull(SessionTable.time_suspended)))
+          .set({
+            time_suspended: sql`coalesce(${SessionTable.time_suspended}, ${Date.now()})`,
+            execution_recoverable: options?.recoverable ?? true,
+            time_updated: sql`${SessionTable.time_updated}`,
+          })
+          .where(eq(SessionTable.id, sessionID))
           .run()
           .pipe(Effect.orDie)
       }),
@@ -230,6 +267,7 @@ const layer = Layer.effect(
             and(
               isNotNull(SessionTable.time_suspended),
               isNotNull(SessionTable.parent_id),
+              eq(SessionTable.execution_recoverable, true),
               recoverable.length > 0 ? notInArray(SessionTable.id, Array.from(recoverable)) : undefined,
             ),
           )

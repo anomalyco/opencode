@@ -34,7 +34,7 @@ const DEFAULT_MAX_ATTEMPTS = 10
 
 export interface Interface {
   /**
-   * Resumes Sessions whose execution claim was never released — turns orphaned
+   * Resumes Sessions whose recoverable execution claim was never released — turns orphaned
    * by a process that died without teardown, or interrupted by a graceful
    * shutdown (which preserves the claim on purpose). The claim is never
    * cleared here: only a terminal event releases it, so a death anywhere in
@@ -47,7 +47,8 @@ export interface Interface {
  * Recovery for orphaned executions. Claims are written at turn start by
  * SessionExecution, so this sweep needs no cooperation from the previous
  * process: crash, SIGKILL, isolate eviction, and graceful restart all leave
- * the same durable signature.
+ * the same durable signature. Only claims recorded by a recoverable execution
+ * are eligible: a standalone server's environment cannot be restored here.
  *
  * Recovery is at-least-once: local coordination prevents concurrent drains,
  * not repeated external side effects after a crash.
@@ -192,7 +193,21 @@ export const layer = (options?: Options) =>
       return Service.of({
         resumeSuspendedSessions: Effect.gen(function* () {
           const active = yield* execution.active
-          const pending = yield* jobs.pendingBackground
+          const background = yield* jobs.pendingBackground
+          const unrecoverable = yield* store.unrecoverable(
+            background.flatMap((job) =>
+              job.recovery.kind === "shell"
+                ? [job.recovery.sessionID]
+                : [job.recovery.parentSessionID, job.recovery.childSessionID],
+            ),
+          )
+          // Background completions can wake an idle parent, so claims alone are not
+          // enough to keep standalone executions out of the managed recovery sweep.
+          const pending = background.filter((job) =>
+            job.recovery.kind === "shell"
+              ? !unrecoverable.has(job.recovery.sessionID)
+              : !unrecoverable.has(job.recovery.parentSessionID) && !unrecoverable.has(job.recovery.childSessionID),
+          )
           const children = pending.flatMap((background) =>
             background.status === "running" && background.recovery.kind === "subagent"
               ? [background.recovery.childSessionID]

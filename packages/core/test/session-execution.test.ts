@@ -33,6 +33,64 @@ const it = testEffect(
 )
 
 describe("SessionExecution lifecycle", () => {
+  for (const recoverable of [false, true]) {
+    it.effect(`records recoverable=${recoverable} before a drain starts and preserves it on shutdown`, () =>
+      Effect.gen(function* () {
+        const database = yield* Database.Service
+        const store = yield* SessionStore.Service
+        const sessionID = Session.ID.make("ses_recovery_policy")
+        yield* seedSessions(database, [sessionID])
+        const draining = yield* Deferred.make<void>()
+        const scope = yield* Scope.make()
+        yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+        const context = yield* buildExecution(
+          scope,
+          () => Deferred.succeed(draining, undefined).pipe(Effect.andThen(Effect.never)),
+          undefined,
+          undefined,
+          { recoverable },
+        )
+        const execution = Context.get(context, SessionExecution.Service)
+        yield* execution.resume(sessionID).pipe(Effect.forkScoped)
+        yield* Deferred.await(draining)
+        expect((yield* claims(database))[sessionID]).toBe(true)
+        expect(yield* store.listSuspended()).toEqual(recoverable ? [sessionID] : [])
+
+        yield* Scope.close(scope, Exit.void)
+        expect((yield* claims(database))[sessionID]).toBe(true)
+        expect(yield* store.listSuspended()).toEqual(recoverable ? [sessionID] : [])
+      }),
+    )
+  }
+
+  it.effect("allows an explicit resume to adopt an orphan without resetting its claim accounting", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const store = yield* SessionStore.Service
+      const sessionID = Session.ID.make("ses_adopt_standalone")
+      yield* seedSessions(database, [sessionID], {
+        time_suspended: 123,
+        resume_attempts: 2,
+        execution_recoverable: false,
+      })
+      expect(yield* store.listSuspended()).toEqual([])
+      yield* store.claim(sessionID)
+      expect(yield* store.listSuspended()).toEqual([sessionID])
+      expect(
+        yield* database.db
+          .select({ claimed: SessionTable.time_suspended, attempts: SessionTable.resume_attempts })
+          .from(SessionTable)
+          .where(eq(SessionTable.id, sessionID))
+          .get()
+          .pipe(Effect.orDie),
+      ).toEqual({ claimed: 123, attempts: 2 })
+      yield* store.release(sessionID)
+      yield* store.claim(sessionID, { recoverable: false })
+      expect(yield* store.listSuspended()).toEqual([])
+      expect(yield* attempts(database, sessionID)).toBe(0)
+    }),
+  )
+
   test("classifies success and typed failure terminals", () => {
     expect(SessionExecution.terminal(Exit.succeed(undefined))).toEqual({ type: "succeeded" })
     expect(
@@ -288,6 +346,40 @@ describe("SessionExecution lifecycle", () => {
     }),
   )
 
+  it.effect("does not recover a standalone claim when a managed server starts", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const store = yield* SessionStore.Service
+      const standalone = Session.ID.make("ses_standalone_orphan")
+      const managed = Session.ID.make("ses_managed_orphan")
+      yield* seedSessions(database, [standalone, managed])
+      yield* store.claim(standalone, { recoverable: false })
+      yield* store.claim(managed)
+
+      const drained: Session.ID[] = []
+      const resumed = yield* Deferred.make<void>()
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(scope, ({ sessionID }) =>
+        Effect.gen(function* () {
+          drained.push(sessionID)
+          if (sessionID === managed) yield* Deferred.succeed(resumed, undefined)
+        }),
+      )
+      const execution = Context.get(context, SessionExecution.Service)
+      const restart = Context.get(context, SessionRestart.Service)
+      yield* restart.resumeSuspendedSessions
+      yield* Deferred.await(resumed)
+      yield* execution.awaitIdle(managed)
+      expect(drained).toEqual([managed])
+      expect(yield* attempts(database, standalone)).toBe(0)
+      expect(yield* SessionInbox.list(database.db, standalone)).toEqual([])
+
+      yield* restart.resumeSuspendedSessions
+      expect(drained).toEqual([managed])
+    }),
+  )
+
   it.effect("terminalizes a turn that exhausts its resume budget instead of crash-looping", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
@@ -376,6 +468,62 @@ describe("SessionExecution lifecycle", () => {
 })
 
 describe("SessionRestart background recovery", () => {
+  it.effect("does not wake a standalone parent through a persisted subagent or completed shell", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const jobs = yield* Job.Service
+      const parent = Session.ID.make("ses_standalone_background_parent")
+      const child = Session.ID.make("ses_standalone_background_child")
+      yield* seedSessions(database, [parent], { execution_recoverable: false })
+      yield* seedSessions(database, [child], {
+        parent_id: parent,
+        time_suspended: Date.now(),
+        execution_recoverable: false,
+      })
+      yield* jobs.start({
+        id: child,
+        type: "subagent",
+        recovery: {
+          kind: "subagent",
+          parentSessionID: parent,
+          childSessionID: child,
+          agent: "explore",
+          description: "Standalone inspection",
+        },
+        run: Effect.never,
+      })
+      yield* jobs.background(child)
+      yield* jobs.start({
+        id: "standalone-shell",
+        type: "shell",
+        recovery: { kind: "shell", sessionID: parent, shellID: "sh_standalone", command: "exit 7" },
+        run: Effect.succeed("shell output"),
+      })
+      yield* jobs.background("standalone-shell")
+      yield* jobs.wait({ id: "standalone-shell" })
+
+      const drained: Session.ID[] = []
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const restartedJobs = yield* Job.make.pipe(Scope.provide(scope))
+      const context = yield* buildExecution(
+        scope,
+        ({ sessionID }) => Effect.sync(() => void drained.push(sessionID)),
+        undefined,
+        restartedJobs,
+      )
+      const restart = Context.get(context, SessionRestart.Service)
+      yield* restart.resumeSuspendedSessions
+      yield* restart.resumeSuspendedSessions
+      expect(drained).toEqual([])
+      expect(yield* SessionInbox.list(database.db, parent)).toEqual([])
+      expect(yield* SessionInbox.list(database.db, child)).toEqual([])
+      expect((yield* claims(database))[child]).toBe(true)
+      expect(yield* attempts(database, child)).toBe(0)
+      expect(yield* restartedJobs.pendingBackground).toHaveLength(2)
+    }),
+  )
+
   it.effect("keeps shell owners idle until a user prompt delivers recovered notices exactly once", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
@@ -1284,7 +1432,9 @@ function seedInbox(
 function seedSessions(
   database: Database.Service["Service"],
   sessionIDs: ReadonlyArray<Session.ID>,
-  values: Partial<Pick<typeof SessionTable.$inferInsert, "time_suspended" | "resume_attempts" | "parent_id">> = {},
+  values: Partial<
+    Pick<typeof SessionTable.$inferInsert, "time_suspended" | "resume_attempts" | "parent_id" | "execution_recoverable">
+  > = {},
 ) {
   return Effect.gen(function* () {
     yield* database.db
@@ -1303,6 +1453,7 @@ function seedSessions(
           directory: "/project",
           title: id,
           version: "test",
+          execution_recoverable: true,
           ...values,
         })),
       )
@@ -1340,6 +1491,7 @@ function buildExecution(
   drain: (input: Parameters<SessionRunner.Interface["drain"]>[0]) => Effect.Effect<void, SessionRunner.RunError>,
   options?: SessionRestart.Options,
   overrideJobs?: Job.Interface,
+  recovery?: SessionExecution.Options,
 ) {
   return Effect.gen(function* () {
     const database = yield* Database.Service
@@ -1378,7 +1530,7 @@ function buildExecution(
     return yield* Layer.buildWithScope(
       SessionRestart.layer(options).pipe(
         Layer.provideMerge(sessionLayer),
-        Layer.provideMerge(Layer.fresh(SessionExecution.layer)),
+        Layer.provideMerge(Layer.fresh(SessionExecution.layerWith(recovery))),
         Layer.provide(Layer.succeed(Database.Service, database)),
         Layer.provide(Layer.succeed(Bus.Service, bus)),
         Layer.provide(Layer.succeed(SessionStore.Service, store)),

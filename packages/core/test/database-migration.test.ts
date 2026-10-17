@@ -21,6 +21,7 @@ import executionClaimsMigration from "@opencode/core/database/migration/20260811
 import sessionInboxMigration from "@opencode/core/database/migration/20260812181746_session_inbox"
 import sessionViewedStateMigration from "@opencode/core/database/migration/20260819222447_session_viewed_state"
 import azureCliCredentialMigration from "@opencode/core/database/migration/20261007190000_azure_cli_external_credential"
+import executionRecoveryMigration from "@opencode/core/database/migration/20261013155157_execution_recoverable"
 import { Global } from "@opencode/util/global"
 
 const run = <A, E>(
@@ -63,6 +64,25 @@ const parkedClient = (arrived: Deferred.Deferred<void>, gate: Deferred.Deferred<
   ).pipe(Layer.provide(SqliteClient.layer({ filename: ":memory:", disableWAL: true })), Layer.provide(Reactivity.layer))
 
 describe("DatabaseMigration", () => {
+  test("does not automatically recover legacy claims with an unknown execution environment", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`
+          CREATE TABLE session_v2 (id text PRIMARY KEY, time_suspended integer, resume_attempts integer)
+        `)
+        yield* db.run(sql`INSERT INTO session_v2 VALUES ('ses_legacy_claim', 123, 2)`)
+        yield* DatabaseMigration.applyOnly(db, [executionRecoveryMigration])
+        expect(yield* db.get(sql`SELECT * FROM session_v2`)).toEqual({
+          id: "ses_legacy_claim",
+          time_suspended: 123,
+          resume_attempts: 2,
+          execution_recoverable: 0,
+        })
+      }),
+    )
+  })
+
   test("defaults missing workspace names while preserving legacy workspace data", async () => {
     await run(
       Effect.gen(function* () {
