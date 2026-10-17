@@ -1209,6 +1209,107 @@ describe("SessionExecution interrupt continuation", () => {
     }),
   )
 
+  it.effect("a background child job follows an interrupt with continue through the resumed steer", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const parent = Session.ID.make("ses_continue_job_parent")
+      const child = Session.ID.make("ses_continue_job_child")
+      yield* seedSessions(database, [parent])
+      yield* seedSessions(database, [child], { parent_id: parent })
+      yield* seedInbox(database, child, ["steer"])
+
+      const draining = yield* Deferred.make<void>()
+      const drains: Array<SessionInbox.Promotable | undefined> = []
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const jobs = yield* Job.make.pipe(Scope.provide(scope))
+      const context = yield* buildExecution(
+        scope,
+        (input) =>
+          Effect.suspend(() => {
+            drains.push(input.promotable)
+            if (drains.length > 1) return Effect.void
+            return Deferred.succeed(draining, undefined).pipe(Effect.andThen(Effect.never))
+          }),
+        undefined,
+        jobs,
+      )
+      const execution = Context.get(context, SessionExecution.Service)
+      yield* jobs.start({
+        id: child,
+        type: "subagent",
+        recovery: {
+          kind: "subagent",
+          parentSessionID: parent,
+          childSessionID: child,
+          agent: "general",
+          description: "Steered inspection",
+        },
+        run: execution.resume(child).pipe(Effect.as("steered")),
+      })
+      yield* jobs.background(child)
+      yield* Deferred.await(draining)
+
+      expect(yield* execution.interrupt(child, { resume: true })).toBeTrue()
+      const info = (yield* jobs.wait({ id: child })).info
+      yield* execution.awaitIdle(child)
+
+      expect(drains).toEqual(["input", "steer"])
+      expect(info).toMatchObject({ status: "completed", output: "steered" })
+    }),
+  )
+
+  it.effect("a background child job stays cancelled when continue only resumes control work", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const parent = Session.ID.make("ses_continue_control_job_parent")
+      const child = Session.ID.make("ses_continue_control_job_child")
+      yield* seedSessions(database, [parent])
+      yield* seedSessions(database, [child], { parent_id: parent })
+      yield* seedInbox(database, child, [{ delivery: "queue", type: "compaction" }])
+
+      const draining = yield* Deferred.make<void>()
+      const drains: Array<SessionInbox.Promotable | undefined> = []
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const jobs = yield* Job.make.pipe(Scope.provide(scope))
+      const context = yield* buildExecution(
+        scope,
+        (input) =>
+          Effect.suspend(() => {
+            drains.push(input.promotable)
+            if (drains.length > 1) return Effect.void
+            return Deferred.succeed(draining, undefined).pipe(Effect.andThen(Effect.never))
+          }),
+        undefined,
+        jobs,
+      )
+      const execution = Context.get(context, SessionExecution.Service)
+      yield* jobs.start({
+        id: child,
+        type: "subagent",
+        recovery: {
+          kind: "subagent",
+          parentSessionID: parent,
+          childSessionID: child,
+          agent: "general",
+          description: "Compacted inspection",
+        },
+        run: execution.resume(child).pipe(Effect.as("stale")),
+      })
+      yield* jobs.background(child)
+      yield* Deferred.await(draining)
+
+      expect(yield* execution.interrupt(child, { resume: true })).toBeTrue()
+      const info = (yield* jobs.wait({ id: child })).info
+      yield* execution.awaitIdle(child)
+
+      // Housekeeping still runs, but it produces no reply that would complete the task.
+      expect(drains).toEqual(["input", "steer"])
+      expect(info?.status).toBe("cancelled")
+    }),
+  )
+
   it.effect("keeps a control item parked behind a queued prompt on continue", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service

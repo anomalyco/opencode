@@ -116,7 +116,7 @@ export const layer = Layer.effect(
         ),
       drain: (sessionID, force, promotable) => drain(sessionID, force, undefined, promotable),
       // One terminal observation per busy period, covering every coalesced drain.
-      settled: (sessionID, exit, reason) =>
+      settled: (sessionID, exit, reason, continued) =>
         reportLifecycle(
           sessionID,
           Effect.gen(function* () {
@@ -127,7 +127,8 @@ export const layer = Layer.effect(
             }
             if (outcome.type === "interrupted") {
               // Deliberate stops release the claim; shutdown keeps it for restart continuity.
-              if (outcome.reason !== "shutdown") yield* jobs.cancel(sessionID)
+              // A continued interruption hands the Session's job to the successor execution.
+              if (outcome.reason !== "shutdown" && !continued) yield* jobs.cancel(sessionID)
               yield* bus.publish(
                 SessionEvent.Execution.Interrupted,
                 { sessionID, reason: outcome.reason },
@@ -164,7 +165,10 @@ export const layer = Layer.effect(
           // promotable here or was fully delivered and needs no resumption.
           const next = yield* SessionInbox.nextPromotable(db, sessionID, "input")
           if (next === undefined) return interrupted
-          if (next.delivery === "steer" || next.type === "compaction" || next.type === "move")
+          // Only steered input carries the interrupted intent forward to a new reply; control
+          // work resumes as housekeeping and leaves the interruption terminal for job observers.
+          if (next.delivery === "steer") yield* coordinator.handoff(sessionID, "steer")
+          if (next.delivery !== "steer" && (next.type === "compaction" || next.type === "move"))
             yield* coordinator.wake(sessionID, "steer")
           return interrupted
         }),

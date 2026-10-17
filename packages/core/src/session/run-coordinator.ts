@@ -1,6 +1,6 @@
 export * as SessionRunCoordinator from "./run-coordinator.js"
 
-import { Deferred, Effect, Exit, Fiber, FiberSet, Scope } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, FiberSet, Scope } from "effect"
 import type { Promotable } from "./inbox.js"
 
 /** Serializes execution for each key while allowing different keys to run concurrently. */
@@ -9,10 +9,19 @@ export interface Coordinator<Key, E, Reason = never> {
   readonly active: Effect.Effect<ReadonlySet<Key>>
   /** Checks ownership for one key, including cleanup and terminal settlement. */
   readonly isActive: (key: Key) => Effect.Effect<boolean>
-  /** Starts an execution while idle, or joins the active execution and returns its exit. */
+  /**
+   * Starts an execution while idle, or joins the active execution and returns its exit. An
+   * interruption handed off to a successor returns the successor's exit instead.
+   */
   readonly run: (key: Key) => Effect.Effect<void, E>
   /** Rings the doorbell: an idle key starts an execution; an active one drains again before settling. */
   readonly wake: (key: Key, scope?: Promotable) => Effect.Effect<void>
+  /**
+   * Wakes like `wake`, but a stopping execution hands its interrupted intent to the successor:
+   * the settled hook observes the interruption as continued, and joiners follow the successor
+   * instead of resolving with the interruption. Idle keys start like `wake`.
+   */
+  readonly handoff: (key: Key, scope: Promotable) => Effect.Effect<void>
   /**
    * Stops the active execution and clears its doorbell. No-op when idle. Resolves once the
    * interruption is accepted, not when cleanup settles: the execution fiber finishes its
@@ -35,7 +44,7 @@ export interface Coordinator<Key, E, Reason = never> {
  * execution rings it with the scope that work needs, and the execution loop drains again
  * instead of ending. The doorbell closes the gap between a drain's last eligibility check
  * and the idle transition, since those cannot be one atomic step. `done` resolves joiners
- * with this execution's exit.
+ * with this execution's exit; `successor` records where a handed-off interruption continues.
  */
 type Execution<E, Reason> = {
   readonly done: Deferred.Deferred<void, E>
@@ -44,6 +53,8 @@ type Execution<E, Reason> = {
   pendingWake?: Promotable
   stopping: boolean
   interruptionReason?: Reason
+  continued: boolean
+  successor?: Execution<E, Reason>
 }
 
 /**
@@ -55,6 +66,8 @@ type Execution<E, Reason> = {
  *      doorbell quiet ◀───────┴───────▶ doorbell rung
  *      idle, waiters get exit          successor execution,
  *                                      waiters get this exit
+ *                                      (handed-off interruption:
+ *                                      waiters follow the successor)
  * ```
  */
 export const make = <Key, E, Reason = never>(options: {
@@ -63,9 +76,15 @@ export const make = <Key, E, Reason = never>(options: {
   readonly started?: (key: Key) => Effect.Effect<void>
   /**
    * Runs in the execution fiber for every exit, including interruption, after the final
-   * drain and before the execution settles (waiters resolve after it completes).
+   * drain and before the execution settles (waiters resolve after it completes). `continued`
+   * reports an interruption whose intent was handed to a successor.
    */
-  readonly settled?: (key: Key, exit: Exit.Exit<void, E>, reason?: Reason) => Effect.Effect<void>
+  readonly settled?: (
+    key: Key,
+    exit: Exit.Exit<void, E>,
+    reason: Reason | undefined,
+    continued: boolean,
+  ) => Effect.Effect<void>
 }): Effect.Effect<Coordinator<Key, E, Reason>, never, Scope.Scope> =>
   Effect.gen(function* () {
     const executions = new Map<Key, Execution<E, Reason>>()
@@ -89,6 +108,7 @@ export const make = <Key, E, Reason = never>(options: {
         done: Deferred.makeUnsafe<void, E>(),
         scope,
         stopping: false,
+        continued: false,
       }
       executions.set(key, execution)
       // The leading yield lets `owner` be assigned before the drain can settle, and keeps
@@ -101,7 +121,11 @@ export const make = <Key, E, Reason = never>(options: {
           Effect.onExit((exit) =>
             Effect.sync(() => {
               execution.owner = undefined
-            }).pipe(Effect.andThen(options.settled?.(key, exit, execution.interruptionReason) ?? Effect.void)),
+            }).pipe(
+              Effect.andThen(
+                options.settled?.(key, exit, execution.interruptionReason, execution.continued) ?? Effect.void,
+              ),
+            ),
           ),
           Effect.onExit((exit) => Effect.sync(() => settle(key, execution, exit))),
           Effect.exit,
@@ -114,10 +138,22 @@ export const make = <Key, E, Reason = never>(options: {
     // A doorbell that survives the execution loop (rung after the loop decided to end, or
     // during failure or interruption cleanup) starts a fresh execution for the remaining work.
     const settle = (key: Key, execution: Execution<E, Reason>, exit: Exit.Exit<void, E>) => {
-      if (execution.pendingWake) start(key, false, execution.pendingWake)
-      else executions.delete(key)
+      if (!execution.pendingWake) executions.delete(key)
+      if (execution.pendingWake) {
+        const successor = start(key, false, execution.pendingWake)
+        if (execution.continued) execution.successor = successor
+      }
       Deferred.doneUnsafe(execution.done, exit)
     }
+
+    // The successor is recorded before `done` resolves, so a handed-off interruption is
+    // followed directly rather than by starting fresh work after a fast successor finished.
+    const join = (execution: Execution<E, Reason>): Effect.Effect<void, E> =>
+      Deferred.await(execution.done).pipe(
+        Effect.catchCause((cause) =>
+          execution.successor && Cause.hasInterruptsOnly(cause) ? join(execution.successor) : Effect.failCause(cause),
+        ),
+      )
 
     const isActive = (key: Key) => Effect.sync(() => executions.has(key))
 
@@ -128,9 +164,9 @@ export const make = <Key, E, Reason = never>(options: {
           // A stopping execution refuses joiners: wait out its cleanup, then run fresh.
           if (execution.stopping)
             return Deferred.await(execution.done).pipe(Effect.ignoreCause, Effect.andThen(run(key)))
-          return Deferred.await(execution.done)
+          return join(execution)
         }
-        return Deferred.await(start(key, true, "input").done)
+        return join(start(key, true, "input"))
       })
 
     const wake = (key: Key, scope: Promotable = "input") =>
@@ -143,6 +179,12 @@ export const make = <Key, E, Reason = never>(options: {
         }
         start(key, false, scope)
       })
+
+    const handoff = (key: Key, scope: Promotable) =>
+      Effect.sync(() => {
+        const execution = executions.get(key)
+        if (execution?.stopping) execution.continued = true
+      }).pipe(Effect.andThen(wake(key, scope)))
 
     const interrupt = (key: Key, reason?: Reason): Effect.Effect<boolean> =>
       Effect.sync(() => {
@@ -180,6 +222,7 @@ export const make = <Key, E, Reason = never>(options: {
       isActive,
       run,
       wake,
+      handoff,
       interrupt: (key, reason, options) =>
         Effect.suspend(() => {
           const execution = executions.get(key)
