@@ -19,7 +19,7 @@ import {
 } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols/openai-chat"
 import { AnthropicMessages, OpenAIResponses } from "@opencode/ai/protocols"
-import { TestLLM, compileRequest } from "@opencode/ai/testing"
+import { TestLLM, applyCachePolicy, compileRequest } from "@opencode/ai/testing"
 import { RequestExecutor } from "@opencode/ai/route"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
 import { Database } from "@opencode/core/database/database"
@@ -97,6 +97,7 @@ import { TestClock } from "effect/testing"
 import { and, asc, desc, eq, sql } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 import { promptLocationNode } from "./fixture/prompt-location"
+import { bill } from "./fixture/llm-meter"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { Expected } from "./lib/session-message"
 import { permissionLayer } from "./lib/permission"
@@ -148,6 +149,14 @@ const replacementIdentity = identity("fake", "replacement")
 const gptIdentity = identity("openai", "gpt-5")
 const replacementModel = testModel("replacement")
 const compactModel = testModel("compact", { context: 4_000, output: 50 })
+// The metered compaction case needs a route that places cache markers, so its provider can
+// charge a cache read instead of billing the whole prompt again on every step.
+const compactCacheModel = LanguageModel.make({
+  id: "compact-cache",
+  provider: "fake",
+  route: AnthropicMessages.route,
+})
+modelLimits.set("compact-cache", { context: 4_000, output: 50 })
 const fullOutputModel = testModel("full-output", { context: 262_144, output: 262_144 })
 const unknownContextModel = testModel("unknown-context", { context: 0, output: 32_000 })
 const undersizedContextModel = testModel("undersized-context", { context: 1, output: 1_000 })
@@ -7619,6 +7628,60 @@ describe("SessionRunnerLLM", () => {
       Expected.user("Call provider tool"),
       Expected.assistant({}, [Expected.failedTool({ id: "call-parsed" }, { input: { query: "hello" } })]),
     ])
+  })
+
+  // What a compaction costs, measured instead of assumed. Summarising is itself a request: the
+  // older half of the conversation is re-sent to the model to produce the summary. The saving
+  // only exists if the summary plus the retained tail is smaller than what it replaced, and the
+  // post-compaction steps have to pay off that saving rather than re-billing the same history.
+  scenario("compaction shrinks what each following step sends", function* (s) {
+    const summary = "## Objective\n- measured summary: " + "keep the parser work and the rejected options. ".repeat(16)
+
+    yield* s.llm.push(TestLLM.textWithUsage("Earlier answer", "text-before-size-compaction", 3_950))
+    yield* s.runPrompt("Earlier question ".repeat(180))
+
+    s.currentModel = compactCacheModel
+    s.requests.length = 0
+    yield* s.llm.push(
+      TestLLM.text(summary, "text-size-summary"),
+      TestLLM.textWithUsage("After", "text-size-after", 900),
+    )
+    yield* s.admit("Recent exact request ".repeat(180))
+    yield* s.resume
+
+    const summaryRequest = s.requests.find((request) =>
+      userTexts(request).some((text) => text.includes("## Objective")),
+    )
+    expect(summaryRequest).toBeDefined()
+    if (!summaryRequest) return
+
+    const stepRequest = s.requests.find((request) => userTexts(request).some((text) => text.includes("<summary>")))
+    expect(stepRequest).toBeDefined()
+    if (!stepRequest) return
+
+    // The post-compaction step carries the summary instead of the history behind it.
+    const checkpoint = userTexts(stepRequest).find((text) => text.startsWith("<conversation-checkpoint>"))
+    expect(checkpoint).toBeDefined()
+
+    // The retained tail is verbatim, so the replacement is the summary plus that tail.
+    const context = yield* s.context
+    const compaction = context.find((message) => message.type === "compaction")
+    expect(compaction?.type === "compaction" && compaction.status === "completed").toBe(true)
+    if (compaction?.type !== "compaction" || compaction.status !== "completed") return
+
+    expect(compaction.summary).toContain("measured summary")
+
+    // Meter the runner's own requests with the cache policy the compiler applies to them. The
+    // summary request re-sends the old history; the step that follows carries the checkpoint.
+    // The route honours cache markers, so the shared system and tool prefix is read rather than
+    // billed again, and compaction pays off only if the step's input is smaller anyway.
+    const billed = bill([summaryRequest, stepRequest].map((request) => applyCachePolicy(request)))
+    const [summaryBill, stepBill] = billed.steps
+    if (!summaryBill || !stepBill) return
+
+    expect(stepBill.cached).toBeGreaterThan(0)
+    expect(stepBill.input).toBeLessThan(summaryBill.input)
+    expect(stepBill.inputCost).toBeLessThan(summaryBill.inputCost)
   })
 
   scenario("rejects malformed streamed tool input ordering", function* (s) {

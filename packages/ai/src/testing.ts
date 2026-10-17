@@ -1,4 +1,5 @@
 export * as TestLLM from "./testing.js"
+export { applyCachePolicy } from "./cache-policy.js"
 export { compileRequest } from "./route/client.js"
 
 import {
