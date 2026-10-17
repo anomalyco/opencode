@@ -25,6 +25,8 @@ export interface Coordinator<Key, E, Reason = never> {
     reason?: Reason,
     options?: { readonly awaitSettlement?: boolean },
   ) => Effect.Effect<boolean>
+  /** Reads the recorded interruption cause for the current execution. Undefined when idle or never interrupted. */
+  readonly interruptionReason: (key: Key) => Effect.Effect<Reason | undefined>
   /** Resolves once no execution is active for the key. Returns immediately when already idle and never starts work. */
   readonly awaitIdle: (key: Key) => Effect.Effect<void>
 }
@@ -166,6 +168,10 @@ export const make = <Key, E, Reason = never>(options: {
         return true
       })
 
+    // The record stays in the map until settle, so drains can read the cause of their own
+    // interruption while they settle (the settled hook reads the field directly instead).
+    const interruptionReason = (key: Key) => Effect.sync(() => executions.get(key)?.interruptionReason)
+
     // One execution's `done` already spans coalesced continuations; re-check after it
     // settles to cover a successor execution started by a late doorbell.
     const awaitIdle = (key: Key): Effect.Effect<void> =>
@@ -180,6 +186,7 @@ export const make = <Key, E, Reason = never>(options: {
       isActive,
       run,
       wake,
+      interruptionReason,
       interrupt: (key, reason, options) =>
         Effect.suspend(() => {
           const execution = executions.get(key)
