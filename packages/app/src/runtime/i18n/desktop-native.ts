@@ -62,6 +62,7 @@ export const DESKTOP_NATIVE_LOCALES = [
   "tg",
   "tk",
   "uz",
+  "kab",
 ] as const
 
 export type DesktopNativeLocale = (typeof DESKTOP_NATIVE_LOCALES)[number]
@@ -130,6 +131,7 @@ export const DESKTOP_NATIVE_LABELS: Record<DesktopNativeLocale, string> = {
   tg: "Тоҷикӣ",
   tk: "Türkmençe",
   uz: "Oʻzbekcha",
+  kab: "Taqbaylit",
 }
 
 export const DESKTOP_NATIVE_LOCALE_TAGS: Record<DesktopNativeLocale, string> = {
@@ -196,6 +198,7 @@ export const DESKTOP_NATIVE_LOCALE_TAGS: Record<DesktopNativeLocale, string> = {
   tg: "tg-Cyrl-TJ",
   tk: "tk-Latn-TM",
   uz: "uz-Latn-UZ",
+  kab: "kab",
 }
 
 export function detectDesktopNativeLocale(languages: readonly string[]): DesktopNativeLocale {
