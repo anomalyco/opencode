@@ -229,6 +229,12 @@ export const connect = Effect.fnUntraced(function* (
     reported: false,
   }
   const failure = (error: unknown) => {
+    // A real authentication failure (an HTTP 401, or the SDK's own UnauthorizedError) is the only thing that
+    // should put a server into needs_auth. Do not match on message text: servers pass through errors from
+    // other APIs whose messages can echo "401"/"unauthorized" without being an auth failure here.
+    if (error instanceof SdkHttpError && error.status === 401)
+      return new NeedsAuthError({ server, message: explain(error) })
+    if (error instanceof UnauthorizedError) return new NeedsAuthError({ server, message: error.message })
     if (!(error instanceof SdkHttpError) || session.transport?.sessionId === undefined) return new Error(explain(error))
     const expired =
       error.status === 404 ||
