@@ -1,4 +1,5 @@
 import type { LocationGetOutput, LocationRef } from "@opencode/client"
+import { isLocationNotFoundError } from "@opencode/client"
 import { createContext, createMemo, createSignal, onCleanup, useContext, type ParentProps } from "solid-js"
 import { useClient } from "./client"
 import { useData } from "./data"
@@ -36,6 +37,9 @@ export function LocationProvider(props: ParentProps) {
         current.workspaceID !== location.workspaceID
       )
         return
+      // Only the server's typed LocationNotFoundError proves the folder is gone.
+      // Transient sync failures (reconnect, timeouts) must not mount recovery.
+      if (!isLocationNotFoundError(cause)) return
       setError({ location, cause })
     })
   }
