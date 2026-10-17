@@ -171,6 +171,13 @@ export const Info = Schema.Struct({
       tps: Schema.optional(Schema.Boolean).annotate({
         description: "Show average tokens per second",
       }),
+      shell_lines: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))).annotate({
+        description: "Lines a collapsed shell call shows, command and output together (default 10)",
+      }),
+      shell_command_lines: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))).annotate({
+        description:
+          "Rows a collapsed shell call's command takes before it is cut with '…', within shell_lines (default 2)",
+      }),
       markdown: Schema.optional(Schema.Literals(["source", "rendered"])).annotate({
         description: "Show Markdown syntax markers or conceal them in rendered transcript content",
       }),
