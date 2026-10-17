@@ -3,15 +3,16 @@ import Notifications from "../../../../src/feature-plugins/system/notifications"
 import type { OpenCodeEvent, PermissionAsked } from "@opencode/client"
 import type { AttentionNotifyOptions, Context, Route, ToastOptions } from "@opencode/plugin/tui/context"
 
-type Session = { id: string; title: string; parentID?: string }
+type Session = { id: string; title: string; parentID?: string; location: { directory: string } }
 
-async function setup(route: Route = { type: "session", sessionID: "session" }) {
+async function setup(route: Route = { type: "session", sessionID: "session" }, tabs: string[] = []) {
   const notifications: AttentionNotifyOptions[] = []
   const toasts: ToastOptions[] = []
   const handlers = new Map<OpenCodeEvent["type"], ((event: OpenCodeEvent) => void)[]>()
-  const session = (id: string, title: string, parentID?: string): Session => ({
+  const session = (id: string, title: string, parentID?: string, directory = "/project"): Session => ({
     id,
     title,
+    location: { directory },
     ...(parentID && { parentID }),
   })
   const sessions: Record<string, Session> = {
@@ -19,11 +20,14 @@ async function setup(route: Route = { type: "session", sessionID: "session" }) {
     subagent: session("subagent", "Subagent session", "session"),
     abort: session("abort", "Abort session"),
     timeout: session("timeout", "Timeout session"),
+    foreign: session("foreign", "Foreign session", undefined, "/other"),
+    "foreign-subagent": session("foreign-subagent", "Foreign subagent", "foreign", "/other"),
   }
 
   await Notifications.setup({
     ui: {
       router: { current: () => route },
+      tabs: { list: () => tabs.map((sessionID) => ({ sessionID })) },
       toast: { show: (toast: ToastOptions) => toasts.push(toast) },
     },
     attention: {
@@ -50,8 +54,10 @@ async function setup(route: Route = { type: "session", sessionID: "session" }) {
       },
       session: {
         get: (sessionID: string) => sessions[sessionID],
+        root: (sessionID: string) => sessions[sessionID]?.parentID ?? sessionID,
         status: () => "running" as const,
       },
+      location: { default: () => ({ directory: "/project" }) },
     },
   } as unknown as Context)
 
@@ -170,6 +176,30 @@ describe("internal notifications TUI plugin", () => {
       expect(harness.notifications).toHaveLength(1)
     },
   )
+
+  test("ignores sessions from other projects on the shared server", async () => {
+    const harness = await setup()
+    harness.emit(executionStarted("started", "foreign"))
+    harness.emit(executionFailed("failed", "foreign"))
+    harness.emit(executionSucceeded("succeeded", "foreign-subagent"))
+    harness.emit({ id: "form", created: 0, type: "form.created", data: { form: form("form-1", "foreign") } })
+    harness.emit({ id: "permission", created: 0, type: "permission.asked", data: permission("p-1", "foreign") })
+    harness.emit(executionFailed("unknown", "unloaded"))
+    expect(harness.toasts).toEqual([])
+    expect(harness.notifications).toEqual([])
+  })
+
+  test.each<[Route, string[]]>([
+    [{ type: "session", sessionID: "foreign-subagent" }, []],
+    [{ type: "home" }, ["foreign"]],
+  ])("surfaces other-project sessions that are in view or open as tabs (%j, %j)", async (route, tabs) => {
+    const harness = await setup(route, tabs)
+    harness.emit(executionFailed("failed", "foreign"))
+    expect(harness.toasts).toEqual([
+      { sessionID: "foreign", title: "Session failed", message: "boom", variant: "error" },
+    ])
+    expect(harness.notifications).toHaveLength(1)
+  })
 
   test("notifies for form and permission requests with blurred notifications and always-on sounds", async () => {
     const harness = await setup()

@@ -8,6 +8,7 @@ function notify(
   sound: AttentionSoundName,
   title?: string,
 ) {
+  if (sessionID && !relevant(context, sessionID)) return
   const session = sessionID ? context.data.session.get(sessionID) : undefined
   const isSubagent = session?.parentID !== undefined
   void context.attention.notify({
@@ -16,6 +17,16 @@ function notify(
     notification: isSubagent ? false : { when: "blurred" },
     sound: { name: sound, when: "always" },
   })
+}
+
+// The event stream spans every location on the server, so instances only surface sessions the user
+// can reach here: the one in view, open tabs, or sessions in this instance's launch directory.
+function relevant(context: Plugin.Context, sessionID: string) {
+  const root = context.data.session.root(sessionID)
+  const route = context.ui.router.current()
+  if (route.type === "session" && context.data.session.root(route.sessionID) === root) return true
+  if (context.ui.tabs.list().some((tab) => tab.sessionID === root)) return true
+  return context.data.session.get(root)?.location.directory === context.data.location.default().directory
 }
 
 export default Plugin.define({
@@ -45,7 +56,9 @@ export default Plugin.define({
       context.data.on("form.created", (event) => {
         if (forms.has(event.data.form.id)) return
         forms.add(event.data.form.id)
-        notify(context, event.data.form.sessionID, "Input needs response", "question", event.data.form.title)
+        // MCP elicitations use the "global" sentinel owner, which is not a session to scope by.
+        const sessionID = event.data.form.sessionID === "global" ? undefined : event.data.form.sessionID
+        notify(context, sessionID, "Input needs response", "question", event.data.form.title)
       }),
       context.data.on("form.replied", (event) => forms.delete(event.data.id)),
       context.data.on("form.cancelled", (event) => forms.delete(event.data.id)),
@@ -67,7 +80,8 @@ export default Plugin.define({
         }
         errored.add(sessionID)
         notify(context, sessionID, event.data.error.message, "error")
-        context.ui.toast.show({ sessionID, title: "Session failed", message: event.data.error.message, variant: "error" })
+        if (relevant(context, sessionID))
+          context.ui.toast.show({ sessionID, title: "Session failed", message: event.data.error.message, variant: "error" })
         ended(sessionID)
       }),
     ]
