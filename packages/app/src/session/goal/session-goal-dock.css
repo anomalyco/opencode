@@ -1,0 +1,96 @@
+[data-component="session-goal-dock"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 6px 8px;
+}
+
+[data-component="session-goal-dock"] [data-slot="session-goal-marker"] {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  color: var(--v2-icon-icon-accent);
+}
+
+[data-component="session-goal-dock"][data-phase="paused"] [data-slot="session-goal-marker"] {
+  color: var(--v2-icon-icon-muted);
+}
+
+[data-component="session-goal-dock"][data-phase="blocked"] [data-slot="session-goal-marker"] {
+  color: var(--v2-state-fg-danger);
+}
+
+[data-component="session-goal-dock"][data-phase="complete"] [data-slot="session-goal-marker"] {
+  color: var(--v2-state-fg-success);
+}
+
+[data-component="session-goal-dock"] [data-slot="session-goal-progress"] {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: baseline;
+  gap: 8px;
+  color: var(--v2-text-text-base);
+  font-size: 13px;
+  line-height: var(--line-height-compact);
+}
+
+[data-component="session-goal-dock"] [data-slot="session-goal-objective"] {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-component="session-goal-dock"] [data-slot="session-goal-meta"] {
+  display: flex;
+  flex-shrink: 0;
+  align-items: baseline;
+  gap: 8px;
+  color: var(--v2-text-text-muted);
+  font-size: 12px;
+  line-height: var(--line-height-compact);
+}
+
+[data-component="session-goal-dock"] [data-slot="session-goal-status"] {
+  color: var(--v2-state-fg-warning);
+}
+
+[data-component="session-goal-dock"][data-phase="complete"] [data-slot="session-goal-status"] {
+  color: var(--v2-state-fg-success);
+}
+
+[data-component="session-goal-dock"] [data-slot="session-goal-blocked"] {
+  flex-shrink: 0;
+  max-width: 50%;
+  overflow: hidden;
+  color: var(--v2-state-fg-danger);
+  font-size: 12px;
+  line-height: var(--line-height-compact);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-component="session-goal-dock"] [data-slot="session-goal-actions"] {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 2px;
+}
+
+[data-component="session-goal-dock"] [data-slot="session-goal-editor"] {
+  flex: 1;
+  min-width: 0;
+}
+
+[data-component="session-goal-dock"] [data-slot="session-goal-input"] {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--v2-text-text-base);
+  font-size: 13px;
+  line-height: var(--line-height-compact);
+  outline: none;
+}

@@ -512,7 +512,7 @@ function effectType(schema: Schema.Top, references: ReturnType<typeof effectType
     }
     return type
   }
-  const type = expand(document.codes[0].Type)
+  const type = stripBrand(expand(document.codes[0].Type))
   if (type.includes("DateTime.")) imports.add('import type { DateTime } from "effect"')
   if (type.includes("Schema.")) imports.add('import type { Schema } from "effect"')
   return type
@@ -1040,7 +1040,10 @@ function structuralTypes(schemas: ReadonlyArray<Schema.Top>, mutable: boolean, r
     promiseTypeAsts(schemas) as [SchemaAST.AST, ...Array<SchemaAST.AST>],
   )
   const document = SchemaRepresentation.toCodeDocument(representations)
-  if (document.artifacts.length > 0 || Object.keys(document.references.recursives).length > 0) {
+  // Import artifacts (e.g. a `Brand` import from a branded scalar) are runtime-only; the
+  // emitted types never reference them, so they do not make the types "referenced".
+  const artifacts = document.artifacts.filter((artifact) => artifact._tag !== "Import")
+  if (artifacts.length > 0 || Object.keys(document.references.recursives).length > 0) {
     throw new GenerationError({ reason: "Referenced Promise types are not implemented" })
   }
   const anonymous = new Set(
@@ -1085,7 +1088,7 @@ function structuralTypes(schemas: ReadonlyArray<Schema.Top>, mutable: boolean, r
     const output = type
       .replaceAll("Schema.Json", "JsonValue")
       .replaceAll(/(?<!["'])\bunknown\b(?!["'])/g, "any")
-    return mutable ? mutableType(preserveStringSuggestions(output)) : preserveStringSuggestions(output)
+    return stripBrand(mutable ? mutableType(preserveStringSuggestions(output)) : preserveStringSuggestions(output))
   }
   const equivalent = new Map<string, string>()
   for (const reference of references) {
@@ -1121,7 +1124,10 @@ function uniqueTypeName(seed: string, used: ReadonlySet<string>, suffix = 1): st
 
 function structuralType(schema: Schema.Top) {
   const document = SchemaRepresentation.toCodeDocument(SchemaRepresentation.toRepresentations([promiseTypeAst(schema)]))
-  if (document.artifacts.length > 0 || Object.keys(document.references.recursives).length > 0) {
+  // Import artifacts (e.g. a `Brand` import from a branded scalar) are runtime-only; the
+  // emitted type never references them, so they do not make the type "referenced".
+  const artifacts = document.artifacts.filter((artifact) => artifact._tag !== "Import")
+  if (artifacts.length > 0 || Object.keys(document.references.recursives).length > 0) {
     throw new GenerationError({ reason: "Referenced Promise types are not implemented" })
   }
   const references = new Map(
@@ -1138,9 +1144,11 @@ function structuralType(schema: Schema.Top) {
     }
     return type
   }
-  return preserveStringSuggestions(
-    expand(document.codes[0].Type)
-      .replaceAll("Schema.Json", "JsonValue"),
+  return stripBrand(
+    preserveStringSuggestions(
+      expand(document.codes[0].Type)
+        .replaceAll("Schema.Json", "JsonValue"),
+    ),
   )
 }
 
@@ -1203,6 +1211,13 @@ function codegenAsts(roots: ReadonlyArray<SchemaAST.AST>) {
 
 function preserveStringSuggestions(type: string) {
   return type.replaceAll(/((?:"(?:\\.|[^"\\])*"\s*\|\s*)+)string\b/g, "$1(string & {})")
+}
+
+// The committed generated surface renders branded scalars as their base type. Newer
+// effect versions emit `string & Brand.Brand<"...">`; strip the brand so the output
+// stays stable across effect versions.
+function stripBrand(type: string) {
+  return type.replaceAll(/ & Brand\.Brand<"[^"]*">/g, "")
 }
 
 function normalizePromiseClientContent(content: string, groups: ReadonlyArray<Group>) {

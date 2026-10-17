@@ -19,6 +19,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
 import { Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/runtime/i18n/language"
+import type { SessionGoalModel } from "@/session/goal/model"
 import type { WebSearchRequestModel } from "./requests/websearch"
 
 const modelReady = Object.assign(() => true, { promise: undefined }) satisfies ModelSelection["ready"]
@@ -193,6 +194,14 @@ function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void 
     onStop: () => setState("activity", "Requested a local stop"),
   })
 
+  const goal = {
+    state: () => undefined,
+    pause: () => undefined,
+    resume: () => undefined,
+    edit: () => undefined,
+    clear: () => undefined,
+  } satisfies SessionGoalModel
+
   const region = {
     state: {
       questionRequest: () => (state.request?.type === "question" ? state.request.value : undefined),
@@ -224,7 +233,9 @@ function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void 
         setState("activity", `Permission response: ${response}`)
       },
       blocked: () => state.request !== undefined,
+      goal,
     },
+    goal,
     centered: () => true,
     onResponseSubmit: () => {
       setState("request", undefined)

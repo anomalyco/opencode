@@ -1,5 +1,6 @@
 import { Show, type JSX } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
+import { SessionGoalDock } from "@/session/goal/session-goal-dock"
 import { SessionPermissionDock } from "@/session/requests/session-permission-dock"
 import { SessionQuestionDock } from "@/session/requests/session-question-dock"
 import { SessionWebSearchDock } from "@/session/requests/session-websearch-dock"
@@ -7,12 +8,12 @@ import type { SessionComposerRegionController } from "./session-composer-region-
 
 type SessionComposerRegionState = Pick<
   SessionComposerRegionController["state"],
-  "questionRequest" | "websearch" | "permissionRequest" | "permissionResponding" | "decide" | "blocked"
+  "questionRequest" | "websearch" | "permissionRequest" | "permissionResponding" | "decide" | "blocked" | "goal"
 >
 
 export type SessionComposerRegionViewController = Pick<
   SessionComposerRegionController,
-  "centered" | "onResponseSubmit" | "openParent" | "setPromptRef" | "setDockRef" | "parentID" | "child" | "showComposer"
+  "centered" | "onResponseSubmit" | "openParent" | "setPromptRef" | "setDockRef" | "parentID" | "child" | "showComposer" | "goal"
 > & { state: SessionComposerRegionState }
 
 export function SessionComposerRegion(props: {
@@ -34,6 +35,7 @@ export function SessionComposerRegion(props: {
           "md:max-w-session md:mx-auto": controller.centered(),
         }}
       >
+        <SessionGoalDock model={controller.goal} />
         <Show when={controller.state.websearch.request()}>
           <SessionWebSearchDock model={controller.state.websearch} onSubmit={controller.onResponseSubmit} />
         </Show>
