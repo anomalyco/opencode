@@ -897,6 +897,114 @@ describe("V1Migration database workflow", () => {
     )
   })
 
+  test("preserves oversized legacy parts and migrates placeholders alongside small attachments", async () => {
+    const limit = 10 * 1024 * 1024
+    const source = user("msg_000000000050aaaaaaaaaaaaaa")
+    const parts = [
+      part("prt_small", source.id, { type: "file", mime: "application/pdf", url: "data:application/pdf;base64,AQID" }),
+      part("prt_large", source.id, {
+        type: "file",
+        mime: "application/pdf",
+        url: `data:application/pdf;base64,${"A".repeat(limit)}`,
+      }),
+      part("prt_metadata", source.id, {
+        type: "file",
+        mime: "application/pdf",
+        url: "data:application/pdf;base64,AQID",
+        filename: "a".repeat(limit),
+      }),
+      part("prt_unicode", source.id, { type: "text", text: "é".repeat(limit / 2) }),
+      part("prt_invalid", source.id, "{".repeat(limit + 1)),
+    ]
+    const output = new Array<ReturnType<typeof Logger.formatStructured.log>>()
+    await database(
+      Effect.gen(function* () {
+        const db = (yield* Database.Service).db
+        yield* db.run(sql`INSERT INTO session (id, project_id, slug, directory, title, version, time_created, time_updated)
+          VALUES ('ses_test', 'global', 'test', '/tmp/test', 'Test', '1', 1, 2)`)
+        yield* db.run(sql`INSERT INTO message (id, session_id, time_created, time_updated, data)
+          VALUES (${source.id}, 'ses_test', 10, 11, ${source.data})`)
+        yield* Effect.forEach(parts, (row) =>
+          db.run(sql`INSERT INTO part (id, message_id, session_id, time_created, time_updated, data)
+            VALUES (${row.id}, ${source.id}, 'ses_test', 1, 2, ${row.data})`),
+        )
+
+        expect(yield* V1Migration.run()).toEqual({ status: "completed" })
+        expect(yield* V1Migration.status()).toEqual({ status: "completed" })
+        const size = yield* db.get<{ bytes: number }>(sql`SELECT octet_length(data) AS bytes FROM session_message`)
+        expect(size!.bytes).toBeLessThan(2048)
+        const migrated = yield* db.get<{ data: string }>(sql`SELECT data FROM session_message`)
+        const message = Schema.decodeUnknownSync(SessionMessage.User)({
+          id: source.id,
+          type: "user",
+          ...Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)))(
+            migrated!.data,
+          ),
+        })
+        expect(message.files).toEqual([{ data: "AQID", mime: "application/pdf", source: { type: "inline" } }])
+        for (const row of parts.slice(1)) {
+          expect(message.text).toContain(row.id)
+          expect(output.map((entry) => entry.message)).toContainEqual([
+            "Skipped V1 migration row",
+            {
+              reason: "oversized-part",
+              sessionID: "ses_test",
+              messageID: source.id,
+              partID: row.id,
+              bytes: Buffer.byteLength(row.data),
+              limit,
+            },
+          ])
+        }
+        expect(message.text).toContain("Original data retained in the legacy part table")
+        for (const row of parts)
+          expect(yield* db.get(sql`SELECT data = ${row.data} AS unchanged FROM part WHERE id = ${row.id}`)).toEqual({
+            unchanged: 1,
+          })
+        expect(yield* V1Migration.run()).toEqual({ status: "completed" })
+        expect(yield* db.all(sql`SELECT data FROM session_message`)).toEqual([migrated])
+      }).pipe(
+        Effect.provide(
+          Logger.layer([
+            Logger.map(Logger.formatStructured, (entry) => {
+              output.push(entry)
+            }),
+          ]),
+        ),
+      ),
+    )
+  }, 30_000)
+
+  test.each([-1, 0, 1])(
+    "bounds legacy part bytes at the limit with offset %i",
+    async (offset) => {
+      const limit = 10 * 1024 * 1024
+      const source = user("msg_000000000051aaaaaaaaaaaaaa")
+      const text = "a".repeat(limit + offset - JSON.stringify({ type: "text", text: "" }).length)
+      const data = JSON.stringify({ type: "text", text })
+      await database(
+        Effect.gen(function* () {
+          const db = (yield* Database.Service).db
+          yield* db.run(sql`INSERT INTO session (id, project_id, slug, directory, title, version, time_created, time_updated)
+          VALUES ('ses_test', 'global', 'test', '/tmp/test', 'Test', '1', 1, 2)`)
+          yield* db.run(sql`INSERT INTO message (id, session_id, time_created, time_updated, data)
+          VALUES (${source.id}, 'ses_test', 10, 11, ${source.data})`)
+          yield* db.run(sql`INSERT INTO part (id, message_id, session_id, time_created, time_updated, data)
+          VALUES ('prt_boundary', ${source.id}, 'ses_test', 1, 2, ${data})`)
+
+          expect(yield* V1Migration.run()).toEqual({ status: "completed" })
+          const row = yield* db.get<{ size: number }>(
+            sql`SELECT length(json_extract(data, '$.text')) AS size FROM session_message`,
+          )
+          if (offset <= 0) expect(row!.size).toBe(text.length)
+          if (offset > 0) expect(row!.size).toBeLessThan(1024)
+          expect(yield* db.get(sql`SELECT data = ${data} AS unchanged FROM part`)).toEqual({ unchanged: 1 })
+        }),
+      )
+    },
+    30_000,
+  )
+
   test("yields while clearing stale events in batches", async () => {
     await database(
       Effect.gen(function* () {
@@ -1222,7 +1330,15 @@ describe("V1Migration database workflow", () => {
     )
   })
 
-  test("rolls back one session atomically and resumes from the committed cursor", async () => {
+  test.each([false, true])("resumes atomically from the cursor (oversized: %s)", async (oversized) => {
+    const source = user("msg_000000000052aaaaaaaaaaaaaa")
+    const data = oversized
+      ? JSON.stringify({
+          type: "file",
+          mime: "application/pdf",
+          url: `data:application/pdf;base64,${"A".repeat(10 * 1024 * 1024)}`,
+        })
+      : ""
     await database(
       Effect.gen(function* () {
         const { db } = yield* Database.Service
@@ -1234,6 +1350,12 @@ describe("V1Migration database workflow", () => {
             sql`INSERT INTO session (id, project_id, slug, directory, title, version, cost, time_created, time_updated) VALUES (${id}, 'global', ${id}, '/tmp/test', 'Test', '1', 99, 1, 2)`,
           ),
         )
+        if (oversized) {
+          yield* db.run(sql`INSERT INTO message (id, session_id, time_created, time_updated, data)
+            VALUES (${source.id}, 'ses_b', 10, 11, ${source.data})`)
+          yield* db.run(sql`INSERT INTO part (id, message_id, session_id, time_created, time_updated, data)
+            VALUES ('prt_oversized', ${source.id}, 'ses_b', 1, 2, ${data})`)
+        }
         yield* db.run(
           sql`CREATE TRIGGER fail_b BEFORE UPDATE ON session_v2 WHEN NEW.id = 'ses_b' BEGIN SELECT RAISE(ABORT, 'stop'); END`,
         )
@@ -1288,11 +1410,25 @@ describe("V1Migration database workflow", () => {
           Effect.retry(Schedule.spaced("10 millis")),
         )
         expect(yield* db.get(sql`SELECT cost FROM session_v2 WHERE id = 'ses_b'`)).toEqual({ cost: 0 })
-        expect(yield* db.all(sql`SELECT id FROM session_message WHERE session_id = 'ses_b'`)).toEqual([])
+        expect(yield* db.all(sql`SELECT id FROM session_message WHERE session_id = 'ses_b'`)).toEqual(
+          oversized ? [{ id: source.id }] : [],
+        )
         expect(yield* db.get(sql`SELECT seq, owner_id FROM event_sequence WHERE aggregate_id = 'ses_b'`)).toEqual({
-          seq: -1,
+          seq: oversized ? 0 : -1,
           owner_id: null,
         })
+        if (oversized) {
+          const projected = yield* db.get<{ data: string }>(
+            sql`SELECT data FROM session_message WHERE id = ${source.id}`,
+          )
+          expect(projected!.data.length).toBeLessThan(1024)
+          expect(projected!.data).toContain("prt_oversized not migrated")
+          expect(yield* db.get(sql`SELECT data = ${data} AS unchanged FROM part WHERE id = 'prt_oversized'`)).toEqual({
+            unchanged: 1,
+          })
+          expect(yield* V1Migration.run()).toEqual({ status: "completed" })
+          expect(yield* db.all(sql`SELECT data FROM session_message WHERE session_id = 'ses_b'`)).toEqual([projected])
+        }
         expect(yield* db.all(sql`SELECT id FROM event`)).toEqual([{ id: "event_after_clear" }])
       }),
     )

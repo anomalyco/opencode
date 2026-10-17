@@ -214,6 +214,7 @@ type NextMessage = {
 const lock = Semaphore.makeUnsafe(1)
 const MIGRATION_STATE_KEY = "migration.v1-v2"
 const EVENT_DELETE_BATCH_SIZE = 1_000
+const MAX_PART_BYTES = 10 * 1024 * 1024
 const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
 const decodeMessage = Schema.decodeUnknownOption(SessionV1.Info)
 const decodePart = Schema.decodeUnknownOption(SessionV1.Part)
@@ -631,10 +632,35 @@ export function run(options: Options = {}): Effect.Effect<RunResult, never, Data
               const sourceMessages = yield* tx.all<SourceMessage>(
                 sql`SELECT id, session_id, time_created, time_updated, data FROM message WHERE session_id = ${next.id}`,
               )
-              const sourceParts = yield* tx.all<SourcePart>(
-                sql`SELECT id, message_id, session_id, time_created, time_updated, data FROM part WHERE session_id = ${next.id}`,
+              // Measure stored bytes without loading or parsing a potentially huge data URI.
+              // Keep the original rows intact so omitted content remains recoverable.
+              const sourceParts = yield* tx.all<Omit<SourcePart, "data"> & { data: string | null; bytes: number }>(
+                sql`SELECT id, message_id, session_id, time_created, time_updated,
+                  octet_length(data) AS bytes,
+                  CASE WHEN octet_length(data) <= ${MAX_PART_BYTES} THEN data END AS data
+                  FROM part WHERE session_id = ${next.id}`,
               )
-              const transformed = transformSession({ session: next, messages: sourceMessages, parts: sourceParts })
+              const parts = yield* Effect.forEach(sourceParts, (part) =>
+                Effect.gen(function* () {
+                  if (part.data !== null) return { ...part, data: part.data }
+                  yield* Effect.logWarning("Skipped V1 migration row", {
+                    reason: "oversized-part",
+                    sessionID: next.id,
+                    messageID: part.message_id,
+                    partID: part.id,
+                    bytes: part.bytes,
+                    limit: MAX_PART_BYTES,
+                  })
+                  return {
+                    ...part,
+                    data: JSON.stringify({
+                      type: "text",
+                      text: `[V1 part ${part.id} not migrated: ${part.bytes} bytes exceeds the ${MAX_PART_BYTES} byte limit. Original data retained in the legacy part table.]`,
+                    }),
+                  }
+                }),
+              )
+              const transformed = transformSession({ session: next, messages: sourceMessages, parts })
               yield* Effect.forEach(transformed.warnings, (warning) =>
                 Effect.logWarning("Skipped V1 migration row", warning),
               )
