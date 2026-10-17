@@ -19,6 +19,33 @@ const it = testEffect(Layer.empty)
 setDefaultTimeout(30_000)
 
 describe("RepositoryCache", () => {
+  it.live("keeps checkouts for port authorities and numeric namespaces independent", () =>
+    withRemote((first) =>
+      withRemote((second) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() => commit(second.source, "second repository\n", "distinct content"))
+          const cache = yield* RepositoryCache.Service
+          const port = {
+            ...Repository.parseRemote("https://git.example.com:8443/team/repo.git"),
+            remote: first.remote,
+          }
+          const namespace = {
+            ...Repository.parseRemote("git@git.example.com:8443/team/repo.git"),
+            remote: second.remote,
+          }
+          const a = yield* cache.ensure({ reference: port })
+          const b = yield* cache.ensure({ reference: namespace })
+
+          expect(a.localPath).not.toBe(b.localPath)
+          expect(yield* read(path.join(a.localPath, "README.md"))).toBe("one\n")
+          expect(yield* read(path.join(b.localPath, "README.md"))).toBe("second repository\n")
+          expect((yield* cache.ensure({ reference: port })).status).toBe("cached")
+          expect((yield* cache.ensure({ reference: namespace })).status).toBe("cached")
+        }).pipe(Effect.provide(cacheLayer(first.root))),
+      ),
+    ),
+  )
+
   it.live("persists the daily throttle across cache recreation and serializes competing refreshes", () =>
     withRemote((fixture) =>
       Effect.gen(function* () {

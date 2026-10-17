@@ -41,9 +41,23 @@ describe("Repository", () => {
     })
   })
 
-  test("caches a host with a port under a directory per host part", () => {
+  test("caches a host with a port as one encoded directory", () => {
     expect(Repository.cachePath("/cache", Repository.parseRemote("ssh://git@example.com:2222/owner/repo"))).toBe(
-      path.join("/cache", "example.com", "2222", "owner", "repo"),
+      path.join("/cache", "example.com%3A2222", "owner", "repo"),
+    )
+  })
+
+  test("keeps port authorities distinct from numeric repository namespaces", () => {
+    const port = Repository.parseRemote("https://git.example.com:8443/team/repo.git")
+    const namespace = Repository.parseRemote("git@git.example.com:8443/team/repo.git")
+
+    expect(Repository.same(port, namespace)).toBe(false)
+    expect(Repository.cachePath("/cache", port)).not.toBe(Repository.cachePath("/cache", namespace))
+    expect(Repository.cachePath("/cache", port, "feature/x")).not.toBe(
+      Repository.cachePath("/cache", namespace, "feature/x"),
+    )
+    expect(Repository.cachePath("/cache", port)).not.toBe(
+      Repository.cachePath("/cache", Repository.parseRemote("git@git.example.com%3A8443:team/repo.git")),
     )
   })
 
