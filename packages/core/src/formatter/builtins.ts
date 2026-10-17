@@ -1,5 +1,6 @@
 import { Effect } from "effect"
 import { ChildProcess } from "effect/process"
+import path from "path"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Npm } from "@opencode/util/npm"
 import { AppProcess } from "@opencode/util/process"
@@ -226,7 +227,7 @@ export function make(input: {
       for (const file of yield* findUp("composer.json")) {
         const json = yield* input.fs.readJson(file)
         if (hasRecordKey(json, "require", "laravel/pint") || hasRecordKey(json, "require-dev", "laravel/pint")) {
-          return ["./vendor/bin/pint", "$FILE"]
+          return [path.join(path.dirname(file), "vendor", "bin", "pint"), "$FILE"]
         }
       }
       return disabled
