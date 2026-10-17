@@ -340,6 +340,8 @@ export function emitPromise(
   options?: {
     readonly outputTypes?: Readonly<Record<string, { readonly name: string; readonly import: string }>>
     readonly mutableOutputs?: boolean
+    readonly brandReferences?: ReadonlyArray<EffectTypeReference>
+    readonly brandInputs?: boolean
   },
 ): Output {
   const groups = contract.groups
@@ -349,7 +351,16 @@ export function emitPromise(
   return {
     operations: promiseOperations(groups),
     files: [
-      { path: "types.ts", content: renderPromiseTypes(groups, options?.outputTypes, options?.mutableOutputs ?? false) },
+      {
+        path: "types.ts",
+        content: renderPromiseTypes(
+          groups,
+          options?.outputTypes,
+          options?.mutableOutputs ?? false,
+          options?.brandReferences ?? [],
+          options?.brandInputs ?? true,
+        ),
+      },
       {
         path: "client-error.ts",
         content: `export type ClientErrorReason = "Transport" | "UnexpectedStatus" | "UnsupportedContentType" | "MalformedResponse" | "SseEventTooLarge"\n\nexport class ClientError extends Error {\n  override readonly name = "ClientError"\n  constructor(readonly reason: ClientErrorReason, options?: ErrorOptions & { readonly detail?: string | null }) {\n    const detail = options?.detail ?? (options?.cause instanceof Error ? options.cause.message : undefined)\n    super(detail ? \`\${reason}: \${detail}\` : reason, options)\n  }\n}\n`,
@@ -800,14 +811,31 @@ function renderPromiseTypes(
   groups: ReadonlyArray<Group>,
   outputTypes?: Readonly<Record<string, { readonly name: string; readonly import: string }>>,
   mutableOutputs = false,
+  brandReferences: ReadonlyArray<EffectTypeReference> = [],
+  brandInputs = true,
 ) {
+  const brandMap = new Map<string, EffectTypeReference>()
+  for (const ref of brandReferences) {
+    brandMap.set(ref.name, ref)
+    brandMap.set(identifierPart(ref.name), ref)
+    brandMap.set(ref.name.replace(/[^A-Za-z0-9_$]/g, "_"), ref)
+    const id = SchemaAST.resolveIdentifier(ref.schema.ast)
+    if (id !== undefined) {
+      brandMap.set(id, ref)
+      brandMap.set(identifierPart(id), ref)
+      brandMap.set(id.replace(/[^A-Za-z0-9_$]/g, "_"), ref)
+    }
+  }
+  const brandImports = new Set<string>()
   const types = new Map<SchemaAST.AST, string>()
-  const typeOf = (schema: Schema.Top, decoded = false) => {
+  const unbrandedTypes = new Map<SchemaAST.AST, string>()
+  const typeOf = (schema: Schema.Top, decoded = false, branded = true) => {
     const projected = decoded ? Schema.toType(schema) : Schema.toEncoded(schema)
-    const cached = types.get(projected.ast)
+    const cache = branded ? types : unbrandedTypes
+    const cached = cache.get(projected.ast)
     if (cached !== undefined) return cached
-    const type = structuralType(projected)
-    types.set(projected.ast, type)
+    const type = structuralType(projected, branded ? brandMap : undefined, branded ? brandImports : undefined)
+    cache.set(projected.ast, type)
     return type
   }
   const outputMarkers = new Map<SchemaAST.AST, string>()
@@ -853,7 +881,7 @@ function renderPromiseTypes(
             const schema = schemas[field.source]
             if (schema === undefined)
               throw new GenerationError({ reason: `Missing input schema: ${prefix}.${field.name}` })
-            return `readonly ${JSON.stringify(field.name)}${field.optional ? "?" : ""}: ${isOpaquePayload(endpoint) && field.source === "payload" ? typeOf(schema) : `(${typeOf(schema, field.source === "query")})[${JSON.stringify(field.name)}]`}`
+            return `readonly ${JSON.stringify(field.name)}${field.optional ? "?" : ""}: ${isOpaquePayload(endpoint) && field.source === "payload" ? typeOf(schema, false, brandInputs) : `(${typeOf(schema, field.source === "query", brandInputs)})[${JSON.stringify(field.name)}]`}`
           })
           .join("; ")
         const successSchema = endpoint.successes[0]
@@ -876,6 +904,7 @@ function renderPromiseTypes(
   const reservedNames = new Set([
     "ClientError",
     "JsonValue",
+    ...brandReferences.map((reference) => reference.name.split(".")[0]),
     ...errors.keys(),
     ...groups.flatMap((group) =>
       group.endpoints.flatMap((endpoint) => {
@@ -885,7 +914,7 @@ function renderPromiseTypes(
     ),
     ...Object.values(outputTypes ?? {}).map((output) => output.name),
   ])
-  const rendered = structuralTypes(outputSchemas, mutableOutputs, reservedNames)
+  const rendered = structuralTypes(outputSchemas, mutableOutputs, reservedNames, brandMap, brandImports)
   const resolve = (source: string) =>
     rendered.types.reduce((result, type, index) => result.replaceAll(`__PROMISE_TYPE_${index}__`, type), source)
   const resolvedErrors = errorTypes.map(resolve)
@@ -895,7 +924,9 @@ function renderPromiseTypes(
   )
     ? `export type JsonValue = null | boolean | number | string | ${mutableOutputs ? "Array<JsonValue> | { [key: string]: JsonValue }" : "ReadonlyArray<JsonValue> | { readonly [key: string]: JsonValue }"}`
     : ""
-  const imports = [...new Set(Object.values(outputTypes ?? {}).map((override) => override.import))]
+  const imports = [
+    ...new Set([...brandImports, ...Object.values(outputTypes ?? {}).map((override) => override.import)]),
+  ]
   return [...imports, json, ...rendered.definitions, ...resolvedErrors, resolvedOperations].filter(Boolean).join("\n\n")
 }
 
@@ -1034,13 +1065,25 @@ function identifierPart(value: string) {
   return /^[A-Za-z_$]/.test(identifier) ? identifier : `_${identifier}`
 }
 
-function structuralTypes(schemas: ReadonlyArray<Schema.Top>, mutable: boolean, reservedNames: ReadonlySet<string>) {
+function structuralTypes(
+  schemas: ReadonlyArray<Schema.Top>,
+  mutable: boolean,
+  reservedNames: ReadonlySet<string>,
+  brandMap?: ReadonlyMap<string, EffectTypeReference>,
+  brandImports?: Set<string>,
+) {
   if (schemas.length === 0) return { types: [], definitions: [] }
   const representations = SchemaRepresentation.toRepresentations(
     promiseTypeAsts(schemas) as [SchemaAST.AST, ...Array<SchemaAST.AST>],
   )
   const document = SchemaRepresentation.toCodeDocument(representations)
-  if (document.artifacts.length > 0 || Object.keys(document.references.recursives).length > 0) {
+  if (
+    document.artifacts.some(
+      (artifact) =>
+        artifact._tag !== "Import" || artifact.importDeclaration !== 'import type * as Brand from "effect/Brand"',
+    ) ||
+    Object.keys(document.references.recursives).length > 0
+  ) {
     throw new GenerationError({ reason: "Referenced Promise types are not implemented" })
   }
   const anonymous = new Set(
@@ -1073,6 +1116,13 @@ function structuralTypes(schemas: ReadonlyArray<Schema.Top>, mutable: boolean, r
   const referenceNames = new Set(references.map((reference) => reference.$ref))
   for (const reference of references) {
     const seed = identifierPart(reference.$ref)
+    const base = seed.replace(/\d+$/, "")
+    const brand = brandMap?.get(reference.$ref) ?? brandMap?.get(seed) ?? brandMap?.get(base)
+    if (brand !== undefined) {
+      names.set(reference.$ref, brand.name)
+      brandImports?.add(brand.import)
+      continue
+    }
     const name = uniqueTypeName(seed, usedNames)
     names.set(reference.$ref, name)
     usedNames.add(name)
@@ -1082,13 +1132,14 @@ function structuralTypes(schemas: ReadonlyArray<Schema.Top>, mutable: boolean, r
       const pattern = `(?<![A-Za-z0-9_$.'"])${reference.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![A-Za-z0-9_$.'"])`
       type = type.replace(new RegExp(pattern, "g"), name)
     }
-    const output = type
-      .replaceAll("Schema.Json", "JsonValue")
-      .replaceAll(/(?<!["'])\bunknown\b(?!["'])/g, "any")
+    const output = type.replaceAll("Schema.Json", "JsonValue").replaceAll(/(?<!["'])\bunknown\b(?!["'])/g, "any")
     return mutable ? mutableType(preserveStringSuggestions(output)) : preserveStringSuggestions(output)
   }
   const equivalent = new Map<string, string>()
   for (const reference of references) {
+    const seed = identifierPart(reference.$ref)
+    const baseBrand = seed.replace(/\d+$/, "")
+    if (brandMap?.has(reference.$ref) || brandMap?.has(seed) || brandMap?.has(baseBrand)) continue
     const base = reference.$ref.replace(/_\d+$/, "")
     const identifier = referenceNames.has(base) ? base : reference.$ref
     const key = `${identifier}\0${render(inlineAnonymous(reference.code.Type))}`
@@ -1105,6 +1156,9 @@ function structuralTypes(schemas: ReadonlyArray<Schema.Top>, mutable: boolean, r
   return {
     types: document.codes.map((code) => render(inlineAnonymous(code.Type))),
     definitions: references.flatMap((reference) => {
+      const seed = identifierPart(reference.$ref)
+      const baseBrand = seed.replace(/\d+$/, "")
+      if (brandMap?.has(reference.$ref) || brandMap?.has(seed) || brandMap?.has(baseBrand)) return []
       const name = names.get(reference.$ref)
       if (name === undefined) throw new GenerationError({ reason: `Missing Promise type name: ${reference.$ref}` })
       if (emitted.has(name)) return []
@@ -1119,9 +1173,19 @@ function uniqueTypeName(seed: string, used: ReadonlySet<string>, suffix = 1): st
   return used.has(name) ? uniqueTypeName(seed, used, suffix + 1) : name
 }
 
-function structuralType(schema: Schema.Top) {
+function structuralType(
+  schema: Schema.Top,
+  brandMap?: ReadonlyMap<string, EffectTypeReference>,
+  brandImports?: Set<string>,
+) {
   const document = SchemaRepresentation.toCodeDocument(SchemaRepresentation.toRepresentations([promiseTypeAst(schema)]))
-  if (document.artifacts.length > 0 || Object.keys(document.references.recursives).length > 0) {
+  if (
+    document.artifacts.some(
+      (artifact) =>
+        artifact._tag !== "Import" || artifact.importDeclaration !== 'import type * as Brand from "effect/Brand"',
+    ) ||
+    Object.keys(document.references.recursives).length > 0
+  ) {
     throw new GenerationError({ reason: "Referenced Promise types are not implemented" })
   }
   const references = new Map(
@@ -1131,6 +1195,14 @@ function structuralType(schema: Schema.Top) {
     for (const [reference, value] of references) {
       const pattern = `(?<![A-Za-z0-9_$.'"])${reference.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![A-Za-z0-9_$.'"])`
       if (!new RegExp(pattern).test(type)) continue
+      const seed = identifierPart(reference)
+      const base = seed.replace(/\d+$/, "")
+      const brand = brandMap?.get(reference) ?? brandMap?.get(seed) ?? brandMap?.get(base)
+      if (brand !== undefined) {
+        brandImports?.add(brand.import)
+        type = type.replace(new RegExp(pattern, "g"), brand.name)
+        continue
+      }
       if (seen.has(reference)) {
         throw new GenerationError({ reason: `Recursive Promise types are not implemented: ${reference}` })
       }
@@ -1138,10 +1210,7 @@ function structuralType(schema: Schema.Top) {
     }
     return type
   }
-  return preserveStringSuggestions(
-    expand(document.codes[0].Type)
-      .replaceAll("Schema.Json", "JsonValue"),
-  )
+  return preserveStringSuggestions(expand(document.codes[0].Type).replaceAll("Schema.Json", "JsonValue"))
 }
 
 function promiseTypeAst(schema: Schema.Top) {
