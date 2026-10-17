@@ -1,5 +1,10 @@
 import { afterAll, describe, expect, test } from "bun:test"
-import { auth, refreshAuthorization } from "@modelcontextprotocol/client"
+import {
+  auth,
+  exchangeAuthorization,
+  InsecureTokenEndpointError,
+  refreshAuthorization,
+} from "@modelcontextprotocol/client"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
 import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
@@ -308,6 +313,44 @@ describe("MCP OAuth", () => {
       { access_token: "access", token_type: "Bearer", refresh_token: "next" },
       { access_token: "access", token_type: "Bearer", refresh_token: "next" },
     ])
+  })
+
+  // RFC 6761 §6.3 reserves the whole .localhost namespace for loopback, so an http token endpoint on
+  // one of its subdomains is as safe as http://localhost itself. The pinned MCP client only exempts
+  // the bare names, so the patch teaches it the same rule its own typescript-sdk#2597 later shipped.
+  const tokenExchange = (tokenEndpoint: string) => {
+    const requests: string[] = []
+    const exchange = exchangeAuthorization(new URL("http://localhost"), {
+      metadata: {
+        issuer: "http://localhost",
+        authorization_endpoint: "http://localhost/authorize",
+        token_endpoint: tokenEndpoint,
+        response_types_supported: ["code"],
+      },
+      clientInformation: { client_id: "client" },
+      authorizationCode: "code",
+      codeVerifier: "verifier",
+      redirectUri: "http://127.0.0.1:0/callback",
+      fetchFn: async (url) => {
+        requests.push(String(url))
+        return Response.json({ access_token: "access", token_type: "Bearer" })
+      },
+    })
+    return { requests, exchange }
+  }
+
+  test("exchanges the authorization code at an http token endpoint on a .localhost subdomain", async () => {
+    const { requests, exchange } = tokenExchange("http://mcp.localhost:18259/token")
+
+    await expect(exchange).resolves.toEqual({ access_token: "access", token_type: "Bearer" })
+    expect(requests).toEqual(["http://mcp.localhost:18259/token"])
+  })
+
+  test("still refuses an http token endpoint that is not loopback", async () => {
+    const { requests, exchange } = tokenExchange("http://example.com/token")
+
+    await expect(exchange).rejects.toThrow(InsecureTokenEndpointError)
+    expect(requests).toEqual([])
   })
 
   test("generates a loopback redirect URL when none is configured", async () => {
