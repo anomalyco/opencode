@@ -101,6 +101,125 @@ it.live("eviction makes progress past an already-removed shell", () =>
   }),
 )
 
+it.live("reports exited only after captured output is complete", () =>
+  Effect.gen(function* () {
+    const exited = yield* Deferred.make<void>()
+    const release = yield* Deferred.make<void>()
+    const environment = Layer.effect(
+      Environment.Service,
+      Effect.gen(function* () {
+        const host = yield* Environment.Service
+        return Environment.Service.of({
+          ...host,
+          spawner: ChildProcessSpawner.make(() =>
+            Effect.gen(function* () {
+              // The process exits while its last output is still in the pipe.
+              const output = Stream.concat(
+                Stream.succeed(Buffer.from("hello ")),
+                Stream.fromEffect(Deferred.await(release).pipe(Effect.as(Buffer.from("world")))),
+              )
+              return makeHandle({
+                pid: ProcessId(1),
+                exitCode: Deferred.succeed(exited, undefined).pipe(Effect.as(ExitCode(0))),
+                isRunning: Effect.succeed(false),
+                kill: () => Effect.void,
+                stdin: Sink.drain,
+                stdout: output,
+                stderr: Stream.empty,
+                all: output,
+                getInputFd: () => Sink.drain,
+                getOutputFd: () => Stream.empty,
+                unref: Effect.succeed(Effect.void),
+              })
+            }),
+          ),
+        })
+      }),
+    ).pipe(Layer.provide(hostEnvironmentLayer))
+
+    yield* Effect.gen(function* () {
+      const shell = yield* Shell.Service
+      const info = yield* shell.create({ shell: "sh", command: "hello", timeout: 0 })
+      yield* Deferred.await(exited)
+      expect((yield* shell.get(info.id)).status).toBe("running")
+
+      yield* Deferred.succeed(release, undefined)
+      expect(yield* shell.result(info)).toMatchObject({
+        info: { status: "exited", exit: 0 },
+        capture: { output: "hello world", truncated: false },
+      })
+    }).pipe(
+      Effect.provide(
+        AppNodeBuilder.build(Shell.node, [
+          Location.node.replace(tempLocationLayer),
+          Global.node.replace(tempGlobalLayer),
+          Config.node.replace(Config.testLayer()),
+          Environment.node.replace(environment),
+        ]),
+      ),
+    )
+  }),
+)
+
+it.live("retiming a timed-out shell while its output drains still resolves waiters", () =>
+  Effect.gen(function* () {
+    const exited = yield* Deferred.make<ExitCode>()
+    const killed = yield* Deferred.make<void>()
+    const release = yield* Deferred.make<void>()
+    const environment = Layer.effect(
+      Environment.Service,
+      Effect.gen(function* () {
+        const host = yield* Environment.Service
+        return Environment.Service.of({
+          ...host,
+          spawner: ChildProcessSpawner.make(() =>
+            Effect.sync(() => {
+              const output = Stream.fromEffect(Deferred.await(release).pipe(Effect.as(Buffer.from("partial"))))
+              return makeHandle({
+                pid: ProcessId(1),
+                exitCode: Deferred.await(exited),
+                isRunning: Deferred.isDone(exited).pipe(Effect.map((done) => !done)),
+                kill: () =>
+                  Deferred.succeed(killed, undefined).pipe(
+                    Effect.andThen(Deferred.succeed(exited, ExitCode(143))),
+                    Effect.asVoid,
+                  ),
+                stdin: Sink.drain,
+                stdout: output,
+                stderr: Stream.empty,
+                all: output,
+                getInputFd: () => Sink.drain,
+                getOutputFd: () => Stream.empty,
+                unref: Effect.succeed(Effect.void),
+              })
+            }),
+          ),
+        })
+      }),
+    ).pipe(Layer.provide(hostEnvironmentLayer))
+
+    yield* Effect.gen(function* () {
+      const shell = yield* Shell.Service
+      const info = yield* shell.create({ shell: "sh", command: "slow", timeout: 20 })
+      yield* Deferred.await(killed)
+      // The timeout fiber is now finishing; retiming must not interrupt it.
+      yield* shell.timeout(info.id, 10_000)
+      yield* Deferred.succeed(release, undefined)
+      expect((yield* shell.wait(info.id)).status).toBe("timeout")
+    }).pipe(
+      Effect.timeout("5 seconds"),
+      Effect.provide(
+        AppNodeBuilder.build(Shell.node, [
+          Location.node.replace(tempLocationLayer),
+          Global.node.replace(tempGlobalLayer),
+          Config.node.replace(Config.testLayer()),
+          Environment.node.replace(environment),
+        ]),
+      ),
+    )
+  }),
+)
+
 it.live("does not inherit host process.env when creating a shell in a workspace-backed location", () =>
   Effect.gen(function* () {
     const tmp = yield* tmpdirScoped()
