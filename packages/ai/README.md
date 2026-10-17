@@ -1201,6 +1201,27 @@ providerOptions: {
 - Anthropic can return a compaction block with `content: null` when summarization fails. This becomes a compaction part with `text: null`, which is **not** a successful replacement for prior history. The package never prunes history automatically.
 - `Usage` totals include all reported Anthropic `usage.iterations`, including compaction. `contextTokens` separately reports the final message iteration's inclusive input size, when available. A compaction-only pause does not report a post-compaction context size. Raw iteration usage remains in `providerMetadata`.
 
+The same `edits` array accepts Anthropic's server-side [context editing](https://platform.claude.com/docs/en/build-with-claude/context-editing) strategies. The API removes old tool results or thinking before the model reads the prompt, while the request still carries the full history, so preserved thinking stays valid:
+
+```ts
+providerOptions: {
+  contextManagement: {
+    edits: [
+      { type: "clear_thinking_20251015", keep: "all" }, // must come first when present
+      {
+        type: "clear_tool_uses_20250919",
+        trigger: { type: "input_tokens", value: 100_000 },
+        keep: { type: "tool_uses", value: 5 },
+        clearAtLeast: { type: "input_tokens", value: 30_000 },
+        excludeTools: ["todowrite"],
+      },
+    ],
+  },
+}
+```
+
+The route adds `context-management-2025-06-27` when any `clear_*` edit is present.
+
 ### Recording tests
 
 Tests cover serialized round trips, real local HTTP plus a tool loop, WebSocket recovery, provider errors, malformed blocks, and usage accounting. Live provider tests are gated by `RECORD=true` and the relevant API keys:
