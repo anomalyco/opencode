@@ -107,7 +107,7 @@ function ComposerModelControl(props: {
               data-control-type="dialog"
               variant="ghost-muted"
               size="normal"
-              class="min-w-0 max-w-[220px] justify-start ![font-weight:440] group"
+              class="min-w-0 max-w-[140px] sm:max-w-[220px] justify-start ![font-weight:440] pointer-coarse:h-11! group"
               classList={{ "animate-in fade-in": shouldAnimate() }}
               style={{ height: "28px" }}
               onClick={props.onUnpaidClick}
@@ -125,7 +125,7 @@ function ComposerModelControl(props: {
                 variant="ghost-muted"
                 size="normal"
                 style={{ height: "28px" }}
-                class="min-w-0 max-w-[220px] justify-start ![font-weight:440] group"
+                class="min-w-0 max-w-[140px] sm:max-w-[220px] justify-start ![font-weight:440] pointer-coarse:h-11! group"
                 classList={{ "animate-in fade-in": shouldAnimate() }}
                 data-action="composer-model"
                 data-control-type={mobile() ? "drawer" : "popover"}
