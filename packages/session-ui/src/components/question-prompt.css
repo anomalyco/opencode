@@ -128,7 +128,7 @@
 
     &:focus-visible {
       outline: 2px solid var(--v2-border-border-focus);
-      outline-offset: 1px;
+      outline-offset: 2px;
     }
 
     &:disabled {
@@ -182,7 +182,7 @@
 
     &[data-picked="true"] {
       background-image: linear-gradient(var(--v2-question-answer-bg-selected), var(--v2-question-answer-bg-selected));
-      box-shadow: inset 0 0 0 0.5px var(--v2-border-border-focus);
+      box-shadow: inset 0 0 0 0.5px var(--v2-border-border-selected);
     }
 
     &:focus-visible {

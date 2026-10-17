@@ -38,7 +38,7 @@ const HOME_SESSION_LONG_PRESS_MS = 500
 function isBackgroundOpen(event: MouseEvent) {
   return shouldOpenSessionInBackground({
     button: event.button,
-    mac: typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform),
+    mac: /(Mac|iPod|iPhone|iPad)/.test(navigator.platform),
     meta: event.metaKey,
     ctrl: event.ctrlKey,
     shift: event.shiftKey,
@@ -326,6 +326,7 @@ function HomeSessionSearch(
             relative z-20 flex h-9 w-full items-center gap-2 rounded-[6px] py-1 ps-3 pe-2
             bg-v2-background-bg-layer-02/60 text-v2-icon-icon-muted transition-[background-color,box-shadow]
             duration-[120ms] ease-in-out hover:bg-v2-background-bg-layer-02 focus-within:bg-v2-background-bg-layer-02
+            focus-within:outline-1 focus-within:outline-v2-border-border-focus
           `}
         >
           <Icon name="magnifying-glass" />
@@ -607,11 +608,12 @@ function HomeSessionRow(
                 value={editor()?.draft ?? ""}
                 disabled={editor()?.renaming ?? false}
                 class={`
-                block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-v2-text-text-base
-                [font-weight:530] field-sizing-content outline-none focus:outline-none focus-visible:outline-none
+                -mx-1 block min-w-0 overflow-hidden rounded-[4px] px-1 text-ellipsis whitespace-nowrap text-v2-text-text-base
+                [font-weight:530] field-sizing-content outline-none focus:outline-1 focus:outline-solid
+                focus:outline-transparent focus:-outline-offset-1 focus:shadow-[inset_0_0_0_1px_var(--v2-border-border-focus)]
                  ${showProjectName() ? "max-w-[min(70%,480px)] flex-[0_1_auto]" : "flex-[1_1_auto]"}
               `}
-                style={{ "--inline-input-shadow": "none", "text-align": "start" }}
+                style={{ "text-align": "start" }}
                 onInput={(event) => {
                   const draft = event.currentTarget.value
                   props.setRowUI("editor", (value) => (value?.id === sessionID() ? { ...value, draft } : value))
@@ -655,7 +657,7 @@ function HomeSessionRow(
             flex h-10 min-w-0 w-full flex-1 shrink-0 cursor-default items-center rounded-[6px] border-0
             bg-transparent py-3 ps-1.5 pe-3 md:ps-3 md:pe-10 text-start text-v2-text-text-muted [font-weight:530]
             transition-[background-color,color,box-shadow] duration-[120ms] ease-in-out
-            hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none
+            hover:bg-v2-overlay-simple-overlay-hover focus-visible:outline-offset-[-2px]
           `}
           classList={{ "gap-1.5": props.desktop, "gap-2": !props.desktop }}
           onMouseDown={(event) => {

@@ -244,6 +244,16 @@ const unsafeCSS = `
   }
 }
 
+/* The page's base focus ring does not reach this shadow tree. */
+:focus-visible {
+  outline: 2px solid var(--v2-border-border-focus);
+  outline-offset: 2px;
+}
+
+[data-code]:focus-visible {
+  outline-offset: -2px;
+}
+
 ${lineCommentStyles}
 
 `

@@ -82,7 +82,7 @@
 
 [data-slot="segmented-control-v2-item"]:where(:focus-visible) {
   outline: 2px solid var(--v2-border-border-focus);
-  outline-offset: 1px;
+  outline-offset: 2px;
   z-index: 2;
 }
 

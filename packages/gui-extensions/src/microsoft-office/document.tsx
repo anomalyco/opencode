@@ -184,7 +184,7 @@ function WordTextLayer(props: {
                   tabIndex={0}
                   title={span.title}
                   dir={span.dir}
-                  class="absolute origin-top-left cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-border-focus"
+                  class="absolute origin-top-left cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-v2-border-border-focus"
                   style={place(span)}
                   onClick={(event) => {
                     // A drag that ends on the link selects text instead of following it.

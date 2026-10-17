@@ -97,10 +97,9 @@
   margin-block: auto;
 }
 
-[data-titlebar-tab]:not(:where([data-slot="mobile-tabs-drawer"] *)):is(
-    :hover,
-    :has(> [data-slot="tab-link"]:focus-visible)
-  ):not([data-state="pressed"]):not([data-dragging="true"]):not([data-editing="true"]) {
+[data-titlebar-tab]:not(:where([data-slot="mobile-tabs-drawer"] *)):hover:not([data-state="pressed"]):not(
+    [data-dragging="true"]
+  ):not([data-editing="true"]) {
   --tab-overlay: var(--v2-overlay-simple-overlay-hover);
 }
 
@@ -108,8 +107,24 @@
   --tab-overlay: var(--v2-overlay-simple-overlay-pressed);
 }
 
-[data-titlebar-tab-action]:is(:hover, :focus-visible) {
+/* Drawn above the close slot, which covers the tab's end edge in the mobile drawer. */
+[data-titlebar-tab]:has(> [data-slot="tab-link"]:focus-visible)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  border-radius: inherit;
+  outline: 2px solid var(--v2-border-border-focus);
+  outline-offset: -2px;
+  pointer-events: none;
+}
+
+[data-titlebar-tab-action]:hover {
   --tab-overlay: var(--v2-overlay-simple-overlay-hover);
+}
+
+[data-titlebar-tab-action]:focus-visible {
+  outline-offset: -2px;
 }
 
 [data-titlebar-tab-action]:is(:active, [data-state="pressed"]) {

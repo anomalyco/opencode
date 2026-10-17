@@ -314,7 +314,8 @@
   display: flex;
   flex-direction: column;
   gap: 20px;
-  padding: 0 20px 20px;
+  /* The top inset keeps the first link's focus ring inside the scroll clip. */
+  padding: 4px 20px 20px;
   color: var(--v2-text-text-muted);
   font-size: 13px;
   line-height: var(--line-height-base);
@@ -936,7 +937,7 @@
 }
 
 .settings-provider-console-item:focus-visible {
-  background: var(--v2-overlay-simple-overlay-hover);
+  outline-offset: -2px;
 }
 
 .settings-provider-console-item:focus-visible .settings-provider-console-item-chevron {
@@ -1666,6 +1667,11 @@
   min-height: 0;
   flex-direction: column;
   gap: 12px;
+  /* Room for focus rings inside the collapse clip. */
+  margin-block-start: -4px;
+  margin-inline: -4px;
+  padding-block-start: 4px;
+  padding-inline: 4px;
   overflow: hidden;
   transition:
     padding-bottom 150ms ease-out,
@@ -2008,8 +2014,14 @@
   padding-inline: 0 !important;
 }
 
+.settings-subtabs[data-component="tabs-v2"] {
+  overflow: visible;
+}
+
 .settings-subtabs > [data-slot="tabs-v2-content"] {
-  padding-top: 24px;
+  /* Room for focus rings inside the panel's scroll clip. */
+  margin: 0 -4px -4px;
+  padding: 24px 4px 4px;
 }
 
 .settings-extension-row {

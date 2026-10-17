@@ -224,9 +224,13 @@
   cursor: pointer;
 }
 
-.project-settings-icon--active,
-.project-settings-icon:focus-visible {
+.project-settings-icon--active {
   outline-color: var(--v2-border-border-focus);
+}
+
+.project-settings-icon:focus-visible {
+  outline: 2px solid var(--v2-border-border-focus);
+  outline-offset: 2px;
 }
 
 .project-settings-icon-overlay {
@@ -264,16 +268,14 @@
   padding: 0;
   border: 0;
   border-radius: 6px;
-  outline: none;
   background: transparent;
   transition: box-shadow 120ms ease;
 }
 
-.project-settings-color:focus-visible,
 .project-settings-color--selected {
   box-shadow:
     0 0 0 2px var(--v2-background-bg-layer-01),
-    0 0 0 4px var(--v2-border-border-focus);
+    0 0 0 4px var(--v2-border-border-selected);
 }
 
 @media (hover: hover) {

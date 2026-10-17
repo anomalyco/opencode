@@ -492,7 +492,9 @@ function MessageTimelineView(
                           classList={{ "max-w-[45%] shrink-0": !!parentID() }}
                           onClick={openTitleEditor}
                         >
-                          {childTitle()}
+                          <button type="button" class="block max-w-full truncate rounded-[2px] text-start">
+                            {childTitle()}
+                          </button>
                         </h1>
                       }
                     >
@@ -506,10 +508,7 @@ function MessageTimelineView(
                         disabled={props.pending.rename()}
                         class="block text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-base field-sizing-content rounded-[6px] px-1 py-1"
                         classList={{ "max-w-[45%] shrink-0": !!parentID() }}
-                        style={{
-                          "--inline-input-shadow": "none",
-                          "text-align": "start",
-                        }}
+                        style={{ "text-align": "start" }}
                         onInput={(event) => setTitle("draft", event.currentTarget.value)}
                         onKeyDown={(event) => {
                           event.stopPropagation()

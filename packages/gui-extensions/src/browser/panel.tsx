@@ -877,7 +877,7 @@ export default function SessionBrowserPane(props: {
         <Show when={empty() && !failed() && !suspended()}>
           {/* As designed: the heading 80px from the top, the recent list centered above a 160px bottom inset. The
               minimum height keeps a full list clear of the heading in a short pane, which then scrolls. */}
-          <div dir="auto" class="size-full overflow-y-auto">
+          <div dir="auto" class="size-full overflow-y-auto focus-visible:outline-offset-[-2px]">
             <div class="relative flex min-h-[max(100%,732px)] items-center justify-center px-6 pb-40">
               <div class="absolute inset-x-6 top-20 mx-auto flex max-w-[360px] flex-col items-center gap-4 text-center">
                 <Icon name="outline-globe" size="large" class="text-v2-icon-icon-muted" />

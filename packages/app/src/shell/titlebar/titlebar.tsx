@@ -556,7 +556,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                     >
                       <MobileDrawerTrigger
                         data-slot="mobile-tabs-trigger"
-                        class="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-base focus-visible:outline-none [app-region:no-drag]"
+                        class="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-base focus-visible:outline-offset-[-2px] [app-region:no-drag]"
                         aria-label={language.t("titlebar.tabs")}
                       >
                         <Show when={currentTab()} fallback={<Icon name="grid-plus" class="shrink-0" />}>
@@ -625,7 +625,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                           <button
                             type="button"
                             data-action="mobile-tabs-new-session"
-                            class="flex h-7 w-full shrink-0 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-base hover:bg-v2-background-bg-layer-02 focus-visible:outline-none focus-visible:bg-v2-background-bg-layer-02"
+                            class="flex h-7 w-full shrink-0 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-base hover:bg-v2-background-bg-layer-02 focus-visible:outline-offset-[-2px]"
                             onClick={() => {
                               openNewTab()
                               setMobileTabs("open", false)
@@ -640,7 +640,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                               data-action="mobile-tabs-home"
                               data-state={layout.route().type === "home" ? "pressed" : undefined}
                               aria-current={layout.route().type === "home" ? "page" : undefined}
-                              class="flex h-7 w-full items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-faint data-[state=pressed]:text-v2-text-text-base focus-visible:outline-none"
+                              class="flex h-7 w-full items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-faint data-[state=pressed]:text-v2-text-text-base focus-visible:outline-offset-[-2px]"
                               onClick={() => {
                                 if (layout.route().type !== "home") toggleHome()
                                 setMobileTabs("open", false)
@@ -653,7 +653,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                               <button
                                 type="button"
                                 data-action="mobile-tabs-settings"
-                                class="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-faint hover:bg-v2-background-bg-layer-02 focus-visible:outline-none focus-visible:bg-v2-background-bg-layer-02"
+                                class="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-faint hover:bg-v2-background-bg-layer-02 focus-visible:outline-offset-[-2px]"
                                 onClick={() => setMobileTabs({ open: false, settings: true })}
                               >
                                 <Icon name="settings-gear" size="small" />
@@ -662,7 +662,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                               <button
                                 type="button"
                                 data-action="mobile-tabs-help"
-                                class="flex h-7 shrink-0 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-faint hover:bg-v2-background-bg-layer-02 focus-visible:outline-none focus-visible:bg-v2-background-bg-layer-02"
+                                class="flex h-7 shrink-0 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-faint hover:bg-v2-background-bg-layer-02 focus-visible:outline-offset-[-2px]"
                                 onClick={() => {
                                   setMobileTabs("open", false)
                                   platform.openExternal("https://opencode.ai/desktop-feedback")
@@ -808,8 +808,8 @@ function ChannelIndicator(props: { horizontal?: boolean; sidebar?: boolean }) {
         classList={{
           "w-6": props.sidebar,
           "w-5": !props.sidebar,
-          "cursor-pointer hover:bg-v2-background-bg-layer-02 focus-visible:outline-none focus-visible:bg-v2-background-bg-layer-02":
-            !!debug(),
+          "cursor-pointer hover:bg-v2-background-bg-layer-02": !!debug(),
+          "focus-visible:outline-offset-[-2px]": props.horizontal,
         }}
         onClick={() => debug()?.run?.()}
         aria-label={debug()?.label}

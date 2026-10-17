@@ -509,6 +509,7 @@ export function ScrollView(props: ScrollViewProps) {
       >
         {local.children}
       </div>
+      <div class="scroll-view__focus-ring" aria-hidden="true" />
 
       {/* Thumb Overlay — optionally portaled into an external track */}
       <Show when={state.showVerticalThumb}>

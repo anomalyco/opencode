@@ -244,7 +244,7 @@ export function SessionAncestorTrail(props: {
     <div class="flex min-w-0 max-w-full items-center">
       <div
         data-slot="session-title-ancestors"
-        class="flex min-w-0 items-center overflow-x-auto whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        class="-my-1 -me-1 flex min-w-0 scroll-px-1 items-center overflow-x-auto whitespace-nowrap p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         <For each={ancestors()}>
           {(ancestor, index) => (
@@ -255,7 +255,7 @@ export function SessionAncestorTrail(props: {
                 data-session-id={ancestor.id}
                 title={ancestor.title}
                 class="max-w-[min(200px,40vw)] shrink-0 truncate text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-faint transition-colors hover:text-v2-text-text-muted"
-                classList={{ "ps-1": index() === 0, "ps-2": index() > 0 }}
+                classList={{ "ps-2": index() > 0 }}
                 onClick={() => open(props.sessionID, ancestor.id)}
               >
                 <bdi dir="auto">{ancestor.title}</bdi>
