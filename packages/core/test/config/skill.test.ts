@@ -249,6 +249,47 @@ describe("ConfigSkillPlugin.Plugin", () => {
     ),
   )
 
+  it.live("ignores skills under a .trash directory", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(async () => {
+            await fs.mkdir(path.join(tmp.path, "review"), { recursive: true })
+            await fs.mkdir(path.join(tmp.path, ".trash", "deleted"), { recursive: true })
+            await write(tmp.path, "review", "Available")
+            await write(path.join(tmp.path, ".trash"), "deleted", "Deleted")
+          })
+
+          const skill = yield* start([tmp.path], tmp.path)
+          expect((yield* skill.list()).map((item) => item.id)).toEqual([Skill.ID.make("review")])
+        }),
+      ),
+    ),
+  )
+
+  it.live("ignores .trash skills in compatibility roots", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const claude = path.join(tmp.path, "claude")
+          const skills = path.join(claude, "skills")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(path.join(skills, "review"), { recursive: true })
+            await fs.mkdir(path.join(skills, ".trash", "deleted"), { recursive: true })
+            await write(skills, "review", "Available")
+            await write(path.join(skills, ".trash"), "deleted", "Deleted")
+          })
+
+          const skill = yield* startEntries([], tmp.path, tmp.path, emptyDiscovery, {
+            claude: [AbsolutePath.make(claude)],
+            agents: [],
+          })
+          expect((yield* skill.list()).map((item) => item.id)).toEqual([Skill.ID.make("review")])
+        }),
+      ),
+    ),
+  )
+
   it.live("prefers a worktree skill over the parent checkout copy", () =>
     Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>

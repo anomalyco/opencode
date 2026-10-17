@@ -14,6 +14,9 @@ const Frontmatter = Schema.Struct({
 })
 const decodeFrontmatter = SchemaParser.decodeUnknownResult(Frontmatter)
 
+/** Tooling moves deleted skills to a `.trash` directory; discovery must not resurrect them. */
+export const SCAN_IGNORE = "**/.trash/**"
+
 export type ParseResult =
   | { readonly _tag: "Parsed"; readonly skill: Skill.Info }
   | { readonly _tag: "Skipped"; readonly reason: "markdown" }
