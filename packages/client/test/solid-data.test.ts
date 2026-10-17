@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import { getEventListeners } from "node:events"
 import { createRoot } from "solid-js"
 import { createData, type CreateDataInput } from "../src/solid"
-import { OpenCode, type ModelInfo, type OpenCodeEvent, type Project, type SessionInfo } from "../src/promise"
+import { OpenCode, type FormInfo, type ModelInfo, type OpenCodeEvent, type Project, type SessionInfo } from "../src/promise"
 
 const session = (viewed: number): SessionInfo => ({
   id: "ses_refresh",
@@ -1187,6 +1187,42 @@ test("projects background user shell metadata from durable shell data", () => {
     expect(setup.data.session.message.list("ses_refresh")).toMatchObject([
       { type: "shell", shellID: "sh_user", status: "running", metadata: { background: true } },
     ])
+  } finally {
+    setup.dispose()
+  }
+})
+
+test("clears stale forms on server reconnect", () => {
+  const form: FormInfo = {
+    id: "form_stale",
+    sessionID: "ses_refresh",
+    title: "Stale form",
+    fields: [{ key: "name", type: "string" }],
+  }
+  const setup = activityFixture(() => Response.json({ data: {} }))
+  try {
+    setup.emit({
+      id: "evt_form_created",
+      created: 1,
+      type: "form.created",
+      location: { directory: "/project" },
+      durable: { aggregateID: "ses_refresh", seq: 1, version: 1 },
+      data: { form },
+    })
+    expect(setup.data.session.form.list("ses_refresh")).toEqual([form])
+
+    setup.emit({ type: "server.connected", data: {} })
+    expect(setup.data.session.form.list("ses_refresh")).toBeUndefined()
+
+    setup.emit({
+      id: "evt_form_created_2",
+      created: 2,
+      type: "form.created",
+      location: { directory: "/project" },
+      durable: { aggregateID: "ses_refresh", seq: 2, version: 1 },
+      data: { form: { ...form, id: "form_new" } },
+    })
+    expect(setup.data.session.form.list("ses_refresh")).toEqual([{ ...form, id: "form_new" }])
   } finally {
     setup.dispose()
   }
