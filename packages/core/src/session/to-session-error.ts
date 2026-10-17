@@ -94,12 +94,34 @@ export function contentFilterError(summary: string, reason: FinishReasonDetails)
   }
 }
 
+const gatewayVpnCodes = [
+  "FreeTierError",
+  "freetiererror",
+  "free_tier_error",
+  "FreeUsageLimitError",
+  "freeusagelimiterror",
+  "free_usage_limit_error",
+] as const
+
 function providerError(type: string, reason: AIError["reason"]): SessionError.Error {
   const status = reason.http?.status
+  const message =
+    Object.entries(tokenSharingMessages).find(([code]) => reason.body?.includes(code))?.[1] ?? reason.message
   return {
     type,
-    message: Object.entries(tokenSharingMessages).find(([code]) => reason.body?.includes(code))?.[1] ?? reason.message,
+    message: vpnHint(message, reason.body),
     ...(status === undefined ? {} : { status }),
     ...(reason.body === undefined ? {} : { response: { body: reason.body } }),
   }
 }
+
+function vpnHint(message: string, body?: string) {
+  const matchesGatewayCode = body !== undefined && gatewayVpnCodes.some((code) => body.includes(code))
+  const matchesGatewayMessage = message.includes("can only be used from within OpenCode")
+  if (matchesGatewayCode || matchesGatewayMessage) {
+    return `${message}${message.endsWith(".") ? " " : ". "}If you are using a VPN or proxy, try disconnecting it.`
+  }
+  return message
+}
+
+
