@@ -6,8 +6,10 @@ import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Location } from "@opencode/core/location"
 import { Mcp } from "@opencode/core/mcp/index"
 import { CommandPlugin } from "@opencode/core/plugin/command"
+import { SessionGoal } from "@opencode/core/session/goal"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/schema/session"
+import { SessionGoal as GoalSchema } from "@opencode/schema/session-goal"
 import { SessionInbox } from "@opencode/schema/session-inbox"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -25,10 +27,36 @@ const locationLayer = Layer.succeed(
   Location.Service,
   Location.Service.of(location({ directory }, { projectDirectory: project })),
 )
+// The plugin only needs the goal service to register the command; the stub records
+// the parsed input so the `/goal` grammar is observable.
+const goalUpdates: SessionGoal.UpdateInput[] = []
+const goalLayer = Layer.succeed(
+  SessionGoal.Service,
+  SessionGoal.Service.of({
+    read: () => Effect.succeed(undefined),
+    readTodo: () => Effect.succeed([]),
+    readState: () => Effect.die("unused SessionGoal.readState"),
+    update: (_sessionID, input) =>
+      Effect.sync(() => {
+        goalUpdates.push(input)
+        return {
+          id: GoalSchema.ID.make("goal_test"),
+          revision: 1,
+          objective: "ship it",
+          phase: "active" as const,
+          maxGoalRounds: 8,
+        }
+      }),
+    replaceTodo: () => Effect.die("unused SessionGoal.replaceTodo"),
+    block: () => Effect.die("unused SessionGoal.block"),
+    complete: () => Effect.die("unused SessionGoal.complete"),
+  }),
+)
 const it = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Command.node, Mcp.node, Bus.node]), [
+  AppNodeBuilder.build(LayerNode.group([Command.node, Mcp.node, Bus.node, SessionGoal.node]), [
     Mcp.node.replace(emptyMcpLayer),
     Location.node.replace(locationLayer),
+    SessionGoal.node.replace(goalLayer),
   ]),
 )
 
@@ -131,6 +159,50 @@ describe("CommandPlugin.Plugin", () => {
           files: undefined,
           delivery: "steer",
         },
+      ])
+    }),
+  )
+
+  it.effect("parses /goal subcommands exactly", () =>
+    Effect.gen(function* () {
+      const command = yield* Command.Service
+      yield* CommandPlugin.Plugin.effect(
+        host({
+          command: {
+            list: () => Effect.die("unused command.list"),
+            transform: command.transform,
+            reload: command.reload,
+          },
+        }),
+      ).pipe(
+        Effect.provideService(
+          Location.Service,
+          Location.Service.of(location({ directory }, { projectDirectory: project })),
+        ),
+      )
+
+      goalUpdates.length = 0
+      const run = (text: string) =>
+        command.execute({
+          name: "goal",
+          invocation: { sessionID: Session.ID.make("ses_test"), prompt: { text }, delivery: "steer" },
+        })
+      yield* run("clear")
+      yield* run("pause")
+      yield* run("resume")
+      yield* run("edit do the thing")
+      yield* run("clear the flaky tests")
+      yield* run("pause the cron job before deploy")
+      yield* run("ship it")
+
+      expect(goalUpdates).toEqual([
+        { action: "clear" },
+        { action: "pause" },
+        { action: "resume" },
+        { action: "edit", objective: "do the thing" },
+        { action: "set", objective: "clear the flaky tests" },
+        { action: "set", objective: "pause the cron job before deploy" },
+        { action: "set", objective: "ship it" },
       ])
     }),
   )
