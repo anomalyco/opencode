@@ -241,8 +241,16 @@ function createLayer(input: () => KeymapLayer) {
           if (command.bind === false) return []
           const configured = value.config.keybinds.get(command.id)
           if (configured.length) return configured
-          if (typeof command.bind !== "string") return []
-          return [{ key: command.bind, cmd: command.id }]
+          if (typeof command.bind === "string") return [{ key: command.bind, cmd: command.id }]
+          if (typeof command.bind === "object" && command.bind.key)
+            return [
+              {
+                key: command.bind.key,
+                cmd: command.id,
+                ...(command.bind.event === undefined ? {} : { event: command.bind.event }),
+              },
+            ]
+          return []
         }),
         ...(bindings ?? []).flatMap((id) => value.config.keybinds.get(id)),
       ],
@@ -257,11 +265,14 @@ function groupCommands(commands: readonly KeymapCommand[] = []) {
         if (!command.id) throw new Error("Keymap command IDs cannot be empty")
         if (typeof command.bind === "string" && !command.bind)
           throw new Error("Keymap command bindings cannot be empty")
+        if (typeof command.bind === "object" && !command.bind.key)
+          throw new Error("Keymap command bindings cannot be empty")
         result.named.push({ ...command, id: command.id })
         return result
       }
       if (command.palette) throw new Error("Palette commands require an ID")
       if (command.slash) throw new Error("Slash commands require an ID")
+      if (typeof command.bind === "object") throw new Error("Object keymap bindings require an ID")
       if (typeof command.bind !== "string") throw new Error("Inline keymap commands require bind")
       if (!command.bind) throw new Error("Keymap command bindings cannot be empty")
       result.inline.push({ ...command, id: undefined, bind: command.bind })
