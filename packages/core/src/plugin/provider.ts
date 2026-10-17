@@ -1,3 +1,4 @@
+import Kiro from "opencode-kiro/server"
 import { AmazonBedrockPlugin } from "./provider/amazon-bedrock.js"
 import { AzurePlugin } from "./provider/azure.js"
 import { CerebrasPlugin } from "./provider/cerebras.js"
@@ -31,6 +32,7 @@ import { VLLMPlugin } from "./provider/vllm.js"
 import { XAIPlugin } from "./provider/xai.js"
 import { ZenmuxPlugin } from "./provider/zenmux.js"
 import type { PluginInternal } from "./internal.js"
+import { PluginPromise } from "./promise.js"
 
 export const ProviderPlugins: PluginInternal.InternalPlugin[] = [
   AmazonBedrockPlugin,
@@ -64,5 +66,7 @@ export const ProviderPlugins: PluginInternal.InternalPlugin[] = [
   VLLMPlugin,
   XAIPlugin,
   ZenmuxPlugin,
+  // Use Kiro's bundled SDK before the dynamic provider falls back to npm.
+  PluginPromise.fromPromise(Kiro),
   DynamicProviderPlugin,
 ]

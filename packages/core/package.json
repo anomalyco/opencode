@@ -130,6 +130,7 @@
     "jose": "6.0.11",
     "jsonc-parser": "3.3.1",
     "mime-types": "3.0.2",
+    "opencode-kiro": "0.5.2",
     "tree-sitter-bash": "0.25.0",
     "tree-sitter-powershell": "0.25.10",
     "web-tree-sitter": "0.25.10",
