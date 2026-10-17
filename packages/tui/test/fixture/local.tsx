@@ -1,4 +1,4 @@
-import { testRender } from "@opentui/solid"
+import { testRender, type JSX } from "@opentui/solid"
 import type { AgentInfo, ModelInfo, SessionInfo } from "@opencode/client"
 import path from "node:path"
 import { ConfigProvider } from "../../src/config"
@@ -27,6 +27,7 @@ export async function renderLocal(
     preferences?: Partial<ModelPreference>
     args?: Args
     fetch?: FetchHandler
+    extraProbe?: () => JSX.Element
   } = {},
 ) {
   const temporary = await tmpdir()
@@ -56,6 +57,13 @@ export async function renderLocal(
     return <box />
   }
 
+  // Optional extra probe. Tests that need to read the plugin's selection
+  // surface can provide one; the fixture calls it from inside the same
+  // provider tree so it sees the same Local context.
+  type ExtraProbe = () => JSX.Element
+  let extraProbe: ExtraProbe | undefined
+  if (input.extraProbe) extraProbe = input.extraProbe as ExtraProbe
+
   const setup = await testRender(
     () => (
       <TestTuiContexts paths={{ state: temporary.path }}>
@@ -72,6 +80,7 @@ export async function renderLocal(
                             <LocalProvider>
                               <DialogProvider>
                                 <Probe />
+                                {extraProbe?.()}
                               </DialogProvider>
                             </LocalProvider>
                           </PermissionProvider>
