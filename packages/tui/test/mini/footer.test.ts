@@ -1,3 +1,6 @@
+import { Agent } from "@opencode/schema/agent"
+import { Session } from "@opencode/schema/session"
+import { SessionMessage } from "@opencode/schema/session-message"
 import { expect, test } from "bun:test"
 import { createTestRenderer } from "@opentui/core/testing"
 import { CliRenderEvents, RGBA, TextRenderable } from "@opentui/core"
@@ -19,7 +22,7 @@ function progress(input: Partial<StreamCommit> = {}): StreamCommit {
     source: "tool",
     phase: "progress",
     text: "one",
-    messageID: "msg_1",
+    messageID: SessionMessage.ID.make("msg_1", { disableChecks: true }),
     partID: "part_1",
     tool: "shell",
     toolState: "running",
@@ -28,7 +31,12 @@ function progress(input: Partial<StreamCommit> = {}): StreamCommit {
 }
 
 test("coalesces progress only within the same message and tool state", () => {
-  expect(coalesceProgressCommit(progress(), progress({ messageID: "msg_2" }))).toBeUndefined()
+  expect(
+    coalesceProgressCommit(
+      progress(),
+      progress({ messageID: SessionMessage.ID.make("msg_2", { disableChecks: true }) }),
+    ),
+  ).toBeUndefined()
   expect(coalesceProgressCommit(progress(), progress({ toolState: "completed" }))).toBeUndefined()
   expect(coalesceProgressCommit(progress(), progress({ text: "two", directory: "/latest" }))).toEqual(
     progress({ text: "onetwo", directory: "/latest" }),
@@ -45,7 +53,7 @@ test.each(["show", "hide"] as const)("tools setting %s controls tool and skill t
       phase: "start",
       source: "tool",
       tool: "read",
-      messageID: "msg_1",
+      messageID: SessionMessage.ID.make("msg_1", { disableChecks: true }),
       partID: "prt_1",
     })
     app.footer.append({
@@ -53,7 +61,7 @@ test.each(["show", "hide"] as const)("tools setting %s controls tool and skill t
       text: `→ Skill "demo"`,
       phase: "start",
       source: "system",
-      messageID: "msg_skill",
+      messageID: SessionMessage.ID.make("msg_skill", { disableChecks: true }),
       partID: "skill:demo",
     })
     app.footer.append({
@@ -61,7 +69,7 @@ test.each(["show", "hide"] as const)("tools setting %s controls tool and skill t
       text: "all done",
       phase: "progress",
       source: "assistant",
-      messageID: "msg_2",
+      messageID: SessionMessage.ID.make("msg_2", { disableChecks: true }),
       partID: "prt_text",
     })
     await app.footer.idle()
@@ -83,14 +91,14 @@ test.each(["show", "hide"] as const)("tools setting %s controls tool and skill t
 
 test("falls back only when no agent is selected", () => {
   const agents: RunAgent[] = [
-    { id: "task", name: "Task", mode: "subagent", hidden: false },
-    { id: "secret", name: "Secret", mode: "primary", hidden: true },
-    { id: "build", name: "Build", mode: "primary", hidden: false },
-    { id: "plan", name: "Plan", mode: "primary", hidden: false },
+    { id: Agent.ID.make("task", { disableChecks: true }), name: "Task", mode: "subagent", hidden: false },
+    { id: Agent.ID.make("secret", { disableChecks: true }), name: "Secret", mode: "primary", hidden: true },
+    { id: Agent.ID.make("build", { disableChecks: true }), name: "Build", mode: "primary", hidden: false },
+    { id: Agent.ID.make("plan", { disableChecks: true }), name: "Plan", mode: "primary", hidden: false },
   ]
 
-  expect(resolveRunAgent(agents, undefined)?.id).toBe("build")
-  expect(resolveRunAgent(agents, "plan")?.id).toBe("plan")
+  expect<unknown>(resolveRunAgent(agents, undefined)?.id).toBe("build")
+  expect<unknown>(resolveRunAgent(agents, "plan")?.id).toBe("plan")
   expect(resolveRunAgent(agents, "missing")).toBeUndefined()
 })
 
@@ -129,9 +137,9 @@ async function setup(
   const footer = new RunFooter(app.renderer, {
     directory: () => "/project",
     findFiles: async () => [],
-    agents: [{ id: "build", name: "Build", mode: "primary", hidden: false }],
+    agents: [{ id: Agent.ID.make("build", { disableChecks: true }), name: "Build", mode: "primary", hidden: false }],
     references: [],
-    agent: "build",
+    agent: Agent.ID.make("build", { disableChecks: true }),
     modelLabel: "GPT-5",
     model: undefined,
     variant: undefined,
@@ -229,7 +237,11 @@ test("footer usage survives unrelated patches and clears when explicitly undefin
 test("motion demo waits for work and can be interrupted without a model call", async () => {
   const footer = createFooterApiFixture()
   const controller = new AbortController()
-  const demo = createRunDemo({ sessionID: "seed-demo", thinking: false, footer: footer.api })
+  const demo = createRunDemo({
+    sessionID: Session.ID.make("seed-demo", { disableChecks: true }),
+    thinking: false,
+    footer: footer.api,
+  })
   let finished = false
   try {
     expect(demo.interrupt()).toBe(false)

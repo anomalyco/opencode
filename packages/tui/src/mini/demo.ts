@@ -16,6 +16,9 @@
 // the synthetic tool parts through the same callbacks used by the live footer.
 import path from "path"
 import type { JsonValue, SessionMessageAssistantTool } from "@opencode/client/promise"
+import { Form } from "@opencode/schema/form"
+import { Permission } from "@opencode/schema/permission"
+import { SessionID } from "@opencode/schema/session-id"
 import { parseSlashHead } from "../prompt/parse"
 import { writeSessionOutput } from "./stream"
 import { toolCommit, toolFinalPhase } from "./stream-v2.subagent"
@@ -369,8 +372,8 @@ function askPermission(state: State, item: Permit): void {
   present(state, [], {
     type: "permission",
     request: {
-      id,
-      sessionID: state.id,
+      id: Permission.ID.make(id, { disableChecks: true }),
+      sessionID: SessionID.make(state.id, { disableChecks: true }),
       action: item.permission,
       resources: item.patterns,
       metadata: item.metadata ?? {},
@@ -802,7 +805,7 @@ function emitForm(state: State, kind: FormKind = "question"): void {
   startTool(state, ref)
   state.form++
   const request: MiniFormRequest = {
-    id: `frm_demo_${state.form}`,
+    id: Form.ID.make(`frm_demo_${state.form}`, { disableChecks: true }),
     sessionID: state.id,
     title: form.title,
     metadata:

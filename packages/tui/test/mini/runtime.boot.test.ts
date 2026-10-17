@@ -1,3 +1,4 @@
+import { Provider } from "@opencode/schema/provider"
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
 import { OpenCode } from "@opencode/client/promise"
 import { resolveMiniSettings, resolveModelInfo, resolveRunTuiConfig } from "../../src/mini/runtime.boot"
@@ -82,7 +83,13 @@ describe("run runtime boot", () => {
     } as never)
     spyOn(sdk.model, "list").mockResolvedValue({
       location,
-      data: [catalogModel({ id: "gpt-5", providerID: "openai", variants: ["high", "minimal"] })],
+      data: [
+        catalogModel({
+          id: "gpt-5",
+          providerID: Provider.ID.make("openai", { disableChecks: true }),
+          variants: ["high", "minimal"],
+        }),
+      ],
     } as never)
 
     await expect(resolveModelInfo(sdk, { directory: "/workspace" })).resolves.toEqual({

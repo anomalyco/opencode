@@ -1,3 +1,6 @@
+import { Session } from "@opencode/schema/session"
+import { Agent } from "@opencode/schema/agent"
+import { SessionMessage } from "@opencode/schema/session-message"
 import { afterEach, expect, test } from "bun:test"
 import type { SessionMessageAssistantTool } from "@opencode/client/promise"
 import { CliRenderEvents, MarkdownRenderable, RGBA, SyntaxStyle, TextAttributes, TextRenderable } from "@opentui/core"
@@ -111,7 +114,7 @@ function assistant(text: string, phase: StreamCommit["phase"] = "progress"): Str
     text,
     phase,
     source: "assistant",
-    messageID: "msg-1",
+    messageID: SessionMessage.ID.make("msg-1", { disableChecks: true }),
     partID: "part-1",
   }
 }
@@ -122,7 +125,7 @@ function reasoning(text: string, phase: StreamCommit["phase"] = "progress"): Str
     text,
     phase,
     source: "reasoning",
-    messageID: "msg-r-1",
+    messageID: SessionMessage.ID.make("msg-r-1", { disableChecks: true }),
     partID: "part-r-1",
   }
 }
@@ -131,7 +134,11 @@ test("turn summary starts at the left edge", async () => {
   const out = await setup()
 
   try {
-    await out.scrollback.writeTurnSummary({ agent: "Build", model: "Little Frank", duration: "2.2s" })
+    await out.scrollback.writeTurnSummary({
+      agent: Agent.ID.make("Build", { disableChecks: true }),
+      model: "Little Frank",
+      duration: "2.2s",
+    })
 
     const commits = claim(out.renderer)
     try {
@@ -339,10 +346,10 @@ test("renders completed subagent markdown in monochrome mode", async () => {
         toolState: "completed",
         state: {
           status: "completed",
-          input: { description: "Inspect reducer", agent: "explore" },
+          input: { description: "Inspect reducer", agent: Agent.ID.make("explore", { disableChecks: true }) },
           content: [{ type: "text", text: "# Findings\n\n- Café → stable" }],
           metadata: {
-            sessionID: "ses-child-1",
+            sessionID: Session.ID.make("ses-child-1", { disableChecks: true }),
             status: "completed",
             output: "# Findings\n\n- Café → stable",
           },
@@ -414,7 +421,7 @@ function toolCommit(input: {
   messageID?: string
 }): StreamCommit {
   const id = input.id ?? `${input.tool}-1`
-  const messageID = input.messageID ?? `msg-${input.tool}`
+  const messageID = SessionMessage.ID.make(input.messageID ?? `msg-${input.tool}`, { disableChecks: true })
 
   return {
     kind: "tool",
@@ -450,10 +457,10 @@ test("scopes repeated tool part IDs to their assistant messages", () => {
     tool: "read",
     phase: "start",
     id: "call-repeated",
-    messageID: "msg-one",
+    messageID: SessionMessage.ID.make("msg-one", { disableChecks: true }),
     toolState: "running",
   })
-  const second = { ...first, messageID: "msg-two" }
+  const second = { ...first, messageID: SessionMessage.ID.make("msg-two", { disableChecks: true }) }
 
   expect(entryGroupKey(first)).not.toBe(entryGroupKey(second))
 })
@@ -882,7 +889,7 @@ test("renders structured write finals once as code blocks", async () => {
         phase: "start",
         toolState: "running",
         id: "tool-2",
-        messageID: "msg-2",
+        messageID: SessionMessage.ID.make("msg-2", { disableChecks: true }),
         state: {
           status: "running",
           input: {
@@ -901,7 +908,7 @@ test("renders structured write finals once as code blocks", async () => {
         phase: "final",
         toolState: "completed",
         id: "tool-2",
-        messageID: "msg-2",
+        messageID: SessionMessage.ID.make("msg-2", { disableChecks: true }),
         state: {
           status: "completed",
           input: {

@@ -1,3 +1,6 @@
+import { Form } from "@opencode/schema/form"
+import { Session } from "@opencode/schema/session"
+import { Permission } from "@opencode/schema/permission"
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
 import { BoxRenderable, RGBA, ScrollBoxRenderable, TextRenderable, type Renderable } from "@opentui/core"
@@ -14,15 +17,15 @@ import type { FormReply, MiniFormRequest, MiniPermissionRequest, PermissionReply
 import { createTuiResolvedConfig } from "../fixture/tui-runtime"
 
 const permission: MiniPermissionRequest = {
-  id: "per_responsive",
-  sessionID: "ses_responsive",
+  id: Permission.ID.make("per_responsive", { disableChecks: true }),
+  sessionID: Session.ID.make("ses_responsive", { disableChecks: true }),
   action: "shell",
   resources: ["rm -rf /project/build/cache"],
   save: ["/project/build/*", "/project/private/GRANT_SENTINEL"],
 }
 const form: MiniFormRequest = {
-  id: "frm_responsive",
-  sessionID: "ses_responsive",
+  id: Form.ID.make("frm_responsive", { disableChecks: true }),
+  sessionID: Session.ID.make("ses_responsive", { disableChecks: true }),
   title: "Deployment",
   fields: [
     {
@@ -703,7 +706,12 @@ test.each([
       <RunFooterSubagentBody
         active={() => true}
         theme={() => RUN_THEME_FALLBACK}
-        tab={() => ({ sessionID: "child", label: "Explore", description: "Inspect authentication", status: "running" })}
+        tab={() => ({
+          sessionID: Session.ID.make("child", { disableChecks: true }),
+          label: "Explore",
+          description: "Inspect authentication",
+          status: "running",
+        })}
         index={() => 12}
         total={() => 12}
         detail={() => ({ commits: [{ kind: "system", source: "system", phase: "final", text: "Activity" }] })}

@@ -1,3 +1,7 @@
+import { Session } from "@opencode/schema/session"
+import { Agent } from "@opencode/schema/agent"
+import { Model } from "@opencode/schema/model"
+import { Provider } from "@opencode/schema/provider"
 import { expect, spyOn, test } from "bun:test"
 import { RGBA, TextAttributes } from "@opentui/core"
 import { createTestRenderer } from "@opentui/core/testing"
@@ -27,9 +31,9 @@ async function setup(mono = false) {
   const footer = new RunFooter(app.renderer, {
     directory: () => "/project",
     findFiles: async () => ["packages/tui/src/mini/footer.view.tsx", "packages/tui/src/mini/", "src/\u6587\u4ef6.ts"],
-    agents: [{ id: "build", name: "Build", mode: "primary", hidden: false }],
+    agents: [{ id: Agent.ID.make("build", { disableChecks: true }), name: "Build", mode: "primary", hidden: false }],
     references: [],
-    agent: "build",
+    agent: Agent.ID.make("build", { disableChecks: true }),
     modelLabel: "GPT-5",
     model: undefined,
     variant: undefined,
@@ -103,13 +107,20 @@ test.each([false, true])(
       app.footer.event({
         type: "models",
         providers: [
-          { id: "opencode", name: "Anomaly / OpenCode", models: { "gpt-5.6-sol": { name: "GPT-5.6 Sol (50% Off)" } } },
+          {
+            id: Provider.ID.make("opencode", { disableChecks: true }),
+            name: "Anomaly / OpenCode",
+            models: { "gpt-5.6-sol": { name: "GPT-5.6 Sol (50% Off)" } },
+          },
         ],
       })
       app.footer.event({
         type: "model",
         model: "GPT-5.6 Sol (50% Off)",
-        selection: { providerID: "opencode", modelID: "gpt-5.6-sol" },
+        selection: {
+          providerID: Provider.ID.make("opencode", { disableChecks: true }),
+          modelID: Model.ID.make("gpt-5.6-sol", { disableChecks: true }),
+        },
       })
       app.footer.event({ type: "variants", variants: ["max"], current: "max" })
       app.footer.event({ type: "stream.patch", patch: { usage: { tokens: 14100, percent: 1, cost: 0.04 } } })
@@ -217,7 +228,7 @@ test.each([false, true])(
         type: "models",
         providers: [
           {
-            id: "provider-with-long-id",
+            id: Provider.ID.make("provider-with-long-id", { disableChecks: true }),
             name: "Provider with a very long name",
             models: Object.fromEntries(
               Array.from({ length: 22 }, (_, index) => [
@@ -284,7 +295,7 @@ test("subagent menu recalculates its twelve-row window after shrink, filter, and
       type: "stream.subagent",
       state: {
         tabs: Array.from({ length: 24 }, (_, index) => ({
-          sessionID: `child-${index}`,
+          sessionID: Session.ID.make(`child-${index}`, { disableChecks: true }),
           label: "Worker",
           description: `Task ${String(index).padStart(2, "0")}`,
           status: "running",

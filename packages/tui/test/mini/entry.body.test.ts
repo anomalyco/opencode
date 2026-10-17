@@ -1,3 +1,6 @@
+import { SessionMessage } from "@opencode/schema/session-message"
+import { Session } from "@opencode/schema/session"
+import { Agent } from "@opencode/schema/agent"
 import { describe, expect, test } from "bun:test"
 import os from "os"
 import path from "path"
@@ -30,7 +33,10 @@ function toolCommit(input: {
     toolState:
       input.toolState ??
       (input.state.status === "error" ? "error" : input.state.status === "completed" ? "completed" : "running"),
-    messageID: input.messageID,
+    messageID:
+      input.messageID === undefined
+        ? input.messageID
+        : SessionMessage.ID.make(input.messageID, { disableChecks: true }),
     part: canonicalToolPart(input.tool, input.state, input.id),
   })
 }
@@ -223,9 +229,9 @@ describe("run entry body", () => {
             status: "running",
             input: {
               description: "Inspect reducer",
-              agent: "explore",
+              agent: Agent.ID.make("explore", { disableChecks: true }),
             },
-            metadata: { sessionID: "ses-child-1", status: "running" },
+            metadata: { sessionID: Session.ID.make("ses-child-1", { disableChecks: true }), status: "running" },
           },
         }),
       ),
@@ -241,11 +247,11 @@ describe("run entry body", () => {
         status: "completed",
         input: {
           description: "Inspect reducer",
-          agent: "explore",
+          agent: Agent.ID.make("explore", { disableChecks: true }),
         },
         content: [{ type: "text", text: "# Findings\n\n- Footer stays live" }],
         metadata: {
-          sessionID: "ses-child-1",
+          sessionID: Session.ID.make("ses-child-1", { disableChecks: true }),
           status: "completed",
           output: "# Findings\n\n- Footer stays live",
         },
@@ -266,11 +272,11 @@ describe("run entry body", () => {
             status: "completed",
             input: {
               description: "Inspect reducer",
-              agent: "explore",
+              agent: Agent.ID.make("explore", { disableChecks: true }),
             },
             content: [{ type: "text", text: "" }],
             metadata: {
-              sessionID: "ses-child-1",
+              sessionID: Session.ID.make("ses-child-1", { disableChecks: true }),
               status: "completed",
               output: "",
             },

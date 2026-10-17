@@ -1,3 +1,4 @@
+import { SessionMessage } from "@opencode/schema/session-message"
 import { afterEach, expect, test } from "bun:test"
 import {
   CliRenderEvents,
@@ -73,7 +74,15 @@ async function setup(
 }
 
 function image(source = wide, text = "landscape.png", partID = "image-1"): StreamCommit {
-  return { kind: "user", source: "system", phase: "final", messageID: "message-1", partID, text, image: source }
+  return {
+    kind: "user",
+    source: "system",
+    phase: "final",
+    messageID: SessionMessage.ID.make("message-1", { disableChecks: true }),
+    partID,
+    text,
+    image: source,
+  }
 }
 
 test.each([

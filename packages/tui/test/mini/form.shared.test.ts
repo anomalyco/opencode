@@ -1,3 +1,6 @@
+import { Session } from "@opencode/schema/session"
+import { WorkspaceID } from "@opencode/schema/workspace-id"
+import { Form } from "@opencode/schema/form"
 import { describe, expect, test } from "bun:test"
 import type { FormField, FormInfo } from "@opencode/client/promise"
 import {
@@ -15,7 +18,12 @@ import {
 } from "../../src/mini/form.shared"
 
 function request(fields: FormField[]): FormInfo {
-  return { id: "frm_1", sessionID: "ses_1", title: "Input", fields: fields as FormInfo["fields"] }
+  return {
+    id: Form.ID.make("frm_1", { disableChecks: true }),
+    sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+    title: "Input",
+    fields: fields as FormInfo["fields"],
+  }
 }
 
 describe("Mini form state", () => {
@@ -39,7 +47,12 @@ describe("Mini form state", () => {
 
     const answer = { choice: "fast", count: 1.5, whole: 2, enabled: false, tags: ["custom"], external: true }
     expect(formAnswer(form, state)).toEqual(answer)
-    expect(formReply({ ...form, location: { directory: "/tmp", workspaceID: "wrk_1" } }, state)).toEqual({
+    expect<unknown>(
+      formReply(
+        { ...form, location: { directory: "/tmp", workspaceID: WorkspaceID.make("wrk_1", { disableChecks: true }) } },
+        state,
+      ),
+    ).toEqual({
       sessionID: "ses_1",
       formID: "frm_1",
       answer,
