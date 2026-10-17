@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test"
-import { expectPath, holdRoute, NO_PROVIDER, project, REMOTE_SERVER, seed, sessionHref } from "../utils/app"
+import { expectPath, holdRoute, NO_PROVIDER, project, provider, REMOTE_SERVER, seed, sessionHref } from "../utils/app"
 import { mockOpenCodeServer } from "../utils/mock-server"
 import { fixture, mockStressTimeline } from "../utils/session-fixture"
 import { mockRemoteServer } from "../utils/workspace"
@@ -102,6 +102,27 @@ test("the Home shortcut focuses session search, and the Home button leaves focus
   await page.getByRole("button", { name: "Home", exact: true }).click()
   await expect(search).toHaveValue("")
   await expect(search).not.toBeFocused()
+})
+
+test("New session opens a draft on a Home with no project open", async ({ page }) => {
+  const directory = "C:/OpenCode/EmptyHome"
+
+  // A client that has never opened a project: no seeded projects, and `sync.data.path` stays empty.
+  await mockOpenCodeServer(page, {
+    provider: provider(),
+    directory,
+    project: project({ id: "proj_empty_home", directory, name: "empty-home" }),
+    sessions: [],
+    pageMessages: () => ({ items: [] }),
+  })
+  await seed(page, {})
+  await page.goto("/")
+  await expectAppVisible(page.locator('[data-slot="home-panel"]'))
+
+  await page.getByRole("button", { name: "New session", exact: true }).click()
+
+  // The titlebar asks the server where it runs, then starts the draft there instead of doing nothing.
+  await expect(page).toHaveURL(/\/new-session\?draftId=/)
 })
 
 test("Home shows loaded sessions before the location request resolves", async ({ page }) => {

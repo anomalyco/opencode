@@ -25,6 +25,7 @@ import type { ComposerState } from "@/composer/persistence"
 import "./titlebar.css"
 import { TitlebarRightMount } from "@/shell/titlebar/right-slot"
 import { MobileDrawer, MobileDrawerContent, MobileDrawerLabel, MobileDrawerTrigger } from "@/shell/mobile-drawer"
+import { newSessionTarget } from "./new-session-target"
 import { sessionTabTitle } from "./tab-title"
 import { SessionTabAvatar } from "@/shell/layout/session-tab-avatar"
 import { SessionProgressIndicatorV2 } from "@opencode/session-ui/v2/session-progress-indicator-v2"
@@ -323,7 +324,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
               tabsStoreActions.removeSessions(detail)
             })
 
-            const openNewTab = () => {
+            const openNewTab = async () => {
               const route = layout.route()
 
               switch (route.type) {
@@ -377,18 +378,25 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                     global.servers.list().find((item) => ServerConnection.key(item) === selection.server) ??
                     global.servers.list()[0]
 
-                  const projects = conn ? global.ensureServerCtx(conn).projects : undefined
+                  if (!conn) return
 
-                  const project =
-                    projects?.list().find((item) => item.worktree === selection.directory) ??
-                    projects?.list().find((item) => item.worktree === projects.last()) ??
-                    projects?.list()[0]
+                  const ctx = global.ensureServerCtx(conn)
 
-                  if (conn && project) {
-                    void tabs.newDraft({ server: ServerConnection.key(conn), directory: project.worktree }, "")
+                  const projects = ctx.projects.list().map((project) => project.worktree)
 
-                    return
-                  }
+                  // A client that has never opened a project still knows where this server runs, but
+                  // only the server can say where: `sync.data.path` stays empty until a directory has
+                  // been loaded, so it cannot supply the directory here.
+                  const directory =
+                    newSessionTarget({ projects, selected: selection.directory, last: ctx.projects.last() }) ??
+                    (await ctx.sdk.api.location.get().catch(() => undefined))?.project.directory
+
+                  if (!directory) return
+                  ctx.projects.open(directory)
+                  ctx.projects.touch(directory)
+                  void tabs.newDraft({ server: ServerConnection.key(conn), directory }, "")
+
+                  return
                 }
               }
             }
