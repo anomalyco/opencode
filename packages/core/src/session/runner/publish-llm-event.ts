@@ -59,6 +59,8 @@ const INPUT_FAILURES = {
 export interface StepRecord {
   /** The model produced visible output this attempt, which bars transparent retries and overflow recovery. */
   readonly outputStarted: boolean
+  /** Reasoning alone is not a completed response; tool input has its own settlement path. */
+  readonly hasContent: boolean
   readonly providerFailed: boolean
   /** The step's recorded assistant failure, if any. */
   readonly failure?: SessionError.Error
@@ -123,6 +125,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
   let stepStarted = false
   let providerFailed = false
   let outputStarted = false
+  let hasText = false
   let stepFailure: SessionError.Error | undefined
   let stepSettlement: StepRecord["finish"]
 
@@ -240,6 +243,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     "text",
     (_textID, value, ordinal, state) =>
       Effect.gen(function* () {
+        if (value.trim()) hasText = true
         yield* bus.publish(SessionEvent.Text.Ended, {
           sessionID: input.sessionID,
           assistantMessageID: yield* currentAssistantMessageID(),
@@ -652,6 +656,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     /** Immutable snapshot of everything recorded for this step so far. */
     record: (): StepRecord => ({
       outputStarted,
+      hasContent: hasText || tools.size > 0,
       providerFailed,
       failure: stepFailure,
       finish: stepSettlement,
