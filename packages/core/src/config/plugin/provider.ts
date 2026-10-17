@@ -74,6 +74,13 @@ export const Plugin = define({
           if (item.headers !== undefined) provider.headers = Provider.mergeHeaders(provider.headers, item.headers)
           if (item.body !== undefined) provider.body = Provider.mergeOverlay(provider.body, item.body)
         })
+        // Catalog models can carry their own endpoint, which would otherwise win over the configured one.
+        if (item.settings?.baseURL !== undefined)
+          for (const [id, model] of providers.get(providerID)?.models ?? [])
+            if (model.settings?.baseURL !== undefined)
+              providers.models.update(providerID, id, (model) => {
+                if (model.settings) delete model.settings.baseURL
+              })
         const definitions = new Map<string, { readonly inherit: boolean; readonly base?: Model.Info }>()
         for (const [id, config] of Object.entries(item.models ?? {})) {
           const base = source?.models.get(config.modelID ?? id) ?? source?.models.get(id)

@@ -665,6 +665,46 @@ describe("ConfigProviderPlugin.Plugin", () => {
     }),
   )
 
+  it.effect("sends catalog models with their own endpoint to the configured provider baseURL", () =>
+    Effect.gen(function* () {
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
+      const providerID = Provider.ID.make("custom")
+      yield* providers.transform((editor) => {
+        editor.update(providerID, (provider) => {
+          provider.package = "@opencode/ai/providers/openai/chat"
+          provider.settings = { baseURL: "https://catalog.example/v1" }
+        })
+        for (const id of ["chat", "listed"])
+          editor.models.update(providerID, Model.ID.make(id), (model) => {
+            model.settings = { baseURL: "https://catalog.example/v1" }
+          })
+      })
+      yield* addPlugin([
+        new Document({
+          type: "document",
+          info: decode({
+            providers: {
+              custom: {
+                settings: { baseURL: "https://gateway.example/v1" },
+                models: { listed: { settings: { baseURL: "https://listed.example/v1" } } },
+              },
+            },
+          }),
+        }),
+      ])
+
+      const resolver = yield* ModelResolver.Service
+      const endpoint = (id: string) =>
+        models.get(providerID, Model.ID.make(id)).pipe(
+          Effect.flatMap((model) => resolver.resolveModel(required(model))),
+          Effect.map((resolved) => resolved.model.route.endpoint.baseURL),
+        )
+      expect(yield* endpoint("chat")).toBe("https://gateway.example/v1")
+      expect(yield* endpoint("listed")).toBe("https://listed.example/v1")
+    }).pipe(Effect.provide(ModelResolver.layer)),
+  )
+
   it.effect("generates variants after rewriting a configured model package", () =>
     Effect.gen(function* () {
       const models = yield* Model.Service
