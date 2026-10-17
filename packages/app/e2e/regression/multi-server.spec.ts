@@ -223,9 +223,12 @@ test("auto-accept approves a request discovered by opening a session", async ({ 
 test("a project's auto-accept choice overrides the default in both directions", async ({ page }) => {
   const api = session({ id: "ses_project_api", directory: "/work/api", title: "API session", projectID: "proj_api" })
   const web = session({ id: "ses_project_web", directory: "/work/web", title: "Web session", projectID: "proj_web" })
+  const sessions = [api, web]
   const requests = { [api.id]: [pending("permission-api", api.id)], [web.id]: [pending("permission-web", web.id)] }
   const replies: string[] = []
-  await mockServers(page, {
+  const sessionGets: string[] = []
+
+  const servers = await mockServers(page, {
     [SERVER]: {
       directory: "/work/api",
       project: project({ id: "proj_api", directory: "/work/api" }),
@@ -234,14 +237,16 @@ test("a project's auto-accept choice overrides the default in both directions", 
         project({ id: "proj_web", directory: "/work/web" }),
       ],
       provider: { all: [], connected: [], default: {} },
-      sessions: [api, web],
+      sessions,
       pageMessages: () => ({ items: [] }),
       sessionStatus: { [api.id]: { type: "running" }, [web.id]: { type: "running" } },
       permissions: () => Object.values(requests).flat(),
       sessionPermissions: requests,
+      onSession: (id) => sessionGets.push(id),
       onPermissionReply: (reply) => replies.push(reply.permissionID),
     },
   })
+
   await seed(page, {
     projects: { local: [{ worktree: "/work/api" }, { worktree: "/work/web" }] },
     tabs: [api.id, web.id],
@@ -268,11 +273,40 @@ test("a project's auto-accept choice overrides the default in both directions", 
   await expect(dock.getByText("git status")).toBeVisible()
   expect(replies).toEqual(["permission-api"])
 
+  // Sessions created by another client after the sweep have no cached project when their requests arrive.
+  const unloaded = [
+    session({ id: "ses_api_unloaded", directory: "/work/api", projectID: "proj_api", parentID: api.id }),
+    session({ id: "ses_web_unloaded", directory: "/work/web", projectID: "proj_web", parentID: web.id }),
+  ]
+
+  sessions.push(...unloaded)
+  await servers[SERVER]!.transport.waitForConnection()
+
+  for (const [index, item] of unloaded.entries()) {
+    expect(sessionGets).not.toContain(item.id)
+    requests[item.id] = [pending(`permission-unloaded-${index}`, item.id)]
+    await servers[SERVER]!.transport.send({
+      id: `evt_permission_unloaded_${index}`,
+      created: 1700000002000 + index,
+      type: "permission.asked",
+      location: { directory: item.directory },
+      data: requests[item.id]![0]!,
+    })
+  }
+
+  await expect.poll(() => replies).toEqual(["permission-api", "permission-unloaded-0"])
+  await expect.poll(() => sessionGets.includes(unloaded[1]!.id)).toBe(true)
+  await page.goto(sessionHref(unloaded[1]!.id))
+  await expectSessionTitle(page, unloaded[1]!.title)
+  await expect(dock.getByText("git status")).toBeVisible()
+
   // Back on the default, web follows it.
   await page.keyboard.press("Control+,")
   await settings.getByRole("tab", { name: "Projects", exact: true }).click()
   await settings.getByRole("button", { name: "web", exact: true }).click()
   await settings.locator('[data-action="settings-project-auto-accept-permissions"]').click()
   await page.getByRole("option", { name: "Use default (On)" }).click()
-  await expect.poll(() => replies).toEqual(["permission-api", "permission-web"])
+  await expect
+    .poll(() => replies.toSorted())
+    .toEqual(["permission-api", "permission-unloaded-0", "permission-unloaded-1", "permission-web"])
 })
