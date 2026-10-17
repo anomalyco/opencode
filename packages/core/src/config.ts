@@ -152,8 +152,13 @@ export const layer = (options?: Options) =>
         const auth = entry.manifest.auth
         const credential = (yield* credentials.list(entry.integrationID)).at(-1)
         const variables = auth && credential?.value.type === "key" ? { [auth.env]: credential.value.key } : undefined
-        // A failed refresh, including a missing credential, keeps the last resolved config so remote providers
-        // and allowlists do not disappear; only removing the source clears it.
+        // A logged-out endpoint (auth declared, no usable credential) contributes no
+        // documents: its cached config can no longer resolve {env:VAR}, so emitting it
+        // would substitute "" and shadow the wiring of still-authenticated endpoints.
+        // A failed refresh with a credential present keeps the last resolved config so
+        // remote providers and allowlists do not disappear; only removing the source
+        // clears it.
+        if (auth && !variables) return []
         const configs = yield* (
           variables ? wellknown.resolve(entry, variables) : Effect.fail(new Error("No usable wellknown credential"))
         ).pipe(
