@@ -25,6 +25,7 @@ describe("acp session lifecycle over the wire", () => {
         _meta: { "opencode/child-session-updates": true },
       },
       agentInfo: { name: "OpenCode" },
+      _meta: { steering: { supported: true } },
     })
     expect(plain.authMethods).toEqual([
       { id: "opencode-login", name: "Login with opencode", description: "Run `opencode auth login` in the terminal" },

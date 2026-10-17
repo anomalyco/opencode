@@ -29,8 +29,15 @@ import { ACPPrompt } from "./prompt"
 import type { ACPSessions, Attached } from "./sessions"
 import { ACPTranslate } from "./translate"
 
+export type SteeringRequest = { readonly sessionId: string; readonly prompt: PromptRequest["prompt"] }
+export type SteeringResponse =
+  | { readonly outcome: "injected" }
+  | { readonly outcome: "promptRequired"; readonly reason: "noRunningTurn" }
+
 export interface Interface {
   readonly prompt: (input: PromptRequest, signal: AbortSignal) => Effect.Effect<PromptResponse, ACPError.Failure>
+  /** Redirects a running turn; an idle session is left alone so a steer never starts a turn. */
+  readonly steer: (input: SteeringRequest) => Effect.Effect<SteeringResponse, ACPError.Failure>
   readonly cancel: (input: CancelNotification) => Effect.Effect<void>
   /** Unlike `cancel`, interrupts an idle session too, since server work can outlive its turn. */
   readonly close: (sessionID: string) => Effect.Effect<void, ACPError.Error | RequestError>
@@ -223,7 +230,7 @@ export const make = Effect.fnUntraced(function* (input: {
     }
   })
 
-  const submit = Effect.fnUntraced(function* (attached: Attached, prompt: ACPPrompt.Prepared) {
+  const submitSynthetic = Effect.fnUntraced(function* (attached: Attached, prompt: ACPPrompt.Prepared) {
     const sessionID = attached.id
     if (prompt.synthetic.length > 0) {
       yield* input.client.session
@@ -236,6 +243,28 @@ export const make = Effect.fnUntraced(function* (input: {
         })
         .pipe(Effect.catch(ACPClient.classify))
     }
+  })
+
+  const submitInput = Effect.fnUntraced(function* (
+    attached: Attached,
+    prompt: ACPPrompt.Prepared,
+    options?: { readonly resume: false },
+  ) {
+    yield* input.client.session
+      .prompt({
+        sessionID: attached.id,
+        id: prompt.start.id,
+        text: prompt.text,
+        files: prompt.files,
+        delivery: "steer",
+        ...options,
+      })
+      .pipe(Effect.catch(ACPClient.classify))
+  })
+
+  const submit = Effect.fnUntraced(function* (attached: Attached, prompt: ACPPrompt.Prepared) {
+    const sessionID = attached.id
+    yield* submitSynthetic(attached, prompt)
     if (prompt.start.type === "compaction") {
       yield* input.client.session.compact({ sessionID, id: prompt.start.id }).pipe(Effect.catch(ACPClient.classify))
       return
@@ -253,9 +282,7 @@ export const make = Effect.fnUntraced(function* (input: {
         .pipe(Effect.catch(ACPClient.classify))
       return
     }
-    yield* input.client.session
-      .prompt({ sessionID, id: prompt.start.id, text: prompt.text, files: prompt.files, delivery: "steer" })
-      .pipe(Effect.catch(ACPClient.classify))
+    yield* submitInput(attached, prompt)
   })
 
   const windDown = Effect.fnUntraced(function* (
@@ -390,6 +417,16 @@ export const make = Effect.fnUntraced(function* (input: {
       // A `$/cancel_request` for this prompt cancels its turn like `session/cancel`, rather than failing the request.
       yield* aborted(signal).pipe(Effect.andThen(Fiber.interrupt(turn)), Effect.forkChild)
       return yield* Fiber.join(turn)
+    }),
+    steer: Effect.fn("cli.acp.turn.steer")(function* (params) {
+      const attached = yield* input.sessions.require(params.sessionId)
+      const active = yield* input.client.session.active().pipe(Effect.catch(ACPClient.classify))
+      if (!(attached.id in active)) return { outcome: "promptRequired", reason: "noRunningTurn" } as const
+      const prompt = yield* ACPPrompt.prepare(yield* input.catalog.get(attached.cwd), params.prompt)
+      yield* submitSynthetic(attached, prompt)
+      // Without resume, a session that went idle after the check keeps the steer queued instead of starting a turn.
+      yield* submitInput(attached, prompt, { resume: false })
+      return { outcome: "injected" } as const
     }),
     cancel: Effect.fnUntraced(function* (params) {
       yield* FiberMap.remove(turns, params.sessionId)
