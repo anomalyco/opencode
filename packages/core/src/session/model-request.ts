@@ -73,6 +73,7 @@ export interface Prepared<Event = SessionRequest> {
 export interface Input {
   readonly session: SessionSchema.Info
   readonly agent: Agent.ID
+  readonly effort?: Agent.Info["effort"]
   readonly model: SessionRunnerModel.Resolved
   readonly tools?: Tool.Snapshot
   readonly system: Array<SystemPart>
@@ -298,7 +299,18 @@ export const layer = Layer.effect(
         tools: Array.from(hooked, ([name, t]) => ({ ...t, name })),
         toolChoice: input.toolChoice,
         generation: Object.keys(generation).length === 0 ? undefined : generation,
-        providerOptions: Object.keys(providerOptions).length === 0 ? undefined : providerOptions,
+        // A selected agent may override thinking effort without changing model or variant.
+        providerOptions:
+          input.effort === undefined
+            ? Object.keys(providerOptions).length === 0
+              ? undefined
+              : providerOptions
+            : {
+                ...providerOptions,
+                ...(model.model.route.protocol === "anthropic-messages"
+                  ? { effort: input.effort }
+                  : { reasoningEffort: input.effort }),
+              },
       })
 
       const baseURL = base.model.route.endpoint.baseURL

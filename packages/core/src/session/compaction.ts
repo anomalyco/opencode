@@ -588,6 +588,7 @@ export const layer = Layer.effect(
       return requests.compaction({
         session: context.session,
         agent: context.agent.id,
+        effort: context.agent.info.effort,
         model: context.model,
         tools: context.tools,
         system: base.system,

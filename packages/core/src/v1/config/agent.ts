@@ -15,6 +15,9 @@ const AgentSchema = Schema.StructWithRest(
     variant: Schema.optional(Schema.String).annotate({
       description: "Default model variant for this agent (applies only when using the agent's configured model).",
     }),
+    effort: Schema.optional(Schema.String).annotate({
+      description: "Override the reasoning effort independently of the selected or inherited model.",
+    }),
     temperature: Schema.optional(Schema.Finite),
     top_p: Schema.optional(Schema.Finite),
     prompt: Schema.optional(Schema.String),
