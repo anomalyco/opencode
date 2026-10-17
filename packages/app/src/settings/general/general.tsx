@@ -19,6 +19,7 @@ import { createShellOptions, type ShellSettingsController } from "./controllers"
 import "@/settings/settings.css"
 
 const tabLayoutOptions: ("horizontal" | "vertical")[] = ["horizontal", "vertical"]
+const verticalTabPositionOptions: ("top" | "bottom")[] = ["top", "bottom"]
 
 const AutoApprovePermissionsSetting: Component = () => {
   const language = useLanguage()
@@ -217,6 +218,33 @@ const TabLayoutSetting = () => {
   )
 }
 
+const VerticalTabPositionSetting = () => {
+  const language = useLanguage()
+  const settings = useSettings()
+  return (
+    <Show when={settings.appearance.tabLayout() === "vertical"}>
+      <SettingsRow
+        title={language.t("settings.appearance.row.verticalTabPosition.title")}
+        description={language.t("settings.appearance.row.verticalTabPosition.description")}
+      >
+        <Select
+          options={verticalTabPositionOptions}
+          current={settings.appearance.verticalTabPosition()}
+          aria-label={language.t("settings.appearance.row.verticalTabPosition.title")}
+          placement="bottom-end"
+          gutter={6}
+          label={(option) =>
+            option === "top"
+              ? language.t("settings.appearance.row.verticalTabPosition.top")
+              : language.t("settings.appearance.row.verticalTabPosition.bottom")
+          }
+          onSelect={(option) => option && settings.appearance.setVerticalTabPosition(option)}
+        />
+      </SettingsRow>
+    </Show>
+  )
+}
+
 export const SettingsGeneral: Component = () => {
   const language = useLanguage()
   const platform = usePlatform()
@@ -244,6 +272,7 @@ export const SettingsGeneral: Component = () => {
       <SettingsList>
         <LanguageSetting />
         <TabLayoutSetting />
+        <VerticalTabPositionSetting />
 
         <WorkspaceDestinationSetting />
         <AutoApprovePermissionsSetting />
