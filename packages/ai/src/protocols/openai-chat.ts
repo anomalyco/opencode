@@ -599,7 +599,16 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, options:
   const flushAttachments = () => {
     if (pendingAttachments.length === 0) return
     bridgeTools()
-    messages.push({ role: "user", content: pendingAttachments.splice(0) })
+    const content = pendingAttachments.splice(0)
+    // OpenRouter's Gemini translation rejects image-only tool continuations when
+    // the preceding model turn carries thought signatures.
+    const prefix =
+      request.model.provider === "openrouter" &&
+      modelID.startsWith("google/gemini-") &&
+      content.every((part) => part.type === "image_url")
+        ? [{ type: "text" as const, text: "Attached media from tool result:" }]
+        : []
+    messages.push({ role: "user", content: [...prefix, ...content] })
   }
   for (const message of request.messages) {
     if (message.role === "user") bridgeTools()
