@@ -25,6 +25,7 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
 import { ServerRowMenuView, serverMenuLabels } from "@/servers/registry/row-menu"
 import { ServerHealthIndicator } from "@/servers/registry/row"
+import { HELP_LINKS } from "@/shell/help"
 import { type ServerHealth } from "@/runtime/server/health"
 import { fileManagerApp } from "@/home/projects/file-manager"
 import "./view.css"
@@ -75,7 +76,7 @@ export type HomeProjectsViewProps = {
   onClearNotifications: (server: ServerConnection.Any, project: LocalProject) => void
   onCloseProject: (server: ServerConnection.Any, directory: string) => void
   onOpenSettings: () => void
-  onOpenHelp: () => void
+  onOpenHelp: (href: string) => void
 }
 
 export function HomeProjectsView(props: HomeProjectsViewProps) {
@@ -313,7 +314,7 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
 export function HomeUtilityNav(props: {
   class?: string
   onOpenSettings: () => void
-  onOpenHelp: () => void
+  onOpenHelp: (href: string) => void
   language: ReturnType<typeof useLanguage>
 }) {
   return (
@@ -328,14 +329,29 @@ export function HomeUtilityNav(props: {
         <Icon name="settings-gear" size="small" />
         <span class={HOME_PROJECT_NAV_LABEL}>{props.language.t("sidebar.settings")}</span>
       </HomeProjectNavButton>
-      <HomeProjectNavButton
-        type="button"
-        class="text-v2-text-text-faint [&>[data-slot=icon-svg]]:text-v2-icon-icon-muted"
-        onClick={props.onOpenHelp}
-      >
-        <Icon name="help" size="small" />
-        <span class={HOME_PROJECT_NAV_LABEL}>{props.language.t("sidebar.help")}</span>
-      </HomeProjectNavButton>
+      <Menu gutter={6} modal={false} placement="top-start">
+        <Menu.Trigger
+          as={HomeProjectNavButton}
+          type="button"
+          class="text-v2-text-text-faint [&>[data-slot=icon-svg]]:text-v2-icon-icon-muted"
+        >
+          <Icon name="help" size="small" />
+          <span class={HOME_PROJECT_NAV_LABEL}>{props.language.t("sidebar.help")}</span>
+        </Menu.Trigger>
+        <Menu.Portal>
+          <Menu.Content>
+            <Menu.Group>
+              <For each={HELP_LINKS}>
+                {(link) => (
+                  <Menu.Item onSelect={() => props.onOpenHelp(link.href)}>
+                    {props.language.t(link.labelKey)}
+                  </Menu.Item>
+                )}
+              </For>
+            </Menu.Group>
+          </Menu.Content>
+        </Menu.Portal>
+      </Menu>
     </div>
   )
 }
