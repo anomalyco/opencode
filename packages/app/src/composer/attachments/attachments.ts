@@ -53,6 +53,11 @@ export function createComposerAttachments(
     return { prompt, cursor: prompt.cursor() ?? cursorPosition(editor) }
   }
 
+  // The composer fires these off without awaiting (`void attachments.handleDrop(event)`), and the
+  // document-level drop listener cannot await either. Persisting an inline attachment can fail, so
+  // the failure has to be reported here rather than rejecting where nobody is listening.
+  const report = <T>(operation: Promise<T>) => operation.catch(input.onError)
+
   // Uploads this composer started; they finish (or fail) even if the composer unmounts.
   const [pending, setPending] = createStore<{ ids: string[] }>({ ids: [] })
 
@@ -235,13 +240,13 @@ export function createComposerAttachments(
     makeEventListener(document, "keydown", (event) => {
       if (event.key === "Escape") clearDrag()
     })
-    makeEventListener(document, "drop", handleDrop)
+    makeEventListener(document, "drop", (event) => report(handleDrop(event)))
   })
 
   return {
-    addAttachments,
-    handlePaste,
-    handleDrop,
+    addAttachments: (files: File[], target?: ReturnType<typeof capture>) => report(addAttachments(files, target)),
+    handlePaste: (event: ClipboardEvent) => report(handlePaste(event)),
+    handleDrop: (event: DragEvent) => report(handleDrop(event)),
     /** Uploads still in flight for this composer; sending waits for them. */
     pending: () => uploads.items().filter((item) => pending.ids.includes(item.id)),
     cancel(id: string) {
