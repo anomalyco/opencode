@@ -452,6 +452,7 @@ describe("OpencodePlugin", () => {
                         settings: { baseURL: `${origin}/anthropic` },
                       },
                       disabled: { name: "Disabled", disabled: true },
+                      "*": { disabled: true },
                     },
                   },
                 },
@@ -554,6 +555,7 @@ describe("OpencodePlugin", () => {
               ?.settings?.baseURL,
           ).toBe("https://upstream.example/v1")
           expect(yield* models.get(Provider.ID.openai, Model.ID.make("api-model"))).toBeUndefined()
+          expect(yield* models.get(Provider.ID.make("remote"), Model.ID.make("*"))).toBeUndefined()
 
           yield* credentials.update(initial.id, { label: "Renamed" })
           yield* Effect.yieldNow
