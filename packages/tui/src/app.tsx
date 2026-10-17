@@ -11,6 +11,7 @@ import { LogProvider, type LogSink } from "./context/log"
 import { ExitProvider, useExit } from "./context/exit"
 import { EpilogueProvider } from "./context/epilogue"
 import { Selection } from "./util/selection"
+import { noTimeoutFetch } from "./util/no-timeout-fetch"
 import {
   CliRenderEvents,
   createCliRenderer,
@@ -213,7 +214,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   const config = Config.resolve(yield* Effect.tryPromise(() => input.config.get()), {
     terminalSuspend: process.platform !== "win32",
   })
-  const options = { baseUrl: input.server.endpoint.url, headers: Service.headers(input.server.endpoint) }
+  const options = { baseUrl: input.server.endpoint.url, headers: Service.headers(input.server.endpoint), fetch: noTimeoutFetch }
   const api = OpenCode.make(options)
   const location = yield* Effect.tryPromise(() => api.file.list({ location: { directory: process.cwd() } })).pipe(
     Effect.map((response) => response.location),
@@ -227,7 +228,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
     ? {
         reconnect: async (signal: AbortSignal) => {
           const endpoint = await managed.reconnect(signal)
-          const next = { baseUrl: endpoint.url, headers: Service.headers(endpoint) }
+          const next = { baseUrl: endpoint.url, headers: Service.headers(endpoint), fetch: noTimeoutFetch }
           return { api: OpenCode.make(next), url: endpoint.url }
         },
         restart: managed.restart,
