@@ -1,5 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer, RcMap, Scope } from "effect"
+import { sql } from "drizzle-orm"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Database } from "@opencode/core/database/database"
@@ -112,6 +113,92 @@ describe("Session.remove", () => {
         _tag: "Failure",
         failure: { _tag: "Session.NotFoundError", sessionID },
       })
+    }),
+  )
+
+  it.effect("removes legacy V1 rows left behind by the V1→V2 migration", () =>
+    Effect.gen(function* () {
+      const temporary = yield* tmpdirScoped()
+      const location = Location.Ref.make({ directory: AbsolutePath.make(temporary.path) })
+      const session = yield* Session.Service
+      const db = (yield* Database.Service).db
+      // Reproduce the V1→V2-migrated shape: the legacy store (as created by the
+      // 20260127222353 migration) survives alongside session_v2. Fresh bootstrap
+      // databases never create it, so the test materializes it explicitly.
+      yield* db.run(sql`
+        CREATE TABLE IF NOT EXISTS session (
+          id text PRIMARY KEY,
+          project_id text NOT NULL,
+          parent_id text,
+          slug text NOT NULL,
+          directory text NOT NULL,
+          title text NOT NULL,
+          version text NOT NULL,
+          time_created integer NOT NULL,
+          time_updated integer NOT NULL,
+          CONSTRAINT fk_session_project_id_project_id_fk FOREIGN KEY (project_id) REFERENCES project (id) ON DELETE CASCADE
+        )
+      `)
+      yield* db.run(sql`
+        CREATE TABLE IF NOT EXISTS message (
+          id text PRIMARY KEY,
+          session_id text NOT NULL,
+          time_created integer NOT NULL,
+          time_updated integer NOT NULL,
+          data text NOT NULL,
+          CONSTRAINT fk_message_session_id_session_id_fk FOREIGN KEY (session_id) REFERENCES session (id) ON DELETE CASCADE
+        )
+      `)
+      yield* db.run(sql`
+        CREATE TABLE IF NOT EXISTS part (
+          id text PRIMARY KEY,
+          message_id text NOT NULL,
+          session_id text NOT NULL,
+          time_created integer NOT NULL,
+          time_updated integer NOT NULL,
+          data text NOT NULL,
+          CONSTRAINT fk_part_message_id_message_id_fk FOREIGN KEY (message_id) REFERENCES message (id) ON DELETE CASCADE
+        )
+      `)
+      yield* db.run(sql`
+        CREATE TABLE IF NOT EXISTS todo (
+          session_id text NOT NULL,
+          content text NOT NULL,
+          status text NOT NULL,
+          priority text NOT NULL,
+          position integer NOT NULL,
+          time_created integer NOT NULL,
+          time_updated integer NOT NULL,
+          CONSTRAINT todo_pk PRIMARY KEY (session_id, position),
+          CONSTRAINT fk_todo_session_id_session_id_fk FOREIGN KEY (session_id) REFERENCES session (id) ON DELETE CASCADE
+        )
+      `)
+      const migrated = yield* session.create({ location })
+      yield* db.run(sql`
+        INSERT INTO session (id, project_id, slug, directory, title, version, time_created, time_updated)
+        SELECT id, project_id, slug, directory, coalesce(title, ''), version, time_created, time_updated
+        FROM session_v2 WHERE id = ${migrated.id}
+      `)
+      yield* db.run(sql`
+        INSERT INTO message (id, session_id, time_created, time_updated, data)
+        VALUES ('msg_legacy_1', ${migrated.id}, 0, 0, '{}')
+      `)
+      yield* db.run(sql`
+        INSERT INTO part (id, message_id, session_id, time_created, time_updated, data)
+        VALUES ('part_legacy_1', 'msg_legacy_1', ${migrated.id}, 0, 0, '{}')
+      `)
+      yield* db.run(sql`
+        INSERT INTO todo (session_id, content, status, priority, position, time_created, time_updated)
+        VALUES (${migrated.id}, 'legacy', 'pending', 'high', 0, 0, 0)
+      `)
+
+      yield* session.remove(migrated.id)
+
+      expect((yield* session.list()).data).toEqual([])
+      expect((yield* db.get<{ value: number }>(sql`SELECT COUNT(*) AS value FROM session WHERE id = ${migrated.id}`))?.value).toBe(0)
+      expect((yield* db.get<{ value: number }>(sql`SELECT COUNT(*) AS value FROM message WHERE session_id = ${migrated.id}`))?.value).toBe(0)
+      expect((yield* db.get<{ value: number }>(sql`SELECT COUNT(*) AS value FROM part WHERE session_id = ${migrated.id}`))?.value).toBe(0)
+      expect((yield* db.get<{ value: number }>(sql`SELECT COUNT(*) AS value FROM todo WHERE session_id = ${migrated.id}`))?.value).toBe(0)
     }),
   )
 })
