@@ -114,6 +114,14 @@ test("shows the TPS default in session settings", () => {
   expect(setting?.default).toBe(true)
 })
 
+test("shows the model label setting in session settings", () => {
+  expect(settings.find((setting) => setting.path.join(".") === "session.model_label")).toMatchObject({
+    category: "Session",
+    default: "name",
+    values: ["name", "id"],
+  })
+})
+
 test("shows transcript verbosity in session settings", () => {
   expect(settings.find((setting) => setting.path.join(".") === "session.verbosity")).toMatchObject({
     category: "Session",
