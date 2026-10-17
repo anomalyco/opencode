@@ -183,20 +183,26 @@ function decode(file: { directory: string; filepath: string; primary: boolean },
     .replace(/^(agent|agents|mode|modes)\//, "")
     .replace(/\.md$/, "")
   const body = markdown.content.trim()
-  const legacy = Object.keys(markdown.data).some((key) => !agentKeys.has(key))
+  // V1 accepted theme color names for `color`; translate them to hex so the hex-only V2 schema
+  // keeps the agent instead of dropping it (and so legacy migration no longer greys the color out).
+  const frontmatter =
+    typeof markdown.data.color === "string"
+      ? { ...markdown.data, color: ConfigAgentV1.resolveThemeColor(markdown.data.color) }
+      : markdown.data
+  const legacy = Object.keys(frontmatter).some((key) => !agentKeys.has(key))
   // Join legacy model + variant without sending native request/permissions through migration.
   // Embedded and structured native selections, and a variant without a model, stay unchanged.
   const data =
-    typeof markdown.data.model === "string" &&
-    !markdown.data.model.includes("#") &&
-    typeof markdown.data.variant === "string" &&
-    /^[^#]+$/.test(markdown.data.variant)
-      ? { ...markdown.data, model: `${markdown.data.model}#${markdown.data.variant}` }
-      : markdown.data
+    typeof frontmatter.model === "string" &&
+    !frontmatter.model.includes("#") &&
+    typeof frontmatter.variant === "string" &&
+    /^[^#]+$/.test(frontmatter.variant)
+      ? { ...frontmatter, model: `${frontmatter.model}#${frontmatter.variant}` }
+      : frontmatter
   const agent = legacy
     ? Option.getOrUndefined(
         Option.map(
-          decodeLegacyAgent({ name, ...markdown.data, prompt: body }, { errors: "all" }),
+          decodeLegacyAgent({ name, ...frontmatter, prompt: body }, { errors: "all" }),
           ConfigMigrateV1.migrateAgent,
         ),
       )
