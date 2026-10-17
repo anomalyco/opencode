@@ -289,6 +289,36 @@ OpenCode then marks the last tool definition, the system prompt, and the latest 
 for Alibaba Model Studio models, which accept the same markers but ignore them on tool definitions. Set
 `compatibility.cacheFormat` on the provider instead when every model it serves accepts the same format.
 
+## Decision gate
+
+The experimental decision gate checks each new message before the model call. When it is confident a message is plain
+chat, such as a greeting, a thank-you, or "got it", the first step of that reply runs on a fast model instead of the
+session's model. Every other message goes to the session's model as usual.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "decision_gate": {
+      "mode": "route",
+      "model": "openai/gpt-5-mini",
+    },
+  },
+}
+```
+
+- `mode: "observe"` only logs what the gate decides (`decision gate decided` in the server log) and changes nothing.
+  Use it to check the decisions before turning on routing.
+- `mode: "route"` sends confident plain-chat messages to the fast model.
+- `model` is the fast model. It defaults to the small model of the session's provider.
+
+The gate keeps the session's model when the fast model can't be resolved, when the conversation would take more than
+half of the fast model's context window, or when the fast model's step fails or is retried. If the fast model calls a
+tool, the following steps run on the session's model.
+
+The decision gate follows a proposal by Andrea Bruno
+([harness-superfast](https://github.com/Andrea-Bruno/harness-superfast)).
+
 ## Local
 
 OpenCode automatically discovers models from Ollama, LM Studio, and vLLM at their default local addresses. You can also

@@ -540,6 +540,17 @@ describe("ConfigNormalize", () => {
     })
   })
 
+  test("keeps the experimental decision gate and rejects an unknown mode", () => {
+    expect(
+      normalized({ experimental: { decision_gate: { mode: "route", model: "openai/gpt-5-mini" } } }).encoded,
+    ).toEqual({
+      experimental: { decision_gate: { mode: "route", model: { providerID: "openai", model: "gpt-5-mini" } } },
+    })
+    const invalid = normalized({ experimental: { decision_gate: { mode: "answer" } } })
+    expect(invalid.encoded).toEqual({})
+    expect(invalid.diagnostics).toContainEqual(expect.objectContaining({ path: ["experimental", "decision_gate"] }))
+  })
+
   test("never emits experimental policies", () => {
     expect(
       normalized({ experimental: { policies: [{ action: "provider.use", resource: "*", effect: "deny" }] } }).encoded,

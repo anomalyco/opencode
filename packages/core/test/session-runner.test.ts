@@ -62,6 +62,7 @@ import { Agent } from "@opencode/core/agent"
 import { Config } from "@opencode/core/config"
 import { Document, Info } from "@opencode/schema/config"
 import { ConfigCompaction } from "@opencode/schema/config/compaction"
+import { ConfigExperimental } from "@opencode/schema/config/experimental"
 import { Tool } from "@opencode/core/tool"
 import type { Info as ToolInfo } from "@opencode/schema/tool"
 import { InstructionStateTable, SessionInboxTable, SessionMessageTable, SessionTable } from "@opencode/core/session/sql"
@@ -211,6 +212,7 @@ const makeRunnerState = (compaction?: SessionRunnerModel.Resolved["compaction"])
   return {
     currentModel: model,
     compaction,
+    decisionGate: undefined as ConfigExperimental.DecisionGate | undefined,
     modelResolveHook: resolvesModel,
     systemBaseline: "Initial context",
     systemRemoved: false,
@@ -393,7 +395,7 @@ const layer = Layer.unwrap(
       load: () => Effect.succeed(Instructions.empty),
     })
     const mcpInstructions = Layer.mock(McpInstructions.Service, { load: () => Effect.succeed(Instructions.empty) })
-    const config = Config.testLayer([
+    const baseConfig = Config.testLayer([
       new Document({
         type: "document",
         info: new Info({
@@ -404,6 +406,32 @@ const layer = Layer.unwrap(
         }),
       }),
     ])
+    const config = Layer.effect(
+      Config.Service,
+      Config.Service.use((base) =>
+        Effect.succeed(
+          Config.Service.of({
+            ...base,
+            entries: () =>
+              base.entries().pipe(
+                Effect.map((entries) =>
+                  state.decisionGate
+                    ? [
+                        ...entries,
+                        new Document({
+                          type: "document",
+                          info: new Info({
+                            experimental: new ConfigExperimental.Info({ decision_gate: state.decisionGate }),
+                          }),
+                        }),
+                      ]
+                    : entries,
+                ),
+              ),
+          }),
+        ),
+      ),
+    ).pipe(Layer.provide(baseConfig))
     const promptModels = Layer.mock(Model.Service, {
       get: () => Effect.undefined,
       all: () => Effect.succeed([]),
@@ -6807,5 +6835,37 @@ describe("SessionRunnerLLM", () => {
     expect(defect).toBeInstanceOf(Error)
     if (!(defect instanceof Error)) return
     expect(defect.message).toBe("Tool input delta before start: call-1")
+  })
+})
+
+describe("session.runner.decision-gate", () => {
+  const gate = (mode: ConfigExperimental.DecisionGate["mode"]) =>
+    new ConfigExperimental.DecisionGate({
+      mode,
+      model: { providerID: Provider.ID.make("fake"), model: ID.make("replacement") },
+    })
+
+  scenario("routes plain chat to the fast model and keeps other messages on the primary", function* (s) {
+    s.decisionGate = gate("route")
+    yield* s.runPrompt("Thanks!")
+    yield* s.runPrompt("Fix the failing test in src/app.ts")
+
+    expect(s.requests.map((request) => request.model)).toEqual([replacementModel, model])
+    expect(s.requests[0]?.system.map((part) => part.text)).toContain(replacementIdentity)
+  })
+
+  scenario("keeps the primary model when the request does not fit the fast model", function* (s) {
+    s.decisionGate = gate("route")
+    modelLimits.set("replacement", { context: 10, output: 5 })
+    yield* s.runPrompt("Thanks!").pipe(Effect.ensuring(Effect.sync(() => modelLimits.delete("replacement"))))
+
+    expect(s.requests.map((request) => request.model)).toEqual([model])
+  })
+
+  scenario("only observes in observe mode", function* (s) {
+    s.decisionGate = gate("observe")
+    yield* s.runPrompt("Thanks!")
+
+    expect(s.requests.map((request) => request.model)).toEqual([model])
   })
 })

@@ -476,6 +476,15 @@ function normalizeExperimental(
         )
         if (value !== undefined) result.subagent_depth = value
       }
+      if (own(experimental, "decision_gate")) {
+        const value = decodeEncoded(
+          ConfigExperimental.Info.fields.decision_gate,
+          experimental.decision_gate,
+          ["experimental", "decision_gate"],
+          diagnostics,
+        )
+        if (value !== undefined) result.decision_gate = value
+      }
     }
   }
   if (Object.keys(result).length || (isRecord(input.experimental) && !Object.keys(input.experimental).length))

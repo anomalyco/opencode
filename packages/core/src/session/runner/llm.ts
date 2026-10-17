@@ -9,6 +9,7 @@ import { LocationLifecycle } from "../../location-lifecycle.js"
 import { InstructionState } from "../instruction-state.js"
 import { SessionCompaction } from "../compaction.js"
 import { SessionContext } from "../context.js"
+import { SessionDecisionGate } from "../decision-gate.js"
 import { SessionEvent } from "../event.js"
 import { SessionInbox } from "../inbox.js"
 import { SessionHistory } from "../history.js"
@@ -51,6 +52,7 @@ const layer = Layer.effect(
     const plugins = yield* Plugin.Service
     const title = yield* SessionTitle.Service
     const steps = yield* SessionStep.make
+    const gate = yield* SessionDecisionGate.Service
     // Title generation starts once input is visible and must not delay model execution.
     const titles = yield* FiberMap.make<SessionSchema.ID, void, never>()
 
@@ -213,6 +215,8 @@ const layer = Layer.effect(
       let initial: SessionContext.Loaded | undefined = first
       let recoverOverflow = true
       let recoverContinuation = true
+      // Only a turn's first Step may use the fast model; any outcome other than completion returns to the primary.
+      let routed = step === 1 ? yield* gate.route(first) : undefined
       while (true) {
         // Reuse boundary preparation once; retries refresh context without delivering more input.
         const loaded = initial ?? (yield* prepareContext(sessionID).pipe(Effect.flatMap(context.load)))
@@ -223,10 +227,12 @@ const layer = Layer.effect(
           assistantMessageID = SessionMessage.ID.create()
           continue
         }
+        // Compaction sizes against the primary model; the gate only routes requests that fit the fast one.
+        const model = routed ?? loaded.model
         const stepLimitReached = loaded.agent.info.steps !== undefined && step >= loaded.agent.info.steps
         const transcript = SessionModelRequest.baseTranscript({
           agent: loaded.agent.info,
-          model: loaded.model,
+          model: model,
           tools: loaded.tools,
           initial: loaded.initial,
           messages: loaded.messages,
@@ -234,7 +240,7 @@ const layer = Layer.effect(
         const prepared = yield* context.request.primary({
           session: loaded.session,
           agent: loaded.agent.id,
-          model: loaded.model,
+          model: model,
           tools: loaded.tools,
           system: transcript.system,
           messages: stepLimitReached
@@ -250,14 +256,14 @@ const layer = Layer.effect(
           sessionID,
           assistantMessageID,
           agent: loaded.agent.id,
-          model: loaded.model,
+          model: model,
           prepared,
           retry: (cause, error, proposed) =>
             retry.decide({
               cause,
               error,
               agent: loaded.agent.id,
-              model: loaded.model.ref,
+              model: model.ref,
               hook: prepared.retry,
               retry: proposed,
             }),
@@ -270,6 +276,7 @@ const layer = Layer.effect(
               : Effect.succeed(false),
           ),
         })
+        if (outcome._tag !== "Completed") routed = undefined
         const completed = yield* SessionStep.Outcome.$match(outcome, {
           Completed: (outcome) => Effect.succeed(outcome.needsContinuation),
           Retry: (outcome) =>
@@ -399,6 +406,7 @@ export const node = makeLocationNode({
     SessionModelTransport.node,
     SessionStore.node,
     SessionCompaction.node,
+    SessionDecisionGate.node,
     Plugin.node,
     SessionTitle.node,
     Snapshot.node,

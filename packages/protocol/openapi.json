@@ -14180,6 +14180,45 @@
                 "type": "integer",
                 "minimum": 0
               },
+              "decision_gate": {
+                "type": "object",
+                "properties": {
+                  "mode": {
+                    "type": "string",
+                    "enum": ["observe", "route"],
+                    "description": "`observe` logs what the gate would decide without changing anything. `route` sends the first step of messages the gate is confident are plain chat to the fast model."
+                  },
+                  "model": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^[^/#]+\\/[^#]+(?:#[^#]+)?$"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "providerID": {
+                            "type": "string",
+                            "pattern": "^[^/#]+$"
+                          },
+                          "model": {
+                            "type": "string",
+                            "pattern": "^[^#]+$"
+                          },
+                          "variant": {
+                            "type": "string",
+                            "pattern": "^[^#]+$"
+                          }
+                        },
+                        "required": ["providerID", "model"],
+                        "additionalProperties": false
+                      }
+                    ]
+                  }
+                },
+                "required": ["mode"],
+                "additionalProperties": false
+              },
               "policies": {
                 "type": "array",
                 "items": {
