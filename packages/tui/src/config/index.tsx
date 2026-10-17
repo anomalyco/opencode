@@ -66,6 +66,15 @@ export const Cursor = Schema.Struct({
   }),
 }).annotate({ description: "Terminal cursor settings" })
 
+export const PermissionPrompt = Schema.Struct({
+  max_height: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))).annotate({
+    description: "Maximum height in rows when not fullscreen (default: 15)",
+  }),
+  default_expanded: Schema.optional(Schema.Boolean).annotate({
+    description: "Open in fullscreen mode by default (default: false)",
+  }),
+}).annotate({ description: "Permission prompt presentation settings" })
+
 export const Info = Schema.Struct({
   theme: Schema.optional(
     Schema.Struct({
@@ -149,6 +158,7 @@ export const Info = Schema.Struct({
       }),
     }),
   ).annotate({ description: "Prompt input behavior" }),
+  permission_prompt: Schema.optional(PermissionPrompt),
   session: Schema.optional(
     Schema.Struct({
       sidebar: Schema.optional(Schema.Literals(["auto", "hide"])).annotate({
