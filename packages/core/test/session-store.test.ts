@@ -21,7 +21,7 @@ const it = testEffect(
   ]),
 )
 
-const seedSessions = (rows: { id: string; updated: number }[]) =>
+const seedSessions = (rows: { id: string; updated: number; title?: string }[]) =>
   Effect.gen(function* () {
     const database = yield* Database.Service
     const bus = yield* Bus.Service
@@ -43,7 +43,7 @@ const seedSessions = (rows: { id: string; updated: number }[]) =>
           aggregateID: sessionID,
           seq: 1,
           type: Bus.versionedType(SessionEvent.Renamed.type, 1),
-          data: { sessionID, title: row.id },
+          data: { sessionID, title: row.title ?? row.id },
         })
       }),
     )
@@ -51,6 +51,25 @@ const seedSessions = (rows: { id: string; updated: number }[]) =>
   })
 
 describe("SessionStore", () => {
+  it.effect("treats wildcard characters in title searches literally", () =>
+    Effect.gen(function* () {
+      yield* seedSessions([
+        { id: "ses_literal", updated: 30, title: "release_100%" },
+        { id: "ses_wildcard", updated: 20, title: "releaseX1000" },
+        { id: "ses_percent", updated: 10, title: "100% ready" },
+      ])
+      const store = yield* SessionStore.Service
+
+      expect((yield* store.list({ search: "release_100%" })).map((session) => session.id)).toEqual([
+        Session.ID.make("ses_literal"),
+      ])
+      expect((yield* store.list({ search: "100%" })).map((session) => session.id)).toEqual([
+        Session.ID.make("ses_literal"),
+        Session.ID.make("ses_percent"),
+      ])
+    }),
+  )
+
   it.effect("lists by updated time and ID with exclusive two-item pages in either direction", () =>
     Effect.gen(function* () {
       yield* seedSessions([
