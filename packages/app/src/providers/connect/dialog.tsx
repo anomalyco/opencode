@@ -81,6 +81,8 @@ export const DialogConnectProvider: Component<{
   /** Connects at the server's default Location instead of the current route's directory. */
   defaultLocation?: boolean
   controller?: ReturnType<typeof useProviderConnectController>
+  /** Opened for one provider from another flow: no way back to the provider list, and the dialog wraps its content. */
+  standalone?: boolean
   selection?: ModelSelection
   onDone?: () => void
   onConnected?: (provider: string) => void
@@ -94,11 +96,13 @@ export const DialogConnectProvider: Component<{
     authorization: boolean
     chatgptWelcome: boolean
     picked: boolean
+    stepBack: boolean
   }>({
     completed: false,
     authorization: false,
     chatgptWelcome: false,
     picked: false,
+    stepBack: false,
   })
 
   const language = useLanguage()
@@ -149,6 +153,7 @@ export const DialogConnectProvider: Component<{
               }}
               onFirstConnection={(provider) => setState("modelProvider", provider)}
               onAuthorization={(authorization) => setState("authorization", authorization)}
+              onStepBack={(stepBack) => setState("stepBack", stepBack)}
             />
           )}
         </Match>
@@ -167,7 +172,10 @@ export const DialogConnectProvider: Component<{
           ? "!h-[min(calc(100vh_-_16px),560px)] !w-[min(calc(100vw_-_16px),640px)]"
           : consoleSelected() && state.authorization
             ? "!h-auto !max-h-[min(calc(100vh_-_16px),560px)] !w-[min(calc(100vw_-_16px),640px)]"
-            : "!h-[min(calc(100vh_-_16px),512px)] !w-[min(calc(100vw_-_16px),640px)]"
+            : props.standalone
+              ? // The floor is the API key step's height, so switching between it and the intro doesn't jump.
+                "!h-auto !min-h-[min(calc(100vh_-_16px),252px)] !max-h-[min(calc(100vh_-_16px),560px)] !w-[min(calc(100vw_-_16px),640px)]"
+              : "!h-[min(calc(100vh_-_16px),512px)] !w-[min(calc(100vw_-_16px),640px)]"
       }
       onCloseAutoFocus={(event) => {
         if (state.completed && props.onDone) {
@@ -199,7 +207,7 @@ export const DialogConnectProvider: Component<{
               </div>
             )}
           </Match>
-          <Match when={controller.selected()}>
+          <Match when={controller.selected() && (!props.standalone || state.stepBack)}>
             <button
               type="button"
               class="flex size-5 items-center justify-center rounded-sm text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
@@ -209,8 +217,12 @@ export const DialogConnectProvider: Component<{
               <Icon name="arrow-left" size="small" />
             </button>
           </Match>
-          <Match when={true}>
+          <Match when={!props.standalone}>
             <DialogTitle>{language.t("command.provider.connect")}</DialogTitle>
+          </Match>
+          <Match when={true}>
+            {/* Holds the back button's space so the content doesn't shift when it appears. */}
+            <span aria-hidden="true" class="size-5" />
           </Match>
         </Switch>
       </DialogHeader>
@@ -414,6 +426,7 @@ function ProviderConnection(props: {
   onConnected?: (methodID?: string) => void
   onFirstConnection: (provider: { id: string; name: string }) => void
   onAuthorization: (authorization: boolean) => void
+  onStepBack: (stepBack: boolean) => void
   accounts?: boolean
 }) {
   const dialog = useDialog()
@@ -912,20 +925,25 @@ function ProviderConnection(props: {
     )
   }
 
+  const backToAccounts = () =>
+    !!props.accounts &&
+    state.adding &&
+    accounts().length > 0 &&
+    (state.direct || controller.methodIndex() === undefined)
+
+  const backToMethods = () => (isConsole || controller.methods().length > 1) && controller.methodIndex() !== undefined
+
+  createEffect(() => props.onStepBack(backToAccounts() || backToMethods()))
+
   function goBack() {
-    if (
-      props.accounts &&
-      state.adding &&
-      accounts().length > 0 &&
-      (state.direct || controller.methodIndex() === undefined)
-    ) {
+    if (backToAccounts()) {
       controller.auth.reset()
       setState({ adding: false, direct: false })
 
       return
     }
 
-    if ((isConsole || controller.methods().length > 1) && controller.methodIndex() !== undefined) {
+    if (backToMethods()) {
       controller.auth.reset()
 
       return

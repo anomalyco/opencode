@@ -123,6 +123,7 @@ type TimelineServerInput = Partial<
     | "fileList"
     | "fileContent"
     | "findFiles"
+    | "integrations"
     | "pty"
     | "keepalive"
     | "onPermissionReply"

@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test"
 import type { ConfigEntry, OpenCodeEvent, WorktreeDirectory } from "@opencode/client/promise"
 import { NO_PROVIDER, REMOTE_SERVER, SERVER, holdRoute, project, session } from "../utils/app"
 import { mockMissingLocation, mockOpenCodeServer } from "../utils/mock-server"
+import { event, sessionID, setupTimeline } from "../utils/timeline"
 import { mockRemoteServer, mockWorkspace, openSettings, type WorkspaceInput } from "../utils/workspace"
 
 const directory = "C:/Projects/settings-demo"
@@ -840,6 +841,48 @@ for (const row of [
     await expect.poll(async () => (await container.boundingBox())?.height).toBeLessThan(512)
   })
 }
+
+test("providers: the free tier upsell opens Go sign-in on its own, sized to its content", async ({ page }) => {
+  const timeline = await setupTimeline(page, { integrations: consoleIntegrations })
+  await timeline.send(
+    event("session.status", {
+      sessionID,
+      status: {
+        type: "retry",
+        attempt: 1,
+        message: "Free tier limit reached",
+        next: 1700000060000,
+        action: {
+          reason: "free_tier_limit",
+          provider: "opencode",
+          title: "Free tier limit reached",
+          message: "Subscribe to OpenCode Go to keep going.",
+          label: "Continue with OpenCode Go",
+        },
+      },
+    }),
+  )
+  await page.getByRole("button", { name: "Continue with OpenCode Go", exact: true }).click()
+
+  const dialog = page.getByRole("dialog", { name: "Connect OpenCode Go", exact: true })
+  const container = page.locator('[data-slot="dialog-container"]')
+  const back = dialog.getByRole("button", { name: "Navigate back", exact: true })
+  const useKey = dialog.getByRole("button", { name: "Use API key", exact: true })
+  await expect(useKey).toBeVisible()
+  // Nothing to go back to: the upsell opened the dialog straight on Go.
+  await expect(back).toHaveCount(0)
+  await expect.poll(async () => (await container.boundingBox())?.height).toBeLessThan(512)
+  const height = (await container.boundingBox())?.height
+
+  // The API key step keeps the intro's height, and its back button returns to the intro.
+  await useKey.click()
+  await expect(dialog.getByPlaceholder("API key")).toBeVisible()
+  await expect.poll(async () => (await container.boundingBox())?.height).toBe(height)
+  await back.click()
+  await expect(useKey).toBeVisible()
+  await expect(back).toHaveCount(0)
+  await expect.poll(async () => (await container.boundingBox())?.height).toBe(height)
+})
 
 test("providers: the connect dialog lists connected providers and manages their accounts", async ({ page }) => {
   const accounts = [
