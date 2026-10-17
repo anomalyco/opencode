@@ -1,15 +1,7 @@
 export * as CodeModeTool from "./tool.js"
 
 import { CodeMode, Namespace, Tool, toolError } from "@opencode/codemode"
-import type {
-  Content,
-  Context,
-  Error,
-  Info,
-  Metadata,
-  Namespace as ToolNamespace,
-  Result,
-} from "@opencode/schema/tool"
+import type { Content, Context, Error, Info, Metadata, Namespace as ToolNamespace, Result } from "@opencode/schema/tool"
 import { Effect, Ref, Schema, Semaphore } from "effect"
 import { definition, normalizedName } from "../tool/runtime.js"
 import { CodeModeCatalog } from "./catalog.js"
@@ -26,6 +18,11 @@ const ExecuteCall = Schema.Struct({
   status: Schema.Literals(["running", "completed", "error"]),
   input: Schema.optionalKey(Schema.Record(Schema.String, Schema.Json)),
 })
+
+// Completed results and logs get separate budgets so either can survive a large output from the other.
+const PARTIAL_BYTES = 8 * 1024
+const CALL_BYTES = 2 * 1024
+const TRUNCATED = "[truncated]"
 
 type ExecuteCall = typeof ExecuteCall.Type
 
@@ -82,6 +79,7 @@ export const create = (
         const callIndex = yield* Ref.make(0)
         const files = yield* Ref.make<Array<CollectedFiles>>([])
         const calls = yield* Ref.make<Array<ExecuteCall>>([])
+        const previews = new Map<number, string>()
         const lock = Semaphore.makeUnsafe(1)
         const record = (update: (items: Array<ExecuteCall>) => Array<ExecuteCall>) =>
           lock.withPermit(
@@ -104,7 +102,25 @@ export const create = (
               const text = content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
               return text === "" ? null : text
             }),
-          progressHooks(record),
+          {
+            ...progressHooks(record, previews),
+            "execution.interrupted": ({ logs }) =>
+              Effect.gen(function* () {
+                const toolCalls = yield* Ref.get(calls)
+                const completed = toolCalls.flatMap((call, index) =>
+                  call.status === "completed" ? [`${call.tool}: ${previews.get(index) ?? "[output omitted]"}`] : [],
+                )
+                const output = [
+                  completed.length > 0
+                    ? `Completed tool calls:\n${preview(completed.join("\n"), PARTIAL_BYTES)}`
+                    : undefined,
+                  logs.length > 0 ? `Logs:\n${preview(logs.join("\n"), PARTIAL_BYTES)}` : undefined,
+                ]
+                  .filter((part) => part !== undefined)
+                  .join("\n\n")
+                if (output && context.interrupted) yield* context.interrupted([{ type: "text", text: output }])
+              }),
+          },
         ).execute(code)
         const toolCalls = yield* Ref.get(calls)
         const collected = (yield* Ref.get(files))
@@ -140,19 +156,38 @@ export const create = (
 }
 
 // Rows appear in start order; the same call object arrives at both hooks, so a call finds its row again.
-function progressHooks(record: (update: (items: Array<ExecuteCall>) => Array<ExecuteCall>) => Effect.Effect<unknown>) {
+function progressHooks(
+  record: (update: (items: Array<ExecuteCall>) => Array<ExecuteCall>) => Effect.Effect<unknown>,
+  previews: Map<number, string>,
+) {
   const rows = new WeakMap<object, number>()
+  let remaining = PARTIAL_BYTES
   const start = (call: object, entry: ExecuteCall) =>
     record((items) => {
       rows.set(call, items.length)
       return [...items, entry]
     })
-  const settle = (call: object, result: CodeMode.CallResult) => {
+  const settle = (call: object, result: CodeMode.CallResult, capture = false) => {
     const index = rows.get(call)
     if (index === undefined) return Effect.void
     return record((items) => {
+      // Tool after-hooks receive validated JSON values. Extension values can be opaque, so keep them out.
+      const output =
+        capture && result.status === "success" && remaining >= TRUNCATED.length
+          ? preview(
+              typeof result.value === "string" ? result.value : (JSON.stringify(result.value) ?? "undefined"),
+              Math.min(CALL_BYTES, remaining),
+            )
+          : undefined
+      if (output !== undefined) {
+        remaining -= Buffer.byteLength(output)
+        previews.set(index, output)
+      }
       const next = [...items]
-      next[index] = { ...items[index], status: result.status === "success" ? "completed" : "error" }
+      next[index] = {
+        ...items[index],
+        status: result.status === "success" ? "completed" : "error",
+      }
       return next
     })
   }
@@ -161,7 +196,7 @@ function progressHooks(record: (update: (items: Array<ExecuteCall>) => Array<Exe
       const shown = displayInput(call.input)
       return start(call, { tool: call.name, status: "running", ...(shown ? { input: shown } : {}) })
     },
-    "tool.after": settle,
+    "tool.after": (call, result) => settle(call, result, true),
     // Only listed extension functions get a row; anything else stays out of the TUI.
     "extension.before": (call) => {
       switch (call.name) {
@@ -173,6 +208,17 @@ function progressHooks(record: (update: (items: Array<ExecuteCall>) => Array<Exe
     },
     "extension.after": settle,
   } satisfies CodeMode.Hooks
+}
+
+function preview(text: string, limit: number) {
+  const bytes = Buffer.from(text)
+  if (bytes.length <= limit) return text
+  return (
+    bytes
+      .subarray(0, limit - TRUNCATED.length)
+      .toString("utf8")
+      .replace(/\uFFFD$/, "") + TRUNCATED
+  )
 }
 
 export const catalog = (inventory: Inventory) => {

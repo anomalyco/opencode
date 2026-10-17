@@ -17,6 +17,8 @@ export interface Context {
   readonly messageID: SessionMessage.ID
   readonly id: CallID
   readonly progress: (update: Metadata) => Effect.Effect<void>
+  /** Retain bounded model content for an interrupted call; only its terminal abort persists it. */
+  readonly interrupted?: ((content: readonly [Content, ...Content[]]) => Effect.Effect<void>) | undefined
 }
 
 export interface Namespace {

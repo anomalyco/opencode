@@ -231,6 +231,24 @@ test("interrupted progress metadata remains in the terminal failure snapshot", a
   })
 })
 
+for (const outcome of ["success", "failure"] as const)
+  test(`does not persist interruption-only content on ordinary tool ${outcome}`, async () => {
+    const { published, publisher } = capture()
+    await Effect.runPromise(publisher.publish(call))
+    await Effect.runPromise(publisher.interrupted(call.id, [{ type: "text", text: "ONLY_ON_ABORT" }]))
+    if (outcome === "success")
+      await Effect.runPromise(
+        publisher.toolExecution(call.id, call.name, { content: [{ type: "text", text: "completed" }] }),
+      )
+    if (outcome === "failure")
+      await Effect.runPromise(publisher.failTool(call.id, { type: "tool.execution", message: "failed" }))
+
+    expect(
+      published.some((event) => event.type === `session.tool.${outcome === "success" ? "success" : "failed"}.2`),
+    ).toBe(true)
+    expect(JSON.stringify(published)).not.toContain("ONLY_ON_ABORT")
+  })
+
 test("interrupted subagent failures expose their existing child session to the model", async () => {
   const { published, publisher } = capture("anthropic", { interruptProgress: true })
   const subagent = LLMEvent.toolCall({
