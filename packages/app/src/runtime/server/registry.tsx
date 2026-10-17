@@ -1,5 +1,5 @@
 import { createSimpleContext } from "@opencode/ui/context"
-import { batch, createMemo } from "solid-js"
+import { batch, createEffect, createMemo, createResource, untrack } from "solid-js"
 import { type SetStoreFunction, type Store } from "solid-js/store"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { pathKey } from "@/workspaces/path-key"
@@ -34,6 +34,32 @@ function isLocalHost(url: string) {
   const host = url.replace(/^https?:\/\//, "").split(":")[0]
 
   if (host === "localhost" || host === "127.0.0.1") return "local"
+}
+
+// A filesystem root ("/", "C:/") is too broad to open as a project.
+export function adoptable(directory: string) {
+  return !!directory && !pathKey(directory).endsWith("/")
+}
+
+// Fetches the server's location on each connect and adopts its directory. Waits for the
+// stored projects: adopting into the empty pre-hydration list would overwrite them.
+// Only the location is tracked, so closing the last project does not re-adopt.
+export function adoptServerDirectory(input: {
+  hydrated: () => boolean
+  connected: () => boolean
+  location: () => Promise<{ directory: string }>
+  adopt: (directory: string) => void
+}) {
+  const [location] = createResource(
+    () => input.hydrated() && input.connected(),
+    () => input.location().catch(() => undefined),
+  )
+
+  createEffect(() => {
+    const directory = location()?.directory ?? ""
+
+    if (adoptable(directory)) untrack(() => input.adopt(directory))
+  })
 }
 
 export function createServerProjects(input: {
@@ -73,6 +99,17 @@ export function createServerProjects(input: {
 
       if (current().some((project) => project.worktree === directory)) return
       setStore("projects", scope, [{ worktree: directory, expanded: true }, ...current()])
+    },
+    // Opens a directory only when this server has no open projects, so a fresh client
+    // lands somewhere without reordering an existing list. Directories the user closed
+    // stay closed.
+    adopt(directory: string) {
+      if (current().length > 0) return
+      const key = pathKey(directory)
+
+      if (currentClosed().some((worktree) => pathKey(worktree) === key)) return
+      setStore("projects", input.scope(), [{ worktree: directory, expanded: true }])
+      setStore("lastProject", input.scope(), directory)
     },
     // User-initiated close: removes the project and records it in recently closed.
     // Internal, non-user removals (e.g. sandbox/worktree normalization) should use remove().

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { canRemoveServer, createServerProjects, resolveServerList, ServerConnection } from "./registry"
+import { adoptable, canRemoveServer, createServerProjects, resolveServerList, ServerConnection } from "./registry"
 import { Schema } from "effect"
 import { serverState } from "./persistence"
 import { createStore } from "solid-js/store"
@@ -100,4 +100,52 @@ test("project actions update schema-derived state and follow dynamic server scop
   expect(projects.recentlyClosed()).toEqual([])
   expect(store.projects.local).toEqual([{ worktree: "/local", expanded: true }])
   expect(store.projects[props.server]).toEqual([{ worktree: "/remote", expanded: false }])
+})
+
+function projectsFor(scope: string) {
+  const [store, setStore] = createStore(Schema.decodeUnknownSync(serverSchema())({}))
+  const at = (key: string) =>
+    createServerProjects({ store, setStore, scope: () => ServerScope.fromServerKey(ServerConnection.Key.make(key)) })
+
+  return { store, projects: at(scope), at }
+}
+
+test("adopt opens a directory only when no project is open", () => {
+  const { projects } = projectsFor("https://a.example")
+
+  projects.adopt("/srv/repo")
+  expect(projects.list()).toEqual([{ worktree: "/srv/repo", expanded: true }])
+  expect(projects.last()).toBe("/srv/repo")
+
+  projects.adopt("/srv/other")
+  expect(projects.list()).toEqual([{ worktree: "/srv/repo", expanded: true }])
+  expect(projects.last()).toBe("/srv/repo")
+})
+
+test("adopt keeps a directory the user closed closed", () => {
+  const { projects } = projectsFor("https://a.example")
+
+  projects.adopt("/srv/repo")
+  projects.close("/srv/repo")
+  projects.adopt("/srv/repo/")
+  expect(projects.list()).toEqual([])
+  expect(projects.recentlyClosed()).toEqual(["/srv/repo"])
+})
+
+test("adopt is scoped per server", () => {
+  const { projects, at } = projectsFor("https://a.example")
+  const other = at("https://b.example")
+
+  projects.open("/repo")
+  other.adopt("/srv/repo")
+  expect(other.list()).toEqual([{ worktree: "/srv/repo", expanded: true }])
+  expect(projects.list()).toEqual([{ worktree: "/repo", expanded: true }])
+})
+
+test("adoptable skips filesystem roots and empty paths", () => {
+  expect(adoptable("/srv/repo")).toBe(true)
+  expect(adoptable("C:\\Users\\u\\repo")).toBe(true)
+  expect(adoptable("/")).toBe(false)
+  expect(adoptable("C:\\")).toBe(false)
+  expect(adoptable("")).toBe(false)
 })
