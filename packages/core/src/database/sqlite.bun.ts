@@ -91,6 +91,10 @@ const nativeLayer = (config: Config) =>
       })
       yield* Effect.addFinalizer(() => Effect.sync(() => native.close()))
       if (config.disableWAL !== true) native.run("PRAGMA journal_mode = WAL;")
+      if (config.readonly !== true) {
+        native.run("PRAGMA synchronous = NORMAL;")
+        native.run("PRAGMA busy_timeout = 30000;")
+      }
       return native
     }),
   )
