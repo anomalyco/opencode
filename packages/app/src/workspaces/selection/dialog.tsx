@@ -167,7 +167,10 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
       return false
     }
 
-    tree?.batch(policy.entries(key, nodes).map((item) => ({ type: "add", path: item })))
+    // A folder preloaded in the background is already in the tree, and adding it again throws.
+    const entries = policy.entries(key, nodes).filter((item) => !tree?.getItem(item))
+
+    if (entries.length > 0) tree?.batch(entries.map((item) => ({ type: "add", path: item })))
 
     if (!eager && advanceTreePreload(advanced, key)) {
       for (const directory of preloadTreeDirectories(key, nodes)) void load(directory, generation, true)
