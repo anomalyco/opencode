@@ -66,6 +66,32 @@ export const Cursor = Schema.Struct({
   }),
 }).annotate({ description: "Terminal cursor settings" })
 
+export const PasteSummaryDefaults = {
+  lines: 3,
+  characters: 150,
+  format: "[Pasted ~{lines} lines]",
+  excerpt: 30,
+}
+export const PasteSummary = Schema.Struct({
+  lines: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))).annotate({
+    description: "A paste of at least this many lines is summarized (default: 3)",
+  }),
+  characters: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))).annotate({
+    description: "A paste longer than this many characters is summarized (default: 150)",
+  }),
+  format: Schema.optional(Schema.String.check(Schema.isMinLength(1))).annotate({
+    description: [
+      "The placeholder a summarized paste shows (default: '[Pasted ~{lines} lines]').",
+      "{lines} is its line count, {characters} its length, {bytes} its size in UTF-8 bytes,",
+      "{excerpt} its start with line breaks and repeated spaces collapsed",
+    ].join(" "),
+  }),
+  excerpt: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))).annotate({
+    description: "Characters {excerpt} shows before it is cut with '…' (default: 30)",
+  }),
+}).annotate({ description: "When a compact paste is replaced by a placeholder, and what the placeholder says" })
+export type PasteSummary = Schema.Schema.Type<typeof PasteSummary>
+
 export const Info = Schema.Struct({
   theme: Schema.optional(
     Schema.Struct({
@@ -144,6 +170,7 @@ export const Info = Schema.Struct({
       paste: Schema.optional(Schema.Literals(["compact", "full"])).annotate({
         description: "Display large pastes as compact placeholders or full text",
       }),
+      paste_summary: Schema.optional(PasteSummary),
       image_preview: Schema.optional(Schema.Boolean).annotate({
         description: "Show image attachment previews above the prompt input",
       }),
