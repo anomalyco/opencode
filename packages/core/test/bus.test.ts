@@ -1280,6 +1280,43 @@ describe("Bus", () => {
     }),
   )
 
+  it.effect("log restores missing start times in legacy step events", () =>
+    Effect.gen(function* () {
+      const bus = yield* Bus.Service
+      const { db } = yield* Database.Service
+      const aggregateID = Session.ID.create()
+      const type = Bus.versionedType(SessionEvent.Step.Started.type, 1)
+      const data = {
+        sessionID: aggregateID,
+        assistantMessageID: "msg_test",
+        agent: "test",
+        model: { id: "test", providerID: "test" },
+      }
+      yield* db.insert(EventSequenceTable).values({ aggregate_id: aggregateID, seq: 1 }).run().pipe(Effect.orDie)
+      yield* db
+        .insert(EventTable)
+        .values([
+          { id: Event.ID.create(), aggregate_id: aggregateID, seq: 0, created: 1_000, type, data },
+          {
+            id: Event.ID.create(),
+            aggregate_id: aggregateID,
+            seq: 1,
+            created: 3_000,
+            type,
+            data: { ...data, started: 2_000 },
+          },
+        ])
+        .run()
+        .pipe(Effect.orDie)
+
+      const events = (yield* Stream.runCollect(bus.log({ aggregateID }))).filter(
+        (item): item is Event.Payload => !Bus.isSynced(item),
+      )
+
+      expect(events).toMatchObject([{ data: { started: 1_000 } }, { data: { started: 2_000 } }])
+    }),
+  )
+
   it.effect("log synced marker omits seq for an empty log and keeps the cursor otherwise", () =>
     Effect.gen(function* () {
       const bus = yield* Bus.Service

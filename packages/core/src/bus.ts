@@ -75,12 +75,17 @@ const decodeSerializedEvent = (event: SerializedEvent): Event.Payload => {
   if (!definition?.durable) {
     throw new InvalidDurableEventError({ type: event.type, message: `Unknown durable event type ${event.type}` })
   }
+  // v2.0.6 rows predate this field but used the envelope creation time for step timing.
+  const data =
+    event.type === Event.versionedType(SessionEvent.Step.Started.type, 1) && !Object.hasOwn(event.data, "started")
+      ? { ...event.data, started: event.created ?? 0 }
+      : event.data
   return {
     id: event.id,
     created: event.created ?? 0,
     type: definition.type,
     durable: envelope(event.aggregateID, event.seq, definition.durable.version),
-    data: Schema.decodeUnknownSync(definition.data)(event.data),
+    data: Schema.decodeUnknownSync(definition.data)(data),
   }
 }
 
