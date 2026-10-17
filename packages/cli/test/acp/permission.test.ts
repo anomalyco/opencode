@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test"
+import { Effect } from "effect"
+import { ACPPermission } from "../../src/acp/permission"
 import type { AnyRequest, CreateElicitationResponse, RequestPermissionResponse } from "@agentclientprotocol/sdk"
 import type { OpenCodeEventEncoded } from "@opencode/protocol/groups/event"
 import fs from "node:fs/promises"
@@ -289,6 +291,38 @@ describe("acp edit previews over the wire", () => {
     expect(decisions(acp)).toHaveLength(8)
   })
 })
+
+describe("acp completed tool call diffs", () => {
+  test("attaches a diff for an ordinary file name", async () => {
+    await using dir = await tmpdir()
+    const name = "notes.txt"
+    await fs.writeFile(path.join(dir.path, name), "world\n")
+
+    const enriched = await Effect.runPromise(completedDiffUpdate(name, dir.path))
+
+    expect(enriched).toMatchObject({
+      content: [{ type: "diff", path: path.join(dir.path, name), oldText: "hello\n", newText: "world\n" }],
+    })
+  })
+
+  test("completes the tool call when the file name breaks the patch header", async () => {
+    await using dir = await tmpdir()
+    const name = "notes.txt\nx"
+    await fs.writeFile(path.join(dir.path, name), "world\n")
+
+    const enriched = await Effect.runPromise(completedDiffUpdate(name, dir.path))
+
+    expect(enriched).toEqual({ sessionUpdate: "tool_call_update", toolCallId: "call_edit", status: "completed" })
+  })
+})
+
+function completedDiffUpdate(name: string, cwd: string) {
+  return ACPPermission.withCompletedDiffs(
+    { sessionUpdate: "tool_call_update", toolCallId: "call_edit", status: "completed" },
+    { toolName: "edit", input: { path: name }, metadata: { files: [fileDiff(name, "hello\n", "world\n")] } },
+    cwd,
+  )
+}
 
 function question(sessionID: string, id: string) {
   return ephemeralEvent("form.created", {
