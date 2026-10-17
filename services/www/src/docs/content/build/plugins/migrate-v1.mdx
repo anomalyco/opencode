@@ -93,8 +93,14 @@ living on a separate `client` property.
 `ctx.location` describes the location where this plugin instance loaded. It is not the location of every session or event
 the plugin may observe. Read the session or event data when that distinction matters.
 
-The context exposes many more domains than the table lists, including catalogs, commands, integrations, MCP servers,
-references, skills, storage, VCS, worktrees, and web search. See the [complete plugin context](/build/plugins#api).
+The context exposes many more domains than the table lists, including commands, integrations, MCP servers, providers,
+models, references, skills, storage, VCS, worktrees, and web search. See the [complete plugin context](/build/plugins#api).
+
+The early V2 API in `@opencode-ai/plugin` 1.18.x exposed `ctx.catalog`. OpenCode 2 splits it into `ctx.provider` for
+provider and source model definitions, and `ctx.model` for active model changes. Move `draft.provider.update(id, fn)`
+from `ctx.catalog.transform(...)` to `editor.update(id, fn)` in `ctx.provider.transform(...)`; move
+`draft.model.update(providerID, modelID, fn)` to `editor.update(providerID, modelID, fn)` in `ctx.model.transform(...)`.
+Replace `ctx.catalog.reload()` with `ctx.provider.reload()` or `ctx.model.reload()` for the affected transform.
 
 ## Register hooks in `setup`
 
