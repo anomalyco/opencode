@@ -574,7 +574,7 @@ const EndpointSessionCompact = (raw: RawClient["server.session"]) => (input: Ses
   preserveEffect<SessionCompactOutput>()(
     raw["session.compact"]({
       params: { sessionID: input["sessionID"] },
-      payload: { id: input["id"], delivery: input["delivery"] },
+      payload: { id: input["id"], delivery: input["delivery"], guidance: input["guidance"] },
     }).pipe(
       Effect.mapError(mapClientError),
       Effect.map((value) => value.data),

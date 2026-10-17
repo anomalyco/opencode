@@ -233,3 +233,77 @@ test.each(["first", "second"])(
     }
   },
 )
+
+test("/compact sends the text after the command as compaction guidance", async () => {
+  await using state = await tmpdir()
+  const setup = await createTestRenderer({ width: 100, height: 30, useThread: false, kittyKeyboard: true })
+  setup.renderer.start()
+  const ready = Promise.withResolvers<void>()
+  const compacted = Promise.withResolvers<unknown>()
+  const events = createEventStream()
+  const sessionID = "ses_compact_guidance"
+  const location = { directory, project: { id: "project", directory, canonical: directory } }
+  const calls = createFetch(async (url, request) => {
+    if (url.pathname === `/api/session/${sessionID}`)
+      return json({
+        data: {
+          id: sessionID,
+          projectID: "project",
+          title: "Compact guidance fixture",
+          model: { providerID: "demo", id: "model" },
+          location: { directory },
+          cost: 0,
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          time: { created: 0, updated: 0 },
+        },
+      })
+    if (url.pathname === `/api/session/${sessionID}/message`) return json({ data: [], cursor: {} })
+    if (url.pathname === `/api/session/${sessionID}/inbox` || url.pathname === `/api/session/${sessionID}/permission`)
+      return json({ data: [] })
+    if (url.pathname === "/api/agent")
+      return json({ location, data: [{ id: "build", mode: "primary", hidden: false, permissions: [] }] })
+    if (url.pathname === "/api/provider") return json({ location, data: [{ id: "demo", name: "Demo" }] })
+    if (url.pathname === "/api/model")
+      return json({ location, data: [{ id: "model", providerID: "demo", name: "Demo Model", variants: [] }] })
+    if (url.pathname === `/api/session/${sessionID}/model`) return new Response(null, { status: 204 })
+    if (url.pathname === `/api/session/${sessionID}/compact`) {
+      const body = await request.json()
+      compacted.resolve(body)
+      return json({
+        data: {
+          id: body.id,
+          sessionID,
+          type: "compaction",
+          time: { created: 10 },
+          payload: { guidance: body.guidance },
+          delivery: "steer",
+        },
+      })
+    }
+    return undefined
+  }, events)
+  const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
+  const { run } = await import("../src/app")
+  const task = Effect.runPromise(
+    run({
+      app: { name: "test", version: "test", channel: "test" },
+      server: { endpoint: { url: server.url.toString() } },
+      config: { get: async () => ({ animations: false }), update: async () => ({}) },
+      packages: { prepare: async () => ({ directory: "" }) },
+      terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: ready.resolve }),
+      args: { sessionID },
+      log: () => {},
+    }).pipe(Effect.provide(Global.layerWith({ state: state.path })), Effect.provide(FileSystem.layerNoop({}))),
+  )
+  try {
+    await ready.promise
+    await setup.waitForFrame((frame) => frame.includes("Demo Model"))
+    await setup.mockInput.typeText("/compact Keep only the parser work")
+    setup.mockInput.pressEnter()
+    expect(await compacted.promise).toMatchObject({ guidance: "Keep only the parser work" })
+  } finally {
+    setup.renderer.destroy()
+    await task
+    await server.stop()
+  }
+})

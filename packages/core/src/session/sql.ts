@@ -131,7 +131,14 @@ export const SessionInboxTable = sqliteTable(
       .notNull()
       .references(() => SessionTable.id, { onDelete: "cascade" }),
     type: text().$type<SessionInbox.Info["type"]>().notNull(),
-    payload: text({ mode: "json" }).$type<UserPayload | SyntheticPayload | CompactionPayload | MovePayload>().notNull(),
+    payload: text({ mode: "json" })
+      .$type<
+        | (typeof UserPayload)["Encoded"]
+        | (typeof SyntheticPayload)["Encoded"]
+        | (typeof CompactionPayload)["Encoded"]
+        | (typeof MovePayload)["Encoded"]
+      >()
+      .notNull(),
     delivery: text().$type<SessionInbox.Delivery>().notNull(),
     enqueued_seq: integer().notNull(),
     time_created: integer()

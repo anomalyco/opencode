@@ -116,7 +116,7 @@ export type SessionInboxDelivery = "steer" | "queue"
 
 export type SessionInboxSyntheticPayload = { text: string; description?: string; metadata?: { [x: string]: JsonValue } }
 
-export type SessionInboxCompactionPayload = {}
+export type SessionInboxCompactionPayload = { guidance?: string }
 
 export type InstructionEntryKey = string
 
@@ -4671,11 +4671,21 @@ export type SessionShellOutput = void
 
 export type SessionCompactInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
-  readonly id?: { readonly id?: string | undefined; readonly delivery?: ("steer" | "queue") | undefined }["id"]
+  readonly id?: {
+    readonly id?: string | undefined
+    readonly delivery?: ("steer" | "queue") | undefined
+    readonly guidance?: string | undefined
+  }["id"]
   readonly delivery?: {
     readonly id?: string | undefined
     readonly delivery?: ("steer" | "queue") | undefined
+    readonly guidance?: string | undefined
   }["delivery"]
+  readonly guidance?: {
+    readonly id?: string | undefined
+    readonly delivery?: ("steer" | "queue") | undefined
+    readonly guidance?: string | undefined
+  }["guidance"]
 }
 
 export type SessionCompactOutput = { data: SessionInboxCompaction }["data"]

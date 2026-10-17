@@ -70,7 +70,11 @@ export function configOptions(catalog: Catalog, selection: Selection): SessionCo
 export function availableCommands(catalog: Catalog) {
   return [
     ...catalog.commands.map((command) => ({ name: command.name, description: command.description ?? "" })),
-    ...Array.from(builtinCommands, ([name, command]) => ({ name, description: command.description })),
+    ...Array.from(builtinCommands, ([name, command]) => ({
+      name,
+      description: command.description,
+      input: { hint: command.hint },
+    })),
   ]
 }
 

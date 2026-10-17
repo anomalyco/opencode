@@ -259,11 +259,18 @@ describe("acp prompt turns over the wire", () => {
 
     const command = await acp.prompt(session.sessionId, "/review now")
     const compact = await acp.prompt(session.sessionId, "/compact")
+    const instructed = await acp.prompt(session.sessionId, "/compact keep only the parser work")
 
-    expect([command.stopReason, compact.stopReason]).toEqual(["end_turn", "end_turn"])
+    expect([command.stopReason, compact.stopReason, instructed.stopReason]).toEqual(["end_turn", "end_turn", "end_turn"])
     expect(acp.server.submissions).toEqual([
       { kind: "command", sessionID: session.sessionId, name: "review", text: "now", files: [], delivery: "steer" },
       { kind: "compact", sessionID: session.sessionId, id: expect.stringMatching(/^msg_/) },
+      {
+        kind: "compact",
+        sessionID: session.sessionId,
+        id: expect.stringMatching(/^msg_/),
+        guidance: "keep only the parser work",
+      },
     ])
     expect(
       (await acp.waitForUpdate((item) => item.update.sessionUpdate === "available_commands_update")).update,
@@ -271,7 +278,7 @@ describe("acp prompt turns over the wire", () => {
       sessionUpdate: "available_commands_update",
       availableCommands: [
         { name: "review", description: "Review changes" },
-        { name: "compact", description: "Compact the session" },
+        { name: "compact", description: "Compact the session", input: { hint: "optional guidance for the summary" } },
       ],
     })
   })

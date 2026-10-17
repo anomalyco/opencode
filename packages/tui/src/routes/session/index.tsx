@@ -956,12 +956,14 @@ export function Session(props: {
       group: "Session",
       slash: {
         name: "compact",
+        arguments: "optional" as const,
       },
-      run: () => {
+      run: (input?: string) => {
         const selection = local.model.current()
         void data.session
           .compact({
             sessionID: route.sessionID,
+            guidance: input?.trim() || undefined,
             model: selection
               ? {
                   providerID: selection.providerID,

@@ -2770,6 +2770,16 @@
                         "type": "null"
                       }
                     ]
+                  },
+                  "guidance": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "additionalProperties": false
@@ -18429,9 +18439,13 @@
         "additionalProperties": false
       },
       "Session.Inbox.CompactionPayload": {
-        "not": {
-          "type": "null"
-        }
+        "type": "object",
+        "properties": {
+          "guidance": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
       },
       "Session.Inbox.Delivery": {
         "type": "string",

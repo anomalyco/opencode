@@ -478,7 +478,7 @@ export function Autocomplete(props: {
       return [slash.name, ...(slash.aliases ?? [])].map((name) => ({
         display: `/${name}`,
         description: command.description ?? command.title,
-        onSelect: slash.arguments ? () => insertSlash(name) : command.run,
+        onSelect: slash.arguments === true ? () => insertSlash(name) : command.run,
       }))
     })
     const commandNames = new Set<string>()

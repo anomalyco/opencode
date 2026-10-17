@@ -7,7 +7,10 @@ import { Cause, Deferred, Effect, Exit, Schedule, Semaphore, Stream, Subscriptio
 import { ACPError } from "./error"
 
 export const builtinCommands = new Map([
-  ["compact", { description: "Compact the session", start: "compaction" as const }],
+  [
+    "compact",
+    { description: "Compact the session", hint: "optional guidance for the summary", start: "compaction" as const },
+  ],
 ])
 
 export type Catalog = {

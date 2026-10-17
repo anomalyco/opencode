@@ -237,7 +237,9 @@ export const make = Effect.fnUntraced(function* (input: {
         .pipe(Effect.catch(ACPClient.classify))
     }
     if (prompt.start.type === "compaction") {
-      yield* input.client.session.compact({ sessionID, id: prompt.start.id }).pipe(Effect.catch(ACPClient.classify))
+      yield* input.client.session
+        .compact({ sessionID, id: prompt.start.id, guidance: prompt.slash?.args || undefined })
+        .pipe(Effect.catch(ACPClient.classify))
       return
     }
     const command = prompt.command

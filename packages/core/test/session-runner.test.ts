@@ -2109,6 +2109,16 @@ describe("SessionRunnerLLM", () => {
     ])
   })
 
+  scenario("adds requested guidance to a manual compaction prompt", function* (s) {
+    yield* s.runPrompt("First")
+    yield* s.llm.push(TestLLM.text("## Objective\n- summary", "guidance-summary"))
+    yield* s.session.compact({ sessionID, guidance: "Keep only the parser work" })
+    yield* s.resume
+    expect(userTexts(s.requests[1]).at(-1)).toBe(
+      SessionCompaction.buildPrompt(false, false, "Keep only the parser work"),
+    )
+  })
+
   scenario("moves the epoch at compaction and narrates later changes", function* (s) {
     yield* s.runPrompt("First")
     s.systemBaseline = "Changed before compaction"

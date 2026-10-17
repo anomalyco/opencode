@@ -127,6 +127,7 @@ const layer = Layer.effect(
                     return yield* compaction.compact({
                       reason: "manual",
                       inputID: pending.id,
+                      guidance: pending.payload.guidance,
                       context: {
                         session: selected.session,
                         agent: selected.agent,
