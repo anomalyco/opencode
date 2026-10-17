@@ -75,7 +75,8 @@ export default function TerminalPanel(props: { model: TerminalModel; session: Mo
 
         seen.workspace = workspace.key
 
-        if (workspace.all().length === 0) workspace.new()
+        // A create still in flight from the last open answers this open too; a second one would add a duplicate.
+        if (workspace.all().length === 0 && !workspace.creating()) workspace.new()
       },
     )
   })
