@@ -25,6 +25,11 @@ export type ExecutionLimits = {
    * No default: absent means no timeout.
    */
   readonly timeoutMs?: number
+  /**
+   * Milliseconds the program may wait with no step taken and no tool or extension call running before it fails as
+   * stalled. Such a program is awaiting a promise nothing can settle. No default: absent means no stall detection.
+   */
+  readonly stallMs?: number
   /** Maximum number of tool calls admitted by the runtime. No default: absent means unlimited. */
   readonly maxToolCalls?: number
   /**
@@ -36,6 +41,7 @@ export type ExecutionLimits = {
 
 export type ResolvedExecutionLimits = {
   readonly timeoutMs: number | undefined
+  readonly stallMs: number | undefined
   readonly maxToolCalls: number | undefined
   readonly maxOutputBytes: number | undefined
 }
@@ -74,6 +80,7 @@ export const DiagnosticKind = Schema.Literals([
   "InvalidDataValue",
   "ToolCallLimitExceeded",
   "TimeoutExceeded",
+  "Stalled",
   "ToolFailure",
   "ExecutionFailure",
   "Truncated",
@@ -132,6 +139,7 @@ const validateLimit = (name: keyof ExecutionLimits, value: number | undefined, m
 
 const resolveExecutionLimits = (limits?: ExecutionLimits): ResolvedExecutionLimits => ({
   timeoutMs: validateLimit("timeoutMs", limits?.timeoutMs, 1),
+  stallMs: validateLimit("stallMs", limits?.stallMs, 1),
   maxToolCalls: validateLimit("maxToolCalls", limits?.maxToolCalls, 0),
   maxOutputBytes: validateLimit("maxOutputBytes", limits?.maxOutputBytes, 0),
 })

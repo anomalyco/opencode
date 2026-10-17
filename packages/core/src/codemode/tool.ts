@@ -58,6 +58,9 @@ export type Inventory = {
   readonly namespaces?: ReadonlyMap<string, ToolNamespace>
 }
 
+// A program that takes no step while no call is running can never resume; fail it instead of holding the turn.
+const STALL_MS = 30_000
+
 // Invariant model-facing guidance; the changing tool catalog is delivered through Instructions.
 const description = [
   "Run JavaScript in a confined Code Mode runtime to script tool calls and HTTP requests and compose their results.",
@@ -66,6 +69,7 @@ const description = [
   'Call tools through `tools` using only exact paths and signatures from the catalog. Do not infer or normalize tool names; preserve bracket notation such as `tools.<namespace>["tool-name"](input)`.',
   "Prefer an explicit `return`; if omitted, the final top-level expression becomes the result.",
   "Await every call whose completion matters; pending calls are interrupted when execution ends. Run independent calls concurrently with `Promise.allSettled`.",
+  "Do not use it to wait or poll: without timers it cannot sleep, and a program awaiting a promise that nothing can settle fails as stalled.",
 ].join("\n")
 
 export const create = (
@@ -236,7 +240,12 @@ function runtime(
     })
   }
   const tools = renderTools(root)
-  return CodeMode.make<typeof tools>({ tools, extensions: [CodeModeWeb.extension], hooks })
+  return CodeMode.make<typeof tools>({
+    tools,
+    extensions: [CodeModeWeb.extension],
+    hooks,
+    limits: { stallMs: STALL_MS },
+  })
 }
 
 function getNode<T>(root: Node<T>, path: string) {

@@ -8,6 +8,7 @@ import type { Value } from "./objects.js"
 import { createBuiltins } from "./intrinsics.js"
 import { Pending } from "./promises.js"
 import { Interpreter } from "./interpreter.js"
+import { Activity } from "./activity.js"
 
 export const executeProgram = <R>(
   code: string,
@@ -29,6 +30,7 @@ export const executeProgram = <R>(
     const builtins = createBuiltins()
     const tools = ToolRuntime.make(prepared, limits.maxToolCalls, hooks)
     const logs: Array<string> = []
+    const activity = new Activity()
     const logged = () => (logs.length > 0 ? { logs: [...logs] } : {})
     // Set only after copy-out so timeouts cannot report invalid values as completed.
     let returned: { value: DataValue; pending: Pending<R> } | undefined
@@ -39,7 +41,7 @@ export const executeProgram = <R>(
         Effect.gen(function* () {
           const program = parseProgram(code)
           const pending = new Pending<R>(scope, builtins.Promise)
-          const ctx = new Interpreter<R>({ tools, pending, builtins, logs, globals })
+          const ctx = new Interpreter<R>({ tools, pending, builtins, logs, activity, globals })
           const result = (yield* toBoundary(ctx, yield* ctx.run(program))) ?? null
           returned = { value: result, pending }
           const warnings = yield* pending.interrupt()
@@ -53,11 +55,35 @@ export const executeProgram = <R>(
         }),
       (scope, exit) => Scope.close(scope, exit),
     )
+    const stallMs = limits.stallMs
+    // Only the program body can stall; once it returns, settling background work is bounded by the timeout.
+    // Cleanup runs through tracked calls, so the guard below is a backstop for cleanup that is slow while untracked.
+    const watched =
+      stallMs === undefined
+        ? base
+        : Effect.raceFirst(
+            base,
+            activity.stalled(stallMs).pipe(
+              Effect.flatMap(() => (returned === undefined ? Effect.void : Effect.never)),
+              Effect.map(
+                () =>
+                  ({
+                    ok: false,
+                    error: {
+                      kind: "Stalled",
+                      message: `Execution stalled: nothing ran for ${stallMs}ms while the program awaited a promise that no running call can settle. Timers are unavailable, so a promise settles only through a tool or extension call, or by calling its resolve or reject.`,
+                    },
+                    ...logged(),
+                    toolCalls: tools.calls,
+                  }) satisfies Result,
+              ),
+            ),
+          )
     const timeoutMs = limits.timeoutMs
     const operation =
       timeoutMs === undefined
-        ? base
-        : base.pipe(
+        ? watched
+        : watched.pipe(
             Effect.timeoutOrElse({
               duration: timeoutMs,
               orElse: () =>

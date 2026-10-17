@@ -1280,3 +1280,109 @@ describe("CodeMode public contract", () => {
     expect(elapsedMs).toBeLessThan(3_000)
   })
 })
+
+describe("CodeMode stall detection", () => {
+  const sleepy = (ms: number) =>
+    Tool.make({
+      description: "Resolve after a delay",
+      input: Schema.Struct({}),
+      output: Schema.String,
+      execute: () => Effect.as(Effect.sleep(ms), "done"),
+    })
+  const later = Extension.make({
+    name: "later",
+    globals: { later: () => new Promise((resolve) => setTimeout(() => resolve("late"), 150)) },
+  })
+  const stalls = (code: string, options: Omit<CodeMode.Options, "limits"> = {}) =>
+    Effect.runPromise(CodeMode.make({ ...options, limits: { stallMs: 50 } }).execute(code))
+
+  test("fails a program awaiting a promise nothing can settle", async () => {
+    for (const code of [
+      "await new Promise((resolve) => resolve); return 1",
+      "await new Promise(() => {}); return 1",
+      "const { promise } = Promise.withResolvers(); return await promise",
+    ]) {
+      const startedAt = Date.now()
+      const result = await stalls(code)
+      expect(result).toMatchObject({ ok: false, error: { kind: "Stalled" } })
+      expect(Date.now() - startedAt).toBeLessThan(2_000)
+    }
+  })
+
+  test("keeps the calls and logs made before the stall", async () => {
+    const result = await stalls('console.log("waiting"); await tools.host.wait({}); await new Promise(() => {})', {
+      tools: { host: { wait: sleepy(1) } },
+    })
+    expect(result).toMatchObject({
+      ok: false,
+      error: { kind: "Stalled" },
+      logs: ["waiting"],
+      toolCalls: [{ name: "host.wait" }],
+    })
+  })
+
+  test("waits for tool and extension calls that outlast the stall window", async () => {
+    expect(await stalls("return await tools.host.wait({})", { tools: { host: { wait: sleepy(150) } } })).toMatchObject({
+      ok: true,
+      value: "done",
+    })
+    expect(await stalls("return await later()", { extensions: [later] })).toMatchObject({ ok: true, value: "late" })
+  })
+
+  test("counts slow before hooks as calls in flight", async () => {
+    const slowBefore = { "tool.before": () => Effect.sleep(150), "extension.before": () => Effect.sleep(150) }
+    expect(
+      await stalls("return await tools.host.wait({})", { tools: { host: { wait: sleepy(1) } }, hooks: slowBefore }),
+    ).toMatchObject({ ok: true, value: "done" })
+    expect(await stalls("return await later()", { extensions: [later], hooks: slowBefore })).toMatchObject({
+      ok: true,
+      value: "late",
+    })
+  })
+
+  test("reports whichever of the stall and the timeout comes first", async () => {
+    const run = (code: string, limits: CodeMode.ExecutionLimits) =>
+      Effect.runPromise(CodeMode.make({ limits }).execute(code))
+    expect(await run("await new Promise(() => {})", { stallMs: 50, timeoutMs: 1_000 })).toMatchObject({
+      ok: false,
+      error: { kind: "Stalled" },
+    })
+    expect(await run("await new Promise(() => {})", { stallMs: 1_000, timeoutMs: 50 })).toMatchObject({
+      ok: false,
+      error: { kind: "TimeoutExceeded" },
+    })
+  })
+
+  test("reports slow cleanup after return as a timeout warning, not a stall", async () => {
+    // Interrupting the un-awaited call at return runs its `tool.after`, which outlasts both windows. The hook
+    // counts as a call in flight, so the stall watcher stays quiet and the timeout ends the cleanup.
+    const result = await Effect.runPromise(
+      CodeMode.make({
+        tools: { host: { wait: sleepy(10_000) } },
+        hooks: { "tool.after": () => Effect.sleep(400) },
+        limits: { stallMs: 50, timeoutMs: 200 },
+      }).execute("tools.host.wait({}); return 5"),
+    )
+    expect(result).toMatchObject({ ok: true, value: 5, warnings: [{ kind: "TimeoutExceeded" }] })
+  })
+
+  test("never stalls a program that keeps running", async () => {
+    const result = await stalls("let total = 0; for (let i = 0; i < 300000; i += 1) total += i; return total")
+    expect(result).toMatchObject({ ok: true, value: 44999850000 })
+  })
+
+  test("does not count an un-awaited promise left behind at return", async () => {
+    expect(await stalls("new Promise(() => {}); return 5")).toMatchObject({ ok: true, value: 5 })
+  })
+
+  test("is off unless the host sets stallMs", async () => {
+    const result = await Effect.runPromise(
+      CodeMode.make({ limits: { timeoutMs: 200 } }).execute("await new Promise(() => {})"),
+    )
+    expect(result).toMatchObject({ ok: false, error: { kind: "TimeoutExceeded" } })
+  })
+
+  test("rejects an invalid stallMs", () => {
+    expect(() => CodeMode.make({ limits: { stallMs: 0 } })).toThrow(RangeError)
+  })
+})

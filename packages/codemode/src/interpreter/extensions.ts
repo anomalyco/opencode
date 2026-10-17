@@ -140,14 +140,18 @@ export const extensionGlobals = <R>(
     fn<R>(builtins, value.name, value.length, (_, values) => {
       const args = values.map((item, index) => toHost(item, `Argument ${index + 1} to ${label}`))
       const hooks = ctx.tools.hooks
+      // Track the hooks too: a slow `extension.before` is a call in flight, as `tool.before` is.
       const settle = (run: Effect.Effect<unknown, unknown, R>) =>
-        (describe === undefined
-          ? run
-          : hooked(describe(args), hooks["extension.before"], hooks["extension.after"], run)
-        ).pipe(
-          Effect.mapError((reason) => new Throw(fromHost(reason, label))),
-          Effect.map((settled) => fromHost(settled, label)),
-        )
+        ctx.activity
+          .track(
+            describe === undefined
+              ? run
+              : hooked(describe(args), hooks["extension.before"], hooks["extension.after"], run),
+          )
+          .pipe(
+            Effect.mapError((reason) => new Throw(fromHost(reason, label))),
+            Effect.map((settled) => fromHost(settled, label)),
+          )
       let result: unknown
       try {
         result = value.apply(undefined, args)
