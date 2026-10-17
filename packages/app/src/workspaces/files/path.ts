@@ -92,8 +92,14 @@ export function createPathHelpers(scope: () => string) {
   const normalize = (input: string) => {
     const root = scope()
 
+    // A file URL with a host (file://host/share/...) addresses a UNC share,
+    // but only a UNC workspace root gives that host meaning; other roots keep
+    // the old behavior (e.g. file://src/app.ts stays a relative path).
+    const unc = root.startsWith("\\\\") ? /^file:\/\/([^/]+)\/(.*)$/.exec(input) : undefined
+    const source = unc ? `//${unc[1]}/${unc[2]}` : input
+
     // file:///C:/dir becomes /C:/dir once the protocol is gone; restore the drive form.
-    let path = unquoteGitPath(decodeFilePath(stripQueryAndHash(stripFileProtocol(input)))).replace(
+    let path = unquoteGitPath(decodeFilePath(stripQueryAndHash(stripFileProtocol(source)))).replace(
       /^[/\\]([A-Za-z]:)/,
       "$1",
     )

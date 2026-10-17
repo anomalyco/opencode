@@ -61,6 +61,9 @@ describe("encodeFilePath", () => {
     ["D:", "/D:"],
     ["C:\\Users\\test\\", "/C:/Users/test/"],
     ["C:\\Users\\..\\test\\.\\file.txt", "/C:/Users/../test/./file.txt"],
+    ["\\\\host\\share\\path\\file.ext", "host/share/path/file.ext"],
+    ["\\\\host\\share\\file with spaces.txt", "host/share/file%20with%20spaces.txt"],
+    ["\\\\host\\share\\", "host/share/"],
     ["/D:/path/file.txt", "/D:/path/file.txt"],
   ] as const
 
