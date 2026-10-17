@@ -19,6 +19,12 @@ export const name = (server: string, tool: string) => `${namespace(server)}_${to
 export interface Interface {
   /** Wait for the initial MCP tool registration to settle. */
   readonly flush: Effect.Effect<void>
+  /**
+   * Reload the registry from the connected servers and wait for it to apply, without waiting for the
+   * debounced reload. Routes that change the server set use this so their response means the registry
+   * already reflects the change.
+   */
+  readonly refresh: Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/McpTool") {}
@@ -121,6 +127,8 @@ export const layer = Layer.effect(
         }),
       )
       .pipe(Effect.forkScoped)
+    // Re-reads the connected servers and reloads the registry. Background announcements reach it through
+    // the debounce below; a caller that just changed the server set awaits it directly via `refresh`.
     const reconcile = lock.withPermit(
       Effect.gen(function* () {
         discovered = yield* mcp.tools()
@@ -141,7 +149,7 @@ export const layer = Layer.effect(
       Stream.runForEach(() => reconcile),
       Effect.forkScoped({ startImmediately: true }),
     )
-    return Service.of({ flush: Effect.asVoid(Fiber.await(initial)) })
+    return Service.of({ flush: Effect.asVoid(Fiber.await(initial)), refresh: reconcile })
   }),
 )
 
