@@ -92,8 +92,44 @@ describe("command keybinds", () => {
     { config: "mod+alt+[", event: { key: "[", metaKey: true, altKey: true }, match: false },
     // macOS Option turns L into ¬; the physical key still matches.
     { config: "meta+alt+l", event: { key: "¬", code: "KeyL", metaKey: true, altKey: true }, match: true },
+    { config: "ctrl+f", event: { key: "а", code: "KeyF", ctrlKey: true }, match: true },
+    { config: "meta+f", event: { key: "а", code: "KeyF", metaKey: true }, match: true },
+    { config: "ctrl+shift+f", event: { key: "А", code: "KeyF", ctrlKey: true, shiftKey: true }, match: true },
+    { config: "ctrl+g", event: { key: "γ", code: "KeyG", ctrlKey: true }, match: true },
+    { config: "ctrl+e", event: { key: "ק", code: "KeyE", ctrlKey: true }, match: true },
+    { config: "ctrl+comma", event: { key: "б", code: "Comma", ctrlKey: true }, match: true },
+    { config: "ctrl+.", event: { key: "ю", code: "Period", ctrlKey: true }, match: true },
+    { config: "ctrl+;", event: { key: "ж", code: "Semicolon", ctrlKey: true }, match: true },
+    { config: "ctrl+'", event: { key: "э", code: "Quote", ctrlKey: true }, match: true },
+    { config: "ctrl+[", event: { key: "х", code: "BracketLeft", ctrlKey: true }, match: true },
+    { config: "ctrl+]", event: { key: "ъ", code: "BracketRight", ctrlKey: true }, match: true },
+    { config: "ctrl+\\", event: { key: "む", code: "Backslash", ctrlKey: true }, match: true },
+    { config: "ctrl+/", event: { key: "め", code: "Slash", ctrlKey: true }, match: true },
+    { config: "ctrl+`", event: { key: "ё", code: "Backquote", ctrlKey: true }, match: true },
+    { config: "ctrl+а", event: { key: "а", code: "KeyF", ctrlKey: true }, match: true },
+    { config: "а", event: { key: "а", code: "KeyF" }, match: true },
+    { config: "f", event: { key: "а", code: "KeyF" }, match: false },
+    { config: "shift+f", event: { key: "А", code: "KeyF", shiftKey: true }, match: false },
+    { config: "ctrl+a", event: { key: "a", code: "KeyQ", ctrlKey: true }, match: true },
+    { config: "ctrl+q", event: { key: "a", code: "KeyQ", ctrlKey: true }, match: false },
+    { config: "ctrl+e", event: { key: "é", code: "KeyE", ctrlKey: true }, match: false },
+    { config: "ctrl+f", event: { key: "а", code: "KeyF", metaKey: true }, match: false },
+    { config: "ctrl+f", event: { key: "а", code: "KeyF", ctrlKey: true, shiftKey: true }, match: false },
+    { config: "ctrl+f", event: { key: "а", code: "KeyF", ctrlKey: true, isComposing: true }, match: false },
+    { config: "ctrl+f", event: { key: "Dead", code: "KeyF", ctrlKey: true }, match: false },
+    { config: "ctrl+f", event: { key: "Unidentified", code: "KeyF", ctrlKey: true }, match: false },
+    { config: "ctrl+alt+[", event: { key: "х", code: "BracketLeft", ctrlKey: true, altKey: true }, match: false },
+    {
+      config: "ctrl+[",
+      event: { key: "х", code: "BracketLeft", ctrlKey: true, modifierAltGraph: true },
+      match: false,
+    },
   ])("matchKeybind $config with $event.key is $match", (row) => {
-    expect(matchKeybind(parseKeybind(row.config), new KeyboardEvent("keydown", row.event))).toBe(row.match)
+    const event = new KeyboardEvent("keydown", row.event)
+
+    // happy-dom does not implement modifierAltGraph.
+    if ("modifierAltGraph" in row.event) event.getModifierState = (key) => key === "AltGraph"
+    expect(matchKeybind(parseKeybind(row.config), event)).toBe(row.match)
   })
 
   // IS_MAC is fixed when the module loads, so each assertion accepts either platform's symbols.
