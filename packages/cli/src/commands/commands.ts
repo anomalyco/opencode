@@ -415,6 +415,14 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
         ...PermissionParams,
       },
     }),
+    Spec.make("db", {
+      description: "Manage the local database",
+      commands: [
+        Spec.make("vacuum", {
+          description: "Reclaim database space and enable incremental vacuum (stop the background service first)",
+        }),
+      ],
+    }),
     Spec.make("session", {
       description: "Manage sessions",
       commands: [
