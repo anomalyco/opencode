@@ -1,4 +1,4 @@
-import { batch, untrack, type Accessor } from "solid-js"
+import { batch, createSignal, untrack, type Accessor } from "solid-js"
 import { createStore, type SetStoreFunction } from "solid-js/store"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { ServerScope } from "@/runtime/server/scope"
@@ -28,6 +28,8 @@ export type {
   PathAttachmentPart,
   Prompt,
   PromptModel,
+  QuoteComment,
+  QuoteContextItem,
   SkillPart,
   TextPart,
 } from "./schema"
@@ -40,7 +42,7 @@ type InitialPrompt = {
 }
 
 export function isCommentItem(item: ContextItem | (ContextItem & { key: string })) {
-  return !!item.comment?.trim()
+  return item.type === "quote" || !!item.comment?.trim()
 }
 
 function createComposerActions(setStore: SetStoreFunction<ComposerStore>) {
@@ -85,6 +87,8 @@ function initialComposerStore(initial?: InitialPrompt): ComposerStore {
 
 function createComposerStateValue(store: ComposerStore, setStore: SetStoreFunction<ComposerStore>) {
   const actions = createComposerActions(setStore)
+  // The quote whose comment editor is open, by key; a request made before the composer shows waits for it.
+  const [quoteComment, setQuoteComment] = createSignal<string>()
 
   const clearRetry = () => {
     if (untrack(() => store.retry) !== undefined) setStore("retry", undefined)
@@ -125,16 +129,18 @@ function createComposerStateValue(store: ComposerStore, setStore: SetStoreFuncti
         setStore("context", "items", (items) => items.filter((x) => x.key !== key))
         clearRetry()
       },
-      /** Removes the file comment or note with this commentID. */
+      /** Removes the file comment, note, or quote with this commentID. */
       removeComment(commentID: string) {
         setStore("context", "items", (items) => items.filter((item) => item.commentID !== commentID))
         clearRetry()
       },
-      /** Edits the file comment or note with this commentID; only file comments carry a preview. */
+      /** Edits the file comment, note, or quote with this commentID; only file comments carry a preview. */
       updateComment(commentID: string, next: { readonly comment?: string; readonly preview?: string }) {
         setStore("context", "items", (items) =>
           items.map((item) => {
             if (item.commentID !== commentID) return item
+
+            if (item.type === "quote") return { ...item, comment: next.comment }
 
             const value =
               item.type === "file" ? { ...item, ...next } : { ...item, comment: next.comment ?? item.comment }
@@ -164,6 +170,7 @@ function createComposerStateValue(store: ComposerStore, setStore: SetStoreFuncti
         clearRetry()
       },
     },
+    quoteComment: { key: quoteComment, set: (key?: string) => setQuoteComment(key) },
     set: (prompt: Prompt, cursorPosition?: number) => actions.set(prompt, cursorPosition),
     reset: () => actions.reset(),
     capture: () => value,

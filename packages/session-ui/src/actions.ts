@@ -17,6 +17,12 @@ export type SessionUserComment =
       label: string
       icon: string
     }
+  | {
+      /** Plain text quoted from the session timeline, with an optional comment. */
+      type: "quote"
+      text: string
+      comment?: string
+    }
 
 /** An attachment delivered to the model as a path on the server instead of inline bytes. */
 export type SessionUserAttachmentReference = {

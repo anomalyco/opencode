@@ -32,6 +32,7 @@ import { SideRegion } from "@/runtime/extension/side-region"
 import { createSessionTimelineInteraction } from "./timeline/interaction"
 import { createTimelineSearchController } from "./timeline/search-controller"
 import { TimelineSearchBar } from "./timeline/search-bar"
+import { createTimelineQuote, TimelineQuote } from "./timeline/quote"
 import { ActiveSessionComposerRegion, createActiveSessionRegion } from "./composer/region"
 import { SessionIdentityHeader } from "./session-identity-header"
 import { SessionReviewToggle } from "./header/session-header-actions"
@@ -227,6 +228,13 @@ function SessionScreenContent(props: {
   props.bindBackground(composer.requests.background.tasks)
   useUsageExceededDialogs()
 
+  const quote = createTimelineQuote({
+    root: timeline.scroller,
+    sessionKey: session.identity.sessionKey,
+    enabled: () => conversationVisible() && composer.quote.available(),
+    add: composer.quote.add,
+  })
+
   const sessionErrorFallback = (cause: unknown, reset: () => void) => {
     createEffect(on(session.identity.sessionKey, reset, { defer: true }))
 
@@ -304,6 +312,7 @@ function SessionScreenContent(props: {
         input={composer.drop.input()}
         identity={session.layout.tabKey}
       />
+      <TimelineQuote controller={quote} />
       <Show when={!isDesktop() && !!session.identity.params.id && !bottomMobileTabs()}>{mobileTabs()}</Show>
       {/* Surface query errors without suspending session metadata while messages load. */}
       <Show when={timeline.resource.error}>

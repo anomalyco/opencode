@@ -1,5 +1,5 @@
 import { Predicate } from "effect"
-import { createEffect, type Accessor } from "solid-js"
+import { createEffect, createSignal, type Accessor } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { useFilteredList } from "@opencode/ui/hooks"
 import { createComposerAttachments, type ComposerAttachmentConfig } from "../attachments/attachments"
@@ -22,6 +22,7 @@ import {
 } from "../suggestions/machine"
 import { clonePrompt, isAttachment, promptLength } from "../prompt-parts"
 import type { ComposerQueue } from "../adapter"
+import { isCommentItem } from "../state"
 
 export type ComposerSelectControl = {
   options: Accessor<ComposerOption[]>
@@ -66,6 +67,8 @@ export function createComposerEditor(input: {
   openAttachment?: (attachment: ComposerAttachment) => void
   openContext?: (key: string) => void
   onContextRemove?: (item: ComposerComment) => void
+  onQuoteComment?: (item: Extract<ComposerComment, { type: "quote" }>, comment: string) => void
+  quoteComment?: { key: Accessor<string | undefined>; set: (key?: string) => void }
   onEditor?: (element: HTMLElement) => void
   onSuggestionSelect?: (item: ComposerSuggestion) => (() => void) | void
   view: ComposerEditorView
@@ -74,6 +77,8 @@ export function createComposerEditor(input: {
   let editor: HTMLElement | undefined
   let fileInput: HTMLInputElement | undefined
   const draft = createComposerEditorActions(input.store)
+  const [localQuoteComment, setLocalQuoteComment] = createSignal<string>()
+  const quoteComment = input.quoteComment ?? { key: localQuoteComment, set: setLocalQuoteComment }
   const [state, setState] = input.state ?? createComposerEditorState(draft.state.mode)
 
   function addPart(part: ComposerPersistedState["prompt"][number]) {
@@ -381,7 +386,7 @@ export function createComposerEditor(input: {
       return draft.state.context.items.find((item) => item.key === id)
     },
     comments() {
-      return draft.state.context.items.filter((item) => !!item.comment?.trim())
+      return draft.state.context.items.filter(isCommentItem)
     },
     files() {
       return draft.state.context.items.flatMap((item) => (item.type === "file" && !item.comment?.trim() ? [item] : []))
@@ -398,6 +403,16 @@ export function createComposerEditor(input: {
     toggleContext(id: string) {
       dispatch({ type: "context.active", id })
       input.openContext?.(id)
+    },
+    editingQuote: () => quoteComment.key(),
+    editQuote: (key?: string) => quoteComment.set(key),
+    commentQuote(id: string, comment: string) {
+      const item = draft.state.context.items.find((entry) => entry.key === id)
+
+      if (item?.type === "quote") input.onQuoteComment?.(item, comment)
+    },
+    async searchPaths(query: string) {
+      return (await input.searchContextFiles(query)).flatMap((item) => (item.path ? [item.path] : []))
     },
     removeContext(id: string) {
       const item = draft.state.context.items.find((entry) => entry.key === id)
@@ -427,7 +442,7 @@ export function createComposerEditor(input: {
 
       if (persisted.prompt.some(isAttachment)) return true
 
-      if (persisted.context.items.some((item) => !!item.comment?.trim())) return true
+      if (persisted.context.items.some(isCommentItem)) return true
 
       return persisted.prompt.some((part) => "content" in part && !!part.content.trim())
     },
