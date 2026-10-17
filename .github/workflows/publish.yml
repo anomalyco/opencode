@@ -358,16 +358,15 @@ jobs:
       fail-fast: false
       matrix:
         settings:
-          - host: macos-26-intel
+          - host: macos-26
             target: x86_64-apple-darwin
             platform_flag: --mac --x64
-            bun_install_flags: --os=darwin --cpu=x64
+            bun_install_flags: --os=darwin --cpu=*
           - host: macos-26
             target: aarch64-apple-darwin
             platform_flag: --mac --arm64
             bun_install_flags: --os=darwin --cpu=arm64
-          # github-hosted: blacksmith lacks ARM64 MSVC cross-compilation toolchain
-          - host: "windows-2025"
+          - host: "blacksmith-4vcpu-windows-2025"
             target: aarch64-pc-windows-msvc
             platform_flag: --win --arm64
             bun_install_flags: --cpu=*
