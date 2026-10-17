@@ -149,6 +149,7 @@ Review this diff:
 ```
 
 OpenCode runs each block with the configured shell in the active project location and inserts its combined output.
+Shell blocks finish before prompt submission, including before a background child session is created.
 Argument placeholders are expanded first:
 
 ```md title=".opencode/commands/history.md"
@@ -166,14 +167,16 @@ For `/history 5`, the shell receives `git log --oneline -5`. Do not place untrus
 
 ## Attachments
 
-Stored templates do not expand `@path`; it remains ordinary prompt text.
+Stored templates preserve `@path` and `@agent` mentions as ordinary prompt text. They do not read files or launch agents
+from those mentions.
 
 ```md title=".opencode/commands/readme.md"
-Review @README.md.
+Review @README.md with @reviewer.
 ```
 
-To attach a file, add it through the composer when invoking the command. OpenCode preserves those composer attachments
-when it submits the expanded prompt.
+Add explicit attachments through the composer or API when invoking the command. OpenCode preserves supplied files,
+agent metadata, and skills in both current-session and child-session prompts. File content follows the normal attachment
+loading rules; an agent attachment does not select the execution agent.
 
 ## Execution
 
@@ -189,11 +192,12 @@ Plan $ARGUMENTS.
 ```
 
 Running `/plan migration` switches the current session to `plan` before submitting the prompt.
+Later prompts keep using that agent until you change the session's selection.
 
 Model selection follows these rules:
 
 1. A command `model` overrides every other model.
-2. Otherwise, the selected command agent's configured model overrides the model active at invocation.
+2. Otherwise, an explicitly specified command agent's configured model overrides the model active at invocation.
 3. Otherwise, the current session model remains active.
 
 For example, this command selects both its agent and an explicit model:
@@ -206,6 +210,9 @@ model: openai/gpt-5#high
 
 Design $ARGUMENTS.
 ```
+
+For commands in the current session, the selected model also remains active for later prompts. Background commands set
+the child model without changing the parent's selection.
 
 ## Background
 
@@ -221,17 +228,18 @@ subagent: true
 Audit $ARGUMENTS for bugs and missing tests.
 ```
 
-The parent stays available and keeps its agent and model. OpenCode sends the child's result or failure back to the parent
-when the child finishes.
+The parent stays available and keeps its agent and model. OpenCode sends the child's result, failure, or cancellation
+notice back to the parent when the child finishes.
 
 | Value | Behavior |
 | --- | --- |
 | `true` | Always use a child, even when the selected agent has `mode: primary`. |
 | `false` | Always use the current session, even when the selected agent has `mode: subagent`. |
-| Omitted | Use a child only when the selected agent has `mode: subagent`. |
+| Omitted | Use a child only when the command explicitly selects an agent with `mode: subagent`. |
 
-The child uses the command model, then the selected agent's model, then the parent's model. Legacy `subtask` remains
-accepted; if both fields are present, `subagent` wins.
+The child uses the command model, then the selected agent's model, then the parent's model. Native JSON and Markdown
+accept `subtask` as an alias; legacy singular `command` JSON uses `subtask`. If both fields are present in native
+configuration, `subagent` wins.
 
 ```yaml
 subagent: false

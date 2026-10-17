@@ -5,19 +5,23 @@ import { Bus } from "@opencode/core/bus"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Location } from "@opencode/core/location"
 import { Mcp } from "@opencode/core/mcp/index"
+import { Plugin } from "@opencode/plugin/effect"
 import { CommandPlugin } from "@opencode/core/plugin/command"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/schema/session"
 import { SessionInbox } from "@opencode/schema/session-inbox"
 import { SessionMessage } from "@opencode/schema/session-message"
+import { Skill } from "@opencode/core/skill"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { DateTime } from "effect"
-import { emptyMcpLayer } from "../fixture/mcp"
+import { emptyMcp, emptyMcpLayer } from "../fixture/mcp"
 import { location } from "../fixture/location"
 import { testEffect } from "../lib/effect"
 import { host } from "./host"
 import PROMPT_INITIALIZE from "../../src/plugin/command/initialize.txt"
 import PROMPT_REVIEW from "../../src/plugin/command/review.txt"
+
+type SessionPromptInput = Parameters<Plugin.Context["session"]["prompt"]>[0]
 
 const directory = AbsolutePath.make("/repo/packages/app")
 const project = AbsolutePath.make("/repo")
@@ -129,6 +133,94 @@ describe("CommandPlugin.Plugin", () => {
         {
           text: PROMPT_REVIEW.replace("${path}", project).replaceAll("$ARGUMENTS", ""),
           files: undefined,
+          delivery: "steer",
+        },
+      ])
+    }),
+  )
+
+  it.effect("executes MCP prompt commands and forwards explicit attachments", () =>
+    Effect.gen(function* () {
+      const command = yield* Command.Service
+      const prompts: SessionPromptInput[] = []
+      const serverName = Mcp.ServerName.make("github")
+      const mcpPrompt: Mcp.Prompt = {
+        server: serverName,
+        name: "review-pr",
+        description: "Review pull request",
+        arguments: [{ name: "pr_number" }],
+      }
+      const mcpService = Mcp.Service.of({
+        ...emptyMcp,
+        prompts: () => Effect.succeed([mcpPrompt]),
+        prompt: (input) =>
+          Effect.succeed({
+            server: serverName,
+            name: input.name,
+            messages: [
+              {
+                role: "user" as const,
+                content: { type: "text" as const, text: `Review PR #${input.args?.["pr_number"] ?? ""}` },
+              },
+            ],
+          }),
+      })
+      yield* CommandPlugin.Plugin.effect(
+        host({
+          command: {
+            list: () => Effect.die(new Error("unused command.list")),
+            transform: command.transform,
+            reload: command.reload,
+          },
+          session: {
+            prompt: (input) =>
+              Effect.sync(() => {
+                prompts.push(input)
+                return SessionInbox.User.make({
+                  id: SessionMessage.ID.make("msg_test"),
+                  sessionID: input.sessionID,
+                  time: { created: DateTime.makeUnsafe(0) },
+                  type: "user",
+                  payload: { text: input.text },
+                  delivery: input.delivery ?? "steer",
+                })
+              }),
+          },
+        }),
+      ).pipe(
+        Effect.provideService(Mcp.Service, mcpService),
+        Effect.provideService(
+          Location.Service,
+          Location.Service.of(location({ directory }, { projectDirectory: project })),
+        ),
+      )
+
+      expect(yield* command.get("github:review-pr")).toMatchObject({
+        name: "github:review-pr",
+        description: "Review pull request",
+      })
+
+      yield* command.execute({
+        name: "github:review-pr",
+        invocation: {
+          sessionID: Session.ID.make("ses_test"),
+          prompt: {
+            text: "123",
+            files: [{ uri: "data:text/plain;base64,ZXhwb3J0IGNvbnN0IHggPSAxOw==", name: "pr.diff" }],
+            agents: [{ name: "reviewer" }],
+            skills: [{ id: Skill.ID.make("code-review") }],
+          },
+          delivery: "steer",
+        },
+      })
+
+      expect(prompts).toMatchObject([
+        {
+          sessionID: Session.ID.make("ses_test"),
+          text: "Review PR #123",
+          files: [{ uri: "data:text/plain;base64,ZXhwb3J0IGNvbnN0IHggPSAxOw==", name: "pr.diff" }],
+          agents: [{ name: "reviewer" }],
+          skills: [{ id: Skill.ID.make("code-review") }],
           delivery: "steer",
         },
       ])
