@@ -425,6 +425,27 @@ it.live("rejects request-hook route rewrites before provider compaction", () =>
   }),
 )
 
+it.live("rechecks native routing after preparing a reduced request", () =>
+  Effect.gen(function* () {
+    const fixture = yield* setup()
+    yield* fixture.prompt("Old exchange ".repeat(1000))
+    yield* fixture.prompt("Newest exchange")
+    fixture.state.overflow = true
+    let calls = 0
+    yield* fixture.hooks.register("session", "model.request", (event) =>
+      Effect.sync(() => {
+        if (++calls === 2) event.baseURL = "https://another.example/v1"
+      }),
+    )
+    expect(yield* fixture.compact).toMatchObject({
+      status: "failed",
+      error: { type: "provider.unsupported-operation" },
+    })
+    expect(calls).toBe(2)
+    expect(fixture.state.calls).toBe(1)
+  }),
+)
+
 test("retained user budget counts attachments and drops whole oldest messages", () => {
   const model = SessionRunnerModel.resolved(OpenAI.responses("gpt-5.4-mini"), {
     capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
