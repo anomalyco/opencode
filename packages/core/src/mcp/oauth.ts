@@ -27,7 +27,10 @@ import { ErrorSummary } from "../util/error-summary.js"
 /** Client ID Metadata Document: servers that support CIMD accept this URL as the client_id without registration. */
 export const CLIENT_METADATA_URL = "https://opencode.ai/oauth/opencode/client.json"
 
-// Refresh tokens rotate, so concurrent refreshes of the same token share one request or the second gets invalid_grant.
+// Refresh tokens rotate, so a refresh token is spent once the server answers. Concurrent refreshes of the
+// same token share one request, and a successful answer is kept briefly for callers that read the token
+// before the new one was saved; sending the spent token would get invalid_grant or a 429.
+const REFRESH_REUSE = 60_000
 const refreshes = new Map<string, ReturnType<FetchLike>>()
 
 const refreshKey = (url: string | URL, init: RequestInit | undefined) => {
@@ -45,10 +48,13 @@ const send: FetchLike = (url, init) => {
   if (key === undefined) return base(url, init)
   const current = refreshes.get(key)
   if (current) return share(current)
-  const pending = base(url, init).finally(() => {
-    if (refreshes.get(key) === pending) refreshes.delete(key)
-  })
+  const pending = base(url, init)
   refreshes.set(key, pending)
+  const forget = () => {
+    if (refreshes.get(key) === pending) refreshes.delete(key)
+  }
+  // Failures are forgotten at once so a retry reaches the server.
+  pending.then((response) => (response.ok ? setTimeout(forget, REFRESH_REUSE).unref() : forget()), forget)
   return share(pending)
 }
 
