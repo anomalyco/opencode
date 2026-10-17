@@ -5,9 +5,10 @@ import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import { Array, Context, Effect, Layer, Schema } from "effect"
 import path from "path"
+import { Environment } from "./environment/index.js"
+import type { Files } from "./environment/index.js"
 import { Location } from "./location.js"
 import { Permission } from "./permission.js"
-import { Project } from "./project.js"
 import { AbsolutePath } from "./schema.js"
 import type { SessionErrors } from "./session/error.js"
 import type { Tool } from "./tool.js"
@@ -46,7 +47,7 @@ export interface ReadOptions {
 
 export interface Interface {
   /** Resolve a lexical path and its permission resources, without requesting approval. */
-  readonly resolve: (input: ResolveInput) => Effect.Effect<Target, FSUtil.Error>
+  readonly resolve: (input: ResolveInput) => Effect.Effect<Target, Environment.Failed>
   /** Approve external directories in one batch, preserving first-seen resource order. */
   readonly authorizeExternal: (
     targets: readonly Target[],
@@ -58,7 +59,7 @@ export interface Interface {
     file: string,
     context: Invocation,
     options?: ReadOptions,
-  ) => Effect.Effect<Target, FSUtil.Error | Error | SessionErrors.NotFoundError>
+  ) => Effect.Effect<Target, Environment.Failed | Error | SessionErrors.NotFoundError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/FileAccess") {}
@@ -83,10 +84,32 @@ const invocation = (context: Invocation) => ({
   source: { type: "tool" as const, messageID: context.messageID, id: context.id },
 })
 
+/** Walk upward from `start` looking for project markers via Environment.files. */
+const projectRootViaFiles = Effect.fn("FileAccess.projectRootViaFiles")(function* (
+  files: Files,
+  start: AbsolutePath,
+  markers: readonly string[] = [".git", ".hg"],
+) {
+  let current: string = start
+  while (true) {
+    for (const marker of markers) {
+      const found = yield* files.stat(path.join(current, marker)).pipe(
+        Effect.as(true),
+        Effect.catchTag("Environment.NotFound", () => Effect.succeed(false)),
+      )
+      if (found) return AbsolutePath.make(current)
+    }
+    const parent = path.dirname(current)
+    if (parent === current) break
+    current = parent
+  }
+  return undefined
+})
+
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const fs = yield* FSUtil.Service
+    const environment = yield* Environment.Service
     const location = yield* Location.Service
     const permission = yield* Permission.Service
 
@@ -102,14 +125,15 @@ const layer = Layer.effect(
           resource: slash(path.relative(location.directory, absolute) || "."),
         } satisfies Target
       }
-      const type =
+      const isDir =
         input.kind === "directory"
-          ? "Directory"
+          ? true
           : input.kind === "file"
-            ? "File"
-            : (yield* fs.stat(absolute).pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined)))
-                ?.type
-      const directory = AbsolutePath.make(type === "Directory" ? absolute : path.dirname(absolute))
+            ? false
+            : (yield* Environment.typeFollowing(environment.files, absolute).pipe(
+                Effect.catchTag("Environment.NotFound", () => Effect.undefined),
+              )) === "directory"
+      const directory = AbsolutePath.make(isDir ? absolute : path.dirname(absolute))
       return {
         absolute,
         resource: slash(absolute),
@@ -117,7 +141,7 @@ const layer = Layer.effect(
           action: "external_directory",
           directory,
           resource: slash(path.join(directory, "*")),
-          save: slash(path.join((yield* Project.root(fs, directory)) ?? directory, "*")),
+          save: slash(path.join((yield* projectRootViaFiles(environment.files, directory)) ?? directory, "*")),
         },
       } satisfies Target
     })
@@ -164,4 +188,8 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [FSUtil.node, Location.node, Permission.node] })
+export const node = makeLocationNode({
+  service: Service,
+  layer,
+  deps: [Environment.node, Location.node, Permission.node],
+})
