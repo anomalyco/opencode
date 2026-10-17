@@ -51,7 +51,8 @@ export const layer = Layer.effect(
       readonly text: string
       readonly model: SessionRunnerModel.Resolved
     }) {
-      const chunks: string[] = []
+      const chunks: Array<{ id: string; text: string }> = []
+      const commentary = new Set<string>()
       let failed = false
       let usage: SessionUsage.Recorded | undefined
       const recordUsage = Effect.suspend(() =>
@@ -71,10 +72,17 @@ export const layer = Layer.effect(
         messages: [Message.user(input.text)],
       })
       if (prepared.event.result !== undefined) return prepared.event.result
+      const metadataKey = prepared.request.model.route.providerMetadataKey ?? prepared.request.model.provider
       yield* llm.stream(prepared.request, prepared.options).pipe(
         Stream.runForEach((event) => {
           if (LLMEvent.is.providerError(event)) failed = true
-          if (LLMEvent.is.textDelta(event)) chunks.push(event.text)
+          // Responses can classify a text block only when it ends; filter after the stream completes.
+          if (LLMEvent.is.textStart(event) || LLMEvent.is.textDelta(event) || LLMEvent.is.textEnd(event)) {
+            const phase = event.providerMetadata?.[metadataKey]?.phase
+            if (phase === "commentary") commentary.add(event.id)
+            if (phase === "final_answer" || phase === null) commentary.delete(event.id)
+          }
+          if (LLMEvent.is.textDelta(event)) chunks.push({ id: event.id, text: event.text })
           if (LLMEvent.is.stepFinish(event)) {
             const step = SessionUsage.record(event.usage, input.model.cost)
             usage = usage ? SessionUsage.add(usage, step) : step
@@ -91,6 +99,8 @@ export const layer = Layer.effect(
       yield* recordUsage
       if (failed) return
       return chunks
+        .filter((chunk) => !commentary.has(chunk.id))
+        .map((chunk) => chunk.text)
         .join("")
         .split("\n")
         .map((line) => line.trim())
