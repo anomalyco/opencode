@@ -13,6 +13,7 @@ import { fileURLToPath } from "url"
 import { SessionMessage } from "../message.js"
 import { SessionProviderContext } from "../provider-context.js"
 import type { FileAttachment } from "@opencode/schema/prompt"
+import { ToolOutput } from "../../tool-output.js"
 
 const imageMimes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"])
 
@@ -290,17 +291,36 @@ function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMe
       return [Message.make({ id: message.id, role: "user", content: message.text, metadata: message.metadata })]
     case "system":
       return [Message.system(message.text)]
-    case "shell":
+    case "shell": {
       // Background shell results enter context once, through their completion inbox item.
       if (message.metadata?.background === true) return []
+      // Unbounded shell output reaches the provider request verbatim and can
+      // strand the session on context overflow. Bound the model-facing preview
+      // to the tool-output limit, counting bytes per code point so multi-byte
+      // text is never split; the full output stays in session history.
+      const output = message.output?.output ?? ""
+      const totalBytes = Buffer.byteLength(output, "utf-8")
+      let preview = output
+      if (totalBytes > ToolOutput.MAX_BYTES) {
+        let kept = ""
+        let keptBytes = 0
+        for (const char of output) {
+          const size = Buffer.byteLength(char, "utf-8")
+          if (keptBytes + size > ToolOutput.MAX_BYTES) break
+          kept += char
+          keptBytes += size
+        }
+        preview = `${kept}\n[truncated: ${totalBytes - keptBytes} bytes omitted]`
+      }
       return [
         Message.make({
           id: message.id,
           role: "user",
-          content: `The following shell command was executed by the user:\n\nCommand:\n${message.command}\n\nOutput:\n${message.output?.output ?? ""}`,
+          content: `The following shell command was executed by the user:\n\nCommand:\n${message.command}\n\nOutput:\n${preview}`,
           metadata: message.metadata,
         }),
       ]
+    }
     case "assistant":
       return assistant(message, model, providerMetadataKey)
     case "compaction":

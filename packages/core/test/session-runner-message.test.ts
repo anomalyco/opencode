@@ -1248,4 +1248,81 @@ Earlier work
       },
     ])
   })
+
+  test("short shell output passes through verbatim", () => {
+    const shell = SessionMessage.Shell.make({
+      id: id("short-shell"),
+      type: "shell",
+      shellID: Shell.ID.make("sh_short"),
+      status: "exited",
+      command: "cat big.log",
+      output: { output: "hello\n", cursor: 6, size: 6, truncated: false },
+      time: { created },
+    })
+    expect(toLLMMessages([shell], model)).toEqual([
+      Message.make({
+        id: shell.id,
+        role: "user",
+        content:
+          "The following shell command was executed by the user:\n\nCommand:\ncat big.log\n\nOutput:\nhello\n",
+      }),
+    ])
+  })
+
+  test("bounds large shell output with the omitted byte count", () => {
+    const output = `head-${"a".repeat(60 * 1024)}-TAIL`
+    const shell = SessionMessage.Shell.make({
+      id: id("long-shell"),
+      type: "shell",
+      shellID: Shell.ID.make("sh_long"),
+      status: "exited",
+      command: "bun typecheck",
+      output: { output, cursor: output.length, size: output.length, truncated: false },
+      time: { created },
+    })
+    const [message] = toLLMMessages([shell], model)
+    const text =
+      typeof message?.content === "string"
+        ? message.content
+        : (message?.content ?? [])
+            .flatMap((part) => (part.type === "text" ? [part.text] : []))
+            .join("")
+    expect(text).toContain("Command:\nbun typecheck")
+    expect(text).toContain("[truncated:")
+    expect(text).toContain("bytes omitted]")
+    expect(text).not.toContain("TAIL")
+    expect(Buffer.byteLength(text, "utf-8")).toBeLessThan(50 * 1024 + 512)
+  })
+
+  test("does not split multi-byte shell output at the truncation boundary", () => {
+    const output = "é".repeat(40 * 1024)
+    const shell = SessionMessage.Shell.make({
+      id: id("shell-multibyte"),
+      type: "shell",
+      shellID: Shell.ID.make("sh_multibyte"),
+      status: "exited",
+      command: "echo",
+      output: { output, cursor: output.length, size: output.length, truncated: false },
+      time: { created },
+    })
+    const [message] = toLLMMessages([shell], model)
+    const text = typeof message?.content === "string" ? message.content : JSON.stringify(message?.content)
+    expect(text).not.toContain("�")
+    expect(text).toContain("[truncated:")
+  })
+
+  test("background shell results bypass the bound through their completion path", () => {
+    const output = `head-${"a".repeat(60 * 1024)}-TAIL`
+    const shell = SessionMessage.Shell.make({
+      id: id("background-large"),
+      type: "shell",
+      shellID: Shell.ID.make("sh_background_large"),
+      status: "exited",
+      command: "bun typecheck",
+      metadata: { background: true },
+      output: { output, cursor: output.length, size: output.length, truncated: false },
+      time: { created },
+    })
+    expect(toLLMMessages([shell], model)).toEqual([])
+  })
 })
