@@ -57,6 +57,15 @@ describe("prompt local attachments", () => {
     ).toEqual([])
   })
 
+  test("resolves pastes without attachment paths synchronously", () => {
+    for (const input of ["你好", "plain\r\ntext", "https://example.com/image.png", "/tmp/notes.txt", ""]) {
+      expect(resolvePastedAttachments(input, "linux")).toBeUndefined()
+    }
+    for (const input of ["/tmp/image.PNG", "file:///tmp/file.pdf", "/tmp/one.png /tmp/two.webp"]) {
+      expect(resolvePastedAttachments(input, "linux")).toBeInstanceOf(Promise)
+    }
+  })
+
   test("reads SVG attachments as text", async () => {
     expect(await readLocalAttachmentWith(files({ mime: "image/svg+xml", text: "<svg />" }), "/tmp/image.svg")).toEqual({
       type: "text",
