@@ -37,3 +37,31 @@ describe.skipIf(process.platform === "win32")("Database file permissions", () =>
     expect(await openModes(filename)).toEqual([0o600, 0o600, 0o600])
   })
 })
+
+describe.skipIf(process.platform === "win32")("Database WAL switch", () => {
+  // Switching a new file to WAL takes an exclusive lock, and SQLite does not run the busy handler
+  // for a journal-mode change, so a connection that finds the lock held fails with SQLITE_BUSY
+  // instead of waiting. Two processes starting on one new database at the same time hit exactly
+  // this, and the loser used to exit. Hold the lock the way that other process would and require
+  // the connection to wait for it.
+  test("waits for a held write lock instead of failing when switching a new file to WAL", async () => {
+    await using tmp = await tmpdir()
+    const filename = path.join(tmp.path, "opencode.db")
+    const { Database: SqliteDatabase } = await import("bun:sqlite")
+
+    const holder = new SqliteDatabase(filename, { create: true, readwrite: true })
+    holder.run("BEGIN IMMEDIATE;")
+
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        yield* Effect.forkScoped(
+          Effect.sleep("50 millis").pipe(Effect.andThen(Effect.sync(() => holder.run("COMMIT;")))),
+        )
+        yield* Layer.build(Database.layer({ path: filename }))
+      }).pipe(Effect.scoped, Effect.provideService(Global.Service, Global.make({ data: path.dirname(filename) }))),
+    )
+
+    expect(holder.query("PRAGMA journal_mode;").get()).toEqual({ journal_mode: "wal" })
+    holder.close()
+  })
+})
