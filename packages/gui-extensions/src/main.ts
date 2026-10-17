@@ -1,6 +1,7 @@
 import { Extension } from "./sdk/main"
 import context from "./context"
 import btw from "./btw"
+import sideChat from "./side-chat"
 import debug from "./debug"
 import terminal from "./terminal"
 import file from "./file"
@@ -20,6 +21,7 @@ import microsoftOffice from "./microsoft-office"
 export const builtins = Extension.compose(
   context,
   btw,
+  sideChat,
   debug,
   terminal,
   file,
