@@ -1,5 +1,11 @@
 import { spyOn } from "bun:test"
-import type { LocationRef, ModelListOutput, OpenCodeClient, ProviderListOutput } from "@opencode/client/promise"
+import type {
+  ConfigGetOutput,
+  LocationRef,
+  ModelListOutput,
+  OpenCodeClient,
+  ProviderListOutput,
+} from "@opencode/client/promise"
 
 export function catalogProvider(id: string, name: string): ProviderListOutput["data"][number] {
   return {
@@ -43,6 +49,7 @@ export function stubCatalogLists(
     location?: LocationRef
     providers?: ProviderListOutput["data"]
     models?: ModelListOutput["data"]
+    config?: ConfigGetOutput
   } = {},
 ) {
   const location = {
@@ -52,6 +59,7 @@ export function stubCatalogLists(
   }
   const empty = { location, data: [] }
 
+  spyOn(sdk.config, "get").mockResolvedValue((input.config ?? []) as never)
   return {
     provider: spyOn(sdk.provider, "list").mockResolvedValue({ location, data: input.providers ?? [] } as never),
     model: spyOn(sdk.model, "list").mockResolvedValue({ location, data: input.models ?? [] } as never),
