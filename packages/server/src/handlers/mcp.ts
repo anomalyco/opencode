@@ -1,4 +1,5 @@
 import { Mcp } from "@opencode/core/mcp/index"
+import { Plugin } from "@opencode/core/plugin"
 import { McpServerNotFoundError } from "@opencode/protocol/errors"
 import { Effect } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/http-api"
@@ -14,6 +15,7 @@ export const McpHandler = HttpApiBuilder.group(Api, "server.mcp", (handlers) =>
       .handle(
         "mcp.list",
         Effect.fn(function* () {
+          yield* Plugin.awaitActivation
           const service = yield* Mcp.Service
           return yield* response(
             service
@@ -29,6 +31,7 @@ export const McpHandler = HttpApiBuilder.group(Api, "server.mcp", (handlers) =>
       .handle(
         "mcp.add",
         Effect.fn(function* (ctx) {
+          yield* Plugin.awaitActivation
           const service = yield* Mcp.Service
           yield* service.add(ctx.params.server, ctx.payload.config)
           return HttpApiSchema.NoContent.make()
@@ -37,6 +40,7 @@ export const McpHandler = HttpApiBuilder.group(Api, "server.mcp", (handlers) =>
       .handle(
         "mcp.remove",
         Effect.fn(function* (ctx) {
+          yield* Plugin.awaitActivation
           const service = yield* Mcp.Service
           yield* notFound(service.remove(ctx.params.server))
           return HttpApiSchema.NoContent.make()
@@ -45,6 +49,7 @@ export const McpHandler = HttpApiBuilder.group(Api, "server.mcp", (handlers) =>
       .handle(
         "mcp.connect",
         Effect.fn(function* (ctx) {
+          yield* Plugin.awaitActivation
           const service = yield* Mcp.Service
           yield* notFound(service.connect(ctx.params.server))
           return HttpApiSchema.NoContent.make()
@@ -53,6 +58,7 @@ export const McpHandler = HttpApiBuilder.group(Api, "server.mcp", (handlers) =>
       .handle(
         "mcp.disconnect",
         Effect.fn(function* (ctx) {
+          yield* Plugin.awaitActivation
           const service = yield* Mcp.Service
           yield* notFound(service.disconnect(ctx.params.server))
           return HttpApiSchema.NoContent.make()
@@ -61,6 +67,7 @@ export const McpHandler = HttpApiBuilder.group(Api, "server.mcp", (handlers) =>
       .handle(
         "mcp.resource.catalog",
         Effect.fn(function* () {
+          yield* Plugin.awaitActivation
           const service = yield* Mcp.Service
           return yield* response(service.resourceCatalog())
         }),
