@@ -1,0 +1,312 @@
+---
+title: "Quyền"
+---
+
+Quyền kiểm soát việc một tác nhân có được phép thực hiện một hành động trên một tài nguyên hay không.
+
+## Cấu hình
+
+Một thiết lập phổ biến là hỏi trước khi chạy lệnh shell, cho phép các lệnh Git
+kiểm tra thường ngày, và luôn chặn push. Thêm các quy tắc có thứ tự sau vào
+`opencode.jsonc`:
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    { "action": "shell", "resource": "*", "effect": "ask" },
+    { "action": "shell", "resource": "git status *", "effect": "allow" },
+    { "action": "shell", "resource": "git diff *", "effect": "allow" },
+    { "action": "shell", "resource": "git push *", "effect": "deny" },
+  ],
+}
+```
+
+Quy tắc khớp cuối cùng sẽ thắng, nên các ngoại lệ cụ thể đứng sau quy tắc rộng.
+
+<Callout type="warning">
+  V1 dùng tên trường và tên hành động khác. Trong V2, hãy dùng `permissions`, `shell` và
+  `subagent` thay cho `permission`, `bash` và `task`.
+</Callout>
+
+## Quy tắc
+
+Mỗi quy tắc yêu cầu ba trường chuỗi:
+
+| Trường      | Ý nghĩa                                                                     |
+| ---------- | -------------------------------------------------------------------------- |
+| `action`   | Hành động quyền của công cụ                                                  |
+| `resource` | Giá trị được sử dụng, chẳng hạn như đường dẫn, lệnh, URL, truy vấn, ID kỹ năng hoặc ID tác nhân |
+| `effect`   | `allow`, `deny` hoặc `ask`                                                    |
+
+```jsonc
+{
+  "permissions": [
+    { "action": "read", "resource": "*", "effect": "allow" },
+    { "action": "read", "resource": "*.env", "effect": "deny" },
+  ],
+}
+```
+
+| Hiệu ứng  | Kết quả                              |
+| ------- | ----------------------------------- |
+| `allow` | Tiếp tục mà không hỏi              |
+| `deny`  | Chặn thao tác                        |
+| `ask`   | Chờ quyết định từ client            |
+
+Nếu không có quy tắc nào khớp, OpenCode dùng `ask`.
+
+## So khớp
+
+Hành động và tài nguyên dùng các ký tự đại diện đơn giản trên toàn bộ giá trị:
+
+| Mẫu      | Khớp                                     |
+| ------- | ------------------------------------------ |
+| `*`     | Không hoặc nhiều ký tự, bao gồm `/`       |
+| `?`     | Đúng một ký tự                           |
+| Khác    | Ký tự theo nghĩa đen                     |
+
+```jsonc
+{
+  "permissions": [
+    { "action": "edit", "resource": "packages/docs/*.mdx", "effect": "allow" },
+  ],
+}
+```
+
+Mẫu này khớp với toàn bộ đường dẫn đã chuẩn hóa. Dấu gạch chéo ngược được chuẩn hóa
+thành dấu gạch chéo, và việc so khớp không phân biệt chữ hoa chữ thường trên Windows.
+
+Một mẫu shell kết thúc bằng ` *` cũng khớp với lệnh không có đối số:
+
+```jsonc
+{ "action": "shell", "resource": "git status *", "effect": "allow" }
+```
+
+Điều này khớp với cả `git status` và `git status --short`.
+
+OpenCode kết hợp các quy tắc theo thứ tự và dùng kết quả khớp cuối cùng. Cấu hình ưu
+tiên thấp được nạp trước, sau đó các quy tắc toàn cục được thêm vào, và quy tắc của tác
+nhân được thêm vào cuối cùng.
+
+```jsonc
+{
+  "permissions": [
+    { "action": "read", "resource": "*", "effect": "allow" },
+    { "action": "read", "resource": "secrets/*", "effect": "deny" },
+  ],
+}
+```
+
+Một thao tác có thể kiểm tra nhiều tài nguyên, chẳng hạn như một bản vá chạm vào nhiều
+tệp. Bất kỳ `deny` nào cũng từ chối thao tác; nếu không thì bất kỳ `ask` nào sẽ hỏi; nếu
+không thì thao tác được phép.
+
+## Hành động
+
+Tên hành động trong V2 là chuỗi, nên tiện ích mở rộng có thể định nghĩa thêm hành động. Hiện các
+công cụ tích hợp dùng những hành động và tài nguyên sau:
+
+| Hành động               | Tài nguyên                                                                        |
+| -------------------- | --------------------------------------------------------------------------- |
+| `read`               | Đường dẫn nội bộ tương đối so với Location, hoặc đường dẫn bên ngoài tuyệt đối ở dạng chuẩn hóa  |
+| `edit`               | Đường dẫn đích cho `edit`, `write` và `patch`                                 |
+| `glob`               | Mẫu glob được yêu cầu                                                           |
+| `grep`               | Biểu thức chính quy được yêu cầu, không phải đường dẫn tìm kiếm                |
+| `shell`              | Chuỗi lệnh do bộ quét tạo ra; lệnh ghép có thể tạo ra nhiều chuỗi               |
+| `subagent`           | ID tác nhân đích                                                                |
+| `skill`              | ID kỹ năng                                                                      |
+| `question`           | `*`                                                                             |
+| `webfetch`           | URL được yêu cầu                                                                |
+| `websearch`          | Truy vấn tìm kiếm                                                               |
+| `external_directory` | Ranh giới thư mục bên ngoài ở dạng chuẩn hóa, thường kết thúc bằng `/*`         |
+| `<server>_<tool>`    | `*` cho một công cụ MCP; ký tự không được hỗ trợ trong cả hai tên trở thành `_`  |
+| `opencode_list_mcp_resources` | Tên máy chủ MCP                                                       |
+| `opencode_read_mcp_resource`  | `<server>:<uri>`                                                  |
+| `execute`            | `*`; một quy tắc deny sẽ loại bỏ Code Mode và các công cụ chỉ đi qua nó, trong khi các công cụ lồng nhau vẫn áp dụng quy tắc của chúng |
+
+Ví dụ, cho phép một kỹ năng và từ chối tất cả kỹ năng khác:
+
+```jsonc
+{
+  "permissions": [
+    { "action": "skill", "resource": "*", "effect": "deny" },
+    { "action": "skill", "resource": "effect", "effect": "allow" },
+  ],
+}
+```
+
+`doom_loop` và `lsp` không phải là hành động quyền hiện hành của V2 Core.
+
+## Thư mục
+
+Một đường dẫn nằm ngoài cả Location đang hoạt động và worktree dự án không phải gốc của
+nó sẽ được kiểm tra với `external_directory` trước khi áp dụng các quy tắc `read` hoặc
+`edit` của nó. Chính sách mặc định cho phép `external_directory`, vì vậy các đường dẫn bên
+ngoài sẽ không bị hỏi trừ khi bạn thêm một quy tắc. Để được hỏi trước mọi lần truy cập ra
+ngoài dự án:
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    { "action": "external_directory", "resource": "*", "effect": "ask" },
+  ],
+}
+```
+
+Các quy tắc hẹp hơn đặt sau đó có thể cho phép hoặc từ chối những thư mục cụ thể:
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    { "action": "external_directory", "resource": "~/projects/reference/*", "effect": "allow" },
+    { "action": "read", "resource": "~/projects/reference/*", "effect": "allow" },
+    { "action": "edit", "resource": "~/projects/reference/*", "effect": "deny" },
+  ],
+}
+```
+
+Điều này áp dụng cho các đường dẫn bên ngoài mà `read`, `edit`, `write` và `patch` sử
+dụng. Shell kiểm tra thư mục làm việc bên ngoài của nó và các thư mục được bộ quét suy
+luận trước khi kiểm tra tài nguyên `shell`.
+
+Với `external_directory`, `read` và `edit`, tiền tố `~`, `~/`, `$HOME` hoặc `$HOME/` sẽ
+được mở rộng khi nạp cấu hình:
+
+```jsonc
+{ "action": "read", "resource": "$HOME/reference/*", "effect": "allow" }
+```
+
+Tài nguyên shell vẫn là văn bản lệnh thô và không được mở rộng thư mục home.
+
+<Callout type="warning">
+  `shell` chạy với quyền tệp tin, tiến trình và mạng của người dùng máy chủ. Việc suy luận thư mục từ văn bản lệnh chỉ là
+  nỗ lực tối đa, vì vậy hãy ưu tiên danh sách cho phép shell hẹp hẹp thay vì các mẫu nhằm nhận diện mọi lệnh nguy hiểm.
+</Callout>
+
+Các đường dẫn tương đối dùng để thay đổi có thể rời khỏi Location đang hoạt động trong khi
+vẫn nằm bên trong worktree dự án của nó. Các đường dẫn bên ngoài tường minh được chuẩn
+hóa trước khi so khớp, vì vậy chỉ nên cấp quyền cho các ranh giới thư mục đáng tin cậy.
+
+## Bộ quét
+
+Bật bộ quét shell thử nghiệm, dùng được ở mọi nơi, bằng:
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "portable_shell_scanner": true,
+  },
+}
+```
+
+Bộ quét dùng được ở mọi nơi thay thế bộ quét tree-sitter mặc định; tree-sitter không
+phải là phương án dự phòng hay ý kiến thứ hai. Một lệnh mà bộ quét này không phân tích
+được sẽ trả về lỗi bộ quét, không phải từ chối quyền.
+
+Cờ này chỉ thay đổi việc chọn bộ phân tích cú pháp. Các quy tắc quyền hiện có, các mẫu
+phê duyệt đã lưu và việc suy luận thư mục nỗ lực tối đa vẫn áp dụng. Không có chế độ phê
+duyệt bổ sung hay hạn chế chung cho các thư mục chưa biết.
+
+## Mặc định
+
+Mọi tác nhân, kể cả các tác nhân tùy chỉnh, đều bắt đầu với chính sách cơ sở có thứ tự
+sau:
+
+```jsonc
+[
+  { "action": "*", "resource": "*", "effect": "allow" },
+  { "action": "read", "resource": "*.env", "effect": "ask" },
+  { "action": "read", "resource": "*.env.*", "effect": "ask" },
+  { "action": "read", "resource": "*.env.example", "effect": "allow" },
+]
+```
+
+Các tác nhân tích hợp sẵn bổ sung những chính sách sau:
+
+| Tác nhân        | Chính sách bổ sung                                                             |
+| ------------ | ------------------------------------------------------------------------------ |
+| `build`      | Cho phép hỏi câu                                                              |
+| `plan`       | Cho phép hỏi câu; từ chối chỉnh sửa, trừ các tệp nằm dưới `~/.opencode/plan`           |
+| `general`    | Từ chối hỏi câu và khởi chạy subagent                                        |
+| `explore`    | Từ chối mọi thứ trừ shell, đọc, glob, grep, tìm nạp web, tìm kiếm web và thư mục bên ngoài; hỏi khi đọc `.env` |
+| `title`      | Từ chối mọi hành động                                                              |
+| `summary`    | Từ chối mọi hành động                                                              |
+| `compaction` | Giữ nguyên chính sách cơ sở                                                          |
+
+Vì không có quy tắc mặc định nào hỏi về `external_directory`, các lần đọc và chỉnh sửa
+ngoài Location và worktree sẽ diễn ra mà không hỏi. Hãy thêm một quy tắc `ask` hoặc `deny`
+cho `external_directory`, như [Thư mục](#directories) đã trình bày, để khôi phục lại
+việc hỏi hoặc chặn truy cập từ bên ngoài. Các quy tắc toàn cục và quy tắc của tác nhân đặt
+sau sẽ ghi đè những mặc định này.
+
+## Tác nhân
+
+Đặt các quy tắc dùng chung ở cấp cao nhất và các quy tắc hẹp hơn dưới
+`agents.<id>.permissions`:
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permissions": [
+    { "action": "shell", "resource": "*", "effect": "ask" },
+    { "action": "shell", "resource": "git status *", "effect": "allow" },
+  ],
+  "agents": {
+    "reviewer": {
+      "description": "Review code without changing it",
+      "mode": "subagent",
+      "permissions": [
+        { "action": "edit", "resource": "*", "effect": "deny" },
+      ],
+    },
+  },
+}
+```
+
+Quy tắc của tác nhân được thêm vào sau các quy tắc toàn cục; chúng không thay thế mảng
+toàn cục. Một subagent tùy chỉnh dùng quyền riêng của nó, không phải tập con quyền của tác
+nhân cha.
+
+## Phê duyệt
+
+Khi một quy tắc cho ra kết quả `ask`, client có thể trả lời bằng:
+
+| Lựa chọn       | Phản hồi      | Kết quả                                                               |
+| ------------ | ---------- | -------------------------------------------------------------------- |
+| Cho phép một lần   | `once`     | Chỉ phê duyệt yêu cầu đang chờ                                     |
+| Luôn cho phép | `always`   | Phê duyệt và lưu các mẫu do công cụ đề xuất cho dự án     |
+| Từ chối       | `reject`   | Từ chối nó và mọi yêu cầu quyền đang chờ khác trong phiên đó |
+
+Ví dụ, chọn **Luôn cho phép** cho `git status --short` có thể lưu một tiền tố shell bao
+phủ các lệnh `git status` về sau:
+
+```text
+shell: git status * → allow
+```
+
+Các lần phê duyệt đã lưu là những quy tắc `allow` bền vững, có phạm vi theo dự án. Chúng
+không bao giờ ghi đè một `deny` đã cấu hình. Công cụ chọn mẫu lưu được đề xuất: một số đề
+xuất `*`, shell đề xuất tiền tố lệnh, còn kỹ năng và subagent đề xuất ID của chúng. Hãy
+xem lại các lần phê duyệt rộng và gỡ bỏ những cái không còn cần thiết.
+
+Client có thể kèm phản hồi khi từ chối. Client không tương tác phải tự quyết định cách xử
+lý các yêu cầu phê duyệt; các quy tắc `deny` đã cấu hình luôn được thực thi.
+
+## Chính sách
+
+Một [chính sách](/policies) có thể từ chối dứt khoát một lần kiểm tra quyền sau khi các
+quy tắc và lần phê duyệt đã lưu đã chạy. Nó biến `allow` hoặc `ask` thành `deny` và
+không bao giờ cấp quyền truy cập.
+
+```jsonc
+{
+  "policies": [{ "action": "tool.use", "resource": "shell:sudo *", "effect": "deny" }],
+}
+```
+
+Các chính sách toàn cục và do Console quản lý ghi đè cấu hình dự án, đó là cách một tổ
+chức chặn một lệnh mà kho lưu trữ vốn cho phép.

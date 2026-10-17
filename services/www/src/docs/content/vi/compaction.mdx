@@ -1,0 +1,175 @@
+---
+title: "Nén"
+---
+
+Nén tạo khoảng trống trong một phiên dài bằng cách thay phần hội thoại cũ hơn bằng một bản
+tóm tắt, để phiên có thể tiếp tục vượt qua giới hạn ngữ cảnh của mô hình.
+
+## Cách hoạt động
+
+Khi một phiên đến gần giới hạn ngữ cảnh của mô hình, OpenCode tóm tắt mọi thứ ngoại trừ
+phần hội thoại gần nhất, khoảng 15.000 token theo mặc định. Khi bản tóm tắt sẵn sàng,
+nó được đặt trước phần hội thoại gần đó và phiên tiếp tục từ đó.
+
+```text
+before   [ system prompt ][ older conversation ............ ][ recent 15k ][ pending work ]
+after    [ system prompt ][ summary ][ recent 15k ][ pending work ]
+```
+
+Mô hình nhìn thấy bản tóm tắt như phần hội thoại đã qua. Những lần nén về sau cập nhật
+cùng một bản tóm tắt đó thay vì bắt đầu lại.
+
+## Bắt đầu
+
+Nén tự động được bật theo mặc định:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "compaction": {
+    "auto": true,
+    "keep": { "tokens": 15000 },
+  },
+}
+```
+
+Nén làm mất thông tin. Hãy tăng `keep.tokens` khi cần chi tiết gần đây một cách chính
+xác, hoặc tự yêu cầu nén trước lần nén tự động.
+
+## Thủ công
+
+Yêu cầu nén bất cứ lúc nào, kể cả với một lịch sử ngắn:
+
+```sh
+opencode api post /api/session/ses_example/compact --data '{}'
+```
+
+Lệnh `api` phát hiện và xác thực với dịch vụ nền. Phản hồi của nó xác nhận yêu cầu đã
+được chấp nhận; nó không chờ bản tóm tắt. Hãy theo dõi các sự kiện `session.compaction.*`
+để biết khi nào hoàn tất. Xem [tài liệu API](/api) để biết thao tác đầy đủ.
+
+| Quy tắc | Hành vi |
+| --- | --- |
+| Thời điểm | Chạy ở điểm an toàn kế tiếp, trước cả những lời nhắc vẫn đang chờ. |
+| Lặp lại | Các yêu cầu được gửi khi một yêu cầu khác đang chờ sẽ được gộp vào yêu cầu đó. |
+| Tự động hóa | Hoạt động khi `compaction.auto` là `false`. |
+
+Truyền một `id` để một lần thử lại chính xác trở nên idempotent. Tái sử dụng ID đó cho
+một yêu cầu khác sẽ trả về xung đột.
+
+```sh
+opencode api post /api/session/ses_example/compact --data '{"id":"msg_compact_once"}'
+```
+
+## Cài đặt
+
+Thêm `compaction` vào bất kỳ [tệp cấu hình OpenCode](/config) nào:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "compaction": {
+    "auto": false,
+    "keep": { "tokens": 24000 },
+    "buffer": 16000,
+  },
+}
+```
+
+| Trường | Mặc định | Hành vi |
+| --- | ---: | --- |
+| `auto` | `true` | Tự động nén khi gần giới hạn ngữ cảnh, và khôi phục một lần khi một nhà cung cấp từ chối một yêu cầu vì quá dài. Nén thủ công luôn hoạt động. |
+| `keep.tokens` | `15000` | Lượng hội thoại gần đây xấp xỉ được giữ lại bên cạnh bản tóm tắt. Giá trị lớn hơn giữ được nhiều chi tiết hơn nhưng để lại ít chỗ cho công việc mới. |
+| `buffer` | 10% giới hạn | Số token cần giữ trống bên dưới giới hạn của mô hình. Giá trị lớn hơn bắt đầu nén tự động sớm hơn. |
+
+`keep.tokens` và `buffer` nhận các số nguyên không âm.
+
+## Nhà cung cấp
+
+Mặc định OpenCode tự viết bản tóm tắt, dùng mô hình của phiên. Một số nhà cung cấp có thể
+nén hội thoại ở phía của họ. Hãy bật tính năng đó cho từng nhà cung cấp hoặc mô hình bằng
+`settings.compaction`:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "openai": {
+      "settings": { "compaction": { "type": "native" } },
+      "models": {
+        "gpt-4.1": { "settings": { "compaction": { "type": "summary" } } },
+      },
+    },
+  },
+}
+```
+
+Cài đặt của mô hình sẽ ghi đè cài đặt của nhà cung cấp. `native` dùng cách nén của nhà
+cung cấp; `summary` dùng cách nén của chính OpenCode.
+
+Với nén native, OpenCode gửi hội thoại tới endpoint nén của nhà cung cấp. Nhà cung cấp
+trả về một mục mờ đục, đã mã hóa đại diện cho phần hội thoại cũ hơn. Các tin nhắn và tệp
+đính kèm gần đây của bạn, tối đa `keep.tokens`, được giữ lại bên cạnh nó:
+
+```text
+before   [ older conversation ........................ ][ recent user messages ]
+after    [ encrypted checkpoint + recent user messages ]
+```
+
+| Nội dung | Hành vi |
+| --- | --- |
+| Hỗ trợ | Các mô hình OpenAI Responses. Mức hỗ trợ thay đổi theo cách triển khai và mô hình. |
+| Ngưỡng | Cùng các cài đặt `auto` và `buffer` như nén tóm tắt. Các yêu cầu thủ công cũng hoạt động. |
+| Khả chuyển | Một checkpoint đã mã hóa chỉ hoạt động với cùng nhà cung cấp, mô hình và endpoint. Nếu bạn đổi mô hình, phiên sẽ tiếp tục từ hội thoại gốc. |
+| Quá dài | Nếu nhà cung cấp từ chối một lần nén vì quá dài, OpenCode sẽ thử lại với một yêu cầu nhỏ hơn. Nó không chuyển sang tóm tắt. |
+
+## Bản tóm tắt
+
+Bản tóm tắt có cấu trúc để một tác nhân khác có thể tiếp nhận công việc từ đó:
+
+```md
+## Objective
+Finish the authentication migration.
+
+## Next Move
+- Update the callback handler.
+- Verify the login flow.
+```
+
+Nó bao gồm mục tiêu và các yêu cầu, các quyết định, công việc đã hoàn thành và đang diễn
+ra, các điểm vướng mắc và bước tiếp theo, cùng những tệp liên quan. Trong phần hội thoại
+gần đây được giữ bên cạnh, kết quả công cụ dài được rút gọn và dữ liệu tệp đính kèm được
+thay bằng một mô tả ngắn.
+
+Sau khi nén, các phiên bản hiện tại của những tệp chỉ dẫn của bạn trở thành nền tảng của
+phiên; xem [Chỉ dẫn](/instructions).
+
+## Giới hạn
+
+| Giới hạn | Kết quả |
+| --- | --- |
+| Mô hình | Nén dùng mô hình của phiên. Không có mô hình nén riêng. |
+| Lịch sử | Nén cần hội thoại cũ hơn để thay thế. Nó không thể tạo khoảng trống khi một yêu cầu chủ yếu là chỉ dẫn cố định và lược đồ công cụ. |
+| Kích thước | Nếu bản thân hội thoại cần nén đã quá dài, OpenCode sẽ gửi một phiên bản văn bản rút gọn và có thể bỏ qua các lượt trao đổi cũ nhất. |
+| Khôi phục | Một yêu cầu bị từ chối vì quá dài sẽ được nén và thử lại một lần. Lần từ chối thứ hai được trả về như một lỗi. |
+| Lưu trữ | Các tin nhắn trước đó vẫn được lưu ngay cả khi chúng không còn được gửi cho mô hình. |
+
+Ví dụ, việc nén không giúp ích ở đây:
+
+```text
+128k context = 120k fixed instructions and tools + 8k conversation
+```
+
+## Chuyển đổi
+
+V1 dùng hành vi tail-turn và cắt bớt. V2 dùng bản tóm tắt và `compaction.keep.tokens`:
+
+```jsonc
+{
+  "compaction": {
+    "keep": { "tokens": 15000 }
+  }
+}
+```
+
+Các cài đặt và hành vi trên trang này áp dụng cho V2.
