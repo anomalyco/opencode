@@ -4,7 +4,13 @@ import path from "node:path"
 import asset from "./pty-binding.js"
 
 // opencode-pty does not ship Windows binaries.
-export const available = process.platform !== "win32"
+// The platform alone is not enough: without an embedded binary (or on a
+// platform with no @opencode-ai/pty package) the daemon still has to be
+// resolvable through OPENCODE_PTY_BIN or $PATH. Otherwise persistent terminals
+// are advertised but every create fails.
+export const available =
+  process.platform !== "win32" &&
+  (Boolean(asset) || Boolean(process.env.OPENCODE_PTY_BIN) || Boolean(Bun.which("opencode-pty")))
 
 export async function resolveBinary(bin: string) {
   if (process.env.OPENCODE_PTY_BIN) return process.env.OPENCODE_PTY_BIN
