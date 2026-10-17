@@ -6,7 +6,12 @@ export function base64Encode(value: string) {
 
 export function base64Decode(value: string) {
   const binary = atob(value.replace(/-/g, "+").replace(/_/g, "/"))
-  return new TextDecoder().decode(Uint8Array.from(binary, (character) => character.charCodeAt(0)))
+  // Decode as fatal UTF-8: bytes that are not valid UTF-8 reject instead of silently becoming
+  // U+FFFD. Callers pass these values as directories and route keys, where mojibake is a path
+  // that can never resolve.
+  return new TextDecoder("utf-8", { fatal: true }).decode(
+    Uint8Array.from(binary, (character) => character.charCodeAt(0)),
+  )
 }
 
 export function checksum(content: string): string | undefined {
