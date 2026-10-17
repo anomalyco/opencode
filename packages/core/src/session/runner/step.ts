@@ -168,16 +168,23 @@ export const make = Effect.gen(function* () {
 
         if (overflowFailure) yield* publisher.publish(overflowFailure)
         const recorded = publisher.record()
-        const unknownFinish =
-          Exit.isSuccess(stream) && recorded.finish?.finish === "unknown"
+        // A successful stream with an explicit provider error or unknown finish is still a failed assistant turn.
+        // `length` is intentionally excluded: it is a valid truncation outcome and may contain
+        // usable partial output, so it is outside this subagent failure fix.
+        const invalidFinish =
+          Exit.isSuccess(stream) &&
+          (recorded.finish?.finish === "unknown" || recorded.finish?.finish === "error")
             ? new AIError({
                 reason: new InvalidProviderOutputError({
-                  message: "The provider response ended with an unknown finish reason.",
-                  classification: "incomplete-stream",
+                  message:
+                    recorded.finish.finish === "error"
+                      ? `The provider response ended with an error finish reason${recorded.finish.rawFinish ? ` (${recorded.finish.rawFinish})` : ""}.`
+                      : "The provider response ended with an unknown finish reason.",
+                  ...(recorded.finish.finish === "unknown" ? { classification: "incomplete-stream" as const } : {}),
                 }),
               })
             : undefined
-        const llmFailure = streamFailure instanceof AIError ? streamFailure : unknownFinish
+        const llmFailure = streamFailure instanceof AIError ? streamFailure : invalidFinish
         const llmError = llmFailure && !recorded.providerFailed ? toSessionError(llmFailure) : undefined
         if (
           input.recoverContinuation &&
