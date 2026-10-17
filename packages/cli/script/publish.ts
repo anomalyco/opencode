@@ -153,6 +153,10 @@ if ((Script.channel === "beta" || Script.channel === "latest") && Script.release
     ...process.env,
     OPENCODE_CLI_DIST: root,
   })
+  await $`bun ./script/publish-system-packages.ts ${dryRun ? ["--dry-run"] : []}`.env({
+    ...process.env,
+    OPENCODE_CLI_DIST: root,
+  })
 }
 
 async function archive(bin: string, target: string, binary: string, directory: string) {

@@ -1,0 +1,21 @@
+name: opencode
+arch: "${NFPM_ARCH}"
+platform: linux
+version: "${VERSION}"
+maintainer: "OpenCode <opencode@sst.dev>"
+description: "The open source AI coding agent for the terminal"
+homepage: "https://opencode.ai"
+license: "MIT"
+vendor: "Anomaly"
+section: "devel"
+priority: "optional"
+
+recommends:
+  - ripgrep
+
+contents:
+  - src: "${BINARY_PATH}"
+    dst: /usr/bin/opencode
+    expand: true
+    file_info:
+      mode: 0755
