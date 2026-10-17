@@ -64,6 +64,10 @@ export function contenderPool(timing: EnsureTiming) {
   let spawnDelay = timing.spawnDelay
   let lastSpawn = 0
   return {
+    /** A live attempt owned by this ensure call still has its startup deadline to answer. */
+    starting(pid: number) {
+      return [...contenders].some((item) => item.child.pid === pid && !contenderFinished(item))
+    },
     /** The first startup failure seen since the last eviction. */
     failure: () => failure,
     /** A registered service answered, so the next attempt waits the base delay again. */
