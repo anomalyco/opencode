@@ -469,6 +469,90 @@ describe("ConfigNormalize", () => {
     ])
   })
 
+  test("keeps native oauth keys written in a direct MCP server entry", () => {
+    const result = normalized({
+      mcp: {
+        slack: {
+          type: "remote",
+          url: "https://mcp.slack.com/mcp",
+          oauth: {
+            client_id: "abc",
+            client_secret: "shh",
+            callback_port: 3118,
+            redirect_uri: "http://localhost:3118/callback",
+            auth_server_metadata_url: "https://slack.com/.well-known/oauth-authorization-server",
+          },
+        },
+      },
+    })
+    expect((result.encoded.mcp as { servers: Record<string, unknown> }).servers.slack).toEqual({
+      type: "remote",
+      url: "https://mcp.slack.com/mcp",
+      oauth: {
+        client_id: "abc",
+        client_secret: "shh",
+        callback_port: 3118,
+        redirect_uri: "http://localhost:3118/callback",
+        auth_server_metadata_url: "https://slack.com/.well-known/oauth-authorization-server",
+      },
+    })
+    expect(result.diagnostics).toEqual([])
+  })
+
+  test("prefers the native oauth spelling over the legacy one", () => {
+    const legacy = normalized({
+      mcp: { slack: { type: "remote", url: "https://mcp.slack.com/mcp", oauth: { clientId: "legacy" } } },
+    })
+    expect((legacy.encoded.mcp as { servers: Record<string, unknown> }).servers.slack).toEqual({
+      type: "remote",
+      url: "https://mcp.slack.com/mcp",
+      oauth: { client_id: "legacy" },
+    })
+    expect(legacy.diagnostics).toEqual([])
+
+    const both = normalized({
+      mcp: {
+        slack: {
+          type: "remote",
+          url: "https://mcp.slack.com/mcp",
+          oauth: { clientId: "legacy", client_id: "native" },
+        },
+      },
+    })
+    expect((both.encoded.mcp as { servers: Record<string, unknown> }).servers.slack).toEqual({
+      type: "remote",
+      url: "https://mcp.slack.com/mcp",
+      oauth: { client_id: "native" },
+    })
+  })
+
+  test("reports unknown oauth keys instead of dropping them silently", () => {
+    const direct = normalized({
+      mcp: {
+        slack: {
+          type: "remote",
+          url: "https://mcp.slack.com/mcp",
+          oauth: { client_id: "abc", client_idd: "typo" },
+        },
+      },
+    })
+    expect((direct.encoded.mcp as { servers: Record<string, unknown> }).servers.slack).toEqual({
+      type: "remote",
+      url: "https://mcp.slack.com/mcp",
+      oauth: { client_id: "abc" },
+    })
+    expect(direct.diagnostics.map((item) => [item.kind, item.path])).toEqual([
+      ["unsupported", ["mcp", "slack", "oauth", "client_idd"]],
+    ])
+
+    const native = normalized({
+      mcp: { servers: { slack: { type: "remote", url: "https://mcp.slack.com/mcp", oauth: { clientId: "abc" } } } },
+    })
+    expect(native.diagnostics.map((item) => [item.kind, item.path])).toEqual([
+      ["unsupported", ["mcp", "servers", "slack", "oauth", "clientId"]],
+    ])
+  })
+
   test("normalizes MCP timeout fields in schema order with per-leaf recovery", () => {
     const result = normalized({ mcp: { timeout: { execution: 3000, startup: "invalid", catalog: 2000 } } })
 
