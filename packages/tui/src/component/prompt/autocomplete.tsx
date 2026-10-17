@@ -621,8 +621,12 @@ export function Autocomplete(props: {
       return
     }
     selected.onSelect?.()
-    setDismissedValue(props.input().plainText)
-    hide(true)
+    if (selected.value === search()) {
+      setDismissedValue(props.input().plainText)
+      hide(true)
+      return
+    }
+    setStore("selected", 0)
   }
 
   function triggerDestructive() {
