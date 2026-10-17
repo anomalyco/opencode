@@ -55,6 +55,10 @@ const source = {
   "ui.lineComment.submit": "Comment",
   "ui.lineComment.cancel": "Cancel",
 
+  "ui.commentCard.quote": "Quote",
+  "ui.commentCard.addComment": "Add comment",
+  "ui.commentCard.editComment": "Edit comment",
+
   "ui.sessionTurn.steps.show": "Show steps",
   "ui.sessionTurn.steps.hide": "Hide steps",
   "ui.sessionTurn.summary.response": "Response",

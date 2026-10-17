@@ -18,7 +18,7 @@ import { Markdown } from "../components/markdown"
 import { ImagePreview } from "@opencode/ui/image-preview"
 import { getFilename } from "@opencode/util/path"
 import { AttachmentCard } from "./attachment-card"
-import { CommentCard } from "./comment-card"
+import { CommentCard, commentCardTarget, quoteTooltip } from "./comment-card"
 import { TimelineSeparator } from "../components/timeline-separator"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { IconButton } from "@opencode/ui/icon-button"
@@ -236,13 +236,9 @@ function UserMessageComments(props: { comments: SessionUserComment[]; bounded: b
       <For each={comments()}>
         {(comment) => (
           <CommentCard
-            comment={comment.comment}
-            target={
-              comment.type === "note"
-                ? { type: "note", label: comment.label, icon: comment.icon }
-                : { type: "file", path: comment.path, selection: comment.selection }
-            }
-            title={comment.comment}
+            comment={comment.comment ?? ""}
+            target={commentCardTarget(comment)}
+            title={comment.type === "quote" ? quoteTooltip(comment) : comment.comment}
             tooltip
             wide
           />

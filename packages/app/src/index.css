@@ -424,6 +424,14 @@
     --session-dropzone-card: var(--v2-background-bg-layer-01);
   }
 
+  [data-component="timeline-quote"] {
+    background-color: var(--v2-background-bg-base);
+  }
+
+  [data-color-scheme="dark"] [data-component="timeline-quote"] {
+    background-color: var(--v2-background-bg-layer-01);
+  }
+
   @media (prefers-reduced-motion: reduce) {
     [data-component="session-dropzone"][data-visible="true"],
     [data-component="session-dropzone"][data-visible="true"] [data-slot="session-dropzone-content"],

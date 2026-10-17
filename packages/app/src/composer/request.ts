@@ -9,12 +9,15 @@ import type {
   NoteContextItem,
   PathAttachmentPart,
   Prompt,
+  QuoteComment,
+  QuoteContextItem,
   SkillPart,
 } from "@/composer/state"
 import {
   formatAttachmentReference,
   formatCommentNote,
   formatNoteComment,
+  formatQuoteComment,
   type PromptAttachmentReference,
   type PromptComment,
 } from "@/composer/comment-note"
@@ -95,6 +98,16 @@ export function noteComment(item: NoteContextItem, comment: string) {
   return note
 }
 
+/** The sent form of a quote: its comment travels only when the user wrote one. */
+export function quoteComment(item: QuoteContextItem) {
+  const quote: QuoteComment = { type: "quote", text: item.text }
+  const comment = item.comment?.trim()
+
+  if (comment) quote.comment = comment
+
+  return quote
+}
+
 export function buildPromptRequest(input: BuildPromptRequestInput): PromptRequest {
   const skills = input.prompt.filter(isSkillAttachment).map((attachment) => ({
     id: attachment.id,
@@ -142,6 +155,13 @@ export function buildPromptRequest(input: BuildPromptRequestInput): PromptReques
       return mentioned(comment)
     }
 
+    if (item.type === "quote") {
+      const quote = quoteComment(item)
+      comments.push(quote)
+
+      return quote.comment ? mentioned(quote.comment) : []
+    }
+
     const path = absolute(input.sessionDirectory, item.path)
     const uri = `file://${encodeFilePath(path)}${fileQuery(item.selection)}`
     const comment = item.comment?.trim()
@@ -179,7 +199,13 @@ export function buildPromptRequest(input: BuildPromptRequestInput): PromptReques
     text: [
       ...(input.text.trim() ? [input.text] : []),
       ...attachments.map(formatAttachmentReference),
-      ...comments.map((comment) => (comment.type === "note" ? formatNoteComment(comment) : formatCommentNote(comment))),
+      ...comments.map((comment) => {
+        if (comment.type === "note") return formatNoteComment(comment)
+
+        if (comment.type === "quote") return formatQuoteComment(comment)
+
+        return formatCommentNote(comment)
+      }),
     ].join("\n"),
     displayText: input.text,
     files: [...files, ...context, ...inline],

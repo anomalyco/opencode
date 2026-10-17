@@ -3,11 +3,11 @@ import type { SessionMessageUser } from "@opencode/client/promise"
 import type { Accessor } from "solid-js"
 import type { PromptComment } from "./comment-note"
 import type { PromptHistoryComment } from "./history/entry"
-import type { ImageAttachmentPart, Prompt } from "./state"
+import { isCommentItem, type ContextItem, type ImageAttachmentPart, type Prompt } from "./state"
 import { clonePrompt, promptLength } from "./prompt-parts"
 import type { ComposerAdapter, ComposerDelivery, ComposerSelection, ComposerSession } from "./adapter"
 import { createComposerSubmission } from "./submission-state"
-import { buildPromptRequest, noteComment } from "./request"
+import { buildPromptRequest, noteComment, quoteComment } from "./request"
 import { setCursorPosition } from "./editor/dom"
 import { blobDataUrl, resolveBlobUrl } from "@/runtime/persistence/drafts"
 import { isAttachment } from "./prompt-parts"
@@ -90,13 +90,13 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
     const submission = createComposerSubmission({
       target: input.adapter.state,
       prompt,
-      context: input.adapter.state.context
-        .items()
-        .map((item) =>
-          item.type === "note"
-            ? { ...item, live: item.live ? { ...item.live } : undefined }
-            : { ...item, selection: item.selection ? { ...item.selection } : undefined },
-        ),
+      context: input.adapter.state.context.items().map((item) => {
+        if (item.type === "note") return { ...item, live: item.live ? { ...item.live } : undefined }
+
+        if (item.type === "quote") return { ...item }
+
+        return { ...item, selection: item.selection ? { ...item.selection } : undefined }
+      }),
     })
 
     const read = readSubmission(input, submission.prompt, submission.context, text, options?.alternate ?? false)
@@ -252,6 +252,7 @@ function handoffMessage(value: ComposerSubmission): SessionMessageUser {
         part.type === "path" ? [{ name: part.filename, mime: part.mime, path: part.path }] : [],
       ),
       comments: value.context.flatMap((item): PromptComment[] => {
+        if (item.type === "quote") return [quoteComment(item)]
         const comment = item.comment?.trim()
 
         if (!comment) return []
@@ -287,7 +288,7 @@ function readSubmission(
   if (mode === "shell" && !text.trim()) return
   const images = prompt.filter((part): part is ImageAttachmentPart => part.type === "image")
   // Like the TUI's blank Enter, file chips alone send nothing; they wait for text.
-  const comments = context.filter((item) => !!item.comment?.trim()).length
+  const comments = context.filter(isCommentItem).length
 
   if (!text.trim() && !prompt.some(isAttachment) && comments === 0) return
 
@@ -359,31 +360,33 @@ function restoreSubmission(
   restored.target.set(restored.prompt, promptLength(restored.prompt))
   restored.target.mode.set(value.mode)
   restored.target.context.replaceComments(
-    restored.context
-      .filter((item) => !!item.comment?.trim())
-      .map((item) =>
-        item.type === "note"
-          ? {
-              type: "note",
-              origin: item.origin,
-              label: item.label,
-              icon: item.icon,
-              subject: item.subject,
-              href: item.href,
-              live: item.live,
-              comment: item.comment,
-              commentID: item.commentID,
-            }
-          : {
-              type: "file",
-              path: item.path,
-              selection: item.selection,
-              comment: item.comment,
-              commentID: item.commentID,
-              commentOrigin: item.commentOrigin,
-              preview: item.preview,
-            },
-      ),
+    restored.context.filter(isCommentItem).map((item): ContextItem => {
+      if (item.type === "quote")
+        return { type: "quote", text: item.text, comment: item.comment, commentID: item.commentID }
+
+      if (item.type === "note")
+        return {
+          type: "note",
+          origin: item.origin,
+          label: item.label,
+          icon: item.icon,
+          subject: item.subject,
+          href: item.href,
+          live: item.live,
+          comment: item.comment,
+          commentID: item.commentID,
+        }
+
+      return {
+        type: "file",
+        path: item.path,
+        selection: item.selection,
+        comment: item.comment,
+        commentID: item.commentID,
+        commentOrigin: item.commentOrigin,
+        preview: item.preview,
+      }
+    }),
   )
   restored.context.forEach((item) => {
     if (item.type === "file" && !item.comment?.trim())

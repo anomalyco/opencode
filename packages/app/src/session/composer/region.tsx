@@ -17,6 +17,8 @@ import { useServerSDK } from "@/runtime/server/client"
 import { showToast } from "@/shell/notifications/toast"
 import { useLocal } from "@/providers/models/selection"
 import { usePlatform } from "@/runtime/platform/platform"
+import { uuid } from "@/runtime/persistence/uuid"
+import { contextItemKey } from "@/composer/schema"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { requireServerKey, sessionHref } from "@/shell/routes/session"
 import { useComposerCommands } from "@/composer/commands"
@@ -267,6 +269,17 @@ export function createActiveSessionRegion(input: {
     drop: {
       active: () => active()?.drop.active() ?? false,
       input: () => active()?.drop.input(),
+    },
+    quote: {
+      // A child session has no composer to quote into, and a shell command takes no quotes.
+      available: () => !input.session.data.isChild() && prompt.capture().mode.current() !== "shell",
+      add: (text: string, comment: boolean) => {
+        const item = { type: "quote" as const, text, commentID: uuid() }
+        prompt.context.add(item)
+
+        if (comment) return prompt.capture().quoteComment.set(contextItemKey(item))
+        focus()
+      },
     },
     actions: {
       timeline: {

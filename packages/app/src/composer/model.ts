@@ -21,6 +21,7 @@ import { formatServerError } from "@/runtime/server/errors"
 import { Skill } from "@opencode/schema/skill"
 import type { ComposerAdapter, ComposerControls, ComposerQueue } from "./adapter"
 import { isAttachment } from "./prompt-parts"
+import { isCommentItem } from "./state"
 import type { PromptHistoryComment } from "./history/entry"
 import { createComposerHistory } from "./history/store"
 import { createComposerSubmit } from "./submit"
@@ -82,7 +83,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
   const commentCount = createMemo(() => {
     if (mode() === "shell") return 0
 
-    return prompt.context.items().filter((item) => !!item.comment?.trim()).length
+    return prompt.context.items().filter(isCommentItem).length
   })
 
   const blank = createMemo(() => {
@@ -146,9 +147,9 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
         time: item.time,
       })),
     )
-    // History records file comments only; notes stay with the draft while it is browsed.
+    // History records file comments only; notes and quotes stay with the draft while it is browsed.
     prompt.context.replaceComments([
-      ...prompt.context.items().filter((item) => item.type === "note"),
+      ...prompt.context.items().filter((item) => item.type !== "file"),
       ...items.map((item) => ({
         type: "file" as const,
         path: item.path,
@@ -324,6 +325,8 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
         path,
         mention: { type: "file", path, content: `@${path}`, start: 0, end: 0 },
       })),
+    onQuoteComment: (item, comment) => prompt.context.updateComment(item.commentID, { comment }),
+    quoteComment: prompt.quoteComment,
     onContextRemove(item) {
       if (item.type === "file" && item.commentID) comments.remove(item.path, item.commentID)
     },
@@ -345,7 +348,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
         return
       }
 
-      if (item) openComment(item, links, extensions.current(), files, comments)
+      if (item?.type === "file") openComment(item, links, extensions.current(), files, comments)
     },
     onEditor(element) {
       // SAFETY: the editor's only `setEditor` call passes its editable root, a `<div>` (`editor/editor.tsx`).

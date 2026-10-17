@@ -593,6 +593,10 @@ export const dict = {
 
   "session.search.placeholder": "Find...",
   "session.search.noResults": "No matches",
+  "session.quote.actions": "Quote selection",
+  "session.quote.add": "Quote",
+  "session.quote.addWithComment": "Quote and comment",
+  "session.quote.tooLong": "Selection too long",
   "session.header.open.finder": "Finder",
   "session.header.open.fileExplorer": "File Explorer",
   "session.header.open.fileManager": "File Manager",

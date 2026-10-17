@@ -29,7 +29,7 @@ import { ScrollView } from "@opencode/ui/scroll-view"
 import { AttachmentCard } from "@opencode/session-ui/attachment-card"
 import { ProgressCircle } from "@opencode/ui/progress-circle"
 import type { Upload } from "../attachments/uploads"
-import { CommentCard } from "@opencode/session-ui/comment-card"
+import { CommentCard, commentCardTarget, quoteTooltip } from "@opencode/session-ui/comment-card"
 import { typeLabel } from "@opencode/session-ui/message-file"
 import { getFilename } from "@opencode/util/path"
 import { Skill } from "@opencode/schema/skill"
@@ -45,6 +45,7 @@ import type {
 } from "../types"
 import type { ComposerEditorModel, ComposerSelectControl } from "./interaction"
 import { isAttachment } from "../prompt-parts"
+import { QuoteCommentEditor } from "./quote-comment"
 import "../attachments/attachments.css"
 import "./editor.css"
 
@@ -214,6 +215,10 @@ export function ComposerEditor(props: ComposerEditorProps) {
             onCommentClick={(comment) => props.controller.toggleContext(comment.key)}
             onCommentRemove={(comment) => props.controller.removeContext(comment.key)}
             onFileRemove={(file) => props.controller.removeContext(file.key)}
+            editingQuote={props.controller.editingQuote()}
+            onEditQuote={props.controller.editQuote}
+            onQuoteComment={(quote, comment) => props.controller.commentQuote(quote.key, comment)}
+            searchPaths={props.controller.searchPaths}
           />
         </Show>
 
@@ -590,9 +595,29 @@ export function ComposerAttachments(props: {
   onCommentClick?: (comment: ComposerComment) => void
   onCommentRemove?: (comment: ComposerComment) => void
   onFileRemove?: (file: Extract<ComposerComment, { type: "file" }>) => void
+  editingQuote?: string
+  onEditQuote?: (key?: string) => void
+  onQuoteComment?: (quote: Extract<ComposerComment, { type: "quote" }>, comment: string) => void
+  searchPaths?: (query: string) => Promise<string[]>
 }) {
   const i18n = useI18n()
   const percent = (upload: Upload) => (upload.size === 0 ? 100 : Math.floor((upload.loaded / upload.size) * 100))
+  // A quote added with its editor open renders its chip in the same update, so the anchors are reactive.
+  const [anchors, setAnchors] = createStore<Record<string, HTMLElement | undefined>>({})
+
+  // Plain functions, not inline conditionals: the tooltip reads these from event handlers, outside any owner.
+  const quoteTitle = (comment: ComposerComment) => (comment.type === "quote" ? quoteTooltip(comment) : undefined)
+  const quoteHint = (comment: ComposerComment) => comment.type === "quote" && props.editingQuote !== comment.key
+
+  const commentActive = (comment: ComposerComment) =>
+    comment.key === props.activeCommentID || comment.key === props.editingQuote
+
+  const editing = createMemo(() =>
+    props.comments?.find(
+      (comment): comment is Extract<ComposerComment, { type: "quote" }> =>
+        comment.type === "quote" && comment.key === props.editingQuote,
+    ),
+  )
 
   return (
     <Show
@@ -610,27 +635,39 @@ export function ComposerAttachments(props: {
         >
           <For each={props.comments ?? []}>
             {(comment) => (
-              <div class="relative group shrink-0">
+              <div
+                ref={(element) => {
+                  setAnchors(comment.key, element)
+                  onCleanup(() => setAnchors(comment.key, undefined))
+                }}
+                class="relative group shrink-0"
+              >
                 <Tooltip
                   value={comment.comment}
                   placement="top"
                   openDelay={800}
+                  disabled={comment.type === "quote"}
                   contentClass="max-w-[300px] break-words"
                 >
                   <CommentCard
                     comment={comment.comment ?? ""}
-                    target={
-                      comment.type === "note"
-                        ? { type: "note", label: comment.label, icon: comment.icon }
-                        : { type: "file", path: comment.path, selection: comment.selection }
+                    target={commentCardTarget(comment)}
+                    title={quoteTitle(comment)}
+                    tooltip={quoteHint(comment)}
+                    active={commentActive(comment)}
+                    onClick={() =>
+                      comment.type === "quote"
+                        ? props.onEditQuote?.(props.editingQuote === comment.key ? undefined : comment.key)
+                        : props.onCommentClick?.(comment)
                     }
-                    active={comment.key === props.activeCommentID}
-                    onClick={() => props.onCommentClick?.(comment)}
                   />
                 </Tooltip>
                 <button
                   type="button"
-                  onClick={() => props.onCommentRemove?.(comment)}
+                  onClick={() => {
+                    if (props.editingQuote === comment.key) props.onEditQuote?.()
+                    props.onCommentRemove?.(comment)
+                  }}
                   class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center hover-reveal group-hover:opacity-100"
                   aria-label={props.removeLabel}
                 >
@@ -747,6 +784,25 @@ export function ComposerAttachments(props: {
           data-slot="composer-attachments-fade-right"
           class="pointer-events-none absolute inset-y-0 end-0 z-10 w-6 bg-[linear-gradient(to_left,var(--v2-background-bg-base),transparent)] rtl:bg-[linear-gradient(to_right,var(--v2-background-bg-base),transparent)]"
         />
+        <Show when={editing()} keyed>
+          {(current) => (
+            <Show when={anchors[current.key]}>
+              {(anchor) => (
+                <QuoteCommentEditor
+                  anchor={anchor()}
+                  text={current.text}
+                  comment={current.comment ?? ""}
+                  mention={(query) => props.searchPaths?.(query) ?? Promise.resolve([])}
+                  onSubmit={(comment) => {
+                    props.onQuoteComment?.(current, comment)
+                    props.onEditQuote?.()
+                  }}
+                  onClose={() => props.onEditQuote?.()}
+                />
+              )}
+            </Show>
+          )}
+        </Show>
       </div>
     </Show>
   )

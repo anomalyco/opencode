@@ -679,7 +679,9 @@ test.describe("Working", () => {
     await expect(working).toBeVisible()
 
     await timeline.send(partUpdated(toolPart("prt_read_four", "read", "running", { path: "src/four.ts" })))
-    await expect(group.locator('[data-slot="basic-tool-tool-subtitle"]')).toHaveText("one.ts, two.ts, three.ts, four.ts")
+    await expect(group.locator('[data-slot="basic-tool-tool-subtitle"]')).toHaveText(
+      "one.ts, two.ts, three.ts, four.ts",
+    )
     await expect(working).toBeVisible()
 
     await timeline.send(partUpdated(toolPart("prt_read_four", "read", "completed", { path: "src/four.ts" })))
@@ -1359,7 +1361,9 @@ test.describe("background shortcut", () => {
 
     expect(breadcrumbOrder).toEqual(["session-title-parent", "session-title-child"])
     await expect(header.locator('[data-slot="session-title-separator"]')).toHaveCount(1)
-    await expect(header.getByRole("heading").getByRole("button", { name: "Draft TUI proposal +2 running" })).toBeEnabled()
+    await expect(
+      header.getByRole("heading").getByRole("button", { name: "Draft TUI proposal +2 running" }),
+    ).toBeEnabled()
 
     await trigger.click()
     await expect(list.getByRole("menuitem")).toHaveText([
@@ -1808,6 +1812,517 @@ test.describe("shell completion", () => {
       "Checking project\nCheck finished\nCommand exited with code 0.",
     )
   })
+})
+
+test("quotes plain timeline text into the composer, with or without a comment", async ({ page }) => {
+  const prompts: string[] = []
+  await setupTimeline(page, {
+    messages: [
+      userMessage([userText("Explain the build", { id: "prt_quote_user" })]),
+      assistantMessage([textPart("prt_quote_answer", "It has **two** steps:\n\n- compile\n- bundle")]),
+    ],
+    onPrompt: (input) => void prompts.push(String(input.body.text)),
+  })
+
+  const user = '[data-slot="user-message-text"]'
+  const answer = `[data-timeline-part-id="${renderedPartID("prt_quote_answer")}"] [data-slot="text-part-body"]`
+  await expect(page.locator(answer).getByText("bundle", { exact: true })).toBeVisible()
+
+  const select = (from: string, to: string) =>
+    page.evaluate(
+      (selectors) => {
+        const [start, end] = selectors.map((selector) => document.querySelector(selector))
+
+        if (!start || !end) throw new Error("Selection target is missing")
+        const range = document.createRange()
+        range.setStart(start, 0)
+        range.setEnd(end, end.childNodes.length)
+        window.getSelection()?.removeAllRanges()
+        window.getSelection()?.addRange(range)
+      },
+      [from, to],
+    )
+
+  // A selection across the user's message and the answer quotes their text, not the controls between them.
+  await select(user, answer)
+  const toolbar = page.getByRole("toolbar", { name: "Quote selection" })
+  await toolbar.getByRole("button", { name: "Quote", exact: true }).click()
+  await expect(toolbar).toHaveCount(0)
+  const chips = page.locator('[data-component="composer-attachments"] [data-component="attachment-card"]')
+  await expect(chips).toHaveCount(1)
+  await expect(chips).toContainText("Explain the build")
+
+  // A quote's chip takes its comment; saving an emptied comment clears it again.
+  await select(answer, answer)
+  await toolbar.getByRole("button", { name: "Quote", exact: true }).click()
+  await expect(chips).toHaveCount(2)
+  const comment = page.locator('[data-component="composer-quote-comment"] textarea')
+  await chips.nth(1).click()
+  await comment.fill("Why three?")
+  await comment.press("Enter")
+  await expect(comment).toHaveCount(0)
+  await expect(chips.nth(1)).toContainText("Why three?")
+  await chips.nth(1).click()
+  await expect(comment).toHaveValue("Why three?")
+  await comment.fill("")
+  await comment.press("Enter")
+  await expect(chips.nth(1)).not.toContainText("Why three?")
+  await chips.nth(1).click()
+  await comment.fill("Why two?")
+  await comment.press("Escape")
+  await expect(chips.nth(1)).not.toContainText("Why two?")
+  await chips.nth(1).click()
+  await comment.fill("Why two?")
+  await comment.press("Enter")
+  await expect(chips.nth(1)).toContainText("Why two?")
+
+  // The shell turns selection off, so select all in the timeline selects its conversation and offers to quote it.
+  await page.locator(answer).getByText("bundle", { exact: true }).click()
+  await page.keyboard.press("ControlOrMeta+a")
+  await expect(toolbar).toBeVisible()
+  await page.keyboard.press("Escape")
+  await expect(toolbar).toHaveCount(0)
+
+  const editor = page.locator('[data-component="composer-editor"]')
+  await editor.press("Enter")
+  await expect
+    .poll(() => prompts)
+    .toEqual([
+      [
+        "The user quoted the following from earlier in the conversation:",
+        "> Explain the build",
+        "> ",
+        "> It has two steps:",
+        "> compile",
+        "> bundle",
+        "The user quoted the following from earlier in the conversation:",
+        "> It has two steps:",
+        "> compile",
+        "> bundle",
+        "",
+        "The user made the following comment regarding this quote: Why two?",
+      ].join("\n"),
+    ])
+  await expect(chips).toHaveCount(0)
+})
+
+test("quotes table rows and diff lines selected across a diff viewer", async ({ page }) => {
+  const prompts: string[] = []
+  await setupTimeline(page, {
+    settings: { editToolPartsExpanded: true },
+    messages: [
+      userMessage(),
+      assistantMessage([
+        textPart("prt_quote_table", "| File | Change |\n| --- | --- |\n| a.ts | rename |"),
+        toolPart(
+          "prt_quote_edit",
+          "edit",
+          "completed",
+          { path: "src/a.ts", oldString: "export const value = 'before'", newString: "export const value = 'after'" },
+          {
+            output: "Edited src/a.ts",
+            title: "src/a.ts",
+            metadata: {
+              files: [
+                {
+                  file: "src/a.ts",
+                  patch: createTwoFilesPatch(
+                    "a/src/a.ts",
+                    "b/src/a.ts",
+                    "export const value = 'before'\n",
+                    "export const value = 'after'\n",
+                  ),
+                  additions: 1,
+                  deletions: 1,
+                  status: "modified",
+                },
+              ],
+            },
+          },
+        ),
+      ]),
+    ],
+    onPrompt: (input) => void prompts.push(String(input.body.text)),
+  })
+
+  const removed = page.locator('[data-line-type="change-deletion"][data-line]')
+  const added = page.locator('[data-line-type="change-addition"][data-line]')
+  await expect(added).toHaveText("export const value = 'after'")
+
+  const drag = async (from: Locator, to: Locator) => {
+    const start = await from.boundingBox()
+    const end = await to.boundingBox()
+
+    if (!start || !end) throw new Error("Selection target is not laid out")
+    await page.mouse.move(start.x + 1, start.y + start.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(end.x + end.width - 1, end.y + end.height / 2, { steps: 10 })
+    await page.mouse.up()
+  }
+
+  const toolbar = page.getByRole("toolbar", { name: "Quote selection" })
+  const chips = page.locator('[data-component="composer-attachments"] [data-component="attachment-card"]')
+
+  // A drag from the table into the diff viewer quotes both, table cells by tabs and diff lines with their markers.
+  await drag(page.locator("th").getByText("File", { exact: true }), added)
+  await toolbar.getByRole("button", { name: "Quote", exact: true }).click()
+  await expect(chips).toHaveCount(1)
+
+  // The quote stops where a selection inside the diff viewer ends.
+  await drag(page.locator("td").getByText("a.ts", { exact: true }), removed)
+  await toolbar.getByRole("button", { name: "Quote", exact: true }).click()
+  await expect(chips).toHaveCount(2)
+
+  await page.locator('[data-component="composer-editor"]').press("Enter")
+  await expect
+    .poll(() => prompts)
+    .toEqual([
+      [
+        "The user quoted the following from earlier in the conversation:",
+        "> File\tChange",
+        "> a.ts\trename",
+        "> ",
+        "> -export const value = 'before'",
+        "> +export const value = 'after'",
+        "The user quoted the following from earlier in the conversation:",
+        "> a.ts\trename",
+        "> ",
+        "> -export const value = 'before'",
+      ].join("\n"),
+    ])
+})
+
+test("places the quote action by the end a selection was made towards", async ({ page }) => {
+  const paragraph = Array.from(
+    { length: 14 },
+    (_, index) => `Sentence ${index} explains one more part of the build.`,
+  ).join(" ")
+
+  await setupTimeline(page, {
+    messages: [
+      userMessage(),
+      assistantMessage([
+        textPart("prt_place_short", "A short line with a word."),
+        textPart("prt_place_long", Array.from({ length: 10 }, () => paragraph).join("\n\n")),
+      ]),
+    ],
+  })
+
+  const toolbar = page.getByRole("toolbar", { name: "Quote selection" })
+  const scroller = page.locator('[data-slot="session-timeline-scroll"] .scroll-view__viewport')
+  const first = page.locator(`[data-timeline-part-id="${renderedPartID("prt_place_long")}"] p`).first()
+  await expect(first).toBeVisible()
+
+  const box = async (locator: Locator) => {
+    const value = await locator.boundingBox()
+
+    if (!value) throw new Error("Element is not laid out")
+
+    return value
+  }
+
+  const drag = async (from: { x: number; y: number }, to: { x: number; y: number }) => {
+    await page.mouse.move(from.x, from.y)
+    await page.mouse.down()
+    await page.mouse.move(to.x, to.y, { steps: 10 })
+    await page.mouse.up()
+    await expect(toolbar).toBeVisible()
+
+    return box(toolbar)
+  }
+
+  // The middle of the selected text, whose right edge is ragged where its lines wrap.
+  const middle = () =>
+    page.evaluate(() => {
+      const rects = [...(window.getSelection()?.getRangeAt(0).getClientRects() ?? [])].filter((rect) => rect.width > 0)
+
+      return (Math.min(...rects.map((rect) => rect.left)) + Math.max(...rects.map((rect) => rect.right))) / 2
+    })
+
+  // Pressing inside a selection drags its text, so each case starts from no selection.
+  const clear = async () => {
+    await page.keyboard.press("Escape")
+    await expect(toolbar).toHaveCount(0)
+    await page.evaluate(() => window.getSelection()?.removeAllRanges())
+  }
+
+  await first.scrollIntoViewIfNeeded()
+  const lines = await box(first)
+  const start = { x: lines.x + 1, y: lines.y + 8 }
+  const end = { x: lines.x + lines.width - 1, y: lines.y + lines.height - 8 }
+
+  // A short selection keeps the action above it, even when dragged down.
+  const short = await drag(start, { x: lines.x + 200, y: lines.y + 30 })
+  expect(short.y + short.height).toBeLessThanOrEqual(lines.y)
+  expect(Math.abs(short.x + short.width / 2 - (await middle()))).toBeLessThan(2)
+  await clear()
+
+  // A tall downward selection puts the action below its last line, centred on the lines.
+  const down = await drag(start, end)
+  expect(down.y).toBeGreaterThanOrEqual(lines.y + lines.height)
+  expect(Math.abs(down.x + down.width / 2 - (await middle()))).toBeLessThan(2)
+  await clear()
+
+  // A tall upward one puts it above its first line.
+  const up = await drag(end, start)
+  expect(up.y + up.height).toBeLessThanOrEqual(lines.y)
+  expect(Math.abs(up.x + up.width / 2 - (await middle()))).toBeLessThan(2)
+  await clear()
+
+  // A single line keeps it above the selection, centred on it, whichever way it was made.
+  const word = page.getByText("A short line with a word.", { exact: true })
+
+  // The paragraph spans the column; the text inside it is narrower.
+  const line = await word.evaluate((element) => {
+    element.scrollIntoView({ block: "center" })
+    const range = document.createRange()
+    range.selectNodeContents(element)
+    const rect = range.getBoundingClientRect()
+
+    return { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
+  })
+
+  const single = await drag(
+    { x: line.x + line.width - 1, y: line.y + line.height / 2 },
+    { x: line.x + 1, y: line.y + line.height / 2 },
+  )
+
+  expect(single.y + single.height).toBeLessThanOrEqual(line.y)
+  expect(Math.abs(single.x + single.width / 2 - (line.x + line.width / 2))).toBeLessThan(2)
+  await clear()
+
+  // A narrower timeline, as when a side panel opens, moves the action with the reflowed text.
+  const scroll = page.locator('[data-slot="session-timeline-scroll"]')
+
+  const centre = async () => {
+    const action = await box(toolbar)
+
+    return Math.abs(action.x + action.width / 2 - (await middle())) < 2
+  }
+
+  await word.click({ clickCount: 3, position: { x: 4, y: line.height / 2 } })
+  await expect(toolbar).toBeVisible()
+  await expect.poll(centre).toBe(true)
+  await scroll.evaluate((element) => (element.style.width = "60%"))
+  await expect.poll(centre).toBe(true)
+  await scroll.evaluate((element) => (element.style.width = ""))
+  await clear()
+
+  // A selection running past both edges of the timeline pins the action to its bottom.
+  await first.click()
+  await page.keyboard.press("ControlOrMeta+a")
+  await expect(toolbar).toBeVisible()
+  await scroller.evaluate((element) => (element.scrollTop = (element.scrollHeight - element.clientHeight) / 2))
+  const view = await box(scroller)
+  await expect
+    .poll(async () => Math.round((await box(toolbar)).y + (await box(toolbar)).height))
+    .toBe(Math.round(view.y + view.height - 8))
+})
+
+test("keeps the quote action by a triple-clicked paragraph whose selection runs on to the next message", async ({
+  page,
+}) => {
+  await setupTimeline(page, {
+    messages: [
+      userMessage([userText("Highlight what?", { id: "prt_triple_ask" })], { id: "msg_1000_triple_user" }),
+      assistantMessage(
+        [
+          textPart(
+            "prt_triple_text",
+            "Highlight **visible prompt bubbles only**, or else the turn whose reply is being read.",
+          ),
+          toolPart("prt_triple_read", "read", "completed", { path: "src/a.ts" }, { output: "a", title: "src/a.ts" }),
+          toolPart("prt_triple_grep", "grep", "completed", { pattern: "a" }, { output: "a", title: "a" }),
+        ],
+        { id: "msg_1001_triple_assistant", parentID: "msg_1000_triple_user" },
+      ),
+      userMessage([userText("have you finished?", { id: "prt_triple_next" })], {
+        id: "msg_1002_triple_user",
+        created: 1700000005000,
+      }),
+    ],
+  })
+
+  const paragraph = page.getByText("or else the turn whose reply is being read", { exact: false })
+  await expect(paragraph).toBeVisible()
+  // The selection ends at the start of the next message, past the tools between them.
+  await paragraph.click({ clickCount: 3, position: { x: 4, y: 8 } })
+  const toolbar = page.getByRole("toolbar", { name: "Quote selection" })
+  await expect(toolbar).toBeVisible()
+  const text = await paragraph.boundingBox()
+  const action = await toolbar.boundingBox()
+
+  if (!text || !action) throw new Error("Element is not laid out")
+  // One line, so the action sits just above it rather than below the tools the selection runs past.
+  expect(action.y + action.height).toBeLessThanOrEqual(text.y)
+  expect(action.y + action.height).toBeGreaterThanOrEqual(text.y - 10)
+
+  // A press on unselectable space, which leaves the selection to the page, clears it before the button is released.
+  const view = await page.locator('[data-slot="session-timeline-scroll"] .scroll-view__viewport').boundingBox()
+
+  if (!view) throw new Error("Element is not laid out")
+  await page.mouse.move(view.x + 30, text.y + 4)
+  await page.mouse.down()
+  await expect(toolbar).toHaveCount(0)
+  expect(await page.evaluate(() => window.getSelection()?.toString())).toBe("")
+  await page.mouse.up()
+})
+
+for (const input of [
+  { name: "a narrow window with a mouse anchors it to the selection", touch: false },
+  { name: "a touch screen docks it to the timeline's bottom", touch: true },
+])
+  test(`places the quote action: ${input.name}`, async ({ browser }) => {
+    const context = await browser.newContext({ hasTouch: input.touch })
+    const page = await context.newPage()
+    await setupTimeline(page, {
+      viewport: { width: 390, height: 844 },
+      messages: [userMessage(), assistantMessage([textPart("prt_dock_text", "A short line to quote.")])],
+    })
+
+    const text = page.getByText("A short line to quote.", { exact: true })
+    await expect(text).toBeVisible()
+    await text.evaluate((element) => window.getSelection()?.selectAllChildren(element))
+    const toolbar = page.getByRole("toolbar", { name: "Quote selection" })
+    await expect(toolbar).toBeVisible()
+    const line = await text.boundingBox()
+    const view = await page.locator('[data-slot="session-timeline-scroll"] .scroll-view__viewport').boundingBox()
+    const action = await toolbar.boundingBox()
+
+    if (!line || !view || !action) throw new Error("Element is not laid out")
+
+    if (input.touch) expect(Math.round(action.y + action.height)).toBe(Math.round(view.y + view.height - 8))
+    else expect(action.y + action.height).toBeLessThanOrEqual(line.y)
+    await context.close()
+  })
+
+test("opens a quote's comment with Alt-click", async ({ page }) => {
+  await setupTimeline(page, {
+    messages: [
+      userMessage(),
+      assistantMessage([
+        textPart("prt_alt_first", "The first sentence to quote."),
+        textPart("prt_alt_second", "The second sentence to quote."),
+      ]),
+    ],
+  })
+
+  const toolbar = page.getByRole("toolbar", { name: "Quote selection" })
+  const chips = page.locator('[data-component="composer-attachments"] [data-component="attachment-card"]')
+  const comment = page.locator('[data-component="composer-quote-comment"] textarea')
+
+  const select = async (text: string) => {
+    await page
+      .locator('[data-slot="text-part-body"]')
+      .getByText(text, { exact: true })
+      .evaluate((element) => window.getSelection()?.selectAllChildren(element))
+    await expect(toolbar).toBeVisible()
+  }
+
+  // A plain click adds the quote and leaves the comment closed.
+  await select("The first sentence to quote.")
+  await toolbar.getByRole("button", { name: "Quote", exact: true }).click()
+  await expect(chips).toHaveCount(1)
+  await expect(comment).toHaveCount(0)
+  await chips.nth(0).hover()
+  await page.getByRole("button", { name: "Remove attachment" }).click()
+  await expect(chips).toHaveCount(0)
+
+  // A slow tooltip names the action and its shortcut.
+  await select("The first sentence to quote.")
+  await toolbar.getByRole("button", { name: "Quote", exact: true }).hover()
+  const tooltip = page.locator('[data-component="tooltip-v2"]', { hasText: "Quote and comment" })
+  await expect(tooltip).toBeVisible()
+  await expect(tooltip.locator('[data-slot="keybind-v2-label"]')).toHaveText([/^(⌥|Alt)$/])
+
+  // Alt-click opens the new quote's comment, focused.
+  await page.keyboard.down("Alt")
+  await toolbar.getByRole("button", { name: "Quote", exact: true }).click()
+  await page.keyboard.up("Alt")
+  await expect(chips).toHaveCount(1)
+  await expect(comment).toBeFocused()
+  await page.keyboard.type("Why first?")
+  await page.keyboard.press("Enter")
+  await expect(comment).toHaveCount(0)
+  await expect(chips.nth(0)).toContainText("Why first?")
+
+  // Enter on an empty comment keeps the quote without one.
+  await select("The second sentence to quote.")
+  await page.keyboard.down("Alt")
+  await toolbar.getByRole("button", { name: "Quote", exact: true }).click()
+  await page.keyboard.up("Alt")
+  await expect(comment).toBeFocused()
+  await page.keyboard.press("Enter")
+  await expect(comment).toHaveCount(0)
+  await expect(chips).toHaveCount(2)
+  await expect(chips.nth(1)).toContainText("The second sentence to quote.")
+  await expect(chips.nth(1)).toContainText("Quote")
+})
+
+test("reaches the quote action from the keyboard and blocks a selection over the limit", async ({ page }) => {
+  await setupTimeline(page, {
+    messages: [
+      userMessage(),
+      assistantMessage([
+        textPart("prt_quote_short", "Short answer."),
+        textPart("prt_quote_long", Array.from({ length: 3_000 }, (_, index) => `word${index}`).join(" ")),
+      ]),
+    ],
+  })
+
+  const short = page.getByText("Short answer.", { exact: true })
+  await expect(short).toBeVisible()
+  const toolbar = page.getByRole("toolbar", { name: "Quote selection" })
+
+  // A drag released where no pointerup arrives, such as outside the window, still lets the selection settle.
+  await short.click()
+  await page.mouse.down()
+  await page.evaluate(() => window.dispatchEvent(new Event("blur")))
+  await short.evaluate((element) => window.getSelection()?.selectAllChildren(element))
+  await expect(toolbar).toBeVisible()
+  await page.mouse.up()
+
+  await page.keyboard.press("Tab")
+  await expect(toolbar.getByRole("button", { name: "Quote", exact: true })).toBeFocused()
+  await page.keyboard.press("Escape")
+  await expect(toolbar).toHaveCount(0)
+  await expect(page.locator('[data-slot="session-timeline-scroll"] .scroll-view__viewport')).toBeFocused()
+
+  const scroller = page.locator('[data-slot="session-timeline-scroll"] .scroll-view__viewport')
+  const composer = page.locator('[data-component="composer-editor"]')
+
+  // Select all from the app menu covers the whole window; with focus in the timeline it keeps to the conversation.
+  await page.evaluate(() => window.getSelection()?.selectAllChildren(document.body))
+  await expect(toolbar).toBeVisible()
+  await expect
+    .poll(() =>
+      scroller.evaluate((element) => {
+        const range = window.getSelection()?.getRangeAt(0)
+
+        return !!range && element.contains(range.startContainer) && element.contains(range.endContainer)
+      }),
+    )
+    .toBe(true)
+
+  // Over the limit, the action is disabled and Tab moves on as usual.
+  await expect(toolbar.getByText("Selection too long", { exact: true })).toBeVisible()
+  await expect(toolbar.getByRole("button", { name: "Quote", exact: true })).toBeDisabled()
+  await scroller.focus()
+  await page.keyboard.press("Tab")
+  await expect(scroller).not.toBeFocused()
+  await expect(toolbar.getByRole("button", { name: "Quote", exact: true })).not.toBeFocused()
+
+  // Tab from a control inside the timeline keeps its usual order while a quote is offered.
+  await page.keyboard.press("Escape")
+  await short.evaluate((element) => window.getSelection()?.selectAllChildren(element))
+  await expect(toolbar).toBeVisible()
+  const copy = page.getByRole("button", { name: "Copy message" })
+  await copy.focus()
+  await expect(toolbar).toBeVisible()
+  await page.keyboard.press("Tab")
+  await expect(copy).not.toBeFocused()
+  expect(await page.evaluate(() => !!document.activeElement?.closest('[data-component="timeline-quote"]'))).toBe(false)
+  await expect(composer).toHaveCount(1)
 })
 
 function pauseExitAnimations(locator: Locator) {
