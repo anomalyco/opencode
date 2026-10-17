@@ -6,6 +6,7 @@ import { Schema } from "effect"
 import path from "node:path"
 import { ACPReplay } from "../../src/acp/replay"
 import { ACPTranslate } from "../../src/acp/translate"
+import { planUpdate } from "../../src/acp/tool"
 import {
   assistantMessage,
   childCreated,
@@ -594,6 +595,68 @@ const rows: Row[] = [
     },
   },
 ]
+
+test("projects a plugin's structured ACP plan in live updates and saved-message replay", () => {
+  const plan = {
+    entries: [
+      { content: "Parser: compound queries verified", priority: "medium" as const, status: "completed" as const },
+    ],
+    _meta: { goal: { status: "active", nextPhase: "execution" } },
+  }
+  const result = translate({
+    name: "plugin plan",
+    events: live(
+      toolStarted(root, "tool_plan", "update_goal_plan"),
+      toolSucceeded(root, "tool_plan", { acp: { plan } }, "updated"),
+    ),
+    expected: {},
+  })
+  expect(result.updates).toContainEqual({ sessionUpdate: "plan", ...plan })
+  const message = assistantMessage("msg_plan", {
+    content: [
+      {
+        type: "tool",
+        id: "tool_plan",
+        name: "update_goal_plan",
+        time: { created: 1 },
+        state: {
+          status: "completed",
+          input: {},
+          metadata: { acp: { plan } },
+          content: [{ type: "text", text: "updated" }],
+        },
+      },
+    ],
+  })
+  expect(translate({ name: "saved plan", messages: [message], expected: {} }).updates).toContainEqual({
+    sessionUpdate: "plan",
+    ...plan,
+  })
+})
+
+test.each([
+  undefined,
+  {},
+  { acp: { plan: { entries: "invalid" } } },
+  { acp: { plan: { entries: [{ content: 1, priority: "medium", status: "pending" }] } } },
+  { acp: { plan: { entries: [{ content: "task", priority: "urgent", status: "pending" }] } } },
+  { acp: { plan: { entries: [{ content: "task", priority: "medium", status: "cancelled" }] } } },
+])("ignores absent or malformed plan metadata %j", (metadata) => {
+  expect(planUpdate(metadata)).toBeUndefined()
+})
+
+test("a child plan cannot replace the root plan without child-update capabilities", () => {
+  const result = translate({
+    name: "child plan",
+    events: live(
+      childCreated("ses_child", root, "Explore"),
+      toolStarted("ses_child", "tool_plan", "clear_goal"),
+      toolSucceeded("ses_child", "tool_plan", { acp: { plan: { entries: [] } } }, "cleared"),
+    ),
+    expected: {},
+  })
+  expect(result.updates.some((update) => update.sessionUpdate === "plan")).toBe(false)
+})
 
 describe("acp turn translation", () => {
   test.each(rows)("$name", (row) => {
