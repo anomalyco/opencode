@@ -416,6 +416,11 @@ if [[ "$no_modify_path" != "true" ]]; then
         fi
     done
 
+    # zsh is the macOS default shell, but a fresh account has no ~/.zshrc yet.
+    if [[ -z $config_file && $current_shell == zsh ]] && touch "${ZDOTDIR:-$HOME}/.zshrc" 2>/dev/null; then
+        config_file="${ZDOTDIR:-$HOME}/.zshrc"
+    fi
+
     if [[ -z $config_file ]]; then
         print_message warning "No config file found for $current_shell. You may need to manually add to PATH:"
         print_message info "  export PATH=$INSTALL_DIR:\$PATH"
