@@ -93,6 +93,37 @@ test("counts every subagent page in a root session's cost", async () => {
   }
 })
 
+test("publishes a root session's own metadata before its child pages finish", async () => {
+  const children = Promise.withResolvers<void>()
+  const root = { ...session(0), id: "ses_root", title: "Existing title" }
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async (input, init) => {
+      const url = new URL((input instanceof Request ? input : new Request(input, init)).url)
+      if (url.pathname === "/api/session/ses_root") return Response.json({ data: root })
+      await children.promise
+      return Response.json({ data: [], cursor: {} })
+    },
+  })
+  const setup = createRoot((dispose) => ({
+    data: createData({ api: () => api, directory: "/project", event: { on: () => () => {}, listen: () => () => {} } }),
+    dispose,
+  }))
+
+  try {
+    // The child list never answers, exactly like a slow page that turns out to be empty.
+    const family = setup.data.session.sync("ses_root", { children: true })
+    await wait(() => setup.data.session.get("ses_root") !== undefined)
+    expect(setup.data.session.get("ses_root")?.title).toBe("Existing title")
+
+    children.resolve()
+    await family
+  } finally {
+    children.resolve()
+    setup.dispose()
+  }
+})
+
 test("keeps the previous model in a live variant notice until the projected message arrives", async () => {
   const projected = Promise.withResolvers<void>()
   const previous = { providerID: "provider", id: "model", variant: "high" }

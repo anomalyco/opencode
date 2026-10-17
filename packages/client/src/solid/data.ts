@@ -577,6 +577,25 @@ export function createData(config: CreateDataInput) {
     )
   }
 
+  // Write session infos into the store, complete each one's own sync and fold it into the
+  // family index. Reads call this as their results arrive, so metadata that is already known
+  // is published without waiting for the rest of the read that produced it.
+  function publishSessions(sessions: SessionInfo[]) {
+    batch(() => {
+      setStore(
+        "session",
+        "info",
+        produce((draft) => {
+          for (const session of sessions) draft[session.id] = session
+        }),
+      )
+      for (const session of sessions) {
+        sync.complete(`session:${session.id}`)
+        registerSession(session.id)
+      }
+    })
+  }
+
   function evictSession(sessionID: string) {
     if (sessionOutbox.has(sessionID)) return
     sync.invalidate(`session.pending:${sessionID}`)
@@ -1655,24 +1674,20 @@ export function createData(config: CreateDataInput) {
       },
       sync(sessionID: string, options?: { children?: boolean }) {
         return sync.run(options?.children ? `session.family:${sessionID}` : `session:${sessionID}`, async () => {
-          const [info, children] = await Promise.all([
-            api().session.get({ sessionID }),
-            options?.children ? listChildren({ parentID: sessionID, order: "desc", limit: CHILD_PAGE }) : [],
+          // Each read publishes what it has as soon as it has it, and the sync still settles only
+          // once all of them have. The root's own metadata is what a view waits for, so it must not
+          // be held back by child pagination that is slower and may return nothing at all, while a
+          // failing child page must still reject the whole sync so it is retried.
+          await Promise.all([
+            api()
+              .session.get({ sessionID })
+              .then((info) => publishSessions([info])),
+            options?.children
+              ? listChildren({ parentID: sessionID, order: "desc", limit: CHILD_PAGE }).then((children) =>
+                  publishSessions(children),
+                )
+              : undefined,
           ])
-          const sessions = [info, ...children]
-          batch(() => {
-            setStore(
-              "session",
-              "info",
-              produce((draft) => {
-                for (const session of sessions) draft[session.id] = session
-              }),
-            )
-            for (const session of sessions) {
-              sync.complete(`session:${session.id}`)
-              registerSession(session.id)
-            }
-          })
         })
       },
       invalidate(sessionID: string) {
