@@ -1,6 +1,10 @@
 import type { Hooks } from "./registration.js"
 
 export interface ShellCreateBefore {
+  /** Validated native session identity; absent for sessionless execution. */
+  readonly sessionID?: string
+  /** Cancel preparation when the caller stops waiting for shell creation. */
+  readonly signal?: AbortSignal
   command: string
   cwd: string
   timeout: number
