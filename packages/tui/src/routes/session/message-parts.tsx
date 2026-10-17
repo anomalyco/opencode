@@ -112,6 +112,14 @@ export function ReasoningPart(props: {
   )
 }
 
+// Claude 5.5 returns the notes it writes for the user between tool calls as thinking blocks.
+// Anthropic marks them with a "narration" type inside the block's signature.
+export function progressUpdate(state: SessionMessageAssistantReasoning["state"]) {
+  const signature = state?.signature
+  if (typeof signature !== "string") return false
+  return atob(signature.slice(0, 64)).includes("B\tnarration")
+}
+
 export function reasoningContent(part: SessionMessageAssistantReasoning) {
   // OpenRouter encrypts some reasoning blocks; drop the placeholder.
   return part.text.replace("[REDACTED]", "").trim()
@@ -168,7 +176,7 @@ function ReasoningHeader(props: {
 
 export function TextPart(props: {
   last: boolean
-  part: SessionMessageAssistantText
+  part: SessionMessageAssistantText | SessionMessageAssistantReasoning
   message: SessionMessageAssistant
 }) {
   const ctx = use()

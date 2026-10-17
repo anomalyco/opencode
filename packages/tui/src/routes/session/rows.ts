@@ -22,6 +22,7 @@ import {
   defaultVerbosity,
 } from "./grouping/session"
 import { groupID } from "./anchors"
+import { progressUpdate } from "./message-parts"
 export type { CacheUsage, PartRef, SessionRow } from "./grouping/session"
 
 /**
@@ -287,11 +288,13 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
         )
     }),
     data.on("session.reasoning.ended", (event) => {
-      if (event.data.sessionID === sessionID() && event.data.text.trim())
-        appendPart(
-          { messageID: event.data.assistantMessageID, partID: `reasoning:${event.data.ordinal}` },
-          { type: "reasoning", time: { completed: event.created } },
-        )
+      if (event.data.sessionID !== sessionID() || !event.data.text.trim()) return
+      // The signature arrives with the end event, after the deltas grouped the part as thinking.
+      if (progressUpdate(event.data.state)) return rebuild()
+      appendPart(
+        { messageID: event.data.assistantMessageID, partID: `reasoning:${event.data.ordinal}` },
+        { type: "reasoning", time: { completed: event.created } },
+      )
     }),
     data.on("session.tool.input.started", (event) => {
       if (event.data.sessionID === sessionID())
@@ -394,10 +397,11 @@ export function reduceSessionRows(
     message.content.forEach((part) => {
       const partID = part.type === "tool" ? part.id : `${part.type}:${ordinals[part.type]++}`
       if ((part.type === "text" || part.type === "reasoning") && !part.text.trim()) return
+      const shape = part.type === "reasoning" && progressUpdate(part.state) ? { type: "text" as const } : part
       rows.push({
         entry: { type: "part", ref: { messageID: message.id, partID } },
-        part,
-        path: partPath(part, verbosity),
+        part: shape,
+        path: partPath(shape, verbosity),
       })
     })
     const terminal = (message.finish && !["tool-calls", "unknown"].includes(message.finish)) || message.error

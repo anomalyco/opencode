@@ -122,7 +122,14 @@ import { SessionLocationMissing } from "./location-missing"
 import { isRecord } from "../../util/record"
 import { createHistoryPrepend } from "./history"
 import { context, use, type PendingAction } from "./render-context"
-import { INLINE_TOOL_ICON_WIDTH, InlineToolRow, ReasoningPart, TextPart, toolDisplay } from "./message-parts"
+import {
+  INLINE_TOOL_ICON_WIDTH,
+  InlineToolRow,
+  progressUpdate,
+  ReasoningPart,
+  TextPart,
+  toolDisplay,
+} from "./message-parts"
 import { defaultVerbosity, type GroupKind, type SessionEntry } from "./grouping/session"
 import { SessionGroupView } from "./group-view"
 import { useEntryAnchor } from "./anchor-view"
@@ -1856,9 +1863,14 @@ function SessionPartView(props: {
     <Show when={part()}>
       {(item) => (
         <Switch>
-          <Match when={item().type === "text"}>
+          <Match
+            when={
+              item().type === "text" ||
+              (item().type === "reasoning" && progressUpdate((item() as SessionMessageAssistantReasoning).state))
+            }
+          >
             <TextPart
-              part={item() as SessionMessageAssistantText}
+              part={item() as SessionMessageAssistantText | SessionMessageAssistantReasoning}
               message={message() as SessionMessageAssistant}
               last={false}
             />
