@@ -281,18 +281,57 @@ describe("Permission", () => {
     }),
   )
 
-  it.effect("resolves an asked permission once", () =>
+  for (const reply of ["once", "always", "reject"] as const) {
+    it.effect(`publishes one reply when an asked permission is answered with ${reply}`, () =>
+      Effect.gen(function* () {
+        yield* setup()
+        const bus = yield* Bus.Service
+        const replies = new Array<unknown>()
+        const unsubscribe = yield* bus.listen((event) =>
+          Effect.sync(() => {
+            if (event.type === Permission.Event.Replied.type) replies.push(event.data)
+          }),
+        )
+        yield* Effect.addFinalizer(() => unsubscribe)
+        const { service, fiber, request } = yield* waitForRequest({ save: ["src/*"] })
+        expect(yield* service.list()).toEqual([request])
+        expect(yield* service.forSession(request.sessionID)).toEqual([request])
+        expect(yield* service.forSession(Session.ID.make("ses_other"))).toEqual([])
+        expect(yield* service.get(request.id)).toEqual(request)
+        yield* service.reply({ requestID: request.id, reply })
+        expect((yield* Fiber.await(fiber))._tag).toBe(reply === "reject" ? "Failure" : "Success")
+        expect(yield* service.list()).toEqual([])
+        expect(yield* service.get(request.id)).toBeUndefined()
+        yield* service.close
+        expect(replies).toEqual([{ sessionID: request.sessionID, requestID: request.id, reply }])
+      }),
+    )
+  }
+
+  it.effect("publishes a rejection for an interrupted permission without rejecting another request", () =>
     Effect.gen(function* () {
       yield* setup()
-      const { service, fiber, request } = yield* waitForRequest()
-      expect(yield* service.list()).toEqual([request])
-      expect(yield* service.forSession(request.sessionID)).toEqual([request])
-      expect(yield* service.forSession(Session.ID.make("ses_other"))).toEqual([])
-      expect(yield* service.get(request.id)).toEqual(request)
-      yield* service.reply({ requestID: request.id, reply: "once" })
-      yield* Fiber.join(fiber)
-      expect(yield* service.list()).toEqual([])
-      expect(yield* service.get(request.id)).toBeUndefined()
+      const bus = yield* Bus.Service
+      const replies = new Array<unknown>()
+      const unsubscribe = yield* bus.listen((event) =>
+        Effect.sync(() => {
+          if (event.type === Permission.Event.Replied.type) replies.push(event.data)
+        }),
+      )
+      yield* Effect.addFinalizer(() => unsubscribe)
+      const selected = yield* waitForRequest()
+      const other = yield* waitForRequest({ id: Permission.ID.create("per_other") })
+
+      yield* Fiber.interrupt(selected.fiber)
+
+      expect(replies).toEqual([
+        { sessionID: selected.request.sessionID, requestID: selected.request.id, reply: "reject" },
+      ])
+      expect(yield* selected.service.list()).toEqual([other.request])
+      expect(yield* selected.service.get(selected.request.id)).toBeUndefined()
+      expect(other.fiber.pollUnsafe()).toBeUndefined()
+      yield* other.service.reply({ requestID: other.request.id, reply: "once" })
+      yield* Fiber.join(other.fiber)
     }),
   )
 
