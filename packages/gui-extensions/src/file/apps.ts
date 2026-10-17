@@ -8,6 +8,7 @@ const OPEN_APPS = [
   "antigravity",
   "finder",
   "terminal",
+  "integrated-terminal",
   "iterm2",
   "ghostty",
   "warp",

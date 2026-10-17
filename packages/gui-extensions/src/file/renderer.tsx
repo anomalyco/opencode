@@ -166,6 +166,7 @@ const setup: Setup<typeof File> = (ctx) => {
   const shared: FileShared = {
     changes: ctx.uses.changes,
     browser: ctx.uses.browser,
+    terminal: ctx.uses.terminal,
     tree: {
       tab: () => tree.value.tab,
       setTab: (tab) =>

@@ -1,8 +1,10 @@
 import { Extension } from "../sdk"
+import { Terminal } from "./contract"
 import en from "./i18n/en"
 
 export default Extension.define({
   id: "terminal",
+  provides: { terminal: Terminal },
   i18n: {
     en,
     am: () => import("./i18n/am"),

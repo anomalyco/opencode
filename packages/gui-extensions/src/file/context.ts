@@ -1,6 +1,7 @@
 import { createContext, useContext, type Accessor } from "solid-js"
 import type { Browser } from "../browser/contract"
 import type { Changes } from "../review/contract"
+import type { Terminal } from "../terminal/contract"
 import type { LineRange, Live, MountedSession, OpenOptions } from "../sdk"
 import type { OpenApp } from "./apps"
 
@@ -16,6 +17,7 @@ export interface OpenRequest {
 export interface FileShared {
   readonly changes: Accessor<Live<Changes>>
   readonly browser: Accessor<Live<Browser>>
+  readonly terminal: Accessor<Live<Terminal>>
   readonly tree: {
     tab(): TreeTab
     setTab(tab: TreeTab): void
