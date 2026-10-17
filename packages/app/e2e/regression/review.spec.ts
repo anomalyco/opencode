@@ -738,8 +738,10 @@ test("image files load into the review panel and keep it painted while loading",
       // A 1x1 PNG.
       return {
         type: "binary",
-        content: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
-        encoding: "base64",
+        bytes: Buffer.from(
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
+          "base64",
+        ),
         mimeType: "image/png",
       }
     },

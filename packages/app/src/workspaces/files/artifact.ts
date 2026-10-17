@@ -26,13 +26,13 @@ export function fileContentFromBytes(path: string, bytes: Uint8Array): FileConte
   const mimeType = artifactMime(path)
 
   if (binaryKinds.has(kind)) {
-    if (bytes.length > MAX_MEDIA_BYTES) return { type: "binary", content: "", size: bytes.length }
+    if (bytes.length > MAX_MEDIA_BYTES) return { type: "binary", size: bytes.length }
 
-    return { type: "binary", content: "", bytes, mimeType }
+    return { type: "binary", bytes, mimeType }
   }
 
   // Unknown binaries keep no bytes: the viewer only shows a placeholder for them.
-  if (kind === "text" && isBinaryBytes(bytes)) return { type: "binary", content: "", size: bytes.length }
+  if (kind === "text" && isBinaryBytes(bytes)) return { type: "binary", size: bytes.length }
 
   return { type: "text", content: new TextDecoder().decode(bytes), mimeType }
 }

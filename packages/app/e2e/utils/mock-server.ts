@@ -38,7 +38,8 @@ export type MockMcpStatus = { status: string; error?: string }
 
 export type MockFileContent =
   | string
-  | { type?: string; content: string; encoding?: string; mimeType?: string }
+  | Uint8Array
+  | { type?: string; content?: string; bytes?: Uint8Array; mimeType?: string }
   | undefined
 
 export interface MockServerConfig {
@@ -782,12 +783,9 @@ function mockHandlers(
 
           if (Predicate.isString(value)) return HttpServerResponse.uint8Array(new TextEncoder().encode(value))
 
-          // Like the server, stream base64 content as the bytes it encodes.
-          return HttpServerResponse.uint8Array(
-            value?.encoding === "base64"
-              ? Buffer.from(value.content, "base64")
-              : new TextEncoder().encode(value?.content ?? ""),
-          )
+          if (value instanceof Uint8Array) return HttpServerResponse.uint8Array(value)
+
+          return HttpServerResponse.uint8Array(value?.bytes ?? new TextEncoder().encode(value?.content ?? ""))
         }),
       )
       // Raw, so a hook's answer can replace the status and body.

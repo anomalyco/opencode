@@ -1,17 +1,8 @@
-import { base64ToBytes } from "@opencode/util/base64"
 import type { FileContent } from "../sdk"
 
 /** Approximate on-disk size of loaded content. */
 export function contentBytes(content: FileContent) {
-  if (content.size !== undefined) return content.size
-
-  if (content.bytes !== undefined) return content.bytes.byteLength
-
-  if (content.encoding === "base64") {
-    const padding = content.content.endsWith("==") ? 2 : content.content.endsWith("=") ? 1 : 0
-
-    return Math.floor((content.content.length * 3) / 4) - padding
-  }
+  if (content.type === "binary") return content.size ?? content.bytes?.byteLength ?? 0
 
   return new TextEncoder().encode(content.content).length
 }
@@ -90,30 +81,27 @@ export function parseDelimited(text: string, delimiter: string, limit = 1000) {
 /** The raw bytes of loaded content. */
 export function bytesFromContent(content: FileContent) {
   // A copy, as a viewer may move the returned buffer to a worker.
-  if (content.bytes !== undefined) return content.bytes.slice()
+  if (content.type === "binary") return content.bytes?.slice() ?? new Uint8Array(0)
 
-  if (content.encoding !== "base64") return new TextEncoder().encode(content.content)
-
-  return base64ToBytes(content.content)
+  return new TextEncoder().encode(content.content)
 }
 
 /** Build a blob URL from loaded content. Callers revoke it when the viewer unmounts. */
 export function blobUrlFromContent(content: FileContent) {
   const type = content.mimeType ?? "application/octet-stream"
+
+  if (content.type === "text") return URL.createObjectURL(new Blob([content.content], { type }))
+
   const bytes = content.bytes
 
-  if (bytes !== undefined) {
-    const view =
-      bytes.buffer instanceof ArrayBuffer
-        ? new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength)
-        : bytes.slice()
+  if (!bytes) return URL.createObjectURL(new Blob([], { type }))
 
-    return URL.createObjectURL(new Blob([view], { type }))
-  }
+  const view =
+    bytes.buffer instanceof ArrayBuffer
+      ? new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+      : bytes.slice()
 
-  if (content.encoding !== "base64") return URL.createObjectURL(new Blob([content.content], { type }))
-
-  return URL.createObjectURL(new Blob([bytesFromContent(content)], { type }))
+  return URL.createObjectURL(new Blob([view], { type }))
 }
 
 /**

@@ -1,4 +1,12 @@
-import type { ProjectListOutput, WorktreeDirectory } from "@opencode/client/promise"
+import type {
+  AgentInfo,
+  ConfigEntry,
+  IntegrationMethod,
+  ModelSettings,
+  ProjectListOutput,
+  ProviderSettings,
+  WorktreeDirectory,
+} from "@opencode/client/promise"
 
 export type Project = Omit<ProjectListOutput[number], "canonical"> & {
   worktree: string
@@ -11,30 +19,6 @@ export type FileNode = {
   absolute: string
   type: "file" | "directory"
   ignored: boolean
-}
-
-export type FileContent = {
-  type: "text" | "binary"
-  content: string
-  diff?: string
-  patch?: {
-    oldFileName: string
-    newFileName: string
-    oldHeader?: string
-    newHeader?: string
-    hunks: Array<{
-      oldStart: number
-      oldLines: number
-      newStart: number
-      newLines: number
-      lines: string[]
-    }>
-    index?: string
-  }
-  encoding?: "base64"
-  mimeType?: string
-  /** On-disk size when the bytes themselves are not retained. */
-  size?: number
 }
 
 export type Path = {
@@ -62,7 +46,7 @@ export type Agent = {
   model?: { modelID: string; providerID: string }
   variant?: string
   prompt?: string
-  options: Record<string, unknown>
+  options: AgentInfo["request"]["settings"]
   steps?: number
 }
 
@@ -122,10 +106,10 @@ export type Model = {
     output: number
   }
   status: "alpha" | "beta" | "deprecated" | "active"
-  options: Record<string, unknown>
+  options: ModelSettings
   headers: Record<string, string>
   release_date: string
-  variants?: Record<string, Record<string, unknown>>
+  variants?: Record<string, ModelSettings>
 }
 
 export type Provider = {
@@ -137,7 +121,7 @@ export type Provider = {
   source: "env" | "config" | "custom" | "api"
   env: string[]
   key?: string
-  options: Record<string, unknown>
+  options: ProviderSettings
   models: Record<string, Model>
 }
 
@@ -147,26 +131,12 @@ export type ProviderListResponse = {
   connected: string[]
 }
 
-export type ProviderAuthResponse = Record<string, unknown>
+export type ProviderAuthResponse = Record<string, Array<Extract<IntegrationMethod, { type: "key" | "oauth" }>>>
 
-export type Config = {
-  model?: string
+export type Config = Extract<ConfigEntry, { type: "document" }>["info"] & {
   small_model?: string
-  default_agent?: string
-  username?: string
-  share?: "manual" | "auto" | "disabled"
   autoshare?: boolean
-  shell?: string
-  plugin?: Array<string | [string, Record<string, unknown>]>
-  provider?: Record<string, { npm?: string; models?: Record<string, unknown> }>
-  mcp?: Record<string, unknown>
-  agent?: Record<string, unknown>
-  command?: Record<string, unknown>
-  instructions?: string[]
   disabled_providers?: string[]
   enabled_providers?: string[]
-  permission?: string | Record<string, unknown>
   tools?: Record<string, boolean>
-  experimental?: Record<string, unknown>
-  [key: string]: unknown
 }

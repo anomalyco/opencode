@@ -98,11 +98,11 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   }
 
   const selectionPreview = (path: string, selection: FileSelection) => {
-    const content = file.get(path)?.content?.content
+    const content = file.get(path)?.content
 
-    if (!content) return undefined
+    if (content?.type !== "text" || !content.content) return undefined
 
-    return previewSelectedLines(content, { start: selection.startLine, end: selection.endLine })
+    return previewSelectedLines(content.content, { start: selection.startLine, end: selection.endLine })
   }
 
   const addSelectionToContext = (path: string, selection: FileSelection) => {

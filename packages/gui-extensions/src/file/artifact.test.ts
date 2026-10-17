@@ -4,7 +4,7 @@ import { bytesFromContent, contentBytes, parseDelimited, resolveArtifactPath } f
 describe("binary content helpers", () => {
   test("reads size and independent byte copies from raw bytes", () => {
     const bytes = new Uint8Array([0, 1, 2, 3])
-    const content = { type: "binary" as const, content: "", bytes, mimeType: "video/mp4" }
+    const content = { type: "binary" as const, bytes, mimeType: "video/mp4" }
 
     expect(contentBytes(content)).toBe(4)
 

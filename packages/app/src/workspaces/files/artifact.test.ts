@@ -7,7 +7,6 @@ describe("fileContentFromBytes", () => {
     const png = new Uint8Array([137, 80, 78, 71])
     expect(fileContentFromBytes("a.png", png)).toEqual({
       type: "binary",
-      content: "",
       bytes: png,
       mimeType: "image/png",
     })
@@ -16,7 +15,6 @@ describe("fileContentFromBytes", () => {
     const content = fileContentFromBytes("arcade-update-draft.mp4", video)
     expect(content).toEqual({
       type: "binary",
-      content: "",
       bytes: video,
       mimeType: "video/mp4",
     })
@@ -38,10 +36,10 @@ describe("fileContentFromBytes", () => {
 
   test("keeps only the size of media above the cap", () => {
     const content = fileContentFromBytes("big.mp4", new Uint8Array(MAX_MEDIA_BYTES + 1))
-    expect(content).toEqual({ type: "binary", content: "", size: MAX_MEDIA_BYTES + 1 })
+    expect(content).toEqual({ type: "binary", size: MAX_MEDIA_BYTES + 1 })
   })
 
   test("marks unknown binaries without keeping bytes", () => {
-    expect(fileContentFromBytes("a.bin", new Uint8Array([1, 0, 2]))).toEqual({ type: "binary", content: "", size: 3 })
+    expect(fileContentFromBytes("a.bin", new Uint8Array([1, 0, 2]))).toEqual({ type: "binary", size: 3 })
   })
 })

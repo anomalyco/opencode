@@ -60,53 +60,30 @@ export type Project = Omit<ProjectListOutput[number], "canonical"> & {
   worktrees: WorktreeDirectory[]
 }
 
-/** A file's content as the server read it. */
-export type FileContent = {
-  /**
-   * How to read `content`.
-   * - `text`: `content` is the text.
-   * - `binary`: `bytes` holds the raw bytes, `content` is base64 when `encoding` says so, or empty when only `size` is known.
-   */
-  type: "text" | "binary"
-  /** The text, or the base64 bytes of a binary file. */
-  content: string
-  /** The raw bytes of a binary file, when kept without base64 encoding. */
-  bytes?: Uint8Array
-  /** A unified diff of the file's uncommitted change, when there is one. */
-  diff?: string
-  /** The same change, parsed. */
-  patch?: {
-    /** The file's name before the change. */
-    oldFileName: string
-    /** The file's name after the change. */
-    newFileName: string
-    /** The header of the old side. */
-    oldHeader?: string
-    /** The header of the new side. */
-    newHeader?: string
-    /** The changed regions. */
-    hunks: Array<{
-      /** First line of the hunk in the old file. */
-      oldStart: number
-      /** Lines of the hunk in the old file. */
-      oldLines: number
-      /** First line of the hunk in the new file. */
-      newStart: number
-      /** Lines of the hunk in the new file. */
-      newLines: number
-      /** The hunk's lines, each prefixed with " ", "+" or "-". */
-      lines: string[]
-    }>
-    /** The diff's index line. */
-    index?: string
-  }
-  /** `base64` when `content` holds encoded bytes. */
-  encoding?: "base64"
+/** A text file's decoded content as the workspace file model holds it. */
+export type TextFileContent = {
+  /** Marks decoded text content. */
+  readonly type: "text"
+  /** The decoded text. */
+  readonly content: string
   /** The file's MIME type, when the server knows it. */
-  mimeType?: string
-  /** On-disk size when the bytes themselves are not retained. */
-  size?: number
+  readonly mimeType?: string
 }
+
+/** A binary file's raw bytes or size as the workspace file model holds it. */
+export type BinaryFileContent = {
+  /** Marks binary content. */
+  readonly type: "binary"
+  /** The raw bytes of the file, when retained in memory. */
+  readonly bytes?: Uint8Array
+  /** On-disk size when the bytes themselves are not retained. */
+  readonly size?: number
+  /** The file's MIME type, when the server knows it. */
+  readonly mimeType?: string
+}
+
+/** A file's content as the server read it. */
+export type FileContent = TextFileContent | BinaryFileContent
 
 /** A range of lines in a file, or in one side of its diff. */
 export interface LineRange {
