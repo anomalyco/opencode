@@ -49,7 +49,7 @@ export function DialogUpdate(props: {
       type === "available"
         ? { label: "Update", run: props.install }
         : type === "installed"
-          ? { label: "Restart", run: props.restart }
+          ? { label: "Quit", run: props.restart }
           : undefined
     return [
       {
@@ -137,7 +137,7 @@ export function DialogUpdate(props: {
             </Match>
             <Match when={current.type === "available"}>
               <text fg={theme.text.muted}>
-                An update is available. After installing, you'll be prompted to restart OpenCode.
+                An update is available. After installing, quit and run opencode again to use the new version.
               </text>
             </Match>
             <Match when={current.type === "installing"}>
@@ -147,7 +147,7 @@ export function DialogUpdate(props: {
             </Match>
             <Match when={current.type === "installed"}>
               <text fg={theme.text.muted} wrapMode="word">
-                Update successful! A restart is required. Any active sessions will be resumed automatically.
+                Update successful! Quit, then run opencode again to use the new version.
               </text>
             </Match>
             <Match when={current.type === "current"}>
