@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Deferred, Effect, Fiber, Layer, Schema, Stream } from "effect"
+import { Context, Deferred, Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { LanguageModel } from "@opencode/ai"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { TestLLM } from "@opencode/ai/testing"
@@ -57,6 +57,46 @@ const tokens = { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 }
 const outputSessionID = (value: unknown) =>
   Schema.decodeUnknownSync(Schema.Struct({ sessionID: Session.ID }))(value).sessionID
 
+const publishCompletion = Effect.fnUntraced(function* (
+  bus: Bus.Interface,
+  store: SessionStore.Interface,
+  completed: Set<Session.ID>,
+  sessionID: Session.ID,
+) {
+  if (completed.has(sessionID)) return
+  if ((yield* store.get(sessionID))?.title?.includes("fail")) {
+    yield* new SessionRunnerModel.ModelNotSelectedError({ sessionID })
+    return
+  }
+  completed.add(sessionID)
+  const assistantMessageID = SessionMessage.ID.create()
+  yield* bus.publish(SessionEvent.Step.Started, {
+    sessionID,
+    assistantMessageID,
+    agent: Agent.ID.make("reviewer"),
+    model: childModel,
+    started: 0,
+  })
+  yield* bus.publish(SessionEvent.Text.Started, {
+    sessionID,
+    assistantMessageID,
+    ordinal: 0,
+  })
+  yield* bus.publish(SessionEvent.Text.Ended, {
+    sessionID,
+    assistantMessageID,
+    ordinal: 0,
+    text: childText,
+  })
+  yield* bus.publish(SessionEvent.Step.Ended, {
+    sessionID,
+    assistantMessageID,
+    finish: "stop",
+    cost: Money.USD.zero,
+    tokens,
+  })
+})
+
 const executionNode = makeGlobalNode({
   service: SessionExecution.Service,
   layer: Layer.effect(
@@ -65,40 +105,7 @@ const executionNode = makeGlobalNode({
       const bus = yield* Bus.Service
       const store = yield* SessionStore.Service
       const completed = new Set<Session.ID>()
-      const complete = Effect.fn("SubagentTest.complete")(function* (sessionID: Session.ID) {
-        if (completed.has(sessionID)) return
-        if ((yield* store.get(sessionID))?.title?.includes("fail")) {
-          yield* new SessionRunnerModel.ModelNotSelectedError({ sessionID })
-          return
-        }
-        completed.add(sessionID)
-        const assistantMessageID = SessionMessage.ID.create()
-        yield* bus.publish(SessionEvent.Step.Started, {
-          sessionID,
-          assistantMessageID,
-          agent: Agent.ID.make("reviewer"),
-          model: childModel,
-          started: 0,
-        })
-        yield* bus.publish(SessionEvent.Text.Started, {
-          sessionID,
-          assistantMessageID,
-          ordinal: 0,
-        })
-        yield* bus.publish(SessionEvent.Text.Ended, {
-          sessionID,
-          assistantMessageID,
-          ordinal: 0,
-          text: childText,
-        })
-        yield* bus.publish(SessionEvent.Step.Ended, {
-          sessionID,
-          assistantMessageID,
-          finish: "stop",
-          cost: Money.USD.zero,
-          tokens,
-        })
-      })
+      const complete = (sessionID: Session.ID) => publishCompletion(bus, store, completed, sessionID)
       return SessionExecution.Service.of({
         active: Effect.succeed(new Set()),
         isActive: () => Effect.succeed(false),
@@ -110,6 +117,84 @@ const executionNode = makeGlobalNode({
     }),
   ),
   deps: [Bus.node, SessionStore.node],
+})
+
+interface ExecutionGate {
+  readonly begin: (sessionID: Session.ID) => Effect.Effect<void>
+  readonly awaitRelease: (sessionID: Session.ID) => Effect.Effect<void>
+  readonly started: (sessionID: Session.ID) => Effect.Effect<void>
+  readonly release: (sessionID: Session.ID) => Effect.Effect<void>
+  readonly peak: Effect.Effect<number>
+}
+
+class ExecutionGateService extends Context.Service<ExecutionGateService, ExecutionGate>()(
+  "@opencode/TestSubagentExecutionGate",
+) {}
+
+const executionGateNode = makeGlobalNode({
+  service: ExecutionGateService,
+  layer: Layer.effect(
+    ExecutionGateService,
+    Effect.gen(function* () {
+      const started = new Map<Session.ID, Deferred.Deferred<void>>()
+      const gates = new Map<Session.ID, Deferred.Deferred<void>>()
+      const begun = new Set<Session.ID>()
+      let active = 0
+      let peak = 0
+      const ensure = (deferreds: Map<Session.ID, Deferred.Deferred<void>>, sessionID: Session.ID) => {
+        const existing = deferreds.get(sessionID)
+        if (existing !== undefined) return existing
+        const created = Deferred.makeUnsafe<void>()
+        deferreds.set(sessionID, created)
+        return created
+      }
+      return ExecutionGateService.of({
+        begin: Effect.fn("TestSubagentExecutionGate.begin")(function* (sessionID) {
+          if (!begun.has(sessionID)) {
+            begun.add(sessionID)
+            active += 1
+            peak = Math.max(peak, active)
+          }
+          yield* Deferred.succeed(ensure(started, sessionID), undefined)
+        }),
+        awaitRelease: (sessionID) => Deferred.await(ensure(gates, sessionID)),
+        started: (sessionID) => Deferred.await(ensure(started, sessionID)),
+        release: Effect.fn("TestSubagentExecutionGate.release")(function* (sessionID) {
+          active -= 1
+          yield* Deferred.succeed(ensure(gates, sessionID), undefined)
+        }),
+        peak: Effect.sync(() => peak),
+      })
+    }),
+  ),
+  deps: [],
+})
+
+const concurrentExecutionNode = makeGlobalNode({
+  service: SessionExecution.Service,
+  layer: Layer.effect(
+    SessionExecution.Service,
+    Effect.gen(function* () {
+      const bus = yield* Bus.Service
+      const store = yield* SessionStore.Service
+      const gate = yield* ExecutionGateService
+      const completed = new Set<Session.ID>()
+      const complete = (sessionID: Session.ID) => publishCompletion(bus, store, completed, sessionID)
+      return SessionExecution.Service.of({
+        active: Effect.succeed(new Set()),
+        isActive: () => Effect.succeed(false),
+        resume: Effect.fn("SubagentTest.gatedResume")(function* (sessionID) {
+          yield* gate.begin(sessionID)
+          yield* gate.awaitRelease(sessionID)
+          yield* complete(sessionID)
+        }),
+        wake: () => Effect.void,
+        interrupt: () => Effect.succeed(false),
+        awaitIdle: (sessionID) => complete(sessionID).pipe(Effect.exit, Effect.asVoid),
+      })
+    }),
+  ),
+  deps: [Bus.node, SessionStore.node, executionGateNode],
 })
 
 const subagentPluginSupervisor = makeLocationNode({
@@ -171,6 +256,15 @@ const completionIt = testEffect(
           ),
       }),
     ),
+  ]),
+)
+
+const concurrencyIt = testEffect(
+  AppNodeBuilder.build(LayerNode.group([nodes, executionGateNode]), [
+    Global.node.replace(tempGlobalLayer),
+    offlineModels,
+    SessionExecution.node.replace(concurrentExecutionNode),
+    PluginSupervisor.node.replace(subagentPluginSupervisor),
   ]),
 )
 
@@ -396,6 +490,70 @@ describe("SubagentTool", () => {
             status: "completed",
           })
           expect((yield* sessions.get(outputSessionID(settled.metadata))).parentID).toBe(parent.id)
+        }),
+      ),
+    ),
+  )
+
+  concurrencyIt.live("limits parallel subagents to the configured concurrency", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Bun.write(
+              path.join(dir.path, "opencode.json"),
+              JSON.stringify({ experimental: { subagent_concurrency: 1 } }),
+            ),
+          )
+          const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+          const sessions = yield* Session.Service
+          const parent = yield* sessions.create({ location, model: parentModel })
+          yield* withSubagent(parent.location)
+          const locations = yield* LocationServiceMap.Service
+          const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
+          const gate = yield* ExecutionGateService
+          // The progress update arrives after the child session is created and before the call
+          // takes its permit, so it orders the two calls deterministically.
+          const launch = (id: string) =>
+            Effect.gen(function* () {
+              const created = yield* Deferred.make<Tool.Metadata>()
+              const fiber = yield* executeTool(registry, {
+                sessionID: parent.id,
+                ...toolIdentity,
+                progress: (update) => Deferred.succeed(created, update),
+                call: {
+                  type: "tool-call" as const,
+                  id,
+                  name: SubagentTool.name,
+                  input: { agent: "reviewer", description: "background review", prompt: "review", background: true },
+                },
+              }).pipe(Effect.forkChild({ startImmediately: true }))
+              const child = outputSessionID(yield* Deferred.await(created))
+              return { fiber, child }
+            })
+
+          const first = yield* launch("call-concurrency-first")
+          yield* gate.started(first.child)
+          const second = yield* launch("call-concurrency-second")
+
+          const children = (yield* sessions.list({ parentID: parent.id })).data
+          const admitted = yield* Effect.forEach(children, (child) =>
+            sessions.inbox(child.id).pipe(Effect.map((inbox) => inbox.some((message) => message.type === "user"))),
+          )
+          expect(children).toHaveLength(2)
+          // The second call queues for a permit, so its prompt is not admitted yet.
+          expect(admitted.filter(Boolean)).toHaveLength(1)
+
+          yield* gate.release(first.child)
+          yield* Fiber.join(second.fiber)
+          yield* gate.started(second.child)
+          yield* gate.release(second.child)
+          yield* Fiber.join(first.fiber)
+
+          expect(yield* gate.peak).toBe(1)
         }),
       ),
     ),

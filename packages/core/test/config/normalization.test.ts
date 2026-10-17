@@ -713,4 +713,15 @@ describe("ConfigNormalize", () => {
     })
     expect(result.encoded.share).toBeUndefined()
   })
+
+  test("decodes experimental.subagent_concurrency and rejects non-positive values", () => {
+    expect(normalized({ experimental: { subagent_concurrency: 2 } }).encoded).toEqual({
+      experimental: { subagent_concurrency: 2 },
+    })
+    const result = normalized({ experimental: { subagent_concurrency: 0 } })
+    expect(result.encoded.experimental).toBeUndefined()
+    expect(result.diagnostics.map((item) => [item.kind, item.path])).toEqual([
+      ["invalid", ["experimental", "subagent_concurrency"]],
+    ])
+  })
 })

@@ -558,6 +558,23 @@ The default is `1`, which allows primary agents to launch subagents but prevents
 
 ---
 
+### Subagent concurrency
+
+You can limit how many subagents execute at the same time using the `experimental.subagent_concurrency` option.
+
+```jsonc title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "subagent_concurrency": 2
+  }
+}
+```
+
+Without the option, subagents run without a limit. With a limit of `2`, at most two subagents execute concurrently, and further calls wait for a slot to free up. This is most useful when running local models, where parallel subagents contend for a small number of context slots.
+
+---
+
 ### Commands
 
 You can configure custom commands for repetitive tasks through the `command` option.

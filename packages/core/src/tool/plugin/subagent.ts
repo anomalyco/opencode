@@ -3,7 +3,7 @@ export * as SubagentTool from "./subagent.js"
 import { ToolFailure } from "@opencode/ai"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
-import { Effect, Predicate, Schema } from "effect"
+import { Effect, Predicate, Schema, Semaphore, Scope } from "effect"
 import { Agent } from "../../agent.js"
 import { Config } from "../../config.js"
 import { Job } from "../../job.js"
@@ -71,6 +71,9 @@ export const Plugin = {
     const permission = yield* Permission.Service
     const models = yield* Model.Service
     const subagents = yield* SubagentJob.Service
+    const scope = yield* Scope.Scope
+    // Starts at zero; each call resizes it to the configured limit before taking.
+    const gate = Semaphore.makeUnsafe(0)
 
     const resolveModel = Effect.fn("SubagentTool.resolveModel")(function* (input: string) {
       const ref = yield* Effect.try({
@@ -126,7 +129,8 @@ export const Plugin = {
                     ),
                   )
               }
-              const limit = Config.latest(yield* config.entries(), "experimental")?.subagent_depth ?? 1
+              const experimental = Config.latest(yield* config.entries(), "experimental")
+              const limit = experimental?.subagent_depth ?? 1
               if (depth >= limit)
                 return yield* new ToolFailure({
                   message: `Subagent depth limit reached (${limit}). Increase "experimental.subagent_depth" to allow nested subagents.`,
@@ -200,23 +204,6 @@ export const Plugin = {
               const background = input.background === true
               yield* context.progress({ sessionID: child.id, status: "running" })
 
-              // Standard prompt admission outside the job: Job.start joining a running child skips
-              // its run effect, and the default wake starts an idle child or steers a running one.
-              yield* sessions
-                .prompt({
-                  sessionID: child.id,
-                  text:
-                    existing === undefined
-                      ? ["You are a subagent spawned by another session.", input.prompt].join("\n")
-                      : input.prompt,
-                  ...(background && existing === undefined ? { resume: false } : {}),
-                })
-                .pipe(
-                  Effect.mapError(
-                    (error) => new ToolFailure({ message: `Failed to prompt subagent: ${child.id}`, error }),
-                  ),
-                )
-
               const recovery = {
                 kind: "subagent" as const,
                 parentSessionID: context.sessionID,
@@ -224,7 +211,45 @@ export const Plugin = {
                 agent: agent.name,
                 description: input.description,
               }
-              yield* subagents.start(recovery)
+              // A child executes from prompt admission until its job settles. Settlement outlives
+              // background calls, so the permit releases on settlement rather than the tool call.
+              const concurrency = experimental?.subagent_concurrency
+              if (concurrency !== undefined) {
+                yield* gate.resize(concurrency)
+                yield* gate.take(1)
+              }
+              yield* Effect.gen(function* () {
+                // Standard prompt admission outside the job: Job.start joining a running child skips
+                // its run effect, and the default wake starts an idle child or steers a running one.
+                yield* sessions
+                  .prompt({
+                    sessionID: child.id,
+                    text:
+                      existing === undefined
+                        ? ["You are a subagent spawned by another session.", input.prompt].join("\n")
+                        : input.prompt,
+                    ...(background && existing === undefined ? { resume: false } : {}),
+                  })
+                  .pipe(
+                    Effect.mapError(
+                      (error) => new ToolFailure({ message: `Failed to prompt subagent: ${child.id}`, error }),
+                    ),
+                  )
+                yield* subagents.start(recovery)
+                if (concurrency !== undefined)
+                  yield* Effect.gen(function* () {
+                    yield* jobs.wait({ id: child.id })
+                    yield* gate.release(1)
+                  }).pipe(Effect.forkIn(scope, { startImmediately: true }))
+              }).pipe(
+                // An admission failure before the job starts would otherwise strand the permit.
+                Effect.catchCause((cause) =>
+                  Effect.gen(function* () {
+                    if (concurrency !== undefined) yield* gate.release(1)
+                    return yield* Effect.failCause(cause)
+                  }),
+                ),
+              )
 
               if (background) {
                 yield* subagents.background(recovery)

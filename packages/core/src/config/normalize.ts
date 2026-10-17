@@ -476,6 +476,15 @@ function normalizeExperimental(
         )
         if (value !== undefined) result.subagent_depth = value
       }
+      if (own(experimental, "subagent_concurrency")) {
+        const value = decodeEncoded(
+          ConfigExperimental.Info.fields.subagent_concurrency,
+          experimental.subagent_concurrency,
+          ["experimental", "subagent_concurrency"],
+          diagnostics,
+        )
+        if (value !== undefined) result.subagent_concurrency = value
+      }
     }
   }
   if (Object.keys(result).length || (isRecord(input.experimental) && !Object.keys(input.experimental).length))
