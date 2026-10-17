@@ -24,7 +24,7 @@ import { Instructions } from "@opencode/core/instructions/index"
 import { InstructionBuiltIns } from "@opencode/core/instructions/builtins"
 import { Location } from "@opencode/core/location"
 import { McpInstructions } from "@opencode/core/mcp/instructions"
-import { ID } from "@opencode/core/model"
+import { ID, Model } from "@opencode/core/model"
 import { Project } from "@opencode/core/project"
 import { Provider } from "@opencode/core/provider"
 import { ReferenceInstructions } from "@opencode/core/reference/instructions"
@@ -82,15 +82,25 @@ const client = Layer.mock(LLMClient.Service)({
       return response
     }),
 })
+// Every `session.model` the context handed to model resolution, in order.
+const requested: Array<SessionSchema.Info["model"]> = []
 const models = Layer.mock(SessionRunnerModel.Service)({
-  resolve: () =>
-    Effect.succeed(
-      SessionRunnerModel.resolved(model, {
-        capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
-        cost: [],
-        limit: { context: 200_000, output: 32_000 },
-      }),
-    ),
+  resolve: (session) => {
+    requested.push(session.model)
+    return Effect.succeed(
+      SessionRunnerModel.resolved(
+        // Mirror the requested route, so an assertion can follow it through to the request.
+        session.model
+          ? LanguageModel.make({ id: session.model.id, provider: session.model.providerID, route: OpenAIChat.route })
+          : model,
+        {
+          capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
+          cost: [],
+          limit: { context: 200_000, output: 32_000 },
+        },
+      ),
+    )
+  },
 })
 const builtins = Layer.mock(InstructionBuiltIns.Service, {
   load: () =>
@@ -411,6 +421,32 @@ it.effect(
       expect(error).toBeInstanceOf(Instructions.InitializationBlocked)
       expect(requests).toEqual([])
       expect(yield* durableState(db, sessionID)).toEqual(before)
+    }),
+  { timeout: 15_000 },
+)
+
+it.effect(
+  "resolves the selected agent's configured model for a session that has none",
+  () =>
+    Effect.gen(function* () {
+      requests.length = 0
+      requested.length = 0
+      instruction = "Initial context"
+      const { db, bus, instructions, session, instances } = yield* setup
+      const agents = yield* Agent.Service
+      const configured = Model.Ref.make({ id: Model.ID.make("agent-model"), providerID: Provider.ID.make("test") })
+      yield* agents.transform((editor) =>
+        editor.update(Agent.ID.make("build"), (agent) => void (agent.model = configured)),
+      )
+      yield* InstructionState.prepare(db, bus, instructions, sessionID)
+
+      yield* SessionGenerate.generate({ session, prompt: "Summarize privately" }).pipe(
+        Effect.provideService(Instance.Service, instances),
+      )
+
+      expect(session.model).toBeUndefined()
+      expect(requested).toEqual([configured])
+      expect(String(requests[0]?.model.id)).toBe("agent-model")
     }),
   { timeout: 15_000 },
 )

@@ -35,7 +35,7 @@ export const generate = Effect.fn("SessionGenerate.generate")(function* (input: 
     yield* Plugin.awaitActivation
     const context = yield* SessionContext.Service
     const selection = yield* context.select(input.session.id)
-    const model = yield* context.resolveModel(selection.session)
+    const model = yield* context.resolveModel(selection)
     const history = yield* SessionHistory.preview(
       database.db,
       selection.session.id,

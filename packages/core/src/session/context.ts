@@ -53,9 +53,8 @@ export interface Interface {
   readonly select: (sessionID: SessionSchema.ID) => Effect.Effect<Selection, AgentNotFoundError>
   /** Resolves the model and active history for that selection. */
   readonly load: (selection: Selection) => Effect.Effect<Loaded, SessionRunnerModel.Error>
-  readonly resolveModel: (
-    session: SessionSchema.Info,
-  ) => Effect.Effect<SessionRunnerModel.Resolved, SessionRunnerModel.Error>
+  /** Resolves the model a selection runs with: the session's own model, else the agent's configured model. */
+  readonly resolveModel: (selection: Selection) => Effect.Effect<SessionRunnerModel.Resolved, SessionRunnerModel.Error>
   /** Selects auxiliary title capabilities without instruction or tool preflight. */
   readonly selectTitle: (session: SessionSchema.Info) => Effect.Effect<
     | {
@@ -90,12 +89,21 @@ const layer = Layer.effect(
     const store = yield* SessionStore.Service
     const registry = yield* Tool.Service
 
-    const resolveModel = (session: SessionSchema.Info) => models.resolve(session, model.available)
+    const resolveSessionModel = (session: SessionSchema.Info) => models.resolve(session, model.available)
+
+    // The session's own selection is explicit, so it wins; an agent's configured model stands in for a
+    // session that has none, which would otherwise fall through to the catalog default.
+    const resolveModel = (selection: Selection) => {
+      const configured = selection.session.model ?? selection.agent.info.model
+      return resolveSessionModel(
+        configured === undefined ? selection.session : { ...selection.session, model: configured },
+      )
+    }
 
     const selectTitle = Effect.fn("SessionContext.selectTitle")(function* (session: SessionSchema.Info) {
       const agent = yield* agents.get(Agent.ID.make("title"))
       if (!agent) return
-      const primary = yield* resolveModel(session).pipe(Effect.orElseSucceed(() => undefined))
+      const primary = yield* resolveSessionModel(session).pipe(Effect.orElseSucceed(() => undefined))
       const info = yield* Effect.gen(function* () {
         if (agent.model) return yield* model.get(agent.model.providerID, agent.model.id)
         if (!primary) return
@@ -105,7 +113,7 @@ const layer = Layer.effect(
         agent.model?.variant ?? MINIMAL_REASONING_VARIANTS.find((id) => info?.variants.some((item) => item.id === id))
       const preferred =
         info &&
-        (yield* resolveModel({
+        (yield* resolveSessionModel({
           ...session,
           model: Model.Ref.make({
             providerID: info.providerID,
@@ -161,7 +169,7 @@ const layer = Layer.effect(
     })
 
     const load = Effect.fn("SessionContext.load")(function* (selection: Selection) {
-      const model = yield* resolveModel(selection.session)
+      const model = yield* resolveModel(selection)
       const history = yield* SessionHistory.entriesForRunner(
         db,
         selection.session.id,
