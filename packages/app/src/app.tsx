@@ -6,10 +6,11 @@ import { ThemeProvider } from "@opencode/ui/theme/context"
 import { MetaProvider } from "@solidjs/meta"
 import { type BaseRouterProps, Router } from "@solidjs/router"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
-import { type Component, createRenderEffect, ErrorBoundary, type JSX, type ParentProps } from "solid-js"
+import { type Component, createRenderEffect, ErrorBoundary, type JSX, onCleanup, onMount, type ParentProps } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { CommandProvider } from "@/shell/commands/command"
 import { DesktopCommands } from "@/shell/commands/desktop"
+import { createDuplicateKeyGuard } from "@/shell/key-dedupe"
 import { GlobalProvider } from "@/runtime/server/runtime"
 import { LanguageProvider, UiI18nBridge, type Locale } from "@/runtime/i18n/language"
 import { ServerConnection, ServersProvider } from "@/runtime/server/registry"
@@ -84,6 +85,15 @@ export function AppBaseProviders(
   )
 }
 
+function DuplicateKeyGuard() {
+  onMount(() => {
+    const guard = createDuplicateKeyGuard()
+    document.addEventListener("keydown", guard, { capture: true })
+    onCleanup(() => document.removeEventListener("keydown", guard, { capture: true }))
+  })
+  return null
+}
+
 export function AppInterface(props: {
   children?: JSX.Element
   canonicalLocalServer?: ServerConnection.Key
@@ -97,6 +107,7 @@ export function AppInterface(props: {
     <TabsProvider>
       <GlobalProvider>
         <BodyTypography />
+        <DuplicateKeyGuard />
         <CommandProvider>
           <DesktopCommands />
           {props.children}
