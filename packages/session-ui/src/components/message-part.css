@@ -621,15 +621,18 @@
     }
   }
 
+  [data-slot="execute-tool-call-input-scroll"] {
+    margin: 4px 0 2px 4px;
+    max-height: 240px;
+  }
+
   [data-slot="execute-tool-call-input"] {
     display: flex;
     flex-direction: column;
     gap: 2px;
-    margin: 4px 0 2px 4px;
+    margin: 0;
     padding-inline-start: 13px;
     border-inline-start: 0.5px solid var(--v2-border-border-base);
-    max-height: 240px;
-    overflow-y: auto;
   }
 
   [data-slot="execute-tool-call-input-entry"] {
@@ -666,10 +669,12 @@
     color: var(--v2-state-fg-danger);
   }
 
-  [data-slot="execute-tool-error"] {
+  [data-slot="execute-tool-error-scroll"] {
     margin-top: 4px;
     max-height: 240px;
-    overflow-y: auto;
+  }
+
+  [data-slot="execute-tool-error"] {
     padding-inline-start: 20px;
     white-space: pre-wrap;
     overflow-wrap: anywhere;

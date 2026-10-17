@@ -294,6 +294,52 @@ export const ExecuteFailed = {
   ),
 }
 
+export const ExecuteLongInput = {
+  render: () => (
+    <CurrentSessionTimelineStory
+      title="Execute long input"
+      description="Expanded call inputs and errors taller than their limit scroll inside a custom scroll view."
+      document={storyDocument([
+        storyTool(
+          "tool_execute_long_input",
+          "execute",
+          "completed",
+          { code: "return await tools.composio.COMPOSIO_MULTI_EXECUTE_TOOL(request);\n" },
+          {
+            output: Array.from(
+              { length: 24 },
+              (_, index) => `SLACK_LIST_ALL_CHANNELS page ${index + 1} returned ratelimited; retry after 30s.`,
+            ).join("\n"),
+            metadata: {
+              error: true,
+              toolCalls: [
+                {
+                  tool: "composio.COMPOSIO_MULTI_EXECUTE_TOOL",
+                  status: "error",
+                  input: {
+                    tools: Array.from({ length: 6 }, (_, index) => ({
+                      tool_slug: "SLACK_LIST_ALL_CHANNELS",
+                      arguments: {
+                        limit: 40,
+                        types: "public_channel,private_channel",
+                        exclude_archived: true,
+                        cursor: `dGVhbTpDMEIxUjIyMFdCRA==${index}`,
+                      },
+                    })),
+                    sync_response_to_workbench: false,
+                    current_step: "RESOLVING_DESTINATION",
+                  },
+                },
+              ],
+            },
+          },
+        ),
+      ])}
+      width="786px"
+    />
+  ),
+}
+
 export const TestFailed = {
   render: () => (
     <CurrentSessionTimelineStory

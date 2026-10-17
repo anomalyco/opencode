@@ -37,6 +37,7 @@ import { useMarkdown } from "../context/markdown"
 import { getDirectory, getFilename } from "@opencode/util/path"
 import { checksum } from "@opencode/util/encode"
 import { Tooltip } from "@opencode/ui/tooltip"
+import { ScrollView } from "@opencode/ui/scroll-view"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { Dialog, DialogBody, DialogHeader, DialogTitle } from "@opencode/ui/dialog"
 import { IconButton } from "@opencode/ui/icon-button"
@@ -2175,22 +2176,26 @@ function ExecuteCallRow(props: { call?: ExecuteToolCall; error?: string }) {
       </div>
       <Show when={open()}>
         <Show when={input().length > 0}>
-          <dl data-slot="execute-tool-call-input" dir="ltr">
-            <For each={input()}>
-              {([key, value]) => (
-                <div data-slot="execute-tool-call-input-entry">
-                  <dt>{key}:</dt>
-                  <dd>{typeof value === "string" ? value : JSON.stringify(value, null, 2)}</dd>
-                </div>
-              )}
-            </For>
-          </dl>
+          <ScrollView data-slot="execute-tool-call-input-scroll">
+            <dl data-slot="execute-tool-call-input" dir="ltr">
+              <For each={input()}>
+                {([key, value]) => (
+                  <div data-slot="execute-tool-call-input-entry">
+                    <dt>{key}:</dt>
+                    <dd>{typeof value === "string" ? value : JSON.stringify(value, null, 2)}</dd>
+                  </div>
+                )}
+              </For>
+            </dl>
+          </ScrollView>
         </Show>
         <Show when={props.error}>
           {(error) => (
-            <div data-slot="execute-tool-error" dir="ltr">
-              {error()}
-            </div>
+            <ScrollView data-slot="execute-tool-error-scroll">
+              <div data-slot="execute-tool-error" dir="ltr">
+                {error()}
+              </div>
+            </ScrollView>
           )}
         </Show>
       </Show>
