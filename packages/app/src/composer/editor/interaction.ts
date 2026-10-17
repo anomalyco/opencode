@@ -377,6 +377,9 @@ export function createComposerEditor(input: {
     parts() {
       return draft.state.prompt
     },
+    insertNewline() {
+      insertEditorNewline(editor)
+    },
     contextItem(id: string) {
       return draft.state.context.items.find((item) => item.key === id)
     },
@@ -557,6 +560,26 @@ export function shouldHandlePasteAsAttachment(clipboard: DataTransfer | null, re
   if (Array.from(clipboard?.types ?? []).some((type) => type.startsWith("text/"))) return false
 
   return readClipboardImage
+}
+
+function insertEditorNewline(target: HTMLElement | undefined) {
+  if (!target) return
+  const selection = window.getSelection()
+
+  if (!selection?.rangeCount) return
+  const range = selection.getRangeAt(0)
+
+  if (!target.contains(range.startContainer) || !target.contains(range.endContainer)) return
+
+  if (Predicate.isFunction(document.execCommand) && document.execCommand("insertText", false, "\n")) return
+  range.deleteContents()
+  const node = document.createTextNode("\n")
+  range.insertNode(node)
+  range.setStartAfter(node)
+  range.collapse(true)
+  selection.removeAllRanges()
+  selection.addRange(range)
+  target.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertLineBreak", data: "\n" }))
 }
 
 function canNavigateHistory(direction: "up" | "down", text: string, cursor: number, inHistory: boolean) {
