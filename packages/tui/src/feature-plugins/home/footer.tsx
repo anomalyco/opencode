@@ -3,6 +3,7 @@ import { createMemo, Match, Show, Switch } from "solid-js"
 import { useTerminalDimensions } from "@opentui/solid"
 import { usePlugin } from "../../plugin/context"
 import { Slot } from "../../plugin/render"
+import { useLocal } from "../../context/local"
 
 export function homeFooterVisibility(width: number) {
   return {
@@ -76,6 +77,7 @@ function Plugins(props: { context: Plugin.Context }) {
 
 function View(props: { context: Plugin.Context }) {
   const dimensions = useTerminalDimensions()
+  const local = useLocal()
   const visibility = createMemo(() => homeFooterVisibility(dimensions().width))
 
   return (
@@ -92,7 +94,7 @@ function View(props: { context: Plugin.Context }) {
       >
         <Mcp context={props.context} />
         <Plugins context={props.context} />
-        <Slot path="home.footer.status" />
+        <Slot path="home.footer.status" input={{ model: local.model.current() }} />
         <box flexGrow={1} />
         <Show when={visibility().version}>
           <box flexShrink={0}>
