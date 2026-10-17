@@ -86,7 +86,7 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
   const db = (yield* Database.Service).db
   const to = input.to ?? Date.now()
   if (input.from !== undefined && input.from >= to) return yield* new InvalidRangeError({ from: input.from, to })
-  const project = input.projectID === undefined ? sql`` : sql`AND session.project_id = ${input.projectID}`
+  const project = input.projectID ? sql`AND session.project_id = ${input.projectID}` : sql``
   const from =
     input.from ??
     (yield* db
@@ -282,7 +282,7 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
   const ids = yield* db
     .select({ id: SessionTable.id })
     .from(SessionTable)
-    .where(input.projectID === undefined ? undefined : eq(SessionTable.project_id, input.projectID))
+    .where(input.projectID ? eq(SessionTable.project_id, input.projectID) : undefined)
     .all()
     .pipe(Effect.orDie)
   const events = (yield* Effect.forEach(
