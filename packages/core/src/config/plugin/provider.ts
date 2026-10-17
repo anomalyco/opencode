@@ -47,6 +47,7 @@ export const Plugin = define({
         ConfigProvider.Info,
         {
           readonly providerID: string
+          readonly previousPackage?: string
           readonly models: ReadonlyMap<string, { readonly inherit: boolean; readonly base?: Model.Info }>
         }
       >(),
@@ -58,6 +59,7 @@ export const Plugin = define({
         const current = providers.get(providerID)
         const source = providers.get(item.canonical ?? current?.provider.canonical ?? providerID)
         const changed = item.canonical !== undefined && item.canonical !== current?.provider.canonical
+        const previousPackage = source?.provider.package
         providers.update(providerID, (provider) => {
           if (changed && source && source.provider !== provider)
             Object.assign(provider, structuredClone(source.provider), {
@@ -88,7 +90,7 @@ export const Plugin = define({
             if (item.settings?.baseURL !== undefined && model.settings) delete model.settings.baseURL
           })
         }
-        next.set(item, { providerID, models: definitions })
+        next.set(item, { providerID, previousPackage, models: definitions })
       }
       for (const [item, definition] of next) {
         for (const [id, config] of Object.entries(item.models ?? {})) {
@@ -107,8 +109,21 @@ export const Plugin = define({
     yield* ctx.model.transform((models) => {
       const configuredDefault = sources.defaultModel
       if (configuredDefault !== undefined) models.default.set(configuredDefault.providerID, configuredDefault.model)
+      // Respell variants inherited for a provider's previous package before any document's configured variants
+      // overlay them, so variants configured in one file survive a package override from another.
+      for (const [item, definition] of sources.models) {
+        const providerPackage = models.provider.get(definition.providerID)?.provider.package
+        if (item.package === undefined || providerPackage === definition.previousPackage) continue
+        for (const model of models.list(definition.providerID)) {
+          if (model.package !== undefined || model.variants.length === 0) continue
+          models.update(definition.providerID, model.id, (draft) => {
+            draft.variants = [...Variant.resolve({ ...draft, package: providerPackage })]
+          })
+        }
+      }
       for (const [item, definition] of sources.models) {
         const providerID = definition.providerID
+        const providerPackage = models.provider.get(providerID)?.provider.package
         for (const [id, config] of Object.entries(item.models ?? {})) {
           const source = definition.models.get(id)
           const inherit = source?.inherit || !models.get(providerID, id)
@@ -172,15 +187,15 @@ export const Plugin = define({
           const repackaged =
             source?.base !== undefined &&
             source.base.variants.length > 0 &&
-            models.get(providerID, id)?.package !== source.base.package
-          if (config.variants === undefined && config.capabilities?.reasoning === undefined && (!source?.base || repackaged))
+            (models.get(providerID, id)?.package ?? providerPackage) !==
+              (source.base.package ?? definition.previousPackage)
+          if (
+            config.variants === undefined &&
+            config.capabilities?.reasoning === undefined &&
+            (!source?.base || repackaged)
+          )
             models.update(providerID, id, (model) => {
-              model.variants = [
-                ...Variant.resolve({
-                  ...model,
-                  package: model.package ?? models.provider.get(providerID)?.provider.package,
-                }),
-              ]
+              model.variants = [...Variant.resolve({ ...model, package: model.package ?? providerPackage })]
             })
         }
       }
