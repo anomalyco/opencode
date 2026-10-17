@@ -49,6 +49,8 @@ const modelKey = (model: ModelItem) => `${model.provider.id}:${model.id}`
 
 const manageKey = "action:manage"
 
+const connectKey = "action:connect"
+
 const sortModelGroups = (a: { category: string; items: ModelItem[] }, b: { category: string; items: ModelItem[] }) => {
   const aIndex = popularProviders.indexOf(a.category)
   const bIndex = popularProviders.indexOf(b.category)
@@ -257,7 +259,6 @@ type ModelSelectorTrigger = (props: ModelSelectorTriggerProps) => JSX.Element
 export function ModelSelectorPopover(props: {
   provider?: string
   model?: ModelState
-  unpaid?: boolean
   trigger: ModelSelectorTrigger
   onClose?: () => void
 }) {
@@ -289,7 +290,7 @@ export function ModelSelectorPopover(props: {
 
   const connect = async () => {
     const { DialogConnectProvider } = await import("@/providers/connect/dialog")
-    void dialog.show(() => <DialogConnectProvider directory={location().directory} />)
+    void dialog.show(() => <DialogConnectProvider directory={location().directory} selection={props.model} />)
   }
 
   return (
@@ -305,6 +306,7 @@ export function ModelSelectorPopover(props: {
           chatgptPlan={chatgptPlan()}
           select={controller.select}
           onManage={manage}
+          onConnect={connect}
           onClose={() => props.onClose?.()}
         />
       }
@@ -313,7 +315,7 @@ export function ModelSelectorPopover(props: {
         trigger={props.trigger}
         model={props.model}
         provider={props.provider}
-        onConnect={props.unpaid ? connect : undefined}
+        onConnect={connect}
         chatgptPlan={chatgptPlan()}
         onClose={() => props.onClose?.()}
         onManage={manage}
@@ -501,6 +503,7 @@ export function ModelSelectorPopoverView(props: {
   chatgptPlan?: boolean
   select: (item: ModelItem) => void
   onManage: () => void
+  onConnect: () => void
   onClose: () => void
 }) {
   const language = useLanguage()
@@ -511,7 +514,7 @@ export function ModelSelectorPopoverView(props: {
 
   const models = createMemo(() => props.models(store.search))
   const groups = createMemo(() => props.groups(models()))
-  const keys = () => [...groups().flatMap((group) => group.items.map(modelKey)), manageKey]
+  const keys = () => [...groups().flatMap((group) => group.items.map(modelKey)), manageKey, connectKey]
 
   const managed = createMemo(() => consoleModelGroup(props.all()))
   const managedIDs = createMemo(() => new Set(managed()?.providers.map((provider) => provider.id)))
@@ -569,6 +572,12 @@ export function ModelSelectorPopoverView(props: {
     dismiss.afterClose(props.onManage)
   }
 
+  const connect = () => {
+    dismiss.preventTriggerRestore()
+    setOpen(false)
+    dismiss.afterClose(props.onConnect)
+  }
+
   const selectActive = () => {
     const item = models().find((item) => modelKey(item) === store.active)
 
@@ -579,6 +588,8 @@ export function ModelSelectorPopoverView(props: {
     }
 
     if (store.active === manageKey) manage()
+
+    if (store.active === connectKey) connect()
   }
 
   const moveActive = (delta: number) => {
@@ -774,6 +785,18 @@ export function ModelSelectorPopoverView(props: {
             >
               <Icon name="outline-sliders" size="small" />
               <span class="min-w-0 flex-1 truncate leading-5">{language.t("dialog.model.manage")}</span>
+            </Menu.Item>
+            <Menu.Item
+              data-option-key={connectKey}
+              classList={{ "!bg-v2-overlay-simple-overlay-hover": store.active === connectKey }}
+              onMouseEnter={() => {
+                setStore("active", connectKey)
+                setTimeout(() => searchRef?.focus())
+              }}
+              onSelect={connect}
+            >
+              <Icon name="plus" size="small" />
+              <span class="min-w-0 flex-1 truncate leading-5">{language.t("command.provider.connect")}</span>
             </Menu.Item>
           </div>
           <Show when={props.chatgptPlan}>

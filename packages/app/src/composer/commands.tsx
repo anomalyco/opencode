@@ -30,7 +30,8 @@ export const useComposerCommands = (input: { model?: ModelSelection } = {}) => {
   // Mirrors the TUI's `/connect`, which the Console's setup steps tell people to run.
   const connectProvider = async () => {
     const { DialogConnectProvider } = await import("@/providers/connect/dialog")
-    void dialog.show(() => <DialogConnectProvider directory={workspace().directory} />)
+    // Like the TUI, the model chosen after connecting applies to this composer.
+    void dialog.show(() => <DialogConnectProvider directory={workspace().directory} selection={model} />)
   }
 
   const chooseModel = () => {

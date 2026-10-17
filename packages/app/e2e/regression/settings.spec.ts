@@ -798,48 +798,53 @@ const consoleIntegrations = [
   { id: "opencode-go", name: "OpenCode Go", methods: [{ type: "key" }], connections: [] },
 ]
 
-for (const row of [
-  { provider: "OpenCode Console", connect: "Connect OpenCode Console", signIn: "Connecting to OpenCode Console" },
-  { provider: "OpenCode Go", connect: "Connect OpenCode Go", signIn: "Connecting to OpenCode Go" },
-]) {
-  test(`providers: ${row.provider} signs in from the Console intro`, async ({ page, context }) => {
-    const url = "https://auth.example.test/device?user_code=ABCD-EFGH"
-    await context.route("https://auth.example.test/**", (route) => route.fulfill({ body: "Sign in" }))
-    const { settings } = await open(page, { integrations: consoleIntegrations, onIntegrationOAuth: () => ({ url }) })
+test("providers: OpenCode Console signs in from its method list", async ({ page, context }) => {
+  const url = "https://auth.example.test/device?user_code=ABCD-EFGH"
+  await context.route("https://auth.example.test/**", (route) => route.fulfill({ body: "Sign in" }))
+  const { settings } = await open(page, { integrations: consoleIntegrations, onIntegrationOAuth: () => ({ url }) })
 
-    // Registered after the mock server so it sees the sign-in request first.
-    const start = await holdRoute(page, (url) => url.pathname === "/api/integration/opencode/connect/oauth", {
-      method: "POST",
-    })
+  await settings.getByRole("tab", { name: "Providers", exact: true }).click()
+  await settings
+    .locator(".settings-provider-row", { hasText: "OpenCode Console" })
+    .getByRole("button", { name: "Connect", exact: true })
+    .click()
+  const methods = page.getByRole("dialog", { name: "Connect OpenCode Console", exact: true })
+  // The methods come from the integration in the TUI's order: sign-ins first, API keys last.
+  await expect(methods.locator('[data-action="provider-connect-method"]')).toHaveText([
+    "OpenCode Console account",
+    "API key (service account)",
+  ])
 
-    await settings.getByRole("tab", { name: "Providers", exact: true }).click()
-    await settings
-      .locator(".settings-provider-row", { hasText: row.provider })
-      .getByRole("button", { name: "Connect", exact: true })
-      .click()
-    const intro = page.getByRole("dialog", { name: row.connect, exact: true })
-    const container = page.locator('[data-slot="dialog-container"]')
-    await expect(
-      intro.getByText("Sign in with your OpenCode Console account to use the available models."),
-    ).toBeVisible()
-    await expect(intro.getByRole("button", { name: "Use API key", exact: true })).toBeVisible()
-    expect((await container.boundingBox())?.height).toBe(512)
+  const popup = page.waitForEvent("popup")
+  await methods.getByRole("button", { name: "OpenCode Console account", exact: true }).click()
+  await expect(await popup).toHaveURL(url)
 
-    const popup = page.waitForEvent("popup")
-    await intro.getByRole("button", { name: "Continue in the browser", exact: true }).click()
-    await start.arrived
-    await expect(intro.getByRole("button", { name: "Opening browser…", exact: true })).toBeDisabled()
-    expect((await container.boundingBox())?.height).toBe(512)
-    start.release()
-    await expect(await popup).toHaveURL(url)
+  const signIn = page.getByRole("dialog", { name: "Connecting to OpenCode Console", exact: true })
+  await expect(signIn.getByRole("group", { name: "Device code: ABCD-EFGH", exact: true })).toBeVisible()
+  await expect(signIn.getByRole("button", { name: "Copy sign-in link", exact: true })).toBeVisible()
+})
 
-    const signIn = page.getByRole("dialog", { name: row.signIn, exact: true })
-    await expect(signIn.getByRole("group", { name: "Device code: ABCD-EFGH", exact: true })).toBeVisible()
-    await expect(signIn.getByRole("button", { name: "Copy sign-in link", exact: true })).toBeVisible()
-    await expect(signIn.getByRole("button", { name: "Use API key", exact: true })).toHaveCount(0)
-    await expect.poll(async () => (await container.boundingBox())?.height).toBeLessThan(512)
+test("providers: OpenCode Go connects with its own methods, not the Console sign-in", async ({ page }) => {
+  const attempts: string[] = []
+
+  const { settings } = await open(page, {
+    integrations: consoleIntegrations,
+    onIntegrationOAuth: (input) => {
+      attempts.push(input.integrationID)
+
+      return { url: "https://auth.example.test/device?user_code=ABCD-EFGH" }
+    },
   })
-}
+
+  await settings.getByRole("tab", { name: "Providers", exact: true }).click()
+  await settings
+    .locator(".settings-provider-row", { hasText: "OpenCode Go" })
+    .getByRole("button", { name: "Connect", exact: true })
+    .click()
+  const dialog = page.getByRole("dialog", { name: "Connect OpenCode Go", exact: true })
+  await expect(dialog.getByPlaceholder("API key")).toBeVisible()
+  expect(attempts).toEqual([])
+})
 
 test("providers: the connect dialog lists connected providers and manages their accounts", async ({ page }) => {
   const accounts = [
@@ -875,10 +880,10 @@ test("providers: the connect dialog lists connected providers and manages their 
   await settings.getByRole("button", { name: "Show more providers", exact: true }).click()
   const dialog = page.getByRole("dialog")
   const openai = dialog.locator('[data-provider-id="openai"]')
-  const count = openai.locator('[data-component="tag"]')
-  await expect(count).toHaveText("2")
-  await expect(count).toHaveAttribute("aria-label", "2 accounts")
-  await expect(dialog.locator('[data-provider-id="anthropic"]').locator('[data-component="tag"]')).toHaveCount(0)
+  await expect(openai.locator('[data-slot="provider-connected"]')).toHaveText("2 connections")
+  await expect(
+    dialog.locator('[data-provider-id="anthropic"]').locator('[data-slot="provider-connected"]'),
+  ).toHaveCount(0)
   await openai.click()
 
   await expect(page.getByRole("dialog", { name: "OpenAI", exact: true })).toBeVisible()
@@ -919,13 +924,13 @@ test("providers: the connect dialog lists connected providers and manages their 
   await dialog.getByRole("button", { name: "Remove", exact: true }).click()
   await removed
 
-  await dialog.getByRole("button", { name: "Add another account", exact: true }).click()
+  await dialog.getByRole("button", { name: "Add account", exact: true }).click()
   await expect(dialog.getByPlaceholder("API key")).toBeVisible()
   await dialog.getByRole("button", { name: "Navigate back", exact: true }).click()
   await expect(list).toBeVisible()
 })
 
-test("providers: adding a Go account uses a Go key, and a lone sign-in starts once", async ({ page, context }) => {
+test("providers: adding an account starts a lone method once", async ({ page, context }) => {
   await context.route("https://auth.example.test/**", (route) => route.fulfill({ body: "Sign in" }))
   const attempts: string[] = []
 
@@ -956,7 +961,7 @@ test("providers: adding a Go account uses a Go key, and a lone sign-in starts on
   await settings.getByRole("button", { name: "Show more providers", exact: true }).click()
   const dialog = page.getByRole("dialog")
   await dialog.locator('[data-provider-id="opencode-go"]').click()
-  await dialog.getByRole("button", { name: "Add another account", exact: true }).click()
+  await dialog.getByRole("button", { name: "Add account", exact: true }).click()
   await expect(dialog.getByPlaceholder("API key")).toBeVisible()
   expect(attempts).toEqual([])
 
@@ -965,7 +970,7 @@ test("providers: adding a Go account uses a Go key, and a lone sign-in starts on
   await dialog.getByRole("button", { name: "Navigate back", exact: true }).click()
   await dialog.locator('[data-provider-id="github-copilot"]').click()
   const popup = page.waitForEvent("popup")
-  await dialog.getByRole("button", { name: "Add another account", exact: true }).click()
+  await dialog.getByRole("button", { name: "Add account", exact: true }).click()
   await popup
   await expect.poll(() => attempts).toEqual(["github-copilot"])
   expect(attempts).toEqual(["github-copilot"])
@@ -1097,7 +1102,7 @@ test("providers: switching to a Zen API key does not wait for a Console workspac
   expect(catalogReads).toHaveLength(1)
 })
 
-test("providers: connecting OpenCode Go keeps the Console row in place", async ({ page, context }) => {
+test("providers: adding a Console account keeps the Console row in place", async ({ page, context }) => {
   await context.route("https://auth.example.test/**", (route) => route.fulfill({ body: "Sign in" }))
 
   // After the sign-in the server reloads the workspace, briefly serving only the free catalog.
@@ -1119,13 +1124,7 @@ test("providers: connecting OpenCode Go keeps the Console row in place", async (
       return { all: [{ id: "opencode", name: "OpenCode", models: {} }], connected: ["opencode"], default: {} }
     }
 
-    if (!state.authorized) return workspace
-
-    return {
-      all: [...workspace.all, { id: "opencode-go", integrationID: "opencode-go", name: "OpenCode Go", models: {} }],
-      connected: [...workspace.connected, "opencode-go"],
-      default: {},
-    }
+    return workspace
   }
 
   const { settings } = await open(page, {
@@ -1135,14 +1134,12 @@ test("providers: connecting OpenCode Go keeps the Console row in place", async (
         id: "opencode",
         name: "OpenCode Console",
         methods: [{ id: "device", type: "oauth", label: "OpenCode Console account" }],
-        connections: [{ type: "credential", id: "cred_console", label: "Anomaly", method: "oauth" }],
+        connections: [
+          { type: "credential", id: "cred_console", label: "Anomaly", method: "oauth" },
+          ...(state.authorized ? [{ type: "credential", id: "cred_clara", label: "Clara", method: "oauth" }] : []),
+        ],
       },
-      {
-        id: "opencode-go",
-        name: "OpenCode Go",
-        methods: [{ type: "key" }],
-        connections: state.authorized ? [{ type: "credential", id: "cred_go", label: "Anomaly", method: "oauth" }] : [],
-      },
+      { id: "opencode-go", name: "OpenCode Go", methods: [{ type: "key" }], connections: [] },
     ],
     onIntegrationOAuth: () => ({ url: "https://auth.example.test/device?user_code=GOGO-1234" }),
     onIntegrationOAuthStatus: () => {
@@ -1164,17 +1161,14 @@ test("providers: connecting OpenCode Go keeps the Console row in place", async (
     }).observe(element, { childList: true, subtree: true, characterData: true })
   })
 
-  await settings
-    .locator(".settings-provider-row", { hasText: "OpenCode Go" })
-    .getByRole("button", { name: "Connect", exact: true })
-    .click()
+  await settings.getByRole("button", { name: "Show more providers", exact: true }).click()
+  const dialog = page.getByRole("dialog")
+  await dialog.locator('[data-provider-id="opencode"]').click()
   const popup = page.waitForEvent("popup")
-  await page.getByRole("button", { name: "Continue in the browser", exact: true }).click()
+  await dialog.getByRole("button", { name: "Add account", exact: true }).click()
   await popup
-  await expect(page.getByText("OpenCode Go connected", { exact: true })).toBeVisible()
-  await expect(page.getByRole("dialog")).toHaveCount(0)
+  await expect(page.getByText("OpenCode Console connected", { exact: true })).toBeVisible()
 
-  await expect(connected.getByText("OpenCode Go", { exact: true })).toBeVisible()
   await expect(connected.getByText("OpenCode Console", { exact: true })).toBeVisible()
   await expect(connected).not.toHaveAttribute("data-flashed")
 })

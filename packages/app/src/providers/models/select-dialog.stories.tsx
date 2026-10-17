@@ -65,6 +65,7 @@ function SelectorStory(props: { plan: boolean }) {
         chatgptPlan={props.plan}
         select={(item) => setCurrent(item.id)}
         onManage={() => undefined}
+        onConnect={() => undefined}
         onClose={() => undefined}
       />
     </div>

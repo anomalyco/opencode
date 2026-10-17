@@ -44,7 +44,9 @@ export const DialogSelectModelUnpaid: Component<{ model?: ModelState }> = (props
     void import("@/providers/connect/dialog").then((x) => {
       const controller = x.useProviderConnectController()
       controller.select(provider)
-      void dialog.show(() => <x.DialogConnectProvider controller={controller} directory={directory()} />)
+      void dialog.show(() => (
+        <x.DialogConnectProvider controller={controller} directory={directory()} selection={model} />
+      ))
     })
   }
 

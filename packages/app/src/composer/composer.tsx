@@ -118,7 +118,6 @@ function ComposerModelControl(props: {
         >
           <ModelSelectorPopover
             model={props.model}
-            unpaid={!props.paid}
             trigger={(triggerProps) => (
               <Button
                 {...triggerProps}

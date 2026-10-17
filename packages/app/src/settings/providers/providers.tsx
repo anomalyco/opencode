@@ -14,7 +14,7 @@ import { createStore, reconcile } from "solid-js/store"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useServerSDK } from "@/runtime/server/client"
 import { formatServerError } from "@/runtime/server/errors"
-import { CONSOLE_INTEGRATION, CONSOLE_PROVIDERS } from "@/providers/connect/controller"
+import { CONSOLE_INTEGRATION } from "@/providers/connect/controller"
 import { DialogConnectProvider, useProviderConnectController } from "@/providers/connect/dialog"
 import { ProviderModelIcon } from "@/providers/models/provider-group"
 import { SettingsList } from "@/settings/list"
@@ -87,7 +87,7 @@ export const SettingsProviders: Component<{
           defaultLocation={props.directory === undefined}
           controller={providerConnect}
           onConnected={(providerID) => {
-            if (CONSOLE_PROVIDERS.has(providerID)) {
+            if (providerID === CONSOLE_INTEGRATION) {
               setState("disconnecting", reconcile({}))
 
               return
