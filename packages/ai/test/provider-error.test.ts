@@ -22,6 +22,27 @@ describe("provider error classification", () => {
     expect(messages.every(isContextOverflow)).toBe(true)
   })
 
+  test("classifies OpenCode Go configured input limits without treating all unsupported requests as overflow", () => {
+    const message = "This text request is too large for the model's configured input limit."
+    expect(classifyProviderFailure({ message, status: 400 })).toMatchObject({
+      _tag: "InvalidRequest",
+      classification: "context-overflow",
+    })
+    expect(
+      classifyProviderFailure({
+        message: "Upstream request failed",
+        status: 400,
+        rawBody: JSON.stringify({ error: { type: "unsupported_request", code: "unsupported_request", message } }),
+      }),
+    ).toMatchObject({ _tag: "InvalidRequest", classification: "context-overflow" })
+    expect(
+      classifyProviderFailure({
+        message: "[unsupported_request] Message content supports text content only. Images, audio and files are not enabled.",
+        status: 400,
+      }),
+    ).not.toMatchObject({ classification: "context-overflow" })
+  })
+
   test("classifies Anthropic request_too_large as recoverable overflow", () => {
     expect(
       classifyProviderFailure({
