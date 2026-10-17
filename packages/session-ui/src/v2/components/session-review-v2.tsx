@@ -4,6 +4,7 @@ import { TextInput } from "@opencode/ui/text-input"
 import { Keybind } from "@opencode/ui/keybind"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
+import { Loader } from "@opencode/ui/loader"
 import { Tooltip } from "@opencode/ui/tooltip"
 import type { SessionReviewDiffStyle } from "../../components/session-review"
 import { ResizeHandle } from "@opencode/ui/resize-handle"
@@ -34,6 +35,9 @@ export type SessionReviewV2Props = {
   onSelectFile: (file: string) => void
   diffStyle: SessionReviewDiffStyle
   toolbarAction?: JSX.Element
+  onRefresh?: () => void
+  refreshing?: boolean
+  refreshDisabled?: boolean
   onDiffStyleChange?: (style: SessionReviewDiffStyle) => void
   expandMode: SessionReviewExpandMode
   onExpandModeChange: (mode: SessionReviewExpandMode) => void
@@ -272,6 +276,24 @@ export function SessionReviewV2(props: SessionReviewV2Props) {
             aria-label={i18n.t("ui.sessionReviewV2.nextFile")}
           />
         </Tooltip>
+        <Show when={props.onRefresh}>
+          <Tooltip openDelay={2000} inactive={props.refreshDisabled} value={i18n.t("ui.sessionReviewV2.refresh")}>
+            <IconButton
+              icon={
+                <Show when={props.refreshing} fallback={<Icon name="rotate-clockwise" />}>
+                  <Loader />
+                </Show>
+              }
+              variant="ghost"
+              size="small"
+              class="session-review-v2-file-nav-button"
+              disabled={props.refreshDisabled}
+              aria-busy={props.refreshing || undefined}
+              onClick={() => props.onRefresh?.()}
+              aria-label={i18n.t("ui.sessionReviewV2.refresh")}
+            />
+          </Tooltip>
+        </Show>
       </div>
     </>
   )

@@ -334,6 +334,11 @@
   padding: 0;
 }
 
+/* The refresh spinner takes its button's icon color, as the browser pane's does. */
+[data-component="session-review-v2"] .session-review-v2-file-nav-button [data-component="loader-v2"] {
+  color: inherit;
+}
+
 [data-component="session-review-v2"]
   [data-slot="session-review-v2-toolbar-group"]
   [data-component="tooltip-v2-trigger"] {

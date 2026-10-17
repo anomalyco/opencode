@@ -58,6 +58,9 @@ type ReviewPanelProps = {
   onSelectFile: (path: string) => void
   diffStyle: SessionReviewDiffStyle
   onDiffStyleChange?: (style: SessionReviewDiffStyle) => void
+  onRefresh: () => void
+  refreshing: boolean
+  refreshDisabled: boolean
   state: ReviewPanelState
   onLineComment?: (comment: SessionReviewLineComment) => void
   onLineCommentUpdate?: (comment: SessionReviewCommentUpdate) => void
@@ -95,6 +98,9 @@ export default function ReviewPanelContent(props: {
       onSelectFile={props.review.focusFile}
       diffStyle={props.diffStyle}
       onDiffStyleChange={props.onDiffStyleChange}
+      onRefresh={props.review.refresh}
+      refreshing={props.review.refreshing()}
+      refreshDisabled={!props.review.canRefresh()}
       state={{
         sidebar: panel.sidebar,
         filter: props.review.filter,
@@ -219,6 +225,9 @@ function ReviewPanel(props: ReviewPanelProps) {
       onSelectFile={props.onSelectFile}
       diffStyle={props.diffStyle}
       onDiffStyleChange={props.onDiffStyleChange}
+      onRefresh={props.onRefresh}
+      refreshing={props.refreshing}
+      refreshDisabled={props.refreshDisabled}
       expandMode={props.state.expandMode()}
       onExpandModeChange={props.state.setExpandMode}
       hasDiffs={diffs().length > 0}

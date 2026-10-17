@@ -57,9 +57,14 @@ export function createReviewModel(input: {
   const directory = () => screen.file.root
 
   // The filter is transient by design: a persisted filter would silently hide files after a reload.
-  const [state, setState] = createStore<{ filter: string; initializingGit: Record<string, true | undefined> }>({
+  const [state, setState] = createStore<{
+    filter: string
+    initializingGit: Record<string, true | undefined>
+    refreshing: Record<string, true | undefined>
+  }>({
     filter: "",
     initializingGit: {},
+    refreshing: {},
   })
 
   // The review panel's scroller and the file it scrolls to belong to the session the view shows.
@@ -150,14 +155,16 @@ export function createReviewModel(input: {
 
   const turnKey = () => [ctx.id, view().server.id, "session-turn", view().id] as const
 
+  // Desktop storage loads asynchronously; until this session's mode is known, a request would use the default.
+  const diffEnabled = () => !!stored() && view().server.connected && wantsReview() && !!view().project?.vcs
+
   const diffQuery = createQuery(() => {
     const value = mode()
     const turn = value === "turn"
 
     return {
       queryKey: turn ? turnKey() : ([...vcsKey(), value] as const),
-      // Desktop storage loads asynchronously; until this session's mode is known, a request would use the default.
-      enabled: !!stored() && view().server.connected && wantsReview() && !!view().project?.vcs,
+      enabled: diffEnabled(),
       refetchOnMount: "always" as const,
       // A finished turn does not change on focus or filesystem events; refresh it when the session goes idle.
       refetchOnWindowFocus: !turn,
@@ -190,7 +197,7 @@ export function createReviewModel(input: {
         }),
   }))
 
-  const refresh = debounce(() => {
+  const refreshSoon = debounce(() => {
     void queryClient.invalidateQueries({ queryKey: vcsKey() })
     void queryClient.invalidateQueries({ queryKey: detailsKey() })
   }, 100)
@@ -202,7 +209,7 @@ export function createReviewModel(input: {
     (current) =>
       onCleanup(
         current.data.listen(({ details }) => {
-          if (details.type === "filesystem.changed" && details.location?.directory === current.directory) refresh()
+          if (details.type === "filesystem.changed" && details.location?.directory === current.directory) refreshSoon()
         }),
       ),
     { equals: (previous, next) => previous.directory === next.directory && previous.data === next.data },
@@ -223,7 +230,7 @@ export function createReviewModel(input: {
     if (diffQuery.isFetching) return
 
     if (input.demand.tree > 0) {
-      refresh()
+      refreshSoon()
 
       return
     }
@@ -265,6 +272,20 @@ export function createReviewModel(input: {
   })
 
   const alive = () => !lifetime.disposed && !ctx.signal.aborted
+
+  // The refresh button skips the debounce and spins until the changes it asked for have loaded; a click while it
+  // spins joins that refresh.
+  const refresh = () => {
+    const key = view().key
+
+    if (state.refreshing[key]) return
+    setState("refreshing", key, true)
+    void Promise.all(
+      [vcsKey(), turnKey(), detailsKey()].map((queryKey) => queryClient.invalidateQueries({ queryKey })),
+    ).finally(() => {
+      if (alive()) setState("refreshing", key, undefined)
+    })
+  }
 
   // Initializes Git for the routed session. The request keeps that session's object, so its server and location stay
   // its own. Cache refresh follows the request's session; only error feedback depends on which session is routed.
@@ -559,7 +580,7 @@ export function createReviewModel(input: {
 
   // A session that goes idle has finished its turn, which may have changed files.
   createKeyed(idled, () => {
-    refresh()
+    refreshSoon()
     void queryClient.invalidateQueries({ queryKey: turnKey() })
   })
 
@@ -624,6 +645,9 @@ export function createReviewModel(input: {
     options,
     panelRendered,
     ready,
+    canRefresh: diffEnabled,
+    refresh,
+    refreshing: () => !!state.refreshing[view().key],
     setMode: (value: ChangeMode) =>
       update((draft) => {
         draft.mode = value
