@@ -83,6 +83,16 @@ const SsoRequired = Schema.Struct({
 const InvalidGrant = Schema.Struct({ error: Schema.Literal("invalid_grant") })
 // Console's 401 when the session behind the access token was revoked or expired.
 const Unauthorized = Schema.Struct({ _tag: Schema.Literal("Unauthorized") })
+const ApiKeyExpired = Schema.Struct({ code: Schema.Literal("api_key_expired"), message: Schema.String })
+const RejectedCredential = Schema.Union([Unauthorized, ApiKeyExpired])
+const ExpiredInference = Schema.Union([
+  Schema.Struct({ error: ApiKeyExpired }),
+  Schema.Struct({
+    error: Schema.Struct({
+      details: Schema.NonEmptyArray(Schema.Struct({ reason: Schema.Literal("api_key_expired") })),
+    }),
+  }),
+])
 const signedOutMessage = "Reconnect OpenCode Console to continue"
 const ssoMessage = (organization: string | undefined) =>
   `Sign in with SSO again to use ${organization ?? "your OpenCode Console organization"}`
@@ -102,6 +112,10 @@ class SignedOutError extends Schema.TaggedError<SignedOutError>()("OpencodeConso
     return `${signedOutMessage}.`
   }
 }
+
+class ApiKeyExpiredError extends Schema.TaggedError<ApiKeyExpiredError>()("OpencodeConsole.ApiKeyExpired", {
+  message: Schema.String,
+}) {}
 
 function oauth(http: HttpClient.HttpClient) {
   return {
@@ -461,6 +475,14 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Manag
     const explain = (event: SessionHttpResponse) =>
       Effect.gen(function* () {
         if (event.response.status !== 401 && event.response.status !== 403) return
+        // A static API key cannot be renewed by OAuth or SSO. Keep the upstream code and recovery instructions.
+        if (event.response.status === 401) {
+          const expired = yield* Effect.tryPromise(() => event.response.clone().json()).pipe(
+            Effect.flatMap(Schema.decodeUnknownEffect(ExpiredInference)),
+            Effect.option,
+          )
+          if (Option.isSome(expired)) return
+        }
         yield* check()
         const status = reported
         if (!status) return
@@ -510,8 +532,11 @@ function fetchConfig(http: HttpClient.HttpClient, value: Credential.Key | Creden
         Effect.gen(function* () {
           if (response.status === 404) return undefined
           if (response.status === 401) {
-            const body = yield* HttpClientResponse.schemaBodyJson(Unauthorized)(response).pipe(Effect.option)
-            if (Option.isSome(body)) return yield* new SignedOutError()
+            const body = yield* HttpClientResponse.schemaBodyJson(RejectedCredential)(response).pipe(Effect.option)
+            if (Option.isSome(body))
+              return yield* "code" in body.value
+                ? new ApiKeyExpiredError({ message: body.value.message })
+                : new SignedOutError()
           }
           if (response.status === 403) {
             const body = yield* HttpClientResponse.schemaBodyJson(SsoRequired)(response).pipe(Effect.option)
@@ -541,6 +566,7 @@ function ssoUrl(server: string, connectionID: string) {
 }
 
 function connectionStatus(cause: unknown): IntegrationConnection.Status | undefined {
+  if (cause instanceof ApiKeyExpiredError) return { status: "needs_auth", message: cause.message }
   if (cause instanceof SsoRequiredError)
     return {
       status: "needs_auth",

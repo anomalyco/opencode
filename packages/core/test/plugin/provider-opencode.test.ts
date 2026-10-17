@@ -1120,6 +1120,91 @@ describe("OpencodePlugin", () => {
     ),
   )
 
+  it.effect("reports API key expiry with replacement instructions and keeps the saved key", () =>
+    Effect.gen(function* () {
+      const credentials = yield* Credential.Service
+      const integrations = yield* Integration.Service
+      const credential = yield* credentials.create({
+        integrationID: Integration.ID.make("opencode"),
+        value: Credential.Key.make({ type: "key", key: "saved-key", metadata: { server: "https://console.test" } }),
+      })
+      const http = HttpClient.make((request) =>
+        Effect.succeed(
+          HttpClientResponse.fromWeb(
+            request,
+            Response.json(
+              {
+                _tag: "ApiKeyExpired",
+                code: "api_key_expired",
+                message:
+                  "This API key has expired. Create a new API key in OpenCode Console and replace it in your client or secret store. Signing in again will not renew this key.",
+              },
+              { status: 401 },
+            ),
+          ),
+        ),
+      )
+      yield* addPlugin().pipe(Effect.provideService(HttpClient.HttpClient, http))
+      yield* drain
+      expect((yield* integrations.get(Integration.ID.make("opencode")))?.connections[0]?.status).toEqual({
+        status: "needs_auth",
+        message:
+          "This API key has expired. Create a new API key in OpenCode Console and replace it in your client or secret store. Signing in again will not renew this key.",
+      })
+      expect((yield* credentials.get(credential.id))?.value).toMatchObject({ key: "saved-key" })
+    }),
+  )
+  ;[
+    { error: { type: "authentication_error", code: "api_key_expired", message: "Create a replacement API key." } },
+    {
+      error: {
+        code: 401,
+        status: "UNAUTHENTICATED",
+        message: "Create a replacement API key.",
+        details: [
+          { "@type": "type.googleapis.com/google.rpc.ErrorInfo", reason: "api_key_expired", domain: "opencode.ai" },
+        ],
+      },
+    },
+  ].forEach((body) =>
+    it.effect(
+      `keeps the upstream expired-key error instead of replacing it with reconnect: ${body.error.type ?? "google"}`,
+      () =>
+        Effect.gen(function* () {
+          const credentials = yield* Credential.Service
+          const hooks = yield* PluginHooks.Service
+          yield* credentials.create({
+            integrationID: Integration.ID.make("opencode"),
+            value: Credential.Key.make({ type: "key", key: "saved-key", metadata: { server: "https://console.test" } }),
+          })
+          const state = { rejected: false }
+          const http = HttpClient.make((request) =>
+            Effect.succeed(
+              HttpClientResponse.fromWeb(
+                request,
+                state.rejected
+                  ? Response.json({ _tag: "Unauthorized" }, { status: 401 })
+                  : Response.json({ providers: {} }),
+              ),
+            ),
+          )
+          yield* addPlugin().pipe(Effect.provideService(HttpClient.HttpClient, http))
+          yield* drain
+          state.rejected = true
+          const event = yield* hooks.trigger("session", "http.response", {
+            sessionID: Session.ID.make("ses_expired_key"),
+            agent: Agent.ID.make("build"),
+            model: Model.Ref.make({ providerID: Provider.ID.opencode, id: Model.ID.make("model") }),
+            kind: "primary",
+            request: new Request("https://inference.example/v1/responses"),
+            response: Response.json(body, { status: 401 }),
+          })
+          expect(event.response.status).toBe(401)
+          expect(yield* Effect.promise(() => event.response.json())).toEqual(body)
+        }),
+    ),
+  )
+
   it.live("explains rejected Console inference with the sign-in the connection needs", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => {
