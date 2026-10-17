@@ -31,6 +31,7 @@ export type AutocompleteRef = {
   onInput: (value: string) => void
   visible: false | "reference" | "command" | "directory"
   completeQueueableCommand: () => boolean
+  close: () => void
 }
 
 export type AutocompleteOption = {
@@ -776,6 +777,9 @@ export function Autocomplete(props: {
         if (store.visible !== "command" || !options()[store.selected]?.queueable) return false
         select()
         return true
+      },
+      close() {
+        hide()
       },
       onInput(value) {
         if (dismissedValue() === value) return
