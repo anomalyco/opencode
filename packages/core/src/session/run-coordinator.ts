@@ -1,6 +1,6 @@
 export * as SessionRunCoordinator from "./run-coordinator.js"
 
-import { Deferred, Effect, Exit, Fiber, FiberSet, Scope } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, FiberSet, Scope } from "effect"
 import type { Promotable } from "./inbox.js"
 
 /** Serializes execution for each key while allowing different keys to run concurrently. */
@@ -42,6 +42,7 @@ type Execution<E, Reason> = {
   owner?: Fiber.Fiber<void>
   scope: Promotable
   pendingWake?: Promotable
+  advisoryRetriesRemaining: number
   stopping: boolean
   interruptionReason?: Reason
 }
@@ -59,6 +60,8 @@ type Execution<E, Reason> = {
  */
 export const make = <Key, E, Reason = never>(options: {
   readonly drain: (key: Key, force: boolean, scope: Promotable) => Effect.Effect<void, E>
+  /** Confirms durable work remains before retrying a failed advisory wake. */
+  readonly retryFailedWake?: (key: Key) => Effect.Effect<boolean>
   /** Runs once when a process-local busy period begins, before its first drain. */
   readonly started?: (key: Key) => Effect.Effect<void>
   /**
@@ -73,11 +76,23 @@ export const make = <Key, E, Reason = never>(options: {
 
     const loop = (key: Key, execution: Execution<E, Reason>, force: boolean): Effect.Effect<void, E> =>
       Effect.suspend(() => options.drain(key, force, execution.scope)).pipe(
+        Effect.catchCause((cause) => {
+          if (execution.stopping || execution.advisoryRetriesRemaining === 0 || Cause.hasInterruptsOnly(cause))
+            return Effect.failCause(cause)
+          return (options.retryFailedWake?.(key) ?? Effect.succeed(false)).pipe(
+            Effect.flatMap((retry) => {
+              if (!retry) return Effect.failCause(cause)
+              execution.advisoryRetriesRemaining--
+              return Effect.yieldNow.pipe(Effect.andThen(loop(key, execution, false)))
+            }),
+          )
+        }),
         Effect.andThen(
           Effect.suspend(() => {
             if (execution.stopping || execution.pendingWake === undefined) return Effect.void
             execution.scope = execution.pendingWake
             execution.pendingWake = undefined
+            execution.advisoryRetriesRemaining = 1
             // Trampoline so drains that complete synchronously cannot grow the stack.
             return Effect.yieldNow.pipe(Effect.andThen(loop(key, execution, false)))
           }),
@@ -88,6 +103,7 @@ export const make = <Key, E, Reason = never>(options: {
       const execution: Execution<E, Reason> = {
         done: Deferred.makeUnsafe<void, E>(),
         scope,
+        advisoryRetriesRemaining: force ? 0 : 1,
         stopping: false,
       }
       executions.set(key, execution)

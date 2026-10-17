@@ -61,6 +61,70 @@ describe("SessionRunCoordinator", () => {
     }),
   )
 
+  it.effect("retries a failed advisory wake once within the same execution", () =>
+    Effect.gen(function* () {
+      let runs = 0
+      let starts = 0
+      const settlements: Exit.Exit<void, Error>[] = []
+      const coordinator = yield* SessionRunCoordinator.make<string, Error>({
+        drain: () =>
+          Effect.sync(() => ++runs).pipe(
+            Effect.flatMap((run) => (run === 1 ? Effect.fail(new Error("transient")) : Effect.void)),
+          ),
+        started: () => Effect.sync(() => starts++).pipe(Effect.asVoid),
+        retryFailedWake: () => Effect.succeed(true),
+        settled: (_key, exit) => Effect.sync(() => void settlements.push(exit)),
+      })
+
+      yield* coordinator.wake("session")
+      yield* coordinator.awaitIdle("session")
+
+      expect(runs).toBe(2)
+      expect(starts).toBe(1)
+      expect(settlements).toHaveLength(1)
+      expect(settlements.every(Exit.isSuccess)).toBeTrue()
+    }),
+  )
+
+  it.effect("reports an advisory failure after its single retry", () =>
+    Effect.gen(function* () {
+      const settled = yield* Deferred.make<Exit.Exit<void, Error>>()
+      let runs = 0
+      const failure = new Error("persistent")
+      const coordinator = yield* SessionRunCoordinator.make<string, Error>({
+        drain: () => Effect.sync(() => runs++).pipe(Effect.andThen(Effect.fail(failure))),
+        retryFailedWake: () => Effect.succeed(true),
+        settled: (_key, exit) => Deferred.succeed(settled, exit),
+      })
+
+      yield* coordinator.wake("session")
+      const exit = yield* Deferred.await(settled)
+      yield* coordinator.awaitIdle("session")
+
+      expect(runs).toBe(2)
+      expect(Exit.isFailure(exit)).toBeTrue()
+      if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBe(failure)
+    }),
+  )
+
+  it.effect("does not retry a failed wake after its durable work was consumed", () =>
+    Effect.gen(function* () {
+      const settled = yield* Deferred.make<Exit.Exit<void, Error>>()
+      let runs = 0
+      const coordinator = yield* SessionRunCoordinator.make<string, Error>({
+        drain: () => Effect.sync(() => runs++).pipe(Effect.andThen(Effect.fail(new Error("failed")))),
+        retryFailedWake: () => Effect.succeed(false),
+        settled: (_key, exit) => Deferred.succeed(settled, exit),
+      })
+
+      yield* coordinator.wake("session")
+      const exit = yield* Deferred.await(settled)
+
+      expect(runs).toBe(1)
+      expect(Exit.isFailure(exit)).toBeTrue()
+    }),
+  )
+
   it.effect("snapshots only active executions", () =>
     Effect.gen(function* () {
       const firstStarted = yield* Deferred.make<void>()

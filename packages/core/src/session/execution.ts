@@ -115,6 +115,8 @@ export const layer = Layer.effect(
           bus.publish(SessionEvent.Execution.Started, { sessionID }, claimOnCommit(sessionID)),
         ),
       drain: (sessionID, force, promotable) => drain(sessionID, force, undefined, promotable),
+      retryFailedWake: (sessionID) =>
+        SessionInbox.nextPromotable(db, sessionID, "input").pipe(Effect.map((pending) => pending !== undefined)),
       // One terminal observation per busy period, covering every coalesced drain.
       settled: (sessionID, exit, reason) =>
         reportLifecycle(
