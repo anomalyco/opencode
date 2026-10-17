@@ -61,6 +61,7 @@ const instances = Layer.effect(
       Instance.node.replace(
         Layer.succeed(Instance.Service, {
           provide: (session) => Effect.provide(map.get(session.location)),
+          provideCached: (session) => Instance.cached(map, session.location),
         }),
       ),
     ]

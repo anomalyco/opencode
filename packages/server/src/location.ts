@@ -1,4 +1,5 @@
 import { FileSystem } from "@opencode/core/filesystem"
+import { Instance } from "@opencode/core/instance/service"
 import { Location } from "@opencode/core/location"
 import { Plugin } from "@opencode/core/plugin"
 import { LocationServiceMap } from "@opencode/core/location-services"
@@ -11,6 +12,14 @@ import { HttpApiMiddleware } from "effect/http-api"
 import { missingSession } from "./handlers/session-error"
 
 export type LocationServices = Layer.Success<ReturnType<(typeof LocationServiceMap.Service)["get"]>>
+
+export function cachedLocation<A, E>(
+  locations: typeof LocationServiceMap.Service.Service,
+  ref: Location.Ref,
+  read: Effect.Effect<A, E, LocationServices>,
+) {
+  return read.pipe(Instance.cached(locations, LocationServiceMap.canonical(ref)), locationErrors)
+}
 
 export class LocationMiddleware extends HttpApiMiddleware.Service<LocationMiddleware, { provides: LocationServices }>()(
   "@opencode/HttpApiLocation",

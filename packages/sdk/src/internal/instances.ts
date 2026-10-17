@@ -57,6 +57,7 @@ export function layer(options: Options, replacements: () => LayerNode.Replacemen
         ...LocationServiceMap.canonical(session.location),
       })
       const provide = (session: Session.Info) => Effect.provide(instances.get(key(session)))
+      const provideCached = (session: Session.Info) => Instance.cached(instances, key(session))
       const instances: LayerMap.LayerMap<
         ReturnType<typeof key>,
         Instance.Services,
@@ -72,7 +73,7 @@ export function layer(options: Options, replacements: () => LayerNode.Replacemen
                   ...replacements(),
                   // Instances borrow this selector and the host's Location map instead of retaining
                   // their Layer scopes; retaining the selector would block its shutdown on its own entries.
-                  Instance.node.replace(Layer.succeed(Instance.Service, { provide })),
+                  Instance.node.replace(Layer.succeed(Instance.Service, { provide, provideCached })),
                   LocationServiceMap.node.replace(Layer.succeed(LocationServiceMap.Service, locations)),
                 ],
               }).pipe(
@@ -102,7 +103,7 @@ export function layer(options: Options, replacements: () => LayerNode.Replacemen
           ),
         { idleTimeToLive: Duration.infinity },
       )
-      return Instance.Service.of({ provide })
+      return Instance.Service.of({ provide, provideCached })
     }),
   )
 }
