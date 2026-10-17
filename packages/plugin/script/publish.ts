@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { Script } from "@opencode/script"
+import { NpmLibraries } from "@opencode/script/npm"
 import { $ } from "bun"
 import { fileURLToPath } from "url"
 
@@ -10,7 +10,6 @@ async function published(name: string, version: string) {
   return (await $`npm view ${name}@${version} version`.nothrow()).exitCode === 0
 }
 
-await $`bun run build`
 const originalText = await Bun.file("package.json").text()
 const pkg = JSON.parse(originalText) as {
   name: string
@@ -18,8 +17,14 @@ const pkg = JSON.parse(originalText) as {
   exports: Record<string, string>
   imports: Record<string, Record<string, string>>
 }
-if (await published(pkg.name, pkg.version)) {
+const tarball = `${pkg.name.replace("@", "").replace("/", "-")}-${pkg.version}.tgz`
+const carried = await NpmLibraries.carried(tarball)
+
+if (!carried) await $`bun run build`
+if (!NpmLibraries.packDir && (await published(pkg.name, pkg.version))) {
   console.log(`already published ${pkg.name}@${pkg.version}`)
+} else if (carried) {
+  await NpmLibraries.publish(carried)
 } else {
   for (const [key, value] of Object.entries(pkg.exports)) {
     const file = value.replace("./src/", "./dist/").replace(".ts", "")
@@ -43,7 +48,7 @@ if (await published(pkg.name, pkg.version)) {
   await Bun.write("package.json", JSON.stringify(pkg, null, 2))
   try {
     await $`bun pm pack`
-    await $`npm publish *.tgz --tag ${Script.channel} --access public`
+    await NpmLibraries.publish(tarball)
   } finally {
     await Bun.write("package.json", originalText)
   }

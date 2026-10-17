@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { Script } from "@opencode/script"
+import { NpmLibraries } from "@opencode/script/npm"
 import { $ } from "bun"
 import { rm } from "node:fs/promises"
 import { fileURLToPath } from "node:url"
@@ -16,8 +16,19 @@ const pkg = JSON.parse(originalText) as {
 }
 const tarball = `${pkg.name.replace("@", "").replace("/", "-")}-${pkg.version}.tgz`
 
-if (!dryRun && (await $`npm view ${pkg.name}@${pkg.version} version`.nothrow()).exitCode === 0) {
+if (
+  !dryRun &&
+  !NpmLibraries.packDir &&
+  (await $`npm view ${pkg.name}@${pkg.version} version`.nothrow()).exitCode === 0
+) {
   console.log(`already published ${pkg.name}@${pkg.version}`)
+  process.exit(0)
+}
+
+const carried = await NpmLibraries.carried(tarball)
+
+if (carried && !dryRun) {
+  await NpmLibraries.publish(carried)
   process.exit(0)
 }
 
@@ -39,7 +50,7 @@ try {
   await Bun.write("package.json", JSON.stringify(pkg, null, 2) + "\n")
   await rm(tarball, { force: true })
   await $`bun pm pack`
-  if (!dryRun) await $`npm publish ${tarball} --tag ${Script.channel} --access public`
+  if (!dryRun) await NpmLibraries.publish(tarball)
 } finally {
   await Bun.write("package.json", originalText)
   await rm(tarball, { force: true })

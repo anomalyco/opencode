@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { Script } from "@opencode/script"
+import { NpmLibraries } from "@opencode/script/npm"
 import { $ } from "bun"
 import { rm } from "node:fs/promises"
 import { fileURLToPath } from "node:url"
@@ -18,8 +18,15 @@ const tarball = `${pkg.name.replace("@", "").replace("/", "-")}-${pkg.version}.t
 const output = (value: string, types = false) =>
   value.replace("./src/", types ? "./dist/types/" : "./dist/").replace(/\.ts$/, types ? ".d.ts" : ".js")
 
-if ((await $`npm view ${pkg.name}@${pkg.version} version`.nothrow()).exitCode === 0) {
+if (!NpmLibraries.packDir && (await $`npm view ${pkg.name}@${pkg.version} version`.nothrow()).exitCode === 0) {
   console.log(`already published ${pkg.name}@${pkg.version}`)
+  process.exit(0)
+}
+
+const carried = await NpmLibraries.carried(tarball)
+
+if (carried) {
+  await NpmLibraries.publish(carried)
   process.exit(0)
 }
 
@@ -43,7 +50,7 @@ try {
   await Bun.write("package.json", JSON.stringify(pkg, null, 2) + "\n")
   await rm(tarball, { force: true })
   await $`bun pm pack`
-  await $`npm publish ${tarball} --tag ${Script.channel} --access public`
+  await NpmLibraries.publish(tarball)
 } finally {
   await Bun.write("package.json", originalText)
   await rm(tarball, { force: true })

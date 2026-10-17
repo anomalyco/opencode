@@ -1,8 +1,10 @@
 #!/usr/bin/env bun
 
 import { Script } from "@opencode/script"
+import { NpmLibraries } from "@opencode/script/npm"
 import { $ } from "bun"
 import { fileURLToPath } from "url"
+import { packageJsons, prepareReleaseFiles } from "./release-files"
 
 console.log("=== publishing ===\n")
 
@@ -17,22 +19,7 @@ if (Script.channel === "beta") {
   process.exit(0)
 }
 
-const pkgjsons = await Array.fromAsync(
-  new Bun.Glob("**/package.json").scan({
-    absolute: true,
-  }),
-).then((arr) => arr.filter((x) => !x.includes("node_modules") && !x.includes("dist")))
-
-async function prepareReleaseFiles() {
-  for (const file of pkgjsons) {
-    let pkg = await Bun.file(file).text()
-    pkg = pkg.replaceAll(/"version": "[^"]+"/g, `"version": "${Script.version}"`)
-    console.log("updated:", file)
-    await Bun.file(file).write(pkg)
-  }
-
-  await $`bun install`
-}
+const pkgjsons = await packageJsons()
 
 async function writeChangelog() {
   const notes = process.env["OPENCODE_RELEASE_NOTES"]?.trim()
@@ -48,12 +35,15 @@ async function writeChangelog() {
   await file.write(`${head}\n\n${entry}${rest ? `\n${rest}` : ""}`)
 }
 
+// publish.yml's pack-npm job built the library tarballs. Check them all before anything is published.
+if (NpmLibraries.tarballs) await NpmLibraries.verify(NpmLibraries.tarballs)
+
 if (Script.release && !Script.preview) {
   await $`git fetch origin --tags`
   await $`git switch --detach`
 }
 
-await prepareReleaseFiles()
+await prepareReleaseFiles(pkgjsons)
 
 if (Script.release) await $`bun ./packages/desktop/scripts/publish.ts --dry-run`
 
@@ -110,7 +100,7 @@ if (Script.release && !Script.preview) {
   await new Promise((resolve) => setTimeout(resolve, 5_000))
   await $`git fetch origin`
   await $`git checkout -B dev origin/dev`
-  await prepareReleaseFiles()
+  await prepareReleaseFiles(pkgjsons)
   await writeChangelog()
   if ((await $`git diff --quiet`.nothrow()).exitCode !== 0) {
     // The release already published this code; a push-triggered dev publish of a version bump is wasted work.
