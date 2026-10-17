@@ -21,7 +21,7 @@ test("retains nested expansion state and registers exact headers and parts", asy
   const [expanded, setExpanded] = createStore<Record<string, boolean>>({})
   const config = createTuiResolvedConfig({ animations: false })
   const messages = new Map<string, SessionMessageAssistant>(
-    ["a", "b"].map((id) => [
+    ["a", "b", "c"].map((id) => [
       id,
       {
         id,
@@ -42,10 +42,11 @@ test("retains nested expansion state and registers exact headers and parts", asy
       },
     ]),
   )
+  // The sibling read keeps the inner group nested rather than shown in its parent's place.
   const [row, setRow] = createStore<SessionGroup>({
     type: "group",
     kind: "exploration",
-    size: 2,
+    size: 3,
     completed: true,
     pending: [],
     children: [
@@ -58,6 +59,7 @@ test("retains nested expansion state and registers exact headers and parts", asy
           { type: "entry", size: 1, entry: { type: "part", ref: { messageID: "b", partID: "read-b" } } },
         ],
       },
+      { type: "entry", size: 1, entry: { type: "part", ref: { messageID: "c", partID: "read-c" } } },
     ],
   })
   let target: TextRenderable | undefined
@@ -295,6 +297,77 @@ test("failed low activity uses a disclosure icon and keeps details expandable", 
     await app.renderOnce()
     expect(app.captureCharFrame()).toContain("− 1 command")
     expect(app.captureCharFrame()).toContain("command failed")
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("a low activity group holding only an exploration shows the exploration in its place", async () => {
+  const anchors = createTimelineAnchors()
+  const [expanded, setExpanded] = createStore<Record<string, boolean>>({})
+  const tool = (id: string, name: string) => ({
+    type: "tool" as const,
+    id,
+    name,
+    time: { created: 0, completed: 2 },
+    state: {
+      status: "completed" as const,
+      input: { path: id },
+      content: [{ type: "text" as const, text: id }] as [{ type: "text"; text: string }],
+    },
+  })
+  const message: SessionMessageAssistant = {
+    id: "a",
+    type: "assistant",
+    agent: "build",
+    model: { providerID: "fixture", id: "fixture" },
+    time: { created: 0, completed: 2 },
+    content: [tool("one", "read"), tool("two", "read"), tool("three", "shell")],
+  }
+  const entry = (partID: string) => ({
+    type: "entry" as const,
+    size: 1 as const,
+    entry: { type: "part" as const, ref: { messageID: "a", partID } },
+  })
+  const exploration = {
+    type: "group" as const,
+    kind: "exploration" as const,
+    size: 2,
+    children: [entry("one"), entry("two")],
+  }
+  const [row, setRow] = createStore<SessionGroup>({
+    type: "group",
+    kind: "activity",
+    size: 2,
+    completed: true,
+    pending: [],
+    children: [exploration],
+  })
+  const app = await mount({
+    row,
+    anchors,
+    config: createTuiResolvedConfig({ animations: false }),
+    expanded: (id) => expanded[id],
+    setExpanded: (id, value) => setExpanded(id, value),
+    message: () => message,
+    entry: (entry) => <text>{entry.type === "part" ? `Tool ${entry.ref.partID}` : ""}</text>,
+  })
+  try {
+    app.renderer.start()
+    await app.waitForFrame((frame) => frame.includes("Explored: 2 reads"))
+    expect(app.captureCharFrame()).not.toContain("+ 2 reads")
+    expect(anchors.get({ type: "group", groupID: groupID(row, 0)! })).toBeUndefined()
+    // One click reveals the reads; the inner group keeps its own tree-level ID.
+    const inner = groupID(exploration, 1)!
+    await app.mockMouse.click(4, anchors.get({ type: "group", groupID: inner })?.node.y ?? -1)
+    await app.renderOnce()
+    expect(expanded[inner]).toBe(true)
+    expect(app.captureCharFrame()).toContain("Tool one")
+    expect(app.captureCharFrame()).toContain("Tool two")
+    // Once a sibling arrives, the activity summary wraps both again.
+    setRow(reconcile({ ...row, size: 3, children: [exploration, entry("three")] }))
+    await app.waitForFrame((frame) => frame.includes("1 command, 2 reads"))
+    expect(app.captureCharFrame()).not.toContain("Tool one")
   } finally {
     app.renderer.destroy()
   }
