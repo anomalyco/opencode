@@ -5,6 +5,7 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { ExternalLink } from "@/runtime/platform/external-link"
 import { SettingsList } from "@/settings/list"
 import { SettingsRow } from "@/settings/row"
+import { fontSizeMinimum, fontSizeMaximum, lineHeightMinimum, lineHeightMaximum, useSettings } from "@/settings/model"
 import { createAppearanceSettingsController, type AppearanceSettingsController } from "@/settings/general/controllers"
 import "@/settings/settings.css"
 
@@ -66,6 +67,7 @@ const FontSetting: Component<{
 export const SettingsAppearance: Component = () => {
   const language = useLanguage()
   const appearance = createAppearanceSettingsController()
+  const settings = useSettings()
 
   return (
     <>
@@ -128,6 +130,56 @@ export const SettingsAppearance: Component = () => {
             <FontSetting kind="ui" fonts={appearance.fonts} />
             <FontSetting kind="code" fonts={appearance.fonts} />
             <FontSetting kind="terminal" fonts={appearance.fonts} />
+            <SettingsRow
+              title={language.t("settings.appearance.fontSize.title")}
+              description={language.t("settings.appearance.fontSize.description", {
+                min: fontSizeMinimum,
+                max: fontSizeMaximum,
+              })}
+            >
+              <div class="w-24">
+                <TextInput
+                  data-action="settings-font-size"
+                  type="number"
+                  dir="ltr"
+                  numeric
+                  min={fontSizeMinimum}
+                  max={fontSizeMaximum}
+                  step={1}
+                  aria-label={language.t("settings.appearance.fontSize.title")}
+                  value={settings.appearance.fontSize()}
+                  onChange={(event) => {
+                    settings.appearance.setFontSize(event.currentTarget.valueAsNumber)
+                    event.currentTarget.value = `${settings.appearance.fontSize()}`
+                  }}
+                />
+              </div>
+            </SettingsRow>
+            <SettingsRow
+              title={language.t("settings.appearance.lineHeight.title")}
+              description={language.t("settings.appearance.lineHeight.description", {
+                min: lineHeightMinimum,
+                max: lineHeightMaximum,
+              })}
+            >
+              <div class="w-24">
+                <TextInput
+                  data-action="settings-line-height"
+                  type="number"
+                  dir="ltr"
+                  numeric
+                  min={lineHeightMinimum}
+                  max={lineHeightMaximum}
+                  step={1}
+                  aria-label={language.t("settings.appearance.lineHeight.title")}
+                  value={settings.appearance.lineHeight()}
+                  onChange={(event) => {
+                    settings.appearance.setLineHeight(event.currentTarget.valueAsNumber)
+                    event.currentTarget.value = `${settings.appearance.lineHeight()}`
+                  }}
+                />
+              </div>
+            </SettingsRow>
           </SettingsList>
         </div>
       </div>

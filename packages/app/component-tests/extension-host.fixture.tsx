@@ -79,7 +79,7 @@ const build: Build = { version: "", channel: "dev", platform: "desktop", package
 
 const locale: Locale = { locale: () => "en", direction: () => "ltr", setDirection() {} }
 
-const appearance: Appearance = { font: () => "monospace" }
+const appearance: Appearance = { font: () => "monospace", fontSize: () => 14 }
 
 const router: Router = { routing: () => false, path: () => "/" }
 
@@ -343,6 +343,7 @@ function standIn(overrides: Partial<Interface>): Interface {
     settings() {},
     project() {},
     font: () => "fixture mono",
+    fontSize: () => 14,
     routing: () => false,
     path: () => "/",
     keybind: () => [],

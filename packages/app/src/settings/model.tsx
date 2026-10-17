@@ -34,6 +34,15 @@ export const sansDefault = "Inter"
 
 export const terminalDefault = "JetBrainsMono Nerd Font Mono"
 
+export const fontSizeMinimum = 10
+
+// Leave room for text inside the app's explicit 20–28px control and row heights.
+export const fontSizeMaximum = 16
+
+export const lineHeightMinimum = 20
+
+export const lineHeightMaximum = 22
+
 const monoFallback =
   '"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
 
@@ -125,7 +134,11 @@ const generalSchema = Persistence.struct({
 })
 
 const appearanceSchema = Persistence.struct({
-  fontSize: Schema.Number,
+  fontSize: Schema.Number.check(Schema.isInt(), Schema.isBetween({ minimum: fontSizeMinimum, maximum: fontSizeMaximum })),
+  lineHeight: Schema.Number.check(
+    Schema.isInt(),
+    Schema.isBetween({ minimum: lineHeightMinimum, maximum: lineHeightMaximum }),
+  ),
   mono: Schema.String,
   sans: Schema.String,
   terminal: Schema.String,
@@ -284,7 +297,7 @@ export const defaultSettings: Settings = {
     terminalPlacement: "side",
     followUpBehavior: "steer",
   },
-  appearance: { fontSize: 14, mono: "", sans: "", terminal: "", tabLayout: "horizontal" },
+  appearance: { fontSize: 14, lineHeight: 20, mono: "", sans: "", terminal: "", tabLayout: "horizontal" },
   keybinds: {},
   permissions: { autoApprove: false, autoApproveProjects: {} },
   workspaces: { defaultDestination: "last-used", lastUsed: {} },
@@ -314,6 +327,25 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
       () => store.general?.showCustomAgents,
       defaultSettings.general.showCustomAgents,
     )
+
+    const fontSize = withFallback(() => store.appearance?.fontSize, defaultSettings.appearance.fontSize)
+    const lineHeight = withFallback(() => store.appearance?.lineHeight, defaultSettings.appearance.lineHeight)
+
+    createEffect(() => {
+      if (typeof document === "undefined") {
+        return
+      }
+
+      // Keep rem-based layout and JavaScript measurements on their original scale.
+      document.documentElement.style.setProperty(
+        "--app-font-size-scale",
+        `${fontSize() / defaultSettings.appearance.fontSize}`,
+      )
+      document.documentElement.style.setProperty(
+        "--app-line-height-scale",
+        `${lineHeight() / defaultSettings.appearance.lineHeight}`,
+      )
+    })
 
     createEffect(() => {
       if (typeof document === "undefined") return
@@ -381,9 +413,21 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         customAgents: showCustomAgents,
       },
       appearance: {
-        fontSize: withFallback(() => store.appearance?.fontSize, defaultSettings.appearance.fontSize),
+        fontSize,
         setFontSize(value: number) {
-          setStore("appearance", "fontSize", value)
+          if (!Number.isFinite(value)) {
+            return
+          }
+
+          setStore("appearance", "fontSize", Math.min(fontSizeMaximum, Math.max(fontSizeMinimum, Math.round(value))))
+        },
+        lineHeight,
+        setLineHeight(value: number) {
+          if (!Number.isFinite(value)) {
+            return
+          }
+
+          setStore("appearance", "lineHeight", Math.min(lineHeightMaximum, Math.max(lineHeightMinimum, Math.round(value))))
         },
         font: withFallback(() => store.appearance?.mono, defaultSettings.appearance.mono),
         setFont(value: string) {
