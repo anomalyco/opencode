@@ -39,12 +39,12 @@ export const FileSystemHandler = HttpApiBuilder.group(Api, "server.fs", (handler
         ),
       )
       .handle("fs.find", (ctx) =>
-        response(
-          Effect.gen(function* () {
-            const fs = yield* FileSystem.Service
-            return yield* fs.find(ctx.query)
-          }),
-        ),
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.Service
+          const result = yield* fs.findWithStatus(ctx.query)
+          const envelope = yield* response(Effect.succeed(result.entries))
+          return { ...envelope, indexTruncated: result.indexTruncated }
+        }),
       )
       .handle("fs.write", (ctx) =>
         response(
