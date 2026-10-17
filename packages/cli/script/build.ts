@@ -30,6 +30,7 @@ const baselineFlag = process.argv.includes("--baseline")
 const requestedTarget = process.argv.find((arg) => arg.startsWith("--target="))?.slice("--target=".length)
 const skipInstall = process.argv.includes("--skip-install")
 const skipWebUi = process.argv.includes("--skip-web-ui")
+const requestedArchive = process.argv.find((arg) => arg.startsWith("--app-archive="))?.slice("--app-archive=".length)
 const solidPlugin = createSolidTransformPlugin()
 const highlights = Script.preview ? undefined : embed(process.env.OPENCODE_RELEASE_NOTES)
 const releaseAssets = new Map<string, Promise<Map<string, string>>>()
@@ -69,7 +70,14 @@ if (!targets.length) throw new Error(`Unknown build target: ${requestedTarget}`)
 if (!skipInstall)
   await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]} @opencode-ai/pty@${pkg.dependencies["@opencode-ai/pty"]}`
 const appArchive = path.join(dir, ".cache", "bun-app-archive.bin")
-await Bun.write(appArchive, await buildAppArchive(Script.channel, { skipBuild: skipWebUi }))
+// CI builds the archive once for every target and passes it in with --app-archive. It is copied rather than embedded
+// from its own path because the executable records the file's name.
+await Bun.write(
+  appArchive,
+  requestedArchive
+    ? Bun.file(path.resolve(dir, requestedArchive))
+    : await buildAppArchive(Script.channel, { skipBuild: skipWebUi }),
+)
 const appAssetsPlugin: BunPlugin = {
   name: "opencode-app-assets",
   setup(build) {
