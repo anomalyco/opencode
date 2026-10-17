@@ -171,7 +171,6 @@ describe("SessionExecution lifecycle", () => {
       const context = yield* buildExecution(
         scope,
         () => Deferred.succeed(running, undefined).pipe(Effect.andThen(Effect.never)),
-        undefined,
         jobs,
       )
       const execution = Context.get(context, SessionExecution.Service)
@@ -203,7 +202,6 @@ describe("SessionExecution lifecycle", () => {
       const restarted = yield* buildExecution(
         restartedScope,
         ({ sessionID }) => Effect.sync(() => void drained.push(sessionID)),
-        undefined,
         restartedJobs,
       )
       yield* Context.get(restarted, SessionRestart.Service).resumeSuspendedSessions
@@ -288,28 +286,30 @@ describe("SessionExecution lifecycle", () => {
     }),
   )
 
-  it.effect("terminalizes a turn that exhausts its resume budget instead of crash-looping", () =>
+  it.effect("continues recovering a turn after any number of prior resumes", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
       const bus = yield* Bus.Service
       const sessionID = Session.ID.make("ses_resume_exhausted")
-      // A claim from a dead process, already resumed twice without completing.
-      yield* seedSessions(database, [sessionID], { time_suspended: Date.now(), resume_attempts: 2 })
+      // A stale claim has been resumed many times. Delay has elapsed, so work can continue.
+      yield* seedSessions(database, [sessionID], { time_suspended: Date.now() - 10 * 60_000, resume_attempts: 100 })
 
       const drained: string[] = []
       const failures: SessionEvent.Execution.Failed[] = []
+      const recovered = yield* Deferred.make<void>()
       const scope = yield* Scope.make()
       yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
-      const context = yield* buildExecution(scope, ({ sessionID: id }) => Effect.sync(() => void drained.push(id)), {
-        maxAttempts: 2,
-      })
+      const context = yield* buildExecution(scope, ({ sessionID: id }) =>
+        Effect.sync(() => void drained.push(id)).pipe(Effect.andThen(Deferred.succeed(recovered, undefined))),
+      )
       const restart = Context.get(context, SessionRestart.Service)
       yield* bus.project(SessionEvent.Execution.Failed, (event) => Effect.sync(() => void failures.push(event)))
 
       yield* restart.resumeSuspendedSessions
-      expect(drained).toEqual([])
-      expect(failures.map((event) => event.data.error.type)).toEqual(["aborted"])
-      // The terminal released the claim and reset the counter atomically.
+      yield* Deferred.await(recovered)
+      yield* Context.get(context, SessionExecution.Service).awaitIdle(sessionID)
+      expect(drained).toEqual([sessionID])
+      expect(failures).toEqual([])
       expect(yield* claims(database)).toEqual({ [sessionID]: false })
       expect(yield* attempts(database, sessionID)).toBe(0)
     }),
@@ -405,7 +405,6 @@ describe("SessionRestart background recovery", () => {
             Effect.andThen(SessionInbox.promote(database.db, bus, sessionID, "steer")),
             Effect.asVoid,
           ),
-        undefined,
         restarted,
       )
       const restart = Context.get(context, SessionRestart.Service)
@@ -514,7 +513,6 @@ describe("SessionRestart background recovery", () => {
       const context = yield* buildExecution(
         scope,
         ({ sessionID }) => Effect.sync(() => void drained.push(sessionID)),
-        undefined,
         restarted,
       )
       yield* Context.get(context, SessionRestart.Service).resumeSuspendedSessions
@@ -566,7 +564,7 @@ describe("SessionRestart background recovery", () => {
         const scope = yield* Scope.make()
         yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
         const restarted = yield* Job.make.pipe(Effect.provideService(Scope.Scope, scope))
-        const context = yield* buildExecution(scope, () => Effect.void, undefined, restarted)
+        const context = yield* buildExecution(scope, () => Effect.void, restarted)
         yield* Context.get(context, SessionRestart.Service).resumeSuspendedSessions
 
         expect(yield* restarted.pendingBackground).toEqual([])
@@ -597,7 +595,7 @@ describe("SessionRestart background recovery", () => {
       const scope = yield* Scope.make()
       yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
       const restarted = yield* Job.make.pipe(Effect.provideService(Scope.Scope, scope))
-      const context = yield* buildExecution(scope, () => Effect.void, undefined, restarted)
+      const context = yield* buildExecution(scope, () => Effect.void, restarted)
       yield* Context.get(context, SessionRestart.Service).resumeSuspendedSessions
 
       expect(yield* restarted.pendingBackground).toEqual([])
@@ -632,7 +630,6 @@ describe("SessionRestart background recovery", () => {
             ),
             Effect.asVoid,
           ),
-        undefined,
         restarted,
       )
       const execution = Context.get(context, SessionExecution.Service)
@@ -647,32 +644,34 @@ describe("SessionRestart background recovery", () => {
     }),
   )
 
-  it.effect("does not bypass a claimed owner's restart budget for a shell notice", () =>
+  it.effect("recovers a claimed owner and shell notice after many prior resumes", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
       const jobs = yield* Job.Service
       const sessionID = Session.ID.make("ses_shell_recovery_exhausted")
-      yield* seedSessions(database, [sessionID], { time_suspended: Date.now(), resume_attempts: 2 })
+      yield* seedSessions(database, [sessionID], { time_suspended: Date.now() - 10 * 60_000, resume_attempts: 100 })
       yield* seedBackground(jobs, sessionID, [
         { id: "call-exhausted-shell", shellID: "sh_exhausted", command: "sleep 60" },
       ])
 
       const drained: Session.ID[] = []
+      const recovered = yield* Deferred.make<void>()
       const scope = yield* Scope.make()
       yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
       const restarted = yield* Job.make.pipe(Scope.provide(scope))
       const context = yield* buildExecution(
         scope,
-        ({ sessionID }) => Effect.sync(() => void drained.push(sessionID)),
-        { maxAttempts: 2 },
+        ({ sessionID }) =>
+          Effect.sync(() => void drained.push(sessionID)).pipe(Effect.andThen(Deferred.succeed(recovered, undefined))),
         restarted,
       )
       const restart = Context.get(context, SessionRestart.Service)
       const execution = Context.get(context, SessionExecution.Service)
       yield* restart.resumeSuspendedSessions
+      yield* Deferred.await(recovered)
       yield* execution.awaitIdle(sessionID)
 
-      expect(drained).toEqual([])
+      expect(drained).toEqual([sessionID])
       expect(yield* claims(database)).toEqual({ [sessionID]: false })
       expect(yield* attempts(database, sessionID)).toBe(0)
       expect(yield* SessionInbox.list(database.db, sessionID)).toMatchObject([
@@ -680,14 +679,14 @@ describe("SessionRestart background recovery", () => {
       ])
       expect(yield* restarted.pendingBackground).toEqual([])
       yield* restart.resumeSuspendedSessions
-      expect(drained).toEqual([])
+      expect(drained).toEqual([sessionID])
     }),
   )
 
   for (const shellFirst of [false, true]) {
     for (const resumeAttempts of [1, 2]) {
       it.effect(
-        `recovers a child's shell ${shellFirst ? "before" : "after"} its job record without bypassing attempt ${resumeAttempts + 1}`,
+        `recovers a child's shell ${shellFirst ? "before" : "after"} its job record after ${resumeAttempts} prior attempts`,
         () =>
           Effect.gen(function* () {
             const database = yield* Database.Service
@@ -699,7 +698,7 @@ describe("SessionRestart background recovery", () => {
             yield* seedSessions(database, [parent])
             yield* seedSessions(database, [child], {
               parent_id: parent,
-              time_suspended: Date.now(),
+              time_suspended: Date.now() - 10 * 60_000,
               resume_attempts: resumeAttempts,
             })
             const shell = seedBackground(jobs, child, [
@@ -749,38 +748,35 @@ describe("SessionRestart background recovery", () => {
                   })
                   yield* Deferred.await(release)
                 }),
-              { maxAttempts: 2 },
               restarted,
             )
             const restart = Context.get(context, SessionRestart.Service)
             const execution = Context.get(context, SessionExecution.Service)
             yield* restart.resumeSuspendedSessions
 
-            if (resumeAttempts < 2) {
-              expect(yield* Deferred.await(observed)).toEqual({
-                attempts: 2,
-                notices: [
-                  expect.stringContaining("The server restarted while you were working"),
-                  expect.stringContaining("Command cancelled because the server restarted"),
-                ],
-              })
-              expect(drained).toEqual([child])
-              expect(yield* execution.active).not.toContain(parent)
-              expect(yield* SessionInbox.list(database.db, parent)).toEqual([])
-            }
+            expect(yield* Deferred.await(observed)).toEqual({
+              attempts: resumeAttempts + 1,
+              notices: [
+                expect.stringContaining("The server restarted while you were working"),
+                expect.stringContaining("Command cancelled because the server restarted"),
+              ],
+            })
+            expect(drained).toEqual([child])
+            expect(yield* execution.active).not.toContain(parent)
+            expect(yield* SessionInbox.list(database.db, parent)).toEqual([])
             yield* Deferred.succeed(release, undefined)
             yield* Deferred.await(parentWoken)
             yield* Effect.forEach([parent, child], execution.awaitIdle, { discard: true })
-            expect(drained).toEqual(resumeAttempts < 2 ? [child, parent] : [parent])
+            expect(drained).toEqual([child, parent])
             expect((yield* store.context(parent)).filter((message) => message.type === "synthetic")).toMatchObject([
-              { metadata: { source: "subagent", childID: child, state: resumeAttempts < 2 ? "completed" : "error" } },
+              { metadata: { source: "subagent", childID: child, state: "completed" } },
             ])
             expect(yield* claims(database)).toEqual({ [parent]: false, [child]: false })
             expect(yield* attempts(database, child)).toBe(0)
             expect(yield* restarted.pendingBackground).toEqual([])
 
             yield* restart.resumeSuspendedSessions
-            expect(drained).toHaveLength(resumeAttempts < 2 ? 2 : 1)
+            expect(drained).toHaveLength(2)
           }),
       )
     }
@@ -793,8 +789,14 @@ describe("SessionRestart background recovery", () => {
       const parent = Session.ID.make("ses_subagent_recovery_parent")
       const child = Session.ID.make("ses_subagent_recovery_child")
       const unrelated = Session.ID.make("ses_subagent_unrelated_child")
-      yield* seedSessions(database, [parent], { time_suspended: Date.now(), resume_attempts: 1 })
-      yield* seedSessions(database, [child, unrelated], { parent_id: parent, time_suspended: Date.now() })
+      yield* seedSessions(database, [parent], {
+        time_suspended: Date.now() - 10 * 60_000,
+        resume_attempts: 1,
+      })
+      yield* seedSessions(database, [child, unrelated], {
+        parent_id: parent,
+        time_suspended: Date.now() - 10 * 60_000,
+      })
       yield* jobs.start({
         id: child,
         type: "subagent",
@@ -832,7 +834,6 @@ describe("SessionRestart background recovery", () => {
               undefined,
             )
           }),
-        undefined,
         restarted,
       )
       const restart = Context.get(context, SessionRestart.Service)
@@ -900,9 +901,10 @@ describe("SessionRestart background recovery", () => {
         scope,
         ({ sessionID }) =>
           Effect.sync(() => void drained.push(sessionID)).pipe(
-            Effect.andThen(Deferred.succeed(parentWoken, undefined)),
+            Effect.andThen(
+              sessionID === parent ? Deferred.succeed(parentWoken, undefined) : Effect.void,
+            ),
           ),
-        undefined,
         restarted,
       )
       yield* Context.get(context, SessionRestart.Service).resumeSuspendedSessions
@@ -959,8 +961,8 @@ describe("SessionRestart background recovery", () => {
     }),
   )
 
-  for (const resumeAttempts of [1, 2]) {
-    it.effect(`honors a suspended parent's restart budget after ${resumeAttempts} attempts before notifying it`, () =>
+  for (const resumeAttempts of [1, 2, 100]) {
+    it.effect(`recovers a suspended parent after ${resumeAttempts} prior attempts`, () =>
       Effect.gen(function* () {
         const database = yield* Database.Service
         const bus = yield* Bus.Service
@@ -970,7 +972,7 @@ describe("SessionRestart background recovery", () => {
           Session.ID.make("ses_subagent_budget_child_1"),
           Session.ID.make("ses_subagent_budget_child_2"),
         ]
-        yield* seedSessions(database, [parent], { time_suspended: Date.now(), resume_attempts: resumeAttempts })
+        yield* seedSessions(database, [parent], { time_suspended: Date.now() - 10 * 60_000, resume_attempts: resumeAttempts })
         yield* seedSessions(database, children, { parent_id: parent })
         const complete = yield* Deferred.make<string>()
         for (const child of children) {
@@ -1009,42 +1011,35 @@ describe("SessionRestart background recovery", () => {
               yield* Deferred.succeed(draining, yield* attempts(database, sessionID))
               yield* Deferred.await(release)
             }),
-          { maxAttempts: 2 },
           restarted,
         )
         const restart = Context.get(context, SessionRestart.Service)
         const execution = Context.get(context, SessionExecution.Service)
         yield* restart.resumeSuspendedSessions
 
-        if (resumeAttempts < 2) {
-          expect(yield* Deferred.await(draining)).toBe(2)
-          expect(drained).toEqual([parent])
-          expect(continued).toEqual([parent])
-          yield* Deferred.succeed(release, undefined)
-          yield* execution.awaitIdle(parent)
-        }
-        if (resumeAttempts === 2) {
-          expect(drained).toEqual([])
-          expect(continued).toEqual([])
-        }
+        expect(yield* Deferred.await(draining)).toBe(resumeAttempts + 1)
+        expect(drained).toEqual([parent])
+        expect(continued).toEqual([parent])
+        yield* Deferred.succeed(release, undefined)
+        yield* execution.awaitIdle(parent)
         expect((yield* claims(database))[parent]).toBe(false)
         expect(yield* attempts(database, parent)).toBe(0)
         expect(yield* SessionInbox.list(database.db, parent)).toHaveLength(2)
         expect(yield* restarted.pendingBackground).toEqual([])
         yield* restart.resumeSuspendedSessions
-        expect(drained).toHaveLength(resumeAttempts < 2 ? 1 : 0)
+        expect(drained).toHaveLength(1)
       }),
     )
   }
 
-  it.effect("terminalizes a recovered subagent that exhausts its resume budget", () =>
+  it.effect("recovers a subagent after many prior resumes", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
       const jobs = yield* Job.Service
       const parent = Session.ID.make("ses_subagent_exhausted_parent")
       const child = Session.ID.make("ses_subagent_exhausted_child")
       yield* seedSessions(database, [parent])
-      yield* seedSessions(database, [child], { parent_id: parent, time_suspended: Date.now(), resume_attempts: 2 })
+      yield* seedSessions(database, [child], { parent_id: parent, time_suspended: Date.now() - 10 * 60_000, resume_attempts: 100 })
       yield* jobs.start({
         id: child,
         type: "subagent",
@@ -1068,21 +1063,20 @@ describe("SessionRestart background recovery", () => {
         scope,
         ({ sessionID }) =>
           Effect.sync(() => void drained.push(sessionID)).pipe(
-            Effect.andThen(Deferred.succeed(parentWoken, undefined)),
+            Effect.andThen(sessionID === parent ? Deferred.succeed(parentWoken, undefined) : Effect.void),
           ),
-        { maxAttempts: 2 },
         restarted,
       )
       yield* Context.get(context, SessionRestart.Service).resumeSuspendedSessions
       yield* Deferred.await(parentWoken)
 
-      expect(drained).toEqual([parent])
+      expect(drained).toEqual([child, parent])
       expect((yield* claims(database))[child]).toBe(false)
       expect(yield* SessionInbox.list(database.db, parent)).toMatchObject([
         {
           payload: {
-            text: expect.stringContaining("will not be resumed automatically"),
-            metadata: { source: "subagent", childID: child, state: "error" },
+            text: expect.stringContaining("Subagent completed without a text response."),
+            metadata: { source: "subagent", childID: child, state: "completed" },
           },
         },
       ])
@@ -1338,7 +1332,6 @@ function attempts(database: Database.Service["Service"], sessionID: Session.ID) 
 function buildExecution(
   scope: Scope.Closeable,
   drain: (input: Parameters<SessionRunner.Interface["drain"]>[0]) => Effect.Effect<void, SessionRunner.RunError>,
-  options?: SessionRestart.Options,
   overrideJobs?: Job.Interface,
 ) {
   return Effect.gen(function* () {
@@ -1376,7 +1369,7 @@ function buildExecution(
       ),
     )
     return yield* Layer.buildWithScope(
-      SessionRestart.layer(options).pipe(
+      SessionRestart.layer().pipe(
         Layer.provideMerge(sessionLayer),
         Layer.provideMerge(Layer.fresh(SessionExecution.layer)),
         Layer.provide(Layer.succeed(Database.Service, database)),
