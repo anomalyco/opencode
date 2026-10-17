@@ -9,6 +9,7 @@ import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import { State } from "../state.js"
 import { which } from "../util/which.js"
+import { ShellPreamble } from "./preamble.js"
 
 const META: Record<string, { deny?: boolean; login?: boolean; ps?: boolean }> = {
   bash: { login: true },
@@ -161,11 +162,23 @@ function info(file: string, options?: Options, bin?: string): Item {
   }
 }
 
-export function args(file: string, command: string) {
+export interface ArgsOptions {
+  prune?: boolean
+}
+
+export function wrapCommand(file: string, command: string, options?: ArgsOptions) {
+  if (options?.prune === false) return command
+  const n = name(file)
+  if (n === "cmd") return command
+  return ShellPreamble.wrap(file, command, ps(file))
+}
+
+export function args(file: string, command: string, options?: ArgsOptions) {
   const n = name(file)
   if (n === "cmd") return ["/c", command]
-  if (ps(file)) return ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command]
-  return ["-c", command]
+  const cmd = options?.prune ? wrapCommand(file, command, options) : command
+  if (ps(file)) return ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", cmd]
+  return ["-c", cmd]
 }
 
 // Resolve afresh so removing a shell does not leave terminals using a stale cached path.
