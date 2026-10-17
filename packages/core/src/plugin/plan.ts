@@ -38,6 +38,10 @@ export const Plugin = define({
         item.permissions.push({ action: "question", resource: "*", effect: "allow" })
         item.permissions.push({ action: "edit", resource: "*", effect: "deny" })
         item.permissions.push({ action: "edit", resource: path.join(directory, "*"), effect: "allow" })
+        // Plan only denies the file-editing tools, so shell commands (which can edit files
+        // too) would otherwise run unprompted. The documented Plan permission set asks
+        // before every shell command; read-only commands stay usable after confirmation.
+        item.permissions.push({ action: "shell", resource: "*", effect: "ask" })
       })
     })
 

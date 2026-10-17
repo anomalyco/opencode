@@ -267,6 +267,14 @@ describe("plan plugin mutations", () => {
     }),
   )
 
+  it.effect("asks before running shell commands", () =>
+    Effect.gen(function* () {
+      const { planAgent } = yield* run()
+      expect(Permission.evaluate("shell", "ls", planAgent.permissions).effect).toBe("ask")
+      expect(Permission.evaluate("shell", "rm -rf src", planAgent.permissions).effect).toBe("ask")
+    }),
+  )
+
   it.effect("rewrites blocked mutation failures with the Plan directory", () =>
     Effect.gen(function* () {
       const { toolHook } = yield* run()
