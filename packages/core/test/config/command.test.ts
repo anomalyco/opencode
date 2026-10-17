@@ -1,7 +1,7 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { DateTime, Deferred, Effect, Fiber, Layer, Option, PubSub, Schema, Stream } from "effect"
+import { DateTime, Deferred, Effect, Fiber, Layer, Logger, Option, PubSub, Schema, Stream } from "effect"
 import { advance, drain } from "../lib/clock"
 import { Directory, Document, Event, Info } from "@opencode/schema/config"
 import { Session } from "@opencode/core/session"
@@ -247,6 +247,64 @@ Review files`,
       ),
     ),
   )
+
+  it.live("keeps a file-based command whose model is not provider/model", () => {
+    const warnings: unknown[] = []
+    const logger = Logger.map(Logger.formatStructured, (entry) => {
+      if (entry.level === "WARN") warnings.push(entry.message)
+    })
+    return Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const file = path.join(tmp.path, "commands", "hello.md")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(path.dirname(file), { recursive: true })
+            await fs.writeFile(file, `---\ndescription: says hello\nmodel: opus\n---\nSay hello`)
+          })
+
+          const command = yield* Command.Service
+          const prompts: string[] = []
+          yield* ConfigCommandPlugin.Plugin.effect(
+            host({
+              command: {
+                list: () => Effect.die("unused command.list"),
+                transform: command.transform,
+                reload: command.reload,
+              },
+              event: { subscribe: () => Stream.empty },
+              session: {
+                prompt: (input) =>
+                  Effect.sync(() => {
+                    prompts.push(input.text)
+                    return SessionInbox.User.make({
+                      id: SessionMessage.ID.make("msg_test"),
+                      sessionID: input.sessionID,
+                      time: { created: DateTime.makeUnsafe(0) },
+                      type: "user",
+                      payload: { text: input.text },
+                      delivery: input.delivery ?? "steer",
+                    })
+                  }),
+              },
+            }),
+          ).pipe(
+            Effect.provide(Config.testLayer([new Directory({ type: "directory", path: AbsolutePath.make(tmp.path) })])),
+          )
+
+          expect(yield* command.list()).toEqual([Command.Info.make({ name: "hello", description: "says hello" })])
+          yield* command.execute({
+            name: "hello",
+            invocation: { sessionID: Session.ID.make("ses_test"), prompt: { text: "" }, delivery: "steer" },
+          })
+          expect(prompts).toEqual(["Say hello"])
+          expect(warnings).toHaveLength(1)
+          expect(JSON.stringify(warnings[0])).toContain(file)
+          expect(JSON.stringify(warnings[0])).toContain("opus")
+        }),
+      ),
+      Effect.provide(Logger.layer([logger])),
+    )
+  })
 
   for (const testCase of sourceCases()) {
     it.effect(`rebuilds commands when a source file is ${testCase.name}`, () =>
