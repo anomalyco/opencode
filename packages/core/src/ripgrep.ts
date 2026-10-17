@@ -6,6 +6,7 @@ import { Entry, Match } from "@opencode/schema/filesystem"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { collectStream, waitForAbort } from "@opencode/util/process"
 import { Environment } from "./environment/index.js"
+import { Location } from "./location.js"
 import { NonNegativeInt, PositiveInt, RelativePath } from "./schema.js"
 import { RipgrepBinary } from "./ripgrep/binary.js"
 
@@ -103,7 +104,9 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const environment = yield* Environment.Service
+    const location = yield* Location.Service
     const binary = yield* RipgrepBinary.Service
+    const executable = environment.ripgrep ?? (location.workspaceID ? Effect.succeed("rg") : binary.filepath)
 
     const run = <A>(input: {
       readonly cwd: string
@@ -118,7 +121,7 @@ const layer = Layer.effect(
         Effect.gen(function* () {
           // Hosted environments will resolve rg through their driver image; the spawner is the execution seam.
           const handle = yield* environment.spawner.spawn(
-            ChildProcess.make(yield* binary.filepath, input.args, { cwd: input.cwd, extendEnv: true, stdin: "ignore" }),
+            ChildProcess.make(yield* executable, input.args, { cwd: input.cwd, extendEnv: true, stdin: "ignore" }),
           )
           const stderrFiber = yield* collectStream(handle.stderr, ERROR_BYTES).pipe(
             Effect.map((output) => output.buffer.toString("utf8")),
@@ -272,4 +275,8 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [Environment.node, RipgrepBinary.node] })
+export const node = makeLocationNode({
+  service: Service,
+  layer,
+  deps: [Environment.node, Location.node, RipgrepBinary.node],
+})
