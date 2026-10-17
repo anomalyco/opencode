@@ -10,6 +10,7 @@ import { Script } from "@opencode/script"
 import { embed } from "@opencode/script/highlights"
 import pkg from "../package.json"
 import { collectNodeAssets, copyNodeAssets, hashNodeAssets, seaAssetMap } from "./node-assets"
+import { platformFields } from "./platform-fields"
 import { appArchiveAsset, mainConfig } from "../vite.node.config"
 import { nodeExecArgv, nodeTarget, type NodeTarget } from "../src/node/target"
 import { buildAppArchive } from "./app-assets"
@@ -147,8 +148,7 @@ for (const target of targets) {
         version: Script.version,
         license: pkg.license,
         repository: { type: "git", url: "git+https://github.com/anomalyco/opencode.git" },
-        os: [target.platform],
-        cpu: [target.arch],
+        ...platformFields({ os: target.platform, arch: target.arch }),
       },
       null,
       2,
