@@ -4,7 +4,7 @@ import { fileURLToPath } from "url"
 import path from "path"
 import { SqliteClient } from "@effect/sql-sqlite-bun"
 import { EffectDrizzleSqlite } from "@opencode/core/database/drizzle"
-import { Deferred, Effect, Fiber, Layer } from "effect"
+import { Deferred, Effect, Fiber, Layer, Schema } from "effect"
 import { Reactivity } from "effect/reactivity"
 import { SqlClient, Statement } from "effect/sql"
 import { sql } from "drizzle-orm"
@@ -21,6 +21,9 @@ import executionClaimsMigration from "@opencode/core/database/migration/20260811
 import sessionInboxMigration from "@opencode/core/database/migration/20260812181746_session_inbox"
 import sessionViewedStateMigration from "@opencode/core/database/migration/20260819222447_session_viewed_state"
 import azureCliCredentialMigration from "@opencode/core/database/migration/20261007190000_azure_cli_external_credential"
+import legacyMcpCredentialsMigration from "@opencode/core/database/migration/20261016120000_import_legacy_mcp_credentials"
+import { McpOAuth } from "@opencode/core/mcp/oauth"
+import { Credential } from "@opencode/schema/credential"
 import { Global } from "@opencode/util/global"
 
 const run = <A, E>(
@@ -527,6 +530,107 @@ describe("DatabaseMigration", () => {
         yield* DatabaseMigration.applyOnly(db, [legacyCredentialsMigration])
 
         expect(yield* db.all(sql`SELECT id FROM credential`)).toEqual([])
+      }),
+      Global.make({ data: tmp.path }),
+    )
+  })
+
+  test("imports legacy MCP OAuth credentials under the integration each remote server registers", async () => {
+    await using tmp = await tmpdir()
+    const source = path.join(tmp.path, "mcp-auth.json")
+    const content = JSON.stringify({
+      work: {
+        tokens: { accessToken: "work-access", refreshToken: "work-refresh", expiresAt: 1_800_000_000.25, scope: "read" },
+        clientInfo: { clientId: "work-client", clientSecret: "work-secret", clientIdIssuedAt: 1_700_000_000 },
+        codeVerifier: "stale-verifier",
+        oauthState: "stale-state",
+        serverUrl: "https://work.example.com/mcp",
+      },
+      plain: {
+        tokens: { accessToken: "plain-access" },
+        serverUrl: "https://plain.example.com/mcp",
+      },
+      relogged: {
+        tokens: { accessToken: "v1-access", refreshToken: "v1-refresh" },
+        serverUrl: "https://relogged.example.com/mcp",
+      },
+      pending: { clientInfo: { clientId: "pending-client" }, serverUrl: "https://pending.example.com/mcp" },
+      unbound: { tokens: { accessToken: "unbound-access" } },
+      invalid: "not-an-entry",
+    })
+    await Bun.write(source, content)
+
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* DatabaseMigration.apply(db)
+        const now = Date.now()
+        const current = JSON.stringify({ type: "oauth", methodID: "x", access: "v2-access", refresh: "", expires: 0 })
+        // Pinned rather than derived: the MCP layer looks credentials up by this id, so a change orphans them.
+        yield* db.run(sql`
+          INSERT INTO credential (id, integration_id, label, value, time_created, time_updated)
+          VALUES ('existing', 'mcp_9f3e1191e54c03ea', 'OAuth', ${current}, ${now}, ${now})
+        `)
+
+        yield* db.run(sql`DELETE FROM migration WHERE id = ${legacyMcpCredentialsMigration.id}`)
+        yield* DatabaseMigration.applyOnly(db, [legacyMcpCredentialsMigration])
+        yield* DatabaseMigration.applyOnly(db, [legacyMcpCredentialsMigration])
+
+        const rows = (yield* db.all<{ integration_id: string; value: string }>(
+          sql`SELECT integration_id, value FROM credential ORDER BY integration_id`,
+        )).map((row) => ({ integrationID: row.integration_id, value: JSON.parse(row.value) }))
+        expect(rows.map((row) => row.integrationID).toSorted()).toEqual([
+          "mcp_701bb16c5fd8c5f1",
+          "mcp_9f3e1191e54c03ea",
+          "mcp_bf106997361d8dcb",
+        ])
+        expect(rows.find((row) => row.integrationID === "mcp_9f3e1191e54c03ea")?.value.access).toBe("v2-access")
+        expect(rows.find((row) => row.integrationID === "mcp_701bb16c5fd8c5f1")?.value).toEqual({
+          type: "oauth",
+          methodID: "mcp_701bb16c5fd8c5f1",
+          access: "plain-access",
+          refresh: "",
+          expires: 0,
+          metadata: { serverUrl: "https://plain.example.com/mcp", tokenType: "Bearer" },
+        })
+
+        const work = Schema.decodeUnknownSync(Credential.OAuth)(
+          rows.find((row) => row.integrationID === "mcp_bf106997361d8dcb")?.value,
+        )
+        expect(work).toMatchObject({ methodID: "mcp_bf106997361d8dcb", expires: 1_800_000_000_250 })
+        expect(McpOAuth.toTokens(work)).toEqual({
+          access_token: "work-access",
+          token_type: "Bearer",
+          refresh_token: "work-refresh",
+          expires_in: expect.any(Number),
+          scope: "read",
+        })
+        expect(McpOAuth.clientFromCredential(work)).toEqual({
+          client_id: "work-client",
+          client_secret: "work-secret",
+          client_id_issued_at: 1_700_000_000,
+        })
+      }),
+      Global.make({ data: tmp.path }),
+    )
+
+    expect(await Bun.file(source).text()).toBe(content)
+  })
+
+  test("skips an absent or unreadable legacy MCP credential file without failing the migration", async () => {
+    await using tmp = await tmpdir()
+    const source = path.join(tmp.path, "mcp-auth.json")
+
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* DatabaseMigration.apply(db)
+        for (const content of [undefined, "{ not json", "[]"]) {
+          if (content !== undefined) yield* Effect.promise(() => Bun.write(source, content))
+          yield* db.run(sql`DELETE FROM migration WHERE id = ${legacyMcpCredentialsMigration.id}`)
+          yield* DatabaseMigration.applyOnly(db, [legacyMcpCredentialsMigration])
+          expect(yield* db.all(sql`SELECT id FROM credential`)).toEqual([])
+        }
       }),
       Global.make({ data: tmp.path }),
     )
