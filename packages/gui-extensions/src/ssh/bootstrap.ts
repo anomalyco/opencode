@@ -154,7 +154,14 @@ export const bootstrap = Effect.fn("Ssh.bootstrap")(function* (input: {
   }
 
   yield* input.stage("starting")
-  const registration = parseRegistration(yield* run(startScript(version, input.replace)))
+
+  const registration = parseRegistration(
+    yield* run(startScript(version, input.replace)).pipe(
+      // The remote CLI already answered over this connection, so a non-zero exit here is the
+      // service failing to start rather than a transport failure.
+      Effect.mapError((error) => (error.code === "connection" ? new SshFailure("service", error.detail) : error)),
+    ),
+  )
 
   if (!registration) return yield* Effect.fail(new SshFailure("service"))
 
