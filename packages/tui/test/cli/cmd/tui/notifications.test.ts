@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test"
 import Notifications from "../../../../src/feature-plugins/system/notifications"
 import type { OpenCodeEvent, PermissionAsked } from "@opencode/client"
-import type { AttentionNotifyOptions, Context, Route, ToastOptions } from "@opencode/plugin/tui/context"
+import type { AttentionNotifyOptions, Context, PermissionMode, Route, ToastOptions } from "@opencode/plugin/tui/context"
 
 type Session = { id: string; title: string; parentID?: string }
 
-async function setup(route: Route = { type: "session", sessionID: "session" }) {
+async function setup(route: Route = { type: "session", sessionID: "session" }, mode: PermissionMode = "prompt") {
   const notifications: AttentionNotifyOptions[] = []
   const toasts: ToastOptions[] = []
   const handlers = new Map<OpenCodeEvent["type"], ((event: OpenCodeEvent) => void)[]>()
@@ -24,6 +24,7 @@ async function setup(route: Route = { type: "session", sessionID: "session" }) {
   await Notifications.setup({
     ui: {
       router: { current: () => route },
+      permission: { mode: () => mode },
       toast: { show: (toast: ToastOptions) => toasts.push(toast) },
     },
     attention: {
@@ -50,6 +51,7 @@ async function setup(route: Route = { type: "session", sessionID: "session" }) {
       },
       session: {
         get: (sessionID: string) => sessions[sessionID],
+        family: (sessionID: string) => (sessionID === "session" ? ["session", "subagent"] : [sessionID]),
         status: () => "running" as const,
       },
     },
@@ -183,6 +185,32 @@ describe("internal notifications TUI plugin", () => {
     harness.emit({ id: "event-3", created: 0, type: "permission.asked", data: permission("permission-1") })
 
     expect(harness.notifications).toEqual([titledFormNotification, permissionNotification])
+  })
+
+  test("stays silent for permissions the client auto-approves on the open session and its subagents", async () => {
+    const harness = await setup(undefined, "autoaccept")
+
+    harness.emit({ id: "event-1", created: 0, type: "permission.asked", data: permission("permission-open") })
+    harness.emit({
+      id: "event-2",
+      created: 0,
+      type: "permission.asked",
+      data: permission("permission-subagent", "subagent"),
+    })
+
+    expect(harness.notifications).toEqual([])
+  })
+
+  test.each<Route>([
+    { type: "home" },
+    { type: "session", sessionID: "other" },
+    { type: "session", sessionID: "subagent" },
+  ])("still notifies for auto-accepted permissions outside the open session (%j)", async (route) => {
+    const harness = await setup(route, "autoaccept")
+
+    harness.emit({ id: "event-1", created: 0, type: "permission.asked", data: permission("permission-1") })
+
+    expect(harness.notifications).toEqual([permissionNotification])
   })
 
   test("notifies for global forms once the TUI can render them", async () => {
