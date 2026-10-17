@@ -83,6 +83,27 @@ describe("Ripgrep", () => {
     ),
   )
 
+  for (const newline of ["\n", "\r\n", ""]) {
+    it.live(`removes ${JSON.stringify(newline)} line endings before bounding grep previews`, () =>
+      Effect.gen(function* () {
+        const tmp = yield* tmpdirScoped()
+        const ripgrep = yield* Ripgrep.Service
+        for (const text of ["  needle \t", `needle${"x".repeat(1_994)}`, `needle${"x".repeat(1_995)}`]) {
+          yield* Effect.promise(() => Bun.write(path.join(tmp.path, "match.txt"), text + newline))
+          const matches = yield* ripgrep.grep({ cwd: tmp.path, pattern: "needle", limit: 10 })
+
+          expect(matches).toHaveLength(1)
+          expect(matches[0]?.text).toBe(text.length > 2_000 ? text.slice(0, 2_000) + "..." : text)
+          expect(matches[0]?.line).toBe(1)
+          expect(matches[0]?.offset).toBe(0)
+          expect(matches[0]?.submatches).toEqual([
+            { text: "needle", start: text.indexOf("needle"), end: text.indexOf("needle") + 6 },
+          ])
+        }
+      }),
+    )
+  }
+
   it.live("keeps ignored files out of catch-all find results", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
