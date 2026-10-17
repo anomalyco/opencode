@@ -23,7 +23,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "typecheck": "tsgo --noEmit -p tsconfig.test.json",
+    "typecheck": "tsc --noEmit -p tsconfig.test.json",
     "test": "bun test"
   },
   "dependencies": {
@@ -34,7 +34,7 @@
   "devDependencies": {
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
-    "@typescript/native-preview": "catalog:",
+    "@typescript/native": "catalog:",
     "typescript": "catalog:"
   }
 }

@@ -7,7 +7,7 @@
   "license": "MIT",
   "scripts": {
     "test": "bun test --timeout 30000 --only-failures",
-    "typecheck": "tsgo -b"
+    "typecheck": "tsc -b"
   },
   "exports": {
     ".": "./src/index.tsx",
@@ -75,6 +75,6 @@
   "devDependencies": {
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
-    "@typescript/native-preview": "catalog:"
+    "@typescript/native": "catalog:"
   }
 }

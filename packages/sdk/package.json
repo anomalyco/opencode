@@ -24,7 +24,7 @@
   "scripts": {
     "build": "bun run script/build.ts",
     "test": "bun test --timeout 5000",
-    "typecheck": "tsgo -b",
+    "typecheck": "tsc -b",
     "verify:package": "bun run script/verify-package.ts"
   },
   "dependencies": {
@@ -42,6 +42,6 @@
     "@opencode/protocol": "workspace:*",
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
-    "@typescript/native-preview": "catalog:"
+    "@typescript/native": "catalog:"
   }
 }

@@ -91,7 +91,7 @@
   },
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.build.json",
-    "typecheck": "tsgo --noEmit",
+    "typecheck": "tsc --noEmit",
     "test": "bun test src --only-failures",
     "dev": "vite",
     "generate:tailwind": "bun run script/tailwind.ts",
@@ -101,7 +101,7 @@
     "@solidjs/meta": "catalog:",
     "@tsconfig/node22": "catalog:",
     "@types/bun": "catalog:",
-    "@typescript/native-preview": "catalog:",
+    "@typescript/native": "catalog:",
     "solid-js": "catalog:",
     "tailwindcss": "catalog:",
     "typescript": "catalog:",

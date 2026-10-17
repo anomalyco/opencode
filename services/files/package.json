@@ -7,12 +7,12 @@
     "build": "wrangler deploy --dry-run --env dev --outdir dist",
     "dev": "wrangler dev --env dev",
     "deploy": "wrangler deploy",
-    "typecheck": "tsgo --noEmit"
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "catalog:",
     "@tsconfig/node22": "catalog:",
-    "@typescript/native-preview": "catalog:",
+    "@typescript/native": "catalog:",
     "wrangler": "4.110.0"
   }
 }

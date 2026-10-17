@@ -9,7 +9,7 @@
     "dev": "wrangler dev",
     "db:migrate": "wrangler d1 migrations apply DB --remote",
     "test": "bun test",
-    "typecheck": "tsgo --noEmit"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "jose": "6.0.11",
@@ -21,7 +21,7 @@
     "@tsconfig/node22": "catalog:",
     "@types/bun": "catalog:",
     "@types/semver": "catalog:",
-    "@typescript/native-preview": "catalog:",
+    "@typescript/native": "catalog:",
     "wrangler": "4.110.0"
   }
 }

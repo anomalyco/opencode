@@ -30,7 +30,7 @@
     "generate": "bun run script/build.ts",
     "check:generated": "bun run generate && git diff --exit-code -- src/promise/generated src/effect/generated src/effect/api",
     "test": "bun test --timeout 5000",
-    "typecheck": "tsgo --noEmit"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@opencode/schema": "workspace:*",
@@ -53,7 +53,7 @@
     "@opencode/httpapi-codegen": "workspace:*",
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
-    "@typescript/native-preview": "catalog:",
+    "@typescript/native": "catalog:",
     "effect": "catalog:",
     "solid-js": "catalog:"
   }

@@ -21,7 +21,7 @@
   },
   "scripts": {
     "build": "bun run script/build.ts",
-    "typecheck": "tsgo --noEmit",
+    "typecheck": "tsc --noEmit",
     "test": "bun test"
   },
   "dependencies": {
@@ -31,6 +31,6 @@
   "devDependencies": {
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
-    "@typescript/native-preview": "catalog:"
+    "@typescript/native": "catalog:"
   }
 }

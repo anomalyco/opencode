@@ -8,7 +8,7 @@
     "deploy": "wrangler deploy",
     "dev": "wrangler dev",
     "test": "bun test",
-    "typecheck": "tsgo --noEmit"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "marked": "catalog:"
@@ -17,7 +17,7 @@
     "@cloudflare/workers-types": "catalog:",
     "@tsconfig/node22": "catalog:",
     "@types/bun": "catalog:",
-    "@typescript/native-preview": "catalog:",
+    "@typescript/native": "catalog:",
     "wrangler": "4.110.0"
   }
 }

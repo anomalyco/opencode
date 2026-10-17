@@ -47,7 +47,7 @@
   },
   "scripts": {
     "generate:progress-indicator": "bun script/generate-session-progress-indicator.ts",
-    "typecheck": "tsgo -b",
+    "typecheck": "tsc -b",
     "test": "bun test src --only-failures",
     "test:components": "playwright test --config playwright.components.config.ts",
     "test:components:ui": "playwright test --config playwright.components.config.ts --ui"
@@ -57,7 +57,7 @@
     "@playwright/test": "catalog:",
     "@tsconfig/node22": "catalog:",
     "@types/bun": "catalog:",
-    "@typescript/native-preview": "catalog:",
+    "@typescript/native": "catalog:",
     "vite": "catalog:",
     "vite-plugin-solid": "catalog:"
   },

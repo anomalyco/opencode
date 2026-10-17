@@ -12,7 +12,7 @@
   "scripts": {
     "audit:layouts": "bun run script/layout-audit.ts",
     "test": "bun test --timeout 30000 --only-failures",
-    "typecheck": "tsgo --noEmit"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@opencode/plugin": "workspace:*",
@@ -23,6 +23,6 @@
   "devDependencies": {
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
-    "@typescript/native-preview": "catalog:"
+    "@typescript/native": "catalog:"
   }
 }

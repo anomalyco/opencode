@@ -21,7 +21,7 @@
     "build:node": "bun run script/build-node.ts",
     "dev": "bun run src/index.ts",
     "test": "bun test --timeout 30000 --only-failures",
-    "typecheck": "tsgo -b"
+    "typecheck": "tsc -b"
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "1.6.0",
@@ -57,7 +57,7 @@
     "@opencode/protocol": "workspace:*",
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
-    "@typescript/native-preview": "catalog:",
+    "@typescript/native": "catalog:",
     "@lydell/node-pty-darwin-arm64": "1.2.0-beta.12",
     "@lydell/node-pty-darwin-x64": "1.2.0-beta.12",
     "@lydell/node-pty-linux-arm64": "1.2.0-beta.12",

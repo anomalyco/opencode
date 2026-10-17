@@ -10,7 +10,7 @@
     "email": "hello@opencode.ai"
   },
   "scripts": {
-    "typecheck": "tsgo -b",
+    "typecheck": "tsc -b",
     "test": "bun test --timeout 30000",
     "dev": "bun ./scripts/dev.ts",
     "migration": "bun ./scripts/migration.ts",
@@ -45,7 +45,7 @@
     "@solidjs/router": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
-    "@typescript/native-preview": "catalog:",
+    "@typescript/native": "catalog:",
     "app-builder-lib": "26.15.7",
     "drizzle-kit": "catalog:",
     "drizzle-orm": "catalog:",
@@ -55,7 +55,7 @@
     "electron-vite": "6.0.0-beta.1",
     "magic-string": "0.30.21",
     "solid-js": "catalog:",
-    "typescript": "~5.6.2",
+    "typescript": "catalog:",
     "vite": "8.2.2"
   },
   "optionalDependencies": {

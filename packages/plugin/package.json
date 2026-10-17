@@ -6,7 +6,7 @@
   "license": "MIT",
   "scripts": {
     "test": "bun test --only-failures",
-    "typecheck": "tsgo --noEmit",
+    "typecheck": "tsc --noEmit",
     "build": "tsc -p tsconfig.build.json"
   },
   "exports": {
@@ -66,6 +66,6 @@
     "@types/node": "catalog:",
     "solid-js": "catalog:",
     "typescript": "catalog:",
-    "@typescript/native-preview": "catalog:"
+    "@typescript/native": "catalog:"
   }
 }

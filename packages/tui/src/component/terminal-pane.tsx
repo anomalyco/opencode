@@ -65,7 +65,7 @@ export function TerminalPane(props: {
     if (terminalTheme) terminal?.write(terminalTheme)
   }
 
-  const send = (data: Uint8Array) => {
+  const send = (data: Uint8Array<ArrayBuffer>) => {
     if (attached && socket?.readyState === WebSocket.OPEN) socket.send(data)
   }
 

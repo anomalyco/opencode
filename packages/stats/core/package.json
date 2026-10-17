@@ -24,7 +24,7 @@
     "db:studio": "drizzle-kit studio --config=drizzle.config.ts",
     "honeycomb:backfill": "bun src/honeycomb-backfill.ts",
     "test": "bun test --only-failures",
-    "typecheck": "tsgo --noEmit"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@planetscale/database": "1.19.0",
@@ -36,7 +36,7 @@
     "@tsconfig/node22": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
-    "@typescript/native-preview": "catalog:",
+    "@typescript/native": "catalog:",
     "drizzle-kit": "catalog:",
     "typescript": "catalog:"
   },

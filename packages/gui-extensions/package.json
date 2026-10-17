@@ -14,7 +14,7 @@
     "./updater": "./src/updater/contract.ts"
   },
   "scripts": {
-    "typecheck": "tsgo -b",
+    "typecheck": "tsc -b",
     "test": "bun test"
   },
   "dependencies": {
@@ -55,7 +55,7 @@
     "@tsconfig/node22": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
-    "@typescript/native-preview": "catalog:",
+    "@typescript/native": "catalog:",
     "devtools-protocol": "0.0.1687809",
     "electron": "44.4.5",
     "electron-updater": "6.8.9",

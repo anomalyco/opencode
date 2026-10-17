@@ -7,7 +7,7 @@
   "scripts": {
     "setup:recording-env": "bun run script/setup-recording-env.ts",
     "test": "bun test --timeout 30000 --only-failures",
-    "typecheck": "tsgo --noEmit && tsgo --noEmit -p tsconfig.types.json",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.types.json",
     "build": "tsc -p tsconfig.build.json"
   },
   "files": [
@@ -25,7 +25,7 @@
     "@opencode/http-recorder": "workspace:*",
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
-    "@typescript/native-preview": "catalog:",
+    "@typescript/native": "catalog:",
     "typescript": "catalog:"
   },
   "dependencies": {

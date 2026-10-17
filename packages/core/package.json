@@ -24,7 +24,7 @@
     "build": "bun run script/build.ts",
     "update-models-snapshot": "bun run script/update-models-snapshot.ts",
     "test": "bun run script/test.ts",
-    "typecheck": "tsgo -b tsconfig.json tsconfig.tests.json"
+    "typecheck": "tsc -b tsconfig.json tsconfig.tests.json"
   },
   "exports": {
     "./*": "./src/*.ts"

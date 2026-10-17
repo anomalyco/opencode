@@ -23,7 +23,7 @@
     "skills-source.json"
   ],
   "scripts": {
-    "typecheck": "tsgo --noEmit",
+    "typecheck": "tsc --noEmit",
     "sync:skills": "bun run script/sync-skills.ts"
   },
   "dependencies": {
@@ -35,6 +35,6 @@
   "devDependencies": {
     "@tsconfig/bun": "1.0.9",
     "@types/bun": "1.4.0",
-    "@typescript/native-preview": "7.0.0-dev.20251207.1"
+    "@typescript/native": "npm:typescript@7.0.2"
   }
 }
