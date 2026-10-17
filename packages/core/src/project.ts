@@ -65,6 +65,8 @@ export interface ListInput {
   readonly archived?: boolean
 }
 
+const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/
+
 export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<ReadonlyArray<Info>>
   readonly update: (input: UpdateInput) => Effect.Effect<Info, NotFoundError>
@@ -274,7 +276,7 @@ const layer = Layer.effect(
     const cached = Effect.fnUntraced(function* (dir: string) {
       return yield* fs.readFileString(path.join(dir, "opencode")).pipe(
         Effect.map((value) => value.trim()),
-        Effect.map((value) => (value ? ID.make(value) : undefined)),
+        Effect.map((value) => (value && !CONTROL_CHARACTERS.test(value) ? ID.make(value) : undefined)),
         Effect.orElseSucceed(() => undefined),
       )
     })
