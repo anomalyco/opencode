@@ -309,6 +309,26 @@ it.live("vp detection ignores no-match output that repeats the package name", ()
   }),
 )
 
+it.live("check reports updates unavailable when the updater is disabled", () =>
+  Effect.gen(function* () {
+    yield* Effect.acquireRelease(
+      Effect.sync(() => {
+        process.env.OPENCODE_DISABLE_AUTOUPDATE = "1"
+      }),
+      () =>
+        Effect.sync(() => {
+          delete process.env.OPENCODE_DISABLE_AUTOUPDATE
+        }),
+    )
+    const test = yield* fixture()
+    expect(yield* test.updater.check()).toEqual({
+      type: "unavailable",
+      message: "Updates are disabled for this installation. Use your package manager to update OpenCode instead.",
+    })
+    expect(test.commands).toHaveLength(0)
+  }),
+)
+
 it.live("Homebrew Core installs check and upgrade the Core formula", () =>
   Effect.gen(function* () {
     const test = yield* fixture(() => ({}), "@opencode/cli", false, "anomalyco/tap/opencode-v2", "opencode")

@@ -17,6 +17,8 @@ export type Method = (typeof methods)[number]
 export type RunResult = { readonly type: "available" | "installed"; readonly version: string }
 export type CheckResult = RunResult | { readonly type: "unavailable"; readonly message: string }
 
+const autoUpdateDisabled = () => ["1", "true"].includes(process.env.OPENCODE_DISABLE_AUTOUPDATE?.toLowerCase() ?? "")
+
 export class UpgradeError extends Error {
   readonly title: string
   readonly detail: string
@@ -531,7 +533,7 @@ const make = Effect.gen(function* () {
   })
 
   const inspect = Effect.fnUntraced(function* () {
-    if (OPENCODE_LOCAL || ["1", "true"].includes(process.env.OPENCODE_DISABLE_AUTOUPDATE?.toLowerCase() ?? "")) {
+    if (OPENCODE_LOCAL || autoUpdateDisabled()) {
       yield* Effect.logInfo("update check skipped", {
         reason: OPENCODE_LOCAL ? "local-install" : "disabled",
         version: OPENCODE_VERSION,
@@ -583,6 +585,11 @@ const make = Effect.gen(function* () {
   })
 
   const check = Effect.fn("cli.updater.check")(function* () {
+    if (autoUpdateDisabled())
+      return {
+        type: "unavailable" as const,
+        message: "Updates are disabled for this installation. Use your package manager to update OpenCode instead.",
+      }
     if (OPENCODE_LOCAL)
       return {
         type: "unavailable" as const,
