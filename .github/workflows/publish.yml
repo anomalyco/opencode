@@ -34,6 +34,8 @@ permissions:
   id-token: write
   contents: write
   packages: write
+  # Desktop jobs poll this run's artifacts and jobs while the CLI builds.
+  actions: read
 
 env:
   OPENCODE_CHANNEL: ${{ (github.ref_name == 'dev' && !inputs.bump && !inputs.version && 'dev') || '' }}
@@ -336,9 +338,9 @@ jobs:
 
   build-electron:
     # Desktop packaging re-signs the bundled CLI on macOS and Windows, so it starts from the unsigned build.
+    # It builds the app while build-cli runs and waits for its own CLI just before Prepare.
     needs:
       - version
-      - build-cli
     if: github.repository == 'anomalyco/opencode' && ((github.ref_name == 'dev' && needs.version.outputs.release != '') || github.ref_name == 'beta')
     continue-on-error: false
     env:
@@ -384,11 +386,6 @@ jobs:
     steps:
       - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
 
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          name: cli-unsigned-${{ matrix.settings.cli }}
-          path: packages/cli/dist
-
       - uses: apple-actions/import-codesign-certs@8f3fb608891dd2244cdab3d69cd68c0d37a7fe93 # v2.0.0
         if: runner.os == 'macOS'
         with:
@@ -403,14 +400,6 @@ jobs:
       - uses: ./.github/actions/setup-bun
         with:
           install-flags: ${{ matrix.settings.bun_install_flags }}
-
-      - name: Azure login
-        if: runner.os == 'Windows'
-        uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2.3.0
-        with:
-          client-id: ${{ env.AZURE_CLIENT_ID }}
-          tenant-id: ${{ env.AZURE_TENANT_ID }}
-          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
@@ -440,17 +429,10 @@ jobs:
           opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
           opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
 
-      - name: Prepare
-        run: bun ./scripts/prepare.ts
-        working-directory: packages/desktop
-        env:
-          OPENCODE_VERSION: ${{ needs.version.outputs.version }}
-          OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
-          OPENCODE_CLI_TARGET: ${{ matrix.settings.target }}
-          OPENCODE_CLI_DIST: ${{ github.workspace }}/packages/cli/dist
-
-      - name: Build
-        run: bun run build
+      # The app builds before its CLI exists. `bun run build` would run the prebuild hook, which copies the CLI;
+      # Prepare runs it once the CLI is here.
+      - name: Build app
+        run: bun run electron-vite build
         working-directory: packages/desktop
         env:
           NODE_OPTIONS: --max-old-space-size=4096
@@ -463,6 +445,35 @@ jobs:
           VITE_SENTRY_DSN: ${{ vars.WEB_SENTRY_DSN }}
           VITE_SENTRY_ENVIRONMENT: ${{ (github.ref_name == 'beta' && 'beta') || 'production' }}
           VITE_SENTRY_RELEASE: desktop@${{ needs.version.outputs.version }}
+          OPENCODE_CLI_TARGET: ${{ matrix.settings.target }}
+
+      # The job name is the one GitHub gives the build-cli leg for this target.
+      - name: Wait for the CLI
+        run: bun ./script/wait-for-artifact.ts cli-unsigned-${{ matrix.settings.cli }} "build-cli (${{ matrix.settings.cli }})"
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: cli-unsigned-${{ matrix.settings.cli }}
+          path: packages/cli/dist
+
+      # az requests new Azure tokens with the GitHub OIDC token, which expires 5 minutes after login. Prepare requests
+      # the first signing token, so a login before a long wait would fail it with AADSTS700024.
+      - name: Azure login
+        if: runner.os == 'Windows'
+        uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2.3.0
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Prepare
+        run: bun ./scripts/prepare.ts
+        working-directory: packages/desktop
+        env:
+          OPENCODE_VERSION: ${{ needs.version.outputs.version }}
+          OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
           OPENCODE_CLI_TARGET: ${{ matrix.settings.target }}
           OPENCODE_CLI_DIST: ${{ github.workspace }}/packages/cli/dist
 
