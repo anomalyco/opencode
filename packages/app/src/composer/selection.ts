@@ -10,14 +10,35 @@ import { useModels } from "@/providers/models/models"
 import { cycleModelVariant, getConfiguredAgentVariant, resolveModelVariant } from "@/providers/models/variant"
 import { useComposerState } from "./persistence"
 import { useConfiguredModel } from "@/providers/models/configured"
+import { consoleProviderGroup, consoleProviderName } from "@/providers/catalog/console"
 
 export function createComposerControls(input: { model?: ModelSelection } = {}) {
   const local = useLocal()
   const sdk = useWorkspaceLocation()
   const data = useData()
   const providers = useProviders(() => sdk().directory)
+  const canonical = (provider: { id: string; canonical?: string }) =>
+    provider.canonical ?? provider.id.replace(/^console-/, "")
+
+  // Like the model picker, a Console-managed provider drops its "Workspace / " prefix unless the
+  // same provider is also connected directly and the workspace is what tells them apart.
+  const providerName = (providerID: string) => {
+    const provider = providers.all().get(providerID)
+
+    if (!provider) return providerID
+    const all = [...providers.all().values()]
+    const managed = consoleProviderGroup(all)
+
+    if (!managed?.providers.includes(provider)) return provider.name
+    const direct = all.some((item) => !managed.providers.includes(item) && canonical(item) === canonical(provider))
+
+    return direct ? provider.name : consoleProviderName(managed, provider.name)
+  }
 
   return createMemo<ComposerControls>(() => {
+    const selection = input.model ?? local.model
+    const key = selection.key()
+
     return {
       agents: {
         available: normalizeAgentList(data.location.agent.list({ directory: sdk().directory }) ?? []),
@@ -27,11 +48,14 @@ export function createComposerControls(input: { model?: ModelSelection } = {}) {
         select: local.agent.set,
       },
       model: {
-        selection: input.model ?? local.model,
+        selection,
+        // A model the catalog no longer offers still names its provider.
+        providerName: key && providerName(key.providerID),
         paid: providers.paid().length > 0,
+        // The session's model applies only to its agent, so resolve agents before showing a model.
         loading:
-          !(input.model ?? local.model).ready() ||
-          (local.agent.visible() && data.location.agent.list({ directory: sdk().directory }) === undefined) ||
+          !selection.ready() ||
+          data.location.agent.list({ directory: sdk().directory }) === undefined ||
           !providers.ready(),
       },
     }
@@ -78,14 +102,18 @@ export function createComposerModelSelection(input: {
       return modelID ? [{ providerID: provider.id, modelID }] : []
     })[0]
 
-  const current = () => {
+  const key = () => {
     if (!configuredModel.ready()) return
 
-    const key = [prompt.model.current(), input.agent()?.model, configuredModel(), recent(), fallback()].find(
+    return [prompt.model.current(), input.agent()?.model, configuredModel(), recent(), fallback()].find(
       (item): item is ModelKey => !!item && valid(item),
     )
+  }
 
-    return key ? models.find(key) : undefined
+  const current = () => {
+    const item = key()
+
+    return item ? models.find(item) : undefined
   }
 
   const recentModels = createMemo(() =>
@@ -99,6 +127,7 @@ export function createComposerModelSelection(input: {
     trackSessionCommit: local.model.trackSessionCommit,
     remembered: () => Object.fromEntries(Object.entries(remembered).map(([name, model]) => [name, { model }])),
     ready: Object.assign(() => models.ready() && configuredModel.ready(), { promise: models.ready.promise }),
+    key,
     current,
     recent: recentModels,
     list: models.list,

@@ -22,6 +22,7 @@ const selectedModel = {
 
 const selection = {
   ready: Object.assign(() => true, { promise: undefined }),
+  key: () => ({ providerID: "provider-1", modelID: "model-1" }),
   current: () => selectedModel,
   recent: () => [selectedModel],
   list: () => [selectedModel],

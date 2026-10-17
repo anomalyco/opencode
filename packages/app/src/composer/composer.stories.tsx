@@ -79,6 +79,7 @@ function ComposerStory(props: {
 
   const modelSelection = {
     ready: Object.assign(() => true, { promise: undefined }),
+    key: () => ({ providerID: modelOption().provider.id, modelID: modelOption().id }),
     current: () => modelOption(),
     recent: () => [modelOption()],
     list: () => [modelOption()],

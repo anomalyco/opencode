@@ -17,6 +17,7 @@ export type ComposerControls = {
   }
   model: {
     selection: ModelSelection
+    providerName?: string
     paid: boolean
     loading: boolean
   }

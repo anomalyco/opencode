@@ -58,6 +58,7 @@ const storyComposerModel = {
 
 const modelSelection = {
   ready: modelReady,
+  key: () => ({ providerID: storyComposerModel.provider.id, modelID: storyComposerModel.id }),
   current: () => storyComposerModel,
   recent: () => [storyComposerModel],
   list: () => [storyComposerModel],

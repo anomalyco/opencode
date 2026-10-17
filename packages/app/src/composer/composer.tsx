@@ -4,7 +4,6 @@ import { Button } from "@opencode/ui/button"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { Icon } from "@opencode/ui/icon"
 import { Keybind } from "@opencode/ui/keybind"
-import { ProviderModelIcon } from "@/providers/models/provider-group"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { ComposerEditor } from "./editor/editor"
 import { ModelSelectorPopover } from "@/providers/models/select-dialog"
@@ -23,6 +22,17 @@ export function Composer(props: {
   const dialog = useDialog()
   const command = useCommand()
   const language = useLanguage()
+  const modelName = () => {
+    const selection = props.model.model.selection
+    const model = selection.current()
+
+    if (model) return model.name
+    const key = selection.key()
+
+    if (key) return language.t("dialog.model.unavailable", { model: key.modelID })
+
+    return language.t("dialog.model.select.title")
+  }
 
   return (
     <div class="flex flex-col gap-3">
@@ -44,8 +54,8 @@ export function Composer(props: {
             title={language.t("command.model.choose")}
             keybind={command.keybindParts("model.choose")}
             model={props.model.model.selection}
-            provider={props.model.model.selection.current()?.provider}
-            modelName={props.model.model.selection.current()?.name ?? language.t("dialog.model.select.title")}
+            providerName={props.model.model.providerName}
+            modelName={modelName()}
             onClose={props.model.restoreFocus}
             onUnpaidClick={() => dialog.show(() => <DialogSelectModelUnpaid model={props.model.model.selection} />)}
           />
@@ -61,7 +71,7 @@ function ComposerModelControl(props: {
   title: string
   keybind: string[]
   model: ComposerModel["model"]["selection"]
-  provider?: { id: string; canonical?: string; name: string }
+  providerName?: string
   modelName: string
   onClose: () => void
   onUnpaidClick: () => void
@@ -71,15 +81,17 @@ function ComposerModelControl(props: {
 
   const content = () => (
     <>
-      <Show when={props.provider}>
-        {(provider) => (
-          <ProviderModelIcon
-            provider={provider()}
-            class="shrink-0 opacity-40 transition-opacity duration-150 group-hover:opacity-100"
-          />
-        )}
-      </Show>
-      <span class="truncate leading-4">{props.modelName}</span>
+      <span class="flex min-w-0 whitespace-nowrap leading-4">
+        <Show when={props.providerName}>
+          {(name) => (
+            <>
+              <span class="shrink-0 text-v2-text-text-faint">{name()}</span>
+              <span class="shrink-0 whitespace-pre text-v2-text-text-faint">{" / "}</span>
+            </>
+          )}
+        </Show>
+        <span class="truncate">{props.modelName}</span>
+      </span>
       <span class="-ml-0.5 -mr-1 flex shrink-0">
         <Icon name="chevron-down" />
       </span>
@@ -107,7 +119,7 @@ function ComposerModelControl(props: {
               data-control-type="dialog"
               variant="ghost-muted"
               size="normal"
-              class="min-w-0 max-w-[220px] justify-start ![font-weight:440] group"
+              class="min-w-0 max-w-[60cqw] justify-start ![font-weight:440]"
               classList={{ "animate-in fade-in": shouldAnimate() }}
               style={{ height: "28px" }}
               onClick={props.onUnpaidClick}
@@ -125,7 +137,7 @@ function ComposerModelControl(props: {
                 variant="ghost-muted"
                 size="normal"
                 style={{ height: "28px" }}
-                class="min-w-0 max-w-[220px] justify-start ![font-weight:440] group"
+                class="min-w-0 max-w-[60cqw] justify-start ![font-weight:440]"
                 classList={{ "animate-in fade-in": shouldAnimate() }}
                 data-action="composer-model"
                 data-control-type={mobile() ? "drawer" : "popover"}

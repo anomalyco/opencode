@@ -266,18 +266,24 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       },
     }
 
-    const current = createMemo(() => {
+    // The chosen model, kept even when the catalog no longer offers it.
+    const key = createMemo<ModelKey | undefined>(() => {
       if (!configuredModel.ready()) return
 
       const session = durable()
 
       // Catalog availability must not replace a user's choice with a default on the next submission.
-      const item =
+      return (
         scope()?.model ??
         (session?.model && (!session.agent || session.agent === agent.current()?.name)
           ? { providerID: session.model.providerID, modelID: session.model.id }
           : undefined) ??
         firstModel(() => agent.current()?.model, fallback)
+      )
+    })
+
+    const current = createMemo(() => {
+      const item = key()
 
       if (!item) return
 
@@ -384,6 +390,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
     const model = {
       ready: Object.assign(() => models.ready() && configuredModel.ready(), { promise: models.ready.promise }),
+      key,
       current,
       recent,
       list: models.list,
