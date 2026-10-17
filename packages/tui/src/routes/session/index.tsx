@@ -1404,7 +1404,7 @@ export function Session(props: {
                   visible: showScrollbar(),
                   trackOptions: {
                     backgroundColor: theme.decrease(theme.background.raised.base),
-                    foregroundColor: theme.border.base,
+                    foregroundColor: theme.scrollbar.base,
                   },
                 }}
                 stickyScroll={!navigationMessage() && !navigationSlack()}
