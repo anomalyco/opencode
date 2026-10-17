@@ -6,7 +6,6 @@ import { Session } from "@opencode/schema/session"
 import { optional } from "@opencode/schema/schema"
 
 export const MAX_FILE_BYTES = 5 * 1024 * 1024
-export const TUNNEL_CHUNK_BYTES = 64 * 1024
 export const MAX_TEXT = 100_000
 const text = Schema.String.check(Schema.isMaxLength(MAX_TEXT))
 const short = Schema.String.check(Schema.isMaxLength(2_048))
@@ -528,13 +527,9 @@ export const TunnelTarget = Schema.Struct({
   port: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65_535 })),
 })
 export type TunnelTarget = typeof TunnelTarget.Type
-const tunnel = { ...attachment, tunnelID: short }
-const bytes = Schema.Uint8ArrayFromBase64.check(Schema.isMaxLength(TUNNEL_CHUNK_BYTES))
-export const TunnelRead = Schema.Struct({ data: bytes, eof: Schema.Boolean })
-export type TunnelRead = typeof TunnelRead.Type
 const errors = { unavailable: Schema.Struct({}) }
 export const Control = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("attached"), connectionID: Schema.String, version: Schema.Literal(4) }),
+  Schema.Struct({ type: Schema.Literal("attached"), connectionID: Schema.String, version: Schema.Literal(5) }),
   Schema.Struct({
     type: Schema.Literal("command"),
     connectionID: Schema.String,
@@ -549,21 +544,19 @@ export const Definition = Rpc.define({
   id: "experimental.browser",
   methods: {
     attach: {
-      input: Schema.Struct({ ...attachment, version: Schema.Literal(4) }),
+      input: Schema.Struct({ ...attachment, version: Schema.Literal(5) }),
       output: Schema.Literals(["closed", "replaced"]),
       errors,
     },
     state: { input: Schema.Struct({ ...attachment, state: State }), output: Schema.Void, errors },
     command: { input: Schema.Struct(request), output: Command, errors },
     result: { input: Schema.Struct({ ...request, outcome: Outcome }), output: Schema.Void, errors },
-    "tunnel.open": { input: Schema.Struct({ ...attachment, target: TunnelTarget }), output: short, errors },
-    "tunnel.read": { input: Schema.Struct(tunnel), output: TunnelRead, errors },
-    "tunnel.write": {
-      input: Schema.Struct({ ...tunnel, data: bytes, end: optional(Schema.Boolean) }),
+    tunnel: {
+      websocket: true,
+      input: Schema.Struct({ ...attachment, target: TunnelTarget }),
       output: Schema.Void,
       errors,
     },
-    "tunnel.close": { input: Schema.Struct(tunnel), output: Schema.Void, errors },
   },
   events: { control: { schema: Control } },
 })

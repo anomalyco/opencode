@@ -14,10 +14,7 @@ import { Schema } from "effect"
 import { Browser } from "./rpc.js"
 
 export type Transport = {
-  open(target: Browser.TunnelTarget, signal: AbortSignal): Promise<string>
-  read(id: string, signal: AbortSignal): Promise<Browser.TunnelRead>
-  write(id: string, data: Uint8Array, end: boolean, signal: AbortSignal): Promise<void>
-  close(id: string): Promise<void>
+  open(target: Browser.TunnelTarget, signal: AbortSignal): Promise<Duplex>
 }
 export type Proxy = Awaited<ReturnType<typeof make>>
 
@@ -43,8 +40,7 @@ export async function make(transport: Transport) {
     if (signal.aborted) cancel()
     pending.add(abort)
     try {
-      const id = await transport.open(target, abort.signal)
-      const socket = new TunnelSocket(transport, id)
+      const socket = await transport.open(target, abort.signal)
       if (closed || abort.signal.aborted) {
         socket.destroy()
         throw new Error("Browser proxy connection was cancelled")
@@ -246,82 +242,4 @@ function target(url: URL) {
     host: url.hostname.replace(/^\[|\]$/g, ""),
     port: url.port ? Number(url.port) : url.protocol === "https:" || url.protocol === "wss:" ? 443 : 80,
   })
-}
-
-class TunnelSocket extends Duplex {
-  readonly connecting = false
-  private readonly abort = new AbortController()
-  private pending = false
-
-  constructor(
-    private readonly transport: Transport,
-    private readonly id: string,
-  ) {
-    super({ highWaterMark: Browser.TUNNEL_CHUNK_BYTES, allowHalfOpen: true })
-    this.on("error", () => this.destroy())
-  }
-  override _read() {
-    if (this.pending || this.destroyed) return
-    this.pending = true
-    void this.transport.read(this.id, this.abort.signal).then(
-      (result) => {
-        this.pending = false
-        if (this.destroyed) return
-        if (result.eof) {
-          this.push(null)
-          return
-        }
-        if (this.push(result.data)) this._read()
-      },
-      (error: unknown) => this.destroy(asError(error)),
-    )
-  }
-  override _write(chunk: Buffer | string, encoding: BufferEncoding, callback: (error?: Error | null) => void) {
-    const data = typeof chunk === "string" ? Buffer.from(chunk, encoding) : chunk
-    void (async () => {
-      for (let offset = 0; offset < data.byteLength; offset += Browser.TUNNEL_CHUNK_BYTES)
-        await this.transport.write(
-          this.id,
-          data.subarray(offset, offset + Browser.TUNNEL_CHUNK_BYTES),
-          false,
-          this.abort.signal,
-        )
-    })().then(
-      () => callback(),
-      (error: unknown) => callback(asError(error)),
-    )
-  }
-  override _final(callback: (error?: Error | null) => void) {
-    void this.transport.write(this.id, new Uint8Array(), true, this.abort.signal).then(
-      () => callback(),
-      (error: unknown) => callback(asError(error)),
-    )
-  }
-  override _destroy(error: Error | null, callback: (error?: Error | null) => void) {
-    this.abort.abort()
-    void this.transport
-      .close(this.id)
-      .catch(() => undefined)
-      .then(() => callback(error))
-  }
-  setKeepAlive() {
-    return this
-  }
-  setNoDelay() {
-    return this
-  }
-  setTimeout(_timeout: number, callback?: () => void) {
-    if (callback) this.once("timeout", callback)
-    return this
-  }
-  ref() {
-    return this
-  }
-  unref() {
-    return this
-  }
-}
-
-function asError(error: unknown) {
-  return error instanceof Error ? error : new Error(String(error))
 }

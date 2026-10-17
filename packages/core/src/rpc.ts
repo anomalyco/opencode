@@ -9,6 +9,7 @@ import type { Tool } from "@opencode/schema/tool"
 import type { StandardSchemaV1 } from "@standard-schema/spec"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Context, Deferred, Effect, JsonSchema, Layer, Schema, SchemaRepresentation, Stream } from "effect"
+import type { Socket } from "effect/socket"
 import { Bus } from "./bus.js"
 import { Location } from "./location.js"
 import { optional, statics } from "./schema.js"
@@ -17,6 +18,12 @@ export interface Interface {
   readonly register: RpcDomain["register"]
   readonly client: <D extends Rpc.Definition>(definition: D) => RpcClient<D, Rpc.SystemError, never, unknown>
   readonly call: (rpcID: string, method: string, input: unknown) => Effect.Effect<unknown, Rpc.Failure>
+  readonly connect: (
+    rpcID: string,
+    method: string,
+    input: unknown,
+    socket: Effect.Effect<Socket.Socket>,
+  ) => Effect.Effect<unknown, Rpc.Failure>
   readonly close: Effect.Effect<void>
 }
 
@@ -105,7 +112,12 @@ const layer = Layer.effect(
       }
     })
 
-    const call = Effect.fn("Rpc.call")(function* (rpcID: string, name: string, input: unknown) {
+    const call = Effect.fn("Rpc.call")(function* (
+      rpcID: string,
+      name: string,
+      input: unknown,
+      socket?: Effect.Effect<Socket.Socket>,
+    ) {
       if (yield* Deferred.isDone(closed))
         return yield* Effect.fail(failure("rpc.unavailable", `RPC is unavailable: ${rpcID}`))
       const entry = registrations.get(rpcID)?.at(-1)
@@ -113,13 +125,18 @@ const layer = Layer.effect(
       if (!Object.hasOwn(entry.definition.methods, name) || !Object.hasOwn(entry.handlers, name))
         return yield* Effect.fail(failure("rpc.method_not_found", `Unknown RPC method: ${rpcID}.${name}`))
       const method = entry.definition.methods[name]
+      if (!!method.websocket !== !!socket)
+        return yield* Effect.fail(failure("rpc.method_not_found", `Unsupported RPC transport: ${rpcID}.${name}`))
       const handler = entry.handlers[name]
       const parsed = yield* parse(method.input, input).pipe(
         Effect.mapError((error) => failure("rpc.invalid_input", errorMessage(error, "Invalid RPC input"))),
       )
       const result = yield* Effect.suspend(() => {
         // The heterogeneous registry erases handlers after their selected schema validates input.
-        const execution: Effect.Effect<unknown, unknown> = handler(parsed, callContext)
+        const execution: Effect.Effect<unknown, unknown> = handler(
+          parsed,
+          socket ? { ...callContext, socket } : callContext,
+        )
         return execution
       }).pipe(
         Effect.catch((error) => encodeError(method, error)),
@@ -144,14 +161,16 @@ const layer = Layer.effect(
     const client = <D extends Rpc.Definition>(definition: D): RpcClient<D, Rpc.SystemError, never, unknown> => {
       const events = eventsFor(definition)
       const methods = Object.fromEntries(
-        Object.entries(definition.methods).map(([name, method]) => [
-          name,
-          (input: unknown) =>
-            call(definition.id, name, input).pipe(
-              Effect.catch((error) => decodeError(method, error)),
-              Effect.flatMap((value) => read(method.output, value).pipe(Effect.catch((cause) => Effect.die(cause)))),
-            ),
-        ]),
+        Object.entries(definition.methods)
+          .filter(([, method]) => !method.websocket)
+          .map(([name, method]) => [
+            name,
+            (input: unknown) =>
+              call(definition.id, name, input).pipe(
+                Effect.catch((error) => decodeError(method, error)),
+                Effect.flatMap((value) => read(method.output, value).pipe(Effect.catch((cause) => Effect.die(cause)))),
+              ),
+          ]),
       )
       // SAFETY: Every runtime key comes from this definition, and each method delegates through its corresponding schema.
       // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
@@ -170,7 +189,13 @@ const layer = Layer.effect(
       } as RpcClient<D, Rpc.SystemError, never, unknown>
     }
 
-    return Service.of({ register, call, client, close: Deferred.succeed(closed, undefined).pipe(Effect.asVoid) })
+    return Service.of({
+      register,
+      call: (id, name, input) => call(id, name, input),
+      connect: call,
+      client,
+      close: Deferred.succeed(closed, undefined).pipe(Effect.asVoid),
+    })
   }),
 )
 

@@ -17,7 +17,7 @@ export type RpcClient<
   Options = RpcCallOptions,
   EventError = E,
 > = {
-  readonly [Name in keyof D["methods"]]: (
+  readonly [Name in keyof D["methods"] as D["methods"][Name] extends { readonly websocket: true } ? never : Name]: (
     ...args: RpcArguments<Rpc.Input<D["methods"][Name]["input"]>, Options>
   ) => Effect.Effect<
     Rpc.Output<D["methods"][Name]["output"]>,
@@ -41,44 +41,46 @@ export function make<CallError, EventError>(
 ): RpcApi<Exclude<CallError, RpcError | RpcInternalError> | Rpc.SystemError, RpcCallOptions, EventError> {
   return <D extends Rpc.Definition>(definition: D) => {
     const methods = Object.fromEntries(
-      Object.entries(definition.methods).map(([name, method]) => [
-        name,
-        (input?: unknown, options?: RpcCallOptions) => {
-          const result = Effect.gen(function* () {
-            const response = yield* call(
-              {
-                rpcID: definition.id,
-                method: name,
-                input,
-                location: options?.location,
-              },
-              options,
+      Object.entries(definition.methods)
+        .filter(([, method]) => !method.websocket)
+        .map(([name, method]) => [
+          name,
+          (input?: unknown, options?: RpcCallOptions) => {
+            const result = Effect.gen(function* () {
+              const response = yield* call(
+                {
+                  rpcID: definition.id,
+                  method: name,
+                  input,
+                  location: options?.location,
+                },
+                options,
+              )
+              return yield* RpcRuntime.read(method.output, response.output)
+            }).pipe(Effect.catch((error) => RpcRuntime.readError(method, error)))
+            const signal = options?.signal
+            if (!signal) return result
+            return Effect.suspend(() =>
+              signal.aborted
+                ? Effect.interrupt
+                : Effect.raceFirst(result, Effect.andThen(aborted(signal), Effect.interrupt)),
             )
-            return yield* RpcRuntime.read(method.output, response.output)
-          }).pipe(Effect.catch((error) => RpcRuntime.readError(method, error)))
-          const signal = options?.signal
-          if (!signal) return result
-          return Effect.suspend(() =>
-            signal.aborted
-              ? Effect.interrupt
-              : Effect.raceFirst(result, Effect.andThen(aborted(signal), Effect.interrupt)),
-          )
-        },
-      ]),
+          },
+        ]),
     )
     // SAFETY: Every runtime key comes from this definition, and each value is decoded through its corresponding schema.
     // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
     return Object.assign(methods, {
-        events: {
-          subscribe: (name: keyof D["events"] & string) => {
-            const type = RpcRuntime.eventType(definition, name)
-            if (!Object.hasOwn(definition.events, name)) return Stream.fail(new Error(`Unknown RPC event: ${type}`))
-            const schema = definition.events[name]
-            return subscribe().pipe(
-              Stream.filter((event): event is RpcEvent => event.type === type),
-              Stream.mapEffect((event) => RpcRuntime.event(definition, name, schema, event)),
-            )
-          },
+      events: {
+        subscribe: (name: keyof D["events"] & string) => {
+          const type = RpcRuntime.eventType(definition, name)
+          if (!Object.hasOwn(definition.events, name)) return Stream.fail(new Error(`Unknown RPC event: ${type}`))
+          const schema = definition.events[name]
+          return subscribe().pipe(
+            Stream.filter((event): event is RpcEvent => event.type === type),
+            Stream.mapEffect((event) => RpcRuntime.event(definition, name, schema, event)),
+          )
+        },
       },
     }) as RpcClient<D, Exclude<CallError, RpcError | RpcInternalError> | Rpc.SystemError, RpcCallOptions, EventError>
   }

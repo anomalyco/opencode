@@ -1,37 +1,45 @@
 import { net, session, type WebContents } from "electron"
-import type { RpcClient } from "@opencode/client/effect/api"
 import type { Session } from "@opencode/schema/session"
-import { Browser } from "@opencode/plugin-browser/rpc"
 import { BrowserProxy } from "@opencode/plugin-browser/proxy"
+import { BrowserStream } from "@opencode/plugin-browser/stream"
+import { NodeSocket } from "@effect/platform-node"
 import { Effect } from "effect"
-import { Base64 } from "effect/encoding"
+import { Socket } from "effect/socket"
 
 export type BrowserNetwork = Effect.Success<ReturnType<typeof createBrowserNetwork>>
 
 export const createBrowserNetwork = Effect.fn("BrowserNetwork.create")(function* (input: {
-  rpc: RpcClient<typeof Browser.Definition, unknown>
+  server: { url: string; headers: Readonly<Record<string, string>> }
   attachment: { sessionID: Session.ID; connectionID: string }
   location: { directory: string; workspace?: string }
   partition: string
 }) {
-  const options = { location: input.location }
-
   const proxy = yield* Effect.acquireRelease(
     Effect.tryPromise(() =>
       BrowserProxy.make({
-        open: (target, signal) =>
-          Effect.runPromise(input.rpc["tunnel.open"]({ ...input.attachment, target }, options), { signal }),
-        read: (tunnelID, signal) =>
-          Effect.runPromise(input.rpc["tunnel.read"]({ ...input.attachment, tunnelID }, options), { signal }),
-        write: (tunnelID, data, end, signal) =>
-          Effect.runPromise(
-            input.rpc["tunnel.write"]({ ...input.attachment, tunnelID, data: Base64.encode(data), end }, options),
-            { signal },
-          ),
-        close: (tunnelID) =>
-          Effect.runPromise(
-            input.rpc["tunnel.close"]({ ...input.attachment, tunnelID }, options).pipe(Effect.timeout("5 seconds")),
-          ),
+        open: (target, signal) => {
+          const url = new URL(`${input.server.url.replace(/\/$/, "")}/api/rpc/experimental.browser/tunnel/socket`)
+          url.protocol = url.protocol === "https:" ? "wss:" : "ws:"
+          url.searchParams.set("location[directory]", input.location.directory)
+          url.searchParams.set("input", JSON.stringify({ ...input.attachment, target }))
+
+          return BrowserStream.open(
+            Socket.fromWebSocket(
+              Effect.acquireRelease(
+                Effect.sync(
+                  () =>
+                    new NodeSocket.NodeWS.WebSocket(url, {
+                      headers: input.server.headers,
+                      maxPayload: BrowserStream.FRAME_BYTES + 1,
+                      perMessageDeflate: false,
+                    }),
+                ),
+                (ws) => Effect.sync(() => ws.terminate()),
+              ),
+            ),
+            signal,
+          )
+        },
       }),
     ),
     (proxy) => Effect.promise(() => proxy.close()),

@@ -2,11 +2,12 @@ import type { RpcApi } from "@opencode/client/effect/api"
 export type { RpcClient } from "@opencode/client/effect/api"
 import type { Rpc } from "@opencode/schema/rpc"
 import type { Effect, Scope } from "effect"
+import type { Socket } from "effect/socket"
 import type { Registration } from "./registration.js"
 
-export interface RpcCallContext<M extends Rpc.Method> {
+export type RpcCallContext<M extends Rpc.Method> = {
   readonly error: Rpc.ErrorFactory<M>
-}
+} & (M extends { readonly websocket: true } ? { readonly socket: Effect.Effect<Socket.Socket> } : {})
 
 export type RpcHandlers<D extends Rpc.Definition> = {
   readonly [Name in keyof D["methods"]]: (

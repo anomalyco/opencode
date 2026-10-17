@@ -111,17 +111,9 @@ test.each([
   }
 })
 
-test("network RPC is bounded bytes and does not add model tools", () => {
+test("network transport validates targets and does not add model tools", () => {
   expect(Browser.Operations.some((operation) => operation.name.startsWith("tunnel."))).toBe(false)
-  expect(Schema.decodeUnknownSync(Browser.TunnelRead)({ data: "AAEC", eof: false }).data).toEqual(
-    new Uint8Array([0, 1, 2]),
-  )
-  expect(() =>
-    Schema.decodeUnknownSync(Browser.TunnelRead)({
-      data: Buffer.alloc(Browser.TUNNEL_CHUNK_BYTES + 1).toString("base64"),
-      eof: false,
-    }),
-  ).toThrow()
+  expect(() => Schema.decodeUnknownSync(Browser.TunnelTarget)({ host: "bad/host", port: 80 })).toThrow()
   expect(() => Schema.decodeUnknownSync(Browser.TunnelTarget)({ host: "localhost", port: 0 })).toThrow()
 })
 

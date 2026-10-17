@@ -164,7 +164,7 @@ export function createBrowserPane(input: {
             const attachment = { sessionID, connectionID: crypto.randomUUID() }
             const rpc = client.rpc(Browser.Definition)
             entry.network = yield* createBrowserNetwork({
-              rpc,
+              server,
               attachment,
               location: options.location,
               partition: entry.partition,
@@ -281,7 +281,7 @@ export function createBrowserPane(input: {
               receive,
               Stream.fromQueue(outbound).pipe(Stream.runForEach((send) => send)),
               Deferred.await(connected).pipe(
-                Effect.andThen(rpc.attach({ ...attachment, version: 4 }, options)),
+                Effect.andThen(rpc.attach({ ...attachment, version: 5 }, options)),
                 Effect.tap((result) =>
                   Effect.sync(() => {
                     if (result === "replaced") reason = "browser.pane.replaced"

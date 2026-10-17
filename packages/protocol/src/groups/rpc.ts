@@ -27,4 +27,22 @@ export const RpcGroup = HttpApiGroup.make("server.rpc")
         }),
       ),
   )
+  .add(
+    HttpApiEndpoint.get("rpc.connect", "/api/rpc/:rpcID/:method/socket", {
+      params: { rpcID: Schema.String, method: Schema.String },
+      query: Schema.Struct({ ...LocationQuery.fields, input: Schema.String }),
+      success: Schema.Void,
+      error: [RpcError, RpcInternalError],
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "rpc.connect",
+          summary: "Connect a plugin WebSocket",
+          description:
+            "Authenticate and upgrade a plugin method declared with websocket: true. Input is JSON encoded in the query; frames use the plugin's protocol.",
+          override: { "x-websocket": true },
+        }),
+      ),
+  )
   .annotateMerge(OpenApi.annotations({ title: "rpc", description: "Plugin RPC routes." }))

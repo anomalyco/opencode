@@ -71,7 +71,7 @@ it.live(
       const attachment = { sessionID: session.id, connectionID: crypto.randomUUID() }
       const state = { ...attachment, state: { tabs: [], focusedTabID: null } }
       const pending = yield* rpc
-        .attach({ ...attachment, version: 4 })
+        .attach({ ...attachment, version: 5 })
         .pipe(Effect.provide(locations.get(ref)), Effect.flip, Effect.forkScoped)
       yield* rpc.state(state).pipe(
         Effect.retry({
@@ -83,6 +83,25 @@ it.live(
       // The location has now been idle for its whole TTL; the next sweep evicts it.
       idle.millis += Duration.toMillis(timeToLive)
 
+      // A socket upgrade must not grant another session or attachment this browser's network reach.
+      for (const invalid of [
+        { ...attachment, connectionID: crypto.randomUUID() },
+        { ...attachment, sessionID: Session.ID.create() },
+      ]) {
+        const result = yield* Context.get(context, Rpc.Service)
+          .connect(
+            Browser.Definition.id,
+            "tunnel",
+            { ...invalid, target: { host: "127.0.0.1", port: 1 } },
+            Effect.die(new Error("Unauthorized browser upgrade")),
+          )
+          .pipe(Effect.flip)
+        expect(result).toMatchObject({
+          type: "unavailable",
+          message: "Browser attachment is unavailable; its network connections were closed.",
+        })
+      }
+
       // Real idle cleanup must end the long-lived request, not leave a second registry behind it.
       expect(yield* Fiber.join(pending).pipe(Effect.timeout("10 seconds"))).toMatchObject({ type: "rpc.unavailable" })
       expect(yield* RcMap.has(locations.rcMap, LocationServiceMap.canonical(ref))).toBe(false)
@@ -91,7 +110,7 @@ it.live(
       const replacement = yield* locations.contextEffect(ref)
       yield* Plugin.awaitActivation.pipe(Effect.provideContext(replacement))
       const fresh = Context.get(replacement, Rpc.Service).client(Browser.Definition)
-      const resumed = yield* fresh.attach({ ...attachment, version: 4 }).pipe(Effect.forkScoped)
+      const resumed = yield* fresh.attach({ ...attachment, version: 5 }).pipe(Effect.forkScoped)
       yield* fresh.state(state).pipe(
         Effect.retry({
           while: (error) => "type" in error && error.type === "unavailable",

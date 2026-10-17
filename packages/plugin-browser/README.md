@@ -46,7 +46,7 @@ The desktop implementation is the built-in `browser` GUI extension
 The plugin-owned contract is `@opencode/plugin-browser/rpc`. This entrypoint
 contains only schemas and descriptions; it does not load the server plugin or
 filesystem code. The desktop subscribes
-to control events before starting `attach` with `version: 4`. The attachment call
+to control events before starting `attach` with `version: 5`. The attachment call
 stays pending for its lifetime. A matching `attached` event is the readiness barrier.
 
 - `state` publishes the authoritative tab inventory. Tab lookups read only this
@@ -81,16 +81,26 @@ resumable file-transfer service or object store. Browsing uses the connected
 server's network: `localhost:8000` reaches that server's port 8000, while Chromium
 and page JavaScript still run on the desktop. Dev-server ports need not be public.
 
-`tunnel.open/read/write/close` relay bounded TCP chunks through the existing
-authenticated plugin RPC route. The desktop-only `/proxy` entrypoint adapts
-Chromium's HTTP/CONNECT proxy traffic, including WebSockets, to those methods.
-Network bytes never go onto the global event stream. Attachment closure releases
-the sockets; failed writes are not replayed and there is no direct-network fallback.
+Each TCP connection uses one authenticated binary WebSocket at
+`/api/rpc/experimental.browser/tunnel/socket`. The desktop-only `/proxy` entrypoint
+adapts Chromium's HTTP/CONNECT proxy traffic, including WebSockets, to these streams.
+The upgrade input identifies the session, active attachment, and target; the server
+validates it before upgrading. Network bytes never go onto the global event stream
+or through JSON/Base64 RPC. Attachment closure releases the sockets; failed writes
+are not replayed and there is no direct-network fallback.
+
+Binary frames carry a one-byte opcode: `0` followed by up to 64 KiB of TCP bytes,
+`1` for readiness after the target connects, `2` for TCP half-close, or `3` followed
+by a big-endian uint32 consumption credit. Each direction starts with a 1 MiB
+window; consumed bytes replenish credit in batches. Writers pause only when that
+window is exhausted, rather than waiting for an RPC acknowledgment per chunk.
+The existing 64-connection attachment limit remains. Invalid frames or excess
+credit close the stream. Both peers must use this protocol; there is no legacy fallback.
 The tunnel relays whatever a loaded page requests and is not filtered per request:
 page traffic has the server host's network reach, including its loopback and LAN.
 
 Remote endpoints can use HTTPS and the existing server credentials. A reverse
-proxy must allow long-lived event and attachment requests; the attachment RPC
+proxy must allow WebSocket upgrades and long-lived event and attachment requests; the attachment RPC
 stays open rather than sending response-body heartbeats.
 
 Lighthouse audits use snapshot mode without changing device emulation or adding

@@ -14,11 +14,14 @@ export interface Method {
   readonly input: Tool.ValueSchema
   readonly output: Tool.ValueSchema
   readonly errors?: ErrorMap
+  /** Upgrade this method to a WebSocket instead of calling it over HTTP. */
+  readonly websocket?: true
 }
 
 export type PortableValueSchema = StandardSchemaV1<unknown, unknown> | JsonSchema.JsonSchema
 
 export interface PortableMethod extends Method {
+  readonly websocket?: never
   readonly input: PortableValueSchema
   readonly output: PortableValueSchema
   readonly errors?: Readonly<Record<string, PortableValueSchema>> & {
