@@ -1,3 +1,4 @@
+import { Plugin } from "@opencode/schema/plugin"
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
 import { testRender } from "@opentui/solid"
@@ -29,7 +30,7 @@ const target = "git+ssh://git@github.com/example/team-plugins.git"
 
 function packagePlugin(outdated: boolean): PluginInfo {
   return {
-    id: "team.plugins",
+    id: Plugin.ID.make("team.plugins", { disableChecks: true }),
     source: { type: "package", target, version: "dadba13", ...(outdated ? { outdated: true as const } : {}) },
     features: { server: true },
     state: { status: "active" },
@@ -200,7 +201,7 @@ test("checking for updates reports an up-to-date inventory", async () => {
 test("the check action stays hidden without package plugins", async () => {
   await using tmp = await tmpdir()
   const local: PluginInfo = {
-    id: "local.plugin",
+    id: Plugin.ID.make("local.plugin", { disableChecks: true }),
     source: { type: "local", path: path.join(tmp.path, "plugin.ts") },
     features: { server: true },
     state: { status: "active" },

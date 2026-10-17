@@ -1,3 +1,8 @@
+import { Agent } from "@opencode/schema/agent"
+import { Shell } from "@opencode/schema/shell"
+import { Provider } from "@opencode/schema/provider"
+import { Model } from "@opencode/schema/model"
+import { SessionMessage } from "@opencode/schema/session-message"
 import { expect, test } from "bun:test"
 import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode/client"
 import { createMemo, createRoot } from "solid-js"
@@ -17,7 +22,12 @@ test("measures turn duration from the user prompt across assistant steps", () =>
   const final = assistant("assistant-2", [])
   final.time = { created: 27_000, completed: 30_000 }
   const messages: SessionMessageInfo[] = [
-    { type: "user", id: "user-1", text: "Question", time: { created: 1_000 } },
+    {
+      type: "user",
+      id: SessionMessage.ID.make("user-1", { disableChecks: true }),
+      text: "Question",
+      time: { created: 1_000 },
+    },
     first,
     final,
   ]
@@ -30,11 +40,20 @@ test("measures request throughput including reasoning across model changes witho
   first.time = { created: 6_000, streamed: 10_000, completed: 20_000 }
   first.tokens = { input: 10, output: 20, reasoning: 5, cache: { read: 0, write: 0 } }
   const final = assistant("assistant-2", [])
-  final.model = { id: "other-model", providerID: "other-provider", variant: "other-variant" }
+  final.model = {
+    id: Model.ID.make("other-model", { disableChecks: true }),
+    providerID: Provider.ID.make("other-provider", { disableChecks: true }),
+    variant: Model.VariantID.make("other-variant", { disableChecks: true }),
+  }
   final.time = { created: 24_000, streamed: 30_000, completed: 31_000 }
   final.tokens = { input: 20, output: 30, reasoning: 10, cache: { read: 0, write: 0 } }
   const messages: SessionMessageInfo[] = [
-    { type: "user", id: "user-1", text: "Question", time: { created: 1_000 } },
+    {
+      type: "user",
+      id: SessionMessage.ID.make("user-1", { disableChecks: true }),
+      text: "Question",
+      time: { created: 1_000 },
+    },
     first,
     final,
   ]
@@ -60,13 +79,33 @@ test.each([false, true])(
     })
     const messages: SessionMessageInfo[] = [
       step("before-input", 0, 1_000, 2_000, 5),
-      { type: "user", id: "input", text: "Question", time: { created: 3_000 } },
+      {
+        type: "user",
+        id: SessionMessage.ID.make("input", { disableChecks: true }),
+        text: "Question",
+        time: { created: 3_000 },
+      },
       step("first-step", 4_000, 5_000, 6_000, 10),
-      { type: "system", id: "system", text: "Instructions", time: { created: 6_500 } },
+      {
+        type: "system",
+        id: SessionMessage.ID.make("system", { disableChecks: true }),
+        text: "Instructions",
+        time: { created: 6_500 },
+      },
       step("second-step", 7_000, 8_000, 9_000, 20),
-      { type: "synthetic", id: "synthetic", text: "Update", time: { created: 10_000 } },
+      {
+        type: "synthetic",
+        id: SessionMessage.ID.make("synthetic", { disableChecks: true }),
+        text: "Update",
+        time: { created: 10_000 },
+      },
       step("after-synthetic", 11_000, 13_000, 14_000, 12),
-      { type: "user", id: "later-input", text: "Next question", time: { created: 15_000 } },
+      {
+        type: "user",
+        id: SessionMessage.ID.make("later-input", { disableChecks: true }),
+        text: "Next question",
+        time: { created: 15_000 },
+      },
       assistant("incomplete", []),
     ]
 
@@ -98,7 +137,12 @@ test("preserves missing-anchor footer fallbacks without including the absent ass
   const stored = assistant("stored", [])
   stored.time = { created: 6_000, streamed: 8_000, completed: 9_000 }
   stored.tokens = { input: 1, output: 20, reasoning: 0, cache: { read: 0, write: 0 } }
-  const input: SessionMessageInfo = { type: "user", id: "input", text: "Question", time: { created: 5_000 } }
+  const input: SessionMessageInfo = {
+    type: "user",
+    id: SessionMessage.ID.make("input", { disableChecks: true }),
+    text: "Question",
+    time: { created: 5_000 },
+  }
 
   expect(turnDuration(absent, [input, stored])).toBe(5_000)
   expect(turnTokensPerSecond(absent, [input, stored])).toBe(10)
@@ -115,9 +159,19 @@ test("indexed tail footer calculations do not subscribe to an unrelated history 
       final.time = { created: 2_000, streamed: 3_000, completed: 5_000 }
       final.tokens = { input: 1, output: 20, reasoning: 0, cache: { read: 0, write: 0 } }
       const [messages, setMessages] = createStore<SessionMessageInfo[]>([
-        { type: "user", id: "old-input", text: "Old question", time: { created: 0 } },
+        {
+          type: "user",
+          id: SessionMessage.ID.make("old-input", { disableChecks: true }),
+          text: "Old question",
+          time: { created: 0 },
+        },
         assistant("old-step", []),
-        { type: "user", id: "input", text: "Current question", time: { created: 1_000 } },
+        {
+          type: "user",
+          id: SessionMessage.ID.make("input", { disableChecks: true }),
+          text: "Current question",
+          time: { created: 1_000 },
+        },
         final,
       ])
       let runs = 0
@@ -128,7 +182,12 @@ test("indexed tail footer calculations do not subscribe to an unrelated history 
         return [turnDuration(current, messages, 3), turnTokensPerSecond(current, messages, 3)]
       })
       expect(footer()).toEqual([4_000, 20])
-      setMessages(0, { type: "user", id: "replaced-prefix", text: "Older question", time: { created: 50 } })
+      setMessages(0, {
+        type: "user",
+        id: SessionMessage.ID.make("replaced-prefix", { disableChecks: true }),
+        text: "Older question",
+        time: { created: 50 },
+      })
       expect(footer()).toEqual([4_000, 20])
       expect(runs).toBe(1)
 
@@ -144,7 +203,10 @@ test("indexed tail footer calculations do not subscribe to an unrelated history 
 })
 
 test("filters OpenAI cache quantization from cache reuse drops", () => {
-  const openai = { id: "gpt", providerID: "openai" }
+  const openai = {
+    id: Model.ID.make("gpt", { disableChecks: true }),
+    providerID: Provider.ID.make("openai", { disableChecks: true }),
+  }
   expect(cacheReuseDrop(undefined, { read: 10_000, model: openai })).toBeUndefined()
   expect(cacheReuseDrop({ read: 10_000, model: openai }, { read: 11_000, model: openai })).toBeUndefined()
   expect(cacheReuseDrop({ read: 10_000, model: openai }, { read: 8_977, model: openai })).toBe(1_023)
@@ -155,44 +217,102 @@ test("filters OpenAI cache quantization from cache reuse drops", () => {
 })
 
 test("compares cache reuse only for the same model", () => {
-  const previous = { read: 10_000, model: { id: "claude", providerID: "anthropic" } }
-  expect(cacheReuseDrop(previous, { read: 8_976, model: { id: "gpt", providerID: "openai" } })).toBeUndefined()
-  expect(cacheReuseDrop(previous, { read: 8_976, model: { id: "claude", providerID: "anthropic" } })).toBe(1_024)
+  const previous = {
+    read: 10_000,
+    model: {
+      id: Model.ID.make("claude", { disableChecks: true }),
+      providerID: Provider.ID.make("anthropic", { disableChecks: true }),
+    },
+  }
+  expect(
+    cacheReuseDrop(previous, {
+      read: 8_976,
+      model: {
+        id: Model.ID.make("gpt", { disableChecks: true }),
+        providerID: Provider.ID.make("openai", { disableChecks: true }),
+      },
+    }),
+  ).toBeUndefined()
+  expect(
+    cacheReuseDrop(previous, {
+      read: 8_976,
+      model: {
+        id: Model.ID.make("claude", { disableChecks: true }),
+        providerID: Provider.ID.make("anthropic", { disableChecks: true }),
+      },
+    }),
+  ).toBe(1_024)
   expect(
     cacheReuseDrop(
-      { read: 10_000, model: { id: "gpt", providerID: "openai", variant: "low" } },
-      { read: 8_976, model: { id: "gpt", providerID: "openai", variant: "high" } },
+      {
+        read: 10_000,
+        model: {
+          id: Model.ID.make("gpt", { disableChecks: true }),
+          providerID: Provider.ID.make("openai", { disableChecks: true }),
+          variant: Model.VariantID.make("low", { disableChecks: true }),
+        },
+      },
+      {
+        read: 8_976,
+        model: {
+          id: Model.ID.make("gpt", { disableChecks: true }),
+          providerID: Provider.ID.make("openai", { disableChecks: true }),
+          variant: Model.VariantID.make("high", { disableChecks: true }),
+        },
+      },
     ),
   ).toBeUndefined()
 })
 
 test("carries model identity with the cross-turn cache baseline", () => {
   const first = assistant("assistant-1", [])
-  first.model = { id: "claude", providerID: "anthropic" }
+  first.model = {
+    id: Model.ID.make("claude", { disableChecks: true }),
+    providerID: Provider.ID.make("anthropic", { disableChecks: true }),
+  }
   first.finish = "stop"
   first.tokens = { input: 1, output: 0, reasoning: 0, cache: { read: 10_000, write: 0 } }
   const second = assistant("assistant-2", [])
-  second.model = { id: "gpt", providerID: "openai" }
+  second.model = {
+    id: Model.ID.make("gpt", { disableChecks: true }),
+    providerID: Provider.ID.make("openai", { disableChecks: true }),
+  }
   second.finish = "stop"
   second.tokens = { input: 1, output: 0, reasoning: 0, cache: { read: 8_976, write: 0 } }
 
   const rows = reduceSessionRows(
     [
-      { type: "user", id: "user-1", text: "First", time: { created: 0 } },
+      {
+        type: "user",
+        id: SessionMessage.ID.make("user-1", { disableChecks: true }),
+        text: "First",
+        time: { created: 0 },
+      },
       first,
-      { type: "user", id: "user-2", text: "Second", time: { created: 2 } },
+      {
+        type: "user",
+        id: SessionMessage.ID.make("user-2", { disableChecks: true }),
+        text: "Second",
+        time: { created: 2 },
+      },
       second,
     ],
     new Set(),
     true,
   ).filter((row) => row.type === "turn-usage")
 
-  expect(rows).toEqual([
+  expect<unknown>(rows).toEqual([
     { type: "turn-usage", messageIDs: ["assistant-1"] },
     {
       type: "turn-usage",
       messageIDs: ["assistant-2"],
-      previousCache: { read: 10_000, model: { id: "claude", providerID: "anthropic" } },
+      previousCache: {
+        read: 10_000,
+        model: {
+          id: "claude",
+          providerID: "anthropic",
+        },
+      },
     },
   ])
 })
@@ -210,7 +330,7 @@ test("resets the cross-turn cache baseline after compaction", () => {
       first,
       {
         type: "compaction",
-        id: "compaction-1",
+        id: SessionMessage.ID.make("compaction-1", { disableChecks: true }),
         status: "completed",
         reason: "auto",
         summary: "Compacted context",
@@ -223,7 +343,7 @@ test("resets the cross-turn cache baseline after compaction", () => {
     true,
   ).filter((row) => row.type === "turn-usage")
 
-  expect(rows).toEqual([
+  expect<unknown>(rows).toEqual([
     { type: "turn-usage", messageIDs: ["assistant-1"] },
     { type: "turn-usage", messageIDs: ["assistant-2"] },
   ])
@@ -237,19 +357,39 @@ test("closes turn usage on the idle marker so steered steps share one footer", (
   })
   const idle = (id: string, created: number): SessionMessageInfo => ({
     type: "idle",
-    id,
+    id: SessionMessage.ID.make(id, { disableChecks: true }),
     outcome: "succeeded",
     time: { created },
   })
   const messages: SessionMessageInfo[] = [
-    { type: "user", id: "user-1", text: "First", time: { created: 0 } },
+    {
+      type: "user",
+      id: SessionMessage.ID.make("user-1", { disableChecks: true }),
+      text: "First",
+      time: { created: 0 },
+    },
     step("assistant-1", 1_000),
-    { type: "user", id: "steer", text: "Also this", time: { created: 2 } },
+    {
+      type: "user",
+      id: SessionMessage.ID.make("steer", { disableChecks: true }),
+      text: "Also this",
+      time: { created: 2 },
+    },
     step("assistant-2", 2_000),
     idle("idle-1", 3),
-    { type: "user", id: "user-2", text: "Second", time: { created: 4 } },
+    {
+      type: "user",
+      id: SessionMessage.ID.make("user-2", { disableChecks: true }),
+      text: "Second",
+      time: { created: 4 },
+    },
     step("assistant-3", 3_000),
-    { type: "user", id: "steer-2", text: "Wait", time: { created: 5 } },
+    {
+      type: "user",
+      id: SessionMessage.ID.make("steer-2", { disableChecks: true }),
+      text: "Wait",
+      time: { created: 5 },
+    },
     step("assistant-4", 4_000),
   ]
 
@@ -258,20 +398,32 @@ test("closes turn usage on the idle marker so steered steps share one footer", (
     { type: "assistant-footer", messageID: "assistant-1" },
     { type: "message", messageID: "steer" },
     { type: "assistant-footer", messageID: "assistant-2" },
-    { type: "turn-usage", messageIDs: ["assistant-1", "assistant-2"] },
+    {
+      type: "turn-usage",
+      messageIDs: ["assistant-1", "assistant-2"],
+    },
     { type: "message", messageID: "user-2" },
     { type: "assistant-footer", messageID: "assistant-3" },
     { type: "message", messageID: "steer-2" },
     { type: "assistant-footer", messageID: "assistant-4" },
   ])
-  expect(
+  expect<unknown>(
     reduceSessionRows([...messages, idle("idle-2", 6)], new Set(), true).filter((row) => row.type === "turn-usage"),
   ).toEqual([
-    { type: "turn-usage", messageIDs: ["assistant-1", "assistant-2"] },
+    {
+      type: "turn-usage",
+      messageIDs: ["assistant-1", "assistant-2"],
+    },
     {
       type: "turn-usage",
       messageIDs: ["assistant-3", "assistant-4"],
-      previousCache: { read: 2_000, model: { id: "model", providerID: "provider" } },
+      previousCache: {
+        read: 2_000,
+        model: {
+          id: "model",
+          providerID: "provider",
+        },
+      },
     },
   ])
 })
@@ -283,12 +435,32 @@ test("measures a marker-era turn from its first prompt across steers", () => {
     tokens: { input: 1, output, reasoning: 0, cache: { read: 0, write: 0 } },
   })
   const messages: SessionMessageInfo[] = [
-    { type: "user", id: "old-input", text: "Old question", time: { created: 0 } },
+    {
+      type: "user",
+      id: SessionMessage.ID.make("old-input", { disableChecks: true }),
+      text: "Old question",
+      time: { created: 0 },
+    },
     step("old-step", 1_000, 2_000, 3_000, 5),
-    { type: "idle", id: "idle-1", outcome: "succeeded", time: { created: 3_500 } },
-    { type: "user", id: "input", text: "Question", time: { created: 4_000 } },
+    {
+      type: "idle",
+      id: SessionMessage.ID.make("idle-1", { disableChecks: true }),
+      outcome: "succeeded",
+      time: { created: 3_500 },
+    },
+    {
+      type: "user",
+      id: SessionMessage.ID.make("input", { disableChecks: true }),
+      text: "Question",
+      time: { created: 4_000 },
+    },
     step("first-step", 5_000, 6_000, 7_000, 10),
-    { type: "user", id: "steer", text: "Also this", time: { created: 7_500 } },
+    {
+      type: "user",
+      id: SessionMessage.ID.make("steer", { disableChecks: true }),
+      text: "Also this",
+      time: { created: 7_500 },
+    },
     step("second-step", 8_000, 9_000, 10_000, 20),
   ]
   const final = messages[6]
@@ -302,7 +474,12 @@ test("measures a marker-era turn from its first prompt across steers", () => {
 
 test("assigns assistant boundaries to the first rendered row instead of the first text row", () => {
   const messages: SessionMessageInfo[] = [
-    { type: "user", id: "user-1", text: "Question", time: { created: 0 } },
+    {
+      type: "user",
+      id: SessionMessage.ID.make("user-1", { disableChecks: true }),
+      text: "Question",
+      time: { created: 0 },
+    },
     assistant("assistant-1", [
       { type: "reasoning", text: "Thinking" },
       { type: "text", text: "First" },
@@ -311,7 +488,7 @@ test("assigns assistant boundaries to the first rendered row instead of the firs
   ]
   const rows = reduceSessionRows(messages)
 
-  expect(messageBoundaryIDs(rows, messages)).toEqual(["user-1", "assistant-1", undefined, undefined])
+  expect<unknown>(messageBoundaryIDs(rows, messages)).toEqual(["user-1", "assistant-1", undefined, undefined])
 })
 
 test("assigns stable IDs to tool rows for direct navigation", () => {
@@ -334,7 +511,12 @@ test("assigns stable IDs to tool rows for direct navigation", () => {
 
 test("groups exploration parts across assistant messages until a delimiter", () => {
   const messages: SessionMessageInfo[] = [
-    { type: "user", id: "user-1", text: "Explore", time: { created: 0 } },
+    {
+      type: "user",
+      id: SessionMessage.ID.make("user-1", { disableChecks: true }),
+      text: "Explore",
+      time: { created: 0 },
+    },
     assistant("assistant-1", [
       { type: "text", text: "Looking" },
       { type: "tool", id: "read-1", name: "read", state: pending(), time: { created: 2 } },
@@ -346,9 +528,12 @@ test("groups exploration parts across assistant messages until a delimiter", () 
     ]),
   ]
 
-  expect(reduceSessionRows(messages)).toEqual([
+  expect<unknown>(reduceSessionRows(messages)).toEqual([
     { type: "message", messageID: "user-1" },
-    { type: "part", ref: { messageID: "assistant-1", partID: "text:0" } },
+    {
+      type: "part",
+      ref: { messageID: "assistant-1", partID: "text:0" },
+    },
     {
       type: "group",
       kind: "exploration",
@@ -361,7 +546,10 @@ test("groups exploration parts across assistant messages until a delimiter", () 
         partChild("assistant-2", "grep-1"),
       ],
     },
-    { type: "part", ref: { messageID: "assistant-2", partID: "text:0" } },
+    {
+      type: "part",
+      ref: { messageID: "assistant-2", partID: "text:0" },
+    },
   ])
 })
 
@@ -374,7 +562,7 @@ test("keeps non-exploration tools as individual part rows", () => {
     ]),
   ]
 
-  expect(reduceSessionRows(messages)).toEqual([
+  expect<unknown>(reduceSessionRows(messages)).toEqual([
     {
       type: "group",
       kind: "exploration",
@@ -383,7 +571,10 @@ test("keeps non-exploration tools as individual part rows", () => {
       size: 1,
       children: [partChild("assistant-1", "read-1")],
     },
-    { type: "part", ref: { messageID: "assistant-1", partID: "reasoning:0" } },
+    {
+      type: "part",
+      ref: { messageID: "assistant-1", partID: "reasoning:0" },
+    },
     {
       type: "group",
       kind: "exploration",
@@ -405,8 +596,11 @@ test("assigns stable kind ordinals within an assistant message", () => {
     ]),
   ]
 
-  expect(reduceSessionRows(messages)).toEqual([
-    { type: "part", ref: { messageID: "assistant-1", partID: "text:0" } },
+  expect<unknown>(reduceSessionRows(messages)).toEqual([
+    {
+      type: "part",
+      ref: { messageID: "assistant-1", partID: "text:0" },
+    },
     {
       type: "group",
       kind: "reasoning",
@@ -414,7 +608,10 @@ test("assigns stable kind ordinals within an assistant message", () => {
       size: 1,
       children: [partChild("assistant-1", "reasoning:0")],
     },
-    { type: "part", ref: { messageID: "assistant-1", partID: "text:1" } },
+    {
+      type: "part",
+      ref: { messageID: "assistant-1", partID: "text:1" },
+    },
     {
       type: "group",
       kind: "reasoning",
@@ -435,7 +632,7 @@ test("groups adjacent reasoning parts until a visible boundary", () => {
     ]),
   ]
 
-  expect(reduceSessionRows(messages)).toEqual([
+  expect<unknown>(reduceSessionRows(messages)).toEqual([
     {
       type: "group",
       kind: "reasoning",
@@ -443,7 +640,10 @@ test("groups adjacent reasoning parts until a visible boundary", () => {
       size: 2,
       children: [partChild("assistant-1", "reasoning:0"), partChild("assistant-1", "reasoning:1")],
     },
-    { type: "part", ref: { messageID: "assistant-1", partID: "text:0" } },
+    {
+      type: "part",
+      ref: { messageID: "assistant-1", partID: "text:0" },
+    },
     {
       type: "group",
       kind: "reasoning",
@@ -492,11 +692,16 @@ test("completes exploration groups when another row follows", () => {
   finished.finish = "stop"
   const messages: SessionMessageInfo[] = [
     assistant("assistant-1", [{ type: "tool", id: "read-1", name: "read", state: pending(), time: { created: 1 } }]),
-    { type: "user", id: "user-1", text: "Continue", time: { created: 2 } },
+    {
+      type: "user",
+      id: SessionMessage.ID.make("user-1", { disableChecks: true }),
+      text: "Continue",
+      time: { created: 2 },
+    },
     finished,
   ]
 
-  expect(reduceSessionRows(messages)).toEqual([
+  expect<unknown>(reduceSessionRows(messages)).toEqual([
     {
       type: "group",
       kind: "exploration",
@@ -521,9 +726,9 @@ test("completes exploration groups when another row follows", () => {
 test("hides synthetic messages without descriptions", () => {
   const messages: SessionMessageInfo[] = [
     {
-      id: "shell-message",
+      id: SessionMessage.ID.make("shell-message", { disableChecks: true }),
       type: "shell",
-      shellID: "sh_user",
+      shellID: Shell.ID.make("sh_user", { disableChecks: true }),
       command: "pwd",
       status: "exited",
       time: { created: 0 },
@@ -531,16 +736,16 @@ test("hides synthetic messages without descriptions", () => {
     assistant("assistant-1", [{ type: "tool", id: "read-1", name: "read", state: pending(), time: { created: 1 } }]),
     {
       type: "synthetic",
-      id: "synthetic-1",
+      id: SessionMessage.ID.make("synthetic-1", { disableChecks: true }),
       text: "internal context",
-      metadata: { source: "shell", shellID: "sh_user", state: "completed" },
+      metadata: { source: "shell", shellID: Shell.ID.make("sh_user", { disableChecks: true }), state: "completed" },
       time: { created: 2 },
     },
     assistant("assistant-2", [{ type: "tool", id: "grep-1", name: "grep", state: pending(), time: { created: 3 } }]),
   ]
 
   const rows = reduceSessionRows(messages)
-  expect(rows).toEqual([
+  expect<unknown>(rows).toEqual([
     { type: "message", messageID: "shell-message" },
     {
       type: "group",
@@ -559,7 +764,7 @@ test("renders synthetic messages with descriptions", () => {
     assistant("assistant-1", [{ type: "tool", id: "read-1", name: "read", state: pending(), time: { created: 1 } }]),
     {
       type: "synthetic",
-      id: "synthetic-1",
+      id: SessionMessage.ID.make("synthetic-1", { disableChecks: true }),
       text: "internal context",
       description: "Explicit notice",
       time: { created: 2 },
@@ -567,7 +772,7 @@ test("renders synthetic messages with descriptions", () => {
     assistant("assistant-2", [{ type: "tool", id: "grep-1", name: "grep", state: pending(), time: { created: 3 } }]),
   ]
 
-  expect(reduceSessionRows(messages)).toEqual([
+  expect<unknown>(reduceSessionRows(messages)).toEqual([
     {
       type: "group",
       kind: "exploration",
@@ -589,7 +794,14 @@ test("renders synthetic messages with descriptions", () => {
 })
 
 function partChild(messageID: string, partID: string) {
-  return { type: "entry" as const, entry: { type: "part" as const, ref: { messageID, partID } }, size: 1 as const }
+  return {
+    type: "entry" as const,
+    entry: {
+      type: "part" as const,
+      ref: { messageID: SessionMessage.ID.make(messageID, { disableChecks: true }), partID },
+    },
+    size: 1 as const,
+  }
 }
 
 test("renders a footer for a pre-output retry assistant after replay", () => {
@@ -606,7 +818,7 @@ test("renders a footer for a pre-output retry assistant after replay", () => {
 test("places a running compaction barrier before every queued user message", () => {
   const queued = (id: string, text: string, created: number): SessionMessageInfo => ({
     type: "user",
-    id,
+    id: SessionMessage.ID.make(id, { disableChecks: true }),
     text,
     time: { created },
   })
@@ -614,7 +826,7 @@ test("places a running compaction barrier before every queued user message", () 
     queued("user-before", "Before", 1),
     {
       type: "compaction",
-      id: "compaction",
+      id: SessionMessage.ID.make("compaction", { disableChecks: true }),
       status: "running",
       reason: "manual",
       summary: "",
@@ -624,7 +836,7 @@ test("places a running compaction barrier before every queued user message", () 
     queued("user-after", "After", 3),
   ]
 
-  expect(reduceSessionRows(messages, new Set(["user-before", "user-after"]))).toEqual([
+  expect<unknown>(reduceSessionRows(messages, new Set(["user-before", "user-after"]))).toEqual([
     { type: "message", messageID: "compaction" },
     { type: "message", messageID: "user-before" },
     { type: "message", messageID: "user-after" },
@@ -634,9 +846,12 @@ test("places a running compaction barrier before every queued user message", () 
 function assistant(id: string, content: SessionMessageAssistant["content"]): SessionMessageAssistant {
   return {
     type: "assistant",
-    id,
-    agent: "build",
-    model: { id: "model", providerID: "provider" },
+    id: SessionMessage.ID.make(id, { disableChecks: true }),
+    agent: Agent.ID.make("build", { disableChecks: true }),
+    model: {
+      id: Model.ID.make("model", { disableChecks: true }),
+      providerID: Provider.ID.make("provider", { disableChecks: true }),
+    },
     content,
     time: { created: 1 },
   }

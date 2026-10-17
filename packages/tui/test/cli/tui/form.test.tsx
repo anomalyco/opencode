@@ -1,3 +1,5 @@
+import { Session } from "@opencode/schema/session"
+import { Form } from "@opencode/schema/form"
 /** @jsxImportSource @opentui/solid */
 import { testRender } from "@opentui/solid"
 import { expect, test } from "bun:test"
@@ -34,8 +36,8 @@ async function mountForm(
   const events = createEventStream()
   const config = createTuiResolvedConfig()
   const form = {
-    id: "frm_test",
-    sessionID: "ses_test",
+    id: Form.ID.make("frm_test", { disableChecks: true }),
+    sessionID: Session.ID.make("ses_test", { disableChecks: true }),
     title: "Authorization required",
     fields: fields ?? [
       {

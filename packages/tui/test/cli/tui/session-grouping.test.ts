@@ -1,10 +1,11 @@
+import { SessionMessage } from "@opencode/schema/session-message"
 import { expect, test } from "bun:test"
 import { append, groupRefs, partitionPending, type SessionRow } from "../../../src/routes/session/grouping/session"
 
 test("a pending tool does not hide a later tool reusing its call ID in another message", () => {
   const rows: SessionRow[] = []
-  const blocked = { messageID: "assistant-a", partID: "call-reused" }
-  const later = { messageID: "assistant-b", partID: "call-reused" }
+  const blocked = { messageID: SessionMessage.ID.make("assistant-a", { disableChecks: true }), partID: "call-reused" }
+  const later = { messageID: SessionMessage.ID.make("assistant-b", { disableChecks: true }), partID: "call-reused" }
   append(rows, blocked, { type: "tool", name: "read" })
   partitionPending(rows, new Set([blocked.partID]))
   append(rows, later, { type: "tool", name: "read" })

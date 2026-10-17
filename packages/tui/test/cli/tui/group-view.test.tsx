@@ -1,3 +1,8 @@
+import { Session } from "@opencode/schema/session"
+import { Model } from "@opencode/schema/model"
+import { Provider } from "@opencode/schema/provider"
+import { Agent } from "@opencode/schema/agent"
+import { SessionMessage } from "@opencode/schema/session-message"
 import { expect, test } from "bun:test"
 import { testRender } from "@opentui/solid"
 import type { JSX } from "solid-js"
@@ -21,26 +26,31 @@ test("retains nested expansion state and registers exact headers and parts", asy
   const [expanded, setExpanded] = createStore<Record<string, boolean>>({})
   const config = createTuiResolvedConfig({ animations: false })
   const messages = new Map<string, SessionMessageAssistant>(
-    ["a", "b"].map((id) => [
-      id,
-      {
+    [SessionMessage.ID.make("a", { disableChecks: true }), SessionMessage.ID.make("b", { disableChecks: true })].map(
+      (id) => [
         id,
-        type: "assistant",
-        agent: "build",
-        model: { providerID: "fixture", id: "fixture" },
-        time: { created: 0, completed: 2 },
-        content: [
-          {
-            type: "tool",
-            id: `read-${id}`,
-            name: "read",
-            time: { created: 0, completed: 2 },
-            state: { status: "completed", input: { path: id }, content: [{ type: "text", text: id }], metadata: {} },
+        {
+          id,
+          type: "assistant",
+          agent: Agent.ID.make("build", { disableChecks: true }),
+          model: {
+            providerID: Provider.ID.make("fixture", { disableChecks: true }),
+            id: Model.ID.make("fixture", { disableChecks: true }),
           },
-          { type: "reasoning", text: "**Reset title**\n\nReset thought body", time: { created: 0, completed: 2 } },
-        ],
-      },
-    ]),
+          time: { created: 0, completed: 2 },
+          content: [
+            {
+              type: "tool",
+              id: `read-${id}`,
+              name: "read",
+              time: { created: 0, completed: 2 },
+              state: { status: "completed", input: { path: id }, content: [{ type: "text", text: id }], metadata: {} },
+            },
+            { type: "reasoning", text: "**Reset title**\n\nReset thought body", time: { created: 0, completed: 2 } },
+          ],
+        },
+      ],
+    ),
   )
   const [row, setRow] = createStore<SessionGroup>({
     type: "group",
@@ -54,8 +64,22 @@ test("retains nested expansion state and registers exact headers and parts", asy
         kind: "exploration",
         size: 2,
         children: [
-          { type: "entry", size: 1, entry: { type: "part", ref: { messageID: "a", partID: "read-a" } } },
-          { type: "entry", size: 1, entry: { type: "part", ref: { messageID: "b", partID: "read-b" } } },
+          {
+            type: "entry",
+            size: 1,
+            entry: {
+              type: "part",
+              ref: { messageID: SessionMessage.ID.make("a", { disableChecks: true }), partID: "read-a" },
+            },
+          },
+          {
+            type: "entry",
+            size: 1,
+            entry: {
+              type: "part",
+              ref: { messageID: SessionMessage.ID.make("b", { disableChecks: true }), partID: "read-b" },
+            },
+          },
         ],
       },
     ],
@@ -83,8 +107,14 @@ test("retains nested expansion state and registers exact headers and parts", asy
   if (!outerID || !innerID) throw new Error("Missing group IDs")
   const outer: AnchorTarget = { type: "group", groupID: outerID }
   const nested: AnchorTarget = { type: "group", groupID: innerID }
-  const a: AnchorTarget = { type: "part", ref: { messageID: "a", partID: "read-a" } }
-  const b: AnchorTarget = { type: "part", ref: { messageID: "b", partID: "read-b" } }
+  const a: AnchorTarget = {
+    type: "part",
+    ref: { messageID: SessionMessage.ID.make("a", { disableChecks: true }), partID: "read-a" },
+  }
+  const b: AnchorTarget = {
+    type: "part",
+    ref: { messageID: SessionMessage.ID.make("b", { disableChecks: true }), partID: "read-b" },
+  }
   try {
     await app.waitForFrame((frame) => frame.includes("Explored"))
     expect(app.captureCharFrame()).not.toContain("Target B")
@@ -119,8 +149,22 @@ test("retains nested expansion state and registers exact headers and parts", asy
         completed: true,
         pending: [],
         children: [
-          { type: "entry", size: 1, entry: { type: "part", ref: { messageID: "a", partID: "read-a" } } },
-          { type: "entry", size: 1, entry: { type: "part", ref: { messageID: "b", partID: "read-b" } } },
+          {
+            type: "entry",
+            size: 1,
+            entry: {
+              type: "part",
+              ref: { messageID: SessionMessage.ID.make("a", { disableChecks: true }), partID: "read-a" },
+            },
+          },
+          {
+            type: "entry",
+            size: 1,
+            entry: {
+              type: "part",
+              ref: { messageID: SessionMessage.ID.make("b", { disableChecks: true }), partID: "read-b" },
+            },
+          },
         ],
       }),
     )
@@ -134,8 +178,22 @@ test("retains nested expansion state and registers exact headers and parts", asy
         size: 2,
         completed: true,
         children: [
-          { type: "entry", size: 1, entry: { type: "part", ref: { messageID: "a", partID: "reasoning:0" } } },
-          { type: "entry", size: 1, entry: { type: "part", ref: { messageID: "b", partID: "reasoning:0" } } },
+          {
+            type: "entry",
+            size: 1,
+            entry: {
+              type: "part",
+              ref: { messageID: SessionMessage.ID.make("a", { disableChecks: true }), partID: "reasoning:0" },
+            },
+          },
+          {
+            type: "entry",
+            size: 1,
+            entry: {
+              type: "part",
+              ref: { messageID: SessionMessage.ID.make("b", { disableChecks: true }), partID: "reasoning:0" },
+            },
+          },
         ],
       }),
     )
@@ -158,7 +216,7 @@ test("expanded instructions stay adjacent to their summary and each other", asyn
   const [expanded, setExpanded] = createStore<Record<string, boolean>>({})
   const messages: SessionMessageInfo[] = ["AGENTS.md", "packages/tui/AGENTS.md"].map((path) => ({
     type: "synthetic",
-    id: path,
+    id: SessionMessage.ID.make(path, { disableChecks: true }),
     text: "Instructions",
     description: `Loaded ${path}`,
     metadata: { instruction: { paths: [path] } },
@@ -172,7 +230,7 @@ test("expanded instructions stay adjacent to their summary and each other", asyn
     children: messages.map((message) => ({
       type: "entry",
       size: 1,
-      entry: { type: "message", messageID: message.id },
+      entry: { type: "message", messageID: SessionMessage.ID.make(message.id, { disableChecks: true }) },
     })),
   }
   const app = await mount({
@@ -212,10 +270,13 @@ test("a low activity group with nothing finished stays collapsed behind a status
     state: { status: "running" as const, input: {}, metadata: {} },
   })
   const message: SessionMessageAssistant = {
-    id: "a",
+    id: SessionMessage.ID.make("a", { disableChecks: true }),
     type: "assistant",
-    agent: "build",
-    model: { providerID: "fixture", id: "fixture" },
+    agent: Agent.ID.make("build", { disableChecks: true }),
+    model: {
+      providerID: Provider.ID.make("fixture", { disableChecks: true }),
+      id: Model.ID.make("fixture", { disableChecks: true }),
+    },
     time: { created: 0 },
     content: [shell("one"), shell("two")],
   }
@@ -229,7 +290,10 @@ test("a low activity group with nothing finished stays collapsed behind a status
       children: ["one", "two"].map((partID) => ({
         type: "entry" as const,
         size: 1,
-        entry: { type: "part" as const, ref: { messageID: "a", partID } },
+        entry: {
+          type: "part" as const,
+          ref: { messageID: SessionMessage.ID.make("a", { disableChecks: true }), partID },
+        },
       })),
     },
     anchors: createTimelineAnchors(),
@@ -254,10 +318,13 @@ test("failed low activity uses a disclosure icon and keeps details expandable", 
   const anchors = createTimelineAnchors()
   const [expanded, setExpanded] = createStore<Record<string, boolean>>({})
   const message: SessionMessageAssistant = {
-    id: "a",
+    id: SessionMessage.ID.make("a", { disableChecks: true }),
     type: "assistant",
-    agent: "build",
-    model: { providerID: "fixture", id: "fixture" },
+    agent: Agent.ID.make("build", { disableChecks: true }),
+    model: {
+      providerID: Provider.ID.make("fixture", { disableChecks: true }),
+      id: Model.ID.make("fixture", { disableChecks: true }),
+    },
     time: { created: 0, completed: 2 },
     content: [
       {
@@ -275,7 +342,16 @@ test("failed low activity uses a disclosure icon and keeps details expandable", 
     size: 1,
     completed: true,
     pending: [],
-    children: [{ type: "entry", size: 1, entry: { type: "part", ref: { messageID: "a", partID: "failed-shell" } } }],
+    children: [
+      {
+        type: "entry",
+        size: 1,
+        entry: {
+          type: "part",
+          ref: { messageID: SessionMessage.ID.make("a", { disableChecks: true }), partID: "failed-shell" },
+        },
+      },
+    ],
   }
   const app = await mount({
     row,
@@ -318,7 +394,7 @@ function mount(input: {
               value={{
                 width: 40,
                 terminal: { width: 40, height: 24 },
-                sessionID: "fixture",
+                sessionID: Session.ID.make("fixture", { disableChecks: true }),
                 anchors: input.anchors,
                 groupExpanded: input.expanded,
                 setGroupExpanded: input.setExpanded,
