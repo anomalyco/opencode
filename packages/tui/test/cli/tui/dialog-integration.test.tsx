@@ -3,7 +3,7 @@ import { InputRenderable, TextareaRenderable } from "@opentui/core"
 import type { FormFields, LocationRef } from "@opencode/client"
 import { testRender } from "@opentui/solid"
 import { expect, test } from "bun:test"
-import { onMount } from "solid-js"
+import { onCleanup, onMount } from "solid-js"
 import { DialogIntegration } from "../../../src/component/dialog-integration"
 import { ConfigProvider } from "../../../src/config"
 import { ClientProvider } from "../../../src/context/client"
@@ -11,6 +11,7 @@ import { DataProvider, useData } from "../../../src/context/data"
 import { Keymap } from "../../../src/context/keymap"
 import { LocationProvider, useLocation } from "../../../src/context/location"
 import { ThemeProvider } from "../../../src/context/theme"
+import { ProgramStatusContext } from "../../../src/context/program-status"
 import { DialogProvider, useDialog } from "../../../src/ui/dialog"
 import { ToastProvider } from "../../../src/ui/toast"
 import { emptyThemeSource } from "../../fixture/fixture"
@@ -44,9 +45,11 @@ test("opens the key connection prompt from the initially focused add account row
     await fixture.app.waitForFrame((frame) => frame.includes("API key") && !frame.includes("Connected accounts"))
 
     expect(fixture.requests).toEqual([])
+    expect(fixture.authentication()).toBe(true)
   } finally {
     fixture.app.renderer.destroy()
   }
+  expect(fixture.authentication()).toBe(false)
 })
 
 test("skips hidden authentication fields and sends their defaults", async () => {
@@ -356,6 +359,7 @@ async function renderIntegration(activeLocation?: LocationRef, form?: FormFields
     return null
   }
 
+  let authentication = false
   const app = await testRender(
     () => (
       <TestTuiContexts>
@@ -366,9 +370,22 @@ async function renderIntegration(activeLocation?: LocationRef, form?: FormFields
                 <DataProvider directory={process.cwd()}>
                   <LocationProvider>
                     <ThemeProvider mode="dark" source={emptyThemeSource}>
-                      <DialogProvider>
-                        <Probe />
-                      </DialogProvider>
+                      <ProgramStatusContext.Provider
+                        value={{
+                          authentication() {
+                            onMount(() => {
+                              authentication = true
+                            })
+                            onCleanup(() => {
+                              authentication = false
+                            })
+                          },
+                        }}
+                      >
+                        <DialogProvider>
+                          <Probe />
+                        </DialogProvider>
+                      </ProgramStatusContext.Provider>
                     </ThemeProvider>
                   </LocationProvider>
                 </DataProvider>
@@ -389,6 +406,7 @@ async function renderIntegration(activeLocation?: LocationRef, form?: FormFields
 
   return {
     app,
+    authentication: () => authentication,
     reads,
     requests,
     locations,

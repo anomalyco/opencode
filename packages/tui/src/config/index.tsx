@@ -130,7 +130,12 @@ export const Info = Schema.Struct({
   ).annotate({ description: "Diff presentation settings" }),
   terminal: Schema.optional(
     Schema.Struct({
-      title: Schema.optional(Schema.Boolean).annotate({ description: "Update the terminal window title" }),
+      title: Schema.optional(Schema.Boolean).annotate({
+        description: "Update the terminal window title and status labels",
+      }),
+      status: Schema.optional(Schema.Boolean).annotate({
+        description: "Report OSC 7501 program status to the terminal",
+      }),
       copy: Schema.optional(Schema.Literals(["manual", "select"])).annotate({
         description: "Copy text manually or immediately after selecting it",
       }),

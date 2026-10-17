@@ -267,10 +267,11 @@ Configure terminal integration:
 
 <div class="docs-table-scroll" role="region" aria-label="Terminal settings" tabIndex={0}>
 
-| Setting          | Values               | Description                                                                                              |
-| ---------------- | -------------------- | -------------------------------------------------------------------------------------------------------- |
-| `terminal.title` | boolean              | Updates the terminal window title.                                                                       |
-| `terminal.copy`  | `manual` or `select` | Copies manually or immediately after selection. The platform default is `manual` on Windows and `select` elsewhere. |
+| Setting           | Values               | Description                                                                                                         |
+| ----------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `terminal.title`  | boolean              | Updates the terminal window title and includes session labels in OSC 7501 reports. Defaults to `true`.              |
+| `terminal.status` | boolean              | Reports OSC 7501 program status to the terminal. Set to `false` to disable reports. Defaults to `true`.             |
+| `terminal.copy`   | `manual` or `select` | Copies manually or immediately after selection. The platform default is `manual` on Windows and `select` elsewhere. |
 
 </div>
 
