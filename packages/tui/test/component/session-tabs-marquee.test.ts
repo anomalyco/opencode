@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, jest, test } from "bun:test"
 import { createRoot } from "solid-js"
-import { createMarquee, createTabMarquee } from "../../src/component/session-tabs"
+import { createTabMarquee } from "../../src/component/session-tabs"
+import { createMarquee } from "../../src/ui/marquee"
 
 afterEach(() => jest.useRealTimers())
 
