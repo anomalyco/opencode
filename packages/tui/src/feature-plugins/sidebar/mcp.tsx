@@ -1,15 +1,25 @@
 import { Plugin } from "@opencode/plugin/tui"
 import { createMemo, For, Match, Show, Switch } from "solid-js"
 import { DialogMcp } from "../../component/dialog-mcp"
+import { useConfig } from "../../config"
+
+const statuses = ["connected", "pending", "failed", "needs_auth", "disabled"] as const
 
 export function SidebarMcp(props: { context: Plugin.Context; sessionID: string }) {
   const [view, updateView] = props.context.storage.store("view", { initial: { open: true } })
   const theme = props.context.theme
+  const config = useConfig()
+  const summary = () => config.data.session.mcp_summary ?? "default"
   const session = createMemo(() => props.context.data.session.get(props.sessionID))
   const list = createMemo(() => props.context.data.location.mcp.server.list(session()?.location) ?? [])
   const on = createMemo(() => list().filter((item) => item.status.status === "connected").length)
   const bad = createMemo(
     () => list().filter((item) => item.status.status === "failed" || item.status.status === "needs_auth").length,
+  )
+  const counts = createMemo(() =>
+    statuses
+      .map((status) => ({ status, count: list().filter((item) => item.status.status === status).length }))
+      .filter((item) => item.count > 0),
   )
 
   const dot = (status: string) => {
@@ -38,11 +48,21 @@ export function SidebarMcp(props: { context: Plugin.Context; sessionID: string }
           </Show>
           <text fg={theme.text.base}>
             <b>MCP</b>
-            <Show when={!view.open}>
+            <Show when={summary() === "default" && !view.open}>
               <span style={{ fg: theme.text.muted }}>
                 {" "}
                 ({on()} active{bad() > 0 ? `, ${bad()} error${bad() > 1 ? "s" : ""}` : ""})
               </span>
+            </Show>
+            <Show when={summary() === "always" || (summary() === "collapsed" && !view.open)}>
+              <For each={counts()}>
+                {(item) => (
+                  <>
+                    <span style={{ fg: dot(item.status) }}> •</span>
+                    <span style={{ fg: theme.text.muted }}>{item.count}</span>
+                  </>
+                )}
+              </For>
             </Show>
           </text>
         </box>
