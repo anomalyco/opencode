@@ -46,8 +46,6 @@ jobs:
     if: github.repository == 'anomalyco/opencode'
     steps:
       - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
-        with:
-          fetch-depth: 0
 
       - uses: ./.github/actions/setup-bun
 
@@ -58,10 +56,6 @@ jobs:
           opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
           opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
 
-      - name: Install OpenCode
-        if: inputs.bump || inputs.version
-        run: bun i -g opencode-ai
-
       - id: version
         run: |
           ./script/version.ts
@@ -69,7 +63,6 @@ jobs:
           GH_TOKEN: ${{ steps.committer.outputs.token }}
           OPENCODE_BUMP: ${{ inputs.bump }}
           OPENCODE_VERSION: ${{ inputs.version }}
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
     outputs:
       version: ${{ steps.version.outputs.version }}
       release: ${{ steps.version.outputs.release }}
@@ -610,7 +603,9 @@ jobs:
 
       - uses: ./.github/actions/setup-bun
 
+      # Only releases push the Docker image (packages/cli/script/publish.ts).
       - name: Login to GitHub Container Registry
+        if: needs.version.outputs.release
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ghcr.io
@@ -618,9 +613,11 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up QEMU
+        if: needs.version.outputs.release
         uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
 
       - name: Set up Docker Buildx
+        if: needs.version.outputs.release
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -701,7 +698,9 @@ jobs:
           opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
           opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
 
+      # Only releases publish to AUR and Homebrew and make release commits, which use the git identity set below.
       - name: Cache apt packages (AUR)
+        if: needs.version.outputs.release
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: /var/cache/apt/archives
@@ -710,6 +709,7 @@ jobs:
             ${{ runner.os }}-apt-aur-
 
       - name: Setup SSH for AUR
+        if: needs.version.outputs.release
         run: |
           sudo apt-get update
           sudo apt-get install -y pacman-package-manager
