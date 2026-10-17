@@ -90,7 +90,10 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
     if (service !== undefined) {
       pool.serviceAnswered()
       const decision = decide(service, options)
-      if (decision._tag === "fail") return yield* Effect.fail(decision.error)
+      if (decision._tag === "fail") {
+        if (service.state === "failed") yield* terminate(service.info, options, timing).pipe(Effect.ignore)
+        return yield* Effect.fail(decision.error)
+      }
       if (decision._tag === "reuse") {
         yield* Effect.tryPromise(() => PtyHandoff.complete(options.file ?? fallback(), service.info))
         return Option.some(service)
