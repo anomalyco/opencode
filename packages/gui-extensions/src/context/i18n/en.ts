@@ -7,6 +7,9 @@ export default {
   "usage.view": "View context usage",
   "usage.toggle": "Toggle session context",
   "systemPrompt.title": "System Prompt",
+  "systemPrompt.unavailable":
+    "Not stored: the system prompt is assembled for each request from the agent and the workspace instructions.",
+  "systemPrompt.updates": "Instruction updates",
   "rawMessages.title": "Raw messages",
   "export.session": "Export session",
   "stats.session": "Session",

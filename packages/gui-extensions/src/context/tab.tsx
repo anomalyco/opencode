@@ -16,6 +16,7 @@ import { createKeyed, useExtension, type MountedSession } from "../sdk"
 import { catalogModel, syncCatalog } from "./catalog"
 import { fetchSessionExport, sessionExportFilename } from "./export"
 import { createSessionContextFormatter } from "./format"
+import { instructionUpdates } from "./instructions"
 
 function Stat(props: { label: string; value: JSX.Element }) {
   return (
@@ -152,16 +153,7 @@ export default function SessionContextTab(props: { session: MountedSession }) {
     }
   })
 
-  const systemPrompt = createMemo(() => {
-    const system = messages().findLast((message) => message.type === "system")?.text
-
-    if (!system) return
-    const trimmed = system.trim()
-
-    if (!trimmed) return
-
-    return trimmed
-  })
+  const systemUpdates = createMemo(() => instructionUpdates(messages()))
 
   const providerLabel = createMemo(() => {
     const c = context()
@@ -295,16 +287,25 @@ export default function SessionContextTab(props: { session: MountedSession }) {
           <For each={stats}>{(stat) => <Stat label={ctx.t(stat.label)} value={stat.value()} />}</For>
         </div>
 
-        <Show when={systemPrompt()}>
-          {(prompt) => (
-            <div class="flex flex-col gap-2">
-              <div class="text-12-regular text-text-weak">{ctx.t("systemPrompt.title")}</div>
-              <div class="border border-border-base rounded-md bg-surface-base px-3 py-2">
-                <Markdown text={prompt()} class="text-12-regular" />
-              </div>
-            </div>
-          )}
-        </Show>
+        <div class="flex flex-col gap-2">
+          <div class="text-12-regular text-text-weak">{ctx.t("systemPrompt.title")}</div>
+          <div class="border border-border-base rounded-md bg-surface-base px-3 py-2">
+            <div class="text-12-regular text-text-weak">{ctx.t("systemPrompt.unavailable")}</div>
+          </div>
+          <Show when={systemUpdates().length > 0}>
+            <div class="text-12-regular text-text-weak">{ctx.t("systemPrompt.updates")}</div>
+            <For each={systemUpdates()}>
+              {(update) => (
+                <div class="flex flex-col gap-1 border border-border-base rounded-md bg-surface-base px-3 py-2">
+                  <Show when={update.description}>
+                    {(description) => <div class="text-12-regular text-text-weak">{description()}</div>}
+                  </Show>
+                  <Markdown text={update.text} class="text-12-regular" />
+                </div>
+              )}
+            </For>
+          </Show>
+        </div>
 
         <div class="flex flex-col gap-2">
           <div class="flex items-center justify-between">
