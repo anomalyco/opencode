@@ -565,7 +565,7 @@ export function Prompt(props: PromptProps) {
           }).catch((error) => {
             toast.show({ title: "Failed to open editor", message: errorMessage(error), variant: "error" })
           })
-          if (!content) return
+          if (content === undefined) return
           const normalized = normalizePromptContent(content)
 
           input.setText(normalized)
