@@ -110,7 +110,7 @@ const materializeAttachment = Effect.fn("SessionPrompt.materializeAttachment")(f
       message: `Attachment exceeds the ${MAX_ATTACHMENT_BYTES} byte limit: ${label}`,
     })
 
-  const mime = resolved.mime ?? Mime.detect(resolved.bytes)
+  const mime = resolved.mime ?? Mime.detect(resolved.bytes, resolved.name)
   const content =
     mime === "text/plain" && resolved.start !== undefined
       ? Buffer.from(
