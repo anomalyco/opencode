@@ -26,6 +26,7 @@ import type { SessionScreenLayout } from "../screen-layout"
 import { syncPromptModel } from "../session-model-helpers"
 import type { SessionTimelineInteraction } from "../timeline/interaction"
 import { createSessionRevert } from "../revert"
+import { createSessionPins } from "../pinned"
 import { SessionComposerRegion } from "./session-composer-region"
 import { createSessionComposerController, type SessionComposerController } from "./controller"
 import { SessionQueuePanel } from "./queue-panel"
@@ -190,6 +191,19 @@ export function createActiveSessionRegion(input: {
 
   const revertMessage: NonNullable<SessionUserActions["revert"]> = ({ messageID }) => revert.to(messageID)
 
+  const pins = createSessionPins()
+
+  const pinMessage: NonNullable<SessionUserActions["pin"]> = ({ sessionID, messageID }) =>
+    pins.pin(sessionID, messageID)
+
+  const unpinMessage: NonNullable<SessionUserActions["unpin"]> = ({ sessionID, messageID }) =>
+    pins.unpin(sessionID, messageID)
+
+  const isMessagePinned: NonNullable<SessionUserActions["isPinned"]> = ({ sessionID, messageID }) =>
+    pins.isPinned(sessionID, messageID)
+
+  const pinnedMessages: NonNullable<SessionUserActions["pinnedMessages"]> = (sessionID) => pins.list(sessionID)
+
   const notifyFailed = () => {
     showToast({ title: language.t("common.requestFailed") })
   }
@@ -280,6 +294,10 @@ export function createActiveSessionRegion(input: {
 
           return pendingSteer
         },
+        pin: pinMessage,
+        unpin: unpinMessage,
+        isPinned: isMessagePinned,
+        pinnedMessages,
         openAttachment,
       } satisfies SessionUserActions,
     },

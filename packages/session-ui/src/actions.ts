@@ -37,4 +37,12 @@ export type SessionUserActions = {
     queue: (input: { sessionID: string; messageID: string }) => Promise<void>
     remove: (input: { sessionID: string; messageID: string }) => Promise<void>
   }
+  /** Pins a message so it stays reachable without scrolling. Pins are kept per session. */
+  pin?: (input: { sessionID: string; messageID: string }) => void
+  /** Removes a pinned message. */
+  unpin?: (input: { sessionID: string; messageID: string }) => void
+  /** Whether a message is pinned. Reading this inside a reactive scope tracks changes. */
+  isPinned?: (input: { sessionID: string; messageID: string }) => boolean
+  /** Pinned message IDs for a session, newest first. Reading this inside a reactive scope tracks changes. */
+  pinnedMessages?: (sessionID: string) => readonly string[]
 }

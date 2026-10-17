@@ -254,6 +254,14 @@ const icons = {
     viewBox: "0 0 20 20",
     body: `<path d="M5.83333 4.16406L2.5 7.4974L5.83333 10.8307M3.33333 7.4974H17.9167V15.4141H10" stroke="currentColor" stroke-linecap="square"/>`,
   },
+  pin: {
+    viewBox: "0 0 16 16",
+    body: `<path d="M6 1.5H10M7 1.5V6.4L4.2 9.2V10.5H11.8V9.2L9 6.4V1.5M8 10.5V15" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>`,
+  },
+  "pin-filled": {
+    viewBox: "0 0 16 16",
+    body: `<path d="M6.5 1H9.5V2H9V6.15L11.8 8.95V10.5H8.75V15H7.25V10.5H4.2V8.95L7 6.15V2H6.5V1Z" fill="currentColor"/>`,
+  },
   "outline-undo": {
     viewBox: "0 0 16 16",
     body: `<path d="M2 10L4.25193 7.76999C7.29213 4.7594 12.4119 5.77372 14.0747 9.71606" stroke="currentColor"/><path d="M2 6V10H6" stroke="currentColor" stroke-linecap="square"/>`,

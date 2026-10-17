@@ -364,6 +364,7 @@ export function createSessionTimelineRowRenderer(input: {
           <Show when={content()}>
             {(content) => (
               <SessionAssistantContent
+                sessionID={input.sessionID()}
                 message={message()}
                 content={content()}
                 contentID={ref()!.partID}
@@ -373,6 +374,7 @@ export function createSessionTimelineRowRenderer(input: {
                 toolOpen={input.disclosure.value(disclosureKey()) ?? defaultOpen()}
                 onToolOpenChange={(open) => input.disclosure.set(disclosureKey(), open)}
                 onContentRendered={onSizeChange}
+                actions={input.actions}
               />
             )}
           </Show>

@@ -86,7 +86,7 @@ function modelLabel(
 
 function MessageActionButton(
   props: Pick<ComponentProps<"button">, "disabled" | "onMouseDown" | "onClick" | "aria-label"> & {
-    icon: "check" | "copy" | "reset" | "arrow-down-to-line" | "outline-trash"
+    icon: "check" | "copy" | "reset" | "arrow-down-to-line" | "outline-trash" | "pin" | "pin-filled"
     label: JSX.Element
   },
 ) {
@@ -327,6 +327,17 @@ export function CurrentUserMessageDisplay(props: {
     setState("updating", false)
   }
 
+  const pinAvailable = () => !!props.actions?.pin && !!props.actions?.unpin && !!props.actions?.isPinned
+
+  const pinned = () => props.actions?.isPinned?.({ sessionID: props.sessionID, messageID: props.message.id }) ?? false
+
+  const togglePin = () => {
+    const input = { sessionID: props.sessionID, messageID: props.message.id }
+
+    if (pinned()) props.actions?.unpin?.(input)
+    else props.actions?.pin?.(input)
+  }
+
   const renderAttachments = () => (
     <Show when={attachments().length > 0 || references().length > 0}>
       <div data-slot="user-message-attachments">
@@ -512,6 +523,18 @@ export function CurrentUserMessageDisplay(props: {
               </Menu.Context.Portal>
             </Menu.Context>
           </Show>
+          <Show when={pinAvailable() && !pending()}>
+            <MessageActionButton
+              icon={pinned() ? "pin-filled" : "pin"}
+              label={pinned() ? i18n.t("ui.message.unpinMessage") : i18n.t("ui.message.pinMessage")}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={(event) => {
+                event.stopPropagation()
+                togglePin()
+              }}
+              aria-label={pinned() ? i18n.t("ui.message.unpinMessage") : i18n.t("ui.message.pinMessage")}
+            />
+          </Show>
         </div>
       </Show>
     </div>
@@ -670,10 +693,12 @@ export function SessionCompactionMessage(props: { message: SessionMessageCompact
 
 export function AssistantTextContent(props: {
   id: string
+  sessionID: string
   text: string
   message: SessionMessageAssistant
   showCopy: boolean
   turnDurationMs?: number | null
+  actions?: SessionUserActions
 }) {
   const data = useData()
   const i18n = useI18n()
@@ -733,6 +758,17 @@ export function AssistantTextContent(props: {
     setTimeout(() => setCopied(false), 2000)
   }
 
+  const pinAvailable = () => !!props.actions?.pin && !!props.actions?.unpin && !!props.actions?.isPinned
+
+  const pinned = () => props.actions?.isPinned?.({ sessionID: props.sessionID, messageID: props.message.id }) ?? false
+
+  const togglePin = () => {
+    const input = { sessionID: props.sessionID, messageID: props.message.id }
+
+    if (pinned()) props.actions?.unpin?.(input)
+    else props.actions?.pin?.(input)
+  }
+
   return (
     <Show when={props.text}>
       <div data-component="text-part" data-timeline-part-id={props.id}>
@@ -748,6 +784,18 @@ export function AssistantTextContent(props: {
               onClick={copy}
               aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
             />
+            <Show when={pinAvailable()}>
+              <MessageActionButton
+                icon={pinned() ? "pin-filled" : "pin"}
+                label={pinned() ? i18n.t("ui.message.unpinResponse") : i18n.t("ui.message.pinResponse")}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  togglePin()
+                }}
+                aria-label={pinned() ? i18n.t("ui.message.unpinResponse") : i18n.t("ui.message.pinResponse")}
+              />
+            </Show>
             <Show when={meta()}>
               <span data-slot="text-part-meta" class="text-12-regular text-text-weak cursor-default">
                 {meta()}

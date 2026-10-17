@@ -267,6 +267,7 @@ function SessionScreenContent(props: {
           setContentRef={timeline.view.setContentRef}
           anchor={timeline.view.anchor}
           setRevealMessage={timeline.view.setRevealMessage}
+          onRevealMessage={timeline.actions.revealMessage}
           reveal={timeline.view.reveal}
           setScrollToEnd={timeline.view.setScrollToEnd}
           search={

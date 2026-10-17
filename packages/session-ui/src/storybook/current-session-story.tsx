@@ -7,6 +7,7 @@ import { SessionTimeline } from "../timeline/session-timeline"
 import { FileComponentProvider } from "@opencode/ui/context/file"
 import { Button } from "@opencode/ui/button"
 import { Show, createMemo, createSignal, type JSX } from "solid-js"
+import { createStore } from "solid-js/store"
 import { CURRENT_SESSION_ID, STORY_TIME } from "./current-session-fixtures"
 
 export function CurrentSessionProviders(props: { document: SessionDocument; children: JSX.Element }) {
@@ -84,6 +85,9 @@ export function CurrentSessionTimelineStory(props: {
   const [revision, setRevision] = createSignal(1)
   const [activity, setActivity] = createSignal("No local action")
 
+  // An in-memory pin set so the timeline stories exercise the production pin controls.
+  const [pins, setPins] = createStore<Record<string, string[]>>({})
+
   const actions = {
     openAttachment: (file) => {
       setActivity(`Opened ${file.name ?? file.mime}`)
@@ -91,6 +95,16 @@ export function CurrentSessionTimelineStory(props: {
     revert: (input) => {
       setActivity(`Selected revert boundary ${input.messageID}`)
     },
+    pin: ({ sessionID, messageID }) => {
+      setPins(sessionID, (current) => [messageID, ...(current ?? []).filter((id) => id !== messageID)])
+      setActivity(`Pinned ${messageID}`)
+    },
+    unpin: ({ sessionID, messageID }) => {
+      setPins(sessionID, (current) => (current ?? []).filter((id) => id !== messageID))
+      setActivity(`Unpinned ${messageID}`)
+    },
+    isPinned: ({ sessionID, messageID }) => (pins[sessionID] ?? []).includes(messageID),
+    pinnedMessages: (sessionID) => pins[sessionID] ?? [],
   } satisfies SessionUserActions
 
   const reset = () => {

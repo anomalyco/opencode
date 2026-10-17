@@ -28,6 +28,7 @@ import { useCommand } from "@/shell/commands/command"
 import { SessionAncestorTrail, SessionProjectMenu, SessionTitleHeader } from "../session-identity-header"
 import { SessionHeaderSpacer } from "@/session/header/session-header"
 import { SessionRunningMenu } from "@/session/header/session-running-menu"
+import { SessionPinnedMenu } from "@/session/header/session-pinned-menu"
 
 type BlockingTask = { type: "shell" | "subagent"; partID: string; id?: string; label?: string }
 
@@ -87,6 +88,7 @@ type MessageTimelineProps = {
   setContentRef: (el: HTMLDivElement) => void
   anchor: (id: string) => string
   setRevealMessage?: (fn: (id: string, partID?: string) => void) => void
+  onRevealMessage?: (id: string, partID?: string) => void
   setScrollToEnd?: (fn: () => void) => void
   reveal?: { target: () => string | undefined; done: () => void }
   search?: JSX.Element
@@ -165,6 +167,28 @@ function MessageTimelineView(
   const showHeader = createMemo(() => !props.hideHeader && (props.data.showHeader() || workspaceSession()))
   const pinned = createMemo(() => props.pinned)
   const messageByID = projection.messageByID
+
+  // A short single-line preview for a pinned message, enough to recognize it in the pinned list.
+  const pinnedLabel = (id: string) => {
+    const message = messageByID().get(id)
+
+    if (!message) return undefined
+
+    let text: string | undefined
+
+    if (message.type === "user") text = message.text
+    else if (message.type === "assistant") {
+      const part = message.content.find((entry) => entry.type === "text")
+
+      text = part?.type === "text" ? part.text : undefined
+    }
+
+    return text
+      ?.trim()
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .find(Boolean)
+  }
 
   const virtualized = createTimelineVirtualizer({
     active: () => props.active !== false,
@@ -589,8 +613,16 @@ function MessageTimelineView(
                 </div>
               </div>
               <Show when={sessionID()} keyed>
-                {(_id) => (
+                {(id) => (
                   <div class="shrink-0 flex items-center gap-2">
+                    <Show when={props.actions?.pinnedMessages}>
+                      <SessionPinnedMenu
+                        messageIDs={props.actions?.pinnedMessages?.(id) ?? []}
+                        label={pinnedLabel}
+                        onSelect={(messageID) => props.onRevealMessage?.(messageID)}
+                        onUnpin={(messageID) => props.actions?.unpin?.({ sessionID: id, messageID })}
+                      />
+                    </Show>
                     {props.search}
                     <ExtensionSlot
                       at="session.header"
