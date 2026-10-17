@@ -78,6 +78,8 @@ export type CreateDataInput = {
   }
   /** Receives failed event-driven reads. Explicit reads still reject to their caller. */
   readonly onError?: (error: unknown) => void
+  /** Predicate returning whether a session is followed and eligible to project live events. */
+  readonly isFollowed?: (sessionID: string) => boolean
 }
 
 const messageIDFromEvent = (eventID: string) => eventID.replace(/^evt_/, "msg_")
@@ -284,7 +286,20 @@ export function createData(config: CreateDataInput) {
   let activeUpdates: Map<string, DataSessionStatus | undefined> | undefined
   const pendingUpdates = new Map<string, Map<string, SessionInboxInfo | SessionInbox.Delivery | undefined>>()
 
+  function isFollowed(sessionID: string): boolean {
+    if (config.isFollowed) {
+      if (config.isFollowed(sessionID)) return true
+      const root = resolveRoot(sessionID)
+      if (root !== sessionID && config.isFollowed(root)) return true
+      if (store.session.message[sessionID] !== undefined) return true
+      if (root !== sessionID && store.session.message[root] !== undefined) return true
+      return false
+    }
+    return true
+  }
+
   function setSessionActive(sessionID: string, status: DataSessionStatus) {
+    if (!store.session.info[sessionID] && !isFollowed(sessionID)) return
     activeUpdates?.set(sessionID, status)
     setStore("session", "active", sessionID, status)
   }
@@ -448,10 +463,12 @@ export function createData(config: CreateDataInput) {
 
   const message = {
     update(sessionID: string, fn: (messages: SessionMessageInfo[], index: Map<string, number>) => void) {
+      if (!isFollowed(sessionID) && store.session.message[sessionID] === undefined) return
       setStore(
         "session",
         "message",
         produce((draft) => {
+          if (!isFollowed(sessionID) && draft[sessionID] === undefined) return
           fn((draft[sessionID] ??= []), index(sessionID))
         }),
       )
@@ -668,7 +685,7 @@ export function createData(config: CreateDataInput) {
       case "project.updated":
         setStore("project", "info", event.data.id, reconcile(event.data))
         return
-      case "session.created":
+      case "session.created": {
         sessionOutbox.delete(event.data.sessionID)
         result.session.invalidate(event.data.sessionID)
         refresh(() => result.session.sync(event.data.sessionID))
@@ -679,6 +696,7 @@ export function createData(config: CreateDataInput) {
         sync.complete(`session.pending:${event.data.sessionID}`)
         sync.complete(`session.message:${event.data.sessionID}`)
         return
+      }
       case "session.deleted":
         removeSession(event.data.sessionID)
         return
@@ -814,6 +832,7 @@ export function createData(config: CreateDataInput) {
         return
       }
       case "session.inbox.enqueued": {
+        if (!isFollowed(event.data.sessionID)) return
         outbox.delete(event.data.inboxID)
         const item = {
           id: event.data.inboxID,
@@ -832,6 +851,7 @@ export function createData(config: CreateDataInput) {
         return
       }
       case "session.instructions.updated":
+        if (!isFollowed(event.data.sessionID)) return
         // Mirror the projector: the initial baseline and empty-rendering deltas carry no text
         // and produce no transcript message.
         const updateText = event.data.text
@@ -846,6 +866,7 @@ export function createData(config: CreateDataInput) {
         })
         return
       case "session.synthetic":
+        if (!isFollowed(event.data.sessionID)) return
         message.insert(event.data.sessionID, {
           id: messageIDFromEvent(event.id),
           type: "synthetic",
@@ -856,6 +877,7 @@ export function createData(config: CreateDataInput) {
         })
         return
       case "session.shell.started":
+        if (!isFollowed(event.data.sessionID)) return
         message.insert(event.data.sessionID, {
           id: messageIDFromEvent(event.id),
           type: "shell",
@@ -869,6 +891,7 @@ export function createData(config: CreateDataInput) {
         })
         return
       case "session.shell.ended":
+        if (!isFollowed(event.data.sessionID)) return
         message.update(event.data.sessionID, (draft) => {
           const match = message.shell(draft, event.data.shell.id)
           if (!match) return
@@ -879,6 +902,7 @@ export function createData(config: CreateDataInput) {
         })
         return
       case "session.step.started":
+        if (!isFollowed(event.data.sessionID)) return
         message.update(event.data.sessionID, (draft, index) => {
           const position = index.get(event.data.assistantMessageID)
           const existing = position === undefined ? undefined : draft[position]
@@ -1053,6 +1077,7 @@ export function createData(config: CreateDataInput) {
         setSessionActive(event.data.sessionID, "running")
         return
       case "session.compaction.started":
+        if (!isFollowed(event.data.sessionID)) return
         if (event.data.inputID) removePending(event.data.sessionID, event.data.inputID)
         message.insert(event.data.sessionID, {
           id: event.data.inputID ?? messageIDFromEvent(event.id),
@@ -1069,6 +1094,7 @@ export function createData(config: CreateDataInput) {
       case "session.execution.failed":
       case "session.execution.interrupted":
         setSessionActive(event.data.sessionID, "idle")
+        if (!isFollowed(event.data.sessionID) && !store.session.message[event.data.sessionID]) return
         message.update(event.data.sessionID, (draft) => {
           const currentAssistant = message.activeAssistant(draft)
           if (currentAssistant) currentAssistant.retry = undefined
@@ -1136,12 +1162,14 @@ export function createData(config: CreateDataInput) {
         })
         return
       case "session.compaction.delta":
+        if (!isFollowed(event.data.sessionID)) return
         message.update(event.data.sessionID, (draft) => {
           const current = message.compaction(draft)
           if (current?.status === "running") current.summary += event.data.text
         })
         return
       case "session.compaction.ended":
+        if (!isFollowed(event.data.sessionID)) return
         message.update(event.data.sessionID, (draft, index) => {
           const position = draft.findLastIndex((item) => item.type === "compaction" && item.status === "running")
           const current = draft[position]
@@ -1176,6 +1204,7 @@ export function createData(config: CreateDataInput) {
         })
         return
       case "session.compaction.failed":
+        if (!isFollowed(event.data.sessionID)) return
         if (event.data.inputID) removePending(event.data.sessionID, event.data.inputID)
         message.update(event.data.sessionID, (draft, index) => {
           const position = draft.findLastIndex((item) => item.type === "compaction" && item.status === "running")
@@ -1204,6 +1233,7 @@ export function createData(config: CreateDataInput) {
         return
       case "permission.asked":
         if (store.session.permission[event.data.sessionID]?.some((request) => request.id === event.data.id)) return
+        if (!store.session.info[event.data.sessionID] && !isFollowed(event.data.sessionID)) return
         setStore("session", "permission", event.data.sessionID, [
           ...(store.session.permission[event.data.sessionID] ?? []),
           event.data,
@@ -1249,6 +1279,8 @@ export function createData(config: CreateDataInput) {
 
     if (!event.location) return
     const location = event.location
+    const locKey = locationKey(location)
+    if (!store.location[locKey] && locKey !== locationKey(defaultLocation())) return
     switch (event.type) {
       case "provider.updated":
         result.location.provider.invalidate(location)
@@ -1281,6 +1313,7 @@ export function createData(config: CreateDataInput) {
         }))
         break
       case "form.created":
+        if (event.data.form.sessionID !== "global" && !store.session.info[event.data.form.sessionID] && !isFollowed(event.data.form.sessionID)) break
         if (store.session.form[event.data.form.sessionID]?.some((form) => form.id === event.data.form.id)) break
         setStore("session", "form", event.data.form.sessionID, [
           ...(store.session.form[event.data.form.sessionID] ?? []),

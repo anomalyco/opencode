@@ -4,6 +4,7 @@ import type { Plugin } from "@opencode/plugin/tui"
 import { createStore } from "solid-js/store"
 import { createSimpleContext } from "./helper"
 import { useClient } from "./client"
+import { useRoute } from "./route"
 
 export { locationKey } from "@opencode/client/solid"
 export type { FormWithLocation } from "@opencode/client/solid"
@@ -12,11 +13,18 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
   name: "Data",
   init: (props: { directory: string }) => {
     const client = useClient()
+    let route: ReturnType<typeof useRoute> | undefined
+    try {
+      route = useRoute()
+    } catch {
+      // Allow mounting DataProvider outside RouteProvider in isolated unit tests
+    }
     const data = createData({
       api: () => client.api,
       event: client.event,
       connection: client.connection,
       directory: props.directory,
+      isFollowed: (sessionID) => (route ? route.data.type === "session" && route.data.sessionID === sessionID : true),
     })
     data satisfies Plugin.Context["data"]
     const [generatingTitles, setGeneratingTitles] = createStore<Record<string, boolean | undefined>>({})

@@ -1245,3 +1245,93 @@ async function wait(check: () => boolean) {
     await Bun.sleep(10)
   }
 }
+
+test("ignores foreign session transcript events until followed while preserving subagent family events", async () => {
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      const path = new URL(request.url).pathname
+      if (path === "/api/session/ses_child") {
+        return Response.json({ data: { ...session(0), id: "ses_child", parentID: "ses_active" } })
+      }
+      if (path === "/api/session/ses_foreign") {
+        return Response.json({ data: { ...session(0), id: "ses_foreign" } })
+      }
+      return Response.json([])
+    },
+  })
+
+  let activeSessionID = "ses_active"
+  const setup = createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: "/project",
+      isFollowed: (sessionID) => sessionID === activeSessionID,
+      event: {
+        on: () => () => {},
+        listen(handler) {
+          listeners.add(handler)
+          return () => listeners.delete(handler)
+        },
+      },
+    }),
+    emit: (details: OpenCodeEvent) => listeners.forEach((listener) => listener({ name: details.type, details })),
+    dispose,
+  }))
+
+  try {
+    // 1. Foreign session step/message event should NOT allocate message list or index
+    setup.emit({
+      type: "session.step.started",
+      id: "evt_foreign_step",
+      created: 1,
+      data: {
+        sessionID: "ses_foreign",
+        assistantMessageID: "msg_foreign_1",
+        started: 1,
+        agent: "build",
+        model: { providerID: "provider", id: "model" },
+      },
+    } as any)
+    expect(setup.data.session.message.list("ses_foreign")).toHaveLength(0)
+
+    // 2. Subagent child created under followed parent
+    setup.emit({
+      type: "session.created",
+      id: "evt_child_created",
+      created: 2,
+      data: { sessionID: "ses_child" },
+    } as any)
+    await wait(() => setup.data.session.get("ses_child")?.parentID === "ses_active")
+    expect(setup.data.session.root("ses_child")).toBe("ses_active")
+
+    // 3. Subagent child permission is preserved and visible
+    setup.emit({
+      type: "permission.asked",
+      id: "evt_child_perm",
+      created: 3,
+      data: {
+        id: "perm_1",
+        sessionID: "ses_child",
+        permission: "terminal.execute",
+        patterns: ["ls"],
+        metadata: {},
+        always: [],
+      },
+    } as any)
+    expect(setup.data.session.permission.list("ses_child")).toHaveLength(1)
+
+    // 4. Followed active session events project normally
+    setup.emit({
+      type: "session.execution.started",
+      id: "evt_active_started",
+      created: 4,
+      data: { sessionID: "ses_active" },
+    } as any)
+    expect(setup.data.session.status("ses_active")).toBe("running")
+  } finally {
+    setup.dispose()
+  }
+})
