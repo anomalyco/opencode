@@ -6,7 +6,7 @@ import type { Transform } from "./registration.js"
 
 export interface CommandInvocation {
   readonly sessionID: Session.ID
-  readonly prompt: PromptInput.Prompt
+  readonly prompt: PromptInput.Prompt & Pick<SessionInbox.UserPayload, "agent" | "model">
   readonly delivery: SessionInbox.Delivery
 }
 

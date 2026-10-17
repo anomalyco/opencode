@@ -9,6 +9,8 @@ import { SessionExecution } from "@opencode/core/session/execution"
 import { Job } from "@opencode/core/job"
 import { SubagentJob } from "@opencode/core/session/subagent-job"
 import { Agent } from "@opencode/core/agent"
+import { Model } from "@opencode/core/model"
+import { Provider } from "@opencode/core/provider"
 import { SessionInbox } from "@opencode/schema/session-inbox"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { Command } from "@opencode/core/command"
@@ -73,6 +75,171 @@ const it = testEffect(
 const decode = Schema.decodeUnknownSync(Info)
 
 describe("ConfigCommandPlugin.Plugin", () => {
+  for (const delivery of ["queue", "steer"] as const) {
+    it.live(`defers configured agent overrides for ${delivery} commands`, () =>
+      Effect.gen(function* () {
+        const command = yield* Command.Service
+        const plan = Agent.Info.default(Agent.ID.make("plan"))
+        const prompts: { agent?: string; model?: { id: string } }[] = []
+        yield* ConfigCommandPlugin.Plugin.effect(
+          host({
+            command: { list: () => Effect.die("unused"), transform: command.transform, reload: command.reload },
+            agent: {
+              transform: () => Effect.die("unused"),
+              reload: () => Effect.die("unused"),
+              list: () => Effect.die("unused"),
+              get: () => Effect.succeed({ location: location({ directory: AbsolutePath.make("/test") }), data: plan }),
+            },
+            session: {
+              prompt: (input) =>
+                Effect.sync(() => {
+                  prompts.push(input)
+                  return SessionInbox.User.make({
+                    id: SessionMessage.ID.make("msg_test"),
+                    sessionID: input.sessionID,
+                    time: { created: DateTime.makeUnsafe(0) },
+                    type: "user",
+                    payload: { text: input.text },
+                    delivery: "queue",
+                  })
+                }),
+              switchAgent: () => Effect.die("must not switch while queued"),
+              switchModel: () => Effect.die("must not switch while queued"),
+            },
+          }),
+        ).pipe(
+          Effect.provide(
+            Config.testLayer([
+              new Document({
+                type: "document",
+                info: decode({ commands: { review: { template: "Review", agent: "plan" } } }),
+              }),
+            ]),
+          ),
+        )
+        yield* command.execute({
+          name: "review",
+          invocation: {
+            sessionID: Session.ID.make("ses_test"),
+            prompt: { text: "", agent: Agent.ID.make("build") },
+            delivery,
+          },
+        })
+        expect(prompts).toMatchObject([{ agent: "plan" }])
+      }),
+    )
+  }
+
+  it.live("preserves caller selection for steered template commands", () =>
+    Effect.gen(function* () {
+      const command = yield* Command.Service
+      const prompts: { agent?: string; model?: { id: string } }[] = []
+      yield* ConfigCommandPlugin.Plugin.effect(
+        host({
+          command: { list: () => Effect.die("unused"), transform: command.transform, reload: command.reload },
+          session: {
+            prompt: (input) =>
+              Effect.sync(() => {
+                prompts.push(input)
+                return SessionInbox.User.make({
+                  id: SessionMessage.ID.make("msg_test"),
+                  sessionID: input.sessionID,
+                  time: { created: DateTime.makeUnsafe(0) },
+                  type: "user",
+                  payload: { text: input.text },
+                  delivery: "steer",
+                })
+              }),
+          },
+        }),
+      ).pipe(
+        Effect.provide(
+          Config.testLayer([
+            new Document({ type: "document", info: decode({ commands: { review: { template: "Review" } } }) }),
+          ]),
+        ),
+      )
+      yield* command.execute({
+        name: "review",
+        invocation: {
+          sessionID: Session.ID.make("ses_test"),
+          prompt: { text: "", agent: Agent.ID.make("plan") },
+          delivery: "steer",
+        },
+      })
+      expect(prompts).toMatchObject([{ agent: "plan" }])
+    }),
+  )
+
+  for (const override of [true, false]) {
+    it.live(`resolves subagent selection at creation with command overrides ${override}`, () =>
+      Effect.gen(function* () {
+        const command = yield* Command.Service
+        const sessions = yield* Session.Service
+        const fs = yield* FSUtil.Service
+        const directory = yield* fs.makeTempDirectoryScoped({ prefix: "opencode-command-test-" })
+        const parent = yield* sessions.create({
+          title: "Parent",
+          agent: Agent.ID.make("build"),
+          location: { directory: AbsolutePath.make(directory) },
+        })
+        const explore = { ...Agent.Info.default(Agent.ID.make("explore")), mode: "subagent" as const }
+        yield* ConfigCommandPlugin.Plugin.effect(
+          host({
+            command: { list: () => Effect.die("unused"), transform: command.transform, reload: command.reload },
+            agent: {
+              transform: () => Effect.die("unused"),
+              reload: () => Effect.die("unused"),
+              list: () => Effect.die("unused"),
+              get: () =>
+                Effect.succeed({ location: location({ directory: AbsolutePath.make("/test") }), data: explore }),
+            },
+          }),
+        ).pipe(
+          Effect.provide(
+            Config.testLayer([
+              new Document({
+                type: "document",
+                info: decode({
+                  commands: {
+                    review: { template: "Review", ...(override ? { agent: "explore" } : {}), subagent: true },
+                  },
+                }),
+              }),
+            ]),
+          ),
+        )
+        const model = {
+          id: Model.ID.make("composer"),
+          providerID: Provider.ID.make("demo"),
+          variant: Model.VariantID.make("high"),
+        }
+        yield* command.execute({
+          name: "review",
+          invocation: {
+            sessionID: parent.id,
+            prompt: { text: "", agent: Agent.ID.make("plan"), model },
+            delivery: "queue",
+          },
+        })
+        const children = (yield* sessions.list()).data.filter((session) => session.parentID === parent.id)
+        expect(children).toHaveLength(1)
+        expect(children[0]?.agent).toBe(Agent.ID.make(override ? "explore" : "plan"))
+        expect(children[0]?.model).toEqual(model)
+        expect((yield* sessions.get(parent.id)).agent).toBe(Agent.ID.make("build"))
+        const child = children[0]
+        if (!child) return yield* Effect.die("Missing child session")
+        const pending = yield* sessions.inbox(child.id)
+        expect(pending).toHaveLength(1)
+        expect(pending[0]?.type).toBe("user")
+        if (pending[0]?.type === "user") {
+          expect(pending[0].payload.agent).toBeUndefined()
+          expect(pending[0].payload.model).toBeUndefined()
+        }
+      }),
+    )
+  }
+
   for (const item of [
     ...["$&", "$$", "$`", "$'"].flatMap((input) => [
       { template: "Explain $ARGUMENTS.", input, expected: `Explain ${input}.` },

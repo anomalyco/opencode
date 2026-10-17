@@ -1051,6 +1051,36 @@ describe("Session.prompt", () => {
     }),
   )
 
+  it.effect("does not repeat selection events for an unchanged selection", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+      const bus = yield* Bus.Service
+      const database = yield* Database.Service
+
+      yield* session.prompt({
+        sessionID,
+        text: "Review next",
+        agent: Agent.ID.make("plan"),
+        delivery: "queue",
+        resume: false,
+      })
+      expect(yield* SessionInbox.promote(database.db, bus, sessionID, "input")).toBe(1)
+      expect((yield* session.get(sessionID)).agent).toBe(Agent.ID.make("plan"))
+      const before = yield* eventCount(Bus.versionedType(SessionEvent.AgentSelected.type, 1))
+
+      yield* session.prompt({
+        sessionID,
+        text: "Keep reviewing",
+        agent: Agent.ID.make("plan"),
+        delivery: "queue",
+        resume: false,
+      })
+      expect(yield* SessionInbox.promote(database.db, bus, sessionID, "input")).toBe(1)
+      expect(yield* eventCount(Bus.versionedType(SessionEvent.AgentSelected.type, 1))).toBe(before)
+    }),
+  )
+
   it.effect("promotes prompt and synthetic steers in admission order", () =>
     Effect.gen(function* () {
       yield* setup

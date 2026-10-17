@@ -16,6 +16,8 @@ export const execute = Effect.fn("SessionCommand.execute")(function* (input: {
   agents?: PromptInput.Prompt["agents"]
   skills?: PromptInput.Prompt["skills"]
   delivery?: SessionInbox.Delivery
+  agent?: SessionInbox.UserPayload["agent"]
+  model?: SessionInbox.UserPayload["model"]
 }) {
   const instances = yield* Instance.Service
   const commands = yield* Plugin.awaitActivation.pipe(Effect.andThen(Command.Service), instances.provide(input.session))
@@ -28,6 +30,8 @@ export const execute = Effect.fn("SessionCommand.execute")(function* (input: {
         files: input.files,
         agents: input.agents,
         skills: input.skills,
+        agent: input.agent,
+        model: input.model,
       },
       delivery: input.delivery ?? "steer",
     },

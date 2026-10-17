@@ -320,6 +320,8 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           id: SessionMessage.ID.pipe(Schema.optional),
           ...PromptInput.Prompt.fields,
           metadata: SessionInbox.UserPayload.fields.metadata,
+          agent: SessionInbox.UserPayload.fields.agent,
+          model: SessionInbox.UserPayload.fields.model,
           delivery: SessionInbox.Delivery.pipe(Schema.optional),
           resume: Schema.Boolean.pipe(Schema.optional),
         }),
@@ -331,7 +333,8 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           OpenApi.annotations({
             identifier: "session.prompt",
             summary: "Send message",
-            description: "Durably admit one session input and schedule agent-loop execution unless resume is false.",
+            description:
+              "Durably admit one session input and schedule agent-loop execution unless resume is false. Agent and model selections apply at delivery: the next safe step boundary for steer, or after current work finishes for queue.",
           }),
         ),
     )
@@ -341,6 +344,8 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
         payload: Schema.Struct({
           name: Schema.String,
           ...PromptInput.Prompt.fields,
+          agent: SessionInbox.UserPayload.fields.agent,
+          model: SessionInbox.UserPayload.fields.model,
           delivery: SessionInbox.Delivery.pipe(Schema.optional),
         }),
         success: HttpApiSchema.NoContent,

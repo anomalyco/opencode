@@ -50,7 +50,10 @@ export interface Loaded {
  */
 export interface Interface {
   /** Selects the Session, agent, instructions, and tools used by subsequent work. */
-  readonly select: (sessionID: SessionSchema.ID) => Effect.Effect<Selection, AgentNotFoundError>
+  readonly select: (
+    sessionID: SessionSchema.ID,
+    selection?: { readonly agent?: Agent.ID; readonly model?: Model.Ref },
+  ) => Effect.Effect<Selection, AgentNotFoundError>
   /** Resolves the model and active history for that selection. */
   readonly load: (selection: Selection) => Effect.Effect<Loaded, SessionRunnerModel.Error>
   readonly resolveModel: (
@@ -118,9 +121,13 @@ const layer = Layer.effect(
       return { agent, primary, selected }
     })
 
-    const select = Effect.fn("SessionContext.select")(function* (sessionID: SessionSchema.ID) {
-      const session = yield* store.get(sessionID)
-      if (!session) return yield* Effect.die(new Error(`Session not found: ${sessionID}`))
+    const select = Effect.fn("SessionContext.select")(function* (
+      sessionID: SessionSchema.ID,
+      selection?: { readonly agent?: Agent.ID; readonly model?: Model.Ref },
+    ) {
+      const stored = yield* store.get(sessionID)
+      if (!stored) return yield* Effect.die(new Error(`Session not found: ${sessionID}`))
+      const session = { ...stored, agent: selection?.agent ?? stored.agent, model: selection?.model ?? stored.model }
       if (session.location.directory !== location.directory || session.location.workspaceID !== location.workspaceID)
         return yield* Effect.interrupt
 

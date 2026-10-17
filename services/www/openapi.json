@@ -2144,7 +2144,7 @@
             }
           }
         },
-        "description": "Durably admit one session input and schedule agent-loop execution unless resume is false.",
+        "description": "Durably admit one session input and schedule agent-loop execution unless resume is false. Agent and model selections apply at delivery: the next safe step boundary for steer, or after current work finishes for queue.",
         "summary": "Send message",
         "requestBody": {
           "content": {
@@ -2185,6 +2185,12 @@
                   },
                   "metadata": {
                     "type": "object"
+                  },
+                  "agent": {
+                    "$ref": "#/components/schemas/Agent.ID"
+                  },
+                  "model": {
+                    "$ref": "#/components/schemas/Model.Ref"
                   },
                   "delivery": {
                     "anyOf": [
@@ -2317,6 +2323,12 @@
                     "items": {
                       "$ref": "#/components/schemas/PromptInput.SkillAttachment"
                     }
+                  },
+                  "agent": {
+                    "$ref": "#/components/schemas/Agent.ID"
+                  },
+                  "model": {
+                    "$ref": "#/components/schemas/Model.Ref"
                   },
                   "delivery": {
                     "anyOf": [
@@ -18607,6 +18619,12 @@
             "items": {
               "$ref": "#/components/schemas/Prompt.SkillAttachment"
             }
+          },
+          "agent": {
+            "$ref": "#/components/schemas/Agent.ID"
+          },
+          "model": {
+            "$ref": "#/components/schemas/Model.Ref"
           },
           "metadata": {
             "type": "object"

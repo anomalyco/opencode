@@ -208,6 +208,8 @@ export interface Interface {
     agents?: PromptInput.Prompt["agents"]
     skills?: PromptInput.Prompt["skills"]
     delivery?: SessionInbox.Delivery
+    agent?: SessionInbox.UserPayload["agent"]
+    model?: SessionInbox.UserPayload["model"]
   }) => Effect.Effect<
     void,
     NotFoundError | Command.NotFoundError | Command.ExecutionError | FileSystem.DirectoryNotFoundError

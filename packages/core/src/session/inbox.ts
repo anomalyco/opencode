@@ -22,7 +22,7 @@ import { KeyedMutex } from "../effect/keyed-mutex.js"
 import { SessionEvent } from "./event.js"
 import { SessionMessage } from "./message.js"
 import { SessionSchema } from "./schema.js"
-import { SessionInboxTable, SessionMessageTable } from "./sql.js"
+import { SessionInboxTable, SessionMessageTable, SessionTable } from "./sql.js"
 
 type DatabaseService = Database.Interface["db"]
 
@@ -455,23 +455,47 @@ const publishMutation = <A, E, R>(input: PendingRef, effect: Effect.Effect<A, E,
     Effect.catchDefect((defect) => (defect instanceof LifecycleConflict ? Effect.fail(defect) : Effect.die(defect))),
   )
 
-const publish = Effect.fn("SessionInbox.publish")(function* (
+const publish = Effect.fn("SessionInbox.publish")(function* <E = never, R = never>(
   db: DatabaseService,
   bus: Bus.Interface,
   sessionID: SessionSchema.ID,
   rows: ReadonlyArray<typeof SessionInboxTable.$inferSelect>,
+  prepare?: (payload: UserPayload | undefined) => Effect.Effect<Bus.PublishInput | undefined, E, R>,
 ) {
-  yield* Effect.forEach(
+  yield* Effect.forEach<void, E, R, typeof rows, true>(
     rows,
-    (row) => {
-      const entry = fromRow(row)
-      if (entry.type === "compaction") return Effect.die(new LifecycleConflict({ id: entry.id }))
-      return bus
-        .publish(SessionEvent.InboxDelivered, {
-          sessionID,
-          inboxID: entry.id,
-        })
-        .pipe(
+    (row) =>
+      Effect.gen(function* () {
+        const entry = fromRow(row)
+        if (entry.type === "compaction") return yield* Effect.die(new LifecycleConflict({ id: entry.id }))
+        const instructions = prepare ? yield* prepare(entry.type === "user" ? entry.payload : undefined) : undefined
+        const events: [Bus.PublishInput, ...Bus.PublishInput[]] = [
+          [SessionEvent.InboxDelivered, { sessionID, inboxID: entry.id }],
+        ]
+        if (entry.type === "user" && (entry.payload.agent || entry.payload.model)) {
+          const current = yield* db
+            .select()
+            .from(SessionTable)
+            .where(eq(SessionTable.id, sessionID))
+            .get()
+            .pipe(Effect.orDie)
+          const model = entry.payload.model
+          if (
+            model &&
+            (current?.model?.id !== model.id ||
+              current.model.providerID !== model.providerID ||
+              (current.model.variant ?? "default") !== (model.variant ?? "default"))
+          )
+            events.unshift([SessionEvent.ModelSelected, { sessionID, model, previous: current?.model ?? undefined }])
+          if (entry.payload.agent && entry.payload.agent !== current?.agent)
+            events.unshift([
+              SessionEvent.AgentSelected,
+              { sessionID, agent: entry.payload.agent, previous: current?.agent ?? undefined },
+            ])
+        }
+        if (instructions) events.unshift(instructions)
+        // Instructions, selection, and delivery commit together.
+        yield* bus.publishAll(events).pipe(
           Effect.catchDefect((defect) =>
             defect instanceof LifecycleConflict
               ? promotedFromMessage(db, sessionID, entry.id, entry.delivery).pipe(
@@ -481,7 +505,7 @@ const publish = Effect.fn("SessionInbox.publish")(function* (
               : Effect.die(defect),
           ),
         )
-    },
+      }),
     { discard: true },
   )
   return rows.length
@@ -493,11 +517,12 @@ const publish = Effect.fn("SessionInbox.publish")(function* (
  * Steered compaction takes priority over pending prompts, without crossing a move.
  * Only the "input" scope may fall through to one queued input.
  */
-export const promote = Effect.fn("SessionInbox.promote")(function* (
+export const promote = Effect.fn("SessionInbox.promote")(function* <E = never, R = never>(
   db: DatabaseService,
   bus: Bus.Interface,
   sessionID: SessionSchema.ID,
   scope: Promotable,
+  prepare?: (payload: UserPayload | undefined) => Effect.Effect<Bus.PublishInput | undefined, E, R>,
 ) {
   return yield* serialized(
     sessionID,
@@ -506,7 +531,7 @@ export const promote = Effect.fn("SessionInbox.promote")(function* (
       if (steers.length > 0 || scope === "steer") {
         const control = steers.findIndex((row) => row.type === "compaction" || row.type === "move")
         if (control === 0) return undefined
-        return yield* publish(db, bus, sessionID, control === -1 ? steers : steers.slice(0, control))
+        return yield* publish(db, bus, sessionID, control === -1 ? steers : steers.slice(0, control), prepare)
       }
 
       const queued = yield* db
@@ -519,13 +544,17 @@ export const promote = Effect.fn("SessionInbox.promote")(function* (
         .pipe(Effect.orDie)
       if (!queued) return 0
       if (queued.type === "compaction" || queued.type === "move") return undefined
-      const promoted = yield* publish(db, bus, sessionID, [queued])
+      const promoted = yield* publish(db, bus, sessionID, [queued], prepare)
       const arrivedSteers = yield* pendingSteers(db, sessionID)
       const control = arrivedSteers.findIndex((row) => row.type === "compaction" || row.type === "move")
-      return (
-        promoted +
-        (yield* publish(db, bus, sessionID, control === -1 ? arrivedSteers : arrivedSteers.slice(0, control)))
+      const arrived = yield* publish(
+        db,
+        bus,
+        sessionID,
+        control === -1 ? arrivedSteers : arrivedSteers.slice(0, control),
+        prepare,
       )
+      return promoted + arrived
     }),
   )
 })

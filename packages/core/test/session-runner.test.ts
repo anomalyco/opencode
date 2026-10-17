@@ -1462,6 +1462,39 @@ describe("SessionRunnerLLM", () => {
     expect(userTexts(s.requests[2])).toContain("Queued for later")
   })
 
+  scenario("continues across a move before validating an unavailable queued agent", function* (s) {
+    yield* s.admit("Build before moving")
+    yield* s.llm.push(TestLLM.tool("call-move", "echo", { text: "moving" }), TestLLM.stop())
+    const tools = yield* s.blockTools()
+    const run = yield* s.resume.pipe(Effect.forkChild)
+    yield* tools.started
+    yield* s.session.prompt({
+      sessionID,
+      text: "Unavailable review",
+      agent: Agent.ID.make("missing"),
+      delivery: "queue",
+      resume: false,
+    })
+    yield* s.sessionInbox.admit({
+      id: SessionMessage.ID.create(),
+      sessionID,
+      item: {
+        type: "move",
+        payload: {
+          location: Location.Ref.make({ directory: AbsolutePath.make("/project") }),
+          projectID: Project.ID.global,
+        },
+        delivery: "steer",
+      },
+    })
+    yield* tools.release
+    expect(Exit.isFailure(yield* Fiber.await(run))).toBe(true)
+    expect(s.requests).toHaveLength(2)
+    expect(userTexts(s.requests[1])).toContain("Build before moving")
+    expect(userTexts(s.requests[1])).not.toContain("Unavailable review")
+    expect((yield* s.inbox).map((item) => item.type)).toEqual(["user"])
+  })
+
   scenario("runs a queued control on Location entry before a carried continuation", function* (s) {
     const runner = yield* SessionRunner.Service
     yield* s.admit("Echo before moving")
@@ -4104,6 +4137,31 @@ describe("SessionRunnerLLM", () => {
     expect((yield* s.context).map((message) => message.type)).toEqual(["user", "assistant", "user", "assistant"])
   })
 
+  scenario("applies a steered selection only after the active step settles", function* (s) {
+    yield* s.admit("Start building")
+    yield* s.llm.push(TestLLM.tool("call-echo", "echo", { text: "hello" }), TestLLM.stop())
+    const first = yield* s.resumePaused
+    const before = yield* s.session.get(sessionID)
+    const selection = {
+      agent: Agent.ID.make("reviewer"),
+      model: {
+        id: ID.make("replacement"),
+        providerID: Provider.ID.make("fake"),
+        variant: Model.VariantID.make("high"),
+      },
+    }
+    yield* s.session.prompt({ sessionID, text: "Review instead", delivery: "steer", ...selection })
+    expect((yield* s.session.get(sessionID)).agent).toBe(before.agent)
+    expect((yield* s.session.get(sessionID)).model).toEqual(before.model)
+    yield* first.finish
+    expect(
+      (yield* s.context).flatMap((message) => (message.type === "assistant" ? [String(message.agent)] : [])),
+    ).toEqual(["build", "reviewer"])
+    expect(s.requests.map((request) => String(request.model.id))).toEqual(["fake-model", "replacement"])
+    expect(s.requests.map(userTexts)).toEqual([["Start building"], ["Start building", "Review instead"]])
+    expect(yield* s.session.get(sessionID)).toMatchObject(selection)
+  })
+
   scenario("promotes queued input after continuation ends", function* (s) {
     yield* s.admit("Start working")
 
@@ -4121,6 +4179,203 @@ describe("SessionRunnerLLM", () => {
     expect(userTexts(s.requests[0])).toEqual(["Start working"])
     expect(userTexts(s.requests[1])).toEqual(["Start working"])
     expect(userTexts(s.requests[2])).toEqual(["Start working", "Wait until continuation ends"])
+  })
+
+  scenario("defers queued agent and model selection until continuation ends", function* (s) {
+    const before = yield* s.session.get(sessionID)
+    yield* s.admit("Build first")
+    yield* s.llm.push(TestLLM.tool("call-echo", "echo", { text: "hello" }), TestLLM.stop(), TestLLM.stop())
+    const first = yield* s.resumePaused
+    const selection = {
+      agent: Agent.ID.make("reviewer"),
+      model: {
+        id: ID.make("replacement"),
+        providerID: Provider.ID.make("fake"),
+        variant: Model.VariantID.make("high"),
+      },
+    }
+    yield* s.session.prompt({ sessionID, text: "Review next", delivery: "queue", ...selection })
+    expect((yield* s.session.get(sessionID)).agent).toBe(before.agent)
+    expect((yield* s.session.get(sessionID)).model).not.toEqual(selection.model)
+    yield* first.finish
+
+    expect(s.requests.map(userTexts)).toEqual([["Build first"], ["Build first"], ["Build first", "Review next"]])
+    expect(
+      (yield* s.context).flatMap((message) => (message.type === "assistant" ? [String(message.agent)] : [])),
+    ).toEqual(["build", "build", "reviewer"])
+    expect(s.requests.map((request) => String(request.model.id))).toEqual(["fake-model", "fake-model", "replacement"])
+    expect(yield* s.session.get(sessionID)).toMatchObject(selection)
+  })
+
+  scenario("leaves a queued input pending when its selected agent was removed", function* (s) {
+    const before = yield* s.session.get(sessionID)
+    const queued = yield* s.session.prompt({
+      sessionID,
+      text: "Review later",
+      delivery: "queue",
+      resume: false,
+      agent: Agent.ID.make("reviewer"),
+    })
+    const agents = yield* Agent.Service
+    yield* agents.transform((editor) => editor.remove(Agent.ID.make("reviewer")))
+    const exit = yield* s.resume.pipe(Effect.exit)
+    expect(Exit.isFailure(exit)).toBe(true)
+    expect((yield* s.inbox).map((item) => String(item.id))).toEqual([String(queued.id)])
+    expect((yield* s.session.get(sessionID)).agent).toBe(before.agent)
+    expect((yield* s.messages).some((message) => message.type === "agent-switched" || message.id === queued.id)).toBe(
+      false,
+    )
+    yield* s.session.cancelInbox({ sessionID, inboxID: queued.id })
+    expect(yield* s.inbox).toEqual([])
+  })
+
+  scenario("leaves a queued input pending when its selected model is unavailable", function* (s) {
+    const before = yield* s.session.get(sessionID)
+    const queued = yield* s.session.prompt({
+      sessionID,
+      text: "Review later",
+      delivery: "queue",
+      resume: false,
+      model: { id: ID.make("missing"), providerID: Provider.ID.make("missing") },
+    })
+    s.modelResolveHook = Effect.fail(
+      new SessionRunnerModel.ModelUnavailableError({
+        providerID: Provider.ID.make("missing"),
+        modelID: Model.ID.make("missing"),
+      }),
+    )
+    const exit = yield* s.resume.pipe(Effect.exit)
+    expect(Exit.isFailure(exit)).toBe(true)
+    expect((yield* s.inbox).map((item) => String(item.id))).toEqual([String(queued.id)])
+    expect((yield* s.session.get(sessionID)).model).toEqual(before.model)
+  })
+
+  scenario("does not commit rejected queued selection instructions", function* (s) {
+    s.skillBaselines.set(Agent.ID.make("build"), "Build skills")
+    s.skillBaselines.set(Agent.ID.make("reviewer"), "Reviewer skills")
+    yield* s.runPrompt("Build first")
+    const before = yield* s.db.select().from(InstructionStateTable).all().pipe(Effect.orDie)
+    const queued = yield* s.session.prompt({
+      sessionID,
+      text: "Review later",
+      delivery: "queue",
+      resume: false,
+      agent: Agent.ID.make("reviewer"),
+      model: { id: ID.make("missing"), providerID: Provider.ID.make("missing") },
+    })
+    s.modelResolveHook = Effect.fail(
+      new SessionRunnerModel.ModelUnavailableError({
+        providerID: Provider.ID.make("missing"),
+        modelID: Model.ID.make("missing"),
+      }),
+    )
+    expect(Exit.isFailure(yield* s.resume.pipe(Effect.exit))).toBe(true)
+    expect(yield* s.db.select().from(InstructionStateTable).all().pipe(Effect.orDie)).toEqual(before)
+    expect(
+      (yield* s.messages).some((message) => message.type === "system" && message.text.includes("Reviewer skills")),
+    ).toBe(false)
+    yield* s.session.cancelInbox({ sessionID, inboxID: queued.id })
+  })
+
+  scenario("delivers a queued replacement after the current agent is removed", function* (s) {
+    yield* s.session.prompt({
+      sessionID,
+      text: "Review next",
+      agent: Agent.ID.make("reviewer"),
+      delivery: "queue",
+      resume: false,
+    })
+    const agents = yield* Agent.Service
+    yield* agents.transform((editor) => editor.remove(Agent.ID.make("build")))
+    yield* s.llm.push(TestLLM.stop())
+    yield* s.resume
+    expect((yield* s.session.get(sessionID)).agent).toBe(Agent.ID.make("reviewer"))
+    expect(s.requests.map(userTexts)).toEqual([["Review next"]])
+    expect(yield* s.inbox).toEqual([])
+  })
+
+  scenario("does not apply a selection cancelled during instruction observation", function* (s) {
+    yield* s.runPrompt("Build first")
+    const before = yield* s.session.get(sessionID)
+    const queued = yield* s.session.prompt({
+      sessionID,
+      text: "Cancelled review",
+      agent: Agent.ID.make("reviewer"),
+      delivery: "queue",
+      resume: false,
+    })
+    s.systemLoadHook = Effect.gen(function* () {
+      s.systemLoadHook = Effect.void
+      yield* s.session.cancelInbox({ sessionID, inboxID: queued.id }).pipe(Effect.orDie)
+    })
+    yield* s.llm.push(TestLLM.stop())
+    yield* s.resume
+    expect((yield* s.session.get(sessionID)).agent).toBe(before.agent)
+    expect(
+      (yield* s.context).flatMap((message) => (message.type === "assistant" ? [String(message.agent)] : [])),
+    ).not.toContain("reviewer")
+  })
+
+  scenario("combines partial selections across a batch of steers", function* (s) {
+    yield* s.session.prompt({ sessionID, text: "Review", agent: Agent.ID.make("reviewer"), resume: false })
+    yield* s.session.prompt({
+      sessionID,
+      text: "Use replacement",
+      model: { id: ID.make("replacement"), providerID: Provider.ID.make("fake") },
+      resume: false,
+    })
+    yield* s.llm.push(TestLLM.stop())
+    yield* s.resume
+    expect((yield* s.session.get(sessionID)).agent).toBe(Agent.ID.make("reviewer"))
+    expect(s.requests.map((request) => String(request.model.id))).toEqual(["replacement"])
+    expect(s.requests.map(userTexts)).toEqual([["Review", "Use replacement"]])
+  })
+
+  scenario("keeps each queued selection in FIFO order across replay", function* (s) {
+    yield* s.session.prompt({
+      sessionID,
+      text: "Review",
+      delivery: "queue",
+      resume: false,
+      agent: Agent.ID.make("reviewer"),
+    })
+    yield* s.session.prompt({
+      sessionID,
+      text: "Build",
+      delivery: "queue",
+      resume: false,
+      agent: Agent.ID.make("build"),
+    })
+    yield* replaySessionProjection(sessionID)
+    yield* s.llm.push(TestLLM.stop(), TestLLM.stop())
+    yield* s.resume
+    expect(
+      (yield* s.context).flatMap((message) => (message.type === "assistant" ? [String(message.agent)] : [])),
+    ).toEqual(["reviewer", "build"])
+    expect(s.requests.map(userTexts)).toEqual([["Review"], ["Review", "Build"]])
+    yield* replaySessionProjection(sessionID)
+    expect((yield* s.session.get(sessionID)).agent).toBe(Agent.ID.make("build"))
+  })
+
+  scenario("cancelling queued input discards its agent and model selection", function* (s) {
+    const before = yield* s.session.get(sessionID)
+    yield* s.admit("Build first")
+    yield* s.llm.push(TestLLM.stop())
+    const first = yield* s.resumePaused
+    const queued = yield* s.session.prompt({
+      sessionID,
+      text: "Cancelled review",
+      delivery: "queue",
+      agent: Agent.ID.make("reviewer"),
+      model: { id: ID.make("replacement"), providerID: Provider.ID.make("fake") },
+    })
+    yield* s.session.cancelInbox({ sessionID, inboxID: queued.id })
+    yield* first.finish
+    expect((yield* s.session.get(sessionID)).agent).toBe(before.agent)
+    expect(s.requests).toHaveLength(1)
+    expect(
+      (yield* s.messages).some((message) => message.type === "agent-switched" || message.type === "model-switched"),
+    ).toBe(false)
   })
 
   scenario("keeps queued input parked when a steer is cancelled during preparation", function* (s) {

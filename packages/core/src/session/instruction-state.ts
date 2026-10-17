@@ -35,9 +35,9 @@ export const observe = Effect.fn("InstructionState.observe")(function* (
   }
 })
 
-export const commit = Effect.fn("InstructionState.commit")(function* (
+/** Builds an instruction update that can commit atomically with input delivery. */
+export const publication = Effect.fn("InstructionState.publication")(function* (
   db: DatabaseService,
-  bus: Bus.Interface,
   instructions: Instructions.List,
   observation: Observation,
 ) {
@@ -45,7 +45,7 @@ export const commit = Effect.fn("InstructionState.commit")(function* (
   // The rendered text is frozen into the durable event because re-rendering it
   // later would require the original Location-scoped instruction sources.
   const text = observation.initial ? "" : yield* renderUpdateText(db, instructions, observation)
-  yield* bus.publish(
+  return [
     SessionEvent.InstructionsUpdated,
     {
       sessionID: observation.sessionID,
@@ -57,7 +57,17 @@ export const commit = Effect.fn("InstructionState.commit")(function* (
       ...(observation.initial ? { metadata: { instructions: { initial: true } } } : {}),
       commit: () => insertBlobs(db, observation.blobs),
     },
-  )
+  ] satisfies Bus.PublishInput
+})
+
+export const commit = Effect.fn("InstructionState.commit")(function* (
+  db: DatabaseService,
+  bus: Bus.Interface,
+  instructions: Instructions.List,
+  observation: Observation,
+) {
+  const event = yield* publication(db, instructions, observation)
+  if (event) yield* bus.publish(...event)
 })
 
 const renderUpdateText = Effect.fnUntraced(function* (

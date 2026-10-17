@@ -97,15 +97,17 @@ export const Plugin = define({
                 })
                 if (subagent ?? commandAgent?.mode === "subagent") {
                   const parent = yield* sessions.get(input.sessionID)
-                  const selected = yield* agents.select(agent ?? parent.agent)
+                  const selected = yield* agents.select(agent ?? input.prompt.agent ?? parent.agent)
                   const child = yield* sessions.create({
                     parentID: parent.id,
                     title: command.description ?? name,
                     agent: selected.id,
-                    model: model ?? selected.info?.model ?? parent.model,
+                    model: model ?? input.prompt.model ?? selected.info?.model ?? parent.model,
                   })
                   yield* sessions.prompt({
                     ...input.prompt,
+                    agent: undefined,
+                    model: undefined,
                     sessionID: child.id,
                     text: ["You are a subagent spawned by another session.", text].join("\n"),
                     resume: false,
@@ -121,16 +123,13 @@ export const Plugin = define({
                   yield* subagents.background(recovery)
                   return
                 }
-                if (agent !== undefined) {
-                  const session = yield* ctx.session.get({ sessionID: input.sessionID })
-                  if (session.agent !== agent) yield* ctx.session.switchAgent({ sessionID: input.sessionID, agent })
-                }
-                if (model !== undefined) yield* ctx.session.switchModel({ sessionID: input.sessionID, model })
                 yield* ctx.session.prompt({
                   ...input.prompt,
                   sessionID: input.sessionID,
                   text,
                   delivery: input.delivery,
+                  agent: agent ?? input.prompt.agent,
+                  model: model ?? input.prompt.model,
                 })
               }).pipe(Effect.asVoid),
           })

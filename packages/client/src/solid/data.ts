@@ -1623,6 +1623,8 @@ export function createData(config: CreateDataInput) {
             text: request.text,
             agents: request.agents?.map((agent) => ({ ...agent })),
             metadata: request.metadata,
+            agent: request.agent,
+            model: request.model,
           }
           if (files) payload.files = files
           outbox.add(id)

@@ -1313,7 +1313,7 @@ export function Prompt(props: PromptProps) {
       const send = async () => {
         // Commands inherit the composer selection; command-specific overrides
         // remain server-owned and run after this preparation.
-        await commitSelection()
+        if (delivery !== "queue") await commitSelection()
         return client.api.session.command({
           sessionID: target,
           name: slashHead.name,
@@ -1322,6 +1322,9 @@ export function Prompt(props: PromptProps) {
           agents: entry.agents,
           skills: entry.skills?.length ? entry.skills : undefined,
           delivery,
+          agent: delivery === "queue" ? agent.id : undefined,
+          model:
+            delivery === "queue" ? { providerID: selection.providerID, id: selection.modelID, variant } : undefined,
         })
       }
       void (newSession ? newSession.gate.then(send) : send()).catch((error) =>
@@ -1329,7 +1332,7 @@ export function Prompt(props: PromptProps) {
       )
     } else {
       move.startSubmit()
-      if (!(await attempt("Failed to prepare session", prepareAgent))) return true
+      if (delivery !== "queue" && !(await attempt("Failed to prepare session", prepareAgent))) return true
       // Revert must settle before optimistic admission: its committed echo
       // splices every local row at or after the boundary, which would include
       // a freshly admitted prompt.
@@ -1364,10 +1367,13 @@ export function Prompt(props: PromptProps) {
           skills: entry.skills?.length ? entry.skills : undefined,
           delivery,
           gate: newSession?.gate,
+          ...(delivery === "queue"
+            ? { agent: agent.id, model: { providerID: selection.providerID, id: selection.modelID, variant } }
+            : {}),
           // Commit the captured selection after earlier admissions, including
           // compaction setup. Cached state may still precede their SSE echoes;
           // the server makes an unchanged selection a no-op.
-          prepare: commitModel,
+          prepare: delivery === "queue" ? undefined : commitModel,
         })
         .catch((error) => (newSession ? newSession.recover(error) : fail("Failed to send prompt", error)))
       if (pendingEditorSelection) editor.markSelectionSent()

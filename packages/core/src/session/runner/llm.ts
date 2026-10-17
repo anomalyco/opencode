@@ -165,21 +165,53 @@ const layer = Layer.effect(
                 return DrainResult.Complete()
               const ready = yield* restore(
                 Effect.gen(function* () {
-                  const selected = yield* prepareContext(sessionID)
-                  const promoted = yield* SessionInbox.promote(
-                    db,
-                    bus,
-                    sessionID,
-                    entering && !continuing ? promotable : "steer",
+                  const scope = entering && !continuing ? promotable : "steer"
+                  const candidate =
+                    pending?.type === "user" && (scope === "input" || pending.delivery === "steer")
+                      ? pending.payload
+                      : undefined
+                  const initial = yield* context.select(sessionID, candidate)
+                  // Observe before promotion so newly admitted controls can take priority.
+                  const observation = yield* InstructionState.observe(db, initial.instructions, sessionID)
+                  let prepared = initial
+                  let observed: InstructionState.Observation | undefined = observation
+                  const promoted = yield* SessionInbox.promote(db, bus, sessionID, scope, (payload) =>
+                    Effect.gen(function* () {
+                      if (!observed || payload?.agent || payload?.model || candidate?.agent || candidate?.model)
+                        prepared = yield* context.select(sessionID, payload)
+                      if (payload?.agent || payload?.model) yield* context.resolveModel(prepared.session)
+                      const event = yield* InstructionState.publication(
+                        db,
+                        prepared.instructions,
+                        prepared === initial && observed
+                          ? observed
+                          : yield* InstructionState.observe(db, prepared.instructions, sessionID),
+                      )
+                      observed = undefined
+                      return event
+                    }),
                   )
                   // A control admitted during context preparation owns this boundary.
                   if (promoted === undefined) return undefined
+                  const selected =
+                    promoted > 0
+                      ? prepared
+                      : candidate?.agent || candidate?.model
+                        ? yield* prepareContext(sessionID)
+                        : initial
+                  if (promoted === 0 && selected === initial)
+                    yield* InstructionState.commit(db, bus, initial.instructions, observation)
                   if (promoted > 0 && !selected.session.parentID && SessionTitle.isUntitled(selected.session))
                     yield* FiberMap.run(titles, sessionID, title.generate(sessionID), {
                       onlyIfMissing: true,
                     })
                   if (promoted > 0) step = 1
-                  return { _tag: "Ready" as const, context: yield* context.load(selected) }
+                  // Deferred selection belongs to the promoted input, including its
+                  // permissions and instruction discovery, rather than the preceding work.
+                  return {
+                    _tag: "Ready" as const,
+                    context: yield* context.load(selected),
+                  }
                 }),
               )
               if (ready) return ready
