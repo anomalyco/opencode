@@ -707,6 +707,12 @@ export function Autocomplete(props: {
         title: "Select autocomplete item",
         group: "Autocomplete",
         run() {
+          // A slash after other text with no matching command is just text (e.g. a trailing path), so let the
+          // prompt submit it. A mistyped command at the start of the prompt stays blocked.
+          if (store.visible === "command" && !options().length && store.index > 0) {
+            hide()
+            return false
+          }
           select()
         },
       },
