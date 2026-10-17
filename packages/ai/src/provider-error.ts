@@ -128,6 +128,7 @@ const QUOTA_CODES = new Set([
 // Google reports an invalid API key as HTTP 400 INVALID_ARGUMENT with this `details[].reason`.
 // Z.ai's Responses API reports account and plan rejections mid-stream as `permission_denied`.
 const AUTH_CODES = new Set(["authentication_error", "permission_error", "permission_denied", "api_key_invalid"])
+const ACCESS_RESTRICTION_CODES = new Set(["regionerror", "freetiererror"])
 const SERVER_CODES = new Set([
   "api_error",
   "internal_error",
@@ -264,6 +265,8 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
     (input.status === 429 && QUOTA_TEXT.test(text))
   )
     return new QuotaExceededError(details)
+  if (input.status === 403 && codes.some((code) => ACCESS_RESTRICTION_CODES.has(code)))
+    return new InvalidRequestError(details)
   if (
     input.status === 401 ||
     input.status === 403 ||

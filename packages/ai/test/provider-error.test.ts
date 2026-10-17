@@ -432,6 +432,43 @@ describe("provider error rawBody classification", () => {
     }
   })
 
+  test("classifies typed 403 access restrictions as invalid requests", () => {
+    const http = { url: "https://provider.test/v1/chat", status: 403, headers: { "x-request-id": "req-1" } }
+    const cases = [
+      {
+        message: "Model access is unavailable in this region",
+        rawBody: '{"error":{"type":"RegionError","message":"Model access is unavailable in this region"}}',
+      },
+      {
+        message: "Free tier access is unavailable",
+        rawBody: '{"message":"Free tier access is unavailable"}',
+        data: { error: { type: "FreeTierError" } },
+      },
+    ] as const
+
+    for (const value of cases) {
+      const reason = classifyProviderFailure({ ...value, status: 403, http })
+      expect(reason._tag).toBe("InvalidRequest")
+      expect(reason.message).toBe(value.message)
+      expect(reason.body).toBe(value.rawBody)
+      expect(reason.http).toEqual(http)
+    }
+  })
+
+  test("keeps genuine authentication 403 controls as authentication failures", () => {
+    expect(
+      [
+        classifyProviderFailure({ message: "Invalid credentials", status: 401 }),
+        classifyProviderFailure({ message: "Forbidden", status: 403 }),
+        classifyProviderFailure({
+          message: "Access denied",
+          status: 403,
+          rawBody: '{"error":{"code":"permission_error","message":"Access denied"}}',
+        }),
+      ].map((reason) => reason._tag),
+    ).toEqual(["Authentication", "Authentication", "Authentication"])
+  })
+
   test("classifies Workers AI context window rejections as context overflow despite HTTP 413", () => {
     const message =
       "AiError: Ai: The estimated number of input and maximum output tokens (900047) exceeded this model context window limit (32000). (17851589-f2e6-405d-b67c-5550e52ee1c1)"
