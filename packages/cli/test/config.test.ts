@@ -71,6 +71,25 @@ test("preserves the schema in an existing cli.json", async () => {
   expect(await Bun.file(file).json()).toEqual(config)
 })
 
+test("persists the hide-subagents-in-child-sessions setting", async () => {
+  await using directory = await tmpdir()
+
+  const config = await run(
+    directory.path,
+    Effect.gen(function* () {
+      const service = yield* Config.Service
+      return yield* service.update((draft) => {
+        draft.session = { ...draft.session, hide_subagents_in_child_sessions: true }
+      })
+    }),
+  )
+
+  expect(config.session?.hide_subagents_in_child_sessions).toBe(true)
+  expect((await Bun.file(path.join(directory.path, "cli.json")).json()).session).toEqual({
+    hide_subagents_in_child_sessions: true,
+  })
+})
+
 test("merges inline CLI config content over the global config", async () => {
   await using directory = await tmpdir()
   const file = path.join(directory.path, "cli.json")

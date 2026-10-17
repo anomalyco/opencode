@@ -114,6 +114,25 @@ test("shows the TPS default in session settings", () => {
   expect(setting?.default).toBe(true)
 })
 
+test("validates and resolves the hide-subagents-in-child-sessions setting", () => {
+  expect(decodeInfo({ session: { hide_subagents_in_child_sessions: true } })).toEqual({
+    session: { hide_subagents_in_child_sessions: true },
+  })
+  expect(() => decodeInfo({ session: { hide_subagents_in_child_sessions: "yes" } })).toThrow()
+
+  expect(resolve({}, { terminalSuspend: true }).session.hide_subagents_in_child_sessions).toBe(false)
+  expect(
+    resolve({ session: { hide_subagents_in_child_sessions: true } }, { terminalSuspend: true }).session
+      .hide_subagents_in_child_sessions,
+  ).toBe(true)
+
+  expect(settings.find((setting) => setting.path.join(".") === "session.hide_subagents_in_child_sessions")).toMatchObject({
+    category: "Session",
+    default: false,
+    values: [false, true],
+  })
+})
+
 test("shows transcript verbosity in session settings", () => {
   expect(settings.find((setting) => setting.path.join(".") === "session.verbosity")).toMatchObject({
     category: "Session",
