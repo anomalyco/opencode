@@ -31,3 +31,28 @@ it.live("boots the workerd profile over durable object storage", () =>
     expect(body).toMatchObject({ version: "workerd-test" })
   }),
 )
+
+it.live("keeps opencode's tables under the database prefix beside the object's own tables", () =>
+  Effect.gen(function* () {
+    const storage = makeDurableObjectStorage()
+    storage.sql.exec("CREATE TABLE session (id TEXT PRIMARY KEY)")
+    storage.sql.exec("INSERT INTO session (id) VALUES ('host')")
+    const handler = yield* ServerWorkerd.create({
+      storage,
+      database: { prefix: "opencode_" },
+      app: { version: "workerd-test" },
+      config: { content: "{}" },
+    })
+
+    const status = yield* Effect.promise(() => handler(new Request("http://opencode.local/api/info")))
+    expect(status.status).toBe(200)
+
+    const names = storage.sql
+      .exec("SELECT name FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' AND name NOT LIKE '\\_%' ESCAPE '\\'")
+      .toArray()
+      .map((row) => String(row.name))
+    expect(names).toContain("opencode_session_v2")
+    expect(names.filter((name) => !name.startsWith("opencode_"))).toEqual(["session"])
+    expect(storage.sql.exec("SELECT id FROM session").toArray()).toEqual([{ id: "host" }])
+  }),
+)
