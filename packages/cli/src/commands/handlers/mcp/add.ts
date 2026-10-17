@@ -43,6 +43,8 @@ export async function resolveConfigPath(directory: string) {
     path.join(directory, "opencode.jsonc"),
     path.join(directory, ".opencode", "opencode.json"),
     path.join(directory, ".opencode", "opencode.jsonc"),
+    path.join(directory, ".agents", "opencode", "opencode.json"),
+    path.join(directory, ".agents", "opencode", "opencode.jsonc"),
   ]
   for (const candidate of candidates) {
     if (

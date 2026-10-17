@@ -1279,6 +1279,7 @@ describe("Config", () => {
                 path: tmp.path,
                 names: [".agents", ".claude", ".opencode", "opencode.json", "opencode.jsonc"],
               },
+              { type: "entries", path: path.join(tmp.path, ".agents"), names: ["opencode"] },
             ])
           }).pipe(Effect.provide(testLayer(tmp.path, undefined, undefined, undefined, Watcher.testLayer)))
         }),
@@ -1904,7 +1905,7 @@ describe("Config", () => {
             await fs.mkdir(globalAgents, { recursive: true })
             await fs.mkdir(globalClaude, { recursive: true })
             await fs.mkdir(directory, { recursive: true })
-            await fs.mkdir(path.join(root, ".agents"), { recursive: true })
+            await fs.mkdir(path.join(root, ".agents", "opencode"), { recursive: true })
             await fs.mkdir(path.join(root, ".claude"), { recursive: true })
             await fs.mkdir(path.join(root, ".opencode"), { recursive: true })
             await fs.mkdir(path.join(directory, ".agents"), { recursive: true })
@@ -1916,6 +1917,10 @@ describe("Config", () => {
               fs.writeFile(path.join(root, "opencode.json"), JSON.stringify({ $schema: "root" })),
               fs.writeFile(path.join(parent, "opencode.jsonc"), JSON.stringify({ $schema: "parent" })),
               fs.writeFile(path.join(directory, "opencode.json"), JSON.stringify({ $schema: "directory" })),
+              fs.writeFile(
+                path.join(root, ".agents", "opencode", "opencode.json"),
+                JSON.stringify({ $schema: "root-agents" }),
+              ),
               fs.writeFile(path.join(root, ".opencode", "opencode.json"), JSON.stringify({ $schema: "root-dot" })),
               fs.writeFile(
                 path.join(directory, ".opencode", "opencode.jsonc"),
@@ -1932,6 +1937,7 @@ describe("Config", () => {
 
             expect(entries.filter((entry) => entry.type === "directory").map((entry) => entry.path)).toEqual([
               AbsolutePath.make(global),
+              AbsolutePath.make(path.join(root, ".agents", "opencode")),
               AbsolutePath.make(path.join(root, ".opencode")),
               AbsolutePath.make(path.join(directory, ".opencode")),
             ])
@@ -1951,6 +1957,7 @@ describe("Config", () => {
               "root",
               "parent",
               "directory",
+              "root-agents",
               "root-dot",
               "directory-dot",
             ])
@@ -1961,6 +1968,8 @@ describe("Config", () => {
               "root",
               "parent",
               "directory",
+              "root-agents",
+              AbsolutePath.make(path.join(root, ".agents", "opencode")),
               "root-dot",
               AbsolutePath.make(path.join(root, ".opencode")),
               "directory-dot",
