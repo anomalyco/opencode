@@ -1,5 +1,6 @@
 import { OpenCode, type SessionInfo } from "@opencode/client"
 import { Service } from "@opencode/client/effect/service"
+import { Project } from "@opencode/schema/project"
 import { Effect, Option, Stream } from "effect"
 import { EOL } from "node:os"
 import { Commands } from "../../commands"
@@ -23,7 +24,9 @@ const handler = Effect.fn("cli.session.list")(function* (
     try: (signal) =>
       client.session.list(
         {
-          project: location.project.id,
+          ...(location.project.id === Project.ID.global
+            ? { directory: location.directory }
+            : { project: location.project.id }),
           parentID: null,
           order: "desc",
           limit: Option.getOrElse(input.maxCount, () => 100),
