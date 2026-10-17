@@ -955,6 +955,9 @@ describe("ConfigProviderPlugin.Plugin", () => {
                         requireFinishReason: false,
                         supportsEffortUpdates: false,
                         supportsThinkingBlockBinding: false,
+                        supportsStore: false,
+                        supportsUsageInStreaming: false,
+                        supportsStrictMode: false,
                       },
                       capabilities: { tools: true, input: ["text"], output: ["text"] },
                       disabled: true,
@@ -1063,6 +1066,9 @@ describe("ConfigProviderPlugin.Plugin", () => {
           requireFinishReason: false,
           supportsEffortUpdates: false,
           supportsThinkingBlockBinding: false,
+          supportsStore: false,
+          supportsUsageInStreaming: false,
+          supportsStrictMode: false,
         })
         expect(model.capabilities).toEqual({ tools: true, input: ["text"], output: ["text"] })
         expect(model.enabled).toBe(false)

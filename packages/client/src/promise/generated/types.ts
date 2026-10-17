@@ -639,6 +639,9 @@ export type ModelCompatibility = {
   maxTokensField?: ModelMaxTokensField
   requireFinishReason?: boolean
   requireAssistantAfterTool?: boolean
+  supportsStore?: boolean
+  supportsUsageInStreaming?: boolean
+  supportsStrictMode?: boolean
   supportsPromptCacheKey?: boolean
   cacheFormat?: ModelCacheFormat
   supportsThinkingBlockBinding?: boolean
@@ -651,6 +654,9 @@ export type ProviderCompatibility = {
   maxTokensField?: ModelMaxTokensField
   requireFinishReason?: boolean
   requireAssistantAfterTool?: boolean
+  supportsStore?: boolean
+  supportsUsageInStreaming?: boolean
+  supportsStrictMode?: boolean
   supportsPromptCacheKey?: boolean
   cacheFormat?: ModelCacheFormat
 }
