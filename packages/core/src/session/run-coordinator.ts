@@ -25,6 +25,12 @@ export interface Coordinator<Key, E, Reason = never> {
     reason?: Reason,
     options?: { readonly awaitSettlement?: boolean },
   ) => Effect.Effect<boolean>
+  /**
+   * Names the reason for a stop the drain decides on its own. Such a drain interrupts its own fiber,
+   * so no caller reaches `interrupt`, and the settle could not tell that stop from an unowned
+   * teardown. Records the reason only — the drain still interrupts itself, and wakes stay unclaimed.
+   */
+  readonly stopReason: (key: Key, reason: Reason) => Effect.Effect<void>
   /** Resolves once no execution is active for the key. Returns immediately when already idle and never starts work. */
   readonly awaitIdle: (key: Key) => Effect.Effect<void>
 }
@@ -166,6 +172,12 @@ export const make = <Key, E, Reason = never>(options: {
         return true
       })
 
+    const stopReason = (key: Key, reason: Reason) =>
+      Effect.sync(() => {
+        const execution = executions.get(key)
+        if (execution !== undefined) execution.interruptionReason = reason
+      })
+
     // One execution's `done` already spans coalesced continuations; re-check after it
     // settles to cover a successor execution started by a late doorbell.
     const awaitIdle = (key: Key): Effect.Effect<void> =>
@@ -192,5 +204,6 @@ export const make = <Key, E, Reason = never>(options: {
           )
         }),
       awaitIdle,
+      stopReason,
     }
   })
