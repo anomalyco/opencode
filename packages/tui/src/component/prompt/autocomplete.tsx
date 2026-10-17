@@ -245,6 +245,7 @@ export function Autocomplete(props: {
     item: FileSystemEntry,
     filePath: string,
     lineRange?: { startLine: number; endLine?: number },
+    workspaceRelative?: string,
   ) {
     const urlObj = pathToFileURL(filePath)
     const filename =
@@ -267,6 +268,7 @@ export function Autocomplete(props: {
         value: {
           uri: urlObj.href,
           name: filename,
+          ...(workspaceRelative === undefined ? {} : { workspaceRelative }),
           mention: { start: 0, end: 0, text: "" },
         },
       },
@@ -372,7 +374,12 @@ export function Autocomplete(props: {
 
       options.push(
         ...result.data.map((item): AutocompleteOption => {
-          const { filename, part } = createFilePart(item, path.join(result.location.directory, item.path), lineRange)
+          const { filename, part } = createFilePart(
+            item,
+            path.join(result.location.directory, item.path),
+            lineRange,
+            base.startsWith("~") || path.posix.isAbsolute(base) || path.win32.isAbsolute(base) ? undefined : item.path,
+          )
           return {
             display: Locale.truncateMiddle(filename, width),
             value: filename,
