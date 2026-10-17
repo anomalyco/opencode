@@ -104,4 +104,44 @@ describe("Composer store", () => {
     ])
     expect(prompt.state.cursor).toBe(9)
   })
+
+  test("keeps every mention added without a range", () => {
+    const prompt = createComposerEditorActions(
+      createStore<ComposerPersistedState>({
+        prompt: [{ type: "text", content: "", start: 0, end: 0 }],
+        cursor: 0,
+        context: { items: [] },
+      }),
+    )
+
+    prompt.addMention({ type: "file", path: "src/a.ts", content: "@src/a.ts", start: 0, end: 0 })
+    prompt.addMention({ type: "file", path: "src/b.ts", content: "@src/b.ts", start: 0, end: 0 })
+
+    expect(prompt.state.prompt).toEqual([
+      { type: "file", path: "src/a.ts", content: "@src/a.ts", start: 0, end: 9 },
+      { type: "text", content: " ", start: 9, end: 10 },
+      { type: "file", path: "src/b.ts", content: "@src/b.ts", start: 10, end: 19 },
+      { type: "text", content: " ", start: 19, end: 20 },
+      { type: "text", content: "", start: 20, end: 20 },
+    ])
+    expect(prompt.state.cursor).toBe(20)
+  })
+
+  test("replaces the trigger typed in the text part holding the cursor", () => {
+    const [state, setState] = createStore<ComposerPersistedState>({
+      prompt: [{ type: "text", content: "look @src/app", start: 0, end: 13 }],
+      cursor: 13,
+      context: { items: [] },
+    })
+
+    const prompt = createComposerEditorActions([state, setState])
+    prompt.addMention({ type: "file", path: "src/app.ts", content: "@src/app.ts", start: 0, end: 0 })
+
+    expect(prompt.state.prompt).toEqual([
+      { type: "text", content: "look ", start: 0, end: 5 },
+      { type: "file", path: "src/app.ts", content: "@src/app.ts", start: 5, end: 16 },
+      { type: "text", content: " ", start: 16, end: 17 },
+    ])
+    expect(prompt.state.cursor).toBe(17)
+  })
 })

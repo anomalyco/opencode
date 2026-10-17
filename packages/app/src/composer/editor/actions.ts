@@ -82,9 +82,10 @@ export function createComposerEditorActions(input: ComposerStateStoreInput) {
         .join("")
 
       const end = range?.end ?? store().cursor ?? text.length
-      const start = range?.start ?? text.slice(0, end).lastIndexOf("@")
-      setStore()("prompt", insertMention(store().prompt, start < 0 ? end : start, end, mention))
-      setStore()("cursor", (start < 0 ? end : start) + mention.content.length + 1)
+      const start = range?.start ?? triggerStart(store().prompt, end)
+      const at = start < 0 ? end : start
+      setStore()("prompt", insertMention(store().prompt, at, end, mention))
+      setStore()("cursor", at + mention.content.length + 1)
       clearRetry()
     },
     removeAttachment(id: string) {
@@ -134,13 +135,15 @@ function insertMention(
   }
 
   let position = 0
+  let inserted = false
 
   const parts = prompt.flatMap<ComposerPrompt[number]>((part) => {
     if (isAttachment(part)) return [part]
     const partStart = position
     position += part.content.length
 
-    if (part.type !== "text" || start < partStart || end > position) return [part]
+    if (inserted || part.type !== "text" || start < partStart || end > position) return [part]
+    inserted = true
     const before = part.content.slice(0, start - partStart)
     const after = part.content.slice(end - partStart)
 
@@ -152,6 +155,25 @@ function insertMention(
   })
 
   return withOffsets(parts)
+}
+
+/** The `@` a mention replaces, when it was typed in the text part the cursor sits in. */
+function triggerStart(prompt: ComposerPrompt, end: number): number {
+  let position = 0
+
+  for (const part of prompt) {
+    if (isAttachment(part)) continue
+    const partStart = position
+    position += part.content.length
+
+    if (part.type !== "text" || end < partStart || end > position) continue
+
+    const index = part.content.slice(0, end - partStart).lastIndexOf("@")
+
+    return index < 0 ? -1 : partStart + index
+  }
+
+  return -1
 }
 
 function withOffsets(prompt: ComposerPrompt): ComposerPrompt {
