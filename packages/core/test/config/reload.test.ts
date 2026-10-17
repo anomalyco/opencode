@@ -29,7 +29,7 @@ import { Credential } from "@opencode/core/credential"
 import { WellKnown } from "@opencode/core/wellknown"
 import { Watcher } from "@opencode/core/filesystem/watcher"
 import { AppProcess } from "@opencode/util/process"
-import { Deferred, Effect, Layer, Schema } from "effect"
+import { Deferred, Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { AbsolutePath } from "@opencode/core/schema"
 import { testEffect } from "../lib/effect"
@@ -68,6 +68,7 @@ describe("config plugin reloads", () => {
             })
             return yield* Effect.gen(function* () {
               const config = yield* Config.Service
+              const bus = yield* Bus.Service
               const plugins = yield* Plugin.Service
               const skills = yield* Skill.Service
               const host = yield* PluginHost.make(plugins)
@@ -75,20 +76,35 @@ describe("config plugin reloads", () => {
               expect(yield* skills.list()).toEqual([])
 
               // Finish startup by observing an ordinary config reload before creating the root.
-              yield* Effect.promise(() => Bun.write(file, JSON.stringify({ shell: "ready" })))
-              yield* waitUntil(
+              yield* settle(
+                bus.subscribe(Event.Updated),
+                Effect.promise(() => Bun.write(file, JSON.stringify({ shell: "ready" }))),
                 config.entries().pipe(Effect.map((entries) => Config.latest(entries, "shell") === "ready")),
               )
-              const skill = path.join(root, "skills", "probe", "SKILL.md")
-              yield* Effect.promise(() =>
-                Bun.write(skill, "---\nname: probe\ndescription: Hot reload\n---\nTest skill"),
+              // The root can appear before its skills directory.
+              yield* settle(
+                bus.subscribe(Skill.Event.Updated),
+                Effect.promise(() => fs.mkdir(root)),
+                Effect.succeed(true),
               )
-              yield* waitUntil(skills.list().pipe(Effect.map((items) => items.some((item) => item.id === "probe"))))
+              const skill = path.join(root, "skills", "probe", "SKILL.md")
+              yield* settle(
+                bus.subscribe(Skill.Event.Updated),
+                Effect.promise(() => Bun.write(skill, "---\nname: probe\ndescription: Hot reload\n---\nTest skill")),
+                skills.list().pipe(Effect.map((items) => items.some((item) => item.id === "probe"))),
+              )
               expect((yield* skills.list())[0]?.path).toBe(AbsolutePath.make(skill))
-              yield* Effect.promise(() => fs.rm(root, { recursive: true }))
-              yield* waitUntil(skills.list().pipe(Effect.map((items) => items.length === 0)))
-              yield* Effect.promise(() => Bun.write(skill, "---\nname: probe\ndescription: Recreated\n---\nTest skill"))
-              yield* waitUntil(skills.list().pipe(Effect.map((items) => items[0]?.description === "Recreated")))
+              yield* settle(
+                bus.subscribe(Skill.Event.Updated),
+                Effect.promise(() => fs.rm(root, { recursive: true })),
+                skills.list().pipe(Effect.map((items) => items.length === 0)),
+              )
+              // Recreate the root and the skill in one write.
+              yield* settle(
+                bus.subscribe(Skill.Event.Updated),
+                Effect.promise(() => Bun.write(skill, "---\nname: probe\ndescription: Recreated\n---\nTest skill")),
+                skills.list().pipe(Effect.map((items) => items[0]?.description === "Recreated")),
+              )
             }).pipe(Effect.provide(liveConfig(project, undefined, { global: input.global })))
           }),
         ),
@@ -367,6 +383,21 @@ function referenceConfig(file: string, references: Record<string, string>) {
 function title(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1)
 }
+
+// Subscribes before the action so the event that makes the condition true cannot be missed.
+const settle = Effect.fnUntraced(function* (
+  events: Stream.Stream<unknown>,
+  action: Effect.Effect<unknown>,
+  condition: Effect.Effect<boolean>,
+) {
+  const settled = yield* events.pipe(
+    Stream.filterEffect(() => condition),
+    Stream.runHead,
+    Effect.forkScoped({ startImmediately: true }),
+  )
+  yield* action
+  yield* Fiber.join(settled)
+})
 
 const waitUntil = Effect.fnUntraced(function* (condition: Effect.Effect<boolean>) {
   for (let attempt = 0; attempt < 100; attempt++) {
