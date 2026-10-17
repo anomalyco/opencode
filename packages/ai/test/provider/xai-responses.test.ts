@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer, Stream } from "effect"
-import { LLM, LLMEvent, Message } from "../../src/index.js"
+import { LLM, LLMEvent, Message, ToolDefinition } from "../../src/index.js"
 import { XAI } from "../../src/providers.js"
 import { OpenResponses } from "../../src/protocols/open-responses.js"
 import { OpenAIResponses } from "../../src/protocols/openai-responses.js"
@@ -269,6 +269,59 @@ describe("xAI Responses route", () => {
         ],
       })
       expect(JSON.parse(unstored.message).previous_response_id).toBeUndefined()
+    }),
+  )
+
+  it.effect("lowers xAI hosted search tools next to function tools", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          prompt: "Search X",
+          tools: [
+            XAI.xSearch({ allowedXHandles: ["xai"], fromDate: "2026-10-01", enableImageUnderstanding: true }),
+            XAI.webSearch({ excludedDomains: ["example.com"], enableImageSearch: false }),
+            ToolDefinition.make({ name: "lookup", description: "Lookup", inputSchema: { type: "object" } }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.tools).toEqual([
+        { type: "x_search", allowed_x_handles: ["xai"], from_date: "2026-10-01", enable_image_understanding: true },
+        { type: "web_search", filters: { excluded_domains: ["example.com"] }, enable_image_search: false },
+        { type: "function", name: "lookup", description: "Lookup", parameters: { type: "object" }, strict: false },
+      ])
+    }),
+  )
+
+  it.effect("lowers xAI hosted search tools without options", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({ model, prompt: "Search", tools: [XAI.xSearch(), XAI.webSearch()] }),
+      )
+
+      expect(prepared.body.tools).toEqual([{ type: "x_search" }, { type: "web_search" }])
+    }),
+  )
+
+  it.effect("rejects hosted tools that belong to another provider", () =>
+    Effect.gen(function* () {
+      const error = yield* compileRequest(
+        LLM.request({
+          model,
+          prompt: "Hello",
+          tools: [
+            ToolDefinition.make({
+              name: "foreign",
+              description: "Foreign tool",
+              inputSchema: {},
+              native: { meta: { type: "web_search" } },
+            }),
+          ],
+        }),
+      ).pipe(Effect.flip)
+
+      expect(error.reason._tag).toBe("InvalidRequest")
     }),
   )
 

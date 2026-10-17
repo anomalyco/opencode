@@ -31,9 +31,37 @@ const XAIResponsesHostedToolItem = Schema.Union([
   ),
 ])
 
+// Hosted search tools run inside the xAI request and are billed per fetched source.
+// https://docs.x.ai/developers/tools/overview
+export const XSearch = Schema.Struct({
+  type: Schema.Literal("x_search"),
+  allowed_x_handles: Schema.optional(Schema.Array(Schema.String)),
+  excluded_x_handles: Schema.optional(Schema.Array(Schema.String)),
+  from_date: Schema.optional(Schema.String),
+  to_date: Schema.optional(Schema.String),
+  enable_image_understanding: Schema.optional(Schema.Boolean),
+  enable_video_understanding: Schema.optional(Schema.Boolean),
+})
+
+// Unlike X search, the Responses API takes web search domain lists under `filters`.
+export const WebSearch = Schema.Struct({
+  type: Schema.Literal("web_search"),
+  filters: Schema.optional(
+    Schema.Struct({
+      allowed_domains: Schema.optional(Schema.Array(Schema.String)),
+      excluded_domains: Schema.optional(Schema.Array(Schema.String)),
+    }),
+  ),
+  enable_image_search: Schema.optional(Schema.Boolean),
+  enable_image_understanding: Schema.optional(Schema.Boolean),
+})
+
+const NativeTool = Schema.Union([XSearch, WebSearch])
+
 const adapter = {
   id: ADAPTER,
   name: NAME,
+  nativeTool: (native) => ProviderShared.validateWith(Schema.decodeUnknownEffect(NativeTool))(native.xai),
   restoreHostedToolItem: (item: unknown) => (Schema.is(XAIResponsesHostedToolItem)(item) ? item : undefined),
 } satisfies OpenResponses.ProviderAdapter
 

@@ -2,7 +2,7 @@ import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { MediaRoute } from "../route/media.js"
-import { ProviderID, type ModelID } from "../schema/index.js"
+import { ProviderID, ToolDefinition, type ModelID } from "../schema/index.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
 import { OpenResponsesChannel } from "../protocols/open-responses-channel.js"
 import { XAIResponses } from "../protocols/xai-responses.js"
@@ -30,6 +30,60 @@ export type Settings = ProviderPackage.Settings &
 
 export type { XAIImageOptions } from "../protocols/xai-images.js"
 export type { XAIVideoOptions } from "../protocols/xai-video.js"
+
+export interface XSearchOptions {
+  readonly allowedXHandles?: ReadonlyArray<string>
+  readonly excludedXHandles?: ReadonlyArray<string>
+  /** ISO 8601 date (`YYYY-MM-DD`). */
+  readonly fromDate?: string
+  /** ISO 8601 date (`YYYY-MM-DD`). */
+  readonly toDate?: string
+  readonly enableImageUnderstanding?: boolean
+  readonly enableVideoUnderstanding?: boolean
+}
+
+export interface WebSearchOptions {
+  readonly allowedDomains?: ReadonlyArray<string>
+  readonly excludedDomains?: ReadonlyArray<string>
+  readonly enableImageSearch?: boolean
+  readonly enableImageUnderstanding?: boolean
+}
+
+export const xSearch = (options: XSearchOptions = {}) =>
+  ToolDefinition.make({
+    name: "x_search",
+    description: "Search X posts and profiles with xAI's hosted search tool.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    native: {
+      xai: {
+        type: "x_search",
+        allowed_x_handles: options.allowedXHandles,
+        excluded_x_handles: options.excludedXHandles,
+        from_date: options.fromDate,
+        to_date: options.toDate,
+        enable_image_understanding: options.enableImageUnderstanding,
+        enable_video_understanding: options.enableVideoUnderstanding,
+      },
+    },
+  })
+
+export const webSearch = (options: WebSearchOptions = {}) =>
+  ToolDefinition.make({
+    name: "web_search",
+    description: "Search the web with xAI's hosted search tool.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    native: {
+      xai: {
+        type: "web_search",
+        filters:
+          options.allowedDomains === undefined && options.excludedDomains === undefined
+            ? undefined
+            : { allowed_domains: options.allowedDomains, excluded_domains: options.excludedDomains },
+        enable_image_search: options.enableImageSearch,
+        enable_image_understanding: options.enableImageUnderstanding,
+      },
+    },
+  })
 
 const RESPONSES_WEBSOCKET_ROTATE_AFTER_MS = 24 * 60 * 1000
 

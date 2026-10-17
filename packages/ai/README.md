@@ -508,6 +508,36 @@ replay the signed image handle on the next request. Muse Image accepts only the 
 Meta Responses is explicitly HTTP/SSE-only and does not use WebSockets, even when a caller supplies
 `StreamOptions.webSocket`. The public `/v1/responses` endpoint rejects WebSocket upgrades with HTTP 405 (`Allow: POST`).
 
+## xAI
+
+Use xAI's [Responses API](https://docs.x.ai/developers/api-reference) with `XAI_API_KEY`:
+
+```ts
+import { XAI } from "@opencode/ai/providers"
+
+const xai = XAI.configure() // or XAI.configure({ apiKey })
+const request = LLM.request({
+  model: xai.responses("grok-4.6"), // xai.model(...) also selects Responses
+  prompt: "What did the xAI account post this week?",
+  tools: [XAI.xSearch({ allowedXHandles: ["xai"], fromDate: "2026-10-01" })],
+})
+```
+
+`xai.chat("grok-4.6")` selects Chat Completions. Responses defaults to `store: false` and
+`include: ["reasoning.encrypted_content"]`; retain `response.message` to replay reasoning and hosted tool
+items through tool loops.
+
+`XAI.xSearch(options)` and `XAI.webSearch(options)` add xAI's hosted
+[X search and web search](https://docs.x.ai/developers/tools/overview) tools to a Responses request. They run
+inside the provider request, so there is no client execution step: hosted calls reported as `x_search_call` or
+`web_search_call` items surface as `tool-call` and `tool-result` pairs carrying `providerExecuted: true`, and
+Grok cites the fetched posts and pages in its answer. xAI bills hosted searches per fetched source, so add them
+only to requests that should search. Options lower to the wire names: `allowedXHandles` or `excludedXHandles`
+(at most 20, not both), `fromDate`/`toDate` (`YYYY-MM-DD`), `enableImageUnderstanding`, and
+`enableVideoUnderstanding` for X search; `allowedDomains` or `excludedDomains` (at most 5, not both, sent under
+`filters`), `enableImageSearch`, and `enableImageUnderstanding` for web search. Hosted tools from other
+providers fail with `InvalidRequest` before any network call.
+
 ## Image generation
 
 Use `Image.generate` with an image model for direct asset generation. `Image.request` mirrors `LLM.request`: the
