@@ -6,16 +6,71 @@ import { Command } from "@opencode/core/command"
 import { Bus } from "@opencode/core/bus"
 import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
+import { Location } from "@opencode/core/location"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginModule } from "@opencode/core/plugin/module"
 import { Session } from "@opencode/core/session"
 import { SessionSchema } from "@opencode/core/session/schema"
 import { Watcher } from "@opencode/core/filesystem/watcher"
 import { fromPromise } from "@opencode/plugin/promise/adapter"
+import { Event } from "@opencode/schema/event"
+import { ModelsDev } from "@opencode/schema/models-dev"
+import { AbsolutePath } from "@opencode/schema/schema"
+import { SessionEvent } from "@opencode/schema/session-event"
+import { WorkspaceID } from "@opencode/schema/workspace-id"
 import { testEffect } from "./lib/effect"
 import { PluginTestLayer } from "./plugin/fixture"
 
 const it = testEffect(PluginTestLayer)
+
+it.live("scopes Promise plugin events to its location while retaining global events", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const bus = yield* Bus.Service
+    const location = yield* Location.Service
+    const sessions = yield* Session.Service
+    const created = yield* Effect.forEach(
+      [
+        { directory: location.directory, workspaceID: location.workspaceID },
+        { directory: AbsolutePath.make(path.dirname(location.directory)) },
+        { directory: location.directory, workspaceID: WorkspaceID.make("wrk_other") },
+      ],
+      (location) => sessions.create({ location }),
+    )
+    const ready = Event.ID.create()
+    const done = Event.ID.create()
+    const completed = Promise.withResolvers<void>()
+    const received: string[] = []
+    let subscribed = false
+    yield* plugins.activate([
+      {
+        ...fromPromise({
+          id: "event-scope",
+          setup(ctx) {
+            void (async () => {
+              for await (const event of ctx.event.subscribe({})) {
+                if (event.id === ready) subscribed = true
+                if (event.type === SessionEvent.Execution.Succeeded.type || event.id === done) received.push(event.id)
+                if (event.id === done) completed.resolve()
+              }
+            })().catch(completed.reject)
+          },
+        }),
+        revision: "1",
+      },
+    ])
+    yield* bus
+      .publish(ModelsDev.Event.Refreshed, {}, { id: ready, global: true })
+      .pipe(Effect.andThen(Effect.yieldNow), Effect.repeat({ until: () => subscribed }))
+    const events = yield* Effect.forEach(created, (session) =>
+      bus.publish(SessionEvent.Execution.Succeeded, { sessionID: session.id }, { location: session.location }),
+    )
+    yield* bus.publish(ModelsDev.Event.Refreshed, {}, { id: done, global: true })
+    yield* Effect.promise(() => completed.promise)
+
+    expect(received).toEqual([events[0]?.id, done])
+  }),
+)
 
 for (const scenario of [
   {

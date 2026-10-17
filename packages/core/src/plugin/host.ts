@@ -257,14 +257,13 @@ export const make = Effect.fn("PluginHost.make")(function* (
     },
     event: {
       subscribe: () =>
-        bus
-          .subscribe()
-          .pipe(
-            Stream.filter(
-              (event): event is EventManifest.ServerEvent | RpcEvent =>
-                EventManifest.isServer(event) || isRpcEvent(event),
-            ),
+        bus.subscribe().pipe(
+          Stream.provideService(Location.Service, location),
+          Stream.filter(
+            (event): event is EventManifest.ServerEvent | RpcEvent =>
+              EventManifest.isServer(event) || isRpcEvent(event),
           ),
+        ),
     },
     experimental: {
       terminal: {
