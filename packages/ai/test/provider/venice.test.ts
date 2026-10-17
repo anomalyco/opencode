@@ -1,7 +1,7 @@
 import { expect } from "bun:test"
 import { ConfigProvider, Effect } from "effect"
 import { Headers } from "effect/http"
-import { Auth, LLM, LLMClient, Message } from "../../src/index.js"
+import { Auth, LLM, LLMClient, Message, ToolCallPart } from "../../src/index.js"
 import { OpenAI, Venice } from "../../src/providers.js"
 import { compileRequest } from "../../src/route/client.js"
 import { Endpoint } from "../../src/route/endpoint.js"
@@ -10,6 +10,52 @@ import { fixedResponse } from "../lib/http.js"
 import { sseEvents } from "../lib/sse.js"
 
 const model = Venice.configure({ apiKey: "fixture" }).chat("fixture-model")
+it.effect("Venice keeps signatures and call order when replay IDs collide", () =>
+  Effect.gen(function* () {
+    const messages = [0, 1].flatMap((group) => [
+      Message.assistant(
+        ["a", "b"].map((id) =>
+          ToolCallPart.make({
+            id,
+            name: "lookup",
+            input: { id, group },
+            providerMetadata: {
+              venice: {
+                thoughtSignature: `call-${group}-${id}`,
+                messageThoughtSignature: `message-${group}`,
+                encryptedReasoningContent: `encrypted-${group}`,
+                extraContent: { google: { thought_signature: `google-${group}-${id}` } },
+              },
+            },
+          }),
+        ),
+      ),
+      ...["b", "a"].map((id) => Message.tool({ id, name: "lookup", result: id })),
+    ])
+    const prepared = yield* compileRequest(LLM.request({ model, messages }))
+    const wire = prepared.body.messages as Array<{
+      thought_signature?: string
+      reasoning_content?: string
+      tool_calls?: Array<{ id: string; thought_signature?: string; extra_content?: unknown }>
+      tool_call_id?: string
+    }>
+    const assistants = wire.filter((message) => message.tool_calls !== undefined)
+    expect(assistants.map((message) => message.thought_signature)).toEqual(["message-0", "message-1"])
+    expect(assistants.map((message) => message.reasoning_content)).toEqual(["encrypted-0", "encrypted-1"])
+    const calls = assistants.flatMap((message) => message.tool_calls ?? [])
+    expect(calls.map((call) => call.thought_signature)).toEqual(["call-0-a", "call-0-b", "call-1-a", "call-1-b"])
+    expect(calls.map((call) => call.extra_content)).toEqual(
+      [0, 1].flatMap((group) => ["a", "b"].map((id) => ({ google: { thought_signature: `google-${group}-${id}` } }))),
+    )
+    expect(new Set(calls.map((call) => call.id)).size).toBe(4)
+    expect(wire.flatMap((message) => (message.tool_call_id === undefined ? [] : [message.tool_call_id]))).toEqual([
+      calls[1].id,
+      calls[0].id,
+      calls[3].id,
+      calls[2].id,
+    ])
+  }),
+)
 const frame = (delta: Record<string, unknown>, finish_reason: string | null = null) => ({
   choices: [{ delta, finish_reason }],
 })
