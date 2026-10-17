@@ -4,11 +4,8 @@ run-name: "${{ format('release {0}', inputs.bump) }}"
 on:
   push:
     branches:
-      - ci
       - dev
       - beta
-      - fix/npm-native-binary-install
-      - snapshot-*
   workflow_dispatch:
     inputs:
       bump:
