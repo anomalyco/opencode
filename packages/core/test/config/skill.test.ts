@@ -7,6 +7,7 @@ import { Directory, Document, type Entry, Info } from "@opencode/schema/config"
 import { ConfigSkillPlugin } from "@opencode/core/config/plugin/skill"
 import { ConfigCompatibilityPlugin } from "@opencode/core/config/plugin/compatibility"
 import { SkillFile } from "@opencode/core/config/plugin/skill-file"
+import { SkillScan } from "@opencode/core/config/plugin/skill-scan"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Watcher } from "@opencode/core/filesystem/watcher"
 import { Bus } from "@opencode/core/bus"
@@ -205,7 +206,7 @@ describe("ConfigSkillPlugin.Plugin", () => {
             { claude: [AbsolutePath.make(claude)], agents: [AbsolutePath.make(agents)] },
           )
           const watcher = yield* Watcher.Test
-          expect(yield* watcher.subscriptions()).toEqual(expected.map((item) => ({ path: item, type: "directory" })))
+          expect(yield* watcher.subscriptions()).toEqual(expected.map((item) => ({ path: item, type: "directory", ignore: SkillScan.ignore.toSorted() })))
         }),
       ),
     ),
@@ -335,7 +336,7 @@ describe("ConfigSkillPlugin.Plugin", () => {
     ),
   )
 
-  it.live("watches canonical directories behind symlinked skills", () =>
+  it.live("watches canonical files behind symlinked skills", () =>
     Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
@@ -352,7 +353,7 @@ describe("ConfigSkillPlugin.Plugin", () => {
           const skill = yield* start([source], tmp.path)
           const watcher = yield* Watcher.Test
           expect((yield* skill.list()).find((item) => item.id === "bro")?.description).toBe("Initial")
-          expect(yield* watcher.subscriptions()).toContainEqual({ path: target, type: "directory" })
+          expect(yield* watcher.subscriptions()).toContainEqual({ path: file, type: "file" })
 
           yield* Effect.promise(() => fs.writeFile(file, "---\nname: bro\ndescription: Updated\n---\n# bro"))
           yield* emitAndWait({ type: "update", path: file })
@@ -381,7 +382,7 @@ describe("ConfigSkillPlugin.Plugin", () => {
           const watcher = yield* Watcher.Test
           expect((yield* skill.list()).find((item) => item.id === "bro")?.description).toBe("First")
           expect(yield* watcher.subscriptions()).toEqual([
-            { path: first, type: "directory" },
+            { path: first, type: "directory", ignore: SkillScan.ignore.toSorted() },
             { path: source, type: "file" },
           ])
 
@@ -393,9 +394,9 @@ describe("ConfigSkillPlugin.Plugin", () => {
 
           expect((yield* skill.list()).find((item) => item.id === "bro")?.description).toBe("Second")
           expect(yield* watcher.subscriptions()).toEqual([
-            { path: first, type: "directory" },
+            { path: first, type: "directory", ignore: SkillScan.ignore.toSorted() },
             { path: source, type: "file" },
-            { path: second, type: "directory" },
+            { path: second, type: "directory", ignore: SkillScan.ignore.toSorted() },
             { path: source, type: "file" },
           ])
         }),

@@ -273,6 +273,10 @@ export namespace FSUtil {
       .replace(/^\/mnt\/([a-zA-Z])(?:\/|$)/, (_, drive) => `${drive.toUpperCase()}:/`)
   }
 
+  export const ignoredDirectories = ["node_modules", ".git", ".venv", "venv", "__pycache__"]
+
+  export const ignoreGlobs = [...ignoredDirectories, `**/{${ignoredDirectories.join(",")}}/**`]
+
   export function overlaps(a: string, b: string) {
     return contains(a, b) || contains(b, a)
   }
