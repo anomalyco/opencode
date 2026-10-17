@@ -44,6 +44,8 @@ export type Warning = {
   readonly messageID?: string
   readonly partID?: string
   readonly observedType?: string
+  /** Required fields no legacy source could supply, so the row was dropped. */
+  readonly missing?: ReadonlyArray<string>
 }
 
 export type TransformResult = {
@@ -217,23 +219,39 @@ const EVENT_DELETE_BATCH_SIZE = 1_000
 const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
 const decodeMessage = Schema.decodeUnknownOption(SessionV1.Info)
 const decodePart = Schema.decodeUnknownOption(SessionV1.Part)
+const compareSource = (a: SourceMessage, b: SourceMessage) =>
+  a.time_created - b.time_created || a.id.localeCompare(b.id)
+/** The built-in agent (`Agent.defaultID`), which this layer must not depend on. */
+const DEFAULT_AGENT = "build"
 let runtimeState: RuntimeState = { status: "idle" }
 
 export function transformSession(input: TransformInput): TransformResult {
   const warnings: Warning[] = []
-  const messages = input.messages
-    .map((row) => {
-      const value = Option.getOrUndefined(decodeJson(row.data))
+  const ordered = input.messages.toSorted(compareSource)
+  const parsed = ordered.map((row) => {
+    const value = Option.getOrUndefined(decodeJson(row.data))
+    return value && typeof value === "object" ? (value as Record<string, unknown>) : undefined
+  })
+  const legacy = legacyMetadata(ordered, parsed, input.session)
+  const messages = ordered
+    .map((row, index) => {
+      const value = parsed[index]
       const decoded =
-        value && typeof value === "object"
-          ? Option.getOrUndefined(decodeMessage({ ...value, id: row.id, sessionID: row.session_id }))
-          : undefined
+        value === undefined
+          ? undefined
+          : Option.getOrUndefined(
+              decodeMessage({ ...value, ...legacy[index].patch, id: row.id, sessionID: row.session_id }),
+            )
       if (decoded) return { row, value: decoded }
-      warnings.push({ reason: "invalid-message", sessionID: input.session.id, messageID: row.id })
+      warnings.push({
+        reason: "invalid-message",
+        sessionID: input.session.id,
+        messageID: row.id,
+        ...(legacy[index].missing.length ? { missing: legacy[index].missing } : {}),
+      })
       return undefined
     })
     .filter((item): item is NonNullable<typeof item> => item !== undefined)
-    .sort((a, b) => a.row.time_created - b.row.time_created || a.row.id.localeCompare(b.row.id))
   const messageIDs = new Set(input.messages.map((row) => row.id))
   const parts = input.parts
     .map((row) => {
@@ -1034,6 +1052,82 @@ function normalizeFinish(finish: string | undefined) {
       (value) => value === finish,
     ) ?? "unknown"
   )
+}
+
+// Rows written before `agent`, the user `model` and the assistant `parentID` became
+// required (OpenCode <= 1.0.65) fail validation and take the whole session's history
+// with them, even though the fields are metadata rather than conversation content.
+// Recover them from the row itself, the reply that handled the turn, and the session
+// row, so the history survives; `missing` names whatever no source could supply.
+function legacyMetadata(
+  rows: ReadonlyArray<SourceMessage>,
+  values: ReadonlyArray<Record<string, unknown> | undefined>,
+  session: TransformInput["session"],
+): ReadonlyArray<{ patch: Record<string, unknown>; missing: ReadonlyArray<string> }> {
+  const previousUser = new Array<string | undefined>(rows.length)
+  const previousReply = new Array<Record<string, unknown> | undefined>(rows.length)
+  const nextReply = new Array<Record<string, unknown> | undefined>(rows.length)
+  let user: string | undefined
+  let reply: Record<string, unknown> | undefined
+  for (let index = 0; index < rows.length; index++) {
+    previousUser[index] = user
+    previousReply[index] = reply
+    if (values[index]?.role === "user") user = rows[index].id
+    if (values[index]?.role === "assistant") reply = values[index]
+  }
+  reply = undefined
+  for (let index = rows.length - 1; index >= 0; index--) {
+    nextReply[index] = reply
+    if (values[index]?.role === "assistant") reply = values[index]
+  }
+  return rows.map((_, index) => {
+    const value = values[index]
+    if (value?.role === "user") {
+      const handled = nextReply[index] ?? previousReply[index]
+      const model = value.model ?? replyModel(handled) ?? sessionModel(session)
+      return {
+        patch: {
+          agent: legacyAgent(value, handled, session),
+          ...(model === undefined ? {} : { model }),
+        },
+        missing: model === undefined ? ["model"] : [],
+      }
+    }
+    if (value?.role === "assistant") {
+      const parentID = value.parentID ?? previousUser[index]
+      return {
+        patch: {
+          agent: legacyAgent(value, undefined, session),
+          ...(parentID === undefined ? {} : { parentID }),
+        },
+        missing: parentID === undefined ? ["parentID"] : [],
+      }
+    }
+    return { patch: {}, missing: [] }
+  })
+}
+
+// `mode` is the pre-rename name of `agent`; rows that carry both always agree on it.
+function legacyAgent(
+  value: Record<string, unknown>,
+  handled: Record<string, unknown> | undefined,
+  session: TransformInput["session"],
+) {
+  return (
+    [value.agent, value.mode, handled?.agent, handled?.mode, session.agent].find(
+      (item): item is string => typeof item === "string",
+    ) ?? DEFAULT_AGENT
+  )
+}
+
+function replyModel(reply: Record<string, unknown> | undefined) {
+  if (typeof reply?.providerID !== "string" || typeof reply.modelID !== "string") return undefined
+  return { providerID: reply.providerID, modelID: reply.modelID }
+}
+
+function sessionModel(session: TransformInput["session"]) {
+  if (!session.model) return undefined
+  return { providerID: session.model.providerID, modelID: session.model.id }
 }
 
 function migrateFile(part: SessionV1.FilePart) {
