@@ -53,13 +53,31 @@ describe("shell", () => {
     expect(ShellSelect.args("/usr/bin/fish", "echo hi")).toEqual(["-c", "echo hi"])
     expect(ShellSelect.args("/bin/zsh", "echo hi")).toEqual(["-c", "echo hi"])
     expect(ShellSelect.args("/bin/bash", "echo hi")).toEqual(["-c", "echo hi"])
-    expect(ShellSelect.args("pwsh", "Write-Output hi")).toEqual([
-      "-NoLogo",
-      "-NoProfile",
-      "-NonInteractive",
-      "-Command",
-      "Write-Output hi",
-    ])
+  })
+
+  test("switches cmd output to UTF-8", () => {
+    expect(ShellSelect.args("cmd", 'echo "hello"')).toEqual(["/d", "/c", 'chcp 65001 >nul 2>nul & echo "hello"'])
+  })
+
+  test("transports PowerShell commands with UTF-8 encoding preamble", () => {
+    const args = ShellSelect.args("pwsh", 'Write-Output "hello"')
+    expect(args.slice(0, 4)).toEqual(["-NoLogo", "-NoProfile", "-NonInteractive", "-Command"])
+    expect(args[4]).toContain("[Console]::OutputEncoding = $utf8")
+    expect(args[4]).toContain("$OutputEncoding = $utf8")
+    expect(args[4]).toContain("$ProgressPreference = 'SilentlyContinue'")
+    expect(args[4]).toContain('Write-Output "hello"')
+  })
+
+  test("leaves out preamble for PowerShell using statements", () => {
+    const command = "using namespace System.Text; [StringBuilder]::new()"
+    expect(ShellSelect.args("pwsh", command)).toEqual(["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command])
+  })
+
+  test("forces UTF-8 python encoding on Windows", () => {
+    expect(ShellSelect.env("win32")).toEqual({
+      PYTHONIOENCODING: "utf-8",
+    })
+    expect(ShellSelect.env("linux")).toEqual({})
   })
 
   if (process.platform !== "win32") {

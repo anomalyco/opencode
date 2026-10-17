@@ -266,6 +266,7 @@ const layer = () =>
           timeout: input.timeout ?? 0,
           shell: input.shell ?? (yield* shell.resolve({ priority: "config" })),
           env: {
+            ...ShellSelect.env(),
             ...baseEnv,
             TERM: "xterm-256color",
             OPENCODE_TERMINAL: "1",
