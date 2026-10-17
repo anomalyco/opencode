@@ -1,7 +1,7 @@
 import type { OpenCodeClient, OpenCodeEvent } from "@opencode/client"
 import { createClientConnection, createPersistentPtyClient } from "@opencode/client/solid"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
-import { onCleanup } from "solid-js"
+import { createResource, onCleanup } from "solid-js"
 import { createSimpleContext } from "./helper"
 import { useLog } from "./log"
 
@@ -38,6 +38,21 @@ export const { use: useClient, provider: ClientProvider } = createSimpleContext(
       log,
     })
 
+    let home: { api: OpenCodeClient; value: Promise<string | undefined> } | undefined
+    function resolveServerHome() {
+      if (home?.api === api) return home.value
+      const value = api.server.info().then((info) => info.paths.home)
+      home = { api, value }
+      value.catch(() => {
+        if (home?.value === value) home = undefined
+      })
+      return value
+    }
+    const [serverHome] = createResource(
+      () => connection.status() === "connected" && api,
+      () => resolveServerHome().catch(() => undefined),
+    )
+
     onCleanup(() => {
       events.clear()
     })
@@ -55,6 +70,8 @@ export const { use: useClient, provider: ClientProvider } = createSimpleContext(
         listen: events.listen,
       },
       connection,
+      serverHome,
+      resolveServerHome,
       restart: service?.restart,
     }
   },

@@ -333,12 +333,19 @@ export function Autocomplete(props: {
       }
       const width = props.anchor().width - 4
       if (input.visible === "directory") {
-        const result = await directoryAutocomplete(
-          client.api.file,
-          { ...requestLocation, directory: requestLocation.directory ?? paths.cwd },
-          base,
-          paths.home,
-        ).catch(() => undefined)
+        const home =
+          base === "~" || base.startsWith("~/")
+            ? await client.resolveServerHome().catch(() => null)
+            : client.serverHome()
+        const result =
+          home === null
+            ? undefined
+            : await directoryAutocomplete(
+                client.api.file,
+                { ...requestLocation, directory: requestLocation.directory ?? paths.cwd },
+                base,
+                home ?? paths.home,
+              ).catch(() => undefined)
         if (!result)
           return info.value?.mode === input.visible
             ? { ...info.value, failed: true }

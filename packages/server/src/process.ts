@@ -208,7 +208,7 @@ const infoResponse = Effect.fnUntraced(function* (
 ) {
   const state = yield* status.current
   return HttpServerResponse.jsonUnsafe(
-    { version, pid: process.pid, urls: urls(), paths: { tmp } },
+    { version, pid: process.pid, urls: urls(), paths: { tmp, home: Global.Path.home } },
     {
       status: state.type === "ready" ? 200 : state.type === "failed" ? 500 : 503,
       headers: state.type === "starting" || state.type === "stopping" ? { "retry-after": "1" } : undefined,

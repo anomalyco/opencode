@@ -1,3 +1,4 @@
+import { Global } from "@opencode/util/global"
 import { Duration, Effect } from "effect"
 import { HttpServerRequest, HttpServerResponse } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
@@ -12,6 +13,7 @@ export const ServerHandler = HttpApiBuilder.group(Api, "server.server", (handler
   Effect.gen(function* () {
     const pairing = yield* ServerPairing.Service
     const auth = yield* ServerAuth.Config
+    const global = yield* Global.Service
 
     return handlers
       .handle("server.info", () =>
@@ -21,7 +23,7 @@ export const ServerHandler = HttpApiBuilder.group(Api, "server.server", (handler
             version: info.app.version ?? "unknown",
             pid: process.pid ?? 0,
             urls: info.urls(),
-            paths: info.paths,
+            paths: { ...info.paths, home: global.home },
             capabilities: { persistentPty: PersistentPty.available },
           }
         }),

@@ -276,8 +276,17 @@ export function Prompt(props: PromptProps) {
           const session = sessionID ? data.session.get(sessionID) : undefined
           const sourceProjectID = session?.projectID ?? data.location.info()?.project.id
           const value = input.trim()
+          const home =
+            !sessionID && (value === "~" || value.startsWith("~/"))
+              ? await client.resolveServerHome().catch((error) => {
+                  toast.show({ title: "Failed to change directory", message: errorMessage(error), variant: "error" })
+                  return null
+                })
+              : client.serverHome()
+          if (home === null) return
+          const serverHome = home ?? paths.home
           const expanded =
-            value === "~" ? paths.home : value.startsWith("~/") ? path.join(paths.home, value.slice(2)) : value
+            value === "~" ? serverHome : value.startsWith("~/") ? path.join(serverHome, value.slice(2)) : value
           const directory = path.resolve(
             session?.location.directory ?? currentLocation.current?.directory ?? data.location.default().directory,
             expanded,
@@ -1970,7 +1979,7 @@ export function Prompt(props: PromptProps) {
             data.location.info()?.project.id
           if (!projectID) return []
           return directoryRecents.list(projectID).map((item) => {
-            const value = directoryRecentValue(item.directory, paths.home)
+            const value = directoryRecentValue(item.directory, client.serverHome() ?? paths.home)
             return {
               display: value,
               value,

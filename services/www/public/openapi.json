@@ -18303,6 +18303,16 @@
             "properties": {
               "tmp": {
                 "type": "string"
+              },
+              "home": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               }
             },
             "required": ["tmp"],

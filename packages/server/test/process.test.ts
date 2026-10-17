@@ -1,4 +1,5 @@
 import { expect } from "bun:test"
+import { Global } from "@opencode/util/global"
 import { Effect } from "effect"
 import { HttpServer, HttpServerRequest, HttpServerResponse } from "effect/http"
 import { it } from "../../core/test/lib/effect"
@@ -52,7 +53,10 @@ it.live("authenticates API requests behind the frontend transform while allowing
 
     expect(status.status).toBe(200)
     expect(status.headers.get("access-control-allow-origin")).toBe("http://localhost:3000")
-    expect(yield* Effect.promise(() => status.json())).toMatchObject({ version: "test-version" })
+    expect(yield* Effect.promise(() => status.json())).toMatchObject({
+      version: "test-version",
+      paths: { home: Global.Path.home },
+    })
 
     yield* Effect.forEach(
       ["http://192.168.1.10:3001", "https://example.com", "https://untrusted.example.com"],

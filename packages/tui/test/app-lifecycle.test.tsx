@@ -10,6 +10,62 @@ import { createAppFixture } from "./fixture/app"
 import { waitForHighlightedFrame } from "./fixture/frame"
 import type { PluginInfo } from "@opencode/client"
 
+test("relative directory completion does not depend on server metadata", async () => {
+  const requested = Promise.withResolvers<string>()
+  await using setup = await createAppFixture({
+    fetch: (url) => {
+      if (url.pathname === "/api/info") return new Response("Unavailable", { status: 503 })
+      if (url.pathname === "/api/fs/list" && url.searchParams.get("path") === path.resolve(directory, "..")) {
+        requested.resolve(url.searchParams.get("path")!)
+      }
+      return undefined
+    },
+  })
+  await setup.ready
+  await setup.waitForFrame((frame) => frame.includes("commands"))
+  await setup.mockInput.typeText("/cd ../review-target")
+  expect(await requested.promise).toBe(path.resolve(directory, ".."))
+})
+
+test("session tilde moves do not depend on server metadata", async () => {
+  const requested = Promise.withResolvers<string>()
+  const metadata = Promise.withResolvers<void>()
+  const session = {
+    id: "ses_cd_review",
+    title: "Directory review session",
+    projectID: "proj_test",
+    location: { directory },
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    time: { created: 1, updated: 1 },
+  }
+  await using setup = await createAppFixture({
+    args: { sessionID: session.id },
+    fetch: async (url, request) => {
+      if (url.pathname === "/api/info") {
+        metadata.resolve()
+        return new Response("Unavailable", { status: 503 })
+      }
+      if (url.pathname === `/api/session/${session.id}/move`) {
+        requested.resolve(await request.text())
+        return new Response(null, { status: 204 })
+      }
+      if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
+      if (url.pathname === `/api/session/${session.id}`) return json({ data: session })
+      if (url.pathname === `/api/session/${session.id}/message`) return json({ data: [], cursor: {} })
+      if (url.pathname === `/api/session/${session.id}/inbox`) return json({ data: [] })
+      return undefined
+    },
+  })
+  await setup.ready
+  await metadata.promise
+  await setup.waitForFrame((frame) => frame.includes(session.title))
+  await setup.mockInput.typeText("/cd ~/review-target")
+  setup.mockInput.pressEscape()
+  setup.mockInput.pressEnter()
+  expect(JSON.parse(await requested.promise)).toEqual({ directory: "~/review-target" })
+})
+
 test.each([100, 44])("Ctrl-O is immediate, dismissible, and prunes cached deletions at width %s", async (width) => {
   await using state = await tmpdir()
   const requested = Promise.withResolvers<void>()
