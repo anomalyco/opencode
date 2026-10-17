@@ -5,6 +5,35 @@ import { ConfigProvider } from "../src/config"
 import { Keymap } from "../src/context/keymap"
 import { createTuiResolvedConfig } from "./fixture/tui-runtime"
 
+test("background shortcut preserves readline cursor movement", async () => {
+  let backgrounded = 0
+
+  function Harness() {
+    Keymap.createLayer(() => ({
+      commands: [{ id: "session.background", bind: false, run: () => void backgrounded++ }],
+    }))
+    Keymap.createLayer(() => ({ bindings: ["session.background"] }))
+    return <textarea focused={true} />
+  }
+
+  const app = await testRender(() => (
+    <ConfigProvider config={createTuiResolvedConfig()}>
+      <Keymap.Provider>
+        <Harness />
+      </Keymap.Provider>
+    </ConfigProvider>
+  ))
+  try {
+    await app.mockInput.typeText("abc")
+    app.mockInput.pressKey("b", { ctrl: true })
+    await app.mockInput.typeText("X")
+    expect(app.renderer.currentFocusedEditor?.plainText).toBe("abXc")
+    expect(backgrounded).toBe(1)
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("legacy page key aliases compile as page keys", async () => {
   let read = () => ({ up: "", down: "" })
 
