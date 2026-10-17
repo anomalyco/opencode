@@ -101,3 +101,22 @@ test("project actions update schema-derived state and follow dynamic server scop
   expect(store.projects.local).toEqual([{ worktree: "/local", expanded: true }])
   expect(store.projects[props.server]).toEqual([{ worktree: "/remote", expanded: false }])
 })
+
+test("moving a project discovered from the server pins it at that position", () => {
+  const [store, setStore] = createStore(Schema.decodeUnknownSync(serverSchema())({}))
+
+  const projects = createServerProjects({
+    store,
+    setStore,
+    scope: () => ServerScope.fromServerKey(ServerConnection.Key.make("https://remote.example")),
+  })
+
+  projects.open("/a")
+  projects.open("/b")
+  projects.move("/discovered", 1)
+  expect(projects.list()).toEqual([
+    { worktree: "/b", expanded: true },
+    { worktree: "/discovered", expanded: false },
+    { worktree: "/a", expanded: true },
+  ])
+})

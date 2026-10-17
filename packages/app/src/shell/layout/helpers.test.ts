@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionInfo } from "@opencode/client/promise"
-import { closeHomeProject, errorMessage, projectForSession, toggleHomeProjectSelection } from "./helpers"
+import {
+  closeHomeProject,
+  discoverServerProjects,
+  errorMessage,
+  projectForSession,
+  toggleHomeProjectSelection,
+} from "./helpers"
 import { ServerConnection } from "@/runtime/server/registry"
 
 const serverKey = ServerConnection.Key.make
@@ -94,5 +100,36 @@ describe("layout workspace helpers", () => {
     expect(errorMessage({ data: { message: "boom" } }, "fallback")).toBe("boom")
     expect(errorMessage(new Error("broken"), "fallback")).toBe("broken")
     expect(errorMessage("unknown", "fallback")).toBe("fallback")
+  })
+})
+
+describe("discoverServerProjects", () => {
+  const known = (worktree: string, updated: number) => ({ id: worktree, worktree, time: { updated } })
+
+  test("lists server projects this browser has not opened, newest first, collapsed", () => {
+    expect(
+      discoverServerProjects({
+        opened: [{ worktree: "/opened" }],
+        closed: [],
+        known: [known("/old", 1), known("/opened", 9), known("/new", 5)],
+      }),
+    ).toEqual([
+      { ...known("/new", 5), expanded: false },
+      { ...known("/old", 1), expanded: false },
+    ])
+  })
+
+  test("keeps projects closed in this browser hidden and matches paths across separators", () => {
+    expect(
+      discoverServerProjects({
+        opened: [{ worktree: "C:/repo" }],
+        closed: ["/closed/"],
+        known: [known("C:\\repo", 1), known("/closed", 2), known("/dup", 3), known("/dup/", 4), known("", 5)],
+      }).map((project) => project.worktree),
+    ).toEqual(["/dup/"])
+  })
+
+  test("an empty or not yet loaded inventory discovers nothing and leaves opened projects alone", () => {
+    expect(discoverServerProjects({ opened: [{ worktree: "/opened" }], closed: [], known: [] })).toEqual([])
   })
 })

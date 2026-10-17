@@ -62,17 +62,23 @@ type ProjectApi = {
 
 type LocationApi = { readonly get: (input?: LocationGetInput) => Promise<LocationGetOutput> }
 
+/** Whether a server project belongs in the client inventory (the list and live `project.updated` events agree). */
+export const listedProject = (project: { worktree: string }) =>
+  !!project.worktree && !project.worktree.includes("opencode-test")
+
+export const projectsQueryKey = (scope: ServerScope) => [scope, "project"] as const
+
 // Metadata only. Worktree inventories load per project when a view shows it (see workspaces/inventory).
 export const loadProjectsQuery = (scope: ServerScope, projects: ProjectApi) =>
   queryOptions({
-    queryKey: [scope, "project"],
+    queryKey: projectsQueryKey(scope),
     queryFn: () =>
       retry(() =>
         projects.list().then((items) =>
           items
             .filter((project) => !!project?.id)
             .map(normalizeProjectInfo)
-            .filter((p) => !!p.worktree && !p.worktree.includes("opencode-test"))
+            .filter(listedProject)
             .sort((a, b) => cmp(a.id, b.id)),
         ),
       ),

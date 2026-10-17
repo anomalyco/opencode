@@ -95,9 +95,10 @@ export function createServerProjects(input: {
     move(directory: string, toIndex: number) {
       const fromIndex = current().findIndex((project) => project.worktree === directory)
 
-      if (fromIndex === -1 || fromIndex === toIndex) return
+      if (fromIndex === toIndex) return
       const next = [...current()]
-      const [item] = next.splice(fromIndex, 1)
+      // Moving a project discovered from the server pins it here, at the requested position.
+      const [item] = fromIndex === -1 ? [{ worktree: directory, expanded: false }] : next.splice(fromIndex, 1)
       next.splice(toIndex, 0, item)
       setStore("projects", input.scope(), next)
     },
