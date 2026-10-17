@@ -163,7 +163,8 @@ const CONTENT_POLICY_CODES = new Set([
 const GATEWAY_CODE_LABEL = /^[^:\n]+: \[([A-Za-z0-9_.-]+)\]/
 // xAI reports an invalid API key as HTTP 400 with the generic `invalid-argument` code.
 const AUTH_TEXT = /incorrect api key provided/i
-const RATE_LIMIT_TEXT = /rate increased too quickly|rate[-_\s]?limit|too[_\s]?many[_\s]?requests/i
+const NO_ACCOUNT_TEXT = /\bno available accounts?\b/i
+const RATE_LIMIT_TEXT = /rate increased too quickly|rate[-_\s]?limit|too[_\s]?many[_\s]?(?:pending )?requests/i
 // Only consulted on 429, where throttles and account caps share a status.
 // Z.ai reports balance, plan expiry, plan limits, and plan model access on 429.
 const QUOTA_TEXT =
@@ -258,6 +259,7 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
     return new InvalidRequestError({ ...details, classification: "payload-too-large" })
   if (codes.some((code) => CONTENT_POLICY_CODES.has(code)) || (clientScoped && CONTENT_POLICY_TEXT.test(input.message)))
     return new ContentPolicyError(details)
+  if (NO_ACCOUNT_TEXT.test(text)) return new AuthenticationError(details)
   if (
     input.status === 402 ||
     codes.some((code) => QUOTA_CODES.has(code)) ||
@@ -268,7 +270,7 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
     input.status === 401 ||
     input.status === 403 ||
     codes.some((code) => AUTH_CODES.has(code)) ||
-    (input.status === 400 && AUTH_TEXT.test(text))
+    ((input.status === undefined || input.status === 400) && AUTH_TEXT.test(text))
   )
     return new AuthenticationError(details)
   if (
