@@ -2,9 +2,9 @@ export * as Config from "./config"
 
 import { Global } from "@opencode/util/global"
 import { Flock } from "@opencode/util/flock"
-import { Context, Effect, FileSystem, Layer, Option, Schema } from "effect"
+import { Context, Effect, FileSystem, Layer, Option, Result, Schema, SchemaIssue, SchemaParser } from "effect"
 import { produce, type Draft } from "immer"
-import { applyEdits, modify, parse, type ParseError } from "jsonc-parser"
+import { applyEdits, getLocation, modify, parse, printParseErrorCode, type ParseError } from "jsonc-parser"
 import path from "path"
 import { ConfigMigration } from "./migrate"
 import { Info, normalizeLegacyTabs, SchemaURL } from "./schema"
@@ -14,13 +14,16 @@ export * from "./schema"
 export interface Interface {
   readonly path: string
   readonly get: () => Effect.Effect<Info>
+  readonly diagnostic: () => string | undefined
   readonly update: (update: (draft: Draft<Info>) => void) => Effect.Effect<Info, Error>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/cli/config/Config") {}
 
 const decode = Schema.decodeUnknownOption(Info)
+const decodeResult = SchemaParser.decodeUnknownResult(Info)
 const decodeRecord = Schema.decodeUnknownOption(Schema.Record(Schema.String, Schema.Unknown))
+const formatIssue = SchemaIssue.makeFormatterStandardSchemaV1()
 const empty: Info = {}
 
 export const layer = Layer.effect(
@@ -32,11 +35,23 @@ export const layer = Layer.effect(
     const content = process.env.OPENCODE_CLI_CONFIG_CONTENT
       ? Option.getOrUndefined(decode(parseRecord(process.env.OPENCODE_CLI_CONFIG_CONTENT)))
       : undefined
+    let diagnostic: string | undefined
 
     const readJson = Effect.fnUntraced(function* () {
       const text = yield* fs.readFileString(file).pipe(Effect.orElseSucceed(() => undefined))
       if (text === undefined) return undefined
-      return parseRecord(text)
+      const errors: ParseError[] = []
+      const value: unknown = parse(text, errors, { allowTrailingComma: true })
+      const error = errors[0]
+      if (error) {
+        const field = getLocation(text, error.offset).path.join(".") || "root"
+        const lines = text.slice(0, error.offset).split(/\r\n|\r|\n/)
+        return {
+          reason: `${field}: ${printParseErrorCode(error.error)} at ${lines.length}:${lines.at(-1)!.length + 1}`,
+        }
+      }
+      const record = Option.getOrUndefined(decodeRecord(value))
+      return record === undefined ? { reason: "root: expected an object" } : { record }
     })
 
     const write = Effect.fnUntraced(function* (text: string) {
@@ -62,7 +77,13 @@ export const layer = Layer.effect(
         ),
       )
     const load = Effect.fnUntraced(function* (migration?: Info) {
-      return merge(migration ?? Option.getOrUndefined(decode(yield* readJson())), content)
+      const source = migration === undefined ? yield* readJson() : undefined
+      const result = source && "record" in source ? decodeResult(source.record) : undefined
+      const issue = result && Result.isFailure(result) ? formatIssue(result.failure).issues[0] : undefined
+      const field = issue?.path?.join(".") || "root"
+      const reason = source && "reason" in source ? source.reason : issue && `${field}: ${issue.message}`
+      diagnostic = reason ? `Invalid CLI config at ${file}: ${reason}. File ignored.` : undefined
+      return merge(migration ?? (result && Result.isSuccess(result) ? result.success : undefined), content)
     })
 
     const get = Effect.fn("cli.config.get")(() =>
@@ -104,12 +125,13 @@ export const layer = Layer.effect(
           const config = Option.getOrUndefined(decode(parse(updated, errors, { allowTrailingComma: true })))
           if (errors.length || config === undefined) return yield* Effect.fail(new Error("Invalid CLI config update"))
           yield* write(updated.endsWith("\n") ? updated : updated + "\n")
+          diagnostic = undefined
           return merge(config, content)
         }),
       ).pipe(Effect.mapError((cause) => new Error("Failed to update CLI config", { cause }))),
     )
 
-    return Service.of({ path: file, get, update })
+    return Service.of({ path: file, get, diagnostic: () => diagnostic, update })
   }),
 )
 

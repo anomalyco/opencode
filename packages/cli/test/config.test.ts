@@ -71,6 +71,60 @@ test("preserves the schema in an existing cli.json", async () => {
   expect(await Bun.file(file).json()).toEqual(config)
 })
 
+test("reports rejected CLI config without applying any of its settings", async () => {
+  await using directory = await tmpdir()
+  const file = path.join(directory.path, "cli.json")
+  await Bun.write(file, JSON.stringify({ session: { sidebar: "hide" }, leader: "ctrl+x" }))
+
+  await run(
+    directory.path,
+    Effect.gen(function* () {
+      const service = yield* Config.Service
+      expect(yield* service.get()).toEqual({})
+      expect(service.diagnostic()).toContain(file)
+      expect(service.diagnostic()).toContain("leader")
+      const rejected = yield* service
+        .update((draft) => {
+          draft.mouse = false
+        })
+        .pipe(Effect.match({ onFailure: () => true, onSuccess: () => false }))
+      expect(rejected).toBe(true)
+      expect(yield* Effect.promise(() => Bun.file(file).json())).toEqual({
+        session: { sidebar: "hide" },
+        leader: "ctrl+x",
+      })
+
+      yield* Effect.promise(() => Bun.write(file, '{"session":'))
+      expect(yield* service.get()).toEqual({})
+      expect(service.diagnostic()).toContain(file)
+
+      yield* Effect.promise(() => Bun.write(file, JSON.stringify({ session: { sidebar: "hide" } })))
+      expect(yield* service.get()).toEqual({ session: { sidebar: "hide" } })
+      expect(service.diagnostic()).toBeUndefined()
+      expect(
+        yield* service.update((draft) => {
+          draft.mouse = false
+        }),
+      ).toEqual({ session: { sidebar: "hide" }, mouse: false })
+      expect(service.diagnostic()).toBeUndefined()
+    }),
+  )
+})
+
+test("reports a malformed CLI config at its line and column", async () => {
+  await using directory = await tmpdir()
+  await Bun.write(path.join(directory.path, "cli.json"), '{\n  "mouse": true,\n  "leader":\n}')
+
+  await run(
+    directory.path,
+    Effect.gen(function* () {
+      const service = yield* Config.Service
+      expect(yield* service.get()).toEqual({})
+      expect(service.diagnostic()).toMatch(/leader: .* at 4:1/)
+    }),
+  )
+})
+
 test("merges inline CLI config content over the global config", async () => {
   await using directory = await tmpdir()
   const file = path.join(directory.path, "cli.json")

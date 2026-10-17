@@ -38,6 +38,7 @@ export default Runtime.handler(Commands.commands.mini, (input) =>
         replayLimit: Option.getOrUndefined(input.replayLimit) ?? resolved.mini?.replay_limit,
         demo: input.demo,
         tuiConfig: resolved,
+        diagnostic: config.diagnostic(),
         config: {
           update: (update) => runServicePromise(config.update(update)),
         },

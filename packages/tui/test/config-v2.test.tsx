@@ -2,10 +2,13 @@
 import { testRender } from "@opentui/solid"
 import { expect, test } from "bun:test"
 import { Schema } from "effect"
+import { createEffect } from "solid-js"
 import { resolve, ConfigProvider, Info, useConfig, type Interface } from "../src/config"
 import { settings } from "../src/component/dialog-config"
 import { TuiKeybind } from "../src/config/keybind"
 import { CommandMap, Definitions } from "../src/config/v1/keybind"
+import { tmpdir } from "./fixture/fixture"
+import path from "node:path"
 
 const decodeInfo = Schema.decodeUnknownSync(Info)
 
@@ -320,6 +323,71 @@ test("provides config and its host interface", async () => {
     })
     await app.renderOnce()
     expect(app.captureCharFrame()).toContain("none ctrl+o")
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("shows the fallback settings on invalid reload and applies the next valid edit", async () => {
+  await using directory = await tmpdir()
+  const file = path.join(directory.path, "cli.json")
+  await Bun.write(file, JSON.stringify({ mouse: false }))
+  let diagnostic: string | undefined
+  let reads = 0
+  const service: Interface = {
+    path: file,
+    async get() {
+      reads++
+      const value = await Bun.file(file).json()
+      diagnostic = typeof value.leader === "string" ? "Invalid CLI config: leader" : undefined
+      return diagnostic ? {} : value
+    },
+    diagnostic: () => diagnostic,
+    async update() {
+      return {}
+    },
+  }
+  let context: ReturnType<typeof useConfig> | undefined
+  let warnings = 0
+  function Consumer() {
+    context = useConfig()
+    createEffect(() => {
+      if (context?.diagnostic()) warnings++
+    })
+    return <text>{context.data.mouse ? "mouse on" : "mouse off"}</text>
+  }
+  const initial = await service.get()
+  const app = await testRender(() => (
+    <ConfigProvider config={resolve(initial, { terminalSuspend: true })} service={service}>
+      <Consumer />
+    </ConfigProvider>
+  ))
+  try {
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("mouse off")
+
+    await Bun.write(file, JSON.stringify({ mouse: true, leader: "bad" }))
+    const invalidDeadline = Date.now() + 2_000
+    while (context?.diagnostic() === undefined && Date.now() < invalidDeadline) await Bun.sleep(10)
+    expect(context?.diagnostic()).toContain("leader")
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("mouse on")
+    expect(warnings).toBe(1)
+
+    const invalidReads = reads
+    await Bun.write(file, JSON.stringify({ mouse: true, leader: "bad" }))
+    const repeatDeadline = Date.now() + 2_000
+    while (reads === invalidReads && Date.now() < repeatDeadline) await Bun.sleep(10)
+    expect(reads).toBeGreaterThan(invalidReads)
+    await app.renderOnce()
+    expect(warnings).toBe(1)
+
+    await Bun.write(file, JSON.stringify({ mouse: false }))
+    const validDeadline = Date.now() + 2_000
+    while (context?.diagnostic() !== undefined && Date.now() < validDeadline) await Bun.sleep(10)
+    expect(context?.diagnostic()).toBeUndefined()
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("mouse off")
   } finally {
     app.renderer.destroy()
   }

@@ -22,6 +22,7 @@ export type MiniCommandInput = {
   replayLimit?: number
   demo?: boolean
   tuiConfig?: MiniFrontendInput["tuiConfig"]
+  diagnostic?: string
   config?: MiniFrontendInput["config"]
   paths: { home: string; state: string; log: string }
 }
@@ -124,6 +125,7 @@ export async function runMini(input: MiniCommandInput) {
         replayLimit: input.replayLimit,
         demo: input.demo,
         tuiConfig: input.tuiConfig,
+        diagnostic: input.diagnostic,
         config: input.config,
       })
     })

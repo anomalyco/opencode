@@ -18,7 +18,7 @@ import {
 } from "@opentui/core"
 import { isFallbackTitle } from "@opencode/util/session-title-fallback"
 import { monoSnapshot } from "./mono"
-import { entrySplash, exitSplash } from "./splash"
+import { configWarning, entrySplash, exitSplash } from "./splash"
 import { resolveRunTheme } from "./theme"
 import type {
   FooterApi,
@@ -67,6 +67,7 @@ export type LifecycleInput = {
   model: RunInput["model"]
   variant: string | undefined
   tuiConfig: RunTuiConfig | Promise<RunTuiConfig>
+  diagnostic?: string
   onMiniSettingChange?: (change: MiniSettingChange) => Promise<MiniSettings>
   onPermissionReply: (input: PermissionReply) => void | Promise<void>
   onFormReply: (input: FormReply) => void | Promise<void>
@@ -201,6 +202,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
         })
       : undefined,
   )
+  if (input.diagnostic) renderer.writeToScrollback(configWarning(input.diagnostic))
   await renderer.idle().catch(() => {})
   if (mono) renderer.off(CliRenderEvents.EXTERNAL_OUTPUT, monoSnapshot)
 

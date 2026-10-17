@@ -62,6 +62,7 @@ type RunRuntimeInput = {
   replayLimit?: number
   demo?: RunInput["demo"]
   tuiConfig?: RunTuiConfig | Promise<RunTuiConfig>
+  diagnostic?: string
   config?: Pick<Config.Interface, "update">
 }
 
@@ -81,6 +82,7 @@ export type RunDeferredInput = {
   replayLimit?: number
   demo?: RunInput["demo"]
   tuiConfig?: RunTuiConfig | Promise<RunTuiConfig>
+  diagnostic?: string
   config?: Pick<Config.Interface, "update">
 }
 
@@ -250,6 +252,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     model: state.model,
     variant: state.activeVariant,
     tuiConfig: tuiConfigTask,
+    diagnostic: input.diagnostic,
     onMiniSettingChange: config
       ? async (change) => {
           const info = await config.update((draft) => {
@@ -1106,6 +1109,7 @@ export async function runInteractiveDeferredMode(input: RunDeferredInput, deps?:
       replayLimit: input.replayLimit,
       demo: input.demo,
       tuiConfig: input.tuiConfig,
+      diagnostic: input.diagnostic,
       config: input.config,
       reconnect: input.reconnect,
       resolveSession: input.target,
