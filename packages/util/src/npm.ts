@@ -2,6 +2,7 @@ export * as Npm from "./npm.js"
 
 import path from "path"
 import { createHash, randomUUID } from "node:crypto"
+import npa from "npm-package-arg"
 import { Clock, Effect, Schema, Context, Layer, Option, FileSystem } from "effect"
 import { FSUtil } from "./fs-util.js"
 import { Global } from "./global.js"
@@ -46,6 +47,11 @@ export async function isRegistryPackage(pkg: string) {
   return (await parse(pkg))?.type === "registry"
 }
 
+export function registryName(pkg: string) {
+  const target = parse(pkg)
+  return target?.type === "registry" ? target.name : undefined
+}
+
 export async function isInstallablePackage(pkg: string) {
   return (await parse(pkg)) !== undefined
 }
@@ -58,8 +64,7 @@ type Target =
   | { readonly type: "registry"; readonly name: string; readonly spec: string; readonly mutable: boolean }
   | { readonly type: "git"; readonly name?: string; readonly slug: string; readonly mutable: boolean }
 
-async function parse(pkg: string): Promise<Target | undefined> {
-  const { default: npa } = await import("npm-package-arg")
+function parse(pkg: string): Target | undefined {
   try {
     const result = npa(pkg)
     if (result.type === "git") {
@@ -343,13 +348,13 @@ const layer = Layer.effect(
     })
 
     const add = Effect.fn("Npm.add")(function* (pkg: string) {
-      const target = yield* Effect.promise(() => parse(pkg))
+      const target = yield* Effect.sync(() => parse(pkg))
       const dir = directory(pkg, target)
       return yield* install(pkg, target, dir, false)
     }, Effect.scoped)
 
     const resolve = Effect.fn("Npm.resolve")(function* (pkg: string) {
-      const target = yield* Effect.promise(() => parse(pkg))
+      const target = yield* Effect.sync(() => parse(pkg))
       const root = directory(pkg, target)
       const generation = yield* current(root)
       const name = yield* installedName(pkg, generation ?? root, target)
@@ -359,7 +364,7 @@ const layer = Layer.effect(
     })
 
     const check = Effect.fn("Npm.check")(function* (pkg: string) {
-      const target = yield* Effect.promise(() => parse(pkg))
+      const target = yield* Effect.sync(() => parse(pkg))
       const root = directory(pkg, target)
       if (!target)
         return yield* new InstallFailedError({
@@ -392,7 +397,7 @@ const layer = Layer.effect(
     })
 
     const update = Effect.fn("Npm.update")(function* (pkg: string) {
-      const target = yield* Effect.promise(() => parse(pkg))
+      const target = yield* Effect.sync(() => parse(pkg))
       const dir = directory(pkg, target)
       if (!target)
         return yield* new InstallFailedError({
@@ -406,7 +411,7 @@ const layer = Layer.effect(
     }, Effect.scoped)
 
     const which = Effect.fn("Npm.which")(function* (pkg: string, bin?: string) {
-      const target = yield* Effect.promise(() => parse(pkg))
+      const target = yield* Effect.sync(() => parse(pkg))
       const root = directory(pkg, target)
 
       const pick = Effect.fnUntraced(function* (dir: string) {
