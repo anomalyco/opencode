@@ -25,6 +25,7 @@ const result = await Bun.build({
     "#persistent-pty-binary",
     "#fff",
     "#photon-wasm",
+    "#runtime-fetch",
     "#shell-parser-wasm",
     "#v1-migration",
   ],

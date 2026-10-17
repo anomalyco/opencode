@@ -109,9 +109,14 @@ const resolve = {
   alias: [
     { find: /^solid-js\/store$/, replacement: "solid-js/store/dist/store.js" },
     { find: /^solid-js$/, replacement: "solid-js/dist/solid.js" },
+    // Bun, which runs this build, lists ws and undici as builtins, so Vite would leave them external.
     {
       find: /^ws$/,
       replacement: path.join(path.dirname(createRequire(import.meta.url).resolve("ws/package.json")), "wrapper.mjs"),
+    },
+    {
+      find: /^undici$/,
+      replacement: path.join(path.dirname(createRequire(import.meta.url).resolve("undici/package.json")), "index.js"),
     },
   ],
   conditions: ["node"],

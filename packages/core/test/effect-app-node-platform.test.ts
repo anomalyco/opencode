@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test"
-import { WebSocketTransport } from "@opencode/ai/route"
+import { RequestExecutor, WebSocketTransport } from "@opencode/ai/route"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { LayerNodePlatform } from "@opencode/core/effect/app-node-platform"
 import { WebSocketConstructor } from "@opencode/core/effect/websocket-constructor"
 import { Effect } from "effect"
-import { Headers } from "effect/http"
+import { FetchHttpClient, Headers, HttpClientRequest } from "effect/http"
 import { Socket } from "effect/socket"
 
 const makeServer = (fetch: (request: Request, server: Bun.Server<undefined>) => Response | undefined) =>
@@ -17,6 +19,34 @@ const makeServer = (fetch: (request: Request, server: Bun.Server<undefined>) => 
     ),
     (server) => Effect.promise(() => server.stop(true)),
   )
+
+describe("provider fetch policy", () => {
+  // Bun's fetch otherwise ends a request after five quiet minutes, before provider routes' own timeouts.
+  test("sends provider requests through the ambient fetch without Bun's idle deadline", async () => {
+    const sent: Array<{ url: string; timeout?: boolean }> = []
+    const ambient = Object.assign(
+      async (input: string | URL | Request, init?: RequestInit & { readonly timeout?: boolean }) => {
+        sent.push({ url: String(input), timeout: init?.timeout })
+        return new Response("ok")
+      },
+      { preconnect: fetch.preconnect },
+    )
+
+    const status = await Effect.runPromise(
+      Effect.gen(function* () {
+        const executor = yield* RequestExecutor.Service
+        const response = yield* executor.execute(HttpClientRequest.post("https://provider.test/v1/chat/completions"))
+        return response.status
+      }).pipe(
+        Effect.provide(AppNodeBuilder.build(LayerNodePlatform.requestExecutor)),
+        Effect.provideService(FetchHttpClient.Fetch, ambient),
+      ),
+    )
+
+    expect(status).toBe(200)
+    expect(sent).toEqual([{ url: "https://provider.test/v1/chat/completions", timeout: false }])
+  })
+})
 
 describe("WebSocket network policy", () => {
   test("uses protocol-specific and standard proxy variables", () => {

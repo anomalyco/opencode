@@ -36,6 +36,7 @@ import { Cause, Context, Effect, Layer, Option, Schema, Scope, Stream } from "ef
 import { makeParser } from "effect/encoding/Sse"
 import { HttpClientRequest, HttpClientResponse } from "effect/http"
 import { AsyncLocalStorage } from "node:async_hooks"
+import { withoutRuntimeTimeouts } from "#runtime-fetch"
 import type { ID, RuntimeInfo } from "./model.js"
 import { Provider } from "./provider.js"
 import { State } from "./state.js"
@@ -159,13 +160,11 @@ function prepareOptions(model: RuntimeInfo, pkg: string) {
       }
     }
 
-    const send: Fetch = typeof customFetch === "function" ? customFetch : fetch
+    const send = withoutRuntimeTimeouts(typeof customFetch === "function" ? customFetch : fetch)
     const middleware = httpMiddleware.getStore()
-    const res = await (
-      middleware
-        ? throughMiddleware(middleware, send, input, { ...opts, timeout: false })
-        : send(input, { ...opts, timeout: false })
-    ).finally(() => clearTimeout(headerTimer))
+    const res = await (middleware ? throughMiddleware(middleware, send, input, opts) : send(input, opts)).finally(() =>
+      clearTimeout(headerTimer),
+    )
     if (timeouts.chunkTimeout === false) return res
     return wrapSSE(res, timeouts.chunkTimeout, chunks)
   }
@@ -173,17 +172,15 @@ function prepareOptions(model: RuntimeInfo, pkg: string) {
   return options
 }
 
-type Fetch = (input: Parameters<typeof fetch>[0], init?: BunFetchRequestInit) => Promise<Response>
-
 // HTTP hook middleware is scoped to one model request, but the SDK's fetch is baked into the
 // cached language model, so the active middleware rides along in async context instead.
 const httpMiddleware = new AsyncLocalStorage<{ http: HttpMiddleware; context: Context.Context<never> }>()
 
 function throughMiddleware(
   store: { http: HttpMiddleware; context: Context.Context<never> },
-  send: Fetch,
+  send: typeof fetch,
   input: Parameters<typeof fetch>[0],
-  init: BunFetchRequestInit,
+  init: RequestInit,
 ) {
   const toError = (cause: unknown) => (cause instanceof Error ? cause : new Error(String(cause)))
   const request = input instanceof Request ? new Request(input, init) : new Request(String(input), init)

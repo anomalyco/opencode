@@ -4,23 +4,25 @@ import { FetchHttpClient, HttpClient } from "effect/http"
 import { Socket } from "effect/socket"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { httpClient } from "@opencode/util/effect/app-node-platform"
+import { withoutRuntimeTimeouts } from "#runtime-fetch"
 import { WebSocketConstructor } from "./websocket-constructor.js"
 
-// Bun's fetch ends a request after five quiet minutes, before provider routes' own header and chunk timeouts.
-const withoutBunTimeout = Layer.effect(
+// Provider routes enforce their own header, chunk, and total timeouts; the runtime fetch must not end requests first.
+const withoutFetchTimeouts = Layer.effect(
   HttpClient.HttpClient,
   Effect.gen(function* () {
     const client = yield* HttpClient.HttpClient
-    return HttpClient.transformResponse(
-      client,
-      Effect.provideService(FetchHttpClient.RequestInit, { timeout: false } as BunFetchRequestInit),
+    return HttpClient.transformResponse(client, (effect) =>
+      Effect.flatMap(FetchHttpClient.Fetch, (fetch) =>
+        Effect.provideService(effect, FetchHttpClient.Fetch, withoutRuntimeTimeouts(fetch)),
+      ),
     )
   }),
 )
 
 export const requestExecutor = makeGlobalNode({
   service: RequestExecutor.Service,
-  layer: RequestExecutor.layer.pipe(Layer.provide(withoutBunTimeout)),
+  layer: RequestExecutor.layer.pipe(Layer.provide(withoutFetchTimeouts)),
   deps: [httpClient],
 })
 
