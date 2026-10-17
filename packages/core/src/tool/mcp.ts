@@ -9,6 +9,7 @@ import { Bus } from "../bus.js"
 import { Mcp } from "../mcp/index.js"
 import { Permission } from "../permission.js"
 import { Tool } from "../tool.js"
+import { Wildcard } from "../util/wildcard.js"
 
 /**
  * Registry namespace and permission action names for MCP tools.
@@ -16,9 +17,31 @@ import { Tool } from "../tool.js"
 export const namespace = (server: string) => server.replace(/[^a-zA-Z0-9_-]/g, "_")
 export const name = (server: string, tool: string) => `${namespace(server)}_${tool.replace(/[^a-zA-Z0-9_-]/g, "_")}`
 
+/**
+ * Whether any tool of this server could be visible under the ruleset, so the server must be
+ * running. Permission rules resolve last-wins per action: the server is needed unless a blanket
+ * deny covering the whole namespace (`ns_*`, `ns*`, or `*`) still wins for every tool once later
+ * carve-outs are applied. Unknown tool names make this conservative on purpose — it may spawn a
+ * server only one specific tool can reach, but it never hides a tool the snapshot would show.
+ */
+export const usable = (server: string, rules: Permission.Ruleset): boolean => {
+  const ns = namespace(server)
+  // A canary action matches blanket namespace patterns while colliding with no registered tool.
+  const canary = `${ns}___demanded`
+  const denyAt = rules.findLastIndex(
+    (rule) => Wildcard.match(canary, rule.action) && rule.resource === "*" && rule.effect === "deny",
+  )
+  if (denyAt < 0) return true
+  return rules
+    .slice(denyAt + 1)
+    .some((rule) => rule.effect !== "deny" && (Wildcard.match(canary, rule.action) || rule.action.startsWith(ns)))
+}
+
 export interface Interface {
   /** Wait for the initial MCP tool registration to settle. */
   readonly flush: Effect.Effect<void>
+  /** Starts every server whose tools this ruleset can reach, then refreshes the registry for the caller's snapshot. */
+  readonly demand: (permissions: Permission.Ruleset) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/McpTool") {}
@@ -121,9 +144,13 @@ export const layer = Layer.effect(
         }),
       )
       .pipe(Effect.forkScoped)
+    // Skip the reload when no server changed its tool list: a reload invalidates the shared
+    // Code Mode catalog that snapshot keeps across Steps.
     const reconcile = lock.withPermit(
       Effect.gen(function* () {
-        discovered = yield* mcp.tools()
+        const next = yield* mcp.tools()
+        if (next.length === discovered.length && next.every((tool, index) => tool === discovered[index])) return
+        discovered = next
         yield* tools.reload()
       }),
     )
@@ -141,7 +168,17 @@ export const layer = Layer.effect(
       Stream.runForEach(() => reconcile),
       Effect.forkScoped({ startImmediately: true }),
     )
-    return Service.of({ flush: Effect.asVoid(Fiber.await(initial)) })
+    const demand = Effect.fn("McpTool.demand")(function* (permissions: Permission.Ruleset) {
+      const servers = yield* mcp.servers()
+      yield* Effect.forEach(
+        servers.filter((server) => usable(server.name, permissions)),
+        (server) => mcp.demand(server.name),
+        { concurrency: "unbounded" },
+      )
+      // The snapshot taken right after this select must already contain freshly connected tools.
+      yield* reconcile
+    })
+    return Service.of({ flush: Effect.asVoid(Fiber.await(initial)), demand })
   }),
 )
 
