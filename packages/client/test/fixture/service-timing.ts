@@ -1,16 +1,17 @@
-import { withEnsureTiming } from "../../src/service-timing"
+import { withEnsureTiming, type EnsureTiming } from "../../src/service-timing"
 
 const timing = {
   pollInterval: 20,
   requestTimeout: 100,
+  unresponsiveTimeout: 200,
   spawnDelay: 200,
   maxSpawnDelay: 1_200,
   promiseTimeout: 3_000,
   stopPollInterval: 5,
 }
 
-export function accelerate<A extends object, B>(ensure: (options?: A) => B) {
-  return (options: A) => ensure(withEnsureTiming(options, timing))
+export function accelerate<A extends object, B>(ensure: (options?: A) => B, overrides: Partial<EnsureTiming> = {}) {
+  return (options: A) => ensure(withEnsureTiming(options, { ...timing, ...overrides }))
 }
 
 export async function waitForExit(pid: number) {
