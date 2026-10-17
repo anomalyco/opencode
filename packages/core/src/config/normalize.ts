@@ -476,6 +476,15 @@ function normalizeExperimental(
         )
         if (value !== undefined) result.subagent_depth = value
       }
+      if (own(experimental, "location_idle_timeout")) {
+        const value = decodeEncoded(
+          ConfigExperimental.Info.fields.location_idle_timeout,
+          experimental.location_idle_timeout,
+          ["experimental", "location_idle_timeout"],
+          diagnostics,
+        )
+        if (value !== undefined) result.location_idle_timeout = value
+      }
     }
   }
   if (Object.keys(result).length || (isRecord(input.experimental) && !Object.keys(input.experimental).length))

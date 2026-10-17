@@ -2,7 +2,7 @@ import type { FileSystem } from "@opencode/core/filesystem"
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Config } from "@opencode/schema/config"
+import { Event } from "@opencode/schema/config"
 import { Money } from "@opencode/schema/money"
 import {
   DateTime,
@@ -30,6 +30,9 @@ import { LocationServiceMap, type LocationServices } from "@opencode/core/locati
 import { LocationActivity } from "@opencode/core/location-activity"
 import { Location } from "@opencode/core/location"
 import { LocationWatcher } from "@opencode/core/filesystem/location-watcher"
+import { Config } from "@opencode/core/config"
+import { Form } from "@opencode/core/form"
+import { Permission } from "@opencode/core/permission"
 import { Plugin } from "@opencode/core/plugin"
 import { Model } from "@opencode/core/model"
 import { Project } from "@opencode/core/project"
@@ -59,14 +62,22 @@ const activityLocations = Layer.effect(
   LocationServiceMap.Service,
   LayerMap.make(
     (ref) =>
+      // LocationActivity reads config, questions, and permission prompts during its sweep.
       // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
-      Layer.succeed(
-        Location.Service,
-        Location.Service.of({
-          directory: ref.directory,
-          workspaceID: ref.workspaceID,
-          project: { id: Project.ID.global, directory: ref.directory, canonical: ref.directory },
-        }),
+      Layer.mergeAll(
+        Layer.succeed(
+          Location.Service,
+          Location.Service.of({
+            directory: ref.directory,
+            workspaceID: ref.workspaceID,
+            project: { id: Project.ID.global, directory: ref.directory, canonical: ref.directory },
+          }),
+        ),
+        Config.testLayer(),
+        // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
+        Layer.succeed(Form.Service, { list: () => Effect.succeed([]) } as unknown as Form.Interface),
+        // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
+        Layer.succeed(Permission.Service, { list: () => Effect.succeed([]) } as unknown as Permission.Interface),
       ) as unknown as Layer.Layer<LocationServices, FileSystem.DirectoryNotFoundError>,
     { idleTimeToLive: Duration.infinity },
   ),
@@ -338,19 +349,19 @@ describe("LocationServiceMap", () => {
             const firstContext = yield* locations.contextEffect(firstRef)
             const secondContext = yield* locations.contextEffect(secondRef)
             const received = { first: 0, second: 0 }
-            yield* bus.subscribe(Config.Event.Updated).pipe(
+            yield* bus.subscribe(Event.Updated).pipe(
               Stream.runForEach(() => Effect.sync(() => received.first++)),
               Effect.provideContext(firstContext),
               Effect.forkScoped({ startImmediately: true }),
             )
-            yield* bus.subscribe(Config.Event.Updated).pipe(
+            yield* bus.subscribe(Event.Updated).pipe(
               Stream.runForEach(() => Effect.sync(() => received.second++)),
               Effect.provideContext(secondContext),
               Effect.forkScoped({ startImmediately: true }),
             )
             yield* Effect.sleep("10 millis")
 
-            yield* bus.publish(Config.Event.Updated, {}, { location: firstRef })
+            yield* bus.publish(Event.Updated, {}, { location: firstRef })
             yield* Effect.sleep("10 millis")
 
             expect(received).toEqual({ first: 1, second: 0 })

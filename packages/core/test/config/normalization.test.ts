@@ -525,11 +525,12 @@ describe("ConfigNormalize", () => {
         experimental: {
           portable_shell_scanner: true,
           subagent_depth: 0,
+          location_idle_timeout: "2 hours",
           policies: [{ action: "provider.use", resource: "custom", effect: "allow" }],
         },
       }).encoded,
     ).toMatchObject({
-      experimental: { portable_shell_scanner: true, subagent_depth: 0 },
+      experimental: { portable_shell_scanner: true, subagent_depth: 0, location_idle_timeout: "7200000 millis" },
       policies: [
         { action: "provider.use", resource: "*", effect: "deny" },
         { action: "provider.use", resource: "anthropic", effect: "allow" },

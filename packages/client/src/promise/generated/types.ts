@@ -2327,6 +2327,7 @@ export type ConfigEntry =
         experimental?: {
           portable_shell_scanner?: boolean
           subagent_depth?: number
+          location_idle_timeout?: string
           policies?: Array<{
             action: "provider.use" | "tool.use" | "integration.use"
             resource: string
