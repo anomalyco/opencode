@@ -88,8 +88,7 @@ type ServerEntry = {
   registration?: State.Registration
 }
 
-// MCP elicitations are Location-scoped, not Session-scoped: the server cannot attribute them to a
-// persisted session row, so their forms are owned by this opaque sentinel session identifier.
+// Unsolicited elicitations and callers without a Session retain the Location-scoped owner.
 const GLOBAL_ELICITATION_SESSION_ID = "global"
 const URL_ELICITATION_FIELD_KEY = "elicitation"
 // Connections remain Location-scoped, but shared remote endpoints should not receive concurrent startup bursts.
@@ -231,6 +230,7 @@ export const layer = (options?: Options) =>
       const elicitation = {
         create: (input: {
           readonly server: string
+          readonly sessionID?: Session.ID
           readonly params: McpClient.ElicitationParams
           readonly signal: AbortSignal
         }) =>
@@ -245,7 +245,7 @@ export const layer = (options?: Options) =>
               return yield* forms
                 .ask({
                   id: formID,
-                  sessionID: GLOBAL_ELICITATION_SESSION_ID,
+                  sessionID: input.sessionID ?? GLOBAL_ELICITATION_SESSION_ID,
                   title: `${input.server} is requesting input`,
                   metadata: {
                     kind: "mcp-elicitation",
@@ -272,7 +272,7 @@ export const layer = (options?: Options) =>
             if (!field) return { action: "accept", content: {} }
             return yield* forms
               .ask({
-                sessionID: GLOBAL_ELICITATION_SESSION_ID,
+                sessionID: input.sessionID ?? GLOBAL_ELICITATION_SESSION_ID,
                 title: `${input.server} is requesting input`,
                 metadata: { kind: "mcp-elicitation", server: input.server, message: params.message },
                 fields: [field, ...fields],
