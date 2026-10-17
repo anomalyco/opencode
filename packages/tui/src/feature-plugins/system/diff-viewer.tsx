@@ -99,6 +99,8 @@ function DiffViewer(props: { api: TuiPluginApi }) {
           sessionID?: string
           messageID?: string
           returnRoute?: TuiRouteCurrent
+          // A file to open at, e.g. a row clicked in the sidebar's Modified Files.
+          file?: string
         }
       | undefined
   const mode = () => params()?.mode ?? "git"
@@ -351,6 +353,18 @@ function DiffViewer(props: { api: TuiPluginApi }) {
       })
     })
   }
+
+  // Opened at a file: select and scroll to it once the diff has loaded.
+  let openedAt = false
+  createEffect(() => {
+    const file = params()?.file
+    if (openedAt || !file || files().length === 0) return
+    openedAt = true
+    const fileIndex = files().findIndex((item) => item.file === file)
+    if (fileIndex < 0) return
+    selectPatchFile(fileIndex)
+    scrollToPatchFileIndexAfterRender(fileIndex)
+  })
 
   const scrollSinglePatchToTop = () => {
     requestAnimationFrame(() => {

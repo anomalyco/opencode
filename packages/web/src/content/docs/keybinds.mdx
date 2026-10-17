@@ -187,6 +187,25 @@ On Windows, the defaults for `input_undo` and `terminal_suspend` are different:
 
 ---
 
+## Undo with ctrl+z
+
+`input_undo` and `input_redo` step through the prompt's [undo history](/docs/tui#undo-in-the-prompt). On macOS and Linux, <kbd>ctrl+z</kbd> suspends OpenCode by default. To use <kbd>ctrl+z</kbd> and <kbd>ctrl+shift+z</kbd> for undo and redo instead, unbind suspend:
+
+```json title="tui.json"
+{
+  "$schema": "https://opencode.ai/tui.json",
+  "keybinds": {
+    "terminal_suspend": "none",
+    "input_undo": "ctrl+z,ctrl+-,super+z",
+    "input_redo": "ctrl+shift+z,ctrl+.,super+shift+z"
+  }
+}
+```
+
+<kbd>ctrl+shift+z</kbd> reaches OpenCode only in a terminal that reports it apart from <kbd>ctrl+z</kbd>, through the kitty keyboard protocol or `modifyOtherKeys`; inside tmux that also needs `extended-keys`. <kbd>ctrl+.</kbd> needs the same.
+
+---
+
 ## Leader Key
 
 OpenCode uses a `leader` key for many keybinds. This avoids conflicts in your terminal.

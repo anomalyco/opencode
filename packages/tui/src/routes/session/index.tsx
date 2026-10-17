@@ -24,7 +24,14 @@ import { SplitBorder } from "../../ui/border"
 import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
 import { Spinner } from "../../component/spinner"
 import { createSyntaxStyleMemo, generateSubtleSyntax, selectedForeground, useTheme } from "../../context/theme"
-import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA } from "@opentui/core"
+import {
+  BoxRenderable,
+  ScrollBoxRenderable,
+  addDefaultParsers,
+  TextAttributes,
+  RGBA,
+  type MouseEvent,
+} from "@opentui/core"
 import { Prompt, type PromptRef } from "../../component/prompt"
 import type {
   AssistantMessage,
@@ -81,6 +88,9 @@ import { getRevertDiffFiles } from "../../util/revert-diff"
 import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useOpencodeKeymap } from "../../keymap"
 import { usePathFormatter } from "../../context/path-format"
 import { LocationProvider } from "../../context/location"
+import { cellText, idUnder } from "../../ui/id-click"
+import { onClick } from "../../ui/click"
+import { DialogModel } from "../../component/dialog-model"
 
 addDefaultParsers(parsers.parsers)
 
@@ -1202,8 +1212,9 @@ export function Session() {
                       <Match when={message.role === "user"}>
                         <UserMessage
                           index={index()}
-                          onMouseUp={() => {
+                          onMouseUp={(event) => {
                             if (renderer.getSelection()?.getSelectedText()) return
+                            if (idUnder(renderer.currentRenderBuffer, event)) return
                             dialog.replace(() => (
                               <DialogMessage
                                 messageID={message.id}
@@ -1299,7 +1310,7 @@ export function Session() {
 function UserMessage(props: {
   message: UserMessage
   parts: Part[]
-  onMouseUp: () => void
+  onMouseUp: (event: MouseEvent) => void
   index: number
   pending?: number
 }) {
@@ -1404,6 +1415,8 @@ function UserMessage(props: {
 function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; last: boolean }) {
   const ctx = use()
   const local = useLocal()
+  const renderer = useRenderer()
+  const dialog = useDialog()
   const { theme } = useTheme()
   const sync = useSync()
   const messages = createMemo(() => sync.data.message[props.message.sessionID] ?? [])
@@ -1420,6 +1433,21 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
     if (!user || !user.time) return 0
     return props.message.time.completed - user.time.created
   })
+
+  // A click on the footer's model opens the model picker on the model this
+  // turn ran on. The footer is one text, so the model's cells are found in
+  // the row as drawn.
+  const openModel = (event: MouseEvent) => {
+    const target = event.target
+    if (!target) return
+    const row = cellText(renderer.currentRenderBuffer, event.y, target.x, target.x + target.width)
+    const start = row.indexOf(model(), 1)
+    const column = event.x - target.x
+    if (start < 0 || column < start || column >= start + model().length) return
+    dialog.replace(() => (
+      <DialogModel current={{ providerID: props.message.providerID, modelID: props.message.modelID }} />
+    ))
+  }
 
   const childShortcut = useCommandShortcut("session.child.first")
   const backgroundShortcut = useCommandShortcut("session.background")
@@ -1483,7 +1511,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
       <Switch>
         <Match when={props.last || final() || props.message.error?.name === "MessageAbortedError"}>
           <box ref={(el: BoxRenderable) => alwaysSeparate.add(el)} paddingLeft={3}>
-            <text marginTop={1}>
+            <text marginTop={1} {...onClick(openModel)}>
               <span
                 style={{
                   fg:
@@ -1832,8 +1860,9 @@ function InlineTool(props: {
       separate={props.separate}
       onMouseOver={() => clickable() && setHover(true)}
       onMouseOut={() => setHover(false)}
-      onMouseUp={() => {
+      onMouseUp={(event: MouseEvent) => {
         if (renderer.getSelection()?.getSelectedText()) return
+        if (idUnder(renderer.currentRenderBuffer, event)) return
         if (failed()) {
           setErrorExpanded((value) => !value)
           return
@@ -1863,7 +1892,7 @@ export function InlineToolRow(props: {
   children: JSX.Element
   onMouseOver?: () => void
   onMouseOut?: () => void
-  onMouseUp?: () => void
+  onMouseUp?: (event: MouseEvent) => void
 }) {
   return (
     <box
@@ -1951,8 +1980,9 @@ function BlockTool(props: {
       borderColor={theme.background}
       onMouseOver={() => props.onClick && setHover(true)}
       onMouseOut={() => setHover(false)}
-      onMouseUp={() => {
+      onMouseUp={(event: MouseEvent) => {
         if (renderer.getSelection()?.getSelectedText()) return
+        if (idUnder(renderer.currentRenderBuffer, event)) return
         props.onClick?.()
       }}
     >
