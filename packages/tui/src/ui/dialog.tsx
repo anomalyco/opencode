@@ -147,6 +147,8 @@ export function DialogLayout(
     legacyFooter?: JSX.Element
     /** Side padding in cells. Defaults to DIALOG_INSET. */
     inset?: number
+    /** Blank rows between the body and the footer under the "new-designs" experiment. Defaults to 1. */
+    footerGap?: number
   }>,
 ) {
   const inset = () => props.inset ?? DIALOG_INSET
@@ -154,7 +156,7 @@ export function DialogLayout(
   return (
     <box id={props.id} paddingLeft={inset()} paddingRight={inset()} paddingBottom={1} gap={1}>
       {props.header}
-      <box>{props.children}</box>
+      <box paddingBottom={newDesigns() && props.footer ? (props.footerGap ?? 1) - 1 : 0}>{props.children}</box>
       <Show when={newDesigns() || props.legacyFooter === undefined} fallback={props.legacyFooter}>
         <Show when={props.footer}>
           {(footer) => (
