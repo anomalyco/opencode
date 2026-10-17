@@ -11,6 +11,10 @@ export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
   subagent_depth: NonNegativeInt.pipe(optional).annotate({
     description: "Maximum subagent nesting depth. Defaults to 1.",
   }),
+  vision_model: Schema.String.pipe(optional).annotate({
+    description:
+      "Transcribe image attachments the selected model cannot read with this model, as provider/model. Opt-in: nothing is transcribed unless this is set.",
+  }),
   policies: ConfigPolicy.Info.pipe(Schema.Array, optional).annotate({
     description: "Deprecated: use top-level policies. Ordered policies controlling access to configured resources",
   }),

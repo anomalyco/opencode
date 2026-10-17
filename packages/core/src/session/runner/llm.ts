@@ -20,6 +20,7 @@ import { SessionSchema } from "../schema.js"
 import { SessionStore } from "../store.js"
 import { SessionMessageTable } from "../sql.js"
 import { SessionTitle } from "../title.js"
+import { SessionVision } from "../vision.js"
 import { toSessionError } from "../to-session-error.js"
 import { DrainResult, Service, type Interface } from "./index.js"
 import { Snapshot } from "../../snapshot.js"
@@ -50,6 +51,7 @@ const layer = Layer.effect(
     const compaction = yield* SessionCompaction.Service
     const plugins = yield* Plugin.Service
     const title = yield* SessionTitle.Service
+    const vision = yield* SessionVision.Service
     const steps = yield* SessionStep.make
     // Title generation starts once input is visible and must not delay model execution.
     const titles = yield* FiberMap.make<SessionSchema.ID, void, never>()
@@ -224,12 +226,20 @@ const layer = Layer.effect(
           continue
         }
         const stepLimitReached = loaded.agent.info.steps !== undefined && step >= loaded.agent.info.steps
+        // Transcribe image attachments the selected model cannot read before the request
+        // replaces them with unreadable-attachment error text.
+        const bridged = yield* vision.bridge({
+          session: loaded.session,
+          agent: loaded.agent.id,
+          model: loaded.model,
+          messages: loaded.messages,
+        })
         const transcript = SessionModelRequest.baseTranscript({
           agent: loaded.agent.info,
           model: loaded.model,
           tools: loaded.tools,
           initial: loaded.initial,
-          messages: loaded.messages,
+          messages: bridged,
         })
         const prepared = yield* context.request.primary({
           session: loaded.session,
@@ -401,6 +411,7 @@ export const node = makeLocationNode({
     SessionCompaction.node,
     Plugin.node,
     SessionTitle.node,
+    SessionVision.node,
     Snapshot.node,
     ToolOutput.node,
     Database.node,
