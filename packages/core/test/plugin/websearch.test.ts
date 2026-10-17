@@ -145,6 +145,30 @@ describe("built-in web search providers", () => {
     }),
   )
 
+  it.effect("returns Exa results when SSE data fields omit the optional space", () =>
+    Effect.gen(function* () {
+      resetWebSearchFixture(
+        `event: message\ndata:${JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          result: {
+            content: [{ type: "text", text: "Title: Effect\nURL: https://effect.website\nText: Documentation" }],
+          },
+        })}\n\n`,
+      )
+      const integrations = yield* Integration.Service
+      const websearch = yield* WebSearch.Service
+      yield* WebSearchExa.Plugin.effect(
+        host({ integration: integrationHost(integrations), websearch: webSearchHost(websearch) }),
+      )
+
+      const result = yield* websearch.query({ query: "effect typescript", providerID: WebSearch.ID.make("exa") })
+      expect(result.results).toEqual([
+        { url: "https://effect.website", title: "Effect", content: "Documentation", time: {} },
+      ])
+    }),
+  )
+
   it.effect("registers Parallel and keeps its credential in the authorization header", () =>
     Effect.gen(function* () {
       resetWebSearchFixture(
