@@ -122,7 +122,7 @@ import { SessionLocationMissing } from "./location-missing"
 import { isRecord } from "../../util/record"
 import { createHistoryPrepend } from "./history"
 import { context, use, type PendingAction } from "./render-context"
-import { INLINE_TOOL_ICON_WIDTH, InlineToolRow, ReasoningPart, TextPart, toolDisplay } from "./message-parts"
+import { INLINE_TOOL_ICON_WIDTH, InlineToolRow, ReasoningPart, TextPart, toolDisplay, ThemedMarkdown } from "./message-parts"
 import { defaultVerbosity, type GroupKind, type SessionEntry } from "./grouping/session"
 import { SessionGroupView } from "./group-view"
 import { useEntryAnchor } from "./anchor-view"
@@ -2080,13 +2080,11 @@ function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type:
       </box>
       <Show when={content()}>
         <box paddingTop={1} paddingLeft={3}>
-          <markdown
-            syntaxStyle={syntax()}
+          <ThemedMarkdown
+            syntax={syntax()}
             renderNode={plugins.markdown()}
             streaming={true}
-            internalBlockMode="top-level"
             content={content()}
-            tableOptions={{ style: "grid", cellPaddingX: 1 }}
             conceal={ctx.markdownMode() === "rendered"}
             fg={theme.markdown.text}
             bg={theme.background.base}

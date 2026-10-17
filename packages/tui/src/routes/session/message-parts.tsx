@@ -1,5 +1,5 @@
 import { createMemo, createSignal, Match, Show, Switch } from "solid-js"
-import { RGBA, TextAttributes, type MouseEvent } from "@opentui/core"
+import { RGBA, TextAttributes, type MarkdownOptions, type MouseEvent, type SyntaxStyle } from "@opentui/core"
 import type { JSX } from "@opentui/solid"
 import type {
   SessionMessageAssistant,
@@ -166,6 +166,36 @@ function ReasoningHeader(props: {
   )
 }
 
+export function ThemedMarkdown(props: {
+  syntax: SyntaxStyle
+  content: string
+  streaming: boolean
+  renderNode?: MarkdownOptions["renderNode"]
+  conceal: boolean
+  fg: RGBA
+  bg: RGBA
+}) {
+  // Remount on theme swap: opentui's own style refresh skips list items whose raw text did not
+  // change, so the mounted tree would keep their previous colors.
+  return (
+    <Show when={props.syntax} keyed>
+      {(style) => (
+        <markdown
+          syntaxStyle={style}
+          renderNode={props.renderNode}
+          content={props.content}
+          streaming={props.streaming}
+          internalBlockMode="top-level"
+          tableOptions={{ style: "grid", cellPaddingX: 1 }}
+          conceal={props.conceal}
+          fg={props.fg}
+          bg={props.bg}
+        />
+      )}
+    </Show>
+  )
+}
+
 export function TextPart(props: {
   last: boolean
   part: SessionMessageAssistantText
@@ -179,13 +209,11 @@ export function TextPart(props: {
     <Show when={props.part.text.trim()}>
       <box paddingLeft={3} flexShrink={0}>
         {/* Configure custom nodes before parsing; apply content before streaming so completion keeps the final tokens. */}
-        <markdown
-          syntaxStyle={syntax()}
+        <ThemedMarkdown
+          syntax={syntax()}
           renderNode={plugins.markdown()}
           content={props.part.text.trim()}
           streaming={props.message.time.completed === undefined}
-          internalBlockMode="top-level"
-          tableOptions={{ style: "grid", cellPaddingX: 1 }}
           conceal={ctx.markdownMode() === "rendered"}
           fg={theme.markdown.text}
           bg={theme.background.base}

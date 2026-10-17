@@ -189,6 +189,14 @@ function activeSyntax(scrollback: RunScrollbackStream) {
   return entry?.renderable?.syntaxStyle
 }
 
+function activeListMarkerColor(scrollback: RunScrollbackStream) {
+  // oxlint-disable-next-line no-restricted-globals -- RunScrollbackStream does not expose its active entry publicly.
+  const entry = Reflect.get(scrollback, "active") as { renderable?: MarkdownRenderable } | undefined
+  const list = entry?.renderable?._blockStates.find((state) => state.token.type === "list")
+  const marker = list?.renderable.getChildren()[0]?.getChildren()[0]
+  return marker instanceof TextRenderable ? marker.chunks[0]?.fg : undefined
+}
+
 test("theme swaps preserve streamed markdown parser state", async () => {
   const out = await setup()
   const next = {
@@ -215,6 +223,42 @@ test("theme swaps preserve streamed markdown parser state", async () => {
     }
   } finally {
     out.scrollback.destroy()
+  }
+})
+
+test("theme swaps restyle streamed markdown lists", async () => {
+  const previousSyntax = SyntaxStyle.fromStyles({ default: { fg: "#123456" }, "markup.list": { fg: "#654321" } })
+  const nextSyntax = SyntaxStyle.fromStyles({ default: { fg: "#abcdef" }, "markup.list": { fg: "#ff00ff" } })
+  const previous = {
+    ...RUN_THEME_FALLBACK,
+    block: {
+      ...RUN_THEME_FALLBACK.block,
+      syntax: previousSyntax,
+    },
+  }
+  const next = {
+    ...RUN_THEME_FALLBACK,
+    block: {
+      ...RUN_THEME_FALLBACK.block,
+      syntax: nextSyntax,
+    },
+  }
+  const out = await setup({ theme: previous })
+
+  try {
+    await out.scrollback.append(assistant("- apple\n- banana"))
+    expect(activeListMarkerColor(out.scrollback)).toEqual(previousSyntax.getStyle("markup.list")?.fg)
+
+    out.scrollback.setTheme(next)
+    await out.scrollback.append(assistant("\n- cherry"))
+    await out.renderOnce()
+
+    expect(activeListMarkerColor(out.scrollback)).toEqual(nextSyntax.getStyle("markup.list")?.fg)
+  } finally {
+    out.scrollback.destroy()
+    destroy(claim(out.renderer))
+    previousSyntax.destroy()
+    nextSyntax.destroy()
   }
 })
 

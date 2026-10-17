@@ -10,6 +10,7 @@ import { useTheme, useThemes } from "../../context/theme"
 import { usePlugin } from "../../plugin/context"
 import { DIALOG_INSET, DialogBleed, DialogFooter, DialogHeader, DialogLayout } from "../../ui/dialog"
 import { useToast } from "../../ui/toast"
+import { ThemedMarkdown } from "../../routes/session/message-parts"
 import { getScrollAcceleration } from "../../util/scroll"
 
 // session.generate exposes the session's tools but runs no tool loop, so a
@@ -171,13 +172,12 @@ export function Answer(props: {
           scrollAcceleration={getScrollAcceleration(config)}
         >
           <box paddingLeft={DIALOG_INSET} paddingRight={DIALOG_INSET} paddingTop={1} paddingBottom={1}>
-            <markdown
-              syntaxStyle={syntax()}
+            <ThemedMarkdown
+              syntax={syntax()}
               renderNode={props.markdown()}
               content={props.answer}
-              conceal
-              internalBlockMode="top-level"
-              tableOptions={{ style: "grid", cellPaddingX: 1 }}
+              streaming={false}
+              conceal={true}
               fg={overlay.markdown.text}
               bg={overlay.background.raised.high}
             />

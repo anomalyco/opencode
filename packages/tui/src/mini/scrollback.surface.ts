@@ -163,6 +163,17 @@ export class RunScrollbackStream {
       return
     }
 
+    if (active.renderable instanceof MarkdownRenderable) {
+      // Markdown blocks bake their resolved colors when they are built, and the renderable's own
+      // style refresh skips list items whose raw text did not change — rebuild the active tree so
+      // every block re-resolves against the new theme, the same way mono toggles do.
+      const next = this.createEntry(active.commit, active.body)
+      this.active = { ...active, surface: next.surface, renderable: next.renderable }
+      active.surface.destroy()
+      this.releasePendingThemes()
+      return
+    }
+
     active.renderable.fg = entryColor(active.commit, theme)
     active.renderable.syntaxStyle = entrySyntax(theme)
   }
