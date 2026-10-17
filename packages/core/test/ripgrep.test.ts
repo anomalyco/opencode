@@ -83,6 +83,25 @@ describe("Ripgrep", () => {
     ),
   )
 
+  it.live("greps files whose matching line is not valid UTF-8", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      yield* Effect.promise(() => fs.writeFile(path.join(tmp.path, "utf8.txt"), "needle\n"))
+      // 0xE9 is "é" in Latin-1 and an invalid byte in UTF-8, so rg reports this line as base64 bytes.
+      yield* Effect.promise(() =>
+        fs.writeFile(path.join(tmp.path, "latin1.txt"), Buffer.from([...Buffer.from("needle caf"), 0xe9, 0x0a])),
+      )
+
+      const ripgrep = yield* Ripgrep.Service
+      const result = yield* ripgrep.grep({ cwd: tmp.path, pattern: "needle", limit: 10 })
+
+      expect(result.map((match) => [match.entry.path, match.text]).sort()).toEqual([
+        [RelativePath.make("latin1.txt"), "needle caf�\n"],
+        [RelativePath.make("utf8.txt"), "needle\n"],
+      ])
+    }),
+  )
+
   it.live("keeps ignored files out of catch-all find results", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
