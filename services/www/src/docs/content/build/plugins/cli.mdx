@@ -477,6 +477,29 @@ context.keymap.layer(() => ({
 }))
 ```
 
+## Prompt suggestions
+
+Offer ghost text to the current session's empty composer. The user presses Tab to insert it into the draft without
+sending, or Escape to dismiss it. These bindings are configurable as `prompt.suggestion.accept` and
+`prompt.suggestion.dismiss`.
+
+```ts
+const clear = context.ui.prompt.suggest({
+  sessionID,
+  text: "Add a test for the empty-input case.",
+})
+
+// Withdraw this offer, for example when its generating request becomes stale.
+clear()
+```
+
+- Offers are ignored unless the target session is current and idle, and its normal composer is empty and focused.
+- Typing, adding attachments, opening a dialog, starting execution, or leaving the session discards the suggestion.
+- The newest offer replaces the visible suggestion. An older disposer cannot remove a newer offer.
+- The preview uses the composer's normal wrapping and height limit. Acceptance inserts the original text in full.
+- Suggestions belong to the plugin activation and are removed when it unloads. They never enter saved drafts or history
+  until accepted.
+
 ## Slots
 
 Slots insert or replace JSX at `app`, `home.footer`, `home.footer.status`, `prompt.footer`, `prompt.footer.status`,

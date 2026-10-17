@@ -31,6 +31,7 @@ import { useStorage } from "../context/storage"
 import { useSessionTabs } from "../context/session-tabs"
 import { useOptionalPanel } from "../context/panel"
 import { useLocal } from "../context/local"
+import { usePromptRef } from "../context/prompt"
 import { abbreviateHome } from "../util/path-format"
 
 export type Dispose = () => Promise<void>
@@ -82,6 +83,7 @@ export function usePluginHost() {
     sessionTabs: useSessionTabs(),
     panel: useOptionalPanel(),
     local: useLocal(),
+    prompt: usePromptRef(),
   }
 }
 
@@ -97,6 +99,8 @@ export function createPluginContext(input: {
 }): Context {
   const host = input.host
   input.owned.push(async () => host.panel?.release(input.id))
+  let clearSuggestion: (() => void) | undefined
+  input.owned.push(async () => clearSuggestion?.())
   let context: Context
   let claims = 0
   // Every dialog and registered render is wrapped so plugin components can
@@ -293,6 +297,18 @@ export function createPluginContext(input: {
             host.local.model.variant.set(variant)
             return true
           },
+        },
+      },
+      prompt: {
+        suggest(value) {
+          clearSuggestion?.()
+          clearSuggestion = undefined
+          const route = host.route.data
+          if (!input.registry.active() || route.type !== "session" || route.sessionID !== value.sessionID)
+            return () => {}
+          const clear = host.prompt.current?.suggest(value) ?? (() => {})
+          clearSuggestion = clear
+          return clear
         },
       },
       slot(value: SlotClaim) {

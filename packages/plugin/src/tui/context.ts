@@ -487,6 +487,11 @@ export interface Keymap {
   }
 }
 
+export interface PromptSuggestion {
+  readonly sessionID: string
+  readonly text: string
+}
+
 export interface UI {
   readonly dialog: Dialog
   readonly toast: Toast
@@ -536,6 +541,15 @@ export interface UI {
       /** Selects a variant of the selected model, or the model default when undefined. Returns false when no model is selected or the variant is unavailable. */
       set(variant: string | undefined): boolean
     }
+  }
+  readonly prompt: {
+    /**
+     * Offers ghost text to the current session's empty composer. Tab accepts it into the draft without sending.
+     * Replaces this plugin's previous suggestion. Returns a disposer for this suggestion only.
+     * Offers to another session, a busy session, or a nonempty composer are ignored.
+     * Typing, dismissal, navigation, or plugin cleanup removes the suggestion.
+     */
+    suggest(input: PromptSuggestion): () => void
   }
   /** Claims a place in the slot tree; see SlotClaim. */
   readonly slot: (claim: SlotClaim) => () => void
