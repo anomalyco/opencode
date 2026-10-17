@@ -51,7 +51,49 @@ test("plain clicks on any row of a wrapped Markdown link resolve the full URL", 
 
     await app.mockMouse.click(rows[tail]!.indexOf("brake"), tail)
     await app.mockMouse.click(rows[tail]!.indexOf("brake"), tail)
-    expect(opened).toEqual([url, url, url])
+    expect(opened).toEqual([url, url, url, url])
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("re-clicks inside the double-click window still open the link", async () => {
+  const opened: string[] = []
+  function Transcript() {
+    const renderer = useRenderer()
+    return (
+      <box
+        onMouseUp={(event) => {
+          const link = clickedLink(renderer, event)
+          if (link) opened.push(link)
+        }}
+      >
+        <box height={1} />
+        <markdown syntaxStyle={syntaxStyle} content={`See ${url} now.`} />
+      </box>
+    )
+  }
+  const clock = new ManualClock()
+  const app = await testRender(() => <Transcript />, { width: 32, height: 6, clock })
+
+  try {
+    for (let attempt = 0; attempt < 50 && !app.captureCharFrame().replace(/\s/g, "").includes(url); attempt++) {
+      await app.renderOnce()
+      await Bun.sleep(10)
+    }
+    const rows = app.captureCharFrame().split("\n")
+    const head = rows.findIndex((row) => row.includes("https"))
+    const x = rows[head]!.indexOf("https")
+
+    clock.setTime(1000)
+    await app.mockMouse.click(x + 3, head)
+    clock.setTime(1200)
+    await app.mockMouse.click(x + 3, head)
+    expect(opened).toEqual([url, url])
+
+    clock.setTime(1400)
+    await app.mockMouse.click(x + 3, head)
+    expect(opened).toEqual([url, url])
   } finally {
     app.renderer.destroy()
   }
