@@ -1,3 +1,11 @@
+import { WorkspaceID } from "@opencode/schema/workspace-id"
+import { Model } from "@opencode/schema/model"
+import { Form } from "@opencode/schema/form"
+import { Provider } from "@opencode/schema/provider"
+import { Agent } from "@opencode/schema/agent"
+import { SessionMessage } from "@opencode/schema/session-message"
+import { Event } from "@opencode/schema/event"
+import { Session } from "@opencode/schema/session"
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
 import {
   OpenCode,
@@ -9,7 +17,7 @@ import { runNonInteractivePrompt } from "../../src/run/noninteractive"
 
 type V2Event = EventSubscribeOutput
 type FormInfo = Extract<V2Event, { type: "form.created" }>["data"]["form"]
-const location = { directory: "/work tree", workspaceID: "wrk_1" }
+const location = { directory: "/work tree", workspaceID: WorkspaceID.make("wrk_1", { disableChecks: true }) }
 
 function ok<T>(data: T) {
   return Promise.resolve(data)
@@ -17,70 +25,82 @@ function ok<T>(data: T) {
 
 function form(id: string, sessionID: string): FormInfo {
   return {
-    id,
-    sessionID,
+    id: Form.ID.make(id, { disableChecks: true }),
+    sessionID: Session.ID.make(sessionID, { disableChecks: true }),
     title: "Input requested",
     fields: [{ key: "authorization", type: "external", url: "https://example.com/form" }],
   }
 }
 
 function formCreated(info: FormInfo, eventLocation = location): V2Event {
-  return { id: `evt_${info.id}`, created: 0, type: "form.created", location: eventLocation, data: { form: info } }
+  return {
+    id: Event.ID.make(`evt_${info.id}`, { disableChecks: true }),
+    created: 0,
+    type: "form.created",
+    location: eventLocation,
+    data: { form: info },
+  }
 }
 
 function prompted(inboxID: string): V2Event {
   return {
-    id: "evt_prompted",
+    id: Event.ID.make("evt_prompted", { disableChecks: true }),
     created: 0,
     type: "session.inbox.delivered",
-    durable: { aggregateID: "ses_1", seq: 0, version: 1 },
-    data: { sessionID: "ses_1", inboxID },
+    durable: { aggregateID: Session.ID.make("ses_1", { disableChecks: true }), seq: 0, version: 1 },
+    data: {
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+      inboxID: SessionMessage.ID.make(inboxID, { disableChecks: true }),
+    },
   }
 }
 
 function settled(outcome: "success" | "interrupted" = "success"): V2Event {
   if (outcome === "interrupted")
     return {
-      id: "evt_interrupted",
+      id: Event.ID.make("evt_interrupted", { disableChecks: true }),
       created: 0,
       type: "session.execution.interrupted",
-      durable: { aggregateID: "ses_1", seq: 1, version: 1 },
-      data: { sessionID: "ses_1", reason: "user" },
+      durable: { aggregateID: Session.ID.make("ses_1", { disableChecks: true }), seq: 1, version: 1 },
+      data: { sessionID: Session.ID.make("ses_1", { disableChecks: true }), reason: "user" },
     }
   return {
-    id: "evt_succeeded",
+    id: Event.ID.make("evt_succeeded", { disableChecks: true }),
     created: 0,
     type: "session.execution.succeeded",
-    durable: { aggregateID: "ses_1", seq: 1, version: 1 },
-    data: { sessionID: "ses_1" },
+    durable: { aggregateID: Session.ID.make("ses_1", { disableChecks: true }), seq: 1, version: 1 },
+    data: { sessionID: Session.ID.make("ses_1", { disableChecks: true }) },
   }
 }
 
 function stepStarted(): V2Event {
   return {
-    id: "evt_step_started",
+    id: Event.ID.make("evt_step_started", { disableChecks: true }),
     created: 1,
     type: "session.step.started",
-    durable: { aggregateID: "ses_1", seq: 1, version: 1 },
+    durable: { aggregateID: Session.ID.make("ses_1", { disableChecks: true }), seq: 1, version: 1 },
     data: {
       started: 1,
-      sessionID: "ses_1",
-      assistantMessageID: "msg_assistant",
-      agent: "build",
-      model: { providerID: "test", id: "test-model" },
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+      assistantMessageID: SessionMessage.ID.make("msg_assistant", { disableChecks: true }),
+      agent: Agent.ID.make("build", { disableChecks: true }),
+      model: {
+        providerID: Provider.ID.make("test", { disableChecks: true }),
+        id: Model.ID.make("test-model", { disableChecks: true }),
+      },
     },
   }
 }
 
 function stepFailed(message: string): V2Event {
   return {
-    id: "evt_step_failed",
+    id: Event.ID.make("evt_step_failed", { disableChecks: true }),
     created: 2,
     type: "session.step.failed",
-    durable: { aggregateID: "ses_1", seq: 2, version: 1 },
+    durable: { aggregateID: Session.ID.make("ses_1", { disableChecks: true }), seq: 2, version: 1 },
     data: {
-      sessionID: "ses_1",
-      assistantMessageID: "msg_assistant",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+      assistantMessageID: SessionMessage.ID.make("msg_assistant", { disableChecks: true }),
       error: { type: "provider.transport", message },
     },
   }
@@ -88,12 +108,12 @@ function stepFailed(message: string): V2Event {
 
 function executionFailed(message: string): V2Event {
   return {
-    id: "evt_execution_failed",
+    id: Event.ID.make("evt_execution_failed", { disableChecks: true }),
     created: 3,
     type: "session.execution.failed",
-    durable: { aggregateID: "ses_1", seq: 3, version: 1 },
+    durable: { aggregateID: Session.ID.make("ses_1", { disableChecks: true }), seq: 3, version: 1 },
     data: {
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       error: { type: "provider.transport", message },
     },
   }
@@ -103,49 +123,49 @@ function failedTool(inboxID: string): V2Event[] {
   return [
     prompted(inboxID),
     {
-      id: "evt_failed_tool_input",
+      id: Event.ID.make("evt_failed_tool_input", { disableChecks: true }),
       created: 1,
       type: "session.tool.input.started",
-      durable: { aggregateID: "ses_1", seq: 1, version: 1 },
+      durable: { aggregateID: Session.ID.make("ses_1", { disableChecks: true }), seq: 1, version: 1 },
       data: {
-        sessionID: "ses_1",
-        assistantMessageID: "msg_failed_tool",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_failed_tool", { disableChecks: true }),
         id: "call_failed_tool",
         name: "shell",
       },
     },
     {
-      id: "evt_failed_tool_called",
+      id: Event.ID.make("evt_failed_tool_called", { disableChecks: true }),
       created: 2,
       type: "session.tool.called",
-      durable: { aggregateID: "ses_1", seq: 2, version: 1 },
+      durable: { aggregateID: Session.ID.make("ses_1", { disableChecks: true }), seq: 2, version: 1 },
       data: {
-        sessionID: "ses_1",
-        assistantMessageID: "msg_failed_tool",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_failed_tool", { disableChecks: true }),
         id: "call_failed_tool",
         input: { command: "printf partial && false" },
         executed: true,
       },
     },
     {
-      id: "evt_failed_tool_progress",
+      id: Event.ID.make("evt_failed_tool_progress", { disableChecks: true }),
       created: 3,
       type: "session.tool.progress",
       data: {
-        sessionID: "ses_1",
-        assistantMessageID: "msg_failed_tool",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_failed_tool", { disableChecks: true }),
         id: "call_failed_tool",
         metadata: { checkpoint: 1 },
       },
     },
     {
-      id: "evt_failed_tool_terminal",
+      id: Event.ID.make("evt_failed_tool_terminal", { disableChecks: true }),
       created: 4,
       type: "session.tool.failed",
-      durable: { aggregateID: "ses_1", seq: 4, version: 2 },
+      durable: { aggregateID: Session.ID.make("ses_1", { disableChecks: true }), seq: 4, version: 2 },
       data: {
-        sessionID: "ses_1",
-        assistantMessageID: "msg_failed_tool",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_failed_tool", { disableChecks: true }),
         id: "call_failed_tool",
         error: { type: "unknown", message: "tool failed" },
         metadata: { checkpoint: 1 },
@@ -162,38 +182,38 @@ function successfulGrep(inboxID: string): V2Event[] {
   return [
     prompted(inboxID),
     {
-      id: "evt_grep_input",
+      id: Event.ID.make("evt_grep_input", { disableChecks: true }),
       created: 1,
       type: "session.tool.input.started",
-      durable: { aggregateID: "ses_1", seq: 1, version: 1 },
+      durable: { aggregateID: Session.ID.make("ses_1", { disableChecks: true }), seq: 1, version: 1 },
       data: {
-        sessionID: "ses_1",
-        assistantMessageID: "msg_grep",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_grep", { disableChecks: true }),
         id: "call_grep",
         name: "grep",
       },
     },
     {
-      id: "evt_grep_called",
+      id: Event.ID.make("evt_grep_called", { disableChecks: true }),
       created: 2,
       type: "session.tool.called",
-      durable: { aggregateID: "ses_1", seq: 2, version: 1 },
+      durable: { aggregateID: Session.ID.make("ses_1", { disableChecks: true }), seq: 2, version: 1 },
       data: {
-        sessionID: "ses_1",
-        assistantMessageID: "msg_grep",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_grep", { disableChecks: true }),
         id: "call_grep",
         input: { pattern: "needle" },
         executed: true,
       },
     },
     {
-      id: "evt_grep_success",
+      id: Event.ID.make("evt_grep_success", { disableChecks: true }),
       created: 3,
       type: "session.tool.success",
-      durable: { aggregateID: "ses_1", seq: 3, version: 2 },
+      durable: { aggregateID: Session.ID.make("ses_1", { disableChecks: true }), seq: 3, version: 2 },
       data: {
-        sessionID: "ses_1",
-        assistantMessageID: "msg_grep",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_grep", { disableChecks: true }),
         id: "call_grep",
         metadata: { matches: 2 },
         content: [{ type: "text", text }],
@@ -220,7 +240,9 @@ async function run(input: {
   terminalDelay?: number
 }) {
   const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
-  const values: V2Event[] = [{ id: "evt_connected", type: "server.connected", data: {} }]
+  const values: V2Event[] = [
+    { id: Event.ID.make("evt_connected", { disableChecks: true }), type: "server.connected", data: {} },
+  ]
   let wake: (() => void) | undefined
   const wait = Promise.withResolvers<void>()
   const stream = (async function* (): AsyncGenerator<V2Event, void, unknown> {
@@ -252,7 +274,7 @@ async function run(input: {
       }) as never,
   )
   spyOn(sdk.session.form, "cancel").mockImplementation((request) => (input.cancel?.(request) ?? ok(undefined)) as never)
-  let promptID = "msg_prompt"
+  let promptID = SessionMessage.ID.make("msg_prompt", { disableChecks: true })
   spyOn(sdk.session, "wait").mockImplementation(() => input.wait?.() ?? wait.promise)
   spyOn(sdk.message, "list").mockImplementation(() =>
     ok({
@@ -261,16 +283,20 @@ async function run(input: {
     }),
   )
   spyOn(sdk.session, "prompt").mockImplementation((request) => {
-    const messageID = request.id ?? "msg_prompt"
+    const messageID = SessionMessage.ID.make(request.id ?? "msg_prompt", { disableChecks: true })
     promptID = messageID
     values.push(...input.turn(messageID))
     wake?.()
     wake = undefined
-    return ok({ id: messageID, sessionID: "ses_1", time: { created: 1 } }) as never
+    return ok({
+      id: messageID,
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+      time: { created: 1 },
+    }) as never
   })
   await runNonInteractivePrompt({
     client: sdk,
-    sessionID: "ses_1",
+    sessionID: Session.ID.make("ses_1", { disableChecks: true }),
     location,
     message: "hello",
     files: [],
@@ -348,15 +374,23 @@ describe("runNonInteractivePrompt", () => {
       wait: () => idle.promise,
       messages: (messageID) => [
         {
-          id: "msg_assistant",
+          id: SessionMessage.ID.make("msg_assistant", { disableChecks: true }),
           type: "assistant",
-          agent: "build",
-          model: { providerID: "test", id: "test-model" },
+          agent: Agent.ID.make("build", { disableChecks: true }),
+          model: {
+            providerID: Provider.ID.make("test", { disableChecks: true }),
+            id: Model.ID.make("test-model", { disableChecks: true }),
+          },
           content: [{ type: "text", text: "projected answer" }],
           finish: "stop",
           time: { created: 2, completed: 3 },
         },
-        { id: messageID, type: "user", text: "hello", time: { created: 1 } },
+        {
+          id: SessionMessage.ID.make(messageID, { disableChecks: true }),
+          type: "user",
+          text: "hello",
+          time: { created: 1 },
+        },
       ],
     }).then((output) => {
       done = true
@@ -406,7 +440,16 @@ describe("runNonInteractivePrompt", () => {
           executionFailed("selection unavailable"),
         ],
         messages: (messageID) =>
-          promotedBeforeFailure ? [{ id: messageID, type: "user", text: "hello", time: { created: 1 } }] : [],
+          promotedBeforeFailure
+            ? [
+                {
+                  id: SessionMessage.ID.make(messageID, { disableChecks: true }),
+                  type: "user",
+                  text: "hello",
+                  time: { created: 1 },
+                },
+              ]
+            : [],
         wait: () => Promise.resolve(),
         terminalDelay: 10,
       })
@@ -418,10 +461,16 @@ describe("runNonInteractivePrompt", () => {
 
   test("cancels session and global form blockers and exits on pre-promotion interrupt", async () => {
     const sdk = await run({
-      pendingForms: [form("frm_pending", "ses_1"), form("frm_pending_global", "global")],
+      pendingForms: [
+        form(Form.ID.make("frm_pending", { disableChecks: true }), Session.ID.make("ses_1", { disableChecks: true })),
+        form(Form.ID.make("frm_pending_global", { disableChecks: true }), "global"),
+      ],
       // No prompted event: the execution settles interrupted before promotion,
       // which must not leave the consume loop waiting forever.
-      turn: () => [formCreated(form("frm_live", "global")), settled("interrupted")],
+      turn: () => [
+        formCreated(form(Form.ID.make("frm_live", { disableChecks: true }), "global")),
+        settled("interrupted"),
+      ],
     })
     const globalOptions = {
       headers: {
@@ -430,7 +479,10 @@ describe("runNonInteractivePrompt", () => {
     }
     expect(sdk.session.form.cancel).toHaveBeenCalledWith({ sessionID: "global", formID: "frm_live" }, globalOptions)
     expect(sdk.session.form.cancel).toHaveBeenCalledWith({ sessionID: "ses_1", formID: "frm_pending" })
-    expect(sdk.session.form.cancel).toHaveBeenCalledWith({ sessionID: "global", formID: "frm_pending_global" }, globalOptions)
+    expect(sdk.session.form.cancel).toHaveBeenCalledWith(
+      { sessionID: "global", formID: "frm_pending_global" },
+      globalOptions,
+    )
     expect(sdk.form.list).toHaveBeenCalledWith({
       location: { directory: "/work tree" },
     })
@@ -440,12 +492,22 @@ describe("runNonInteractivePrompt", () => {
   test("attach mode cancels only session-owned forms", async () => {
     const sdk = await run({
       attached: true,
-      pendingForms: [form("frm_pending", "ses_1"), form("frm_pending_global", "global")],
-      turn: (messageID) => [formCreated(form("frm_live", "global")), prompted(messageID), settled()],
+      pendingForms: [
+        form(Form.ID.make("frm_pending", { disableChecks: true }), Session.ID.make("ses_1", { disableChecks: true })),
+        form(Form.ID.make("frm_pending_global", { disableChecks: true }), "global"),
+      ],
+      turn: (messageID) => [
+        formCreated(form(Form.ID.make("frm_live", { disableChecks: true }), "global")),
+        prompted(messageID),
+        settled(),
+      ],
     })
     expect(sdk.session.form.cancel).toHaveBeenCalledWith({ sessionID: "ses_1", formID: "frm_pending" })
     expect(sdk.form.list).not.toHaveBeenCalled()
-    expect(sdk.session.form.cancel).not.toHaveBeenCalledWith({ sessionID: "global", formID: "frm_live" }, expect.anything())
+    expect(sdk.session.form.cancel).not.toHaveBeenCalledWith(
+      { sessionID: "global", formID: "frm_live" },
+      expect.anything(),
+    )
     expect(sdk.session.form.cancel).not.toHaveBeenCalledWith(
       { sessionID: "global", formID: "frm_pending_global" },
       expect.anything(),

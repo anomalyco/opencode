@@ -1,3 +1,6 @@
+import { SessionMessage } from "@opencode/schema/session-message"
+import { Project } from "@opencode/schema/project"
+import { Session } from "@opencode/schema/session"
 import { expect, test } from "bun:test"
 import fs from "node:fs/promises"
 import os from "node:os"
@@ -5,8 +8,8 @@ import path from "node:path"
 import { OPENCODE_VERSION } from "../src/version"
 
 const info = {
-  id: "ses_export_test",
-  projectID: "global",
+  id: Session.ID.make("ses_export_test", { disableChecks: true }),
+  projectID: Project.ID.make("global", { disableChecks: true }),
   cost: 0,
   tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
   time: { created: 1, updated: 2 },
@@ -16,8 +19,18 @@ const info = {
 const transfer = {
   info,
   messages: [
-    { id: "msg_first", type: "user", text: "First", time: { created: 1 } },
-    { id: "msg_second", type: "user", text: "Second", time: { created: 2 } },
+    {
+      id: SessionMessage.ID.make("msg_first", { disableChecks: true }),
+      type: "user",
+      text: "First",
+      time: { created: 1 },
+    },
+    {
+      id: SessionMessage.ID.make("msg_second", { disableChecks: true }),
+      type: "user",
+      text: "Second",
+      time: { created: 2 },
+    },
   ],
 }
 const sanitizedTransfer = {
@@ -28,13 +41,13 @@ const sanitizedTransfer = {
   },
   messages: [
     {
-      id: "msg_first",
+      id: SessionMessage.ID.make("msg_first", { disableChecks: true }),
       type: "user",
       text: "[redacted:text:msg_first]",
       time: { created: 1 },
     },
     {
-      id: "msg_second",
+      id: SessionMessage.ID.make("msg_second", { disableChecks: true }),
       type: "user",
       text: "[redacted:text:msg_second]",
       time: { created: 2 },
@@ -123,7 +136,7 @@ test("export requires a session outside an interactive terminal", async () => {
 })
 
 test("export reports a missing session without a stack trace", async () => {
-  const sessionID = "ses_missing"
+  const sessionID = Session.ID.make("ses_missing", { disableChecks: true })
   const server = Bun.serve({
     port: 0,
     fetch(request) {
@@ -131,7 +144,11 @@ test("export reports a missing session without a stack trace", async () => {
       if (url.pathname === "/api/info") return status()
       if (url.pathname === `/api/experimental/session/${sessionID}/export`) {
         return Response.json(
-          { _tag: "SessionNotFoundError", sessionID, message: `Session not found: ${sessionID}` },
+          {
+            _tag: "SessionNotFoundError",
+            sessionID: Session.ID.make(sessionID, { disableChecks: true }),
+            message: `Session not found: ${sessionID}`,
+          },
           { status: 404 },
         )
       }

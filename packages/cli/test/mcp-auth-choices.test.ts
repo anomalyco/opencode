@@ -1,3 +1,5 @@
+import { Credential } from "@opencode/schema/credential"
+import { Integration } from "@opencode/schema/integration"
 import { expect, test } from "bun:test"
 import path from "node:path"
 import type { IntegrationInfo, McpServer } from "@opencode/client"
@@ -7,13 +9,26 @@ const server = (
   name: string,
   integrationID?: string,
   status: McpServer["status"] = { status: "pending" },
-): McpServer => ({ name, integrationID, status })
+): McpServer => ({
+  name,
+  integrationID: integrationID === undefined ? undefined : Integration.ID.make(integrationID, { disableChecks: true }),
+  status,
+})
 
 const integration = (id: string, methods: IntegrationInfo["methods"], connected = false): IntegrationInfo => ({
-  id,
+  id: Integration.ID.make(id, { disableChecks: true }),
   name: id,
-  methods,
-  connections: connected ? [{ type: "credential", method: "oauth", id: "cred_1", label: "Work" }] : [],
+  methods: methods,
+  connections: connected
+    ? [
+        {
+          type: "credential",
+          method: "oauth",
+          id: Credential.ID.make("cred_1", { disableChecks: true }),
+          label: "Work",
+        },
+      ]
+    : [],
 })
 
 test("offers only OAuth-capable MCP servers by their server identity", () => {
@@ -28,11 +43,25 @@ test("offers only OAuth-capable MCP servers by their server identity", () => {
         server("Unresolved", "mcp_missing"),
       ],
       [
-        integration("mcp_linear", [{ type: "oauth", id: "login", label: "Linear" }], true),
-        integration("mcp_github", [{ type: "oauth", id: "login", label: "GitHub" }]),
-        integration("mcp_sentry", [{ type: "oauth", id: "login", label: "Sentry" }]),
+        integration(
+          "mcp_linear",
+          [{ type: "oauth", id: Integration.MethodID.make("login", { disableChecks: true }), label: "Linear" }],
+          true,
+        ),
+        integration("mcp_github", [
+          { type: "oauth", id: Integration.MethodID.make("login", { disableChecks: true }), label: "GitHub" },
+        ]),
+        integration("mcp_sentry", [
+          { type: "oauth", id: Integration.MethodID.make("login", { disableChecks: true }), label: "Sentry" },
+        ]),
         integration("mcp_key", [{ type: "key" }]),
-        integration("Linear", [{ type: "oauth", id: "login", label: "A provider with a colliding name" }]),
+        integration("Linear", [
+          {
+            type: "oauth",
+            id: Integration.MethodID.make("login", { disableChecks: true }),
+            label: "A provider with a colliding name",
+          },
+        ]),
       ],
     ),
   ).toEqual([
