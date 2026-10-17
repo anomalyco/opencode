@@ -13,7 +13,7 @@ export { EventRpcs } from "./ipc-rpc/events"
 
 export { ExtensionRpcs } from "./ipc-rpc/extensions"
 
-export { FileRpcs } from "./ipc-rpc/files"
+export { AttachmentSizeLimitError, FileRpcs } from "./ipc-rpc/files"
 
 export { MenuRpcs } from "./ipc-rpc/menu"
 

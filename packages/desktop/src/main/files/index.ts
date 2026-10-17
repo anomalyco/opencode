@@ -64,7 +64,7 @@ function make(fs: FileSystem.FileSystem, path: Path.Path) {
         { concurrency: "unbounded" },
       )
 
-      assertAttachmentBudget(files)
+      yield* assertAttachmentBudget(files)
 
       return { token: pickedFiles.add(sender, result.filePaths), files }
     }),
