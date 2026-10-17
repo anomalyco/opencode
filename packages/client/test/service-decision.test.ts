@@ -52,3 +52,34 @@ test("a version mismatch replaces the service, handing off terminals only when i
     pty: "clear",
   })
 })
+
+const newerService =
+  "Background service is running a newer version (2.0.29). Update this client or rerun with --standalone."
+
+test("a newer service is kept instead of being replaced by an older client", () => {
+  expect(decide(service({ version: "2.0.29", state: "ready", compatible: true }), { version: "2.0.28" })).toEqual({
+    _tag: "fail",
+    error: new Error(newerService),
+  })
+  expect(decide(service({ version: "2.0.29", state: "waiting", compatible: true }), { version: "2.0.28" })).toEqual({
+    _tag: "fail",
+    error: new Error(newerService),
+  })
+  // Replacing an older service (the normal upgrade path) is unchanged.
+  expect(decide(service({ version: "2.0.27", state: "ready", compatible: true }), { version: "2.0.28" })).toEqual({
+    _tag: "replace",
+    pty: "handoff",
+  })
+})
+
+test("versions that cannot be ordered keep the existing replace behavior", () => {
+  expect(decide(service({ version: "dev", state: "ready", compatible: true }), { version: "2.0.28" })).toEqual({
+    _tag: "replace",
+    pty: "handoff",
+  })
+  expect(
+    decide(service({ version: "2.0.29", state: "ready", compatible: true }), {
+      version: (version) => version.startsWith("1."),
+    }),
+  ).toEqual({ _tag: "replace", pty: "handoff" })
+})

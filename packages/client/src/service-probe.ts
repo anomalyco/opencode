@@ -2,7 +2,7 @@ import { homedir } from "node:os"
 import { join } from "node:path"
 import type { DiscoverOptions, Endpoint, Info } from "./service.js"
 import { defaultEnsureTiming } from "./service-timing.js"
-import { matchesVersion } from "./service-version.js"
+import { isNewer, matchesVersion } from "./service-version.js"
 
 // Shared by the Effect and Promise clients. Keep this module free of Effect so the
 // Promise client never loads the Effect runtime.
@@ -17,11 +17,23 @@ export type LocalService = {
 
 /**
  * What `ensure()` does with a registered service that answered: return it, keep polling while
- * it starts, replace it because its version does not meet the requirement, or fail.
+ * it starts, replace it because it is older than this client, or fail.
  */
 export function decide(service: LocalService, options: DiscoverOptions) {
-  if (!matchesVersion(service.version, options))
+  if (!matchesVersion(service.version, options)) {
+    // Replacing a newer service silently downgrades whatever started it (for example a
+    // Desktop-managed host) and starts a version ping-pong. The older client steps aside
+    // instead of winning by starting last.
+    if (
+      typeof options.version === "string" &&
+      service.version !== undefined &&
+      isNewer(service.version, options.version)
+    )
+      return fail(
+        `Background service is running a newer version (${service.version}). Update this client or rerun with --standalone.`,
+      )
     return { _tag: "replace", pty: service.state === "ready" ? "handoff" : "clear" } as const
+  }
   if (!service.compatible)
     return fail(
       "Background service uses an incompatible health protocol. Update this client or explicitly restart the service.",
