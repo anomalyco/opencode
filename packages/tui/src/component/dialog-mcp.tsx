@@ -24,6 +24,9 @@ function Status(props: { status: McpServer["status"]; loading: boolean }) {
   if (props.status.status === "connected") {
     return <span style={{ attributes: TextAttributes.BOLD }}>Connected ✓</span>
   }
+  if (props.status.status === "idle") {
+    return <span style={{ attributes: TextAttributes.BOLD }}>Idle ✓</span>
+  }
   if (props.status.status === "failed") {
     return <>Failed !</>
   }
@@ -55,7 +58,7 @@ export function DialogMcp(props: { initialServer?: string; details?: boolean } =
   const [loading, setLoading] = createSignal<ReadonlySet<string>>(new Set())
 
   const statusColor = (status: McpServer["status"]) => {
-    if (status.status === "connected") return theme.text.feedback.success.base
+    if (status.status === "connected" || status.status === "idle") return theme.text.feedback.success.base
     if (status.status === "failed") return theme.text.feedback.error.base
     if (status.status === "needs_auth") return theme.text.feedback.warning.base
     return theme.text.muted
@@ -84,7 +87,7 @@ export function DialogMcp(props: { initialServer?: string; details?: boolean } =
 
   const toggleTitle = createMemo(() => {
     const status = focusedServer()?.status.status
-    if (status === "connected") return "disconnect"
+    if (status === "connected" || status === "idle") return "disconnect"
     if (status === "failed") return "retry"
     if (status === "needs_auth") return "sign in"
     return "connect"
@@ -121,7 +124,10 @@ export function DialogMcp(props: { initialServer?: string; details?: boolean } =
     setLoading((prev) => new Set(prev).add(name))
     const target = current()
     const input = { server: name, location: { directory: target.directory } }
-    const call = server.status.status === "connected" ? client.api.mcp.disconnect(input) : client.api.mcp.connect(input)
+    const call =
+      server.status.status === "connected" || server.status.status === "idle"
+        ? client.api.mcp.disconnect(input)
+        : client.api.mcp.connect(input)
     void call.catch(toast.error).finally(() =>
       setLoading((prev) => {
         const next = new Set(prev)

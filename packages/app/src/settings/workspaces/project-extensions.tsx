@@ -245,9 +245,13 @@ export const ProjectSettingsExtensions: Component<{
       .sort()
   })
 
-  const mcpEnabled = (name: string) =>
-    data.location.mcp.server.list({ directory: directorySDK().directory })?.find((server) => server.name === name)
-      ?.status.status === "connected"
+  const mcpEnabled = (name: string) => {
+    const status = data.location.mcp.server
+      .list({ directory: directorySDK().directory })
+      ?.find((server) => server.name === name)?.status.status
+
+    return status === "connected" || status === "idle"
+  }
 
   // Reading `.latest` rethrows a failed fetch, such as the project's plugin list after its folder is deleted, so these
   // lists fall back to empty instead of crashing the page.

@@ -1,11 +1,13 @@
 import { describe, expect } from "bun:test"
 import { Command } from "@opencode/core/command"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { Mcp } from "@opencode/core/mcp/index"
 import { Session } from "@opencode/schema/session"
 import { Effect } from "effect"
 import { testEffect } from "./lib/effect"
+import { emptyMcpLayer } from "./fixture/mcp"
 
-const it = testEffect(AppNodeBuilder.build(Command.node))
+const it = testEffect(AppNodeBuilder.build(Command.node, [Mcp.node.replace(emptyMcpLayer)]))
 
 describe("Command", () => {
   it.effect("registers and executes callback commands", () =>

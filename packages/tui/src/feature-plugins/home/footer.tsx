@@ -17,7 +17,9 @@ function Mcp(props: { context: Plugin.Context }) {
   const visibility = createMemo(() => homeFooterVisibility(dimensions().width))
   const list = createMemo(() => props.context.data.location.mcp.server.list(props.context.location) ?? [])
   const failed = createMemo(() => list().filter((item) => item.status.status === "failed").length)
-  const count = createMemo(() => list().filter((item) => item.status.status === "connected").length)
+  const count = createMemo(
+    () => list().filter((item) => item.status.status === "connected" || item.status.status === "idle").length,
+  )
 
   return (
     <Show when={list().length}>
@@ -31,8 +33,7 @@ function Mcp(props: { context: Plugin.Context }) {
             <Match when={true}>
               <span
                 style={{
-                  fg:
-                    count() > 0 ? props.context.theme.text.feedback.success.base : props.context.theme.text.muted,
+                  fg: count() > 0 ? props.context.theme.text.feedback.success.base : props.context.theme.text.muted,
                 }}
               >
                 ⊙{" "}

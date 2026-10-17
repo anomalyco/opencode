@@ -22,6 +22,7 @@ export default {
   failed: "Failed",
   retry: "Retry",
   connecting: "Connecting…",
+  idle: "Idle",
   needsAuth: "Sign in required",
   configure: "Configuration file",
   copyConfigPath: "Copy configuration file path",
