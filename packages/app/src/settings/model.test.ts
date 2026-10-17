@@ -186,21 +186,41 @@ describe("settings schema", () => {
   })
 })
 
-test("font defaults are Inter and IBM Plex Mono", () => {
-  expect(sansDefault).toBe("Inter")
-  expect(monoDefault).toBe("IBM Plex Mono")
-})
+describe("settings font families", () => {
+  test("defaults normal text to Inter", () => {
+    expect(sansDefault).toBe("Inter")
+    expect(sansFontFamily(undefined)).toStartWith('"Inter", ')
+    expect(sansFontFamily("")).toStartWith('"Inter", ')
+    expect(sansFontFamily("   ")).toStartWith('"Inter", ')
+  })
 
-test.each([
-  { name: "sans", family: sansFontFamily, font: undefined, prefix: '"Inter", ' },
-  { name: "sans", family: sansFontFamily, font: "", prefix: '"Inter", ' },
-  { name: "sans", family: sansFontFamily, font: "   ", prefix: '"Inter", ' },
-  { name: "sans", family: sansFontFamily, font: "Custom Sans", prefix: '"Custom Sans", "Inter", ' },
-  { name: "mono", family: monoFontFamily, font: undefined, prefix: '"IBM Plex Mono", ' },
-  { name: "mono", family: monoFontFamily, font: "", prefix: '"IBM Plex Mono", ' },
-  { name: "mono", family: monoFontFamily, font: "   ", prefix: '"IBM Plex Mono", ' },
-  { name: "mono", family: monoFontFamily, font: "Custom Mono", prefix: '"Custom Mono", "IBM Plex Mono", ' },
-  { name: "terminal", family: terminalFontFamily, font: undefined, prefix: '"JetBrainsMono Nerd Font Mono", ' },
-])("$name font family for $font starts with $prefix", ({ family, font, prefix }) => {
-  expect(family(font)).toStartWith(prefix)
+  test("keeps custom normal fonts ahead of the default", () => {
+    expect(sansFontFamily("Custom Sans")).toStartWith('"Custom Sans", "Inter", ')
+  })
+
+  test("defaults monospace text to IBM Plex Mono", () => {
+    expect(monoDefault).toBe("IBM Plex Mono")
+    expect(monoFontFamily(undefined)).toStartWith('"IBM Plex Mono", ')
+    expect(monoFontFamily("")).toStartWith('"IBM Plex Mono", ')
+    expect(monoFontFamily("   ")).toStartWith('"IBM Plex Mono", ')
+  })
+
+  test("keeps custom monospace fonts ahead of the default", () => {
+    expect(monoFontFamily("Custom Mono")).toStartWith('"Custom Mono", "IBM Plex Mono", ')
+  })
+
+  test("supports comma-separated font families", () => {
+    expect(sansFontFamily("Custom Sans, Fallback")).toStartWith('"Custom Sans", Fallback, "Inter", ')
+    expect(monoFontFamily("Fira Code, monospace")).toStartWith('"Fira Code", monospace, "IBM Plex Mono", ')
+    expect(sansFontFamily("Inter, system-ui")).toStartWith("Inter, system-ui, ")
+  })
+
+  test("drops empty segments from comma-separated font families", () => {
+    expect(sansFontFamily("Custom Sans, ,  ,Other")).toStartWith('"Custom Sans", Other, "Inter", ')
+    expect(sansFontFamily(",,")).toStartWith('"Inter", ')
+  })
+
+  test("preserves the separate terminal font default", () => {
+    expect(terminalFontFamily(undefined)).toStartWith('"JetBrainsMono Nerd Font Mono", ')
+  })
 })
