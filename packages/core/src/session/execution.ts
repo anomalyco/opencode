@@ -90,8 +90,10 @@ export const layer = Layer.effect(
       continuation?: SessionRunner.Continuation,
       promotable: SessionInbox.Promotable = "input",
     ): Effect.fn.Return<void, SessionRunner.RunError> {
-      const session = yield* store.get(sessionID)
+      // Staging shares this lock, so a drain cannot read through an in-flight snapshot restore.
+      const session = yield* SessionInbox.serialized(sessionID, store.get(sessionID))
       if (!session) return yield* Effect.die(new Error(`Session not found: ${sessionID}`))
+      if (session.revert) return
       const result = yield* SessionRunner.Service.use((runner) =>
         runner.drain({ sessionID, force, continuation, promotable }),
       ).pipe(

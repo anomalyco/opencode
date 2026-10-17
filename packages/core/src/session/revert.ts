@@ -23,37 +23,33 @@ export const stage = Effect.fn("SessionRevert.stage")(function* (input: {
   messageID: SessionMessage.ID
   files?: boolean
 }) {
-  const instances = yield* Instance.Service
   const database = yield* Database.Service
   const bus = yield* Bus.Service
-
-  return yield* Effect.gen(function* () {
-    const snapshot = yield* Snapshot.Service
-    const original = input.session.revert?.snapshot
-      ? Snapshot.ID.make(input.session.revert.snapshot)
-      : yield* snapshot.capture()
-    const next = yield* plan(database.db, { sessionID: input.session.id, messageID: input.messageID })
-    const restore = new Map<RelativePath, Snapshot.ID>()
-    if (original) {
-      for (const file of input.session.revert?.files ?? []) restore.set(RelativePath.make(file.file), original)
-    }
-    if (input.files !== false) for (const [file, tree] of next) restore.set(file, tree)
-    if (restore.size) yield* snapshot.restore({ files: restore })
-    const paths = input.files === false ? [] : Array.from(next.keys())
-    const files = original
-      ? yield* snapshot.diff({ from: original, to: (yield* snapshot.capture()) ?? original, paths })
-      : []
-    const revert = {
-      messageID: input.messageID,
-      snapshot: original,
-      files,
-    } satisfies SessionSchema.Info["revert"]
-    yield* bus.publish(SessionEvent.RevertEvent.Staged, {
-      sessionID: input.session.id,
-      revert,
-    })
-    return revert
-  }).pipe(instances.provide(input.session))
+  const snapshot = yield* Snapshot.Service
+  const original = input.session.revert?.snapshot
+    ? Snapshot.ID.make(input.session.revert.snapshot)
+    : yield* snapshot.capture()
+  const next = yield* plan(database.db, { sessionID: input.session.id, messageID: input.messageID })
+  const restore = new Map<RelativePath, Snapshot.ID>()
+  if (original) {
+    for (const file of input.session.revert?.files ?? []) restore.set(RelativePath.make(file.file), original)
+  }
+  if (input.files !== false) for (const [file, tree] of next) restore.set(file, tree)
+  if (restore.size) yield* snapshot.restore({ files: restore })
+  const paths = input.files === false ? [] : Array.from(next.keys())
+  const files = original
+    ? yield* snapshot.diff({ from: original, to: (yield* snapshot.capture()) ?? original, paths })
+    : []
+  const revert = {
+    messageID: input.messageID,
+    snapshot: original,
+    files,
+  } satisfies SessionSchema.Info["revert"]
+  yield* bus.publish(SessionEvent.RevertEvent.Staged, {
+    sessionID: input.session.id,
+    revert,
+  })
+  return revert
 })
 
 export const clear = Effect.fn("SessionRevert.clear")(function* (session: SessionSchema.Info) {

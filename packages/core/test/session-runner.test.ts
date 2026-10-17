@@ -212,6 +212,7 @@ const makeRunnerState = (compaction?: SessionRunnerModel.Resolved["compaction"])
     currentModel: model,
     compaction,
     modelResolveHook: resolvesModel,
+    captureSnapshot: Effect.succeed<Snapshot.ID | undefined>(undefined),
     systemBaseline: "Initial context",
     systemRemoved: false,
     systemUnavailable: false,
@@ -412,7 +413,15 @@ const layer = Layer.unwrap(
       small: () => Effect.undefined,
     })
     const replacements: LayerNode.Replacements = [
-      Snapshot.node.replace(Snapshot.noopLayer),
+      Snapshot.node.replace(
+        Layer.effect(
+          Snapshot.Service,
+          Effect.gen(function* () {
+            const snapshots = yield* Snapshot.Service
+            return Snapshot.Service.of({ ...snapshots, capture: () => Effect.suspend(() => state.captureSnapshot) })
+          }),
+        ).pipe(Layer.provide(Snapshot.noopLayer)),
+      ),
       LayerNodePlatform.llmClient.replace(TestLLM.clientLayer.pipe(Layer.provide(testLLM))),
       SessionRunnerModel.node.replace(models),
       InstructionBuiltIns.node.replace(systemContext),
@@ -5180,6 +5189,68 @@ describe("SessionRunnerLLM", () => {
     yield* s.llm.push([])
     yield* s.resume
     expect(messageRoles(s.requests[0])).toEqual(["user", "assistant", "tool"])
+  })
+
+  scenario("a replacement prepared during real staging commits the staged boundary", function* (s) {
+    const boundary = yield* s.admit("Before replacement")
+    yield* s.llm.push(TestLLM.text("Before answer", "before-replacement"))
+    yield* s.resume
+    const capturing = yield* Deferred.make<void>()
+    const release = yield* Deferred.make<Snapshot.ID | undefined>()
+    const prepared = yield* Deferred.make<void>()
+    const hooks = yield* PluginHooks.Service
+    s.captureSnapshot = Deferred.succeed(capturing, undefined).pipe(Effect.andThen(Deferred.await(release)))
+    yield* hooks.register("session", "prompt", () => Deferred.succeed(prepared, undefined))
+
+    try {
+      const stage = yield* s.session.revert.stage({ sessionID, messageID: boundary.id }).pipe(Effect.forkChild)
+      yield* Deferred.await(capturing)
+      const replacement = yield* s.admit("Replacement").pipe(Effect.forkChild)
+      yield* Deferred.await(prepared)
+      yield* Effect.yieldNow
+      yield* Deferred.succeed(release, undefined)
+      yield* Fiber.join(stage)
+      const admitted = yield* Fiber.join(replacement)
+      expect((yield* s.session.get(sessionID)).revert).toBeUndefined()
+      expect((yield* s.session.inbox(sessionID)).map((item) => item.id)).toContain(admitted.id)
+      yield* s.llm.push(TestLLM.text("Replacement answer", "replacement-answer"))
+      yield* s.resume
+      expect((yield* s.context).filter((message) => message.type === "user")).toMatchObject([
+        { id: admitted.id, text: "Replacement" },
+      ])
+    } finally {
+      yield* Deferred.succeed(release, undefined)
+    }
+  })
+
+  scenario("a queued restage keeps the original restore snapshot", function* (s) {
+    const boundary = yield* s.admit("Before restage")
+    yield* s.llm.push(TestLLM.text("Before answer", "before-restage"))
+    yield* s.resume
+    const capturing = yield* Deferred.make<void>()
+    const release = yield* Deferred.make<void>()
+    let captures = 0
+    s.captureSnapshot = Effect.gen(function* () {
+      captures += 1
+      const id = Snapshot.ID.make(`tree-${captures}`)
+      if (captures === 1) {
+        yield* Deferred.succeed(capturing, undefined)
+        yield* Deferred.await(release)
+      }
+      return id
+    })
+
+    try {
+      const first = yield* s.session.revert.stage({ sessionID, messageID: boundary.id }).pipe(Effect.forkChild)
+      yield* Deferred.await(capturing)
+      const second = yield* s.session.revert.stage({ sessionID, messageID: boundary.id }).pipe(Effect.forkChild)
+      yield* Effect.yieldNow
+      yield* Deferred.succeed(release, undefined)
+      expect((yield* Fiber.join(first)).snapshot).toBe(Snapshot.ID.make("tree-1"))
+      expect((yield* Fiber.join(second)).snapshot).toBe(Snapshot.ID.make("tree-1"))
+    } finally {
+      yield* Deferred.succeed(release, undefined)
+    }
   })
 
   scenario("interrupts a blocked step without local tool execution", function* (s) {
