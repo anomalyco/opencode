@@ -26,7 +26,7 @@ export type V1RunCommandInput = {
 }
 
 export function runV1Bridge(input: V1RunCommandInput) {
-  const root = process.env.PWD ?? process.cwd()
+  const root = process.cwd()
   const attached = input.server !== undefined
   const local = !attached && input.directory ? path.resolve(root, input.directory) : root
   try {
