@@ -35,14 +35,14 @@ export const Plugin = define({
 
     const refresh = Effect.fn("ConfigCompatibilityPlugin.refresh")(
       function* () {
-        yield* FiberMap.clear(watches)
         const roots = config.compatibility ? yield* config.compatibility() : { claude: [], agents: [] }
         const directories = [...roots.claude, ...roots.agents].map((root) => path.join(root, "skills"))
         const loaded = new Map<Skill.ID, Skill.Info>()
+        const plan = new Map<string, string>()
         for (const directory of directories) {
           const resolved = yield* fs.realPath(directory).pipe(Effect.orElseSucceed(() => undefined))
           if (!resolved) continue
-          yield* watch(resolved, "directory")
+          plan.set(`directory:${resolved}`, resolved)
           const files = yield* fs
             .scan("{*.md,**/SKILL.md}", { cwd: resolved, absolute: true, include: "file", symlink: true, dot: true })
             .pipe(Effect.orElseSucceed(() => [] as string[]))
@@ -52,6 +52,20 @@ export const Plugin = define({
             const parsed = SkillFile.parse(resolved, filepath, content)
             if (parsed._tag === "Parsed") loaded.set(parsed.skill.id, parsed.skill)
           }
+        }
+        // Reconcile rather than clear. A blanket clear defeats the `onlyIfMissing`
+        // on `watch`, so every event reaching the debounce below tore down and
+        // rebuilt each watch, and each rebuild published an update that fed the
+        // same debounce again — a directory nothing was writing to kept the
+        // service busy at ~37% CPU. Keeping the watches that are still planned
+        // leaves that loop without an event to sustain it.
+        const watching = new Set(Array.from(watches, ([key]) => key))
+        for (const key of watching) {
+          if (!plan.has(key)) yield* FiberMap.remove(watches, key)
+        }
+        for (const [key, target] of plan) {
+          if (watching.has(key)) continue
+          yield* watch(target, "directory")
         }
         skills.splice(0, skills.length, ...loaded.values())
       },

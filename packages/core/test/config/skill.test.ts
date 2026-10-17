@@ -425,4 +425,36 @@ describe("ConfigSkillPlugin.Plugin", () => {
       ),
     ),
   )
+
+  it.live("keeps a compatibility watch instead of rebuilding it on every event", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const claude = path.join(tmp.path, "claude")
+          const agents = path.join(tmp.path, "agents")
+          const home = path.join(tmp.path, "home")
+          const directory = path.join(tmp.path, "project")
+          const target = path.join(agents, "skills")
+          yield* Effect.promise(() =>
+            Promise.all([claude, home, directory, target].map((item) => fs.mkdir(item, { recursive: true }))),
+          )
+
+          yield* startEntries([], directory, home, emptyDiscovery, {
+            claude: [AbsolutePath.make(claude)],
+            agents: [AbsolutePath.make(agents)],
+          })
+          const watcher = yield* Watcher.Test
+          expect(yield* watcher.subscriptions()).toContainEqual({ path: target, type: "directory" })
+
+          // Any event resettles the watch, and a rebuilt watch publishes again, so
+          // re-subscribing here is what turns one unrelated write into a loop.
+          yield* emitAndWait({ type: "update", path: path.join(target, "SKILL.md") })
+
+          expect((yield* watcher.subscriptions()).filter((item) => item.path === target)).toEqual([
+            { path: target, type: "directory" },
+          ])
+        }),
+      ),
+    ),
+  )
 })
