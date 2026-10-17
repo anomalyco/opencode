@@ -304,7 +304,17 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
     }),
     Spec.make("models", {
       description: "List all available models",
-      params: ServerParams,
+      params: {
+        ...ServerParams,
+        refresh: Flag.Boolean("refresh").pipe(
+          Flag.withDescription("Refresh the models cache from models.dev before listing"),
+          Flag.withDefault(false),
+        ),
+        verbose: Flag.Boolean("verbose").pipe(
+          Flag.withDescription("Include model metadata (costs, limits, etc.) in the output"),
+          Flag.withDefault(false),
+        ),
+      },
     }),
     Spec.make("stats", {
       description: "Show shareable usage statistics",

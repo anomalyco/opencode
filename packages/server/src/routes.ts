@@ -71,6 +71,7 @@ const applicationServiceNodes = [
   WellKnown.node,
   PtyEnvironment.node,
   ServerPairing.node,
+  ModelsDev.node,
   LocationServiceMap.node,
   LocationActivity.node,
   SessionRestart.node,

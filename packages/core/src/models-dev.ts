@@ -254,7 +254,7 @@ export { Event } from "@opencode/schema/models-dev"
 
 export interface Interface {
   readonly get: () => Effect.Effect<readonly Snapshot[]>
-  readonly refresh: (force?: boolean) => Effect.Effect<void>
+  readonly refresh: (force?: boolean) => Effect.Effect<boolean, unknown>
 }
 
 export const Options = Schema.Struct({
@@ -406,27 +406,35 @@ export const layer = (options?: Options) =>
       const get = (): Effect.Effect<readonly Snapshot[]> => cachedGet
 
       const refresh = Effect.fn("ModelsDev.refresh")(function* (force = false) {
-        yield* lock
+        // A fetch-disabled server never dials out: a forced refresh is a no-op.
+        if (!fetch) return false
+        // A user-requested refresh must report fetch/decode failures instead of swallowing them,
+        // so the caller (e.g. `models --refresh`) can tell the user the cache wasn't refreshed.
+        // The scheduled background refresh wraps this in Effect.ignore, so it stays best-effort.
+        // The boolean result tells the caller whether a fetch & republish actually happened, so it
+        // knows whether to await the downstream provider/model reload before reading the list.
+        const republished = yield* lock
           .withPermit(
             Effect.gen(function* () {
               const stored = yield* loadFromCache()
-              if (!force && stored && Date.now() - stored.updatedAt < Duration.toMillis(ttl)) return
+              if (!force && stored && Date.now() - stored.updatedAt < Duration.toMillis(ttl)) return false
               const text = yield* fetchApi()
               const digest = bodyDigest(text)
               // models.dev rarely changes between polls; skip the cache write,
               // invalidation, and Refreshed event for a byte-identical body so
               // downstream provider/model update listeners stay quiet.
-              if (!force && stored?.digest === digest) return
+              if (!force && stored?.digest === digest) return false
               yield* decodeCatalog(text)
               yield* writeCache(text, digest)
               yield* invalidate
               yield* bus.publish(ModelsDev.Event.Refreshed, {})
+              return true
             }),
           )
           .pipe(
             Effect.tapCause((cause) => Effect.logError("Failed to fetch models.dev", { cause: cause })),
-            Effect.ignore,
           )
+        return republished
       })
 
       if (fetch && !process.argv.includes("--get-yargs-completions")) {
