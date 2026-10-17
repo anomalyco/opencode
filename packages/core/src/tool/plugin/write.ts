@@ -8,6 +8,7 @@ export * as WriteTool from "./write.js"
 
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { ToolFailure } from "@opencode/ai"
+import { FileDiff } from "@opencode/schema/file-diff"
 import { Effect, Schema } from "effect"
 import { Bom } from "@opencode/util/bom"
 import { Environment } from "../../environment/index.js"
@@ -32,6 +33,7 @@ export const Output = Schema.Struct({
   target: Schema.String,
   resource: Schema.String,
   existed: Schema.Boolean,
+  files: Schema.Array(FileDiff.Info),
 })
 export type Output = typeof Output.Type
 
@@ -85,13 +87,18 @@ export const Plugin = {
                 source,
               })
               const result = yield* fileMutation.writeTextPreservingBom({ target, content: input.content })
-              const bom = (yield* FileMutation.readText(environment.files, target.absolute)).bom
-              if (yield* formatter.file(target.absolute)) {
-                yield* FileMutation.syncTextBom(environment.files, target.absolute, bom)
-              }
-              return result
+              const written = yield* FileMutation.readText(environment.files, target.absolute)
+              const formatted = (yield* formatter.file(target.absolute))
+                ? yield* FileMutation.syncTextBom(environment.files, target.absolute, written.bom)
+                : written.text
+              return {
+                ...result,
+                files: [
+                  fileDiff(result.resource, current?.text ?? "", formatted, result.existed ? "modified" : "added"),
+                ],
+              } satisfies Output
             }).pipe(
-              Effect.map((output) => ({ output, content: toModelContent(output) })),
+              Effect.map((output) => ({ output, content: toModelContent(output), metadata: { files: output.files } })),
               Effect.mapError((error) => new ToolFailure({ message: `Unable to write ${input.path}`, error })),
             ),
         }),
