@@ -141,9 +141,11 @@ Configure how full-screen TUI sessions are presented and where new sessions star
 | `session.tps`           | boolean                     | Shows output tokens per second in assistant footers.                         |
 | `session.markdown`      | `source` or `rendered`      | Shows Markdown syntax markers or conceals them in rendered content.          |
 | `session.new_location`  | `launch` or `inherit`       | Starts in the TUI launch directory or inherits the active session location.  |
-| `session.permissions`   | `prompt` or `autoaccept`    | Prompts for permission requests or accepts every request automatically.      |
+| `session.permissions`   | `prompt` or `autoaccept`    | Default for sessions: prompts for requests or accepts them automatically.    |
 
 </div>
+
+To change one session without changing the default, run **Auto-accept permissions in this session** or **Prompt for permissions in this session** from the command palette. Subagents follow the session that started them. The choice takes precedence over `--auto` and `session.permissions`, and the TUI remembers it across restarts until you change it or delete the session.
 
 ## Tabs
 

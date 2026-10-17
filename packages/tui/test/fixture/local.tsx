@@ -10,6 +10,8 @@ import { Keymap } from "../../src/context/keymap"
 import { LocationProvider, useLocation } from "../../src/context/location"
 import { PermissionProvider } from "../../src/context/permission"
 import { RouteProvider, useRoute } from "../../src/context/route"
+import { TuiAppProvider } from "../../src/context/runtime"
+import { StorageProvider } from "../../src/context/storage"
 import { ThemeProvider } from "../../src/context/theme"
 import { ToastProvider } from "../../src/ui/toast"
 import { DialogProvider, useDialog } from "../../src/ui/dialog"
@@ -59,31 +61,35 @@ export async function renderLocal(
   const setup = await testRender(
     () => (
       <TestTuiContexts paths={{ state: temporary.path }}>
-        <ArgsProvider {...input.args}>
-          <ConfigProvider config={createTuiResolvedConfig()}>
-            <Keymap.Provider>
-              <ThemeProvider mode="dark" source={{ discover: async () => ({}) }}>
-                <ToastProvider>
-                  <RouteProvider initialRoute={{ type: "home" }}>
-                    <ClientProvider api={createApi(calls.fetch)}>
-                      <DataProvider directory={directory}>
-                        <LocationProvider>
-                          <PermissionProvider>
-                            <LocalProvider>
-                              <DialogProvider>
-                                <Probe />
-                              </DialogProvider>
-                            </LocalProvider>
-                          </PermissionProvider>
-                        </LocationProvider>
-                      </DataProvider>
-                    </ClientProvider>
-                  </RouteProvider>
-                </ToastProvider>
-              </ThemeProvider>
-            </Keymap.Provider>
-          </ConfigProvider>
-        </ArgsProvider>
+        <TuiAppProvider value={{ name: "test", version: "test", channel: "test" }}>
+          <StorageProvider>
+            <ArgsProvider {...input.args}>
+              <ConfigProvider config={createTuiResolvedConfig()}>
+                <Keymap.Provider>
+                  <ThemeProvider mode="dark" source={{ discover: async () => ({}) }}>
+                    <ToastProvider>
+                      <RouteProvider initialRoute={{ type: "home" }}>
+                        <ClientProvider api={createApi(calls.fetch)}>
+                          <DataProvider directory={directory}>
+                            <LocationProvider>
+                              <PermissionProvider>
+                                <LocalProvider>
+                                  <DialogProvider>
+                                    <Probe />
+                                  </DialogProvider>
+                                </LocalProvider>
+                              </PermissionProvider>
+                            </LocationProvider>
+                          </DataProvider>
+                        </ClientProvider>
+                      </RouteProvider>
+                    </ToastProvider>
+                  </ThemeProvider>
+                </Keymap.Provider>
+              </ConfigProvider>
+            </ArgsProvider>
+          </StorageProvider>
+        </TuiAppProvider>
       </TestTuiContexts>
     ),
     { width: 100, height: 30, kittyKeyboard: true },

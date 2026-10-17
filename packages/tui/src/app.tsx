@@ -377,8 +377,8 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                             }
                                           >
                                             <ClientProvider api={api} url={input.server.endpoint.url} service={service}>
-                                              <PermissionProvider>
-                                                <DataProvider directory={directory}>
+                                              <DataProvider directory={directory}>
+                                                <PermissionProvider>
                                                   <LocationProvider>
                                                     <SessionTabsProvider>
                                                       <SessionTerminalsProvider>
@@ -419,8 +419,8 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                       </SessionTerminalsProvider>
                                                     </SessionTabsProvider>
                                                   </LocationProvider>
-                                                </DataProvider>
-                                              </PermissionProvider>
+                                                </PermissionProvider>
+                                              </DataProvider>
                                             </ClientProvider>
                                           </RouteProvider>
                                         </ToastProvider>
