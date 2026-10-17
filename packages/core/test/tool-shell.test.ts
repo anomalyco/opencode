@@ -444,36 +444,52 @@ describe("ShellTool scanner permissions", () => {
         }),
       ))
 
-    test(`${scanner}: a numeric symlink operand still reaches outside without an external-directory prompt`, () =>
+    test(`${scanner}: a numeric symlink cd operand ${portable ? "asks for the resolved external directory" : "stays ungated because numeric operands are not classified as directories"}`, () =>
       withScanner(portable, (registry, fixture) =>
         Effect.gen(function* () {
           yield* Effect.promise(() => fs.symlink(fixture.outside, path.join(fixture.active, "123")))
           const agents = yield* Agent.Service
           yield* agents.transform((editor) =>
             editor.update(toolIdentity.agent, (agent) => {
-              agent.permissions = [
-                { action: "shell", resource: "*", effect: "allow" },
-                { action: "external_directory", resource: "*", effect: "deny" },
-              ]
+              agent.permissions = [{ action: "shell", resource: "*", effect: "allow" }]
             }),
           )
           const marker = path.join(fixture.active, "marker")
-          const result = yield* runPermissionCommand(
-            registry,
-            `cd 123 && pwd -P && printf reached > '${marker}'`,
-            marker,
-            [],
-          )
-          expect(result.requests).toEqual([])
-          expect(result.exit).toMatchObject({
-            _tag: "Success",
-            value: {
-              status: "completed",
-              metadata: { exit: 0 },
-              content: [{ type: "text", text: `${fixture.outside}\n` }],
-            },
-          })
-          expect(yield* Effect.promise(() => Bun.file(marker).text())).toBe("reached")
+          const command = `cd 123 && pwd -P && printf reached > '${marker}'`
+          if (!portable) {
+            const result = yield* runPermissionCommand(registry, command, marker, [])
+            expect(result.requests).toEqual([])
+            expect(result.exit).toMatchObject({
+              _tag: "Success",
+              value: {
+                status: "completed",
+                metadata: { exit: 0 },
+                content: [{ type: "text", text: `${fixture.outside}\n` }],
+              },
+            })
+            expect(yield* Effect.promise(() => Bun.file(marker).text())).toBe("reached")
+            return
+          }
+          for (const reply of ["reject", "once"] as const) {
+            const result = yield* runPermissionCommand(registry, command, marker, [reply])
+            expect(result.requests).toMatchObject([
+              { action: "external_directory", resources: [path.join(fixture.outside, "*")] },
+            ])
+            if (reply === "reject") {
+              expect(Exit.isFailure(result.exit)).toBe(true)
+              expect(yield* Effect.promise(() => Bun.file(marker).exists())).toBe(false)
+              continue
+            }
+            expect(result.exit).toMatchObject({
+              _tag: "Success",
+              value: {
+                status: "completed",
+                metadata: { exit: 0 },
+                content: [{ type: "text", text: `${fixture.outside}\n` }],
+              },
+            })
+            expect(yield* Effect.promise(() => Bun.file(marker).text())).toBe("reached")
+          }
         }),
       ))
 

@@ -24,7 +24,7 @@ export type ResolveInput = typeof ResolveInput.Type
 
 export interface ExternalDirectoryAuthorization {
   readonly action: "external_directory"
-  /** Lexical directory used as the external approval boundary. */
+  /** Resolved directory used as the external approval boundary. */
   readonly directory: AbsolutePath
   readonly resource: string
   readonly save: string
@@ -90,12 +90,31 @@ const layer = Layer.effect(
     const location = yield* Location.Service
     const permission = yield* Permission.Service
 
+    // Resolve symlinks before the containment check so the external-directory boundary
+    // follows the real path: an in-location link pointing outside surfaces as external
+    // instead of passing the lexical check, and an outside link pointing inside stays
+    // internal. Targets that do not resolve (prospective files) fall back to their
+    // parent's real path, then to the lexical path.
+    const realPath = (target: string): Effect.Effect<string> =>
+      fs.realPath(target).pipe(
+        Effect.catch(() =>
+          fs
+            .realPath(path.dirname(target))
+            .pipe(
+              Effect.map((parent) => path.join(parent, path.basename(target))),
+              Effect.catch(() => Effect.succeed(target)),
+            ),
+        ),
+      )
+
     const resolve = Effect.fn("FileAccess.resolve")(function* (input: ResolveInput) {
       const absolute = AbsolutePath.make(resolvePath(location.directory, input.path))
-      const worktree = path.resolve(location.project.directory)
+      const realTarget = yield* realPath(absolute)
+      const realDirectory = yield* realPath(location.directory)
+      const realWorktree = yield* realPath(path.resolve(location.project.directory))
       const internal =
-        FSUtil.contains(location.directory, absolute) ||
-        (worktree !== path.parse(worktree).root && FSUtil.contains(worktree, absolute))
+        FSUtil.contains(realDirectory, realTarget) ||
+        (realWorktree !== path.parse(realWorktree).root && FSUtil.contains(realWorktree, realTarget))
       if (internal) {
         return {
           absolute,
@@ -107,12 +126,12 @@ const layer = Layer.effect(
           ? "Directory"
           : input.kind === "file"
             ? "File"
-            : (yield* fs.stat(absolute).pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined)))
+            : (yield* fs.stat(realTarget).pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined)))
                 ?.type
-      const directory = AbsolutePath.make(type === "Directory" ? absolute : path.dirname(absolute))
+      const directory = AbsolutePath.make(type === "Directory" ? realTarget : path.dirname(realTarget))
       return {
-        absolute,
-        resource: slash(absolute),
+        absolute: AbsolutePath.make(realTarget),
+        resource: slash(realTarget),
         externalDirectory: {
           action: "external_directory",
           directory,

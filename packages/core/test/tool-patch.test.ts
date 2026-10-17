@@ -1009,7 +1009,7 @@ describe("PatchTool", () => {
     ),
   )
 
-  it.live("follows an internal symlink to an external file without external permission", () =>
+  it.live("approves an internal symlink to an external file at its real location before edit", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => Promise.all([tmpdir(), tmpdir()])),
       ([active, outside]) => {
@@ -1028,7 +1028,10 @@ describe("PatchTool", () => {
                     call("*** Begin Patch\n*** Update File: link.txt\n@@\n-before\n+after\n*** End Patch"),
                   ),
                 ).toMatchObject({ status: "completed" })
-                expect(assertions.map((input) => input.action)).toEqual(["edit"])
+                expect(assertions.map((input) => input.action)).toEqual(["external_directory", "edit"])
+                expect(assertions[0]).toMatchObject({
+                  resources: [path.join(outside.path, "*").replaceAll("\\", "/")],
+                })
                 expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("after\n")
               }),
             ),
