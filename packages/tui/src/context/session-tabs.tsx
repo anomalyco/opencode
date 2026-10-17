@@ -9,6 +9,7 @@ import { withTimestampedFallback } from "@opencode/util/session-title-fallback"
 import { useEvent } from "./event"
 import { useRoute } from "./route"
 import { useConfig } from "../config"
+import { usePermission } from "./permission"
 import { useLocation } from "./location"
 import { useStorage } from "./storage"
 import { useTuiPaths } from "./runtime"
@@ -61,6 +62,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     const data = useData()
     const event = useEvent()
     const config = useConfig().data
+    const permission = usePermission()
     const location = useLocation()
     const paths = useTuiPaths()
     const renderer = useRenderer()
@@ -161,8 +163,11 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
             ? ("error" as const)
             : ("activity" as const),
         promptPulse: promptPulses()[session] ?? 0,
-        attention: members.some((id) => (data.session.permission.list(id)?.length ?? 0) > 0)
-          ? ("permission" as const)
+        // Auto mode handles permission requests without requiring attention in this client.
+        attention:
+          permission.mode !== "autoaccept" &&
+          members.some((id) => (data.session.permission.list(id)?.length ?? 0) > 0)
+            ? ("permission" as const)
           : members.some((id) => (data.session.form.list(id)?.length ?? 0) > 0)
             ? ("question" as const)
             : (false as const),

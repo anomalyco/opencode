@@ -17,7 +17,6 @@ import { LocationProvider } from "../../src/context/location"
 import { Keymap } from "../../src/context/keymap"
 import { RouteProvider } from "../../src/context/route"
 import { TuiAppProvider } from "../../src/context/runtime"
-import { SessionTabsProvider } from "../../src/context/session-tabs"
 import { StorageProvider } from "../../src/context/storage"
 import { ThemeProvider, useTheme } from "../../src/context/theme"
 import { DialogProvider } from "../../src/ui/dialog"
@@ -93,20 +92,18 @@ for (const orientation of ["horizontal", "vertical"] as const) {
                   <ClientProvider api={createApi(createFetch(undefined, createEventStream()).fetch)}>
                     <DataProvider directory={temporary.path}>
                       <LocationProvider>
-                        <SessionTabsProvider>
-                          <ThemeProvider mode="dark" source={emptyThemeSource}>
-                            <Colors />
-                            <Keymap.Provider>
-                              <ToastProvider>
-                                <DialogProvider>
-                                  <box width="100%" height="100%">
-                                    <SessionTabs controller={controller} orientation={orientation} animations={false} />
-                                  </box>
-                                </DialogProvider>
-                              </ToastProvider>
-                            </Keymap.Provider>
-                          </ThemeProvider>
-                        </SessionTabsProvider>
+                        <ThemeProvider mode="dark" source={emptyThemeSource}>
+                          <Colors />
+                          <Keymap.Provider>
+                            <ToastProvider>
+                              <DialogProvider>
+                                <box width="100%" height="100%">
+                                  <SessionTabs controller={controller} orientation={orientation} animations={false} />
+                                </box>
+                              </DialogProvider>
+                            </ToastProvider>
+                          </Keymap.Provider>
+                        </ThemeProvider>
                       </LocationProvider>
                     </DataProvider>
                   </ClientProvider>
