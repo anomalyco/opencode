@@ -124,10 +124,10 @@ test("inactive session attention dots share the close control without marking th
 test("a tab does not reopen its title editor while a rename is saving", async ({ page }) => {
   await mockWorkspace(page, { name: "Tabs", sessions: [a, b] })
   await page.goto(sessionHref(a.id))
-  const title = page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(a.id)}"]) [data-slot="tab-title"]`)
+  const title = page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(b.id)}"]) [data-slot="tab-title"]`)
   const editor = page.locator('[data-slot="tab-title"][contenteditable="true"]')
-  await expect(title).toHaveText(a.title)
-  const save = await holdRoute(page, (url) => url.pathname === `/api/session/${a.id}`, { method: "PATCH" })
+  await expect(title).toHaveText(b.title)
+  const save = await holdRoute(page, (url) => url.pathname === `/api/session/${b.id}`, { method: "PATCH" })
 
   await title.dblclick()
   await expect(editor).toBeFocused()
@@ -187,6 +187,49 @@ test("option arrows move to the previous or next tab, and with shift to the next
   await page.keyboard.press("Shift+Alt+ArrowDown")
   await expectPath(page, sessionHref(c.id))
 })
+
+for (const navigation of ["horizontal", "vertical", "keyboard"] as const) {
+  test(`switching session tabs restores the caret and pastes into the destination draft (${navigation})`, async ({
+    page,
+    context,
+  }) => {
+    const tabLayout = navigation === "vertical" ? "vertical" : "horizontal"
+
+    const strip = page.locator(
+      tabLayout === "vertical" ? '[data-slot="vertical-tabs-sidebar"]' : '[data-slot="titlebar-tabs"]',
+    )
+
+    await context.grantPermissions(["clipboard-read", "clipboard-write"])
+    await openSession(page, {
+      name: "TabFocus",
+      sessions: [a, b],
+      seed: { settings: { appearance: { tabLayout } } },
+    })
+    const editor = page.locator('[data-component="composer-editor"]')
+    const tabB = strip.locator(`[data-titlebar-tab-link][href="${sessionHref(b.id)}"]`)
+    await editor.fill("Draft A")
+
+    await (navigation === "keyboard" ? page.keyboard.press("Control+Alt+ArrowRight") : tabB.click())
+    await expectPath(page, sessionHref(b.id))
+    await expect(editor).toBeFocused()
+    await page.evaluate(() => navigator.clipboard.writeText("Draft B"))
+    await page.keyboard.press("ControlOrMeta+V")
+    await expect(editor).toHaveText("Draft B")
+
+    await page.keyboard.press("Control+Alt+ArrowLeft")
+    await expectPath(page, sessionHref(a.id))
+    await expect(editor).toBeFocused()
+    await expect(editor).toHaveText("Draft A")
+    await page.evaluate(() => navigator.clipboard.writeText(" appended"))
+    await page.keyboard.press("ControlOrMeta+V")
+    await expect(editor).toHaveText("Draft A appended")
+
+    await tabB.click()
+    await expectPath(page, sessionHref(b.id))
+    await expect(editor).toBeFocused()
+    await expect(editor).toHaveText("Draft B")
+  })
+}
 
 for (const row of [
   { tabLayout: "horizontal", width: 360, hasTouch: false, direction: "ltr" },

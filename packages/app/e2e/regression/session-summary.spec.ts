@@ -12,7 +12,7 @@ for (const custom of [false, true]) {
     await installStressSessionTabs(page)
 
     // The legacy command ID; the keybind migration renames it to `details.toggle`.
-    if (custom) await seed(page, { settings: { keybinds: { "session.summary.toggle": "f8" } } })
+    if (custom) await seed(page, { settings: { keybinds: { "session.summary.toggle": "alt+f8" } } })
     await page.goto(sessionHref(fixture.sourceID))
     const trigger = page.getByRole("button", { name: "Session details", exact: true })
     const summary = page.getByRole("dialog", { name: "Session details", exact: true })
@@ -27,9 +27,9 @@ for (const custom of [false, true]) {
     const tooltip = page.getByRole("tooltip")
     await expect(tooltip).toContainText("Summary")
     const mac = await page.evaluate(() => /(Mac|iPod|iPhone|iPad)/.test(navigator.platform))
-    const shortcut = custom ? "F8" : mac ? "Meta+Shift+Y" : "Control+Shift+Y"
+    const shortcut = custom ? "Alt+F8" : mac ? "Meta+Shift+Y" : "Control+Shift+Y"
     await expect(tooltip.locator('[data-slot="keybind-v2-label"]')).toHaveText(
-      custom ? ["F8"] : mac ? ["⇧", "⌘", "Y"] : ["Ctrl", "Shift", "Y"],
+      custom ? (mac ? ["⌥", "F8"] : ["Alt", "F8"]) : mac ? ["⇧", "⌘", "Y"] : ["Ctrl", "Shift", "Y"],
     )
 
     for (const id of [fixture.sourceID, fixture.targetID, fixture.sourceID]) {
@@ -53,13 +53,13 @@ for (const custom of [false, true]) {
 
     // The override moved, so storage keeps only its new id and Shortcuts lists no row titled with the old one.
     const keybinds = () => page.evaluate(() => JSON.parse(localStorage.getItem("settings.v3") ?? "null")?.keybinds)
-    await expect.poll(keybinds).toEqual({ "details.toggle": "f8" })
+    await expect.poll(keybinds).toEqual({ "details.toggle": "alt+f8" })
     await page.goto("/settings")
     const settings = page.getByTestId("settings-screen")
     await settings.getByRole("tab", { name: "Shortcuts", exact: true }).click()
     await expect(settings.getByText("Toggle summary", { exact: true })).toBeVisible()
     await expect(settings.getByText("session.summary.toggle", { exact: true })).toHaveCount(0)
-    expect(await keybinds()).toEqual({ "details.toggle": "f8" })
+    expect(await keybinds()).toEqual({ "details.toggle": "alt+f8" })
   })
 }
 
