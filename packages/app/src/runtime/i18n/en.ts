@@ -9,6 +9,9 @@ export const dict = {
   "session.location.worktreesFailed": "Failed to load worktrees",
   "session.location.moving": "Moving session…",
   "session.location.moveFailed": "Failed to move session",
+  "newSession.location.unavailable": "Folder unavailable",
+  "newSession.location.description":
+    "This folder no longer exists. Choose another directory or project to start the session.",
   "server.action.authenticate": "Authenticate",
   "server.status.connecting": "Connecting over SSH…",
   "server.status.authentication": "Authentication required",
