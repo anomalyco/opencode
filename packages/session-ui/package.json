@@ -81,6 +81,7 @@
     "remend": "catalog:",
     "shiki": "catalog:",
     "solid-js": "catalog:",
-    "strip-ansi": "7.1.2"
+    "strip-ansi": "7.1.2",
+    "@opencode/schema": "workspace:*"
   }
 }
