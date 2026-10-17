@@ -218,6 +218,21 @@ export function detectDesktopNativeLocale(languages: readonly string[]): Desktop
   return "en"
 }
 
+// System (OS) languages implying RTL layout even when the UI locale differs.
+// In Electron `navigator.languages` reflects the OS language, so this stays
+// independent of the selected UI locale.
+// `iw` is the legacy ISO code for Hebrew still seen in navigator.languages.
+// `pa` is intentionally excluded: only Shahmukhi (Arab script) is RTL, Gurmukhi is LTR.
+const RTL_LANGUAGE_CODES: ReadonlySet<string> = new Set(["ar", "he", "iw", "fa", "ur", "dv", "yi", "ps"])
+
+export function systemPrefersRtl(languages: readonly string[]): boolean {
+  return languages.some((tag) => {
+    const code = tag.split(/[-_]/)[0]?.toLowerCase()
+
+    return code !== undefined && RTL_LANGUAGE_CODES.has(code)
+  })
+}
+
 export function desktopNativePluralCategories(locale: DesktopNativeLocale) {
   return new Intl.PluralRules(DESKTOP_NATIVE_LOCALE_TAGS[locale]).resolvedOptions().pluralCategories
 }

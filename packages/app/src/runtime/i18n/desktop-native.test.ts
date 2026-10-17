@@ -6,6 +6,7 @@ import {
   DESKTOP_NATIVE_LOCALES,
   DESKTOP_NATIVE_LOCALE_TAGS,
   detectDesktopNativeLocale,
+  systemPrefersRtl,
   DESKTOP_NATIVE_MAX_PAYLOAD_BYTES,
   formatDesktopNativeMessage,
   parseDesktopNativeBundle,
@@ -65,6 +66,25 @@ describe("desktop native locale detection", () => {
     [["he-IL"], "he"],
   ])("uses Unicode likely subtags to map %p to %p", (tags, locale) => {
     expect<string | undefined>(detectDesktopNativeLocale([...tags])).toBe(locale)
+  })
+
+  test.each([
+    [["he-IL"], true],
+    [["he"], true],
+    [["iw-IL"], true],
+    [["ar-EG"], true],
+    [["fa-IR"], true],
+    [["ur-PK"], true],
+    [["en-US", "he-IL"], true],
+    [["HE-il"], true],
+    [["he_IL"], true],
+    [["en-US"], false],
+    [["fr-FR"], false],
+    [["de-DE", "en"], false],
+    [[], false],
+    [["not_a_locale"], false],
+  ])("maps system languages %p to RTL %p", (tags, rtl) => {
+    expect(systemPrefersRtl([...tags])).toBe(rtl)
   })
 })
 
