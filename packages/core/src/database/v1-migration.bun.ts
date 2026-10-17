@@ -581,6 +581,43 @@ export function run(options: Options = {}): Effect.Effect<RunResult, never, Data
       const projects = new Set(
         (yield* db.all<{ id: string }>(sql`SELECT id FROM project`)).map((project) => project.id),
       )
+      // Older V1 databases predate columns such as `path` and `metadata` on the
+      // legacy `session` table. Copy only the columns that table actually has and
+      // let `session_v2` defaults fill the rest, instead of failing the whole
+      // migration on a missing column.
+      const legacyColumns = new Set(
+        (yield* db.all<{ name: string }>(sql`SELECT name FROM pragma_table_info('session')`)).map(
+          (column) => column.name,
+        ),
+      )
+      const copyColumns = [
+        "workspace_id",
+        "parent_id",
+        "slug",
+        "directory",
+        "path",
+        "title",
+        "version",
+        "share_url",
+        "summary_additions",
+        "summary_deletions",
+        "summary_files",
+        "summary_diffs",
+        "metadata",
+        "cost",
+        "tokens_input",
+        "tokens_output",
+        "tokens_reasoning",
+        "tokens_cache_read",
+        "tokens_cache_write",
+        "revert",
+        "agent",
+        "model",
+        "time_created",
+        "time_updated",
+        "time_compacting",
+        "time_archived",
+      ].filter((column) => legacyColumns.has(column))
       while (true) {
         const state = yield* readState(db)
         const cursorValue = state?.phase === "sessions" ? state.cursor : undefined
@@ -608,17 +645,14 @@ export function run(options: Options = {}): Effect.Effect<RunResult, never, Data
                   projectID: nextID.project_id,
                 })
               yield* tx.run(sql`
-                  INSERT OR IGNORE INTO session_v2 (
-                    id, project_id, workspace_id, parent_id, slug, directory, path, title, version, share_url,
-                    summary_additions, summary_deletions, summary_files, summary_diffs, metadata, cost,
-                    tokens_input, tokens_output, tokens_reasoning, tokens_cache_read, tokens_cache_write,
-                    revert, permission, agent, model, time_created, time_updated, time_compacting, time_archived
-                  )
-                  SELECT
-                    id, ${projectID}, workspace_id, parent_id, slug, directory, path, title, version, share_url,
-                    summary_additions, summary_deletions, summary_files, summary_diffs, metadata, cost,
-                    tokens_input, tokens_output, tokens_reasoning, tokens_cache_read, tokens_cache_write,
-                    revert, NULL, agent, model, time_created, time_updated, time_compacting, time_archived
+                  INSERT OR IGNORE INTO session_v2 (id, project_id, ${sql.join(
+                    copyColumns.map((column) => sql.identifier(column)),
+                    sql`, `,
+                  )})
+                  SELECT id, ${projectID}, ${sql.join(
+                    copyColumns.map((column) => sql.identifier(column)),
+                    sql`, `,
+                  )}
                   FROM session
                   WHERE id = ${nextID.id}
                 `)
