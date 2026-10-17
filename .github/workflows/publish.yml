@@ -73,11 +73,28 @@ jobs:
       release: ${{ steps.version.outputs.release }}
       tag: ${{ steps.version.outputs.tag }}
 
+  # Each target builds in its own job and artifact, so signers and desktop jobs download only the CLIs they use.
   build-cli:
     needs: version
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 30
     if: github.repository == 'anomalyco/opencode'
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - darwin-arm64
+          - darwin-x64
+          - darwin-x64-baseline
+          - windows-arm64
+          - windows-x64
+          - windows-x64-baseline
+          - linux-arm64
+          - linux-x64
+          - linux-x64-baseline
+          - linux-arm64-musl
+          - linux-x64-musl
+          - linux-x64-baseline-musl
     steps:
       - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
         with:
@@ -87,54 +104,31 @@ jobs:
         with:
           bun-version: 1.4.2
 
-      - name: Setup git committer
-        id: committer
-        uses: ./.github/actions/setup-git-committer
-        with:
-          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
-          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
-
-      - name: Build legacy CLI
-        if: github.ref_name != 'dev' && github.ref_name != 'beta'
-        run: ./packages/opencode/script/build.ts ${{ (github.ref_name == 'beta' && '--sourcemaps') || '' }}
-        env:
-          OPENCODE_VERSION: ${{ needs.version.outputs.version }}
-          OPENCODE_RELEASE: ${{ needs.version.outputs.release }}
-          GH_REPO: ${{ github.repository }}
-          GH_TOKEN: ${{ steps.committer.outputs.token }}
-
-      - name: Build preview CLI
-        id: build
-        run: ./packages/cli/script/build.ts ${{ (github.ref_name == 'beta' && '--sourcemaps') || '' }}
+      - name: Build CLI
+        run: ./packages/cli/script/build.ts --target=opencode-${{ matrix.target }}
         env:
           BUN_COMPILE_RELEASE: bun-v1.4.2
           OPENCODE_VERSION: ${{ needs.version.outputs.version }}
           OPENCODE_RELEASE: ${{ needs.version.outputs.release }}
           OPENCODE_RELEASE_NOTES: ${{ (github.ref_name == 'dev' && inputs.release_notes) || '' }}
           GH_REPO: ${{ github.repository }}
-          GH_TOKEN: ${{ steps.committer.outputs.token }}
+          GH_TOKEN: ${{ github.token }}
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: github.ref_name != 'dev' && github.ref_name != 'beta'
-        with:
-          name: opencode-cli
-          path: |
-            packages/opencode/dist/opencode-darwin*
-            packages/opencode/dist/opencode-linux*
+      # The artifact must hold this target alone: publish merges every CLI artifact into one dist.
+      - name: Check CLI output
+        run: |
+          actual=$(ls packages/cli/dist)
+          if [ "$actual" != "cli-${{ matrix.target }}" ]; then
+            echo "Expected only cli-${{ matrix.target }} in packages/cli/dist, found: $actual"
+            exit 1
+          fi
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        if: github.ref_name != 'dev' && github.ref_name != 'beta'
-        with:
-          name: opencode-cli-windows
-          path: packages/opencode/dist/opencode-windows*
-
+      # The glob keeps the cli-<target>/ directory in the artifact.
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: opencode-preview-cli-unsigned
+          name: cli-unsigned-${{ matrix.target }}
           path: packages/cli/dist/cli-*
-
-    outputs:
-      version: ${{ needs.version.outputs.version }}
+          if-no-files-found: error
 
   sign-cli-macos:
     needs: build-cli
@@ -152,8 +146,9 @@ jobs:
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          name: opencode-preview-cli-unsigned
+          pattern: cli-unsigned-darwin-*
           path: packages/cli/dist
+          merge-multiple: true
 
       - name: Sign macOS CLI binaries
         run: |
@@ -187,8 +182,8 @@ jobs:
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: opencode-preview-cli-macos
-          path: packages/cli/dist/cli-*
+          name: cli-signed-darwin
+          path: packages/cli/dist/cli-darwin-*
           if-no-files-found: error
 
   build-node-app-archive:
@@ -273,7 +268,7 @@ jobs:
 
   sign-cli-windows:
     needs:
-      - sign-cli-macos
+      - build-cli
     runs-on: blacksmith-4vcpu-windows-2025
     if: github.repository == 'anomalyco/opencode' && github.ref_name == 'dev'
     env:
@@ -284,12 +279,11 @@ jobs:
       AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE: ${{ secrets.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE }}
       AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
     steps:
-      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
-
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          name: opencode-preview-cli-macos
+          pattern: cli-unsigned-windows-*
           path: packages/cli/dist
+          merge-multiple: true
 
       - name: Azure login
         uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2.3.0
@@ -336,8 +330,8 @@ jobs:
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: opencode-preview-cli
-          path: packages/cli/dist/cli-*
+          name: cli-signed-windows
+          path: packages/cli/dist/cli-windows-*
           if-no-files-found: error
 
   build-electron:
@@ -357,27 +351,34 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # `cli` must be the build-cli target that packages/desktop/scripts/utils.ts bundles for `target`.
         settings:
           - host: macos-26
             target: x86_64-apple-darwin
+            cli: darwin-x64-baseline
             platform_flag: --mac --x64
             bun_install_flags: --os=darwin --cpu=*
           - host: macos-26
             target: aarch64-apple-darwin
+            cli: darwin-arm64
             platform_flag: --mac --arm64
             bun_install_flags: --os=darwin --cpu=arm64
           - host: "blacksmith-4vcpu-windows-2025"
             target: aarch64-pc-windows-msvc
+            cli: windows-arm64
             platform_flag: --win --arm64
             bun_install_flags: --cpu=*
           - host: "blacksmith-4vcpu-windows-2025"
             target: x86_64-pc-windows-msvc
+            cli: windows-x64-baseline
             platform_flag: --win
           - host: "blacksmith-4vcpu-ubuntu-2404"
             target: x86_64-unknown-linux-gnu
+            cli: linux-x64-baseline
             platform_flag: --linux
           - host: "blacksmith-4vcpu-ubuntu-2404-arm"
             target: aarch64-unknown-linux-gnu
+            cli: linux-arm64
             platform_flag: --linux --arm64
     runs-on: ${{ matrix.settings.host }}
     steps:
@@ -385,7 +386,7 @@ jobs:
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          name: opencode-preview-cli-unsigned
+          name: cli-unsigned-${{ matrix.settings.cli }}
           path: packages/cli/dist
 
       - uses: apple-actions/import-codesign-certs@8f3fb608891dd2244cdab3d69cd68c0d37a7fe93 # v2.0.0
@@ -571,28 +572,18 @@ jobs:
           registry-url: "https://registry.npmjs.org"
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        if: github.ref_name != 'dev' && github.ref_name != 'beta'
+        if: github.ref_name != 'beta'
         with:
-          name: opencode-cli
-          path: packages/opencode/dist
-
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        if: github.ref_name != 'dev' && github.ref_name != 'beta'
-        with:
-          name: opencode-cli-windows
-          path: packages/opencode/dist
-
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        if: github.ref_name != 'dev' && github.ref_name != 'beta'
-        with:
-          name: opencode-cli-signed-windows
-          path: packages/opencode/dist
+          pattern: cli-unsigned-linux-*
+          path: packages/cli/dist
+          merge-multiple: true
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         if: github.ref_name != 'beta'
         with:
-          name: opencode-preview-cli
+          pattern: cli-signed-*
           path: packages/cli/dist
+          merge-multiple: true
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         if: needs.build-node-cli.result == 'success'
@@ -600,6 +591,38 @@ jobs:
           pattern: opencode-node-cli-*
           path: packages/cli/dist/node
           merge-multiple: true
+
+      # packages/cli/script/publish.ts publishes every package in dist, and a pattern that matches nothing downloads
+      # nothing, so check that dist holds each target once and that no macOS binary is unsigned.
+      - name: Check CLI packages
+        if: github.ref_name != 'beta'
+        working-directory: packages/cli/dist
+        run: |
+          expected="cli-darwin-arm64 cli-darwin-x64 cli-darwin-x64-baseline cli-linux-arm64 cli-linux-arm64-musl cli-linux-x64 cli-linux-x64-baseline cli-linux-x64-baseline-musl cli-linux-x64-musl cli-windows-arm64 cli-windows-x64 cli-windows-x64-baseline"
+          actual=$(printf '%s\n' cli-* | LC_ALL=C sort | xargs)
+          if [ "$actual" != "$expected" ]; then
+            echo "Expected: $expected"
+            echo "Found: $actual"
+            exit 1
+          fi
+
+          for dir in $expected; do
+            binary="$dir/bin/opencode"
+            case "$dir" in cli-windows-*) binary="$binary.exe" ;; esac
+            if [ ! -f "$dir/package.json" ] || [ ! -s "$binary" ]; then
+              echo "$dir needs package.json and a non-empty $binary"
+              exit 1
+            fi
+          done
+
+          # Cross-compiled macOS binaries keep Bun's own, now invalid, Developer ID signature, so match the full name of
+          # the certificate sign-cli-macos signs with.
+          for binary in cli-darwin-*/bin/opencode; do
+            if ! LC_ALL=C grep -aqF "Developer ID Application: Anomaly Innovations, Inc. (5NZ4Q7NXJ4)" "$binary"; then
+              echo "$binary is not signed with the OpenCode Developer ID"
+              exit 1
+            fi
+          done
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         if: needs.version.outputs.release
