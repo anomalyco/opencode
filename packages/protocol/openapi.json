@@ -20383,6 +20383,9 @@
           "status": {
             "type": "string",
             "enum": ["added", "deleted", "modified"]
+          },
+          "untracked": {
+            "type": "boolean"
           }
         },
         "required": ["file", "additions", "deletions", "status"],
@@ -20396,6 +20399,14 @@
           },
           "branch": {
             "$ref": "#/components/schemas/Vcs.Branch"
+          },
+          "ahead": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "behind": {
+            "type": "integer",
+            "minimum": 0
           }
         },
         "required": ["branch"],

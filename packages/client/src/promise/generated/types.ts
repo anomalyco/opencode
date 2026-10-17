@@ -290,6 +290,7 @@ export type VcsFileStatus = {
   additions: number
   deletions: number
   status: "added" | "deleted" | "modified"
+  untracked?: boolean
 }
 
 export type VcsBranchList = Array<string>
@@ -850,7 +851,7 @@ export type FormMultiselectField1 = {
 
 export type FormAnswer2 = { [x: string]: FormValue1 }
 
-export type VcsInfo = { provider?: string; branch: VcsBranch }
+export type VcsInfo = { provider?: string; branch: VcsBranch; ahead?: number; behind?: number }
 
 export type WebSearchProvider = { id: WebSearchID; name: string }
 

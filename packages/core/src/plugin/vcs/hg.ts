@@ -93,7 +93,7 @@ function make(
     return emptyPatch(item.file)
   })
 
-  const diffAgainst = Effect.fnUntraced(function* (rev: string | undefined, options?: DiffOptions) {
+  const collect = Effect.fnUntraced(function* (rev: string | undefined, options?: DiffOptions) {
     const [items, batch] = yield* Effect.all(
       [hg.status(rev, scope), hg.diff(rev, scope, { context: options?.context ?? PATCH_CONTEXT_LINES })],
       { concurrency: 2 },
@@ -111,7 +111,11 @@ function make(
         status: item.status,
       })
     }
-    return list
+    return { list, items }
+  })
+
+  const diffAgainst = Effect.fnUntraced(function* (rev: string | undefined, options?: DiffOptions) {
+    return (yield* collect(rev, options)).list
   })
 
   return {
@@ -122,13 +126,16 @@ function make(
       return []
     }),
     status: Effect.fn("VcsHg.status")(function* () {
-      return (yield* diffAgainst(undefined, { context: 0 })).map(
+      const { list, items } = yield* collect(undefined, { context: 0 })
+      const untracked = new Set(items.filter((item) => item.code === "?").map((item) => item.file))
+      return list.map(
         (item) =>
           ({
             file: item.file,
             additions: item.additions,
             deletions: item.deletions,
             status: item.status,
+            ...(untracked.has(item.file) ? { untracked: true } : {}),
           }) satisfies FileStatus,
       )
     }),

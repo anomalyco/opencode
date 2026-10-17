@@ -70,10 +70,15 @@ function make(proc: AppProcess.Interface, input: { directory: string; worktree: 
 
   return {
     info: Effect.fn("VcsGit.info")(function* () {
-      const [current, root] = yield* Effect.all([ctx.git.branch(ctx.directory), ctx.git.defaultBranch(ctx.directory)], {
-        concurrency: 2,
-      })
-      return { branch: { current, default: root?.name } } satisfies Info
+      const [current, root, track] = yield* Effect.all(
+        [ctx.git.branch(ctx.directory), ctx.git.defaultBranch(ctx.directory), ctx.git.tracking(ctx.directory)],
+        { concurrency: 3 },
+      )
+      return {
+        branch: { current, default: root?.name },
+        ...(track.ahead !== undefined ? { ahead: track.ahead } : {}),
+        ...(track.behind !== undefined ? { behind: track.behind } : {}),
+      } satisfies Info
     }),
     base: () => ctx.git.base(ctx.directory),
     branches: Effect.fn("VcsGit.branches")(function* (options?: BranchOptions) {
@@ -105,6 +110,7 @@ function make(proc: AppProcess.Interface, input: { directory: string; worktree: 
               additions: stat?.additions ?? 0,
               deletions: stat?.deletions ?? 0,
               status: item.status,
+              ...(item.code === "??" ? { untracked: true } : {}),
             } satisfies FileStatus
           }),
       )
@@ -256,6 +262,14 @@ function makeGit(proc: AppProcess.Interface, env?: Record<string, string>) {
     const result = yield* run(["symbolic-ref", "--quiet", "--short", "HEAD"], { cwd })
     if (result.exitCode !== 0) return
     return result.text().trim() || undefined
+  })
+
+  const tracking = Effect.fn("VcsGit.tracking")(function* (cwd: string) {
+    const result = yield* run(["rev-list", "--left-right", "--count", "@{upstream}...HEAD"], { cwd })
+    if (result.exitCode !== 0) return { ahead: undefined, behind: undefined }
+    const [behind, ahead] = result.text().trim().split(/\s+/).map(Number)
+    if (!Number.isFinite(ahead) || !Number.isFinite(behind)) return { ahead: undefined, behind: undefined }
+    return { ahead, behind }
   })
 
   const branches = Effect.fn("VcsGit.branches")(function* (cwd: string, options?: BranchOptions) {
@@ -523,6 +537,7 @@ function makeGit(proc: AppProcess.Interface, env?: Record<string, string>) {
     intentToAdd,
     worktreeStats,
     worktreePatch,
+    tracking,
   }
 }
 

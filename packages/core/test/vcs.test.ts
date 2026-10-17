@@ -568,9 +568,39 @@ describe("Vcs", () => {
         expect(status).toEqual([
           { file: "gone.txt", additions: 0, deletions: 1, status: "deleted" },
           { file: "keep.txt", additions: 1, deletions: 1, status: "modified" },
-          { file: "new.txt", additions: 2, deletions: 0, status: "added" },
+          { file: "new.txt", additions: 2, deletions: 0, status: "added", untracked: true },
         ])
       }),
+    ),
+  )
+
+  it.live("reports tracking divergence against upstream", () =>
+    withTmp((directory) =>
+      Effect.promise(async () => {
+        await initRepo(directory)
+        const remote = path.join(directory, "upstream.git")
+        await $`git init --bare ${remote}`.quiet()
+        await fs.writeFile(path.join(directory, "file.txt"), "one\n")
+        await commitAll(directory, "initial")
+        await $`git remote add origin ${remote}`.cwd(directory).quiet()
+        await $`git push -u origin main`.cwd(directory).quiet()
+        await fs.writeFile(path.join(directory, "file.txt"), "two\n")
+        await commitAll(directory, "second")
+      }).pipe(
+        Effect.andThen(
+          Effect.gen(function* () {
+            const vcs = yield* Vcs.Service
+            const context = host()
+            yield* VcsGitPlugin.Plugin.effect({
+              ...context,
+              vcs: { ...context.vcs, transform: vcs.transform, reload: vcs.reload },
+            })
+            const info = yield* vcs.info()
+            expect(info.ahead).toBe(1)
+            expect(info.behind).toBe(0)
+          }).pipe(provide(directory, { git: true, worktree: directory })),
+        ),
+      ),
     ),
   )
 
@@ -714,7 +744,7 @@ describe("Vcs", () => {
           await fs.writeFile(path.join(directory, "new.txt"), "hello\n")
         })
         const vcs = yield* Vcs.Service
-        expect(yield* vcs.status()).toEqual([{ file: "new.txt", additions: 1, deletions: 0, status: "added" }])
+        expect(yield* vcs.status()).toEqual([{ file: "new.txt", additions: 1, deletions: 0, status: "added", untracked: true }])
         const diff = yield* vcs.diff("working")
         expect(diff).toHaveLength(1)
         expect(diff[0].patch).toContain("+hello")

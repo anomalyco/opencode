@@ -107,7 +107,7 @@ describeHg("Vcs mercurial", () => {
         expect(status).toEqual([
           { file: "gone.txt", additions: 0, deletions: 1, status: "deleted" },
           { file: "keep.txt", additions: 1, deletions: 1, status: "modified" },
-          { file: "new.txt", additions: 2, deletions: 0, status: "added" },
+          { file: "new.txt", additions: 2, deletions: 0, status: "added", untracked: true },
         ])
       }),
     ),
@@ -202,7 +202,7 @@ describeHg("Vcs mercurial", () => {
         })
         const vcs = yield* Vcs.Service
         expect(yield* vcs.status()).toEqual([
-          { file: "loose.txt", additions: 1, deletions: 0, status: "added" },
+          { file: "loose.txt", additions: 1, deletions: 0, status: "added", untracked: true },
           { file: "tracked.txt", additions: 2, deletions: 0, status: "added" },
         ])
         const diff = yield* vcs.diff("working")

@@ -12,6 +12,8 @@ export interface Branch extends Schema.Schema.Type<typeof Branch> {}
 export const Info = Schema.Struct({
   provider: optional(Schema.String),
   branch: Branch,
+  ahead: optional(NonNegativeInt),
+  behind: optional(NonNegativeInt),
 }).annotate({ identifier: "Vcs.Info" })
 export interface Info extends Schema.Schema.Type<typeof Info> {}
 
@@ -33,5 +35,6 @@ export const FileStatus = Schema.Struct({
   additions: NonNegativeInt,
   deletions: NonNegativeInt,
   status: Schema.Literals(["added", "deleted", "modified"]),
+  untracked: optional(Schema.Boolean),
 }).annotate({ identifier: "Vcs.FileStatus" })
 export interface FileStatus extends Schema.Schema.Type<typeof FileStatus> {}
