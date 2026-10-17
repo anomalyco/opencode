@@ -12,13 +12,15 @@ function isWindowsStoragePath(input: string) {
   return /^[A-Za-z]:\//.test(input) || input.startsWith("//")
 }
 
-function absolute(input: string) {
+// Persisted projects and sessions can move between operating systems during migration.
+function isAbsoluteStoragePath(input: string) {
   const result = storagePath(input)
-  // Persisted projects and sessions can move between operating systems during migration.
-  if (!nodePath.posix.isAbsolute(result) && !isWindowsStoragePath(result)) {
-    throw new Error(`Path is not absolute: ${input}`)
-  }
-  return result
+  return nodePath.posix.isAbsolute(result) || isWindowsStoragePath(result)
+}
+
+function absolute(input: string) {
+  if (!isAbsoluteStoragePath(input)) throw new Error(`Path is not absolute: ${input}`)
+  return storagePath(input)
 }
 
 function toPlatform(input: string) {
@@ -42,8 +44,17 @@ export const absoluteColumn = customType<{
   },
 })
 
-// Legacy sessions may persist an empty directory. Keep that existing value
-// readable while normalizing and validating every real directory.
+// Legacy sessions may persist an empty directory, or a value that is not a filesystem path at all:
+// older web clients stored the session's own URL. Decoding runs per row, so one such value would
+// abort the whole statement, failing a session list of any size on that single row. Keep those
+// values readable as they are, while every real directory is still normalized and validated.
+// Writes stay strict, so a value like this can no longer be stored.
+function legacyDirectory(input: string) {
+  if (!input) return input
+  if (!isAbsoluteStoragePath(input)) return storagePath(input)
+  return toPlatform(absolute(input))
+}
+
 export const directoryColumn = customType<{
   data: string
   driverData: string
@@ -56,7 +67,7 @@ export const directoryColumn = customType<{
     return input ? absolute(input) : input
   },
   fromDriver(input) {
-    return input ? toPlatform(absolute(input)) : input
+    return legacyDirectory(input)
   },
 })
 
