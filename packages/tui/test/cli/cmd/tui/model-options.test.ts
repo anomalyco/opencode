@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { go } from "fuzzysort"
-import { prioritizeFavorites, sortModelOptions } from "../../../../src/component/dialog-model"
+import { prioritizeFavorites, searchModelOptions, sortModelOptions } from "../../../../src/component/dialog-model"
 
 describe("prioritizeFavorites", () => {
   test("uses the favorite order captured when the dialog opened", () => {
@@ -80,5 +80,42 @@ describe("sortModelOptions", () => {
     ])
 
     expect(sorted.map((model) => model.title)).toEqual(["Claude Opus 4", "Claude Sonnet 4"])
+  })
+})
+
+describe("searchModelOptions", () => {
+  const category = "OpenRouter"
+  // Titles from a real OpenRouter catalogue.
+  const options = [
+    { title: "inclusionai/ling-3.0-flash", category, releaseDate: 5 },
+    { title: "inclusionai/ling-3.0-flash-vl", category, releaseDate: 5 },
+    { title: "openai/gpt-5.6-luna", category, releaseDate: 4 },
+    { title: "openai/gpt-5.6-luna-pro", category, releaseDate: 3 },
+    { title: "poolside/laguna-s-2.1", category, releaseDate: 6 },
+    { title: "~openai/gpt-luna-latest", category, releaseDate: 1, footer: "Free" },
+  ]
+
+  test("ranks names containing the query above scattered-letter matches", () => {
+    expect(searchModelOptions("luna", options).map((option) => option.title)).toEqual([
+      "~openai/gpt-luna-latest",
+      "openai/gpt-5.6-luna",
+      "openai/gpt-5.6-luna-pro",
+      "poolside/laguna-s-2.1",
+      "inclusionai/ling-3.0-flash",
+      "inclusionai/ling-3.0-flash-vl",
+    ])
+  })
+
+  test("keeps free-first, newest-first order when every result contains the query", () => {
+    const haiku = [
+      { title: "Claude Haiku 3", releaseDate: 1 },
+      { title: "Claude Haiku 4.5", releaseDate: 2 },
+      { title: "Claude Haiku Free", releaseDate: 0, footer: "Free" },
+    ]
+    expect(searchModelOptions("haik", haiku).map((option) => option.title)).toEqual([
+      "Claude Haiku Free",
+      "Claude Haiku 4.5",
+      "Claude Haiku 3",
+    ])
   })
 })

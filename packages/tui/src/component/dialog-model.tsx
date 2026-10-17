@@ -105,13 +105,7 @@ export function DialogModel(props: { providerID?: string }) {
     )
 
     if (needle) {
-      return prioritizeFavorites(
-        sortModelOptions(
-          fuzzysort.go(needle, modelOptions, { keys: ["title", "category"] }).map((item) => item.obj),
-          false,
-        ),
-        favoritePriority,
-      )
+      return prioritizeFavorites(searchModelOptions(needle, modelOptions), favoritePriority)
     }
 
     return [...favoriteOptions, ...recentOptions, ...modelOptions]
@@ -190,6 +184,24 @@ export function prioritizeFavorites<T extends { value: { providerID: string; mod
   return options.toSorted(
     (a, b) => Number(favorites.has(modelPreferenceKey(b.value))) - Number(favorites.has(modelPreferenceKey(a.value))),
   )
+}
+
+// Names that contain the query rank above scattered-letter matches, so "opus" finds
+// Claude Opus before MiMo-V2.6-Pro-UltraSpeed. Each tier keeps the free-first,
+// newest-first order.
+export function searchModelOptions<
+  T extends { title: string; category?: string; releaseDate: string | number; footer?: string },
+>(needle: string, options: T[]) {
+  const query = needle.toLowerCase()
+  const matches = fuzzysort.go(needle, options, { keys: ["title", "category"] }).map((item) => item.obj)
+  const contains = (option: T) => option.title.toLowerCase().includes(query)
+  return [
+    ...sortModelOptions(matches.filter(contains), false),
+    ...sortModelOptions(
+      matches.filter((option) => !contains(option)),
+      false,
+    ),
+  ]
 }
 
 export function sortModelOptions<
