@@ -106,6 +106,40 @@ describe("buildPromptRequest", () => {
     expect(result.text).toContain("focus here")
   })
 
+  test("keeps bare @words inside comment text as text", () => {
+    const result = buildPromptRequest({
+      prompt: [{ type: "text", content: "look", start: 0, end: 4 }],
+      context: [
+        { key: "ctx:bare", type: "file", path: "src/review.ts", comment: "or should I use @here?" },
+        {
+          key: "ctx:mixed",
+          type: "file",
+          path: "src/other.ts",
+          comment: "Compare with @src/shared.ts and @channel.",
+        },
+        {
+          key: "note:example:c=1",
+          commentID: "1",
+          type: "note",
+          origin: "example",
+          label: "button",
+          icon: "select-element",
+          subject: "the button",
+          comment: "ping @everyone",
+        },
+      ],
+      images: [],
+      text: "look",
+      sessionDirectory: "/repo",
+    })
+
+    expect(result.files.map((file) => file.uri)).toEqual([
+      "file:///repo/src/review.ts",
+      "file:///repo/src/other.ts",
+      "file:///repo/src/shared.ts",
+    ])
+  })
+
   test("sends an extension note with its live subject and attaches only the files it mentions", () => {
     const note = {
       type: "note" as const,
