@@ -712,6 +712,12 @@ export type McpServer = {
   integrationID?: IntegrationID
 }
 
+export type McpToolCatalog = {
+  name: string
+  status: McpStatusConnected | McpStatusPending | McpStatusDisabled | McpStatusFailed | McpStatusNeedsAuth
+  tools: Array<{ name: string; description?: string }>
+}
+
 export type McpResourceCatalog = { resources: Array<McpResource>; templates: Array<McpResourceTemplate> }
 
 export type Project = {
@@ -5968,6 +5974,19 @@ export type McpListInput = {
 }
 
 export type McpListOutput = { location: LocationPublicRef; data: Array<McpServer> }
+
+export type McpToolsInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined } | undefined
+    readonly server?: string | undefined
+  }["location"]
+  readonly server?: {
+    readonly location?: { readonly directory?: string | undefined } | undefined
+    readonly server?: string | undefined
+  }["server"]
+}
+
+export type McpToolsOutput = { location: LocationPublicRef; data: Array<McpToolCatalog> }
 
 export type McpAddInput = {
   readonly server: { readonly server: string }["server"]

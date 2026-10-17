@@ -87,6 +87,11 @@ type ResourceTemplatePage = {
   nextCursor?: string
 }
 
+type ToolPage = {
+  items: McpClient.Tool[]
+  nextCursor?: string
+}
+
 function resourceServer(
   input: {
     /** Serve 2026-07-28 only through createMcpHandler; the default is a sessionful legacy transport. */
@@ -95,6 +100,7 @@ function resourceServer(
     listChanged?: boolean
     emptyElicitation?: boolean
     urlElicitation?: boolean
+    toolPages?: Record<string, ToolPage>
     respond?: (request: Request) => Response | undefined | Promise<Response | undefined>
   } = {},
 ) {
@@ -139,14 +145,18 @@ function resourceServer(
             instructions: "Use the resources tools.",
           },
         )
-        protocol.setRequestHandler("tools/list", () => {
+        protocol.setRequestHandler("tools/list", (request) => {
           state.toolLists += 1
+          const page = input.toolPages?.[request.params?.cursor ?? "initial"]
           return Promise.resolve({
-            tools: input.emptyElicitation
-              ? [{ name: "empty-elicitation", inputSchema: { type: "object" as const, properties: {} } }]
-              : input.urlElicitation
-                ? [{ name: "url-elicitation", inputSchema: { type: "object" as const, properties: {} } }]
-                : [{ name: "echo", inputSchema: { type: "object" as const, properties: {} } }],
+            tools:
+              page?.items ??
+              (input.emptyElicitation
+                ? [{ name: "empty-elicitation", inputSchema: { type: "object" as const, properties: {} } }]
+                : input.urlElicitation
+                  ? [{ name: "url-elicitation", inputSchema: { type: "object" as const, properties: {} } }]
+                  : [{ name: "echo", inputSchema: { type: "object" as const, properties: {} } }]),
+            nextCursor: page?.nextCursor,
           })
         })
         if (input.emptyElicitation) {
@@ -1305,6 +1315,89 @@ test("settles modern MCP URL elicitations when the user confirms", async () => {
     ),
   )
 })
+
+testEffect(Layer.empty).live("MCP tool catalogs wait for discovery and reuse native tools across every page", () =>
+  Effect.gen(function* () {
+    const started = yield* Deferred.make<void>()
+    const release = yield* Deferred.make<void>()
+    const completed = yield* Deferred.make<void>()
+    const server = yield* resourceServer({
+      toolPages: {
+        initial: {
+          items: [{ name: "search.foo", description: "Search documents", inputSchema: { type: "object" } }],
+          nextCursor: "second",
+        },
+        second: { items: [{ name: "search-foo", inputSchema: { type: "object" } }] },
+      },
+      respond: (request) =>
+        request.method !== "POST"
+          ? undefined
+          : Effect.runPromise(
+              Deferred.succeed(started, undefined).pipe(Effect.andThen(Deferred.await(release)), Effect.as(undefined)),
+            ),
+    })
+    yield* Effect.gen(function* () {
+      const service = yield* Mcp.Service
+      yield* Deferred.await(started)
+      expect(yield* service.tools()).toEqual([])
+      expect((yield* service.servers())[0]?.status).toEqual({ status: "pending" })
+      const catalog = yield* service.toolCatalog({ server: "resources" }).pipe(
+        Effect.tap(() => Deferred.succeed(completed, undefined)),
+        Effect.forkScoped({ startImmediately: true }),
+      )
+      expect(yield* Deferred.isDone(completed)).toBe(false)
+
+      yield* service.add("disabled", { type: "local", command: ["must-not-run"], disabled: true })
+      expect(yield* service.toolCatalog({ server: "disabled" })).toEqual([
+        { name: "disabled", status: { status: "disabled" }, tools: [] },
+      ])
+      expect(yield* service.toolCatalog({ server: "missing" }).pipe(Effect.flip)).toBeInstanceOf(Mcp.NotFoundError)
+
+      yield* Deferred.succeed(release, undefined)
+      const result = yield* Fiber.join(catalog)
+      expect(result).toEqual([
+        {
+          name: "resources",
+          status: { status: "connected" },
+          tools: [
+            { name: "search-foo", description: undefined },
+            { name: "search.foo", description: "Search documents" },
+          ],
+        },
+      ])
+      expect(yield* service.toolCatalog({ server: "resources" })).toEqual(result)
+      expect(server.state.toolLists).toBe(2)
+      expect(server.state.initializations).toBe(1)
+      expect(server.state.toolCalls).toEqual([])
+    }).pipe(Effect.ensuring(Deferred.succeed(release, undefined)), Effect.provide(resourceMcpLayer(server.url)))
+  }),
+)
+
+testEffect(Layer.empty).live("MCP tool catalogs preserve empty, disabled, and failed servers", () =>
+  Effect.gen(function* () {
+    const server = yield* resourceServer({ toolPages: { initial: { items: [] } } })
+    yield* Effect.gen(function* () {
+      const service = yield* Mcp.Service
+      yield* service.add("disabled", { type: "local", command: ["must-not-run"], disabled: true })
+      yield* service.add("failed", { type: "remote", url: "not a URL", oauth: false })
+      expect(yield* service.toolCatalog({})).toEqual([
+        { name: "disabled", status: { status: "disabled" }, tools: [] },
+        {
+          name: "failed",
+          status: { status: "failed", error: 'Invalid MCP URL for "failed"' },
+          tools: [],
+        },
+        { name: "resources", status: { status: "connected" }, tools: [] },
+      ])
+      expect(server.state.toolLists).toBe(1)
+      expect(server.state.toolCalls).toEqual([])
+      yield* service.remove("resources")
+      yield* service.remove("disabled")
+      yield* service.remove("failed")
+      expect(yield* service.toolCatalog({})).toEqual([])
+    }).pipe(Effect.provide(resourceMcpLayer(server.url)))
+  }),
+)
 
 test("loads and reads MCP resources", async () => {
   await Effect.runPromise(

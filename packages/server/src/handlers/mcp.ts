@@ -3,7 +3,7 @@ import { McpServerNotFoundError } from "@opencode/protocol/errors"
 import { Effect } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/http-api"
 import { Api } from "../api"
-import { response } from "../location"
+import { awaitPlugins, response } from "../location"
 
 const notFound = <A, R>(effect: Effect.Effect<A, Mcp.NotFoundError, R>) =>
   effect.pipe(Effect.mapError((error) => new McpServerNotFoundError({ server: error.server, message: error.message })))
@@ -24,6 +24,14 @@ export const McpHandler = HttpApiBuilder.group(Api, "server.mcp", (handlers) =>
                 ),
               ),
           )
+        }),
+      )
+      .handle(
+        "mcp.tools",
+        Effect.fn(function* (ctx) {
+          yield* awaitPlugins
+          const service = yield* Mcp.Service
+          return yield* response(notFound(service.toolCatalog({ server: ctx.query.server })))
         }),
       )
       .handle(

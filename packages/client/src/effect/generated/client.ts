@@ -147,6 +147,8 @@ import type {
   IntegrationCommandCancelOutput,
   McpListInput,
   McpListOutput,
+  McpToolsInput,
+  McpToolsOutput,
   McpAddInput,
   McpAddOutput,
   McpRemoveInput,
@@ -1021,6 +1023,13 @@ const EndpointMcpList = (raw: RawClient["server.mcp"]) => (input?: McpListInput)
     raw["mcp.list"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
+const EndpointMcpTools = (raw: RawClient["server.mcp"]) => (input?: McpToolsInput) =>
+  preserveEffect<McpToolsOutput>()(
+    raw["mcp.tools"]({ query: { location: input?.["location"], server: input?.["server"] } }).pipe(
+      Effect.mapError(mapClientError),
+    ),
+  )
+
 const EndpointMcpAdd = (raw: RawClient["server.mcp"]) => (input: McpAddInput) =>
   preserveEffect<McpAddOutput>()(
     raw["mcp.add"]({
@@ -1058,6 +1067,7 @@ const EndpointMcpResourceCatalog = (raw: RawClient["server.mcp"]) => (input?: Mc
 
 const adaptGroupMcp = (raw: RawClient["server.mcp"]) => ({
   list: EndpointMcpList(raw),
+  tools: EndpointMcpTools(raw),
   add: EndpointMcpAdd(raw),
   remove: EndpointMcpRemove(raw),
   connect: EndpointMcpConnect(raw),

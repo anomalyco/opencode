@@ -223,6 +223,13 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
       description: "Manage MCP (Model Context Protocol) servers",
       commands: [
         Spec.make("list", { description: "List configured MCP servers and their status" }),
+        Spec.make("tools", {
+          description: "List tools exposed by MCP servers",
+          params: {
+            ...ServerParams,
+            name: Argument.String("name").pipe(Argument.withDescription("Name of the MCP server"), Argument.optional),
+          },
+        }),
         Spec.make("add", {
           description: "Add an MCP server to your configuration",
           params: {

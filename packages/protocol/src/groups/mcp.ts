@@ -2,7 +2,7 @@ import { Mcp } from "@opencode/schema/mcp"
 import { Location } from "@opencode/schema/location"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/http-api"
-import { McpServerNotFoundError } from "../errors.js"
+import { McpServerNotFoundError, ServiceUnavailableError } from "../errors.js"
 import { LocationQuery, locationQueryOpenApi } from "./location.js"
 
 export const McpGroup = HttpApiGroup.make("server.mcp")
@@ -17,6 +17,21 @@ export const McpGroup = HttpApiGroup.make("server.mcp")
           identifier: "mcp.list",
           summary: "List MCP servers",
           description: "Retrieve configured MCP servers and their connection status.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.get("mcp.tools", "/api/mcp/tools", {
+      query: Schema.Struct({ ...LocationQuery.fields, server: Schema.optional(Schema.String) }),
+      success: Location.response(Schema.Array(Mcp.ToolCatalog)),
+      error: [McpServerNotFoundError, ServiceUnavailableError],
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "mcp.tools",
+          summary: "List MCP tools",
+          description: "Retrieve native tool names and descriptions grouped by MCP server after initial discovery.",
         }),
       ),
   )

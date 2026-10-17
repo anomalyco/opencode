@@ -1598,6 +1598,13 @@ export type McpListInput = { readonly location?: { readonly directory?: string |
 export type McpListOutput = { readonly location: Location.PublicRef; readonly data: ReadonlyArray<Mcp.Server> }
 export type McpListOperation<E = never> = (input?: McpListInput) => Effect.Effect<McpListOutput, E>
 
+export type McpToolsInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly server?: string | undefined
+}
+export type McpToolsOutput = { readonly location: Location.PublicRef; readonly data: ReadonlyArray<Mcp.ToolCatalog> }
+export type McpToolsOperation<E = never> = (input?: McpToolsInput) => Effect.Effect<McpToolsOutput, E>
+
 export type McpAddInput = {
   readonly server: string
   readonly location?: { readonly directory?: string | undefined } | undefined
@@ -1635,6 +1642,7 @@ export type McpResourceCatalogOperation<E = never> = (
 
 export interface McpApi<E = never> {
   readonly list: McpListOperation<E>
+  readonly tools: McpToolsOperation<E>
   readonly add: McpAddOperation<E>
   readonly remove: McpRemoveOperation<E>
   readonly connect: McpConnectOperation<E>

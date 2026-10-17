@@ -141,6 +141,8 @@ import type {
   IntegrationCommandCancelOutput,
   McpListInput,
   McpListOutput,
+  McpToolsInput,
+  McpToolsOutput,
   McpAddInput,
   McpAddOutput,
   McpRemoveInput,
@@ -1362,6 +1364,18 @@ export function make(options: ClientOptions) {
             query: { location: input?.["location"] },
             successStatus: 200,
             declaredStatuses: [400, 401, 404],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      tools: (input?: McpToolsInput, requestOptions?: RequestOptions) =>
+        request<McpToolsOutput>(
+          {
+            method: "GET",
+            path: `/api/mcp/tools`,
+            query: { location: input?.["location"], server: input?.["server"] },
+            successStatus: 200,
+            declaredStatuses: [400, 401, 404, 503],
             empty: false,
           },
           requestOptions,

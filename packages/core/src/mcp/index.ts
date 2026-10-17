@@ -117,6 +117,7 @@ export interface Interface extends State.Transformable<Editor> {
   readonly disconnect: (server: ServerName | string) => Effect.Effect<void, NotFoundError>
   readonly remove: (server: ServerName | string) => Effect.Effect<void, NotFoundError>
   readonly tools: () => Effect.Effect<Tool[]>
+  readonly toolCatalog: (input: { readonly server?: string }) => Effect.Effect<Mcp.ToolCatalog[], NotFoundError>
   readonly callTool: (input: {
     readonly server: ServerName | string
     readonly name: string
@@ -665,6 +666,28 @@ export const layer = (options?: Options) =>
           return Array.from(entries.values())
             .flatMap((entry) => entry.tools ?? [])
             .toSorted((a, b) => a.server.localeCompare(b.server) || a.name.localeCompare(b.name))
+        }),
+        toolCatalog: Effect.fn("MCP.toolCatalog")(function* (input) {
+          const servers =
+            input.server === undefined
+              ? Array.from(entries, ([name, entry]) => ({ name, entry }))
+              : [yield* requireServer(input.server)]
+          return yield* Effect.forEach(
+            servers.toSorted((a, b) => a.name.localeCompare(b.name)),
+            ({ name, entry }) =>
+              Effect.gen(function* () {
+                // An explicit catalog request waits for discovery; reactive reads remain non-blocking.
+                yield* entry.startup.await
+                return {
+                  name,
+                  status: entry.status,
+                  tools: (entry.tools ?? [])
+                    .toSorted((a, b) => a.name.localeCompare(b.name))
+                    .map((tool) => ({ name: tool.name, description: tool.description })),
+                }
+              }),
+            { concurrency: "unbounded" },
+          )
         }),
         callTool: Effect.fn("MCP.callTool")(function* (input) {
           const target = yield* requireServer(input.server)

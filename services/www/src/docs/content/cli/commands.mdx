@@ -210,6 +210,21 @@ Manages MCP (Model Context Protocol) servers.
 $ opencode mcp list
 ```
 
+List the tools exposed by each server, grouped by server and using their original MCP names.
+
+```bash
+$ opencode mcp tools
+```
+
+Pass a server name to include tool descriptions.
+
+```bash
+$ opencode mcp tools context7
+```
+
+Disabled servers do not make the overview fail. Connection or authentication failures return a nonzero exit code while
+still showing tools from available servers. Selecting an unknown or disabled server also returns a nonzero exit code.
+
 Add a remote server.
 
 ```bash
