@@ -193,6 +193,9 @@ export const Info = Schema.Struct({
       scope: Schema.optional(Schema.Literals(["global", "cwd"])).annotate({
         description: "Share tabs globally or keep a separate set for each working directory",
       }),
+      restore: Schema.optional(Schema.Boolean).annotate({
+        description: "Reopen saved tabs at launch, or keep unsaved tabs that last until the TUI exits",
+      }),
       layout: Schema.optional(Schema.Literals(["horizontal", "vertical"])).annotate({
         description: "Show tabs in a horizontal strip or vertical sidebar",
       }),
@@ -280,6 +283,7 @@ export type Resolved = Omit<Info, "attention" | "cursor" | "keybinds" | "leader"
     mode: "auto" | "on" | "off"
     enabled: boolean
     scope: "global" | "cwd"
+    restore: boolean
     layout: "horizontal" | "vertical"
     indicators: "status" | "numbers"
   }
@@ -332,6 +336,7 @@ export function resolve(
       mode: tabsMode,
       enabled: tabsMode === "on" || (tabsMode === "auto" && (options.environment ?? process.env).HERDR_ENV !== "1"),
       scope: input.tabs?.scope ?? "cwd",
+      restore: input.tabs?.restore ?? true,
       layout: input.tabs?.layout ?? "horizontal",
       indicators: input.tabs?.indicators ?? "status",
     },

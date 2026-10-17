@@ -144,6 +144,15 @@ export const settings: Setting[] = [
     labels: ["current directory", "global"],
   },
   {
+    title: "Restore on launch",
+    category: "Tabs",
+    path: ["tabs", "restore"],
+    default: true,
+    values: [false, true],
+    labels: ["off", "on"],
+    keywords: ["reopen", "startup", "persist", "save"],
+  },
+  {
     title: "Layout",
     category: "Tabs",
     path: ["tabs", "layout"],

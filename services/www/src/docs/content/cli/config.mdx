@@ -154,6 +154,7 @@ Configure the persistent session tab strip:
   "tabs": {
     "mode": "auto",
     "scope": "cwd",
+    "restore": true,
     "layout": "horizontal",
     "indicators": "status"
   }
@@ -168,10 +169,14 @@ The legacy boolean `tabs.enabled` setting remains supported: `true` is `on` and 
 | ----------------- | --------------------------- | ----------------------------------------------------------------------------- |
 | `tabs.mode`       | `auto`, `on`, or `off`      | Uses tabs automatically, always, or never. Auto hides them inside Herdr.       |
 | `tabs.scope`      | `cwd` or `global`           | Keeps separate tabs per working directory or shares them globally.            |
+| `tabs.restore`    | boolean                     | Reopens saved tabs when the TUI starts.                                       |
 | `tabs.layout`     | `horizontal` or `vertical`  | Places tabs in a horizontal strip or a vertical sidebar.                      |
 | `tabs.indicators` | `status` or `numbers`       | Shows status icons or always shows tab numbers.                               |
 
 </div>
+
+With `tabs.restore` set to `false`, each TUI keeps its tabs in memory until it exits. They are not shared with other open
+TUIs, and the saved tabs stay as they were.
 
 Number indicators retain status colors and background animations. Ctrl+number shortcuts switch tabs in either indicator
 mode.

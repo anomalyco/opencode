@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createSignal, on, onCleanup } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createStore, reconcile, unwrap } from "solid-js/store"
 import { useKeyboard, useRenderer } from "@opentui/solid"
 import { isDeepEqual } from "remeda"
 import { createSimpleContext } from "./helper"
@@ -68,14 +68,12 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     const enabled = () => config.tabs.enabled
     const [focused, setFocused] = createSignal<boolean>()
     // Keyed reconcile keeps tab object identity across reorders, so strip rows move instead of
-    // mutating in place, which per-row animations and drag state depend on.
-    const [store, updateStore] = storage.store<PersistedState>("tabs", {
-      initial: {
-        global: empty(),
-        cwd: {},
-      },
-      key: "sessionID",
-    })
+    // mutating in place, which per-row animations and drag state depend on. Restore is read once:
+    // switching stores mid-session would swap the visible tab set.
+    const initial: PersistedState = { global: empty(), cwd: {} }
+    const [store, updateStore] = config.tabs.restore
+      ? storage.store("tabs", { initial, key: "sessionID" })
+      : unsavedTabs(initial)
     const fallback = empty()
     const [promptPulses, setPromptPulses] = createSignal<Record<string, number>>({})
     let history: SessionTabHistory = { entries: [], index: -1 }
@@ -472,3 +470,15 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     }
   },
 })
+
+// Same draft-then-reconcile updates as storage.store, minus the file: these tabs never reach the
+// set that other TUIs share and restore, and they are gone when this TUI exits.
+function unsavedTabs(initial: PersistedState) {
+  const [store, setStore] = createStore(initial)
+  const update = async (mutation: (draft: PersistedState) => void) => {
+    const draft = structuredClone(unwrap(store))
+    mutation(draft)
+    setStore(reconcile(draft, { key: "sessionID" }))
+  }
+  return [store, update] as const
+}
