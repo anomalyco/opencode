@@ -1,6 +1,6 @@
 export * as SessionRestart from "./restart.js"
 
-import { Context, Effect, Layer } from "effect"
+import { Context, Effect, Layer, Semaphore } from "effect"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Bus } from "../../bus.js"
 import { Job } from "../../job.js"
@@ -14,23 +14,6 @@ import { SubagentCompletion } from "../subagent-completion.js"
 
 const CONTINUE_AFTER_SERVER_RESTART =
   "The server restarted while you were working. Continue from where you left off without repeating completed work."
-
-const RESUME_EXHAUSTED = {
-  type: "aborted",
-  message: "Execution was interrupted repeatedly and will not be resumed automatically.",
-} as const
-
-export interface Options {
-  /**
-   * Times a single turn may be resumed before it is terminalized instead.
-   * The counter is durable and only a terminal event resets it, so a turn
-   * that keeps dying cannot crash-loop across restarts. Turns that complete
-   * never accumulate: the budget is per-turn, not per-session.
-   */
-  readonly maxAttempts?: number
-}
-
-const DEFAULT_MAX_ATTEMPTS = 10
 
 export interface Interface {
   /**
@@ -62,7 +45,7 @@ export interface Interface {
  */
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionRestart") {}
 
-export const layer = (options?: Options) =>
+export const layer = () =>
   Layer.effect(
     Service,
     Effect.gen(function* () {
@@ -72,23 +55,27 @@ export const layer = (options?: Options) =>
       const jobs = yield* Job.Service
       const sessions = yield* Session.Service
       const scope = yield* Effect.scope
-      const maxAttempts = options?.maxAttempts ?? DEFAULT_MAX_ATTEMPTS
-
+      // Start recovery with a small batch, then grow as durable reads and
+      // accounting succeed. There is no fixed ceiling; failures contract the
+      // window so a large restart recovery does not fan out before the store is ready.
+      const recoveryGate = yield* Semaphore.make(4)
+      let recoveryWindow = 4
+      const withRecoveryAdmission = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+        recoveryGate.withPermit(effect).pipe(
+          Effect.tap(() => {
+            recoveryWindow += 1
+            return recoveryGate.resize(recoveryWindow)
+          }),
+          Effect.tapError(() => {
+            recoveryWindow = Math.max(1, Math.floor(recoveryWindow / 2))
+            return recoveryGate.resize(recoveryWindow)
+          }),
+        )
       const prepareResume = Effect.fnUntraced(function* (sessionID: SessionSchema.ID) {
-        // Durable before the resume runs, so a crash inside the resumed turn is
-        // counted by the next sweep and the budget cannot be dodged.
+        // Count only when execution is about to start. A process that dies
+        // during the cooldown does not push the next start further away.
         const attempts = yield* store.countResume(sessionID)
         if (attempts === undefined) return false
-        if (attempts > maxAttempts) {
-          // Terminalize instead: the release hook clears the claim and resets the
-          // counter atomically with the terminal event.
-          yield* bus.publish(
-            SessionEvent.Execution.Failed,
-            { sessionID, error: RESUME_EXHAUSTED },
-            { commit: () => store.release(sessionID) },
-          )
-          return false
-        }
         yield* bus.publish(SessionEvent.Synthetic, {
           sessionID,
           text: CONTINUE_AFTER_SERVER_RESTART,
@@ -160,10 +147,7 @@ export const layer = (options?: Options) =>
           return
         }
         if (yield* execution.isActive(recovery.childSessionID)) return
-        if (!(yield* prepareResume(recovery.childSessionID))) {
-          yield* notify({ status: "error", error: RESUME_EXHAUSTED.message })
-          return
-        }
+        const delay = yield* store.resumeDelay(recovery.childSessionID)
 
         yield* jobs.start({
           id: background.id,
@@ -171,16 +155,21 @@ export const layer = (options?: Options) =>
           title: recovery.description,
           notificationID: background.notificationID,
           recovery,
-          run: execution.resume(recovery.childSessionID).pipe(
-            Effect.andThen(store.context(recovery.childSessionID)),
-            Effect.map((messages) => {
-              const assistant = messages.findLast(
-                (message) =>
-                  message.type === "assistant" && message.time.completed !== undefined && message.error === undefined,
-              )
-              return SubagentCompletion.text(assistant)
-            }),
-          ),
+          run: Effect.gen(function* () {
+            if (delay > 0) yield* Effect.sleep(delay)
+            const resumed = yield* withRecoveryAdmission(Effect.gen(function* () {
+              if (!(yield* prepareResume(recovery.childSessionID))) return false
+              yield* execution.resume(recovery.childSessionID)
+              return true
+            }))
+            if (!resumed) return "The recovered execution was already settled."
+            const messages = yield* store.context(recovery.childSessionID)
+            const assistant = messages.findLast(
+              (message) =>
+                message.type === "assistant" && message.time.completed !== undefined && message.error === undefined,
+            )
+            return SubagentCompletion.text(assistant)
+          }),
         })
         yield* jobs.background(background.id)
         yield* jobs.wait({ id: background.id }).pipe(
@@ -198,7 +187,7 @@ export const layer = (options?: Options) =>
               ? [background.recovery.childSessionID]
               : [],
           )
-          // Early notices wait for recovery's accounting, including Sessions that exhaust their budget.
+          // Early notices wait for recovery accounting before they can wake a parent.
           const suspended = new Set(
             [...(yield* store.listSuspended()), ...children].filter((sessionID) => !active.has(sessionID)),
           )
@@ -221,9 +210,14 @@ export const layer = (options?: Options) =>
           yield* Effect.forEach(
             (yield* store.listSuspended()).filter((sessionID) => !resumed.has(sessionID)),
             (sessionID) =>
-              execution
-                .resume(sessionID)
-                .pipe(Effect.ignore, Effect.forkIn(scope), Effect.when(prepareResume(sessionID))),
+              Effect.gen(function* () {
+                const delay = yield* withRecoveryAdmission(store.resumeDelay(sessionID))
+                if (delay > 0) yield* Effect.sleep(delay)
+                yield* withRecoveryAdmission(Effect.gen(function* () {
+                  if (!(yield* prepareResume(sessionID))) return
+                  yield* execution.resume(sessionID)
+                })).pipe(Effect.ignore)
+              }).pipe(Effect.forkIn(scope)),
             { concurrency: "unbounded", discard: true },
           )
           // Async observers consult this set at delivery; later completions wake parents normally.

@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { AIError, ProviderInternalError, TransportError } from "@opencode/ai"
+import { AIError, AuthenticationError, ProviderInternalError, TransportError } from "@opencode/ai"
 import { Agent } from "@opencode/schema/agent"
 import { Model } from "@opencode/schema/model"
 import { Provider } from "@opencode/core/provider"
@@ -33,15 +33,23 @@ const decisions = (cause: AIError, count: number) =>
   })
 
 describe("SessionRunnerRetry.policy", () => {
-  it.effect("stops retrying transport timeouts after three attempts", () =>
+  it.effect("continues retrying transport timeouts while they remain retryable", () =>
     Effect.gen(function* () {
-      expect(yield* decisions(timeout, 4)).toEqual([true, true, true, false])
+      expect(yield* decisions(timeout, 20)).toEqual(Array(20).fill(true))
     }),
   )
 
-  it.effect("keeps the general allowance for other transient failures", () =>
+  it.effect("continues retrying other transient failures without an attempt limit", () =>
     Effect.gen(function* () {
-      expect(yield* decisions(internal, 10)).toEqual(Array(10).fill(true))
+      expect(yield* decisions(internal, 50)).toEqual(Array(50).fill(true))
+    }),
+  )
+
+  it.effect("does not retry failures classified as non-retryable", () =>
+    Effect.gen(function* () {
+      expect(yield* decisions(new AIError({ reason: new AuthenticationError({ message: "invalid credentials" }) }), 1)).toEqual([
+        false,
+      ])
     }),
   )
 })

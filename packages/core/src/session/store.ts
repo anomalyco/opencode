@@ -82,6 +82,8 @@ export interface Interface {
    * total — or undefined when the Session no longer exists.
    */
   readonly countResume: (sessionID: Session.ID) => Effect.Effect<number | undefined>
+  /** Delay before resuming a claimed turn, based on its durable prior resume starts. */
+  readonly resumeDelay: (sessionID: Session.ID) => Effect.Effect<number>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionStore") {}
@@ -237,17 +239,35 @@ const layer = Layer.effect(
           .pipe(Effect.orDie, Effect.asVoid),
       ),
       countResume: Effect.fn("SessionStore.countResume")(function* (sessionID) {
+        const now = Date.now()
         const row = yield* db
           .update(SessionTable)
           .set({
             resume_attempts: sql`${SessionTable.resume_attempts} + 1`,
+            time_suspended: now,
             time_updated: sql`${SessionTable.time_updated}`,
           })
-          .where(eq(SessionTable.id, sessionID))
+          .where(and(eq(SessionTable.id, sessionID), isNotNull(SessionTable.time_suspended)))
           .returning({ attempts: SessionTable.resume_attempts })
           .get()
           .pipe(Effect.orDie)
         return row?.attempts
+      }),
+      resumeDelay: Effect.fn("SessionStore.resumeDelay")(function* (sessionID) {
+        const row = yield* db
+          .select({ attempts: SessionTable.resume_attempts, suspendedAt: SessionTable.time_suspended })
+          .from(SessionTable)
+          .where(eq(SessionTable.id, sessionID))
+          .get()
+          .pipe(Effect.orDie)
+        if (!row || row.suspendedAt === null || row.attempts === 0) return 0
+        const base = Math.min(60_000 * 2 ** Math.min(row.attempts - 1, 3), 5 * 60_000)
+        const hash = Array.from(sessionID).reduce(
+          (value, character) => (value * 31 + character.charCodeAt(0)) >>> 0,
+          0,
+        )
+        const jitter = 0.8 + (hash % 4_001) / 10_000
+        return Math.max(0, Math.round(base * jitter - (Date.now() - row.suspendedAt)))
       }),
     })
   }),
