@@ -7,6 +7,7 @@ import { Job } from "../job.js"
 import { Instance } from "../instance/service.js"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { SessionEvent } from "./event.js"
+import { SessionStatusEvent } from "@opencode/schema/session-status-event"
 import { SessionRunCoordinator } from "./run-coordinator.js"
 import { SessionRunner } from "./runner/index.js"
 import { SessionSchema } from "./schema.js"
@@ -112,7 +113,10 @@ export const layer = Layer.effect(
       started: (sessionID) =>
         reportLifecycle(
           sessionID,
-          bus.publish(SessionEvent.Execution.Started, { sessionID }, claimOnCommit(sessionID)),
+          Effect.all([
+            bus.publish(SessionStatusEvent.Status, { sessionID, status: { type: "busy" } }),
+            bus.publish(SessionEvent.Execution.Started, { sessionID }, claimOnCommit(sessionID)),
+          ]),
         ),
       drain: (sessionID, force, promotable) => drain(sessionID, force, undefined, promotable),
       // One terminal observation per busy period, covering every coalesced drain.
@@ -120,6 +124,7 @@ export const layer = Layer.effect(
         reportLifecycle(
           sessionID,
           Effect.gen(function* () {
+            yield* bus.publish(SessionStatusEvent.Status, { sessionID, status: { type: "idle" } })
             const outcome = terminal(exit, reason)
             if (outcome.type === "succeeded") {
               yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID }, releaseOnCommit(sessionID))

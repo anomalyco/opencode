@@ -17,12 +17,13 @@ import { Session } from "@opencode/core/session"
 import { SessionExecution } from "@opencode/core/session/execution"
 import { SessionRestart } from "@opencode/core/session/execution/restart"
 import { SessionEvent } from "@opencode/core/session/event"
+import { SessionStatusEvent } from "@opencode/schema/session-status-event"
 import { SessionInbox } from "@opencode/core/session/inbox"
 import { SessionMessage } from "@opencode/core/session/message"
 import { SessionRunner } from "@opencode/core/session/runner/index"
 import { SessionInboxTable, SessionTable } from "@opencode/core/session/sql"
 import { SessionStore } from "@opencode/core/session/store"
-import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, LayerMap, Scope } from "effect"
+import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, LayerMap, Scope, Stream } from "effect"
 import { eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 
@@ -116,6 +117,45 @@ describe("SessionExecution lifecycle", () => {
       yield* Scope.close(scope, Exit.void)
       expect((yield* claims(database))[interrupted]).toBe(true)
       expect(yield* execution.isActive(interrupted)).toBe(false)
+    }),
+  )
+
+  it.effect("publishes session.status busy then idle around a drain", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+      const sessionID = Session.ID.make("ses_status_emitted")
+      yield* seedSessions(database, [sessionID])
+
+      const started = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(scope, () =>
+        Deferred.succeed(started, undefined).pipe(Effect.andThen(Deferred.await(release))),
+      )
+      const execution = Context.get(context, SessionExecution.Service)
+
+      // `session.status` is ephemeral, so it is observed through the subscribe stream rather than a
+      // durable projector.
+      const statuses = yield* bus.subscribe(SessionStatusEvent.Status).pipe(
+        Stream.take(2),
+        Stream.map((event) => event.data.status.type),
+        Stream.runCollect,
+        Effect.forkScoped,
+        Effect.flatMap((fiber) =>
+          Effect.gen(function* () {
+            yield* Effect.yieldNow
+            const completing = yield* execution.resume(sessionID).pipe(Effect.forkIn(scope))
+            yield* Deferred.await(started)
+            yield* Deferred.succeed(release, undefined)
+            yield* Fiber.join(completing)
+            return yield* Fiber.join(fiber)
+          }),
+        ),
+      )
+
+      expect([...statuses]).toEqual(["busy", "idle"])
     }),
   )
 
