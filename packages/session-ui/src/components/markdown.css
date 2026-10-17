@@ -163,23 +163,53 @@
   }
 
   .markdown-session-link {
-    display: inline;
-    padding: 0;
+    display: inline-block;
+    max-width: min(100%, 40ch);
+    margin: 0 1px;
+    padding: 0 6px 0 5px;
+    overflow: hidden;
     border: 0;
-    background: none;
-    color: var(--text-interactive-base);
+    border-radius: 6px;
+    background: color-mix(in oklch, var(--v2-text-text-base) var(--markdown-inline-code-bg-mix), transparent);
+    color: var(--v2-text-text-base);
     font: inherit;
+    font-weight: var(--font-weight-medium);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    vertical-align: bottom;
     cursor: pointer;
   }
 
+  .markdown-session-link::before {
+    content: "";
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    margin-inline-end: 4px;
+    vertical-align: -0.125em;
+    background: var(--text-interactive-base);
+    mask: url("./markdown-session.svg") center / contain no-repeat;
+  }
+
+  .markdown-session-link:not([data-session-title]) {
+    font-family: var(--font-family-mono);
+    font-feature-settings: var(--font-family-mono--font-feature-settings);
+    color: var(--v2-text-text-muted);
+  }
+
+  .markdown-session-link > code {
+    padding: 0;
+    background: none;
+    color: inherit;
+  }
+
   .markdown-session-link:hover {
-    text-decoration: underline;
-    text-underline-offset: 2px;
+    background: color-mix(in oklch, var(--v2-text-text-base) 14%, transparent);
   }
 
   .markdown-session-link:focus-visible {
-    outline: 2px solid currentColor;
-    outline-offset: 2px;
+    outline: 2px solid var(--text-interactive-base);
+    outline-offset: 1px;
   }
 
   &[data-local-links] :not(pre) > code[data-inline-code-kind="path"]:not(a > code) {

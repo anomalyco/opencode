@@ -1,7 +1,9 @@
+import type { SessionInfo } from "@opencode/client/promise"
 import { DataProvider } from "@opencode/session-ui/context"
 import { MarkdownProvider, type ReadMarkdownImage } from "@opencode/session-ui/context/markdown"
 import { useNavigate, useParams } from "@solidjs/router"
 import { createMemo, type ParentProps } from "solid-js"
+import { createStore } from "solid-js/store"
 import { useProviders } from "@/providers/catalog/providers"
 import { LocalProvider } from "@/providers/models/selection"
 import type { ServerConnection } from "@/runtime/server/registry"
@@ -64,6 +66,23 @@ export function SessionUIProvider(
     tabs.select(tabs.addSessionTab({ server: props.server, sessionId: session.id }))
   }
 
+  // Referenced sessions are fetched once without entering the shared session store, which feeds session lists.
+  const [referenced, setReferenced] = createStore<Record<string, SessionInfo>>({})
+  const requested = new Set<string>()
+
+  const sessionTitle = (sessionID: string) => {
+    const session = data.session.get(sessionID) ?? referenced[sessionID]
+
+    if (session) return session.time.archived ? undefined : session.title || undefined
+
+    if (requested.has(sessionID)) return
+    requested.add(sessionID)
+    void serverSDK.api.session
+      .get({ sessionID })
+      .then((info) => setReferenced(sessionID, info))
+      .catch(() => undefined)
+  }
+
   const providers = useProviders(directory)
 
   // Turn diffs live in the tab's in-memory state, so they outlast timeline remounts and go when the tab closes.
@@ -113,7 +132,7 @@ export function SessionUIProvider(
       onNavigateToSession={navigateToSession}
       onSessionHref={href}
     >
-      <MarkdownProvider readImage={readImage()} openSession={openReferencedSession}>
+      <MarkdownProvider readImage={readImage()} openSession={openReferencedSession} sessionTitle={sessionTitle}>
         <LocalProvider>{props.children}</LocalProvider>
       </MarkdownProvider>
     </DataProvider>

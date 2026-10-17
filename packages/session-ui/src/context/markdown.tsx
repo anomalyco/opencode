@@ -11,11 +11,15 @@ export type OpenMarkdownLocalFile = (path: string) => void
  */
 export type MarkdownLocalFileExists = (path: string) => boolean | Promise<boolean>
 
+/** Reactively resolve a referenced session's display title, or undefined while unknown or unavailable. */
+export type MarkdownSessionTitle = (sessionID: string) => string | undefined
+
 const context = createContext<{
   readonly readImage?: ReadMarkdownImage
   readonly openLocalFile?: OpenMarkdownLocalFile
   readonly localFileExists?: MarkdownLocalFileExists
   readonly openSession?: (sessionID: string) => void
+  readonly sessionTitle?: MarkdownSessionTitle
 }>()
 
 export function MarkdownProvider(
@@ -24,6 +28,7 @@ export function MarkdownProvider(
     openLocalFile?: OpenMarkdownLocalFile
     localFileExists?: MarkdownLocalFileExists
     openSession?: (id: string) => void
+    sessionTitle?: MarkdownSessionTitle
   }>,
 ) {
   const parent = useMarkdown()
@@ -42,6 +47,9 @@ export function MarkdownProvider(
         },
         get openSession() {
           return props.openSession ?? parent?.openSession
+        },
+        get sessionTitle() {
+          return props.sessionTitle ?? parent?.sessionTitle
         },
       }}
     >
