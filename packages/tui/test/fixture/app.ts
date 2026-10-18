@@ -14,6 +14,8 @@ export async function createAppFixture(
     state?: string
     config?: Config.Info
     args?: TuiInput["args"]
+    packages?: TuiInput["packages"]
+    log?: TuiInput["log"]
     fetch?: FetchHandler
     // A renderer whose owner already set up its terminal, such as the simulation renderer.
     setup?: TestRendererSetup
@@ -49,10 +51,10 @@ export async function createAppFixture(
           return next
         },
       },
-      packages: { prepare: async () => ({ directory: "" }) },
+      packages: input.packages ?? { prepare: async () => ({ directory: "" }) },
       terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: ready.resolve }),
       args: input.args ?? {},
-      log: () => {},
+      log: input.log ?? (() => {}),
     }).pipe(
       Effect.provide(
         Global.layerWith({
