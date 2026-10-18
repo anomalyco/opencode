@@ -8,6 +8,7 @@ import { HttpClientError } from "effect/http"
 import { Form } from "../../form.js"
 import { Permission } from "../../permission.js"
 import { WebSearch } from "../../websearch.js"
+import { WebSearchMcp } from "../../plugin/websearch/mcp.js"
 
 export const name = "websearch"
 export const NO_RESULTS = "No search results found. Please try a different query."
@@ -168,8 +169,9 @@ export const Plugin = {
                 if (!Schema.is(WebSearch.RequestError)(error)) return new ToolFailure({ message: fallback, error })
                 const status = HttpClientError.isHttpClientError(error.cause) ? error.cause.response?.status : undefined
                 return new ToolFailure({
-                  message:
-                    status === undefined
+                  message: Schema.is(WebSearchMcp.ToolError)(error.cause)
+                    ? `Web search failed: ${error.cause.message}`
+                    : status === undefined
                       ? fallback
                       : (httpErrors.get(status) ?? `Web search request failed (HTTP ${status})`),
                   error,

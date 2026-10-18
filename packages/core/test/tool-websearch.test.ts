@@ -11,6 +11,7 @@ import { Session } from "@opencode/core/session"
 import { toSessionError } from "@opencode/core/session/to-session-error"
 import { Tool } from "@opencode/core/tool"
 import { WebSearchTool } from "@opencode/core/tool/plugin/websearch"
+import { WebSearchMcp } from "@opencode/core/plugin/websearch/mcp"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Image } from "@opencode/core/image"
 import { testEffect } from "./lib/effect"
@@ -44,7 +45,7 @@ class Fixture {
   formResponse: Form.TerminalState = { status: "cancelled" }
   formResponses: Form.TerminalState[] = []
   formWait = Effect.void
-  error: HttpClientError.HttpClientError | undefined
+  error: HttpClientError.HttpClientError | WebSearchMcp.ToolError | undefined
   results: readonly WebSearch.Result[] = [
     { url: "https://example.com", title: "Search results", content: "search results", time: {} },
   ]
@@ -425,6 +426,27 @@ describe("WebSearchTool registration", () => {
       )
       expect(fixture.events.filter((event) => event === "query")).toHaveLength(2)
       expect(fixture.formRequests).toEqual([])
+    }),
+  )
+
+  it.effect("reports the provider message for MCP tool errors", () =>
+    Effect.gen(function* () {
+      const fixture = yield* setup
+      const tools = yield* fixture.registry.snapshot()
+      yield* fixture.websearch.select(WebSearch.ID.make("exa"))
+      fixture.error = new WebSearchMcp.ToolError({ message: "You've hit the free MCP rate limit." })
+      const error = yield* tools
+        .execute({
+          sessionID,
+          ...toolIdentity,
+          call: { type: "tool-call", id: "call-mcp-error", name: "websearch", input: { query: "effect" } },
+        })
+        .pipe(Effect.flip)
+      expect(toSessionError(error)).toEqual({
+        type: "tool.execution",
+        message: "Web search failed: You've hit the free MCP rate limit.",
+      })
+      expect(error.metadata).toEqual({ provider: "exa" })
     }),
   )
 
