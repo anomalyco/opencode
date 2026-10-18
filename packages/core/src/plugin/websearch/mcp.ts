@@ -9,6 +9,16 @@ export const MAX_RESPONSE_BYTES = 256 * 1024
 
 const decodeMessage = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
 
+// MCP servers report tool failures, such as an exhausted keyless quota, as a 200 response with `isError`.
+export class ToolError extends Schema.TaggedError<ToolError>()("WebSearchMcp.ToolError", {
+  message: Schema.String,
+}) {}
+
+const ToolStatus = Schema.Struct({
+  isError: Schema.Boolean.pipe(Schema.optional),
+  content: Schema.Array(Schema.Struct({ text: Schema.String.pipe(Schema.optional) })).pipe(Schema.optional),
+})
+
 export const parseResponse = <F extends Schema.Struct.Fields>(body: string, result: Schema.Struct<F>) => {
   const decode = Schema.decodeUnknownEffect(Schema.Struct({ result }))
   // A server may send notifications and requests ahead of the response on the same stream; only a message with an id
@@ -70,7 +80,14 @@ export const call = <F extends Schema.Struct.Fields, R extends Schema.Struct.Fie
         MAX_RESPONSE_BYTES,
         () => new Error(`${tool} response exceeded ${MAX_RESPONSE_BYTES} bytes`),
       )
-      return yield* parseResponse(body.toString("utf8"), schema.output)
+      const text = body.toString("utf8")
+      const status = yield* parseResponse(text, ToolStatus)
+      if (status?.isError)
+        return yield* new ToolError({
+          message:
+            status.content?.flatMap((item) => (item.text ? [item.text] : [])).join("\n") || `${tool} returned an error`,
+        })
+      return yield* parseResponse(text, schema.output)
     }).pipe(
       Effect.scoped,
       Effect.timeoutOrElse({
