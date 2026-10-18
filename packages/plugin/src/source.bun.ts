@@ -67,5 +67,20 @@ export async function prepareSource(entrypoint: string, track: (file: string, di
     }
   }
   visit(root)
-  return { version: String(++generation), load: () => Host.load(entrypoint) }
+  // A default re-export bridge must load its NPM target through the entry loader
+  // before Bun can load it transitively without the host's runtime/JSX rewrite.
+  const trivia = String.raw`(?:\s|//[^\n]*(?:\n|$)|/\*[\s\S]*?\*/)*`
+  const forwarding = new RegExp(
+    String.raw`^${trivia}export\s*\{\s*default\s*\}\s*from\s*(["'])([^"']+)\1\s*;?${trivia}$`,
+  ).exec(readFileSync(root, "utf8"))
+  return {
+    version: String(++generation),
+    load: async () => {
+      if (forwarding && !provides(forwarding[2])) {
+        const dependency = Bun.resolveSync(forwarding[2], path.dirname(root))
+        if (dependency.split(path.sep).includes("node_modules")) await Host.load(pathToFileURL(dependency).href)
+      }
+      return Host.load(entrypoint)
+    },
+  }
 }

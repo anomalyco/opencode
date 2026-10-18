@@ -9,15 +9,23 @@ export function provides(specifier: string) {
   return installed !== undefined && Object.hasOwn(installed, specifier)
 }
 
-export function ensurePluginRuntime() {
+/** Later host consumers may add shared modules without replacing existing owners. */
+export function ensurePluginRuntime(additional: Readonly<Record<string, Record<string, unknown>>> = {}) {
   if (typeof Bun === "undefined") return {}
-  if (installed) return installed
-  const modules = loadRuntimeModules()
-  installed = modules
+  const previous = installed
+  const modules = previous ?? loadRuntimeModules()
+  const added = Object.fromEntries(
+    Object.entries(additional)
+      .filter(([specifier]) => !Object.hasOwn(modules, specifier))
+      .map(([specifier, exports]) => [specifier, () => exports]),
+  )
+  if (previous && Object.keys(added).length === 0) return previous
+  installed = { ...modules, ...added }
+  const pending = previous ? added : installed
   Bun.plugin({
     name: "opencode-plugin-runtime",
     setup(build) {
-      for (const [specifier, load] of Object.entries(modules)) {
+      for (const [specifier, load] of Object.entries(pending)) {
         build.module(specifier, () => {
           const exports = load()
           return exports instanceof Promise
@@ -25,16 +33,17 @@ export function ensurePluginRuntime() {
             : { exports, loader: "object" as const }
         })
       }
-      build.onLoad({ filter: createForeignPackageFilter() }, (args) => {
-        const match = args.path.match(foreignPkgPattern)
-        const target = match ? `${match[2] ?? match[3]}/${match[4]}`.replaceAll("\\", "/") : args.path
-        throw new Error(
-          `Cannot load "${target}" from plugin node_modules: "${target}" is not provided by OpenCode; plugins must use the host's "effect" and "@opencode/plugin" modules.`,
-        )
-      })
+      if (!previous)
+        build.onLoad({ filter: createForeignPackageFilter() }, (args) => {
+          const match = args.path.match(foreignPkgPattern)
+          const target = match ? `${match[2] ?? match[3]}/${match[4]}`.replaceAll("\\", "/") : args.path
+          throw new Error(
+            `Cannot load "${target}" from plugin node_modules: "${target}" is not provided by OpenCode; plugins must use the host's "effect" and "@opencode/plugin" modules.`,
+          )
+        })
     },
   })
-  return modules
+  return installed
 }
 
 export function createForeignPackageFilter(rootsInput: Iterable<string> = resolveHostPackageRoots()) {
