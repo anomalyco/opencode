@@ -24,6 +24,7 @@ const request: MiniFormRequest = {
 
 async function press(screenReader: boolean, ...keys: string[]) {
   const replies: FormReply[] = []
+  const cursorRows: number[] = []
   const app = await testRender(
     () => (
       <RunFormBody
@@ -44,18 +45,24 @@ async function press(screenReader: boolean, ...keys: string[]) {
       if (key === "enter") app.mockInput.pressEnter()
       else app.mockInput.pressKey(key)
       await app.renderOnce()
+      cursorRows.push(app.renderer.getCursorState().y)
     }
-    return replies
+    return { replies, cursorRows }
   } finally {
     app.renderer.destroy()
   }
 }
 
 test("a digit submits the choice outside screen reader mode", async () => {
-  expect((await press(false, "2"))[0]?.answer).toEqual({ target: "prod" })
+  expect((await press(false, "2")).replies[0]?.answer).toEqual({ target: "prod" })
 })
 
 test("a digit only selects in screen reader mode and Enter confirms", async () => {
-  expect(await press(true, "2")).toEqual([])
-  expect((await press(true, "2", "enter"))[0]?.answer).toEqual({ target: "prod" })
+  expect((await press(true, "2")).replies).toEqual([])
+  expect((await press(true, "2", "enter")).replies[0]?.answer).toEqual({ target: "prod" })
+})
+
+test("the cursor moves to the selected choice in screen reader mode", async () => {
+  const { cursorRows } = await press(true, "2", "1")
+  expect(cursorRows[0]! - cursorRows[1]!).toBe(1)
 })
