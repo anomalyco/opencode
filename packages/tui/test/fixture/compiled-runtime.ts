@@ -11,8 +11,17 @@ import { createAppFixture } from "./app"
 // canonical runtime, not depend on being the first initializer.
 ensurePluginRuntime()
 await import("../../src/plugin/runtime-plugin-support.bun")
-const owned = ensurePluginRuntime()
-assert.equal(ensurePluginRuntime({ "solid-js": { createSignal: () => undefined } }), owned)
+let loads = 0
+const owned = ensurePluginRuntime({
+  "runtime-peer/lazy": () => {
+    loads++
+    return { value: 1 }
+  },
+})
+assert.equal(loads, 0)
+assert.equal(ensurePluginRuntime({ "runtime-peer/lazy": () => ({ value: 2 }) }), owned)
+assert.equal(((await Host.load("runtime-peer/lazy")) as { value: number }).value, 1)
+assert.equal(loads, 1)
 
 const directory = process.argv[2]
 assert.ok(directory, "physical NPM package directory is required")
