@@ -1,5 +1,6 @@
 import { toolEntryBody } from "./tool"
 import { monoPrefix, monoToolText } from "./mono"
+import { screenReader } from "./screen-reader"
 import type { RunEntryBody, ScrollbackOptions, StreamCommit } from "./types"
 
 export type EntryFlags = {
@@ -56,7 +57,7 @@ function userBody(raw: string, mono: boolean): RunEntryBody {
 
   const lead = raw.match(/^\n+/)?.[0] ?? ""
   const body = lead ? raw.slice(lead.length) : raw
-  return textBody(`${lead}${mono ? ">" : "›"} ${body}`)
+  return textBody(`${lead}${screenReader.enabled ? "you:" : mono ? ">" : "›"} ${body}`)
 }
 
 function reasoningBody(raw: string, mono: boolean): RunEntryBody {
@@ -78,6 +79,12 @@ function reasoningBody(raw: string, mono: boolean): RunEntryBody {
 
 function systemBody(raw: string, phase: StreamCommit["phase"]): RunEntryBody {
   return textBody(phase === "progress" ? raw : raw.trim())
+}
+
+// Screen reader mode names the speaker on each entry, since color and layout cannot.
+function labelled(label: string, body: RunEntryBody): RunEntryBody {
+  if (!screenReader.enabled || body.type !== "text") return body
+  return textBody(`${label}: ${body.content}`)
 }
 
 function monoBody(body: RunEntryBody): RunEntryBody {
@@ -208,13 +215,16 @@ export function entryBody(commit: StreamCommit, options?: ScrollbackOptions): Ru
   if (commit.kind === "tool") {
     const body = toolEntryBody(commit, raw, options) ?? RUN_ENTRY_NONE
     const result = mono ? monoBody(body) : body
-    if (!mono || body.type !== "text" || result.type !== "text" || commit.phase === "progress") return result
-    return textBody(monoToolText(result.content, true))
+    if (commit.phase === "progress") return result
+    const failed = commit.toolState === "error" || commit.part?.state.status === "error"
+    const label = failed ? "tool error" : "tool"
+    if (!mono || body.type !== "text" || result.type !== "text") return labelled(label, result)
+    return labelled(label, textBody(monoToolText(result.content, true)))
   }
 
   if (commit.kind === "assistant") {
     if (commit.phase === "start") {
-      return RUN_ENTRY_NONE
+      return screenReader.enabled ? textBody("assistant:") : RUN_ENTRY_NONE
     }
 
     if (commit.phase === "final") {
@@ -236,7 +246,7 @@ export function entryBody(commit: StreamCommit, options?: ScrollbackOptions): Ru
     return reasoningBody(raw, mono)
   }
 
-  const body = systemBody(raw, commit.phase)
+  const body = commit.kind === "error" ? labelled("error", systemBody(raw, commit.phase)) : systemBody(raw, commit.phase)
   if (!mono || body.type !== "text") return body
   return textBody(monoPrefix(body.content, true))
 }
