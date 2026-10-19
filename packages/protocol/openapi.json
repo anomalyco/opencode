@@ -16679,6 +16679,9 @@
               "mcp_events": {
                 "type": "boolean"
               },
+              "openai_compatible_discovery": {
+                "type": "boolean"
+              },
               "part_rows": {
                 "type": "boolean"
               },

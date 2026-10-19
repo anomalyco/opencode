@@ -659,6 +659,20 @@ automatic compaction doesn't pause the session. Defaults to `false`. See
 }
 ```
 
+### OpenAI-compatible model discovery
+
+Set `openai_compatible_discovery` to `true` to add the models that OpenAI-compatible providers list at
+`GET {baseURL}/models`, so they don't have to be listed under `models`. Defaults to `false`. See
+[Discovered models](/providers#discovered-models) for how it works.
+
+```jsonc
+{
+  "experimental": {
+    "openai_compatible_discovery": true,
+  },
+}
+```
+
 ### Image generation
 
 `image_generate` sets the default model for the [`experimental_image_generate`](/tools#image-generate) tool, as
