@@ -39,6 +39,7 @@
     "@opencode/app": "workspace:*",
     "@opencode/gui-extensions": "workspace:*",
     "@opencode/client": "workspace:*",
+    "@opencode/util": "workspace:*",
     "@opencode/schema": "workspace:*",
     "@opencode/ui": "workspace:*",
     "@sentry/solid": "catalog:",
