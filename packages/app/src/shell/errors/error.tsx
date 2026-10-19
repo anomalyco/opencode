@@ -262,11 +262,11 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
   const [store, setStore] = createStore<{
     actionError: string | undefined
     captureException: typeof captureException | undefined
-    restartingService: boolean
+    restarting: boolean
   }>({
     actionError: undefined,
     captureException: undefined,
-    restartingService: false,
+    restarting: false,
   })
 
   function ensureFatalErrorRecorded() {
@@ -317,16 +317,15 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
     return state?.status === "ready" || state?.status === "download-required" ? state.version : undefined
   }
 
-  // A service that failed to boot stays registered, so relaunching alone would reattach to it.
-  const restartService = () =>
-    errorDescriptionKey(props.error) === "error.page.description.localServerStartup"
-      ? platform.restartService
-      : undefined
-
-  async function runRestartService(restart: () => Promise<void>) {
-    setStore({ restartingService: true, actionError: undefined })
-    await restart().catch((err) => {
-      setStore({ restartingService: false, actionError: formatError(err, language.t) })
+  async function restart() {
+    setStore({ restarting: true, actionError: undefined })
+    // A service that failed to boot stays registered, so relaunching alone would reattach to it.
+    const service =
+      errorDescriptionKey(props.error) === "error.page.description.localServerStartup"
+        ? platform.restartService
+        : undefined
+    await (service ? service() : platform.restart()).catch((err) => {
+      setStore({ restarting: false, actionError: formatError(err, language.t) })
     })
   }
 
@@ -368,22 +367,8 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
           label={language.t("error.page.details.label")}
           hideLabel
         />
-        <div class="flex flex-row items-center justify-center gap-3 flex-wrap max-w-lg">
-          <Show when={restartService()}>
-            {(restart) => (
-              <Button
-                size="large"
-                variant={store.restartingService ? "loading" : "contrast"}
-                disabled={store.restartingService}
-                onClick={() => void runRestartService(restart())}
-              >
-                {language.t(
-                  store.restartingService ? "error.page.action.restartingService" : "error.page.action.restartService",
-                )}
-              </Button>
-            )}
-          </Show>
-          <Button size="large" onClick={platform.restart}>
+        <div class="flex flex-row items-center justify-center gap-3 flex-wrap max-w-64">
+          <Button size="large" disabled={store.restarting} onClick={() => void restart()}>
             {language.t(platform.platform === "web" ? "error.page.action.reload" : "error.page.action.restart")}
           </Button>
           <Show when={platform.platform === "desktop" && platform.exportDebugLogs}>

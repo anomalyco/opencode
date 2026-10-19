@@ -50,10 +50,6 @@ export const LocalServerStartup = {
   render: () => page(desktop, startupFailure()),
 }
 
-export const LocalServerStartupWithoutRestartService = {
-  render: () => page({ ...desktop, restartService: undefined }, startupFailure()),
-}
-
 export const UnexpectedError = {
   render: () =>
     page(
