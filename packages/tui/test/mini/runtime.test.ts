@@ -2,7 +2,7 @@ import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
 import { OpenCode } from "@opencode/client/promise"
 import { runInteractiveDeferredMode } from "../../src/mini/runtime"
 import type { LifecycleInput } from "../../src/mini/runtime.lifecycle"
-import type { FooterEvent, MiniHost } from "../../src/mini/types"
+import type { FooterEvent, MiniHost, StreamCommit } from "../../src/mini/types"
 import { catalogModel, catalogProvider, stubCatalogLists } from "./fixture/catalog"
 import { createFooterApiFixture } from "./fixture/footer-api"
 import { createTuiResolvedConfig } from "../fixture/tui-runtime"
@@ -587,5 +587,66 @@ describe("run interactive runtime", () => {
     expect(catalogs.reference).toHaveBeenCalledWith(query, { signal: expect.any(AbortSignal) })
     expect(catalogs.command).toHaveBeenCalledWith(query, { signal: expect.any(AbortSignal) })
     expect(fileFind).toHaveBeenCalledWith({ query: "index", type: "file", ...query })
+  })
+})
+
+describe("screen reader mode", () => {
+  async function commitsFor(screenReader: boolean) {
+    const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
+    stubCatalogLists(sdk, {})
+    const commits: StreamCommit[] = []
+    const api = createFooterApiFixture({ commits }).api
+    await runInteractiveDeferredMode(
+      {
+        host: host(),
+        sdk,
+        directory: "/tmp",
+        target: async () => ({
+          sessionID: "ses_root",
+          location: { directory: "/tmp", project: { id: "pro-1", directory: "/tmp", canonical: "/tmp" } },
+          agent: "build",
+          model: undefined,
+          variant: undefined,
+          resume: false,
+        }),
+        agent: "build",
+        model: undefined,
+        variant: undefined,
+        files: [],
+        initialInput: "hello",
+        tuiConfig: createTuiResolvedConfig({ screen_reader: screenReader }),
+      },
+      {
+        createRuntimeLifecycle: async () => ({
+          footer: api,
+          onResize: () => () => {},
+          refreshTheme: () => {},
+          setTitle: () => {},
+          resetForReplay: () => Promise.resolve(),
+          close: () => Promise.resolve(),
+        }),
+        streamTransport: Promise.resolve({
+          createSessionTransport: async () => ({
+            runPromptTurn: async () => api.close(),
+            admitPromptTurn: async () => {},
+            waitForIdle: async () => {},
+            interruptActiveTurn: async () => {},
+            selectSubagent: () => {},
+            replayOnResize: async () => false,
+            close: async () => {},
+          }),
+          formatUnknownError: (error: unknown) => String(error),
+        }),
+      },
+    )
+    return commits.map((commit) => commit.text)
+  }
+
+  test("announces that work started after a prompt is sent", async () => {
+    expect(await commitsFor(true)).toContain("Working...")
+  })
+
+  test("prints nothing extra outside screen reader mode", async () => {
+    expect(await commitsFor(false)).not.toContain("Working...")
   })
 })
