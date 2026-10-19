@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
 import { GenerationOptions, LLMClient, LLMEvent, LanguageModel, ToolDefinition, type LLMRequest } from "@opencode/ai"
 import { OpenAIChat } from "@opencode/ai/protocols"
+import type { StreamOptions } from "@opencode/ai/route"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { llmClient } from "@opencode/core/effect/app-node-platform"
@@ -33,6 +34,7 @@ import { asc, eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 
 let requests: LLMRequest[] = []
+let requestOptions: Array<StreamOptions | undefined> = []
 const model = LanguageModel.make({
   id: "summary-model",
   provider: "test",
@@ -49,8 +51,9 @@ const cost = [
   },
 ]
 const client = Layer.mock(LLMClient.Service)({
-  stream: (request: LLMRequest) => {
+  stream: (request: LLMRequest, options?: StreamOptions) => {
     requests.push(request)
+    requestOptions.push(options)
     return Stream.make(
       LLMEvent.textDelta({ id: "summary", text: "## Objective\n- manual summary" }),
       LLMEvent.stepFinish({
@@ -385,6 +388,41 @@ const recentWithToolOutput = (id: Session.ID, content: SessionMessage.ToolStateC
     const stored = (yield* store.context(id))[0]
     return stored?.type === "compaction" && stored.status === "completed" ? stored.recent : ""
   })
+
+for (const transport of ["websocket", "http"] as const) {
+  it.effect(`summary compaction respects ${transport} so large histories keep the selected transport`, () =>
+    Effect.gen(function* () {
+      requestOptions = []
+      const session = yield* insertSession(Session.ID.make(`ses_summary_transport_${transport}`))
+      const inputID = SessionMessage.ID.create()
+      const bus = yield* Bus.Service
+      const compaction = yield* SessionCompaction.Service
+      yield* bus.publish(SessionEvent.Compaction.Started, {
+        sessionID: session.id,
+        reason: "manual",
+        recent: "",
+        inputID,
+      })
+      const messages = ["Earlier work", "Continue the work"].map((text) =>
+        SessionMessage.User.make({
+          id: SessionMessage.ID.create(),
+          type: "user",
+          text,
+          time: { created: DateTime.makeUnsafe(0) },
+        }),
+      )
+      const context = loaded(session, messages)
+      const outcome = yield* compaction.compact({
+        reason: "manual",
+        inputID,
+        context: { ...context, model: { ...context.model, transport } },
+      })
+      expect(outcome).toEqual({ status: "completed" })
+      expect(requestOptions).toHaveLength(1)
+      expect(requestOptions[0]?.webSocket !== undefined).toBe(transport === "websocket")
+    }),
+  )
+}
 
 it.effect("manual compaction summarizes short context instead of no-op", () =>
   Effect.gen(function* () {
