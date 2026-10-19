@@ -948,3 +948,63 @@ test("escape closes an open command palette instead of cancelling an arriving qu
     scene.app.renderer.destroy()
   }
 })
+for (const [width, height] of [
+  [80, 20],
+  [60, 16],
+]) {
+  test(`scrolls long questions and resets between fields at ${width}x${height}`, async () => {
+    await using tmp = await tmpdir()
+    const details = Array.from({ length: 40 }, (_, i) => `Paragraph ${i + 1}: details of the design.`).join("\n")
+    const prompt = await mountForm(
+      tmp.path,
+      width,
+      [
+        {
+          key: "layout",
+          type: "string",
+          description: `QUESTION-START\n${details}\nQUESTION-END`,
+          options: [
+            { value: "grid", label: "Grid" },
+            { value: "list", label: "List" },
+          ],
+        },
+        {
+          key: "theme",
+          type: "string",
+          description: `SECOND-START\n${details}\nSECOND-END`,
+          options: [
+            { value: "grid", label: "Grid" },
+            { value: "list", label: "List" },
+          ],
+        },
+      ],
+      height,
+    )
+    prompt.app.renderer.pause()
+    try {
+      expect(prompt.app.captureCharFrame()).toContain("QUESTION-START")
+      expect(prompt.app.captureCharFrame()).toContain("esc dismiss")
+      const frames: string[] = []
+      for (let i = 0; i < 40; i++) {
+        prompt.app.mockInput.pressKey("\u001b[6~")
+        await prompt.app.renderOnce()
+        frames.push(prompt.app.captureCharFrame())
+      }
+      expect(frames.some((frame) => frame.includes("QUESTION-END"))).toBe(true)
+      await prompt.app.waitForFrame((frame) => frame.includes("List"))
+      for (let i = 0; i < 40; i++) prompt.app.mockInput.pressKey("\u001b[5~")
+      await prompt.app.waitForFrame((frame) => frame.includes("QUESTION-START"))
+      for (let i = 0; i < 40; i++) await prompt.app.mockMouse.scroll(10, 5, "down")
+      await prompt.app.waitForFrame((frame) => frame.includes("QUESTION-END"))
+      prompt.app.mockInput.pressKey("2")
+      await prompt.app.waitForFrame((frame) => frame.includes("SECOND-START"))
+      prompt.app.mockInput.pressKey("1")
+      await prompt.app.waitForFrame((frame) => frame.includes("enter submit"))
+      prompt.app.mockInput.pressEnter()
+      await prompt.app.waitFor(() => prompt.replies.length === 1)
+      expect(prompt.replies).toEqual([{ answer: { layout: "list", theme: "grid" } }])
+    } finally {
+      prompt.app.renderer.destroy()
+    }
+  })
+}
