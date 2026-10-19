@@ -126,6 +126,11 @@ test("plain opencode hands off to the minimal interface in screen reader mode", 
   expect(await miniSettings({ config: { screen_reader: true }, flag: Option.none(), plain: true })).toMatchObject(quiet)
 })
 
+test("the autoaccept config setting alone does not auto-accept in the minimal interface", async () => {
+  const config = { session: { permissions: "autoaccept" } }
+  expect((await runHandler({ config, flag: Option.none() }))?.session).toMatchObject({ permissions: "prompt" })
+})
+
 test("--auto auto-accepts permissions in the minimal interface", async () => {
   expect((await runHandler({ config: {}, flag: Option.none(), auto: true }))?.session).toMatchObject({
     permissions: "autoaccept",
