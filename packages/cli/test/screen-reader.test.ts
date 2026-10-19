@@ -1,6 +1,6 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { Global } from "@opencode/util/global"
-import { ConfigProvider, Effect, Option } from "effect"
+import { ConfigProvider, Effect, type FileSystem, type Scope, Option } from "effect"
 import { afterAll, expect, mock, test } from "bun:test"
 import { mkdir, rm } from "node:fs/promises"
 import path from "node:path"
@@ -19,9 +19,15 @@ mock.module("../src/mini", () => ({
   },
 }))
 const handler = (await import("../src/commands/handlers/mini")).default
+const plainHandler = (await import("../src/commands/handlers/default")).default
 afterAll(() => mock.restore())
 
-async function miniSettings(input: { config: object; flag: Option.Option<boolean>; env?: Record<string, string> }) {
+async function miniSettings(input: {
+  config: object
+  flag: Option.Option<boolean>
+  env?: Record<string, string>
+  plain?: boolean
+}) {
   const root = await Bun.$`mktemp -d`.text().then((value) => value.trim())
   const configDirectory = path.join(root, "config")
   await mkdir(configDirectory, { recursive: true })
@@ -32,21 +38,37 @@ async function miniSettings(input: { config: object; flag: Option.Option<boolean
   })
 
   try {
+    const url = Option.some(server.url.toString())
+    const command = input.plain
+      ? plainHandler({
+          server: url,
+          standalone: false,
+          auto: false,
+          yolo: false,
+          dangerouslySkipPermissions: false,
+          directory: Option.none(),
+          continue: false,
+          session: Option.none(),
+          prompt: Option.none(),
+          screenReader: input.flag,
+        })
+      : handler({
+          server: url,
+          standalone: false,
+          continue: false,
+          session: Option.none(),
+          fork: false,
+          replay: Option.none(),
+          replayLimit: Option.none(),
+          model: Option.none(),
+          agent: Option.none(),
+          prompt: Option.none(),
+          demo: false,
+          screenReader: input.flag,
+        })
     await Effect.runPromise(
-      handler({
-        server: Option.some(server.url.toString()),
-        standalone: false,
-        continue: false,
-        session: Option.none(),
-        fork: false,
-        replay: Option.none(),
-        replayLimit: Option.none(),
-        model: Option.none(),
-        agent: Option.none(),
-        prompt: Option.none(),
-        demo: false,
-        screenReader: input.flag,
-      }).pipe(
+      // The plain handler also needs services that it only reaches after the screen reader handoff.
+      (command as Effect.Effect<void, unknown, Config.Service | Global.Service | FileSystem.FileSystem | Scope.Scope>).pipe(
         Effect.provide(Config.layer),
         // The default provider reads process.env once per process, so inject the environment.
         Effect.provide(
@@ -89,4 +111,9 @@ test("NO_COLOR makes the interface monochrome without the rest of screen reader 
   expect(mini?.mono).toBe(true)
   expect(mini?.splash).not.toBe("hide")
   expect((await miniSettings({ config: {}, flag: Option.none(), env: { NO_COLOR: "" } }))?.mono).not.toBe(true)
+})
+
+test("plain opencode hands off to the minimal interface in screen reader mode", async () => {
+  expect(await miniSettings({ config: {}, flag: Option.some(true), plain: true })).toMatchObject(quiet)
+  expect(await miniSettings({ config: { screen_reader: true }, flag: Option.none(), plain: true })).toMatchObject(quiet)
 })
