@@ -1,7 +1,8 @@
 /** @jsxImportSource @opentui/solid */
 import { TextAttributes, type ColorInput } from "@opentui/core"
-import { useTerminalDimensions, type JSX } from "@opentui/solid"
+import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import { createEffect, createMemo, createSignal, type Accessor } from "solid-js"
+import { screenReader } from "./screen-reader"
 import { transparent, type RunFooterTheme } from "./theme"
 import { Locale } from "../util/locale"
 import { stringWidth } from "../util/string-width"
@@ -91,7 +92,10 @@ export function RunFooterMenu(props: {
   background?: boolean
   headerColor?: ColorInput
   mono?: boolean
+  // Park the terminal cursor on the selected row so screen readers announce it.
+  cursor?: boolean
 }) {
+  const renderer = useRenderer()
   const term = useTerminalDimensions()
   const limit = () => Math.max(1, Math.min(props.rows(), props.limit ?? FOOTER_MENU_ROWS))
   const border = () => props.border ?? true
@@ -240,7 +244,20 @@ export function RunFooterMenu(props: {
             return footerMenuText(row.item.description, remaining, props.mono)
           }
           return (
-            <box height={1} flexShrink={0} paddingRight={0} flexDirection="row" backgroundColor={background()}>
+            <box
+              height={1}
+              flexShrink={0}
+              paddingRight={0}
+              flexDirection="row"
+              backgroundColor={background()}
+              renderAfter={
+                props.cursor && screenReader.enabled && active()
+                  ? function () {
+                      renderer.setCursorPosition(this.x + 1, this.y + 1, true)
+                    }
+                  : undefined
+              }
+            >
               {border() ? (
                 <text fg={props.theme().actionFocusedText} bg={background()} wrapMode="none">
                   {active() ? (props.mono ? ">" : "▌") : " "}

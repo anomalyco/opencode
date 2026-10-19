@@ -16,6 +16,7 @@ import {
 } from "./footer.menu"
 import { stringWidth } from "../util/string-width"
 import { monoShortcut } from "./mono"
+import { screenReader } from "./screen-reader"
 import type { RunFooterTheme } from "./theme"
 import type {
   FooterQueuedPrompt,
@@ -336,6 +337,7 @@ function PanelShell(props: {
       >
         <input
           width="100%"
+          showCursor={!screenReader.enabled}
           focusedBackgroundColor={props.background === false ? "transparent" : props.theme().formfieldFocusedBg}
           focusedTextColor={
             props.background === false ? props.theme().formfieldText : props.theme().formfieldFocusedText
@@ -608,6 +610,7 @@ export function RunCommandMenuBody(props: {
       mono={props.mono}
     >
       <RunFooterMenu
+        cursor
         theme={props.theme}
         items={controller.items}
         selected={controller.menu.selected}
@@ -673,6 +676,7 @@ export function RunAgentSelectBody(props: {
       mono={props.mono}
     >
       <RunFooterMenu
+        cursor
         theme={props.theme}
         items={controller.items}
         selected={controller.menu.selected}
@@ -840,6 +844,7 @@ export function RunSettingsBody(props: {
       mono={props.mono}
     >
       <RunFooterMenu
+        cursor
         theme={props.theme}
         items={controller.items}
         selected={controller.menu.selected}
@@ -924,6 +929,7 @@ export function RunSubagentSelectBody(props: {
       mono={props.mono}
     >
       <RunFooterMenu
+        cursor
         theme={props.theme}
         items={controller.items}
         selected={controller.menu.selected}
@@ -1019,6 +1025,7 @@ export function RunQueuedPromptSelectBody(props: {
       mono={props.mono}
     >
       <RunFooterMenu
+        cursor
         theme={props.theme}
         items={controller.items}
         selected={controller.menu.selected}
@@ -1088,6 +1095,7 @@ export function RunVariantSelectBody(props: {
       mono={props.mono}
     >
       <RunFooterMenu
+        cursor
         theme={props.theme}
         items={controller.items}
         selected={controller.menu.selected}
@@ -1180,6 +1188,7 @@ export function RunModelSelectBody(props: {
       background={false}
     >
       <RunFooterMenu
+        cursor
         theme={props.theme}
         items={() =>
           controller.query().trim() ||

@@ -34,6 +34,7 @@ import { RUN_SUBAGENT_PANEL_ROWS, footerPanelLayout } from "./footer.command"
 import { SUBAGENT_INSPECTOR_ROWS } from "./footer.subagent"
 import { TEXTAREA_MIN_ROWS, footerPromptLayout } from "./footer.prompt"
 import { RunFooterView } from "./footer.view"
+import { screenReader } from "./screen-reader"
 import { monoSnapshot } from "./mono"
 import { RunScrollbackStream } from "./scrollback.surface"
 import { resolveRunTheme, type RunTheme } from "./theme"
@@ -321,6 +322,7 @@ export class RunFooter implements FooterApi {
     this.renderer.prependInputHandler(this.handleThemeNotification)
     this.unsubscribeThemeSignal = options.subscribeThemeSignal(this.handleThemeSignal)
 
+    screenReader.enabled = options.tuiConfig.screen_reader ?? false
     const footer = this
     void render(
       () =>
