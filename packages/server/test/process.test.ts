@@ -268,9 +268,7 @@ it.live("allows requests without credentials when authentication is disabled", (
       app: { version: "test-version" },
       database: { path: ":memory:" },
     })
-    const response = yield* Effect.promise(() =>
-      fetch(new URL("/api/health", HttpServer.formatAddress(server.address))),
-    )
+    const response = yield* Effect.promise(() => fetch(new URL("/api/info", HttpServer.formatAddress(server.address))))
 
     expect(response.status).toBe(200)
     expect(yield* Effect.promise(() => response.json())).toMatchObject({ version: "test-version" })

@@ -62,6 +62,28 @@ test("service disabled accepts only booleans without changing configuration on i
   }
 })
 
+test("service auth defaults on and preserves the saved password when toggled", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-auth-config-"))
+  const layer = Global.layerWith({ config: path.join(root, "config"), state: path.join(root, "state") })
+  const run = <A, E>(effect: Effect.Effect<A, E, Global.Service | FileSystem.FileSystem>) =>
+    Effect.runPromise(effect.pipe(Effect.provide(layer), Effect.provide(NodeFileSystem.layer)))
+  try {
+    expect(await run(ServiceConfig.get("auth"))).toBe("true")
+    await expect(run(ServiceConfig.set("auth", "yes"))).rejects.toThrow("Auth must be true or false")
+    expect(await run(ServiceConfig.read())).toEqual({})
+    await run(ServiceConfig.password("stored-password"))
+    await run(ServiceConfig.set("auth", "false"))
+    expect(await run(ServiceConfig.get("auth"))).toBe("false")
+    expect(await run(ServiceConfig.read())).toEqual({ auth: false, password: "stored-password" })
+    await run(ServiceConfig.set("auth", "true"))
+    expect(await run(ServiceConfig.get("auth"))).toBe("true")
+    await run(ServiceConfig.unset("auth"))
+    expect(await run(ServiceConfig.read())).toEqual({ password: "stored-password" })
+  } finally {
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})
+
 // Enabling remote creates a real tunnel, so only the paths that stay local are covered here.
 test("service remote accepts only booleans and persists across set and unset", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-remote-config-"))
@@ -486,6 +508,51 @@ test("configured managed service port overrides the channel default", async () =
     await fs.rm(root, { recursive: true, force: true })
   }
 }, 30_000)
+
+test.each([
+  { args: ["--no-auth"], env: { OPENCODE_AUTH: "true" }, config: { auth: true } },
+  { args: [], env: { OPENCODE_AUTH: "false" }, config: {} },
+  { args: [], env: { OPENCODE_AUTH: "true" }, config: { auth: false } },
+  { args: [], env: {}, config: { env: { OPENCODE_AUTH: "false" } } },
+])(
+  "managed service supports passwordless discovery and shutdown: %j",
+  async ({ args, env, config }) => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-no-auth-"))
+    const file = path.join(root, "config", ServiceConfig.filename())
+    const registration = path.join(root, "state", "opencode", ServiceConfig.filename())
+    await fs.mkdir(path.dirname(file), { recursive: true })
+    await fs.writeFile(file, JSON.stringify({ password: "stored-password", ...config }))
+    const owner = Bun.spawn(
+      [process.execPath, path.join(import.meta.dir, "../src/index.ts"), "serve", "--service", "--port", "0", ...args],
+      { env: isolatedEnv(root, env), stderr: "pipe", stdout: "ignore" },
+    )
+    try {
+      const info = await waitForInfo(registration)
+      expect(info.password).toBeUndefined()
+      expect((await Bun.file(file).json()).password).toBe("stored-password")
+      const endpoint = await Effect.runPromise(
+        Service.discover({ file: registration }).pipe(
+          Effect.filterOrFail((value) => value !== undefined),
+          Effect.retry(Schedule.spaced("50 millis")),
+          Effect.timeout("20 seconds"),
+          Effect.provide(NodeFileSystem.layer),
+        ),
+      )
+      expect(endpoint.auth).toBeUndefined()
+      const response = await fetch(new URL("/api/info", endpoint.url))
+      expect(response.status).toBe(200)
+      expect(await response.json()).toMatchObject({ pid: owner.pid })
+      await Effect.runPromise(Service.stop({ file: registration }).pipe(Effect.provide(NodeFileSystem.layer)))
+      expect(await waitForExit(owner)).toBe(true)
+      expect(await Bun.file(registration).exists()).toBe(false)
+    } finally {
+      owner.kill("SIGTERM")
+      await owner.exited
+      await fs.rm(root, { recursive: true, force: true })
+    }
+  },
+  30_000,
+)
 
 test.each([
   { args: [], origins: ["http://192.0.2.10:3001", "https://configured.example.com"] },
