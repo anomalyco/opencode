@@ -18723,6 +18723,9 @@
               "browser_stream_tunnel": {
                 "type": "boolean"
               },
+              "openai_compatible_discovery": {
+                "type": "boolean"
+              },
               "video_generate": {
                 "anyOf": [
                   {
