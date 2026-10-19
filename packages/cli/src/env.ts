@@ -15,6 +15,9 @@ export const password = Config.Redacted("OPENCODE_PASSWORD").pipe(
 // Forces screen reader mode on or off, overriding the config file. The --screen-reader flag wins over it.
 export const screenReader = Config.Boolean("OPENCODE_SCREEN_READER").pipe(Config.withDefault(undefined))
 
+// https://no-color.org: any non-empty value turns color off.
+export const noColor = Config.String("NO_COLOR").pipe(Config.withDefault(""))
+
 export function session() {
   return Object.fromEntries(
     Object.entries(process.env).filter(

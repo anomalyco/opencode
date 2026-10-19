@@ -21,7 +21,7 @@ mock.module("../src/mini", () => ({
 const handler = (await import("../src/commands/handlers/mini")).default
 afterAll(() => mock.restore())
 
-async function miniSettings(input: { config: object; flag: Option.Option<boolean>; env?: string }) {
+async function miniSettings(input: { config: object; flag: Option.Option<boolean>; env?: Record<string, string> }) {
   const root = await Bun.$`mktemp -d`.text().then((value) => value.trim())
   const configDirectory = path.join(root, "config")
   await mkdir(configDirectory, { recursive: true })
@@ -51,7 +51,7 @@ async function miniSettings(input: { config: object; flag: Option.Option<boolean
         // The default provider reads process.env once per process, so inject the environment.
         Effect.provide(
           ConfigProvider.layer(
-            ConfigProvider.fromEnvRecord(input.env === undefined ? {} : { OPENCODE_SCREEN_READER: input.env }),
+            ConfigProvider.fromEnvRecord(input.env ?? {}),
           ),
         ),
         Effect.provide(Global.layerWith({ config: configDirectory, state: path.join(root, "state") })),
@@ -77,9 +77,16 @@ test("interface stays unchanged without screen reader mode", async () => {
 })
 
 test("env overrides config, flag overrides env", async () => {
-  expect(await miniSettings({ config: {}, flag: Option.none(), env: "true" })).toMatchObject(quiet)
-  expect((await miniSettings({ config: { screen_reader: true }, flag: Option.none(), env: "false" }))?.mono).not.toBe(
+  expect(await miniSettings({ config: {}, flag: Option.none(), env: { OPENCODE_SCREEN_READER: "true" } })).toMatchObject(quiet)
+  expect((await miniSettings({ config: { screen_reader: true }, flag: Option.none(), env: { OPENCODE_SCREEN_READER: "false" } }))?.mono).not.toBe(
     true,
   )
-  expect(await miniSettings({ config: {}, flag: Option.some(true), env: "false" })).toMatchObject(quiet)
+  expect(await miniSettings({ config: {}, flag: Option.some(true), env: { OPENCODE_SCREEN_READER: "false" } })).toMatchObject(quiet)
+})
+
+test("NO_COLOR makes the interface monochrome without the rest of screen reader mode", async () => {
+  const mini = await miniSettings({ config: {}, flag: Option.none(), env: { NO_COLOR: "1" } })
+  expect(mini?.mono).toBe(true)
+  expect(mini?.splash).not.toBe("hide")
+  expect((await miniSettings({ config: {}, flag: Option.none(), env: { NO_COLOR: "" } }))?.mono).not.toBe(true)
 })
