@@ -131,6 +131,12 @@ test("the autoaccept config setting alone does not auto-accept in the minimal in
   expect((await runHandler({ config, flag: Option.none() }))?.session).toMatchObject({ permissions: "prompt" })
 })
 
+test("plain opencode keeps the autoaccept config setting across the handoff", async () => {
+  const config = { session: { permissions: "autoaccept" } }
+  const session = (await runHandler({ config, flag: Option.some(true), plain: true }))?.session
+  expect(session).toMatchObject({ permissions: "autoaccept" })
+})
+
 test("--auto auto-accepts permissions in the minimal interface", async () => {
   expect((await runHandler({ config: {}, flag: Option.none(), auto: true }))?.session).toMatchObject({
     permissions: "autoaccept",

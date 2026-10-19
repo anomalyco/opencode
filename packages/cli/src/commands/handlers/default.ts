@@ -22,8 +22,8 @@ export default Runtime.handler(Commands, (input) =>
     const requestedServer = Option.getOrUndefined(input.server)
     if (requestedDirectory !== undefined) process.chdir(requestedDirectory)
     const config = yield* Config.Service
-    const screenReader =
-      Option.getOrUndefined(input.screenReader) ?? (yield* Env.screenReader) ?? (yield* config.get()).screen_reader
+    const settings = yield* config.get()
+    const screenReader = Option.getOrUndefined(input.screenReader) ?? (yield* Env.screenReader) ?? settings.screen_reader
     if (screenReader) {
       // The full-screen interface redraws in place, which screen readers cannot follow. Mini appends to scrollback.
       const { start } = yield* Effect.promise(() => import("./mini"))
@@ -40,7 +40,8 @@ export default Runtime.handler(Commands, (input) =>
         replayLimit: Option.none(),
         demo: false,
         screenReader: Option.some(true),
-        auto: input.auto,
+        // The full interface honors this setting, so the handoff keeps it.
+        auto: input.auto || settings.session?.permissions === "autoaccept",
         yolo: input.yolo,
         dangerouslySkipPermissions: input.dangerouslySkipPermissions,
       })
