@@ -922,6 +922,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                                   formStates.delete(input.formID)
                                 }}
                                 mono={props.mono}
+                                screenReader={props.tuiConfig.screen_reader}
                               />
                             )}
                           </For>

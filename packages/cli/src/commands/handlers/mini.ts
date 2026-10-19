@@ -39,7 +39,7 @@ export const start = (input: Input<typeof Commands.commands.mini>) =>
         replayLimit: Option.getOrUndefined(input.replayLimit) ?? resolved.mini?.replay_limit,
         demo: input.demo,
         tuiConfig: screenReader
-          ? { ...resolved, mini: { ...resolved.mini, splash: "hide", footer: "hide", mono: true } }
+          ? { ...resolved, screen_reader: true, mini: { ...resolved.mini, splash: "hide", footer: "hide", mono: true } }
           : resolved,
         config: {
           update: (update) => runServicePromise(config.update(update)),

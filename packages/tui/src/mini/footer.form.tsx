@@ -45,6 +45,7 @@ export function RunFormBody(props: {
   state?: FormBodyState
   onState?: (state: FormBodyState) => void
   mono?: boolean
+  screenReader?: boolean
 }) {
   const renderer = useRenderer()
   const dims = useTerminalDimensions()
@@ -281,7 +282,9 @@ export function RunFormBody(props: {
     const total = rows().length + (custom() ? 1 : 0)
     const digit = Number(event.name)
     if (!Number.isNaN(digit) && digit >= 1 && digit <= Math.min(total, 9)) {
-      choose(digit - 1)
+      // Screen reader users need Enter to confirm, so a digit only moves the selection.
+      if (props.screenReader) setState((previous) => formSetSelected(previous, digit - 1))
+      else choose(digit - 1)
       event.preventDefault()
       return
     }
