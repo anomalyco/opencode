@@ -84,7 +84,11 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
         yield* RetainedImage.retain(global.cache, "service")
       const { start } = yield* Effect.promise(() => import("@opencode/server/process"))
       const environmentPassword = yield* Env.password
-      const auth = !options.noAuth && (config.auth ?? (yield* Env.auth))
+      const auth = options.mode === "stdio" || (!options.noAuth && (config.auth ?? (yield* Env.auth)))
+      if (!auth && config.remote !== undefined)
+        return yield* Effect.fail(
+          new Error("Remote access requires authentication. Enable auth or disable remote access in the service config."),
+        )
       // Keep the lease credential out of the environment inherited by tools.
       if (options.mode === "stdio") {
         delete process.env.OPENCODE_PASSWORD
@@ -210,6 +214,8 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
       }
       const url = HttpServer.formatAddress(server.address)
       console.log(options.mode === "stdio" ? JSON.stringify({ url }) : `server listening on ${url}`)
+      if (!password)
+        console.warn("WARNING: Authentication is disabled. Anyone who can reach this server can use its tools.")
       if (foreground && password && !environmentPassword) console.log(`server password ${password}`)
       return yield* options.mode === "service"
         ? server.shutdown
