@@ -358,9 +358,6 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
               ? language.t("error.page.description.status", { status: status()! })
               : language.t(errorDescriptionKey(props.error))}
           </p>
-          <Show when={restartService()}>
-            <p class="text-sm text-text-weak max-w-md text-balance">{language.t("error.page.hint.restartService")}</p>
-          </Show>
         </div>
         <TextField
           value={formattedError()}
