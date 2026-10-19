@@ -398,6 +398,34 @@ The TUI can request attention for questions, permissions, session errors, and co
 
 ---
 
+## Screen reader mode
+
+Screen reader mode replaces the full-screen interface with the minimal interface (`opencode mini`), which appends output to your terminal scrollback instead of redrawing the screen. It is off by default and is never detected automatically.
+
+Turn it on with any of these, in order of precedence:
+
+1. The `--screen-reader` flag, or `--no-screen-reader` to force it off.
+2. The `OPENCODE_SCREEN_READER` environment variable (`true` or `false`).
+3. The `screen_reader` option in `cli.json`, in your OpenCode config directory.
+
+```json title="cli.json"
+{
+  "$schema": "https://opencode.ai/v2/cli.json",
+  "screen_reader": true
+}
+```
+
+OpenCode prints `Screen reader mode on.` when it starts. In this mode:
+
+- The splash screen, the persistent footer details, and color are turned off.
+- OpenCode prints `Working...` when it starts working on a prompt.
+- Menus and question lists move the terminal cursor to the selected row, so your screen reader reads it as you move.
+- Pressing a number in a question list selects that option. Press Enter to confirm.
+
+The full-screen interface has features the minimal interface does not. Plain `opencode` hands off to the minimal interface in this mode, and the `--auto` flag does not carry over.
+
+---
+
 ## Customization
 
 You can customize various aspects of the TUI view using the command palette (`ctrl+p`). These settings persist across restarts.
