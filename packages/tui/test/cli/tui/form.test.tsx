@@ -948,6 +948,57 @@ test("escape closes an open command palette instead of cancelling an arriving qu
     scene.app.renderer.destroy()
   }
 })
+for (const [width, height, description] of [
+  [100, 26, "Choose an option"],
+  [60, 16, Array.from({ length: 40 }, (_, i) => `Question paragraph ${i + 1}`).join("\n")],
+] as const) {
+  test(`keeps keyboard choices and the custom editor visible at ${width}x${height}`, async () => {
+    await using tmp = await tmpdir()
+    const prompt = await mountForm(
+      tmp.path,
+      width,
+      [
+        {
+          key: "target",
+          type: "multiselect",
+          description,
+          options: Array.from({ length: 14 }, (_, i) => ({ value: `value${i + 1}`, label: `Option${i + 1}` })),
+          custom: true,
+        },
+      ],
+      height,
+    )
+    prompt.app.renderer.pause()
+    try {
+      for (let i = 0; i < 13; i++) prompt.app.mockInput.pressArrow("down")
+      await prompt.app.waitForFrame((frame) => frame.includes("14.") && frame.includes("Option14"))
+      expect(prompt.app.captureCharFrame()).toContain("esc dismiss")
+      for (let i = 0; i < 13; i++) prompt.app.mockInput.pressArrow("up")
+      await prompt.app.waitForFrame((frame) => frame.includes("1. [ ] Option1 "))
+      for (let i = 0; i < 13; i++) prompt.app.mockInput.pressKey("j")
+      await prompt.app.waitForFrame((frame) => frame.includes("14. [ ] Option14"))
+      for (let i = 0; i < 13; i++) prompt.app.mockInput.pressKey("k")
+      await prompt.app.waitForFrame((frame) => frame.includes("1. [ ] Option1 "))
+      prompt.app.mockInput.pressKey("9")
+      await prompt.app.waitForFrame((frame) => frame.includes("9. [✓] Option9"))
+      for (let i = 0; i < 6; i++) prompt.app.mockInput.pressArrow("down")
+      await prompt.app.waitForFrame((frame) => frame.includes("Type your own answer"))
+      // Keep the custom row selected while moving its viewport away.
+      for (let i = 0; i < 40; i++) prompt.app.mockInput.pressKey("\u001b[5~")
+      await prompt.app.waitForFrame((frame) => frame.includes(description.split("\n")[0]))
+      prompt.app.mockInput.pressEnter()
+      await prompt.app.waitFor(() => prompt.app.renderer.currentFocusedEditor !== null)
+      await prompt.app.waitForFrame((frame) => frame.includes("Type your own answer"))
+      await prompt.app.mockInput.typeText("keyboard custom")
+      await prompt.app.waitForFrame((frame) => frame.includes("keyboard custom"))
+      expect(prompt.replies).toEqual([])
+    } finally {
+      prompt.app.renderer.destroy()
+    }
+  })
+}
+
+
 for (const [width, height] of [
   [80, 20],
   [60, 16],

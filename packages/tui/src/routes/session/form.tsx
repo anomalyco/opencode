@@ -91,6 +91,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
   let textarea: TextareaRenderable | undefined
   const [inputTarget, setInputTarget] = createSignal<TextareaRenderable>()
   let content: ScrollBoxRenderable | undefined
+  let choices: BoxRenderable | undefined
   let review: ScrollBoxRenderable | undefined
 
   const message = createMemo(() => {
@@ -241,6 +242,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
     }
     target.focusable = true
     target.focus()
+    if (other()) select(store.selected)
   })
 
   onCleanup(
@@ -323,8 +325,15 @@ export function FormPrompt(props: { form: FormWithLocation }) {
     setStore("error", "")
   }
 
+  function select(index: number) {
+    setStore("selected", index)
+    const row = choices?.getChildren()[index]
+    if (row) content?.scrollChildIntoView(row.id)
+  }
+
   function selectOption() {
     if (other()) {
+      select(store.selected)
       if (!multi()) {
         setStore("editing", true)
         return
@@ -349,7 +358,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
   function pasteCustom(value: string) {
     const current = answerField()
     if (!current || textual() || !custom() || confirm()) return false
-    setStore("selected", rows().length)
+    select(rows().length)
     updateCustom(current, input() + value)
     setStore("editing", true)
     return true
@@ -616,7 +625,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
           if (textual() || !textarea || textarea.isDestroyed || store.selected === 0) return false
           if (textarea.scrollY + textarea.visualCursor.visualRow > 0) return false
           setStore("editing", false)
-          setStore("selected", store.selected - 1)
+          select(store.selected - 1)
         },
       },
       {
@@ -737,7 +746,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                   title: `Select answer ${index + 1}`,
                   group: "Form",
                   run: () => {
-                    setStore("selected", index)
+                    select(index)
                     selectOption()
                   },
                 })),
@@ -745,25 +754,25 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                   bind: "up",
                   title: "Previous answer",
                   group: "Form",
-                  run: () => setStore("selected", (store.selected - 1 + total) % total),
+                  run: () => select((store.selected - 1 + total) % total),
                 },
                 {
                   bind: "k",
                   title: "Previous answer",
                   group: "Form",
-                  run: () => setStore("selected", (store.selected - 1 + total) % total),
+                  run: () => select((store.selected - 1 + total) % total),
                 },
                 {
                   bind: "down",
                   title: "Next answer",
                   group: "Form",
-                  run: () => setStore("selected", (store.selected + 1) % total),
+                  run: () => select((store.selected + 1) % total),
                 },
                 {
                   bind: "j",
                   title: "Next answer",
                   group: "Form",
-                  run: () => setStore("selected", (store.selected + 1) % total),
+                  run: () => select((store.selected + 1) % total),
                 },
                 { bind: "return", title: "Select answer", group: "Form", run: () => selectOption() },
                 ...(multi()
@@ -930,7 +939,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
               </box>
             </Show>
             <Show when={!textual()}>
-              <box>
+              <box ref={(r: BoxRenderable) => (choices = r)}>
                 <For each={rows()}>
                   {(row, i) => {
                     const active = () => i() === store.selected
@@ -941,8 +950,8 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                     }
                     return (
                       <box
-                        onMouseMove={() => setStore("selected", i())}
-                        onMouseDown={() => setStore("selected", i())}
+                        onMouseMove={() => select(i())}
+                        onMouseDown={() => select(i())}
                         onMouseUp={() => {
                           if (renderer.getSelection()?.getSelectedText()) return
                           selectOption()
@@ -995,8 +1004,8 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                 </For>
                 <Show when={custom()}>
                   <box
-                    onMouseMove={() => setStore("selected", rows().length)}
-                    onMouseDown={() => setStore("selected", rows().length)}
+                    onMouseMove={() => select(rows().length)}
+                    onMouseDown={() => select(rows().length)}
                     onMouseUp={() => {
                       if (renderer.getSelection()?.getSelectedText()) return
                       selectOption()
