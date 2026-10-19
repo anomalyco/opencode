@@ -90,6 +90,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
 
   let textarea: TextareaRenderable | undefined
   const [inputTarget, setInputTarget] = createSignal<TextareaRenderable>()
+  let content: ScrollBoxRenderable | undefined
   let review: ScrollBoxRenderable | undefined
 
   const message = createMemo(() => {
@@ -139,7 +140,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
     return current?.type === "external" ? current : undefined
   })
   const confirm = createMemo(() => !single() && store.tab >= fields().length)
-  const reviewMaxHeight = createMemo(() => Math.max(3, dimensions().height - 14))
+  const contentMaxHeight = createMemo(() => Math.max(3, dimensions().height - 14))
   const configuredRows = createMemo(() => {
     const current = answerField()
     return current ? formRows(current) : []
@@ -314,6 +315,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
   }
 
   function selectTab(index: number) {
+    content?.scrollTo(0)
     const next = fields()[index]
     setStore("tab", index)
     setStore("selected", next && isFormAnswerField(next) ? formSelected(next, store.answers[next.key]) : 0)
@@ -718,6 +720,18 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                 { bind: "j", title: "Scroll review", group: "Form", run: () => review?.scrollBy(1) },
               ]
             : [
+                {
+                  bind: "pageup",
+                  title: "Scroll form up",
+                  group: "Form",
+                  run: () => content?.scrollBy(-1, "viewport"),
+                },
+                {
+                  bind: "pagedown",
+                  title: "Scroll form down",
+                  group: "Form",
+                  run: () => content?.scrollBy(1, "viewport"),
+                },
                 ...Array.from({ length: max }, (_, index) => ({
                   bind: String(index + 1),
                   title: `Select answer ${index + 1}`,
@@ -880,7 +894,12 @@ export function FormPrompt(props: { form: FormWithLocation }) {
         </Show>
 
         <Show when={!confirm() && answerField()}>
-          <box paddingLeft={1} gap={1}>
+          <scrollbox
+            maxHeight={contentMaxHeight()}
+            contentOptions={{ minHeight: 0, paddingLeft: 1, gap: 1 }}
+            scrollbarOptions={{ visible: false }}
+            ref={(r: ScrollBoxRenderable) => (content = r)}
+          >
             <box>
               <text fg={theme.text.base}>{answerField()!.description ?? formLabel(answerField()!)}</text>
             </box>
@@ -1059,12 +1078,12 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                 </Show>
               </box>
             </Show>
-          </box>
+          </scrollbox>
         </Show>
 
         <Show when={confirm()}>
           <scrollbox
-            maxHeight={reviewMaxHeight()}
+            maxHeight={contentMaxHeight()}
             contentOptions={{ minHeight: 0 }}
             scrollbarOptions={{ visible: false }}
             ref={(r: ScrollBoxRenderable) => (review = r)}
@@ -1144,7 +1163,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
               {"↑↓"} <span style={{ fg: theme.text.muted }}>select</span>
             </text>
           </Show>
-          <Show when={confirm() && reviewContentHeight() > reviewMaxHeight()}>
+          <Show when={confirm() && reviewContentHeight() > contentMaxHeight()}>
             <text fg={theme.text.base}>
               {"↑↓"} <span style={{ fg: theme.text.muted }}>scroll</span>
             </text>
