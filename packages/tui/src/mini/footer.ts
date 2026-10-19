@@ -34,7 +34,7 @@ import { RUN_SUBAGENT_PANEL_ROWS, footerPanelLayout } from "./footer.command"
 import { SUBAGENT_INSPECTOR_ROWS } from "./footer.subagent"
 import { TEXTAREA_MIN_ROWS, footerPromptLayout } from "./footer.prompt"
 import { RunFooterView } from "./footer.view"
-import { screenReader } from "./screen-reader"
+import { ringBell, screenReader } from "./screen-reader"
 import { monoSnapshot } from "./mono"
 import { RunScrollbackStream } from "./scrollback.surface"
 import { resolveRunTheme, type RunTheme } from "./theme"
@@ -436,6 +436,9 @@ export class RunFooter implements FooterApi {
   }
 
   public event(next: FooterEvent): void {
+    // Finished, or waiting on the user for a permission or a form.
+    if (next.type === "turn.idle" || (next.type === "stream.view" && next.view.type !== "prompt")) ringBell()
+
     if (next.type === "history") {
       this.setHistory(next.history)
       return
