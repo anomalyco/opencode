@@ -4,7 +4,7 @@ import { lstat } from "node:fs/promises"
 import { tmpdir } from "./fixture/fixture"
 import { installRuntimePeer } from "./fixture/runtime-peer"
 
-// One cold executable build, physical NPM install and four complete app boots.
+// One cold executable build and physical copies of installed runtime peers.
 test("compiled consumer shares host runtime with physically installed NPM TUI peers", async () => {
   await using root = await tmpdir()
   const peer = await installRuntimePeer(root.path)
@@ -18,34 +18,32 @@ test("compiled consumer shares host runtime with physically installed NPM TUI pe
   )
   const built = await Promise.all([build.exited, new Response(build.stdout).text(), new Response(build.stderr).text()])
   expect({ code: built[0], output: built[0] ? built.slice(1) : [] }).toEqual({ code: 0, output: [] })
-  for (const native of [false, true]) {
-    await peer.entry(native)
-    for (const local of [undefined, peer.wrapper]) {
-      const child = Bun.spawn([executable, peer.directory, ...(local ? [local] : [])], {
-        cwd: peer.consumer,
-        env: {
-          ...process.env,
-          HOME: peer.consumer,
-          XDG_CONFIG_HOME: path.join(peer.consumer, "config"),
-          XDG_DATA_HOME: path.join(peer.consumer, "data"),
-          XDG_STATE_HOME: path.join(peer.consumer, "state"),
-          XDG_CACHE_HOME: path.join(peer.consumer, "cache"),
-        },
-        stdout: "pipe",
-        stderr: "pipe",
-      })
-      const [code, stdout, stderr] = await Promise.all([
-        child.exited,
-        new Response(child.stdout).text(),
-        new Response(child.stderr).text(),
-      ])
-      expect({ entry: native ? "v2" : "tui", mode: local ? "local-wrapper" : "npm", code, stderr }).toEqual({
-        entry: native ? "v2" : "tui",
-        mode: local ? "local-wrapper" : "npm",
-        code: 0,
-        stderr: "",
-      })
-      expect(stdout).toContain("COMPILED_RUNTIME_SHARED_OK")
-    }
+  for (const mode of ["npm", "default", "barrel", "binding", "alias"] as const) {
+    await peer.entry(true, mode === "npm" ? "default" : mode)
+    const local = mode === "npm" ? undefined : peer.wrapper
+    const child = Bun.spawn([executable, peer.directory, ...(local ? [local] : [])], {
+      cwd: peer.consumer,
+      env: {
+        ...process.env,
+        HOME: peer.consumer,
+        XDG_CONFIG_HOME: path.join(peer.consumer, "config"),
+        XDG_DATA_HOME: path.join(peer.consumer, "data"),
+        XDG_STATE_HOME: path.join(peer.consumer, "state"),
+        XDG_CACHE_HOME: path.join(peer.consumer, "cache"),
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    const [code, stdout, stderr] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ])
+    expect({ mode, code, stderr }).toEqual({
+      mode,
+      code: 0,
+      stderr: "",
+    })
+    expect(stdout).toContain("COMPILED_RUNTIME_SHARED_OK")
   }
 }, 120_000)

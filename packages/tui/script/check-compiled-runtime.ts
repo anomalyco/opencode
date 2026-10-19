@@ -1,29 +1,25 @@
-import { expect, test } from "bun:test"
+import assert from "node:assert/strict"
 import path from "node:path"
 import { EmbeddedTerminalRenderable } from "@opentui/core"
 import { createTestRenderer } from "@opentui/core/testing"
-import { tmpdir } from "./fixture/fixture"
-import { createEventStream, createFetch, json } from "./fixture/tui-client"
-import { installRuntimePeer } from "./fixture/runtime-peer"
+import { tmpdir } from "../test/fixture/fixture"
+import { createEventStream, createFetch, json } from "../test/fixture/tui-client"
+import { installRuntimePeer } from "../test/fixture/runtime-peer"
 
 const binary = process.env.OPENCODE_RUNTIME_CLI
+if (!binary || process.platform === "win32") throw new Error("Set OPENCODE_RUNTIME_CLI to a native POSIX executable")
 if (binary && (await Bun.file(binary).slice(0, 2).text()) === "#!")
   throw new Error("OPENCODE_RUNTIME_CLI must be a native executable, not a profile launcher")
 
 // Boots the actual default CLI through a PTY. The fake server is local and all
 // user directories are private. No providers, credentials or live service.
-test.skipIf(!binary || process.platform === "win32")(
-  "production compiled CLI activates and updates NPM TUI plugins through local wrappers",
-  async () => {
-    await using root = await tmpdir()
-    const peer = await installRuntimePeer(root.path)
-    for (const native of [false, true]) {
-      await peer.entry(native)
-      await runCLI(peer.consumer, peer.wrapper)
-    }
-  },
-  60_000,
-)
+await using root = await tmpdir()
+const peer = await installRuntimePeer(root.path)
+for (const native of [false, true]) {
+  await peer.entry(native)
+  await runCLI(peer.consumer, peer.wrapper)
+}
+console.log("Compiled CLI runtime check passed")
 
 async function runCLI(consumer: string, plugin: string) {
   const { spawn } = await import("../../core/node_modules/bun-pty")
@@ -124,7 +120,7 @@ async function runCLI(consumer: string, plugin: string) {
         process.kill(-group, "SIGTERM")
         if (!(await waitExit())) process.kill(-group, "SIGKILL")
       }
-      expect(await waitExit()).toBe(true)
+      assert.ok(await waitExit(), "native CLI must exit during cleanup")
     }
     data.dispose()
     done.dispose()

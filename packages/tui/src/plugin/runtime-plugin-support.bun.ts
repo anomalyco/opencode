@@ -6,7 +6,7 @@ import { ensureRuntimePluginSupport } from "@opentui/solid/runtime-plugin-suppor
 // host namespaces first so physical plugin peers cannot create another owner.
 ensurePluginRuntime({
   "@opentui/core": await import("@opentui/core"),
-  "@opentui/core/testing": await import("@opentui/core/testing"),
+  "@opentui/core/testing": () => import("@opentui/core/testing"),
   "@opentui/solid": await import("@opentui/solid"),
   "@opentui/solid/components": await import("@opentui/solid/components"),
   "@opentui/solid/jsx-runtime": await import("@opentui/solid/jsx-runtime"),

@@ -10,14 +10,16 @@ export function provides(specifier: string) {
 }
 
 /** Later host consumers may add shared modules without replacing existing owners. */
-export function ensurePluginRuntime(additional: Readonly<Record<string, Record<string, unknown>>> = {}) {
+export function ensurePluginRuntime(
+  additional: Readonly<Record<string, Record<string, unknown> | RuntimeModuleLoader>> = {},
+) {
   if (typeof Bun === "undefined") return {}
   const previous = installed
   const modules = previous ?? loadRuntimeModules()
   const added = Object.fromEntries(
     Object.entries(additional)
       .filter(([specifier]) => !Object.hasOwn(modules, specifier))
-      .map(([specifier, exports]) => [specifier, () => exports]),
+      .map(([specifier, exports]) => [specifier, typeof exports === "function" ? exports : () => exports]),
   )
   if (previous && Object.keys(added).length === 0) return previous
   installed = { ...modules, ...added }
