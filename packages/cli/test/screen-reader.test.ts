@@ -114,6 +114,10 @@ test("env overrides config, flag overrides env", async () => {
   expect(await miniSettings({ config: {}, flag: Option.some(true), env: { OPENCODE_SCREEN_READER: "false" } })).toMatchObject(quiet)
 })
 
+test("an unrecognised env value is ignored", async () => {
+  expect(await miniSettings({ config: { screen_reader: true }, flag: Option.none(), env: { OPENCODE_SCREEN_READER: "maybe" } })).toMatchObject(quiet)
+})
+
 test("NO_COLOR makes the interface monochrome without the rest of screen reader mode", async () => {
   const mini = await miniSettings({ config: {}, flag: Option.none(), env: { NO_COLOR: "1" } })
   expect(mini?.mono).toBe(true)
