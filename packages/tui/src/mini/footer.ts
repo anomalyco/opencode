@@ -56,8 +56,10 @@ import type {
   MiniSettings,
   PermissionReply,
   QueuedPromptAction,
+  RunAction,
   RunAgent,
   RunCommand,
+  RunPicker,
   RunInput,
   RunPrompt,
   RunProvider,
@@ -105,6 +107,7 @@ type RunFooterOptions = {
   onEditorOpen: (input: { value: string }) => Promise<string | undefined>
   onSubagentSelect?: (sessionID: string | undefined) => void
   onSubagentInterrupt?: (sessionID: string) => void
+  actions?: RunAction[]
   subscribeThemeSignal: (listener: () => void) => () => void
 }
 
@@ -200,6 +203,10 @@ export class RunFooter implements FooterApi {
   private subagent: Accessor<FooterSubagentState>
   private setSubagent: (next: FooterSubagentState) => void
   private queuedPrompts: Accessor<FooterQueuedPrompt[]>
+  private picker: Accessor<RunPicker | undefined>
+  private setPicker: Setter<RunPicker | undefined>
+  private prefill: Accessor<RunPrompt | undefined>
+  private setPrefill: Setter<RunPrompt | undefined>
   private setQueuedPrompts: Setter<FooterQueuedPrompt[]>
   private history: Accessor<RunPrompt[]>
   private setHistory: Setter<RunPrompt[]>
@@ -302,6 +309,12 @@ export class RunFooter implements FooterApi {
     const [queuedPrompts, setQueuedPrompts] = createSignal<FooterQueuedPrompt[]>([])
     this.queuedPrompts = queuedPrompts
     this.setQueuedPrompts = setQueuedPrompts
+    const [picker, setPicker] = createSignal<RunPicker | undefined>()
+    this.picker = picker
+    this.setPicker = setPicker
+    const [prefill, setPrefill] = createSignal<RunPrompt | undefined>()
+    this.prefill = prefill
+    this.setPrefill = setPrefill
     const [history, setHistory] = createSignal(options.history ?? [])
     this.history = history
     this.setHistory = setHistory
@@ -336,6 +349,9 @@ export class RunFooter implements FooterApi {
               view: footer.view,
               subagent: footer.subagent,
               queuedPrompts: footer.queuedPrompts,
+              actions: () => options.actions ?? [],
+              picker: footer.picker,
+              prefill: footer.prefill,
               findFiles: options.findFiles,
               agents: footer.agents,
               references: footer.references,
@@ -516,6 +532,16 @@ export class RunFooter implements FooterApi {
 
       this.setVariants(next.variants)
       this.setCurrentVariant(next.current)
+      return
+    }
+
+    if (next.type === "picker") {
+      if (!this.isGone) this.setPicker(next.picker)
+      return
+    }
+
+    if (next.type === "prefill") {
+      if (!this.isGone) this.setPrefill(next.prompt)
       return
     }
 
@@ -766,7 +792,7 @@ export class RunFooter implements FooterApi {
         ? this.base + PERMISSION_ROWS
         : type === "form"
           ? this.base + FORM_ROWS
-          : ["command", "skill", "agent", "model", "variant", "settings"].includes(route)
+          : ["command", "skill", "agent", "model", "variant", "settings", "picker"].includes(route)
             ? 1 + panel.frame + panel.limit
             : route === "queued-menu" || route === "subagent-menu"
               ? 1 + this.subagentMenuRows

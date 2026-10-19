@@ -45,6 +45,7 @@ import {
   isCompactCommand,
   mentionTriggerIndex,
   slashTriggerIndex,
+  isLocalCommand,
   isNewCommand,
   movePromptHistory,
   promptCopy,
@@ -1158,6 +1159,7 @@ export function createPromptState(input: PromptInput): PromptState {
     if (current === "model") return false
     if (current === "variant") return false
     if (current === "settings") return false
+    if (current === "picker") return false
     if (current === "queued-menu") return false
     if (current === "subagent-menu") return false
     return true
@@ -1390,6 +1392,7 @@ export function createPromptState(input: PromptInput): PromptState {
       (next.mode === "shell" ||
         isNewCommand(next.text) ||
         isCompactCommand(next.text) ||
+        isLocalCommand(next.text) ||
         isExitCommand(next.text) ||
         next.text.trim().toLowerCase() === "/settings")
     ) {
@@ -1408,7 +1411,7 @@ export function createPromptState(input: PromptInput): PromptState {
     }
 
     const parsed =
-      command || next.parts.some((part) => part.type === "skill") || next.mode === "shell" || isNewCommand(next.text)
+      command || next.parts.some((part) => part.type === "skill") || next.mode === "shell" || isNewCommand(next.text) || isLocalCommand(next.text)
         ? undefined
         : parseSlashCommand(next.text, input.commands())
     if (parsed?.type === "pending") {
