@@ -80,6 +80,7 @@ export const api: ElectronAPI = {
   setWindowFocus: () => invoke("WindowSetFocus"),
   showWindow: () => invoke("WindowShow"),
   relaunch: () => send("AppRelaunch"),
+  restartService: () => invoke("AppRestartService"),
   getZoomFactor: () => invoke("WindowGetZoomFactor"),
   setZoomFactor: (factor) => invoke("WindowSetZoomFactor", { factor }),
   getPinchZoomEnabled: () => invoke("WindowGetPinchZoomEnabled"),
