@@ -421,8 +421,18 @@ OpenCode prints `Screen reader mode on.` when it starts. In this mode:
 - OpenCode prints `Working...` when it starts working on a prompt.
 - Menus and question lists move the terminal cursor to the selected row, so your screen reader reads it as you move.
 - Pressing a number in a question list selects that option. Press Enter to confirm.
+- The bell rings when a response finishes, when a permission or question needs you, and when a tool runs for more than 5 seconds.
+- Output lines are labeled `you:`, `assistant:`, `tool:`, `tool error:` and `error:`. `NO_COLOR` also turns color off.
 
-The full-screen interface has features the minimal interface does not. Plain `opencode` hands off to the minimal interface in this mode, and the `--auto` flag does not carry over.
+The minimal interface also has these commands, in the command menu (`ctrl+p`) or typed in the prompt:
+
+- `/sessions` - switch to another session.
+- `/rename <title>` - rename the session.
+- `/fork` - continue in a copy of the session.
+- `/undo` and `/redo` - undo the previous message, which returns to the prompt for editing, and restore it.
+- `/mcp` - connect or disconnect MCP servers.
+
+The full-screen interface has features the minimal interface does not, such as tabs, themes, the sidebar and the diff viewer. Plain `opencode` hands off to the minimal interface in this mode, and `--auto` carries over.
 
 ---
 
