@@ -1,8 +1,9 @@
 import { afterEach, expect, test } from "bun:test"
 import { createTestRenderer } from "@opentui/core/testing"
 import { RunFooter } from "../../src/mini/footer"
-import { ringBell, screenReader } from "../../src/mini/screen-reader"
+import { ringBell, screenReader, stopWatchingTools, watchTool } from "../../src/mini/screen-reader"
 import { RUN_THEME_FALLBACK } from "../../src/mini/theme"
+import type { StreamCommit } from "../../src/mini/types"
 import { createTuiResolvedConfig } from "../fixture/tui-runtime"
 
 const bell = screenReader.bell
@@ -69,4 +70,25 @@ test("the footer rings when a turn ends or input is needed, not when the prompt 
     footer.destroy()
     app.renderer.destroy()
   }
+})
+
+test("rings once for a tool that is still running after the delay", async () => {
+  screenReader.enabled = true
+  let rings = 0
+  screenReader.bell = () => rings++
+  const tool = (id: string, phase: StreamCommit["phase"], toolState: StreamCommit["toolState"]): StreamCommit => ({
+    kind: "tool",
+    source: "tool",
+    text: "",
+    phase,
+    toolState,
+    partID: id,
+  })
+  watchTool(tool("slow", "start", "running"), 5)
+  watchTool(tool("slow", "progress", "running"), 5)
+  watchTool(tool("fast", "start", "running"), 5)
+  watchTool(tool("fast", "final", "completed"), 5)
+  await Bun.sleep(30)
+  expect(rings).toBe(1)
+  stopWatchingTools()
 })

@@ -34,7 +34,7 @@ import { RUN_SUBAGENT_PANEL_ROWS, footerPanelLayout } from "./footer.command"
 import { SUBAGENT_INSPECTOR_ROWS } from "./footer.subagent"
 import { TEXTAREA_MIN_ROWS, footerPromptLayout } from "./footer.prompt"
 import { RunFooterView } from "./footer.view"
-import { ringBell, screenReader } from "./screen-reader"
+import { ringBell, screenReader, stopWatchingTools, watchTool } from "./screen-reader"
 import { monoSnapshot } from "./mono"
 import { RunScrollbackStream } from "./scrollback.surface"
 import { resolveRunTheme, type RunTheme } from "./theme"
@@ -619,6 +619,7 @@ export class RunFooter implements FooterApi {
     }
 
     this.finishStartup()
+    watchTool(commit)
     if (this.miniSettings().tools === "hide" && toolTranscript(commit)) return
     const last = this.queue.at(-1)
     const merged = last ? coalesceProgressCommit(last, commit) : undefined
@@ -1142,6 +1143,7 @@ export class RunFooter implements FooterApi {
 
     clearTimeout(this.startupTimer)
     this.startupTimer = undefined
+    stopWatchingTools()
     this.flush()
     this.destroyed = true
     this.notifyClose()
