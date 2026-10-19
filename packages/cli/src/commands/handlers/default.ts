@@ -40,6 +40,9 @@ export default Runtime.handler(Commands, (input) =>
         replayLimit: Option.none(),
         demo: false,
         screenReader: Option.some(true),
+        auto: input.auto,
+        yolo: input.yolo,
+        dangerouslySkipPermissions: input.dangerouslySkipPermissions,
       })
     }
     const preflight = UpdatePreflight.make()

@@ -22,11 +22,16 @@ const handler = (await import("../src/commands/handlers/mini")).default
 const plainHandler = (await import("../src/commands/handlers/default")).default
 afterAll(() => mock.restore())
 
-async function miniSettings(input: {
+async function miniSettings(input: Parameters<typeof runHandler>[0]) {
+  return (await runHandler(input))?.mini
+}
+
+async function runHandler(input: {
   config: object
   flag: Option.Option<boolean>
   env?: Record<string, string>
   plain?: boolean
+  auto?: boolean
 }) {
   const root = await Bun.$`mktemp -d`.text().then((value) => value.trim())
   const configDirectory = path.join(root, "config")
@@ -65,6 +70,9 @@ async function miniSettings(input: {
           prompt: Option.none(),
           demo: false,
           screenReader: input.flag,
+          auto: input.auto ?? false,
+          yolo: false,
+          dangerouslySkipPermissions: false,
         })
     await Effect.runPromise(
       // The plain handler also needs services that it only reaches after the screen reader handoff.
@@ -81,7 +89,7 @@ async function miniSettings(input: {
         Effect.scoped,
       ),
     )
-    return (await received)?.mini
+    return await received
   } finally {
     server.stop(true)
     await rm(root, { recursive: true, force: true })
@@ -116,4 +124,10 @@ test("NO_COLOR makes the interface monochrome without the rest of screen reader 
 test("plain opencode hands off to the minimal interface in screen reader mode", async () => {
   expect(await miniSettings({ config: {}, flag: Option.some(true), plain: true })).toMatchObject(quiet)
   expect(await miniSettings({ config: { screen_reader: true }, flag: Option.none(), plain: true })).toMatchObject(quiet)
+})
+
+test("--auto auto-accepts permissions in the minimal interface", async () => {
+  expect((await runHandler({ config: {}, flag: Option.none(), auto: true }))?.session).toMatchObject({
+    permissions: "autoaccept",
+  })
 })

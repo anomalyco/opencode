@@ -436,6 +436,19 @@ export class RunFooter implements FooterApi {
   }
 
   public event(next: FooterEvent): void {
+    if (
+      next.type === "stream.view" &&
+      next.view.type === "permission" &&
+      this.options.tuiConfig.session.permissions === "autoaccept"
+    ) {
+      const request = next.view.request
+      // Fall back to asking when the reply fails, so the request is never silently dropped.
+      void this.handlePermissionReply({ sessionID: request.sessionID, requestID: request.id, decision: "once" }).catch(
+        () => this.present(next.view),
+      )
+      return
+    }
+
     // Finished, or waiting on the user for a permission or a form.
     if (next.type === "turn.idle" || (next.type === "stream.view" && next.view.type !== "prompt")) ringBell()
 

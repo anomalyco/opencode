@@ -20,6 +20,7 @@ export const start = (input: Input<typeof Commands.commands.mini>) =>
     const screenReader =
       Option.getOrUndefined(input.screenReader) ?? (yield* Env.screenReader) ?? resolved.screen_reader ?? false
     const noColor = (yield* Env.noColor) !== ""
+    const auto = input.auto || input.yolo || input.dangerouslySkipPermissions
     const fileSystem = yield* FileSystem.FileSystem
     const runServicePromise = Effect.runPromiseWith(Context.make(FileSystem.FileSystem, fileSystem))
     const service = server.service
@@ -39,16 +40,15 @@ export const start = (input: Input<typeof Commands.commands.mini>) =>
         replay: Option.getOrUndefined(input.replay) ?? resolved.mini?.replay ?? true,
         replayLimit: Option.getOrUndefined(input.replayLimit) ?? resolved.mini?.replay_limit,
         demo: input.demo,
-        tuiConfig: screenReader
-          ? {
-              ...resolved,
-              screen_reader: true,
-              animations: false,
-              mini: { ...resolved.mini, splash: "hide", footer: "hide", mono: true },
-            }
-          : noColor
-            ? { ...resolved, mini: { ...resolved.mini, mono: true } }
-            : resolved,
+        tuiConfig: {
+          ...resolved,
+          ...(screenReader && { screen_reader: true, animations: false }),
+          ...(auto && { session: { ...resolved.session, permissions: "autoaccept" as const } }),
+          mini: {
+            ...resolved.mini,
+            ...(screenReader ? { splash: "hide" as const, footer: "hide" as const, mono: true } : noColor && { mono: true }),
+          },
+        },
         config: {
           update: (update) => runServicePromise(config.update(update)),
         },
