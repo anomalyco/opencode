@@ -412,6 +412,24 @@ function ExaOutput(props: { output?: string }) {
   )
 }
 
+// A group renders one header, so it reports the span from its earliest start to its latest finish.
+function groupedElapsedTime(tools: SessionMessageAssistantTool[]): SessionMessageAssistantTool["time"] | undefined {
+  const starts = tools.flatMap((tool) => {
+    const start = tool.time?.ran ?? tool.time?.created
+
+    return start === undefined ? [] : [start]
+  })
+  if (starts.length === 0) return undefined
+
+  const start = Math.min(...starts)
+  if (tools.some((tool) => tool.state.status === "streaming" || tool.state.status === "running"))
+    return { created: start, ran: start }
+
+  const ends = tools.flatMap((tool) => (tool.time?.completed === undefined ? [] : [tool.time.completed]))
+
+  return { created: start, ran: start, completed: ends.length === 0 ? undefined : Math.max(...ends) }
+}
+
 export type ContextGroupPart =
   | SessionMessageAssistantTool
   | (SessionMessageAssistantReasoning & { id: string; streaming?: boolean })
@@ -604,6 +622,7 @@ export function CurrentContextToolGroup(props: {
       <BasicTool
         icon="glasses"
         status={pending() ? "running" : "completed"}
+        time={groupedElapsedTime(tools())}
         compact
         hasContent
         allowOpenWhilePending
@@ -938,6 +957,7 @@ export function CurrentReadToolGroup(props: {
                     )}
                   </Index>
                 </span>
+                <ToolElapsed time={groupedElapsedTime(props.tools)} running={pending()} />
               </div>
             </div>
           </div>
