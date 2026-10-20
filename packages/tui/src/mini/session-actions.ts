@@ -33,7 +33,8 @@ export async function runSessionCommand(deps: Deps, text: string) {
 }
 
 const commands: Record<string, (deps: Deps, args: string) => Promise<void>> = {
-  sessions: async (deps) =>
+  sessions: async (deps, id) => {
+    if (id) return id === deps.sessionID() ? undefined : deps.open(id)
     deps.footer.event({
       type: "picker",
       picker: {
@@ -51,13 +52,11 @@ const commands: Record<string, (deps: Deps, args: string) => Promise<void>> = {
                 current: session.id === deps.sessionID(),
               })),
             ),
-        onSelect: (id) => {
-          if (id !== deps.sessionID()) void runSessionCommand(deps, `/open ${id}`)
-        },
+        // Goes through the prompt queue so the switch waits for any active turn.
+        onSelect: (id) => deps.footer.submit({ text: `/sessions ${id}`, parts: [] }),
       },
-    }),
-
-  open: (deps, id) => deps.open(id),
+    })
+  },
 
   rename: async (deps, title) => {
     if (!title) return say(deps, "usage: /rename <new title>")
@@ -75,8 +74,13 @@ const commands: Record<string, (deps: Deps, args: string) => Promise<void>> = {
   undo: async (deps) => {
     const sdk = deps.sdk()
     const sessionID = deps.sessionID()
-    const messages = await sdk.message.list({ sessionID, limit: 50, order: "desc" })
-    const message = messages.data.find((item) => item.type === "user" && item.text.trim())
+    const [session, messages] = await Promise.all([
+      sdk.session.get({ sessionID }),
+      sdk.message.list({ sessionID, limit: 50, order: "desc" }),
+    ])
+    // A staged revert hides that message and everything after it, so undo again steps further back.
+    const staged = messages.data.findIndex((item) => item.id === session.revert?.messageID)
+    const message = messages.data.slice(staged + 1).find((item) => item.type === "user" && item.text.trim())
     if (message?.type !== "user") return say(deps, "nothing to undo")
     await sdk.session.interrupt({ sessionID })
     await sdk.session.wait({ sessionID })
@@ -119,9 +123,9 @@ const commands: Record<string, (deps: Deps, args: string) => Promise<void>> = {
     if (!server) return say(deps, `no MCP server named ${name}`)
     if (server.status.status === "needs_auth")
       return say(deps, `${name} needs authentication. Connect it from the full interface.`)
-    if (server.status.status === "connected") await sdk.mcp.disconnect(input)
-    else await sdk.mcp.connect(input)
-    say(deps, server.status.status === "connected" ? `disconnected ${name}` : `connecting ${name}`)
+    const connected = server.status.status === "connected"
+    await (connected ? sdk.mcp.disconnect(input) : sdk.mcp.connect(input))
+    say(deps, connected ? `disconnected ${name}` : `connecting ${name}`)
   },
 }
 

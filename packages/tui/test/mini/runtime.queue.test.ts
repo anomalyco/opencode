@@ -192,6 +192,26 @@ describe("run runtime queue", () => {
     expect(order).toEqual(["run:first", "local:/rename New title", "run:later"])
   })
 
+  test("a configured command with a local command's name runs as that command", async () => {
+    const ui = createFooterApiFixture()
+    const order: string[] = []
+
+    const task = runPromptQueue({
+      footer: ui.api,
+      onLocalCommand: async (text) => {
+        order.push(`local:${text}`)
+      },
+      run: async (prompt) => {
+        order.push(`run:${prompt.command?.name}`)
+        ui.api.close()
+      },
+    })
+
+    ui.submit({ text: "/fork", parts: [], command: { name: "fork", arguments: "" } })
+    await task
+    expect(order).toEqual(["run:fork"])
+  })
+
   test("shell mode submits /exit as a shell command", async () => {
     const ui = createFooterApiFixture()
     const seen: RunPrompt[] = []

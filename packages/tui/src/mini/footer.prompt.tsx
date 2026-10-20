@@ -1411,10 +1411,11 @@ export function createPromptState(input: PromptInput): PromptState {
     }
 
     const parsed =
-      command || next.parts.some((part) => part.type === "skill") || next.mode === "shell" || isNewCommand(next.text) || isLocalCommand(next.text)
+      command || next.parts.some((part) => part.type === "skill") || next.mode === "shell" || isNewCommand(next.text)
         ? undefined
         : parseSlashCommand(next.text, input.commands())
-    if (parsed?.type === "pending") {
+    // Local commands still run while the list loads; a loaded command with the same name wins.
+    if (parsed?.type === "pending" && !isLocalCommand(next.text)) {
       input.onStatus("loading commands")
       return
     }

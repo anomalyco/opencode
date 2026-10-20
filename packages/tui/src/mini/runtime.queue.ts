@@ -144,7 +144,7 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
             continue
           }
 
-          if (prompt.mode !== "shell" && isLocalCommand(prompt.text)) {
+          if (prompt.mode !== "shell" && !prompt.command && isLocalCommand(prompt.text)) {
             await input.onLocalCommand?.(prompt.text)
             continue
           }

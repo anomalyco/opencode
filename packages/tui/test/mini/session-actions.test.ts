@@ -7,11 +7,13 @@ function setup(sdk: object) {
   const events: FooterEvent[] = []
   const commits: StreamCommit[] = []
   const calls: string[] = []
+  const footer = createFooterApiFixture({ events, commits }).api
+  footer.onPrompt((prompt) => calls.push(`submit ${prompt.text}`))
   const deps = {
     sdk: () => sdk as unknown as RunInput["sdk"],
     sessionID: () => "ses_current",
     directory: () => "/project",
-    footer: createFooterApiFixture({ events, commits }).api,
+    footer,
     open: async (id: string) => {
       calls.push(`open ${id}`)
     },
@@ -53,6 +55,7 @@ test("undo stages the revert and puts the message back in the prompt", async () 
   const test = setup({
     message: { list: async () => ({ data: [user] }) },
     session: {
+      get: async () => ({}),
       interrupt: async () => steps.push("interrupt"),
       wait: async () => steps.push("wait"),
       revert: { stage: async (input: { messageID: string }) => steps.push(`stage ${input.messageID}`) },
@@ -63,11 +66,26 @@ test("undo stages the revert and puts the message back in the prompt", async () 
   expect(test.events).toContainEqual({ type: "prefill", prompt: { text: "fix the bug", parts: [] } })
 })
 
+test("undo again skips the message already staged for revert", async () => {
+  const staged: string[] = []
+  const test = setup({
+    message: { list: async () => ({ data: [{ ...user, id: "msg_2", text: "second" }, user] }) },
+    session: {
+      get: async () => ({ revert: { messageID: "msg_2" } }),
+      interrupt: async () => {},
+      wait: async () => {},
+      revert: { stage: async (input: { messageID: string }) => staged.push(input.messageID) },
+    },
+  })
+  await test.run("/undo")
+  expect(staged).toEqual(["msg_1"])
+})
+
 test("undo with no messages says so, and redo clears the revert", async () => {
   const cleared: unknown[] = []
   const test = setup({
     message: { list: async () => ({ data: [] }) },
-    session: { revert: { clear: async (input: unknown) => cleared.push(input) } },
+    session: { get: async () => ({}), revert: { clear: async (input: unknown) => cleared.push(input) } },
   })
   await test.run("/undo")
   expect(test.texts()).toEqual(["nothing to undo"])
@@ -92,10 +110,11 @@ test("the session picker lists sessions and opens the chosen one", async () => {
     ["ses_current", "Now", true],
     ["ses_old", "ses_old", false],
   ])
-  await picker.onSelect("ses_current")
-  expect(test.calls).toEqual([])
   await picker.onSelect("ses_old")
-  expect(test.calls).toEqual(["open ses_old"])
+  expect(test.calls).toEqual(["submit /sessions ses_old"])
+  await test.run("/sessions ses_current")
+  await test.run("/sessions ses_old")
+  expect(test.calls).toEqual(["submit /sessions ses_old", "open ses_old"])
 })
 
 test("the MCP picker toggles servers and explains the ones that need auth", async () => {

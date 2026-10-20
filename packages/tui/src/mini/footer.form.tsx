@@ -290,9 +290,9 @@ export function RunFormBody(props: {
     const digit = Number(event.name)
     if (!Number.isNaN(digit) && digit >= 1 && digit <= Math.min(total, 9)) {
       // Screen reader users need Enter to confirm, so a digit only moves the selection.
-      if (props.screenReader) setState((previous) => formSetSelected(previous, digit - 1))
-      else choose(digit - 1)
       event.preventDefault()
+      if (props.screenReader) return setState((previous) => formSetSelected(previous, digit - 1))
+      choose(digit - 1)
       return
     }
     if (event.name === "up" || event.name === "k") {

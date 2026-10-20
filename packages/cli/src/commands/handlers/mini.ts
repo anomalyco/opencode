@@ -42,7 +42,8 @@ export const start = (input: Input<typeof Commands.commands.mini>) =>
         demo: input.demo,
         tuiConfig: {
           ...resolved,
-          ...(screenReader && { screen_reader: true, animations: false }),
+          screen_reader: screenReader,
+          ...(screenReader && { animations: false }),
           // Only the flag auto-approves here; the config setting never did in this interface.
           session: { ...resolved.session, permissions: auto ? ("autoaccept" as const) : ("prompt" as const) },
           mini: {
