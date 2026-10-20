@@ -10,6 +10,9 @@ const RemoteModel = Schema.Struct({
 
 const Response = Schema.Struct({ data: Schema.Array(RemoteModel) })
 
+// Only LiteLLM gives this body on this path. Other OpenAI-compatible servers on port 4000 are not shown as LiteLLM.
+const Liveliness = Schema.Literal("I'm alive!")
+
 export const make = createLocalProviderPlugin({
   id: "opencode.provider.litellm",
   providerID: "litellm",
@@ -17,6 +20,7 @@ export const make = createLocalProviderPlugin({
   origin: "http://127.0.0.1:4000",
   discover: (client) =>
     Effect.gen(function* () {
+      yield* client.getJson("/health/liveliness", Liveliness)
       const response = yield* client.getJson("/v1/models", Response)
       return response.data
         .filter((model) => model.id.length > 0 && (model.mode ?? "chat") === "chat")

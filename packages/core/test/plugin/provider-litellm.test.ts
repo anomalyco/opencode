@@ -43,6 +43,10 @@ const remoteModel = (id: string, extra: Record<string, unknown> = {}) => ({
   ...extra,
 })
 
+// Answers the LiteLLM liveliness check, under any path prefix, and passes other requests to the handler.
+const proxy = (handler: (request: Request) => Response) => (request: Request) =>
+  new URL(request.url).pathname.endsWith("/health/liveliness") ? Response.json("I'm alive!") : handler(request)
+
 describe("LiteLLMPlugin", () => {
   it.live("discovers chat models from an unauthenticated proxy", () =>
     Effect.acquireUseRelease(
@@ -57,17 +61,19 @@ describe("LiteLLMPlugin", () => {
                 authorization: request.headers.get("authorization"),
                 path: new URL(request.url).pathname,
               })
-              return Response.json({
-                object: "list",
-                data: [
-                  remoteModel("gpt-6-luna", { mode: "chat", max_input_tokens: 200_000, max_output_tokens: 64_000 }),
-                  remoteModel("old-proxy-alias"),
-                  remoteModel("null-metadata", { mode: null, max_input_tokens: null }),
-                  remoteModel("text-embedding-3-large", { mode: "embedding", max_input_tokens: 8191 }),
-                  remoteModel("image-model", { mode: "image_generation" }),
-                  remoteModel(""),
-                ],
-              })
+              return proxy(() =>
+                Response.json({
+                  object: "list",
+                  data: [
+                    remoteModel("gpt-6-luna", { mode: "chat", max_input_tokens: 200_000, max_output_tokens: 64_000 }),
+                    remoteModel("old-proxy-alias"),
+                    remoteModel("null-metadata", { mode: null, max_input_tokens: null }),
+                    remoteModel("text-embedding-3-large", { mode: "embedding", max_input_tokens: 8191 }),
+                    remoteModel("image-model", { mode: "image_generation" }),
+                    remoteModel(""),
+                  ],
+                }),
+              )(request)
             },
           }),
         }
@@ -104,10 +110,9 @@ describe("LiteLLMPlugin", () => {
           expect(yield* modelState.get(providerID, Model.ID.make("null-metadata"))).toBeDefined()
           expect(yield* modelState.get(providerID, Model.ID.make("text-embedding-3-large"))).toBeUndefined()
           expect(yield* modelState.get(providerID, Model.ID.make("image-model"))).toBeUndefined()
-          expect(requests.length).toBeGreaterThan(0)
-          expect(requests.every((request) => request.path === "/v1/models" && request.authorization === null)).toBe(
-            true,
-          )
+          expect(requests).toContainEqual({ authorization: null, path: "/health/liveliness" })
+          expect(requests).toContainEqual({ authorization: null, path: "/v1/models" })
+          expect(requests.every((request) => request.authorization === null)).toBe(true)
         }),
       ({ server }) => Effect.promise(() => server.stop(true)),
     ),
@@ -121,10 +126,11 @@ describe("LiteLLMPlugin", () => {
           state,
           server: Bun.serve({
             port: 0,
-            fetch: () =>
+            fetch: proxy(() =>
               state.failing
                 ? new Response(null, { status: 502 })
                 : Response.json({ object: "list", data: state.models }),
+            ),
           }),
         }
       }),
@@ -149,6 +155,43 @@ describe("LiteLLMPlugin", () => {
     ),
   )
 
+  it.live("ignores an OpenAI-compatible server that is not LiteLLM", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const requests: string[] = []
+        return {
+          requests,
+          server: Bun.serve({
+            port: 0,
+            // A dev server that gives 200 for every path, and another OpenAI-compatible server.
+            fetch: (request) => {
+              const path = new URL(request.url).pathname
+              requests.push(path)
+              return path === "/v1/models"
+                ? Response.json({ object: "list", data: [remoteModel("other-model")] })
+                : new Response("<html></html>", { headers: { "content-type": "text/html" } })
+            },
+          }),
+        }
+      }),
+      ({ requests, server }) =>
+        Effect.gen(function* () {
+          const providers = yield* Provider.Service
+          const modelState = yield* Model.Service
+          const providerID = Provider.ID.make("litellm")
+          yield* addPlugin(server.url.origin, "5 millis")
+          yield* eventually(
+            Effect.sync(() => requests.length),
+            (count) => count >= 3,
+          )
+          expect(requests).not.toContain("/v1/models")
+          expect(yield* modelState.get(providerID, Model.ID.make("other-model"))).toBeUndefined()
+          expect((yield* providers.available()).map((provider) => provider.id)).not.toContain(providerID)
+        }),
+      ({ server }) => Effect.promise(() => server.stop(true)),
+    ),
+  )
+
   it.live(
     "reloads a configured endpoint and sends the key as a bearer token",
     () =>
@@ -159,7 +202,7 @@ describe("LiteLLMPlugin", () => {
             requests,
             initial: Bun.serve({
               port: 0,
-              fetch: () => Response.json({ object: "list", data: [remoteModel("initial-model")] }),
+              fetch: proxy(() => Response.json({ object: "list", data: [remoteModel("initial-model")] })),
             }),
             configured: Bun.serve({
               port: 0,
@@ -168,7 +211,7 @@ describe("LiteLLMPlugin", () => {
                   authorization: request.headers.get("authorization"),
                   path: new URL(request.url).pathname,
                 })
-                return Response.json({ object: "list", data: [remoteModel("configured-model")] })
+                return proxy(() => Response.json({ object: "list", data: [remoteModel("configured-model")] }))(request)
               },
             }),
           }
@@ -194,6 +237,7 @@ describe("LiteLLMPlugin", () => {
               (model) => model !== undefined,
             )
 
+            expect(requests).toContainEqual({ authorization: "Bearer sk-secret", path: "/litellm/health/liveliness" })
             expect(requests).toContainEqual({ authorization: "Bearer sk-secret", path: "/litellm/v1/models" })
             expect(yield* modelState.get(providerID, Model.ID.make("initial-model"))).toBeUndefined()
             expect((yield* providers.get(providerID))?.settings).toEqual({

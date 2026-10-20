@@ -475,11 +475,30 @@ model by the name in your proxy configuration with the `litellm` provider ID:
 }
 ```
 
-OpenCode refreshes `/v1/models` in the background. It uses `max_input_tokens` as the context limit when the proxy
+OpenCode first checks `/health/liveliness`, so another OpenAI-compatible server on port 4000 is not shown as LiteLLM.
+Then it refreshes `/v1/models` in the background. It uses `max_input_tokens` as the context limit when the proxy
 reports it, and it excludes models whose `mode` is not `chat`.
 
 Discovered models advertise text input and output, but not vision or tools. `/v1/models` does not report what the model
-behind each name supports.
+behind each name supports. To use tools and images with a model, set its capabilities. Discovery keeps this setting:
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "litellm": {
+      "models": {
+        "gpt-6-luna": {
+          "capabilities": {
+            "tools": true,
+            "input": ["text", "image"],
+            "output": ["text"],
+          },
+        },
+      },
+    },
+  },
+}
+```
 
 For another host or a proxy with [virtual keys](https://docs.litellm.ai/docs/proxy/virtual_keys), set its URL and key:
 
@@ -499,7 +518,8 @@ For another host or a proxy with [virtual keys](https://docs.litellm.ai/docs/pro
 - Omit `apiKey` when the proxy does not require authentication. A proxy that requires a key is not discovered without
   one.
 - Disable discovery with `"plugins": ["-opencode.provider.litellm"]`.
-- Path-prefixed proxies are supported. For example, `https://example.com/litellm/v1` discovers `/litellm/v1/models`.
+- Path-prefixed proxies are supported. For example, `https://example.com/litellm/v1` checks
+  `/litellm/health/liveliness` and discovers `/litellm/v1/models`.
 
 ### Compatible
 
