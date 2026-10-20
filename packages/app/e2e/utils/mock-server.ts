@@ -1377,7 +1377,11 @@ function location(config: MockServerConfig, directory = config.directory) {
 
   return {
     directory,
-    project: { id: projectSeed(config)?.id, directory: config.directory, canonical: config.directory },
+    project: {
+      id: projectSeed(config)?.id,
+      directory: config.directory,
+      canonical: projectSeed(config)?.canonical ?? config.directory,
+    },
   }
 }
 
