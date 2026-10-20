@@ -826,6 +826,13 @@ export function CurrentContextToolGroup(props: {
                                       </span>
                                     )}
                                   </Show>
+                                  <ToolElapsed
+                                    time={groupedElapsedTime(group())}
+                                    running={group().some(
+                                      (item) =>
+                                        item.state.status === "streaming" || item.state.status === "running",
+                                    )}
+                                  />
                                 </div>
                               </Show>
                             }
@@ -1084,6 +1091,7 @@ export function CurrentFileToolGroup(props: {
         tool={tool()}
         input={{}}
         metadata={metadata()}
+        time={groupedElapsedTime(props.tools)}
         status={pending() ? "running" : "completed"}
         fileOpen={props.fileOpen}
         onFileOpenChange={props.onFileOpenChange}
