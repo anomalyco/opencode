@@ -416,19 +416,23 @@ export function ExaOutput(props: { output?: string }) {
 }
 
 // A group renders one header, so it reports the span from its earliest start to its latest finish.
-function groupedElapsedTime(tools: SessionMessageAssistantTool[]): SessionMessageAssistantTool["time"] | undefined {
-  const starts = tools.flatMap((tool) => {
-    const start = tool.time?.ran ?? tool.time?.created
+type GroupElapsedInput = { created?: number; ran?: number; completed?: number }
+
+function groupedElapsedTime(
+  times: ReadonlyArray<GroupElapsedInput | undefined>,
+  running: boolean,
+): { created: number; ran?: number; completed?: number } | undefined {
+  const starts = times.flatMap((time) => {
+    const start = time?.ran ?? time?.created
 
     return start === undefined ? [] : [start]
   })
   if (starts.length === 0) return undefined
 
   const start = Math.min(...starts)
-  if (tools.some((tool) => tool.state.status === "streaming" || tool.state.status === "running"))
-    return { created: start, ran: start }
+  if (running) return { created: start, ran: start }
 
-  const ends = tools.flatMap((tool) => (tool.time?.completed === undefined ? [] : [tool.time.completed]))
+  const ends = times.flatMap((time) => (time?.completed === undefined ? [] : [time.completed]))
 
   return { created: start, ran: start, completed: ends.length === 0 ? undefined : Math.max(...ends) }
 }
@@ -436,7 +440,12 @@ function groupedElapsedTime(tools: SessionMessageAssistantTool[]): SessionMessag
 export type ContextGroupPart =
   | SessionMessageAssistantTool
   | (SessionMessageAssistantReasoning & { id: string; streaming?: boolean })
-  | { type: "notice" | "shell" | "text"; id: string; render: () => JSX.Element }
+  | {
+    type: "notice" | "shell" | "text"
+    id: string
+    render: () => JSX.Element
+    time?: { created: number; completed?: number }
+  }
 
 export function CurrentContextToolGroup(props: {
   parts: ContextGroupPart[]
@@ -460,6 +469,9 @@ export function CurrentContextToolGroup(props: {
   const pending = createMemo(
     () => props.busy || tools().some((tool) => tool.state.status === "streaming" || tool.state.status === "running"),
   )
+
+  // Shell and notice rows are not tools, so the header spans every part, not just tool parts.
+  const span = () => groupedElapsedTime(props.parts.map((part) => part.time), pending())
 
   const names = createMemo(() =>
     i18n.list([
@@ -625,7 +637,7 @@ export function CurrentContextToolGroup(props: {
       <BasicTool
         icon="glasses"
         status={pending() ? "running" : "completed"}
-        time={groupedElapsedTime(tools())}
+        time={span()}
         compact
         hasContent
         allowOpenWhilePending
@@ -830,7 +842,13 @@ export function CurrentContextToolGroup(props: {
                                     )}
                                   </Show>
                                   <ToolElapsed
-                                    time={groupedElapsedTime(group())}
+                                    time={groupedElapsedTime(
+                                      group().map((item) => item.time),
+                                      group().some(
+                                        (item) =>
+                                          item.state.status === "streaming" || item.state.status === "running",
+                                      ),
+                                    )}
                                     running={group().some(
                                       (item) =>
                                         item.state.status === "streaming" || item.state.status === "running",
@@ -996,7 +1014,13 @@ export function CurrentReadToolGroup(props: {
                     {(text) => text()}
                   </Show>
                 </span>
-                <ToolElapsed time={groupedElapsedTime(props.tools)} running={pending()} />
+                <ToolElapsed
+                  time={groupedElapsedTime(
+                    props.tools.map((tool) => tool.time),
+                    pending(),
+                  )}
+                  running={pending()}
+                />
               </div>
             </div>
           </div>
@@ -1123,7 +1147,10 @@ export function CurrentFileToolGroup(props: {
         tool={tool()}
         input={{}}
         metadata={metadata()}
-        time={groupedElapsedTime(props.tools)}
+        time={groupedElapsedTime(
+          props.tools.map((tool) => tool.time),
+          pending(),
+        )}
         status={pending() ? "running" : "completed"}
         fileOpen={props.fileOpen}
         onFileOpenChange={props.onFileOpenChange}
