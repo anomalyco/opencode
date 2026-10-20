@@ -156,7 +156,6 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
                 <div data-slot="basic-tool-tool-info-structured">
                   <div data-slot="basic-tool-tool-info-main">
                     <span data-slot="basic-tool-tool-title">{name()}</span>
-                    <ToolElapsed time={props.time} />
                     <Show when={split.subtitle && (split.href || !(open() && state.clipped))}>
                       <Show
                         when={split.href}
@@ -182,6 +181,7 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
                     <Show when={!open()}>
                       <span data-slot="tool-error-card-summary">{summary()}</span>
                     </Show>
+                    <ToolElapsed time={props.time} />
                   </div>
                 </div>
               </div>

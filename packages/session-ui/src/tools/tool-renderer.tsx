@@ -2699,7 +2699,6 @@ ToolRegistry.register({
             <span data-slot="tool-loaded-value" aria-hidden="true">
               <TextShimmer as="span" text={name()} active={running()} />
             </span>
-            <ToolElapsed time={props.time} running={running()} />
             <Show when={parts()[1]?.trim()}>
               {(suffix) => (
                 <span data-slot="tool-loaded-kind" aria-hidden="true">
@@ -2707,6 +2706,7 @@ ToolRegistry.register({
                 </span>
               )}
             </Show>
+            <ToolElapsed time={props.time} running={running()} />
           </div>
         )}
       </Show>
