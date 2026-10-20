@@ -142,7 +142,22 @@ test("rejects only when no clipboard route accepted the write", async () => {
 })
 
 test("rejects reads when no clipboard route is supported", async () => {
-  const clipboard = createClipboardAdapter(coreClipboard({ read: { status: "unsupported" } }))
+  await withWSL({}, async () => {
+    const clipboard = createClipboardAdapter(coreClipboard({ read: { status: "unsupported" } }))
 
-  await expect(clipboard.read()).rejects.toThrow("Clipboard read is not supported on this system")
+    await expect(clipboard.read()).rejects.toThrow("Clipboard read is not supported on this system")
+  })
 })
+
+// Without WSLg the host reports the clipboard as unsupported rather than empty, and that status
+// has to reach the interop fallback as well.
+test.skipIf(process.platform !== "linux" || Bun.which("powershell.exe") !== null)(
+  "tries the WSL interop before rejecting an unsupported host clipboard",
+  async () => {
+    await withWSL({ WSL_DISTRO_NAME: "Ubuntu" }, async () => {
+      const clipboard = createClipboardAdapter(coreClipboard({ read: { status: "unsupported" } }))
+
+      await expect(clipboard.read()).rejects.toThrow("needs powershell.exe interop")
+    })
+  },
+)
