@@ -203,6 +203,7 @@ export const OpenAIChatMessage = Schema.Union([
     role: Schema.Literal("tool"),
     tool_call_id: Schema.String,
     content: Schema.Union([Schema.String, Schema.Array(OpenAIChatTextContent)]),
+    cache_control: Schema.optional(OpenAIChatCacheControl),
   }),
 ]).pipe(Schema.toTaggedUnion("role"))
 type OpenAIChatMessage = Schema.Schema.Type<typeof OpenAIChatMessage>
@@ -389,6 +390,8 @@ export interface ParserState {
 // fields into `LLMRequest`.
 interface LoweringOptions {
   readonly cacheControl?: (cache: CacheHint | undefined) => OpenAIChatCacheControl | undefined
+  /** Puts the marker for a tool result on the tool message, where an Anthropic-backed gateway reads it. */
+  readonly cacheControlAtMessageLevel?: boolean
   readonly toolCallID?: (id: string) => string
   /** Project provider-specific fields from the exact source, even when other messages are dropped during lowering. */
   readonly assistant?: (source: AssistantMessage, message: OpenAIChatMessage) => OpenAIChatMessage
@@ -602,6 +605,7 @@ const lowerToolMessages = Effect.fnUntraced(function* (message: ToolMessage, opt
           options.toolCallID?.(part.id) ?? part.id,
           ProviderShared.toolResultText(part),
           options.cacheControl?.(part.cache),
+          options.cacheControlAtMessageLevel === true,
         ),
       )
       continue
@@ -609,7 +613,12 @@ const lowerToolMessages = Effect.fnUntraced(function* (message: ToolMessage, opt
     const content: ReadonlyArray<Tool.Content> = part.result.value
     const text = content.filter((item) => item.type === "text").map((item) => item.text)
     messages.push(
-      toolMessage(options.toolCallID?.(part.id) ?? part.id, text.join("\n"), options.cacheControl?.(part.cache)),
+      toolMessage(
+        options.toolCallID?.(part.id) ?? part.id,
+        text.join("\n"),
+        options.cacheControl?.(part.cache),
+        options.cacheControlAtMessageLevel === true,
+      ),
     )
     const files = content.filter((item) => item.type === "file")
     attachments.push(...(yield* Effect.forEach(files, (item) => lowerMedia(ProviderShared.toolFileMedia(item)))))
@@ -617,12 +626,28 @@ const lowerToolMessages = Effect.fnUntraced(function* (message: ToolMessage, opt
   return { messages, attachments }
 })
 
-// Chat cache breakpoints belong on text content parts, not on the message itself.
-const toolMessage = (toolCallID: string, text: string, cacheControl: OpenAIChatCacheControl | undefined) => ({
-  role: "tool" as const,
-  tool_call_id: toolCallID,
-  content: cacheControl === undefined ? text : [{ type: "text" as const, text, cache_control: cacheControl }],
-})
+// Chat cache breakpoints belong on text content parts, not on the message itself. A gateway
+// that translates the chat shape into Anthropic's is the exception: it reads the marker for a
+// tool result off the tool message, and one nested in the content array is not a position it
+// translates, so the request is billed as uncached input from then on.
+const toolMessage = (
+  toolCallID: string,
+  text: string,
+  cacheControl: OpenAIChatCacheControl | undefined,
+  cacheControlAtMessageLevel: boolean,
+) =>
+  cacheControlAtMessageLevel
+    ? {
+        role: "tool" as const,
+        tool_call_id: toolCallID,
+        content: text,
+        ...(cacheControl === undefined ? {} : { cache_control: cacheControl }),
+      }
+    : {
+        role: "tool" as const,
+        tool_call_id: toolCallID,
+        content: cacheControl === undefined ? text : [{ type: "text" as const, text, cache_control: cacheControl }],
+      }
 
 const lowerMessage = Effect.fnUntraced(function* (
   message: UserMessage | AssistantMessage,
@@ -885,7 +910,12 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
   const hasHistory = hasToolHistory(request.messages)
   const hasActiveTools = flattened.tools.length > 0
   const custom = OpenAIFreeform.tools(request)
-  const lowering = { ...options, cacheControl: options.cacheControl ?? declaredCacheControl(request), custom }
+  const lowering = {
+    ...options,
+    cacheControl: options.cacheControl ?? declaredCacheControl(request),
+    cacheControlAtMessageLevel: toolCacheControlAtMessageLevel(request),
+    custom,
+  }
   return {
     model: request.model.id,
     messages: yield* lowerMessages(flattened.request, lowering),
@@ -915,6 +945,15 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
 // Provider wrappers that pass their own marker writer keep it; otherwise a declared cache format adds one.
 const declaredCacheControl = (request: LLMRequest) =>
   request.model.compatibility?.cacheFormat === undefined ? undefined : Cache.cacheControl()
+
+// A gateway that speaks the chat shape in front of Anthropic reads a tool result's marker off the
+// tool message; one nested in the content array is not a position it translates. Opt-in, because
+// an OpenAI-compatible endpoint that reads markers off content blocks (Databricks, Snowflake
+// Cortex) keeps the nested position, and only the endpoint's operator knows which one it is.
+const toolCacheControlAtMessageLevel = (request: LLMRequest) =>
+  request.model.route.id === "openai-compatible-chat" &&
+  request.model.compatibility?.cacheFormat === "anthropic" &&
+  request.model.compatibility.cacheControlAtMessageLevel === true
 
 // =============================================================================
 // Stream Parsing

@@ -311,6 +311,11 @@ for Alibaba Model Studio models, which accept the same markers but ignore them o
 `compatibility.cacheFormat` on the provider instead when every model it serves accepts the same format. See
 [Compatibility](#compatibility) for the other fields.
 
+A gateway that translates the chat shape into Anthropic's messages may read a tool result's marker off the `tool`
+message instead of its content part. Add `"cacheControlAtMessageLevel": true` beside `cacheFormat` for that gateway;
+an OpenAI-compatible endpoint that reads markers off content blocks, such as Databricks Foundation Model APIs or
+Snowflake Cortex, keeps the default content-part position.
+
 ### Cache lifetime
 
 OpenCode doesn't send a cache lifetime by default, so each provider uses its own default, such as five minutes on
@@ -380,6 +385,7 @@ built-in default or detection. `supportsThinkingBlockBinding` and `supportsEffor
 | `supportsPromptCacheKey` | Whether the endpoint accepts the `prompt_cache_key` body field. | OpenAI Chat, OpenAI Responses, Mistral | `true` or `false`. OpenAI Chat only sends the key when `true`, which some provider packages set by default. Other APIs send it unless `false`. |
 | `streamUsage` | Requests token usage in the stream with `stream_options.include_usage`. | OpenAI Chat | `true` or `false`. Defaults to `true`. |
 | `cacheFormat` | Prompt-cache marker syntax the endpoint accepts. Overrides the provider's automatic breakpoint placement. `alibaba` skips tool definitions. | Every API with prompt-cache markers, including OpenAI Chat, Anthropic Messages, and Bedrock Converse | `anthropic` or `alibaba`. Unset uses the provider default. See [Prompt caching](#prompt-caching). |
+| `cacheControlAtMessageLevel` | Puts an anthropic tool-result marker on the `tool` message instead of its `content` part, for a gateway that translates the chat shape into Anthropic's messages. | OpenAI Chat | `true` or `false`. Defaults to `false`. See [Prompt caching](#prompt-caching). |
 | `supportsThinkingBlockBinding` | Asks the API to drop thinking blocks whose earlier context changed instead of rejecting the request. | Anthropic Messages, Bedrock Converse | `true` or `false`. Unset detects Claude 5.1 and later. |
 | `supportsEffortUpdates` | Sends reasoning effort changes as per-message updates, which keep the prompt cache. Otherwise the effort changes for the whole request. | Anthropic Messages, OpenAI Responses | `true` or `false`. Unset detects Claude Opus 5, Claude 5.1 and later, and GPT-6 and later. |
 | `mediaInput` | Where images and other media go in a decision request. | System One | `assets` (images referenced from the state), `state` (inline in the state), or `root` (top-level `images`, `audio`, and `videos` lists). Unset uses the provider default. |

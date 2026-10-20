@@ -222,6 +222,12 @@ export class LanguageModelCompatibility extends Schema.Class<LanguageModelCompat
   requireAssistantAfterTool: Schema.optional(Schema.Boolean),
   /** Prompt-cache marker syntax the endpoint accepts. Overrides the route default; both send `cache_control`, and `alibaba` skips tool definitions. */
   cacheFormat: Schema.optional(LanguageModelCacheFormatCompatibility),
+  /**
+   * OpenAI Chat: put an anthropic cache marker for a tool result on the tool message instead of its
+   * content part. For a gateway that translates the chat shape into Anthropic's messages; an
+   * OpenAI-compatible endpoint that reads markers off content blocks keeps the default position.
+   */
+  cacheControlAtMessageLevel: Schema.optional(Schema.Boolean),
   zaiToolStream: Schema.optional(Schema.Boolean),
   requireSignature: Schema.optional(Schema.Boolean),
   /** Supports Anthropic's thinking-prefix mismatch controls. Overrides model-ID detection. */
