@@ -35,7 +35,7 @@ export function ToolElapsed(props: { time?: SessionMessageAssistantTool["time"];
   }
   return (
     <Show when={elapsed() !== undefined}>
-      <span data-slot="tool-elapsed" class="ml-1.5 shrink-0 text-text-weak whitespace-nowrap">
+      <span data-slot="tool-elapsed" class="shrink-0 text-text-weak whitespace-nowrap">
         {text()}
       </span>
     </Show>
