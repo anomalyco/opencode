@@ -1826,6 +1826,31 @@ ToolRegistry.register({
       return value
     })
 
+    const running = createMemo(() => {
+      if (props.status === "streaming" || props.status === "running") return true
+      const id = childSessionId()
+
+      if (!id) return false
+
+      return (data.store.session_status[id]?.type ?? "idle") !== "idle"
+    })
+
+    // Background dispatches complete the tool call at launch, so its own timestamps would freeze at 0s.
+    // Track the child session instead: tick while it runs, freeze when it settles.
+    const start = createMemo(() => props.time?.ran ?? props.time?.created)
+    const endAt = createMemo((previous?: number) => (running() ? undefined : (previous ?? Date.now())))
+    const liveTime = createMemo(() => {
+      const begin = start()
+
+      if (begin === undefined) return undefined
+      if (running()) return { created: begin, ran: begin }
+
+      const realEnd = props.time?.completed
+      if (realEnd !== undefined && realEnd > begin) return { created: begin, ran: begin, completed: realEnd }
+
+      return { created: begin, ran: begin, completed: endAt() }
+    })
+
     const href = createMemo(() => sessionLink(childSessionId(), data.sessionHref))
     const clickable = createMemo(() => !!(childSessionId() && (data.navigateToSession || href())))
 
@@ -1864,6 +1889,7 @@ ToolRegistry.register({
               <Show when={subtitle()}>
                 <span data-slot="basic-tool-tool-subtitle">{subtitle()}</span>
               </Show>
+              <ToolElapsed time={liveTime()} running={running()} />
             </div>
             <Show when={clickable()}>
               <div data-component="task-tool-action">
@@ -1882,7 +1908,7 @@ ToolRegistry.register({
           <BasicTool
             icon="task"
             status={view().basicStatus}
-            time={props.time}
+            time={undefined}
             trigger={trigger()}
             hideDetails
             triggerAsLink
