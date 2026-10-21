@@ -337,7 +337,11 @@ function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void 
                         </SessionComposerLane>
                       </SettingsProvider>
                     }
-                    composer={<Composer model={prompt.controller} borderUnderlay />}
+                    composer={
+                      <SettingsProvider>
+                        <Composer model={prompt.controller} borderUnderlay />
+                      </SettingsProvider>
+                    }
                   />
                 </section>
                 <Show when={side()}>

@@ -852,7 +852,8 @@ function insertEditorNewline(target: HTMLElement | undefined) {
 
   if (!target.contains(range.startContainer) || !target.contains(range.endContainer)) return
 
-  if (Predicate.isFunction(document.execCommand) && document.execCommand("insertText", false, "\n")) return
+  // insertText("\n") creates a trailing div in Chromium; insertLineBreak keeps it a BR, like native Shift+Enter.
+  if (Predicate.isFunction(document.execCommand) && document.execCommand("insertLineBreak", false)) return
   range.deleteContents()
   const node = document.createTextNode("\n")
   range.insertNode(node)
