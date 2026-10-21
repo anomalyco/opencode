@@ -231,6 +231,21 @@ The retired `diff.toggle`, `diff.expand`, `diff.expand_all`, `diff.collapse`, an
 | `session.tab.select.9`                | `<leader>9,ctrl+9`      | Switch to session tab 9                  |
 | `session.tab.select.10`               | `<leader>0,ctrl+0`      | Switch to session tab 10                 |
 
+### Windows Terminal
+
+Windows Terminal binds `ctrl+tab` and `ctrl+shift+tab` to its own tab actions, so those keys never reach OpenCode. Use `alt+down` and `alt+up` to switch session tabs instead, or unbind the terminal's action in `settings.json`:
+
+```json
+{
+  "actions": [
+    { "command": "unbound", "keys": "ctrl+tab" },
+    { "command": "unbound", "keys": "ctrl+shift+tab" }
+  ]
+}
+```
+
+Restart Windows Terminal or open a new tab after editing the file.
+
 ## Models and agents
 
 | ID                             | Default     | Description                          |
