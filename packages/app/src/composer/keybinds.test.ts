@@ -1,11 +1,77 @@
 import { describe, expect, test } from "bun:test"
-import { matchPromptKeybind } from "./keybinds"
+import { matchPromptKeybind, promptKeybindOptions } from "./keybinds"
+import { matchKeybind, parseKeybind } from "@/shell/commands/command"
 
 function keyEvent(input: KeyboardEventInit = {}) {
   return new KeyboardEvent("keydown", { key: "Enter", ...input })
 }
 
 describe("prompt keybind matching", () => {
+  test("declares every accepted default variant for Settings conflict detection", () => {
+    const options = promptKeybindOptions({ submit: "Submit", newline: "Newline", alternate: "Alternate" })
+
+    for (const input of [
+      { id: "prompt.submit", event: keyEvent({ altKey: true }) },
+      { id: "prompt.newline", event: keyEvent({ ctrlKey: true, shiftKey: true }) },
+      { id: "prompt.newline", event: keyEvent({ altKey: true, metaKey: true, shiftKey: true }) },
+      { id: "prompt.submit.alternate", event: keyEvent({ ctrlKey: true }) },
+      { id: "prompt.submit.alternate", event: keyEvent({ metaKey: true }) },
+    ]) {
+      expect(matchKeybind(parseKeybind(options.find((option) => option.id === input.id)!.keybind), input.event)).toBe(
+        true,
+      )
+    }
+  })
+
+  test("advertises only remaining defaults after an explicit binding takes a chord", () => {
+    const options = promptKeybindOptions(
+      { submit: "Submit", newline: "Newline", alternate: "Alternate" },
+      { submit: "ctrl+shift+enter" },
+    )
+
+    const newline = options.find((option) => option.id === "prompt.newline")
+    expect(newline).toBeDefined()
+    expect(matchKeybind(parseKeybind(newline?.keybind ?? "none"), keyEvent({ ctrlKey: true, shiftKey: true }))).toBe(
+      false,
+    )
+    expect(matchKeybind(parseKeybind(newline?.keybind ?? "none"), keyEvent({ shiftKey: true }))).toBe(true)
+    expect(options.find((option) => option.id === "prompt.submit")?.keybind).toBe("ctrl+shift+enter")
+  })
+
+  test("preserves all sixteen legacy Enter modifier combinations", () => {
+    const expected = [
+      "submit",
+      "newline",
+      "alternate",
+      "newline",
+      "alternate",
+      "newline",
+      "alternate",
+      "newline",
+      "submit",
+      "newline",
+      "alternate",
+      "newline",
+      "alternate",
+      "newline",
+      "alternate",
+      "newline",
+    ]
+
+    expected.forEach((action, mask) => {
+      const event = keyEvent({
+        shiftKey: !!(mask & 1),
+        ctrlKey: !!(mask & 2),
+        metaKey: !!(mask & 4),
+        altKey: !!(mask & 8),
+      })
+
+      expect(matchPromptKeybind("submit", {}, event)).toBe(action === "submit")
+      expect(matchPromptKeybind("newline", {}, event)).toBe(action === "newline")
+      expect(matchPromptKeybind("alternate", {}, event)).toBe(action === "alternate")
+    })
+  })
+
   test("rebinds, disables, and swaps alternate delivery with submit", () => {
     expect(matchPromptKeybind("alternate", {}, keyEvent({ ctrlKey: true }))).toBe(true)
     expect(matchPromptKeybind("alternate", {}, keyEvent({ metaKey: true }))).toBe(true)

@@ -414,6 +414,7 @@ export const EmptyDraft = {}
 export const ConfigurableShortcuts = {
   render: () => {
     const settings = useSettings()
+
     const original = {
       submit: settings.keybinds.get(PROMPT_KEYBINDS.submit.id),
       newline: settings.keybinds.get(PROMPT_KEYBINDS.newline.id),
@@ -424,6 +425,7 @@ export const ConfigurableShortcuts = {
         const value = original[action]
 
         if (value === undefined) settings.keybinds.reset(PROMPT_KEYBINDS[action].id)
+
         if (value !== undefined) settings.keybinds.set(PROMPT_KEYBINDS[action].id, value)
       }
     })
