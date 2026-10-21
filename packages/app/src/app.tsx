@@ -11,7 +11,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
 import { type Component, createRenderEffect, ErrorBoundary, type JSX, type ParentProps } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { CommandProvider, useCommand } from "@/shell/commands/command"
-import { promptKeybindOptions, PROMPT_KEYBINDS } from "@/composer/keybinds"
+import { createPromptKeybinds, PROMPT_KEYBINDS } from "@/composer/keybinds"
 import { DesktopCommands } from "@/shell/commands/desktop"
 import { ProjectIconsProvider } from "@/shell/layout/project-icons"
 import { GlobalProvider } from "@/runtime/server/runtime"
@@ -52,9 +52,10 @@ function BodyTypography() {
 function PromptCommands() {
   const command = useCommand()
   const language = useLanguage()
+  const keybinds = createPromptKeybinds()
 
   command.register("prompt", () =>
-    promptKeybindOptions({
+    keybinds.options({
       submit: language.t(PROMPT_KEYBINDS.submit.title),
       newline: language.t(PROMPT_KEYBINDS.newline.title),
       alternate: language.t(PROMPT_KEYBINDS.alternate.title),
