@@ -6,10 +6,13 @@ import type {
   ArrowFunctionExpression,
   AssignmentExpression,
   AssignmentProperty,
+  AwaitExpression,
   BinaryExpression,
   BlockStatement,
   BreakStatement,
   CallExpression,
+  ChainExpression,
+  ConditionalExpression,
   ContinueStatement,
   DoWhileStatement,
   Expression,
@@ -18,6 +21,7 @@ import type {
   ForStatement,
   FunctionDeclaration,
   FunctionExpression,
+  Identifier,
   IfStatement,
   LabeledStatement,
   LogicalExpression,
@@ -28,6 +32,8 @@ import type {
   Pattern,
   Program,
   Property,
+  ReturnStatement,
+  SequenceExpression,
   SpreadElement,
   Statement,
   Super,
@@ -85,11 +91,12 @@ import {
   GeneratorObj,
   Obj,
   PromiseObj,
-  record,
+  iteratorResult,
   remove,
   set,
   coerceToNumber,
   coerceToString,
+  type NativeResult,
   type Step,
   type Value,
 } from "./objects.js"
@@ -102,6 +109,7 @@ import {
   type GeneratorRequest,
   Host,
   isEval,
+  map,
   MAX_CALL_DEPTH,
   Runner,
   Slice,
@@ -235,6 +243,27 @@ const usesArguments = (fn: Fn): boolean => {
   return found
 }
 
+// Whether evaluating a node can create a function, which could capture a loop's per-iteration bindings.
+const closures = new WeakMap<AnyNode, boolean>()
+const createsClosure = (node: AnyNode): boolean => {
+  const cached = closures.get(node)
+  if (cached !== undefined) return cached
+  const found = (function visit(item: AnyNode | null): boolean {
+    if (item === null || typeof item !== "object") return false
+    if (
+      item.type === "FunctionExpression" ||
+      item.type === "ArrowFunctionExpression" ||
+      item.type === "FunctionDeclaration"
+    )
+      return true
+    return Object.values(item).some((child) =>
+      Array.isArray(child) ? child.some((entry) => visit(entry)) : visit(child as AnyNode | null),
+    )
+  })(node)
+  closures.set(node, found)
+  return found
+}
+
 // `var` names declared anywhere in a function body except inside nested functions, which own theirs.
 // Memoized per body: a function's var names never change, and hoisting runs on every call.
 const varNames = new WeakMap<ReadonlyArray<Statement | ModuleDeclaration>, ReadonlyArray<string>>()
@@ -308,6 +337,35 @@ type MemberReference = {
 }
 
 const none: StatementResult = { kind: "none" }
+
+/** Marks an operand a fast path has not evaluated yet, since `undefined` is a value. */
+const unevaluated: unique symbol = Symbol("codemode.unevaluated")
+
+type Reference = MemberReference | ToolReference | { value: Value } | typeof OptionalShortCircuit
+
+// Parameter lists of plain names bind without evaluating anything, so a call needs no binding work.
+const simpleParameters = new WeakMap<ReadonlyArray<Pattern>, boolean>()
+const isSimple = (parameters: ReadonlyArray<Pattern>): boolean => {
+  const cached = simpleParameters.get(parameters)
+  if (cached !== undefined) return cached
+  const simple = parameters.every((parameter) => parameter.type === "Identifier")
+  simpleParameters.set(parameters, simple)
+  return simple
+}
+
+// A block that declares nothing lexically needs no scope of its own.
+const blockScopes = new WeakMap<ReadonlyArray<Statement | ModuleDeclaration>, boolean>()
+const declaresLexically = (statements: ReadonlyArray<Statement | ModuleDeclaration>): boolean => {
+  const cached = blockScopes.get(statements)
+  if (cached !== undefined) return cached
+  const declares = statements.some(
+    (statement) =>
+      statement.type === "FunctionDeclaration" ||
+      (statement.type === "VariableDeclaration" && statement.kind !== "var"),
+  )
+  blockScopes.set(statements, declares)
+  return declares
+}
 
 const isAbrupt = (result: StatementResult): boolean =>
   result.kind === "return" || result.kind === "break" || result.kind === "continue"
@@ -454,46 +512,47 @@ class Frame<R> {
   }
 
   private *evaluateStatement(node: Statement | ModuleDeclaration): Eval<StatementResult> {
+    const result = this.execute(node)
+    return isEval(result) ? yield* result : result
+  }
+
+  // Like `evaluate`: statements that cannot run program code complete without a generator.
+  private execute(node: Statement | ModuleDeclaration): StatementResult | Eval<StatementResult> {
     switch (node.type) {
-      case "ExpressionStatement":
-        yield* this.evaluateExpression(node.expression)
-        return none
-      case "VariableDeclaration":
-        yield* this.evaluateVariableDeclaration(node)
-        return none
-      case "ReturnStatement": {
-        const argumentNode = node.argument
-        if (!argumentNode) return { kind: "return", value: undefined }
-        const value = yield* this.evaluateExpression(argumentNode)
-        // An async generator awaits what it returns, as it awaits what it yields.
-        return { kind: "return", value: this.generatorAsync ? yield* this.awaitValue(value) : value }
+      case "ExpressionStatement": {
+        const result = this.evaluate(node.expression)
+        return isEval(result) ? this.finishExpressionStatement(result) : none
       }
+      case "VariableDeclaration":
+        return this.evaluateVariableStatement(node)
+      case "ReturnStatement":
+        return this.evaluateReturnStatement(node)
       case "BlockStatement":
-        return yield* this.evaluateBlock(node)
+        return this.evaluateBlock(node)
       case "IfStatement":
-        return yield* this.evaluateIfStatement(node)
+        return this.evaluateIfStatement(node)
       case "SwitchStatement":
-        return yield* this.evaluateSwitchStatement(node)
+        return this.evaluateSwitchStatement(node)
       case "LabeledStatement":
-        return yield* this.evaluateLabeledStatement(node)
+        return this.evaluateLabeledStatement(node)
       case "WhileStatement":
-        return yield* this.evaluateWhileStatement(node)
+        return this.evaluateWhileStatement(node)
       case "DoWhileStatement":
-        return yield* this.evaluateDoWhileStatement(node)
+        return this.evaluateDoWhileStatement(node)
       case "ForStatement":
-        return yield* this.evaluateForStatement(node)
+        return this.evaluateForStatement(node)
       case "ForOfStatement":
-        return yield* this.evaluateForOfStatement(node)
+        return this.evaluateForOfStatement(node)
       case "ForInStatement":
-        return yield* this.evaluateForInStatement(node)
+        return this.evaluateForInStatement(node)
       case "BreakStatement":
         return this.evaluateBreakStatement(node)
       case "ContinueStatement":
         return this.evaluateContinueStatement(node)
       case "ThrowStatement":
-        return yield* this.evaluateThrowStatement(node)
+        return this.evaluateThrowStatement(node)
       case "TryStatement":
-        return yield* this.evaluateTryStatement(node)
+        return this.evaluateTryStatement(node)
       case "EmptyStatement":
         return none
       case "FunctionDeclaration":
@@ -503,24 +562,43 @@ class Frame<R> {
     }
   }
 
+  private *finishExpressionStatement(work: Eval<Value>): Eval<StatementResult> {
+    yield* work
+    return none
+  }
+
+  private *evaluateVariableStatement(node: VariableDeclaration): Eval<StatementResult> {
+    yield* this.evaluateVariableDeclaration(node)
+    return none
+  }
+
+  private *evaluateReturnStatement(node: ReturnStatement): Eval<StatementResult> {
+    const argumentNode = node.argument
+    if (!argumentNode) return { kind: "return", value: undefined }
+    const evaluated = this.evaluate(argumentNode)
+    const value = isEval(evaluated) ? yield* evaluated : evaluated
+    // An async generator awaits what it returns, as it awaits what it yields.
+    return { kind: "return", value: this.generatorAsync ? yield* this.awaitValue(value) : value }
+  }
+
   private *evaluateBlock(node: BlockStatement): Eval<StatementResult> {
-    this.scopes.push()
-    try {
-      const body = node.body
+    const body = node.body
+    const scoped = declaresLexically(body)
+    if (scoped) {
+      this.scopes.push()
       this.predeclareLexical(body)
       this.hoistFunctions(body)
-
+    }
+    try {
       for (const statement of body) {
-        const result = yield* this.evaluateStatement(statement)
-
-        if (result.kind !== "none") {
-          return result
-        }
+        const executed = this.execute(statement)
+        const result = isEval(executed) ? yield* executed : executed
+        if (result.kind !== "none") return result
       }
 
       return none
     } finally {
-      this.scopes.pop()
+      if (scoped) this.scopes.pop()
     }
   }
 
@@ -597,8 +675,11 @@ class Frame<R> {
   }
 
   private *evaluateIfStatement(node: IfStatement): Eval<StatementResult> {
-    if (yield* this.evaluateExpression(node.test)) return yield* this.evaluateStatement(node.consequent)
-    return node.alternate ? yield* this.evaluateStatement(node.alternate) : none
+    const test = this.evaluate(node.test)
+    const branch = (isEval(test) ? yield* test : test) ? node.consequent : node.alternate
+    if (!branch) return none
+    const result = this.execute(branch)
+    return isEval(result) ? yield* result : result
   }
 
   private *evaluateSwitchStatement(node: SwitchStatement): Eval<StatementResult> {
@@ -642,8 +723,11 @@ class Frame<R> {
 
   private *evaluateWhileStatement(node: WhileStatement, labels?: ReadonlySet<string>): Eval<StatementResult> {
     const runner = this.ctx.runner
-    while (yield* this.evaluateExpression(node.test)) {
-      const exit = loopExit(yield* this.evaluateStatement(node.body), labels)
+    while (true) {
+      const test = this.evaluate(node.test)
+      if (!(isEval(test) ? yield* test : test)) break
+      const executed = this.execute(node.body)
+      const exit = loopExit(isEval(executed) ? yield* executed : executed, labels)
       if (exit !== undefined) return exit
       if (runner.tick()) yield Slice
     }
@@ -682,8 +766,11 @@ class Frame<R> {
         }
       }
 
+      // Each iteration gets fresh copies of the loop's `let` bindings, but only closures can tell them apart.
       const perIterationBindings =
-        initNode?.type === "VariableDeclaration" && initNode.kind !== "var"
+        initNode?.type === "VariableDeclaration" &&
+        initNode.kind !== "var" &&
+        [node.init, node.test, node.update, node.body].some((part) => part && createsClosure(part))
           ? Array.from(this.scopes.current().keys())
           : []
 
@@ -697,13 +784,19 @@ class Frame<R> {
       }
       nextIteration()
 
-      while (testNode ? yield* this.evaluateExpression(testNode) : true) {
-        const exit = loopExit(yield* this.evaluateStatement(node.body), labels)
+      while (true) {
+        if (testNode) {
+          const test = this.evaluate(testNode)
+          if (!(isEval(test) ? yield* test : test)) break
+        }
+        const executed = this.execute(node.body)
+        const exit = loopExit(isEval(executed) ? yield* executed : executed, labels)
         if (exit !== undefined) return exit
 
         nextIteration()
         if (updateNode) {
-          yield* this.evaluateExpression(updateNode)
+          const update = this.evaluate(updateNode)
+          if (isEval(update)) yield* update
         }
         if (runner.tick()) yield Slice
       }
@@ -746,35 +839,51 @@ class Frame<R> {
         throw typeError("Unsupported for...of binding.", left)
       }
       const assignment = left.type === "VariableDeclaration" ? undefined : left
+      // Each iteration gets a fresh binding, but only a closure in the body can tell; without one, a single
+      // `for (const x of ...)` binding is reused.
+      const reused =
+        declared?.lexical && declared.pattern.type === "Identifier" && !createsClosure(node.body)
+          ? { mutable: declared.mutable, value: undefined as Value, initialized: false }
+          : undefined
+      if (reused !== undefined) this.scopes.push(new Map([[(declared!.pattern as Identifier).name, reused]]))
 
-      while (true) {
-        const step: Step = iterator ? yield* this.nextIteratorResult(iterator, node) : yield* cursor!.next()
-        if (step.done) return none
-        let result: StatementResult
-        try {
-          if (declared?.lexical) {
-            this.scopes.push()
-            try {
-              this.predeclarePattern(declared.pattern, declared.mutable, left)
-              yield* this.declarePattern(declared.pattern, step.value, declared.mutable, left, true)
+      try {
+        while (true) {
+          const step: Step = iterator ? yield* this.nextIteratorResult(iterator, node) : yield* cursor!.next()
+          if (step.done) return none
+          let result: StatementResult
+          try {
+            if (reused !== undefined) {
+              reused.value = step.value
+              reused.initialized = true
+              const executed = this.execute(node.body)
+              result = isEval(executed) ? yield* executed : executed
+            } else if (declared?.lexical) {
+              this.scopes.push()
+              try {
+                this.predeclarePattern(declared.pattern, declared.mutable, left)
+                yield* this.declarePattern(declared.pattern, step.value, declared.mutable, left, true)
+                result = yield* this.evaluateStatement(node.body)
+              } finally {
+                this.scopes.pop()
+              }
+            } else {
+              if (declared) yield* this.assignPattern(declared.pattern, step.value, left)
+              else if (assignment) yield* this.assignPattern(assignment, step.value, left)
               result = yield* this.evaluateStatement(node.body)
-            } finally {
-              this.scopes.pop()
             }
-          } else {
-            if (declared) yield* this.assignPattern(declared.pattern, step.value, left)
-            else if (assignment) yield* this.assignPattern(assignment, step.value, left)
-            result = yield* this.evaluateStatement(node.body)
+          } catch (error) {
+            return yield* preserveConsumerError(close, thrower(error))
           }
-        } catch (error) {
-          return yield* preserveConsumerError(close, thrower(error))
+          const exit = loopExit(result, labels)
+          if (exit !== undefined) {
+            yield* close()
+            return exit
+          }
+          if (runner.tick()) yield Slice
         }
-        const exit = loopExit(result, labels)
-        if (exit !== undefined) {
-          yield* close()
-          return exit
-        }
-        if (runner.tick()) yield Slice
+      } finally {
+        if (reused !== undefined) this.scopes.pop()
       }
     } finally {
       if (declared?.lexical) this.scopes.pop()
@@ -792,7 +901,7 @@ class Frame<R> {
     const ctx = this.ctx
     const runner = ctx.runner
     const builtins = ctx.builtins
-    const result = (value: Value, done: boolean) => record(builtins.Object, { value, done })
+    const result = (value: Value, done: boolean) => iteratorResult(builtins.Object, value, done)
     const self = this
     // IteratorNext passes the value `next` received, when it received one.
     const syncNext = function* (args: Array<Value>): Eval<Step> {
@@ -1292,6 +1401,13 @@ class Frame<R> {
   }
 
   private *evaluateExpression(node: Expression): Eval<Value> {
+    const result = this.evaluate(node)
+    return isEval(result) ? yield* result : result
+  }
+
+  // Evaluates leaves directly and returns the work for anything that may run program code, so the common cases cost
+  // no generator; callers finish the work with `yield*`.
+  private evaluate(node: Expression): Value | Eval<Value> {
     switch (node.type) {
       case "Literal": {
         const regex = node.regex
@@ -1302,56 +1418,118 @@ class Frame<R> {
         return this.scopes.get(node.name, node)
       case "ThisExpression":
         return this.scopes.get("this", node)
-      case "BinaryExpression":
-        return yield* this.evaluateBinaryExpression(node)
-      case "LogicalExpression":
-        return yield* this.evaluateLogicalExpression(node)
-      case "UnaryExpression":
-        return yield* this.evaluateUnaryExpression(node)
-      case "AssignmentExpression":
-        return yield* this.evaluateAssignmentExpression(node)
-      case "SequenceExpression": {
-        let result: Value
-        for (const expression of node.expressions) {
-          result = yield* this.evaluateExpression(expression)
-        }
-        return result
+      case "BinaryExpression": {
+        const operator = node.operator
+        if (node.left.type === "PrivateIdentifier") throw unsupportedSyntax(node.left.type, node.left)
+        const left = this.evaluate(node.left)
+        if (isEval(left)) return this.evaluateBinaryExpression(node, left)
+        const right = this.evaluate(node.right)
+        if (isEval(right)) return this.evaluateBinaryExpression(node, left, right)
+        if (operator === "instanceof") return instanceofValue(left, right, node)
+        if (left instanceof Obj || right instanceof Obj) return this.applyOperator(operator, left, right, node)
+        return this.applyBinaryOperator(operator, left, right, node)
       }
+      case "LogicalExpression":
+        return this.evaluateLogicalExpression(node)
+      case "UnaryExpression":
+        return this.evaluateUnaryExpression(node)
+      case "AssignmentExpression": {
+        const left = node.left
+        if (left.type !== "Identifier") return this.evaluateAssignmentExpression(node)
+        if (node.operator === "=") {
+          const right =
+            node.right.type === "ArrowFunctionExpression" ||
+            (node.right.type === "FunctionExpression" && !node.right.id)
+              ? this.createFunction(node.right, left.name)
+              : this.evaluate(node.right)
+          return isEval(right) ? this.assignAfter(left, right) : this.scopes.set(left.name, right, left)
+        }
+        if (!compoundOperators.has(node.operator)) return this.evaluateAssignmentExpression(node)
+        const current = this.scopes.get(left.name, left)
+        const right = this.evaluate(node.right)
+        if (isEval(right) || current instanceof Obj || right instanceof Obj)
+          return this.compoundAfter(node, current, right)
+        return this.scopes.set(
+          left.name,
+          this.applyBinaryOperator(node.operator.slice(0, -1), current, right, node),
+          left,
+        )
+      }
+      case "SequenceExpression":
+        return this.evaluateSequenceExpression(node)
       case "CallExpression":
-        return yield* this.evaluateCallExpression(node)
+        return this.evaluateCallExpression(node)
       case "ArrowFunctionExpression":
       case "FunctionExpression":
         return this.createFunction(node)
-      case "MemberExpression":
-        return yield* this.readMember(node)
-      case "ChainExpression": {
-        const value = yield* this.evaluateExpression(node.expression)
-        return value === OptionalShortCircuit ? undefined : value
+      case "MemberExpression": {
+        const objectNode = node.object
+        const propertyNode = node.property
+        if (objectNode.type === "Super") throw unsupportedSyntax(objectNode.type, objectNode)
+        if (propertyNode.type === "PrivateIdentifier") throw unsupportedSyntax(propertyNode.type, propertyNode)
+        const object = this.evaluate(objectNode)
+        if (isEval(object)) return this.readMember(node, object)
+        if (object === OptionalShortCircuit) return OptionalShortCircuit
+        if ((object === null || object === undefined) && node.optional) return OptionalShortCircuit
+        const key =
+          !node.computed && propertyNode.type === "Identifier" ? propertyNode.name : this.evaluate(propertyNode)
+        if (isEval(key)) return this.readMember(node, object, key)
+        const reference = this.memberReference(node, object, key)
+        return isEval(reference) ? this.readMember(node, object, key) : this.readResolved(node, reference)
       }
+      case "ChainExpression":
+        return this.evaluateChainExpression(node)
       case "ObjectExpression":
-        return yield* this.evaluateObjectExpression(node)
+        return this.evaluateObjectExpression(node)
       case "ArrayExpression":
-        return yield* this.evaluateArrayExpression(node)
+        return this.evaluateArrayExpression(node)
       case "TemplateLiteral":
-        return yield* this.evaluateTemplateLiteral(node)
+        return this.evaluateTemplateLiteral(node)
       case "TaggedTemplateExpression":
-        return yield* this.evaluateTaggedTemplate(node)
+        return this.evaluateTaggedTemplate(node)
       case "ConditionalExpression":
-        return yield* this.evaluateExpression(
-          (yield* this.evaluateExpression(node.test)) ? node.consequent : node.alternate,
-        )
-      case "UpdateExpression":
-        return yield* this.evaluateUpdateExpression(node)
+        return this.evaluateConditionalExpression(node)
+      case "UpdateExpression": {
+        const argument = node.argument
+        if (argument.type !== "Identifier") return this.evaluateUpdateExpression(node)
+        const current = this.scopes.get(argument.name, argument)
+        if (current instanceof Obj) return this.evaluateUpdateExpression(node)
+        return this.update(node, argument, current)
+      }
       case "AwaitExpression":
-        // Await always suspends, including for plain values.
-        return yield* this.awaitValue(yield* this.evaluateExpression(node.argument))
+        return this.evaluateAwaitExpression(node)
       case "YieldExpression":
-        return yield* this.evaluateYieldExpression(node)
+        return this.evaluateYieldExpression(node)
       case "NewExpression":
-        return yield* this.evaluateNewExpression(node)
+        return this.evaluateNewExpression(node)
       default:
         throw unsupportedSyntax(node.type, node)
     }
+  }
+
+  private *evaluateSequenceExpression(node: SequenceExpression): Eval<Value> {
+    let result: Value
+    for (const expression of node.expressions) {
+      const value = this.evaluate(expression)
+      result = isEval(value) ? yield* value : value
+    }
+    return result
+  }
+
+  private *evaluateChainExpression(node: ChainExpression): Eval<Value> {
+    const value = yield* this.evaluateExpression(node.expression)
+    return value === OptionalShortCircuit ? undefined : value
+  }
+
+  private *evaluateConditionalExpression(node: ConditionalExpression): Eval<Value> {
+    const test = this.evaluate(node.test)
+    const branch = this.evaluate((isEval(test) ? yield* test : test) ? node.consequent : node.alternate)
+    return isEval(branch) ? yield* branch : branch
+  }
+
+  private *evaluateAwaitExpression(node: AwaitExpression): Eval<Value> {
+    // Await always suspends, including for plain values.
+    return yield* this.awaitValue(yield* this.evaluateExpression(node.argument))
   }
 
   private *evaluateNewExpression(node: NewExpression): Eval<Value> {
@@ -1371,23 +1549,29 @@ class Frame<R> {
       throw typeError(message, node)
     }
     const args = yield* this.evaluateCallArguments(node.arguments)
-    return yield* this.native(() => construct(args, callee as Native), node)
+    const result = this.native(() => construct(args, callee as Native), node)
+    return isEval(result) ? yield* result : result
   }
 
-  private *evaluateBinaryExpression(node: BinaryExpression): Eval<Value> {
+  // Finishes a binary expression whose left operand (and maybe right) `evaluate` already started.
+  private *evaluateBinaryExpression(
+    node: BinaryExpression,
+    leftValue: Value | Eval<Value>,
+    started: Value | Eval<Value> | typeof unevaluated = unevaluated,
+  ): Eval<Value> {
     const operator = node.operator
-    const left = node.left
-    if (left.type === "PrivateIdentifier") throw unsupportedSyntax(left.type, left)
-    const lhs = yield* this.evaluateExpression(left)
-    const rhs = yield* this.evaluateExpression(node.right)
+    const lhs = isEval(leftValue) ? yield* leftValue : leftValue
+    const rightValue = started === unevaluated ? this.evaluate(node.right) : started
+    const rhs = isEval(rightValue) ? yield* rightValue : rightValue
     if (operator === "instanceof") return instanceofValue(lhs, rhs, node)
     if (lhs instanceof Obj || rhs instanceof Obj) return yield* this.applyOperator(operator, lhs, rhs, node)
     return this.applyBinaryOperator(operator, lhs, rhs, node)
   }
 
   /** ToPrimitive for an operand: data objects run their own methods; opaque values stay for the data gates below. */
-  private toPrimitive(value: Value, hint: Hint, node: AstNode): Eval<Value> {
-    return this.native(() => toPrimitive(this.ctx, value, hint), node)
+  private *toPrimitive(value: Value, hint: Hint, node: AstNode): Eval<Value> {
+    const result = this.native(() => toPrimitive(this.ctx, value, hint), node)
+    return isEval(result) ? yield* result : result
   }
 
   // Arithmetic, relational, and bitwise operators convert both operands first, left then right, so a `valueOf`
@@ -1479,7 +1663,8 @@ class Frame<R> {
 
   private *evaluateLogicalExpression(node: LogicalExpression): Eval<Value> {
     const operator = node.operator
-    const left = yield* this.evaluateExpression(node.left)
+    const leftValue = this.evaluate(node.left)
+    const left = isEval(leftValue) ? yield* leftValue : leftValue
     if (operator === "&&") return left ? yield* this.evaluateExpression(node.right) : left
     if (operator === "||") return left ? left : yield* this.evaluateExpression(node.right)
     if (operator === "??")
@@ -1535,7 +1720,8 @@ class Frame<R> {
       const name = left.name
       if (operator !== "=") {
         const current = this.scopes.get(name, left)
-        const rightValue = yield* this.evaluateExpression(node.right)
+        const evaluated = this.evaluate(node.right)
+        const rightValue = isEval(evaluated) ? yield* evaluated : evaluated
         const next =
           current instanceof Obj || rightValue instanceof Obj
             ? yield* this.applyOperator(binary, current, rightValue, node)
@@ -1555,6 +1741,30 @@ class Frame<R> {
       })
     }
     throw typeError("Assignment target must be an Identifier or MemberExpression.", left)
+  }
+
+  private *assignAfter(left: Identifier, right: Eval<Value>): Eval<Value> {
+    return this.scopes.set(left.name, yield* right, left)
+  }
+
+  private *compoundAfter(node: AssignmentExpression, current: Value, started: Value | Eval<Value>): Eval<Value> {
+    const left = node.left as Identifier
+    const binary = node.operator.slice(0, -1)
+    const right = isEval(started) ? yield* started : started
+    const next =
+      current instanceof Obj || right instanceof Obj
+        ? yield* this.applyOperator(binary, current, right, node)
+        : this.applyBinaryOperator(binary, current, right, node)
+    return this.scopes.set(left.name, next, left)
+  }
+
+  // `++`/`--` on a name whose value is already primitive.
+  private update(node: UpdateExpression, argument: Identifier, current: Value): Value {
+    if (isOpaque(current)) throw invalidData(`'${node.operator}' requires a data value.`, argument)
+    const before = coerceToNumber(current)
+    const next = node.operator === "++" ? before + 1 : before - 1
+    this.scopes.set(argument.name, next, argument)
+    return node.prefix ? next : before
   }
 
   private *evaluateLogicalAssignment(node: AssignmentExpression, left: Pattern, operator: string): Eval<Value> {
@@ -1630,7 +1840,8 @@ class Frame<R> {
     if ((callable === null || callable === undefined) && node.optional) return OptionalShortCircuit
 
     const args = yield* this.evaluateCallArguments(node.arguments)
-    return yield* this.call(callable, thisValue, args, node, callee)
+    const result = this.dispatch(callable, thisValue, args, node, callee)
+    return isEval(result) ? yield* result : result instanceof Call ? ((yield result) as Value) : result
   }
 
   private *readMethod(node: MemberExpression): Eval<{ callable: Value; thisValue: Value }> {
@@ -1641,38 +1852,42 @@ class Frame<R> {
     return { callable: this.readReference(reference, node), thisValue: reference.receiver }
   }
 
-  // The single dispatch for every invocation: call expressions and callbacks share it.
   *call(callable: Value, thisValue: Value, args: Array<Value>, node?: AstNode, callee?: Expression): Eval<Value> {
-    if (callable instanceof Fn) return yield* this.invokeFunction(callable, thisValue, args, node)
-    if (callable instanceof Native) {
-      // Built-ins throw without a location, synchronously or inside their work; the call site supplies it.
-      this.ctx.site = node
-      try {
-        const result = callable.call(thisValue, args)
-        return isEval(result) ? yield* result : result
-      } catch (error) {
-        throw locate(error, node)
-      }
-    }
+    const result = this.dispatch(callable, thisValue, args, node, callee)
+    return isEval(result) ? yield* result : result instanceof Call ? ((yield result) as Value) : result
+  }
+
+  // The single dispatch for every invocation: call expressions and callbacks share it. A program function is a `Call`
+  // for the caller to yield; a built-in that returns a value needs no generator.
+  private dispatch(
+    callable: Value,
+    thisValue: Value,
+    args: Array<Value>,
+    node?: AstNode,
+    callee?: Expression,
+  ): Value | Eval<Value> | Call {
+    if (callable instanceof Fn) return this.invokeFunction(callable, thisValue, args, node)
+    if (callable instanceof Native) return this.native(() => callable.call(thisValue, args), node)
     if (callable instanceof ToolReference) {
       if (callable.path.length === 0) {
         throw typeError("The tools root is not callable.", callee ?? node)
       }
       this.ctx.site = node
-      return yield* this.createToolCallPromise(callable.path, args)
+      return this.createToolCallPromise(callable.path, args)
     }
     throw typeError(`${calleeDescription(callee) ?? "The called value"} is not a function.`, callee ?? node)
   }
 
   // Built-ins throw without a location, synchronously or inside their work; the call site supplies it.
-  private *native(body: () => Value | Eval<Value>, node?: AstNode): Eval<Value> {
+  private native(body: () => NativeResult, node?: AstNode): Value | Eval<Value> {
     this.ctx.site = node
+    let result: NativeResult
     try {
-      const result = body()
-      return isEval(result) ? yield* result : result
+      result = body()
     } catch (error) {
       throw locate(error, node)
     }
+    return isEval(result) ? located(result, node) : result
   }
 
   private *evaluateCallArguments(argNodes: ReadonlyArray<Expression | SpreadElement>): Eval<Array<Value>> {
@@ -1688,15 +1903,17 @@ class Frame<R> {
           args.push(step.value)
         }
       } else {
-        args.push(yield* this.evaluateExpression(argNode))
+        const value = this.evaluate(argNode)
+        args.push(isEval(value) ? yield* value : value)
       }
     }
     return args
   }
 
-  // A program call runs as its own activation on the explicit stack. An async call returns its promise when the body
-  // first suspends or ends; a generator call binds its parameters and returns the generator without running the body.
-  *invokeFunction(fn: Fn, thisValue: Value, args: Array<Value>, node?: AstNode): Eval<Value> {
+  // A program call runs as its own activation on the explicit stack, so it is a `Call` for the caller to yield. An
+  // async call returns its promise when the body first suspends or ends; a generator call binds its parameters and
+  // returns the generator without running the body.
+  invokeFunction(fn: Fn, thisValue: Value, args: Array<Value>, node?: AstNode): Call | Value | Eval<Value> {
     const runner = this.ctx.runner
     // The program's own activation is at the bottom of the stack.
     if (runner.depth > MAX_CALL_DEPTH) throw rangeError("Maximum call stack size exceeded", node)
@@ -1712,35 +1929,46 @@ class Frame<R> {
         initialized: true,
       })
     }
-    // Seed all parameters first so defaults cannot fall through to same-named outer bindings.
-    for (const parameter of fn.parameters) {
-      for (const name of collectPatternNames(parameter)) {
-        paramScope.set(name, { mutable: true, value: undefined, initialized: false })
+    const simple = isSimple(fn.parameters)
+    if (simple) {
+      // A repeated name takes the last argument for it, as in JS.
+      for (const [index, parameter] of fn.parameters.entries()) {
+        paramScope.set((parameter as Identifier).name, { mutable: true, value: args[index], initialized: true })
+      }
+    } else {
+      // Seed all parameters first so defaults cannot fall through to same-named outer bindings.
+      for (const parameter of fn.parameters) {
+        for (const name of collectPatternNames(parameter)) {
+          paramScope.set(name, { mutable: true, value: undefined, initialized: false })
+        }
       }
     }
     if (fn.generator) {
-      yield* invocation.bindParameters(fn, args)
       invocation.generator = true
       invocation.generatorAsync = fn.async
-      const proto = get(fn, "prototype")
-      return new GeneratorObj(
-        proto instanceof Obj ? proto : fn.async ? this.ctx.builtins.AsyncGenerator : this.ctx.builtins.Generator,
-        fn.async,
-        generatorBody(invocation.functionBody(fn, paramScope)),
-      )
+      // The prototype is read after the parameters bind, since a default may replace it.
+      const create = () => {
+        const proto = get(fn, "prototype")
+        return new GeneratorObj(
+          proto instanceof Obj ? proto : fn.async ? this.ctx.builtins.AsyncGenerator : this.ctx.builtins.Generator,
+          fn.async,
+          generatorBody(invocation.functionBody(fn, paramScope)),
+        )
+      }
+      return simple ? create() : map(invocation.bindParameters(fn, args), create)
     }
-    const body = invocation.enter(fn, args, paramScope)
-    if (!fn.async) return (yield new Call(body)) as Value
+    const body = simple ? invocation.functionBody(fn, paramScope) : invocation.enter(fn, args, paramScope)
+    if (!fn.async) return new Call(body)
     const promise = runner.newPromise()
     const resolving = runner.resolving(promise)
-    return (yield new Call(
+    return new Call(
       body,
       new AsyncBoundary(
         (completion) =>
           completion.ok ? resolving.resolve(completion.value as Value) : resolving.reject(completion.error),
         promise,
       ),
-    )) as Value
+    )
   }
 
   private *enter(fn: Fn, args: Array<Value>, paramScope: Map<string, Binding>): Eval<Value> {
@@ -1776,10 +2004,11 @@ class Frame<R> {
     if (fn.body.type === "BlockStatement") {
       this.scopes.push()
       this.hoistVars(fn.body.body, paramScope)
-      const result = yield* this.evaluateStatement(fn.body)
+      const result = yield* this.evaluateBlock(fn.body)
       return result.kind === "return" ? result.value : undefined
     }
-    return yield* this.evaluateExpression(fn.body)
+    const result = this.evaluate(fn.body)
+    return isEval(result) ? yield* result : result
   }
 
   private *evaluateYieldExpression(node: YieldExpression): Eval<Value> {
@@ -1989,26 +2218,50 @@ class Frame<R> {
 
   private *getMemberReference(
     node: MemberExpression,
-  ): Eval<MemberReference | ToolReference | { value: Value } | typeof OptionalShortCircuit> {
+    object: Value | Eval<Value> | typeof unevaluated = unevaluated,
+    key: Value | Eval<Value> | typeof unevaluated = unevaluated,
+  ): Eval<Reference> {
     const objectNode = node.object
     const propertyNode = node.property
     if (objectNode.type === "Super") throw unsupportedSyntax(objectNode.type, objectNode)
     if (propertyNode.type === "PrivateIdentifier") throw unsupportedSyntax(propertyNode.type, propertyNode)
-    const objectValue = yield* this.evaluateExpression(objectNode)
+    const evaluated = object === unevaluated ? this.evaluate(objectNode) : object
+    const objectValue = isEval(evaluated) ? yield* evaluated : evaluated
     if (objectValue === OptionalShortCircuit) return OptionalShortCircuit
     if ((objectValue === null || objectValue === undefined) && node.optional) return OptionalShortCircuit
 
-    const keyValue =
-      !node.computed && propertyNode.type === "Identifier"
-        ? propertyNode.name
-        : yield* this.evaluateExpression(propertyNode)
-    // GetValue applies ToObject to the base before ToPropertyKey, so a nullish base throws before the key's own
-    // toString runs.
+    const computed =
+      key !== unevaluated
+        ? key
+        : !node.computed && propertyNode.type === "Identifier"
+          ? propertyNode.name
+          : this.evaluate(propertyNode)
+    const keyValue = isEval(computed) ? yield* computed : computed
+    const reference = this.memberReference(node, objectValue, keyValue)
+    return isEval(reference) ? yield* reference : reference
+  }
+
+  // The reference once the object and key are evaluated: ToPropertyKey on an object key may run program code.
+  // GetValue applies ToObject to the base before ToPropertyKey, so a nullish base throws before the key's own
+  // toString runs.
+  private memberReference(node: MemberExpression, objectValue: Value, keyValue: Value): Reference | Eval<Reference> {
     if (objectValue === null || objectValue === undefined) {
-      throw typeError(`Cannot read properties of ${objectValue} (reading '${coerceToString(keyValue)}').`, objectNode)
+      throw typeError(`Cannot read properties of ${objectValue} (reading '${coerceToString(keyValue)}').`, node.object)
     }
-    const key = yield* this.toPropertyKey(keyValue, propertyNode)
-    return this.resolveProperty(objectValue, key, objectNode, propertyNode)
+    if (keyValue instanceof Obj) return this.resolveAfterKey(node, objectValue, keyValue)
+    return this.resolveProperty(objectValue, propertyKey(keyValue), node.object, node.property)
+  }
+
+  private *resolveAfterKey(node: MemberExpression, objectValue: Value, keyValue: Obj): Eval<Reference> {
+    const key = yield* this.toPropertyKey(keyValue, node.property)
+    return this.resolveProperty(objectValue, key, node.object, node.property)
+  }
+
+  private readResolved(node: MemberExpression, reference: Reference): Value {
+    if (reference === OptionalShortCircuit) return OptionalShortCircuit
+    if (reference instanceof ToolReference) return reference
+    if ("value" in reference) return reference.value
+    return this.readReference(reference, node)
   }
 
   private resolveProperty(
@@ -2069,12 +2322,12 @@ class Frame<R> {
     }
   }
 
-  private *readMember(node: MemberExpression): Eval<Value> {
-    const reference = yield* this.getMemberReference(node)
-    if (reference === OptionalShortCircuit) return OptionalShortCircuit
-    if (reference instanceof ToolReference) return reference
-    if ("value" in reference) return reference.value
-    return this.readReference(reference, node)
+  private *readMember(
+    node: MemberExpression,
+    object: Value | Eval<Value> | typeof unevaluated = unevaluated,
+    key: Value | Eval<Value> | typeof unevaluated = unevaluated,
+  ): Eval<Value> {
+    return this.readResolved(node, yield* this.getMemberReference(node, object, key))
   }
 
   private writeMember(node: MemberExpression, value: Value): Eval<Value> {
@@ -2159,4 +2412,13 @@ function* generatorBody(body: Eval<Value>): Eval<Value> {
 // Rethrows inside interpreter work, so a failure already caught can pass through `preserveConsumerError`.
 function* thrower(error: unknown): Eval<never> {
   throw error
+}
+
+// Finishes a built-in's work, locating a failure at the call that started it.
+function* located(work: Eval<Value>, node: AstNode | undefined): Eval<Value> {
+  try {
+    return yield* work
+  } catch (error) {
+    throw locate(error, node)
+  }
 }

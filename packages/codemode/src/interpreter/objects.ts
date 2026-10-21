@@ -676,6 +676,14 @@ export const keys = (target: Obj): Array<string> =>
 /** Own enumerable string entries: `Object.entries` and serialization. */
 export const entries = (target: Obj): Array<[string, Value]> => keys(target).map((key) => [key, getOwn(target, key)])
 
+/** An iterator result `{ value, done }`, built directly since every iteration step makes one. */
+export const iteratorResult = (proto: Obj, value: Value, done: boolean): Obj => {
+  const target = new Obj(proto)
+  target.props.set("value", { value, writable: true, enumerable: true, configurable: true })
+  target.props.set("done", { value: done, writable: true, enumerable: true, configurable: true })
+  return target
+}
+
 export const record = (proto: Obj, fields: Record<string, Value>): Obj => {
   const target = new Obj(proto)
   for (const [key, value] of Object.entries(fields)) define(target, key, value)

@@ -119,14 +119,12 @@ type Pause =
 /** Most activations one task may hold, as the call-stack limit. */
 export const MAX_CALL_DEPTH = 10_000
 /** Interpreter steps between clock checks, and how long one slice may run before the host gets a turn. */
-const FUEL = 256
+const FUEL = 512
 const SLICE_MS = 1
 
-export const isEval = (value: unknown): value is Eval<Value> =>
-  typeof value === "object" &&
-  value !== null &&
-  !(value instanceof Obj) &&
-  typeof (value as { readonly next?: unknown }).next === "function"
+// Program values never have a `next` method of their own: an object's properties live in its property map.
+export const isEval = <A>(value: A | Eval<A>): value is Eval<A> =>
+  typeof value === "object" && value !== null && typeof (value as { readonly next?: unknown }).next === "function"
 
 /**
  * One execution's job queue. Program code runs only inside a job, one job at a time and each to completion, as in a

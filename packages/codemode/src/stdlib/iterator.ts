@@ -9,9 +9,9 @@ import {
   define,
   hasPrototype,
   hidden,
+  iteratorResult,
   IteratorObj,
   Obj,
-  record,
   type Step,
   type Value,
 } from "../interpreter/objects.js"
@@ -100,7 +100,7 @@ export const iteratorGlobals = <R>(ctx: Interpreter<R>) => {
       0,
       function* (thisValue) {
         const step = yield* receiver(IteratorObj, thisValue, method("next")).cursor.next()
-        return record(builtins.Object, { value: step.value, done: step.done })
+        return iteratorResult(builtins.Object, step.value, step.done)
       },
     ],
     [
@@ -319,7 +319,7 @@ export const iteratorGlobals = <R>(ctx: Interpreter<R>) => {
       0,
       function* (thisValue) {
         yield* receiver(IteratorObj, thisValue, "Iterator.prototype.return").cursor.close()
-        return record(builtins.Object, { value: undefined, done: true })
+        return iteratorResult(builtins.Object, undefined, true)
       },
     ],
   ])

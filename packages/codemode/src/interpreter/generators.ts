@@ -1,6 +1,6 @@
 import { fn, type Method, methods, receiver } from "./native.js"
 import { AsyncIteratorSymbol, type GeneratorRequestKind, IteratorSymbol, Throw, typeError } from "./model.js"
-import { define, hidden, GeneratorObj, record, type Value } from "./objects.js"
+import { define, hidden, GeneratorObj, iteratorResult, type Value } from "./objects.js"
 import type { Interpreter } from "./interpreter.js"
 import {
   abrupt,
@@ -42,7 +42,7 @@ export const generatorGlobals = <R>(ctx: Interpreter<R>): void => {
   )
 }
 
-const result = <R>(ctx: Interpreter<R>, value: Value, done: boolean) => record(ctx.builtins.Object, { value, done })
+const result = <R>(ctx: Interpreter<R>, value: Value, done: boolean) => iteratorResult(ctx.builtins.Object, value, done)
 
 // Puts the suspended body back on the stack and continues it with `request`; the boundary answers the caller when
 // the body next yields or ends.
