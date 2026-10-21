@@ -1,8 +1,18 @@
 import { describe, expect, test } from "bun:test"
 import { createRoot, createSignal } from "solid-js"
 import { createKeybindSettingsController } from "../src/settings/keybinds/keybinds"
+import { promptKeybindOptions } from "../src/composer/keybinds"
 
-function setup(overrides: Record<string, string> = {}, plugins?: ReadonlySet<string>, active?: () => boolean) {
+function setup(
+  overrides: Record<string, string> = {},
+  plugins?: ReadonlySet<string>,
+  active?: () => boolean,
+  options = [
+    { id: "session.alpha", title: "Alpha", keybind: "mod+a" },
+    { id: "session.beta", title: "Beta", keybind: "mod+b" },
+    { id: "session.chord", title: "Chord", keybind: "mod+k mod+c" },
+  ],
+) {
   const changes: [string, string][] = []
   const suppression: boolean[] = []
   const notifications: { title: string; description?: string }[] = []
@@ -13,12 +23,7 @@ function setup(overrides: Record<string, string> = {}, plugins?: ReadonlySet<str
     controller = createKeybindSettingsController(
       {
         command: {
-          catalog: [
-            { id: "session.alpha", title: "Alpha", keybind: "mod+a" },
-            { id: "session.beta", title: "Beta", keybind: "mod+b" },
-            { id: "session.chord", title: "Chord", keybind: "mod+k mod+c" },
-            { id: "acme.open", plugin: "acme", title: "Open Acme", section: "session" },
-          ],
+          catalog: [...options, { id: "acme.open", plugin: "acme", title: "Open Acme", section: "session" }],
           options: [],
           suspend: () => {
             suppression.push(false)
@@ -79,6 +84,33 @@ function key(key: string, init?: KeyboardEventInit) {
 }
 
 describe("keybind settings controller", () => {
+  test("shows prompt aliases and rejects them as conflicts until explicitly released", () => {
+    const titles = { submit: "Submit", newline: "Newline", alternate: "Alternate" }
+    const defaults = setup({}, undefined, undefined, promptKeybindOptions(titles))
+    expect(defaults.controller.catalog.alternatives("prompt.submit")).toContain("Alt")
+    defaults.controller.capture.toggle("prompt.newline")
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", altKey: true, bubbles: true, cancelable: true }),
+    )
+    expect(defaults.changes).toEqual([])
+    expect(defaults.notifications[0]?.description).toContain("Submit")
+    defaults.dispose()
+
+    const custom = setup(
+      { "prompt.submit": "enter" },
+      undefined,
+      undefined,
+      promptKeybindOptions(titles, { submit: "enter" }),
+    )
+    expect(custom.controller.catalog.alternatives("prompt.submit")).not.toContain("Alt")
+    custom.controller.capture.toggle("prompt.newline")
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", altKey: true, bubbles: true, cancelable: true }),
+    )
+    expect(custom.changes).toEqual([["prompt.newline", "alt+enter"]])
+    custom.dispose()
+  })
+
   test("derives the catalog, effective bindings, and filtered groups", () => {
     const state = setup({ "session.beta": "alt+k" })
 
