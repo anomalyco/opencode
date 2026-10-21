@@ -1,4 +1,4 @@
-import { Effect } from "effect"
+import { type Eval, gen, map, succeed } from "../interpreter/runner.js"
 import { methods } from "../interpreter/native.js"
 import { applyCollectionCallback } from "../interpreter/callback.js"
 import type { Interpreter } from "../interpreter/interpreter.js"
@@ -17,7 +17,7 @@ export const jsonGlobal = <R>(ctx: Interpreter<R>) => {
   return json
 }
 
-const parse = <R>(ctx: Interpreter<R>, args: Array<Value>): Effect.Effect<Value, unknown, R> => {
+const parse = <R>(ctx: Interpreter<R>, args: Array<Value>): Eval<Value> => {
   const text = coerceToString(args[0])
 
   const parsed = (() => {
@@ -27,11 +27,11 @@ const parse = <R>(ctx: Interpreter<R>, args: Array<Value>): Effect.Effect<Value,
       throw syntaxError(`JSON.parse received invalid JSON: ${error instanceof Error ? error.message : String(error)}`)
     }
   })()
-  if (typeofValue(args[1]) !== "function") return Effect.succeed(parsed)
+  if (typeofValue(args[1]) !== "function") return succeed(parsed)
 
   const apply = applyCollectionCallback(ctx, args[1], "JSON.parse")
-  const visit = (holder: Obj, key: string): Effect.Effect<Value, unknown, R> =>
-    Effect.gen(function* () {
+  const visit = (holder: Obj, key: string): Eval<Value> =>
+    gen(function* () {
       const value = get(holder, key)
       if (value instanceof Obj) {
         for (const name of keys(value)) {
@@ -45,7 +45,7 @@ const parse = <R>(ctx: Interpreter<R>, args: Array<Value>): Effect.Effect<Value,
   return visit(record(ctx.builtins.Object, { "": parsed }), "")
 }
 
-const stringify = <R>(ctx: Interpreter<R>, args: Array<Value>): Effect.Effect<Value, unknown, R> => {
+const stringify = <R>(ctx: Interpreter<R>, args: Array<Value>): Eval<Value> => {
   const space = args[2]
   const indent = typeof space === "number" || typeof space === "string" ? space : undefined
   const replacer = args[1]
@@ -57,7 +57,7 @@ const stringify = <R>(ctx: Interpreter<R>, args: Array<Value>): Effect.Effect<Va
       : null
   const callback =
     typeofValue(replacer) === "function" ? applyCollectionCallback(ctx, replacer, "JSON.stringify") : undefined
-  return Effect.map(toJson(ctx, args[0], callback), (value) => {
+  return map(toJson(ctx, args[0], callback), (value) => {
     const text = JSON.stringify(value, properties, indent)
     if (text !== undefined) checkStringLength(text.length)
     return text

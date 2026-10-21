@@ -1,17 +1,9 @@
 import type { BlockStatement, Expression, Pattern } from "acorn"
-import { Effect, type Fiber } from "effect"
 import { ToolReference } from "../tool-runtime.js"
 import type { Builtins } from "./intrinsics.js"
 import { checkArrayLength } from "./limits.js"
-import {
-  AsyncIteratorSymbol,
-  type Binding,
-  type GeneratorRequestKind,
-  IteratorSymbol,
-  type PendingThrow,
-  rangeError,
-  typeError,
-} from "./model.js"
+import { AsyncIteratorSymbol, type Binding, IteratorSymbol, rangeError, typeError } from "./model.js"
+import type { Entry, Eval, GeneratorRequest, Reaction, Resolving } from "./runner.js"
 
 /** Property attributes, as in a JS property descriptor. */
 export type Attributes = {
@@ -123,8 +115,8 @@ export class Arr extends Obj {
 /** An object with the [[ErrorData]] slot: what `Error.prototype.toString` and the host boundary recognize as an error. */
 export class ErrorObj extends Obj {
   override readonly tag = "Error"
-  /** The interpreter failure this error materialized from, so rethrowing it keeps the diagnostic kind and location. */
-  host?: PendingThrow
+  /** The failure this error materialized from, so rethrowing it keeps the diagnostic kind and location. */
+  host?: unknown
   /** Error.prototype.toString: "name: message", or just one when the other is empty. */
   override toString() {
     const name = get(this, "name")
@@ -195,25 +187,27 @@ export class Arguments extends Obj {
   }
 }
 
-export type NativeCall<R> = (thisValue: Value, args: Array<Value>) => Effect.Effect<Value, unknown, R>
-export type NativeConstruct<R> = (args: Array<Value>, newTarget: Callable) => Effect.Effect<Value, unknown, R>
+/** A native function body: a value, or interpreter work for bodies that call program code or the host. */
+export type NativeResult = Value | Eval<Value>
+export type NativeCall = (thisValue: Value, args: Array<Value>) => NativeResult
+export type NativeConstruct = (args: Array<Value>, newTarget: Callable) => NativeResult
 
-export type NativeOptions<R> = {
+export type NativeOptions = {
   readonly name: string
   readonly length?: number
-  readonly call: NativeCall<R>
+  readonly call: NativeCall
   /** `new name(...)`; without it the function is not a constructor. */
-  readonly construct?: NativeConstruct<R>
+  readonly construct?: NativeConstruct
   /** Whether callback sites (array methods, replacers, promise reactions) admit this function. Defaults to true. */
   readonly callback?: boolean
 }
 
-export class Native<R = never> extends Callable {
-  readonly call: NativeCall<R>
-  readonly construct: NativeConstruct<R> | undefined
+export class Native extends Callable {
+  readonly call: NativeCall
+  readonly construct: NativeConstruct | undefined
   readonly callback: boolean
 
-  constructor(proto: Obj, options: NativeOptions<R>) {
+  constructor(proto: Obj, options: NativeOptions) {
     super(proto, options.name, options.length ?? 0)
     this.call = options.call
     this.construct = options.construct
@@ -223,9 +217,16 @@ export class Native<R = never> extends Callable {
 
 export class PromiseObj extends Opaque {
   override readonly tag = "Promise"
+  state: "pending" | "fulfilled" | "rejected" = "pending"
+  /** The value, or the failure as thrown; a handler receives it materialized. */
+  result: unknown = undefined
+  reactions: Array<Reaction> = []
+  /** [[PromiseIsHandled]]: a reaction was attached, so a rejection is not reported as unhandled. */
+  handled = false
   constructor(
     proto: Obj,
-    readonly fiber: Fiber.Fiber<Value, unknown>,
+    /** Creation order, for reporting unhandled rejections in the order their promises were made. */
+    readonly id: number,
   ) {
     super(proto)
   }
@@ -237,12 +238,26 @@ export class PromiseObj extends Opaque {
   }
 }
 
+export type GeneratorState =
+  | "suspendedStart"
+  | "suspendedYield"
+  | "executing"
+  | "awaiting-return"
+  | "draining"
+  | "completed"
+
 export class GeneratorObj extends Opaque {
   override readonly tag = "Generator"
+  state: GeneratorState = "suspendedStart"
+  /** The suspended body's activations, kept while it waits for the next request. */
+  entries: Array<Entry> | undefined
+  /** An async generator's requests, oldest first, each with the functions that settle its promise. */
+  readonly queue: Array<{ readonly request: GeneratorRequest; readonly resolving: Resolving }> = []
   constructor(
     proto: Obj,
     readonly asynchronous: boolean,
-    readonly request: (kind: GeneratorRequestKind, value: Value) => Effect.Effect<Value, unknown, unknown>,
+    /** The body, started by the first `next()`. */
+    readonly body: Eval<Value>,
   ) {
     super(proto)
   }
@@ -255,18 +270,18 @@ export class GeneratorObj extends Opaque {
 export type Step = { readonly done: boolean; readonly value: Value }
 
 /** How the interpreter drives any iterator: pull the next step, or close it early. */
-export type Cursor<R = unknown> = {
-  readonly next: Effect.Effect<Step, unknown, R>
-  readonly close: Effect.Effect<void, unknown, R>
+export type Cursor = {
+  readonly next: () => Eval<Step>
+  readonly close: () => Eval<void>
 }
 
 /** A cursor over a host iterator; there is nothing to close. */
-export const hostCursor = (iterator: Iterator<Value, undefined>): Cursor<never> => ({
-  next: Effect.sync(() => {
+export const hostCursor = (iterator: Iterator<Value, undefined>): Cursor => ({
+  next: function* () {
     const step = iterator.next()
     return { done: Boolean(step.done), value: step.value }
-  }),
-  close: Effect.void,
+  },
+  close: function* () {},
 })
 
 /** A built-in iterator: a live cursor over a host collection or an iterator helper, yielding program values. */

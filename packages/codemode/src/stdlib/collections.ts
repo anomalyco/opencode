@@ -1,4 +1,4 @@
-import { Effect } from "effect"
+import { type Eval, flatMap, gen, map, succeed, sync } from "../interpreter/runner.js"
 import { constructor, fn, type Method, methods, prototypeFrom, receiver, requiresNew } from "../interpreter/native.js"
 import { invalidData, IteratorSymbol, typeError } from "../interpreter/model.js"
 import {
@@ -29,8 +29,8 @@ import {
 } from "../interpreter/callback.js"
 import type { Interpreter } from "../interpreter/interpreter.js"
 
-const coerceGroupByPropertyKey = <R>(ctx: Interpreter<R>, value: Value): Effect.Effect<string, unknown, R> => {
-  if (value instanceof PromiseObj) return Effect.succeed(coerceToString(value))
+const coerceGroupByPropertyKey = <R>(ctx: Interpreter<R>, value: Value): Eval<string> => {
+  if (value instanceof PromiseObj) return succeed(coerceToString(value))
   if (isOpaque(value)) {
     throw invalidData(`Object.groupBy callback must return a data value, received ${describeValue(value)}.`)
   }
@@ -39,14 +39,14 @@ const coerceGroupByPropertyKey = <R>(ctx: Interpreter<R>, value: Value): Effect.
 
 /** `Map.groupBy` and `Object.groupBy`: the same iteration, keyed into a Map or a data object. */
 export const groupBy = <R>(ctx: Interpreter<R>, namespace: "Map" | "Object") =>
-  fn<R>(ctx.builtins, "groupBy", 2, (_, args) => {
+  fn(ctx.builtins, "groupBy", 2, (_, args) => {
     const builtins = ctx.builtins
     const source = args[0]
     if (source === null || source === undefined) {
       throw typeError(`${namespace}.groupBy expects an iterable collection.`)
     }
     const apply = applyCollectionCallback(ctx, args[1], `${namespace}.groupBy`)
-    return Effect.gen(function* () {
+    return gen(function* () {
       const cursor = yield* ctx.iterate(source)
       if (cursor === undefined) {
         throw typeError(`${namespace}.groupBy expects an iterable collection.`)
@@ -55,7 +55,7 @@ export const groupBy = <R>(ctx: Interpreter<R>, namespace: "Map" | "Object") =>
         const result = new MapObj(builtins.Map)
         let index = 0
         while (true) {
-          const step = yield* cursor.next
+          const step = yield* cursor.next()
           if (step.done) return result
           const item = step.value
           const key = yield* preserveConsumerError(cursor.close, apply([item, index]))
@@ -70,12 +70,12 @@ export const groupBy = <R>(ctx: Interpreter<R>, namespace: "Map" | "Object") =>
       const result = new Obj(null)
       let index = 0
       while (true) {
-        const step = yield* cursor.next
+        const step = yield* cursor.next()
         if (step.done) return result
         const item = step.value
         const key = yield* preserveConsumerError(
           cursor.close,
-          Effect.flatMap(apply([item, index]), (value) => coerceGroupByPropertyKey(ctx, value)),
+          flatMap(apply([item, index]), (value) => coerceGroupByPropertyKey(ctx, value)),
         )
         const group = getOwn(result, key)
         if (group === undefined) define(result, key, new Arr(builtins.Array, [item]))
@@ -87,18 +87,18 @@ export const groupBy = <R>(ctx: Interpreter<R>, namespace: "Map" | "Object") =>
 
 const constructMap = <R>(ctx: Interpreter<R>, init: Value, proto: Obj) => {
   const target = new MapObj(proto)
-  if (init === undefined || init === null) return Effect.succeed(target)
-  return Effect.gen(function* () {
+  if (init === undefined || init === null) return succeed(target)
+  return gen(function* () {
     const cursor = yield* ctx.iterate(init)
     if (cursor === undefined) {
       throw typeError(`new Map(...) expects an iterable of [key, value] pairs, received ${describeValue(init)}.`)
     }
     while (true) {
-      const step = yield* cursor.next
+      const step = yield* cursor.next()
       if (step.done) return target
       yield* preserveConsumerError(
         cursor.close,
-        Effect.sync(() => {
+        sync(() => {
           if (!(step.value instanceof Obj)) {
             throw typeError("new Map(...) expects [key, value] pairs as entry objects.")
           }
@@ -111,14 +111,14 @@ const constructMap = <R>(ctx: Interpreter<R>, init: Value, proto: Obj) => {
 
 const constructSet = <R>(ctx: Interpreter<R>, init: Value, proto: Obj) => {
   const target = new SetObj(proto)
-  if (init === undefined || init === null) return Effect.succeed(target)
-  return Effect.gen(function* () {
+  if (init === undefined || init === null) return succeed(target)
+  return gen(function* () {
     const cursor = yield* ctx.iterate(init)
     if (cursor === undefined) {
       throw typeError(`new Set(...) expects a synchronous iterable, received ${describeValue(init)}.`)
     }
     while (true) {
-      const step = yield* cursor.next
+      const step = yield* cursor.next()
       if (step.done) return target
       target.set.add(step.value)
     }
@@ -128,7 +128,7 @@ const constructSet = <R>(ctx: Interpreter<R>, init: Value, proto: Obj) => {
 export const mapGlobal = <R>(ctx: Interpreter<R>) => {
   const builtins = ctx.builtins
   const proto = builtins.Map
-  const map = constructor<R>(builtins, proto, {
+  const map = constructor(builtins, proto, {
     name: "Map",
     call: requiresNew("Map"),
     construct: (args, newTarget) => constructMap(ctx, args[0], prototypeFrom(newTarget, proto)),
@@ -165,7 +165,8 @@ export const mapGlobal = <R>(ctx: Interpreter<R>) => {
         const apply = applyCollectionCallback(ctx, args[1], "Map.getOrInsertComputed")
         if (target.has(args[0])) return target.get(args[0])
         // The callback sees the stored key (-0 is +0) and its result wins over anything it inserted itself.
-        return Effect.map(apply([args[0] === 0 ? 0 : args[0]]), (value) => {
+        return gen(function* () {
+          const value = yield* apply([args[0] === 0 ? 0 : args[0]])
           target.set(args[0], value)
           return value
         })
@@ -189,7 +190,7 @@ export const mapGlobal = <R>(ctx: Interpreter<R>) => {
       (thisValue, args) => {
         const target = self(thisValue, "forEach")
         const apply = applyCollectionCallback(ctx, args[0], "Map.forEach")
-        return Effect.gen(function* () {
+        return gen(function* () {
           for (const [key, item] of target.map.entries()) yield* apply([item, key, target], args[1])
           return undefined
         })
@@ -202,33 +203,29 @@ export const mapGlobal = <R>(ctx: Interpreter<R>) => {
 
 type SetRecord<R> = {
   readonly size: number
-  readonly has: (item: Value) => Effect.Effect<boolean, unknown, R>
-  readonly keys: () => Effect.Effect<Iterable<Value>, unknown, R>
+  readonly has: (item: Value) => Eval<boolean>
+  readonly keys: () => Eval<Iterable<Value>>
 }
 
-const loadSetRecord = <R>(
-  ctx: Interpreter<R>,
-  source: Value,
-  name: string,
-): Effect.Effect<SetRecord<R>, unknown, R> => {
+const loadSetRecord = <R>(ctx: Interpreter<R>, source: Value, name: string): Eval<SetRecord<R>> => {
   if (source instanceof SetObj) {
-    return Effect.succeed({
+    return succeed({
       size: source.set.size,
-      has: (item: Value) => Effect.succeed(source.set.has(item)),
-      keys: () => Effect.succeed(source.set.values()),
+      has: (item: Value) => succeed(source.set.has(item)),
+      keys: () => succeed(source.set.values()),
     })
   }
   if (source instanceof MapObj) {
-    return Effect.succeed({
+    return succeed({
       size: source.map.size,
-      has: (item: Value) => Effect.succeed(source.map.has(item)),
-      keys: () => Effect.succeed(source.map.keys()),
+      has: (item: Value) => succeed(source.map.has(item)),
+      keys: () => succeed(source.map.keys()),
     })
   }
   if (!(source instanceof Obj)) {
     throw typeError(`Set.${name} expects a Set-like object.`)
   }
-  return Effect.gen(function* () {
+  return gen(function* () {
     const size = yield* toPrimitiveNumber(ctx, get(source, "size"))
     if (Number.isNaN(size)) {
       throw typeError(`Set.${name} received a Set-like object with an invalid size.`)
@@ -240,14 +237,14 @@ const loadSetRecord = <R>(
     }
     return {
       size: Math.max(Math.trunc(size), 0),
-      has: (item: Value) => Effect.map(ctx.call(has, source, [item]), Boolean),
+      has: (item: Value) => map(ctx.call(has, source, [item]), Boolean),
       keys: () =>
-        Effect.gen(function* () {
+        gen(function* () {
           const result = yield* ctx.call(keys, source, [])
           const cursor = result instanceof Arr ? hostCursor(result.items.values()) : ctx.iterateDirect(result)
           const items: Array<Value> = []
           while (true) {
-            const step = yield* cursor.next
+            const step = yield* cursor.next()
             if (step.done) return items
             items.push(step.value)
           }
@@ -256,13 +253,8 @@ const loadSetRecord = <R>(
   })
 }
 
-const setOperation = <R>(
-  ctx: Interpreter<R>,
-  target: SetObj,
-  name: string,
-  source: Value,
-): Effect.Effect<Value, unknown, R> =>
-  Effect.gen(function* () {
+const setOperation = <R>(ctx: Interpreter<R>, target: SetObj, name: string, source: Value): Eval<Value> =>
+  gen(function* () {
     const other = yield* loadSetRecord(ctx, source, name)
     const copy = () => {
       const result = new SetObj(ctx.builtins.Set)
@@ -335,7 +327,7 @@ const setOperation = <R>(
 export const setGlobal = <R>(ctx: Interpreter<R>) => {
   const builtins = ctx.builtins
   const proto = builtins.Set
-  const set = constructor<R>(builtins, proto, {
+  const set = constructor(builtins, proto, {
     name: "Set",
     call: requiresNew("Set"),
     construct: (args, newTarget) => constructSet(ctx, args[0], prototypeFrom(newTarget, proto)),
@@ -387,7 +379,7 @@ export const setGlobal = <R>(ctx: Interpreter<R>) => {
       (thisValue, args) => {
         const target = self(thisValue, "forEach")
         const apply = applyCollectionCallback(ctx, args[0], "Set.forEach")
-        return Effect.gen(function* () {
+        return gen(function* () {
           for (const item of target.set.values()) yield* apply([item, item, target], args[1])
           return undefined
         })
@@ -414,13 +406,13 @@ const weakKey = (value: Value, label: string) => {
 export const weakMapGlobal = <R>(ctx: Interpreter<R>) => {
   const builtins = ctx.builtins
   const proto = builtins.WeakMap
-  const weakMap = constructor<R>(builtins, proto, {
+  const weakMap = constructor(builtins, proto, {
     name: "WeakMap",
     call: requiresNew("WeakMap"),
     construct: (args, newTarget) => {
       const target = new WeakMapObj(prototypeFrom(newTarget, proto))
-      if (args[0] === undefined || args[0] === null) return Effect.succeed(target)
-      return Effect.gen(function* () {
+      if (args[0] === undefined || args[0] === null) return succeed(target)
+      return gen(function* () {
         const cursor = yield* ctx.iterate(args[0]!)
         if (cursor === undefined) {
           throw typeError(
@@ -428,11 +420,11 @@ export const weakMapGlobal = <R>(ctx: Interpreter<R>) => {
           )
         }
         while (true) {
-          const step = yield* cursor.next
+          const step = yield* cursor.next()
           if (step.done) return target
           yield* preserveConsumerError(
             cursor.close,
-            Effect.sync(() => {
+            sync(() => {
               if (!(step.value instanceof Obj)) {
                 throw typeError("new WeakMap(...) expects [key, value] pairs as entry objects.")
               }
@@ -483,7 +475,8 @@ export const weakMapGlobal = <R>(ctx: Interpreter<R>) => {
         const k = key(args[0])
         const apply = applyCollectionCallback(ctx, args[1], "WeakMap.getOrInsertComputed")
         if (target.has(k)) return target.get(k)
-        return Effect.map(apply([k]), (value) => {
+        return gen(function* () {
+          const value = yield* apply([k])
           target.set(k, value)
           return value
         })
@@ -496,23 +489,23 @@ export const weakMapGlobal = <R>(ctx: Interpreter<R>) => {
 export const weakSetGlobal = <R>(ctx: Interpreter<R>) => {
   const builtins = ctx.builtins
   const proto = builtins.WeakSet
-  const weakSet = constructor<R>(builtins, proto, {
+  const weakSet = constructor(builtins, proto, {
     name: "WeakSet",
     call: requiresNew("WeakSet"),
     construct: (args, newTarget) => {
       const target = new WeakSetObj(prototypeFrom(newTarget, proto))
-      if (args[0] === undefined || args[0] === null) return Effect.succeed(target)
-      return Effect.gen(function* () {
+      if (args[0] === undefined || args[0] === null) return succeed(target)
+      return gen(function* () {
         const cursor = yield* ctx.iterate(args[0]!)
         if (cursor === undefined) {
           throw typeError(`new WeakSet(...) expects a synchronous iterable, received ${describeValue(args[0])}.`)
         }
         while (true) {
-          const step = yield* cursor.next
+          const step = yield* cursor.next()
           if (step.done) return target
           yield* preserveConsumerError(
             cursor.close,
-            Effect.sync(() => {
+            sync(() => {
               target.set.add(weakKey(step.value, "in weak set"))
             }),
           )

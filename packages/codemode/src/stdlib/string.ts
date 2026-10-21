@@ -1,4 +1,4 @@
-import { Effect } from "effect"
+import { type Eval, forEach, gen, map } from "../interpreter/runner.js"
 import { constructor, fn, type Impl, type Method, methods } from "../interpreter/native.js"
 import { checkArrayLength, checkStringLength } from "../interpreter/limits.js"
 import { invalidData, IteratorSymbol, rangeError, typeError } from "../interpreter/model.js"
@@ -49,7 +49,7 @@ const replaceWithCallback = <R>(
   value: string,
   name: "replace" | "replaceAll",
   args: Array<Value>,
-): Effect.Effect<Value, unknown, R> => {
+): Eval<Value> => {
   const builtins = ctx.builtins
   const apply = applyCollectionCallback(ctx, args[1], `String.${name}`)
   const matches: Array<{ readonly match: string; readonly offset: number; readonly args: Array<Value> }> = []
@@ -79,7 +79,7 @@ const replaceWithCallback = <R>(
     else value.replaceAll(search, collect)
   }
 
-  return Effect.gen(function* () {
+  return gen(function* () {
     const output: Array<string> = []
     let end = 0
     for (const match of matches) {
@@ -94,7 +94,7 @@ const replaceWithCallback = <R>(
 
 export const stringGlobal = <R>(ctx: Interpreter<R>) => {
   const builtins = ctx.builtins
-  const string = constructor<R>(builtins, builtins.String, {
+  const string = constructor(builtins, builtins.String, {
     name: "String",
     length: 1,
     call: coercion(ctx, "String").call,
@@ -120,8 +120,8 @@ export const stringGlobal = <R>(ctx: Interpreter<R>) => {
         const parts = Array.from({ length: count }, (_, index) =>
           index + 1 < count && index + 1 < args.length ? [get(raw, index), args[index + 1]] : [get(raw, index)],
         ).flat()
-        return Effect.map(
-          Effect.forEach(parts, (part) => toPrimitiveString(ctx, part)),
+        return map(
+          forEach(parts, (part) => toPrimitiveString(ctx, part)),
           (strings) => {
             const output = strings.join("")
             checkStringLength(output.length)

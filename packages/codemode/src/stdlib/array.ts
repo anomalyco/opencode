@@ -1,4 +1,4 @@
-import { Effect } from "effect"
+import { type Eval, forEach, gen, map, succeed, sync } from "../interpreter/runner.js"
 import { constructor, type Method, methods, prototypeFrom, receiver } from "../interpreter/native.js"
 import { checkArrayLength, checkStringLength, MAX_ARRAY_LENGTH } from "../interpreter/limits.js"
 import { invalidData, IteratorSymbol, rangeError, typeError } from "../interpreter/model.js"
@@ -32,12 +32,12 @@ const arrayLikeSource = (source: Value): { readonly length: number; readonly sou
   throw invalidData(`Array.from expects an iterable or array-like value, received ${describeValue(source)}.`)
 }
 
-const arrayFrom = <R>(ctx: Interpreter<R>, args: Array<Value>): Effect.Effect<Value, unknown, R> => {
+const arrayFrom = <R>(ctx: Interpreter<R>, args: Array<Value>): Eval<Value> => {
   const source = args[0]
   const proto = ctx.builtins.Array
   const apply =
     args.length < 2 || args[1] === undefined ? undefined : applyCollectionCallback(ctx, args[1], "Array.from")
-  return Effect.gen(function* () {
+  return gen(function* () {
     const cursor = yield* ctx.iterate(source)
     if (cursor === undefined) {
       if (source instanceof GeneratorObj) {
@@ -56,7 +56,7 @@ const arrayFrom = <R>(ctx: Interpreter<R>, args: Array<Value>): Effect.Effect<Va
     const values: Array<Value> = []
     let index = 0
     while (true) {
-      const step = yield* cursor.next
+      const step = yield* cursor.next()
       if (step.done) return new Arr(proto, values)
       values.push(
         apply === undefined
@@ -73,15 +73,15 @@ export const sortArray = <R>(
   target: Array<Value>,
   comparator: Value,
   name: string,
-): Effect.Effect<Array<Value>, unknown, R> => {
+): Eval<Array<Value>> => {
   if (comparator === undefined) {
-    return Effect.sync(() => [...target].sort((a, b) => compareText(coerceToString(a), coerceToString(b))))
+    return sync(() => [...target].sort((a, b) => compareText(coerceToString(a), coerceToString(b))))
   }
   const apply = applyCollectionCallback(ctx, comparator, name)
-  const mergeSort = (items: Array<Value>): Effect.Effect<Array<Value>, unknown, R> => {
-    if (items.length <= 1) return Effect.succeed(items)
+  const mergeSort = (items: Array<Value>): Eval<Array<Value>> => {
+    if (items.length <= 1) return succeed(items)
     const midpoint = Math.floor(items.length / 2)
-    return Effect.gen(function* () {
+    return gen(function* () {
       const left = yield* mergeSort(items.slice(0, midpoint))
       const right = yield* mergeSort(items.slice(midpoint))
       const merged: Array<Value> = []
@@ -98,7 +98,7 @@ export const sortArray = <R>(
   }
   const defined = target.filter((item) => item !== undefined)
   const undefinedCount = target.length - defined.length
-  return Effect.map(mergeSort(defined), (items) => [...items, ...Array(undefinedCount).fill(undefined)])
+  return map(mergeSort(defined), (items) => [...items, ...Array(undefinedCount).fill(undefined)])
 }
 
 // Array constructs identically with or without new, like JS.
@@ -114,11 +114,11 @@ export const arrayGlobal = <R>(ctx: Interpreter<R>) => {
     // Sparse like JS: Array(3) has holes, and combinator loops already skip them.
     return new Arr(into, new Array(first))
   }
-  const array = constructor<R>(builtins, proto, {
+  const array = constructor(builtins, proto, {
     name: "Array",
     length: 1,
-    call: (_, args) => Effect.sync(() => construct(args, proto)),
-    construct: (args, newTarget) => Effect.sync(() => construct(args, prototypeFrom(newTarget, proto))),
+    call: (_, args) => sync(() => construct(args, proto)),
+    construct: (args, newTarget) => sync(() => construct(args, prototypeFrom(newTarget, proto))),
   })
   methods(builtins, array, [
     ["isArray", 1, (_, args) => args[0] instanceof Arr],
@@ -148,7 +148,7 @@ export const arrayGlobal = <R>(ctx: Interpreter<R>) => {
       "join",
       1,
       (thisValue, args) => {
-        // .map would keep holes, which Effect.forEach would then hand to the body as undefined.
+        // .map would keep holes, which the conversion would then hand to the body as undefined.
         const parts = Array.from(self(thisValue, "join").items, (item) => item ?? "")
         return withPrimitives(
           ctx,
@@ -238,7 +238,7 @@ export const arrayGlobal = <R>(ctx: Interpreter<R>) => {
         const length = items.length
         const holeCount = Array.from({ length }, (_, index) => Object.hasOwn(items, index)).filter((o) => !o).length
         const itemCount = length - holeCount
-        return Effect.map(sortArray(ctx, items, args[0], "Array.sort"), (sorted) => {
+        return map(sortArray(ctx, items, args[0], "Array.sort"), (sorted) => {
           sorted.slice(0, itemCount).forEach((item, index) => {
             items[index] = item
           })
@@ -252,8 +252,7 @@ export const arrayGlobal = <R>(ctx: Interpreter<R>) => {
     [
       "toSorted",
       1,
-      (thisValue, args) =>
-        Effect.map(sortArray(ctx, self(thisValue, "toSorted").items, args[0], "Array.toSorted"), wrap),
+      (thisValue, args) => map(sortArray(ctx, self(thisValue, "toSorted").items, args[0], "Array.toSorted"), wrap),
     ],
     ["toReversed", 0, (thisValue) => wrap([...self(thisValue, "toReversed").items].reverse())],
     [
@@ -341,11 +340,11 @@ export const arrayGlobal = <R>(ctx: Interpreter<R>) => {
       "toLocaleString",
       0,
       (thisValue) =>
-        Effect.map(
-          Effect.forEach(self(thisValue, "toLocaleString").items, (item) =>
+        map(
+          forEach(self(thisValue, "toLocaleString").items, (item) =>
             item === null || item === undefined
-              ? Effect.succeed("")
-              : Effect.map(invoke(ctx, item, "toLocaleString", "Array.prototype.toLocaleString"), coerceToString),
+              ? succeed("")
+              : map(invoke(ctx, item, "toLocaleString", "Array.prototype.toLocaleString"), coerceToString),
           ),
           (parts) => parts.join(","),
         ),
@@ -369,7 +368,7 @@ export const arrayGlobal = <R>(ctx: Interpreter<R>) => {
       (thisValue, args) => {
         const target = self(thisValue, "flatMap")
         const apply = applyCollectionCallback(ctx, args[0], "Array.flatMap")
-        return Effect.gen(function* () {
+        return gen(function* () {
           const length = target.items.length
           const values: Array<Value> = []
           for (let index = 0; index < length; index += 1) {
@@ -409,9 +408,9 @@ export const callbackMethods = <R, T extends Obj>(
     body: (
       target: ArrayLike<Value>,
       receiver: T,
-      apply: (args: Array<Value>) => Effect.Effect<Value, unknown, R>,
+      apply: (args: Array<Value>) => Eval<Value>,
       args: Array<Value>,
-    ) => Effect.Effect<Value, unknown, R>,
+    ) => Eval<Value>,
   ): Method => [
     name,
     length,
@@ -425,7 +424,7 @@ export const callbackMethods = <R, T extends Obj>(
   ]
   return [
     iterate("map", 1, (target, receiver, apply) =>
-      Effect.gen(function* () {
+      gen(function* () {
         const length = target.length
         const values: Array<Value> = []
         values.length = length
@@ -437,7 +436,7 @@ export const callbackMethods = <R, T extends Obj>(
       }),
     ),
     iterate("filter", 1, (target, receiver, apply) =>
-      Effect.gen(function* () {
+      gen(function* () {
         const length = target.length
         const values: Array<Value> = []
         for (let index = 0; index < length; index += 1) {
@@ -449,7 +448,7 @@ export const callbackMethods = <R, T extends Obj>(
       }),
     ),
     iterate("find", 1, (target, receiver, apply) =>
-      Effect.gen(function* () {
+      gen(function* () {
         const length = target.length
         for (let index = 0; index < length; index += 1) {
           const item = target[index]
@@ -459,7 +458,7 @@ export const callbackMethods = <R, T extends Obj>(
       }),
     ),
     iterate("findIndex", 1, (target, receiver, apply) =>
-      Effect.gen(function* () {
+      gen(function* () {
         const length = target.length
         for (let index = 0; index < length; index += 1) {
           if (yield* apply([target[index], index, receiver])) return index
@@ -468,7 +467,7 @@ export const callbackMethods = <R, T extends Obj>(
       }),
     ),
     iterate("findLast", 1, (target, receiver, apply) =>
-      Effect.gen(function* () {
+      gen(function* () {
         for (let index = target.length - 1; index >= 0; index -= 1) {
           const item = target[index]
           if (yield* apply([item, index, receiver])) return item
@@ -477,7 +476,7 @@ export const callbackMethods = <R, T extends Obj>(
       }),
     ),
     iterate("findLastIndex", 1, (target, receiver, apply) =>
-      Effect.gen(function* () {
+      gen(function* () {
         for (let index = target.length - 1; index >= 0; index -= 1) {
           if (yield* apply([target[index], index, receiver])) return index
         }
@@ -485,7 +484,7 @@ export const callbackMethods = <R, T extends Obj>(
       }),
     ),
     iterate("some", 1, (target, receiver, apply) =>
-      Effect.gen(function* () {
+      gen(function* () {
         const length = target.length
         for (let index = 0; index < length; index += 1) {
           if (!(index in target)) continue
@@ -495,7 +494,7 @@ export const callbackMethods = <R, T extends Obj>(
       }),
     ),
     iterate("every", 1, (target, receiver, apply) =>
-      Effect.gen(function* () {
+      gen(function* () {
         const length = target.length
         for (let index = 0; index < length; index += 1) {
           if (!(index in target)) continue
@@ -505,7 +504,7 @@ export const callbackMethods = <R, T extends Obj>(
       }),
     ),
     iterate("forEach", 1, (target, receiver, apply) =>
-      Effect.gen(function* () {
+      gen(function* () {
         const length = target.length
         for (let index = 0; index < length; index += 1) {
           if (index in target) yield* apply([target[index], index, receiver])
@@ -514,7 +513,7 @@ export const callbackMethods = <R, T extends Obj>(
       }),
     ),
     iterate("reduce", 1, (target, receiver, apply, args) =>
-      Effect.gen(function* () {
+      gen(function* () {
         const length = target.length
         let start = 0
         let accumulator = args[1]
@@ -534,7 +533,7 @@ export const callbackMethods = <R, T extends Obj>(
       }),
     ),
     iterate("reduceRight", 1, (target, receiver, apply, args) =>
-      Effect.gen(function* () {
+      gen(function* () {
         let start = target.length - 1
         let accumulator = args[1]
         if (args.length < 2) {
