@@ -70,6 +70,17 @@ export interface SessionModelRequest {
   headers: Record<string, string>
 }
 
+/**
+ * Runs whenever a Session resolves its selected model. Set `target` to serve the request with
+ * another model from the same provider's catalog, including models hidden from selection; durable
+ * records then name the target. Lets router models such as "auto" pick a concrete model.
+ */
+export interface SessionModelResolve {
+  readonly sessionID: Session.ID
+  readonly model: Model.Ref
+  target?: Model.ID
+}
+
 export interface SessionHttpRequest {
   readonly sessionID: Session.ID
   readonly agent: Agent.ID
@@ -142,6 +153,7 @@ export interface SessionHooks {
   readonly compaction: SessionCompaction
   readonly generate: SessionGenerate
   readonly title: SessionTitle
+  readonly "model.resolve": SessionModelResolve
   readonly "model.request": SessionModelRequest
   readonly "http.request": SessionHttpRequest
   readonly "http.response": SessionHttpResponse
