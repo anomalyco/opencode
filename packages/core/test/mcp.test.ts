@@ -301,6 +301,7 @@ function resourceMcpLayer(
     subscribe?: Bus.Interface["subscribe"]
     environment?: Layer.Layer<Environment.Service>
     published?: string[]
+    beforeRegistration?: (service: Mcp.Interface) => Effect.Effect<void>
   },
 ) {
   const directory = AbsolutePath.make(import.meta.dir)
@@ -309,6 +310,7 @@ function resourceMcpLayer(
     Effect.gen(function* () {
       const bus = yield* Bus.Service
       const mcp = yield* Mcp.Service
+      if (overrides?.beforeRegistration) yield* overrides.beforeRegistration(mcp)
       yield* State.batch(
         Effect.gen(function* () {
           yield* ConfigMcpPlugin.register(bus.subscribe())
@@ -604,6 +606,43 @@ testEffect(Layer.empty).effect("does not spawn MCP for an unused location or its
       ),
     )
     expect(spawns).toEqual([])
+  }),
+)
+
+testEffect(Layer.empty).effect("starts first MCP registrations after activation on empty config", () =>
+  Effect.gen(function* () {
+    const counts = { spawned: 0, closed: 0 }
+    yield* Effect.gen(function* () {
+      const service = yield* Mcp.Service
+      yield* advance(() => counts.spawned === 1)
+      yield* Effect.all(Array.from({ length: 12 }, () => service.start()), { concurrency: "unbounded" })
+      expect((yield* service.servers())[0]?.status.status).toBe("connected")
+      expect(counts.spawned).toBe(1)
+      yield* TestClock.adjust("61 seconds")
+      yield* advance(() => counts.closed === 1)
+      expect((yield* service.servers())[0]?.status.status).toBe("idle")
+    }).pipe(
+      Effect.provide(
+        resourceMcpLayer(
+          new ConfigMCP.Local({
+            type: "local",
+            command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-prompts.ts")],
+          }),
+          undefined,
+          undefined,
+          {
+            environment: countedEnvironment(counts),
+            beforeRegistration: (service) =>
+              Effect.gen(function* () {
+                expect(yield* service.servers()).toEqual([])
+                yield* service.start()
+                expect(counts.spawned).toBe(0)
+              }),
+          },
+        ),
+      ),
+    )
+    expect(counts).toEqual({ spawned: 1, closed: 1 })
   }),
 )
 
