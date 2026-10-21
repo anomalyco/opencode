@@ -290,6 +290,7 @@ export const settings: Setting[] = [
     title: "History scope",
     category: "Input",
     path: ["prompt", "history_scope"],
+    description: "Whether prompt recall is shared by every session or scoped to the current session",
     default: "global",
     values: ["global", "session"],
     keywords: ["prompt history", "recall", "history"],
