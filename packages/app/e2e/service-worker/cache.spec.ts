@@ -16,6 +16,7 @@ type Site = {
   legacy: () => void
   requests: string[]
   release: () => void
+  expire: () => void
 }
 
 const fixture = test.extend<{ site: Site }, { builds: Record<string, Record<string, Buffer>> }>({
@@ -31,8 +32,14 @@ const fixture = test.extend<{ site: Site }, { builds: Record<string, Record<stri
           await mkdir(join(root, "public", "nested"), { recursive: true })
           await Promise.all(
             Object.entries({
-              "index.html": `<html><head></head><body><h1>Loading</h1><label>Draft<textarea></textarea></label><button>Load lazy</button><output></output><script type="module" src="/main.js"></script></body></html>`,
-              "main.js": `document.querySelector("h1").textContent = "${version}";
+              "index.html": `<html><head></head><body><h1>Loading</h1><label>Draft<textarea></textarea></label><button>Load lazy</button><button id="connection">Check connection</button><output></output><script type="module" src="/main.js"></script></body></html>`,
+              "main.js": `import { createWebFetch } from "web-fetch";
+            const request = createWebFetch();
+            document.querySelector("#connection").onclick = async () => {
+              const response = await request("/api/info");
+              document.querySelector("output").textContent = response.ok ? "Connected" : "Unauthorized";
+            };
+            document.querySelector("h1").textContent = "${version}";
             document.querySelector("button").onclick = async () => {
               document.querySelector("output").textContent = await (await import("./lazy.js")).load()
             };`,
@@ -50,6 +57,11 @@ const fixture = test.extend<{ site: Site }, { builds: Record<string, Record<stri
             configFile: false,
             root,
             logLevel: "silent",
+            resolve: {
+              alias: {
+                "web-fetch": fileURLToPath(new URL("../../src/runtime/platform/web-fetch.ts", import.meta.url)),
+              },
+            },
             build: { outDir, assetsDir: "_assets", sourcemap: true },
             plugins: serviceWorker(outDir),
           })
@@ -74,7 +86,7 @@ const fixture = test.extend<{ site: Site }, { builds: Record<string, Record<stri
     { scope: "worker" },
   ],
   site: async ({ builds }, use) => {
-    const state = { version: "old", fault: "", legacy: false }
+    const state = { version: "old", fault: "", legacy: false, expired: false }
     const requests: string[] = []
     const blocked: ServerResponse[] = []
     const release = () => blocked.splice(0).forEach((response) => response.end(builds.new["/large.bin"]))
@@ -84,6 +96,29 @@ const fixture = test.extend<{ site: Site }, { builds: Record<string, Record<stri
       const path = url.pathname
       requests.push(path)
       response.setHeader("cache-control", "no-store")
+
+      if (path === "/auth/login") {
+        const target = url.searchParams.get("rd")!
+        const callback = new URL("/auth/callback", target)
+        callback.searchParams.set("rd", target)
+        return void response.writeHead(200, { "content-type": "text/html" }).end(`<a href="${callback}">Sign in</a>`)
+      }
+
+      if (path === "/auth/callback")
+        return void response
+          .writeHead(302, {
+            location: url.searchParams.get("rd")!,
+            "set-cookie": "proxy=signed-in; Path=/; HttpOnly; SameSite=Lax",
+          })
+          .end()
+
+      if (state.expired && !request.headers.cookie?.includes("proxy=signed-in")) {
+        // A distinct login origin reproduces the CORS failure of following an API redirect.
+        const login = new URL(`http://${request.headers.host}/auth/login`)
+        login.hostname = "localhost"
+        login.searchParams.set("rd", `http://${request.headers.host}${request.url}`)
+        return void response.writeHead(302, { location: login.href }).end()
+      }
 
       if (path === "/observer.html")
         return void response.writeHead(200, { "content-type": "text/html" }).end("<title>Worker observer</title>")
@@ -161,6 +196,9 @@ const fixture = test.extend<{ site: Site }, { builds: Record<string, Record<stri
         },
         requests,
         release,
+        expire: () => {
+          state.expired = true
+        },
       })
     } finally {
       release()
@@ -286,7 +324,9 @@ fixture(
         replacement.evaluate(() => {
           // This runs in the service worker, whose global scope holds its registration.
           const registration =
-            "registration" in self && self.registration instanceof ServiceWorkerRegistration ? self.registration : undefined
+            "registration" in self && self.registration instanceof ServiceWorkerRegistration
+              ? self.registration
+              : undefined
 
           return { waiting: !!registration?.waiting, active: registration?.active?.state }
         }),
@@ -365,7 +405,23 @@ fixture("upgrades the legacy shared precache only after old tabs close", async (
   await expect(observer.getByRole("status")).toHaveText("new nested lazy loaded")
 })
 
-fixture("does not substitute cached HTML for API or missing asset navigations", async ({ page, site }) => {
+fixture("recovers an expired proxy session without removing the worker or losing the route", async ({ page, site }) => {
+  await install(page, site.url)
+  await page.goto(`${site.url}/workspace/session?view=diff`)
+  site.expire()
+  await page.getByRole("button", { name: "Check connection" }).click()
+  await expect(page.getByRole("link", { name: "Sign in" })).toBeVisible()
+  expect(site.requests.filter((path) => path === "/auth/login")).toHaveLength(1)
+  await page.getByRole("link", { name: "Sign in" }).click()
+  await expect(page).toHaveURL(`${site.url}/workspace/session?view=diff&reauth=1`)
+  await expect(page.getByRole("heading")).toHaveText("old")
+  expect(await page.evaluate(async () => !!(await navigator.serviceWorker.getRegistration())?.active)).toBe(true)
+  await page.getByRole("button", { name: "Check connection" }).click()
+  await expect(page.getByRole("status")).toHaveText("Connected")
+  expect(await page.evaluate(() => sessionStorage.getItem("opencode.auth-refresh"))).toBeNull()
+})
+
+fixture("does not substitute cached HTML for API, missing asset, or reauth navigations", async ({ page, site }) => {
   await install(page, site.url)
   const api = await page.goto(`${site.url}/api/info`)
   expect(await api?.json()).toEqual({
@@ -378,6 +434,8 @@ fixture("does not substitute cached HTML for API or missing asset navigations", 
   const asset = await page.goto(`${site.url}/_assets/missing.js`)
   expect(asset?.status()).toBe(404)
   expect(await asset?.text()).toBe("Not found")
+  const reauth = await page.goto(`${site.url}/workspace/open?view=diff&reauth=1`)
+  expect(reauth?.fromServiceWorker()).toBe(false)
 })
 
 test("the production build precaches every deployable file except on-demand Office assets", async ({
