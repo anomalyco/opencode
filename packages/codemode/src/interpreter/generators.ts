@@ -19,7 +19,12 @@ export const generatorGlobals = <R>(ctx: Interpreter<R>): void => {
   const sync = (kind: GeneratorRequestKind): Method => [
     kind,
     1,
-    (thisValue, args) => step(ctx, receiver(GeneratorObj, thisValue, `Generator.prototype.${kind}`), kind, args[0]),
+    (thisValue, args) => {
+      const method = `Generator.prototype.${kind}`
+      const generator = receiver(GeneratorObj, thisValue, method)
+      if (generator.asynchronous) throw typeError(`${method} called on incompatible receiver an async generator.`)
+      return step(ctx, generator, kind, args[0])
+    },
   ]
   const async = (kind: GeneratorRequestKind): Method => [
     kind,

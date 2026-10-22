@@ -128,7 +128,7 @@ type Pause =
 /** Most activations one task may hold, as the call-stack limit. */
 export const MAX_CALL_DEPTH = 10_000
 /** Interpreter steps between clock checks, and how long one slice may run before the host gets a turn. */
-const FUEL = 512
+const FUEL = 64
 const SLICE_MS = 1
 
 // Program values never have a `next` method of their own: an object's properties live in its property map.
@@ -150,7 +150,8 @@ export class Runner<R> {
   private sliceStart = 0
   private pending = 0
   private nextID = 0
-  private readonly unhandled = new Set<PromiseObj>()
+  /** Rejections nothing handled yet, described when they happened so reporting them at the end is cheap. */
+  private readonly unhandled = new Map<PromiseObj, Diagnostic>()
   private readonly fibers = new Set<Fiber.Fiber<unknown, unknown>>()
   private readonly inbox: Array<() => void> = []
   private wake: (() => void) | undefined
@@ -213,6 +214,7 @@ export class Runner<R> {
         const pause = self.drive(start.task, start.input)
         if (pause === undefined) {
           start = undefined
+          if (self.tick()) yield* self.yieldToHost
           continue
         }
         if (pause.kind === "slice") {
@@ -247,12 +249,7 @@ export class Runner<R> {
    */
   diagnostics(): Array<Diagnostic> {
     for (let settle = this.inbox.shift(); settle !== undefined; settle = this.inbox.shift()) settle()
-    return [...this.unhandled]
-      .sort((left, right) => left.id - right.id)
-      .map((promise) => {
-        const failure = normalizeError(promise.result)
-        return { ...failure, message: `Unhandled rejection from an un-awaited promise: ${failure.message}` }
-      })
+    return [...this.unhandled].sort(([left], [right]) => left.id - right.id).map(([, diagnostic]) => diagnostic)
   }
 
   /** Counts one interpreter step; true when the slice is over and the caller should yield `Slice`. */
@@ -343,6 +340,12 @@ export class Runner<R> {
     promise.handled = true
   }
 
+  /** Removes a reaction an internal consumer no longer needs, so a long-pending promise does not keep it. */
+  detach(promise: PromiseObj, reaction: Reaction): void {
+    const index = promise.reactions.indexOf(reaction)
+    if (index >= 0) promise.reactions.splice(index, 1)
+  }
+
   /** PromiseResolve(%Promise%, value). */
   promiseResolve(value: Value): PromiseObj {
     if (value instanceof PromiseObj) return value
@@ -358,7 +361,13 @@ export class Runner<R> {
     promise.result = completion.ok ? completion.value : completion.error
     const reactions = promise.reactions
     promise.reactions = []
-    if (!completion.ok && !promise.handled && !(completion.error instanceof Interruption)) this.unhandled.add(promise)
+    if (!completion.ok && !promise.handled && !(completion.error instanceof Interruption)) {
+      const failure = normalizeError(completion.error)
+      this.unhandled.set(promise, {
+        ...failure,
+        message: `Unhandled rejection from an un-awaited promise: ${failure.message}`,
+      })
+    }
     for (const reaction of reactions) this.enqueue(() => reaction(completion))
   }
 

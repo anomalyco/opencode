@@ -96,6 +96,23 @@ describe("the host stays in control", () => {
     expect(ticks).toBeGreaterThan(10)
   })
 
+  // Each case would run for seconds or forever; the timeout must still stop it promptly.
+  test.each([
+    ["a loop of only built-in calls", `return Iterator.from({ next: Object }).drop(Infinity).next()`],
+    [
+      "serializing shared references",
+      `let a = [0]; for (let i = 0; i < 24; i++) a = [a, a]; return JSON.stringify(a).length`,
+    ],
+    ["copying out shared references", `let a = [0]; for (let i = 0; i < 24; i++) a = [a, a]; return a`],
+    [
+      "reporting many unhandled rejections",
+      `const a = Array(10_000).fill(0); for (let i = 0; i < 20_000; i++) Promise.reject(a); return 1`,
+    ],
+  ])("%s still times out", async (_, code) => {
+    const result = await Effect.runPromise(CodeMode.make({ limits: { timeoutMs: 100 } }).execute(code))
+    expect(result).toMatchObject({ ok: false, error: { kind: "TimeoutExceeded" } })
+  })
+
   test("nesting deeper than the host stack fails cleanly, and the next run is unaffected", async () => {
     expect(await failure(`const f = () => f; f${"()".repeat(100_000)}; return 1`)).toBe(
       "Execution exceeded the maximum nesting depth.",

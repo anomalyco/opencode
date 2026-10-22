@@ -1871,7 +1871,11 @@ class Frame<R> {
     callee?: Expression,
   ): Value | Eval<Value> | Call {
     if (callable instanceof Fn) return this.invokeFunction(callable, thisValue, args, node)
-    if (callable instanceof Native) return this.native(() => callable.call(thisValue, args, node), node)
+    if (callable instanceof Native) {
+      // A loop made only of built-in calls has no program call or loop back-edge to count, so count the call.
+      if (this.ctx.runner.tick()) return afterSlice(() => this.native(() => callable.call(thisValue, args, node), node))
+      return this.native(() => callable.call(thisValue, args, node), node)
+    }
     if (callable instanceof ToolReference) {
       if (callable.path.length === 0) {
         throw typeError("The tools root is not callable.", callee ?? node)
@@ -2427,4 +2431,11 @@ function* located(work: Eval<Value>, node: AstNode | undefined): Eval<Value> {
   } catch (error) {
     throw locate(error, node)
   }
+}
+
+// Lets the host run first, then starts the work.
+function* afterSlice(start: () => Value | Eval<Value>): Eval<Value> {
+  yield Slice
+  const result = start()
+  return isEval(result) ? yield* result : result
 }

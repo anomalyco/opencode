@@ -116,6 +116,13 @@ function* combinator<R>(
     }
     const values: Array<Value> = []
     const reasons: Array<Value> = []
+    // Once the result settles early, the remaining members' reactions can do nothing: detach them so a member that
+    // stays pending for the rest of the program does not keep them.
+    const attached: Array<readonly [PromiseObj, Reaction]> = []
+    const decided = (settle: () => void) => {
+      settle()
+      for (const [item, reaction] of attached) runner.detach(item, reaction)
+    }
     let remaining = 1
     let index = 0
     const finish = () => {
@@ -135,17 +142,19 @@ function* combinator<R>(
       reasons.push(undefined)
       remaining++
       let called = false
-      runner.then(item, (settled) => {
+      const reaction: Reaction = (settled) => {
         if (called) return
         called = true
-        if (name === "race" || (!settled.ok && settled.error instanceof Interruption)) return settleWith(made, settled)
+        if (name === "race" || (!settled.ok && settled.error instanceof Interruption)) {
+          return decided(() => settleWith(made, settled))
+        }
         if (name === "all") {
-          if (!settled.ok) return made.reject(settled.error)
+          if (!settled.ok) return decided(() => made.reject(settled.error))
           values[at] = settled.value as Value
           return finish()
         }
         if (name === "any") {
-          if (settled.ok) return made.resolve(settled.value as Value)
+          if (settled.ok) return decided(() => made.resolve(settled.value as Value))
           reasons[at] = materialize(ctx, settled.error)
           return finish()
         }
@@ -153,7 +162,9 @@ function* combinator<R>(
           ? record(ctx.builtins.Object, { status: "fulfilled", value: settled.value as Value })
           : record(ctx.builtins.Object, { status: "rejected", reason: materialize(ctx, settled.error) })
         finish()
-      })
+      }
+      attached.push([item, reaction])
+      runner.then(item, reaction)
     }
     if (name === "race" && index === 0) {
       throw typeError("Promise.race([]) would never settle; provide at least one promise or value.")
