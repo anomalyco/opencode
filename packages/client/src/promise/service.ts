@@ -29,7 +29,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
   const timing = ensureTiming(options)
   const deadline = Date.now() + timing.promiseTimeout
   const pool = contenderPool(timing)
-  let timeouts: { readonly info: Info; readonly count: number } | undefined
+  let unresponsiveSince: number | undefined
   let announced = false
 
   const announce = (reason: "missing" | "version-mismatch", previousVersion?: string) => {
@@ -52,21 +52,27 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
       if (Date.now() >= deadline)
         throw pool.failure() ?? new Error("Timed out waiting for the background service to start")
       const registration = await registered(options.file, timing.requestTimeout)
-      if (registration.timedOut && registration.info !== undefined) {
-        timeouts = {
-          info: registration.info,
-          count: timeouts !== undefined && same(timeouts.info, registration.info) ? timeouts.count + 1 : 1,
-        }
-        if (timeouts.count >= 3) {
+      // A stalled sample means the probe spanned a suspend, so it says nothing about the service:
+      // restart the window instead of counting evidence against a process that was not running.
+      if (
+        !registration.stalled &&
+        registration.timedOut &&
+        registration.info !== undefined &&
+        !stopped(registration.info.pid)
+      ) {
+        unresponsiveSince ??= Date.now()
+        if (Date.now() - unresponsiveSince >= timing.unresponsiveAfter) {
           announce("missing")
-          console.warn("Background service is unresponsive; recovery cannot preserve persistent terminals")
-          await PtyHandoff.clear(options.file ?? fallback())
+          console.warn("Background service is unresponsive; replacing it")
+          await PtyHandoff.prepare(options.file ?? fallback(), registration.info, timing.requestTimeout).catch(
+            (cause: unknown) => console.warn("Failed to prepare persistent terminals for replacement", cause),
+          )
           await terminate(registration.info, options, timing)
           pool.evict(registration.info.pid)
           pool.recruitNow()
-          timeouts = undefined
+          unresponsiveSince = undefined
         }
-      } else timeouts = undefined
+      } else unresponsiveSince = undefined
 
       if (registration.service !== undefined) {
         pool.serviceAnswered()
@@ -123,7 +129,7 @@ async function read(file?: string) {
 
 async function registered(file?: string, timeout?: number) {
   const info = await read(file)
-  if (info === undefined) return { info: undefined, service: undefined, timedOut: false }
+  if (info === undefined) return { info: undefined, service: undefined, timedOut: false, stalled: false }
   return { info, ...(await probeResult(info, timeout)) }
 }
 
