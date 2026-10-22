@@ -412,8 +412,23 @@ This is separate from `opencode.json`, which configures server/runtime behavior.
 - `cursor` - Controls the terminal cursor in TUI input fields. `style` defaults to `"block"`, can be `"underline"`, `"line"`, or `"default"`; `blinking` defaults to `true`. When `style` is `"default"`, the terminal default cursor is restored, so `blinking` has no effect.
 - `mouse` - Enable or disable mouse capture in the TUI (default: `true`). When disabled, the terminal's native mouse selection/scrolling behavior is preserved.
 - `attention` - Configures TUI desktop notifications and sounds. Disabled by default.
+- `syntax` - Controls syntax highlighting in tool calls. [Learn more](#syntax-highlighting).
 
 Use `OPENCODE_TUI_CONFIG` to load a custom TUI config path.
+
+### Syntax highlighting
+
+Tool calls are colored by language. Each part can be turned off under `syntax`:
+
+```json title="tui.json"
+{
+  "syntax": {
+    "tool_input": true
+  }
+}
+```
+
+- `tool_input` - Show a plugin or MCP tool's input as a block, one key per line. Defaults to `false`, which shows only the input's text, number and boolean values, as `[key=value, ...]` on the tool's line. With `true`, input that is all such values and fits in 80 characters stays on that line; anything longer, multi-line or nested becomes a block: keys and values in different colors, values colored by type, text unquoted with its newlines, tabs and quotes shown as themselves, nested objects indented beneath their key, and lists laid out as YAML writes them, `- ` items at their key's indent. Until you click the block, every value takes one row, cut with `…` where it no longer fits; clicking shows it whole.
 
 ### Attention
 
