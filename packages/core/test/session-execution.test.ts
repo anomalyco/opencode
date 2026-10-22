@@ -605,7 +605,7 @@ describe("SessionRestart background recovery", () => {
     }),
   )
 
-  it.effect("delivers cancellation at the resumed parent's next step", () =>
+  it.effect("delivers a shell shutdown notice at the resumed parent's next step", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
       const jobs = yield* Job.Service
@@ -613,7 +613,18 @@ describe("SessionRestart background recovery", () => {
       const bus = yield* Bus.Service
       const parent = Session.ID.make("ses_background_claimed_parent")
       yield* seedSessions(database, [parent], { time_suspended: Date.now() })
-      yield* seedBackground(jobs, parent, [{ id: "call-claimed-shell", shellID: "sh_claimed", command: "sleep 60" }])
+      const stopped = yield* Deferred.make<void>()
+      yield* jobs.start({
+        id: "call-claimed-shell",
+        type: "shell",
+        recovery: { kind: "shell", sessionID: parent, shellID: "sh_claimed", command: "sleep 60" },
+        // Shell shutdown stops its pending command while the job registry is still alive.
+        run: Deferred.await(stopped).pipe(Effect.andThen(Effect.interrupt)),
+      })
+      yield* jobs.background("call-claimed-shell")
+      yield* Deferred.succeed(stopped, undefined)
+      expect((yield* jobs.wait({ id: "call-claimed-shell" })).info?.status).toBe("cancelled")
+      expect(yield* jobs.pendingBackground).toMatchObject([{ id: "call-claimed-shell", status: "running" }])
 
       const observed = yield* Deferred.make<string[]>()
       const scope = yield* Scope.make()

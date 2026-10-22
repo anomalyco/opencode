@@ -21,12 +21,14 @@ export function text(message: SessionMessage.Info | undefined) {
 export const deliver = Effect.fnUntraced(function* (
   sessions: Pick<Session.Interface, "synthetic">,
   jobs: Pick<Job.Interface, "completeBackground">,
-  input: Pick<Job.Info, "status" | "output" | "error" | "notificationID"> & {
+  input: Pick<Job.Info, "status" | "output" | "error" | "notificationID" | "cancellationReason"> & {
     recovery: Extract<Job.Recovery, { kind: "subagent" }>
     resume?: boolean
   },
 ) {
   if (input.status === "running") return
+  // Shutdown is not a result: retain the running marker for the next process.
+  if (input.cancellationReason === "shutdown") return
   const recovery = input.recovery
   const text =
     input.status === "completed"

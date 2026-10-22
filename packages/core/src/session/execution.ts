@@ -126,8 +126,8 @@ export const layer = Layer.effect(
               return
             }
             if (outcome.type === "interrupted") {
-              // Deliberate stops release the claim; shutdown keeps it for restart continuity.
-              if (outcome.reason !== "shutdown") yield* jobs.cancel(sessionID)
+              // The terminal classification owns shutdown evidence for claims and jobs alike.
+              yield* jobs.cancel(sessionID, { resume: outcome.reason === "shutdown" })
               yield* bus.publish(
                 SessionEvent.Execution.Interrupted,
                 { sessionID, reason: outcome.reason },
