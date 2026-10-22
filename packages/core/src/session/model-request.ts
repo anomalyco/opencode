@@ -56,8 +56,9 @@ const OUTPUT_TOKEN_FALLBACK = 32_000
 // No reply needs more, however much the model allows.
 const OUTPUT_TOKEN_MAX = 256_000
 // A title never needs more; without a bound a local thinking model can reason in circles
-// for minutes on the background title request while the user waits (#54401).
-const TITLE_OUTPUT_MAX = 512
+// for minutes on the background title request while the user waits (#54401). Sized to leave
+// room for a small thinking budget, so budget-aware providers don't reject the request.
+const TITLE_OUTPUT_MAX = 4_096
 // Prompt text is estimated at about 4 characters per token, which can run low on dense text such as code.
 const ESTIMATE_ERROR = 0.15
 // Share of the window a turn leaves unused when its output limit is fitted to the room left. Providers count a few

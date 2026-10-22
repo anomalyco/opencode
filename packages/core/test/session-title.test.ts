@@ -690,6 +690,6 @@ it.effect("bounds the title request with a small output limit (#54401)", () =>
     expect(requests).toHaveLength(1)
     const maxTokens = requests[0]?.generation?.maxTokens
     expect(maxTokens).toBeDefined()
-    expect(maxTokens!).toBeLessThanOrEqual(512)
+    expect(maxTokens!).toBeLessThanOrEqual(4_096)
   }),
 )
