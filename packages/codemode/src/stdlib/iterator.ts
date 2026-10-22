@@ -16,7 +16,7 @@ import {
   type Value,
 } from "../interpreter/objects.js"
 import { describeValue } from "../interpreter/references.js"
-import { type Eval, gen } from "../interpreter/runner.js"
+import { type Eval, Interruption } from "../interpreter/runner.js"
 
 const finished: Step = { done: true, value: undefined }
 
@@ -32,6 +32,7 @@ export const iteratorGlobals = <R>(ctx: Interpreter<R>) => {
     try {
       return yield* body
     } catch (error) {
+      if (error instanceof Interruption) throw error
       try {
         yield* source.close()
       } catch {
@@ -184,12 +185,8 @@ export const iteratorGlobals = <R>(ctx: Interpreter<R>) => {
               }
               const step = yield* source.next()
               if (step.done) return finished
-              inner = yield* guarded(
-                source,
-                gen(function* () {
-                  return yield* flattenable(yield* apply([step.value, counter++]), method("flatMap"), false)
-                }),
-              )
+              const mapped = yield* guarded(source, apply([step.value, counter++]))
+              inner = yield* guarded(source, flattenable(mapped, method("flatMap"), false))
             }
           },
           function* () {
@@ -202,112 +199,100 @@ export const iteratorGlobals = <R>(ctx: Interpreter<R>) => {
     [
       "reduce",
       1,
-      (thisValue, args) => {
+      function* (thisValue, args) {
         const source = ctx.iterateDirect(thisValue)
         const apply = applyCollectionCallback(ctx, args[0], method("reduce"))
-        return gen(function* () {
-          let counter = 0
-          let accumulator = args[1]
-          if (args.length < 2) {
-            const first = yield* source.next()
-            if (first.done) throw typeError("Iterator.prototype.reduce of an empty iterator with no initial value.")
-            accumulator = first.value
-            counter = 1
-          }
-          while (true) {
-            const step = yield* source.next()
-            if (step.done) return accumulator
-            accumulator = yield* guarded(source, apply([accumulator, step.value, counter++]))
-          }
-        })
+        let counter = 0
+        let accumulator = args[1]
+        if (args.length < 2) {
+          const first = yield* source.next()
+          if (first.done) throw typeError("Iterator.prototype.reduce of an empty iterator with no initial value.")
+          accumulator = first.value
+          counter = 1
+        }
+        while (true) {
+          const step = yield* source.next()
+          if (step.done) return accumulator
+          accumulator = yield* guarded(source, apply([accumulator, step.value, counter++]))
+        }
       },
     ],
     [
       "toArray",
       0,
-      (thisValue) => {
+      function* (thisValue) {
         const source = ctx.iterateDirect(thisValue)
-        return gen(function* () {
-          const items: Array<Value> = []
-          while (true) {
-            const step = yield* source.next()
-            if (step.done) return new Arr(builtins.Array, items)
-            items.push(step.value)
-          }
-        })
+        const items: Array<Value> = []
+        while (true) {
+          const step = yield* source.next()
+          if (step.done) return new Arr(builtins.Array, items)
+          items.push(step.value)
+        }
       },
     ],
     [
       "forEach",
       1,
-      (thisValue, args) => {
+      function* (thisValue, args) {
         const source = ctx.iterateDirect(thisValue)
         const apply = applyCollectionCallback(ctx, args[0], method("forEach"))
-        return gen(function* () {
-          let counter = 0
-          while (true) {
-            const step = yield* source.next()
-            if (step.done) return undefined
-            yield* guarded(source, apply([step.value, counter++]))
-          }
-        })
+        let counter = 0
+        while (true) {
+          const step = yield* source.next()
+          if (step.done) return undefined
+          yield* guarded(source, apply([step.value, counter++]))
+        }
       },
     ],
     [
       "some",
       1,
-      (thisValue, args) => {
+      function* (thisValue, args) {
         const source = ctx.iterateDirect(thisValue)
         const apply = applyCollectionCallback(ctx, args[0], method("some"))
-        return gen(function* () {
-          let counter = 0
-          while (true) {
-            const step = yield* source.next()
-            if (step.done) return false
-            if (yield* guarded(source, apply([step.value, counter++]))) {
-              yield* source.close()
-              return true
-            }
+        let counter = 0
+        while (true) {
+          const step = yield* source.next()
+          if (step.done) return false
+          if (yield* guarded(source, apply([step.value, counter++]))) {
+            yield* source.close()
+            return true
           }
-        })
+        }
       },
     ],
     [
       "every",
       1,
-      (thisValue, args) => {
+      function* (thisValue, args) {
         const source = ctx.iterateDirect(thisValue)
         const apply = applyCollectionCallback(ctx, args[0], method("every"))
-        return gen(function* () {
-          let counter = 0
-          while (true) {
-            const step = yield* source.next()
-            if (step.done) return true
-            if (!(yield* guarded(source, apply([step.value, counter++])))) {
-              yield* source.close()
-              return false
-            }
+        let counter = 0
+        while (true) {
+          const step = yield* source.next()
+          if (step.done) return true
+          if (!(yield* guarded(source, apply([step.value, counter++])))) {
+            yield* source.close()
+            return false
           }
-        })
+        }
       },
     ],
     [
       "find",
       1,
-      (thisValue, args) => {
+      function* (thisValue, args) {
         const source = ctx.iterateDirect(thisValue)
         const apply = applyCollectionCallback(ctx, args[0], method("find"))
-        return gen(function* () {
-          let counter = 0
-          while (true) {
-            const step = yield* source.next()
-            if (step.done) return undefined
-            if (yield* guarded(source, apply([step.value, counter++]))) {
-              yield* source.close()
-              return step.value
-            }
+        let counter = 0
+        while (true) {
+          const step = yield* source.next()
+          if (step.done) return undefined
+          if (yield* guarded(source, apply([step.value, counter++]))) {
+            yield* source.close()
+            return step.value
           }
-        })
+        }
       },
     ],
   ])

@@ -32,8 +32,12 @@ const functionGlobal = <R>(ctx: Interpreter<R>) => {
   }
   const target = (thisValue: Value, method: string) => receiver(Callable, thisValue, `Function.prototype.${method}`)
   methods(ctx.builtins, ctx.builtins.Function, [
-    ["call", 1, (thisValue, args) => ctx.call(target(thisValue, "call"), args[0], args.slice(1))],
-    ["apply", 2, (thisValue, args) => ctx.call(target(thisValue, "apply"), args[0], listFromArrayLike(args[1]))],
+    ["call", 1, (thisValue, args, site) => ctx.call(target(thisValue, "call"), args[0], args.slice(1), site)],
+    [
+      "apply",
+      2,
+      (thisValue, args, site) => ctx.call(target(thisValue, "apply"), args[0], listFromArrayLike(args[1]), site),
+    ],
     [
       "bind",
       1,
@@ -43,7 +47,7 @@ const functionGlobal = <R>(ctx: Interpreter<R>) => {
         return native(ctx.builtins, {
           name: `bound ${coerceToString(get(fn, "name"))}`,
           length: Math.max(0, fn.length - bound.length),
-          call: (_, rest) => ctx.call(fn, args[0], [...bound, ...rest]),
+          call: (_, rest, site) => ctx.call(fn, args[0], [...bound, ...rest], site),
         })
       },
     ],

@@ -35,7 +35,8 @@ export const executeProgram = <R>(
 
     const base = Effect.gen(function* () {
       const program = parseProgram(code)
-      const ctx = new Interpreter<R>({ tools, builtins, logs, globals })
+      const services = yield* Effect.context<R>()
+      const ctx = new Interpreter<R>({ tools, services, builtins, logs, globals })
       runner = ctx.runner
       const outcome = yield* runner.run(ctx.main(program))
       if (!outcome.ok) {

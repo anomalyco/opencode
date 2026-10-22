@@ -1,4 +1,4 @@
-import { type Eval, gen, sync } from "../interpreter/runner.js"
+import type { Eval } from "../interpreter/runner.js"
 import { constructor, methods, receiver } from "../interpreter/native.js"
 import { type AstNode, AsyncIteratorSymbol, invalidData, IteratorSymbol, typeError } from "../interpreter/model.js"
 import {
@@ -66,27 +66,25 @@ export const objectAssign = <R>(ctx: Interpreter<R>, args: Array<Value>): Value 
   return target
 }
 
-const objectFromEntries = <R>(ctx: Interpreter<R>, source: Value): Eval<Obj> => {
+function* objectFromEntries<R>(ctx: Interpreter<R>, source: Value): Eval<Obj> {
   const out = new Obj(ctx.builtins.Object)
-  return gen(function* () {
-    const cursor = yield* ctx.iterate(source)
-    if (cursor === undefined) {
-      throw typeError("Object.fromEntries expects a synchronous iterable of entries.")
-    }
-    while (true) {
-      const step = yield* cursor.next()
-      if (step.done) return out
-      yield* preserveConsumerError(
-        cursor.close,
-        sync(() => {
-          if (!(step.value instanceof Obj) || containsOpaqueReference(step.value)) {
-            throw typeError("Object.fromEntries expects [key, value] entry objects.")
-          }
-          define(out, coerceToString(getOwn(step.value, 0)), getOwn(step.value, 1))
-        }),
-      )
-    }
-  })
+  const cursor = yield* ctx.iterate(source)
+  if (cursor === undefined) {
+    throw typeError("Object.fromEntries expects a synchronous iterable of entries.")
+  }
+  while (true) {
+    const step = yield* cursor.next()
+    if (step.done) return out
+    yield* preserveConsumerError(cursor.close, defineEntry(out, step.value))
+  }
+}
+
+// A step, so a rejected entry closes the source iterator.
+function* defineEntry(out: Obj, entry: Value): Eval<void> {
+  if (!(entry instanceof Obj) || containsOpaqueReference(entry)) {
+    throw typeError("Object.fromEntries expects [key, value] entry objects.")
+  }
+  define(out, coerceToString(getOwn(entry, 0)), getOwn(entry, 1))
 }
 
 const classTag = (value: Value): string => {
@@ -143,8 +141,8 @@ export const objectGlobal = <R>(ctx: Interpreter<R>) => {
   const object = constructor(builtins, builtins.Object, {
     name: "Object",
     length: 1,
-    call: (_, args) => sync(() => construct(args)),
-    construct: (args) => sync(() => construct(args)),
+    call: (_, args) => construct(args),
+    construct: (args) => construct(args),
   })
   methods(builtins, object, [
     [

@@ -14,7 +14,7 @@ import {
   type Value,
 } from "./objects.js"
 import { isOpaque, typeofValue } from "./references.js"
-import { type Eval, isEval } from "./runner.js"
+import { type Eval, Interruption, isEval } from "./runner.js"
 
 /** IteratorClose: a consumer failure closes the iterator and wins over any close failure, except that a generator's
  * return() is a return completion, so a failing close wins over it, as after `break`. */
@@ -22,6 +22,7 @@ export function* preserveConsumerError<A>(close: Cursor["close"], body: Eval<A>)
   try {
     return yield* body
   } catch (error) {
+    if (error instanceof Interruption) throw error
     try {
       yield* close()
     } catch (closed) {

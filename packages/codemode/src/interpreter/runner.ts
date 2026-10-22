@@ -50,7 +50,16 @@ export class Yield {
 
 /** Block the current job on host work: no other job runs until it ends, as with a synchronous host call. */
 export class Host {
-  constructor(readonly effect: Effect.Effect<unknown, unknown, unknown>) {}
+  constructor(readonly effect: Effect.Effect<unknown, unknown>) {}
+}
+
+/**
+ * Host work that was interrupted on its own. It settles its promise like a rejection, but program code cannot catch
+ * it: handlers, `catch`, and `finally` are skipped, an unobserved one is not reported, and one that reaches the
+ * program's body interrupts the execution.
+ */
+export class Interruption {
+  constructor(readonly cause: Cause.Cause<unknown>) {}
 }
 
 /** Let the host run; the current job continues before any other job. */
@@ -114,7 +123,7 @@ type Job = () => Start | void
 
 type Pause =
   | { readonly kind: "slice"; readonly input: Completion }
-  | { readonly kind: "host"; readonly effect: Effect.Effect<unknown, unknown, unknown> }
+  | { readonly kind: "host"; readonly effect: Effect.Effect<unknown, unknown> }
 
 /** Most activations one task may hold, as the call-stack limit. */
 export const MAX_CALL_DEPTH = 10_000
@@ -142,14 +151,16 @@ export class Runner<R> {
   private pending = 0
   private nextID = 0
   private readonly unhandled = new Set<PromiseObj>()
-  private services: Context.Context<R> | undefined
   private readonly fibers = new Set<Fiber.Fiber<unknown, unknown>>()
   private readonly inbox: Array<() => void> = []
   private wake: (() => void) | undefined
   private stopping = false
-  private hostInterrupted: Cause.Cause<never> | undefined
 
-  constructor(private readonly ctx: Interpreter<R>) {}
+  constructor(
+    private readonly ctx: Interpreter<R>,
+    /** The services host work runs with: the caller's, so tools see its context, tracing, and clock. */
+    private readonly services: Context.Context<R>,
+  ) {}
 
   /** Activations on the running task's stack. */
   get depth(): number {
@@ -163,7 +174,6 @@ export class Runner<R> {
   run(main: Eval<unknown>): Effect.Effect<Completion, unknown, R> {
     const self = this
     return Effect.gen(function* () {
-      self.services = yield* Effect.context<R>()
       let outcome: Completion | undefined
       let start: Start | undefined = {
         task: new Task([
@@ -185,7 +195,6 @@ export class Runner<R> {
             if (start === undefined && self.tick()) yield* self.yieldToHost
             continue
           }
-          if (self.hostInterrupted !== undefined) return yield* Effect.failCause(self.hostInterrupted)
           const settle = self.inbox.shift()
           if (settle !== undefined) {
             settle()
@@ -211,13 +220,14 @@ export class Runner<R> {
           yield* self.yieldToHost
           continue
         }
-        const exit = yield* Effect.exit(pause.effect as Effect.Effect<unknown, unknown, R>)
+        const exit = yield* Effect.exit(pause.effect)
         if (Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)) return yield* Effect.failCause(exit.cause)
         start = {
           task: start.task,
           input: Exit.isSuccess(exit) ? normal(exit.value) : abrupt(Cause.squash(exit.cause)),
         }
       }
+      if (!outcome.ok && outcome.error instanceof Interruption) return yield* Effect.failCause(outcome.error.cause)
       return outcome
     })
   }
@@ -252,6 +262,11 @@ export class Runner<R> {
     return performance.now() - this.sliceStart >= SLICE_MS
   }
 
+  /** A blocking host call, with the caller's services provided so the runner can run it as is. */
+  blocking<A, E>(effect: Effect.Effect<A, E, R>): Host {
+    return new Host(Effect.provideContext(effect, this.services))
+  }
+
   enqueue(job: Job): void {
     this.queue.push(job)
   }
@@ -262,21 +277,23 @@ export class Runner<R> {
    */
   host(effect: Effect.Effect<unknown, unknown, R>, settle: (completion: Completion) => void, site?: AstNode): void {
     // Starts synchronously, so admission and hooks happen at the call site.
-    const fiber = Effect.runForkWith(this.services!)(effect)
+    const fiber = Effect.runForkWith(this.services)(effect)
     this.fibers.add(fiber)
     fiber.addObserver((exit) => {
       this.fibers.delete(fiber)
-      if (Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)) {
-        // Host work interrupted on its own, not by the program ending, interrupts the program.
-        if (!this.stopping) this.hostInterrupted ??= exit.cause as Cause.Cause<never>
-        this.wake?.()
-        return
-      }
+      // Interrupted by the program ending: nothing is left to settle.
+      if (this.stopping) return
       this.inbox.push(() =>
         settle(
           Exit.isSuccess(exit)
             ? normal(exit.value)
-            : abrupt(Cause.hasDies(exit.cause) ? locate(Cause.squash(exit.cause), site) : Cause.squash(exit.cause)),
+            : abrupt(
+                Cause.hasInterruptsOnly(exit.cause)
+                  ? new Interruption(exit.cause)
+                  : Cause.hasDies(exit.cause)
+                    ? locate(Cause.squash(exit.cause), site)
+                    : Cause.squash(exit.cause),
+              ),
         ),
       )
       this.wake?.()
@@ -341,7 +358,7 @@ export class Runner<R> {
     promise.result = completion.ok ? completion.value : completion.error
     const reactions = promise.reactions
     promise.reactions = []
-    if (!completion.ok && !promise.handled) this.unhandled.add(promise)
+    if (!completion.ok && !promise.handled && !(completion.error instanceof Interruption)) this.unhandled.add(promise)
     for (const reaction of reactions) this.enqueue(() => reaction(completion))
   }
 
@@ -481,7 +498,7 @@ export class Runner<R> {
 
   private get hostSettled(): Effect.Effect<void> {
     return Effect.callback<void>((resume) => {
-      if (this.inbox.length > 0 || this.hostInterrupted !== undefined) return resume(Effect.void)
+      if (this.inbox.length > 0) return resume(Effect.void)
       this.wake = () => {
         this.wake = undefined
         resume(Effect.void)
@@ -491,32 +508,4 @@ export class Runner<R> {
       })
     })
   }
-}
-
-/** Synchronous work as interpreter work, for code that composes steps that may run program code. */
-export function* sync<A>(body: () => A): Eval<A> {
-  return body()
-}
-
-/** Runs a generator function as interpreter work, as `Effect.gen` would. */
-export const gen = <A>(body: () => Eval<A>): Eval<A> => body()
-
-export function* succeed<A>(value: A): Eval<A> {
-  return value
-}
-
-export function* map<A, B>(body: Eval<A>, f: (value: A) => B): Eval<B> {
-  return f(yield* body)
-}
-
-export function* flatMap<A, B>(body: Eval<A>, f: (value: A) => Eval<B>): Eval<B> {
-  return yield* f(yield* body)
-}
-
-/** Runs `f` on each item in order. */
-export function* forEach<A, B>(items: Iterable<A>, f: (item: A, index: number) => Eval<B>): Eval<Array<B>> {
-  const out: Array<B> = []
-  let index = 0
-  for (const item of items) out.push(yield* f(item, index++))
-  return out
 }

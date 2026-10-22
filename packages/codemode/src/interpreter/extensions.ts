@@ -5,7 +5,7 @@ import type { Interpreter } from "./interpreter.js"
 import { createErrorValue, isErrorType } from "./intrinsics.js"
 import { MAX_VALUE_DEPTH } from "./limits.js"
 import { PendingThrow, Throw, typeError } from "./model.js"
-import { Host } from "./runner.js"
+import type { Host } from "./runner.js"
 import { fn } from "./native.js"
 import {
   define,
@@ -138,7 +138,7 @@ export const extensionGlobals = <R>(
   // hooks, which see the host's own error on failure; then whatever came back, or was thrown, crosses out so the
   // program catches a copy. Functions inside results are part of a value's API and skip the hooks.
   const wrap = (value: Function, label: string, describe?: (args: ReadonlyArray<unknown>) => ExtensionInvocation) =>
-    fn(builtins, value.name, value.length, (_, values) => {
+    fn(builtins, value.name, value.length, (_, values, site) => {
       const args = values.map((item, index) => toHost(item, `Argument ${index + 1} to ${label}`))
       const hooks = ctx.tools.hooks
       const settle = (run: Effect.Effect<unknown, unknown, R>) =>
@@ -153,16 +153,16 @@ export const extensionGlobals = <R>(
       try {
         result = value.apply(undefined, args)
       } catch (reason) {
-        return blocking(settle(Effect.fail(reason)))
+        return blocking(ctx.runner.blocking(settle(Effect.fail(reason))))
       }
-      if (!(result instanceof Promise)) return blocking(settle(Effect.succeed(result)))
+      if (!(result instanceof Promise)) return blocking(ctx.runner.blocking(settle(Effect.succeed(result))))
       const runner = ctx.runner
       const promise = runner.newPromise()
-      const resolving = runner.resolving(promise, ctx.site)
+      const resolving = runner.resolving(promise, site)
       runner.host(
         settle(Effect.tryPromise({ try: () => result, catch: (reason) => reason })),
         (settled) => (settled.ok ? resolving.resolve(settled.value as Value) : resolving.reject(settled.error)),
-        ctx.site,
+        site,
       )
       return promise
     })
@@ -175,8 +175,8 @@ export const extensionGlobals = <R>(
 }
 
 // A synchronous host call: its hooks run before any other job, as the call itself did.
-function* blocking(effect: Effect.Effect<Value, unknown, unknown>) {
-  return (yield new Host(effect)) as Value
+function* blocking(host: Host) {
+  return (yield host) as Value
 }
 
 /**

@@ -2,7 +2,7 @@ import type { BlockStatement, Expression, Pattern } from "acorn"
 import { ToolReference } from "../tool-runtime.js"
 import type { Builtins } from "./intrinsics.js"
 import { checkArrayLength } from "./limits.js"
-import { AsyncIteratorSymbol, type Binding, IteratorSymbol, rangeError, typeError } from "./model.js"
+import { type AstNode, AsyncIteratorSymbol, type Binding, IteratorSymbol, rangeError, typeError } from "./model.js"
 import type { Entry, Eval, GeneratorRequest, Reaction, Resolving } from "./runner.js"
 
 /** Property attributes, as in a JS property descriptor. */
@@ -189,8 +189,9 @@ export class Arguments extends Obj {
 
 /** A native function body: a value, or interpreter work for bodies that call program code or the host. */
 export type NativeResult = Value | Eval<Value>
-export type NativeCall = (thisValue: Value, args: Array<Value>) => NativeResult
-export type NativeConstruct = (args: Array<Value>, newTarget: Callable) => NativeResult
+/** `site` is the call running the built-in, where a failure it reports later (a rejection) is located. */
+export type NativeCall = (thisValue: Value, args: Array<Value>, site: AstNode | undefined) => NativeResult
+export type NativeConstruct = (args: Array<Value>, newTarget: Callable, site: AstNode | undefined) => NativeResult
 
 export type NativeOptions = {
   readonly name: string

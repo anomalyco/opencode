@@ -1,11 +1,11 @@
-import { Throw, typeError } from "./model.js"
+import { type AstNode, Throw, typeError } from "./model.js"
 import { Callable, define, get, hidden, Arr, Fn, PromiseObj, record, type Value } from "./objects.js"
 import { constructor, fn, methods, native, receiver, requiresNew } from "./native.js"
 import { createAggregateErrorValue, materialize } from "./errors.js"
 import { describeValue, typeofValue } from "./references.js"
 import { isSupportedCallback } from "./callback.js"
 import type { Interpreter } from "./interpreter.js"
-import { type Completion, type Eval, normal, type Reaction, type Resolving, Task } from "./runner.js"
+import { type Completion, type Eval, Interruption, normal, type Reaction, type Resolving, Task } from "./runner.js"
 
 // A `resolve`/`reject` handed to an executor or thenable: calling it settles the capability.
 const resolvingFunctions = <R>(ctx: Interpreter<R>, resolving: Resolving) => ({
@@ -21,11 +21,11 @@ const resolvingFunctions = <R>(ctx: Interpreter<R>, resolving: Resolving) => ({
 
 /**
  * NewPromiseCapability(%Promise%): a pending promise with the host functions that settle it once. A built-in's own
- * failure that rejects it is located at the call that created it.
+ * failure that rejects it is located at `site`, the call that created it.
  */
-export const capability = <R>(ctx: Interpreter<R>) => {
+export const capability = <R>(ctx: Interpreter<R>, site: AstNode | undefined) => {
   const promise = ctx.runner.newPromise()
-  return { promise, ...ctx.runner.resolving(promise, ctx.site) }
+  return { promise, ...ctx.runner.resolving(promise, site) }
 }
 
 /** Settles `resolving` with a completion: a fulfillment value is resolved, so a thenable is adopted. */
@@ -45,7 +45,7 @@ const handlerReaction =
   ): Reaction =>
   (settled) => {
     const handler = settled.ok ? onFulfilled : onRejected
-    if (handler === undefined) {
+    if (handler === undefined || (!settled.ok && settled.error instanceof Interruption)) {
       if (derived !== undefined) settleWith(derived, settled)
       return
     }
@@ -69,16 +69,17 @@ function* invokePromiseMethod<R>(
   ctx: Interpreter<R>,
   name: (typeof promiseStatics)[number],
   args: Array<Value>,
+  site: AstNode | undefined,
 ): Eval<Value> {
   const runner = ctx.runner
   if (name === "resolve") return runner.promiseResolve(args[0])
   if (name === "reject") {
-    const made = capability(ctx)
+    const made = capability(ctx, site)
     made.reject(new Throw(args[0]))
     return made.promise
   }
   if (name === "withResolvers") {
-    const made = capability(ctx)
+    const made = capability(ctx, site)
     const functions = resolvingFunctions(ctx, made)
     return record(ctx.builtins.Object, { promise: made.promise, resolve: functions.resolve, reject: functions.reject })
   }
@@ -86,7 +87,7 @@ function* invokePromiseMethod<R>(
     if (typeofValue(args[0]) !== "function") {
       throw typeError(`Promise.try expects a function, received ${describeValue(args[0])}.`)
     }
-    const made = capability(ctx)
+    const made = capability(ctx, site)
     try {
       made.resolve(yield* ctx.call(args[0], undefined, args.slice(1)))
     } catch (error) {
@@ -94,7 +95,7 @@ function* invokePromiseMethod<R>(
     }
     return made.promise
   }
-  return yield* combinator(ctx, name, args[0])
+  return yield* combinator(ctx, name, args[0], site)
 }
 
 // Promise.all, allSettled, race, and any: each element is resolved to a promise and observed through a reaction, so
@@ -104,9 +105,10 @@ function* combinator<R>(
   ctx: Interpreter<R>,
   name: "all" | "allSettled" | "race" | "any",
   iterable: Value,
+  site: AstNode | undefined,
 ): Eval<Value> {
   const runner = ctx.runner
-  const made = capability(ctx)
+  const made = capability(ctx, site)
   try {
     const cursor = yield* ctx.iterate(iterable)
     if (cursor === undefined) {
@@ -136,7 +138,7 @@ function* combinator<R>(
       runner.then(item, (settled) => {
         if (called) return
         called = true
-        if (name === "race") return settleWith(made, settled)
+        if (name === "race" || (!settled.ok && settled.error instanceof Interruption)) return settleWith(made, settled)
         if (name === "all") {
           if (!settled.ok) return made.reject(settled.error)
           values[at] = settled.value as Value
@@ -168,27 +170,34 @@ const instanceMethod = <R>(
   name: "then" | "catch" | "finally",
   thisValue: Value,
   args: Array<Value>,
+  site: AstNode | undefined,
 ): Value => {
   const method = `Promise.prototype.${name}`
   const promise = receiver(PromiseObj, thisValue, method)
-  if (name === "finally") return chainFinally(ctx, promise, reactionHandler(args[0], method))
+  if (name === "finally") return chainFinally(ctx, promise, reactionHandler(args[0], method), site)
   const onFulfilled = name === "then" ? reactionHandler(args[0], method) : undefined
   const onRejected = reactionHandler(name === "then" ? args[1] : args[0], method)
-  const made = capability(ctx)
+  const made = capability(ctx, site)
   ctx.runner.then(promise, handlerReaction(ctx, onFulfilled, onRejected, made))
   return made.promise
 }
 
 // Promise.prototype.finally: the cleanup runs as a reaction, then the original outcome passes through once the
 // cleanup's own result settles; a failing cleanup wins.
-const chainFinally = <R>(ctx: Interpreter<R>, source: PromiseObj, cleanup: Callable | undefined): PromiseObj => {
+const chainFinally = <R>(
+  ctx: Interpreter<R>,
+  source: PromiseObj,
+  cleanup: Callable | undefined,
+  site: AstNode | undefined,
+): PromiseObj => {
   const runner = ctx.runner
-  const made = capability(ctx)
+  const made = capability(ctx, site)
   if (cleanup === undefined) {
     runner.then(source, (settled) => settleWith(made, settled))
     return made.promise
   }
   runner.then(source, (settled) => {
+    if (!settled.ok && settled.error instanceof Interruption) return made.reject(settled.error)
     const body = function* (): Eval<void> {
       let result: Value
       try {
@@ -205,7 +214,7 @@ const chainFinally = <R>(ctx: Interpreter<R>, source: PromiseObj, cleanup: Calla
         return
       }
       // The spec chains `then(valueThunk)` onto the cleanup's promise: one more job before the outcome passes.
-      const derived = capability(ctx)
+      const derived = capability(ctx, site)
       runner.then(after, (cleaned) => (cleaned.ok ? derived.resolve(undefined) : derived.reject(cleaned.error)))
       runner.then(derived.promise, (cleaned) => settleWith(made, cleaned.ok ? settled : cleaned))
     }
@@ -224,11 +233,11 @@ const reactionHandler = (value: Value, method: string): Callable | undefined => 
   return undefined
 }
 
-function* constructPromise<R>(ctx: Interpreter<R>, executor: Value): Eval<Value> {
+function* constructPromise<R>(ctx: Interpreter<R>, executor: Value, site: AstNode | undefined): Eval<Value> {
   if (!(executor instanceof Fn)) {
     throw typeError("new Promise(...) expects an executor function (e.g. new Promise((resolve, reject) => { ... })).")
   }
-  const made = capability(ctx)
+  const made = capability(ctx, site)
   const functions = resolvingFunctions(ctx, made)
   try {
     yield* ctx.call(executor, undefined, [functions.resolve, functions.reject])
@@ -245,7 +254,7 @@ export const promiseGlobal = <R>(ctx: Interpreter<R>) => {
     name: "Promise",
     length: 1,
     call: requiresNew("Promise"),
-    construct: (args) => constructPromise(ctx, args[0]),
+    construct: (args, _, site) => constructPromise(ctx, args[0], site),
   })
   // Combinators are not callbacks: `[p].map(Promise.resolve)` must ask for an arrow function.
   for (const name of promiseStatics) {
@@ -255,16 +264,16 @@ export const promiseGlobal = <R>(ctx: Interpreter<R>) => {
       native(builtins, {
         name,
         length: 1,
-        call: (_, args) => invokePromiseMethod(ctx, name, args),
+        call: (_, args, site) => invokePromiseMethod(ctx, name, args, site),
         callback: false,
       }),
       hidden,
     )
   }
   methods(builtins, proto, [
-    ["then", 2, (thisValue, args) => instanceMethod(ctx, "then", thisValue, args)],
-    ["catch", 1, (thisValue, args) => instanceMethod(ctx, "catch", thisValue, args)],
-    ["finally", 1, (thisValue, args) => instanceMethod(ctx, "finally", thisValue, args)],
+    ["then", 2, (thisValue, args, site) => instanceMethod(ctx, "then", thisValue, args, site)],
+    ["catch", 1, (thisValue, args, site) => instanceMethod(ctx, "catch", thisValue, args, site)],
+    ["finally", 1, (thisValue, args, site) => instanceMethod(ctx, "finally", thisValue, args, site)],
   ])
   const then = get(proto, "then")
   if (then instanceof Callable) ctx.runner.intrinsicThen = then

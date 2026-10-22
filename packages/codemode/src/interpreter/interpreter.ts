@@ -49,7 +49,7 @@ import type {
   WhileStatement,
   YieldExpression,
 } from "acorn"
-import type { Effect } from "effect"
+import type { Context } from "effect"
 import { fromJson, type Json, toBoundary } from "../data.js"
 import { ToolReference, type ToolRuntime } from "../tool-runtime.js"
 import {
@@ -107,9 +107,8 @@ import {
   Call,
   type Eval,
   type GeneratorRequest,
-  Host,
+  Interruption,
   isEval,
-  map,
   MAX_CALL_DEPTH,
   Runner,
   Slice,
@@ -382,12 +381,12 @@ export class Interpreter<R> {
   readonly logs: Array<string>
   /** Template objects by site: a tag sees the same `strings` array every time its literal is evaluated, as in JS. */
   readonly templates = new WeakMap<TaggedTemplateExpression, Arr>()
-  /** The call running the current built-in, so failures it reports later are located there. */
-  site: AstNode | undefined
   private readonly root: Frame<R>
 
   constructor(options: {
     readonly tools: ToolRuntime<R>
+    /** The caller's services, which host work runs with. */
+    readonly services: Context.Context<R>
     readonly builtins: Builtins
     readonly logs?: Array<string>
     readonly globals?: (ctx: Interpreter<R>) => ReadonlyArray<readonly [string, Value]>
@@ -395,7 +394,7 @@ export class Interpreter<R> {
     this.tools = options.tools
     this.builtins = options.builtins
     this.logs = options.logs ?? []
-    this.runner = new Runner(this)
+    this.runner = new Runner(this, options.services)
     // Program code has no receiver: top-level `this` is undefined, as in a module.
     const globalScope = new Map<string, Binding>([["this", { mutable: false, value: undefined }]])
     // Calling back into the program never reads frame state, so any frame serves; the root is always alive.
@@ -410,8 +409,9 @@ export class Interpreter<R> {
     return yield* toBoundary(this, yield* this.root.run(program))
   }
 
-  call(callable: Value, thisValue: Value, args: Array<Value>): Eval<Value> {
-    return this.root.call(callable, thisValue, args)
+  /** Calls into the program; a built-in passes its own call site so failures inside are located there. */
+  call(callable: Value, thisValue: Value, args: Array<Value>, site?: AstNode): Eval<Value> {
+    return this.root.call(callable, thisValue, args, site)
   }
 
   /** Await: suspends the innermost async body until `value` settles. */
@@ -428,10 +428,10 @@ export class Interpreter<R> {
   }
 
   /** Runs one host call to completion before any other job: arguments cross as JSON, the result comes back as values. */
-  *tool(run: (args: Array<Json | undefined>) => Effect.Effect<Json | undefined, unknown, R>, args: Array<Value>) {
+  *tool(run: ToolRuntime<R>["search"], args: Array<Value>) {
     const json: Array<Json | undefined> = []
     for (const arg of args) json.push(yield* toBoundary(this, arg))
-    return fromJson(this, (yield new Host(run(json))) as Json | undefined)
+    return fromJson(this, (yield this.runner.blocking(run(json))) as Json | undefined)
   }
 }
 
@@ -481,12 +481,15 @@ class Frame<R> {
   // The call returns its promise at once. Arguments cross on the caller's stack, since `toJSON` is program code, and a
   // promise argument is awaited first; the host call starts once they have crossed, so admission and hooks happen at
   // the call site, and runs concurrently with the program.
-  private *createToolCallPromise(path: ReadonlyArray<string>, args: Array<Value>): Eval<Value> {
+  private *createToolCallPromise(
+    path: ReadonlyArray<string>,
+    args: Array<Value>,
+    site: AstNode | undefined,
+  ): Eval<Value> {
     const ctx = this.ctx
     const runner = ctx.runner
     const promise = runner.newPromise()
     const resolving = runner.resolving(promise)
-    const site = ctx.site
     const body = function* (): Eval<void> {
       const json: Array<Json | undefined> = []
       for (const arg of args) json.push(yield* toBoundary(ctx, arg))
@@ -917,7 +920,7 @@ class Frame<R> {
     const syncReturn = (): Value => (custom ? get(custom.iterator, "return") : undefined)
     const settle = (step: Step, closeOnRejection: boolean, made: ReturnType<typeof capability>) => {
       const rejected = (reason: unknown) => {
-        if (step.done || !closeOnRejection) return made.reject(reason)
+        if (step.done || !closeOnRejection || reason instanceof Interruption) return made.reject(reason)
         const body = function* (): Eval<void> {
           try {
             if (custom) yield* self.closeIterator(custom, node)
@@ -942,7 +945,7 @@ class Frame<R> {
       )
     }
     const next = fn(builtins, "next", 1, function* (_, args) {
-      const made = capability(ctx)
+      const made = capability(ctx, node)
       try {
         settle(yield* syncNext(args), true, made)
       } catch (error) {
@@ -951,7 +954,7 @@ class Frame<R> {
       return made.promise
     })
     const close = fn(builtins, "return", 1, function* (_, args) {
-      const made = capability(ctx)
+      const made = capability(ctx, node)
       try {
         const method = syncReturn()
         if (method === undefined || method === null) {
@@ -971,7 +974,7 @@ class Frame<R> {
       return made.promise
     })
     const raise = fn(builtins, "throw", 1, function* (_, args) {
-      const made = capability(ctx)
+      const made = capability(ctx, node)
       try {
         const method = custom ? get(custom.iterator, "throw") : undefined
         if (method === undefined || method === null) {
@@ -1186,6 +1189,7 @@ class Frame<R> {
     try {
       result = yield* this.evaluateStatement(node.block)
     } catch (error) {
+      if (error instanceof Interruption) throw error
       // A generator's return() unwinds through `finally` but is not an exception `catch` sees.
       if (error instanceof GeneratorReturn || !handler) {
         if (!finalizer) throw error
@@ -1198,7 +1202,7 @@ class Frame<R> {
           if (parameter) yield* this.declarePattern(parameter, caught, true, handler)
           result = yield* this.evaluateStatement(handler.body)
         } catch (error) {
-          if (!finalizer) throw error
+          if (!finalizer || error instanceof Interruption) throw error
           failure = { error }
         } finally {
           this.scopes.pop()
@@ -1549,7 +1553,7 @@ class Frame<R> {
       throw typeError(message, node)
     }
     const args = yield* this.evaluateCallArguments(node.arguments)
-    const result = this.native(() => construct(args, callee as Native), node)
+    const result = this.native(() => construct(args, callee as Native, node), node)
     return isEval(result) ? yield* result : result
   }
 
@@ -1867,20 +1871,18 @@ class Frame<R> {
     callee?: Expression,
   ): Value | Eval<Value> | Call {
     if (callable instanceof Fn) return this.invokeFunction(callable, thisValue, args, node)
-    if (callable instanceof Native) return this.native(() => callable.call(thisValue, args), node)
+    if (callable instanceof Native) return this.native(() => callable.call(thisValue, args, node), node)
     if (callable instanceof ToolReference) {
       if (callable.path.length === 0) {
         throw typeError("The tools root is not callable.", callee ?? node)
       }
-      this.ctx.site = node
-      return this.createToolCallPromise(callable.path, args)
+      return this.createToolCallPromise(callable.path, args, node)
     }
     throw typeError(`${calleeDescription(callee) ?? "The called value"} is not a function.`, callee ?? node)
   }
 
   // Built-ins throw without a location, synchronously or inside their work; the call site supplies it.
   private native(body: () => NativeResult, node?: AstNode): Value | Eval<Value> {
-    this.ctx.site = node
     let result: NativeResult
     try {
       result = body()
@@ -1955,7 +1957,11 @@ class Frame<R> {
           generatorBody(invocation.functionBody(fn, paramScope)),
         )
       }
-      return simple ? create() : map(invocation.bindParameters(fn, args), create)
+      if (simple) return create()
+      return (function* () {
+        yield* invocation.bindParameters(fn, args)
+        return create()
+      })()
     }
     const body = simple ? invocation.functionBody(fn, paramScope) : invocation.enter(fn, args, paramScope)
     if (!fn.async) return new Call(body)

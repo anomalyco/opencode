@@ -6,15 +6,15 @@ import {
   frozen,
   hidden,
   Native,
+  type NativeCall,
   type NativeOptions,
-  type NativeResult,
   Obj,
   type Value,
 } from "./objects.js"
 import { describeValue } from "./references.js"
 
 /** A native function body: a value, a thrown `PendingThrow`, or interpreter work producing a value. */
-export type Impl = (thisValue: Value, args: Array<Value>) => NativeResult
+export type Impl = NativeCall
 
 export const native = (builtins: Builtins, options: NativeOptions): Native => new Native(builtins.Function, options)
 

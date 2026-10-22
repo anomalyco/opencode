@@ -1,4 +1,4 @@
-import { type Eval, forEach, gen, map } from "../interpreter/runner.js"
+import type { Eval } from "../interpreter/runner.js"
 import { constructor, fn, type Impl, type Method, methods } from "../interpreter/native.js"
 import { checkArrayLength, checkStringLength } from "../interpreter/limits.js"
 import { invalidData, IteratorSymbol, rangeError, typeError } from "../interpreter/model.js"
@@ -44,12 +44,12 @@ const replaceAllNeedsGlobal = (pattern: RegExp) => {
   }
 }
 
-const replaceWithCallback = <R>(
+function* replaceWithCallback<R>(
   ctx: Interpreter<R>,
   value: string,
   name: "replace" | "replaceAll",
   args: Array<Value>,
-): Eval<Value> => {
+): Eval<Value> {
   const builtins = ctx.builtins
   const apply = applyCollectionCallback(ctx, args[1], `String.${name}`)
   const matches: Array<{ readonly match: string; readonly offset: number; readonly args: Array<Value> }> = []
@@ -79,17 +79,15 @@ const replaceWithCallback = <R>(
     else value.replaceAll(search, collect)
   }
 
-  return gen(function* () {
-    const output: Array<string> = []
-    let end = 0
-    for (const match of matches) {
-      const replacement = yield* apply(match.args)
-      output.push(value.slice(end, match.offset), coerceToString(replacement))
-      end = match.offset + match.match.length
-    }
-    output.push(value.slice(end))
-    return output.join("")
-  })
+  const output: Array<string> = []
+  let end = 0
+  for (const match of matches) {
+    const replacement = yield* apply(match.args)
+    output.push(value.slice(end, match.offset), coerceToString(replacement))
+    end = match.offset + match.match.length
+  }
+  output.push(value.slice(end))
+  return output.join("")
 }
 
 export const stringGlobal = <R>(ctx: Interpreter<R>) => {
@@ -110,7 +108,7 @@ export const stringGlobal = <R>(ctx: Interpreter<R>) => {
     [
       "raw",
       1,
-      (_, args) => {
+      function* (_, args) {
         const template = args[0]
         const raw = template instanceof Obj ? get(template, "raw") : undefined
         if (!(raw instanceof Obj)) throw typeError("String.raw expects a template object with a raw array.")
@@ -120,14 +118,11 @@ export const stringGlobal = <R>(ctx: Interpreter<R>) => {
         const parts = Array.from({ length: count }, (_, index) =>
           index + 1 < count && index + 1 < args.length ? [get(raw, index), args[index + 1]] : [get(raw, index)],
         ).flat()
-        return map(
-          forEach(parts, (part) => toPrimitiveString(ctx, part)),
-          (strings) => {
-            const output = strings.join("")
-            checkStringLength(output.length)
-            return output
-          },
-        )
+        const strings: Array<string> = []
+        for (const part of parts) strings.push(yield* toPrimitiveString(ctx, part))
+        const output = strings.join("")
+        checkStringLength(output.length)
+        return output
       },
     ],
   ])
