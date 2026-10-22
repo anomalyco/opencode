@@ -121,7 +121,8 @@ export function ReasoningPart(props: {
 export function progressUpdate(state: SessionMessageAssistantReasoning["state"]) {
   const signature = state?.signature
   if (typeof signature !== "string") return false
-  return atob(signature.slice(0, 64)).includes("B\tnarration")
+  // Signatures from other providers or gateways need not be base64; Buffer decodes leniently instead of throwing.
+  return Buffer.from(signature.slice(0, 64), "base64").toString("latin1").includes("B\tnarration")
 }
 
 export function reasoningContent(part: SessionMessageAssistantReasoning) {
