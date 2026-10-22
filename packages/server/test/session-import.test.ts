@@ -50,8 +50,6 @@ it.live("preserves imported parentID through HTTP import, read, and parent filte
     }).toEqual({ imported: parent.data.id, read: parent.data.id, children: [id] })
   }).pipe(Effect.scoped),
 )
-).pipe(Effect.scoped),
-)
 
 it.live("upgrades native data in transcripts exported before v2.1", () =>
   Effect.gen(function* () {
