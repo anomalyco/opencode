@@ -157,6 +157,27 @@ Use `context.worktree` for the git worktree root.
 
 ---
 
+### Time limit
+
+A call still running past its time limit is aborted through `context.abort` and ends with an error, so a tool that hangs cannot stall the session. The limit is [`tool_timeout.default`](/docs/config#tool-time-limits), 30 minutes unless configured. A tool can declare its own default in milliseconds with `timeout`, or `false` for no limit:
+
+```ts title=".opencode/tools/deploy.ts" {5}
+import { tool } from "@opencode-ai/plugin"
+
+export default tool({
+  description: "Deploy and wait for the rollout",
+  timeout: 2 * 60 * 60 * 1000,
+  args: {},
+  async execute(args, context) {
+    return "deployed"
+  },
+})
+```
+
+The declared default replaces `tool_timeout.default`, whether higher or lower. A user's `tool_timeout` entry naming the tool replaces both.
+
+---
+
 ## Examples
 
 ### Write a tool in Python

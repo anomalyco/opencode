@@ -606,6 +606,7 @@ export const ShellTool = Tool.define(
         return {
           description: prompt.description,
           parameters: prompt.parameters,
+          callTimeout: (args) => (typeof args.timeout === "number" ? args.timeout : defaultTimeoutMs),
           execute: (params: Parameters, ctx: Tool.Context) =>
             Effect.gen(function* () {
               const instanceCtx = yield* InstanceState.context

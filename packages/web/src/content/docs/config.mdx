@@ -359,6 +359,35 @@ You can manage the tools an LLM can use through the `tools` option.
 
 ---
 
+### Tool time limits
+
+Every tool call runs under a time limit. A call still running when its limit elapses is aborted, and it ends with an error the model sees, like `tool call exceeded its 30m limit (config: tool_timeout.default)`. The turn continues. Use `tool_timeout` to change the limits.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "tool_timeout": {
+    "default": 600000,
+    "webfetch": 60000,
+    "my_slow_tool": false
+  }
+}
+```
+
+- `default` - Limit in milliseconds for every tool (default: `1800000`, 30 minutes).
+- Any other key is a tool ID: a built-in, plugin or MCP tool, for example `bash` or `myserver_search`. It sets that tool's limit, higher or lower than every other setting.
+- `false` means no limit.
+
+The most specific setting wins:
+
+1. A `tool_timeout` entry naming the tool.
+2. The default the tool's provider declares: a [custom tool's `timeout`](/docs/custom-tools#time-limit), or an MCP server's [`tool_timeout`](/docs/mcp-servers). `question` and `task` have no limit by default. `read`, `write`, `edit`, `grep` and `glob` have 10 minutes, or `tool_timeout.default` when that is lower: a call that runs this long is hung on I/O, for example reading a named pipe nothing writes to.
+3. `tool_timeout.default`, else 30 minutes.
+
+A tool that takes its own timeout per call, like `bash`, gets that timeout plus a minute of grace when it is longer than the limit from levels 2 or 3. A `tool_timeout` entry naming the tool still applies. Time spent waiting for a permission prompt does not count.
+
+---
+
 ### Models
 
 You can configure the providers and models you want to use in your OpenCode config through the `provider`, `model` and `small_model` options.

@@ -116,14 +116,15 @@ use the mcp_everything tool to add the number 3 and 4
 
 Here are all the options for configuring a local MCP server.
 
-| Option        | Type    | Required | Description                                                                              |
-| ------------- | ------- | -------- | ---------------------------------------------------------------------------------------- |
-| `type`        | String  | Y        | Type of MCP server connection, must be `"local"`.                                        |
-| `command`     | Array   | Y        | Command and arguments to run the MCP server.                                             |
-| `cwd`         | String  |          | Working directory for the MCP server process. Relative paths resolve from the workspace. |
-| `environment` | Object  |          | Environment variables to set when running the server.                                    |
-| `enabled`     | Boolean |          | Enable or disable the MCP server on startup.                                             |
-| `timeout`     | Number  |          | Timeout in ms for fetching tools from the MCP server. Defaults to 5000 (5 seconds).      |
+| Option         | Type              | Required | Description                                                                                                                                                                                         |
+| -------------- | ----------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `type`         | String            | Y        | Type of MCP server connection, must be `"local"`.                                                                                                                                                   |
+| `command`      | Array             | Y        | Command and arguments to run the MCP server.                                                                                                                                                        |
+| `cwd`          | String            |          | Working directory for the MCP server process. Relative paths resolve from the workspace.                                                                                                            |
+| `environment`  | Object            |          | Environment variables to set when running the server.                                                                                                                                               |
+| `enabled`      | Boolean           |          | Enable or disable the MCP server on startup.                                                                                                                                                        |
+| `timeout`      | Number            |          | Timeout in ms for fetching tools from the MCP server. Defaults to 5000 (5 seconds).                                                                                                                 |
+| `tool_timeout` | Number or `false` |          | Time limit in ms for each call to this server's tools, or `false` for none. Replaces [`tool_timeout.default`](/docs/config#tool-time-limits); a `tool_timeout` entry naming the tool replaces this. |
 
 ---
 
@@ -153,14 +154,15 @@ The `url` is the URL of the remote MCP server and with the `headers` option you 
 
 #### Options
 
-| Option    | Type    | Required | Description                                                                         |
-| --------- | ------- | -------- | ----------------------------------------------------------------------------------- |
-| `type`    | String  | Y        | Type of MCP server connection, must be `"remote"`.                                  |
-| `url`     | String  | Y        | URL of the remote MCP server.                                                       |
-| `enabled` | Boolean |          | Enable or disable the MCP server on startup.                                        |
-| `headers` | Object  |          | Headers to send with the request.                                                   |
-| `oauth`   | Object  |          | OAuth authentication configuration. See [OAuth](#oauth) section below.              |
-| `timeout` | Number  |          | Timeout in ms for fetching tools from the MCP server. Defaults to 5000 (5 seconds). |
+| Option         | Type              | Required | Description                                                                                                                                                                                         |
+| -------------- | ----------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `type`         | String            | Y        | Type of MCP server connection, must be `"remote"`.                                                                                                                                                  |
+| `url`          | String            | Y        | URL of the remote MCP server.                                                                                                                                                                       |
+| `enabled`      | Boolean           |          | Enable or disable the MCP server on startup.                                                                                                                                                        |
+| `headers`      | Object            |          | Headers to send with the request.                                                                                                                                                                   |
+| `oauth`        | Object            |          | OAuth authentication configuration. See [OAuth](#oauth) section below.                                                                                                                              |
+| `timeout`      | Number            |          | Timeout in ms for fetching tools from the MCP server. Defaults to 5000 (5 seconds).                                                                                                                 |
+| `tool_timeout` | Number or `false` |          | Time limit in ms for each call to this server's tools, or `false` for none. Replaces [`tool_timeout.default`](/docs/config#tool-time-limits); a `tool_timeout` entry naming the tool replaces this. |
 
 ---
 

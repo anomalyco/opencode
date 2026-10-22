@@ -45,6 +45,14 @@ export type ToolResult =
 export function tool<Args extends z.ZodRawShape>(input: {
   description: string
   args: Args
+  /**
+   * Default time limit for a call, in milliseconds, or `false` for none.
+   * A call still running past it is aborted through `context.abort` and ends
+   * with an error. When omitted, the global `tool_timeout.default` applies
+   * (30 minutes unless configured); a user's `tool_timeout.<tool>` overrides
+   * either.
+   */
+  timeout?: number | false
   execute(args: z.infer<z.ZodObject<Args>>, context: ToolContext): Promise<ToolResult>
 }) {
   return input

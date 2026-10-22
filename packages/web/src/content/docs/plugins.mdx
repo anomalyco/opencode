@@ -305,6 +305,7 @@ The `tool` helper creates a custom tool that opencode can call. It takes a Zod s
 - `description`: What the tool does
 - `args`: Zod schema for the tool's arguments
 - `execute`: Function that runs when the tool is called
+- `timeout`: Optional default time limit for a call, in milliseconds, or `false` for none. See [time limit](/docs/custom-tools#time-limit).
 
 Your custom tools will be available to opencode alongside built-in tools.
 

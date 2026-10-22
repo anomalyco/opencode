@@ -3,6 +3,11 @@ export * as ConfigMCPV1 from "./mcp"
 import { Schema } from "effect"
 import { PositiveInt } from "../../schema"
 
+const ToolTimeout = Schema.optional(Schema.Union([PositiveInt, Schema.Literal(false)])).annotate({
+  description:
+    "Default time limit in ms for each call to this server's tools, or false for none. Replaces tool_timeout.default for these tools; a tool_timeout entry naming the tool replaces this. Unlike timeout, it is not reset by progress notifications.",
+})
+
 export const Local = Schema.Struct({
   type: Schema.Literal("local").annotate({ description: "Type of MCP server connection" }),
   command: Schema.mutable(Schema.Array(Schema.String)).annotate({
@@ -20,6 +25,7 @@ export const Local = Schema.Struct({
   timeout: Schema.optional(PositiveInt).annotate({
     description: "Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified.",
   }),
+  tool_timeout: ToolTimeout,
 }).annotate({ identifier: "McpLocalConfig" })
 export type Local = Schema.Schema.Type<typeof Local>
 
@@ -56,6 +62,7 @@ export const Remote = Schema.Struct({
   timeout: Schema.optional(PositiveInt).annotate({
     description: "Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified.",
   }),
+  tool_timeout: ToolTimeout,
 }).annotate({ identifier: "McpRemoteConfig" })
 export type Remote = Schema.Schema.Type<typeof Remote>
 

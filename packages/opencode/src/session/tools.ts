@@ -9,6 +9,8 @@ import { Tool } from "@/tool/tool"
 import { ToolJsonSchema } from "@/tool/json-schema"
 import { ToolRegistry } from "@/tool/registry"
 import { Truncate } from "@/tool/truncate"
+import { ToolTimeout } from "@/tool/timeout"
+import { Config } from "@/config/config"
 
 import { Plugin } from "@/plugin"
 import type { TaskPromptOps } from "@/tool/task"
@@ -55,10 +57,27 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   const mcp = yield* MCP.Service
   const truncate = yield* Truncate.Service
   const flags = yield* RuntimeFlags.Service
+  const config = yield* Config.Service
+  const limits = (yield* config.get()).tool_timeout
 
-  const context = (args: Record<string, unknown>, options: ToolExecutionOptions): Tool.Context => ({
+  // Every tool call runs under a hard time limit; see ToolTimeout.resolve for
+  // how a call's limit is chosen.
+  const guard = <A, E>(
+    options: ToolExecutionOptions,
+    limit: { tool: string; declared?: ToolTimeout.Limit; call?: number },
+    execute: (call: ToolTimeout.Call) => Effect.Effect<A, E>,
+  ) =>
+    ToolTimeout.run(ToolTimeout.resolve({ ...limit, config: limits }), options.abortSignal, (call) =>
+      run.fork(execute(call)),
+    )
+
+  const context = (
+    args: Record<string, unknown>,
+    options: ToolExecutionOptions,
+    call: ToolTimeout.Call,
+  ): Tool.Context => ({
     sessionID: input.session.id,
-    abort: options.abortSignal!,
+    abort: call.signal,
     messageID: input.processor.message.id,
     callID: options.toolCallId,
     extra: { model: input.model, bypassAgentCheck: input.bypassAgentCheck, promptOps: input.promptOps },
@@ -79,14 +98,16 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
         }
       }),
     ask: (req) =>
-      permission
-        .ask({
-          ...req,
-          sessionID: input.session.id,
-          tool: { messageID: input.processor.message.id, callID: options.toolCallId },
-          ruleset: Permission.merge(input.agent.permission, input.session.permission ?? []),
-        })
-        .pipe(Effect.orDie),
+      call.hold(
+        permission
+          .ask({
+            ...req,
+            sessionID: input.session.id,
+            tool: { messageID: input.processor.message.id, callID: options.toolCallId },
+            ruleset: Permission.merge(input.agent.permission, input.session.permission ?? []),
+          })
+          .pipe(Effect.orDie),
+      ),
   })
 
   for (const item of yield* registry.tools({
@@ -100,9 +121,14 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
       description: item.description,
       inputSchema: jsonSchema(schema),
       execute(args, options) {
-        return run.promise(
+        const limit = {
+          tool: item.id,
+          declared: item.timeout === undefined ? undefined : { ms: item.timeout, source: "tool default" },
+          call: item.callTimeout?.(toRecord(args)),
+        }
+        return guard(options, limit, (call) =>
           Effect.gen(function* () {
-            const ctx = context(args, options)
+            const ctx = context(args, options, call)
             yield* plugin.trigger(
               "tool.execute.before",
               { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID },
@@ -153,10 +179,10 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
         }),
       ),
       execute(args, opts) {
-        return run.promise(
+        return guard(opts, { tool: MCP_RESOURCE_TOOLS.list }, (call) =>
           Effect.gen(function* () {
             const parsed = parseListMcpResourcesArgs(args)
-            const ctx = context(toRecord(args), opts)
+            const ctx = context(toRecord(args), opts, call)
             const clients = yield* mcp.clients()
             const resourceServers = Object.entries(clients)
               .filter((entry) => !!entry[1].getServerCapabilities()?.resources)
@@ -236,10 +262,10 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
         }),
       ),
       execute(args, opts) {
-        return run.promise(
+        return guard(opts, { tool: MCP_RESOURCE_TOOLS.listTemplates }, (call) =>
           Effect.gen(function* () {
             const parsed = parseListMcpResourcesArgs(args)
-            const ctx = context(toRecord(args), opts)
+            const ctx = context(toRecord(args), opts, call)
             const clients = yield* mcp.clients()
             const resourceServers = Object.entries(clients)
               .filter((entry) => !!entry[1].getServerCapabilities()?.resources)
@@ -323,10 +349,10 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
         }),
       ),
       execute(args, opts) {
-        return run.promise(
+        return guard(opts, { tool: MCP_RESOURCE_TOOLS.read }, (call) =>
           Effect.gen(function* () {
             const parsed = parseReadMcpResourceArgs(args)
-            const ctx = context(toRecord(args), opts)
+            const ctx = context(toRecord(args), opts, call)
             const clients = yield* mcp.clients()
             const client = clients[parsed.server]
             if (!client) {
@@ -395,10 +421,17 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
     const schema = yield* Effect.promise(() => Promise.resolve(asSchema(item.inputSchema).jsonSchema))
     const transformed = ProviderTransform.schema(input.model, { ...schema, properties: schema.properties ?? {} })
     item.inputSchema = jsonSchema(transformed)
+    const limit = {
+      tool: key,
+      declared:
+        entry.toolTimeout === undefined
+          ? undefined
+          : { ms: entry.toolTimeout, source: `config: mcp.${entry.server}.tool_timeout` },
+    }
     item.execute = (args, opts) =>
-      run.promise(
+      guard(opts, limit, (call) =>
         Effect.gen(function* () {
-          const ctx = context(args, opts)
+          const ctx = context(args, opts, call)
           yield* plugin.trigger(
             "tool.execute.before",
             { tool: key, sessionID: ctx.sessionID, callID: opts.toolCallId },
@@ -406,7 +439,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
           )
           const result: Awaited<ReturnType<NonNullable<typeof execute>>> = yield* Effect.gen(function* () {
             yield* ctx.ask({ permission: key, metadata: {}, patterns: ["*"], always: ["*"] })
-            return yield* Effect.promise(() => execute(args, opts))
+            return yield* Effect.promise(() => execute(args, { ...opts, abortSignal: call.signal }))
           }).pipe(
             Effect.withSpan("Tool.execute", {
               attributes: {
