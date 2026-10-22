@@ -1,8 +1,6 @@
 import { afterEach, expect, mock, setSystemTime, spyOn, test } from "bun:test"
 import { createWebFetch } from "./web-fetch"
 
-const worker = Object.getOwnPropertyDescriptor(navigator, "serviceWorker")
-
 const href = location.href
 
 afterEach(() => {
@@ -10,63 +8,83 @@ afterEach(() => {
   setSystemTime()
   sessionStorage.clear()
   location.href = href
-
-  if (worker) return Object.defineProperty(navigator, "serviceWorker", worker)
-  // eslint-disable-next-line no-restricted-globals -- Restore the browser property's original absence.
-  Reflect.deleteProperty(navigator, "serviceWorker")
 })
 
-test.each(["unauthorized", "redirect"])(
-  "%s recovery waits for worker removal and requires a healthy return to rearm",
-  async (kind) => {
-    location.href = "https://opencode.example/"
-    setSystemTime(new Date("2026-10-21T12:00:00Z"))
-    const removal = Promise.withResolvers<boolean>()
-    const unregister = mock(() => removal.promise)
-    Object.defineProperty(navigator, "serviceWorker", {
-      configurable: true,
-      value: { getRegistration: async () => ({ unregister }) },
-    })
-    const navigate = spyOn(location, "replace").mockImplementation(() => {})
-    // Opaque redirect responses can only be created by a browser's network stack.
-    const failure =
-      kind === "unauthorized"
-        ? new Response(null, { status: 401 })
-        : Object.defineProperty(Response.error(), "type", { value: "opaqueredirect" })
-    const request = spyOn(globalThis, "fetch").mockResolvedValue(failure)
-    const platform = { fetch: createWebFetch() }
+test("proxy 401s trigger one recovery while preserving the route, query, hash, and prefix", async () => {
+  location.href = "https://opencode.example/tools/opencode/workspace/session?view=diff#message"
+  const navigate = spyOn(location, "replace").mockImplementation(() => {})
+  spyOn(globalThis, "fetch").mockResolvedValue(new Response("Unauthorized", { status: 401 }))
+  const request = createWebFetch()
 
-    await platform.fetch("https://other.example/api/info")
-    expect(request.mock.calls.at(-1)?.[1]).toBeUndefined()
-    await platform.fetch(`${location.origin}/apiary`)
-    expect(request.mock.calls.at(-1)?.[1]).toBeUndefined()
-    expect(unregister).not.toHaveBeenCalled()
-    const first = platform.fetch(new Request(`${location.origin}/api/info`), { credentials: "include" })
-    expect(request.mock.calls.at(-1)?.[1]).toEqual({ credentials: "include", redirect: "manual" })
-    await platform.fetch(`${location.origin}/api/project`)
-    expect(unregister).toHaveBeenCalledTimes(1)
-    expect(navigate).not.toHaveBeenCalled()
-    removal.resolve(true)
-    expect(await first).toBe(failure)
-    expect(navigate).toHaveBeenCalledTimes(1)
-    expect(navigate).toHaveBeenCalledWith(`/?auth_refresh=${Date.now()}`)
+  await Promise.all([request("/tools/opencode/api/info"), request("/tools/opencode/api/project")])
+  expect(navigate).toHaveBeenCalledTimes(1)
+  expect(navigate).toHaveBeenCalledWith(
+    "https://opencode.example/tools/opencode/workspace/session?view=diff&reauth=1#message",
+  )
 
-    const reloaded = createWebFetch()
-    setSystemTime(new Date("2026-10-21T13:00:00Z"))
-    await reloaded(`${location.origin}/api/info`)
-    expect(navigate).toHaveBeenCalledTimes(1)
+  setSystemTime(new Date(Date.now() + 3_600_000))
+  await createWebFetch()("/tools/opencode/api/info")
+  expect(navigate).toHaveBeenCalledTimes(1)
+})
 
-    request.mockResolvedValue(new Response(null, { status: 200 }))
-    await reloaded(`${location.origin}/api/project`)
-    request.mockResolvedValue(failure)
-    await reloaded(`${location.origin}/api/info`)
-    expect(navigate).toHaveBeenCalledTimes(1)
+test("OpenCode password challenges keep their readable body and never navigate", async () => {
+  location.href = "https://opencode.example/workspace/session"
+  const navigate = spyOn(location, "replace").mockImplementation(() => {})
+  const body = { _tag: "UnauthorizedError", message: "Authentication required" }
+  spyOn(globalThis, "fetch")
+    .mockResolvedValueOnce(Response.json(body, { status: 401 }))
+    .mockResolvedValueOnce(Response.json(body, { status: 401 }))
+  const request = createWebFetch()
 
-    request.mockResolvedValue(new Response(null, { status: 200 }))
-    expect((await reloaded(`${location.origin}/api/info`)).status).toBe(200)
-    expect(navigate).toHaveBeenCalledTimes(1)
-    request.mockResolvedValue(failure)
-    await reloaded(`${location.origin}/api/info`)
-    expect(navigate).toHaveBeenCalledTimes(2)
-  },
-)
+  expect(await (await request("/api/info")).json()).toEqual(body)
+  await request("/api/info")
+  expect(navigate).not.toHaveBeenCalled()
+  expect(sessionStorage.getItem("opencode.auth-refresh")).toBeNull()
+})
+
+test("API redirects are intercepted without losing Request or init options", async () => {
+  location.href = "https://opencode.example/"
+  const navigate = spyOn(location, "replace").mockImplementation(() => {})
+  // Only a browser's network stack can construct this filtered response type.
+  const redirect = Object.defineProperty(Response.error(), "type", { value: "opaqueredirect" })
+  const fetcher = spyOn(globalThis, "fetch").mockResolvedValue(redirect)
+  const input = new Request(`${location.origin}/api/info`, { headers: { "X-Test": "preserved" } })
+
+  expect(await createWebFetch()(input, { credentials: "include" })).toBe(redirect)
+  expect(fetcher).toHaveBeenCalledWith(input, { credentials: "include", redirect: "manual" })
+  expect(navigate).toHaveBeenCalledTimes(1)
+})
+
+test("other origins and non-API requests retain their redirect behavior", async () => {
+  location.href = "https://opencode.example/"
+  const navigate = spyOn(location, "replace").mockImplementation(() => {})
+  const fetcher = spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 401 }))
+  const request = createWebFetch()
+
+  for (const url of ["https://other.example/api/info", "/apiary", "/assets/icon.svg"]) {
+    await request(url, { redirect: "follow" })
+    expect(fetcher).toHaveBeenLastCalledWith(url, { redirect: "follow" })
+  }
+  expect(navigate).not.toHaveBeenCalled()
+})
+
+test("only a successful health check after returning rearms recovery", async () => {
+  location.href = "https://opencode.example/tools/opencode/"
+  sessionStorage.setItem("opencode.auth-refresh", "pending")
+  const navigate = spyOn(location, "replace").mockImplementation(() => {})
+  const fetcher = spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 200 }))
+  const request = createWebFetch()
+
+  await request("/tools/opencode/api/project")
+  expect(sessionStorage.getItem("opencode.auth-refresh")).toBe("pending")
+  await request("/tools/opencode/api/info")
+  expect(sessionStorage.getItem("opencode.auth-refresh")).toBeNull()
+
+  fetcher.mockResolvedValue(new Response(null, { status: 401 }))
+  await request("/tools/opencode/api/info")
+  expect(navigate).toHaveBeenCalledTimes(1)
+
+  fetcher.mockResolvedValue(new Response(null, { status: 200 }))
+  await request("/tools/opencode/api/info")
+  expect(sessionStorage.getItem("opencode.auth-refresh")).toBe("pending")
+})
