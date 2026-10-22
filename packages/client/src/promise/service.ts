@@ -5,6 +5,7 @@ import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service
 import { matchesVersion } from "../service-version.js"
 import { PtyHandoff } from "../pty-handoff.js"
 import { decide, fallback, headers, probeResult, same } from "../service-probe.js"
+import { recoveryPolicy } from "../service-recovery.js"
 
 export * from "../service.js"
 export { fallback, headers }
@@ -29,7 +30,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
   const timing = ensureTiming(options)
   const deadline = Date.now() + timing.promiseTimeout
   const pool = contenderPool(timing)
-  let unresponsiveSince: number | undefined
+  const recovery = recoveryPolicy(timing)
   let announced = false
 
   const announce = (reason: "missing" | "version-mismatch", previousVersion?: string) => {
@@ -52,27 +53,26 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
       if (Date.now() >= deadline)
         throw pool.failure() ?? new Error("Timed out waiting for the background service to start")
       const registration = await registered(options.file, timing.requestTimeout)
-      // A stalled sample means the probe spanned a suspend, so it says nothing about the service:
-      // restart the window instead of counting evidence against a process that was not running.
-      if (
-        !registration.stalled &&
-        registration.timedOut &&
-        registration.info !== undefined &&
-        !stopped(registration.info.pid)
-      ) {
-        unresponsiveSince ??= Date.now()
-        if (Date.now() - unresponsiveSince >= timing.unresponsiveAfter) {
-          announce("missing")
-          console.warn("Background service is unresponsive; replacing it")
-          await PtyHandoff.prepare(options.file ?? fallback(), registration.info, timing.requestTimeout).catch(
-            (cause: unknown) => console.warn("Failed to prepare persistent terminals for replacement", cause),
-          )
-          await terminate(registration.info, options, timing)
-          pool.evict(registration.info.pid)
-          pool.recruitNow()
-          unresponsiveSince = undefined
-        }
-      } else unresponsiveSince = undefined
+      const info = registration.info
+      const ownerAlive = info === undefined ? false : !stopped(info.pid)
+      const unresponsive = recovery.observe({
+        now: Date.now(),
+        info,
+        timedOut: registration.timedOut,
+        stalled: registration.stalled,
+        alive: ownerAlive,
+      })
+      if (unresponsive && info !== undefined) {
+        announce("missing")
+        console.warn("Background service is unresponsive; replacing it")
+        await PtyHandoff.prepare(options.file ?? fallback(), info, timing.requestTimeout).catch((cause: unknown) =>
+          console.warn("Failed to prepare persistent terminals for replacement", cause),
+        )
+        await terminate(info, options, timing)
+        pool.evict(info.pid)
+        pool.recruitNow()
+        recovery.replaced()
+      }
 
       if (registration.service !== undefined) {
         pool.serviceAnswered()
@@ -93,7 +93,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
       } else {
         const failed = pool.reap()
         if (failed !== undefined) throw failed
-        if (pool.shouldRecruit(registration.info !== undefined)) {
+        if (pool.shouldRecruit(info === undefined ? "absent" : ownerAlive ? "alive" : "dead")) {
           announce("missing")
           pool.add(await spawnContender())
         }
