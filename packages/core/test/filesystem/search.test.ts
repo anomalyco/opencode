@@ -3,7 +3,7 @@ import fuzzysort from "fuzzysort"
 import { mkdir } from "node:fs/promises"
 import os from "os"
 import path from "path"
-import { Deferred, Effect, Layer } from "effect"
+import { Deferred, Effect, Fiber, Layer } from "effect"
 import { TestClock } from "effect/testing"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { FileSystem } from "@opencode/core/filesystem"
@@ -129,7 +129,58 @@ describe("FileSystemSearch", () => {
     }),
   )
 
-  it.effect("refreshes a stale ripgrep index atomically without blocking search", () =>
+  it.effect("answers with files created since the last scan once the refresh interval passes", () =>
+    Effect.gen(function* () {
+      const files = ["src/old.ts"]
+      let scans = 0
+      const layer = AppNodeBuilder.build(FileSystemSearch.node, [
+        Location.node.replace(
+          Layer.succeed(
+            Location.Service,
+            Location.Service.of(
+              location({ directory: AbsolutePath.make(path.join(os.tmpdir(), "opencode-search-fresh")) }),
+            ),
+          ),
+        ),
+        Ripgrep.node.replace(
+          Layer.succeed(
+            Ripgrep.Service,
+            Ripgrep.Service.of({
+              find: (input) =>
+                Effect.gen(function* () {
+                  scans++
+                  const entries = files.map((file) =>
+                    FileSystem.Entry.make({ path: RelativePath.make(file), type: "file" }),
+                  )
+                  if (input.onEntry) yield* Effect.forEach(entries, input.onEntry, { discard: true })
+                  return entries
+                }),
+              glob: () => Effect.succeed([]),
+              grep: () => Effect.succeed([]),
+            }),
+          ),
+        ),
+      ])
+
+      yield* Effect.gen(function* () {
+        const search = yield* FileSystemSearch.Service
+        expect(yield* search.find({ query: "new", type: "file" })).toEqual([])
+        files.push("src/new.ts")
+
+        yield* TestClock.adjust("1 second")
+        expect(yield* search.find({ query: "new", type: "file" })).toEqual([])
+        expect(scans).toBe(1)
+
+        yield* TestClock.adjust("1 second")
+        expect((yield* search.find({ query: "new", type: "file" })).map((entry) => entry.path)).toEqual([
+          RelativePath.make("src/new.ts"),
+        ])
+        expect(scans).toBe(2)
+      }).pipe(Effect.provide(layer))
+    }),
+  )
+
+  it.effect("waits briefly for a stale ripgrep rescan, then serves the previous index atomically", () =>
     Effect.gen(function* () {
       let scans = 0
       const started = yield* Deferred.make<void>()
@@ -174,11 +225,14 @@ describe("FileSystemSearch", () => {
         expect((yield* search.find({ query: "old", type: "file" }))[0]?.path).toBe(RelativePath.make("src/old.ts"))
         expect(scans).toBe(1)
 
-        yield* TestClock.adjust("10 seconds")
-        yield* search.find({ query: "old", type: "file" })
+        yield* TestClock.adjust("2 seconds")
+        const waiting = yield* search
+          .find({ query: "old", type: "file" })
+          .pipe(Effect.forkScoped({ startImmediately: true }))
         yield* Deferred.await(started)
-
         expect((yield* search.find({ query: "old", type: "file" }))[0]?.path).toBe(RelativePath.make("src/old.ts"))
+        yield* TestClock.adjust("250 millis")
+        expect((yield* Fiber.join(waiting))[0]?.path).toBe(RelativePath.make("src/old.ts"))
         expect(scans).toBe(2)
         yield* Deferred.succeed(release, undefined)
         const refreshed = yield* Effect.gen(function* () {

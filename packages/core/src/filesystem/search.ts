@@ -21,7 +21,10 @@ export interface Options {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/FileSystem/Search") {}
 
-const REFRESH_INTERVAL = Duration.toMillis("10 seconds")
+// Indexes rescan on demand instead of trusting file watchers, which report ready on WSL /mnt drives and
+// network mounts yet never deliver their changes. The query that starts a rescan waits briefly for it.
+const REFRESH_INTERVAL = Duration.toMillis("2 seconds")
+const FRESH_WAIT = Duration.toMillis("250 millis")
 type Prepared = ReturnType<typeof fuzzysort.prepare>
 
 function emptyIndex() {
@@ -99,7 +102,12 @@ const ripgrepLayer = Layer.effect(
           }),
         ),
         Effect.forkIn(scope),
-        Effect.flatMap(() => (initialized ? Effect.void : Deferred.await(attempt))),
+        // A failed or slow rescan keeps serving the previous index.
+        Effect.flatMap(() =>
+          initialized
+            ? Deferred.await(attempt).pipe(Effect.timeoutOption(FRESH_WAIT), Effect.ignoreCause)
+            : Deferred.await(attempt),
+        ),
       )
     })
     return Service.of({
@@ -135,9 +143,21 @@ export const fffLayer = Layer.effect(
       })
     }
     yield* Effect.addFinalizer(() => Effect.sync(() => result.value.destroy()))
+    const clock = yield* Clock.Clock
+    // fff starts its initial scan on create.
+    let kicked = clock.currentTimeMillisUnsafe()
     return Service.of({
       find: (input) =>
-        Effect.sync(() => {
+        Effect.gen(function* () {
+          const now = clock.currentTimeMillisUnsafe()
+          if (now >= kicked + REFRESH_INTERVAL && !result.value.isScanning()) {
+            kicked = now
+            const rescan = result.value.scanFiles()
+            if (!rescan.ok) yield* Effect.logWarning("failed to rescan fff index", { error: rescan.error })
+          }
+          // Rescans swap in atomically, but the initial scan exposes a partial index until it completes.
+          while (result.value.isScanning() && clock.currentTimeMillisUnsafe() < kicked + FRESH_WAIT)
+            yield* Effect.sleep("10 millis")
           const options = { pageIndex: 0, pageSize: input.limit ?? 50 }
           const items = (() => {
             if (input.type === "file") {
