@@ -29,8 +29,7 @@ export function number(num: number): string {
 export { duration } from "@opencode/util/duration"
 
 export function truncate(str: string, len: number): string {
-  if (str.length <= len) return str
-  return str.slice(0, len - 1) + "…"
+  return truncateWidth(str, len)
 }
 
 const graphemeSegmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" })
@@ -54,6 +53,22 @@ export function takeWidth(str: string, width: number) {
   return result.join("")
 }
 
+export function takeWidthEnd(str: string, width: number) {
+  if (width <= 0) return ""
+  if (stringWidth(str) <= width) return str
+
+  const parts = graphemes(str)
+  const result: string[] = []
+  let used = 0
+  for (let index = parts.length - 1; index >= 0; index--) {
+    const next = stringWidth(parts[index])
+    if (used + next > width) break
+    result.unshift(parts[index])
+    used += next
+  }
+  return result.join("")
+}
+
 export function truncateWidth(str: string, width: number): string {
   if (width <= 0) return ""
   if (stringWidth(str) <= width) return str
@@ -62,20 +77,21 @@ export function truncateWidth(str: string, width: number): string {
 }
 
 export function truncateLeft(str: string, len: number): string {
-  if (str.length <= len) return str
-  return "…" + str.slice(-(len - 1))
+  if (len <= 0) return ""
+  if (stringWidth(str) <= len) return str
+  if (len === 1) return "…"
+  return "…" + takeWidthEnd(str, len - 1)
 }
 
 export function truncateMiddle(str: string, maxLength: number = 35): string {
   if (maxLength <= 0) return ""
-  if (str.length <= maxLength) return str
+  if (maxLength === 1) return "…"
+  if (stringWidth(str) <= maxLength) return str
 
-  const ellipsis = "…"
-  const keepStart = Math.ceil((maxLength - ellipsis.length) / 2)
-  const keepEnd = Math.floor((maxLength - ellipsis.length) / 2)
-  if (keepEnd <= 0) return str.slice(0, keepStart) + ellipsis
+  const keepStart = Math.ceil((maxLength - 1) / 2)
+  const keepEnd = Math.floor((maxLength - 1) / 2)
 
-  return str.slice(0, keepStart) + ellipsis + str.slice(-keepEnd)
+  return takeWidth(str, keepStart) + "…" + takeWidthEnd(str, keepEnd)
 }
 
 export * as Locale from "./locale"
