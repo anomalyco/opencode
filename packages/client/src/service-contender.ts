@@ -63,6 +63,9 @@ export function contenderPool(timing: EnsureTiming) {
   let failure: Error | undefined
   let spawnDelay = timing.spawnDelay
   let lastSpawn = 0
+  // Keep one candidate plus one lock probe for pre-lock stalls. After a failure, let the survivors
+  // finish without recruiting replacements that could hide the error indefinitely.
+  const due = () => failure === undefined && contenders.size < 2 && Date.now() - lastSpawn >= spawnDelay
   return {
     /** The first startup failure seen since the last eviction. */
     failure: () => failure,
@@ -98,14 +101,15 @@ export function contenderPool(timing: EnsureTiming) {
       return contenders.size === 0 ? failure : undefined
     },
     /**
-     * Whether to start another attempt now. A registration that has not answered yet gets one
-     * spawn delay before an attempt competes with it.
+     * Whether to start another attempt now. A live owner holds its port, so a contender could only
+     * fail to bind it and report that failure for the whole `ensure()`. An owner that is gone leaves
+     * the port free and waits one spawn delay before an attempt competes with its exit.
      */
-    shouldRecruit(registered: boolean) {
-      if (lastSpawn === 0 && registered) lastSpawn = Date.now()
-      // Keep one candidate plus one lock probe for pre-lock stalls. After a failure, let the
-      // survivors finish without recruiting replacements that could hide the error indefinitely.
-      return failure === undefined && contenders.size < 2 && Date.now() - lastSpawn >= spawnDelay
+    shouldRecruit(owner: "absent" | "alive" | "dead") {
+      if (owner === "absent") return due()
+      if (lastSpawn === 0) lastSpawn = Date.now()
+      if (owner === "alive") return false
+      return due()
     },
     add(contender: ServiceContender) {
       contenders.add(contender)

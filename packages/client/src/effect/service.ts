@@ -5,6 +5,7 @@ import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service
 import { matchesVersion } from "../service-version.js"
 import { PtyHandoff } from "../pty-handoff.js"
 import { decide, fallback, headers, probeResult, same } from "../service-probe.js"
+import { recoveryPolicy } from "../service-recovery.js"
 
 export * from "../service.js"
 export { headers }
@@ -49,7 +50,7 @@ export const incumbent = Effect.fn("service.incumbent")(function* (
 export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOptions = {}) {
   const timing = ensureTiming(options)
   const pool = contenderPool(timing)
-  let unresponsiveSince: number | undefined
+  const recovery = recoveryPolicy(timing)
   let announced = false
   const announce = (reason: "missing" | "version-mismatch", previousVersion?: string) =>
     Effect.sync(() => {
@@ -72,24 +73,25 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
     const registration = yield* registered(options.file, timing.requestTimeout)
     const info = registration.info
     const service = registration.service
-    // A stalled sample means the probe spanned a suspend, so it says nothing about the service:
-    // restart the window instead of counting evidence against a process that was not running.
-    if (!registration.stalled && registration.timedOut && info !== undefined && (yield* alive(info.pid))) {
-      unresponsiveSince ??= Date.now()
-      if (Date.now() - unresponsiveSince >= timing.unresponsiveAfter) {
-        yield* announce("missing")
-        yield* Effect.logWarning("Background service is unresponsive; replacing it")
-        yield* Effect.tryPromise(() =>
-          PtyHandoff.prepare(options.file ?? fallback(), info, timing.requestTimeout),
-        ).pipe(
-          Effect.catch((cause) => Effect.logWarning("Failed to prepare persistent terminals for replacement", cause)),
-        )
-        yield* terminate(info, options, timing)
-        pool.evict(info.pid)
-        pool.recruitNow()
-        unresponsiveSince = undefined
-      }
-    } else unresponsiveSince = undefined
+    const ownerAlive = yield* alive(info?.pid)
+    const unresponsive = recovery.observe({
+      now: Date.now(),
+      info,
+      timedOut: registration.timedOut,
+      stalled: registration.stalled,
+      alive: ownerAlive,
+    })
+    if (unresponsive && info !== undefined) {
+      yield* announce("missing")
+      yield* Effect.logWarning("Background service is unresponsive; replacing it")
+      yield* Effect.tryPromise(() => PtyHandoff.prepare(options.file ?? fallback(), info, timing.requestTimeout)).pipe(
+        Effect.catch((cause) => Effect.logWarning("Failed to prepare persistent terminals for replacement", cause)),
+      )
+      yield* terminate(info, options, timing)
+      pool.evict(info.pid)
+      pool.recruitNow()
+      recovery.replaced()
+    }
     if (service !== undefined) {
       pool.serviceAnswered()
       const decision = decide(service, options)
@@ -110,7 +112,7 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
 
     const failed = pool.reap()
     if (failed !== undefined) return yield* Effect.fail(failed)
-    if (pool.shouldRecruit(info !== undefined)) {
+    if (pool.shouldRecruit(info === undefined ? "absent" : ownerAlive ? "alive" : "dead")) {
       yield* announce("missing")
       pool.add(yield* spawnContender)
     }
@@ -174,16 +176,18 @@ const poll = (timing: EnsureTiming) =>
 const signal = (pid: number, name: NodeJS.Signals) =>
   Effect.try({ try: () => process.kill(pid, name), catch: (cause) => cause }).pipe(Effect.ignore)
 
-// Whether a registered owner still exists. Signals are not delivered for an unresponsive check, so
-// a live process that merely stopped answering keeps its registration.
-const alive = (pid: number) =>
-  Effect.try({
-    try: () => {
-      process.kill(pid, 0)
-      return true
-    },
-    catch: () => false,
-  })
+// Whether a registered owner still exists. A missing registration has no owner to keep, and a
+// refused signal is never evidence of a missing process.
+const alive = (pid: number | undefined) =>
+  pid === undefined
+    ? Effect.succeed(false)
+    : Effect.try({
+        try: () => {
+          process.kill(pid, 0)
+          return true
+        },
+        catch: () => false,
+      }).pipe(Effect.orElseSucceed(() => false))
 
 const stopped = Effect.fnUntraced(function* (pid: number) {
   const running = yield* Effect.try({ try: () => process.kill(pid, 0), catch: () => false }).pipe(
