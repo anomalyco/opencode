@@ -52,37 +52,6 @@ The OpenCode CLI also has the following commands.
 
 ---
 
-### attach
-
-Attach a terminal to an already running OpenCode backend server started via `serve` or `web` commands.
-
-```bash
-opencode attach [url]
-```
-
-This allows using the TUI with a remote OpenCode backend. For example:
-
-```bash
-# Start the backend server for web/mobile access
-opencode web --port 4096 --hostname 0.0.0.0
-
-# In another terminal, attach the TUI to the running backend
-opencode attach http://10.20.30.40:4096
-```
-
-#### Flags
-
-| Flag                                     | Short | Description                                                                |
-| ---------------------------------------- | ----- | -------------------------------------------------------------------------- |
-| <nobr><code>{"--dir"}</code></nobr>      |       | Working directory to start TUI in                                          |
-| <nobr><code>{"--continue"}</code></nobr> | `-c`  | Continue the last session                                                  |
-| <nobr><code>{"--session"}</code></nobr>  | `-s`  | Session ID to continue                                                     |
-| <nobr><code>{"--fork"}</code></nobr>     |       | Fork the session when continuing (use with `--continue` or `--session`)    |
-| <nobr><code>{"--password"}</code></nobr> | `-p`  | Basic auth password (defaults to `OPENCODE_SERVER_PASSWORD`)               |
-| <nobr><code>{"--username"}</code></nobr> | `-u`  | Basic auth username (defaults to `OPENCODE_SERVER_USERNAME` or `opencode`) |
-
----
-
 ### auth
 
 Command to manage credentials and login for providers.
@@ -135,45 +104,6 @@ Logs you out of a provider by clearing it from the credentials file.
 ```bash
 opencode auth logout
 ```
-
----
-
-### github
-
-Manage the GitHub agent for repository automation.
-
-```bash
-opencode github [command]
-```
-
----
-
-#### install
-
-Install the GitHub agent in your repository.
-
-```bash
-opencode github install
-```
-
-This sets up the necessary GitHub Actions workflow and guides you through the configuration process. [Learn more](/docs/github).
-
----
-
-#### run
-
-Run the GitHub agent. This is typically used in GitHub Actions.
-
-```bash
-opencode github run
-```
-
-##### Flags
-
-| Flag                                  | Description                            |
-| ------------------------------------- | -------------------------------------- |
-| <nobr><code>{"--event"}</code></nobr> | GitHub mock event to run the agent for |
-| <nobr><code>{"--token"}</code></nobr> | GitHub personal access token           |
 
 ---
 
@@ -348,7 +278,9 @@ Start a headless OpenCode server for API access. Check out the [server docs](/do
 opencode serve
 ```
 
-This starts an HTTP server that provides API access to opencode functionality without the TUI interface. Set `OPENCODE_SERVER_PASSWORD` to enable HTTP basic auth (username defaults to `opencode`).
+This starts an HTTP server that provides API access to opencode functionality without the TUI interface. It also serves the web interface, so a browser can connect to the same URL. Set `OPENCODE_SERVER_PASSWORD` to enable HTTP basic auth (username defaults to `opencode`).
+
+To use the TUI or CLI against a server started elsewhere instead of the background service, run `opencode --server <url>`.
 
 #### Flags
 
@@ -399,6 +331,36 @@ opencode session delete <sessionID>
 
 ---
 
+#### export
+
+Export session data as JSON.
+
+```bash
+opencode session export [sessionID]
+```
+
+##### Flags
+
+| Flag                                     | Description                           |
+| ---------------------------------------- | ------------------------------------- |
+| <nobr><code>{"--sanitize"}</code></nobr> | Redact sensitive transcript/file data |
+
+---
+
+#### import
+
+Import session data from a JSON file or URL.
+
+```bash
+opencode session import <file>
+```
+
+```bash
+opencode session import session.json
+```
+
+---
+
 ### stats
 
 Show token usage and cost statistics for your OpenCode sessions.
@@ -415,60 +377,6 @@ opencode stats
 | <nobr><code>{"--tools"}</code></nobr>   | Number of tools to show (all)                                               |
 | <nobr><code>{"--models"}</code></nobr>  | Show model usage breakdown (hidden by default). Pass a number to show top N |
 | <nobr><code>{"--project"}</code></nobr> | Filter by project (all projects, empty string: current project)             |
-
----
-
-### export
-
-Export session data as JSON.
-
-```bash
-opencode export [sessionID]
-```
-
-If you don't provide a session ID, you'll be prompted to select from available sessions.
-
-#### Flags
-
-| Flag                                     | Description                           |
-| ---------------------------------------- | ------------------------------------- |
-| <nobr><code>{"--sanitize"}</code></nobr> | Redact sensitive transcript/file data |
-
----
-
-### import
-
-Import session data from a JSON file.
-
-```bash
-opencode import <file>
-```
-
-```bash
-opencode import session.json
-```
-
----
-
-### web
-
-Start a headless OpenCode server with a web interface.
-
-```bash
-opencode web
-```
-
-This starts an HTTP server and opens a web browser to access OpenCode through a web interface. Set `OPENCODE_SERVER_PASSWORD` to enable HTTP basic auth (username defaults to `opencode`).
-
-#### Flags
-
-| Flag                                        | Description                                |
-| ------------------------------------------- | ------------------------------------------ |
-| <nobr><code>{"--port"}</code></nobr>        | Port to listen on                          |
-| <nobr><code>{"--hostname"}</code></nobr>    | Hostname to listen on                      |
-| <nobr><code>{"--mdns"}</code></nobr>        | Enable mDNS discovery                      |
-| <nobr><code>{"--mdns-domain"}</code></nobr> | Custom mDNS domain name                    |
-| <nobr><code>{"--cors"}</code></nobr>        | Additional browser origin(s) to allow CORS |
 
 ---
 
@@ -515,42 +423,6 @@ opencode plug <module>
 | -------------------------------------- | ----- | ------------------------------- |
 | <nobr><code>{"--global"}</code></nobr> | `-g`  | Install in global config        |
 | <nobr><code>{"--force"}</code></nobr>  | `-f`  | Replace existing plugin version |
-
----
-
-### pr
-
-Fetch and checkout a GitHub PR branch, then run OpenCode.
-
-```bash
-opencode pr <number>
-```
-
----
-
-### db
-
-Database tools.
-
-```bash
-opencode db [query]
-```
-
-#### Flags
-
-| Flag                                   | Description                    |
-| -------------------------------------- | ------------------------------ |
-| <nobr><code>{"--format"}</code></nobr> | Output format: `json` or `tsv` |
-
----
-
-#### path
-
-Print the database path.
-
-```bash
-opencode db path
-```
 
 ---
 
@@ -689,7 +561,7 @@ OpenCode can be configured using environment variables.
 | `OPENCODE_CLIENT`                     | string  | Client identifier (defaults to `cli`)             |
 | `OPENCODE_ENABLE_EXA`                 | boolean | Enable Exa web search tools                       |
 | `OPENCODE_ENABLE_PARALLEL`            | boolean | Enable Parallel web search tools                  |
-| `OPENCODE_SERVER_PASSWORD`            | string  | Enable basic auth for `serve`/`web`               |
+| `OPENCODE_SERVER_PASSWORD`            | string  | Enable basic auth for `serve`                     |
 | `OPENCODE_SERVER_USERNAME`            | string  | Override basic auth username (default `opencode`) |
 | `OPENCODE_MODELS_URL`                 | string  | Custom URL for fetching models configuration      |
 

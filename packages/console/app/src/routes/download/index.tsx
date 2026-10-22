@@ -411,7 +411,7 @@ export default function Download() {
               <Faq question={i18n.t("home.faq.q5")}>
                 {i18n.t("home.faq.a5.beforeDesktop")}{" "}
                 <a href={language.route("/download")}>{i18n.t("home.faq.a5.desktop")}</a> {i18n.t("home.faq.a5.and")}{" "}
-                <a href={language.route("/docs/cli/#web")}>{i18n.t("home.faq.a5.web")}</a>!
+                <a href={language.route("/docs/web")}>{i18n.t("home.faq.a5.web")}</a>!
               </Faq>
             </li>
             <li>
