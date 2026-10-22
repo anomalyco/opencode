@@ -46,9 +46,10 @@ describe("SessionExecution lifecycle", () => {
     ).toEqual({ type: "failed", error: { type: "provider.transport", message: "Disconnected" } })
   })
 
-  test("defaults owner-scope interruption to shutdown and preserves explicit reasons", () => {
+  test("defaults a runner interruption to a deliberate stop and preserves explicit shutdown", () => {
     const interrupted = Effect.runSyncExit(Effect.interrupt)
-    expect(SessionExecution.terminal(interrupted)).toEqual({ type: "interrupted", reason: "shutdown" })
+    expect(SessionExecution.terminal(interrupted)).toEqual({ type: "interrupted", reason: "user" })
+    expect(SessionExecution.terminal(interrupted, "shutdown")).toEqual({ type: "interrupted", reason: "shutdown" })
     expect(SessionExecution.terminal(interrupted, "user")).toEqual({ type: "interrupted", reason: "user" })
   })
 

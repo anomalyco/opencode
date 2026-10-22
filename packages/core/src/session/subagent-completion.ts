@@ -40,7 +40,12 @@ export const deliver = Effect.fnUntraced(function* (
     ...(input.resume === false ? { resume: false } : {}),
     description: recovery.description,
     text: `<subagent sessionID="${recovery.childSessionID}" state="${input.status}" description="${recovery.description}">\n${text}\n</subagent>`,
-    metadata: { source: "subagent", childID: recovery.childSessionID, agent: recovery.agent, state: input.status },
+    metadata: {
+      source: "subagent",
+      childID: recovery.childSessionID,
+      agent: recovery.agent,
+      state: input.status,
+    },
   })
   if (input.notificationID) yield* jobs.completeBackground(input.notificationID)
 })

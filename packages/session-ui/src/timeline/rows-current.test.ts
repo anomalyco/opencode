@@ -157,7 +157,7 @@ describe("current session timeline rows", () => {
       "notice:msg_background",
       "notice:msg_model",
       "assistant-part:part:part:msg_assistant_2:msg_assistant_2:text:0",
-      "notice:msg_restart",
+      "turn-divider:msg_restart",
       "notice:msg_skill",
       "notice:msg_compaction",
     ])
@@ -1170,7 +1170,12 @@ describe("current session timeline rows", () => {
     {
       name: "default",
       grouped: false,
-      groups: [["context", "read", "grep"], ["part", "agent_1"], ["part", "agent_2"], ["context", "glob", "read_2"]],
+      groups: [
+        ["context", "read", "grep"],
+        ["part", "agent_1"],
+        ["part", "agent_2"],
+        ["context", "glob", "read_2"],
+      ],
     },
     { name: "opted in", grouped: true, groups: [["context", "read", "grep", "agent_1", "agent_2", "glob", "read_2"]] },
   ])("gives each subagent its own row unless subagent grouping is enabled ($name)", (input) => {
@@ -1449,6 +1454,47 @@ describe("current session timeline rows", () => {
         Predicate.isTagged(row, "AssistantPart") ? [row.group.type] : [],
       ),
     ).toEqual(["context", "part"])
+  })
+
+  test.each(["restart", "shutdown"])("uses startup evidence for interruption dividers: %s", (reason) => {
+    const messages: SessionMessageInfo[] = [
+      { id: "msg_user", type: "user", text: "continue", time: { created: 1 } },
+      {
+        id: "msg_interrupted",
+        type: "assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+        content: [{ type: "text", text: "before" }],
+        error: { type: "aborted", message: "Step interrupted" },
+        metadata: { interruptionReason: reason },
+        time: { created: 2, completed: 3 },
+      },
+      {
+        id: "msg_notice",
+        type: "synthetic",
+        text: "Other notice",
+        description: "Other notice",
+        time: { created: 4 },
+      },
+      ...(reason === "restart"
+        ? [
+            {
+              id: "msg_restart",
+              type: "synthetic" as const,
+              text: "Continuing after restart",
+              description: "Continuing after restart",
+              metadata: { notice: "restart" },
+              time: { created: 5 },
+            },
+          ]
+        : []),
+    ]
+    const dividers = Timeline.constructSessionMessageRows(messages, true, { type: "idle" }).rows.filter(
+      (row) => row._tag === "TurnDivider",
+    )
+    expect(dividers).toHaveLength(1)
+    expect(dividers[0].reason).toBe(reason === "restart" ? "restart" : undefined)
+    expect(dividers[0].messageID).toBe(reason === "restart" ? "msg_restart" : undefined)
   })
 
   test("places a divider after interrupted output unless the turn compacts", () => {

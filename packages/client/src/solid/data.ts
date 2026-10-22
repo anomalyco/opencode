@@ -854,6 +854,12 @@ export function createData(config: CreateDataInput) {
         })
         return
       case "session.synthetic":
+        if (event.data.metadata?.notice === "restart")
+          message.update(event.data.sessionID, (draft) => {
+            const latest = draft.findLast((item) => item.type === "assistant" || item.type === "idle")
+            if (latest?.type === "assistant" && latest.error?.type === "aborted")
+              latest.metadata = { ...latest.metadata, interruptionReason: "restart" }
+          })
         message.insert(event.data.sessionID, {
           id: messageIDFromEvent(event.id),
           type: "synthetic",
@@ -895,6 +901,7 @@ export function createData(config: CreateDataInput) {
             existing.model = event.data.model
             existing.retry = undefined
             existing.error = undefined
+            if (existing.metadata) delete existing.metadata.interruptionReason
             existing.finish = undefined
             existing.rawFinish = undefined
             existing.native = undefined

@@ -974,7 +974,11 @@ export function createSessionTimelineRowRenderer(input: {
           <div data-slot="session-turn-message-container" class={`w-full ${padding()}`}>
             <div data-slot="session-turn-compaction">
               <div class="py-2">
-                <TimelineSeparator label={i18n.t("ui.message.interrupted")} />
+                <TimelineSeparator
+                  label={i18n.t(
+                    current().reason === "restart" ? "ui.message.serverRestarted" : "ui.message.interrupted",
+                  )}
+                />
               </div>
             </div>
           </div>

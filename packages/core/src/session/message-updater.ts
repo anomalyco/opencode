@@ -7,7 +7,9 @@ export interface Adapter {
   readonly getAgent: () => Effect.Effect<SessionMessage.AgentSelected["agent"] | undefined>
   readonly getModel: () => Effect.Effect<SessionMessage.ModelSelected["model"] | undefined>
   readonly getLocation: () => Effect.Effect<SessionMessage.LocationSwitched["previous"]>
-  readonly getCurrentAssistant: () => Effect.Effect<SessionMessage.Assistant | undefined>
+  readonly getLatestAssistant: (options?: {
+    ignoreIdle?: boolean
+  }) => Effect.Effect<SessionMessage.Assistant | undefined>
   readonly getAssistant: (messageID: SessionMessage.ID) => Effect.Effect<SessionMessage.Assistant | undefined>
   readonly getShell: (shellID: SessionMessage.Shell["shellID"]) => Effect.Effect<SessionMessage.Shell | undefined>
   readonly getCompaction: () => Effect.Effect<SessionMessage.Compaction | undefined>
@@ -51,7 +53,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
     })
 
   const clearCurrentRetry = Effect.gen(function* () {
-    const assistant = yield* adapter.getCurrentAssistant()
+    const assistant = yield* adapter.getLatestAssistant()
     if (!assistant?.retry) return
     yield* adapter.updateAssistant(
       produce(assistant, (draft) => {
@@ -161,18 +163,29 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
           }),
         )
       },
-      "session.synthetic": (event) => {
-        return adapter.appendMessage(
-          SessionMessage.Synthetic.make({
-            text: event.data.text,
-            description: event.data.description,
-            metadata: event.data.metadata,
-            id: SessionMessage.ID.fromEvent(event.id),
-            type: "synthetic",
-            time: { created },
-          }),
-        )
-      },
+      "session.synthetic": (event) =>
+        Effect.gen(function* () {
+          // Only startup recovery proves that an interrupted execution crossed a restart.
+          if (event.data.metadata?.notice === "restart") {
+            const assistant = yield* adapter.getLatestAssistant()
+            if (assistant?.error?.type === "aborted")
+              yield* adapter.updateAssistant(
+                produce(assistant, (draft) => {
+                  draft.metadata = { ...draft.metadata, interruptionReason: "restart" }
+                }),
+              )
+          }
+          yield* adapter.appendMessage(
+            SessionMessage.Synthetic.make({
+              text: event.data.text,
+              description: event.data.description,
+              metadata: event.data.metadata,
+              id: SessionMessage.ID.fromEvent(event.id),
+              type: "synthetic",
+              time: { created },
+            }),
+          )
+        }),
       "session.skill.activated": (event) => {
         return adapter.appendMessage(
           SessionMessage.Skill.make({
@@ -224,6 +237,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
                 draft.model = castDraft(event.data.model)
                 draft.retry = undefined
                 draft.error = undefined
+                if (draft.metadata) delete draft.metadata.interruptionReason
                 draft.finish = undefined
                 draft.rawFinish = undefined
                 draft.native = undefined
@@ -235,8 +249,8 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
             )
             return
           }
-          const currentAssistant = yield* adapter.getCurrentAssistant()
-          if (currentAssistant) {
+          const currentAssistant = yield* adapter.getLatestAssistant({ ignoreIdle: true })
+          if (currentAssistant && !currentAssistant.time.completed) {
             yield* adapter.updateAssistant(
               produce(currentAssistant, (draft) => {
                 draft.retry = undefined

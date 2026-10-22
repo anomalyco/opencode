@@ -260,12 +260,7 @@ function run(db: DatabaseService, event: MessageEvent) {
       return db
         .update(SessionMessageTable)
         .set({ type, time_created: DateTime.toEpochMillis(message.time.created), data })
-        .where(
-          and(
-            eq(SessionMessageTable.id, message.id),
-            eq(SessionMessageTable.session_id, event.data.sessionID),
-          ),
-        )
+        .where(and(eq(SessionMessageTable.id, message.id), eq(SessionMessageTable.session_id, event.data.sessionID)))
         .run()
         .pipe(Effect.orDie)
     }
@@ -320,14 +315,19 @@ function run(db: DatabaseService, event: MessageEvent) {
             ),
           )
       },
-      getCurrentAssistant() {
+      getLatestAssistant(options) {
         return Effect.gen(function* () {
-          // A newer step supersedes stale incomplete rows; never resume an older assistant projection.
+          // A newer step or idle boundary supersedes older assistant projections.
           const row = yield* db
             .select()
             .from(SessionMessageTable)
             .where(
-              and(eq(SessionMessageTable.session_id, event.data.sessionID), eq(SessionMessageTable.type, "assistant")),
+              and(
+                eq(SessionMessageTable.session_id, event.data.sessionID),
+                options?.ignoreIdle
+                  ? eq(SessionMessageTable.type, "assistant")
+                  : inArray(SessionMessageTable.type, ["assistant", "idle"]),
+              ),
             )
             .orderBy(desc(SessionMessageTable.seq))
             .limit(1)
@@ -335,7 +335,7 @@ function run(db: DatabaseService, event: MessageEvent) {
             .pipe(Effect.orDie)
           if (!row) return
           const message = SessionHistory.decodeMessageRowSync(row)
-          return message.type === "assistant" && !message.time.completed ? message : undefined
+          return message.type === "assistant" ? message : undefined
         })
       },
       getAssistant(messageID) {

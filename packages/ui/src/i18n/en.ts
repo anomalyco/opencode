@@ -293,6 +293,7 @@ const source = {
   "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",
   "ui.message.duration.hoursMinutes": "{{hours}}h {{minutes}}m",
   "ui.message.interrupted": "Interrupted",
+  "ui.message.serverRestarted": "Server restarted",
   "ui.message.modelVariant": "{{model}} ({{variant}})",
   "ui.sessionTimeline.notice.model": "Model",
   "ui.sessionTimeline.notice.modelSwitched": "Switched to {{model}}",

@@ -909,6 +909,15 @@ export function AssistantTextContent(props: {
     return !!type && (type.includes("abort") || type.includes("interrupt"))
   }
 
+  const interruption = () =>
+    interrupted()
+      ? i18n.t(
+          props.message.metadata?.interruptionReason === "restart"
+            ? "ui.message.serverRestarted"
+            : "ui.message.interrupted",
+        )
+      : ""
+
   const model = createMemo(() => modelLabel(data, i18n, props.message.model))
 
   const duration = createMemo(() => {
@@ -940,11 +949,7 @@ export function AssistantTextContent(props: {
   const meta = createMemo(() => {
     const agent = props.message.agent
 
-    return [
-      ...(mobile() ? [] : [agentLabel(agent, data.agents), model()]),
-      duration(),
-      interrupted() ? i18n.t("ui.message.interrupted") : "",
-    ].filter(Boolean)
+    return [...(mobile() ? [] : [agentLabel(agent, data.agents), model()]), duration(), interruption()].filter(Boolean)
   })
 
   const [copied, setCopied] = createSignal(false)
@@ -965,7 +970,7 @@ export function AssistantTextContent(props: {
           <MessageOptions
             info={[
               [agentLabel(props.message.agent, data.agents), model()].filter(Boolean).join(" \u00B7 "),
-              [duration(), interrupted() ? i18n.t("ui.message.interrupted") : ""].filter(Boolean).join(" \u00B7 "),
+              [duration(), interruption()].filter(Boolean).join(" \u00B7 "),
             ].filter(Boolean)}
           >
             <Menu.Item onSelect={() => void copy()}>{i18n.t("ui.message.copyResponse")}</Menu.Item>
