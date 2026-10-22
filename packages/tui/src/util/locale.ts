@@ -85,8 +85,8 @@ export function truncateLeft(str: string, len: number): string {
 
 export function truncateMiddle(str: string, maxLength: number = 35): string {
   if (maxLength <= 0) return ""
-  if (maxLength === 1) return "…"
   if (stringWidth(str) <= maxLength) return str
+  if (maxLength === 1) return "…"
 
   const keepStart = Math.ceil((maxLength - 1) / 2)
   const keepEnd = Math.floor((maxLength - 1) / 2)
