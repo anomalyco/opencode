@@ -202,14 +202,13 @@ test("replaces a registered service that stays unresponsive", async () => {
 })
 
 test("keeps a registered service that answers again before the unresponsive deadline", async () => {
-  const ensureSlowSpawn = accelerate(Service.ensure, { spawnDelay: 10_000 })
   await using fixture = await serviceFixture()
   const registration = fixture.registration
   const existing = fixture.spawn("recovering")
   await fixture.waitForFile()
   const original = await Bun.file(registration).json()
 
-  const pending = run(ensureSlowSpawn({ file: registration, version: "test", command: [] }))
+  const pending = run(ensure({ file: registration, version: "test", command: fixture.command("delayed", "10") }))
   await fixture.waitForRequests(3)
   await writeFile(registration + ".recover", "")
 
@@ -218,6 +217,30 @@ test("keeps a registered service that answers again before the unresponsive dead
   expect(await status(endpoint.url)).toMatchObject({ version: "test", pid: original.pid })
   expect(existing.exitCode).toBe(null)
   expect(await fixture.signal()).toBeUndefined()
+  // A live owner still holds its port, so no attempt may compete with it.
+  expect(await fixture.starts()).toEqual([])
+})
+
+test("replaces a registered service whose process is gone without waiting for the window", async () => {
+  await using fixture = await serviceFixture()
+  const registration = fixture.registration
+  const existing = fixture.spawn("recovering")
+  await fixture.waitForFile()
+  const original = await Bun.file(registration).json()
+
+  existing.kill("SIGKILL")
+  await existing.exited
+
+  const startedAt = Date.now()
+  const endpoint = await run(ensure({ file: registration, version: "test", command: fixture.command("delayed", "10") }))
+  const replacement = await Bun.file(registration).json()
+  fixture.track(replacement.pid)
+
+  // A gone owner leaves the port free, so it is replaced by an attempt long before the
+  // unresponsive window (2 s in the accelerated timing) closes.
+  expect(Date.now() - startedAt).toBeLessThan(2_000)
+  expect(replacement.pid).not.toBe(original.pid)
+  expect(endpoint.url).toBe(replacement.url)
 })
 
 test("signals an unresponsive registered service process", async () => {
