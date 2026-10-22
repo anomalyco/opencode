@@ -5,7 +5,7 @@ import { LocationServiceMap } from "@opencode/core/location-services"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { LocationNotFoundError, InvalidRequestError, ServiceUnavailableError } from "@opencode/protocol/errors"
-import { Effect, Layer, Schema } from "effect"
+import { Duration, Effect, Layer, Schema } from "effect"
 import { HttpServerRequest } from "effect/http"
 import { HttpApiMiddleware } from "effect/http-api"
 import { missingSession } from "./handlers/session-error"
@@ -33,17 +33,37 @@ export function locationErrors<A, E, R>(effect: Effect.Effect<A, E, R>) {
   )
 }
 
-export const awaitPlugins = Plugin.awaitActivation.pipe(
-  Effect.timeoutOrElse({
-    duration: "5 seconds",
-    orElse: () =>
-      Effect.fail(
-        new ServiceUnavailableError({
-          message: "Location plugins did not finish activating",
-          service: "plugin",
-        }),
-      ),
-  }),
+/** How long a location's plugins may take to activate before a request stops waiting for them. */
+const defaultActivationBudget = Duration.seconds(5)
+
+/**
+ * Activation is paid once per location, so this budget only has to cover that one wait. A slow
+ * or loaded machine can raise it with OPENCODE_PLUGIN_ACTIVATION_TIMEOUT, for example
+ * "30 seconds"; an unreadable value keeps the default.
+ */
+export function activationBudget() {
+  const configured = process.env.OPENCODE_PLUGIN_ACTIVATION_TIMEOUT?.trim()
+  if (!configured) return defaultActivationBudget
+  try {
+    return Duration.fromInputUnsafe(configured as Duration.Input)
+  } catch {
+    return defaultActivationBudget
+  }
+}
+
+export const awaitPlugins = Effect.suspend(() =>
+  Plugin.awaitActivation.pipe(
+    Effect.timeoutOrElse({
+      duration: activationBudget(),
+      orElse: () =>
+        Effect.fail(
+          new ServiceUnavailableError({
+            message: "Location plugins did not finish activating",
+            service: "plugin",
+          }),
+        ),
+    }),
+  ),
 )
 
 export function response<A, E, R>(data: Effect.Effect<A, E, R>) {
