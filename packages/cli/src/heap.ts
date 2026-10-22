@@ -4,7 +4,8 @@ import { Effect, Queue } from "effect"
 
 export const listen = Effect.gen(function* () {
   const global = yield* Global.Service
-  if (process.platform === "win32") return
+  // FreeBSD's JavaScriptCore uses SIGUSR1 to suspend and resume its threads.
+  if (process.platform === "win32" || process.platform === "freebsd") return
   const signals = yield* Queue.dropping<void>(1)
   yield* Effect.acquireRelease(
     Effect.sync(() => {
