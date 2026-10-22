@@ -48,6 +48,16 @@ runs:
       run: |
         echo "dir=$(bun pm cache)" >> "$GITHUB_OUTPUT"
         echo "version=$(bun --version)" >> "$GITHUB_OUTPUT"
+        # Releases rewrite every workspace "version" in bun.lock without changing dependencies, so the key skips them.
+        deps=$(bun -e '
+          const hash = new Bun.CryptoHasher("sha256")
+          const lock = await Bun.file("bun.lock").text()
+          hash.update(lock.split(/\r?\n/).filter((line) => !/^ {6}"version": "/.test(line)).join("\n"))
+          const patches = await Array.fromAsync(new Bun.Glob("patches/**").scan())
+          for (const file of patches.toSorted()) hash.update(await Bun.file(file).arrayBuffer())
+          process.stdout.write(hash.digest("hex"))
+        ')
+        echo "deps=$deps" >> "$GITHUB_OUTPUT"
 
     # On Windows, extracting the cache archive takes longer than Bun downloading and
     # extracting the same packages itself, so Windows installs skip the cache.
@@ -57,7 +67,9 @@ runs:
       uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
         path: ${{ steps.cache.outputs.dir }}
-        key: ${{ runner.os }}-${{ runner.arch }}-bun-${{ steps.cache.outputs.version }}-${{ hashFiles('bun.lock', 'patches/**') }}
+        key: ${{ runner.os }}-${{ runner.arch }}-bun-${{ steps.cache.outputs.version }}-${{ steps.cache.outputs.deps }}
+        restore-keys: |
+          ${{ runner.os }}-${{ runner.arch }}-bun-${{ steps.cache.outputs.version }}-
 
     - name: Install setuptools for distutils compatibility
       run: python3 -m pip install setuptools || pip install setuptools || true
