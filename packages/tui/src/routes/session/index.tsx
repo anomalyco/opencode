@@ -334,33 +334,43 @@ export function Session(props: {
     if (client.connection.status() !== "connected") return
     setSynced(false)
     const sessionID = route.sessionID
+    let cancelled = false
+    onCleanup(() => {
+      cancelled = true
+    })
     void (async () => {
-      await Promise.all([
-        data.session.sync(sessionID, { children: true }),
-        data.session.permission.sync(sessionID).catch(() => undefined),
-        data.session.form.sync(sessionID).catch(() => undefined),
-      ])
-      const info = data.session.get(sessionID)
-      if (!info) {
-        toast.show({
-          message: `Session not found: ${sessionID}`,
-          variant: "error",
-          duration: 5000,
-        })
-        sessionTabs.enabled() ? sessionTabs.close(sessionID) : navigate({ type: "home" })
-        return
+      // Resuming can race a concurrent writer (API-driven prompts, background
+      // turns): the first read may fail while the session is being written.
+      // Retry transient failures instead of abandoning the route to home.
+      let lastError: unknown = new Error(`Session not found: ${sessionID}`)
+      for (let attempt = 0; attempt < 5; attempt++) {
+        if (cancelled || route.sessionID !== sessionID) return
+        try {
+          await Promise.all([
+            data.session.sync(sessionID, { children: true }),
+            data.session.permission.sync(sessionID).catch(() => undefined),
+            data.session.form.sync(sessionID).catch(() => undefined),
+          ])
+          if (cancelled || route.sessionID !== sessionID) return
+          const info = data.session.get(sessionID)
+          if (info) {
+            editor.reconnect(info.location.directory)
+            setSynced(true)
+            return
+          }
+        } catch (error) {
+          lastError = error
+        }
+        await new Promise((resolve) => setTimeout(resolve, 500 * 2 ** attempt))
       }
-      editor.reconnect(info.location.directory)
-      setSynced(true)
-    })().catch((error) => {
-      if (route.sessionID !== sessionID) return
+      if (cancelled || route.sessionID !== sessionID) return
       toast.show({
-        message: errorMessage(error),
+        message: errorMessage(lastError),
         variant: "error",
         duration: 5000,
       })
       sessionTabs.enabled() ? sessionTabs.close(sessionID) : navigate({ type: "home" })
-    })
+    })()
   })
 
   let seeded = false
