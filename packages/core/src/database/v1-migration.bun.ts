@@ -439,7 +439,12 @@ export function transformSession(input: TransformInput): TransformResult {
         }),
       ]
     })
-    .map((item, seq) => ({ ...item, seq }))
+    .map((item, seq) => ({
+      ...item,
+      // Keep V1 IDs for relationship matching above, then normalize only the V2 projection.
+      id: item.id.startsWith("msg_") ? item.id : syntheticID(item.id, used),
+      seq,
+    }))
   const last = projected.at(-1)
   const notice = last === undefined ? undefined : legacyToolNotice(projected)
   const migrated =
@@ -1086,7 +1091,7 @@ function unavailableFile(part: SessionV1.FilePart) {
 }
 
 function syntheticID(source: string, used: Set<string>) {
-  const prefix = source.slice(0, 16)
+  const prefix = source.startsWith("msg_") ? source.slice(0, 16) : "msg_" + source.slice(3, 15)
   const alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
   for (let salt = 0; ; salt++) {
     const hex = new Bun.CryptoHasher("sha256").update(`v1-synthetic:${source}${salt ? `:${salt}` : ""}`).digest("hex")
