@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import { writeFile } from "node:fs/promises"
 import { Service, type EnsureReason } from "../src/promise/service"
 import {
   catchesSigterm,
@@ -203,25 +204,47 @@ test("reports a bounded contender stderr tail with native promises", async () =>
   expect(error.message.length).toBeLessThan(9_000)
 }, 10_000)
 
-test("evicts an unresponsive registered service before starting its replacement", async () => {
+test("replaces a registered service that stays unresponsive", async () => {
+  const ensureFast = accelerate(Service.ensure, { unresponsiveAfter: 300 })
   await using fixture = await serviceFixture()
   const registration = fixture.registration
   const existing = fixture.spawn("hanging")
   await fixture.waitForFile()
   const original = await Bun.file(registration).json()
 
-  const endpoint = await ensure({
+  const endpoint = await ensureFast({
     file: registration,
     version: "test",
-    command: fixture.command("delayed", "10"),
+    // Do not publish the replacement registration before the verdict, or terminate() correctly
+    // refuses to signal a process that no longer owns the registration.
+    command: fixture.command("delayed", "1000"),
   })
   const replacement = await Bun.file(registration).json()
   fixture.track(replacement.pid)
 
-  expect((await Bun.file(registration + ".requests").text()).trim().split("\n")).toHaveLength(3)
+  expect((await Bun.file(registration + ".requests").text()).trim().split("\n").length).toBeGreaterThanOrEqual(3)
   expect(await existing.exited).toBe(stoppedExitCode)
   expect(replacement.pid).not.toBe(original.pid)
   expect(endpoint.url).toBe(replacement.url)
+})
+
+test("keeps a registered service that answers again before the unresponsive deadline", async () => {
+  const ensureSlowSpawn = accelerate(Service.ensure, { spawnDelay: 10_000 })
+  await using fixture = await serviceFixture()
+  const registration = fixture.registration
+  const existing = fixture.spawn("recovering")
+  await fixture.waitForFile()
+  const original = await Bun.file(registration).json()
+
+  const pending = ensureSlowSpawn({ file: registration, version: "test", command: [] })
+  await fixture.waitForRequests(3)
+  await writeFile(registration + ".recover", "")
+
+  const endpoint = await pending
+  expect(endpoint.url).toBe(original.url)
+  expect((await Bun.file(registration).json()).pid).toBe(original.pid)
+  expect(existing.exitCode).toBe(null)
+  expect(await fixture.signal()).toBeUndefined()
 })
 
 test("recovers when the starting service it waits for is stopped", async () => {

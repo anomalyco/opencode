@@ -79,6 +79,12 @@ const server = Bun.serve({
       await appendFile(registration + ".requests", process.pid + "\n")
       return new Promise<Response>(() => {})
     }
+    // Silent until the test publishes a recover marker, then healthy again: what a service looks like
+    // when it comes back from a suspend while the client is still probing it.
+    if (mode === "recovering" && !(await Bun.file(registration + ".recover").exists())) {
+      await appendFile(registration + ".requests", process.pid + "\n")
+      return new Promise<Response>(() => {})
+    }
     if (mode === "modern" && requests === 1) {
       await writeFile(registration + ".first-request", "")
       while (!(await Bun.file(registration + ".release").exists())) await Bun.sleep(5)
