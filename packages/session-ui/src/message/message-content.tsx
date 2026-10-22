@@ -17,6 +17,7 @@ import { useData } from "../context"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { useI18n } from "@opencode/ui/context/i18n"
 import { Markdown } from "../components/markdown"
+import type { PreparedMarkdown } from "../components/markdown-prepared"
 import { linkSegments } from "../components/link-segments"
 import { sessionReferenceText, setupSessionLinks } from "../components/markdown-session-links"
 import { useMarkdown } from "../context/markdown"
@@ -206,7 +207,7 @@ function createPacedValue(getValue: () => string, live?: () => boolean) {
     timeout = undefined
     const text = getValue()
 
-    if (!live?.()) {
+    if (!live?.() || document.visibilityState === "hidden") {
       sync(text)
 
       return
@@ -233,7 +234,7 @@ function createPacedValue(getValue: () => string, live?: () => boolean) {
   createEffect(() => {
     const text = getValue()
 
-    if (!live?.()) {
+    if (!live?.() || document.visibilityState === "hidden") {
       clear()
       sync(text)
 
@@ -258,22 +259,34 @@ function createPacedValue(getValue: () => string, live?: () => boolean) {
     timeout = setTimeout(run, TEXT_RENDER_PACE_MS)
   })
 
+  const settle = () => {
+    clear()
+    sync(getValue())
+  }
+  document.addEventListener("visibilitychange", settle)
   onCleanup(() => {
+    document.removeEventListener("visibilitychange", settle)
     clear()
   })
 
   return value
 }
 
-function PacedMarkdown(props: { text: string; cacheKey: string; streaming: boolean }) {
+function PacedMarkdown(props: { text: string; cacheKey: string; streaming: boolean; prepared?: PreparedMarkdown }) {
   const value = createPacedValue(
-    () => props.text,
+    () => (props.prepared ? "" : props.text),
     () => props.streaming,
   )
 
   return (
-    <Show when={value()}>
-      <Markdown text={value()} cacheKey={props.cacheKey} streaming={props.streaming} deferUntilReady />
+    <Show when={props.prepared?.text ?? value()}>
+      <Markdown
+        text={props.prepared?.text ?? value()}
+        prepared={props.prepared}
+        cacheKey={props.cacheKey}
+        streaming={props.streaming}
+        deferUntilReady
+      />
     </Show>
   )
 }
@@ -349,6 +362,12 @@ export function CurrentUserMessageDisplay(props: {
 
   const stamp = createMemo(() => timefmt().format(props.message.time.created))
 
+  const labelled = createMemo(() => waiting() && !props.run?.above)
+  const [label, setLabel] = createSignal("")
+  createEffect(() => {
+    if (labelled()) setLabel(i18n.t(status() === "stranded" ? "ui.message.pending" : "ui.message.steering"))
+  })
+
   const info = createMemo(() =>
     [
       waiting() ? i18n.t("ui.message.pending") : "",
@@ -366,6 +385,7 @@ export function CurrentUserMessageDisplay(props: {
   )
 
   const runPose = () => ({
+    label: labelled() ? 1 : 0,
     meta: folded() ? 0 : 1,
     top: meetsAbove() ? 1 : 0,
     bottom: folded() ? 1 : 0,
@@ -379,6 +399,8 @@ export function CurrentUserMessageDisplay(props: {
     () => root,
     runPose,
     (el, value) => {
+      el.style.setProperty("--user-run-label", `${value.label}`)
+      if (value.label === 0 && !labelled()) setLabel("")
       el.style.setProperty("--user-run-meta", `${value.meta}`)
       el.style.setProperty("--user-run-top", `${value.top}`)
       el.style.setProperty("--user-run-bottom", `${value.bottom}`)
@@ -588,6 +610,7 @@ export function CurrentUserMessageDisplay(props: {
       data-run-folded={folded() ? "" : undefined}
       data-run-meta-hidden={restingPose.meta === 0 ? "" : undefined}
       style={{
+        "--user-run-label": `${restingPose.label}`,
         "--user-run-meta": `${restingPose.meta}`,
         "--user-run-top": `${restingPose.top}`,
         "--user-run-bottom": `${restingPose.bottom}`,
@@ -618,6 +641,14 @@ export function CurrentUserMessageDisplay(props: {
         </MessageOptions>
       </Show>
       {renderAttachments()}
+      <Show when={label()}>
+        <div data-slot="user-message-pending-label" class="text-12-regular text-v2-text-text-weak" aria-hidden={!labelled()}>
+          <span data-slot="user-message-pending" aria-hidden="true">
+            <Icon name="outline-steer" size="small" />
+          </span>
+          {label()}
+        </div>
+      </Show>
       <Show
         when={props.text}
         fallback={
@@ -651,17 +682,6 @@ export function CurrentUserMessageDisplay(props: {
         <div data-slot="user-message-copy-wrapper">
           <span data-slot="user-message-meta-wrap">
             <span data-slot="user-message-meta">
-              <UserMessageTransition active={waiting()}>
-                <span data-slot="user-message-pending" aria-hidden="true">
-                  <Icon name="outline-steer" size="small" />
-                </span>
-                <span>{i18n.t("ui.message.pending")}</span>
-                <Show when={metaLabels().length > 0}>
-                  <span data-slot="user-message-meta-separator" aria-hidden="true">
-                    {"\u00B7"}
-                  </span>
-                </Show>
-              </UserMessageTransition>
               <Show when={metaLabels().length > 0}>
                 <span data-slot="user-message-meta-label">
                   <For each={metaLabels()}>
@@ -897,6 +917,7 @@ export function AssistantTextContent(props: {
   message: SessionMessageAssistant
   showCopy: boolean
   turnDurationMs?: number | null
+  preparedMarkdown?: PreparedMarkdown
 }) {
   const data = useData()
   const i18n = useI18n()
@@ -959,7 +980,12 @@ export function AssistantTextContent(props: {
     <Show when={props.text}>
       <div data-component="text-part" data-timeline-part-id={props.id}>
         <div data-slot="text-part-body">
-          <PacedMarkdown text={props.text} cacheKey={props.id} streaming={props.message.time.completed === undefined} />
+          <PacedMarkdown
+            text={props.text}
+            cacheKey={props.id}
+            streaming={props.message.time.completed === undefined}
+            prepared={props.preparedMarkdown}
+          />
         </div>
         <Show when={menu() && props.showCopy}>
           <MessageOptions
@@ -1014,6 +1040,7 @@ export function AssistantReasoningContent(props: {
   open?: boolean
   onOpenChange?: (open: boolean) => void
   onContentRendered?: () => void
+  preparedMarkdown?: PreparedMarkdown
 }) {
   const i18n = useI18n()
   const [state, setState] = createStore<{ open?: boolean }>({})
@@ -1075,7 +1102,12 @@ export function AssistantReasoningContent(props: {
           </div>
         }
       >
-        <PacedMarkdown text={props.content.text} cacheKey={props.id} streaming={props.streaming} />
+        <PacedMarkdown
+          text={props.content.text}
+          cacheKey={props.id}
+          streaming={props.streaming}
+          prepared={props.preparedMarkdown}
+        />
       </BasicTool>
     </div>
   )

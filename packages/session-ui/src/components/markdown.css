@@ -52,8 +52,9 @@
     display: inline;
   }
 
-  :is([data-markdown-word], code)[data-markdown-enter] {
-    animation: markdown-word-enter 180ms ease-out both;
+  :is([data-markdown-word], code, [data-component="markdown-code"])[data-markdown-enter] {
+    animation: markdown-word-enter calc(180ms * var(--motion-time-scale, 1)) ease-out var(--markdown-word-delay, 0ms)
+      both;
   }
 
   /* Spacing for flow */
@@ -70,10 +71,8 @@
     margin-bottom: 0;
   }
 
-  /* Pretty wrapping would move settled words as each token arrives, so the growing block stays greedy until it completes. */
-  &[data-streaming] > [data-markdown-block]:last-child {
-    text-wrap-style: auto;
-  }
+  /* Pretty wrapping would rearrange words when a block finishes or a new paragraph starts, and diverge from pretext's greedy line measurement. */
+  text-wrap-style: auto;
 
   /* Headings: Sized by level, distinguished by color and spacing */
   h1 {
@@ -469,8 +468,21 @@
   }
 }
 
+/* The streaming-edge experiment (Knobs, Experiments): No mask shows new words at once; Word fade fades them longer. */
+:root[data-streaming-edge="whole"] {
+  [data-component="markdown"] :is([data-markdown-word], code, [data-component="markdown-code"])[data-markdown-enter] {
+    animation: none;
+  }
+}
+
+:root[data-streaming-edge="fade"] {
+  [data-component="markdown"] :is([data-markdown-word], code, [data-component="markdown-code"])[data-markdown-enter] {
+    animation-duration: calc(360ms * var(--motion-time-scale, 1));
+  }
+}
+
 :root[data-motion="reduce"] {
-  [data-component="markdown"] :is([data-markdown-word], code)[data-markdown-enter] {
+  [data-component="markdown"] :is([data-markdown-word], code, [data-component="markdown-code"])[data-markdown-enter] {
     animation: none;
   }
 }

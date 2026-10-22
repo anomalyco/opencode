@@ -289,6 +289,21 @@ export function createData(config: CreateDataInput) {
     setStore("session", "active", sessionID, status)
   }
 
+  // An execution's idle boundary promotes every pending steer at once, so a steer only waits behind work once the
+  // current execution has delivered input.
+  function steerStatus(sessionID: string, created: number): DataPendingStatus {
+    const pending = store.session.pending[sessionID] ?? []
+    const messages = store.session.message[sessionID] ?? []
+    const boundary = messages.findLastIndex((entry) => entry.type === "idle")
+    if ((store.session.active[sessionID] ?? "idle") === "idle")
+      return boundary >= 0 && created <= messages[boundary].time.created ? "stranded" : "starting"
+    return messages
+      .slice(boundary + 1)
+      .some((entry) => entry.type === "user" && !pending.some((other) => other.id === entry.id))
+      ? "steering"
+      : "starting"
+  }
+
   function removePending(sessionID: string, inboxID?: string) {
     if (!inboxID) return
     pendingUpdates.get(sessionID)?.set(inboxID, undefined)
@@ -1465,22 +1480,17 @@ export function createData(config: CreateDataInput) {
         list(sessionID: string) {
           return store.session.pending[sessionID] ?? []
         },
-        // An execution's idle boundary promotes every pending steer at once, so a steer only waits behind work
-        // once the current execution has delivered input.
         status(sessionID: string, inboxID: string): DataPendingStatus | undefined {
-          const pending = store.session.pending[sessionID] ?? []
-          const item = pending.find((entry) => entry.id === inboxID && entry.type === "user")
+          const item = (store.session.pending[sessionID] ?? []).find(
+            (entry) => entry.id === inboxID && entry.type === "user",
+          )
           if (!item) return undefined
           if (item.delivery === "queue") return "queued"
-          const messages = store.session.message[sessionID] ?? []
-          const boundary = messages.findLastIndex((entry) => entry.type === "idle")
-          if ((store.session.active[sessionID] ?? "idle") === "idle")
-            return boundary >= 0 && item.time.created <= messages[boundary].time.created ? "stranded" : "starting"
-          return messages
-            .slice(boundary + 1)
-            .some((entry) => entry.type === "user" && !pending.some((other) => other.id === entry.id))
-            ? "steering"
-            : "starting"
+          return steerStatus(sessionID, item.time.created)
+        },
+        /** The status a steer sent now takes once the server admits it. */
+        admission(sessionID: string): DataPendingStatus {
+          return steerStatus(sessionID, Infinity)
         },
         sync(sessionID: string) {
           return sync.run(`session.pending:${sessionID}`, async () => {

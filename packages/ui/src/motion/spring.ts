@@ -71,6 +71,25 @@ export class Spring {
     return new Spring(value, { omega: (2 * Math.PI) / duration, zeta: 1 - bounce })
   }
 
+  tune({ duration, bounce }: DurationOptions): this {
+    if (
+      !Number.isFinite(duration) ||
+      duration < (2 * Math.PI) / 240 ||
+      !Number.isFinite(bounce) ||
+      bounce < 0 ||
+      bounce >= 1
+    ) {
+      throw new RangeError("duration must be >= 2π/240 seconds; bounce must be in [0, 1)")
+    }
+
+    const nextOmega = (2 * Math.PI) / duration
+    if (this.omega > 0) this.velocity *= nextOmega / this.omega
+    this.omega = nextOmega
+    this.zeta = 1 - bounce
+
+    return this
+  }
+
   set(target: number, options?: { velocity?: number }): this {
     if (!Number.isFinite(target) || (options?.velocity !== undefined && !Number.isFinite(options.velocity)))
       throw new RangeError("Non-finite spring target or velocity")

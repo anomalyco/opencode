@@ -1,4 +1,5 @@
 import {
+  createComputed,
   createEffect,
   createMemo,
   createResource,
@@ -6,6 +7,7 @@ import {
   createUniqueId,
   For,
   onCleanup,
+  on,
   onMount,
   Show,
   Suspense,
@@ -387,10 +389,12 @@ export function ComposerEditor(props: ComposerEditorProps) {
                 classList={{ "font-mono! tracking-[-0.04px]": state.mode === "shell" }}
                 style={{ "unicode-bidi": state.mode === "normal" ? "plaintext" : undefined, "text-align": "start" }}
               >
-                {view.placeholder?.() ??
-                  (state.mode === "shell"
-                    ? i18n.t("ui.promptInput.placeholder.shell")
-                    : i18n.t("ui.promptInput.placeholder.normal", { slash: "/", at: "@" }))}
+                <FadingText
+                  text={view.placeholder?.() ??
+                    (state.mode === "shell"
+                      ? i18n.t("ui.promptInput.placeholder.shell")
+                      : i18n.t("ui.promptInput.placeholder.normal", { slash: "/", at: "@" }))}
+                />
               </div>
             </Show>
           </ScrollView>
@@ -1398,9 +1402,23 @@ function ComposerEditorAlternateDelivery(props: { controller: ComposerEditorMode
     return queue.alternate()
   })
 
+  // Sending marks the session busy a moment before the composer clears; a hint that would last only that moment
+  // stays hidden instead of flashing on every send.
+  const [settled, setSettled] = createSignal(action())
+  createEffect(
+    on(
+      action,
+      (value) => {
+        if (!value) return setSettled(undefined)
+        const frame = requestAnimationFrame(() => setSettled(value))
+        onCleanup(() => cancelAnimationFrame(frame))
+      },
+      { defer: true },
+    ),
+  )
   // Appears and leaves on the same frame as the placeholder, so typing never shows a fade.
   return (
-    <Show when={action()} keyed>
+    <Show when={settled()} keyed>
       {(delivery) => (
         <Tooltip placement="top" inactive={delivery !== "steer"} value={i18n.t("ui.promptInput.steerHint")}>
           <Button
@@ -1545,5 +1563,47 @@ function ComposerSuggestionIcon(props: { item: ComposerSuggestion }) {
       node={{ path: props.item.path ?? props.item.label, type: props.item.kind === "reference" ? "directory" : "file" }}
       class="size-4 shrink-0"
     />
+  )
+}
+
+// Swapped text crossfades in place, like the placeholder turning from a follow-up to a new question as a turn ends.
+function FadingText(props: { text: string }) {
+  let element: HTMLSpanElement | undefined
+  let activeCopy: HTMLElement | undefined
+  createComputed(
+    on(
+      () => props.text,
+      (next, prev) => {
+        activeCopy?.remove()
+        activeCopy = undefined
+        if (!element?.isConnected || !prev || !next || prev === next) return
+        // SAFETY: a deep clone has the same element type as its source.
+        const copy = element.cloneNode(true) as HTMLElement
+        activeCopy = copy
+        copy.setAttribute("aria-hidden", "true")
+        Object.assign(copy.style, { position: "absolute", inset: "0", pointerEvents: "none" })
+        element.parentElement?.append(copy)
+        copy
+          .animate([{ opacity: 1 }, { opacity: 0 }], {
+            duration: 150,
+            easing: "cubic-bezier(.4,0,1,1)",
+            fill: "forwards",
+          })
+          .finished.finally(() => {
+            if (activeCopy === copy) activeCopy = undefined
+            copy.remove()
+          })
+        element.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: "cubic-bezier(.2,.8,.2,1)" })
+      },
+      { defer: true },
+    ),
+  )
+
+  return (
+    <span class="relative block">
+      <span ref={element} class="block">
+        {props.text}
+      </span>
+    </span>
   )
 }

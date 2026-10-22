@@ -670,7 +670,7 @@ test.describe("Working", () => {
     await expect(working).toBeVisible()
     await timeline.send(partUpdated(reasoningPart("prt_working_reasoning", "")))
     await expect(page.locator('[data-timeline-row="Thinking"]')).toBeVisible()
-    await expect(working).toHaveCount(0)
+    await expect(working).toBeVisible()
 
     await timeline.send(partUpdated(reasoningPart("prt_working_reasoning", "The inspection is complete.")))
     await expect(page.locator('[data-timeline-row="Thinking"]')).toHaveCount(0)
@@ -727,7 +727,7 @@ test.describe("Working", () => {
       await timeline.send(partUpdated(toolPart(id, name, "streaming", input)))
       const tool = page.locator(`[data-timeline-part-id="${id}"]`)
       await expect(tool).toBeVisible()
-      await expect(working).toHaveCount(0)
+      await expect(working).toBeVisible()
 
       const metadata =
         name === "patch"
@@ -738,7 +738,7 @@ test.describe("Working", () => {
       await expect(tool).toContainText(
         { shell: "printf ready", patch: "working.ts", subagent: "Inspect working indicator" }[name],
       )
-      await expect(working).toHaveCount(0)
+      await expect(working).toBeVisible()
 
       await timeline.send(partUpdated(toolPart(id, name, "completed", input, { metadata })))
       await expect(tool).toBeVisible()
@@ -811,7 +811,7 @@ test.describe("Working", () => {
 
       if (!grouped) {
         await expect(page.locator('[data-timeline-part-id="prt_background_active"]')).toBeVisible()
-        await expect(working).toHaveCount(0)
+        await expect(working).toBeVisible()
 
         return
       }
@@ -873,7 +873,7 @@ test.describe("Working", () => {
     await expect(page.locator(`[data-timeline-part-id="${assistantID}:text:0"]`)).toContainText(
       "The response is streaming.",
     )
-    await expect(working).toHaveCount(0)
+    await expect(working).toBeVisible()
   })
 })
 

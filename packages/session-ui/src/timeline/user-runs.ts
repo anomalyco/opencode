@@ -48,7 +48,7 @@ export function userMessageRuns(
       upper.agent === lower.agent &&
       upper.model.providerID === lower.model.providerID &&
       upper.model.id === lower.model.id &&
-      upper.model.variant === lower.model.variant &&
+      variant(upper.model) === variant(lower.model) &&
       segments.get(above.userMessageID) === segments.get(below.userMessageID)
     )
   }
@@ -84,4 +84,9 @@ function boundarySegments(messages: readonly SessionMessageInfo[]) {
   })
 
   return segments
+}
+
+// A message sent without a local model takes its reply's, whose variant is "default"; one sent with it names none.
+function variant(model: UserRunMember["model"]) {
+  return model.variant === "default" ? undefined : model.variant
 }

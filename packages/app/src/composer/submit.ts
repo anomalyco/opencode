@@ -10,6 +10,7 @@ import { createComposerSubmission } from "./submission-state"
 import { buildPromptRequest, noteComment, quoteComment } from "./request"
 import { setCursorPosition } from "./editor/dom"
 import { blobDataUrl, resolveBlobUrl } from "@/runtime/persistence/drafts"
+import { prepareSendFlight } from "@/session/timeline/send-flight"
 import { isAttachment } from "./prompt-parts"
 import type { ModelSelection } from "@/providers/models/selection"
 import { parseSlashCommand } from "./client-slash-command"
@@ -170,6 +171,9 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
       if (value.mode === "normal" && !command) {
         // The timeline shows a steer, and any switches it makes, as the composer clears; a queued prompt shows in
         // the queue once admitted.
+        if (value.delivery === "steer" && input.adapter.kind === "active-session")
+          prepareSendFlight(value.id, input.editor())
+
         if (value.delivery === "steer")
           session.handoff.set({
             message: handoffMessage(value),

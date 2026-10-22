@@ -379,12 +379,19 @@
   &:focus-within [data-slot="user-message-meta-tail"] {
     opacity: 1;
     pointer-events: auto;
+    transition: opacity 0.15s ease;
   }
 
-  /* A pending steer keeps its Pending label and actions in view. */
-  &[data-pending] [data-slot="user-message-copy-wrapper"] {
-    opacity: 1;
-    pointer-events: auto;
+  [data-slot="user-message-pending-label"] {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    height: calc(20px * var(--user-run-label, 0));
+    margin-bottom: calc(4px * var(--user-run-label, 0));
+    overflow: hidden;
+    opacity: var(--user-run-label, 0);
+    user-select: none;
+    white-space: nowrap;
   }
 
   [data-slot="user-message-copy-wrapper"] > * {
@@ -510,6 +517,18 @@
   &:focus-within [data-slot="text-part-copy-wrapper"] {
     opacity: 1;
     pointer-events: auto;
+  }
+}
+
+/* Rows the timeline moves under a resting pointer stay quiet until the pointer moves. */
+[data-hover-stale]
+  [data-component="user-message"]:not([data-pending], :focus-within)
+  [data-slot="user-message-copy-wrapper"]:not(:has([data-expanded])),
+[data-hover-stale] [data-component="text-part"]:not(:focus-within) [data-slot="text-part-copy-wrapper"] {
+  @media (hover: hover) {
+    opacity: 0;
+    pointer-events: none;
+    transition: none;
   }
 }
 

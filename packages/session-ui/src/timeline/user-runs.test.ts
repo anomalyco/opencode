@@ -113,6 +113,15 @@ describe("userMessageRuns", () => {
     ).toEqual({ msg_1: alone, msg_2: alone, msg_3: alone })
   })
 
+  test("a message on the default variant joins one that names no variant", () => {
+    expect(
+      runs([user("msg_1", 1), user("msg_2", 2)], {
+        msg_1: { kind: "pending", model: { id: "model", providerID: "provider", variant: "default" } },
+        msg_2: { kind: "pending" },
+      }),
+    ).toEqual({ msg_1: { above: false, below: true }, msg_2: { above: true, below: false } })
+  })
+
   test("a switch or compaction ends the run even when the timeline hides its notice", () => {
     const messages = [
       user("msg_1", 1),

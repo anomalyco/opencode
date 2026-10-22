@@ -44,6 +44,7 @@ import { TextShimmer } from "@opencode/ui/text-shimmer"
 import { AnimatedNumber } from "@opencode/ui/animated-number"
 import { changedFileDiff, patchFileGroups } from "../components/apply-patch-file"
 import { animate } from "motion"
+import { widthMorph } from "@opencode/ui/motion/solid"
 import { SessionProgressIndicatorV2 } from "../v2/components/session-progress-indicator-v2"
 import type {
   FileDiffInfo,
@@ -1741,8 +1742,18 @@ ToolRegistry.register({
       open()
     }
 
+    const [card, setCard] = createSignal<HTMLDivElement>()
+    // Backgrounding adds a suffix while the task stays on screen; its surface keeps one continuous width.
+    widthMorph({
+      ref: card,
+      content: () => card()?.querySelector<HTMLElement>('[data-component="task-tool-surface"]') ?? undefined,
+      watch: () => [title(), subtitle(), running(), clickable()],
+      spring: () => ({ duration: 0.25, bounce: 0 }),
+      inset: 0,
+    })
+
     const trigger = () => (
-      <div data-component="task-tool-card">
+      <div ref={setCard} data-component="task-tool-card" class="max-w-full">
         <div data-component="task-tool-surface">
           <div data-slot="basic-tool-tool-info-structured">
             <div data-slot="basic-tool-tool-info-main">

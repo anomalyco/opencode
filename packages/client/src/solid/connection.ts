@@ -49,6 +49,7 @@ export function createClientConnection(initialApi: OpenCodeClient, options: Clie
   let api = initialApi
   let pending: OpenCodeEvent[] = []
   let flushTimer: ReturnType<typeof setTimeout> | undefined
+  let flushFrame: number | undefined
   let stream: AbortController | undefined
   let current: AbortController | undefined
   let run: Promise<void> | undefined
@@ -62,15 +63,29 @@ export function createClientConnection(initialApi: OpenCodeClient, options: Clie
     if (history.length > connectionHistoryLimit) history.shift()
   }
 
+  function flush() {
+    flushTimer = undefined
+    flushFrame = undefined
+    if (!pending.length) return
+    const events = pending
+    pending = []
+    batch(() => events.forEach(options.onEvent))
+  }
+
   function publish(event: OpenCodeEvent) {
     pending.push(event)
-    if (flushTimer) return
-    flushTimer = setTimeout(() => {
-      flushTimer = undefined
-      const events = pending
-      pending = []
-      batch(() => events.forEach(options.onEvent))
-    }, options.flushInterval ?? 10)
+    const visible = typeof document === "undefined" || document.visibilityState === "visible"
+    if (flushFrame !== undefined && !visible && typeof cancelAnimationFrame === "function") {
+      cancelAnimationFrame(flushFrame)
+      flushFrame = undefined
+    }
+    if (flushTimer !== undefined || flushFrame !== undefined) return
+    const interval = options.flushInterval ?? 10
+    if (interval > 0 && typeof requestAnimationFrame === "function" && visible) {
+      flushFrame = requestAnimationFrame(flush)
+      return
+    }
+    flushTimer = setTimeout(flush, interval)
   }
 
   async function connect(signal: AbortSignal, attempt: number) {
@@ -243,7 +258,8 @@ export function createClientConnection(initialApi: OpenCodeClient, options: Clie
   onCleanup(() => {
     stop()
     abort.abort()
-    if (flushTimer) clearTimeout(flushTimer)
+    if (flushTimer !== undefined) clearTimeout(flushTimer)
+    if (flushFrame !== undefined && typeof cancelAnimationFrame === "function") cancelAnimationFrame(flushFrame)
     pending = []
   })
 

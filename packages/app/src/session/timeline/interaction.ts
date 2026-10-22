@@ -53,11 +53,18 @@ export function createSessionTimelineInteraction(session: SessionModel) {
   const pin = () => setState("follow", { sessionKey: session.identity.sessionKey(), pinned: true })
 
   const unpin = () => {
-    if (!scroller || scroller.scrollHeight - scroller.clientHeight <= 1) return
+    const max =
+      scrollGeometry && scrollGeometry.viewport > 0
+        ? scrollGeometry.extent - scrollGeometry.viewport
+        : scroller
+          ? scroller.scrollHeight - scroller.clientHeight
+          : 0
+    if (!scroller || max <= 1) return
     setState("follow", { sessionKey: session.identity.sessionKey(), pinned: false })
   }
 
   let scroller: HTMLDivElement | undefined
+  let scrollGeometry: { extent: number; viewport: number; offset: number } | undefined
   // The history entry whose tool call was already revealed.
   let revealed: string | undefined
 
@@ -116,19 +123,38 @@ export function createSessionTimelineInteraction(session: SessionModel) {
     setState("messageID", message?.id)
   }
 
-  const jumpThreshold = (element: HTMLDivElement) => Math.max(400, element.clientHeight)
+  const jumpThreshold = (clientHeight: number) => Math.max(400, clientHeight)
 
-  const measureScrollState = (element: HTMLDivElement) => {
-    const max = element.scrollHeight - element.clientHeight
-    const distance = max - element.scrollTop
+  const measureScrollState = (
+    element: HTMLDivElement,
+    geometry = element === scroller ? scrollGeometry : undefined,
+  ) => {
+    const clientHeight = geometry && geometry.viewport > 0 ? geometry.viewport : element.clientHeight
+    const max = (geometry && geometry.viewport > 0 ? geometry.extent : element.scrollHeight) - clientHeight
+    const distance = pinned() ? 0 : max - (geometry && geometry.viewport > 0 ? geometry.offset : element.scrollTop)
     const overflow = max > 1
 
-    return { overflow, jump: overflow && distance > jumpThreshold(element) }
+    return { overflow, jump: overflow && distance > jumpThreshold(clientHeight) }
   }
 
-  // Reads in the shared frame loop's read phase, before any frame's writes, so a panel resizing the timeline on
-  // every frame does not force an extra layout here.
-  const scheduleScrollState = (element: HTMLDivElement) => {
+  // Uses the virtualizer's known geometry when present; otherwise reads in the shared frame loop's read phase before
+  // any frame's writes, so a panel resizing the timeline on every frame does not force an extra layout here.
+  const scheduleScrollState = (
+    element: HTMLDivElement,
+    geometry?: { extent: number; viewport: number; offset: number },
+  ) => {
+    if (geometry && element === scroller) scrollGeometry = geometry
+    const known = element === scroller ? scrollGeometry : undefined
+    if (known && known.viewport > 0) {
+      if (scrollStateFrame) {
+        scrollStateFrame()
+        scrollStateFrame = undefined
+      }
+      scrollStateTarget = undefined
+      const next = measureScrollState(element, known)
+      if (state.scroll.overflow !== next.overflow || state.scroll.jump !== next.jump) setState("scroll", next)
+      return
+    }
     scrollStateTarget = element
 
     if (scrollStateFrame !== undefined) return
@@ -177,9 +203,10 @@ export function createSessionTimelineInteraction(session: SessionModel) {
   })
 
   const resume = (behavior?: ScrollBehavior) => {
+    const scroll = behavior ?? (pinned() ? undefined : "smooth")
     setState("messageID", undefined)
     pin()
-    scrollToEnd(behavior)
+    scrollToEnd(scroll)
     clearMessageHash()
 
     if (scroller) scheduleScrollState(scroller)
@@ -196,7 +223,7 @@ export function createSessionTimelineInteraction(session: SessionModel) {
     if (target < 0 || target > messages.length) return
 
     if (target === messages.length) {
-      resume()
+      resume("auto")
 
       return
     }
@@ -222,6 +249,7 @@ export function createSessionTimelineInteraction(session: SessionModel) {
   }
 
   const setScrollRef = (element: HTMLDivElement | undefined) => {
+    if (scroller !== element) scrollGeometry = undefined
     scroller = element
     setState("refs", "scroller", element)
 
@@ -244,8 +272,10 @@ export function createSessionTimelineInteraction(session: SessionModel) {
     }
 
     if (!owner.current() || timeline.messages().length <= before) return
+    const currentOffset =
+      scrollGeometry && scrollGeometry.viewport > 0 ? scrollGeometry.offset : (scroller?.scrollTop ?? Infinity)
 
-    if (pinned() || !scroller || scroller.scrollTop >= 200 || !timeline.history.more()) return
+    if (pinned() || !scroller || currentOffset >= 200 || !timeline.history.more()) return
 
     if (historyContinuationFrame !== undefined) cancelAnimationFrame(historyContinuationFrame)
     historyContinuationFrame = requestAnimationFrame(() => {
@@ -255,19 +285,34 @@ export function createSessionTimelineInteraction(session: SessionModel) {
   }
 
   const onHistoryScroll = () => {
+    const currentOffset =
+      scrollGeometry && scrollGeometry.viewport > 0 ? scrollGeometry.offset : (scroller?.scrollTop ?? Infinity)
     if (
       historyRequests.has(session.ownership.key()) ||
       timeline.history.loading() ||
       pinned() ||
       !scroller ||
-      scroller.scrollTop >= 200
+      currentOffset >= 200
     )
       return
     void loadOlder()
   }
 
-  // Like the scroll state, measures in the shared frame loop's read phase.
+  // Uses known virtualizer geometry when available; otherwise measures in the shared frame loop's read phase.
   const fill = () => {
+    if (scrollGeometry && scrollGeometry.viewport > 0) {
+      if (
+        !!session.identity.params.id &&
+        timeline.ready() &&
+        pinned() &&
+        !timeline.history.loading() &&
+        !!scroller &&
+        scrollGeometry.extent <= scrollGeometry.viewport + 1 &&
+        timeline.history.more()
+      )
+        void loadOlder()
+      return
+    }
     if (fillFrame !== undefined) return
     let short = false
     fillFrame = frameLoop.addMeasured(
@@ -278,7 +323,9 @@ export function createSessionTimelineInteraction(session: SessionModel) {
           pinned() &&
           !timeline.history.loading() &&
           !!scroller &&
-          scroller.scrollHeight <= scroller.clientHeight + 1
+          (scrollGeometry && scrollGeometry.viewport > 0
+            ? scrollGeometry.extent <= scrollGeometry.viewport + 1
+            : scroller.scrollHeight <= scroller.clientHeight + 1)
       },
       () => {
         fillFrame = undefined
@@ -356,19 +403,28 @@ export function createSessionTimelineInteraction(session: SessionModel) {
       fill()
     },
   )
-  createResizeObserver(
-    () => state.refs.dock,
-    (_rect, _element, entry) => {
+  createEffect(() => {
+    const dock = state.refs.dock
+
+    if (!dock) return
+
+    // createResizeObserver deduplicates on rounded content-box dimensions,
+    // dropping the subpixel updates at the tail of the composer's spring.
+    const observer = new ResizeObserver(([entry]) => {
       // The activity pill floats above the region out of flow, so only the docks, queue and composer count here.
-      const dpr = window.devicePixelRatio || 1
-      const next = Math.round((entry.borderBoxSize[0]?.blockSize ?? 0) * dpr) / dpr
+      const next = Math.round((entry.borderBoxSize[0]?.blockSize ?? 0) * 64) / 64
 
       if (next === state.inset) return
       const delta = next - state.inset
 
-      // Measured before the new inset applies: a shrinking region also keeps a reader whose end it uncovers.
+      // Measured before the new inset applies: a shrinking region also keeps a reader whose end it uncovers. A
+      // following timeline keeps its own end, without landing rows that are still growing.
       const stick = scroller
-        ? pinned() || scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop < 10 + Math.max(0, -delta)
+        ? !pinned() &&
+          (scrollGeometry && scrollGeometry.viewport > 0
+            ? scrollGeometry.extent - scrollGeometry.viewport - scrollGeometry.offset
+            : scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop) <
+            10 + Math.max(0, -delta)
         : false
 
       setState("inset", next)
@@ -377,8 +433,11 @@ export function createSessionTimelineInteraction(session: SessionModel) {
 
       if (scroller) scheduleScrollState(scroller)
       fill()
-    },
-  )
+    })
+
+    observer.observe(dock, { box: "border-box" })
+    onCleanup(() => observer.disconnect())
+  })
   onCleanup(() => {
     if (historyContinuationFrame !== undefined) cancelAnimationFrame(historyContinuationFrame)
 

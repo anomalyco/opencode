@@ -481,3 +481,16 @@
     }
   }
 }
+
+/* Closing, a tool's details fade out before they unmount, so they never vanish in one frame. */
+@media (prefers-reduced-motion: no-preference) {
+  [data-component="collapsible"].tool-collapsible > [data-slot="collapsible-content"][data-closed] {
+    animation: basic-tool-content-out 110ms cubic-bezier(0.4, 0, 1, 1) forwards;
+  }
+}
+
+@keyframes basic-tool-content-out {
+  to {
+    opacity: 0;
+  }
+}

@@ -1,4 +1,5 @@
 import { createEffect, onCleanup } from "solid-js"
+import { motionTuning } from "../motion-tuning"
 import { frameLoop } from "./loop"
 import { observeReducedMotion, prefersReducedMotion } from "./reduced"
 import { Spring } from "./spring"
@@ -27,10 +28,11 @@ export function springStyle<K extends string>(
 
     let moving = false
     const snap = reduced || Boolean(options.snap?.())
+    const scaledDt = dt / motionTuning.timeScale()
 
     for (let i = 0; i < keys.length; i++) {
       const spring = springs[i]!
-      values[keys[i]!] = snap ? spring.snap(spring.target).value : spring.step(dt)
+      values[keys[i]!] = snap ? spring.snap(spring.target).value : spring.step(scaledDt)
       moving = moving || spring.value !== spring.target || spring.velocity !== 0
     }
 
@@ -208,7 +210,8 @@ export function widthMorph(options: {
   spring?: () => DurationOptions
   inset?: number
 }): void {
-  let spring = Spring.fromDuration(0, { duration: 0.42, bounce: 0.18 })
+  const spring = Spring.fromDuration(0, { duration: 0.42, bounce: 0.18 })
+  let currentEl: HTMLElement | undefined
   let first = true
   createEffect(() => {
     options.watch?.()
@@ -216,49 +219,54 @@ export function widthMorph(options: {
     const el = options.ref()
     const content = options.content()
 
-    if (!el || !content) return
-
-    if (settings) {
-      const next = Spring.fromDuration(spring.value, settings)
-      next.velocity = spring.velocity
-      spring = next
+    if (!el || !content) {
+      currentEl = undefined
+      return
     }
+
+    if (el !== currentEl) {
+      currentEl = el
+      first = true
+    }
+
+    if (settings) spring.tune(settings)
 
     const originalContentWidth = content.style.width
     content.style.width = "100%"
-    // SAFETY: a deep clone of an HTMLElement is an HTMLElement.
-    const clone = content.cloneNode(true) as HTMLElement
-    clone.removeAttribute("id")
-
-    for (const node of clone.querySelectorAll("[id]")) node.removeAttribute("id")
-    clone.setAttribute("aria-hidden", "true")
-    clone.inert = true
-    Object.assign(clone.style, {
-      position: "absolute",
-      visibility: "hidden",
-      pointerEvents: "none",
-      width: "max-content",
-      maxWidth: "none",
-      minWidth: "0",
-      top: "0",
-      left: "0",
-    })
-    el.append(clone)
     let measured = false
     let remove: (() => void) | undefined
     let reduced = prefersReducedMotion()
 
     const read = () => {
       if (measured) return
+      // SAFETY: a deep clone of an HTMLElement is an HTMLElement.
+      const clone = content.cloneNode(true) as HTMLElement
+      clone.removeAttribute("id")
+
+      for (const node of clone.querySelectorAll("[id]")) node.removeAttribute("id")
+      clone.setAttribute("aria-hidden", "true")
+      clone.inert = true
+      Object.assign(clone.style, {
+        position: "absolute",
+        visibility: "hidden",
+        pointerEvents: "none",
+        width: "max-content",
+        maxWidth: "none",
+        minWidth: "0",
+        top: "0",
+        left: "0",
+      })
+      el.append(clone)
       spring.set(clone.getBoundingClientRect().width + 2 * (options.inset ?? 4))
+      clone.remove()
       measured = true
     }
 
     const write = (dt: number) => {
+      if (options.spring) spring.tune(options.spring())
       if (first || reduced) spring.snap(spring.target)
       first = false
       el.style.width = `${spring.step(dt)}px`
-      clone.remove()
       const moving = !spring.resting
 
       if (!moving) remove = undefined
@@ -277,7 +285,6 @@ export function widthMorph(options: {
     onCleanup(() => {
       remove?.()
       unsubscribe()
-      clone.remove()
       content.style.width = originalContentWidth
     })
   })

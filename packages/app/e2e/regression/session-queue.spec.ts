@@ -1008,7 +1008,42 @@ for (const [action, status] of [
   })
 }
 
-test("waiting steers group under one Pending line, each keeping its own actions beside its bubble @quarantine", async ({
+test("a queued prompt flies from its row onto its bubble as it leaves for the timeline, like a sent message", async ({
+  page,
+}) => {
+  const mock = createQueueMock(
+    ["fly me into the timeline", "remove me quietly"],
+    [{ id: "msg_queue_delivered", type: "user", text: "First prompt", time: { created: 1 } }],
+  )
+  const view = await openQueue(page, mock)
+  await expect(view.rows).toHaveCount(2)
+  // Records each flight copy that paints: the bubble copy carries the prompt's text.
+  await page.evaluate(() => {
+    const seen: string[] = []
+    Object.assign(window, { flights: seen })
+    new MutationObserver((records) =>
+      records.forEach((record) =>
+        record.addedNodes.forEach((node) => {
+          if (node instanceof HTMLElement && node.matches("[data-flight]")) seen.push(node.textContent ?? "")
+        }),
+      ),
+    ).observe(document.body, { childList: true, subtree: true })
+  })
+  const flights = () => page.evaluate(() => ("flights" in window ? (window.flights as string[]) : []))
+
+  await view.rows.nth(0).getByRole("button", { name: "Steer" }).click()
+  await expect(userRow(page, mock.rows[0].id)).toContainText("fly me into the timeline")
+  await expect.poll(flights).toEqual(["fly me into the timeline"])
+
+  // A removed prompt never reaches the timeline, so nothing flies.
+  await view.rows.nth(0).locator('[data-action="session-queue-remove"]').click()
+  await expect(view.rows).toHaveCount(0)
+  await page.waitForTimeout(800)
+  expect(await flights()).toEqual(["fly me into the timeline"])
+  await expect(page.locator("[data-send-flight]")).toHaveCount(0)
+})
+
+test("waiting steers group under one Steering label, each keeping its own actions beside its bubble @quarantine", async ({
   page,
 }) => {
   const mock = createQueueMock(
@@ -1023,8 +1058,9 @@ test("waiting steers group under one Pending line, each keeping its own actions 
   await expect(last).toContainText("U3: And rebase on beta first.")
   await expect(first.locator('[data-component="user-message"]')).toHaveAttribute("data-pending", "true")
 
-  // The run's last steer carries the one Pending line; the first folds its line away.
-  await expect(last.locator('[data-slot="user-message-meta"]')).toContainText("Pending")
+  // The run wears one Steering label above its first steer, and no meta line at rest.
+  await expect(first.locator('[data-slot="user-message-pending-label"]')).toHaveText("Steering")
+  await expect(last.locator('[data-slot="user-message-pending-label"]')).toHaveCount(0)
   await expect(first.locator('[data-slot="user-message-meta"]')).toBeHidden()
 
   await first.locator('[data-slot="user-message-text"]').hover()
@@ -1162,12 +1198,12 @@ for (const delivery of ["steer", "queue"] as const) {
         : undefined
 
     if (colors) {
-      // A pending steer is grey, switches to it without a transition, and keeps its Pending row in view without hover.
+      // A pending steer is grey, switches to it without a transition, and wears a Steering label above it.
       await expect(bubble).toHaveCSS("background-color", colors.pending.background)
       await expect(bubble).toHaveCSS("color", colors.pending.text)
       await expect(bubble).toHaveCSS("transition-duration", "0s")
-      await expect(pending.locator('[data-slot="user-message-copy-wrapper"]')).toHaveCSS("opacity", "1")
-      await expect(pending.locator('[data-slot="user-message-meta"]')).toHaveText(/^Pending\s*·\s*Queue Model$/)
+      await expect(pending.locator('[data-slot="user-message-pending-label"]')).toHaveText("Steering")
+      await expect(pending.locator('[data-slot="user-message-meta"]')).toHaveText(/^Queue Model$/)
       await bubble.evaluate((element) => (element.dataset.deliveryMarker = "pending"))
     }
 

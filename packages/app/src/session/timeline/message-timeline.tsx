@@ -1,7 +1,15 @@
-import { createEffect, createMemo, createSignal, on, onCleanup, Show, type Accessor, type JSX } from "solid-js"
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  on,
+  onCleanup,
+  Show,
+  type Accessor,
+  type JSX,
+} from "solid-js"
 import { createStore } from "solid-js/store"
 import { Predicate } from "effect"
-import { createAnimatedPresence } from "@/runtime/animated-presence"
 import type { SessionUserActions } from "@opencode/session-ui/actions"
 import { Button } from "@opencode/ui/button"
 import { Icon } from "@opencode/ui/icon"
@@ -15,7 +23,7 @@ import { ExtensionSlot } from "@/runtime/extension/render"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useServer } from "@/runtime/server/current"
 import { useWorkspaceLocation } from "@/workspaces/location"
-import { Timeline } from "@opencode/session-ui/timeline/projection"
+import { Timeline, TimelineRow } from "@opencode/session-ui/timeline/projection"
 import { createSessionTimelineRowRenderer } from "@opencode/session-ui/timeline/row"
 import { getReadyMarkdown, preloadMarkdown } from "@opencode/session-ui/markdown-cache"
 import { createTimelineController, type TimelineController, type TimelineSessionSource } from "./controller"
@@ -80,7 +88,7 @@ type MessageTimelineProps = {
   scroll: { overflow: boolean; jump: boolean }
   onResumeScroll: (behavior?: ScrollBehavior) => void
   setScrollRef: (el: HTMLDivElement | undefined) => void
-  onScheduleScrollState: (el: HTMLDivElement) => void
+  onScheduleScrollState: (el: HTMLDivElement, geometry?: { extent: number; viewport: number; offset: number }) => void
   onPin: () => void
   onUnpin: () => void
   onUserScroll: (target?: EventTarget | null) => void
@@ -119,8 +127,18 @@ export function MessageTimeline(props: MessageTimelineProps) {
     }
   }
 
+  // Motion state belongs to one session; another one starts from a fresh view.
   return (
-    <MessageTimelineView {...props} data={controller.data} action={controller.action} pending={controller.pending} />
+    <Show when={controller.data.sessionID()} keyed>
+      {(_id) => (
+        <MessageTimelineView
+          {...props}
+          data={controller.data}
+          action={controller.action}
+          pending={controller.pending}
+        />
+      )}
+    </Show>
   )
 }
 
@@ -177,12 +195,70 @@ function MessageTimelineView(
   const pinned = createMemo(() => props.pinned)
   const messageByID = projection.messageByID
 
+  const backgroundHintPartID = createMemo(() => {
+    const blocking = new Set(props.background.blocking().map((task) => task.partID))
+
+    if (blocking.size === 0) return
+
+    return projection
+      .rows()
+      .flatMap((row) =>
+        Predicate.isTagged(row, "AssistantPart") ? (row.group.type === "part" ? [row.group.ref] : row.group.refs) : [],
+      )
+      .findLast((ref) => blocking.has(ref.partID))?.partID
+  })
+
+  const showWorking = createMemo(() => {
+    const id = sessionID()
+
+    if (!id || sessionStatus().type !== "busy") return false
+
+    if (data.session.permission.list(id)?.length || data.session.form.list(id)?.length) return false
+    const active = projection.activeMessageID()
+
+    if (!active) return false
+    const assistant = projection.assistantMessagesByParent().get(active)?.at(-1)
+
+    if (assistant?.retry) return false
+
+    // Pending steers still project under the previous response until delivery.
+    // Its error must not hide feedback for a newly submitted prompt.
+    if (
+      assistant?.error &&
+      !data.session.pending.list(id).some((item) => item.type === "user" && item.delivery === "steer")
+    )
+      return false
+
+    return !projection.rows().some((row) => {
+      if (row.userMessageID !== active || !Predicate.isTagged(row, "Notice")) return false
+      const message = messageByID().get(row.messageID)
+
+      return message?.type === "compaction" && message.status === "running"
+    })
+  })
+
+  const showActivity = createMemo(() => showWorking() || !!backgroundHintPartID())
+  const timelineRows = createMemo(() => {
+    const base = projection.rows()
+    const active = projection.activeMessageID()
+    if (!showActivity() || !active) return base.filter((row) => !Predicate.isTagged(row, "Activity"))
+    if (base.some((row) => Predicate.isTagged(row, "Activity"))) return base
+    return [...base, new TimelineRow.Activity({ userMessageID: active })]
+  })
+  const timelineRowByKey = createMemo(() => new Map(timelineRows().map((row) => [TimelineRow.key(row), row])))
+
   const virtualized = createTimelineVirtualizer({
     active: () => props.active !== false,
     sessionKey: () => `${server.key}/${props.data.sessionID()}`,
     presentationKey: () => JSON.stringify(props.data.timelineDetail()),
-    projection,
+    projection: {
+      ...projection,
+      rows: timelineRows,
+      rowByKey: timelineRowByKey,
+    },
     showHeader,
+    layout: (row, environment) =>
+      row._tag === "Activity" ? { source: "fixed", height: 36 } : rowRenderer.layout(row, environment),
     pinned,
     scroll: () => props.scroll,
     onResumeScroll: props.onResumeScroll,
@@ -355,125 +431,41 @@ function MessageTimelineView(
     anchor: props.anchor,
   })
 
-  const backgroundHintPartID = createMemo(() => {
-    const blocking = new Set(props.background.blocking().map((task) => task.partID))
+  // Live status sits in its own timeline row at the end of the active turn, growing and leaving on the shared row
+  // spring and handing over to the reply's copy button when the turn completes.
+  function ActivityLane() {
+    const hint = createStatusFade(() => !!backgroundHintPartID(), () => undefined, 1000)
 
-    if (blocking.size === 0) return
-
-    return projection
-      .rows()
-      .flatMap((row) =>
-        Predicate.isTagged(row, "AssistantPart") ? (row.group.type === "part" ? [row.group.ref] : row.group.refs) : [],
-      )
-      .findLast((ref) => blocking.has(ref.partID))?.partID
-  })
-
-  const [backgroundHintRef, setBackgroundHintRef] = createSignal<HTMLDivElement>()
-
-  const backgroundHintPresence = createAnimatedPresence(
-    backgroundHintPartID,
-    () => backgroundHintRef() ?? null,
-    sessionID,
-    1000,
-  )
-
-  const showWorking = createMemo(() => {
-    const id = sessionID()
-
-    if (!id || sessionStatus().type !== "busy") return false
-
-    if (data.session.permission.list(id)?.length || data.session.form.list(id)?.length) return false
-    const active = projection.activeMessageID()
-
-    if (!active) return false
-    const assistant = projection.assistantMessagesByParent().get(active)?.at(-1)
-
-    if (assistant?.retry) return false
-
-    // Pending steers still project under the previous response until delivery.
-    // Its error must not hide feedback for a newly submitted prompt.
-    if (
-      assistant?.error &&
-      !data.session.pending.list(id).some((item) => item.type === "user" && item.delivery === "steer")
-    )
-      return false
-    const content = assistant?.content.at(-1)
-
-    if (
-      assistant?.time.completed === undefined &&
-      assistant?.time.streamed === undefined &&
-      content?.type === "text" &&
-      content.text.trim()
-    )
-      return false
-    const background = new Set(props.background.tasks().map((task) => task.id))
-
-    return !projection.rows().some((row) => {
-      if (row.userMessageID !== active) return false
-
-      if (Predicate.isTagged(row, "Thinking")) return true
-
-      if (Predicate.isTagged(row, "Notice")) {
-        const message = messageByID().get(row.messageID)
-
-        return message?.type === "compaction" && message.status === "running"
-      }
-
-      // Used and read groups keep the fallback, so each new read does not swap Working out for its short call.
-      if (!Predicate.isTagged(row, "AssistantPart") || row.group.type === "context" || row.group.type === "read")
-        return false
-
-      return (row.group.type === "part" ? [row.group.ref] : row.group.refs).some((ref) => {
-        const content = Timeline.resolveContent(messageByID().get(ref.messageID), ref.partID)
-
-        if (content?.type !== "tool") return false
-
-        if (content.state.status === "streaming" || content.state.status === "running") return true
-        const taskID = content.state.metadata?.[content.name === "subagent" ? "sessionID" : "shellID"]
-
-        return background.has(content.id) || (Predicate.isString(taskID) && background.has(taskID))
-      })
-    })
-  })
-
-  // Undelivered input waits below the work the model has seen, so live status moves into the row above it.
-  const activityRow = createMemo(() => projection.rows().some((row) => Predicate.isTagged(row, "Activity")))
-
-  // The lane keeps its height while empty, so Working and the hint come and go without moving the rows around it.
-  const activity = () => (
-    <div
-      classList={{
-        "min-w-0 w-full max-w-full": true,
-        "md:max-w-session md:mx-auto": props.centered,
-      }}
-    >
-      <div class={`flex h-9 items-center gap-2 pt-3 text-[13px] font-[530] leading-text-compact ${turnPadding()}`}>
-        <Show when={showWorking()}>
-          <div data-component="session-working" role="status">
+    return (
+      <div
+        classList={{
+          "min-w-0 w-full max-w-full": true,
+          "md:max-w-session md:mx-auto": props.centered,
+        }}
+      >
+        <div class={`flex h-9 items-center gap-2 pt-3 text-[13px] font-[530] leading-text-compact ${turnPadding()}`}>
+          <div
+            data-slot="session-working-indicator"
+            data-component={showWorking() || !showActivity() ? "session-working" : undefined}
+            role={showWorking() ? "status" : undefined}
+            aria-hidden={!showWorking() || undefined}
+            class="origin-left will-change-[transform,opacity,filter]"
+            classList={{ "invisible pointer-events-none": !showWorking() && showActivity() }}
+          >
             <TextShimmer text={language.t("session.timeline.working")} active />
           </div>
-        </Show>
-        <Show when={backgroundHintPresence.present()}>
-          <div
-            ref={setBackgroundHintRef}
-            data-component="session-background-hint-row"
-            class="duration-150 motion-reduce:animate-none"
-            classList={{
-              "animate-in fade-in": backgroundHintPresence.animate() && backgroundHintPresence.show(),
-              "animate-out fade-out fill-mode-forwards":
-                backgroundHintPresence.animate() && !backgroundHintPresence.show(),
-            }}
-          >
-            <BackgroundMoveHint onMove={props.background.move} />
-          </div>
-        </Show>
+          <Show when={hint.present()}>
+            <div ref={hint.ref} data-component="session-background-hint-row">
+              <BackgroundMoveHint onMove={props.background.move} />
+            </div>
+          </Show>
+        </div>
       </div>
-    </div>
-  )
+    )
+  }
 
   return (
     <VirtualizedTimeline
-      bottomSpacer={<Show when={!activityRow()}>{activity()}</Show>}
       deferred={(row) => {
         if (!Predicate.isTagged(row, "AssistantPart") || row.group.type !== "part") return false
         const content = Timeline.resolveContent(messageByID().get(row.group.ref.messageID), row.group.ref.partID)
@@ -485,7 +477,7 @@ function MessageTimelineView(
           when={Predicate.isTagged(row(), "Activity")}
           fallback={<rowRenderer.Row row={row} onSizeChange={onSizeChange} />}
         >
-          {activity()}
+          <ActivityLane />
         </Show>
       )}
       header={
@@ -666,4 +658,91 @@ function MessageTimelineView(
       }
     />
   )
+}
+
+// Status fades in and out from whatever opacity it has reached, so a flicker or a quick return never cuts it short.
+// Present when it mounts, it starts at rest; `hold` keeps it at least that long once shown.
+function createStatusFade(show: Accessor<boolean>, delay: () => number | undefined, hold = 0) {
+  const [present, setPresent] = createSignal(show())
+  let element: HTMLElement | undefined
+  let fade: Animation | undefined
+  let shownAt = performance.now()
+  let entering = false
+  let animFrom = show() ? 1 : 0
+  let animTo = animFrom
+  let animStart = 0
+  let animWait = 0
+  let animDuration = 0
+
+  const currentOpacity = (visible: boolean) => {
+    if (entering) return 0
+    if (!fade || fade.playState !== "running") return visible ? 0 : 1
+    const elapsed = performance.now() - animStart - animWait
+    if (elapsed <= 0) return animFrom
+    if (elapsed >= animDuration || animDuration <= 0) return animTo
+    const t = elapsed / animDuration
+    return animFrom + (animTo - animFrom) * t
+  }
+
+  const run = (visible: boolean, wait = 0) => {
+    if (!element) return !visible && setPresent(false)
+    const from = currentOpacity(visible)
+    entering = false
+    fade?.cancel()
+    const duration = visible ? 150 : 110
+    animFrom = from
+    animTo = visible ? 1 : 0
+    animStart = performance.now()
+    animWait = wait
+    animDuration = duration
+
+    const current = element.animate([{ opacity: String(from) }, { opacity: visible ? 1 : 0 }], {
+      duration,
+      delay: wait,
+      easing: visible ? "cubic-bezier(.2,.8,.2,1)" : "cubic-bezier(.4,0,1,1)",
+      fill: "both",
+    })
+
+    fade = current
+    current.finished.then(
+      () => fade === current && !visible && setPresent(false),
+      () => undefined,
+    )
+  }
+
+  createEffect(
+    on(
+      show,
+      (visible) => {
+        if (visible) shownAt = performance.now()
+
+        if (visible && !present()) {
+          entering = true
+
+          return setPresent(true)
+        }
+
+        const remaining = visible ? 0 : hold - (performance.now() - shownAt)
+
+        if (remaining <= 0) return run(visible)
+        const timer = setTimeout(() => run(false), remaining)
+        onCleanup(() => clearTimeout(timer))
+      },
+      { defer: true },
+    ),
+  )
+  onCleanup(() => fade?.cancel())
+
+  return {
+    present,
+    ref(value: HTMLElement) {
+      element = value
+      const wait = delay()
+
+      if (entering || (wait !== undefined && show())) {
+        entering = true
+        run(true, wait)
+      }
+    },
+  }
 }

@@ -65,9 +65,11 @@ test("remeasures a recent explored context group before the next paint", async (
 
   // Samples every painted frame after the click until the open group's row holds its measured content, so a
   // stale row height shows up as overlap before the virtualizer catches up.
+  type Sample = { frame: number; allocated: number; overlap: number; expanded: string | null; measured: boolean }
+
   const samples = await page.evaluate(
     ({ contextSelector, following }) =>
-      new Promise<{ frame: number; overlap: number; expanded: string | null; measured: boolean }[]>((resolve) => {
+      new Promise<Sample[]>((resolve) => {
         const context = document.querySelector<HTMLElement>(contextSelector)
         const text = document.querySelector<HTMLElement>(following)
         const scroller = context?.closest<HTMLElement>(".scroll-view__viewport")
@@ -78,18 +80,17 @@ test("remeasures a recent explored context group before the next paint", async (
 
         if (!scroller || !trigger || !contextRow || !virtualRow || !textRow) throw new Error("missing regression nodes")
         scroller.scrollTop = scroller.scrollHeight
-        const samples: { frame: number; overlap: number; expanded: string | null; measured: boolean }[] = []
+        const samples: Sample[] = []
 
         const capture = (frame: number) => {
           const content = context!.querySelector<HTMLElement>('[data-slot="collapsible-content"]')
           const allocated = virtualRow.getBoundingClientRect().height
           const inner = virtualRow.firstElementChild?.getBoundingClientRect().height ?? Infinity
+          const shown = Math.min(contextRow.getBoundingClientRect().bottom, virtualRow.getBoundingClientRect().bottom)
           samples.push({
             frame,
-            overlap: Math.max(
-              0,
-              Math.round((contextRow.getBoundingClientRect().bottom - textRow.getBoundingClientRect().top) * 10) / 10,
-            ),
+            allocated,
+            overlap: Math.max(0, Math.round((shown - textRow.getBoundingClientRect().top) * 10) / 10),
             expanded: trigger.getAttribute("aria-expanded"),
             measured:
               !!content &&
@@ -118,6 +119,8 @@ test("remeasures a recent explored context group before the next paint", async (
 
   expect(samples[0]?.overlap).toBe(0)
   expect(samples.filter((sample) => sample.frame >= 1 && sample.overlap > 0.5)).toEqual([])
+  // The row opens steadily onto its measured height, never shrinking back on the way.
+  expect(samples.filter((sample, index) => sample.allocated < (samples[index - 1]?.allocated ?? 0) - 0.5)).toEqual([])
   expect(samples.at(-1)).toMatchObject({ expanded: "true", measured: true })
 })
 
@@ -249,6 +252,9 @@ test("keeps a file diff anchored while it expands and collapses", async ({ page 
     await expect(diff).toHaveCount(visible ? 1 : 0)
     await expect.poll(bottom).toBeLessThanOrEqual(1)
   }
+
+  // Following the end, the row eases onto its new height; let it land before scrolling away.
+  await expect.poll(measured).toBeLessThanOrEqual(1)
 
   // Scrolled away from the tail, the header keeps its viewport position.
   await expect
@@ -551,7 +557,10 @@ for (const failed of [false, true]) {
       expect(frames.some((frame) => frame.working && frame.prompt === undefined)).toBe(false)
       const positions = frames.flatMap((frame) => (frame.prompt === undefined ? [] : [frame.prompt]))
       expect(positions.length).toBeGreaterThan(0)
-      expect(new Set(positions).size).toBe(1)
+      // The prompt grows in at the followed end and rises into place: it never moves back down or jumps, including
+      // when Working shows.
+      const steps = positions.slice(1).map((position, index) => position - positions[index]!)
+      expect(steps.filter((step) => step > 0.5 || step < -40)).toEqual([])
     } finally {
       release.resolve()
       await observation.dispose()

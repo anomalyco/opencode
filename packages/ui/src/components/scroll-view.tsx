@@ -6,6 +6,14 @@ import { useI18n } from "../context/i18n"
 
 export type ScrollViewThumbVisibility = "hover" | "scroll"
 
+/** Geometry already owned by a virtual list; all dimensions are in CSS pixels. */
+export type ScrollViewGeometry = {
+  extent: number
+  viewport: number
+  offset: number
+  track: number
+}
+
 export interface ScrollViewProps extends ComponentProps<"div"> {
   viewportRef?: (el: HTMLDivElement) => void
   orientation?: "vertical" | "horizontal" | "both"
@@ -24,6 +32,7 @@ export interface ScrollViewProps extends ComponentProps<"div"> {
   onBeforeScroll?: () => void
   /** Offset/extent correction for a virtualized vertical scrollbar. */
   verticalScrollAdjustment?: number
+  verticalGeometry?: ScrollViewGeometry
 }
 
 export const scrollKey = (event: Pick<KeyboardEvent, "key" | "altKey" | "ctrlKey" | "metaKey" | "shiftKey">) => {
@@ -144,6 +153,7 @@ export function ScrollView(props: ScrollViewProps) {
       "thumbHoverTarget",
       "onBeforeScroll",
       "verticalScrollAdjustment",
+      "verticalGeometry",
       "style",
     ],
     [
@@ -214,20 +224,21 @@ export function ScrollView(props: ScrollViewProps) {
 
     if (vertical()) {
       const adjustment = local.verticalScrollAdjustment ?? 0
-      const scrollHeight = viewportRef.scrollHeight + adjustment
-      const trackSize = Math.max(0, (thumbMount()?.clientHeight || viewportRef.clientHeight) - trackPadding * 2)
+      const geometry = local.verticalGeometry
+      const viewport = geometry?.viewport ?? viewportRef.clientHeight
+      const scrollHeight = (geometry?.extent ?? viewportRef.scrollHeight) + adjustment
+      const trackSize = Math.max(0, (geometry?.track ?? (thumbMount()?.clientHeight || viewport)) - trackPadding * 2)
 
-      const size = trackSize
-        ? Math.min(trackSize, Math.max((viewportRef.clientHeight / scrollHeight) * trackSize, minThumbSize))
-        : 0
+      const size = trackSize ? Math.min(trackSize, Math.max((viewport / scrollHeight) * trackSize, minThumbSize)) : 0
 
-      const maxScroll = scrollHeight - viewportRef.clientHeight
+      const maxScroll = scrollHeight - viewport
       const maxStart = trackSize - size
       setState("showVerticalThumb", maxScroll > 0)
       setState("verticalThumbSize", size)
       setState(
         "verticalThumbStart",
-        trackPadding + (maxScroll > 0 ? ((viewportRef.scrollTop + adjustment) / maxScroll) * maxStart : 0),
+        trackPadding +
+          (maxScroll > 0 ? (((geometry?.offset ?? viewportRef.scrollTop) + adjustment) / maxScroll) * maxStart : 0),
       )
     } else {
       setState("showVerticalThumb", false)
@@ -262,7 +273,10 @@ export function ScrollView(props: ScrollViewProps) {
     // appears later), after layout. Measuring here as well would force a synchronous layout per
     // ScrollView while the page is still rendering.
     createResizeObserver(
-      () => [viewportRef, viewportRef.firstElementChild, thumbMount()].filter(Boolean) as HTMLElement[],
+      () =>
+        local.verticalGeometry && !horizontal()
+          ? []
+          : ([viewportRef, viewportRef.firstElementChild, thumbMount()].filter(Boolean) as HTMLElement[]),
       updateThumb,
     )
   })
@@ -280,6 +294,10 @@ export function ScrollView(props: ScrollViewProps) {
     const observer = new MutationObserver(updateThumb)
     observer.observe(viewportRef, { childList: true, subtree: true, characterData: true })
     onCleanup(() => observer.disconnect())
+  })
+
+  createEffect(() => {
+    if (local.verticalGeometry) updateThumb()
   })
 
   createEffect(() => {
@@ -330,9 +348,11 @@ export function ScrollView(props: ScrollViewProps) {
         pointer: vertical ? e.clientY : e.clientX,
         viewportStart: vertical ? track.getBoundingClientRect().top : track.getBoundingClientRect().left,
         grabOffset,
-        clientSize: vertical ? track.clientHeight : track.clientWidth,
-        scrollClientSize: vertical ? viewportRef.clientHeight : viewportRef.clientWidth,
-        scrollSize: vertical ? viewportRef.scrollHeight : viewportRef.scrollWidth,
+        clientSize: vertical ? (local.verticalGeometry?.track ?? track.clientHeight) : track.clientWidth,
+        scrollClientSize: vertical
+          ? (local.verticalGeometry?.viewport ?? viewportRef.clientHeight)
+          : viewportRef.clientWidth,
+        scrollSize: vertical ? (local.verticalGeometry?.extent ?? viewportRef.scrollHeight) : viewportRef.scrollWidth,
         thumbSize: vertical ? state.verticalThumbSize : state.horizontalThumbSize,
         reverse: rtl,
       })
@@ -427,7 +447,7 @@ export function ScrollView(props: ScrollViewProps) {
     prepareScroll()
 
     if (!next) return
-    const scrollAmount = viewportRef.clientHeight * 0.8
+    const scrollAmount = (local.verticalGeometry?.viewport ?? viewportRef.clientHeight) * 0.8
     const lineAmount = 40
 
     switch (next) {
@@ -445,7 +465,7 @@ export function ScrollView(props: ScrollViewProps) {
         break
       case "end":
         e.preventDefault()
-        viewportRef.scrollTo({ top: viewportRef.scrollHeight })
+        viewportRef.scrollTo({ top: local.verticalGeometry?.extent ?? viewportRef.scrollHeight })
         break
       case "up":
         e.preventDefault()
@@ -478,10 +498,9 @@ export function ScrollView(props: ScrollViewProps) {
         class="scroll-view__viewport"
         data-scrollable
         onScroll={(e) => {
-          updateThumb()
-          markScrolling()
-
           if (typeof events.onScroll === "function") events.onScroll(e as any)
+          if (!local.verticalGeometry || horizontal()) updateThumb()
+          markScrolling()
         }}
         // Passive so the compositor never waits on the main thread to scroll; onWheel cannot cancel.
         on:wheel={{

@@ -193,10 +193,12 @@ export const motionTuning = {
   },
   list: () => [...knobs.values()],
   actions: () => [...actions.values()],
+  timeScale: () => timeScale(),
   /** Applies an edit and saves every knob that differs from its default. */
   set<K extends MotionKnob>(knob: K, value: K["value"]) {
     knob.value = value
     save()
+    syncScale()
     notify()
   },
   subscribe(listener: () => void) {
@@ -236,6 +238,13 @@ export const motionGlobals = { speed, slow }
 function timeScale() {
   return (slow.value ? 4 : 1) / speed.value
 }
+
+function syncScale() {
+  if (typeof document !== "undefined")
+    document.documentElement?.style.setProperty("--motion-time-scale", `${timeScale()}`)
+}
+
+syncScale()
 
 function register<K extends MotionKnob>(knob: K) {
   knobs.set(knob.id, knob)

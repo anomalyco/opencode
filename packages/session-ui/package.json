@@ -11,6 +11,7 @@
     "./timeline/projection": "./src/timeline/projection.ts",
     "./timeline/detail": "./src/timeline/detail.ts",
     "./timeline/row": "./src/timeline/session-timeline-row.tsx",
+    "./timeline/text-layout": "./src/timeline/text-layout.ts",
     "./timeline": "./src/timeline/session-timeline.tsx",
     "./basic-tool": "./src/components/basic-tool.tsx",
     "./dock-prompt": "./src/components/dock-prompt.tsx",
@@ -61,6 +62,7 @@
     "vite-plugin-solid": "catalog:"
   },
   "dependencies": {
+    "@chenglou/pretext": "1.0.0",
     "@kobalte/core": "catalog:",
     "@opencode/client": "workspace:*",
     "@opencode/patchmark": "workspace:*",
