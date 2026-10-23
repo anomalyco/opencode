@@ -523,6 +523,27 @@ The connected account needs Copilot Chat access. If GitHub reports no entitlemen
 organization to assign a Copilot seat, then connect again. OpenCode fetches the account's current model list after login
 and whenever the active Copilot account changes.
 
+## ai&
+
+[ai&](https://aiand.com) serves open-weight models from data centers in Japan. Create an API key in the
+[ai& console](https://console.aiand.com/api-keys), then connect it as **ai&**.
+
+```text
+/connect
+# Select ai&, then paste your API key.
+/models
+```
+
+To skip `/connect`, set `AIAND_API_KEY` on the OpenCode server instead. Model IDs keep the upstream organization after
+the `aiand/` prefix. See the [ai& catalog](https://docs.aiand.com/models/catalog/) for every model.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "aiand/zai-org/glm-5.2",
+}
+```
+
 ## Ollama
 
 Start Ollama and pull a model. OpenCode probes `http://127.0.0.1:11434`, discovers completion models, and adds them to
