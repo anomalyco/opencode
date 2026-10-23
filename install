@@ -314,7 +314,8 @@ download_and_install() {
         curl -f -# -L -o "$tmp_dir/$filename" "$url"
     fi
 
-    tar -xzf "$tmp_dir/$filename" -C "$tmp_dir"
+    # Keep Windows paths out of tar's archive and directory arguments.
+    (cd "$tmp_dir" && tar -xzf "$filename")
     local installed_binary="$APP"
     if [ "$os" = "windows" ]; then
         installed_binary="$APP.exe"

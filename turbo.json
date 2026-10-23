@@ -57,6 +57,9 @@
       "dependsOn": ["transit"],
       "outputs": []
     },
+    "@opencode/script#test": {
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/install"]
+    },
     "@opencode/desktop#test": {
       "outputs": [],
       "cache": false
