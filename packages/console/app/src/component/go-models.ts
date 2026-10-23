@@ -62,14 +62,6 @@ export const goModels = [
     regions: true,
   },
   {
-    id: "longcat-2.5-preview-free",
-    name: "LongCat 2.5 Preview Free",
-    requests: Infinity,
-    allowance: Infinity,
-    featured: true,
-    limitedTime: true,
-  },
-  {
     id: "beam-free",
     name: "Beam Free",
     requests: Infinity,
@@ -109,7 +101,6 @@ const plusLimits: Record<string, [number, number]> = {
   "mimo-v2.5": [60200, 120],
   "muse-spark-1.3-contributor": [90600, 120],
   "muse-spark-1.2-contributor": [90600, 120],
-  "longcat-2.5-preview-free": [Infinity, Infinity],
   "beam-free": [Infinity, Infinity],
 }
 
