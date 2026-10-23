@@ -114,6 +114,14 @@ test("shows the TPS default in session settings", () => {
   expect(setting?.default).toBe(true)
 })
 
+test("shows the MCP summary default in session settings", () => {
+  expect(settings.find((setting) => setting.path.join(".") === "session.mcp_summary")).toMatchObject({
+    category: "Session",
+    default: "default",
+    values: ["default", "collapsed", "always", "never"],
+  })
+})
+
 test("shows transcript verbosity in session settings", () => {
   expect(settings.find((setting) => setting.path.join(".") === "session.verbosity")).toMatchObject({
     category: "Session",
