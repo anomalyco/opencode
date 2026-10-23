@@ -34,7 +34,7 @@ export const Plugin = define({
             .prompt({
               ...input.prompt,
               sessionID: input.sessionID,
-              text: append(PROMPT_INITIALIZE.replace("${path}", location.project.directory), input.prompt.text),
+              text: append(PROMPT_INITIALIZE.replace("${path}", () => location.project.directory), input.prompt.text),
               delivery: input.delivery,
             })
             .pipe(Effect.asVoid),
@@ -47,7 +47,7 @@ export const Plugin = define({
             .prompt({
               ...input.prompt,
               sessionID: input.sessionID,
-              text: append(PROMPT_REVIEW.replace("${path}", location.project.directory), input.prompt.text),
+              text: append(PROMPT_REVIEW.replace("${path}", () => location.project.directory), input.prompt.text),
               delivery: input.delivery,
             })
             .pipe(Effect.asVoid),
