@@ -8,6 +8,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js"
+import { createFetchWithInit } from "@modelcontextprotocol/sdk/shared/transport.js"
 import {
   ListRootsRequestSchema,
   type LoggingMessageNotification,
@@ -439,7 +440,45 @@ const layer = Layer.effect(
       Effect.catch(() => Effect.succeed([] as number[])),
     )
 
-    function watch(s: State, name: string, client: MCPClient, bridge: EffectBridge.Shape, timeout?: number) {
+    function watch(
+      s: State,
+      name: string,
+      client: MCPClient,
+      bridge: EffectBridge.Shape,
+      oauthEnabled: boolean,
+      timeout?: number,
+    ) {
+      // Preserve the SDK overloads and observe only requested tools, not background SSE authentication.
+      client.callTool = new Proxy(client.callTool, {
+        apply(call, receiver, args) {
+          const result: ReturnType<MCPClient["callTool"]> = Reflect.apply(call, receiver, args)
+          return result.catch((error: unknown) => {
+            if (
+              oauthEnabled &&
+              error instanceof UnauthorizedError &&
+              s.clients[name] === client &&
+              s.status[name]?.status === "connected"
+            ) {
+              s.status[name] = { status: "needs_auth" }
+              bridge.fork(
+                events.publish(ToolsChanged, { server: name }).pipe(
+                  Effect.andThen(
+                    events.publish(TuiEvent.ToastShow, {
+                      title: "MCP Authentication Required",
+                      message: `Server "${name}" requires authentication. Run: opencode mcp auth ${name}`,
+                      variant: "warning",
+                      duration: 8000,
+                    }),
+                  ),
+                  Effect.ignore,
+                ),
+              )
+            }
+            throw error
+          })
+        },
+      })
+
       client.onclose = () => {
         if (s.clients[name] !== client) return
         delete s.clients[name]
@@ -522,7 +561,7 @@ const layer = Layer.effect(
                 s.clients[key] = result.mcpClient
                 s.defs[key] = result.defs!
                 if (result.instructions) s.instructions[key] = result.instructions
-                watch(s, key, result.mcpClient, bridge, mcp.timeout)
+                watch(s, key, result.mcpClient, bridge, mcp.type === "remote" && mcp.oauth !== false, mcp.timeout)
               }
             }),
           { concurrency: "unbounded" },
@@ -575,6 +614,7 @@ const layer = Layer.effect(
       listed: MCPToolDef[],
       instructions: string | undefined,
       timeout?: number,
+      oauthEnabled = false,
     ) {
       const bridge = yield* EffectBridge.make()
       const previous = s.clients[name]
@@ -583,7 +623,7 @@ const layer = Layer.effect(
       s.defs[name] = listed
       if (instructions) s.instructions[name] = instructions
       else delete s.instructions[name]
-      watch(s, name, client, bridge, timeout)
+      watch(s, name, client, bridge, oauthEnabled, timeout)
       if (previous) yield* Effect.tryPromise(() => previous.close()).pipe(Effect.ignore)
       return s.status[name]
     })
@@ -635,7 +675,15 @@ const layer = Layer.effect(
         return result.status
       }
 
-      return yield* storeClient(s, name, result.mcpClient, result.defs!, result.instructions, mcp.timeout)
+      return yield* storeClient(
+        s,
+        name,
+        result.mcpClient,
+        result.defs!,
+        result.instructions,
+        mcp.timeout,
+        mcp.type === "remote" && mcp.oauth !== false,
+      )
     })
 
     const add = Effect.fn("MCP.add")(function* (name: string, mcp: ConfigMCPV1.Info) {
@@ -850,12 +898,22 @@ const layer = Layer.effect(
       const directory = yield* InstanceState.directory
 
       return yield* Effect.tryPromise({
-        try: () => {
+        try: async () => {
+          const { auth, discoverOAuthServerInfo } = await import("@modelcontextprotocol/sdk/client/auth.js")
+          const fetchFn = createFetchWithInit(undefined, mcpConfig.headers ? { headers: mcpConfig.headers } : undefined)
+          // Optional discovery must not block public or static-header MCP connections.
+          const discovery = await discoverOAuthServerInfo(url, { fetchFn }).catch(() => undefined)
+          // Public discovery does not complete an explicit sign-in to an OAuth-enabled server.
+          if (
+            discovery?.authorizationServerMetadata &&
+            (await auth(authProvider, { serverUrl: url, scope: oauthConfig?.scope, fetchFn })) !== "AUTHORIZED"
+          ) {
+            throw new UnauthorizedError()
+          }
           const client = createClient(directory)
-          return client.connect(transport).then(async () => {
-            await authProvider.commit()
-            return { authorizationUrl: "", oauthState, client } satisfies AuthResult
-          })
+          await client.connect(transport)
+          await authProvider.commit()
+          return { authorizationUrl: "", oauthState, client } satisfies AuthResult
         },
         catch: (error) => error,
       }).pipe(
@@ -892,7 +950,7 @@ const layer = Layer.effect(
 
         const s = yield* InstanceState.get(state)
         yield* auth.clearOAuthState(mcpName)
-        return yield* storeClient(s, mcpName, client, listed, client.getInstructions()?.trim(), mcpConfig.timeout)
+        return yield* storeClient(s, mcpName, client, listed, client.getInstructions()?.trim(), mcpConfig.timeout, true)
       }
 
       const callbackPromise = McpOAuthCallback.waitForCallback(result.oauthState, mcpName)

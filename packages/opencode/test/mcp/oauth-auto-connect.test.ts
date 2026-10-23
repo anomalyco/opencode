@@ -5,14 +5,14 @@ import { ListResourcesRequestSchema, ListToolsRequestSchema } from "@modelcontex
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { FSUtil } from "@opencode-ai/core/fs-util"
-import { Effect } from "effect"
+import { Deferred, Effect } from "effect"
 import { Config } from "../../src/config/config"
 import { EventV2Bridge } from "../../src/event-v2-bridge"
 import { McpAuth } from "../../src/mcp/auth"
 import { MCP } from "../../src/mcp/index"
 import { McpOAuthCallback } from "../../src/mcp/oauth-callback"
 import { McpOAuthPendingProvider, McpOAuthProvider } from "../../src/mcp/oauth-provider"
-import { testEffect } from "../lib/effect"
+import { awaitWithTimeout, testEffect } from "../lib/effect"
 
 const mcpTest = testEffect(
   LayerNode.compile(
@@ -22,6 +22,11 @@ const mcpTest = testEffect(
 
 interface OAuthMcpOptions {
   capabilities?: "tools" | "resources"
+  oauthMetadata?: boolean
+  metadataFailure?: "oauth" | "openid"
+  lazyDiscovery?: boolean
+  protectedCalls?: boolean
+  backgroundChallenge?: boolean
 }
 
 function serveOAuthMcp(options: OAuthMcpOptions = {}) {
@@ -37,6 +42,13 @@ function serveOAuthMcp(options: OAuthMcpOptions = {}) {
         enableJsonResponse: true,
       })
       let listToolsCalls = 0
+      let protectedCalls = 0
+      let authorizeCalls = 0
+      const metadataRequests: string[] = []
+      let releaseGet: () => void = () => {}
+      const getGate = new Promise<void>((resolve) => {
+        releaseGet = resolve
+      })
       let requiresAuth = true
 
       if (capabilities === "tools") {
@@ -59,6 +71,17 @@ function serveOAuthMcp(options: OAuthMcpOptions = {}) {
           const origin = url.origin
           const mcpUrl = `${origin}/mcp`
 
+          if (url.pathname === "/authorize") authorizeCalls++
+          if (url.pathname.startsWith("/.well-known/")) metadataRequests.push(url.pathname)
+          if (
+            (options.metadataFailure === "oauth" && url.pathname === "/.well-known/oauth-authorization-server") ||
+            (options.metadataFailure === "openid" && url.pathname === "/.well-known/openid-configuration")
+          ) {
+            return new Response("Unavailable", { status: 503 })
+          }
+          if (options.oauthMetadata === false && url.pathname.startsWith("/.well-known/")) {
+            return new Response("Not found", { status: 404 })
+          }
           if (url.pathname === "/.well-known/oauth-protected-resource/mcp") {
             return Response.json({
               resource: mcpUrl,
@@ -102,13 +125,60 @@ function serveOAuthMcp(options: OAuthMcpOptions = {}) {
           }
           if (url.pathname !== "/mcp") return new Response("Not found", { status: 404 })
 
-          if (request.method === "GET") return new Response(null, { status: 405 })
+          if (request.method === "GET") {
+            if (options.backgroundChallenge && request.headers.get("authorization") !== "Bearer replacement-token") {
+              await getGate
+              return new Response("Unauthorized", {
+                status: 401,
+                headers: {
+                  "WWW-Authenticate": `Bearer resource_metadata="${origin}/.well-known/oauth-protected-resource", scope="mcp"`,
+                },
+              })
+            }
+            return new Response(null, { status: 405 })
+          }
           if (requiresAuth && request.headers.get("authorization") !== "Bearer replacement-token") {
             return new Response("Unauthorized", {
               status: 401,
               headers: {
                 "WWW-Authenticate": `Bearer resource_metadata="${origin}/.well-known/oauth-protected-resource", scope="mcp"`,
               },
+            })
+          }
+          if (options.lazyDiscovery) {
+            const message = await request.json()
+            if (message.id === undefined) return new Response(null, { status: 202 })
+            if (message.method === "tools/call") {
+              protectedCalls++
+              if (options.protectedCalls && request.headers.get("authorization") !== "Bearer replacement-token") {
+                return new Response("Unauthorized", {
+                  status: 401,
+                  headers: {
+                    "WWW-Authenticate": `Bearer resource_metadata="${origin}/.well-known/oauth-protected-resource", scope="mcp"`,
+                  },
+                })
+              }
+              return Response.json({
+                jsonrpc: "2.0",
+                id: message.id,
+                result: { content: [{ type: "text", text: "synthetic result" }] },
+              })
+            }
+            if (message.method === "initialize")
+              return Response.json({
+                jsonrpc: "2.0",
+                id: message.id,
+                result: {
+                  protocolVersion: "2025-11-25",
+                  capabilities: { tools: {} },
+                  serverInfo: { name: "lazy-oauth", version: "1.0.0" },
+                },
+              })
+            listToolsCalls++
+            return Response.json({
+              jsonrpc: "2.0",
+              id: message.id,
+              result: { tools: [{ name: "test_tool", inputSchema: { type: "object" } }] },
             })
           }
           return transport.handleRequest(request)
@@ -121,6 +191,10 @@ function serveOAuthMcp(options: OAuthMcpOptions = {}) {
           requiresAuth = false
         },
         listToolsCalls: () => listToolsCalls,
+        protectedCalls: () => protectedCalls,
+        authorizeCalls: () => authorizeCalls,
+        metadataRequests: () => metadataRequests,
+        releaseGet: () => releaseGet(),
         close: async () => {
           await http.stop(true)
           await protocol.close()
@@ -268,10 +342,10 @@ mcpTest.instance("auth status only reports credentials stored for the configured
   }),
 )
 
-mcpTest.instance("authenticate() stores a connected client when auth completes without redirect", () =>
+mcpTest.instance("authenticate() connects a public server without OAuth metadata", () =>
   Effect.gen(function* () {
     yield* stopOAuthCallback
-    const server = yield* serveOAuthMcp()
+    const server = yield* serveOAuthMcp({ oauthMetadata: false })
     const mcp = yield* MCP.Service
     const name = "test-oauth-connect"
     const added = yield* mcp.add(name, remote(server.url))
@@ -283,10 +357,33 @@ mcpTest.instance("authenticate() stores a connected client when auth completes w
   }),
 )
 
-mcpTest.instance("authenticate() connects a resource-only server without listing tools", () =>
+for (const metadataFailure of ["oauth", "openid"] as const) {
+  mcpTest.instance(`authenticate() connects without OAuth when ${metadataFailure} discovery returns 503`, () =>
+    Effect.gen(function* () {
+      yield* stopOAuthCallback
+      const server = yield* serveOAuthMcp({ oauthMetadata: false, metadataFailure, lazyDiscovery: true })
+      server.allowAnonymous()
+      const mcp = yield* MCP.Service
+      const name = `test-oauth-discovery-${metadataFailure}-503`
+      const added = yield* mcp.add(name, {
+        ...remote(server.url),
+        ...(metadataFailure === "openid" ? { headers: { Authorization: "Bearer static-test-token" } } : {}),
+      })
+      expect((added.status as Record<string, { status: string }>)[name]?.status).toBe("connected")
+      expect((yield* mcp.authenticate(name)).status).toBe("connected")
+      expect((yield* mcp.status())[name]?.status).toBe("connected")
+      expect(server.metadataRequests()).toContain(
+        metadataFailure === "oauth" ? "/.well-known/oauth-authorization-server" : "/.well-known/openid-configuration",
+      )
+      expect(server.authorizeCalls()).toBe(0)
+    }),
+  )
+}
+
+mcpTest.instance("authenticate() connects a public resource-only server without listing tools", () =>
   Effect.gen(function* () {
     yield* stopOAuthCallback
-    const server = yield* serveOAuthMcp({ capabilities: "resources" })
+    const server = yield* serveOAuthMcp({ capabilities: "resources", oauthMetadata: false })
     const mcp = yield* MCP.Service
     const name = "test-oauth-resources"
     const added = yield* mcp.add(name, remote(server.url))
@@ -296,5 +393,95 @@ mcpTest.instance("authenticate() connects a resource-only server without listing
     expect((yield* mcp.authenticate(name)).status).toBe("connected")
     expect(server.listToolsCalls()).toBe(0)
     expect(Object.keys(yield* mcp.resources())).toEqual([`${name}:docs://readme`])
+  }),
+)
+
+mcpTest.instance("explicit auth starts OAuth after anonymous discovery on a lazy server", () =>
+  Effect.gen(function* () {
+    yield* stopOAuthCallback
+    const server = yield* serveOAuthMcp({ lazyDiscovery: true })
+    server.allowAnonymous()
+    const mcp = yield* MCP.Service
+    const auth = yield* McpAuth.Service
+    const name = "test-lazy-explicit-auth"
+    const added = yield* mcp.add(name, remote(server.url))
+    expect((added.status as Record<string, { status: string }>)[name]?.status).toBe("connected")
+    expect(yield* mcp.getAuthStatus(name)).toBe("not_authenticated")
+    const started = yield* mcp.startAuth(name)
+    expect(started.authorizationUrl).toContain("/authorize")
+    const authorization = new URL(started.authorizationUrl)
+    expect(authorization.searchParams.get("state")).toBe(started.oauthState)
+    expect(authorization.searchParams.get("code_challenge_method")).toBe("S256")
+    expect(authorization.searchParams.get("code_challenge")).toBeTruthy()
+    expect((yield* auth.get(name))?.tokens).toBeUndefined()
+    expect((yield* mcp.finishAuth(name, "valid-code")).status).toBe("connected")
+    expect(yield* mcp.getAuthStatus(name)).toBe("authenticated")
+    expect((yield* auth.get(name))?.tokens?.accessToken).toBe("replacement-token")
+    expect(server.listToolsCalls()).toBeGreaterThan(1)
+  }),
+)
+
+mcpTest.instance("late protected tool401 hides tools until explicit OAuth completes without retry", () =>
+  Effect.gen(function* () {
+    yield* stopOAuthCallback
+    const server = yield* serveOAuthMcp({ lazyDiscovery: true, protectedCalls: true, backgroundChallenge: true })
+    server.allowAnonymous()
+    const mcp = yield* MCP.Service
+    const auth = yield* McpAuth.Service
+    const events = yield* EventV2Bridge.Service
+    const name = "test-late-auth"
+    const toast = yield* Deferred.make<void>()
+    const changed = yield* Deferred.make<void>()
+    const unsubscribe = yield* events.listen((event) => {
+      if (event.type === MCP.ToolsChanged.type) Deferred.doneUnsafe(changed, Effect.void)
+      if (event.type === "tui.toast.show") Deferred.doneUnsafe(toast, Effect.void)
+      return Effect.void
+    })
+    yield* Effect.addFinalizer(() => unsubscribe)
+    const added = yield* mcp.add(name, remote(server.url))
+    expect((added.status as Record<string, { status: string }>)[name]?.status).toBe("connected")
+    expect((yield* auth.get(name))?.tokens).toBeUndefined()
+    const tools = yield* mcp.tools()
+    expect(Object.keys(tools)).toContain(`${name}_test_tool`)
+    const tool = Object.values(tools)[0]!
+    const backgroundError = yield* Deferred.make<void>()
+    tool.client.onerror = () => {
+      Deferred.doneUnsafe(backgroundError, Effect.void)
+    }
+    server.releaseGet()
+    yield* awaitWithTimeout(Deferred.await(backgroundError), "Missing actual background GET401 error", "2 seconds")
+    expect((yield* mcp.status())[name]?.status).toBe("connected")
+    expect(Object.keys(yield* mcp.tools())).toHaveLength(1)
+    expect(server.protectedCalls()).toBe(0)
+    yield* Effect.promise(async () => {
+      await expect(tool.client.callTool({ name: tool.def.name, arguments: {} })).rejects.toThrow()
+    })
+    expect(server.protectedCalls()).toBe(1)
+    expect((yield* mcp.status())[name]?.status).toBe("needs_auth")
+    expect(Object.keys(yield* mcp.tools())).toHaveLength(0)
+    yield* awaitWithTimeout(Deferred.await(changed), "Missing ToolsChanged", "2 seconds")
+    yield* awaitWithTimeout(Deferred.await(toast), "Missing authentication toast", "2 seconds")
+    expect((yield* mcp.startAuth(name)).authorizationUrl).toContain("/authorize")
+    expect((yield* mcp.finishAuth(name, "valid-code")).status).toBe("connected")
+    expect((yield* mcp.status())[name]?.status).toBe("connected")
+    expect(Object.keys(yield* mcp.tools())).toHaveLength(1)
+    expect(server.protectedCalls()).toBe(1)
+  }),
+)
+
+mcpTest.instance("late tool401 does not offer OAuth when explicitly disabled", () =>
+  Effect.gen(function* () {
+    const server = yield* serveOAuthMcp({ lazyDiscovery: true, protectedCalls: true })
+    server.allowAnonymous()
+    const mcp = yield* MCP.Service
+    const name = "test-late-no-oauth"
+    yield* mcp.add(name, { ...remote(server.url), oauth: false })
+    const tool = Object.values(yield* mcp.tools())[0]!
+    yield* Effect.promise(async () => {
+      await expect(tool.client.callTool({ name: tool.def.name, arguments: {} })).rejects.toThrow()
+    })
+    expect(server.protectedCalls()).toBe(1)
+    expect((yield* mcp.status())[name]?.status).toBe("connected")
+    expect(Object.keys(yield* mcp.tools())).toHaveLength(1)
   }),
 )
