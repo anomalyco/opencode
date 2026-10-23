@@ -45,6 +45,8 @@ test("validates config constraints", () => {
   expect(() => decodeInfo({ prompt: { max_width: 0 } })).toThrow()
   expect(() => decodeInfo({ scroll_speed: 0 })).toThrow()
   expect(() => decodeInfo({ cursor: { style: "beam" } })).toThrow()
+  expect(decodeInfo({ syntax: { bash: false } })).toEqual({ syntax: { bash: false } })
+  expect(() => decodeInfo({ syntax: { bash: "off" } })).toThrow()
   expect(decodeInfo({ attention: { sounds: { unknown: "sound.wav" } } })).toEqual({ attention: { sounds: {} } })
 })
 

@@ -412,8 +412,43 @@ This is separate from `opencode.json`, which configures server/runtime behavior.
 - `cursor` - Controls the terminal cursor in TUI input fields. `style` defaults to `"block"`, can be `"underline"`, `"line"`, or `"default"`; `blinking` defaults to `true`. When `style` is `"default"`, the terminal default cursor is restored, so `blinking` has no effect.
 - `mouse` - Enable or disable mouse capture in the TUI (default: `true`). When disabled, the terminal's native mouse selection/scrolling behavior is preserved.
 - `attention` - Configures TUI desktop notifications and sounds. Disabled by default.
+- `syntax` - Controls syntax highlighting in tool calls. [Learn more](#syntax-highlighting).
 
 Use `OPENCODE_TUI_CONFIG` to load a custom TUI config path.
+
+### Syntax highlighting
+
+Tool calls are colored by language. Each part can be turned off under `syntax`:
+
+```json title="tui.json"
+{
+  "syntax": {
+    "bash": false
+  }
+}
+```
+
+- `bash` - Color the bash tool's command as shell code. Defaults to `true`.
+- `heredoc` - Color each heredoc in a bash command in the language of the command that reads it. Defaults to `true`.
+
+A heredoc's language comes from the command that consumes it:
+
+| Command | Language |
+| --- | --- |
+| `python`, `python3`, `uv` | Python |
+| `node` | JavaScript |
+| `bun`, `deno`, `tsx` | TypeScript |
+| `ruby`, `bundle`, `rails` | Ruby |
+| `perl`, `php`, `lua` | Perl, PHP, Lua |
+| `sqlite3`, `psql`, `mysql`, `mariadb`, `duckdb`, `clickhouse-client` | SQL |
+| `jq`, `curl` | JSON |
+| `kubectl`, `yq` | YAML |
+| `bash`, `sh`, `zsh`, `ssh` | Shell |
+| `git commit`, `gh`, `glab` | Markdown |
+| `git apply`, `patch` | Diff |
+| `cat > file`, `tee file` | The file's language, by extension |
+
+A command run through `sudo`, `env`, `timeout`, `ssh`, `docker exec` or `kubectl exec` counts as the command it runs, and `cat <<EOF | psql` counts as `psql`. Otherwise a `#!` line at the top of the body decides. A heredoc whose language is still unknown, or has no parser, keeps the shell's string color.
 
 ### Attention
 
