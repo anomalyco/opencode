@@ -163,6 +163,19 @@ Guided setup for creating or updating `AGENTS.md`. [Learn more](/docs/rules).
 
 ---
 
+### loop
+
+Send a prompt now, then again on a fixed interval. The interval is optional and accepts `s`, `m`, or `h`, with a minimum of `1m`; it defaults to `10m`. The prompt can also be another command.
+
+```bash frame="none"
+/loop 5m check whether the deploy finished
+/loop 30m /review
+```
+
+Ticks that land while the session is busy are skipped. Run `/loop stop` or interrupt the session to end the loop. Starting a new loop replaces the current one. A loop ends on its own after 7 days, or when a run fails. The session shows a notice when a loop starts and when it stops.
+
+---
+
 ### models
 
 List available models.
