@@ -11,7 +11,6 @@ import {
 } from "@opentui/core"
 import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show, Switch, Match, For } from "solid-js"
 import path from "path"
-import { pathToFileURL } from "node:url"
 import { useLocal } from "../../context/local"
 import { useTheme, useThemes } from "../../context/theme"
 import { tint } from "../../theme/color"
@@ -38,7 +37,7 @@ import { computePromptTraits } from "../../prompt/traits"
 import { expandPastedTextPlaceholders, expandTrackedPastedText } from "../../prompt/part"
 import { usePromptStash } from "../../prompt/stash"
 import { DialogStash } from "../dialog-stash"
-import { type AutocompleteOption, type AutocompleteRef, Autocomplete } from "./autocomplete"
+import { type AutocompleteOption, type AutocompleteRef, Autocomplete, createFilePart } from "./autocomplete"
 import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { Locale } from "../../util/locale"
 import { errorMessage } from "../../util/error"
@@ -151,6 +150,12 @@ function hasEditorRangeSelection(selection: EditorSelection["ranges"][number]) {
     selection.selection.start.line !== selection.selection.end.line ||
     selection.selection.start.character !== selection.selection.end.character
   )
+}
+
+// Claude-Code-protocol WebSocket selections carry 0-based editor positions
+// while the Zed integration produces 1-based lines.
+function editorLineOffset(source: EditorSelection["source"]) {
+  return source === "websocket" ? 1 : 0
 }
 
 function getEditorRangeLabel(selection: EditorSelection["ranges"][number]) {
@@ -364,8 +369,11 @@ export function Prompt(props: PromptProps) {
       renderer.requestRender()
     }, 0)
   }
-  const registerLiveChip = (start: number, text: string): typeof liveChip => {
-    const end = start + measure(text)
+  const registerLiveChip = (
+    start: number,
+    chip: { text: string; file: NonNullable<PromptInfo["files"]>[number] },
+  ): typeof liveChip => {
+    const end = start + measure(chip.text)
     const extmarkId = input.extmarks.create({
       start,
       end,
@@ -373,55 +381,53 @@ export function Prompt(props: PromptProps) {
       styleId: fileStyleId,
       typeId: promptPartTypeId,
     })
-    // Turn the chip text (`@rel/path#L9-19`) into a readable file URI: the
-    // server resolves attachments with file:// URLs and ?start&end line ranges.
-    const base = currentLocation.current?.directory ?? data.location.default().directory
-    const body = text.slice(1)
-    const rangeMatch = /#L(\d+)(?:-(\d+))?$/.exec(body)
-    const rel = rangeMatch ? body.slice(0, rangeMatch.index) : body
-    const url = pathToFileURL(path.resolve(base, rel))
-    if (rangeMatch) {
-      url.searchParams.set("start", rangeMatch[1])
-      url.searchParams.set("end", rangeMatch[2] ?? rangeMatch[1])
-    }
     setStore(
       produce((draft) => {
         const files = (draft.prompt.files ??= [])
-        files.push({ uri: url.href, mention: { start, end, text } })
+        files.push({ ...chip.file, mention: { start, end, text: chip.text } })
         draft.extmarkToPart.set(extmarkId, { type: "file", index: files.length - 1 })
       }),
     )
     return { start, end, extmarkId }
   }
-  // The chip text reuses the label's raw line numbers: a single `start.line`
-  // when the selection is one line, otherwise `start.line-end.line`.
-  const liveChipTextFor = (selection: EditorSelection) => {
+  // The chip is a real file part + extmark: reuses the autocomplete mention
+  // builder so live chips and at_mentioned mentions format identically
+  // (`@path#1-2`, `file://…?start&end`, named part). Line numbers are
+  // normalized to 1-based by editorLineOffset.
+  const liveChipPartFor = (selection: EditorSelection) => {
     const base = currentLocation.current?.directory ?? data.location.default().directory
     const relative = path.relative(base, selection.filePath)
     // A file outside the working directory has no relative mention form.
-    if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) return ""
+    if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) return undefined
     const range = selection.ranges.find(hasEditorRangeSelection)
-    const lines = range
-      ? range.selection.start.line === range.selection.end.line
-        ? `#L${range.selection.start.line}`
-        : `#L${range.selection.start.line}-${range.selection.end.line}`
-      : ""
-    return `@${relative.split(path.sep).join("/")}${lines}`
+    const offset = editorLineOffset(selection.source)
+    const startLine = range ? range.selection.start.line + offset : undefined
+    const endLine =
+      range && range.selection.end.line > range.selection.start.line ? range.selection.end.line + offset : undefined
+    const { filename, part } = createFilePart(
+      { path: relative.split(path.sep).join("/"), type: "file" },
+      selection.filePath,
+      startLine !== undefined ? { startLine, endLine } : undefined,
+    )
+    return { text: `@${filename}`, file: part.value }
   }
-  const setLiveChip = (text: string) => {
+  const setLiveChip = (chip: ReturnType<typeof liveChipPartFor>) => {
     if (!input || input.isDestroyed) return
+    const text = chip?.text ?? ""
     liveChipText = text
+    const cursor = input.cursorOffset
     const tracked = liveChip ? input.extmarks.get(liveChip.extmarkId) : undefined
     // Deleting the chip text drops its extmark, so the cached offsets no longer
     // describe the buffer. Stop tracking and append any new chip at the end
     // instead of rewriting unrelated text.
     if (liveChip && !tracked) liveChip = undefined
     if (!liveChip || !tracked) {
-      if (!text) return
+      if (!chip) return
       const start = measure(input.plainText)
       input.gotoBufferEnd()
       input.insertText(text + " ")
-      liveChip = registerLiveChip(start, text)
+      liveChip = registerLiveChip(start, chip)
+      if (cursor < start) input.cursorOffset = cursor
       renderLive()
       return
     }
@@ -430,19 +436,28 @@ export function Prompt(props: PromptProps) {
     // @-mentions (from the editor's at_mentioned flow) aligned. The sync then
     // drops the chip's file part and reindexes the surviving ones.
     const end = input.getTextRange(tracked.end, tracked.end + 1) === " " ? tracked.end + 1 : tracked.end
+    const replacement = text ? text + " " : ""
+    const inserted = measure(replacement)
     input.setSelection(tracked.start, end)
-    input.insertText(text ? text + " " : "")
+    input.insertText(replacement)
     syncExtmarksWithPromptParts()
-    liveChip = text ? registerLiveChip(tracked.start, text) : undefined
+    liveChip = chip ? registerLiveChip(tracked.start, chip) : undefined
+    input.cursorOffset =
+      cursor <= tracked.start
+        ? cursor
+        : cursor >= end
+          ? cursor + inserted - (end - tracked.start)
+          : tracked.start + inserted
     renderLive()
   }
   createEffect(() => {
     const selection = editorContext()
-    const text = liveFollow() && selection ? liveChipTextFor(selection) : ""
+    const chip =
+      liveFollow() && selection && editor.labelState() === "pending" ? liveChipPartFor(selection) : undefined
     // The editor store mints a new selection object per WebSocket message even
     // when the content is identical, so compare the derived chip text.
-    if (text === liveChipText) return
-    setLiveChip(text)
+    if ((chip?.text ?? "") === liveChipText) return
+    setLiveChip(chip)
   })
 
   createEffect(() => {
@@ -1267,7 +1282,9 @@ export function Prompt(props: PromptProps) {
       slashHead !== undefined &&
       (data.location.command.list(currentLocation.ref) ?? []).some((command) => command.name === slashHead.name)
     const editorSelection = editorContext()
-    const pendingEditorSelection = editorSelection && editor.labelState() === "pending" ? editorSelection : undefined
+    const hasLiveChip = Boolean(liveChip && input.extmarks.get(liveChip.extmarkId))
+    const pendingEditorSelection =
+      editorSelection && editor.labelState() === "pending" && !hasLiveChip ? editorSelection : undefined
     if (delivery === "queue" && pendingEditorSelection) {
       toast.show({ message: "Editor context cannot be queued", variant: "warning" })
       return false
@@ -1488,13 +1505,13 @@ export function Prompt(props: PromptProps) {
           prepare: commitModel,
         })
         .catch((error) => (newSession ? newSession.recover(error) : fail("Failed to send prompt", error)))
-      if (pendingEditorSelection) editor.markSelectionSent()
+      if (pendingEditorSelection || hasLiveChip) editor.markSelectionSent()
     }
 
     // Optimistic admission puts the message in the store synchronously, so
     // the session view renders it on arrival.
     if (!props.sessionID) {
-      if (pendingEditorSelection) editor.preserveSelectionFromNewSession()
+      if (pendingEditorSelection || hasLiveChip) editor.preserveSelectionFromNewSession()
       // Text typed while session creation was in flight lives in this (home)
       // prompt, which unmounts on navigation and would stash it under the
       // home key. Re-stash it under the new session so that composer restores
