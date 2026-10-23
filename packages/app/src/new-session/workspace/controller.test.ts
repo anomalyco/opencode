@@ -38,6 +38,23 @@ describe("new session workspace selection", () => {
     expect(resolveNewSessionWorktree(input)).toBe(expected)
   })
 
+  test("keeps the worktree used to open a draft ahead of the saved destination", () => {
+    const input = {
+      enabled: true,
+      directory: "C:\\repos\\app-wt1",
+      projectWorktree: "C:\\repos\\app",
+      workspaces: ["C:\\repos\\app-wt1"],
+    }
+
+    expect(resolveNewSessionWorktree({ ...input, fallback: "main" })).toBe(input.directory)
+    expect(resolveNewSessionWorktree({ ...input, fallback: "create" })).toBe(input.directory)
+    expect(resolveNewSessionWorktree({ ...input, selected: "main" })).toBe("main")
+    expect(resolveNewSessionWorktree({ ...input, directory: input.projectWorktree, fallback: "create" })).toBe(
+      "create",
+    )
+    expect(resolveNewSessionWorktree({ ...input, workspaces: [], fallback: "main" })).toBe("main")
+  })
+
   const branch = (worktree: string) => (worktree === "/project/feature" ? "feature" : undefined)
 
   test.each([
