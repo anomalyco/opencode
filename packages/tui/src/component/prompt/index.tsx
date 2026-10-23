@@ -11,6 +11,7 @@ import {
 } from "@opentui/core"
 import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show, Switch, Match, For } from "solid-js"
 import path from "path"
+import { pathToFileURL } from "node:url"
 import { useLocal } from "../../context/local"
 import { useTheme, useThemes } from "../../context/theme"
 import { tint } from "../../theme/color"
@@ -48,7 +49,7 @@ import { useConnected } from "../use-connected"
 import { useToast } from "../../ui/toast"
 import { createFadeIn } from "../../util/signal"
 import { DialogSkill } from "../dialog-skill"
-import { useConfig, useCursorStyle, useNewDesigns } from "../../config"
+import { useConfig, useCursorStyle, useLiveFollow, useNewDesigns } from "../../config"
 import { usePromptMove } from "./move"
 import { promptFilesForServer, resolvePastedAttachments } from "./local-attachment"
 import { locationKey, useData } from "../../context/data"
@@ -343,6 +344,105 @@ export function Prompt(props: PromptProps) {
     if (!input || input.isDestroyed) return
     input.insertText(evt.data.text)
     input.gotoBufferEnd()
+  })
+
+  // Live IDE follow (upstream editor integration, "live-follow" experiment):
+  // mirror the editor's current file/selection as a trailing chip in the
+  // prompt. The source is the same useEditorContext feed the editor-context
+  // label uses (Claude-Code-compatible WebSocket, or Zed polling), so this
+  // works without a plugin. The chip is a real file part + extmark so
+  // onContentChange's syncExtmarksWithPromptParts keeps it aligned; updates
+  // rewrite the chip range and re-register it. Keeping a mention happens
+  // through the editor's native @-mention or by submitting.
+  const liveFollow = useLiveFollow()
+  let liveChip: { start: number; end: number; extmarkId: number } | undefined
+  let liveChipText = ""
+  const renderLive = () => {
+    setTimeout(() => {
+      if (!input || input.isDestroyed) return
+      input.invalidateIntrinsicSize()
+      renderer.requestRender()
+    }, 0)
+  }
+  const registerLiveChip = (start: number, text: string): typeof liveChip => {
+    const end = start + measure(text)
+    const extmarkId = input.extmarks.create({
+      start,
+      end,
+      virtual: true,
+      styleId: fileStyleId,
+      typeId: promptPartTypeId,
+    })
+    // Turn the chip text (`@rel/path#L9-19`) into a readable file URI: the
+    // server resolves attachments with file:// URLs and ?start&end line ranges.
+    const base = currentLocation.current?.directory ?? data.location.default().directory
+    const body = text.slice(1)
+    const rangeMatch = /#L(\d+)(?:-(\d+))?$/.exec(body)
+    const rel = rangeMatch ? body.slice(0, rangeMatch.index) : body
+    const url = pathToFileURL(path.resolve(base, rel))
+    if (rangeMatch) {
+      url.searchParams.set("start", rangeMatch[1])
+      url.searchParams.set("end", rangeMatch[2] ?? rangeMatch[1])
+    }
+    setStore(
+      produce((draft) => {
+        const files = (draft.prompt.files ??= [])
+        files.push({ uri: url.href, mention: { start, end, text } })
+        draft.extmarkToPart.set(extmarkId, { type: "file", index: files.length - 1 })
+      }),
+    )
+    return { start, end, extmarkId }
+  }
+  // The chip text reuses the label's raw line numbers: a single `start.line`
+  // when the selection is one line, otherwise `start.line-end.line`.
+  const liveChipTextFor = (selection: EditorSelection) => {
+    const base = currentLocation.current?.directory ?? data.location.default().directory
+    const relative = path.relative(base, selection.filePath)
+    // A file outside the working directory has no relative mention form.
+    if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) return ""
+    const range = selection.ranges.find(hasEditorRangeSelection)
+    const lines = range
+      ? range.selection.start.line === range.selection.end.line
+        ? `#L${range.selection.start.line}`
+        : `#L${range.selection.start.line}-${range.selection.end.line}`
+      : ""
+    return `@${relative.split(path.sep).join("/")}${lines}`
+  }
+  const setLiveChip = (text: string) => {
+    if (!input || input.isDestroyed) return
+    liveChipText = text
+    const tracked = liveChip ? input.extmarks.get(liveChip.extmarkId) : undefined
+    // Deleting the chip text drops its extmark, so the cached offsets no longer
+    // describe the buffer. Stop tracking and append any new chip at the end
+    // instead of rewriting unrelated text.
+    if (liveChip && !tracked) liveChip = undefined
+    if (!liveChip || !tracked) {
+      if (!text) return
+      const start = measure(input.plainText)
+      input.gotoBufferEnd()
+      input.insertText(text + " ")
+      liveChip = registerLiveChip(start, text)
+      renderLive()
+      return
+    }
+    // Replace the chip through a selected-range insert: replaceText() drops
+    // every extmark, while this rewrites only the chip range and keeps ordinary
+    // @-mentions (from the editor's at_mentioned flow) aligned. The sync then
+    // drops the chip's file part and reindexes the surviving ones.
+    const end = input.getTextRange(tracked.end, tracked.end + 1) === " " ? tracked.end + 1 : tracked.end
+    input.setSelection(tracked.start, end)
+    input.insertText(text ? text + " " : "")
+    syncExtmarksWithPromptParts()
+    liveChip = text ? registerLiveChip(tracked.start, text) : undefined
+    renderLive()
+  }
+  createEffect(() => {
+    const selection = editorContext()
+    const text = liveFollow() && selection ? liveChipTextFor(selection) : ""
+    // The editor store mints a new selection object per WebSocket message even
+    // when the content is identical, so compare the derived chip text.
+    if (text === liveChipText) return
+    setLiveChip(text)
   })
 
   createEffect(() => {
@@ -701,6 +801,12 @@ export function Prompt(props: PromptProps) {
 
   function resetComposer() {
     history.reset()
+    // The chip is a trailing mention tracked by offsets, so the composer reset
+    // (submit, clear, slash commands, stash) must drop it or the next selection
+    // would rewrite text at stale offsets. Submitting includes it as a normal
+    // file part; the chip only reappears on the next real selection change.
+    liveChip = undefined
+    liveChipText = ""
     input.extmarks.clear()
     setStore("prompt", emptyPrompt())
     setStore("extmarkToPart", new Map())
