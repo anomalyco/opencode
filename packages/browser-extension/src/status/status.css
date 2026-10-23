@@ -1,0 +1,135 @@
+:root {
+  color-scheme: light dark;
+  --bg: #fdfcfc;
+  --fg: #211e1e;
+  --muted: #6e6969;
+  --border: #e5e2e2;
+  --surface: #f6f4f4;
+  --ok: #15803d;
+  --warn: #b45309;
+  font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #131010;
+    --fg: #f1ecec;
+    --muted: #9c9696;
+    --border: #2e2a2a;
+    --surface: #1c1818;
+    --ok: #4ade80;
+    --warn: #fbbf24;
+  }
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+}
+main {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 56px 24px 48px;
+}
+header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+}
+h2 {
+  margin: 0 0 6px;
+  font-size: 14px;
+  font-weight: 600;
+}
+p,
+ul {
+  margin: 0;
+  color: var(--muted);
+}
+ul {
+  padding-left: 18px;
+}
+li + li {
+  margin-top: 4px;
+}
+.lead {
+  margin-top: 10px;
+}
+section {
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+code {
+  font: 12.5px/1.4 ui-monospace, "Berkeley Mono", "SF Mono", Menlo, monospace;
+}
+.command {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 6px 6px 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.command code {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  white-space: nowrap;
+  user-select: all;
+}
+button {
+  font: inherit;
+  font-size: 13px;
+  color: var(--fg);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+button:hover {
+  border-color: var(--muted);
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.status::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 8px;
+  border-radius: 50%;
+  vertical-align: 1px;
+  background: var(--muted);
+}
+.status[data-state="connected"] {
+  color: var(--fg);
+}
+.status[data-state="connected"]::before {
+  background: var(--ok);
+}
+.status[data-state="conflict"]::before,
+.status[data-state="incompatible"]::before {
+  background: var(--warn);
+}
+footer {
+  margin-top: 36px;
+  font-size: 12px;
+  color: var(--muted);
+}
+#extension-id {
+  font-family: ui-monospace, Menlo, monospace;
+  user-select: all;
+}

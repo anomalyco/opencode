@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OpenCode Browser</title>
+    <link rel="stylesheet" href="./src/status/status.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <img src="/icons/icon-48.png" width="32" height="32" alt="" />
+        <h1>OpenCode Browser</h1>
+      </header>
+      <p class="lead">
+        Lets your AI agents use this browser through the <code>browse</code> MCP tools: open and drive tabs, run
+        Playwright, take screenshots, record, and hand off to you for logins.
+      </p>
+
+      <section>
+        <h2>Set up</h2>
+        <p>Run this once in a terminal. It adds the <code>browse</code> tools to opencode.</p>
+        <div class="command">
+          <code id="install-command">npx opencode-browser-cli install</code>
+          <button type="button" id="copy-command">Copy</button>
+        </div>
+      </section>
+
+      <section>
+        <h2>Status</h2>
+        <p class="status" id="status" data-state="offline">Checking…</p>
+        <div class="actions">
+          <button type="button" id="reconnect">Reconnect</button>
+          <button type="button" id="cleanup">Close agent tabs</button>
+          <button type="button" id="diagnostics">Copy diagnostics</button>
+        </div>
+      </section>
+
+      <section>
+        <h2>Using it</h2>
+        <ul>
+          <li>Agents open their own tabs, grouped at the top of the tab strip. Tabs nobody uses for 10 minutes close.</li>
+          <li>To let agents use a tab you have open, click the OpenCode Browser toolbar button on it. Click again to stop.</li>
+          <li>When an agent needs you (a login, 2FA, a payment), the page shows a banner. Finish, then click Continue.</li>
+        </ul>
+      </section>
+
+      <footer>Extension ID <span id="extension-id"></span></footer>
+    </main>
+    <script type="module" src="./src/status/status.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@opencode/browser-extension",
+  "version": "2.0.22",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "build": "vite build && vite build -c vite.content.config.ts",
+    "dev": "vite build -c vite.content.config.ts --mode development && (vite build -c vite.content.config.ts --watch --mode development & vite build --watch --mode development)",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "package": "bun scripts/package.ts"
+  },
+  "devDependencies": {
+    "@tsconfig/node22": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/chrome": "0.3.4",
+    "@typescript/native": "catalog:",
+    "vite": "8.2.2"
+  }
+}
