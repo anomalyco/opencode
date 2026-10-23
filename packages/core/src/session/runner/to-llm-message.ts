@@ -159,6 +159,12 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
   const reasoningInterrupted = message.content.some(
     (item) => item.type === "reasoning" && item.time !== undefined && item.time.completed === undefined,
   )
+  // Errored turns still reuse their reasoning provider state when the model
+  // matches: providers like Anthropic require a tool_use block to be preceded
+  // by its thinking block, so stripping signed thinking from a replayed
+  // errored turn that still carries tool calls produces a request the
+  // provider rejects with a 400.
+  const reuseReasoningProviderMetadata = sameModel && !reasoningInterrupted
   const content = message.content.flatMap((item): ContentPart[] => {
     if (item.type === "text")
       return [
@@ -172,7 +178,7 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
       ]
     // Let the destination adapter handle readable reasoning after a model/provider switch.
     if (item.type === "reasoning")
-      return reuseProviderMetadata && !reasoningInterrupted
+      return reuseReasoningProviderMetadata
         ? [
             {
               type: "reasoning",
