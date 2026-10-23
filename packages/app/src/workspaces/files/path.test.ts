@@ -4,6 +4,8 @@ import { createPathHelpers, stripQueryAndHash, unquoteGitPath } from "./path"
 describe("file path helpers", () => {
   test.each([
     ["/repo", "file:///repo/src/app.ts?x=1#h", "src/app.ts"],
+    ["/repo", "FILE:///repo/src/app.ts", "src/app.ts"],
+    ["/repo", "File:///repo/Src/App.ts", "Src/App.ts"],
     ["/repo", "/repo/src/app.ts", "src/app.ts"],
     ["/repo", "./src/app.ts", "src/app.ts"],
     ["/repo", "file://src/app.ts", "src/app.ts"],
