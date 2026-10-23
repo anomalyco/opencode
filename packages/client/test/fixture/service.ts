@@ -54,6 +54,7 @@ const handoff = {
   ticket: crypto.randomUUID(),
   expiresAt: Date.now() + 30_000,
 }
+const readyAt = Date.now() + Number(delay ?? 0)
 const server = Bun.serve({
   port: 0,
   async fetch(request): Promise<Response> {
@@ -74,6 +75,7 @@ const server = Bun.serve({
     if (mode === "protocol" && (await Bun.file(registration + ".missing-health").exists()))
       return new Response(null, { status: 404 })
     requests += 1
+    if (mode === "coordinated") await Bun.sleep(Math.max(0, readyAt - Date.now()))
     if (mode === "starting") await writeFile(registration + ".status-request", "")
     if (mode === "hanging" || controlled === "hang") {
       await appendFile(registration + ".requests", process.pid + "\n")

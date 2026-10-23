@@ -57,7 +57,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
           info: registration.info,
           count: timeouts !== undefined && same(timeouts.info, registration.info) ? timeouts.count + 1 : 1,
         }
-        if (timeouts.count >= 3) {
+        if (timeouts.count >= 3 && !pool.starting(registration.info.pid)) {
           announce("missing")
           console.warn("Background service is unresponsive; recovery cannot preserve persistent terminals")
           await PtyHandoff.clear(options.file ?? fallback())
@@ -87,7 +87,10 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
       } else {
         const failed = pool.reap()
         if (failed !== undefined) throw failed
-        if (pool.shouldRecruit(registration.info !== undefined)) {
+        if (
+          (registration.info === undefined || !pool.starting(registration.info.pid)) &&
+          pool.shouldRecruit(registration.info !== undefined)
+        ) {
           announce("missing")
           pool.add(await spawnContender())
         }
