@@ -335,7 +335,13 @@ function index(providerID: ID, models: readonly Model.Info[]) {
   if (cached) return cached
   // Model shares these definitions without copying, so a foreign definition takes this provider's identity here.
   const result = freeze(
-    new Map(models.map((model) => [model.id, model.providerID === providerID ? model : { ...model, providerID }])),
+    new Map(
+      models.map((model) => {
+        const value = model.providerID === providerID ? model : { ...model, providerID }
+        if (!Schema.is(Model.Info)(value)) throw new Error(`invalid model "${model.id}"`)
+        return [model.id, value]
+      }),
+    ),
     true,
   )
   indexes.set(providerID, result)
