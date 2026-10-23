@@ -92,11 +92,28 @@ export function parseRemote(input: string): RemoteReference {
   return reference
 }
 
+/**
+ * Rejects branch names Git itself cannot use (see `git check-ref-format --branch`).
+ *
+ * Beyond the character set, Git forbids empty path components (a leading `/`
+ * or `//`), trailing slashes and dots, and components ending in `.lock`.
+ * These names must fail here so repository setup never reaches a confusing
+ * late failure inside a Git operation.
+ */
 export function validateBranch(branch: string): void {
-  if (/^[A-Za-z0-9/_.-]+$/.test(branch) && !branch.startsWith("-") && !branch.includes("..")) return
+  const parts = branch.split("/")
+  if (
+    /^[A-Za-z0-9/_.-]+$/.test(branch) &&
+    !branch.startsWith("-") &&
+    !branch.includes("..") &&
+    !branch.endsWith(".") &&
+    parts.every((part) => part.length > 0 && !part.endsWith(".lock"))
+  )
+    return
   throw new InvalidBranchError({
     branch,
-    message: "Branch must contain only alphanumeric characters, /, _, ., and -, and cannot start with - or contain ..",
+    message:
+      "Branch must contain only alphanumeric characters, /, _, ., and -, and cannot start with -, contain .., end with / or ., contain empty path components, or include a component ending in .lock",
   })
 }
 
