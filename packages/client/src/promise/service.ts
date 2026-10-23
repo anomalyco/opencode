@@ -29,7 +29,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
   const timing = ensureTiming(options)
   const deadline = Date.now() + timing.promiseTimeout
   const pool = contenderPool(timing)
-  let timeouts: { readonly info: Info; readonly count: number } | undefined
+  let timeouts: { readonly info: Info; readonly since: number } | undefined
   let announced = false
 
   const announce = (reason: "missing" | "version-mismatch", previousVersion?: string) => {
@@ -55,17 +55,19 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
       if (registration.timedOut && registration.info !== undefined) {
         timeouts = {
           info: registration.info,
-          count: timeouts !== undefined && same(timeouts.info, registration.info) ? timeouts.count + 1 : 1,
+          since: timeouts !== undefined && same(timeouts.info, registration.info) ? timeouts.since : Date.now(),
         }
-        if (timeouts.count >= 3) {
-          announce("missing")
-          console.warn("Background service is unresponsive; recovery cannot preserve persistent terminals")
-          await PtyHandoff.clear(options.file ?? fallback())
-          await terminate(registration.info, options, timing)
-          pool.evict(registration.info.pid)
-          pool.recruitNow()
-          timeouts = undefined
+        if (Date.now() - timeouts.since < timing.unresponsiveTimeout) {
+          await delay(timing.pollInterval)
+          continue
         }
+        announce("missing")
+        console.warn("Background service is unresponsive; recovery cannot preserve persistent terminals")
+        await PtyHandoff.clear(options.file ?? fallback())
+        await terminate(registration.info, options, timing)
+        pool.evict(registration.info.pid)
+        pool.recruitNow()
+        timeouts = undefined
       } else timeouts = undefined
 
       if (registration.service !== undefined) {
