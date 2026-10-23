@@ -40,6 +40,10 @@ export function sessionExportFilename(session: { id: string; title?: string; slu
   const clean = name
     .toLowerCase()
     .replace(/[^a-z0-9_-]+/gi, "-")
+    // The sanitized basename is ASCII-only, so capping characters keeps the
+    // filename within the 255-byte filesystem component limit with ".json".
+    // Cut before trimming so a cut landing on a separator leaves no trailing "-".
+    .slice(0, 250)
     .replace(/^-+|-+$/g, "")
 
   return `${clean || session.id}.json`
