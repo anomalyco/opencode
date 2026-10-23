@@ -5,12 +5,14 @@ import type { Context } from "@opencode/plugin/effect/plugin"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
 import { Effect, Predicate, Schema } from "effect"
 import { Agent } from "../../agent.js"
+import { Bus } from "../../bus.js"
 import { Config } from "../../config.js"
 import { Job } from "../../job.js"
 import { Model } from "../../model.js"
 import { Permission } from "../../permission.js"
 import { Session } from "../../session.js"
 import { SessionSchema } from "../../session/schema.js"
+import { SessionEvent } from "../../session/event.js"
 import { SubagentCompletion } from "../../session/subagent-completion.js"
 import { SubagentJob } from "../../session/subagent-job.js"
 
@@ -65,6 +67,7 @@ export const Plugin = {
   id: "opencode.tool.subagent",
   effect: Effect.fn("SubagentTool.Plugin")(function* (ctx: Context) {
     const sessions = yield* Session.Service
+    const bus = yield* Bus.Service
     const jobs = yield* Job.Service
     const agents = yield* Agent.Service
     const config = yield* Config.Service
@@ -198,7 +201,18 @@ export const Plugin = {
                   ))
 
               const background = input.background === true
-              yield* context.progress({ sessionID: child.id, status: "running" })
+              // Progress is ephemeral. Commit the child link before admitting any child work.
+              yield* bus
+                .publish(SessionEvent.Tool.SessionLinked, {
+                  sessionID: context.sessionID,
+                  assistantMessageID: context.messageID,
+                  id: context.id,
+                  childSessionID: child.id,
+                })
+                .pipe(
+                  Effect.andThen(context.progress({ sessionID: child.id, status: "running" })),
+                  Effect.uninterruptible,
+                )
 
               // Standard prompt admission outside the job: Job.start joining a running child skips
               // its run effect, and the default wake starts an idle child or steers a running one.
