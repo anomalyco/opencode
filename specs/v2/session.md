@@ -85,7 +85,7 @@ Generic scheduled retry covers rate-limit and provider-internal failures, transp
 
 Before durable output, generic retries retain the logical step number and assistant message ID and do not consume another agent-step allowance. An incomplete stream after durable output instead preserves the failed partial assistant, adds a synthetic continuation instruction, and continues with a new assistant message ID under the same retry budget. Provider continuation rejection permits one immediate full-context rebuild without a scheduled-retry event. `session.retry.scheduled` records generic backoff; later activity or a terminal execution event clears projected retry state.
 
-A normalized content-filter finish fails the Step. Any partial streamed content remains visible.
+A normalized content-filter finish fails the Step. Any partial streamed content remains visible. A normalized `length` finish with no streamed output also fails the Step, because a provider that reports truncation without delivering any content would otherwise settle as a successful empty answer.
 
 ## Instructions Are Value Deltas
 
