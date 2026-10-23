@@ -36,6 +36,7 @@ export const DIRECTORY = "shell"
 type Info = Shell.Info
 type CreateInput = Shell.CreateInput & {
   shell?: string
+  source?: ShellCreateBefore["source"]
 }
 
 type Active = {
@@ -275,6 +276,7 @@ const layer = () =>
           cwd: input.cwd ?? location.directory,
           timeout: input.timeout ?? 0,
           shell: input.shell ?? (yield* shell.resolve({ priority: "config" })),
+          source: input.source,
           env: {
             ...baseEnv,
             TERM: "xterm-256color",

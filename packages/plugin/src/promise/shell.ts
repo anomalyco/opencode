@@ -6,6 +6,7 @@ export interface ShellCreateBefore {
   timeout: number
   shell: string
   env: Record<string, string | undefined>
+  readonly source?: { readonly type: "tool"; readonly messageID: string; readonly id: string }
 }
 
 export interface ShellHooks {

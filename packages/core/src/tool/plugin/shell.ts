@@ -201,6 +201,7 @@ export const Plugin = {
                   timeout,
                   shell: yield* compatibleShell,
                   metadata: { sessionID: context.sessionID },
+                  source: { type: "tool", messageID: context.messageID, id: context.id },
                 },
                 (invocation) =>
                   Effect.gen(function* () {
