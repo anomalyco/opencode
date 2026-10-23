@@ -252,11 +252,21 @@ export const Info = Schema.Struct({
     description: "Show the release highlights once after OpenCode updates",
   }),
   mouse: Schema.optional(Schema.Boolean).annotate({ description: "Enable terminal mouse capture" }),
+  keyboard: Schema.optional(
+    Schema.Struct({
+      kitty: Schema.optional(Schema.Boolean).annotate({
+        description: "Enable the Kitty keyboard protocol (default: true)",
+      }),
+    }),
+  ).annotate({ description: "Keyboard protocol settings" }),
   cursor: Schema.optional(Cursor),
 })
 export type Info = Schema.Schema.Type<typeof Info>
 
-export type Resolved = Omit<Info, "attention" | "cursor" | "keybinds" | "leader" | "mouse" | "session" | "tabs"> & {
+export type Resolved = Omit<
+  Info,
+  "attention" | "cursor" | "keyboard" | "keybinds" | "leader" | "mouse" | "session" | "tabs"
+> & {
   attention: {
     notifications: boolean
     sound: boolean
@@ -267,6 +277,7 @@ export type Resolved = Omit<Info, "attention" | "cursor" | "keybinds" | "leader"
   keybinds: TuiKeybind.BindingLookupView
   leader: { timeout: number }
   mouse: boolean
+  keyboard: { kitty: boolean }
   cursor?: {
     style: "block" | "underline" | "line" | "default"
     blinking: boolean
@@ -290,6 +301,7 @@ export function resolve(
   options: { terminalSuspend: boolean; environment?: Readonly<Record<string, string | undefined>> },
 ): Resolved {
   const tabsMode = input.tabs?.mode ?? (input.tabs?.enabled === undefined ? "auto" : input.tabs.enabled ? "on" : "off")
+  const environment = options.environment ?? process.env
   const keybinds: TuiKeybind.KeybindOverrides = { ...input.keybinds }
   if (!options.terminalSuspend) {
     keybinds["terminal.suspend"] = "none"
@@ -315,6 +327,12 @@ export function resolve(
     }),
     leader: { timeout: input.leader?.timeout ?? 2000 },
     mouse: input.mouse ?? true,
+    keyboard: {
+      kitty:
+        (input.keyboard?.kitty ?? true) &&
+        environment.OPENCODE_DISABLE_KITTY_KEYBOARD !== "1" &&
+        environment.OPENCODE_DISABLE_KITTY_KEYBOARD !== "true",
+    },
     cursor: input.cursor
       ? {
           style: input.cursor.style ?? "block",
@@ -330,7 +348,7 @@ export function resolve(
     tabs: {
       ...input.tabs,
       mode: tabsMode,
-      enabled: tabsMode === "on" || (tabsMode === "auto" && (options.environment ?? process.env).HERDR_ENV !== "1"),
+      enabled: tabsMode === "on" || (tabsMode === "auto" && environment.HERDR_ENV !== "1"),
       scope: input.tabs?.scope ?? "cwd",
       layout: input.tabs?.layout ?? "horizontal",
       indicators: input.tabs?.indicators ?? "status",

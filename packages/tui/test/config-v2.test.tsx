@@ -91,6 +91,32 @@ test("resolves automatic tabs from the terminal environment", () => {
   ).toMatchObject({ mode: "on", enabled: true })
 })
 
+test("resolves the kitty keyboard opt-out", () => {
+  expect(resolve({}, { terminalSuspend: true, environment: {} }).keyboard.kitty).toBe(true)
+  expect(resolve({ keyboard: { kitty: false } }, { terminalSuspend: true, environment: {} }).keyboard.kitty).toBe(false)
+  expect(
+    resolve({}, { terminalSuspend: true, environment: { OPENCODE_DISABLE_KITTY_KEYBOARD: "1" } }).keyboard.kitty,
+  ).toBe(false)
+  expect(
+    resolve(
+      { keyboard: { kitty: true } },
+      { terminalSuspend: true, environment: { OPENCODE_DISABLE_KITTY_KEYBOARD: "true" } },
+    ).keyboard.kitty,
+  ).toBe(false)
+  expect(
+    resolve({}, { terminalSuspend: true, environment: { OPENCODE_DISABLE_KITTY_KEYBOARD: "0" } }).keyboard.kitty,
+  ).toBe(true)
+  expect(() => decodeInfo({ keyboard: { kitty: "no" } })).toThrow()
+})
+
+test("shows the kitty keyboard default in settings", () => {
+  expect(settings.find((setting) => setting.path.join(".") === "keyboard.kitty")).toMatchObject({
+    category: "Input",
+    default: true,
+    values: [false, true],
+  })
+})
+
 test("shows resolved tab defaults in settings", () => {
   expect(settings.find((setting) => setting.path.join(".") === "tabs.mode")).toMatchObject({
     default: "auto",
