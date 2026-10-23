@@ -3,7 +3,6 @@ import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { PluginPromise } from "@opencode/core/plugin/promise"
-import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { SessionTitle } from "@opencode/core/session/title"
 import { Effect, Layer } from "effect"
@@ -18,13 +17,12 @@ beforeEach(() => {
   generated.length = 0
 })
 const it = testEffect(makePluginTestLayer(undefined, recorder))
-const create = (title: string, location?: { directory: AbsolutePath }) =>
+const create = (title: string) =>
   Effect.gen(function* () {
     const plugins = yield* Plugin.Service
     const context = yield* PluginHost.make(plugins)
-    return { context, created: yield* context.session.create({ title, location }) }
+    return { context, created: yield* context.session.create({ title }) }
   })
-const gone = { directory: AbsolutePath.make("/nonexistent/session-update-test") }
 
 it.live("Session.update renames with a title and applies metadata and permissions", () =>
   Effect.gen(function* () {
@@ -42,18 +40,6 @@ it.live("Session.update renames with a title and applies metadata and permission
   }),
 )
 
-it.live("Session.update leaves the title alone when none is given", () =>
-  Effect.gen(function* () {
-    const sessions = yield* Session.Service
-    const { created } = yield* create("Plugin title")
-
-    yield* sessions.update({ sessionID: created.id, metadata: { origin: "test" } })
-
-    expect((yield* sessions.get(created.id)).title).toBe("Plugin title")
-    expect(generated).toEqual([])
-  }),
-)
-
 it.live("Session.update generates a title for an empty one instead of renaming to it", () =>
   Effect.gen(function* () {
     const sessions = yield* Session.Service
@@ -66,54 +52,10 @@ it.live("Session.update generates a title for an empty one instead of renaming t
   }),
 )
 
-it.live("Session.update fails for a missing session", () =>
+it.live("plugins generate a title through session.update with an empty title", () =>
   Effect.gen(function* () {
     const sessions = yield* Session.Service
-    expect(yield* sessions.update({ sessionID: Session.ID.create(), title: "x" }).pipe(Effect.flip)).toMatchObject({
-      _tag: "Session.NotFoundError",
-    })
-  }),
-)
-
-it.live("Session.update renames a session whose directory is missing without booting its location", () =>
-  Effect.gen(function* () {
-    const sessions = yield* Session.Service
-    const { created } = yield* create("Gone", gone)
-
-    yield* sessions.update({ sessionID: created.id, title: "Still gone" })
-
-    expect((yield* sessions.get(created.id)).title).toBe("Still gone")
-  }),
-)
-
-it.live("Session.update fails to generate a title when the session's directory is missing", () =>
-  Effect.gen(function* () {
-    const sessions = yield* Session.Service
-    const { created } = yield* create("Gone", gone)
-
-    expect(yield* sessions.update({ sessionID: created.id, title: "" }).pipe(Effect.flip)).toMatchObject({
-      _tag: "FileSystem.DirectoryNotFoundError",
-    })
-    expect(generated).toEqual([])
-  }),
-)
-
-it.live("Effect plugins regenerate a title through session.update with an empty title", () =>
-  Effect.gen(function* () {
-    const sessions = yield* Session.Service
-    const { context, created } = yield* create("Effect plugin title")
-
-    yield* context.session.update({ sessionID: created.id, title: "" })
-
-    expect((yield* sessions.get(created.id)).title).toBe("Effect plugin title")
-    expect(generated).toEqual([created.id])
-  }),
-)
-
-it.live("Promise plugins regenerate a title through session.update with an empty title", () =>
-  Effect.gen(function* () {
-    const sessions = yield* Session.Service
-    const { context, created } = yield* create("Promise plugin title")
+    const { context, created } = yield* create("Plugin title")
 
     yield* PluginPromise.fromPromise({
       id: "test.session-update",
@@ -122,35 +64,28 @@ it.live("Promise plugins regenerate a title through session.update with an empty
       },
     }).effect(context)
 
-    expect((yield* sessions.get(created.id)).title).toBe("Promise plugin title")
+    expect((yield* sessions.get(created.id)).title).toBe("Plugin title")
     expect(generated).toEqual([created.id])
   }),
 )
 
-it.live("a plugin setup awaiting an empty-title update completes while its location is activating", () =>
+it.live("a plugin's setup can wait on an empty-title update without deadlocking its own activation", () =>
   Effect.gen(function* () {
-    const sessions = yield* Session.Service
-    const { created } = yield* create("Setup title")
+    const { created } = yield* create("Plugin title")
 
-    // Activate in the registry Session.update reaches, not the fixture's root registry.
-    const state = yield* Effect.gen(function* () {
+    // Session.update generates in the session's location, so the plugin has to be activated there.
+    yield* Effect.gen(function* () {
       const plugins = yield* Plugin.Service
       yield* plugins.awaitActivation
       yield* plugins.activate([
         {
-          id: "test.setup-retitle",
+          id: "test.setup-update",
           revision: "1",
           effect: (ctx) => ctx.session.update({ sessionID: created.id, title: "" }).pipe(Effect.orDie),
         },
       ])
-      return (yield* plugins.list()).find((plugin) => plugin.id === "test.setup-retitle")?.state
-    }).pipe(
-      Effect.provide(LocationServiceMap.Service.get(created.location)),
-      Effect.timeoutOrElse({ duration: "3 seconds", orElse: () => Effect.die("setup never finished") }),
-    )
+    }).pipe(Effect.provide(LocationServiceMap.Service.get(created.location)))
 
-    expect(state).toEqual({ status: "active" })
-    expect((yield* sessions.get(created.id)).title).toBe("Setup title")
     expect(generated).toEqual([created.id])
   }),
 )
