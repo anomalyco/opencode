@@ -232,6 +232,7 @@ function migrateModel(info: typeof ConfigProviderV1.Model.Type, npm: string | un
       : undefined
   return {
     modelID: info.id,
+    base: info.base,
     family: info.family,
     name: info.name,
     compatibility: disableThinkingBlockBinding

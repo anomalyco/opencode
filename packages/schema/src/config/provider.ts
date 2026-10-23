@@ -86,6 +86,10 @@ export type Reasoning = typeof Reasoning.Type
 
 class Model extends Schema.Class<Model>("Config.Model")({
   modelID: ID.pipe(optional),
+  base: ID.pipe(optional).annotate({
+    description:
+      "Catalog model this model inherits capabilities, limits, cost, and variants from, while requests keep using this model's own ID. Use it for aliases such as Vercel AI Gateway virtual models.",
+  }),
   family: Family.pipe(optional),
   name: Schema.String.pipe(optional),
   releaseDate: Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}(-\d{2})?$/u))
