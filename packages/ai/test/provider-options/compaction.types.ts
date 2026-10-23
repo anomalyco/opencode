@@ -127,6 +127,24 @@ LLM.request({
 LLM.request({
   model: anthropic,
   providerOptions: {
+    contextManagement: {
+      edits: [
+        { type: "clear_thinking_20251015", keep: { type: "thinking_turns", value: 2 } },
+        { type: "clear_tool_uses_20250919", keep: { type: "tool_uses", value: 3 }, excludeTools: ["todowrite"] },
+      ],
+    },
+  },
+})
+LLM.request({
+  model: anthropic,
+  providerOptions: {
+    // @ts-expect-error Tool result clearing keeps tool uses, not thinking turns.
+    contextManagement: { edits: [{ type: "clear_tool_uses_20250919", keep: { type: "thinking_turns", value: 2 } }] },
+  },
+})
+LLM.request({
+  model: anthropic,
+  providerOptions: {
     // @ts-expect-error A pause setting is boolean.
     contextManagement: { edits: [{ type: "compact_20260112", pauseAfterCompaction: "yes" }] },
   },
