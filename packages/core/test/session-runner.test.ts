@@ -5903,6 +5903,77 @@ describe("SessionRunnerLLM", () => {
     ])
   })
 
+  for (const failure of [streamDisconnected, websocketDisconnected]) {
+    scenario(`closes partial reasoning and text before retrying ${failure.name}`, function* (s) {
+      yield* s.admit("Retry incomplete reasoning and text")
+      yield* s.llm.push(
+        TestLLM.failAfter(
+          failure(),
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.reasoningStart({ id: "reasoning-before-retry" }),
+          LLMEvent.reasoningDelta({ id: "reasoning-before-retry", text: "Before retry" }),
+          LLMEvent.textStart({ id: "text-before-retry" }),
+          LLMEvent.textDelta({ id: "text-before-retry", text: "Partial before retry" }),
+        ),
+      )
+      yield* s.llm.push(
+        TestLLM.stop(
+          LLMEvent.reasoningStart({ id: "reasoning-before-retry" }),
+          LLMEvent.reasoningDelta({ id: "reasoning-before-retry", text: "After retry" }),
+          LLMEvent.reasoningEnd({ id: "reasoning-before-retry" }),
+          LLMEvent.textStart({ id: "text-before-retry" }),
+          LLMEvent.textDelta({ id: "text-before-retry", text: "Recovered" }),
+          LLMEvent.textEnd({ id: "text-before-retry" }),
+        ),
+      )
+
+      const scheduled = yield* subscribeRetries(s)
+      const run = yield* s.resume.pipe(Effect.forkChild)
+      yield* Queue.take(scheduled)
+
+      expect(s.requests).toHaveLength(1)
+      const partial = requireAssistant(yield* s.context)
+      expect(partial.content).toMatchObject([Expected.reasoning("Before retry"), Expected.text("Partial before retry")])
+      expect(partial.content.filter((part) => part.type === "reasoning").every((part) => part.time?.completed)).toBe(
+        true,
+      )
+      const beforeRetry = yield* recordedEventTypes(sessionID)
+      expect(beforeRetry.filter((type) => type === "session.reasoning.ended.1")).toHaveLength(1)
+      expect(beforeRetry.filter((type) => type === "session.text.ended.1")).toHaveLength(1)
+      expect(beforeRetry.indexOf("session.reasoning.ended.1")).toBeLessThan(
+        beforeRetry.indexOf("session.retry.scheduled.1"),
+      )
+      expect(beforeRetry.indexOf("session.text.ended.1")).toBeLessThan(beforeRetry.indexOf("session.retry.scheduled.1"))
+
+      yield* TestClock.adjust("2400 millis")
+      yield* Fiber.join(run)
+
+      expect(s.requests).toHaveLength(2)
+      const context = yield* s.context
+      expect(context).toMatchObject([
+        Expected.user("Retry incomplete reasoning and text"),
+        Expected.assistant({ finish: "error" }, [
+          Expected.reasoning("Before retry"),
+          Expected.text("Partial before retry"),
+        ]),
+        { type: "synthetic", text: INCOMPLETE_STREAM_CONTINUATION },
+        Expected.assistant({ finish: "stop" }, [Expected.reasoning("After retry"), Expected.text("Recovered")]),
+      ])
+      expect(
+        context
+          .flatMap((message) => (message.type === "assistant" ? message.content : []))
+          .filter((part) => part.type === "reasoning")
+          .every((part) => part.time?.completed),
+      ).toBe(true)
+      const events = yield* recordedEventTypes(sessionID)
+      expect(events.filter((type) => type === "session.reasoning.ended.1")).toHaveLength(2)
+      expect(events.filter((type) => type === "session.text.ended.1")).toHaveLength(2)
+
+      yield* replaySessionProjection(sessionID)
+      expect(yield* s.context).toEqual(context)
+    })
+  }
+
   scenario("lowers interrupted reasoning before continuing an incomplete stream", function* (s) {
     yield* s.admit("Continue interrupted reasoning")
     yield* s.llm.push(
