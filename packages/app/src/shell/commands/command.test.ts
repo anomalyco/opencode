@@ -92,6 +92,9 @@ describe("command keybinds", () => {
     { config: "mod+alt+[", event: { key: "[", metaKey: true, altKey: true }, match: false },
     // macOS Option turns L into ¬; the physical key still matches.
     { config: "meta+alt+l", event: { key: "¬", code: "KeyL", metaKey: true, altKey: true }, match: true },
+    // macOS Option turns [ into “ and ] into ‘; the physical key still matches.
+    { config: "meta+alt+[", event: { key: "“", code: "BracketLeft", metaKey: true, altKey: true }, match: true },
+    { config: "meta+alt+]", event: { key: "‘", code: "BracketRight", metaKey: true, altKey: true }, match: true },
   ])("matchKeybind $config with $event.key is $match", (row) => {
     expect(matchKeybind(parseKeybind(row.config), new KeyboardEvent("keydown", row.event))).toBe(row.match)
   })
