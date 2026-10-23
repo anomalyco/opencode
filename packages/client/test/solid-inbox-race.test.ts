@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { createRoot } from "solid-js"
 import { createData, type CreateDataInput } from "../src/solid"
-import { OpenCode, type OpenCodeEvent, type SessionInboxItem } from "../src/promise"
+import { OpenCode, type OpenCodeEvent, type SessionInboxItem, type SessionInfo } from "../src/promise"
 
 const item: SessionInboxItem = {
   id: "msg_remote",
@@ -157,6 +157,113 @@ test("hydration coalesces a concurrent optimistic compaction even if its POST fa
   } finally {
     response.resolve(Response.json({ data: [] }))
     admission.resolve(new Response(null, { status: 204 }))
+    setup.dispose()
+  }
+})
+
+const sessionInfo: SessionInfo = {
+  id: item.sessionID,
+  projectID: "project",
+  cost: 0,
+  tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+  outcome: "succeeded",
+  time: { created: 0, updated: 0, idle: 2, viewed: 1 },
+  location: { directory: "/project" },
+}
+
+let messageEventSeq = 0
+function messageEvent<Type extends OpenCodeEvent["type"]>(
+  type: Type,
+  data: Extract<OpenCodeEvent, { type: Type }>["data"],
+): Extract<OpenCodeEvent, { type: Type }> {
+  messageEventSeq++
+  return {
+    id: `evt_live_${messageEventSeq}`,
+    created: 10 + messageEventSeq,
+    type,
+    durable: { aggregateID: item.sessionID, seq: messageEventSeq, version: 1 },
+    data,
+  }
+}
+
+function messageFixture() {
+  const response = Promise.withResolvers<Response>()
+  let messageGets = 0
+  const setup = fixture((request) => {
+    const url = new URL(request.url)
+    if (request.method === "GET" && url.pathname.includes("/message")) {
+      messageGets++
+      return messageGets === 1 ? response.promise : Promise.resolve(Response.json({ data: [], cursor: {} }))
+    }
+    if (request.method === "GET") return Promise.resolve(Response.json({ data: sessionInfo }))
+    return Promise.resolve(Response.json({ data: {} }))
+  })
+  return { ...setup, response, messageGets: () => messageGets }
+}
+
+const history = { id: "msg_history", type: "user" as const, text: "Continue", time: { created: 1 } }
+
+function startingAssistant() {
+  return [
+    messageEvent("session.execution.started", { sessionID: item.sessionID }),
+    messageEvent("session.step.started", {
+      sessionID: item.sessionID,
+      assistantMessageID: "msg_assistant",
+      agent: "build",
+      model: { providerID: "audit", id: "fixture" },
+      started: 3,
+    }),
+    messageEvent("session.text.started", { sessionID: item.sessionID, assistantMessageID: "msg_assistant", ordinal: 0 }),
+    messageEvent("session.text.delta", {
+      sessionID: item.sessionID,
+      assistantMessageID: "msg_assistant",
+      ordinal: 0,
+      delta: "Hello",
+    }),
+  ]
+}
+
+function finishAssistant() {
+  return [
+    messageEvent("session.text.ended", {
+      sessionID: item.sessionID,
+      assistantMessageID: "msg_assistant",
+      ordinal: 0,
+      text: "Hello world",
+    }),
+    messageEvent("session.step.ended", {
+      sessionID: item.sessionID,
+      assistantMessageID: "msg_assistant",
+      finish: "stop",
+      cost: 0,
+      tokens: { input: 1, output: 2, reasoning: 0, cache: { read: 0, write: 0 } },
+    }),
+    messageEvent("session.execution.succeeded", { sessionID: item.sessionID }),
+  ]
+}
+
+test("a delayed transcript read keeps the live assistant message (#56725)", async () => {
+  const setup = messageFixture()
+  try {
+    setup.data.session.remember(sessionInfo)
+    const reading = setup.data.session.message.sync(item.sessionID)
+    startingAssistant().forEach(setup.emit)
+    expect(setup.data.session.message.get(item.sessionID, "msg_assistant")).toBeDefined()
+
+    setup.response.resolve(Response.json({ data: [history], cursor: {} }))
+    await reading
+    finishAssistant().forEach(setup.emit)
+
+    const assistant = setup.data.session.message.get(item.sessionID, "msg_assistant")
+    expect(assistant?.type).toBe("assistant")
+    if (assistant?.type === "assistant") {
+      expect(assistant.content[0]).toMatchObject({ type: "text", text: "Hello world" })
+      expect(assistant.finish).toBe("stop")
+    }
+    expect(setup.data.session.message.list(item.sessionID).map((message) => message.id)).toContain("msg_history")
+    expect(setup.messageGets()).toBe(1)
+  } finally {
+    setup.response.resolve(Response.json({ data: [], cursor: {} }))
     setup.dispose()
   }
 })
