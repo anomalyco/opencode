@@ -3,6 +3,7 @@ export type EnsureTiming = {
   readonly requestTimeout: number
   // How long a live but silent service stays registered before the client replaces it. A resume from sleep
   // can leave probes unanswered while the process is healthy, so this window must outlast that recovery.
+  // The policy measures it on the monotonic clock, so a wall-clock jump cannot close it early.
   readonly unresponsiveAfter: number
   readonly spawnDelay: number
   readonly maxSpawnDelay: number
