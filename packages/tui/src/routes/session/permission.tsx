@@ -7,7 +7,12 @@ import type { PermissionReply, PermissionRequest } from "@opencode/client"
 import { SplitBorder } from "../../ui/border"
 import { useData } from "../../context/data"
 import { filetype } from "../../util/filetype"
-import { permissionAlwaysLines, permissionOptionLabel, permissionPresentation } from "../../util/permission"
+import {
+  collapsePermissionLines,
+  permissionAlwaysLines,
+  permissionOptionLabel,
+  permissionPresentation,
+} from "../../util/permission"
 import { getScrollAcceleration } from "../../util/scroll"
 import { useConfig } from "../../config"
 import { Keymap } from "../../context/keymap"
@@ -110,8 +115,15 @@ function EditBody(props: { file?: string; diff?: string; patch?: string }) {
   )
 }
 
+// Rows available to the body of a collapsed prompt (maxHeight 15 less padding, header and footer), and the
+// columns it loses to the border and padding.
+const COLLAPSED_BODY_ROWS = 8
+const BODY_INSET_COLUMNS = 8
+
 export function PermissionPrompt(props: { request: PermissionRequest; directory?: string }) {
   const data = useData()
+  const dimensions = useTerminalDimensions()
+  const shortcuts = Keymap.useShortcuts()
   const toast = useToast()
   const [store, setStore] = createStore({
     stage: "permission" as PermissionStage,
@@ -165,7 +177,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
             },
             pathFormatter.format,
           )
-          const presentationBody = () =>
+          const presentationBody = (expanded: boolean) =>
             props.request.action === "edit" ? (
               <EditBody file={current.file} diff={current.diff} patch={current.patch} />
             ) : props.request.action === "external_directory" ? (
@@ -178,23 +190,37 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
                 </box>
               </Show>
             ) : (
-              <box paddingLeft={1}>
-                <For each={current.lines}>
-                  {(line) => (
-                    <text
-                      fg={
-                        props.request.action === "shell" ||
-                        props.request.action === "subagent" ||
-                        props.request.action === "task"
-                          ? theme.text.base
-                          : theme.text.muted
-                      }
-                    >
-                      {line}
-                    </text>
-                  )}
-                </For>
-              </box>
+              (() => {
+                // Collapsed, a long command is cut to what fits and says how much is hidden rather than
+                // clipping silently; the fullscreen view shows it all.
+                const fitted = expanded
+                  ? { lines: current.lines, hidden: 0 }
+                  : collapsePermissionLines(current.lines, dimensions().width - BODY_INSET_COLUMNS, COLLAPSED_BODY_ROWS)
+                return (
+                  <box paddingLeft={1}>
+                    <For each={fitted.lines}>
+                      {(line) => (
+                        <text
+                          fg={
+                            props.request.action === "shell" ||
+                            props.request.action === "subagent" ||
+                            props.request.action === "task"
+                              ? theme.text.base
+                              : theme.text.muted
+                          }
+                        >
+                          {line}
+                        </text>
+                      )}
+                    </For>
+                    <Show when={fitted.hidden > 0}>
+                      <text fg={theme.text.muted}>
+                        {`… ${fitted.hidden} more line${fitted.hidden === 1 ? "" : "s"} · ${shortcuts.get("permission.prompt.fullscreen")} to view all`}
+                      </text>
+                    </Show>
+                  </box>
+                )
+              })()
             )
 
           const header = () => (
@@ -220,8 +246,8 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
               semanticLabel={permissionSemanticLabel(props.request.action, current.title)}
               instance={props.request.id}
               header={header()}
-              body={(option) => (
-                <Show when={option === "always"} fallback={presentationBody()}>
+              body={(option, view) => (
+                <Show when={option === "always"} fallback={presentationBody(view.expanded)}>
                   <box paddingLeft={1} gap={1}>
                     <For each={permissionAlwaysLines(props.request)}>
                       {(line, index) => <text fg={index() === 0 ? theme.text.muted : theme.text.base}>{line}</text>}
@@ -412,7 +438,7 @@ export function SessionQuestion<const T extends Record<string, string>>(props: {
   group?: string
   choicesLabel?: string
   header?: JSX.Element
-  body: JSX.Element | ((option: keyof T) => JSX.Element)
+  body: JSX.Element | ((option: keyof T, view: { expanded: boolean }) => JSX.Element)
   options: T
   escapeKey?: keyof T
   fullscreen?: boolean
@@ -536,7 +562,7 @@ export function SessionQuestion<const T extends Record<string, string>>(props: {
             {props.header}
           </box>
         </Show>
-        {typeof props.body === "function" ? props.body(store.selected) : props.body}
+        {typeof props.body === "function" ? props.body(store.selected, { expanded: store.expanded }) : props.body}
       </box>
       <box
         flexDirection={narrow() ? "column" : "row"}
