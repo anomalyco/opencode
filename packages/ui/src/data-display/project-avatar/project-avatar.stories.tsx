@@ -11,6 +11,7 @@ Saturated 16px project avatar with color variants and optional unread dot.
 
 ### Variants
 - Color: orange, yellow, cyan, green, red, pink, blue, purple, gray.
+- Transparent: no background or border, with theme-aware initials.
 - Outline: neutral, muted style for de-emphasized projects (e.g. recently closed).
 - Image vs initial content state.
 - Unread dot with corner mask when \`unread\` is set.
