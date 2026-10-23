@@ -6,6 +6,7 @@ import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { useI18n } from "@opencode/ui/context/i18n"
+import { writeClipboard } from "./clipboard"
 
 export interface ToolErrorCardProps extends Omit<ComponentProps<typeof Card>, "children" | "variant"> {
   tool: string
@@ -113,7 +114,7 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
     const text = cleaned()
 
     if (!text) return
-    await navigator.clipboard.writeText(text)
+    if (!(await writeClipboard(text))) return
     setState("copied", true)
     setTimeout(() => setState("copied", false), 2000)
   }
