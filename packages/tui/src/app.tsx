@@ -1404,7 +1404,11 @@ function App() {
       }}
       onMouseUp={(event) => {
         const url = clickedLink(renderer, event)
-        if (url) return void openUrl(url).catch(toast.error)
+        if (url)
+          return void plugins
+            .link({ url, sessionID: route.data.type === "session" ? route.data.sessionID : undefined })
+            .then(openUrl)
+            .catch(toast.error)
         if (copyOnSelectEnabled()) Selection.copyOnSelectRelease(event, renderer, toast, clipboard)
       }}
     >
