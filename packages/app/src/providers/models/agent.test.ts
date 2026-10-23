@@ -1,10 +1,5 @@
 import { expect, test } from "bun:test"
-import { hasCustomAgent, resolveAgent } from "./agent"
-
-test("hasCustomAgent detects only explicitly custom agents", () => {
-  expect(hasCustomAgent([{ native: true }, { native: false }])).toBe(true)
-  expect(hasCustomAgent([{ native: true }, {}])).toBe(false)
-})
+import { resolveAgent } from "./agent"
 
 const agents = [{ name: "plan" }, { name: "build" }, { name: "custom" }]
 

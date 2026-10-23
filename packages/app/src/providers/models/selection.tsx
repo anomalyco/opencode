@@ -9,7 +9,7 @@ import { useSettings } from "@/settings/model"
 import { useProviders } from "@/providers/catalog/providers"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
-import { hasCustomAgent, resolveAgent } from "./agent"
+import { resolveAgent } from "./agent"
 import { cycleModelVariant, getConfiguredAgentVariant, resolveModelVariant } from "./variant"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useData } from "@/runtime/server/current"
@@ -98,7 +98,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       ),
     )
 
-    const agentsVisible = createMemo(() => settings.visibility.customAgents() || hasCustomAgent(list()))
+    const agentsVisible = settings.visibility.customAgents
     const connected = createMemo(() => new Set(providers.connected().map((item) => item.id)))
 
     const [saved, setSaved, , savedReady] = persisted(
@@ -265,6 +265,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         agent.set(item.name)
       },
     }
+
+    createEffect(() => {
+      if (agentsVisible() || agent.current()?.name === "build") return
+      agent.set("build")
+    })
 
     const current = createMemo(() => {
       if (!configuredModel.ready()) return
