@@ -39,7 +39,8 @@ export interface Interface {
   readonly track: () => Effect.Effect<string | undefined>
   readonly patch: (hash: string) => Effect.Effect<Patch>
   readonly restore: (snapshot: string) => Effect.Effect<void>
-  readonly revert: (patches: Patch[]) => Effect.Effect<void>
+  /** Returns the files it left as they are because the snapshot store no longer has their earlier content. */
+  readonly revert: (patches: Patch[]) => Effect.Effect<string[]>
   readonly diff: (hash: string) => Effect.Effect<string>
   readonly diffFull: (from: string, to: string) => Effect.Effect<FileDiff[]>
 }
@@ -422,6 +423,11 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
                 }
               }
 
+              const kept: string[] = []
+
+              // A file is deleted only when the snapshot tree is readable and has no entry for it. A tree the
+              // store no longer has (pruned by cleanup, or a store recreated for a moved worktree) makes ls-tree
+              // fail, which says nothing about whether the file existed, so the file is left alone.
               const single = Effect.fnUntraced(function* (op: (typeof ops)[number]) {
                 yield* Effect.logInfo("reverting", { file: op.file, hash: op.hash })
                 const result = yield* git([...core, ...args(["checkout", op.hash, "--", op.file])], {
@@ -431,11 +437,13 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
                 const tree = yield* git([...core, ...args(["ls-tree", op.hash, "--", op.rel])], {
                   cwd: state.worktree,
                 })
-                if (tree.code === 0 && tree.text.trim()) {
-                  yield* Effect.logInfo("file existed in snapshot but checkout failed, keeping", {
+                if (tree.code !== 0 || tree.text.trim()) {
+                  yield* Effect.logWarning("earlier content is not in the snapshot store, keeping", {
                     file: op.file,
                     hash: op.hash,
+                    stderr: tree.code === 0 ? result.stderr : tree.stderr,
                   })
+                  kept.push(op.file)
                   return
                 }
                 yield* Effect.logInfo("file did not exist in snapshot, deleting", { file: op.file, hash: op.hash })
@@ -519,6 +527,7 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
 
                 i = j
               }
+              return kept
             }),
           )
         })

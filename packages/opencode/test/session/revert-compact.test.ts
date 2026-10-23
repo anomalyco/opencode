@@ -9,6 +9,11 @@ import { Effect } from "effect"
 import { Session } from "@/session/session"
 
 import { SessionRevert } from "../../src/session/revert"
+import { EventV2Bridge } from "@/event-v2-bridge"
+import { Global } from "@opencode-ai/core/global"
+import { Hash } from "@opencode-ai/core/util/hash"
+import { existsSync } from "fs"
+import { $ } from "bun"
 import { MessageV2 } from "../../src/session/message-v2"
 import { Snapshot } from "../../src/snapshot"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
@@ -19,7 +24,14 @@ import { ModelV2 } from "@opencode-ai/core/model"
 
 const it = testEffect(
   LayerNode.compile(
-    LayerNode.group([Session.node, SessionRevert.node, Snapshot.node, SessionProjector.node, CrossSpawnSpawner.node]),
+    LayerNode.group([
+      Session.node,
+      SessionRevert.node,
+      Snapshot.node,
+      SessionProjector.node,
+      CrossSpawnSpawner.node,
+      EventV2Bridge.node,
+    ]),
   ),
 )
 
@@ -676,6 +688,61 @@ describe("revert + compact workflow", () => {
           })
           expect((yield* session.get(sid)).revert).toBeUndefined()
           expect(yield* read(path.join(dir, "a.txt"))).toBe("a3")
+        }),
+      { git: true },
+    ),
+  )
+
+  it.live(
+    "a revert whose snapshot was pruned keeps the files and says which",
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const session = yield* Session.Service
+          const revert = yield* SessionRevert.Service
+          const snapshot = yield* Snapshot.Service
+          const bridge = yield* EventV2Bridge.Service
+          const errors: string[] = []
+          const off = yield* bridge.listen((event) => {
+            if (event.type !== Session.Event.Error.type) return Effect.void
+            const data = event.data as typeof Session.Event.Error.data.Type
+            if (data.error?.name === "UnknownError") errors.push(String(data.error.data.message))
+            return Effect.void
+          })
+          yield* Effect.addFinalizer(() => off)
+
+          yield* write(path.join(dir, "a.txt"), "a0")
+          const sid = (yield* session.create({})).id
+          const u = yield* user(sid)
+          yield* text(sid, u.id, "edit a.txt")
+          const a = yield* assistant(sid, u.id, dir)
+          const before = yield* snapshot.track()
+          if (!before) throw new Error("expected snapshot")
+          yield* write(path.join(dir, "a.txt"), "a1")
+          const patch = yield* snapshot.patch(before)
+          yield* session.updatePart({
+            id: PartID.ascending(),
+            messageID: a.id,
+            sessionID: sid,
+            type: "patch",
+            hash: patch.hash,
+            files: patch.files,
+          })
+
+          const root = path.join(Global.Path.data, "snapshot")
+          const gitdir = (yield* Effect.promise(() => fs.readdir(root)))
+            .map((project) => path.join(root, project, Hash.fast(dir)))
+            .find((candidate) => existsSync(candidate))
+          if (!gitdir) throw new Error("no snapshot store")
+          yield* Effect.promise(() => $`git --git-dir ${gitdir} gc --quiet --prune=now`.quiet())
+
+          yield* revert.revert({ sessionID: sid, messageID: u.id })
+
+          expect(yield* read(path.join(dir, "a.txt"))).toBe("a1")
+          expect((yield* session.get(sid)).revert?.messageID).toBe(u.id)
+          expect(errors).toEqual([
+            "Revert kept 1 file as is because the snapshot store no longer has the earlier version: a.txt",
+          ])
         }),
       { git: true },
     ),
