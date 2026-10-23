@@ -74,6 +74,13 @@ const PERMISSION_REJECTED_FEEDBACK =
   "This non-interactive run cannot ask the user for permission, so the request was rejected. Continue without this action."
 
 export async function runNonInteractivePrompt(input: Input) {
+  const models =
+    input.format === "json"
+      ? []
+      : await input.client.model
+          .list({ location: input.location })
+          .then((result) => result.data)
+          .catch(() => [])
   const controller = new AbortController()
   const stream = input.client.event.subscribe({ signal: controller.signal })[Symbol.asyncIterator]()
   const connected = await stream.next()
@@ -265,6 +272,9 @@ export async function runNonInteractivePrompt(input: Input) {
       if (finalizing && !event.type.startsWith("session.execution.")) continue
 
       if (event.type === "session.step.started") {
+        const name =
+          models.find((model) => model.providerID === event.data.model.providerID && model.id === event.data.model.id)
+            ?.name ?? event.data.model.id
         const part = {
           id: partID(event.id),
           sessionID: input.sessionID,
@@ -276,13 +286,13 @@ export async function runNonInteractivePrompt(input: Input) {
           pendingStep = {
             timestamp: time,
             part,
-            label: `> ${event.data.agent} · ${event.data.model.id}`,
+            label: `> ${event.data.agent} · ${name}`,
           }
           continue
         }
         if (!emit("step_start", time, { part }) && input.format !== "json") {
           UI.empty()
-          UI.println(`> ${event.data.agent} · ${event.data.model.id}`)
+          UI.println(`> ${event.data.agent} · ${name}`)
           UI.empty()
         }
         continue
