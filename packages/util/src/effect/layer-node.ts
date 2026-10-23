@@ -204,15 +204,24 @@ function makeProvider<Implementation extends Layer.Any, Items extends readonly A
   tag: T,
 ): Provider<LayerOutput<Implementation>, Layer.Error<Implementation> | Error<Items[number]>, T> {
   if (!Layer.isLayer(input.layer)) throw new Error("A layer node requires an Effect Layer")
+  const name = input.service !== undefined ? input.service.key : input.name
+  validateDependencies(name, input.deps)
   return new ProviderNode(
     {
       kind: "layer",
-      name: input.service !== undefined ? input.service.key : input.name,
+      name,
       implementation: input.layer,
       dependencies: [...input.deps],
     },
     tag,
   )
+}
+
+function validateDependencies(owner: string, dependencies: readonly unknown[]) {
+  for (const [index, dependency] of dependencies.entries()) {
+    if (dependency instanceof GraphValue) continue
+    throw new Error(`LayerNode ${owner}: invalid dependency at index ${index} (${String(dependency)})`)
+  }
 }
 
 export function unbound<R, Shape, const T extends Tag>(service: Context.Key<R, Shape>, tag: T): Node<R, never, T> {
@@ -223,6 +232,7 @@ export function unbound<R, Shape, const T extends Tag>(service: Context.Key<R, S
 export function group<const Items extends readonly AnyGraph[]>(
   dependencies: Items,
 ): Graph<ListOutput<Items>, Error<Items[number]>, GraphTag<Items[number]>> {
+  validateDependencies("group", dependencies)
   return new GraphValue({ kind: "group", name: "group", dependencies: [...dependencies] })
 }
 
