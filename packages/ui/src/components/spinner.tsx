@@ -8,9 +8,12 @@ export type SpinnerVariantName = "today" | keyof typeof spinnerVariants
 // Every AI activity spinner (busy session tabs, the activity chip, subagents, tool cards) shows Soft Radar; Knobs →
 // Experiments tries the other dot-matrix variations, and Today's PNG, in its place. Non-AI loading uses Loader.
 const choice = motionTuning.choice("spinner.variant", {
-  label: "Activity spinner",
+  label: "Style",
   group: "Experiments",
-  order: 1,
+  card: "Activity spinner",
+  order: 30,
+  description: "The spinner on running sessions, loaders and the activity chip.",
+  target: '[data-slot="spinner-grid"], [data-slot="spinner-dots"]',
   value: "radar",
   // SAFETY: built from spinnerVariants' own keys, plus "today".
   labels: Object.fromEntries([

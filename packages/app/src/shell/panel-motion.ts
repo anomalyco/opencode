@@ -18,7 +18,7 @@ const springs = () => !james()
 
 // The left sidebar and the side panel share one spring, so they move as one system.
 const spring = motionTuning.spring("sidebars", {
-  label: "Spring",
+  label: "Slide speed",
   group,
   when: springs,
   shipped: "smooth",
@@ -39,7 +39,7 @@ const style = motionTuning.choice("sidebars.style", {
 
 // How far a panel's contents dim at the closed end of a spring flight; they never black out.
 const fadeFloor = motionTuning.number("sidebars.fadeFloor", {
-  label: "Fade floor",
+  label: "Contents fade to",
   group,
   when: springs,
   value: 0.5,
@@ -52,7 +52,7 @@ const fadeFloor = motionTuning.number("sidebars.fadeFloor", {
 export const panelOpacity = (closed: number) => (closed === 0 || james() ? "" : `${1 - closed * (1 - fadeFloor())}`)
 
 const jamesShift = motionTuning.spring("sidebars.james.shift", {
-  label: "Movement",
+  label: "Shift speed",
   group,
   when: james,
   shipped: "smooth",
@@ -64,7 +64,7 @@ const jamesShift = motionTuning.spring("sidebars.james.shift", {
 })
 
 const jamesFade = motionTuning.easing("sidebars.james.fade", {
-  label: "Fade",
+  label: "Fade curve",
   group,
   when: james,
   value: [0.17, 0.85, 0.63, 1.03],
@@ -84,7 +84,7 @@ const jamesFadeDuration = motionTuning.number("sidebars.james.fadeDuration", {
 
 /** How far the right side panel shifts in from its edge when James opens it, in pixels. */
 export const jamesPanelShift = motionTuning.number("sidebars.james.panelShift", {
-  label: "Panel shift",
+  label: "Shift distance",
   group,
   when: james,
   value: 46,
@@ -117,9 +117,9 @@ const layoutSpring = (direction: string, label: string) =>
     },
   })
 
-const jamesLayoutOpen = layoutSpring("open", "Layout open")
+const jamesLayoutOpen = layoutSpring("open", "Layout open speed")
 
-const jamesLayoutClose = layoutSpring("close", "Layout close")
+const jamesLayoutClose = layoutSpring("close", "Layout close speed")
 
 // The opacity a panel fades up from under James and down to.
 const faded = 0.15

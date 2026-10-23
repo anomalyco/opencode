@@ -2,11 +2,12 @@ import { motionTuning } from "@opencode/ui/motion-tuning"
 import { createSignal } from "solid-js"
 
 const toggle = motionTuning.toggle("session.messageMenu", {
-  label: "Message menu",
+  label: "Enabled",
   group: "Experiments",
-  card: "Experiments",
-  // Ahead of the card's other rows (order 1), so it sits at the top of the EXPERIMENTS card.
-  order: 0,
+  card: "Message menu",
+  order: 50,
+  description: "A ⋯ menu beside each message in the timeline, instead of the hover info line.",
+  target: '[data-slot="message-options"]',
   value: false,
 })
 

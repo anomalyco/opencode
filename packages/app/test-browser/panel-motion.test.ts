@@ -446,11 +446,19 @@ it("swaps the spring knobs for James's while it's on", () => {
       .filter((knob) => knob.group === "Sidebars" && knob.kind !== "mode" && (knob.when?.() ?? true))
       .map((knob) => knob.label)
 
-  expect(shown()).toEqual(["Spring", "Motion", "Fade floor"])
+  expect(shown()).toEqual(["Slide speed", "Motion", "Contents fade to"])
   setJames(true)
-  expect(shown()).toEqual(["Movement", "Fade", "Fade duration", "Panel shift", "Layout", "Layout open", "Layout close"])
+  expect(shown()).toEqual([
+    "Shift speed",
+    "Fade curve",
+    "Fade duration",
+    "Shift distance",
+    "Layout",
+    "Layout open speed",
+    "Layout close speed",
+  ])
   setJames(false)
-  expect(shown()).toEqual(["Spring", "Motion", "Fade floor"])
+  expect(shown()).toEqual(["Slide speed", "Motion", "Contents fade to"])
 })
 
 it("ships the spring as the default sidebar motion, with James one choice away", () => {

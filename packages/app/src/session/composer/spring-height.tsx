@@ -26,8 +26,8 @@ const presets = {
   calm: { duration: 0.55, bounce: 0 },
 }
 // Opening and closing share one height spring, so a dock leaves the way it came.
-const morph = motionTuning.spring("docks.morph", { label: "Height", group, shipped: "smooth", presets })
-const fadeIn = motionTuning.spring("docks.fade-in", { label: "Fade in", group, shipped: "smooth", presets })
+const morph = motionTuning.spring("docks.morph", { label: "Resize speed", group, shipped: "smooth", presets })
+const fadeIn = motionTuning.spring("docks.fade-in", { label: "Fade-in speed", group, shipped: "smooth", presets })
 // A closing face stays opaque until this much of its box is left, then fades out before the box closes.
 const fadeTail = motionTuning.number("docks.fade-tail", {
   label: "Fade-out tail",

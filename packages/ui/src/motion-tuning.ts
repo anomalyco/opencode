@@ -7,11 +7,19 @@ import type { DurationOptions } from "./motion"
 type Knob<Kind extends string, Value> = {
   kind: Kind
   id: string
+  /** What the row changes, without the card's name: "Style", "Glide speed". */
   label: string
   group: string
-  /** Its own card within the group's tab, such as one experiment among several; `order` places that card. */
+  /**
+   * The card it sits on within the group's tab, named for what you see ("Activity chip"): one per experiment or
+   * feature. Its first knob's `order` places the card; Experiments' cards follow the window, sidebar first.
+   */
   card?: string
   order?: number
+  /** One plain line saying what the card changes and where to see it: the card's `groupDescriptions` entry. */
+  description?: string
+  /** A CSS selector for the part of the app the card changes, outlined while one of its rows is hovered or focused. */
+  target?: string
   /** Shown only while this holds, e.g. the controls of the option a choice selects. */
   when?: () => boolean
   initial: Value
@@ -36,7 +44,15 @@ export type MotionKnob =
 
 export type MotionAction = { id: string; label: string; group: string; run: () => void }
 
-type Meta = { label: string; group: string; card?: string; order?: number; when?: () => boolean }
+type Meta = {
+  label: string
+  group: string
+  card?: string
+  order?: number
+  description?: string
+  target?: string
+  when?: () => boolean
+}
 
 // Bumped when knobs are merged or renamed, so values saved for the old ones are dropped.
 const key = "opencode.motion.v2"
@@ -63,6 +79,8 @@ export const motionTuning = {
       card: meta.card,
       order: meta.order,
       when: meta.when,
+      description: meta.description,
+      target: meta.target,
       initial,
       value: { duration: number(`${id}.duration`, initial.duration), bounce: number(`${id}.bounce`, initial.bounce) },
       presets: meta.presets,
@@ -83,6 +101,8 @@ export const motionTuning = {
       card: meta.card,
       order: meta.order,
       when: meta.when,
+      description: meta.description,
+      target: meta.target,
       initial: meta.value,
       // SAFETY: mapping the four indices of a Bezier yields four numbers.
       value: [0, 1, 2, 3].map((index) => number(`${id}.${index}`, meta.value[index])) as Bezier,
@@ -105,6 +125,8 @@ export const motionTuning = {
       card: meta.card,
       order: meta.order,
       when: meta.when,
+      description: meta.description,
+      target: meta.target,
       initial,
       value: number(id, initial ? 1 : 0) === 1,
     })
@@ -120,6 +142,8 @@ export const motionTuning = {
       card: meta.card,
       order: meta.order,
       when: meta.when,
+      description: meta.description,
+      target: meta.target,
       initial: meta.value,
       value: number(id, meta.value ? 1 : 0) === 1,
     })
@@ -139,6 +163,8 @@ export const motionTuning = {
       card: meta.card,
       order: meta.order,
       when: meta.when,
+      description: meta.description,
+      target: meta.target,
       initial: meta.value,
       value: options[number(id, options.indexOf(meta.value))] ?? meta.value,
       options,
@@ -164,6 +190,8 @@ export const motionTuning = {
       card: meta.card,
       order: meta.order,
       when: meta.when,
+      description: meta.description,
+      target: meta.target,
       initial: meta.value,
       value: number(id, meta.value),
       min: meta.min,

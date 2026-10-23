@@ -5,8 +5,12 @@ import { motionTuning } from "@opencode/ui/motion-tuning"
 import "./sidebar-peek.css"
 
 export const sidebarPeekEnabled = motionTuning.toggle("sidebar.peek", {
-  label: "Peekable sidebar",
+  label: "Enabled",
   group: "Experiments",
+  card: "Sidebar peek",
+  order: 10,
+  description: "With the sidebar closed, resting on its toggle floats it over the app.",
+  target: 'button[aria-controls="vertical-tabs-sidebar"]',
   value: true,
 })
 

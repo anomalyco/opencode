@@ -16,6 +16,7 @@ export const dict = {
   "voice.failure.dropped": "The call disconnected.",
   "voice.failure.connection": "Couldn’t connect the call.",
   "experiment.activityChip": "Activity chip",
+  "experiment.activityChip.style": "Style",
   "experiment.activityChip.today": "Today",
   "experiment.activityChip.orb": "CSS orb",
   "experiment.chipCorners": "Chip corners",
