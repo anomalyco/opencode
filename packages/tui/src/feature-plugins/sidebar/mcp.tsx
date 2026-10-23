@@ -1,10 +1,12 @@
 import { Plugin } from "@opencode/plugin/tui"
 import { createMemo, For, Match, Show, Switch } from "solid-js"
 import { DialogMcp } from "../../component/dialog-mcp"
+import { useConfig } from "../../config"
 
 export function SidebarMcp(props: { context: Plugin.Context; sessionID: string }) {
   const [view, updateView] = props.context.storage.store("view", { initial: { open: true } })
   const theme = props.context.theme
+  const config = useConfig()
   const session = createMemo(() => props.context.data.session.get(props.sessionID))
   const list = createMemo(() => props.context.data.location.mcp.server.list(session()?.location) ?? [])
   const on = createMemo(() => list().filter((item) => item.status.status === "connected").length)
@@ -70,19 +72,21 @@ export function SidebarMcp(props: { context: Plugin.Context; sessionID: string }
                 <text fg={theme.text.base} wrapMode="none" truncate flexGrow={1} flexShrink={1} minWidth={0}>
                   <b>{item.name}</b>
                 </text>
-                <text
-                  fg={item.status.status === "failed" ? theme.text.feedback.error.base : theme.text.muted}
-                  wrapMode="none"
-                  flexShrink={0}
-                >
-                  <Switch fallback={item.status.status}>
-                    <Match when={item.status.status === "connected"}>Connected</Match>
-                    <Match when={item.status.status === "pending"}>Connecting</Match>
-                    <Match when={item.status.status === "failed"}>Error</Match>
-                    <Match when={item.status.status === "disabled"}>Disabled</Match>
-                    <Match when={item.status.status === "needs_auth"}>Sign in</Match>
-                  </Switch>
-                </text>
+                <Show when={config.data.session.mcp_list !== "compact"}>
+                  <text
+                    fg={item.status.status === "failed" ? theme.text.feedback.error.base : theme.text.muted}
+                    wrapMode="none"
+                    flexShrink={0}
+                  >
+                    <Switch fallback={item.status.status}>
+                      <Match when={item.status.status === "connected"}>Connected</Match>
+                      <Match when={item.status.status === "pending"}>Connecting</Match>
+                      <Match when={item.status.status === "failed"}>Error</Match>
+                      <Match when={item.status.status === "disabled"}>Disabled</Match>
+                      <Match when={item.status.status === "needs_auth"}>Sign in</Match>
+                    </Switch>
+                  </text>
+                </Show>
               </box>
             )}
           </For>

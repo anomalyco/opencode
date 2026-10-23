@@ -114,6 +114,14 @@ test("shows the TPS default in session settings", () => {
   expect(setting?.default).toBe(true)
 })
 
+test("shows the MCP rows setting in session settings", () => {
+  expect(settings.find((setting) => setting.path.join(".") === "session.mcp_list")).toMatchObject({
+    category: "Session",
+    default: "descriptive",
+    values: ["descriptive", "compact"],
+  })
+})
+
 test("shows transcript verbosity in session settings", () => {
   expect(settings.find((setting) => setting.path.join(".") === "session.verbosity")).toMatchObject({
     category: "Session",
