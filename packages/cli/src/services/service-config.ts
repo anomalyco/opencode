@@ -40,14 +40,18 @@ const decodeRegistration = Schema.decodeUnknownEffect(Schema.fromJsonString(Serv
 
 // Released channels share one service, port and database, so switching between stable and beta keeps the same sessions.
 // Dev builds come from every merge to dev and run their own: sharing let a dev build replace the stable server, and a
-// beta app then adopt that dev server.
-export function filename(channel = OPENCODE_CHANNEL) {
-  if (channel === "latest" || channel === "beta" || channel === "next") return "service.json"
-  return `service-${channel.replace(/[^a-zA-Z0-9._-]/g, "-")}.json`
+// beta app then adopt that dev server. A non-default config dir gets its own registration, and follows the same
+// channel split so a dev profile does not attach to a released profile.
+export function filename(channel = OPENCODE_CHANNEL, profile?: string) {
+  const suffix = profile === undefined ? undefined : Hash.fast(path.resolve(profile))
+  if (channel === "latest" || channel === "beta" || channel === "next")
+    return suffix ? `service-${suffix}.json` : "service.json"
+  const prefix = `service-${channel.replace(/[^a-zA-Z0-9._-]/g, "-")}`
+  return suffix ? `${prefix}-${suffix}.json` : `${prefix}.json`
 }
 
-export function defaultPort(channel = OPENCODE_CHANNEL, platform = process.platform) {
-  const port = channelPort(channel)
+export function defaultPort(channel = OPENCODE_CHANNEL, platform = process.platform, profile?: string) {
+  const port = channelPort(channel, profile)
   // Windows hands out 0xC000-0xFFFF for outgoing connections, Hyper-V and WinNAT reserve blocks of that range at boot,
   // and WSL mirrored networking reserves a 4096-port block that usually covers 44620-48715. A reserved port fails as in
   // use while nothing listens on it. Moving into the 0x7000 block, below 32768, avoids all of them and keeps the low
@@ -56,11 +60,22 @@ export function defaultPort(channel = OPENCODE_CHANNEL, platform = process.platf
   return port
 }
 
-function channelPort(channel: string) {
-  if (channel === "latest" || channel === "beta" || channel === "next") return 0xc0de
-  if (channel === "local") return 0xc0df
-  if (channel === "dev") return 0xc0e0
-  return 10_000 + (Number.parseInt(Hash.fast(channel).slice(0, 8), 16) % 50_000)
+function channelPort(channel: string, profile?: string) {
+  const release = channel === "latest" || channel === "beta" || channel === "next"
+  if (profile === undefined) {
+    if (release) return 0xc0de
+    if (channel === "local") return 0xc0df
+    if (channel === "dev") return 0xc0e0
+    return 10_000 + (Number.parseInt(Hash.fast(channel).slice(0, 8), 16) % 50_000)
+  }
+  const key = `${release ? "latest" : channel}:${path.resolve(profile)}`
+  return 10_000 + (Number.parseInt(Hash.fast(key).slice(0, 8), 16) % 22_768)
+}
+
+export function activeProfile(configDir = process.env.OPENCODE_CONFIG_DIR) {
+  if (!configDir) return undefined
+  const resolved = path.resolve(configDir)
+  return resolved === path.resolve(Global.Path.config) ? undefined : resolved
 }
 
 export function legacyFilename(channel = OPENCODE_CHANNEL) {
@@ -95,6 +110,21 @@ export const migrateRegistration = Effect.fnUntraced(function* (
   yield* fs.writeFileString(file, text.value, { flag: "wx", mode: 0o600 }).pipe(Effect.ignore)
 })
 
+export const migrateProfileRegistration = Effect.fnUntraced(function* (
+  legacy: string,
+  file: string,
+  expectedPassword?: string,
+) {
+  if (!expectedPassword) return
+  const fs = yield* FileSystem.FileSystem
+  const text = yield* fs.readFileString(legacy).pipe(Effect.option)
+  if (Option.isNone(text)) return
+  const registration = yield* decodeRegistration(text.value).pipe(Effect.option)
+  if (Option.isNone(registration) || registration.value.password !== expectedPassword) return
+  yield* fs.writeFileString(file, text.value, { flag: "wx", mode: 0o600 }).pipe(Effect.ignore)
+  yield* fs.remove(legacy).pipe(Effect.ignore)
+})
+
 export const migrateConfig = Effect.fnUntraced(function* (legacy: string, file: string) {
   const fs = yield* FileSystem.FileSystem
   const text = yield* fs.readFileString(legacy).pipe(Effect.option)
@@ -120,21 +150,27 @@ function configKey(key: string): Key {
 const paths = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem
   const global = yield* Global.Service
+  const profile = activeProfile()
   const name = filename()
   const legacy = legacyFilename()
-  const file = path.join(global.state, name)
+  const file = path.join(global.state, filename(OPENCODE_CHANNEL, profile))
   return {
     fs,
     file,
+    profile,
+    legacyProfileRegistrationFile: profile !== undefined ? path.join(global.state, name) : undefined,
     legacyConfigFile: legacy ? path.join(global.config, legacy) : undefined,
-    legacyRegistrationFiles: [
-      ...(legacy ? [path.join(global.state, legacy)] : []),
-      // Dev never owned the shared registration, even while it wrote there; a dev server still in it belongs to an
-      // older build and is left for a released client to replace.
-      ...(name !== "service.json" && OPENCODE_CHANNEL !== "local" && OPENCODE_CHANNEL !== "dev"
-        ? [path.join(global.state, "service.json")]
-        : []),
-    ],
+    legacyRegistrationFiles:
+      profile !== undefined
+        ? []
+        : [
+            ...(legacy ? [path.join(global.state, legacy)] : []),
+            // Dev never owned the shared registration, even while it wrote there; a dev server still in it belongs to an
+            // older build and is left for a released client to replace.
+            ...(name !== "service.json" && OPENCODE_CHANNEL !== "local" && OPENCODE_CHANNEL !== "dev"
+              ? [path.join(global.state, "service.json")]
+              : []),
+          ],
     configFile: path.join(global.config, name),
   }
 })
@@ -149,12 +185,15 @@ export function processEnv(env: Info["env"]) {
 }
 
 export const options = Effect.fnUntraced(function* (input: { readonly checkVersion?: boolean } = {}) {
-  const { file, legacyRegistrationFiles } = yield* paths
+  const { file, profile, legacyProfileRegistrationFile, legacyRegistrationFiles } = yield* paths
+  const config = yield* read()
+  if (legacyProfileRegistrationFile)
+    yield* migrateProfileRegistration(legacyProfileRegistrationFile, file, config.password)
   yield* Effect.forEach(legacyRegistrationFiles, (legacy) => migrateRegistration(legacy, file))
   return {
     file,
     version: input.checkVersion ? OPENCODE_VERSION : undefined,
-    env: processEnv((yield* read()).env),
+    env: processEnv(profile === undefined ? config.env : { ...config.env, OPENCODE_CONFIG_DIR: profile }),
     command: [...selfCommand(), "serve", "--service"],
   }
 })
