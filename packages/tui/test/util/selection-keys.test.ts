@@ -11,6 +11,7 @@ async function setup(copyOnSelect = false) {
     height: 3,
     exitOnCtrlC: false,
     useKittyKeyboard: {},
+    kittyKeyboard: true,
     clock,
   })
   const writes: string[] = []
@@ -170,3 +171,32 @@ test("copy-on-select does not treat output selection as editor selection when an
     app.renderer.destroy()
   }
 })
+
+test.each(["manual", "select"].flatMap((mode) => ["textarea", "input"].map((kind) => ({ mode, kind }))))(
+  "Cmd+X cuts $kind selections in $mode mode",
+  async (input) => {
+    const app = await setup(input.mode === "select")
+    const editor =
+      input.kind === "input"
+        ? new InputRenderable(app.renderer, { width: 24, value: "draft" })
+        : new TextareaRenderable(app.renderer, { width: 24, height: 3, initialValue: "draft" })
+    app.renderer.root.add(editor)
+    editor.focus()
+    try {
+      await app.renderOnce()
+      app.mockInput.pressKey("x", { super: true })
+      expect(editor.plainText).toBe("draft")
+      expect(app.writes).toEqual([])
+
+      app.mockInput.pressKey("END")
+      app.mockInput.pressArrow("left", { shift: true })
+      app.mockInput.pressArrow("left", { shift: true })
+      app.mockInput.pressKey("x", { super: true })
+      expect(editor.plainText).toBe("dra")
+      expect(app.writes).toEqual(["ft"])
+      expect(app.renderer.hasSelection).toBeFalse()
+    } finally {
+      app.renderer.destroy()
+    }
+  },
+)
