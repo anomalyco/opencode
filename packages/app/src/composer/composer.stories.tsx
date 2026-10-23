@@ -86,6 +86,7 @@ function ComposerStory(props: {
     set() {},
     visible: () => true,
     setVisibility() {},
+    setProviderVisibility() {},
     variant: {
       configured: () => STORY_MODEL.variant,
       selected: () => story.variant,
