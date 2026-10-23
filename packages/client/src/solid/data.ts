@@ -1390,6 +1390,12 @@ export function createData(config: CreateDataInput) {
       creating(sessionID: string) {
         return creating.has(sessionID)
       },
+      // The in-flight create for `sessionID`, if one is running. It settles
+      // once the server has acknowledged the session, and never rejects: the
+      // caller that started the create reports its own failure.
+      creation(sessionID: string) {
+        return creating.get(sessionID)?.catch(() => undefined)
+      },
       remember(info: SessionInfo) {
         batch(() => {
           setStore("session", "info", info.id, reconcile(info))

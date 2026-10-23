@@ -1277,16 +1277,22 @@ export function Prompt(props: PromptProps) {
     }
 
     const target = sessionID
+    // The session can still be an optimistic record the server has not stored
+    // yet: an agent or model switch for it is rejected as "Session not found".
+    // Wait for the create to be acknowledged before writing to the session.
+    const awaitCreation = () => data.session.creation(target)
     const prepareAgent = async () => {
       if (!session) {
         await data.session.sync(target)
         session = data.session.get(target)
       }
       if (session?.agent !== agent.id) {
+        await awaitCreation()
         await client.api.session.switchAgent({ sessionID: target, agent: agent.id })
       }
     }
-    const commitModel = () => {
+    const commitModel = async () => {
+      await awaitCreation()
       const model = { providerID: selection.providerID, id: selection.modelID, variant }
       const cancelCommit = local.model.trackSessionCommit(target, model, agent.id)
       return client.api.session.switchModel({ sessionID: target, model }).catch((error) => {
