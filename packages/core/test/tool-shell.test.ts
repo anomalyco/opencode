@@ -33,6 +33,7 @@ import { PermissionSaved } from "@opencode/core/permission/saved"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginSupervisor } from "@opencode/core/plugin/supervisor"
 import { Shell } from "@opencode/core/shell"
+import { ShellParse } from "@opencode/core/shell/parse"
 import { ShellSelect } from "@opencode/core/shell/select"
 import { ID } from "@opencode/schema/shell"
 import { ShellTool } from "@opencode/core/tool/plugin/shell"
@@ -525,6 +526,78 @@ describe("ShellTool scanner permissions", () => {
         }),
       ))
   }
+})
+
+describe("ShellTool command substitution", () => {
+  const test = isWindows || !Bun.which("sh") ? permissionIt.live.skip : permissionIt.live
+  const allowShell = (rules: Permission.Ruleset = []) =>
+    Effect.gen(function* () {
+      const agents = yield* Agent.Service
+      yield* agents.transform((editor) =>
+        editor.update(toolIdentity.agent, (agent) => {
+          agent.permissions = [{ action: "shell", resource: "*", effect: "allow" }, ...rules]
+        }),
+      )
+    })
+
+  test("native: a file's Markdown contents pass through a double-quoted substitution", () =>
+    withScanner(true, (registry, directory) =>
+      Effect.gen(function* () {
+        yield* allowShell()
+        const body = "# Lighting\n\nUses `albedo` and `vec3(1.0)`."
+        yield* Effect.promise(() => Bun.write(path.join(directory.active, "body.md"), body))
+        const marker = path.join(directory.active, "marker")
+        const result = yield* runPermissionCommand(registry, `printf '%s' "$(cat body.md)" > marker`, marker, [])
+        expect(result.exit).toMatchObject({ _tag: "Success", value: { status: "completed", metadata: { exit: 0 } } })
+        expect(yield* Effect.promise(() => Bun.file(marker).text())).toBe(body)
+      }),
+    ))
+
+  test("native: a deny rule still applies inside a double-quoted substitution", () =>
+    withScanner(true, (registry, directory) =>
+      Effect.gen(function* () {
+        yield* allowShell([{ action: "shell", resource: "cat *", effect: "deny" }])
+        yield* Effect.promise(() => Bun.write(path.join(directory.active, "body.md"), "body"))
+        const marker = path.join(directory.active, "marker")
+        const result = yield* runPermissionCommand(registry, `printf '%s' "$(cat body.md)" > marker`, marker, [])
+        expect(result.exit).toMatchObject({
+          _tag: "Success",
+          value: { status: "error", error: { message: expect.stringContaining("Permission denied: shell") } },
+        })
+        expect(yield* Effect.promise(() => Bun.file(marker).exists())).toBe(false)
+      }),
+    ))
+
+  test("native: Markdown backticks in double quotes explain how to pass literal text", () =>
+    withScanner(true, (registry, directory) =>
+      Effect.gen(function* () {
+        yield* allowShell()
+        const marker = path.join(directory.active, "marker")
+        const unanalyzable = yield* runPermissionCommand(
+          registry,
+          'printf "%s" "uses `vec3(1.0)` here" > marker',
+          marker,
+          [],
+        )
+        expect(unanalyzable.exit).toMatchObject({
+          _tag: "Success",
+          value: {
+            status: "error",
+            error: { message: ShellParse.opaqueMessage("command-substitution") },
+          },
+        })
+        expect(yield* Effect.promise(() => Bun.file(marker).exists())).toBe(false)
+
+        const literal = yield* runPermissionCommand(
+          registry,
+          "printf '%s' 'uses `vec3(1.0)` here' > marker",
+          marker,
+          [],
+        )
+        expect(literal.exit).toMatchObject({ _tag: "Success", value: { status: "completed", metadata: { exit: 0 } } })
+        expect(yield* Effect.promise(() => Bun.file(marker).text())).toBe("uses `vec3(1.0)` here")
+      }),
+    ))
 })
 
 describe("ShellTool conditional process substitution", () => {
