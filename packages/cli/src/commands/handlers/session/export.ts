@@ -71,7 +71,13 @@ export default Runtime.handler(
         try: () => client.session.export({ sessionID, sanitize: input.sanitize }),
         catch: (cause) => cause,
       })
-      process.stdout.write(JSON.stringify(data, null, 2) + EOL)
+      yield* Effect.tryPromise({
+        try: () =>
+          new Promise<void>((resolve, reject) => {
+            process.stdout.write(JSON.stringify(data, null, 2) + EOL, (error) => (error ? reject(error) : resolve()))
+          }),
+        catch: (cause) => cause,
+      })
     }).pipe(
       Effect.catch((error) =>
         Effect.sync(() => {
