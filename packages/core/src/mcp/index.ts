@@ -981,7 +981,6 @@ export const layer = (options?: Options) =>
           ].toSorted((a, b) => a.server.localeCompare(b.server) || a.name.localeCompare(b.name))
         }),
         callTool: Effect.fn("MCP.callTool")(function* (input) {
-          yield* activate
           const server = ServerName.make(input.server)
           // An attached client owns the tools it lists, even when a configured server shares its name, and
           // owns its name outright when no configured server has it.
@@ -1001,6 +1000,7 @@ export const layer = (options?: Options) =>
               )
             return { ...result, server, tool: input.name }
           }
+          yield* activate
           const target = yield* requireServer(server)
           const result = yield* withConnection(target.name, target.entry, true, (connection) =>
             connection.callTool({ name: input.name, args: input.args, sessionID: input.sessionID }),

@@ -7,6 +7,7 @@ import {
   createMcpHandler,
   inputRequired,
   inputResponse,
+  McpServer,
   Server,
   WebStandardStreamableHTTPServerTransport,
 } from "@modelcontextprotocol/server"
@@ -606,6 +607,48 @@ testEffect(Layer.empty).effect("does not spawn MCP for an unused location or its
       ),
     )
     expect(spawns).toEqual([])
+  }),
+)
+
+testEffect(Layer.empty).effect("attached tool calls leave inactive configured MCP servers unstarted", () =>
+  Effect.gen(function* () {
+    const spawns: string[] = []
+    const environment = Layer.succeed(
+      Environment.Service,
+      Environment.Service.of({
+        files: Environment.makeFiles(Environment.makeMemoryDriver()),
+        spawner: ChildProcessSpawner.make((command) => {
+          spawns.push(ChildProcess.isStandardCommand(command) ? command.command : "pipeline")
+          return EnvironmentUnavailable.spawner.spawn(command)
+        }),
+      }),
+    )
+    yield* Effect.gen(function* () {
+      const service = yield* Mcp.Service
+      const server = new McpServer({ name: "attached", version: "1.0.0" })
+      server.registerTool("echo", { description: "Attached echo" }, () => ({
+        content: [{ type: "text", text: "attached result" }],
+      }))
+      const [client, transport] = InMemoryTransport.createLinkedPair()
+      yield* Effect.acquireRelease(
+        Effect.promise(() => server.connect(transport)),
+        () => Effect.promise(() => server.close()),
+      )
+      yield* service.attach("attached", client)
+      yield* drain
+      expect(spawns).toEqual([])
+
+      const result = yield* service.callTool({ server: "attached", name: "echo" })
+      expect(result.content).toEqual([{ type: "text", text: "attached result" }])
+      yield* drain
+      expect(spawns).toEqual([])
+    }).pipe(
+      Effect.provide(
+        resourceMcpLayer(new ConfigMCP.Local({ type: "local", command: ["unused"] }), undefined, undefined, {
+          environment,
+        }),
+      ),
+    )
   }),
 )
 
