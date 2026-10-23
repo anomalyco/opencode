@@ -294,7 +294,7 @@ function collect(fs: FileSystem.FileSystem, path: Path.Path, dir: string, prefix
 function writeZip(fs: FileSystem.FileSystem, output: string, entries: Entry[]) {
   return Effect.gen(function* () {
     const { BlobReader, BlobWriter, ZipWriter } = yield* Effect.promise(() => import("@zip.js/zip.js"))
-    const writer = new ZipWriter(new BlobWriter("application/zip"))
+    const writer = new ZipWriter(new BlobWriter("application/zip"), { dataDescriptorSignature: true })
     yield* Effect.forEach(
       entries,
       (entry) =>
