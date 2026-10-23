@@ -35,6 +35,7 @@ import { saveDraft, takeDraft } from "./draft-stash"
 import { Skill } from "@opencode/schema/skill"
 import { computePromptTraits } from "../../prompt/traits"
 import { expandPastedTextPlaceholders, expandTrackedPastedText } from "../../prompt/part"
+import { pasteSummary } from "../../prompt/paste"
 import { usePromptStash } from "../../prompt/stash"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteOption, type AutocompleteRef, Autocomplete } from "./autocomplete"
@@ -1458,8 +1459,8 @@ export function Prompt(props: PromptProps) {
       return
     }
 
-    const lineCount = (pastedContent.match(/\n/g)?.length ?? 0) + 1
-    if ((lineCount >= 3 || pastedContent.length > 150) && config.prompt?.paste !== "full") {
+    const summary = pasteSummary(pastedContent, config.prompt?.paste_summary)
+    if (summary && config.prompt?.paste !== "full") {
       const extmark = input.extmarks.getAllForTypeId(promptPartTypeId).find((extmark) => {
         const ref = store.extmarkToPart.get(extmark.id)
         return (
@@ -1469,7 +1470,7 @@ export function Prompt(props: PromptProps) {
         )
       })
       if (extmark && expandPastedText(extmark.id)) return
-      pasteText(pastedContent, `[Pasted ~${lineCount} lines]`)
+      pasteText(pastedContent, summary)
       return
     }
 

@@ -41,6 +41,11 @@ test("validates the session tabs setting", () => {
   expect(() => decode({ tabs: { mode: true } })).toThrow()
   expect(decode({ tabs: { enabled: false } })).toEqual({ tabs: { enabled: false } })
   expect(decode({ prompt: { image_preview: true } })).toEqual({ prompt: { image_preview: true } })
+  expect(decode({ prompt: { paste_summary: { lines: 10, format: "[{lines}: {excerpt}]" } } })).toEqual({
+    prompt: { paste_summary: { lines: 10, format: "[{lines}: {excerpt}]" } },
+  })
+  expect(() => decode({ prompt: { paste_summary: { lines: 0 } } })).toThrow()
+  expect(() => decode({ prompt: { paste_summary: { format: "" } } })).toThrow()
   expect(decode({ session: { image_preview: true } })).toEqual({ session: { image_preview: true } })
   expect(decode({ session: { tps: false } })).toEqual({ session: { tps: false } })
   expect(decode({ session: { new_location: "inherit" } })).toEqual({ session: { new_location: "inherit" } })
