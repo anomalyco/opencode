@@ -942,3 +942,66 @@ async function twoServers(
     tabs: [input.a[0]!.id, { session: input.b[0]!.id, server: REMOTE_SERVER }],
   })
 }
+
+for (const preference of [
+  { layout: "vertical", position: "top" },
+  { layout: "vertical", position: "bottom" },
+  { layout: "horizontal", position: "top" },
+]) {
+  test(`new tab placement ${preference.layout} ${preference.position} preserves existing and reopened tabs`, async ({
+    page,
+  }) => {
+    await mockWorkspace(page, {
+      name: "TabPlacement",
+      sessions: [a, b, c],
+      seed: {
+        tabs: [a.id, b.id],
+        settings: { appearance: { tabLayout: preference.layout, verticalTabPosition: preference.position } },
+      },
+    })
+    await page.goto(sessionHref(c.id))
+    const titles = page.locator("[data-titlebar-tab-slot]:visible [data-titlebar-tab-title]")
+    const top = preference.layout === "vertical" && preference.position === "top"
+    const expected = top ? [c.title, a.title, b.title] : [a.title, b.title, c.title]
+    await expect(titles).toHaveText(expected)
+    // Opening an existing tab must not move it or duplicate it.
+    await page.locator(`a[data-titlebar-tab-link][href="${sessionHref(a.id)}"]:visible`).click()
+    await expect(titles).toHaveText(expected)
+    // Restoring the middle tab uses its original index even when new tabs go first.
+    const middle = top ? a : b
+    await page
+      .locator(`[data-titlebar-tab-slot]:visible:has(a[href="${sessionHref(middle.id)}"]) [data-slot="tab-close"]`)
+      .click()
+    await expect(titles).toHaveCount(2)
+    await page.keyboard.press("Control+Shift+T")
+    await expect(titles).toHaveText(expected)
+    await page.getByRole("button", { name: "New session", exact: true }).click()
+    await expect(page).toHaveURL(/new-session\?draftId=/)
+    await expect(titles).toHaveText(top ? ["Session", ...expected] : [...expected, "Session"])
+    await expect
+      .poll(() =>
+        page.evaluate(() => JSON.parse(localStorage.getItem("opencode.window.browser.dat:tabs") ?? "[]").length),
+      )
+      .toBe(4)
+    await page.reload()
+    await expect(titles).toHaveText(top ? ["Session", ...expected] : [...expected, "Session"])
+    if (top) {
+      const slots = page.locator("[data-titlebar-tab-slot]:visible")
+      const from = await slots.nth(0).boundingBox()
+      const to = await slots.nth(2).boundingBox()
+      if (!from || !to) throw new Error("Missing tab bounds")
+      await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2)
+      await page.mouse.down()
+      await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 20 })
+      await page.mouse.up()
+      await expect(titles).toHaveText([c.title, a.title, "Session", b.title])
+      await expect
+        .poll(() =>
+          page.evaluate(() => JSON.parse(localStorage.getItem("opencode.window.browser.dat:tabs") ?? "[]")[2]?.type),
+        )
+        .toBe("draft")
+      await page.reload()
+      await expect(titles).toHaveText([c.title, a.title, "Session", b.title])
+    }
+  })
+}

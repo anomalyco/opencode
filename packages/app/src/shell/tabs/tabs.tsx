@@ -21,6 +21,7 @@ import {
 } from "@/composer/state"
 import { appendPrompt, promptLength } from "@/composer/prompt-parts"
 import { TabStorage } from "./schema"
+import { useSettings } from "@/settings/model"
 import { useCurrentRoute } from "@/shell/state/layout"
 
 export type SessionTab = typeof TabStorage.Session.Type
@@ -74,6 +75,9 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
     const servers = useServers()
     const extensions = useExtensionServers()
     const platform = usePlatform()
+    const settings = useSettings()
+    const insertAtTop = () =>
+      settings.appearance.tabLayout() === "vertical" && settings.appearance.verticalTabPosition() === "top"
     const [store, setStore, _, ready] = persisted(Persist.window("tabs"), TabStorage.Tabs, [])
 
     const [recent, setRecent, , recentReady] = persisted(Persist.window("tabs.recent"), TabStorage.Recent, {
@@ -239,7 +243,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
           setStore(
             produce((tabs) => {
               if (tabs.some((item) => tabKey(item) === tabKey(next))) return
-              tabs.push(next)
+              tabs.splice(insertAtTop() ? 0 : tabs.length, 0, next)
             }),
           )
         })
@@ -271,7 +275,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
         await startTransition(() => {
           setStore(
             produce((tabs) => {
-              tabs.push(tab)
+              tabs.splice(insertAtTop() ? 0 : tabs.length, 0, tab)
             }),
           )
           navigate(draftHref(draftID))
