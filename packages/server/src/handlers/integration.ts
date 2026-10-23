@@ -171,15 +171,17 @@ export const IntegrationHandler = HttpApiBuilder.group(Api, "server.integration"
                     attemptID: error.attemptID,
                     message: `OAuth attempt not found: ${error.attemptID}`,
                   })
+                if (error._tag === "Integration.CodeRequired")
+                  return new InvalidRequestError({
+                    message: "Authorization code is required",
+                    kind: "integration_code_required",
+                  })
                 return new InvalidRequestError({
                   message:
-                    error._tag === "Integration.CodeRequired"
-                      ? "Authorization code is required"
+                    error.cause instanceof Error && error.cause.message.trim()
+                      ? error.cause.message
                       : "Authentication failed",
-                  kind:
-                    error._tag === "Integration.CodeRequired"
-                      ? "integration_code_required"
-                      : "integration_authorization",
+                  kind: "integration_authorization",
                 })
               }),
             )

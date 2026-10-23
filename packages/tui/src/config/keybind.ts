@@ -266,6 +266,7 @@ export const Definitions = {
   "dialog.prompt.submit": keybind("return", "Submit dialog prompt"),
   "dialog.integration.rename": keybind("ctrl+r", "Rename integration account"),
   "dialog.integration.delete": keybind("ctrl+d", "Delete integration account"),
+  "dialog.integration.copy": keybind("tab", "Copy authorization link"),
   "dialog.worktree.generate": keybind("tab", "Generate worktree name"),
   "dialog.move_session.new": keybind("ctrl+a", "New worktree"),
   "dialog.move_session.move": keybind("ctrl+m", "Move session to worktree"),

@@ -6758,7 +6758,7 @@
             }
           }
         },
-        "description": "Complete a code-based OAuth attempt and store the resulting credential.",
+        "description": "Complete a code-based OAuth attempt and store the resulting credential. For an automatic attempt with `paste`, `code` is the redirect URL copied from the browser, and the result arrives through the attempt status.",
         "summary": "Complete OAuth connection",
         "requestBody": {
           "content": {
@@ -16315,6 +16315,10 @@
           "mode": {
             "type": "string",
             "enum": ["auto", "code"]
+          },
+          "paste": {
+            "type": "boolean",
+            "enum": [true]
           },
           "time": {
             "type": "object",

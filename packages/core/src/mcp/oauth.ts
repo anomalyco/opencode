@@ -351,7 +351,7 @@ export const authorize = (input: {
       const client = clientFromCredential(previous)
       if (client) yield* Effect.promise(() => store.saveClientInformation(client))
     }
-    const code = yield* Deferred.make<{ code: string; iss: string | undefined; response: ServerResponse }, Error>()
+    const code = yield* Deferred.make<{ code: string; iss: string | undefined; response?: ServerResponse }, Error>()
     const redirect = oauth?.redirect_uri ? new URL(oauth.redirect_uri) : undefined
     const redirectPath = redirect?.pathname ?? "/callback"
     const state = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url")
@@ -491,7 +491,7 @@ export const authorize = (input: {
         const respond = (error?: string) =>
           Effect.sync(() =>
             value.response
-              .writeHead(error ? 400 : 200, { "Content-Type": "text/html" })
+              ?.writeHead(error ? 400 : 200, { "Content-Type": "text/html" })
               .end(
                 error
                   ? OauthCallbackPage.error(error, { provider: input.name })
@@ -512,7 +512,7 @@ export const authorize = (input: {
           Effect.flatMap(() => finalize),
           Effect.tap(() => respond()),
           Effect.tapError((error) => respond(error.message)),
-          Effect.onInterrupt(() => Effect.sync(() => value.response.destroy())),
+          Effect.onInterrupt(() => Effect.sync(() => value.response?.destroy())),
         )
       }),
       Effect.onErrorIf(
@@ -531,6 +531,24 @@ export const authorize = (input: {
       instructions: `Authorize ${input.name} in your browser. This window will close automatically.`,
       mode: "auto" as const,
       callback: Deferred.await(completed),
+      // A pasted URL is held to the same checks as the browser's redirect, but a wrong paste keeps the login waiting.
+      submit: (pasted: string) =>
+        Effect.gen(function* () {
+          const text = pasted.trim()
+          if (!URL.canParse(text)) return yield* Effect.fail(new Error("Paste the full URL from the browser's address bar"))
+          const url = new URL(text)
+          if (url.searchParams.get("state") !== state)
+            return yield* Effect.fail(new Error("This URL belongs to a different sign-in"))
+          const error = url.searchParams.get("error_description") ?? url.searchParams.get("error")
+          if (error) {
+            yield* Deferred.fail(code, new Error(error))
+            return
+          }
+          const value = url.searchParams.get("code")
+          if (!value) return yield* Effect.fail(new Error("The URL does not contain an authorization code"))
+          yield* Effect.logInfo("mcp oauth redirect pasted", fields)
+          yield* Deferred.succeed(code, { code: value, iss: url.searchParams.get("iss") ?? undefined })
+        }),
     }
   }).pipe(
     Effect.onError((cause) =>

@@ -212,6 +212,16 @@ If the server needs authentication, run `/mcps`, select it, and complete authori
 opencode mcp auth sentry
 ```
 
+### Browser on another machine
+
+When OpenCode runs over SSH, in a container, or on a remote server, the browser cannot reach OpenCode after you sign in and shows a page that does not load. Copy that page's URL from the address bar and paste it into the sign-in prompt:
+
+```text
+http://127.0.0.1:52817/callback?code=...&state=...
+```
+
+The prompt appears in `/mcps` and in `opencode mcp auth` while OpenCode waits for the browser.
+
 ### Client registration
 
 OpenCode identifies itself to the authorization server with the first method that applies:

@@ -65,6 +65,8 @@ export type OAuthAuthorization = {
   | {
       readonly mode: "auto"
       readonly callback: Effect.Effect<Credential.OAuth, unknown>
+      /** Hands `callback` the redirect URL a user pasted, for when the browser cannot reach this machine. */
+      readonly submit?: (redirect: string) => Effect.Effect<void, unknown>
     }
   | {
       readonly mode: "code"
@@ -627,6 +629,7 @@ const layer = Layer.effect(
         url: authorization.url,
         instructions: authorization.instructions,
         mode: authorization.mode,
+        ...(authorization.mode === "auto" && authorization.submit ? { paste: true } : {}),
         time,
       })
     })
@@ -818,6 +821,9 @@ const layer = Layer.effect(
           })
           if (!attempt) return yield* new AttemptNotFoundError(input)
           if (attempt.status !== "pending") return
+          // The attempt still settles through its callback; clients keep polling status for the result.
+          if (attempt.authorization.mode === "auto" && attempt.authorization.submit && input.code !== undefined)
+            return yield* authorize(attempt.authorization.submit(input.code))
           if (attempt.authorization.mode === "code" && input.code === undefined) {
             return yield* new CodeRequiredError({ attemptID: input.attemptID })
           }

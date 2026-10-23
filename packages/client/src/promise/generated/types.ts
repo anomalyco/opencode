@@ -705,6 +705,7 @@ export type IntegrationAttempt = {
   url: string
   instructions: string
   mode: "auto" | "code"
+  paste?: true
   time: { created: number; expires: number }
 }
 

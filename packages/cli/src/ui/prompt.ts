@@ -4,7 +4,7 @@ import { errorMessage } from "../util/error"
 
 const cancelled = Symbol("cancelled")
 
-export function prompt<A>(run: () => Promise<A | symbol>) {
+export function prompt<A>(run: (signal: AbortSignal) => Promise<A | symbol>) {
   return Effect.tryPromise({ try: run, catch: (cause) => cause }).pipe(
     Effect.flatMap((value) => (isCancel(value) ? Effect.fail(cancelled) : Effect.succeed(value))),
   )

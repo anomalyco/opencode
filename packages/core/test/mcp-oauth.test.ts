@@ -191,6 +191,41 @@ describe("MCP OAuth", () => {
     expect(credential.access).toBe("access")
   })
 
+  test("completes from a pasted redirect URL and keeps waiting after a wrong paste", async () => {
+    const tokenRequests: URLSearchParams[] = []
+    const server = Bun.serve({
+      port: 0,
+      async fetch(request) {
+        if (request.method !== "POST" || new URL(request.url).pathname !== "/token")
+          return new Response(null, { status: 404 })
+        tokenRequests.push(new URLSearchParams(await request.text()))
+        return Response.json({ access_token: "access", token_type: "Bearer", refresh_token: "refresh", expires_in: 3600 })
+      },
+    })
+
+    const result = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const { authorization, url: authorizationUrl } = yield* start(server, { client_id: "client" })
+          const redirect = new URL(authorizationUrl.searchParams.get("redirect_uri") ?? "")
+          redirect.searchParams.set("code", "pasted")
+          redirect.searchParams.set("state", "another-sign-in")
+          const rejected = yield* Effect.flip(authorization.submit(redirect.href))
+          const notURL = yield* Effect.flip(authorization.submit("pasted"))
+          redirect.searchParams.set("state", authorizationUrl.searchParams.get("state") ?? "")
+          yield* authorization.submit(` ${redirect.href}\n`)
+          return { rejected, notURL, credential: yield* authorization.callback }
+        }),
+      ),
+    ).finally(() => server.stop(true))
+
+    expect(result.rejected.message).toBe("This URL belongs to a different sign-in")
+    expect(result.notURL.message).toBe("Paste the full URL from the browser's address bar")
+    expect(result.credential.access).toBe("access")
+    expect(tokenRequests).toHaveLength(1)
+    expect(tokenRequests[0]?.get("code")).toBe("pasted")
+  })
+
   test("reports a rejected token exchange on the callback page", async () => {
     const server = Bun.serve({
       port: 0,
