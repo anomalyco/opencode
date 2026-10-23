@@ -18,7 +18,7 @@ import {
 } from "@opentui/core"
 import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { normalizePromptContent } from "../prompt/content"
-import { deduplicatePromptImages, promptAttachmentLabel } from "../prompt/attachment"
+import { deduplicatePromptImages, isPromptImageUri, promptAttachmentLabel } from "../prompt/attachment"
 import { resolvePastedAttachments } from "../component/prompt/local-attachment"
 import { createTuiClipboard, type OwnedClipboardService } from "../clipboard"
 import type { ClipboardService } from "../context/clipboard"
@@ -387,7 +387,7 @@ export function createPromptState(input: PromptInput): PromptState {
     ),
   )
   const images = createMemo(() =>
-    (deduplicatePromptImages(attachments()) ?? []).filter((file) => file.uri.startsWith("data:image/")),
+    (deduplicatePromptImages(attachments()) ?? []).filter((file) => isPromptImageUri(file.uri)),
   )
   let clipboard: OwnedClipboardService | undefined
   let pasteQueue: Promise<void> | undefined
@@ -835,10 +835,14 @@ export function createPromptState(input: PromptInput): PromptState {
         }
   }
 
-  const pasteAttachment = (file: { uri: string; filename?: string }) => {
+  const pasteAttachment = (file: { uri: string; filename?: string; description?: string }) => {
     if (!area || area.isDestroyed) return
     syncDraft()
-    const value = promptAttachmentLabel(attachments(), { uri: file.uri, name: file.filename })
+    const value = promptAttachmentLabel(attachments(), {
+      uri: file.uri,
+      name: file.filename,
+      description: file.description,
+    })
     area.insertText(value + " ")
     const end = area.cursorOffset - 1
     const start = end - measure(value)
@@ -848,6 +852,7 @@ export function createPromptState(input: PromptInput): PromptState {
       type: "file",
       url: file.uri,
       filename: file.filename,
+      description: file.description,
       mime: file.uri.slice(5, file.uri.indexOf(";")),
       source: { type: "file", text: { start, end, value } },
     })

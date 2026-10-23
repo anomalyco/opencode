@@ -14,7 +14,16 @@ type ProjectedFile = Readonly<{
 function attachmentKind(uri: string) {
   if (uri.startsWith("data:image/")) return "Image"
   if (uri.startsWith("data:application/pdf;")) return "PDF"
+  if (uri.startsWith("file:")) {
+    const pathname = URL.parse(uri)?.pathname ?? uri
+    if (/\.(avif|gif|jpe?g|png|webp)$/i.test(pathname)) return "Image"
+    if (/\.pdf$/i.test(pathname)) return "PDF"
+  }
   return undefined
+}
+
+export function isPromptImageUri(uri: string) {
+  return attachmentKind(uri) === "Image"
 }
 
 function attachmentMetadata(file: PromptFileIdentity) {
