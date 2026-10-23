@@ -133,3 +133,133 @@ export function filetype(input?: string) {
   if (["typescriptreact", "javascriptreact", "javascript"].includes(language)) return "typescript"
   return language
 }
+
+// Languages a parser is registered for but LANGUAGE_EXTENSIONS names differently.
+const PARSER_FILETYPES: Record<string, string> = {
+  shellscript: "bash",
+  makefile: "make",
+  terraform: "hcl",
+  "terraform-vars": "hcl",
+}
+
+const EXTENSIONS: Record<string, string> = {
+  ".sh": "bash",
+  ".bash": "bash",
+  ".zsh": "bash",
+  ".ksh": "bash",
+  ".env": "bash",
+  ".mk": "make",
+  ".toml": "toml",
+  ".h": "c",
+  ".hh": "cpp",
+  ".hpp": "cpp",
+  ".hxx": "cpp",
+  ".jsonc": "json",
+  ".json5": "json",
+  ".mdx": "markdown",
+  ".plist": "xml",
+  ".svg": "xml",
+  ".xsd": "xml",
+  ".ini": "ini",
+  ".cfg": "ini",
+  ".conf": "ini",
+  ".properties": "ini",
+  ".desktop": "ini",
+  ".service": "ini",
+  ".socket": "ini",
+  ".timer": "ini",
+  ".mount": "ini",
+  ".automount": "ini",
+  ".target": "ini",
+  ".path": "ini",
+  ".slice": "ini",
+  ".scope": "ini",
+  ".swap": "ini",
+  ".device": "ini",
+  ".network": "ini",
+  ".netdev": "ini",
+  ".link": "ini",
+  ".container": "ini",
+  ".volume": "ini",
+  ".pod": "ini",
+  ".kube": "ini",
+  ".image": "ini",
+  ".build": "ini",
+  ".haml": "haml",
+}
+
+const FILENAMES: Record<string, string> = {
+  dockerfile: "dockerfile",
+  containerfile: "dockerfile",
+  makefile: "make",
+  gnumakefile: "make",
+  gemfile: "ruby",
+  rakefile: "ruby",
+  capfile: "ruby",
+  guardfile: "ruby",
+  vagrantfile: "ruby",
+  brewfile: "ruby",
+  podfile: "ruby",
+  berksfile: "ruby",
+  pkgbuild: "bash",
+  ".bashrc": "bash",
+  ".bash_profile": "bash",
+  ".bash_aliases": "bash",
+  ".profile": "bash",
+  ".zshrc": "bash",
+  ".zshenv": "bash",
+  ".zprofile": "bash",
+  ".envrc": "bash",
+  ".gitconfig": "ini",
+  ".gitmodules": "ini",
+  ".editorconfig": "ini",
+}
+
+const INTERPRETERS: Record<string, string> = {
+  sh: "bash",
+  bash: "bash",
+  zsh: "bash",
+  dash: "bash",
+  ksh: "bash",
+  python: "python",
+  python3: "python",
+  node: "typescript",
+  bun: "typescript",
+  deno: "typescript",
+  ruby: "ruby",
+  php: "php",
+  lua: "lua",
+}
+
+// The parser language for a file, beyond the extension map: Dockerfiles, dotenv files, systemd
+// units and other ini-style config, file names such as Makefile and Gemfile, and for a file with no
+// known language a #! line, read from its content or from a diff whose first hunk starts at line 1.
+export function detectFiletype(input?: string, content?: string) {
+  if (!input) return "none"
+  const name = path.basename(input).toLowerCase()
+  const known =
+    FILENAMES[name] ??
+    (name.startsWith("dockerfile.") || name.endsWith(".dockerfile") ? "dockerfile" : undefined) ??
+    (/^\.env(\.|$)/.test(name) ? "bash" : undefined) ??
+    EXTENSIONS[path.extname(name)]
+  if (known) return known
+  const language = filetype(input)
+  if (language) return PARSER_FILETYPES[language] ?? language
+  return content ? shebangFiletype(content) : undefined
+}
+
+function shebangFiletype(content: string) {
+  const first = content.startsWith("#!")
+    ? content
+    : content.match(/^@@ -[01],?\d* \+1,?\d* @@[^\n]*\n[ +-](#![^\n]*)/m)?.[1]
+  if (!first?.startsWith("#!")) return
+  const interpreter = first
+    .slice(2)
+    .split("\n", 1)[0]
+    .trim()
+    .split(/\s+/)
+    .map((word) => path.basename(word))
+    .find((word) => word !== "env" && !word.startsWith("-"))
+  if (!interpreter) return
+  return INTERPRETERS[interpreter] ?? INTERPRETERS[interpreter.replace(/[\d.]+$/, "")]
+}

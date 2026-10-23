@@ -1,3 +1,16 @@
+import sqlWasm from "./parsers/sql/tree-sitter-sql.wasm" with { type: "file" }
+import sqlHighlights from "./parsers/sql/highlights.scm" with { type: "file" }
+import dockerfileWasm from "./parsers/dockerfile/tree-sitter-dockerfile.wasm" with { type: "file" }
+import dockerfileHighlights from "./parsers/dockerfile/highlights.scm" with { type: "file" }
+import iniWasm from "./parsers/ini/tree-sitter-ini.wasm" with { type: "file" }
+import iniHighlights from "./parsers/ini/highlights.scm" with { type: "file" }
+import hamlWasm from "./parsers/haml/tree-sitter-haml.wasm" with { type: "file" }
+import hamlHighlights from "./parsers/haml/highlights.scm" with { type: "file" }
+import hamlInjections from "./parsers/haml/injections.scm" with { type: "file" }
+
+const erbInjections: Record<string, string> = { code: "ruby", content: "html" }
+const hamlInjectionNodes: Record<string, string> = { ruby_code: "ruby", ruby_attributes: "ruby" }
+
 export default {
   // NOTE: FOR markdown, javascript and typescript, we use the opentui built-in parsers
   // Warn: when taking queries from the nvim-treesitter repo, make sure to include the query dependencies as well
@@ -380,6 +393,45 @@ export default {
         highlights: [
           "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/agda/highlights.scm",
         ],
+      },
+    },
+    {
+      filetype: "erb",
+      wasm: "https://github.com/tree-sitter/tree-sitter-embedded-template/releases/download/v0.25.0/tree-sitter-embedded_template.wasm",
+      queries: {
+        highlights: [
+          "https://raw.githubusercontent.com/tree-sitter/tree-sitter-embedded-template/v0.25.0/queries/highlights.scm",
+        ],
+        injections: [
+          "https://raw.githubusercontent.com/tree-sitter/tree-sitter-embedded-template/v0.25.0/queries/injections-erb.scm",
+        ],
+      },
+      injectionMapping: {
+        nodeTypes: erbInjections,
+      },
+    },
+    // No release of these grammars publishes a wasm build, so ./parsers bundles one (see its README).
+    {
+      filetype: "sql",
+      wasm: sqlWasm,
+      queries: { highlights: [sqlHighlights] },
+    },
+    {
+      filetype: "dockerfile",
+      wasm: dockerfileWasm,
+      queries: { highlights: [dockerfileHighlights] },
+    },
+    {
+      filetype: "ini",
+      wasm: iniWasm,
+      queries: { highlights: [iniHighlights] },
+    },
+    {
+      filetype: "haml",
+      wasm: hamlWasm,
+      queries: { highlights: [hamlHighlights], injections: [hamlInjections] },
+      injectionMapping: {
+        nodeTypes: hamlInjectionNodes,
       },
     },
   ],
