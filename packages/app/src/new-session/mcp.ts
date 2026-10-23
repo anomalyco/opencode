@@ -27,7 +27,8 @@ export function createDraftMcpControls(input: { draftID: string; worktree: () =>
   const directory = createMemo(() => {
     const selected = input.worktree()
 
-    return selected === "main" || selected === "create" ? location().directory : selected
+    if (selected !== "main" && selected !== "create") return selected
+    return server.ctx.data.location.info({ directory: location().directory })?.project.canonical ?? location().directory
   })
 
   const states = createMemo(() => {
