@@ -2141,7 +2141,7 @@ describe("OpenAI Chat route", () => {
     Effect.gen(function* () {
       const body = sseEvents(
         deltaChunk({
-          tool_calls: [{ index: 0, id: "call_1", function: { arguments: "{" } }],
+          tool_calls: [{ index: 0, id: "call_1", function: { name: "", arguments: "{" } }],
         }),
         deltaChunk({
           tool_calls: [{ index: 0, function: { name: "lookup", arguments: '\"query\":' } }],
