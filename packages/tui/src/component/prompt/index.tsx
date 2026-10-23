@@ -1533,6 +1533,13 @@ export function Prompt(props: PromptProps) {
     resetComposer()
   }
 
+  const modelLabels = () => {
+    const parsed = local.model.parsed()
+    const selection = local.model.selection()
+    if (config.session?.model_label !== "id" || !selection)
+      return { modelLabel: parsed.model, providerLabel: parsed.provider }
+    return { modelLabel: `${selection.providerID}/${selection.modelID}`, providerLabel: "" }
+  }
   // Keep the last resolved prompt display visible while destination catalogs load;
   // availability and submission still use the live location-scoped catalog.
   const promptDisplay = createMemo<{
@@ -1553,20 +1560,17 @@ export function Prompt(props: PromptProps) {
       if (loading && !failed) return previous
 
       const agent = local.agent.current()
-      const model = local.model.parsed()
       return {
         agentLabel: agent ? Locale.titlecase(agent.id) : undefined,
         agentColor: agent ? local.agent.color(agent.id) : undefined,
-        modelLabel: model.model,
-        providerLabel: model.provider,
+        ...modelLabels(),
         variant: local.model.variant.current(),
       }
     },
     {
       agentLabel: undefined,
       agentColor: undefined,
-      modelLabel: local.model.parsed().model,
-      providerLabel: local.model.parsed().provider,
+      ...modelLabels(),
       variant: undefined,
     },
   )

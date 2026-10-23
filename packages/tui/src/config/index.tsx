@@ -171,6 +171,10 @@ export const Info = Schema.Struct({
       tps: Schema.optional(Schema.Boolean).annotate({
         description: "Show average tokens per second",
       }),
+      model_label: Schema.optional(Schema.Literals(["name", "id"])).annotate({
+        description:
+          "How assistant footers and the prompt name a model: 'name' shows its display name, 'id' shows providerID/modelID",
+      }),
       markdown: Schema.optional(Schema.Literals(["source", "rendered"])).annotate({
         description: "Show Markdown syntax markers or conceal them in rendered transcript content",
       }),
