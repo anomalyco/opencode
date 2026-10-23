@@ -29,19 +29,19 @@ export default Runtime.handler(
     const urls = yield* pairingURLs(client, input)
     const pairing = yield* Effect.tryPromise(() => client.server.pair())
     const links = urls.map((url) => new URL(`/auth/connect/${pairing.code}`, url).href)
-    // Loopback URLs are useless to the scanning device, so the QR code only carries reachable addresses.
-    const remote = urls.filter((url) => !isLoopback(new URL(url).hostname))
+    // Loopback URLs are useless to the scanning device, so the QR code only carries a reachable address.
+    const qrLink = reachablePairingLink(urls, pairing.code)
     process.stdout.write(
       [
         "",
         `  Open a link to connect. Links work once and expire in ${Math.round(pairing.expires_in / 60)} minutes.`,
         "",
         ...(links.length ? links.map((link) => `  ${link}`) : ["  (no server URLs)"]),
-        ...(remote.length
+        ...(qrLink
           ? [
               "",
-              // uqr separates rows with "\n" on every platform, so splitting on EOL ("\r\n" on Windows) indents only the first row.
-              renderUnicodeCompact(JSON.stringify({ code: pairing.code, urls: remote }), {
+              // uqr separates rows with newline on every platform, so splitting on newline (CRLF on Windows) indents only the first row.
+              renderUnicodeCompact(qrLink, {
                 border: 2,
               })
                 .split("\n")
@@ -156,4 +156,22 @@ function isLoopback(hostname: string) {
   return (
     hostname === "localhost" || hostname.endsWith(".localhost") || hostname.startsWith("127.") || hostname === "[::1]"
   )
+}
+
+/** The connect link the QR code carries: a plain URL a generic scanner can open, from a reachable address. */
+export function reachablePairingLink(urls: readonly string[], code: string): string | undefined {
+  const links = urls
+    .map((url) => new URL(`/auth/connect/${code}`, url))
+    .filter((url) => !isLoopback(url.hostname))
+    // Prefer the addresses a phone on the same network can route to; Docker bridges (`172.17.*`) sort last.
+    .sort((a, b) => addressRank(a.hostname) - addressRank(b.hostname))
+
+  return links[0]?.href
+}
+
+function addressRank(hostname: string) {
+  if (hostname.startsWith("192.168.")) return 0
+  if (hostname.startsWith("10.")) return 1
+  if (/^172\.(?:1[6-9]|2\d|3[01])\./.test(hostname)) return 3
+  return 2
 }
