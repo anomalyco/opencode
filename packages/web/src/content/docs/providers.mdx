@@ -2031,6 +2031,42 @@ You can also install [Poolside Agent CLI](https://github.com/poolsideai/pool) to
 
 ---
 
+### Prime Inference
+
+[Prime Inference](https://docs.primeintellect.ai/inference/overview) is an OpenAI-compatible API for hosted and gateway models. It is available in OpenCode as the `prime` provider through the models.dev catalog.
+
+#### Team billing
+
+Requests bill the API key owner's personal balance unless the request includes the `X-Prime-Team-ID` header. To bill a team instead, get your team ID from the Prime Intellect [team profile](https://app.primeintellect.ai/dashboard/team-profile) and configure the header in your opencode config.
+
+```jsonc title="~/.config/opencode/opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "prime": {
+      "options": {
+        "headers": {
+          "X-Prime-Team-ID": "{env:PRIME_TEAM_ID}"
+        }
+      }
+    }
+  }
+}
+```
+
+The `{env:PRIME_TEAM_ID}` placeholder reads the environment of the OpenCode process loading the config. Set the variable before starting OpenCode:
+
+```bash
+export PRIME_TEAM_ID=your-team-id
+opencode
+```
+
+If you connect to an existing server, set the variable in that server's environment and restart it. Exporting the variable in a client shell does not update a running server.
+
+If a request fails with an insufficient-balance error, check the account selected by the header and API key in the [billing dashboard](https://app.primeintellect.ai/dashboard/billing). See [Prime's troubleshooting guide](https://docs.primeintellect.ai/inference/troubleshooting#insufficient-funds).
+
+---
+
 ### SAP AI Core
 
 SAP AI Core provides access to 40+ models from OpenAI, Anthropic, Google, Amazon, Meta, Mistral, and AI21 through a unified platform.

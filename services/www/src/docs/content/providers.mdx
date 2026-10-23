@@ -554,6 +554,57 @@ model requests.
 Discovery refreshes periodically and keeps the last successful inventory during a temporary outage. Embedding-only
 models do not appear because OpenCode only adds models whose Ollama metadata includes the `completion` capability.
 
+## Prime Inference
+
+[Prime Inference](https://docs.primeintellect.ai/inference/overview) provides hosted and gateway models through an
+OpenAI-compatible API. Connect **Prime Inference** with a Prime API key that has the **Inference** permission, or
+provide `PRIME_API_KEY` to the OpenCode server. Its provider ID is `prime`.
+
+```text
+/connect
+# Select Prime Inference and enter your Prime API key.
+/models
+```
+
+### Team billing
+
+Requests bill the API key owner's personal balance unless they include `X-Prime-Team-ID`. To bill a team, get its ID
+from the Prime Intellect [team profile](https://app.primeintellect.ai/dashboard/team-profile) and configure the header.
+The API key owner must have access to the team.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "prime": {
+      "headers": {
+        "X-Prime-Team-ID": "{env:PRIME_TEAM_ID}"
+      }
+    }
+  }
+}
+```
+
+For the managed background service, persist the variable and start the service again:
+
+```bash
+opencode service set env PRIME_TEAM_ID your-team-id
+opencode service start
+```
+
+Changing a managed environment variable stops the running service; `service start` starts it with the new value.
+Exporting a variable in a client shell does not update an already-running service.
+
+Foreground servers read their own process environment. For example:
+
+```bash
+PRIME_TEAM_ID=your-team-id opencode --standalone
+```
+
+If inference returns `insufficient_funds`, check the account selected by the header and API key in the
+[billing dashboard](https://app.primeintellect.ai/dashboard/billing). The Prime CLI team setting does not apply to
+OpenCode requests. See [Prime's troubleshooting guide](https://docs.primeintellect.ai/inference/troubleshooting#insufficient-funds).
+
 ## Runtimes
 
 LM Studio and vLLM also have built-in local discovery. Their default endpoints are
