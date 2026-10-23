@@ -236,6 +236,13 @@ export function Session() {
     return children().flatMap((x) => sync.data.question[x.id] ?? [])
   })
   const visible = createMemo(() => !session()?.parentID && permissions().length === 0 && questions().length === 0)
+  // The prompt may take the transcript column less its bottom padding and the gap above the
+  // prompt; the transcript gives its rows up.
+  const [columnHeight, setColumnHeight] = createSignal<number>()
+  const promptSpace = createMemo(() => {
+    const height = columnHeight()
+    if (height !== undefined) return height - 2
+  })
   const disabled = createMemo(() => permissions().length > 0 || questions().length > 0)
 
   const pending = createMemo(() => {
@@ -1110,7 +1117,17 @@ export function Session() {
         }}
       >
         <box flexDirection="row" flexGrow={1} minHeight={0}>
-          <box flexGrow={1} minHeight={0} paddingBottom={1} paddingLeft={2} paddingRight={2} gap={1}>
+          <box
+            flexGrow={1}
+            minHeight={0}
+            paddingBottom={1}
+            paddingLeft={2}
+            paddingRight={2}
+            gap={1}
+            onSizeChange={function () {
+              setColumnHeight(this.height)
+            }}
+          >
             <Show when={session()}>
               <scrollbox
                 ref={(r) => (scroll = r)}
@@ -1262,6 +1279,7 @@ export function Session() {
                         toBottom()
                       }}
                       sessionID={route.sessionID}
+                      space={promptSpace()}
                       right={<pluginRuntime.Slot name="session_prompt_right" session_id={route.sessionID} />}
                     />
                   </pluginRuntime.Slot>
