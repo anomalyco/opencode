@@ -412,8 +412,25 @@ This is separate from `opencode.json`, which configures server/runtime behavior.
 - `cursor` - Controls the terminal cursor in TUI input fields. `style` defaults to `"block"`, can be `"underline"`, `"line"`, or `"default"`; `blinking` defaults to `true`. When `style` is `"default"`, the terminal default cursor is restored, so `blinking` has no effect.
 - `mouse` - Enable or disable mouse capture in the TUI (default: `true`). When disabled, the terminal's native mouse selection/scrolling behavior is preserved.
 - `attention` - Configures TUI desktop notifications and sounds. Disabled by default.
+- `prompt.history_scope` - Which prompts <kbd>up</kbd> and <kbd>down</kbd> recall in a session: `"global"` (default) or `"session"`. See [Prompt history](#prompt-history).
 
 Use `OPENCODE_TUI_CONFIG` to load a custom TUI config path.
+
+### Prompt history
+
+<kbd>up</kbd> on the first line of the prompt recalls the prompt submitted before, and <kbd>down</kbd> on the last line goes forward again. A shell command run with `!` comes back in shell mode, and a draft of 20 characters or more cleared with <kbd>ctrl+c</kbd> is kept as well.
+
+By default the history is global: every session walks the last 50 prompts submitted in any session on this machine, whichever OpenCode window sent them. With `prompt.history_scope` set to `"session"`, a session walks only the prompts submitted in that session, the last 50 of each. The home screen has no session yet, so there <kbd>up</kbd> still walks every session's prompts, and the prompt that starts a session becomes the first one in its history.
+
+```json title="tui.json"
+{
+  "prompt": {
+    "history_scope": "session"
+  }
+}
+```
+
+Prompts submitted with an OpenCode version older than this setting were not recorded with their session, so no session recalls them; the home screen still does. The history lives in `prompt-history.jsonl` in the OpenCode state directory.
 
 ### Attention
 
