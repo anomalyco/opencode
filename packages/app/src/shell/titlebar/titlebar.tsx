@@ -147,6 +147,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
     <header
       data-slot="titlebar-v2"
       hidden={hideVerticalTitlebar()}
+      dir={language.systemDirection()}
       classList={{
         "shrink-0 relative flex flex-row h-9 bg-v2-background-bg-deep overflow-visible": true,
         "order-last": bottom(),
@@ -171,8 +172,8 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
         "padding-left": macTrafficLights() ? `${macTrafficLightsBaseWidth / zoom()}px` : 0,
         width: windows() ? `env(titlebar-area-width, calc(100vw - ${windowsControlsWidth()}))` : undefined,
         "max-width": windows() ? `env(titlebar-area-width, calc(100vw - ${windowsControlsWidth()}))` : undefined,
-        // Native Windows caption controls remain on the physical right in both writing directions.
-        "margin-right": windows() ? "auto" : undefined,
+        // Window Controls Overlay reports the safe titlebar origin because Windows mirrors caption controls in RTL.
+        left: windows() ? "env(titlebar-area-x, 0px)" : undefined,
       }}
       data-tauri-drag-region
     >

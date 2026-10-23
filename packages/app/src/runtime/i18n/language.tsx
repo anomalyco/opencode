@@ -18,6 +18,7 @@ import { dict } from "@opencode/ui/i18n/en"
 import {
   createDesktopNativeBundle,
   detectDesktopNativeLocale,
+  systemPrefersRtl,
   DESKTOP_NATIVE_ENGLISH,
   DESKTOP_NATIVE_LABELS,
   DESKTOP_NATIVE_LOCALES,
@@ -193,6 +194,14 @@ function detectLocale(): Locale {
   return detectDesktopNativeLocale(navigator.languages?.length ? navigator.languages : [navigator.language])
 }
 
+function systemLanguages(): readonly string[] {
+  if (typeof navigator !== "object") return []
+  if (navigator.languages?.length) return navigator.languages
+  if (typeof navigator.language === "string") return [navigator.language]
+
+  return []
+}
+
 export function normalizeLocale(value: string): Locale {
   return Option.getOrElse(Schema.decodeUnknownOption(LocaleSchema)(value), () => "en")
 }
@@ -243,6 +252,10 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
     const intl = createMemo(() => INTL[locale()])
     const [layout, setLayout] = createStore({ direction: undefined as Direction | undefined })
     const direction = createMemo(() => layout.direction ?? localeDirection(locale()))
+    // Native window chrome (caption buttons) follows the OS language, never the UI
+    // language or conversation content. Only the header consumes this.
+    // In Electron `navigator.languages` reflects the OS language.
+    const systemDirection = createMemo<Direction>(() => (systemPrefersRtl(systemLanguages()) ? "rtl" : "ltr"))
 
     const layoutLocale = createMemo(() => {
       if (!layout.direction) return intl()
@@ -319,6 +332,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       locale,
       intl,
       direction,
+      systemDirection,
       layoutLocale,
       locales: LOCALES,
       label,
