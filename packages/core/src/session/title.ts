@@ -95,8 +95,13 @@ export const layer = Layer.effect(
       )
       yield* recordUsage
       if (failed) return
+      // Some OpenAI-compatible gateways stream the title model's reasoning inline rather than as a
+      // separate part, and its first line would otherwise become the title. A truncated stream can stop
+      // mid-reasoning, so an unclosed block and any leftover tag are dropped too.
       return chunks
         .join("")
+        .replace(/<think>[\s\S]*?(<\/think>|$)\s*/gi, "")
+        .replace(/<\/?think>/gi, "")
         .split("\n")
         .map((line) => line.trim())
         .find((line) => line.length > 0)
