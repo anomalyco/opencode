@@ -13,7 +13,7 @@ export const slowRequestPaths = ["/api/vcs", "/api/worktree"]
 
 // A mount legitimately fires a dozen requests at once; only a request that has waited this long
 // for a slot indicates the server is not keeping up.
-export const requestStallMs = 2_000
+export const requestStallMs = 10_000
 
 // A socket that dies while the device sleeps can leave fetch waiting for response headers until the
 // OS gives up on TCP retransmits, which takes minutes. Bound that so a dead request frees its slot
