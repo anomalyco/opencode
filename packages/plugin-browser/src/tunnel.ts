@@ -21,8 +21,9 @@ export function make() {
     open: Effect.fn("BrowserTunnel.open")(function* (target: Browser.TunnelTarget) {
       const { createConnection } = yield* Effect.promise(() => import("node:net"))
       if (disposed) return yield* Effect.fail(new Error("Browser attachment is closed."))
-      if (sockets.size >= 64)
-        return yield* Effect.fail(new Error("Browser attachment has reached its 64-connection limit."))
+      const MAX_CONNECTIONS = 512
+      if (sockets.size >= MAX_CONNECTIONS)
+        return yield* Effect.fail(new Error(`Browser attachment has reached its ${MAX_CONNECTIONS}-connection limit.`))
       const socket = yield* Effect.try({
         try: () => createConnection({ ...target, allowHalfOpen: true }),
         catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
