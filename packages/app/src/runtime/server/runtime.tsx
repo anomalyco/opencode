@@ -1,6 +1,12 @@
 import { createSimpleContext } from "@opencode/ui/context"
 import { Accessor, batch, createEffect, createMemo, createResource, createRoot, getOwner, untrack } from "solid-js"
-import { createServerProjects, RECENTLY_CLOSED_DISPLAY_LIMIT, ServerConnection, useServers } from "./registry"
+import {
+  adoptServerDirectory,
+  createServerProjects,
+  RECENTLY_CLOSED_DISPLAY_LIMIT,
+  ServerConnection,
+  useServers,
+} from "./registry"
 import { pathKey } from "@/workspaces/path-key"
 import { useServerHealth } from "@/runtime/server/health"
 import { createServerSdkContext } from "./client"
@@ -68,7 +74,13 @@ export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext(
       const serverCtx = createRoot((dispose) => {
         serverCtxDisposers.set(key, dispose)
 
-        return createServerController(conn, server.scope(key), server.projects.forServer(key), notificationCoordinator)
+        return createServerController(
+          conn,
+          server.scope(key),
+          server.projects.forServer(key),
+          server.hydrated,
+          notificationCoordinator,
+        )
       }, owner)
 
       serverCtxs.set(key, serverCtx)
@@ -166,6 +178,7 @@ function createServerController(
   conn: ServerConnection.Any,
   scope: ServerScope,
   projects: ReturnType<typeof createServerProjects>,
+  hydrated: () => boolean,
   notificationCoordinator: ReturnType<typeof createNotificationCoordinator>,
 ) {
   const language = useLanguage()
@@ -217,6 +230,16 @@ function createServerController(
   const sync = createServerSyncContext(sdk, data)
   createPermissionAutoApprover({ sdk, data })
   const notification = createServerNotificationState({ sdk, data, key: connKey, coordinator: notificationCoordinator })
+
+  // Show the folder `opencode serve` was started in. Desktop sidecars are started by
+  // the app, not from a project folder.
+  if (conn.type !== "sidecar")
+    adoptServerDirectory({
+      hydrated,
+      connected: () => sdk.connection.status() === "connected",
+      location: () => sdk.api.location.get(),
+      adopt: projects.adopt,
+    })
 
   function enrich(project: { worktree: string; expanded: boolean }) {
     const [childStore] = sync.child(project.worktree, { bootstrap: false })
