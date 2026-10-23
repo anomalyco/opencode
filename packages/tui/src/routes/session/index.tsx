@@ -1438,13 +1438,16 @@ export function Session(props: {
     bindings: globalCommands.map((command) => command.id),
   }))
 
+  // The prompt owns backgrounding while an editor is focused; do not dispatch it twice on fallthrough.
   Keymap.createLayer(() => ({
     enabled: () => renderer.currentFocusedEditor === null,
-    bindings: baseAndUnfocusedCommands.map((command) => command.id),
+    bindings: [...baseAndUnfocusedCommands.map((command) => command.id), "session.background"],
   }))
 
   Keymap.createLayer(() => ({
-    bindings: [...baseAndUnfocusedCommands, ...baseCommands()].map((command) => command.id),
+    bindings: [...baseAndUnfocusedCommands, ...baseCommands()].flatMap((command) =>
+      command.id === "session.background" ? [] : [command.id],
+    ),
   }))
 
   createEffect(
