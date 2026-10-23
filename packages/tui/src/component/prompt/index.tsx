@@ -51,6 +51,7 @@ import { DialogSkill } from "../dialog-skill"
 import { useConfig } from "../../config"
 import { usePromptMove } from "./move"
 import { resolvePastedAttachments } from "./local-attachment"
+import { readPasteboardFiles } from "../../clipboard"
 import { locationKey, useData } from "../../context/data"
 import { useLocation } from "../../context/location"
 import { useArgs } from "../../context/args"
@@ -1445,7 +1446,7 @@ export function Prompt(props: PromptProps) {
   async function pasteInputText(text: string, changed: () => boolean) {
     const normalizedText = stripAnsiSequences(text).replace(/\r\n?/g, "\n")
     const pastedContent = normalizedText.trim()
-    const attachments = await resolvePastedAttachments(pastedContent, terminalEnvironment.platform)
+    const attachments = await resolvePastedAttachments(pastedContent, terminalEnvironment.platform, readPasteboardFiles)
     if (changed()) return
     if (attachments) {
       attachments.forEach((attachment) => {

@@ -20,7 +20,7 @@ import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { normalizePromptContent } from "../prompt/content"
 import { deduplicatePromptImages, promptAttachmentLabel } from "../prompt/attachment"
 import { resolvePastedAttachments } from "../component/prompt/local-attachment"
-import { createTuiClipboard, type OwnedClipboardService } from "../clipboard"
+import { createTuiClipboard, readPasteboardFiles, type OwnedClipboardService } from "../clipboard"
 import type { ClipboardService } from "../context/clipboard"
 import fuzzysort from "fuzzysort"
 import path from "path"
@@ -878,7 +878,7 @@ export function createPromptState(input: PromptInput): PromptState {
           ? [{ type: "file" as const, uri: `data:${content.mime};base64,${content.data}`, filename: "clipboard" }]
           : shell()
             ? undefined
-            : await resolvePastedAttachments(normalized, process.platform)
+            : await resolvePastedAttachments(normalized, process.platform, readPasteboardFiles)
         if (changed()) return
         // A paste's own text edits must not cancel a submit waiting on that paste.
         applyingPaste = true
