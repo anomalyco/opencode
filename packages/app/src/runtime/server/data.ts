@@ -1,8 +1,10 @@
 import type { Data } from "@opencode/client/solid"
-import type { SessionInfo } from "@opencode/client/promise"
+import { ClientError, type SessionInfo } from "@opencode/client/promise"
+import { Predicate } from "effect"
 import { onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { uuid } from "@/runtime/persistence/uuid"
+import { isSessionNotFoundError } from "./errors"
 
 type SessionMutation = { readonly id: string; readonly type: "remove"; readonly sessionID: string }
 
@@ -22,7 +24,7 @@ export function createDesktopData(input: { data: Data; remove: (sessionID: strin
 }
 
 export function createSessionMutations(remove: (sessionID: string) => Promise<void>) {
-  const [store, setStore] = createStore({ session: [] as SessionMutation[] })
+  const [store, setStore] = createStore<{ session: SessionMutation[] }>({ session: [] })
 
   const clear = (id: string) => {
     setStore("session", (current) => current.filter((mutation) => mutation.id !== id))
@@ -43,6 +45,14 @@ export function createSessionMutations(remove: (sessionID: string) => Promise<vo
       return Promise.resolve()
         .then(() => remove(sessionID))
         .catch((error) => {
+          const cause = error instanceof Error ? error.cause : undefined
+
+          if (
+            !(error instanceof ClientError) &&
+            (!Predicate.isObject(cause) || !("status" in cause) || cause.status === 404) &&
+            isSessionNotFoundError(error, sessionID)
+          )
+            return
           clear(mutation.id)
           throw error
         })
