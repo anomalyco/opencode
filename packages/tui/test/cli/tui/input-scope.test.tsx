@@ -250,6 +250,18 @@ test("permission layers leave the focused peer's Enter and navigation alone unti
   }
 })
 
+test("permission prompt shows the reason it was asked", async () => {
+  await using tmp = await tmpdir()
+  const panes = await mountPanes(tmp.path, () => (
+    <PermissionPrompt request={{ ...request, message: "pushes to a remote" }} />
+  ))
+  try {
+    await panes.app.waitForFrame((frame) => frame.includes("pushes to a remote"))
+  } finally {
+    panes.app.renderer.destroy()
+  }
+})
+
 test("permission rejection text keeps its draft and regains focus when its scope resumes", async () => {
   await using tmp = await tmpdir()
   const panes = await mountPanes(tmp.path, () => <PermissionPrompt request={request} />, "ses_parent")
