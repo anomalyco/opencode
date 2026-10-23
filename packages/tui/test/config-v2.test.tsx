@@ -114,6 +114,13 @@ test("shows the TPS default in session settings", () => {
   expect(setting?.default).toBe(true)
 })
 
+test("shows keep scroll on submit off by default in session settings", () => {
+  expect(settings.find((setting) => setting.path.join(".") === "session.keep_scroll_on_submit")).toMatchObject({
+    category: "Session",
+    default: false,
+  })
+})
+
 test("shows transcript verbosity in session settings", () => {
   expect(settings.find((setting) => setting.path.join(".") === "session.verbosity")).toMatchObject({
     category: "Session",
