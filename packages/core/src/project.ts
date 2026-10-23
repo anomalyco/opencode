@@ -135,7 +135,9 @@ const layer = Layer.effect(
         .get()
         .pipe(Effect.orDie)
       // Clones share a project ID; only replace a canonical directory that is gone.
+      // Global is a catch-all, not the identity of any particular checkout.
       const replaced =
+        project.id !== ID.global &&
         previous &&
         previous.canonical !== project.canonical &&
         !(yield* fs.exists(previous.canonical).pipe(Effect.orElseSucceed(() => true)))
