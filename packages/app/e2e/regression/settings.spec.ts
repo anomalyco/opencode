@@ -84,6 +84,27 @@ test("Ctrl+, opens settings as soon as the app loads", async ({ page }) => {
   await expect(page).toHaveURL("/settings")
 })
 
+test("the Windows Help menu opens About with the desktop version", async ({ page }) => {
+  await mockWorkspace(page, { name: "WindowsMenu", sessions: [] })
+  await holdRoute(page, contributors)
+  await page.goto(`/e2e/utils/windows-menu.html?${new URLSearchParams({ server: SERVER })}`)
+  const settings = page.getByTestId("settings-screen")
+
+  const openAbout = async () => {
+    await page.getByRole("button", { name: "OpenCode menu", exact: true }).click()
+    await page.getByRole("menuitem", { name: "Help", exact: true }).click()
+    await page.getByRole("menuitem", { name: "About", exact: true }).click()
+    await expect(settings.getByRole("tab", { name: "About", exact: true })).toHaveAttribute("aria-selected", "true")
+    await expect(settings.getByText("Version 2.0.0-test", { exact: true })).toBeVisible()
+  }
+
+  await openAbout()
+  const preferences = settings.getByRole("tab", { name: "Preferences", exact: true })
+  await preferences.click()
+  await expect(preferences).toHaveAttribute("aria-selected", "true")
+  await openAbout()
+})
+
 test("a settings page survives refresh", async ({ page }) => {
   const { settings } = await open(page)
   const appearance = settings.getByRole("tab", { name: "Appearance", exact: true })

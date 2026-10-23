@@ -287,6 +287,8 @@ export const DESKTOP_MENU: DesktopMenu[] = [
         labelKey: "desktop.menu.reportBug",
         href: "https://github.com/anomalyco/opencode/issues/new?template=bug_report.yml",
       },
+      { type: "separator", platforms: ["windows"] },
+      { type: "item", labelKey: "desktop.menu.about", command: "settings.about", platforms: ["windows"] },
     ],
   },
 ]
