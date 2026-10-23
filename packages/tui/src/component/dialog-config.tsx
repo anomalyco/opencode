@@ -132,6 +132,15 @@ export const settings: Setting[] = [
     keywords: ["tokens per second", "throughput"],
   },
   {
+    title: "Footer variant",
+    category: "Session",
+    path: ["session", "variant"],
+    default: false,
+    values: [false, true],
+    labels: ["off", "on"],
+    keywords: ["reasoning effort", "model variant", "footer"],
+  },
+  {
     title: "New session location",
     category: "Session",
     path: ["session", "new_location"],

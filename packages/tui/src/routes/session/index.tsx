@@ -2050,6 +2050,9 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
           <Show when={ctx.terminal.width >= 28}>
             <span style={{ fg: theme.text.muted }}> · {model()}</span>
           </Show>
+          <Show when={ctx.terminal.width >= 28 && config.data.session.variant && props.message.model.variant}>
+            {(variant) => <span style={{ fg: theme.text.muted }}> · {variant()}</span>}
+          </Show>
           <Show when={duration() && (ctx.terminal.width < 28 || ctx.terminal.width >= 36)}>
             <span style={{ fg: theme.text.muted }}> · {Locale.duration(duration())}</span>
           </Show>
