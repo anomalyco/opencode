@@ -64,6 +64,7 @@ export function createNewSessionComposerAdapter(props: {
       await pending?.ready
 
       const sessionDirectory = await resolveSessionDirectory({
+        directory: currentDirectory,
         projectDirectory,
         worktree,
         branch,
@@ -196,6 +197,7 @@ export function createNewSessionComposerAdapter(props: {
 }
 
 async function resolveSessionDirectory(input: {
+  directory: string
   projectDirectory: string
   worktree: string
   branch?: string
@@ -203,7 +205,7 @@ async function resolveSessionDirectory(input: {
   serverSDK: ReturnType<typeof useServerSDK>
   language: ReturnType<typeof useLanguage>
 }) {
-  if (input.worktree === "main") return input.projectDirectory
+  if (input.worktree === "main") return input.directory
 
   if (input.worktree !== "create") return input.worktree
 

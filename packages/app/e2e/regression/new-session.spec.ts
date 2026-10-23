@@ -51,6 +51,35 @@ test("the new session screen does not show session details", async ({ page }) =>
   await expect(page.getByRole("button", { name: "Session details", exact: true })).toHaveCount(0)
 })
 
+for (const row of [
+  { name: "a repository subdirectory", directory: "C:/OpenCode/SelectedDirectory/packages/app" },
+  { name: "the repository root", directory: "C:/OpenCode/SelectedDirectory" },
+  { name: "a worktree directory", directory: "C:/OpenCode/selected-worktree" },
+]) {
+  test(`a local new session keeps the selected folder when opened in ${row.name}`, async ({ page }) => {
+    const creates: Parameters<NonNullable<WorkspaceInput["onSessionCreate"]>>[0][] = []
+    const root = "C:/OpenCode/SelectedDirectory"
+
+    const view = await openDraft(page, {
+      name: "SelectedDirectory",
+      directory: row.directory,
+      project: { worktree: root, canonical: root, sandboxes: ["C:/OpenCode/selected-worktree"] },
+      onSessionCreate: (body) => {
+        creates.push(body)
+      },
+    })
+
+    await expect(page.getByRole("button", { name: "Local", exact: true })).toBeVisible()
+    await view.editor.fill("Check the selected folder.")
+    await expect(submit(page)).toBeEnabled()
+    await submit(page).click()
+
+    await expect.poll(() => creates).toEqual([expect.objectContaining({ location: { directory: row.directory } })])
+    await expectPath(page, sessionHref(String(creates[0]!.id)))
+    await expect(page.locator('[data-slot="user-message-text"]')).toHaveText("Check the selected folder.")
+  })
+}
+
 test("the dark new session panel exposes no lighter background at its rounded corners", async ({ page }) => {
   await page.setViewportSize({ width: 935, height: 522 })
   await openDraft(page, { name: "PanelCorner", seed: { theme: { id: "oc-2", scheme: "dark" } } })
