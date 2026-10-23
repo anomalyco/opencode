@@ -169,6 +169,8 @@ describe("config plugin reloads", () => {
     { file: "../opencode.jsonc", empty: false },
     { file: ".opencode/opencode.json", empty: false },
     { file: "../.opencode/opencode.jsonc", empty: true },
+    { file: ".agents/opencode/opencode.json", empty: false },
+    { file: "../.agents/opencode/opencode.jsonc", empty: true },
   ]) {
     it.live(`loads references when ${input.file} is first created and keeps watching it`, () =>
       Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
@@ -185,7 +187,7 @@ describe("config plugin reloads", () => {
               expect(yield* references.list()).toEqual([])
 
               if (input.empty) {
-                yield* Effect.promise(() => fs.mkdir(path.dirname(target)))
+                yield* Effect.promise(() => fs.mkdir(path.dirname(target), { recursive: true }))
                 const config = yield* Config.Service
                 yield* waitUntil(
                   config
