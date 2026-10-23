@@ -2,6 +2,12 @@
   content: "\200B";
 }
 
+/* Keep a final pasted newline editable; typed text returns to normal inline layout. */
+[data-component="composer-editor"] .composer-paste-tail:empty {
+  display: inline-block;
+  min-height: 1em;
+}
+
 /* Masks only cover hidden content; they do not reserve space in the toolbar. */
 [data-slot="composer-controls"][data-overflow-start="true"] {
   --mask-start: 16px;
