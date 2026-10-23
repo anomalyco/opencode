@@ -56,7 +56,11 @@ export const Prompt = Schema.Struct({
   max_width: Schema.optional(Schema.Union([PromptSize, Schema.Literal("auto")])).annotate({
     description: "Home prompt max width: a positive integer for a fixed cap, or 'auto' to scale with terminal width",
   }),
-}).annotate({ description: "Prompt size settings" })
+  undo_depth: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))).annotate({
+    description:
+      "How many steps of prompt edits input_undo can take back (default: 500). Typing is grouped by word, and a paste, a line delete or a submit is one step",
+  }),
+}).annotate({ description: "Prompt settings" })
 
 export const Info = Schema.Struct({
   $schema: Schema.optional(Schema.String),

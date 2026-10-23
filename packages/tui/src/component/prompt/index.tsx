@@ -33,6 +33,7 @@ import { createStore, produce, unwrap } from "solid-js/store"
 import { usePromptHistory, type PromptInfo } from "../../prompt/history"
 import { computePromptTraits } from "../../prompt/traits"
 import { expandPastedTextPlaceholders, expandTrackedPastedText } from "../../prompt/part"
+import { copyPromptParts, createPromptUndo, PromptUndoDepthDefault, type PromptUndoState } from "../../prompt/undo"
 import { usePromptStash } from "../../prompt/stash"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
@@ -139,6 +140,10 @@ function formatEditorContext(selection: EditorSelection) {
 }
 
 let stashed: { prompt: PromptInfo; cursor: number } | undefined
+let undoDepth = PromptUndoDepthDefault
+// Shared by every prompt so that undo survives the remount after a route change, which is what
+// lets undo after a submit bring back what was sent.
+const promptUndo = createPromptUndo({ depth: () => undoDepth })
 
 export function Prompt(props: PromptProps) {
   let input: TextareaRenderable
@@ -624,6 +629,8 @@ export function Prompt(props: PromptProps) {
     }
   })
 
+  onMount(() => queueMicrotask(settleUndo))
+
   onCleanup(() => {
     if (store.prompt.input) {
       stashed = { prompt: unwrap(store.prompt), cursor: input.cursorOffset }
@@ -654,6 +661,53 @@ export function Prompt(props: PromptProps) {
       }),
     }
   })
+
+  // Edits are recorded once the change that caused them has finished, so that text, parts and caret
+  // that are updated one after another are seen together. The text and parts the prompt sets
+  // itself while mounting, and on undo and redo, are not edits.
+  let undoApplying = true
+  let undoObserveQueued = false
+  undoDepth = tuiConfig.prompt?.undo_depth ?? PromptUndoDepthDefault
+
+  function undoState(): PromptUndoState {
+    return {
+      input: store.prompt.input,
+      parts: copyPromptParts(unwrap(store.prompt.parts)),
+      mode: store.mode,
+      cursor: input.cursorOffset,
+    }
+  }
+
+  function observeUndo() {
+    if (undoObserveQueued) return
+    undoObserveQueued = true
+    queueMicrotask(() => {
+      undoObserveQueued = false
+      if (undoApplying || !input || input.isDestroyed) return
+      promptUndo.observe(undoState())
+    })
+  }
+
+  function settleUndo() {
+    undoApplying = false
+    if (!input || input.isDestroyed) return
+    promptUndo.sync(undoState())
+  }
+
+  function stepUndo(direction: "undo" | "redo") {
+    if (!input || input.isDestroyed) return
+    if (!undoApplying) promptUndo.observe(undoState())
+    const current = undoState()
+    const target = direction === "undo" ? promptUndo.undo(current) : promptUndo.redo(current)
+    if (!target) return
+    undoApplying = true
+    input.setText(target.input)
+    setStore("prompt", { input: target.input, parts: copyPromptParts(target.parts) })
+    setStore("mode", target.mode)
+    restoreExtmarksFromParts(store.prompt.parts)
+    input.cursorOffset = target.cursor
+    queueMicrotask(settleUndo)
+  }
 
   function restoreExtmarksFromParts(parts: PromptInfo["parts"]) {
     input.extmarks.clear()
@@ -802,6 +856,19 @@ export function Prompt(props: PromptProps) {
       target: inputTarget,
       enabled: inputTarget() !== undefined && !props.disabled,
       bindings: tuiConfig.keybinds.get("prompt.paste"),
+    }
+  })
+
+  // Replaces the textarea's own undo and redo, which know nothing of the prompt's attachments and
+  // pasted text, and lose everything on submit.
+  useBindings(() => {
+    return {
+      target: inputTarget,
+      enabled: inputTarget() !== undefined && !props.disabled,
+      commands: [
+        { name: "input.undo", title: "Undo in prompt", category: "Prompt", run: () => stepUndo("undo") },
+        { name: "input.redo", title: "Redo in prompt", category: "Prompt", run: () => stepUndo("redo") },
+      ],
     }
   })
 
@@ -1380,8 +1447,12 @@ export function Prompt(props: PromptProps) {
                 auto()?.onInput(value)
                 syncExtmarksWithPromptParts()
                 setCursorVersion((value) => value + 1)
+                observeUndo()
               }}
-              onCursorChange={() => setCursorVersion((value) => value + 1)}
+              onCursorChange={() => {
+                setCursorVersion((value) => value + 1)
+                observeUndo()
+              }}
               onKeyDown={(e: { preventDefault(): void }) => {
                 if (props.disabled) {
                   e.preventDefault()
