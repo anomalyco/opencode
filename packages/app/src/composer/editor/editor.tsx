@@ -784,6 +784,7 @@ export function ComposerEditorAddMenu(props: {
           icon={<Icon name="plus" />}
           variant="ghost-muted"
           size="large"
+          class="pointer-coarse:size-11!"
           disabled={props.disabled}
           aria-label={props.title}
         />
@@ -898,7 +899,7 @@ export function ComposerEditorSelect(props: {
               as={Button}
               variant="ghost-muted"
               size="normal"
-              class={`max-w-[220px] justify-start ![font-weight:440] ${props.class ?? ""}`}
+              class={`min-w-0 max-w-[140px] sm:max-w-[220px] justify-start ![font-weight:440] pointer-coarse:h-11! ${props.class ?? ""}`}
               aria-label={props.title}
             >
               {content()}
@@ -925,7 +926,7 @@ export function ComposerEditorSelect(props: {
           }}
           variant="ghost-muted"
           size="normal"
-          class={`max-w-[220px] justify-start ![font-weight:440] ${props.class ?? ""}`}
+          class={`min-w-0 max-w-[140px] sm:max-w-[220px] justify-start ![font-weight:440] pointer-coarse:h-11! ${props.class ?? ""}`}
           aria-label={props.title}
           aria-haspopup="dialog"
           aria-expanded={store.open}
@@ -1145,7 +1146,7 @@ export function ComposerEditorSubmitButton(props: {
         tabIndex={props.mode === "normal" ? undefined : -1}
         icon={<Icon name={props.stopping ? "stop" : props.mode === "shell" ? "arrow-undo-down" : "arrow-up"} />}
         variant="submit"
-        class="size-7 rounded-md p-[6px]"
+        class="size-7 pointer-coarse:size-11! rounded-md p-[6px]"
         aria-label={props.stopping ? props.stopLabel : props.sendLabel}
         onClick={(event) => {
           event.preventDefault()
