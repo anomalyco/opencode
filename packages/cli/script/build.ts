@@ -54,14 +54,23 @@ const allTargets: {
   { os: "win32", arch: "x64", avx2: false },
 ]
 
+// Baseline variants only exist for x64, so --baseline should not also build the
+// regular target on those platforms.
+const hasBaseline = allTargets.some(
+  (item) => item.os === process.platform && item.arch === process.arch && item.avx2 === false,
+)
+
 const targets =
   requestedTarget !== undefined
     ? allTargets.filter((item) => targetName(item) === requestedTarget)
     : singleFlag
       ? allTargets.filter((item) => {
           if (item.os !== process.platform || item.arch !== process.arch) return false
+          // --single builds one native binary, so skip abi-specific (musl) variants.
+          if (item.abi !== undefined) return false
           if (item.avx2 === false) return baselineFlag
-          return item.abi === undefined
+          if (baselineFlag && hasBaseline) return false
+          return true
         })
       : allTargets
 if (!targets.length) throw new Error(`Unknown build target: ${requestedTarget}`)
