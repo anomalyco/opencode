@@ -377,7 +377,7 @@ export const SessionApi = HttpApi.make("session")
             identifier: "session.revert",
             summary: "Revert message",
             description:
-              "Revert a specific message in a session, undoing its effects and restoring the previous state.",
+              "Revert a specific message in a session, undoing its effects and restoring the previous state. Pass `files: false` to revert only the messages and leave every file untouched.",
           }),
         ),
         HttpApiEndpoint.post("unrevert", SessionPaths.unrevert, {

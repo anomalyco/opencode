@@ -27,6 +27,21 @@ Give me a quick summary of the codebase.
 
 ---
 
+## Message actions
+
+Click a prompt in the conversation to act on it:
+
+| Action | What it does |
+|---|---|
+| **Revert messages** | Removes this prompt and everything after it, and puts the prompt back in the prompt box. Files stay as they are. |
+| **Revert messages and files** | The same, and also reverts the file changes those messages made. |
+| **Copy** | Copies the prompt's text. |
+| **Fork** | Starts a new session from the conversation before this prompt. |
+
+The two Revert actions are listed with [`revert.files`](#options)'s choice first. The conversation shows the revert at once; if the server refuses it, for example because a turn is running, it comes back and a notice says why.
+
+---
+
 ## File references
 
 You can reference files in your messages using `@`. This does a fuzzy file search in the current working directory.
@@ -192,7 +207,7 @@ Start a new session. _Alias_: `/clear`
 Redo a previously undone message. Only available after using `/undo`.
 
 :::tip
-Any file changes will also be restored.
+If the undo reverted files, they are restored too, to how they were at the undo, overwriting any change made since. An undo that kept the files restores only the messages.
 :::
 
 Internally, this uses Git to manage the file changes. So your project **needs to
@@ -256,10 +271,10 @@ This command only controls whether thinking blocks are **displayed** - it does n
 
 ### undo
 
-Undo last message in the conversation. Removes the most recent user message, all subsequent responses, and any file changes.
+Undo last message in the conversation. Removes the most recent user message and all subsequent responses, and by default any file changes they made. Set [`revert.files`](#options) to `false` to keep the files.
 
 :::tip
-Any file changes made will also be reverted.
+`/undo-messages` always keeps the files and `/undo-files` always reverts them, whatever `revert.files` says.
 :::
 
 Internally, this uses Git to manage the file changes. So your project **needs to
@@ -270,6 +285,26 @@ be a Git repository**.
 ```
 
 **Keybind:** `ctrl+x u`
+
+---
+
+### undo-files
+
+Undo last message and the file changes it made.
+
+```bash frame="none"
+/undo-files
+```
+
+---
+
+### undo-messages
+
+Undo last message and keep every file as it is. Nothing is snapshotted, so a later `/redo` restores the messages only and never touches a file.
+
+```bash frame="none"
+/undo-messages
+```
 
 ---
 
@@ -410,6 +445,7 @@ This is separate from `opencode.json`, which configures server/runtime behavior.
 - `scroll_speed` - Controls how fast the TUI scrolls when using scroll commands (minimum: `0.001`, supports decimal values). Defaults to `3`. **Note: This is ignored if `scroll_acceleration.enabled` is set to `true`.**
 - `diff_style` - Controls diff rendering. `"auto"` adapts to terminal width, `"stacked"` always shows a single-column layout.
 - `cursor` - Controls the terminal cursor in TUI input fields. `style` defaults to `"block"`, can be `"underline"`, `"line"`, or `"default"`; `blinking` defaults to `true`. When `style` is `"default"`, the terminal default cursor is restored, so `blinking` has no effect.
+- `revert.files` - Whether `/undo`, its keybind and the first Revert action in [message actions](#message-actions) also revert the file changes the reverted messages made (default: `true`). The other choice is always one row down in message actions, or `/undo-messages` and `/undo-files`, which you can bind with `messages_undo_keep_files` and `messages_undo_with_files`.
 - `mouse` - Enable or disable mouse capture in the TUI (default: `true`). When disabled, the terminal's native mouse selection/scrolling behavior is preserved.
 - `attention` - Configures TUI desktop notifications and sounds. Disabled by default.
 
