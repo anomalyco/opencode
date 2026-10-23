@@ -1,10 +1,85 @@
 import { base64Encode } from "@opencode/util/encode"
-import { expect, test } from "@playwright/test"
+import { expect, test, type Locator } from "@playwright/test"
 import { NO_PROVIDER, REMOTE_SERVER, SERVER, project, provider, session } from "../utils/app"
 import { mockOpenCodeServer, mockServers } from "../utils/mock-server"
 import { expectSessionTitle } from "../utils/waits"
 
 test.use({ viewport: { width: 1280, height: 900 } })
+
+test("WSL distribution radios stay inset and aligned in both add-server lists", async ({ page }) => {
+  await mockOpenCodeServer(page, {
+    directory: "/repo",
+    project: project({ id: "proj_wsl_alignment", directory: "/repo", name: "WSL project" }),
+    provider: NO_PROVIDER,
+    sessions: [],
+    pageMessages: () => ({ items: [] }),
+  })
+  await page.goto(
+    `/e2e/utils/settings-wsl.html?${new URLSearchParams({
+      server: SERVER,
+      mode: "ready",
+      distros: "Ubuntu-24.04,AlmaLinux-9,Debian-WSL1",
+    })}`,
+  )
+  const settings = page.getByTestId("settings-screen")
+  await expect(settings.getByRole("tab", { name: "Ubuntu", exact: true })).toHaveCount(1)
+  await settings.getByRole("button", { name: "Add server", exact: true }).press("Enter")
+  await page.getByRole("menuitem", { name: "Add WSL server", exact: true }).click()
+  const dialog = page.getByRole("dialog")
+  const ubuntu = dialog.getByRole("radio", { name: "Ubuntu-24.04 OpenCode not installed", exact: true })
+  const alma = dialog.getByRole("radio", { name: "AlmaLinux-9 OpenCode not installed", exact: true })
+  await expect(ubuntu).toBeEnabled()
+  await expect(dialog.getByText("OpenCode not installed", { exact: true })).toHaveCount(2)
+  await expect(dialog.getByRole("radio", { name: "Debian-WSL1 Unsupported · Use WSL 2", exact: true })).toBeDisabled()
+  await expectDistroLayout(dialog)
+  await dialog
+    .locator('[data-slot="radio-v2-item-label"]')
+    .filter({ has: page.getByText("AlmaLinux-9", { exact: true }) })
+    .click()
+  await expect(alma).toBeChecked()
+  await alma.press("ArrowUp")
+  await expect(ubuntu).toBeChecked()
+  await expect(ubuntu).toBeFocused()
+  await expectDistroLayout(dialog)
+
+  await dialog.getByRole("button", { name: /Need another distro/ }).click()
+  await expect(dialog.getByRole("heading", { name: "Install distro", exact: true })).toBeVisible()
+  await expect(dialog.getByRole("radio", { name: "Debian", exact: true })).toBeChecked()
+  await expectDistroLayout(dialog)
+  await dialog
+    .locator('[data-slot="radio-v2-item-label"]')
+    .filter({ has: page.getByText("FedoraLinux-43", { exact: true }) })
+    .click()
+  await expect(dialog.getByRole("radio", { name: "FedoraLinux-43", exact: true })).toBeChecked()
+  await expectDistroLayout(dialog)
+})
+
+async function expectDistroLayout(dialog: Locator) {
+  // Keep the visible control inside its row and aligned with its label, including disabled rows.
+  await expect
+    .poll(() =>
+      dialog.locator(".settings-wsl-distro-row").evaluateAll((rows) =>
+        rows.every((row) => {
+          const control = row.querySelector('[data-slot="radio-v2-item-control"]')
+          const label = row.querySelector('[data-slot="radio-v2-item-label-text"]')
+
+          if (!control || !label) return false
+          const bounds = row.getBoundingClientRect()
+          const circle = control.getBoundingClientRect()
+          const text = label.getBoundingClientRect()
+
+          return (
+            circle.left - bounds.left >= 8 &&
+            circle.top - bounds.top >= 8 &&
+            circle.bottom < bounds.bottom &&
+            circle.right < text.left &&
+            Math.abs(circle.top + circle.height / 2 - (text.top + text.height / 2)) <= 4
+          )
+        }),
+      ),
+    )
+    .toBe(true)
+}
 
 for (const mode of ["failed", "stopped", "ready"] as const) {
   test(`manages a ${mode} configured WSL server from nested settings`, async ({ page }) => {
