@@ -98,6 +98,7 @@ export type PromptRef = {
 }
 
 const DRAFT_RETENTION_MIN_CHARS = 20
+const ABORT_TIMEOUT_MS = 15_000
 const revealedPromptMetadata = new WeakSet<object>()
 
 function randomIndex(count: number) {
@@ -360,6 +361,7 @@ export function Prompt(props: PromptProps) {
     mode: "normal" | "shell"
     extmarkToPart: Map<number, PromptPartRef>
     interrupt: number
+    aborting?: string
     placeholder: number
   }>({
     placeholder: randomIndex(list().length),
@@ -370,6 +372,36 @@ export function Prompt(props: PromptProps) {
   })
   let disposed = false
   let pasteQueue = Promise.resolve()
+
+  const aborting = createMemo(() => !!props.sessionID && store.aborting === props.sessionID)
+  let abortTimeout: ReturnType<typeof setTimeout> | undefined
+  createEffect(() => {
+    if (status() === "running" || store.aborting !== props.sessionID) return
+    clearTimeout(abortTimeout)
+    setStore("aborting", undefined)
+  })
+  onCleanup(() => clearTimeout(abortTimeout))
+
+  // Show "aborting" before the request leaves, so the key press is acknowledged on the next frame rather than
+  // whenever the server confirms. The session leaving "running" clears it; a failure or a stuck turn reports itself.
+  function interrupt(sessionID: string) {
+    setStore({ interrupt: 0, aborting: sessionID })
+    clearTimeout(abortTimeout)
+    abortTimeout = setTimeout(() => {
+      if (store.aborting !== sessionID) return
+      setStore("aborting", undefined)
+      toast.show({
+        message: `Session still running ${ABORT_TIMEOUT_MS / 1000}s after interrupt; press again to retry`,
+        variant: "warning",
+      })
+    }, ABORT_TIMEOUT_MS)
+    void client.api.session.interrupt({ sessionID, resume: true }).catch((error) => {
+      if (store.aborting !== sessionID) return
+      clearTimeout(abortTimeout)
+      setStore("aborting", undefined)
+      toast.show({ title: "Failed to interrupt session", message: errorMessage(error), variant: "error" })
+    })
+  }
 
   function enqueuePaste(run: (changed: () => boolean) => Promise<void>) {
     pasteQueue = pasteQueue
@@ -519,13 +551,7 @@ export function Prompt(props: PromptProps) {
             setStore("interrupt", 0)
           }, 5000)
 
-          if (store.interrupt >= 2) {
-            void client.api.session.interrupt({
-              sessionID: props.sessionID,
-              resume: true,
-            })
-            setStore("interrupt", 0)
-          }
+          if (store.interrupt >= 2) interrupt(props.sessionID)
           dialog.clear()
         },
       },
@@ -1900,14 +1926,19 @@ export function Prompt(props: PromptProps) {
                           <spinner color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
                         </Show>
                       </box>
-                      <PromptInterruptStatus
-                        armed={store.interrupt > 0}
-                        animations={animationsEnabled()}
-                        text={theme.text.base}
-                        subdued={theme.text.muted}
-                        warning={theme.text.feedback.warning.base}
-                        flash={theme.decrease(theme.text.feedback.warning.base, 2)}
-                      />
+                      <Show
+                        when={!aborting()}
+                        fallback={<text fg={theme.text.feedback.warning.base}>aborting…</text>}
+                      >
+                        <PromptInterruptStatus
+                          armed={store.interrupt > 0}
+                          animations={animationsEnabled()}
+                          text={theme.text.base}
+                          subdued={theme.text.muted}
+                          warning={theme.text.feedback.warning.base}
+                          flash={theme.decrease(theme.text.feedback.warning.base, 2)}
+                        />
+                      </Show>
                     </box>
                   </Match>
                   <Match when={move.progress()}>
