@@ -243,6 +243,43 @@ test("replaces a registered service whose process is gone without waiting for th
   expect(endpoint.url).toBe(replacement.url)
 })
 
+test("replaces a registration whose PID belongs to another process", async () => {
+  await using fixture = await serviceFixture()
+  const registration = fixture.registration
+  // What a registration looks like after a reboot: its URL answers as a different process, and the
+  // recorded PID was handed to something unrelated, so nothing in it describes a reachable service.
+  const unrelated = Bun.spawn([process.execPath, "-e", "setTimeout(() => {}, 30_000)"], {
+    stdout: "ignore",
+    stderr: "ignore",
+  })
+  const stranger = Bun.serve({ port: 0, fetch: () => Response.json({ version: "test", pid: process.pid }) })
+  try {
+    await writeFile(
+      registration,
+      JSON.stringify({
+        id: crypto.randomUUID(),
+        version: "test",
+        url: stranger.url.toString(),
+        pid: unrelated.pid,
+        password: "private",
+      }),
+    )
+
+    const endpoint = await run(
+      ensure({ file: registration, version: "test", command: fixture.command("delayed", "10") }),
+    )
+    const replacement = await Bun.file(registration).json()
+    fixture.track(replacement.pid)
+
+    expect(replacement.pid).not.toBe(unrelated.pid)
+    expect(endpoint.url).toBe(replacement.url)
+  } finally {
+    stranger.stop(true)
+    unrelated.kill("SIGKILL")
+    await unrelated.exited
+  }
+})
+
 test("signals an unresponsive registered service process", async () => {
   await using fixture = await serviceFixture()
   const registration = fixture.registration

@@ -2,6 +2,7 @@ import { afterEach, expect, test } from "bun:test"
 import {
   contenderFinished,
   contenderPool,
+  ownerState,
   type ServiceContender,
   spawnServiceContender,
 } from "../src/service-contender"
@@ -50,21 +51,40 @@ test("evicting a replaced owner forgets its failure and restarts the spawn clock
   expect(owner.child.exitCode).toBeNull()
 })
 
-test("a gone owner gets one spawn delay, and a live owner is never contested", () => {
+test("a live owner that stops answering is never contested, and other owners get one spawn delay", () => {
   const timing = { ...defaultEnsureTiming, spawnDelay: 60_000 }
   expect(contenderPool(timing).shouldRecruit("absent")).toBe(true)
 
   const dead = contenderPool(timing)
-  expect(dead.shouldRecruit("dead")).toBe(false)
+  expect(dead.shouldRecruit("gone")).toBe(false)
   dead.recruitNow()
-  expect(dead.shouldRecruit("dead")).toBe(true)
+  expect(dead.shouldRecruit("gone")).toBe(true)
 
   // A live owner holds its port, so an attempt could only fail to bind and report that as the
-  // startup failure of the whole ensure().
-  const live = contenderPool(timing)
-  expect(live.shouldRecruit("alive")).toBe(false)
-  live.recruitNow()
-  expect(live.shouldRecruit("alive")).toBe(false)
+  // startup failure of the whole ensure(). Only the recovery window may replace it.
+  const unanswered = contenderPool(timing)
+  expect(unanswered.shouldRecruit("unanswered")).toBe(false)
+  unanswered.recruitNow()
+  expect(unanswered.shouldRecruit("unanswered")).toBe(false)
+
+  // A registration whose PID belongs to another process is no owner at all: it gets one spawn
+  // delay and then a replacement, as before.
+  const refusing = contenderPool(timing)
+  expect(refusing.shouldRecruit("refusing")).toBe(false)
+  refusing.recruitNow()
+  expect(refusing.shouldRecruit("refusing")).toBe(true)
+})
+
+test("classifies a registered owner by what the probe learned", () => {
+  const owner = { id: "owner", url: "http://127.0.0.1:4096", pid: 4242 }
+  const answered = { timedOut: false, stalled: false }
+
+  expect(ownerState(undefined, answered, false)).toBe("absent")
+  expect(ownerState(owner, answered, false)).toBe("gone")
+  expect(ownerState(owner, { timedOut: true, stalled: false }, true)).toBe("unanswered")
+  // A probe that spanned a suspend says nothing about the owner, so it must not be contested.
+  expect(ownerState(owner, { timedOut: false, stalled: true }, true)).toBe("unanswered")
+  expect(ownerState(owner, answered, true)).toBe("refusing")
 })
 
 test("keeps at most two attempts alive", async () => {

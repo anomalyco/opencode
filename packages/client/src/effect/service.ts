@@ -1,6 +1,6 @@
 import { Effect, FileSystem, Option, Schedule, Schema } from "effect"
 import type { DiscoverOptions, EnsureOptions, StopOptions } from "../service.js"
-import { contenderPool, spawnServiceContender } from "../service-contender.js"
+import { contenderPool, ownerState, spawnServiceContender } from "../service-contender.js"
 import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
 import { matchesVersion } from "../service-version.js"
 import { PtyHandoff } from "../pty-handoff.js"
@@ -75,7 +75,7 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
     const service = registration.service
     const ownerAlive = yield* alive(info?.pid)
     const unresponsive = recovery.observe({
-      now: Date.now(),
+      now: performance.now(),
       info,
       timedOut: registration.timedOut,
       stalled: registration.stalled,
@@ -112,7 +112,7 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
 
     const failed = pool.reap()
     if (failed !== undefined) return yield* Effect.fail(failed)
-    if (pool.shouldRecruit(info === undefined ? "absent" : ownerAlive ? "alive" : "dead")) {
+    if (pool.shouldRecruit(ownerState(info, registration, ownerAlive))) {
       yield* announce("missing")
       pool.add(yield* spawnContender)
     }

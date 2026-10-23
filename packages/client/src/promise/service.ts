@@ -1,6 +1,6 @@
 import { readFile, rm } from "node:fs/promises"
 import type { DiscoverOptions, Endpoint, Info, EnsureOptions, StopOptions } from "../service.js"
-import { contenderPool, spawnServiceContender } from "../service-contender.js"
+import { contenderPool, ownerState, spawnServiceContender } from "../service-contender.js"
 import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
 import { matchesVersion } from "../service-version.js"
 import { PtyHandoff } from "../pty-handoff.js"
@@ -56,7 +56,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
       const info = registration.info
       const ownerAlive = info === undefined ? false : !stopped(info.pid)
       const unresponsive = recovery.observe({
-        now: Date.now(),
+        now: performance.now(),
         info,
         timedOut: registration.timedOut,
         stalled: registration.stalled,
@@ -93,7 +93,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
       } else {
         const failed = pool.reap()
         if (failed !== undefined) throw failed
-        if (pool.shouldRecruit(info === undefined ? "absent" : ownerAlive ? "alive" : "dead")) {
+        if (pool.shouldRecruit(ownerState(info, registration, ownerAlive))) {
           announce("missing")
           pool.add(await spawnContender())
         }
