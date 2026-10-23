@@ -60,6 +60,30 @@ test.describe("touch submission", () => {
     await expect(editor).toBeEmpty()
     await expect(editor).not.toBeFocused()
   })
+
+  test("Enter inserts a newline and Send submits the whole prompt", async ({ page }) => {
+    await openSubmitSession(page, 390, "ltr")
+    const editor = page.getByRole("textbox", { name: "Prompt", exact: true })
+    await expect(editor).toBeEditable()
+    await editor.fill("first line")
+    await expect(editor).toBeFocused()
+
+    await editor.press("Enter")
+    await editor.pressSequentially("second line")
+
+    const admitted = page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        new URL(response.url()).pathname === `/api/session/${fixture.targetID}/prompt`,
+    )
+
+    await page.getByRole("button", { name: "Send", exact: true }).tap()
+    const response = await admitted
+    expect(response.ok()).toBe(true)
+    const body = JSON.parse(response.request().postData() ?? "{}") as { text?: string }
+    expect(body.text).toBe("first line\nsecond line")
+    await expect(editor).toBeEmpty()
+  })
 })
 
 async function openSubmitSession(page: Page, width: number, direction: "ltr" | "rtl") {

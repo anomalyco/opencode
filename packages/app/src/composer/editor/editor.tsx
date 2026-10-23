@@ -1,3 +1,4 @@
+import { Predicate } from "effect"
 import {
   createEffect,
   createMemo,
@@ -95,6 +96,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
   const i18n = useI18n()
   const state = props.controller.state
   const view = props.controller.view
+  const touch = createMediaQuery("(hover: none)")
   let editor: HTMLDivElement | undefined
   let viewport: HTMLDivElement | undefined
   let controlsViewport!: HTMLDivElement
@@ -265,6 +267,14 @@ export function ComposerEditor(props: ComposerEditorProps) {
               }
 
               if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+                // Touch keyboards have no Shift key, so Enter inserts a line break and the send button submits.
+                if (touch() && !mod) {
+                  if (Predicate.isFunction(document.execCommand) && document.execCommand("insertLineBreak"))
+                    event.preventDefault()
+
+                  return
+                }
+
                 event.preventDefault()
 
                 if (event.repeat) return
