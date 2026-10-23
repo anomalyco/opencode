@@ -100,6 +100,7 @@ OpenCode has a list of keybinds that you can customize through `tui.json`.
       "key": "ctrl+v",
       "preventDefault": false
     },
+    "input_paste_raw": "<leader>v",
     "input_submit": "return",
     "input_newline": "shift+return,ctrl+return,alt+return,ctrl+j",
     "input_move_left": "left,ctrl+b",
@@ -198,6 +199,17 @@ You don't need to use a leader key for your keybinds but we recommend doing so.
 Some navigation keybinds intentionally do not use the leader key by default. For subagent sessions, the defaults are `session_child_first` = `<leader>down`, `session_child_cycle` = `right`, `session_child_cycle_reverse` = `left`, and `session_parent` = `up`.
 
 `leader_timeout` controls how long OpenCode waits for the next key after the leader key. It defaults to `2000` milliseconds.
+
+---
+
+## Paste Without a Placeholder
+
+A long paste goes into the prompt as a placeholder such as `[Pasted ~12 lines]`. To paste text as typed instead:
+
+- `input_paste_raw` (default `<leader>v`) pastes the clipboard as typed. Like `input_paste`, it reads the clipboard of the machine OpenCode runs on.
+- Pressing the leader key and then pasting with your terminal's own paste shortcut also pastes as typed. Use this when OpenCode runs on another machine, over ssh or in tmux: the terminal's paste carries the clipboard of the machine you are sitting at.
+
+`input_paste_raw` still attaches an image on the clipboard, the way `input_paste` does.
 
 ---
 
