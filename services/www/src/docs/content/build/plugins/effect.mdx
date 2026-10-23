@@ -1379,6 +1379,36 @@ attempt count remains a hard limit. `attempt` is the physical attempt being prop
 so the first retry is attempt `2`. Invalid delays (`NaN`, infinity, or negative values) fall back to the computed delay.
 Context-overflow recovery remains separate because it compacts the conversation instead of retrying the same request.
 
+Vote on whether a session turn ends or continues with a steer. The hook runs at natural turn end, before the turn
+completes. The initial `decision` stops the turn; set `shouldContinue` with `text` to steer it back to the model, for
+example when a gate's checks fail with cited work remaining.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    yield* ctx.session.hook("experimental.stopping", (event) =>
+      Effect.sync(() => {
+        if (event.continuations >= 1) return
+        if (hasFailedChecks(event.sessionID))
+          event.decision = { shouldContinue: true, text: "Checks failed; fix them and re-verify." }
+      }),
+    )
+  }),
+```
+
+Stopping hooks follow these rules:
+
+- Multiple hooks run in registration order, and later hooks see the current decision. A gate needing the final word registers last.
+- At most two continuations are granted per turn. Cap exhaustion stops the turn silently without calling hooks.
+- `continuations` is the pre-increment count, so hooks can enforce a tighter limit against it.
+- `step` is the model steps executed this turn relative to the current step budget: a manual compaction resets the count, mirroring the agent step budget, so a vote right after one can report `step: 0`. `stepsLimit` is the agent's configured step limit, when set.
+- A throwing hook stops the turn instead of failing it, and the failure is logged; interruption still propagates. An empty or whitespace-only `text` abstains and the turn ends.
+- Provider scoping is unavailable for `experimental.stopping`: the event carries no model, so a `providerID` voter would never fire.
+- The vote fires only when no fresh input is waiting: a queued prompt (or pending move) at the boundary starts a new turn instead, with no vote for the finished turn.
+- A location reload or session move landing exactly on the turn boundary ends the turn without a vote. The successor drain starts fresh with the counter at 0 — a missed continuation, never an extra one. A process crash at the same point behaves the same way.
+
+This hook is experimental and its name or shape may change.
+
 #### Reference
 
 ```ts
@@ -1394,6 +1424,7 @@ interface SessionHooks {
   readonly "experimental.ws.send": SessionWebSocketSend
   readonly "experimental.ws.receive": SessionWebSocketReceive
   readonly retry: SessionRetry
+  readonly "experimental.stopping": SessionStopping
 }
 
 type RetryDecision = { retry: false } | { retry: true; delay: number }
@@ -1405,6 +1436,16 @@ interface SessionRetry {
   readonly error: { type: string; message: string; status?: number }
   readonly attempt: number
   decision: RetryDecision
+}
+
+type StoppingDecision = { shouldContinue: false } | { shouldContinue: true; text: string }
+
+interface SessionStopping {
+  readonly sessionID: string
+  readonly step: number
+  readonly stepsLimit?: number
+  readonly continuations: number
+  decision: StoppingDecision
 }
 
 interface SessionHookDomain {

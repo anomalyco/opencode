@@ -29,6 +29,7 @@ import { SessionRunnerRetry } from "./retry.js"
 import { SessionStep } from "./step.js"
 import { ToolOutput } from "../../tool-output.js"
 import { Plugin } from "../../plugin.js"
+import { PluginHooks } from "../../plugin/hooks.js"
 import { MAX_STEPS_PROMPT } from "./max-steps.js"
 
 const CONTINUE_AFTER_INCOMPLETE_STREAM =
@@ -36,6 +37,10 @@ const CONTINUE_AFTER_INCOMPLETE_STREAM =
 
 const CONTINUE_AFTER_OUTPUT_LIMIT =
   "Your last response hit the output token limit (stop reason: length). Do not apologize, recap, or repeat yourself. Break the remaining work into smaller pieces."
+
+// A grant funds a fresh agent budget, so C=2 bounds a user turn at 3×N model
+// steps: one recovery plus one follow-through past a failure.
+const STOPPING_MAX_CONTINUATIONS = 2
 
 const layer = Layer.effect(
   Service,
@@ -48,6 +53,8 @@ const layer = Layer.effect(
     const db = (yield* Database.Service).db
     const compaction = yield* SessionCompaction.Service
     const plugins = yield* Plugin.Service
+    const hooks = yield* PluginHooks.Service
+    const admission = yield* SessionInbox.Service
     const title = yield* SessionTitle.Service
     const steps = yield* SessionStep.make
     // Title generation starts once input is visible and must not delay model execution.
@@ -58,6 +65,22 @@ const layer = Layer.effect(
       let force = input.force
       let continuing = input.continuation !== undefined
       let step = input.continuation?.step ?? 1
+      // Model steps executed this turn: mirrors the drain's turn segmentation
+      // (init from continuation.step, restart on fresh-input step resets) so
+      // the stopping vote reports budget-consistent counts. The drain-local
+      // `step` cannot serve: the would-be-idle observation resets it to 1
+      // just before a mid-work vote.
+      let executedSteps = step - 1
+      // Hook continuations granted this turn. Drain-owned, never host
+      // metadata (which is opaque to core): fresh drains start at 0, moves
+      // and compactions carry it when the turn continues across the handoff,
+      // and hook continuations loop in-drain so they can never leak across
+      // turns. A crash loses the count while an already-admitted steer
+      // survives — up to two fresh grants per crash, bounded and self-limiting.
+      // An idle-boundary move or location reload drops the continuation the
+      // same way (the successor starts fresh and the turn ends without a
+      // vote); fail-closed, documented in the hook docs.
+      let stoppingContinuations = input.continuation?.stoppingContinuations ?? 0
       let entering = true
       const promotable = input.promotable ?? "input"
       if (!force && !continuing) {
@@ -76,7 +99,10 @@ const layer = Layer.effect(
             while (true) {
               if (lifecycle.isClosed()) {
                 yield* restore(modelTransport.close(sessionID))
-                return DrainResult.Reloaded({ force, continuation: continuing ? { step } : undefined })
+                return DrainResult.Reloaded({
+                  force,
+                  continuation: continuing ? { step, stoppingContinuations } : undefined,
+                })
               }
               // Location entry and idle boundaries allow queued controls, not necessarily queued prompts.
               const pending = yield* SessionInbox.serialized(
@@ -105,12 +131,38 @@ const layer = Layer.effect(
                   return next
                 }),
               )
-              if (!continuing && pending?.delivery !== "steer") {
+              if (
+                !continuing &&
+                pending?.delivery !== "steer" &&
+                !(
+                  pending !== undefined &&
+                  pending.delivery === "queue" &&
+                  promotable === "steer" &&
+                  pending.type !== "move" &&
+                  pending.type !== "compaction"
+                )
+              ) {
                 entering = true
                 step = 1
+                // Fresh input starts a new turn; an empty inbox is the
+                // would-be-idle observation just before a vote, which must
+                // keep the count of the turn that ran. Moves and compactions
+                // carry the count across the handoff, and granted steers never
+                // reach here (delivery "steer"). A queued prompt parked
+                // behind a steer-only drain never promotes here either, so the
+                // whole block is skipped: resetting would fake a new turn the
+                // vote input cannot see (the parked vote must report the same
+                // step and continuations as an idle vote after the same
+                // history). The skipped entering/step resets are subsumed —
+                // promotion re-sets step before any runStep, entering is
+                // unobservable on this path, and captures are undefined
+                // while !continuing.
+                if (pending !== undefined) executedSteps = 0
+                if (pending !== undefined && pending.type !== "move" && pending.type !== "compaction")
+                  stoppingContinuations = 0
               }
               if (pending?.type === "move")
-                return DrainResult.Moved({ continuation: continuing ? { step } : undefined })
+                return DrainResult.Moved({ continuation: continuing ? { step, stoppingContinuations } : undefined })
               if (pending?.type === "compaction") {
                 const compacted = yield* restore(
                   Effect.gen(function* () {
@@ -155,8 +207,17 @@ const layer = Layer.effect(
                 force = false
                 continue
               }
-              if (!force && !continuing && (!pending || (pending.delivery === "queue" && promotable === "steer")))
+              if (!force && !continuing && (!pending || (pending.delivery === "queue" && promotable === "steer"))) {
+                // The vote runs interruptibly so untrusted voters can't stall
+                // abort/shutdown; only the drain-state mutation below stays masked.
+                // Like compaction, continue loops back to promotion, and the
+                // increment funds exactly the steer just admitted.
+                if (yield* restore(maybeContinueStopping(sessionID, executedSteps, stoppingContinuations))) {
+                  stoppingContinuations++
+                  continue
+                }
                 return DrainResult.Complete()
+              }
               const ready = yield* restore(
                 Effect.gen(function* () {
                   const selected = yield* prepareContext(sessionID)
@@ -172,7 +233,10 @@ const layer = Layer.effect(
                     yield* FiberMap.run(titles, sessionID, title.generate(sessionID), {
                       onlyIfMissing: true,
                     })
-                  if (promoted > 0) step = 1
+                  if (promoted > 0) {
+                    step = 1
+                    executedSteps = 0
+                  }
                   return { _tag: "Ready" as const, context: yield* context.load(selected) }
                 }),
               )
@@ -187,6 +251,7 @@ const layer = Layer.effect(
         if (next._tag !== "Ready") return next
         continuing = yield* runStep(next.context, step)
         step++
+        executedSteps++
         force = false
         entering = false
       }
@@ -331,6 +396,65 @@ const layer = Layer.effect(
       }
     })
 
+    /**
+     * Pre-terminal continuation vote at natural turn end. Returns true when a
+     * voter granted a continuation: a synthetic steer is admitted and the
+     * caller funds it by incrementing its drain-owned count, so the caller
+     * must not complete. Fail-closed throughout — abstention, silent cap
+     * exhaustion, and voter or infra failure all preserve natural exit.
+     * Interrupts still propagate.
+     */
+    const maybeContinueStopping = Effect.fn("SessionRunner.maybeContinueStopping")(function* (
+      sessionID: SessionSchema.ID,
+      // Model steps executed this turn (0 at fresh entry); mirrors the
+      // drain's turn segmentation so voters reason against the same budget
+      // the `step >= steps` check enforces.
+      step: number,
+      // Hook continuations granted so far this turn (pre-increment).
+      continuations: number,
+    ) {
+      if (!(yield* hooks.has("session", "experimental.stopping"))) return false
+      return yield* Effect.gen(function* () {
+        // Cap exhaustion is silent by design: no voter call, natural exit.
+        if (continuations >= STOPPING_MAX_CONTINUATIONS) return false
+        const selected = yield* context.select(sessionID)
+        const stepsLimit = selected.agent.info.steps
+        const event: PluginHooks.Domains["session"]["experimental.stopping"] = {
+          sessionID,
+          step,
+          ...(stepsLimit !== undefined ? { stepsLimit } : {}),
+          continuations,
+          decision: { shouldContinue: false },
+        }
+        const triggered = yield* hooks.trigger("session", "experimental.stopping", event)
+        // An empty grant would spend a capped continuation and a model step on
+        // nothing, so a buggy voter's empty text abstains (fail-closed).
+        if (!triggered.decision.shouldContinue || triggered.decision.text.trim() === "") return false
+        yield* admission.admit({
+          id: SessionMessage.ID.create(),
+          sessionID,
+          item: {
+            type: "synthetic",
+            payload: SessionInbox.SyntheticPayload.make({ text: triggered.decision.text }),
+            delivery: SessionInbox.Delivery.make("steer"),
+          },
+        })
+        return true
+      }).pipe(
+        // A throwing voter surfaces as a defect, never a typed failure (all
+        // session-hook failure channels are `never`), so `catchAll` alone
+        // would miss it and fail the drain into `Execution.Failed`.
+        // Interrupts still propagate (the `move.ts` fail-closed idiom).
+        // Thrown failures are logged: without this a failing voter would
+        // stop every turn silently and be painful to debug.
+        Effect.catchCause((cause) =>
+          Cause.hasInterrupts(cause)
+            ? Effect.failCause(Cause.fromReasons<never>(cause.reasons.filter(Cause.isInterruptReason)))
+            : Effect.logWarning("stopping voter failed", { sessionID, cause }).pipe(Effect.as(false)),
+        ),
+      )
+    })
+
     const settleStaleCompactions = Effect.fn("SessionRunner.settleStaleCompactions")(function* (
       sessionID: SessionSchema.ID,
     ) {
@@ -401,7 +525,9 @@ export const node = makeLocationNode({
     SessionModelTransport.node,
     SessionStore.node,
     SessionCompaction.node,
+    SessionInbox.node,
     Plugin.node,
+    PluginHooks.node,
     SessionTitle.node,
     Snapshot.node,
     ToolOutput.node,

@@ -136,6 +136,24 @@ export interface SessionRetry {
   decision: SessionRetryDecision
 }
 
+export type SessionStoppingDecision = { shouldContinue: false } | { shouldContinue: true; text: string }
+
+/**
+ * Pre-terminal continuation vote, fired at natural turn end before
+ * `DrainResult.Complete()` is returned. Mutate `decision` to continue the
+ * turn with a steer; abstention preserves natural exit (fail-closed).
+ * Sequential same-reference dispatch in registration order, last-writer-wins
+ * (the `retry` precedent). `continuations` is the pre-increment count of hook
+ * continuations granted so far this turn.
+ */
+export interface SessionStopping {
+  readonly sessionID: Session.ID
+  readonly step: number
+  readonly stepsLimit?: number
+  readonly continuations: number
+  decision: SessionStoppingDecision
+}
+
 export interface SessionHooks {
   readonly prompt: SessionPrompt
   readonly context: SessionContext
@@ -149,6 +167,7 @@ export interface SessionHooks {
   readonly "experimental.ws.send": SessionWebSocketSend
   readonly "experimental.ws.receive": SessionWebSocketReceive
   readonly retry: SessionRetry
+  readonly "experimental.stopping": SessionStopping
 }
 
 export type SessionDomain = Pick<
