@@ -186,6 +186,33 @@ Use `oauth: false` only when the server exclusively uses an API key or another h
 }
 ```
 
+### Baizhi Agent Toolkit
+
+[Baizhi Agent Toolkit](https://baizhi.cloud/landing/agent-toolkit) provides hosted web search, webpage reading, and structured extraction. Configure it with a Bearer API key and keep it disabled until the key is ready:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "baizhi": {
+        "type": "remote",
+        "url": "https://agent-toolkit.app.baizhi.cloud/mcp",
+        "oauth": false,
+        "disabled": true,
+        "headers": {
+          "Authorization": "Bearer {env:BAIZHI_API_KEY}",
+        },
+      },
+    },
+  },
+}
+```
+
+Create a key in the [Baizhi console](https://agent-toolkit.app.baizhi.cloud/) and set `BAIZHI_API_KEY` in the environment that launches OpenCode. Supply the key without a `Bearer` prefix, keep it out of configuration files and version control, and change `disabled` to `false` when ready to connect.
+
+A Baizhi Cloud account and sufficient service credits are required. Connecting can discover tools; tool calls send their inputs to Baizhi and may consume credits. Review [permissions](#permissions) before using `baizhi` for web research.
+
 ## OAuth
 
 OAuth is enabled for remote servers unless `oauth` is `false`. OpenCode discovers the authorization server, signs in with PKCE, and refreshes tokens. Credentials are stored outside project configuration.
