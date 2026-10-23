@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import path from "node:path"
 import { agent, model, renderLocal, session } from "../fixture/local"
 import { json } from "../fixture/tui-client"
 
@@ -54,6 +55,68 @@ test("switching agents restores their model and variant within the session", asy
   setup.local.agent.move(-1)
   expect(setup.local.model.selection()).toEqual({ providerID: "provider", modelID: "first", variant: "low" })
   setup.local.agent.set("plan")
+  expect(setup.local.model.selection()).toEqual({ providerID: "provider", modelID: "third", variant: "high" })
+})
+
+test("recent models picked in another client do not change the open tab", async () => {
+  await using setup = await renderLocal({
+    models: [model("first"), model("second")],
+    agents: [agent("build"), agent("plan")],
+    preferences: { recent: [{ providerID: "provider", modelID: "first" }] },
+  })
+  await setup.waitFor(async () => {
+    await Bun.sleep(10)
+    return setup.local.model.current()?.modelID === "first"
+  })
+  await Bun.write(
+    path.join(setup.state, "model.json"),
+    JSON.stringify({
+      recent: [
+        { providerID: "provider", modelID: "second" },
+        { providerID: "provider", modelID: "first" },
+      ],
+    }),
+  )
+  const started = Date.now()
+  while (setup.local.model.recent()[0]?.modelID !== "second") {
+    if (Date.now() - started > 2_000) throw new Error("Timed out waiting for shared recent models")
+    await Bun.sleep(20)
+  }
+  expect(setup.local.model.current()?.modelID).toBe("first")
+})
+
+test("a new tab opened from a session inherits its agent, model and variant", async () => {
+  await using setup = await renderLocal({
+    models: [model("first", ["low", "high"]), model("second", ["low", "high"]), model("third", ["low", "high"])],
+    agents: [agent("build"), agent("plan")],
+    sessions: [session("ses_first", { providerID: "provider", id: "first", variant: "low" })],
+    preferences: { recent: [{ providerID: "provider", modelID: "second" }] },
+  })
+  await setup.data.session.sync("ses_first")
+  setup.route.navigate({ type: "session", sessionID: "ses_first" })
+  setup.local.agent.set("plan")
+  setup.local.model.set({ providerID: "provider", modelID: "third" })
+  setup.local.model.variant.set("high")
+  setup.route.navigate({ type: "home" })
+  await setup.waitFor(async () => {
+    await Bun.sleep(10)
+    return setup.local.agent.current()?.id === "plan"
+  })
+  expect(setup.local.model.selection()).toEqual({ providerID: "provider", modelID: "third", variant: "high" })
+})
+
+test("re-selecting the carried model on the new-session screen keeps its variant", async () => {
+  await using setup = await renderLocal({
+    models: [model("first", ["low", "high"]), model("third", ["low", "high"])],
+    agents: [agent("build")],
+    sessions: [session("ses_first", { providerID: "provider", id: "third", variant: "high" })],
+    preferences: { variant: { "provider/third": "low" } },
+  })
+  await setup.data.session.sync("ses_first")
+  setup.route.navigate({ type: "session", sessionID: "ses_first" })
+  expect(setup.local.model.selection()).toEqual({ providerID: "provider", modelID: "third", variant: "high" })
+  setup.route.navigate({ type: "home" })
+  setup.local.model.set({ providerID: "provider", modelID: "third" })
   expect(setup.local.model.selection()).toEqual({ providerID: "provider", modelID: "third", variant: "high" })
 })
 
