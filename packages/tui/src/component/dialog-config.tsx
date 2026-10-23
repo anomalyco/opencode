@@ -66,6 +66,15 @@ export const settings: Setting[] = [
     keywords: ["side panel"],
   },
   {
+    title: "Session ID in sidebar",
+    category: "Session",
+    path: ["session", "sidebar_id"],
+    default: false,
+    values: [false, true],
+    labels: ["off", "on"],
+    keywords: ["session id", "ses_", "sidebar"],
+  },
+  {
     title: "Scrollbar",
     category: "Session",
     path: ["session", "scrollbar"],
