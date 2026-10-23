@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process"
+import type { Info } from "./service.js"
 import type { EnsureTiming } from "./service-timing.js"
 
 export type ServiceContender = {
@@ -55,6 +56,28 @@ export function spawnServiceContender(
 }
 
 /**
+ * How a registered owner appears to one `ensure()` poll, which decides whether another attempt
+ * may compete with it.
+ */
+export type OwnerState = "absent" | "unanswered" | "gone" | "refusing"
+
+/**
+ * Classify the registered owner. Only an owner that did not answer may be silently recovering: a
+ * probe that timed out, or one that spanned a suspend, says nothing about whether the process still
+ * holds its port. A dead PID leaves the port free, and a registration pointing at a process that
+ * refuses the connection (or answers as another PID) no longer describes a service at all.
+ */
+export function ownerState(
+  info: Info | undefined,
+  probe: { readonly timedOut: boolean; readonly stalled: boolean },
+  alive: boolean,
+): OwnerState {
+  if (info === undefined) return "absent"
+  if (!alive) return "gone"
+  return probe.timedOut || probe.stalled ? "unanswered" : "refusing"
+}
+
+/**
  * The startup attempts of one `ensure()` call. It keeps at most two attempts alive, remembers
  * the first startup failure, and backs off when attempts exit cleanly because another one won.
  */
@@ -101,14 +124,15 @@ export function contenderPool(timing: EnsureTiming) {
       return contenders.size === 0 ? failure : undefined
     },
     /**
-     * Whether to start another attempt now. A live owner holds its port, so a contender could only
-     * fail to bind it and report that failure for the whole `ensure()`. An owner that is gone leaves
-     * the port free and waits one spawn delay before an attempt competes with its exit.
+     * Whether to start another attempt now. An unanswered owner holds its port and may still be
+     * recovering (from a suspend, for example), so only the recovery window may replace it. A gone
+     * owner leaves the port free, and a refusing one is no longer the service the registration
+     * describes; both wait one spawn delay before an attempt competes.
      */
-    shouldRecruit(owner: "absent" | "alive" | "dead") {
+    shouldRecruit(owner: OwnerState) {
       if (owner === "absent") return due()
       if (lastSpawn === 0) lastSpawn = Date.now()
-      if (owner === "alive") return false
+      if (owner === "unanswered") return false
       return due()
     },
     add(contender: ServiceContender) {

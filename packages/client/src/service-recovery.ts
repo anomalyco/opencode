@@ -7,6 +7,7 @@ import type { EnsureTiming } from "./service-timing.js"
  * process check; this module only decides when that evidence justifies replacing the service.
  */
 export type Sample = {
+  /** Monotonic timestamp (`performance.now()`): a wall-clock jump on resume must not close the window. */
   readonly now: number
   readonly info: Info | undefined
   readonly timedOut: boolean
