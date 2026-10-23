@@ -22,6 +22,8 @@ export const PATH = "/v1/speech-to-text"
 // ---------------------------------------------------------------------------
 
 export type ElevenLabsTranscriptionOptions = {
+  /** Experimental batch edit; adds a 30% surcharge. The original timed transcript is unchanged. */
+  readonly transcript_edit?: string
   readonly tag_audio_events?: boolean
   readonly timestamps_granularity?: OpenString<"none" | "word" | "character">
   readonly diarization_threshold?: number
@@ -60,6 +62,16 @@ const Transcript = Schema.Struct({
   words: optionalNull(Schema.Array(Token)),
   transcription_id: optionalNull(Schema.String),
   audio_duration_secs: optionalNull(Schema.Number),
+  edited_transcript: optionalNull(
+    Schema.Union([
+      Schema.Struct({ kind: Schema.Literal("transcript"), text: Schema.String }),
+      Schema.Struct({
+        kind: Schema.Literal("error"),
+        error_type: Schema.Literal("edit_failed"),
+        message: Schema.String,
+      }),
+    ]),
+  ),
 })
 
 // ---------------------------------------------------------------------------
@@ -84,6 +96,22 @@ const validate = (request: Request, overlay: Record<string, unknown>) => {
   // Webhook requests return 202 with no transcript; the result arrives at a configured webhook instead.
   if (overlay.webhook === true)
     return Effect.fail(route.unsupported("transcription.webhook", `${route.name} does not deliver to webhooks`))
+  if (overlay.transcript_edit != null) {
+    if (typeof overlay.transcript_edit !== "string" || overlay.transcript_edit.length > 2000)
+      return Effect.fail(
+        route.unsupported(
+          "transcription.transcript_edit",
+          `${route.name} transcript_edit must be a string of at most 2000 characters`,
+        ),
+      )
+    if (overlay.entity_detection != null || overlay.entity_redaction != null || overlay.use_multi_channel === true)
+      return Effect.fail(
+        route.unsupported(
+          "transcription.transcript_edit",
+          `${route.name} transcript_edit cannot be combined with entity_detection, entity_redaction, or use_multi_channel`,
+        ),
+      )
+  }
   // Separate multichannel output replaces the transcript with one transcript per channel.
   if (overlay.use_multi_channel === true && overlay.multichannel_output_style !== "combined")
     return Effect.fail(
@@ -172,6 +200,7 @@ const decodeResponse = Effect.fn("ElevenLabsTranscription.decodeResponse")(funct
   const tokens = transcript.words ?? []
   const duration = transcript.audio_duration_secs ?? undefined
   const transcriptionID = transcript.transcription_id ?? undefined
+  const edited = transcript.edited_transcript
   return new TranscriptionResponse({
     text: transcript.text,
     segments: diarizes(context.request) ? speakerTurns(tokens) : undefined,
@@ -185,7 +214,32 @@ const decodeResponse = Effect.fn("ElevenLabsTranscription.decodeResponse")(funct
     language: transcript.language_code?.toLowerCase(),
     durationSeconds: duration,
     usage: duration === undefined ? undefined : { type: "seconds", seconds: duration },
-    providerMetadata: transcriptionID === undefined ? undefined : { elevenlabs: { transcriptionId: transcriptionID } },
+    notices:
+      edited?.kind === "error"
+        ? [
+            {
+              type: "other",
+              message: `ElevenLabs transcript edit failed: ${edited.message}`,
+              providerMetadata: { elevenlabs: { errorType: edited.error_type } },
+            },
+          ]
+        : undefined,
+    providerMetadata:
+      transcriptionID === undefined && edited == null
+        ? undefined
+        : {
+            elevenlabs: {
+              ...(transcriptionID === undefined ? {} : { transcriptionId: transcriptionID }),
+              ...(edited == null
+                ? {}
+                : {
+                    editedTranscript:
+                      edited.kind === "transcript"
+                        ? { kind: edited.kind, text: edited.text }
+                        : { kind: edited.kind, errorType: edited.error_type, message: edited.message },
+                  }),
+            },
+          },
   })
 })
 

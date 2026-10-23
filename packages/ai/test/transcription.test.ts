@@ -571,6 +571,93 @@ describe("Transcription", () => {
     }),
   )
 
+  it.effect("keeps ElevenLabs transcript edits separate from the original timed transcript", () =>
+    Effect.gen(function* () {
+      const calls: Array<Call> = []
+      const response = yield* Transcription.generate({
+        model: elevenlabs,
+        audio,
+        providerOptions: { transcript_edit: "Write dates in ISO 8601 format" },
+      }).pipe(
+        Effect.provide(
+          layer((input) =>
+            observe(calls, input).pipe(
+              Effect.as(
+                json(input, {
+                  text: "the twelfth of July",
+                  words: [{ text: "twelfth", type: "word", start: 0.5, end: 0.9 }],
+                  transcription_id: "tr_2",
+                  edited_transcript: { kind: "transcript", text: "2026-07-12" },
+                }),
+              ),
+            ),
+          ),
+        ),
+      )
+      expect((yield* formFields(calls[0])).transcript_edit).toEqual(["Write dates in ISO 8601 format"])
+      expect(response.text).toBe("the twelfth of July")
+      expect(response.words).toMatchObject([{ text: "twelfth", startSeconds: 0.5, endSeconds: 0.9 }])
+      expect(response.providerMetadata).toEqual({
+        elevenlabs: { transcriptionId: "tr_2", editedTranscript: { kind: "transcript", text: "2026-07-12" } },
+      })
+      expect(response.notices).toBeUndefined()
+    }),
+  )
+
+  it.effect("exposes an ElevenLabs edit failure without losing the successful transcription", () =>
+    Effect.gen(function* () {
+      const response = yield* Transcription.generate({
+        model: elevenlabs,
+        audio,
+        providerOptions: { transcript_edit: "Write dates in ISO 8601 format" },
+      }).pipe(
+        Effect.provide(
+          layer((input) =>
+            Effect.succeed(
+              json(input, {
+                text: "Original transcript",
+                edited_transcript: { kind: "error", error_type: "edit_failed", message: "Please try again" },
+              }),
+            ),
+          ),
+        ),
+      )
+      expect(response.text).toBe("Original transcript")
+      expect(response.providerMetadata).toEqual({
+        elevenlabs: { editedTranscript: { kind: "error", errorType: "edit_failed", message: "Please try again" } },
+      })
+      expect(response.notices).toEqual([
+        {
+          type: "other",
+          message: "ElevenLabs transcript edit failed: Please try again",
+          providerMetadata: { elevenlabs: { errorType: "edit_failed" } },
+        },
+      ])
+    }),
+  )
+
+  it.effect("rejects incompatible ElevenLabs edit options before sending audio", () =>
+    Effect.gen(function* () {
+      const errors = yield* Effect.all(
+        [
+          { transcript_edit: "Edit", entity_detection: ["person"] },
+          { transcript_edit: "Edit", entity_redaction: ["person"] },
+          { transcript_edit: "Edit", use_multi_channel: true, multichannel_output_style: "combined" },
+          { transcript_edit: "x".repeat(2001) },
+        ].map((providerOptions) =>
+          Transcription.generate({ model: elevenlabs, audio, providerOptions }).pipe(Effect.flip),
+        ),
+      )
+      const overlayError = yield* Transcription.generate({
+        model: elevenlabs,
+        audio,
+        providerOptions: { transcript_edit: "Edit" },
+        http: { body: { entity_redaction: ["person"] } },
+      }).pipe(Effect.flip)
+      expect([...errors, overlayError].map((error) => error.reason._tag)).toEqual(Array(5).fill("UnsupportedOperation"))
+    }).pipe(Effect.provide(layer(() => Effect.die("an unsupported request reached the network")))),
+  )
+
   it.effect("rejects reading an AssemblyAI result before the transcript finishes", () =>
     Effect.gen(function* () {
       const generation = yield* Transcription.resume(assemblyai, { transcriptID: "tr_1" })
