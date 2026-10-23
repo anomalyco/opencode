@@ -295,6 +295,7 @@ export function createTimelineSearchController(input: {
     query: {
       value: () => state.value,
       placeholder: () => language.t("session.search.placeholder"),
+      clearLabel: () => language.t("common.clear"),
       noResults: () => language.t("session.search.noResults"),
       open,
       close,
