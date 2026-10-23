@@ -515,7 +515,8 @@ context.keymap.layer(() => ({
 ## Slots
 
 Slots insert or replace JSX at `app`, `home.footer`, `home.footer.status`, `prompt.footer`, `prompt.footer.status`,
-`prompt.footer.file`, `session.composer.top`, `sidebar.content`, or `sidebar.footer`.
+`prompt.footer.file`, `session.composer.top`, `session.tabs.horizontal`, `session.tabs.vertical`, `sidebar.content`,
+or `sidebar.footer`.
 
 ```tsx
 return context.ui.slot({
@@ -539,6 +540,23 @@ after OpenCode's health indicators and before the version.
 
 ```tsx
 context.ui.slot({ append: "home.footer.status", render: () => <text>SYNCED</text> })
+```
+
+`session.tabs.vertical` and `session.tabs.horizontal` wrap the session tab bar in each layout, and only the one in
+use is mounted. Their input has the bar's `width`; the host keeps owning its size, resizing and visibility. Replace
+one to draw your own bar from `context.ui.tabs`, and the other layout keeps the built-in bar.
+
+```tsx
+context.ui.slot({
+  replace: "session.tabs.vertical",
+  render: (bar) => (
+    <box width={bar.width} flexDirection="column">
+      <For each={context.ui.tabs.list()}>
+        {(tab) => <text onMouseUp={() => context.ui.tabs.focus(tab.sessionID)}>{tab.title}</text>}
+      </For>
+    </box>
+  ),
+})
 ```
 
 ### Session panels

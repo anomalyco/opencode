@@ -1418,13 +1418,19 @@ function App() {
         onMouseUp={tabsResize.onMouseUp}
       >
         <Show when={verticalTabsVisible()}>
-          <SessionTabs orientation="vertical" width={tabsResize.size()} />
+          <box width={tabsResize.size()} height="100%" flexShrink={0} flexDirection="column">
+            <Slot path="session.tabs.vertical" input={{ width: tabsResize.size() }}>
+              <SessionTabs orientation="vertical" width={tabsResize.size()} />
+            </Slot>
+          </box>
         </Show>
         <box flexGrow={1} minWidth={0} flexDirection="column">
           <Show when={plugins.ready()}>
             <box flexGrow={1} minHeight={0} flexDirection="column">
               <Show when={tabsVisible() && !tabsVertical()}>
-                <SessionTabs />
+                <Slot path="session.tabs.horizontal" input={{ width: dimensions().width }}>
+                  <SessionTabs />
+                </Slot>
               </Show>
               <Switch>
                 <Match when={route.data.type === "home"}>
