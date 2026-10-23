@@ -55,6 +55,8 @@ export const Definitions = {
   "app.toggle.diffwrap": keybind("none", "Toggle diff wrapping"),
   "app.toggle.paste_summary": keybind("none", "Toggle paste summary"),
   "command.palette.show": keybind("ctrl+p", "List available commands"),
+  "notification.history": keybind("none", "Open notification history"),
+  "notification.history.clear": keybind("ctrl+x", "Clear notification history"),
   "help.show": keybind("none", "Open help dialog"),
   "docs.open": keybind("none", "Open documentation"),
   "opencode.settings": keybind("none", "Open settings"),

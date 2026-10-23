@@ -15,6 +15,14 @@ export type ToastOptions = {
     run: () => void
   }
 }
+export type ToastHistoryEntry = Pick<ToastOptions, "title" | "message" | "variant"> & {
+  id: number
+  time: number
+  truncated: boolean
+}
+
+export const ToastHistoryLimits = { entries: 100, entryText: 8192, totalText: 65536 } as const
+
 type ToastInput = Omit<ToastOptions, "duration"> & { duration?: number }
 
 function ToastSurface(props: {
@@ -122,8 +130,10 @@ function init() {
   const [store, setStore] = createStore({
     currentToast: null as ToastOptions | null,
     queue: [] as ToastOptions[],
+    history: [] as ToastHistoryEntry[],
   })
 
+  let nextID = 0
   let timeoutHandle: NodeJS.Timeout | null = null
   let startedAt = 0
   let remaining = 0
@@ -157,6 +167,28 @@ function init() {
 
   const toast = {
     show(options: ToastInput) {
+      // Copy display data only: history must not retain action closures or their captured state.
+      const title = options.title?.slice(0, ToastHistoryLimits.entryText).replace(/[\uD800-\uDBFF]$/, "")
+      const message = options.message
+        .slice(0, ToastHistoryLimits.entryText - (title?.length ?? 0))
+        .replace(/[\uD800-\uDBFF]$/, "")
+      const entry: ToastHistoryEntry = {
+        id: nextID++,
+        time: Date.now(),
+        title,
+        message,
+        variant: options.variant,
+        truncated: title !== options.title || message !== options.message,
+      }
+      setStore("history", (history) => {
+        const next = [entry, ...history].slice(0, ToastHistoryLimits.entries)
+        let size = 0
+        const end = next.findIndex((item) => {
+          size += (item.title?.length ?? 0) + item.message.length
+          return size > ToastHistoryLimits.totalText
+        })
+        return end < 0 ? next : next.slice(0, end)
+      })
       const toastOptions = { ...options, duration: options.duration ?? 5000 }
       if (store.currentToast && (paused || store.queue.length > 0)) {
         setStore("queue", (queue) => [...queue, toastOptions])
@@ -187,6 +219,12 @@ function init() {
     },
     get currentToast(): ToastOptions | null {
       return store.currentToast
+    },
+    get history(): readonly ToastHistoryEntry[] {
+      return store.history
+    },
+    clearHistory() {
+      setStore("history", [])
     },
     get pending() {
       return store.queue.length
