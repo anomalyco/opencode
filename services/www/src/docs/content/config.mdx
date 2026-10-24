@@ -628,6 +628,7 @@ All experimental settings live under the `experimental` key:
     "portable_shell_scanner": true,
     "background_compaction": true,
     "location_idle_timeout": "4 hours",
+    "precompute_compaction": true,
   },
 }
 ```
@@ -674,6 +675,30 @@ value.
   },
 }
 ```
+
+### Background compaction
+
+Set `precompute_compaction` to `true` to write the [compaction](/compaction) summary in the background before automatic
+compaction is due, so the session doesn't pause while the summary is generated. Defaults to `false`.
+
+```jsonc
+{
+  "experimental": {
+    "precompute_compaction": true,
+  },
+}
+```
+
+Once the context reaches 85% of the compaction threshold, OpenCode summarizes everything before the latest response
+and holds the summary. When compaction is due, including a manual request, it uses that summary and keeps the messages
+since it verbatim. If the summary is still being written, compaction waits for it.
+
+| Case | Behavior |
+| --- | --- |
+| Cost | A background summary costs tokens even if it is never used. None starts until the prompt is at least 64k tokens. |
+| Stale summary | Discarded, and the conversation summarized as usual, if the model, instructions, or conversation start changed, or too much was added since it was written. |
+| Requires | `compaction.auto` enabled and OpenCode's own summaries. Not used with native provider compaction or when recovering from a request rejected as too long. |
+| Restart | Held summaries live in memory and are lost when OpenCode restarts. |
 
 ### Deprecated policies
 
