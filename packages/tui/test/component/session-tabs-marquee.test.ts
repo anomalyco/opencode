@@ -1,3 +1,4 @@
+import { Session } from "@opencode/schema/session"
 import { afterEach, describe, expect, jest, test } from "bun:test"
 import { createRoot } from "solid-js"
 import { createMarquee, createTabMarquee } from "../../src/component/session-tabs"
@@ -9,14 +10,14 @@ describe("session tab marquee", () => {
     jest.useFakeTimers()
     const scope = createRoot((dispose) => ({ marquee: createMarquee(() => false), dispose }))
 
-    scope.marquee.enter("first", "opencode", 6)
-    expect(scope.marquee.active()).toBe("first")
+    scope.marquee.enter(Session.ID.make("first", { disableChecks: true }), "opencode", 6)
+    expect<unknown>(scope.marquee.active()).toBe("first")
     expect(scope.marquee.offset()).toBe(0)
 
     jest.advanceTimersByTime(600)
     expect(scope.marquee.offset()).toBe(1)
 
-    scope.marquee.enter("second", "short", 6)
+    scope.marquee.enter(Session.ID.make("second", { disableChecks: true }), "short", 6)
     expect(scope.marquee.active()).toBeUndefined()
     expect(scope.marquee.offset()).toBe(0)
     expect(scope.marquee.leading()).toBe(0)
@@ -27,10 +28,10 @@ describe("session tab marquee", () => {
     jest.useFakeTimers()
     const scope = createRoot((dispose) => ({ marquee: createMarquee(() => false), dispose }))
 
-    scope.marquee.enter("first", "opencode", 6)
+    scope.marquee.enter(Session.ID.make("first", { disableChecks: true }), "opencode", 6)
     jest.advanceTimersByTime(1_400)
 
-    expect(scope.marquee.active()).toBe("first")
+    expect<unknown>(scope.marquee.active()).toBe("first")
     expect(scope.marquee.offset()).toBe(0)
     expect(scope.marquee.leading()).toBe(0)
     scope.dispose()
@@ -40,9 +41,9 @@ describe("session tab marquee", () => {
     jest.useFakeTimers()
     const scope = createRoot((dispose) => ({ marquee: createMarquee(() => false), dispose }))
 
-    scope.marquee.enter("first", "opencode", 6)
+    scope.marquee.enter(Session.ID.make("first", { disableChecks: true }), "opencode", 6)
     jest.advanceTimersByTime(700)
-    scope.marquee.leave("first")
+    scope.marquee.leave(Session.ID.make("first", { disableChecks: true }))
 
     expect(scope.marquee.active()).toBeUndefined()
     expect(scope.marquee.offset()).toBe(0)
@@ -54,7 +55,7 @@ describe("session tab marquee", () => {
     jest.useFakeTimers()
     const scope = createRoot((dispose) => ({ marquee: createTabMarquee(() => false), dispose }))
 
-    scope.marquee.enter("first", "opencode", 6)
+    scope.marquee.enter(Session.ID.make("first", { disableChecks: true }), "opencode", 6)
     jest.advanceTimersByTime(700)
     scope.marquee.leaveHovered()
     jest.advanceTimersByTime(0)
