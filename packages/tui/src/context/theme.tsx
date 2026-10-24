@@ -16,7 +16,7 @@ import {
   subscribeThemes,
   type ThemeDocumentSource,
 } from "../theme"
-import { generateSystem, terminalMode } from "../theme/system"
+import { generateSystem, terminalMode, watchSystemAppearance } from "../theme/system"
 import { discoverThemes } from "../theme/discovery"
 import { createComponentTheme, type ComponentTheme } from "../theme/component"
 import { createEffect, createMemo, createSignal, onCleanup, onMount, type Accessor, type ParentProps } from "solid-js"
@@ -236,6 +236,7 @@ const themeContext = createSimpleContext({
 
     function pin(mode: "dark" | "light" = store.mode, persist = true) {
       setStore("lock", mode)
+      stopWatch()
       apply(mode)
       if (!persist) return
       void configState
@@ -248,6 +249,7 @@ const themeContext = createSimpleContext({
     function free(persist = true) {
       setStore("lock", undefined)
       apply(renderer.themeMode ?? store.mode)
+      startWatch()
       if (!persist) return
       void configState
         .update((draft) => {
@@ -256,14 +258,41 @@ const themeContext = createSimpleContext({
         .catch(() => {})
     }
 
-    const handleMode = (mode: "dark" | "light") => {
+    const applyUnlocked = (mode: "dark" | "light") => {
       if (store.lock) return
       apply(mode)
     }
-    renderer.on(CliRenderEvents.THEME_MODE, handleMode)
+
+    // The terminal's own colors are the source of truth; the OS appearance is only a fallback.
+    function applyAppearance(mode: "dark" | "light") {
+      if (store.lock || disposed) return
+      renderer.clearPaletteCache()
+      void renderer
+        .getPalette({ size: 16 })
+        .then((colors) => {
+          if (disposed) return
+          applyUnlocked(usablePalette(colors) ? (terminalMode(colors) ?? mode) : mode)
+        })
+        .catch(() => {
+          if (!disposed) applyUnlocked(mode)
+        })
+    }
+
+    // Watch only while the mode can change: never while locked, and a terminal that reports changes itself needs no OS watcher.
+    let stopAppearanceWatch: (() => void) | undefined
+    const startWatch = () => {
+      if (!stopAppearanceWatch) stopAppearanceWatch = watchSystemAppearance(applyAppearance)
+    }
+    const stopWatch = () => {
+      stopAppearanceWatch?.()
+      stopAppearanceWatch = undefined
+    }
+    renderer.on(CliRenderEvents.THEME_MODE, applyUnlocked)
+    if (store.lock === undefined) startWatch()
 
     const handleThemeNotification = (sequence: string) => {
       if (sequence !== "\x1b[?997;1n" && sequence !== "\x1b[?997;2n") return false
+      stopWatch()
       queueMicrotask(refreshPalette)
       return false
     }
@@ -283,7 +312,8 @@ const themeContext = createSimpleContext({
 
     onCleanup(() => {
       disposed = true
-      renderer.off(CliRenderEvents.THEME_MODE, handleMode)
+      stopWatch()
+      renderer.off(CliRenderEvents.THEME_MODE, applyUnlocked)
       renderer.off(CliRenderEvents.PALETTE, handlePalette)
       renderer.removeInputHandler(handleThemeNotification)
       unsubscribeRefresh?.()
