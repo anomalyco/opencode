@@ -541,7 +541,6 @@ for (const failed of [false, true]) {
       await editor.press("Enter")
       expect((await requested).postDataJSON()).toMatchObject({ text })
       await expect(page.locator('[data-timeline-row="UserMessage"]').filter({ hasText: text })).toBeInViewport()
-      await expect(working).toHaveRole("status")
       await expect(working.locator('[data-component="text-shimmer"]')).toHaveAttribute("aria-label", "Working")
       await expect(working).toBeInViewport()
       await expect(page.locator('[data-timeline-row="Thinking"]')).toHaveCount(0)
