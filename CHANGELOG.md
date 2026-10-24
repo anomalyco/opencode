@@ -286,6 +286,7 @@ The transitional `session.compacted` event is removed from the public event surf
 - Prevented undefined permission metadata from breaking pending-request responses. ([#54090](https://github.com/anomalyco/opencode/pull/54090))
 - Bounded skill discovery and file watches, and tolerated filesystem permission denials during sandboxed startup. ([#55597](https://github.com/anomalyco/opencode/pull/55597), [#55817](https://github.com/anomalyco/opencode/pull/55817))
 - Included the root `script/` directory in Nix CLI builds. ([#55494](https://github.com/anomalyco/opencode/pull/55494))
+- Included root dependencies in Nix installs to preserve OpenTUI module identity and prevent TUI startup color crashes. ([#56856](https://github.com/anomalyco/opencode/issues/56856))
 
 ### TUI
 
