@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { action } from "./updater-action"
-import { decodePolicy } from "./updater"
+import { decodePolicy, evaluateProbes } from "./updater"
 
 describe("updater", () => {
   test("reads update policy from JSONC", () => {
@@ -83,5 +83,53 @@ describe("updater", () => {
   test("rejects versions longer than semver's limit before trimming", () => {
     expect(action("1.2.3", `${" ".repeat(251)}1.2.3`, "notify")).toBe("none")
     expect(action("1.2.3", `1.2.4+${"a".repeat(250)}`, "notify")).toBe("notify")
+  })
+})
+
+describe("evaluateProbes", () => {
+  const result = (code: number, stdout = "", stderr = "") => ({ type: "result" as const, code, stdout, stderr })
+  const error = (detail: string) => ({ type: "error" as const, detail })
+
+  test("selects the first probe whose output names the installed package", () => {
+    const evaluated = evaluateProbes(
+      [
+        { method: "npm", outcome: result(1) },
+        { method: "pnpm", outcome: result(0, "└── @opencode/cli@2.0.18") },
+      ],
+      "@opencode/cli",
+    )
+
+    expect(evaluated.method).toBe("pnpm")
+    expect(evaluated.report).toEqual(["npm: exit 1", "pnpm: matched"])
+  })
+
+  test("does not select a probe that never produced output", () => {
+    const evaluated = evaluateProbes([{ method: "npm", outcome: error("Timed out") }], "@opencode/cli")
+
+    expect(evaluated.method).toBeUndefined()
+    expect(evaluated.report).toEqual(["npm: Timed out"])
+  })
+
+  test("requires an exact name from Vite+ instead of a substring", () => {
+    const listed = JSON.stringify([{ name: "@opencode/cli" }])
+
+    expect(evaluateProbes([{ method: "vp", outcome: result(0, listed) }], "@opencode/cli").method).toBe("vp")
+    expect(
+      evaluateProbes([{ method: "vp", outcome: result(1, "No packages matching @opencode/cli") }], "@opencode/cli")
+        .method,
+    ).toBeUndefined()
+  })
+
+  test("leaves the method undetected when every probe runs without a match", () => {
+    const evaluated = evaluateProbes(
+      [
+        { method: "bun", outcome: result(0, "bun@1.4.2") },
+        { method: "yarn", outcome: result(1, "") },
+      ],
+      "@opencode/cli",
+    )
+
+    expect(evaluated.method).toBeUndefined()
+    expect(evaluated.report).toEqual(["bun: exit 0", "yarn: exit 1"])
   })
 })
