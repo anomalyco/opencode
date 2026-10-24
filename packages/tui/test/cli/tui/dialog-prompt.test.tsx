@@ -22,6 +22,7 @@ async function mountPrompt(input: {
   root: string
   keybinds: Partial<TuiKeybind.Keybinds>
   onConfirm: (value: string) => void
+  clipboardText?: string
 }) {
   const state = path.join(input.root, "state")
   await mkdir(state, { recursive: true })
@@ -54,6 +55,12 @@ async function mountPrompt(input: {
           home: input.root,
           state,
           worktree: input.root,
+        }}
+        clipboard={{
+          async read() {
+            return input.clipboardText === undefined ? undefined : { data: input.clipboardText, mime: "text/plain" }
+          },
+          async write() {},
         }}
       >
         <ConfigProvider config={resolvedConfig}>
@@ -180,6 +187,30 @@ test("dialog prompt submit can be disabled", async () => {
 
     expect(confirmed).toEqual([])
     expect(textarea.plainText).toBe("draft")
+  } finally {
+    await prompt.cleanup()
+  }
+})
+
+test("ctrl+v pastes clipboard text into the dialog prompt", async () => {
+  await using tmp = await tmpdir()
+  const confirmed: string[] = []
+  const prompt = await mountPrompt({
+    root: tmp.path,
+    keybinds: {},
+    onConfirm: (value) => confirmed.push(value),
+    clipboardText: "-sk-test\r\n",
+  })
+
+  try {
+    await wait(() => prompt.app.renderer.currentFocusedEditor instanceof TextareaRenderable)
+    const textarea = prompt.app.renderer.currentFocusedEditor
+    if (!(textarea instanceof TextareaRenderable)) throw new Error("expected focused dialog textarea")
+
+    prompt.app.mockInput.pressKey("v", { ctrl: true })
+    await wait(() => textarea.plainText === "draft-sk-test")
+
+    expect(confirmed).toEqual([])
   } finally {
     await prompt.cleanup()
   }
