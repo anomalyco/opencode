@@ -72,6 +72,7 @@ export {
   rosepineTheme,
   shadesOfPurpleTheme,
   solarizedTheme,
+  solarizedOsakaTheme,
   synthwave84Theme,
   tokyonightTheme,
   vercelTheme,
