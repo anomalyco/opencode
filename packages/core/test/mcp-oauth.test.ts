@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test"
-import { auth, refreshAuthorization } from "@modelcontextprotocol/client"
+import { auth, refreshAuthorization, StreamableHTTPClientTransport } from "@modelcontextprotocol/client"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
 import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
@@ -117,6 +117,166 @@ const authorize = (redirect_uri?: string) =>
   )
 
 describe("MCP OAuth", () => {
+  test.each([
+    {
+      name: "refreshes with configured scope when token responses omit scope",
+      source: "configured",
+      returned: undefined,
+      expected: "read offline_access",
+      challenge: "read",
+      stepUp: false,
+    },
+    {
+      name: "refreshes with challenge scope when token responses omit scope",
+      source: "challenge",
+      returned: undefined,
+      expected: "read offline_access",
+      challenge: "read",
+      stepUp: false,
+    },
+    {
+      name: "refreshes with discovered scope when token responses omit scope",
+      source: "metadata",
+      returned: undefined,
+      expected: "read offline_access",
+      challenge: "read",
+      stepUp: false,
+    },
+    {
+      name: "prefers explicitly returned scope over requested scope",
+      source: "configured",
+      returned: "read",
+      expected: "read",
+      challenge: "read",
+      stepUp: false,
+    },
+    {
+      name: "preserves explicitly returned empty scope",
+      source: "configured",
+      returned: "",
+      expected: "",
+      challenge: "read",
+      stepUp: true,
+    },
+    {
+      name: "requires step-up authorization for genuinely additional scopes",
+      source: "configured",
+      returned: undefined,
+      expected: "read offline_access",
+      challenge: "read write",
+      stepUp: true,
+    },
+  ])("$name", async (input) => {
+    const tokenRequests: URLSearchParams[] = []
+    const requests: string[] = []
+    const server = Bun.serve({
+      port: 0,
+      async fetch(request) {
+        const url = new URL(request.url)
+        if (url.pathname === "/.well-known/oauth-authorization-server")
+          return Response.json({
+            issuer: url.origin,
+            authorization_endpoint: `${url.origin}/authorize`,
+            token_endpoint: `${url.origin}/token`,
+            response_types_supported: ["code"],
+            scopes_supported: ["read", "write", "offline_access"],
+          })
+        if (url.pathname === "/.well-known/oauth-protected-resource/mcp")
+          return Response.json({
+            resource: `${url.origin}/mcp`,
+            authorization_servers: [url.origin],
+            ...(input.source === "metadata" ? { scopes_supported: ["read"] } : {}),
+          })
+        if (url.pathname === "/token") {
+          tokenRequests.push(new URLSearchParams(await request.text()))
+          return Response.json({
+            access_token: `access-${tokenRequests.length}`,
+            token_type: "Bearer",
+            refresh_token: "refresh",
+            expires_in: 3600,
+            ...(input.returned !== undefined ? { scope: input.returned } : {}),
+          })
+        }
+        if (url.pathname === "/mcp" && request.method === "POST") {
+          const access = request.headers.get("authorization")
+          if (!access)
+            return new Response(null, {
+              status: 401,
+              headers: { "WWW-Authenticate": `Bearer${input.source === "challenge" ? ' scope="read"' : ""}` },
+            })
+          requests.push(access)
+          if (access === "Bearer expired")
+            return new Response(null, {
+              status: 403,
+              headers: { "WWW-Authenticate": `Bearer error="insufficient_scope", scope="${input.challenge}"` },
+            })
+          return new Response(null, { status: 202 })
+        }
+        return new Response(null, { status: 404 })
+      },
+    })
+    const url = `${server.url.origin}/mcp`
+    try {
+      const value = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const { authorization, url } = yield* start(`${server.url.origin}/mcp`, {
+              client_id: "client",
+              ...(input.source === "configured" ? { scope: "read" } : {}),
+            })
+            expect(url.searchParams.get("scope")).toBe("read offline_access")
+            const redirect = new URL(url.searchParams.get("redirect_uri")!)
+            redirect.searchParams.set("code", "accepted")
+            redirect.searchParams.set("state", url.searchParams.get("state")!)
+            expect((yield* Effect.promise(() => fetch(redirect))).status).toBe(200)
+            return yield* authorization.callback
+          }),
+        ),
+      )
+      expect(value.metadata?.scope).toBe(input.expected)
+      expect(McpOAuth.toTokens(value).scope).toBe(input.expected)
+      const row = new Credential.Info({
+        id: Credential.ID.make("cred_test"),
+        integrationID,
+        label: "test",
+        value: { ...value, access: "expired", expires: Date.now() - 1000 },
+      })
+      const store = memoryCredentials([row])
+      const provider = await connectProvider(remote(url), store)
+      const connection = new StreamableHTTPClientTransport(new URL(url), { authProvider: provider })
+      await connection.start()
+      try {
+        if (input.stepUp) {
+          await expect(connection.send({ jsonrpc: "2.0", id: 1, method: "ping" })).rejects.toThrow(
+            "requires user authorization",
+          )
+          expect(tokenRequests).toHaveLength(1)
+          expect(requests).toEqual(["Bearer expired"])
+          return
+        }
+        // Reload the persisted credential after each expiry: refresh responses also omit scope.
+        for (const id of [1, 2]) {
+          await connection.send({ jsonrpc: "2.0", id, method: "ping" })
+          const stored = store.rows.get(row.id)?.value
+          expect(stored?.type === "oauth" && stored.metadata?.scope).toBe(input.expected)
+          if (stored?.type === "oauth")
+            store.rows.set(row.id, new Credential.Info({ ...row, value: { ...stored, access: "expired", expires: 1 } }))
+        }
+        expect(tokenRequests.map((request) => request.get("grant_type"))).toEqual([
+          "authorization_code",
+          "refresh_token",
+          "refresh_token",
+        ])
+        expect(tokenRequests.slice(1).every((request) => request.get("refresh_token") === "refresh")).toBe(true)
+        expect(requests).toEqual(["Bearer expired", "Bearer access-2", "Bearer expired", "Bearer access-3"])
+      } finally {
+        await connection.close()
+      }
+    } finally {
+      server.stop(true)
+    }
+  })
+
   test("completes interactive authorization through the loopback callback", async () => {
     const tokenRequests: URLSearchParams[] = []
     const server = Bun.serve({
