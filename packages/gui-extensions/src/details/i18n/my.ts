@@ -10,6 +10,7 @@ export default {
   mcp: "MCP",
   "mcp.title": "သတ်မှတ်ထားသော MCP ဆာဗာများ",
   "mcp.empty": "MCP ဆာဗာများ မသတ်မှတ်ထားပါ",
+  "mcp.onCreation": "အလုပ်သစ်ကို ဖန်တီးစဉ်တွင် သက်ဆိုင်သည်",
   plugins: "ပလပ်အင်",
   "plugins.configured": "သတ်မှတ်ထားသော ပလပ်အင်များ",
   "plugins.empty": "ပလပ်အင်များ မသတ်မှတ်ထားပါ",

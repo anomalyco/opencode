@@ -10,6 +10,7 @@ export default {
   mcp: "MCP",
   "mcp.title": "Pelayan MCP yang dikonfigurasikan",
   "mcp.empty": "Tiada pelayan MCP dikonfigurasikan",
+  "mcp.onCreation": "Berkuat kuasa apabila worktree dicipta",
   plugins: "Plugin",
   "plugins.configured": "Plugin yang dikonfigurasikan",
   "plugins.empty": "Tiada plugin dikonfigurasikan",

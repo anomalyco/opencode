@@ -10,6 +10,7 @@ export default {
   mcp: "MCP",
   "mcp.title": "خوادم MCP المكوّنة",
   "mcp.empty": "لم تُكوّن خوادم MCP",
+  "mcp.onCreation": "يُطبّق عند إنشاء شجرة العمل",
   plugins: "الملحقات",
   "plugins.configured": "الملحقات المكوّنة",
   "plugins.empty": "لم تُكوّن ملحقات",

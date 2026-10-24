@@ -10,6 +10,7 @@ export default {
   mcp: "MCP",
   "mcp.title": "เซิร์ฟเวอร์ MCP ที่กำหนดค่าแล้ว",
   "mcp.empty": "ยังไม่ได้กำหนดค่าเซิร์ฟเวอร์ MCP",
+  "mcp.onCreation": "ใช้เมื่อสร้าง worktree",
   plugins: "ปลั๊กอิน",
   "plugins.configured": "ปลั๊กอินที่กำหนดค่าแล้ว",
   "plugins.empty": "ยังไม่ได้กำหนดค่าปลั๊กอิน",

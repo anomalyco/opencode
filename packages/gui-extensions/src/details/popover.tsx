@@ -3,9 +3,18 @@ import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Keybind } from "@opencode/ui/keybind"
 import { Tooltip } from "@opencode/ui/tooltip"
-import { createMemo, onCleanup, Show, Suspense, type Component, type ParentProps } from "solid-js"
+import { createMemo, createSignal, onCleanup, Show, Suspense, type Component, type ParentProps } from "solid-js"
 import { createStore } from "solid-js/store"
-import { Command, createKeyed, createVisitState, useExtension, type MountedSession, type SessionScreen } from "../sdk"
+import {
+  Command,
+  createKeyed,
+  createVisitState,
+  useExtension,
+  type Draft,
+  type MountedSession,
+  type SessionScreen,
+} from "../sdk"
+import type { DraftDetailsPanelProps } from "./draft-panel"
 import type Details from "./index"
 import type { Disclosure, DetailsPanelProps } from "./panel"
 
@@ -66,6 +75,24 @@ export function DetailsHeader(props: {
         </DetailsPopover>
       )}
     </Show>
+  )
+}
+
+/** The details button of the new-session screen, which unmounts when the route leaves the draft. */
+export function DraftDetailsHeader(props: {
+  draft: Draft
+  panel: Component<DraftDetailsPanelProps>
+  disclosure: Disclosure
+}) {
+  const Panel = props.panel
+  const [open, setOpen] = createSignal(false)
+
+  return (
+    <DetailsPopover active open={open()} onOpenChange={setOpen}>
+      <Suspense>
+        <Panel draft={props.draft} shown={open()} disclosure={props.disclosure} />
+      </Suspense>
+    </DetailsPopover>
   )
 }
 

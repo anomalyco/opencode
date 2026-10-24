@@ -20,7 +20,7 @@ import {
   type JSX,
 } from "solid-js"
 import { createStore } from "solid-js/store"
-import { createKeyed, useDrawer, useExtension, type MountedSession } from "../sdk"
+import { createKeyed, useDrawer, useExtension, type DraftMcp, type ServerRef } from "../sdk"
 import { configuredLsps } from "./configured-lsp"
 
 const services = [
@@ -33,20 +33,23 @@ const services = [
 type Service = (typeof services)[number]["type"]
 
 type ServiceMenuProps = {
-  session: MountedSession
+  server: ServerRef
   service: (typeof services)[number]
   directory: string
   shown: boolean
   open: boolean
   mobile?: boolean
+  /** A draft's MCP choices, which replace the immediate MCP toggles. */
+  mcp?: DraftMcp
   onOpenChange: (open: boolean) => void
 }
 
 export function SessionServerPanel(props: {
-  session: MountedSession
+  server: ServerRef
   directory: string
   shown: boolean
   mobile?: boolean
+  mcp?: DraftMcp
   expanded: boolean
   onExpandedChange: (expanded: boolean) => void
 }) {
@@ -54,7 +57,7 @@ export function SessionServerPanel(props: {
   const servers = ctx.servers
   const contentID = createUniqueId()
   // With one server the card is generic; with several it names the session's server.
-  const name = () => (servers.list().length < 2 ? ctx.t("server") : props.session.server.name)
+  const name = () => (servers.list().length < 2 ? ctx.t("server") : props.server.name)
   // A new scope whenever the directory, the details' visibility or the disclosure changes closes the open submenu.
   const scope = createMemo(on([() => props.directory, () => props.shown, () => props.expanded], () => ({})))
   const [submenu, setSubmenu] = createSignal<{ readonly scope: object; readonly service: Service }>()
@@ -86,12 +89,13 @@ export function SessionServerPanel(props: {
             <For each={services}>
               {(service) => (
                 <ServiceMenu
-                  session={props.session}
+                  server={props.server}
                   service={service}
                   directory={directory}
                   shown={props.shown}
                   open={open() === service.type}
                   mobile={props.mobile}
+                  mcp={props.mcp}
                   onOpenChange={(value) => setSubmenu(value ? { scope: scope(), service: service.type } : undefined)}
                 />
               )}
@@ -113,7 +117,7 @@ function ServiceMenu(props: ServiceMenuProps) {
 
 function LspMenu(props: ServiceMenuProps) {
   const ctx = useExtension()
-  const data = () => props.session.server.data
+  const data = () => props.server.data
 
   const [load, { refetch }] = createResource(
     () => props.shown && data(),
@@ -149,7 +153,7 @@ function LspMenu(props: ServiceMenuProps) {
       <Show
         when={names().length}
         fallback={
-          <ServiceEmpty session={props.session} title={ctx.t("lsp.empty")} directory={props.directory} service="lsp" />
+          <ServiceEmpty server={props.server} title={ctx.t("lsp.empty")} directory={props.directory} service="lsp" />
         }
       >
         <h3 class="session-service-title">{ctx.t("lsp.configured")}</h3>
@@ -163,7 +167,7 @@ function LspMenu(props: ServiceMenuProps) {
           )}
         </For>
         <div class="session-service-footer">
-          <ServiceConfigLink session={props.session} directory={props.directory} service="lsp" />
+          <ServiceConfigLink server={props.server} directory={props.directory} service="lsp" />
         </div>
       </Show>
     </ServicePopover>
@@ -173,11 +177,11 @@ function LspMenu(props: ServiceMenuProps) {
 function McpMenu(props: ServiceMenuProps) {
   const ctx = useExtension()
   const system = ctx.system
-  const data = () => props.session.server.data
+  const data = () => props.server.data
 
   const toggle = useMutation(() => ({
     mutationFn: async (input: { name: string; enabled: boolean }) => {
-      const client = props.session.server.client
+      const client = props.server.client
       const source = data()
       const ref = { directory: props.directory }
       const server = (await client.mcp.list({ location: ref })).data.find((item) => item.name === input.name)
@@ -226,13 +230,22 @@ function McpMenu(props: ServiceMenuProps) {
       }),
   }))
 
+  const deferred = () => props.mcp?.deferred === true
+  const busy = () => props.mcp?.pending ?? toggle.isPending
+
   const [load, { refetch }] = createResource(
     () => props.shown && data(),
     async (current) => {
       const directory = props.directory
 
       current.location.mcp.server.invalidate({ directory })
-      await current.location.mcp.server.sync({ directory })
+
+      // A draft also reads the configured defaults, which a new worktree starts with.
+      if (props.mcp) current.location.config.invalidate({ directory })
+      await Promise.all([
+        current.location.mcp.server.sync({ directory }),
+        props.mcp ? current.location.config.sync({ directory }) : undefined,
+      ])
     },
   )
 
@@ -242,11 +255,26 @@ function McpMenu(props: ServiceMenuProps) {
     ),
   )
 
+  // Later configuration documents override earlier ones.
+  const defaults = createMemo(
+    () =>
+      new Map(
+        (data().location.config.list({ directory: props.directory }) ?? []).flatMap((entry) =>
+          entry.type === "document"
+            ? Object.entries(entry.info.mcp?.servers ?? {}).map(([name, config]) => [name, !config.disabled] as const)
+            : [],
+        ),
+      ),
+  )
+
   return (
     <ServicePopover
       {...props}
       loading={load.loading}
-      ready={data().location.mcp.server.list({ directory: props.directory }) !== undefined}
+      ready={
+        data().location.mcp.server.list({ directory: props.directory }) !== undefined &&
+        (!props.mcp || data().location.config.list({ directory: props.directory }) !== undefined)
+      }
       empty={servers().length === 0}
       error={load.error}
       retry={refetch}
@@ -254,14 +282,22 @@ function McpMenu(props: ServiceMenuProps) {
       <Show
         when={servers().length}
         fallback={
-          <ServiceEmpty session={props.session} title={ctx.t("mcp.empty")} directory={props.directory} service="mcp" />
+          <ServiceEmpty server={props.server} title={ctx.t("mcp.empty")} directory={props.directory} service="mcp" />
         }
       >
         <h3 class="session-service-title">{ctx.t("mcp.title")}</h3>
+        <Show when={deferred()}>
+          <div class="session-service-message">{ctx.t("mcp.onCreation")}</div>
+        </Show>
         <Index each={servers()}>
           {(server) => {
-            const enabled = () => server().status.status !== "disabled"
-            const pending = () => toggle.isPending || server().status.status === "pending"
+            // A deferred choice shows what the new worktree will start with, not the project root's live state.
+            const enabled = () =>
+              deferred()
+                ? (props.mcp?.choice(server().name) ?? defaults().get(server().name) ?? true)
+                : server().status.status !== "disabled"
+
+            const pending = () => busy() || (!deferred() && server().status.status === "pending")
 
             const error = () => {
               const status = server().status
@@ -270,6 +306,7 @@ function McpMenu(props: ServiceMenuProps) {
             }
 
             const label = () => {
+              if (deferred()) return undefined
               const status = server().status.status
 
               if (status === "failed") return ctx.t("failed")
@@ -283,17 +320,24 @@ function McpMenu(props: ServiceMenuProps) {
 
             const change = (value: boolean) => {
               if (pending()) return
+
+              if (props.mcp) {
+                props.mcp.set(server().name, value)
+
+                return
+              }
+
               toggle.mutate({ name: server().name, enabled: value })
             }
 
             return (
               <Switch
                 class="session-mcp-row [&_[data-slot=switch-description]]:sr-only"
-                description={label()}
+                description={deferred() ? ctx.t("mcp.onCreation") : label()}
                 checked={enabled()}
                 readOnly={pending()}
                 aria-disabled={pending()}
-                aria-busy={toggle.isPending}
+                aria-busy={busy()}
                 onChange={change}
                 onClick={(event: MouseEvent) => {
                   if (
@@ -303,7 +347,7 @@ function McpMenu(props: ServiceMenuProps) {
                     return
 
                   // Outside the switch itself, a row that requires sign-in starts sign-in instead of toggling.
-                  if (server().status.status === "needs_auth") {
+                  if (!deferred() && server().status.status === "needs_auth") {
                     event.preventDefault()
 
                     return change(true)
@@ -311,9 +355,13 @@ function McpMenu(props: ServiceMenuProps) {
 
                   if (event.target === event.currentTarget) change(!enabled())
                 }}
-                title={error() ?? server().name}
+                title={deferred() ? server().name : (error() ?? server().name)}
               >
-                <span class="session-service-dot" data-status={server().status.status} aria-hidden="true" />
+                <span
+                  class="session-service-dot"
+                  data-status={deferred() ? undefined : server().status.status}
+                  aria-hidden="true"
+                />
                 <span dir="auto" class="session-summary-label">
                   {server().name}
                 </span>
@@ -329,7 +377,7 @@ function McpMenu(props: ServiceMenuProps) {
           }}
         </Index>
         <div class="session-service-footer">
-          <ServiceConfigLink session={props.session} directory={props.directory} service="mcp" />
+          <ServiceConfigLink server={props.server} directory={props.directory} service="mcp" />
         </div>
       </Show>
     </ServicePopover>
@@ -338,7 +386,7 @@ function McpMenu(props: ServiceMenuProps) {
 
 function ServiceCatalog(props: ServiceMenuProps) {
   const ctx = useExtension()
-  const data = () => props.session.server.data
+  const data = () => props.server.data
 
   const [items, { refetch }] = createResource(
     () => props.shown && data(),
@@ -346,7 +394,7 @@ function ServiceCatalog(props: ServiceMenuProps) {
       const directory = props.directory
 
       if (props.service.type === "plugins") {
-        const result = await props.session.server.client.plugin.list({ location: { directory } })
+        const result = await props.server.client.plugin.list({ location: { directory } })
 
         return result.data
           .filter((plugin) => plugin.source.type !== "builtin")
@@ -407,7 +455,7 @@ function ServiceCatalog(props: ServiceMenuProps) {
         when={list().length}
         fallback={
           <ServiceEmpty
-            session={props.session}
+            server={props.server}
             title={ctx.t(props.service.type === "plugins" ? "plugins.empty" : "skills.empty")}
             directory={props.directory}
             service={props.service.type}
@@ -431,7 +479,7 @@ function ServiceCatalog(props: ServiceMenuProps) {
           )}
         </For>
         <div class="session-service-footer">
-          <ServiceConfigLink session={props.session} directory={props.directory} service={props.service.type} />
+          <ServiceConfigLink server={props.server} directory={props.directory} service={props.service.type} />
         </div>
       </Show>
     </ServicePopover>
@@ -545,11 +593,11 @@ function ServiceBody(props: ServiceBodyProps) {
   )
 }
 
-function ServiceConfigLink(props: { session: MountedSession; directory: string; service: Service }) {
+function ServiceConfigLink(props: { server: ServerRef; directory: string; service: Service }) {
   const ctx = useExtension()
   const desktop = ctx.desktop
   const system = ctx.system
-  const local = () => props.session.server.local
+  const local = () => props.server.local
   const [store, setStore] = createStore({ opening: false, copied: false })
   const label = () => ctx.t(local() ? "configure" : "copyConfigPath")
   // Clears the copied mark two seconds after the latest copy.
@@ -561,7 +609,7 @@ function ServiceConfigLink(props: { session: MountedSession; directory: string; 
     if (store.opening || (local() && !desktop)) return
     setStore({ opening: true, copied: false })
     const directory = props.directory
-    await props.session.server.client.config
+    await props.server.client.config
       .get({ location: { directory } })
       .then(async (entries) => {
         const documents = entries
@@ -638,12 +686,12 @@ function ServiceConfigLink(props: { session: MountedSession; directory: string; 
   )
 }
 
-function ServiceEmpty(props: { session: MountedSession; title: string; directory: string; service: Service }) {
+function ServiceEmpty(props: { server: ServerRef; title: string; directory: string; service: Service }) {
   return (
     <div class="session-service-empty">
       <strong>{props.title}</strong>
       <div class="session-service-footer">
-        <ServiceConfigLink session={props.session} directory={props.directory} service={props.service} />
+        <ServiceConfigLink server={props.server} directory={props.directory} service={props.service} />
       </div>
     </div>
   )

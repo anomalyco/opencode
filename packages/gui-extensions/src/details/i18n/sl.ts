@@ -10,6 +10,7 @@ export default {
   mcp: "MCP",
   "mcp.title": "Konfigurirani MCP strežniki",
   "mcp.empty": "Brez konfiguriranih MCP strežnikov",
+  "mcp.onCreation": "Velja ob ustvarjanju delovnega drevesa",
   plugins: "Vtičniki",
   "plugins.configured": "Konfigurirani vtičniki",
   "plugins.empty": "Brez konfiguriranih vtičnikov",

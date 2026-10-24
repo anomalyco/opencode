@@ -10,6 +10,7 @@ export default {
   mcp: "MCP",
   "mcp.title": "Konfigurētie MCP serveri",
   "mcp.empty": "Nav konfigurēts neviens MCP serveris",
+  "mcp.onCreation": "Attiecas, kad tiek izveidots darbkoks",
   plugins: "Spraudņi",
   "plugins.configured": "Konfigurēti spraudņi",
   "plugins.empty": "Nav konfigurēts neviens spraudnis",

@@ -10,6 +10,7 @@ export default {
   mcp: "MCP",
   "mcp.title": "Konfigurerade MCP-servrar",
   "mcp.empty": "Inga MCP-servrar har konfigurerats",
+  "mcp.onCreation": "Gäller när arbetsytan skapas",
   plugins: "Plugins",
   "plugins.configured": "Konfigurerade plugins",
   "plugins.empty": "Inga plugins konfigurerade",

@@ -10,6 +10,7 @@ export default {
   mcp: "MCP",
   "mcp.title": "Configured MCP servers",
   "mcp.empty": "No MCP servers configured",
+  "mcp.onCreation": "Applies when the worktree is created",
   plugins: "Plugins",
   "plugins.configured": "Configured plugins",
   "plugins.empty": "No plugins configured",

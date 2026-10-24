@@ -3,7 +3,7 @@ import { createStore } from "solid-js/store"
 import { createKeyed, onIdle, Panel, Slot, Style, useDrawer, usePanel, type Setup } from "../sdk"
 import type Details from "./index"
 import type { Disclosure } from "./panel"
-import { DetailsHeader } from "./popover"
+import { DetailsHeader, DraftDetailsHeader } from "./popover"
 
 const setup: Setup<typeof Details> = (ctx) => {
   const sessions = ctx.sessions
@@ -23,16 +23,24 @@ const setup: Setup<typeof Details> = (ctx) => {
       }),
   }
 
-  const DetailsPanel = lazy(() =>
-    Promise.all([import("./panel"), import("./details.css?inline")]).then(([panel, css]) => {
-      ctx.add(Style, css.default)
+  // Both panels share the stylesheet, which is added once, with whichever loads first.
+  let styled: Promise<void> | undefined
 
-      return panel
+  const style = () =>
+    (styled ??= import("./details.css?inline").then((css) => {
+      ctx.add(Style, css.default)
+    }))
+
+  const DetailsPanel = lazy(() => Promise.all([import("./panel"), style()]).then(([panel]) => panel))
+  const DraftPanel = lazy(() => Promise.all([import("./draft-panel"), style()]).then(([panel]) => panel))
+
+  // Compile the panels while the app idles, so the first open renders at once.
+  onCleanup(
+    onIdle(() => {
+      void DetailsPanel.preload()
+      void DraftPanel.preload()
     }),
   )
-
-  // Compile the panel while the app idles, so the first open renders at once.
-  onCleanup(onIdle(() => void DetailsPanel.preload()))
 
   ctx.add(Slot, {
     at: "session.header",
@@ -46,6 +54,12 @@ const setup: Setup<typeof Details> = (ctx) => {
         disclosure={disclosure}
       />
     ),
+  })
+
+  ctx.add(Slot, {
+    at: "draft.header",
+    order: 20,
+    render: (input) => <DraftDetailsHeader draft={input.draft} panel={DraftPanel} disclosure={disclosure} />,
   })
 
   // The narrow-screen details drawer, offered for sessions of a project, subagents included.

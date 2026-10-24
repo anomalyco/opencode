@@ -10,6 +10,7 @@ export default {
   mcp: "MCP",
   "mcp.title": "Yapılandırılmış MCP sunucuları",
   "mcp.empty": "Hiçbir MCP sunucusu yapılandırılmadı",
+  "mcp.onCreation": "Çalışma ağacı oluşturulduğunda uygulanır",
   plugins: "Eklentiler",
   "plugins.configured": "Yapılandırılmış eklentiler",
   "plugins.empty": "Hiçbir eklenti yapılandırılmadı",

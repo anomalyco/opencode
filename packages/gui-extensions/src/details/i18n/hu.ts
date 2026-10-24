@@ -10,6 +10,7 @@ export default {
   mcp: "MCP",
   "mcp.title": "Konfigurált MCP szerverek",
   "mcp.empty": "Nincs konfigurálva MCP szerver",
+  "mcp.onCreation": "A munkafa létrehozásakor érvényes",
   plugins: "Beépülő modulok",
   "plugins.configured": "Beállított bővítmények",
   "plugins.empty": "Nincsenek beállítva bővítmények",

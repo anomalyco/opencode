@@ -10,6 +10,7 @@ export default {
   mcp: "MCP",
   "mcp.title": "שרתי MCP מוגדרים",
   "mcp.empty": "לא הוגדרו שרתי MCP",
+  "mcp.onCreation": "חל בעת יצירת עץ העבודה",
   plugins: "תוספים",
   "plugins.configured": "תוספים מוגדרים",
   "plugins.empty": "לא הוגדרו תוספים",

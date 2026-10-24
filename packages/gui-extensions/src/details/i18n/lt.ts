@@ -10,6 +10,7 @@ export default {
   mcp: "MCP",
   "mcp.title": "Sukonfigūruoti MCP serveriai",
   "mcp.empty": "Nekonfigūruota jokių MCP serverių",
+  "mcp.onCreation": "Taikoma, kai sukuriamas darbo medis",
   plugins: "Papildiniai",
   "plugins.configured": "Sukonfigūruoti papildiniai",
   "plugins.empty": "Nėra sukonfigūruotų papildinių",

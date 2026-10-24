@@ -10,6 +10,7 @@ export default {
   mcp: "MCP",
   "mcp.title": "設定済みのMCPサーバー",
   "mcp.empty": "MCPサーバーが設定されていません",
+  "mcp.onCreation": "ワークツリー作成時に適用",
   plugins: "プラグイン",
   "plugins.configured": "設定済みのプラグイン",
   "plugins.empty": "プラグインが設定されていません",

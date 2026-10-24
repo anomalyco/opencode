@@ -10,6 +10,7 @@ export default {
   mcp: "MCP",
   "mcp.title": "Serverët e konfiguruar MCP",
   "mcp.empty": "Nuk ka serverë MCP të konfiguruar",
+  "mcp.onCreation": "Zbatohet kur krijohet pema e punës",
   plugins: "Plugins",
   "plugins.configured": "Shtojcat e konfiguruara",
   "plugins.empty": "Asnjë shtojcë nuk është konfiguruar",

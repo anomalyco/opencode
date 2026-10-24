@@ -620,6 +620,68 @@ export interface Sessions {
 }
 
 /**
+ * The new session the new-session screen shows before it starts: where it will run, and the choices that apply when it
+ * starts. The `draft.header` slot receives it; a draft has no `MountedSession` or `SessionScreen`. One object per
+ * draft screen: its fields are reactive getters that follow the user's selection, so read them where you use them.
+ */
+export interface Draft {
+  /** The server the session will start on. */
+  readonly server: ServerRef
+  /** The project the session will start in, with the user's local name and icon. Undefined while unknown. Reactive. */
+  readonly project: Project | undefined
+  /**
+   * The directory the session will start in: the project root, or the selected worktree. While `workspace` is `create`,
+   * the project root the new worktree branches from. Reactive.
+   */
+  readonly directory: string
+  /**
+   * Where the session will run. Reactive.
+   * - `local`: the project root.
+   * - `worktree`: an existing worktree, `directory`.
+   * - `create`: a new worktree that the draft creates when the session starts.
+   */
+  readonly workspace: "local" | "worktree" | "create"
+  /**
+   * The branch the session starts on, or, while `workspace` is `create`, the branch the new worktree is based on.
+   * Undefined outside git and while unknown. Reactive.
+   */
+  readonly branch: string | undefined
+  /** The draft's MCP server choices. */
+  readonly mcp: DraftMcp
+}
+
+/**
+ * The MCP server choices of a draft. When the session starts, the draft applies them in the session's directory before
+ * the first prompt; if one fails, it shows an error and stays a draft.
+ */
+export interface DraftMcp {
+  /**
+   * The choices wait for the session to start, because its worktree does not exist yet (`workspace` is `create`).
+   * Otherwise each choice connects or disconnects the server in the draft's `directory` at once, as in a session.
+   * Reactive.
+   */
+  readonly deferred: boolean
+  /** A choice is being applied; `set` ignores changes until it settles. Reactive. */
+  readonly pending: boolean
+  /**
+   * The user's choice for a server. Undefined when the user made none: the server keeps its state, or its configured
+   * default while deferred. Reactive.
+   *
+   * @param name - The MCP server's name.
+   * @returns True to connect, false to disconnect, or undefined.
+   */
+  choice(name: string): boolean | undefined
+  /**
+   * Records a choice. Unless `deferred`, also connects or disconnects the server in the draft's `directory` at once and
+   * starts sign-in when the server needs it; a failure shows an error toast. Ignored while `pending`.
+   *
+   * @param name - The MCP server's name.
+   * @param enabled - True to connect the server, false to disconnect it.
+   */
+  set(name: string, enabled: boolean): void
+}
+
+/**
  * Where a panel key stands in a session.
  * - `closed`: not in the strip (a dock: not open).
  * - `open`: in the strip, not selected.

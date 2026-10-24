@@ -10,6 +10,7 @@ export default {
   mcp: "MCP",
   "mcp.title": "Servere MCP configurate",
   "mcp.empty": "Nu au fost configurate servere MCP",
+  "mcp.onCreation": "Se aplică atunci când arborele de lucru este creat",
   plugins: "Pluginuri",
   "plugins.configured": "Pluginuri configurate",
   "plugins.empty": "Nu au fost configurate pluginuri",

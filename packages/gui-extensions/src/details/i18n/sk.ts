@@ -10,6 +10,7 @@ export default {
   mcp: "MCP",
   "mcp.title": "Nakonfigurované MCP servery",
   "mcp.empty": "Nie sú nakonfigurované žiadne MCP servery",
+  "mcp.onCreation": "Platí pri vytvorení worktree",
   plugins: "Pluginy",
   "plugins.configured": "Nakonfigurované pluginy",
   "plugins.empty": "Nie sú nakonfigurované žiadne pluginy",

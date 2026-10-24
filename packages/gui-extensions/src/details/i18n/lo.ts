@@ -10,6 +10,7 @@ export default {
   mcp: "MCP",
   "mcp.title": "ເຄື່ອງບໍລິການ MCP ທີ່ຕັ້ງຄ່າແລ້ວ",
   "mcp.empty": "ບໍ່ມີການຕັ້ງຄ່າເຊີບເວີ MCP",
+  "mcp.onCreation": "ນໍາໃຊ້ເມື່ອສ້າງໄມ້ງານ",
   plugins: "ປລັກອິນ",
   "plugins.configured": "ປລັກອິນທີ່ຕັ້ງຄ່າແລ້ວ",
   "plugins.empty": "ບໍ່ມີການຕັ້ງຄ່າປລັກອິນ",

@@ -10,6 +10,7 @@ export default {
   mcp: "MCP",
   "mcp.title": "MCP-servers geconfigureerd",
   "mcp.empty": "Geen MCP-servers geconfigureerd",
+  "mcp.onCreation": "Is van toepassing wanneer de werkruimte wordt gemaakt",
   plugins: "Plug-ins",
   "plugins.configured": "Geconfigureerde plug-ins",
   "plugins.empty": "Geen plug-ins geconfigureerd",

@@ -10,6 +10,7 @@ export default {
   mcp: "MCP",
   "mcp.title": "Stilltir MCP netþjónar",
   "mcp.empty": "Engir MCP netþjónar stilltir",
+  "mcp.onCreation": "Á við þegar vinnutréð er búið til",
   plugins: "Viðbætur",
   "plugins.configured": "Stillt viðbætur",
   "plugins.empty": "Engar viðbætur stilltar",

@@ -10,6 +10,7 @@ export default {
   mcp: "MCP",
   "mcp.title": "Nakonfigurované servery MCP",
   "mcp.empty": "Nejsou nakonfigurovány žádné servery MCP",
+  "mcp.onCreation": "Použije se při vytvoření pracovního stromu",
   plugins: "Zásuvné moduly",
   "plugins.configured": "Nakonfigurované zásuvné moduly",
   "plugins.empty": "Nejsou nakonfigurovány žádné zásuvné moduly",

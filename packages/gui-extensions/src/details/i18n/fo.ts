@@ -10,6 +10,7 @@ export default {
   mcp: "MCP",
   "mcp.title": "Uppsettir MCP ambætarar",
   "mcp.empty": "Eingin MCP ambætari er uppsettur",
+  "mcp.onCreation": "Er galdandi tá arbeiðstræið er stovnað",
   plugins: "Tilskot",
   "plugins.configured": "Uppsett tilskot",
   "plugins.empty": "Eingi tilskot uppsett",

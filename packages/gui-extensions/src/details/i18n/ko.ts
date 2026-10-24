@@ -10,6 +10,7 @@ export default {
   mcp: "MCP",
   "mcp.title": "구성된 MCP 서버",
   "mcp.empty": "구성된 MCP 서버가 없습니다",
+  "mcp.onCreation": "작업 트리가 생성될 때 적용",
   plugins: "플러그인",
   "plugins.configured": "구성된 플러그인",
   "plugins.empty": "구성된 플러그인이 없습니다",

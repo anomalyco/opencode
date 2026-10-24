@@ -10,6 +10,7 @@ export default {
   mcp: "MCP",
   "mcp.title": "ترتیب شدہ MCP سرورز",
   "mcp.empty": "کوئی MCP سرورز کنفیگر نہیں ہوئے۔",
+  "mcp.onCreation": "ورک ٹری بننے پر لاگو ہوتا ہے۔",
   plugins: "پلگ انز",
   "plugins.configured": "کنفیگرڈ پلگ انز",
   "plugins.empty": "کوئی پلگ ان کنفیگر نہیں ہے۔",

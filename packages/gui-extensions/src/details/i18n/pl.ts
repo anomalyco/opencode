@@ -10,6 +10,7 @@ export default {
   mcp: "MCP",
   "mcp.title": "Skonfigurowane serwery MCP",
   "mcp.empty": "Brak skonfigurowanych serwerów MCP",
+  "mcp.onCreation": "Dotyczy w momencie tworzenia drzewa roboczego",
   plugins: "Wtyczki",
   "plugins.configured": "Skonfigurowane wtyczki",
   "plugins.empty": "Nie skonfigurowano żadnych wtyczek",

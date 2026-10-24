@@ -160,7 +160,7 @@ export default function SessionDetailsPanel(props: DetailsPanelProps) {
         </Show>
       </div>
       <SessionServerPanel
-        session={props.session}
+        server={props.session.server}
         directory={props.session.directory}
         shown={props.shown !== false}
         mobile={props.mobile}

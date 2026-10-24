@@ -10,6 +10,7 @@ export default {
   mcp: "MCP",
   "mcp.title": "Server MCP yang dikonfigurasi",
   "mcp.empty": "Tidak ada server MCP yang dikonfigurasi",
+  "mcp.onCreation": "Berlaku saat worktree dibuat",
   plugins: "Plugin",
   "plugins.configured": "Plugin yang dikonfigurasi",
   "plugins.empty": "Tidak ada plugin yang dikonfigurasi",

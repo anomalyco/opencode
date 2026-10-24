@@ -10,6 +10,7 @@ export default {
   mcp: "MCP",
   "mcp.title": "Servidors MCP configurats",
   "mcp.empty": "No s'ha configurat cap servidor MCP",
+  "mcp.onCreation": "S'aplica quan es crea l'arbre de treball",
   plugins: "Connectors",
   "plugins.configured": "Connectors configurats",
   "plugins.empty": "No s'ha configurat cap connector",

@@ -10,6 +10,7 @@ export default {
   mcp: "MCP",
   "mcp.title": "Կարգավորված MCP սերվերներ",
   "mcp.empty": "MCP սերվերները կոնֆիգուրացված չեն",
+  "mcp.onCreation": "Կիրառվում է աշխատանքային ծառը ստեղծելիս",
   plugins: "Հավելվածներ",
   "plugins.configured": "Կարգավորված հավելվածներ",
   "plugins.empty": "Պլագիններ չեն կոնֆիգուրացված",

@@ -1,7 +1,7 @@
 import type { JSX } from "solid-js"
 import type { IconName } from "@opencode/ui/icons/catalog"
 import { Registry } from "./core"
-import type { SessionRef, MountedSession, SessionScreen } from "./host-apis"
+import type { Draft, SessionRef, MountedSession, SessionScreen } from "./host-apis"
 
 /** The name of a shared icon; derived from the dependency-free UI artwork catalog, not a component's props. */
 export type { IconName }
@@ -555,6 +555,11 @@ export interface SlotMap {
     /** The timeline is the one on screen. */
     readonly active: boolean
   }
+  /** The end of the new-session screen's top row. It has no session or screen. */
+  readonly "draft.header": {
+    /** The draft the screen shows; its fields follow the user's selection. */
+    readonly draft: Draft
+  }
   /** The actions at the end of the side region's tab strip. */
   readonly "session.panel.end": {
     /** The owning session screen; always present. */
@@ -580,9 +585,9 @@ export type Slot = {
     readonly order?: number
     /**
      * Renders the content once; its own reactivity updates it. Session and active fields are reactive getters, so read
-     * `input.session` where you use it: another routed session arrives through it without a remount. `screen` on a
-     * session slot is its constant owning screen, available during the first render. A render that
-     * throws renders nothing and records the error.
+     * `input.session` where you use it: another routed session arrives through it without a remount. A draft's fields
+     * are reactive getters too. `screen` on a session slot is its constant owning screen, available during the first
+     * render. A render that throws renders nothing and records the error.
      *
      * @param input - The slot's input.
      */
