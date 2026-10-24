@@ -50,12 +50,12 @@ export function createClipboardAdapter(clipboard: CoreClipboardService): OwnedCl
       }
       throw new Error(`Unexpected clipboard MIME type: ${result.representation.mimeType}`)
     },
-    async write(text) {
+    async write(text, selections = ["clipboard"]) {
       // OpenTUI rejects NUL before any destination; host clipboard text cannot contain it.
-      const result = await clipboard.writeText(text.replaceAll("\0", ""), {
-        destination: "all-available",
-        selection: "clipboard",
-      })
+      const payload = text.replaceAll("\0", "")
+      const [result] = await Promise.all(
+        selections.map((selection) => clipboard.writeText(payload, { destination: "all-available", selection })),
+      )
       if (result.host.status === "written" || result.terminal.status === "attempted") return
       if (result.host.status === "failed") throw result.host.error
       throw new Error(`Clipboard write failed (host: ${result.host.status}, terminal: ${result.terminal.status})`)

@@ -579,8 +579,7 @@ function App() {
     }
   })
 
-  const copyOnSelectEnabled = () =>
-    (config.data.terminal?.copy ?? (process.platform === "win32" ? "manual" : "select")) === "select"
+  const copyOnSelectEnabled = () => ["select", "both"].includes(Config.copyMode(config.data))
 
   // Selection copy/dismiss must precede both app bindings and the terminal pane's raw key forwarding.
   const offSelectionKeys = keymap.intercept(
@@ -1405,7 +1404,7 @@ function App() {
       onMouseUp={(event) => {
         const url = clickedLink(renderer, event)
         if (url) return void openUrl(url).catch(toast.error)
-        if (copyOnSelectEnabled()) Selection.copyOnSelectRelease(event, renderer, toast, clipboard)
+        Selection.copyOnSelectRelease(event, renderer, toast, clipboard, Config.copyMode(config.data))
       }}
     >
       <box
