@@ -75,7 +75,13 @@ for (const orientation of ["horizontal", "vertical"] as const) {
       () => (
         <TestTuiContexts
           paths={{ state: temporary.path }}
-          clipboard={{ read: async () => undefined, write: async (text) => void copied.push(text) }}
+          clipboard={{
+            read: async () => undefined,
+            write: async (text) => {
+              copied.push(text)
+              return "written"
+            },
+          }}
         >
           <TuiAppProvider value={{ name: "test", version: "test", channel: "test" }}>
             <StorageProvider>
@@ -248,7 +254,9 @@ for (const orientation of ["horizontal", "vertical"] as const) {
         ])
       }
       app.renderer.resize(60, 20)
-      setClosed(Array.from({ length: 11 }, (_, index) => ({ sessionID: `closed-${index}`, title: `History ${index + 1}` })))
+      setClosed(
+        Array.from({ length: 11 }, (_, index) => ({ sessionID: `closed-${index}`, title: `History ${index + 1}` })),
+      )
       await app.renderOnce()
       const historyRows = app.captureCharFrame().split("\n")
       const newRow = historyRows.findIndex((line) => line.includes("+ New session"))

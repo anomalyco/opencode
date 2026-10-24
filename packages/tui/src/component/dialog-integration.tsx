@@ -36,6 +36,7 @@ import { DialogSelect } from "../ui/dialog-select"
 import { Link } from "../ui/link"
 import { useToast } from "../ui/toast"
 import { errorMessage } from "../util/error"
+import { clipboardFeedback } from "../util/clipboard-feedback"
 import {
   formInitialValues,
   formLabel,
@@ -681,7 +682,7 @@ function OAuthAuto(props: {
     const value = props.attempt.instructions.match(OAUTH_CODE)?.[0] ?? props.attempt.url
     clipboard
       .write(value)
-      .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
+      .then((result) => toast.show(clipboardFeedback(result)))
       .catch(toast.error)
   }
 

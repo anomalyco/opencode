@@ -105,6 +105,7 @@ import { COMMAND_PALETTE_COMMAND, Keymap, type KeymapCommand } from "./context/k
 import { DialogVariant } from "./component/dialog-variant"
 import { destroyRenderer, setTerminalTitle } from "./util/renderer"
 import { cliErrorMessage, errorFormat } from "./util/error"
+import { clipboardFeedback } from "./util/clipboard-feedback"
 import { AttentionProvider } from "./context/attention"
 import { StorageProvider, useStorage } from "./context/storage"
 import { SessionTerminalsProvider } from "./context/session-terminals"
@@ -197,6 +198,7 @@ export type TuiInput = {
   updater?: UpdateSource
   packages: PackageSource
   environment?: Readonly<Record<string, string>>
+  clipboardCommand?: ReadonlyArray<string>
   terminalHandoff?: () => Promise<
     | {
         readonly renderer: CliRenderer
@@ -288,7 +290,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
       })
       renderer.setMaxListeners(15)
       const clipboard = yield* Effect.acquireRelease(
-        Effect.sync(() => createTuiClipboard(renderer)),
+        Effect.sync(() => createTuiClipboard(renderer, input.clipboardCommand)),
         (clipboard) =>
           Effect.tryPromise(() => clipboard.dispose()).pipe(
             Effect.catch((error) => Effect.sync(() => log("error", "Failed to dispose TUI clipboard", { error }))),
@@ -600,7 +602,7 @@ function App() {
 
     await clipboard
       .write(text)
-      .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
+      .then((result) => toast.show(clipboardFeedback(result)))
       .catch(toast.error)
 
     renderer.clearSelection()

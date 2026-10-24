@@ -12,7 +12,7 @@ export function ErrorComponent(props: { error: Error; reset: () => void; mode?: 
   const exit = useExit()
   const clipboard = useClipboard()
   const app = useTuiApp()
-  const [copyState, setCopyState] = createSignal<"idle" | "copied" | "failed">("idle")
+  const [copyState, setCopyState] = createSignal<"idle" | "copied" | "attempted" | "failed">("idle")
 
   // Safe fallback palette per mode (mirrors theme/assets/opencode.json) since the
   // theme context may be the thing that crashed.
@@ -48,14 +48,17 @@ export function ErrorComponent(props: { error: Error; reset: () => void; mode?: 
   const copyReport = () => {
     void clipboard
       .write(issueURL.toString())
-      .then(() => setCopyState("copied"))
+      .then((result) => setCopyState(result === "written" ? "copied" : "attempted"))
       .catch(() => setCopyState("failed"))
   }
 
   const actions = [
     {
       key: "c",
-      label: () => ({ idle: "Copy report", copied: "✓ Copied", failed: "Copy failed" })[copyState()],
+      label: () =>
+        ({ idle: "Copy report", copied: "✓ Copied", attempted: "Sent to terminal", failed: "Copy failed" })[
+          copyState()
+        ],
       copy: true,
       onUse: copyReport,
     },
