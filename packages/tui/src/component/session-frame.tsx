@@ -291,6 +291,7 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
             promptMuted={activePane() !== "session"}
             sidebarVisible={rightPane() === "sidebar"}
             onToggleSidebar={toggleSidebar}
+            sidebarOpenable={rightPane() === undefined && !data.session.get(props.sessionID)?.parentID}
             terminals={sessions.available()}
             visibleTerminalID={rightPane() === "terminal" ? selectedTerminal()?.id : undefined}
             onTerminalPicker={(show) => (showTerminals = show)}
@@ -375,7 +376,7 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
               </Show>
             }
           >
-            <Sidebar sessionID={props.sessionID} />
+            <Sidebar sessionID={props.sessionID} onClose={toggleSidebar} />
           </Show>
         </box>
       </Show>
@@ -392,7 +393,7 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
           alignItems="flex-end"
           backgroundColor={RGBA.fromInts(0, 0, 0, 70)}
         >
-          <Sidebar sessionID={props.sessionID} />
+          <Sidebar sessionID={props.sessionID} onClose={toggleSidebar} />
         </box>
       </Show>
     </box>

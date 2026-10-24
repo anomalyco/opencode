@@ -1,6 +1,7 @@
 import { useData } from "../../context/data"
-import { createMemo, Show } from "solid-js"
+import { createMemo, createSignal, Show } from "solid-js"
 import { useTheme } from "../../context/theme"
+import { useRenderer } from "@opentui/solid"
 import { useConfig } from "../../config"
 import { Slot } from "../../plugin/render"
 import { withTimestampedFallback } from "@opencode/util/session-title-fallback"
@@ -10,12 +11,14 @@ import "../../component/title-shimmer"
 import { getScrollAcceleration } from "../../util/scroll"
 import { SESSION_SIDEBAR_WIDTH } from "../../ui/layout"
 
-export function Sidebar(props: { sessionID: string }) {
+export function Sidebar(props: { sessionID: string; onClose?: () => void }) {
   const data = useData()
   const theme = useTheme()
   const config = useConfig().data
+  const renderer = useRenderer()
   const session = createMemo(() => data.session.get(props.sessionID))
   const scrollAcceleration = createMemo(() => getScrollAcceleration(config))
+  const [closeHovered, setCloseHovered] = createSignal(false)
 
   return (
     <Show when={session()}>
@@ -29,23 +32,41 @@ export function Sidebar(props: { sessionID: string }) {
         paddingRight={2}
         position="relative"
       >
-        <box flexShrink={0} paddingRight={2} paddingBottom={1}>
-          <title_shimmer
-            fg={theme.text.base}
-            rename={{
-              pending: data.session.title.pending(props.sessionID),
-              title: withTimestampedFallback(session()),
-            }}
-            enabled={config.animations ?? true}
-            backdrop={theme.background.raised.base}
-            attributes={
-              data.session.title.pending(props.sessionID) && config.animations === false
-                ? TextAttributes.DIM
-                : TextAttributes.BOLD
-            }
-          >
-            {withTimestampedFallback(session())}
-          </title_shimmer>
+        <box flexShrink={0} flexDirection="row" alignItems="flex-start" paddingBottom={1}>
+          <box flexGrow={1} minWidth={0} paddingRight={2}>
+            <title_shimmer
+              fg={theme.text.base}
+              rename={{
+                pending: data.session.title.pending(props.sessionID),
+                title: withTimestampedFallback(session()),
+              }}
+              enabled={config.animations ?? true}
+              backdrop={theme.background.raised.base}
+              attributes={
+                data.session.title.pending(props.sessionID) && config.animations === false
+                  ? TextAttributes.DIM
+                  : TextAttributes.BOLD
+              }
+            >
+              {withTimestampedFallback(session())}
+            </title_shimmer>
+          </box>
+          <Show when={props.onClose}>
+            <text
+              id="sidebar-close"
+              flexShrink={0}
+              fg={closeHovered() ? theme.text.action.secondary.hovered : theme.text.action.secondary.base}
+              onMouseOver={() => setCloseHovered(true)}
+              onMouseOut={() => setCloseHovered(false)}
+              onMouseUp={() => {
+                // Ignore the release that finishes a text selection.
+                if (renderer.getSelection()?.getSelectedText()) return
+                props.onClose?.()
+              }}
+            >
+              ✕
+            </text>
+          </Show>
         </box>
         <scrollbox
           flexGrow={1}
