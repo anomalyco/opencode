@@ -21,10 +21,17 @@ async function setup(copyOnSelect = false) {
       writes.push(text)
     },
   }
+  const toasts: string[] = []
   app.renderer.keyInput.on("keypress", (event) =>
-    Selection.handleSelectionKey(app.renderer, { show() {}, error() {} }, event, clipboard, copyOnSelect),
+    Selection.handleSelectionKey(
+      app.renderer,
+      { show: (toast) => toasts.push(toast.message), error() {} },
+      event,
+      clipboard,
+      copyOnSelect,
+    ),
   )
-  return { ...app, clock, writes }
+  return { ...app, clock, writes, toasts }
 }
 
 async function terminal(copyOnSelect = false) {
@@ -194,6 +201,8 @@ test.each(["manual", "select"].flatMap((mode) => ["textarea", "input"].map((kind
       app.mockInput.pressKey("x", { super: true })
       expect(editor.plainText).toBe("dra")
       expect(app.writes).toEqual(["ft"])
+      await Bun.sleep(0)
+      expect(app.toasts).toEqual(["Cut to clipboard"])
       expect(app.renderer.hasSelection).toBeFalse()
     } finally {
       app.renderer.destroy()
