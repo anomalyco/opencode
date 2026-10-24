@@ -1,6 +1,7 @@
 import { Buffer } from "node:buffer"
 import { Effect, Option, Schema, SchemaGetter } from "effect"
 import { Tool } from "@opencode/schema/tool"
+import { Media } from "../media.js"
 import { Route } from "../route/client.js"
 import { Auth } from "../route/auth.js"
 import { Endpoint } from "../route/endpoint.js"
@@ -13,6 +14,7 @@ import {
   HttpOptions,
   LLMRequest,
   LLMEvent,
+  Message,
   mergeJsonRecords,
   Usage,
   type CacheHint,
@@ -117,6 +119,13 @@ const AnthropicImageBlock = Schema.Struct({
 })
 type AnthropicImageBlock = Schema.Schema.Type<typeof AnthropicImageBlock>
 
+const AnthropicVideoBlock = Schema.Struct({
+  type: Schema.tag("video"),
+  source: AnthropicImageSource,
+  cache_control: Schema.optional(AnthropicCacheControl),
+})
+type AnthropicVideoBlock = Schema.Schema.Type<typeof AnthropicVideoBlock>
+
 // SDK: Base64PDFSource:209 {type:"base64", media_type:"application/pdf", data}, PlainTextSource:2716 {type:"text", media_type:"text/plain", data},
 // SDK: URLPDFSource:3823 {type:"url", url}, FileDocumentSource:2344 {type:"file", file_id}, ContentBlockSource:2266 {type:"content", content}
 // SDK: DocumentBlockParam:2297 {source: 5-way union, cache_control, citations, context, title}
@@ -206,7 +215,12 @@ type AnthropicServerToolResultBlock = Schema.Schema.Type<typeof AnthropicServerT
 // Anthropic accepts either a plain string or an ordered array of text, image, and
 // document blocks inside `tool_result.content`. The array form keeps media as native
 // model input instead of JSON-stringifying base64 into prompt text.
-const AnthropicToolResultContent = Schema.Union([AnthropicTextBlock, AnthropicImageBlock, AnthropicDocumentBlock])
+const AnthropicToolResultContent = Schema.Union([
+  AnthropicTextBlock,
+  AnthropicImageBlock,
+  AnthropicDocumentBlock,
+  AnthropicVideoBlock,
+])
 
 const AnthropicToolResultBlock = Schema.Struct({
   type: Schema.tag("tool_result"),
@@ -220,6 +234,7 @@ const AnthropicUserBlock = Schema.Union([
   AnthropicTextBlock,
   AnthropicImageBlock,
   AnthropicDocumentBlock,
+  AnthropicVideoBlock,
   AnthropicToolResultBlock,
 ])
 type AnthropicUserBlock = Schema.Schema.Type<typeof AnthropicUserBlock>
@@ -671,9 +686,23 @@ const citationsFromMetadata = (metadata: MediaPart["metadata"]): AnthropicDocume
 
 const isHttpUrl = (value: string) => /^https?:\/\//i.test(value.trim())
 
-const lowerMedia = Effect.fnUntraced(function* (part: MediaPart, breakpoints?: Cache.Breakpoints) {
+const lowerMedia = Effect.fnUntraced(function* (part: MediaPart, request: LLMRequest, breakpoints?: Cache.Breakpoints) {
   const mime = part.media.mediaType.toLowerCase()
   const cacheControlValue = breakpoints ? cacheControl(breakpoints, part.cache) : undefined
+  if (mime.startsWith("video/")) {
+    const inline = part.media.inline()
+    const reference = yield* ProviderShared.mediaReference(part.media, request.model.provider, "Messages video")
+    const source = inline
+      ? { type: "base64" as const, media_type: mime, data: inline.base64 }
+      : reference.type === "ref" && !/^[a-z][a-z\d+.-]*:\/\//i.test(reference.value)
+        ? { type: "file" as const, file_id: reference.value }
+        : { type: "url" as const, url: reference.value }
+    return {
+      type: "video" as const,
+      source,
+      ...(cacheControlValue === undefined ? {} : { cache_control: cacheControlValue }),
+    } satisfies AnthropicVideoBlock
+  }
   const fileId = fileIdFromMetadata(part.metadata)
 
   // SDK file sources: FileImageSource:2350 / FileDocumentSource:2344 {type:"file", file_id}
@@ -782,18 +811,37 @@ const lowerMedia = Effect.fnUntraced(function* (part: MediaPart, breakpoints?: C
 
 // Tool results may carry structured text, images, and documents. Keep media as provider-native
 // content instead of JSON-stringifying base64 into a prompt string.
-const lowerToolResultContentItem = Effect.fnUntraced(function* (item: Tool.Content) {
+const lowerToolResultContentItem = Effect.fnUntraced(function* (item: Tool.Content, request: LLMRequest) {
   if (item.type === "text") return { type: "text" as const, text: item.text } satisfies AnthropicTextBlock
-  return yield* lowerMedia(ProviderShared.toolFileMedia(item))
+  const part =
+    item.mime.toLowerCase().startsWith("video/") && /^(ms|mm_file):\/\//.test(item.uri)
+      ? Message.media(Media.url(item.uri, { mediaType: item.mime }), { filename: item.name })
+      : ProviderShared.toolFileMedia(item)
+  return yield* lowerMedia(part, request)
 })
 
-const lowerToolResultContent = Effect.fnUntraced(function* (part: ToolResultPart) {
+const lowerToolResultContent = Effect.fnUntraced(function* (
+  part: ToolResultPart,
+  request: LLMRequest,
+  videos: AnthropicVideoBlock[],
+) {
   // Text / json / error results stay as a string for backward compatibility
   // with existing cassettes and provider expectations.
   if (part.result.type !== "content") return ProviderShared.toolResultText(part)
   // Preserve the narrowed array element type when compiled through a consumer package.
   const content: ReadonlyArray<Tool.Content> = part.result.value
-  return yield* Effect.forEach(content, lowerToolResultContentItem)
+  const blocks = yield* Effect.forEach(content, (item) => lowerToolResultContentItem(item, request))
+  if (
+    ![request.model.provider, request.model.route.provider, request.model.route.providerMetadataKey].includes("meta") &&
+    URL.parse(request.model.route.endpoint.baseURL ?? "")?.hostname !== "api.meta.ai"
+  )
+    return blocks
+  // Meta accepts nested video but does not show it to the model.
+  return blocks.filter((block) => {
+    if (block.type !== "video") return true
+    videos.push(block)
+    return false
+  })
 })
 
 const requireThinkingSignature = (request: LLMRequest) => {
@@ -870,6 +918,7 @@ const appendToUserTurn = (messages: AnthropicMessage[], block: AnthropicUserBloc
 
 const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, breakpoints: Cache.Breakpoints) {
   const messages: AnthropicMessage[] = []
+  const videos: AnthropicVideoBlock[] = []
   const providerMetadataKey = request.model.route.providerMetadataKey ?? request.model.provider
   // Text updates stay where they are unless a user turn follows them; then they move after the latest
   // user turn, the nearest spot where Anthropic accepts a native system message.
@@ -884,6 +933,8 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, breakpoi
   })
 
   for (const [index, message] of request.messages.entries()) {
+    // Wait for every parallel tool result before appending ordinary user content.
+    if (message.role !== "tool") videos.splice(0).forEach((video) => appendToUserTurn(messages, video))
     if (message.role === "system") {
       const update = effortUpdate(message)
       if (update) {
@@ -907,7 +958,7 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, breakpoi
           continue
         }
         if (part.type === "media") {
-          content.push(yield* lowerMedia(part, breakpoints))
+          content.push(yield* lowerMedia(part, request, breakpoints))
           continue
         }
         return yield* ProviderShared.unsupportedContent("Anthropic Messages", "user", ["text", "media"])
@@ -983,7 +1034,7 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, breakpoi
       content.push({
         type: "tool_result",
         tool_use_id: scrubToolCallID(part.id),
-        content: yield* lowerToolResultContent(part),
+        content: yield* lowerToolResultContent(part, request, videos),
         is_error: part.result.type === "error" ? true : undefined,
         cache_control: cacheControl(breakpoints, part.cache),
       })
@@ -993,6 +1044,7 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, breakpoi
       messages[messages.length - 1] = { role: "user", content: [...previous.content, ...content] }
     else messages.push({ role: "user", content })
   }
+  videos.forEach((video) => appendToUserTurn(messages, video))
   yield* releaseHeld()
 
   return messages

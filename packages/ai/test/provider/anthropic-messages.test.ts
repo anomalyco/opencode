@@ -15,7 +15,7 @@ import {
 import { Auth, Endpoint, LLMClient, Route } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import * as AnthropicMessages from "../../src/protocols/anthropic-messages.js"
-import { GoogleVertexMessages } from "../../src/providers.js"
+import { GoogleVertexMessages, MiniMax } from "../../src/providers.js"
 import { continuationRequest, nativeAnthropicMessagesContinuation } from "../continuation-scenarios.js"
 import { it } from "../lib/effect.js"
 import { dynamicResponse, fixedResponse } from "../lib/http.js"
@@ -857,6 +857,85 @@ describe("Anthropic Messages route", () => {
       ).pipe(Effect.flip)
 
       expect(error.message).toContain("Anthropic Messages does not support media type audio/mpeg")
+    }),
+  )
+
+  it.effect("serializes Messages video by default and keeps Meta video after parallel tool results", () =>
+    Effect.gen(function* () {
+      const video = { type: "video", source: { type: "base64", media_type: "video/mp4", data: "AAECAw==" } }
+      const attachment = { type: "file" as const, uri: "data:video/mp4;base64,AAECAw==", mime: "video/mp4" }
+      const user = LLM.request({
+        model: AnthropicMessages.route.with({ provider: "custom" }).model({ id: "video-model" }),
+        prompt: [
+          Message.media(Media.base64("AAECAw==", "video/mp4"), { cache: new CacheHint({ type: "ephemeral" }) }),
+          Message.media(Media.ref("custom", "file_clip", "video/mp4")),
+        ],
+        cache: "none",
+      })
+      const unknown = yield* compileRequest(user)
+      expect(unknown.body.messages).toEqual([
+        {
+          role: "user",
+          content: [
+            { ...video, cache_control: { type: "ephemeral" } },
+            { type: "video", source: { type: "file", file_id: "file_clip" } },
+          ],
+        },
+      ])
+
+      const nested = yield* compileRequest(
+        LLMRequest.update(user, {
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "clip", name: "read", input: {} })]),
+            Message.tool({ id: "clip", name: "read", resultType: "content", result: [attachment] }),
+          ],
+        }),
+      )
+      expect(expectToolResult(nested.body).content).toEqual([video])
+
+      const metaEndpoint = yield* compileRequest(
+        LLM.request({
+          model: MiniMax.configure({ apiKey: "test", baseURL: "https://api.meta.ai/v1" }).messages("video-model"),
+          messages: [
+            Message.assistant([
+              ToolCallPart.make({ id: "first", name: "read", input: {} }),
+              ToolCallPart.make({ id: "second", name: "read", input: {} }),
+            ]),
+            Message.tool({ id: "first", name: "read", resultType: "content", result: [attachment] }),
+            Message.tool({ id: "second", name: "read", resultType: "content", result: [attachment] }),
+            Message.assistant("Observed."),
+          ],
+          cache: "none",
+        }),
+      )
+      expect(metaEndpoint.body.messages).toMatchObject([
+        {
+          role: "assistant",
+          content: [
+            { type: "tool_use", id: "first" },
+            { type: "tool_use", id: "second" },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            { type: "tool_result", tool_use_id: "first", content: [] },
+            { type: "tool_result", tool_use_id: "second", content: [] },
+            video,
+            video,
+          ],
+        },
+        { role: "assistant", content: [{ type: "text", text: "Observed." }] },
+      ])
+
+      const native = yield* compileRequest(
+        LLM.request({
+          model: AnthropicMessages.route.model({ id: "video-model" }),
+          prompt: Message.media(Media.base64("AAECAw==", "video/mp4")),
+          cache: "none",
+        }),
+      )
+      expect(native.body.messages).toEqual([{ role: "user", content: [video] }])
     }),
   )
 
