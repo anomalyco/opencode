@@ -756,7 +756,22 @@ export function Session(props: {
         () => undefined,
         (error) => error,
       )
-      if (!error) return true
+      if (!error) {
+        // Cancel consumed the row server-side (a missing one is a no-op), so
+        // reconcile locally in case its echo is lost across a stream drop.
+        if (action === "cancel") data.session.pending.discard(route.sessionID, inboxID)
+        return true
+      }
+      // The conflict leaves it open whether the row was consumed or is already
+      // in the requested delivery state (a delivery-change echo can be lost
+      // while the card still shows the old mode). Release the guard and let a
+      // fresh read settle it: a consumed row clears, a live one stays.
+      if (typeof error === "object" && error !== null && "_tag" in error && error._tag === "ConflictError") {
+        data.session.pending.release(inboxID)
+        data.session.pending.invalidate(route.sessionID)
+        void data.session.pending.sync(route.sessionID).catch(() => undefined)
+        return true
+      }
       const label = failureLabel ?? (action === "cancel" ? "delete" : action)
       toast.show({ title: `Failed to ${label} pending prompt`, message: errorMessage(error), variant: "error" })
       return false
