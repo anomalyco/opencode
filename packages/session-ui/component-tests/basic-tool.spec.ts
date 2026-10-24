@@ -2,6 +2,44 @@ import { expect, sourceURL, story } from "../../storybook/playwright/story"
 
 const fixture = sourceURL(new URL("./basic-tool.fixture.tsx", import.meta.url))
 
+story("expands unknown tools to show complete inputs and literal output", async ({ mount, page }) => {
+  const input = "First input line\nSecond input line\nFinal input line beyond the compact header"
+  const output = "Message delivered\n<b>literal output</b> **plain text**"
+  await mount("components-markdown--compact-result")
+  await page.evaluate(
+    async ({ fixture, input, output }) => {
+      const { mountGenericTool } = await import(fixture)
+      mountGenericTool({ message: input }, output)
+    },
+    { fixture, input, output },
+  )
+  const root = page.getByTestId("generic-tool-fixture")
+  const trigger = root.getByRole("button", { name: /Called `messageSession`/ })
+  const content = root.locator('[data-slot="collapsible-content"]')
+  await expect(trigger).toHaveAttribute("aria-expanded", "false")
+  await expect(content).toBeHidden()
+
+  await trigger.click()
+  await expect(content).toBeVisible()
+  await expect(content.locator("pre").nth(0)).toHaveJSProperty("textContent", input)
+  await expect(content.locator("pre").nth(1)).toHaveJSProperty("textContent", output)
+  await expect(content.locator("b, strong")).toHaveCount(0)
+
+  await trigger.click()
+  await expect(content).toBeHidden()
+})
+
+story("does not show an arrow for an empty unknown tool", async ({ mount, page }) => {
+  await mount("components-markdown--compact-result")
+  await page.evaluate(async (fixture) => {
+    const { mountGenericTool } = await import(fixture)
+    mountGenericTool({})
+  }, fixture)
+  const root = page.getByTestId("generic-tool-fixture")
+  await expect(root.getByRole("button", { name: "Called `messageSession`", exact: true })).toBeVisible()
+  await expect(root.locator('[data-slot="collapsible-arrow"]')).toHaveCount(0)
+})
+
 story("does not render completed reasoning until it is opened", async ({ mount, page }) => {
   const root = await mount("current-session-timeline-rows--conversation", {
     args: { scenario: "reasoning", mode: "compact", text: "Response after reasoning" },

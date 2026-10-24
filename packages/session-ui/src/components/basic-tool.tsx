@@ -400,19 +400,45 @@ export function GenericTool(props: {
   status?: string
   hideDetails?: boolean
   input?: Record<string, unknown>
+  output?: string
 }) {
   const i18n = useI18n()
+  const input = createMemo(() => Object.entries(props.input ?? {}))
 
   return (
     <BasicTool
       icon="mcp"
       status={props.status}
+      hasContent={input().length > 0 || !!props.output}
       trigger={{
         title: i18n.t("ui.basicTool.called", { tool: props.tool }),
         subtitle: label(props.input),
         args: args(props.input),
       }}
       hideDetails={props.hideDetails}
-    />
+    >
+      <dl data-component="tool-output" class="w-full min-w-0 gap-2">
+        <For each={input()}>
+          {([key, value]) => (
+            <div class="w-full min-w-0">
+              <dt class="text-text-weak">{key}</dt>
+              <dd class="m-0">
+                <pre class="whitespace-pre-wrap break-words">
+                  {typeof value === "string" ? value : JSON.stringify(value, null, 2)}
+                </pre>
+              </dd>
+            </div>
+          )}
+        </For>
+        <Show when={props.output}>
+          <div class="w-full min-w-0">
+            <dt class="text-text-weak">{i18n.t("ui.basicTool.output")}</dt>
+            <dd class="m-0">
+              <pre class="whitespace-pre-wrap break-words">{props.output}</pre>
+            </dd>
+          </div>
+        </Show>
+      </dl>
+    </BasicTool>
   )
 }
