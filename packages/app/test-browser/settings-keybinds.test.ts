@@ -1,8 +1,15 @@
 import { describe, expect, test } from "bun:test"
 import { createRoot } from "solid-js"
 import { createKeybindSettingsController } from "../src/settings/keybinds/keybinds"
+import { promptKeybindOptions } from "../src/composer/keybinds"
 
-function setup(overrides: Record<string, string> = {}) {
+function setup(
+  overrides: Record<string, string> = {},
+  options = [
+    { id: "session.alpha", title: "Alpha", keybind: "mod+a" },
+    { id: "session.beta", title: "Beta", keybind: "mod+b" },
+  ],
+) {
   const changes: [string, string][] = []
   const suppression: boolean[] = []
   const notifications: { title: string; description?: string }[] = []
@@ -13,10 +20,7 @@ function setup(overrides: Record<string, string> = {}) {
     controller = createKeybindSettingsController(
       {
         command: {
-          catalog: [
-            { id: "session.alpha", title: "Alpha", keybind: "mod+a" },
-            { id: "session.beta", title: "Beta", keybind: "mod+b" },
-          ],
+          catalog: options,
           options: [],
           keybinds: (enabled) => suppression.push(enabled),
         },
@@ -67,6 +71,28 @@ function modKey(key: string) {
 }
 
 describe("keybind settings controller", () => {
+  test("shows prompt aliases and rejects them as conflicts until explicitly released", () => {
+    const titles = { submit: "Submit", newline: "Newline", alternate: "Alternate" }
+    const defaults = setup({}, promptKeybindOptions(titles))
+    expect(defaults.controller.catalog.alternatives("prompt.submit")).toContain("Alt")
+    defaults.controller.capture.toggle("prompt.newline")
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", altKey: true, bubbles: true, cancelable: true }),
+    )
+    expect(defaults.changes).toEqual([])
+    expect(defaults.notifications[0]?.description).toContain("Submit")
+    defaults.dispose()
+
+    const custom = setup({ "prompt.submit": "enter" }, promptKeybindOptions(titles, { submit: "enter" }))
+    expect(custom.controller.catalog.alternatives("prompt.submit")).not.toContain("Alt")
+    custom.controller.capture.toggle("prompt.newline")
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", altKey: true, bubbles: true, cancelable: true }),
+    )
+    expect(custom.changes).toEqual([["prompt.newline", "alt+enter"]])
+    custom.dispose()
+  })
+
   test("derives the catalog, effective bindings, and filtered groups", () => {
     const state = setup({ "session.beta": "alt+k" })
 

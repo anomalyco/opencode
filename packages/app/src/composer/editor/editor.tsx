@@ -45,6 +45,7 @@ import type {
 } from "../types"
 import type { ComposerEditorModel, ComposerSelectControl } from "./interaction"
 import { isAttachment } from "../prompt-parts"
+import { handleComposerKeyDown, type ComposerKeybinds } from "./keybind"
 import "../attachments/attachments.css"
 import "./editor.css"
 
@@ -89,6 +90,8 @@ export type ComposerEditorProps = {
   alternateKeybind?: string[]
   exitShellKeybind?: string[]
   suggestionBoundary?: () => HTMLElement | undefined
+  keybinds?: ComposerKeybinds
+  submitKeybind?: string[]
 }
 
 export function ComposerEditor(props: ComposerEditorProps) {
@@ -117,6 +120,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
     onCleanup(() => observer.disconnect())
   })
   let localInput = false
+  let composing = false
 
   const updateCursor = () => {
     if (!editor || !window.getSelection()?.isCollapsed) return
@@ -255,22 +259,28 @@ export function ComposerEditor(props: ComposerEditorProps) {
               props.controller.onInput(prompt.map((part) => part.content).join(""), [...prompt, ...attachments], cursor)
             }}
             onKeyDown={(event) => {
-              if (!view.draftOnly && props.controller.onKeyDown(event)) return
-              const mod = event.metaKey || event.ctrlKey
+              handleComposerKeyDown({
+                event,
+                keybinds: props.keybinds,
+                composing,
+                selectSuggestion: () => {
+                  const popover = state.popover
 
-              if (mod && event.key === "ArrowUp" && !event.shiftKey && !event.altKey) {
-                if (view.submit.queue?.editFirst()) event.preventDefault()
+                  if (popover.type === "closed") return false
+                  const item = props.controller.suggestions().find((entry) => entry.id === popover.activeID)
 
-                return
-              }
+                  if (item) props.controller.dispatch({ type: "popover.select", item })
 
-              if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
-                event.preventDefault()
-
-                if (event.repeat) return
-                props.controller.submit(mod ? { alternate: true } : undefined)
-              }
+                  return true
+                },
+                handleController: () => !view.draftOnly && props.controller.onKeyDown(event),
+                editFirst: view.submit.queue?.editFirst,
+                insertNewline: props.controller.insertNewline,
+                submit: (alternate) => props.controller.submit(alternate ? { alternate: true } : undefined),
+              })
             }}
+            onCompositionStart={() => (composing = true)}
+            onCompositionEnd={() => (composing = false)}
             onKeyUp={updateCursor}
             onPointerUp={updateCursor}
             onPaste={(event) => {
@@ -401,6 +411,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
               disabled={!props.controller.canSubmit()}
               sendLabel={i18n.t("ui.promptInput.send")}
               stopLabel={i18n.t("ui.promptInput.stop")}
+              sendKeybind={props.submitKeybind}
               onSubmit={() => props.controller.submit()}
               onStop={props.controller.stop}
             />
@@ -1074,8 +1085,8 @@ function composerSuggestionMaxHeight(boundaryHeight: number, search: boolean) {
   )
 }
 
-// "Steer ⌘⏎" / "Queue ⌘⏎" hint next to the submit button: submits with the
-// delivery opposite to what plain Enter does. Visible only while the queue
+// Steer / Queue action with its configured shortcut: submits with the
+// delivery opposite to normal submission. Visible only while the queue
 // exposes an alternate (turn running and composer holding a value), so it
 // disappears on its own when the current turn ends.
 function ComposerEditorAlternateDelivery(props: { controller: ComposerEditorModel; keybind: string[] }) {
@@ -1129,6 +1140,7 @@ export function ComposerEditorSubmitButton(props: {
   disabled: boolean
   sendLabel: string
   stopLabel: string
+  sendKeybind?: string[]
   onSubmit: () => void
   onStop: () => void
 }) {
@@ -1136,7 +1148,18 @@ export function ComposerEditorSubmitButton(props: {
     <Tooltip
       placement="top"
       inactive={!props.stopping && props.disabled}
-      value={props.stopping ? props.stopLabel : props.sendLabel}
+      value={
+        props.stopping ? (
+          props.stopLabel
+        ) : (
+          <>
+            {props.sendLabel}
+            <Show when={props.sendKeybind?.length}>
+              <Keybind keys={props.sendKeybind ?? []} variant="neutral" />
+            </Show>
+          </>
+        )
+      }
     >
       <IconButton
         data-action="composer-submit"

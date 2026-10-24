@@ -19,6 +19,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
 import { Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/runtime/i18n/language"
+import { SettingsProvider } from "@/settings/model"
 import type { WebSearchRequestModel } from "./requests/websearch"
 
 const modelReady = Object.assign(() => true, { promise: undefined }) satisfies ModelSelection["ready"]
@@ -273,7 +274,11 @@ function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void 
                   </div>
                   <SessionComposerRegion
                     controller={region}
-                    composer={<Composer model={prompt.controller} borderUnderlay />}
+                    composer={
+                      <SettingsProvider>
+                        <Composer model={prompt.controller} borderUnderlay />
+                      </SettingsProvider>
+                    }
                   />
                 </section>
                 <Show when={state.reviewOpened}>
