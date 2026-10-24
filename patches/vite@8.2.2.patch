@@ -17,10 +17,18 @@ index 4c4a3f6f884795001ffbae43cd3c3d6bf84169dc..b5e80b68140824e7460439b125eec8ec
  			const ctx = new BundledDevHMRContext(bundledDevHmrClient, moduleId);
  			ctx._internal = {
 diff --git a/dist/node/chunks/node.js b/dist/node/chunks/node.js
-index 87cfa480c3d4132f9dd1b74c6c1bbe2b90385d3f..83da417e7b9c380d06b7679d3fbfaeed998f5277 100644
+index 87cfa480c3d4132f9dd1b74c6c1bbe2b90385d3f..2766bd518279eb3feaba34625e0e794711d046ce 100644
 --- a/dist/node/chunks/node.js
 +++ b/dist/node/chunks/node.js
-@@ -26309,7 +26309,6 @@ function memoryFilesMiddleware(server) {
+@@ -25771,6 +25771,7 @@ async function generateFallbackHtml(server) {
+     body {
+       margin: 0;
+       min-height: 100vh;
++      font-family: system-ui, sans-serif;
+       display: flex;
+       background-color: var(--page-bg);
+       color: var(--text-color);
+@@ -26309,7 +26310,6 @@ function memoryFilesMiddleware(server) {
  			const mime = lookup(filePath);
  			if (mime) res.setHeader("Content-Type", mime);
  			for (const name in headers) res.setHeader(name, headers[name]);
@@ -28,7 +36,7 @@ index 87cfa480c3d4132f9dd1b74c6c1bbe2b90385d3f..83da417e7b9c380d06b7679d3fbfaeed
  			return res.end(file.source);
  		}
  		next();
-@@ -26339,7 +26338,6 @@ function triggerLazyBundlingMiddleware(server) {
+@@ -26339,7 +26339,6 @@ function triggerLazyBundlingMiddleware(server) {
  		}
  		if (result == null) return next();
  		res.setHeader("Content-Type", "application/javascript");
@@ -36,7 +44,7 @@ index 87cfa480c3d4132f9dd1b74c6c1bbe2b90385d3f..83da417e7b9c380d06b7679d3fbfaeed
  		return res.end(result.code);
  	};
  }
-@@ -35155,6 +35153,9 @@ var BundledDev = class {
+@@ -35155,6 +35154,9 @@ var BundledDev = class {
  			this.clients.setupIfNeeded(client, payload.clientId);
  			this.devEngine.registerClient(payload.clientId);
  		});
@@ -46,7 +54,7 @@ index 87cfa480c3d4132f9dd1b74c6c1bbe2b90385d3f..83da417e7b9c380d06b7679d3fbfaeed
  		this.environment.hot.on("vite:client:connect", (_payload, client) => {
  			if (this.lastBuildError) {
  				debug$1?.("REPLAY: replaying last build error to newly connected client");
-@@ -35287,12 +35288,11 @@ var BundledDev = class {
+@@ -35287,12 +35289,11 @@ var BundledDev = class {
  		debug$1?.(`TRIGGER-LAZY: trigger lazy bundling for module ${moduleId} for client ${clientId}`);
  		const result = await this.devEngine.compileEntry(moduleId, clientId);
  		this.pendingPayloadFilenames.add(result.filename);
@@ -62,7 +70,7 @@ index 87cfa480c3d4132f9dd1b74c6c1bbe2b90385d3f..83da417e7b9c380d06b7679d3fbfaeed
  	*
  	* Note: the payload filename is unique across all clients.
  	*/
-@@ -35364,7 +35364,7 @@ var BundledDev = class {
+@@ -35364,7 +35365,7 @@ var BundledDev = class {
  			code: typeof hmrOutput.code === "string" ? "[code]" : hmrOutput.code
  		});
  		this.pendingPayloadFilenames.add(hmrOutput.filename);
@@ -71,7 +79,7 @@ index 87cfa480c3d4132f9dd1b74c6c1bbe2b90385d3f..83da417e7b9c380d06b7679d3fbfaeed
  		if (hmrOutput.sourcemapFilename && hmrOutput.sourcemap) this.memoryFiles.set(hmrOutput.sourcemapFilename, { source: hmrOutput.sourcemap });
  		client.send({
  			type: "bundled-dev-update",
-@@ -35407,6 +35407,10 @@ var Clients = class {
+@@ -35407,6 +35408,10 @@ var Clients = class {
  		}
  	}
  };
