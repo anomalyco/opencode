@@ -412,8 +412,57 @@ This is separate from `opencode.json`, which configures server/runtime behavior.
 - `cursor` - Controls the terminal cursor in TUI input fields. `style` defaults to `"block"`, can be `"underline"`, `"line"`, or `"default"`; `blinking` defaults to `true`. When `style` is `"default"`, the terminal default cursor is restored, so `blinking` has no effect.
 - `mouse` - Enable or disable mouse capture in the TUI (default: `true`). When disabled, the terminal's native mouse selection/scrolling behavior is preserved.
 - `attention` - Configures TUI desktop notifications and sounds. Disabled by default.
+- `syntax` - Controls syntax highlighting in tool calls. [Learn more](#syntax-highlighting).
 
 Use `OPENCODE_TUI_CONFIG` to load a custom TUI config path.
+
+### Syntax highlighting
+
+Tool calls are colored by language. Each part can be turned off under `syntax`:
+
+```json title="tui.json"
+{
+  "syntax": {
+    "bash": false
+  }
+}
+```
+
+- `bash` - Color the bash tool's command as shell code. Defaults to `true`.
+- `tool_output` - Color plugin and MCP tool output, by tool name. Keys are tool names or globs (`*` matches any run of characters, `?` one); values are a language id such as `json`, `yaml` or `markdown`, `auto`, or `none`. An exact name wins over any glob, and the glob with the most literal characters wins over the others. `auto` colors output that is a JSON object or array and leaves anything else plain. Output over 100,000 characters stays plain. Unset by default, which leaves all output plain. Colored output wraps exactly as the plain text does.
+- `file_output` - Color tool output that shows the contents of files in each file's language. Defaults to `false`. See [File contents in tool output](#file-contents-in-tool-output).
+
+```json title="tui.json"
+{
+  "syntax": {
+    "tool_output": {
+      "browser": "json",
+      "todo_*": "none",
+      "*": "auto"
+    }
+  }
+}
+```
+
+#### File contents in tool output
+
+With `file_output` on, output that shows code from files is colored in each file's language, and a path or line number a line starts with is muted:
+
+| Output                                                                                                                                                                                | Language                                    |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| A bash command reading files: `cat`, `head`, `tail`, `sed -n`, `nl`, `awk`, `bat`, `git show <ref>:<path>`, chained with `;`, `&&` or a pipe through filters such as `head` or `grep` | The files', when they all have one language |
+| `grep -n`, `rg` and other `path:12:code`, `path-12-code` and `path:code` lines                                                                                                        | Each line's file                            |
+| `rg` with headings: a path line, then `12:code` lines                                                                                                                                 | Each heading's file                         |
+| `12:code` or `   12<tab>code` lines from `rg -n` or `cat -n` on files of one language                                                                                                 | The files'                                  |
+| A `--type`, `-t` or `--glob` of one language for `rg` and `grep`                                                                                                                      | That language                               |
+| Any bash output that is a whole JSON document, or starts like a diff (`git diff`, `git show <commit>`)                                                                                | JSON, diff                                  |
+| The read and grep tools                                                                                                                                                               | The file read, each matched file            |
+| GitHub code search results (`Repository:`, `Path:` and `--- Snippet` blocks)                                                                                                          | Each snippet's path                         |
+| Plugin and MCP output with a fenced code block that names its language, such as context7 docs                                                                                         | Markdown, each block in its own language    |
+
+Output whose language is not clear stays plain: files of different languages read by one command, a command that also runs something else (`ls && cat a.ts`), or a pipe through a command that changes the text (`cat a.json | jq`). A plugin or MCP tool's language set in `tool_output` comes first, and one set to `none` stays plain. Collapsed output is colored like the expanded output. Output over 100,000 characters stays plain, and only the first 64 files of a search are colored.
+
+The read and grep tools show no output by default, only their row. With `file_output` on, clicking a finished read or grep row shows the file or the matches it found as a block, colored, and clicking the block folds it back.
 
 ### Attention
 

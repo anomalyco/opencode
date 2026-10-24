@@ -45,6 +45,14 @@ test("validates config constraints", () => {
   expect(() => decodeInfo({ prompt: { max_width: 0 } })).toThrow()
   expect(() => decodeInfo({ scroll_speed: 0 })).toThrow()
   expect(() => decodeInfo({ cursor: { style: "beam" } })).toThrow()
+  expect(decodeInfo({ syntax: { bash: false } })).toEqual({ syntax: { bash: false } })
+  expect(() => decodeInfo({ syntax: { bash: "off" } })).toThrow()
+  expect(decodeInfo({ syntax: { tool_output: { browser: "json", "*": "auto" } } })).toEqual({
+    syntax: { tool_output: { browser: "json", "*": "auto" } },
+  })
+  expect(() => decodeInfo({ syntax: { tool_output: { browser: true } } })).toThrow()
+  expect(decodeInfo({ syntax: { file_output: true } })).toEqual({ syntax: { file_output: true } })
+  expect(() => decodeInfo({ syntax: { file_output: "yes" } })).toThrow()
   expect(decodeInfo({ attention: { sounds: { unknown: "sound.wav" } } })).toEqual({ attention: { sounds: {} } })
 })
 

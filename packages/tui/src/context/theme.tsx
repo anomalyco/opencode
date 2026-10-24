@@ -19,6 +19,7 @@ import {
   upsertTheme,
   type ThemeJson,
 } from "../theme"
+import { toolCodeTheme } from "../theme/tool-code"
 import { createEffect, createMemo, onCleanup, onMount } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "./helper"
@@ -270,6 +271,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
 
     const syntax = createSyntaxStyleMemo(() => generateSyntax(values()))
     const subtleSyntax = createSyntaxStyleMemo(() => generateSubtleSyntax(values()))
+    const toolSyntax = createSyntaxStyleMemo(() => generateSyntax(toolCodeTheme(values())))
 
     return {
       theme: new Proxy(values(), {
@@ -285,6 +287,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       has: hasTheme,
       syntax,
       subtleSyntax,
+      toolSyntax,
       mode: () => store.mode,
       locked: () => store.lock !== undefined,
       lock: () => pin(store.mode),
