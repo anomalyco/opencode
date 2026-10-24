@@ -13,12 +13,16 @@ import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
 import { AppProcess } from "@opencode/util/process"
 import { Config } from "./config"
+import { Env } from "./env"
 import { Npm } from "@opencode/util/npm"
 import { EffectFlock } from "@opencode/util/effect-flock"
 import { Heap } from "./heap"
 import { CpuProfile } from "./cpu-profile"
 
 ensurePluginRuntime()
+
+// Exempt loopback from any configured proxy before anything dials out.
+Env.ensureLoopbackNoProxy(process.env)
 
 if (process.env.OPENCODE_SSH_ASKPASS_PORT) {
   const { askpass } = await import("./ssh-askpass")
