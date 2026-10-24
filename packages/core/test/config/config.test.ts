@@ -738,7 +738,7 @@ describe("Config", () => {
     ),
   )
 
-  it.live("keeps the last resolved wellknown config across failures and restarts until its source is removed", () =>
+  it.live("keeps the last resolved wellknown config across failures and restarts while authenticated, drops it after logout", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
       (tmp) => {
@@ -851,7 +851,10 @@ describe("Config", () => {
             expect(requests).toBeGreaterThan(before)
 
             key = undefined
-            expect(yield* warm.reload("logged-out", warm.switched)).toEqual(loaded)
+            // Logged out: the endpoint no longer contributes documents, so its
+            // cached config cannot resolve {env:TOKEN} to "" and shadow the
+            // wiring of still-authenticated endpoints (anomalyco/opencode#54645).
+            expect(yield* warm.reload("logged-out", warm.switched)).toEqual(removed)
 
             manifestStatus = 503
             const updated = yield* warm.bus
@@ -873,6 +876,137 @@ describe("Config", () => {
             expect(yield* cold.reload("re-added", cold.wellknown.add(origin))).toEqual(removed)
           }).pipe(Effect.scoped, Effect.provide(instance()))
         }).pipe(Effect.ensuring(Effect.promise(() => server.stop(true))))
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("logged-out wellknown endpoint does not shadow still-authenticated endpoints", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        const keys = new Map<string, string>()
+        const serve = (env: string, key: string) =>
+          Bun.serve({
+            port: 0,
+            fetch(request) {
+              const url = new URL(request.url)
+              if (url.pathname === "/.well-known/opencode")
+                return Response.json({
+                  auth: { command: ["login"], env },
+                  remote_config: { url: `${url.origin}/config`, headers: { authorization: `Bearer {env:${env}}` } },
+                })
+              if (request.headers.get("authorization") !== `Bearer ${key}`)
+                return new Response("Unauthorized", { status: 401 })
+              return Response.json({
+                config: {
+                  provider: {
+                    // v1 provider shape: headers live under options and migrate to
+                    // the top-level headers overlay.
+                    shared: {
+                      npm: "@ai-sdk/openai-compatible",
+                      options: { headers: { "x-api-key": `{env:${env}}` } },
+                      models: {},
+                    },
+                  },
+                },
+              })
+            },
+          })
+        const serverA = serve("TOKEN_A", "key-a")
+        const serverB = serve("TOKEN_B", "key-b")
+        const origins = [serverA.url.origin, serverB.url.origin]
+        const credentialNode = makeGlobalNode({
+          service: Credential.Service,
+          layer: Layer.mock(Credential.Service)({
+            list: (integrationID: Integration.ID) =>
+              Effect.succeed(
+                keys.has(integrationID)
+                  ? [
+                      new Credential.Info({
+                        id: Credential.ID.create(),
+                        integrationID,
+                        label: "default",
+                        value: Credential.Key.make({ type: "key", key: keys.get(integrationID)! }),
+                      }),
+                    ]
+                  : [],
+              ),
+          }),
+          deps: [],
+        })
+        const global = path.join(tmp.path, "global")
+        const project = path.join(tmp.path, "project")
+        const apiKey = (entries: readonly Entry[]) =>
+          Config.latest(entries, "providers")?.["shared"]?.headers?.["x-api-key"]
+        return Effect.gen(function* () {
+          yield* Effect.promise(() => fs.mkdir(project, { recursive: true }))
+          const layer = AppNodeBuilder.build(LayerNode.group([Config.node, Bus.node, WellKnown.node]), [
+            Location.node.replace(
+              Layer.succeed(
+                Location.Service,
+                Location.Service.of(location({ directory: AbsolutePath.make(project) })),
+              ),
+            ),
+            Global.node.replace(Global.layerWith({ config: global, home: path.join(global, "home") })),
+            Credential.node.replace(credentialNode),
+            Watcher.node.replace(Watcher.testLayer),
+          ])
+          yield* Effect.gen(function* () {
+            const config = yield* Config.Service
+            const bus = yield* Bus.Service
+            const wellknown = yield* WellKnown.Service
+            // Runs a mutation, then waits for the config reload it triggers.
+            const reloadAfter = <A, E>(name: string, mutation: Effect.Effect<A, E>) =>
+              Effect.gen(function* () {
+                const reloaded = yield* bus
+                  .subscribe(Event.Updated)
+                  .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
+                yield* Effect.promise(() => fs.writeFile(path.join(project, "opencode.json"), JSON.stringify({ name })))
+                const result = yield* mutation
+                yield* Fiber.join(reloaded)
+                return result
+              })
+            const login = (origin: string, key: string) =>
+              Effect.gen(function* () {
+                const integrationID = Integration.ID.make(origin)
+                // The key must exist before wellknown.add: the add triggers the
+                // entry load, and a logged-out endpoint contributes no documents.
+                keys.set(origin, key)
+                yield* wellknown.add(origin)
+                yield* bus.publish(
+                  Credential.Event.Switched,
+                  { integrationID, credentialID: Credential.ID.create() },
+                  { global: true },
+                )
+              })
+            const logout = (origin: string) =>
+              Effect.gen(function* () {
+                keys.delete(origin)
+                yield* bus.publish(
+                  Credential.Event.Switched,
+                  { integrationID: Integration.ID.make(origin), credentialID: null },
+                  { global: true },
+                )
+                // Re-run the entry loads with the new credential state.
+                yield* wellknown.refresh()
+              })
+            yield* reloadAfter("login-a", login(origins[0], "key-a"))
+            expect(apiKey(yield* config.entries())).toBe("key-a")
+            yield* reloadAfter("login-b", login(origins[1], "key-b"))
+            expect(apiKey(yield* config.entries())).toBe("key-b")
+            // Logging out B must not leave its cached config resolving {env:TOKEN_B}
+            // to "" and shadowing A's wiring — the failure mode in
+            // anomalyco/opencode#54645. The config reload is debounced, so wait
+            // for the update event before asserting.
+            yield* reloadAfter("logout-b", logout(origins[1]))
+            expect(apiKey(yield* config.entries())).toBe("key-a")
+          }).pipe(Effect.scoped, Effect.provide(layer))
+        }).pipe(
+          Effect.ensuring(
+            Effect.promise(() => Promise.all([serverA.stop(true), serverB.stop(true)])).pipe(Effect.asVoid),
+          ),
+        )
       },
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
     ),
