@@ -323,7 +323,7 @@ describe("current session timeline rows", () => {
         ),
         status: failed.status,
         reasoningMode: "compact",
-        timelineDetail: { ...timelinePresets[2].value, notices: { placement: "hidden" } },
+        timelineDetail: { ...timelinePresets[2].value, notices: { placement: "hidden", details: "collapsed" } },
       }).rows.map((row) => row._tag),
     ).toEqual(["UserMessage", "AssistantPart"])
   })

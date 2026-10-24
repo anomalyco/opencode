@@ -656,9 +656,16 @@ test.each([80, 120])("completes custom Markdown and ordinary fences in a session
       return undefined
     },
   })
+  // The summary stays folded under its divider until opened.
+  const folded = await waitForHighlightedFrame(setup, (frame) => frame.includes("+ Compaction"))
+  expect(folded).not.toContain("y\u00b2")
+  const lines = folded.split("\n")
+  const row = lines.findIndex((line) => line.includes("+ Compaction"))
+  await setup.mockMouse.click(lines[row].indexOf("+ Compaction"), row)
   const streaming = await waitForHighlightedFrame(
     setup,
     (frame) =>
+      frame.includes("- Compaction") &&
       frame.includes("initial") &&
       frame.includes("DiagramStart") &&
       frame.includes("DiagramEnd") &&

@@ -30,6 +30,7 @@ import { TextShimmer } from "@opencode/ui/text-shimmer"
 import { BasicTool } from "../components/basic-tool"
 import { reasoningHeading } from "../timeline/projection"
 import { Card } from "@opencode/ui/card"
+import { Collapsible } from "@opencode/ui/collapsible"
 import type {
   PromptAgentAttachment,
   PromptFileAttachment,
@@ -583,8 +584,18 @@ function CompactionDivider(props: { label: string }) {
   )
 }
 
-export function SessionCompactionMessage(props: { message: SessionMessageCompaction; error: string }) {
+export function SessionCompactionMessage(props: {
+  message: SessionMessageCompaction
+  error: string
+  /** Whether the summary starts open; it does unless the timeline's notice detail folds it. */
+  defaultOpen?: boolean
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+}) {
   const i18n = useI18n()
+  const [state, setState] = createStore<{ open?: boolean }>({})
+  const open = () => props.open ?? state.open ?? props.defaultOpen ?? true
+  const running = () => props.message.status === "running"
   const summary = () => (props.message.status === "failed" ? "" : props.message.summary)
 
   const error = () => {
@@ -629,40 +640,67 @@ export function SessionCompactionMessage(props: { message: SessionMessageCompact
 
   const label = createMemo(() => [i18n.t(outcome()), usage()].filter(Boolean).join(" · "))
 
+  const setOpen = (value: boolean) => {
+    setState("open", value)
+    props.onOpenChange?.(value)
+  }
+
   return (
     <div data-component="session-compaction-message">
-      <CompactionDivider label={i18n.t("ui.messagePart.compaction.started")} />
-      <Show when={summary().trim()}>
-        <div data-component="text-part" data-timeline-part-id={props.message.id}>
-          <div data-slot="text-part-body">
-            <PacedMarkdown
-              text={summary()}
-              cacheKey={props.message.id}
-              streaming={props.message.status === "running"}
-            />
-          </div>
-        </div>
-      </Show>
-      <Show when={props.message.status === "running"}>
-        <div role="status" class="py-2">
-          <BasicTool
-            icon="archive"
-            trigger={{ title: i18n.t("ui.messagePart.compaction.running") }}
-            status="running"
-            locked
-            hideDetails
-          />
-        </div>
-      </Show>
-      <Show when={props.message.status !== "running"}>
-        <div class="py-2">
-          <TimelineSeparator label={label()} />
-        </div>
-      </Show>
-      <Show when={error()}>
-        <Card variant="error" class="error-card">
-          {error()}
-        </Card>
+      <Show
+        when={props.message.status === "completed" && summary().trim()}
+        fallback={
+          <>
+            <CompactionDivider label={i18n.t("ui.messagePart.compaction.started")} />
+            <Show when={running()}>
+              <div role="status" class="py-2" data-timeline-part-id={props.message.id}>
+                <BasicTool
+                  icon="archive"
+                  status="running"
+                  compact
+                  hasContent
+                  allowOpenWhilePending
+                  hideDetails={!summary().trim()}
+                  open={open()}
+                  onOpenChange={setOpen}
+                  trigger={{ title: i18n.t("ui.messagePart.compaction.running") }}
+                >
+                  <PacedMarkdown text={summary()} cacheKey={props.message.id} streaming />
+                </BasicTool>
+              </div>
+            </Show>
+            <Show when={!running()}>
+              <div class="py-2">
+                <TimelineSeparator label={label()} />
+              </div>
+            </Show>
+            <Show when={error()}>
+              <Card variant="error" class="error-card">
+                {error()}
+              </Card>
+            </Show>
+          </>
+        }
+      >
+        {/* A finished summary folds into its outcome divider, which opens it. */}
+        <Collapsible
+          variant="ghost"
+          class="py-2"
+          open={open()}
+          onOpenChange={setOpen}
+          data-timeline-part-id={props.message.id}
+        >
+          <Collapsible.Trigger class="cursor-pointer">
+            <TimelineSeparator label={label()} suffix={<Collapsible.Arrow style={{ opacity: 1 }} />} />
+          </Collapsible.Trigger>
+          <Collapsible.Content>
+            <div data-component="text-part">
+              <div data-slot="text-part-body">
+                <PacedMarkdown text={summary()} cacheKey={props.message.id} streaming={false} />
+              </div>
+            </div>
+          </Collapsible.Content>
+        </Collapsible>
       </Show>
     </div>
   )

@@ -1,6 +1,6 @@
 import { ProviderIcon } from "@opencode/ui/provider-icon"
 import { Tooltip } from "@opencode/ui/tooltip"
-import { Show } from "solid-js"
+import { Show, type JSX } from "solid-js"
 
 export function TimelineSeparator(props: {
   label: string
@@ -8,6 +8,8 @@ export function TimelineSeparator(props: {
   tooltip?: string
   providerID?: string
   variant?: string
+  /** Shown after the label, such as a 24px disclosure arrow. */
+  suffix?: JSX.Element
 }) {
   const label = () => (
     <bdi
@@ -29,6 +31,10 @@ export function TimelineSeparator(props: {
           {(providerID) => <ProviderIcon id={providerID()} class="text-v2-icon-icon-faint" aria-hidden="true" />}
         </Show>
         <span class="flex min-w-0 items-center gap-1.5">
+          {/* Balances the suffix so the label stays centered on the line. */}
+          <Show when={props.suffix}>
+            <span class="w-6 shrink-0" aria-hidden="true" />
+          </Show>
           <Show when={props.tooltip} fallback={label()}>
             {(tooltip) => (
               <Tooltip
@@ -61,6 +67,7 @@ export function TimelineSeparator(props: {
               </>
             )}
           </Show>
+          {props.suffix}
         </span>
       </span>
       <span class="h-px min-w-0 flex-1 bg-v2-border-border-strong" />

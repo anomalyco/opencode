@@ -239,15 +239,19 @@ export function Session(props: {
   const renderer = useRenderer()
   const dimensions = useTerminalDimensions()
   const thinkingMode = createMemo<ThinkingMode>(() => config.session?.thinking ?? "hide")
+  const compactionMode = createMemo(() => config.session?.compaction ?? "hide")
   const showScrollbar = createMemo(() => config.session?.scrollbar ?? false)
   const markdownMode = createMemo(() => config.session?.markdown ?? "rendered")
   const diffWrapMode = createMemo(() => config.diffs?.wrap ?? "word")
   const groupExploration = createMemo(() => config.session?.grouping !== "none")
   const verbosity = createMemo(() => config.session?.verbosity ?? defaultVerbosity)
-  // High opens exploration and instruction summaries by default; everything else starts collapsed.
-  const groupExpanded = (groupID: string, kind: GroupKind) =>
+  // High opens exploration and instruction summaries by default and compaction summaries follow their own
+  // setting; everything else starts collapsed.
+  const groupExpanded = (groupID: string, kind: GroupKind | "compaction") =>
     sessionTabs.groupExpanded(sessionID, groupID) ??
-    (verbosity() === "high" && (kind === "exploration" || kind === "instructions"))
+    (kind === "compaction"
+      ? compactionMode() === "show"
+      : verbosity() === "high" && (kind === "exploration" || kind === "instructions"))
   const groupedKind = (kind: GroupKind) =>
     kind === "reasoning" ? thinkingMode() === "hide" : kind === "exploration" ? groupExploration() : true
 
@@ -1168,6 +1172,20 @@ export function Session(props: {
       },
     },
     {
+      title: compactionMode() === "show" ? "Collapse compaction summaries" : "Expand compaction summaries",
+      id: "session.toggle.compaction",
+      group: "Session",
+      palette: undefined,
+      run: () => {
+        void configState
+          .update((draft) => {
+            draft.session = { ...draft.session, compaction: compactionMode() === "show" ? "hide" : "show" }
+          })
+          .catch(toast.error)
+        dialog.clear()
+      },
+    },
+    {
       title: "Toggle session scrollbar",
       id: "session.toggle.scrollbar",
       group: "Session",
@@ -1470,7 +1488,9 @@ export function Session(props: {
         setGroupExpanded: (id, expanded, anchor) => {
           // A group that ends the transcript would open off screen while the reader follows the bottom.
           const last = rows.findLast((row) => row.type !== "assistant-footer" && row.type !== "turn-usage")
-          const ending = last?.type === "group" && groupID(last, 0) === id
+          const ending =
+            (last?.type === "group" && groupID(last, 0) === id) ||
+            (last?.type === "message" && compactionDisclosureID(last.messageID) === id)
           if (anchor && !(ending && !isAwayFromBottom())) {
             const hold = { node: anchor, top: layoutTop(anchor) - scroll.scrollTop }
             held = hold
@@ -2163,17 +2183,34 @@ function SessionSkillMessage(props: { message: Extract<SessionMessageInfo, { typ
   )
 }
 
+/** Disclosure key for a compaction's summary, kept beside the group disclosures of the same session. */
+const compactionDisclosureID = (messageID: string) => JSON.stringify([messageID, "compaction"])
+
 function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type: "compaction" }> }) {
   const ctx = use()
   const theme = useTheme()
+  const renderer = useRenderer()
   const { currentSyntax: syntax } = useThemes()
   const plugins = usePlugin()
+  const [hover, setHover] = createSignal(false)
   const status = () => props.message.status
   const cancelled = () => props.message.status === "failed" && props.message.error.type === "aborted"
+  // A summary stays folded under its divider until the reader opens it; an error always shows.
+  const expandable = () =>
+    props.message.status === "running" ||
+    (props.message.status === "completed" && props.message.summary.trim() !== "")
+  const expanded = () => expandable() && ctx.groupExpanded(compactionDisclosureID(props.message.id), "compaction")
   const text = () =>
-    props.message.status === "failed" ? (cancelled() ? "" : props.message.error.message) : props.message.summary
+    props.message.status === "failed"
+      ? cancelled()
+        ? ""
+        : props.message.error.message
+      : expanded()
+        ? props.message.summary
+        : ""
   const content = createMemo(() => text().trim())
   const color = () => (status() === "failed" && !cancelled() ? theme.text.feedback.error.base : theme.text.muted)
+  const labelColor = () => (expandable() && hover() ? theme.text.base : color())
   // Usage of the compaction request itself; the resulting context size only shows on the next assistant step.
   const usage = () => {
     if (props.message.status === "running" || !props.message.tokens) return
@@ -2185,7 +2222,16 @@ function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type:
   }
   return (
     <box>
-      <box flexDirection="row" alignItems="center">
+      <box
+        flexDirection="row"
+        alignItems="center"
+        onMouseOver={() => setHover(true)}
+        onMouseOut={() => setHover(false)}
+        onMouseUp={(event) => {
+          if (!expandable() || renderer.getSelection()?.getSelectedText()) return
+          ctx.setGroupExpanded(compactionDisclosureID(props.message.id), !expanded(), event.currentTarget)
+        }}
+      >
         <box border={["top"]} borderColor={color()} flexGrow={1} />
         <box flexDirection="row" gap={1} paddingLeft={1} paddingRight={1}>
           <Switch>
@@ -2198,7 +2244,10 @@ function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type:
               <text fg={color()}>✗</text>
             </Match>
           </Switch>
-          <text fg={color()}>
+          <Show when={expandable()}>
+            <text fg={labelColor()}>{expanded() ? "-" : "+"}</text>
+          </Show>
+          <text fg={labelColor()}>
             {props.message.status === "completed" && props.message.native?.messages
               ? "Provider compaction"
               : "Compaction"}
@@ -2207,7 +2256,7 @@ function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type:
             <text fg={color()}>· cancelled</text>
           </Show>
           <Show when={usage()}>
-            <text fg={color()}>· {usage()}</text>
+            <text fg={labelColor()}>· {usage()}</text>
           </Show>
         </box>
         <box border={["top"]} borderColor={color()} flexGrow={1} />
