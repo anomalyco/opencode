@@ -19,7 +19,7 @@ Use in user lists and headers.
 - Uses grapheme-aware fallback rendering.
 
 ### Accessibility
-- TODO: provide alt text when using images; currently image is decorative.
+- Images are decorative (empty alt text). Provide the user name in adjacent text or label the containing control.
 
 ### Theming/tokens
 - Uses \`data-component="avatar"\` with size and image state attributes.
