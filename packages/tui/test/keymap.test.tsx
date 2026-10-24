@@ -4,8 +4,10 @@ import { createBindingLookup } from "@opentui/keymap/extras"
 import { testRender, useRenderer } from "@opentui/solid"
 import { expect, test } from "bun:test"
 import { onCleanup } from "solid-js"
+import type { InputRenderable, TextareaRenderable } from "@opentui/core"
 import { TuiKeybind } from "../src/config/keybind"
 import { getOpencodeModeStack, OPENCODE_BASE_MODE, OpencodeKeymapProvider, registerOpencodeKeymap } from "../src/keymap"
+import type { LineDiscard } from "../src/util/line-discard"
 
 function createResolvedKeymapConfig(input: TuiKeybind.KeybindOverrides = {}) {
   const keybinds = TuiKeybind.parse(input)
@@ -138,4 +140,70 @@ test("mode-less bindings stay active when opencode mode changes", async () => {
   } finally {
     app.renderer.destroy()
   }
+})
+
+test("ctrl+u follows input.line_discard in a textarea, on the caret's line only, and in an input", async () => {
+  async function run(mode: LineDiscard | undefined, field: "textarea" | "input", text: string, caret: number) {
+    let editor: TextareaRenderable | InputRenderable | undefined
+
+    function Harness() {
+      const renderer = useRenderer()
+      const keymap = createDefaultOpenTuiKeymap(renderer)
+      const offKeymap = registerOpencodeKeymap(keymap, renderer, {
+        ...createResolvedKeymapConfig(),
+        input: { line_discard: mode },
+      })
+      onCleanup(offKeymap)
+      const ref = (el: TextareaRenderable) => (editor = el)
+
+      return (
+        <OpencodeKeymapProvider keymap={keymap}>
+          {field === "textarea" ? (
+            <textarea ref={ref} focused initialValue={text} />
+          ) : (
+            <input ref={ref} focused value={text} />
+          )}
+        </OpencodeKeymapProvider>
+      )
+    }
+
+    const app = await testRender(() => <Harness />)
+    try {
+      if (!editor) throw new Error(`${field} did not mount`)
+      editor.cursorOffset = caret
+      app.renderer.stdin.emit("data", Buffer.from("\x15"))
+      await Bun.sleep(50)
+      const after = { text: editor.plainText, caret: editor.cursorOffset }
+      editor.undo()
+      return { ...after, undone: editor.plainText }
+    } finally {
+      app.renderer.destroy()
+    }
+  }
+
+  expect(await run(undefined, "textarea", "hello world", 5)).toEqual({
+    text: " world",
+    caret: 0,
+    undone: "hello world",
+  })
+  expect(await run("bash", "textarea", "hello world", 5)).toEqual({ text: " world", caret: 0, undone: "hello world" })
+  expect(await run("zsh", "textarea", "hello world", 5)).toEqual({ text: "", caret: 0, undone: "hello world" })
+  expect(await run("bash", "textarea", "first\nhello world\nlast", 11)).toEqual({
+    text: "first\n world\nlast",
+    caret: 6,
+    undone: "first\nhello world\nlast",
+  })
+  expect(await run("zsh", "textarea", "first\nhello world\nlast", 11)).toEqual({
+    text: "first\n\nlast",
+    caret: 6,
+    undone: "first\nhello world\nlast",
+  })
+  // A second press on the emptied line joins it to the previous one.
+  expect(await run("zsh", "textarea", "first\n\nlast", 6)).toEqual({
+    text: "first\nlast",
+    caret: 5,
+    undone: "first\n\nlast",
+  })
+  expect(await run("bash", "input", "hello world", 5)).toEqual({ text: " world", caret: 0, undone: "hello world" })
+  expect(await run("zsh", "input", "hello world", 5)).toEqual({ text: "", caret: 0, undone: "hello world" })
 })

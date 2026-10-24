@@ -16,6 +16,7 @@ import { KeymapProvider, useKeymap, useKeymapSelector, useBindings } from "@open
 import { createMemo, type Accessor } from "solid-js"
 import { useTuiConfig } from "./config"
 import { TuiKeybind } from "./config/keybind"
+import { discardLine, type LineDiscard } from "./util/line-discard"
 
 export const LEADER_TOKEN = "leader"
 export const OPENCODE_BASE_MODE = "base"
@@ -42,7 +43,7 @@ type BindingLookup = {
   gather(name: string, commands: readonly string[]): readonly Binding<Renderable, KeyEvent>[]
 }
 type FormatConfig = { keybinds: BindingLookup }
-type ResolvedKeymapConfig = FormatConfig & { leader_timeout: number }
+type ResolvedKeymapConfig = FormatConfig & { leader_timeout: number; input?: { line_discard?: LineDiscard } }
 
 const modeStacks = new WeakMap<OpenTuiKeymap, OpencodeModeStack>()
 
@@ -172,6 +173,33 @@ const inputCommands = [
   "input.submit",
 ] as const
 
+// Replaces the textarea's delete-to-line-start command, which a later layer
+// runs first, with one that follows input.line_discard. A single-line <input>
+// handles ctrl+u itself, so its own layer routes input_delete_to_line_start
+// to the same command while one has focus.
+function registerLineDiscardCommand(keymap: OpenTuiKeymap, renderer: CliRenderer, config: ResolvedKeymapConfig) {
+  const offCommand = keymap.registerLayer({
+    commands: [
+      {
+        name: "input.delete.to.line.start",
+        run() {
+          const editor = renderer.currentFocusedEditor
+          if (!editor || editor.isDestroyed) return false
+          return discardLine(editor, config.input?.line_discard)
+        },
+      },
+    ],
+  })
+  const offInputBindings = keymap.registerLayer({
+    enabled: () => renderer.currentFocusedEditor instanceof InputRenderable,
+    bindings: config.keybinds.gather("input-line-discard", ["input.delete.to.line.start"]),
+  })
+  return () => {
+    offInputBindings()
+    offCommand()
+  }
+}
+
 function hasManagedTextareaFocus(renderer: CliRenderer) {
   const editor = renderer.currentFocusedEditor
   return editor instanceof TextareaRenderable && !(editor instanceof InputRenderable)
@@ -230,8 +258,10 @@ export function registerOpencodeKeymap(keymap: OpenTuiKeymap, renderer: CliRende
     enabled: () => hasManagedTextareaFocus(renderer),
     bindings: config.keybinds.gather("input", inputCommands),
   })
+  const offLineDiscard = registerLineDiscardCommand(keymap, renderer, config)
 
   return () => {
+    offLineDiscard()
     offInputBindings()
     offBackspace()
     offEscape()
