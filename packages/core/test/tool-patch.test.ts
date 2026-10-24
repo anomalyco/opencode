@@ -283,6 +283,26 @@ describe("PatchTool", () => {
     ),
   )
 
+  it.live("preserves CRLF, BOM, and trailing blank lines when updating and moving a file", () =>
+    withTempTool((directory, registry) =>
+      Effect.gen(function* () {
+        const target = path.join(directory, "original.txt")
+        yield* Effect.promise(() => fs.writeFile(target, "\uFEFFfirst\r\nold\r\nlast\r\n\r\n"))
+        const settled = yield* executeTool(
+          registry,
+          call(
+            "*** Begin Patch\n*** Update File: original.txt\n*** Move to: moved.txt\n@@\n first\n-old\n+new\n+added\n last\n*** End Patch",
+          ),
+        )
+        expect(settled).toMatchObject({ status: "completed" })
+        expect(yield* exists(target)).toBe(false)
+        expect(yield* Effect.promise(() => fs.readFile(path.join(directory, "moved.txt"), "utf8"))).toBe(
+          "\uFEFFfirst\r\nnew\r\nadded\r\nlast\r\n\r\n",
+        )
+      }),
+    ),
+  )
+
   it.live("replaces a file with a directory containing an added file", () =>
     withTempTool((directory, registry) =>
       Effect.gen(function* () {

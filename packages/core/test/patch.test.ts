@@ -229,6 +229,47 @@ describe("Patch", () => {
     expect(Patch.joinBom(update.content, update.bom)).toBe("\uFEFFnew\n")
   })
 
+  test.each([
+    {
+      name: "a CRLF file with a trailing blank line",
+      original: "first\r\nold\r\nlast\r\n\r\n",
+      chunks: [{ oldLines: ["old"], newLines: ["new", "added"] }],
+      expected: "first\r\nnew\r\nadded\r\nlast\r\n\r\n",
+    },
+    {
+      name: "a CRLF file without a final newline",
+      original: "first\r\nold",
+      chunks: [{ oldLines: ["old"], newLines: ["new"], endOfFile: true }],
+      expected: "first\r\nnew\r\n",
+    },
+    {
+      name: "an LF file with a trailing blank line",
+      original: "first\nold\n\n",
+      chunks: [{ oldLines: ["first"], newLines: ["FIRST"] }],
+      expected: "FIRST\nold\n\n",
+    },
+    {
+      name: "an LF edit that ends with a blank line",
+      original: "first\nold\n",
+      chunks: [{ oldLines: ["old"], newLines: ["new", ""] }],
+      expected: "first\nnew\n\n",
+    },
+    {
+      name: "an LF region in a mixed file",
+      original: "first\r\nold\nlast\r\n",
+      chunks: [{ oldLines: ["old"], newLines: ["new", "added"] }],
+      expected: "first\r\nnew\nadded\nlast\r\n",
+    },
+    {
+      name: "a file whose content is all deleted",
+      original: "first\r\n",
+      chunks: [{ oldLines: ["first"], newLines: [] }],
+      expected: "",
+    },
+  ])("derives an update for $name", (input) => {
+    expect(Patch.derive("update.txt", input.chunks, input.original)).toEqual({ content: input.expected, bom: false })
+  })
+
   test("derives multiple update chunks", () => {
     expect(
       Patch.derive(
