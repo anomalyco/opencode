@@ -248,6 +248,54 @@ describe("PluginSupervisor reload", () => {
     )
   })
 
+  it.live("reloads a plugin whose setup returned a non-function instead of a cleanup", () =>
+    Effect.gen(function* () {
+      const directory = yield* tmpdirScoped()
+      const root = path.join(directory.path, "external/odd-setup")
+      const file = path.join(root, "index.ts")
+      // A plugin is JavaScript at runtime, so setup() may return anything. The previous generation
+      // is torn down on reload, and a truthy non-function return value must not be called.
+      const source = (version: number) => `export default {
+        id: "odd-setup",
+        async setup(ctx) {
+          await ctx.command.transform((editor) => editor.add({ name: "odd-v${version}", execute: async () => {} }))
+          return { dispose: "not a function" }
+        },
+      }`
+      const write = (content: string, mtime: Date) =>
+        Effect.promise(async () => {
+          await Bun.write(file, content)
+          await fs.utimes(file, mtime, mtime)
+        })
+      yield* write(source(1), new Date(Date.now() - 60_000))
+      yield* Effect.promise(() =>
+        Bun.write(path.join(directory.path, ".opencode/opencode.json"), JSON.stringify({ plugins: [root] })),
+      )
+      const watcher = yield* Watcher.Test
+      const locations = yield* LocationServiceMap.Service
+      yield* Effect.gen(function* () {
+        const plugins = yield* Plugin.Service
+        const commands = yield* Command.Service
+        yield* plugins.awaitActivation
+        expect(yield* commands.get("odd-v1")).toBeDefined()
+
+        yield* write(source(2), new Date())
+        yield* watcher.emit({ path: file, type: "update" })
+
+        // The reload completes: the new generation replaces the old one.
+        yield* commands.get("odd-v2").pipe(
+          Effect.flatMap((command) => (command ? Effect.void : Effect.fail("activation pending"))),
+          Effect.retry({ times: 80, schedule: Schedule.spaced("25 millis") }),
+        )
+        expect(yield* commands.get("odd-v2")).toBeDefined()
+        expect(yield* commands.get("odd-v1")).toBeUndefined()
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
+      )
+    }),
+  )
+
   it.live("keeps the running generation when an updated local plugin fails to import", () =>
     Effect.gen(function* () {
       const directory = yield* tmpdirScoped()

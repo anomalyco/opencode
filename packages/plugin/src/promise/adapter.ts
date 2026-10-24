@@ -619,7 +619,10 @@ export function fromPromise(plugin: Plugin) {
 
         yield* Effect.acquireRelease(
           Effect.promise(() => Promise.resolve(plugin.setup(context2))),
-          (cleanup) => (cleanup ? Effect.promise(() => Promise.resolve(cleanup())) : Effect.void),
+          // A plugin may return anything from setup (JavaScript plugins are not type-checked), so
+          // only a real function counts as a cleanup callback. Calling a truthy non-function here
+          // aborts the whole teardown with a TypeError.
+          (cleanup) => (typeof cleanup === "function" ? Effect.promise(() => Promise.resolve(cleanup())) : Effect.void),
         )
       }),
   })
