@@ -78,7 +78,7 @@ export const Plugin = define({
               Effect.gen(function* () {
                 const agent = command.agent === undefined ? undefined : Agent.ID.make(command.agent)
                 const commandAgent = agent === undefined ? undefined : (yield* ctx.agent.get({ agentID: agent })).data
-                const model =
+                const selectedModel =
                   command.model === undefined
                     ? commandAgent?.model
                     : {
@@ -86,6 +86,21 @@ export const Plugin = define({
                         providerID: command.model.providerID,
                         ...(command.model.variant === undefined ? {} : { variant: command.model.variant }),
                       }
+                const inherited =
+                  selectedModel && selectedModel.variant === undefined
+                    ? (yield* ctx.session.get({ sessionID: input.sessionID })).model?.variant
+                    : undefined
+                const model =
+                  selectedModel &&
+                  inherited !== undefined &&
+                  (yield* ctx.model.list()).data.some(
+                    (model) =>
+                      model.providerID === selectedModel.providerID &&
+                      model.id === selectedModel.id &&
+                      model.variants.some((variant) => variant.id === inherited),
+                  )
+                    ? { ...selectedModel, variant: inherited }
+                    : selectedModel
                 const text = yield* evaluateTemplate(command.template, input.prompt.text, {
                   location,
                   processes,
