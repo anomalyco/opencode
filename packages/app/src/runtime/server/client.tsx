@@ -8,6 +8,7 @@ import { ServerConnection } from "./registry"
 import { createRefCountMap } from "@/runtime/server/refcount"
 import { createRequestQueue } from "@/runtime/server/request-queue"
 import { ServerScope } from "@/runtime/server/scope"
+import { sessionOpenTiming } from "@/session/open-timing"
 import { useServer } from "./current"
 
 type OpenCodeEventMap = { [Type in OpenCodeEvent["type"]]: Extract<OpenCodeEvent, { type: Type }> }
@@ -130,7 +131,7 @@ export function createServerTransport(input: { http: ServerConnection.HttpBase; 
   const queue = createRequestQueue({ fetch: input.fetch ?? globalThis.fetch })
 
   const build = (http: ServerConnection.HttpBase) => {
-    const api = createApiForServer({ server: http, fetch: queue.fetch })
+    const api = createApiForServer({ server: http, fetch: sessionOpenTiming.fetch(queue.fetch) })
 
     return { http, api, pty: createPtyClient(api, { url: http.url }) }
   }

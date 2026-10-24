@@ -1,5 +1,6 @@
 import { createMemo, createRenderEffect, createSignal, on, onCleanup } from "solid-js"
 import { sessionNotFoundError } from "@/runtime/server/errors"
+import { sessionOpenTiming } from "./open-timing"
 
 type SessionStore<T> = {
   get: (id: string) => T | undefined
@@ -61,7 +62,10 @@ export function createSessionResolution<T>(
       // The timeline owns message errors; metadata resolution stays independent. Queued inputs
       // ride along so a reconnect refreshes them with the transcript instead of leaving the
       // pre-disconnect queue on screen.
-      void store.message.sync(id).catch(() => undefined)
+      void store.message
+        .sync(id)
+        .then(() => sessionOpenTiming.stored(id))
+        .catch(() => undefined)
       void store.pending.sync(id).catch(() => undefined)
 
       if (cached() && !options?.children && !options?.connected) {

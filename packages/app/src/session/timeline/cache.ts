@@ -10,6 +10,7 @@ import {
   type JSX,
 } from "solid-js"
 import { createScopedCache } from "@/runtime/server/scoped-cache"
+import { sessionOpenTiming } from "@/session/open-timing"
 import type { TimelineSessionSource } from "./controller"
 
 export function createTimelineCache(
@@ -71,7 +72,9 @@ export function createTimelineCache(
     // A tab's render can run before the workspace watcher in the same batch.
     // Clear the old workspace here, and let that later watcher keep this view.
     syncWorkspace(session.identity.workspaceKey())
+    const key = session.identity.sessionKey()
+    sessionOpenTiming.view(cache.peek(key) !== undefined)
 
-    return cache.get(session.identity.sessionKey()).value
+    return cache.get(key).value
   }
 }

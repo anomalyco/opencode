@@ -1,4 +1,13 @@
-import { ErrorBoundary, createEffect, createMemo, Show, type ParentProps } from "solid-js"
+import {
+  ErrorBoundary,
+  createComputed,
+  createEffect,
+  createMemo,
+  on,
+  onCleanup,
+  Show,
+  type ParentProps,
+} from "solid-js"
 import { useParams } from "@solidjs/router"
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -26,6 +35,7 @@ import { SessionIdentityHeader } from "./session-identity-header"
 import { IncompatibleServerPanel } from "./incompatible-server-panel"
 import { SessionErrorFallback } from "./route-error"
 import { createSessionResolution } from "./session-resolution"
+import { sessionOpenTiming } from "./open-timing"
 import { SessionScreenView } from "./screen"
 import { PreparingComposer } from "./preparing-composer"
 
@@ -119,6 +129,17 @@ function ResolvedTargetSessionRoute() {
   const server = useServer()
   const tabs = useTabs()
   const data = useData()
+
+  // Before resolution, so the clock starts ahead of the transcript requests it triggers.
+  createComputed(
+    on(
+      () => params.id,
+      (id) => {
+        if (id) sessionOpenTiming.start(id, () => data.session.message.list(id).length)
+      },
+    ),
+  )
+  onCleanup(sessionOpenTiming.cancel)
 
   const current = createSessionResolution(
     () => params.id,
