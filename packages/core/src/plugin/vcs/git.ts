@@ -49,7 +49,7 @@ export const Plugin = define({
             if (result.exitCode !== 0) return yield* Effect.fail(new Error("Git initialization failed"))
           }),
         info: () => adapter.info(),
-        base: () => adapter.base(),
+        base: adapter.base,
         branches: (input) => adapter.branches({ search: input.search, limit: input.limit }),
         status: () => adapter.status(),
         diff: (input) => adapter.diff(input.mode, { context: input.context, base: input.base }),
@@ -68,7 +68,62 @@ function make(proc: AppProcess.Interface, input: { directory: string; worktree: 
   // commands run from the worktree root because git lists root-relative paths.
   const ctx: Ctx = { proc, git: makeGit(proc), directory: input.directory, worktree: input.worktree }
 
-  return {
+  const ownRoot = Effect.fn("VcsGit.ownRoot")(function* (target: string) {
+    const toplevel = yield* ctx.git.root(target)
+    if (!toplevel) return false
+    const [a, b] = yield* Effect.promise(() =>
+      Promise.all([fs.realpath(toplevel).catch(() => toplevel), fs.realpath(target).catch(() => target)]),
+    )
+    return a === b
+  })
+
+  const nestedRepos = Effect.fn("VcsGit.nestedRepos")(function* () {
+    const [list, links] = yield* Effect.all(
+      [ctx.git.status(ctx.directory), ctx.git.gitlinks(ctx.directory)],
+      { concurrency: 2 },
+    )
+    const names = new Set(links)
+    for (const item of list) {
+      if (item.code !== "??" || !item.file.endsWith("/")) continue
+      names.add(item.file.slice(0, -1))
+    }
+    names.delete(".")
+    const repos: string[] = []
+    for (const name of [...names].toSorted()) {
+      if (!(yield* ownRoot(path.resolve(ctx.worktree, name)))) continue
+      repos.push(name)
+    }
+    return repos
+  })
+
+  const nested = (file: string, repos: readonly string[]) => {
+    const name = file.endsWith("/") ? file.slice(0, -1) : file
+    return repos.includes(name)
+  }
+
+  const nestedStatus = (repos: readonly string[]): Effect.Effect<FileStatus[]> =>
+    Effect.forEach(
+      repos,
+      Effect.fnUntraced(function* (repo) {
+        const directory = path.resolve(ctx.worktree, repo)
+        const rows = yield* make(ctx.proc, { directory, worktree: directory }).status()
+        return rows.map((row) => ({ ...row, file: `${repo}/${row.file}` }))
+      }),
+      { concurrency: 4 },
+    ).pipe(Effect.map((lists) => lists.flat()))
+
+  const nestedDiffs = (repos: readonly string[], options?: DiffOptions): Effect.Effect<FileDiff.Info[], DiffError> =>
+    Effect.forEach(
+      repos,
+      Effect.fnUntraced(function* (repo) {
+        const directory = path.resolve(ctx.worktree, repo)
+        const rows = yield* make(ctx.proc, { directory, worktree: directory }).diff("working", options)
+        return rows.map((row) => ({ ...row, file: `${repo}/${row.file}` }))
+      }),
+      { concurrency: 4 },
+    ).pipe(Effect.map((lists) => lists.flat()))
+
+  const adapter: Adapter = {
     info: Effect.fn("VcsGit.info")(function* () {
       const [current, root] = yield* Effect.all([ctx.git.branch(ctx.directory), ctx.git.defaultBranch(ctx.directory)], {
         concurrency: 2,
@@ -82,17 +137,18 @@ function make(proc: AppProcess.Interface, input: { directory: string; worktree: 
     status: Effect.fn("VcsGit.status")(function* () {
       const git = ctx.git
       const ref = (yield* git.hasHead(ctx.directory)) ? "HEAD" : undefined
-      const [list, stats] = yield* Effect.all(
-        [git.status(ctx.directory), ref ? git.stats(ctx.directory, ref) : Effect.succeed([] as Stat[])],
-        { concurrency: 2 },
+      const [list, stats, repos] = yield* Effect.all(
+        [git.status(ctx.directory), ref ? git.stats(ctx.directory, ref) : Effect.succeed([] as Stat[]), nestedRepos()],
+        { concurrency: 3 },
       )
       const map = nums(stats)
+      const top = list.filter((item) => !nested(item.file, repos))
       const untracked = yield* untrackedBatch(
         ctx,
-        list.filter((item) => item.status === "added" && !map.has(item.file)).map((item) => item.file),
+        top.filter((item) => item.status === "added" && !map.has(item.file)).map((item) => item.file),
       )
-      return yield* Effect.forEach(
-        list.toSorted((a, b) => a.file.localeCompare(b.file)),
+      const base = yield* Effect.forEach(
+        top.toSorted((a, b) => a.file.localeCompare(b.file)),
         (item) =>
           Effect.gen(function* () {
             const stat =
@@ -108,11 +164,19 @@ function make(proc: AppProcess.Interface, input: { directory: string; worktree: 
             } satisfies FileStatus
           }),
       )
+      const extra = yield* nestedStatus(repos)
+      return [...base, ...extra]
     }),
     diff: Effect.fn("VcsGit.diff")(function* (mode: Mode, options?: DiffOptions) {
       const git = ctx.git
       if (mode === "working") {
-        return yield* track(ctx, (yield* git.hasHead(ctx.directory)) ? "HEAD" : undefined, options)
+        const [rows, repos] = yield* Effect.all([
+          track(ctx, (yield* git.hasHead(ctx.directory)) ? "HEAD" : undefined, options),
+          nestedRepos(),
+        ])
+        const base = rows.filter((row) => !nested(row.file, repos))
+        const extra = yield* nestedDiffs(repos, options)
+        return [...base, ...extra]
       }
 
       if (!(yield* git.hasHead(ctx.directory))) {
@@ -127,7 +191,8 @@ function make(proc: AppProcess.Interface, input: { directory: string; worktree: 
       }
       return yield* diffAgainstRef(ctx, ref, { ...options, target: mode === "committed" ? "HEAD" : undefined })
     }),
-  } satisfies Adapter
+  }
+  return adapter
 }
 
 type Kind = FileStatus["status"]
@@ -355,6 +420,21 @@ function makeGit(proc: AppProcess.Interface, env?: Record<string, string>) {
     return result.exitCode === 0
   })
 
+  const root = Effect.fn("VcsGit.root")(function* (cwd: string) {
+    const result = yield* run(["rev-parse", "--show-toplevel"], { cwd })
+    if (result.exitCode !== 0) return
+    return result.text().trim() || undefined
+  })
+
+  const gitlinks = Effect.fn("VcsGit.gitlinks")(function* (cwd: string) {
+    return nuls(yield* text(["ls-files", "--stage", "-z", "--full-name", "--", "."], { cwd })).flatMap((item) => {
+      const tab = item.indexOf("\t")
+      if (tab === -1 || !item.startsWith("160000 ")) return []
+      const file = item.slice(tab + 1)
+      return file ? [file] : []
+    })
+  })
+
   const mergeBase = Effect.fn("VcsGit.mergeBase")(function* (cwd: string, base: string) {
     const ref = yield* resolve(cwd, base)
     if (!ref) return
@@ -512,6 +592,8 @@ function makeGit(proc: AppProcess.Interface, env?: Record<string, string>) {
     base,
     defaultBranch,
     hasHead,
+    root,
+    gitlinks,
     mergeBase,
     status,
     diff,

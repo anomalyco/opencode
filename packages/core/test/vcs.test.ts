@@ -574,6 +574,105 @@ describe("Vcs", () => {
     ),
   )
 
+  it.live("aggregates changes inside nested independent repositories", () =>
+    withGit((directory) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(async () => {
+          await fs.writeFile(path.join(directory, "root.txt"), "root\n")
+          await commitAll(directory, "initial")
+          const child = path.join(directory, "child")
+          await fs.mkdir(child)
+          await initGit(child, "-b", "main")
+          await fs.writeFile(path.join(child, "base.txt"), "a\n")
+          await commitAll(child, "child initial")
+          await fs.writeFile(path.join(child, "base.txt"), "a\nb\n")
+          await fs.writeFile(path.join(child, "new.txt"), "hello\n")
+        })
+        const vcs = yield* Vcs.Service
+        const status = yield* vcs.status()
+        expect(status.map((row) => row.file)).toEqual(["child/base.txt", "child/new.txt"])
+        const diff = yield* vcs.diff("working")
+        expect(diff.map((row) => row.file)).toEqual(["child/base.txt", "child/new.txt"])
+        expect(diff.find((row) => row.file === "child/base.txt")).toMatchObject({
+          status: "modified",
+          additions: 1,
+          deletions: 0,
+        })
+        expect(diff.find((row) => row.file === "child/new.txt")?.patch).toContain("+hello")
+      }),
+    ),
+  )
+
+  it.live("expands staged gitlink entries into the nested repository changes", () =>
+    withGit((directory) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(async () => {
+          await fs.writeFile(path.join(directory, "root.txt"), "root\n")
+          await commitAll(directory, "initial")
+          const child = path.join(directory, "child")
+          await fs.mkdir(child)
+          await initGit(child, "-b", "main")
+          await fs.writeFile(path.join(child, "base.txt"), "a\nb\n")
+          await commitAll(child, "child initial")
+          await $`git add child`.cwd(directory).quiet()
+          await fs.writeFile(path.join(child, "base.txt"), "a\nc\n")
+        })
+        const vcs = yield* Vcs.Service
+        const status = yield* vcs.status()
+        expect(status.map((row) => row.file)).toEqual(["child/base.txt"])
+        expect(status[0]).toMatchObject({ status: "modified", additions: 1, deletions: 1 })
+        const diff = yield* vcs.diff("working")
+        expect(diff.map((row) => row.file)).toEqual(["child/base.txt"])
+      }),
+    ),
+  )
+
+  it.live("leaves uninitialized submodule gitlinks as single entries", () =>
+    withGit((directory) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(async () => {
+          await fs.writeFile(path.join(directory, "root.txt"), "root\n")
+          await commitAll(directory, "initial")
+          await $`git update-index --add --cacheinfo 160000,5ee719e92056a0f886a5ada95af6dc0c7e8ccbb0,sub`
+            .cwd(directory)
+            .quiet()
+          await fs.mkdir(path.join(directory, "sub"), { recursive: true })
+        })
+        const vcs = yield* Vcs.Service
+        const status = yield* vcs.status()
+        expect(status.map((row) => row.file)).toEqual(["sub"])
+        expect(status[0]).toMatchObject({ status: "added" })
+        const diff = yield* vcs.diff("working")
+        expect(diff.map((row) => row.file)).toEqual(["sub"])
+      }),
+    ),
+  )
+
+  it.live("expands nested repositories for a session scoped to a subdirectory", () =>
+    withGit(
+      (directory) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(async () => {
+            await fs.writeFile(path.join(directory, "pkg", "root.txt"), "root\n")
+            await commitAll(directory, "initial")
+            const child = path.join(directory, "pkg", "child")
+            await fs.mkdir(child)
+            await initGit(child, "-b", "main")
+            await fs.writeFile(path.join(child, "base.txt"), "a\nb\n")
+            await commitAll(child, "child initial")
+            await fs.writeFile(path.join(child, "base.txt"), "a\nc\n")
+          })
+          const vcs = yield* Vcs.Service
+          const status = yield* vcs.status()
+          expect(status.map((row) => row.file)).toEqual(["pkg/child/base.txt"])
+          const diff = yield* vcs.diff("working")
+          expect(diff.map((row) => row.file)).toEqual(["pkg/child/base.txt"])
+          expect(diff[0]).toMatchObject({ status: "modified", additions: 1, deletions: 1 })
+        }),
+      { scope: "pkg" },
+    ),
+  )
+
   it.live("batches untracked files without spawning Git per file or touching the index", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
