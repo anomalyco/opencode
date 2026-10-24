@@ -115,11 +115,6 @@ export const Plugin = {
     const config = yield* Config.Service
 
     const prepare = Effect.fn("ShellTool.prepare")(function* (invocation: ShellCreateBefore, context: Tool.Context) {
-      const source = {
-        type: "tool" as const,
-        messageID: context.messageID,
-        id: context.id,
-      }
       const target = yield* access.resolve({ path: invocation.cwd, kind: "directory" })
       invocation.cwd = target.absolute
       const timeout = invocation.timeout
@@ -141,7 +136,7 @@ export const Plugin = {
           save: parsed.commands.map((command) => command.save),
           sessionID: context.sessionID,
           agent: context.agent,
-          source,
+          source: invocation.source,
         })
       // Approval can outlive the directory, so validate immediately before spawning.
       const workdir = yield* Environment.typeFollowing(environment.files, target.absolute).pipe(
@@ -207,6 +202,7 @@ export const Plugin = {
                   timeout,
                   shell: yield* compatibleShell,
                   metadata: { sessionID: context.sessionID },
+                  source: { type: "tool", messageID: context.messageID, id: context.id },
                 },
                 (invocation) =>
                   Effect.gen(function* () {

@@ -1433,12 +1433,15 @@ effect: (ctx) =>
 #### Reference
 
 ```ts
+import type { Permission } from "@opencode/schema/permission"
+
 interface ShellCreateBefore {
   command: string
   cwd: string
   timeout: number
   shell: string
   env: Record<string, string | undefined>
+  readonly source?: Permission.Source
 }
 
 interface ShellHooks {

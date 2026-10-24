@@ -31,6 +31,7 @@ import { SessionStore } from "@opencode/core/session/store"
 import { Permission } from "@opencode/core/permission"
 import { PermissionSaved } from "@opencode/core/permission/saved"
 import { Plugin } from "@opencode/core/plugin"
+import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { PluginSupervisor } from "@opencode/core/plugin/supervisor"
 import { Shell } from "@opencode/core/shell"
 import { ShellSelect } from "@opencode/core/shell/select"
@@ -954,6 +955,39 @@ describe("ShellTool", () => {
         (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
       ),
     { timeout: 15_000 },
+  )
+
+  productionIt.live(
+    "passes the tool call source to the shell create hook",
+    () =>
+      Effect.acquireUseRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => {
+          reset()
+          return withSession(tmp.path, (registry) =>
+            Effect.scoped(
+              Effect.gen(function* () {
+                const hooks = yield* PluginHooks.Service
+                const sources: unknown[] = []
+                yield* hooks.register("shell", "create.before", (event) =>
+                  Effect.sync(() => void sources.push(event.source)),
+                )
+                const shell = yield* Shell.Service
+
+                yield* executeTool(registry, call({ command: helloCommand }))
+                const direct = yield* shell.create({ command: helloCommand })
+                yield* shell.wait(direct.id)
+
+                expect(sources).toEqual([
+                  { type: "tool", messageID: toolIdentity.messageID, id: "call-shell" },
+                  undefined,
+                ])
+              }),
+            ),
+          )
+        },
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+      ),
   )
 
   productionIt.live(

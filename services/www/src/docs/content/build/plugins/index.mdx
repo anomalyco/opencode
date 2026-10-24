@@ -1717,6 +1717,8 @@ await ctx.shell.hook("create.before", (event) => {
 #### Reference
 
 ```ts
+import type { Permission } from "@opencode/schema/permission"
+
 interface ShellHookContext {
   hook(name: "create.before", callback: (event: ShellCreateBefore) => Promise<void> | void): Promise<Registration>
 }
@@ -1727,6 +1729,7 @@ interface ShellCreateBefore {
   timeout: number
   shell: string
   env: Record<string, string | undefined>
+  readonly source?: Permission.Source
 }
 ```
 
