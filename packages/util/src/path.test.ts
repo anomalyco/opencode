@@ -36,6 +36,9 @@ describe("client paths", () => {
   test("keeps filename truncation stable", () => {
     expect(getFilenameTruncated("/repo/long-component-name.tsx", 16)).toBe("long-compon….tsx")
     expect(truncateMiddle("abcdefghijklmnop", 9)).toBe("abcd…mnop")
+    expect(truncateMiddle("abcdefghijklmnop", 1)).toBe("…")
+    expect(truncateMiddle("abcdefghijklmnop", 2)).toBe("a…")
+    expect(truncateMiddle("abcdefghijklmnop", 3)).toBe("a…p")
   })
 })
 
