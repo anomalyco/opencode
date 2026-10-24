@@ -172,6 +172,24 @@ test("preserves current navigation defaults", () => {
   expect(config.keybinds.get("prompt.images.view")).toMatchObject([{ key: "<leader>i" }])
 })
 
+test("mirrors plain navigation keys on the keypad", () => {
+  const config = resolve({}, { terminalSuspend: true })
+  const keys = (command: string) =>
+    config.keybinds.get(command).flatMap((binding) => (typeof binding.key === "string" ? binding.key.split(",") : []))
+
+  // NumPad Home and End arrive as `kphome` and `kpend` (kitty `CSI 57423 u` / `CSI 57424 u`), not as `home` and
+  // `end`, so a binding that lists only the plain key leaves the keypad key dead beside a working neighbour.
+  for (const [command, plain, keypad] of [
+    ["session.first", "home", "kphome"],
+    ["session.last", "end", "kpend"],
+    ["session.page.up", "pageup", "kppageup"],
+    ["session.page.down", "pagedown", "kppagedown"],
+  ] as const) {
+    expect(keys(command)).toContain(plain)
+    expect(keys(command)).toContain(keypad)
+  }
+})
+
 test("preserves migrated v1 keybind defaults", () => {
   const pairs = [
     ["app.exit", "app_exit"],
