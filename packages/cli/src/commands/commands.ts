@@ -556,6 +556,10 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
           ),
           Flag.withDefault(false),
         ),
+        reset: Flag.Boolean("reset").pipe(
+          Flag.withDescription("Discard a stuck OpenTunnel tunnel and start a new one (requires --remote)"),
+          Flag.withDefault(false),
+        ),
         yes: Flag.Boolean("yes").pipe(
           Flag.withAlias("y"),
           Flag.withDescription(
