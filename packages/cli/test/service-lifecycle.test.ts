@@ -10,8 +10,8 @@ import { isolatedEnv } from "./fixture/environment"
 
 // Real `serve --service` processes driven by the real CLI commands and client. Only behavior that
 // needs real processes lives here; the client's lifecycle decisions are covered by fixture tests in
-// packages/client/test. Every case ends with exactly one live server, registered and answering on
-// the configured port, which a stop removes without leftovers.
+// packages/client/test. Successful starts leave exactly one live server, registered and answering on
+// the configured port, which a stop removes without leftovers. Failed starts leave no server or registration.
 
 const entry = path.join(import.meta.dir, "../src/index.ts")
 const serviceTest = process.platform === "win32" ? test.skip : test
@@ -160,10 +160,10 @@ serviceTest(
 
     await expect(cli(home, "service", "start")).rejects.toThrow("Background service failed to start")
 
-    // A slow first boot can let a second startup attempt begin; it loses the port and exits.
-    const info = await until(() => snapshot(home).then((state) => state.info))
-    await observe(home, (state) => state.servers.length === 1 && state.servers[0] === info.pid)
-    await stopped(home)
+    await observe(home, (state) => state.servers.length === 0 && state.info === undefined)
+    expect(await Bun.file(home.registration).exists()).toBe(false)
+    const server = Bun.serve({ hostname: "127.0.0.1", port: home.port, fetch: () => new Response() })
+    await server.stop(true)
   },
   120_000,
 )
