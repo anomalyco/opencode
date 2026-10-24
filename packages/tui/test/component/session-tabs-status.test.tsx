@@ -187,7 +187,7 @@ for (const orientation of ["horizontal", "vertical"] as const) {
           .lines.flatMap((line) => line.spans)
           .find((span) => span.text.trim() === glyph)?.fg
         expect(color?.toInts()).toEqual(
-          (unread === "error" ? theme.text.feedback.error.base : theme.hue.accent[200]).toInts(),
+          (unread === "error" ? theme.text.feedback.error.base : theme.text.feedback.success.base).toInts(),
         )
         await app.mockMouse.click(1, orientation === "vertical" ? 1 : 0)
         await app.renderOnce()
@@ -203,6 +203,20 @@ for (const orientation of ["horizontal", "vertical"] as const) {
         draft.tabs.indicators = "numbers"
       })
       await app.waitForFrame((frame) => frame.includes("1 First") && frame.includes("2 Second"))
+      setActive("second")
+      for (const state of [
+        { status: { unread: "activity" }, color: theme.text.feedback.success.base },
+        { status: { busy: true, attention: "permission" }, color: theme.hue.accent[200] },
+      ] as const) {
+        setStatus({ ...EMPTY_SESSION_TAB_STATUS, ...state.status })
+        await app.renderOnce()
+        const number = app
+          .captureSpans()
+          .lines.flatMap((line) => line.spans)
+          .find((span) => span.text.trim() === "1")?.fg
+        expect(number?.toInts()).toEqual(state.color.toInts())
+      }
+      setStatus({ ...EMPTY_SESSION_TAB_STATUS, busy: true })
       await config.update((draft) => {
         draft.tabs.indicators = "status"
       })

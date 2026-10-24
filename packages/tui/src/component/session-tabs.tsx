@@ -562,7 +562,7 @@ function VerticalSessionTabs(props: {
   const compact = createMemo(() => width() < SESSION_TABS_COMPACT_BREAKPOINT)
   const tooltipWidth = () => Math.min(54, dimensions().width - width())
   const stride = () => (compact() ? 2 : 3)
-  const unreadColor = () => theme.hue.accent[200]
+  const unreadColor = () => theme.text.feedback.success.base
   const activeNumber = () => theme.hue.interactive[200]
   const idleNumber = () => tint(theme.text.formfield.base, background(), 0.55)
   const separatorUpperPulseColor = createMemo(() => tint(background(), theme.text.base, 0.04))
@@ -1325,7 +1325,7 @@ function HorizontalSessionTabs(props: {
   onCleanup(clearCloseHold)
   // A captured drag ends with a synthetic up on its drop target; do not turn that into a click.
   let suppressClick = false
-  const unreadColor = () => theme.hue.accent[200]
+  const unreadColor = () => theme.text.feedback.success.base
   const activeNumber = () => theme.hue.interactive[200]
   const idleNumber = () => tint(theme.text.formfield.base, theme.background.base, 0.55)
   const newTab = () => tabs.newTab?.() ?? false
