@@ -439,6 +439,85 @@ describe("Snapshot", () => {
   )
 })
 
+describe("Snapshot with the data directory inside the worktree", () => {
+  // Like a Git-tracked `$HOME`, where OpenCode's data and this store live in `.local/share/opencode`.
+  // https://github.com/anomalyco/opencode/issues/55010
+  const setup = (use: (input: { project: string; data: string }) => Effect.Effect<void, unknown, Snapshot.Service>) =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          const project = path.join(tmp.path, "home")
+          const data = path.join(project, ".local", "share", "opencode")
+          // OpenCode is given a symlink to its data directory, so the store must be matched by real path.
+          const link = path.join(tmp.path, "data")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(data, { recursive: true })
+            await fs.symlink(data, link, process.platform === "win32" ? "junction" : "dir")
+            await fs.writeFile(path.join(project, "notes.txt"), "one\n")
+            await initGit(project)
+          })
+          yield* use({ project, data }).pipe(Effect.provide(snapshotLayer(link, project)))
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    )
+
+  testEffect(Layer.empty).live("neither captures nor restores the data directory", () =>
+    setup(({ project, data }) =>
+      Effect.gen(function* () {
+        const snapshot = yield* Snapshot.Service
+        const before = yield* snapshot.capture()
+        yield* Effect.promise(() => fs.writeFile(path.join(project, "notes.txt"), "two\n"))
+        const after = yield* snapshot.capture()
+        if (!before || !after) throw new globalThis.Error("capture failed")
+
+        expect(yield* snapshot.files({ from: before, to: after })).toEqual([RelativePath.make("notes.txt")])
+        const store = yield* snapshotDirectory(data)
+        const tree = yield* Effect.promise(() => $`git --git-dir=${store} ls-tree -r --name-only ${after}`.text())
+        expect(tree.trim().split("\n")).toEqual(["notes.txt"])
+
+        const marker = path.join(data, "marker.txt")
+        yield* Effect.promise(() => fs.writeFile(marker, "kept\n"))
+        yield* snapshot.restore({
+          files: new Map([
+            [RelativePath.make("notes.txt"), before],
+            [RelativePath.make(".local/share/opencode/marker.txt"), before],
+          ]),
+        })
+        expect(yield* read(path.join(project, "notes.txt"))).toBe("one\n")
+        expect(yield* read(marker)).toBe("kept\n")
+      }),
+    ),
+  )
+
+  testEffect(Layer.empty).live("hides and removes the data directory captured before it was excluded", () =>
+    setup(({ project, data }) =>
+      Effect.gen(function* () {
+        const snapshot = yield* Snapshot.Service
+        yield* snapshot.capture()
+        const git = yield* Git.Service.pipe(Effect.provide(AppNodeBuilder.build(Git.node)))
+        const store = AbsolutePath.make(yield* snapshotDirectory(data))
+        const repository = new Git.Repository({
+          worktree: AbsolutePath.make(yield* Effect.promise(() => fs.realpath(project))),
+          gitDirectory: store,
+          commonDirectory: store,
+        })
+        const before = yield* git.tree.capture({ repository, scopes: [RelativePath.make(".")] })
+        yield* Effect.promise(() => fs.writeFile(path.join(project, "notes.txt"), "two\n"))
+        const after = yield* git.tree.capture({ repository, scopes: [RelativePath.make(".")] })
+
+        const compared = { from: Snapshot.ID.make(before), to: Snapshot.ID.make(after) }
+        expect(yield* snapshot.files(compared)).toEqual([RelativePath.make("notes.txt")])
+        expect((yield* snapshot.diff(compared)).map((file) => file.file)).toEqual(["notes.txt"])
+
+        const healed = yield* snapshot.capture()
+        const tree = yield* Effect.promise(() => $`git --git-dir=${store} ls-tree -r --name-only ${healed}`.text())
+        expect(tree.trim().split("\n")).toEqual(["notes.txt"])
+      }),
+    ),
+  )
+})
+
 function snapshotLayer(data: string, directory: string) {
   return AppNodeBuilder.build(Snapshot.node, [
     Location.node.replace(Location.boundNode(Location.Ref.make({ directory: AbsolutePath.make(directory) }))),

@@ -95,12 +95,18 @@ const layer = Layer.effect(
         const gitDirectory = AbsolutePath.make(
           path.join(global.data, "snapshot", location.project.id, Hash.fast(worktree)),
         )
+        // OpenCode's data directory, which holds this store, is inside the worktree when, for example, `$HOME` is a
+        // Git repository. Capturing it would record each capture's own objects and let a revert rewrite them.
+        // See https://github.com/anomalyco/opencode/issues/55010
+        const data = yield* fs.realPath(global.data).pipe(Effect.orElseSucceed(() => global.data))
+        const relative = path.relative(worktree, data).replaceAll("\\", "/")
+        const owned = relative && FSUtil.contains(worktree, data) ? [RelativePath.make(relative)] : []
         const snapshotRepository = (yield* fs.existsSafe(path.join(gitDirectory, "HEAD")))
           ? new Git.Repository({ worktree, gitDirectory, commonDirectory: gitDirectory })
           : yield* git.repo
               .create({ worktree, gitDirectory, seed: source })
               .pipe(Effect.mapError((cause) => failure("capture", cause)))
-        return { source, worktree, snapshotRepository }
+        return { source, worktree, snapshotRepository, owned }
       }).pipe(Effect.forkIn(lifetime)),
     )
     const repository = repositoryFiber.pipe(Effect.uninterruptible, Effect.flatMap(Fiber.join))
@@ -112,6 +118,10 @@ const layer = Layer.effect(
     })
 
     const enabled = () => location.vcs?.type === "git" && state.get().enabled
+
+    // Trees captured before the data directory was excluded can still contain it.
+    const isOwned = (owned: readonly RelativePath[], file: string) =>
+      owned.some((directory) => file === directory || file.startsWith(`${directory}/`))
 
     // `objects.pack` takes a cross-process lock, so a run that outlasts the interval never overlaps the next.
     let lastPackCheck = Number.NEGATIVE_INFINITY
@@ -134,6 +144,7 @@ const layer = Layer.effect(
           scopes: [yield* scope(repo.worktree)],
           ignores: repo.source,
           maximumUntrackedFileBytes: 2 * 1024 * 1024,
+          excludes: repo.owned,
         })
         yield* packWhenDue(repo.snapshotRepository)
         return ID.make(tree)
@@ -146,6 +157,7 @@ const layer = Layer.effect(
       const repo = yield* repository.pipe(Effect.mapError((cause) => failure(operation, cause)))
       return {
         source: repo.source,
+        owned: repo.owned,
         repository: repo.snapshotRepository,
         from: Git.TreeID.make(input.from),
         to: Git.TreeID.make(input.to),
@@ -170,7 +182,7 @@ const layer = Layer.effect(
         .pipe(Effect.mapError((cause) => failure("files", cause)))
       if (changed.length === 0) return []
       const skipped = yield* ignored("files", compared.source, changed)
-      return changed.filter((file) => !skipped.has(file))
+      return changed.filter((file) => !skipped.has(file) && !isOwned(compared.owned, file))
     })
 
     const diff = Effect.fn("Snapshot.diff")(function* (input: DiffInput) {
@@ -189,15 +201,20 @@ const layer = Layer.effect(
       if (diffs.length === 0) return []
       const paths = diffs.map((file) => RelativePath.make(file.file))
       const skipped = yield* ignored("diff", compared.source, paths)
-      return diffs.filter((_, index) => !skipped.has(paths[index]!))
+      return diffs.filter((file, index) => !skipped.has(paths[index]!) && !isOwned(compared.owned, file.file))
     })
 
-    const plan = Effect.fnUntraced(function* (worktree: AbsolutePath, input: RestoreInput) {
+    const plan = Effect.fnUntraced(function* (
+      worktree: AbsolutePath,
+      owned: readonly RelativePath[],
+      input: RestoreInput,
+    ) {
       const files = new Map<RelativePath, Git.TreeID>()
       for (const [file, snapshot] of input.files) {
         const absolute = path.resolve(worktree, file)
         if (!FSUtil.contains(worktree, absolute))
           return yield* new Error({ operation: "restore", message: `Path escapes the project: ${file}` })
+        if (isOwned(owned, file)) continue
         files.set(file, Git.TreeID.make(snapshot))
       }
       return files
@@ -207,7 +224,7 @@ const layer = Layer.effect(
       if (!enabled()) return yield* new Error({ operation: "restore", message: "Snapshots are disabled" })
       const repo = yield* repository.pipe(Effect.mapError((cause) => failure("restore", cause)))
       yield* git.tree
-        .restore({ repository: repo.snapshotRepository, files: yield* plan(repo.worktree, input) })
+        .restore({ repository: repo.snapshotRepository, files: yield* plan(repo.worktree, repo.owned, input) })
         .pipe(Effect.mapError((cause) => failure("restore", cause)))
     })
 
