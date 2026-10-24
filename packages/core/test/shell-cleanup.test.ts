@@ -50,4 +50,25 @@ describe("Shell cleanup", () => {
       }),
     ),
   )
+
+  it.live("keeps output whose mtime is the unix epoch", () =>
+    withStore((fs, root) =>
+      Effect.gen(function* () {
+        const directory = path.join(root, Shell.DIRECTORY, "project")
+        const epoch = path.join(directory, "sh_0123456789abepoch.out")
+        const old = path.join(directory, "sh_0123456789abexpired.out")
+        yield* fs.ensureDir(directory)
+        yield* fs.writeFileString(epoch, "still running")
+        yield* fs.writeFileString(old, "expired")
+        yield* fs.utimes(epoch, new Date(0), new Date(0))
+        yield* fs.utimes(old, new Date(), new Date(Date.now() - 8 * 24 * 60 * 60 * 1_000))
+
+        yield* Shell.cleanup()
+
+        expect(yield* fs.exists(epoch)).toBe(true)
+        expect(yield* fs.readFileString(epoch)).toBe("still running")
+        expect(yield* fs.exists(old)).toBe(false)
+      }),
+    ),
+  )
 })
