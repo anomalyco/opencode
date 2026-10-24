@@ -1,5 +1,6 @@
 import { Model } from "@opencode/schema/model"
 import { Provider } from "./provider.js"
+import { Integration } from "./integration.js"
 import type { DeepMutable } from "./schema.js"
 import { Context, Effect, Layer, Stream } from "effect"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
@@ -75,7 +76,7 @@ export interface Interface extends State.Transformable<Editor> {
   readonly get: (providerID: Provider.ID, modelID: ID) => Effect.Effect<Info | undefined>
   readonly all: () => Effect.Effect<readonly Info[]>
   readonly available: () => Effect.Effect<readonly Info[]>
-  readonly default: () => Effect.Effect<Info | undefined>
+  readonly default: (filter?: (model: Info) => boolean) => Effect.Effect<Info | undefined>
   readonly small: (providerID: Provider.ID) => Effect.Effect<Info | undefined>
 }
 
@@ -90,6 +91,7 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const providers = yield* Provider.Service
+    const integrations = yield* Integration.Service
     const bus = yield* Bus.Service
     const location = yield* Location.Service
     const disableFree = ["1", "true"].includes(process.env.OPENCODE_DISABLE_FREE_MODELS?.toLowerCase() ?? "")
@@ -268,11 +270,25 @@ const layer = Layer.effect(
       ),
       all: Effect.fn("Model.all")(() => read().pipe(Effect.map((value) => value.all))),
       available: Effect.fn("Model.available")(() => read().pipe(Effect.map((value) => value.available))),
-      default: Effect.fn("Model.default")(function* () {
+      default: Effect.fn("Model.default")(function* (filter?: (model: Info) => boolean) {
         const value = yield* read()
         const requested = value.data.defaultModel
         const model = requested && value.byProvider.get(requested.providerID)?.get(requested.modelID)
-        return model?.enabled ? model : value.available.find(supportsText)
+        if (model?.enabled && (!filter || filter(model))) return model
+        const connections = new Map((yield* integrations.list()).map((integration) => [integration.id, integration]))
+        const catalog = yield* providers.snapshot()
+        // Configured gateways remain selectable without a key, but request overlays
+        // alone must not replace the implicit default with an unconnected provider.
+        return value.available.find((candidate) => {
+          if (!supportsText(candidate) || (filter && !filter(candidate))) return false
+          const provider = catalog.records.get(candidate.providerID)?.provider
+          const integration = connections.get(provider?.integrationID ?? Integration.ID.make(candidate.providerID))
+          if (integration?.connections.length) return true
+          if (!provider?.integrationID && !integration) return true
+          return [candidate.settings?.apiKey, candidate.settings?.authToken, candidate.settings?.accessToken].some(
+            (credential) => typeof credential === "string" && credential !== "",
+          )
+        })
       }),
       small: Effect.fn("Model.small")(function* (providerID) {
         const value = yield* read()
@@ -291,7 +307,7 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [Provider.node, Bus.node, Location.node] })
+export const node = makeLocationNode({ service: Service, layer, deps: [Provider.node, Integration.node, Bus.node, Location.node] })
 
 // Signed out, only free OpenCode models are enabled. Clients default to the first available model, so keep
 // these free models ahead of each new free launch instead of letting release order pick the default.

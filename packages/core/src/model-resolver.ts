@@ -410,17 +410,7 @@ export const layer = Layer.effect(
       resolve: Effect.fn("ModelResolver.resolve")(function* (requested) {
         const selected = requested
           ? yield* models.get(requested.providerID, requested.id)
-          : yield* models
-              .default()
-              .pipe(
-                Effect.flatMap((model) =>
-                  model && hasPackage(model)
-                    ? Effect.succeed(model)
-                    : Effect.map(models.available(), (models) =>
-                        models.find((model) => hasPackage(model) && Model.supportsText(model)),
-                      ),
-                ),
-              )
+          : yield* models.default(hasPackage)
         if (!selected) return undefined
         return yield* load(selected, requested?.variant)
       }),

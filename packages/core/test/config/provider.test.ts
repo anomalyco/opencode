@@ -343,6 +343,104 @@ describe("ConfigProviderPlugin.Plugin", () => {
     )
   }
 
+  it.effect("keeps settings-only providers selectable without changing the implicit default", () =>
+    Effect.gen(function* () {
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
+      const integrations = yield* Integration.Service
+      const fallback = Provider.ID.make("fallback")
+      const model = Model.ID.make("chat")
+      yield* integrations.transform((editor) => {
+        editor.method.update({ integrationID: Integration.ID.make("anthropic"), method: { type: "key" } })
+      })
+      yield* providers.transform((editor) => {
+        editor.update(Provider.ID.anthropic, (provider) => {
+          provider.activation = "auto"
+          provider.integrationID = Integration.ID.make("anthropic")
+        })
+        editor.models.update(Provider.ID.anthropic, model, () => {})
+        editor.update(fallback, (provider) => {
+          provider.activation = "enabled"
+        })
+        editor.models.update(fallback, model, () => {})
+      })
+      const clean = required(yield* models.default())
+      expect(clean.providerID).toBe(fallback)
+
+      yield* addPlugin([
+        new Document({
+          type: "document",
+          info: decode({ providers: { anthropic: { settings: { baseURL: "https://proxy.example/v1" } } } }),
+        }),
+      ])
+
+      expect((yield* providers.get(Provider.ID.anthropic))?.activation).toBe("enabled")
+      expect((yield* providers.get(Provider.ID.anthropic))?.settings?.baseURL).toBe("https://proxy.example/v1")
+      expect((yield* providers.available()).map((provider) => provider.id)).toContain(Provider.ID.anthropic)
+      expect((yield* models.default())?.providerID).toBe(clean.providerID)
+    }),
+  )
+
+  for (const override of [{ settings: { apiKey: "fixture-key" } }, { models: { chat: {} } }]) {
+    it.effect(`keeps explicit catalog provider ${"settings" in override ? "credentials" : "models"} available`, () =>
+      Effect.gen(function* () {
+        const providers = yield* Provider.Service
+        const models = yield* Model.Service
+        const integrations = yield* Integration.Service
+        yield* integrations.transform((editor) => {
+          editor.method.update({ integrationID: Integration.ID.make("anthropic"), method: { type: "key" } })
+        })
+        yield* providers.transform((editor) => {
+          editor.update(Provider.ID.anthropic, (provider) => {
+            provider.activation = "auto"
+            provider.integrationID = Integration.ID.make("anthropic")
+          })
+          editor.models.update(Provider.ID.anthropic, Model.ID.make("chat"), () => {})
+        })
+        yield* addPlugin([new Document({ type: "document", info: decode({ providers: { anthropic: override } }) })])
+
+        expect((yield* providers.get(Provider.ID.anthropic))?.activation).toBe("enabled")
+        expect((yield* models.default())?.providerID).toBe("settings" in override ? Provider.ID.anthropic : undefined)
+      }),
+    )
+  }
+
+  for (const headers of [{ "x-api-key": "gateway-key" }, {}]) {
+    it.effect(`preserves explicit ${"x-api-key" in headers ? "header-auth" : "keyless"} gateway selection`, () =>
+      Effect.gen(function* () {
+        const providers = yield* Provider.Service
+        const models = yield* Model.Service
+        const integrations = yield* Integration.Service
+        const modelID = Model.ID.make("chat")
+        yield* integrations.transform((editor) => {
+          editor.method.update({ integrationID: Integration.ID.make("xai"), method: { type: "key" } })
+        })
+        yield* providers.transform((editor) => {
+          editor.update(Provider.ID.make("xai"), (provider) => {
+            provider.activation = "auto"
+            provider.integrationID = Integration.ID.make("xai")
+          })
+          editor.models.update(Provider.ID.make("xai"), modelID, () => {})
+        })
+        yield* addPlugin([
+          new Document({
+            type: "document",
+            info: decode({
+              model: "xai/chat",
+              providers: { xai: { settings: { baseURL: "http://localhost:1234/v1" }, headers } },
+            }),
+          }),
+        ])
+        expect((yield* providers.available()).map((provider) => provider.id)).toContain(Provider.ID.make("xai"))
+        expect(yield* models.get(Provider.ID.make("xai"), modelID)).toMatchObject({
+          settings: { baseURL: "http://localhost:1234/v1" },
+          headers,
+        })
+        expect((yield* models.default())?.providerID).toBe(Provider.ID.make("xai"))
+      }),
+    )
+  }
+
   it.effect("adds key auth for custom providers without env credentials", () =>
     Effect.gen(function* () {
       const integrations = yield* Integration.Service
