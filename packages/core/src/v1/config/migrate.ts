@@ -1,6 +1,7 @@
 export * as ConfigMigrateV1 from "./migrate.js"
 
 import { ConfigAgent } from "@opencode/schema/config/agent"
+import { ConfigProvider } from "@opencode/schema/config/provider"
 import { Schema } from "effect"
 import { ConfigAgentV1 } from "./agent.js"
 import { ConfigCommandV1 } from "./command.js"
@@ -123,10 +124,29 @@ function migrateStandardProvider(info: ConfigProviderV1.Info) {
     settings: info.api ? { ...options.settings, baseURL: info.api } : info.options ? options.settings : undefined,
     headers: info.options && options.headers,
     body: info.options && options.body,
-    models:
-      info.models &&
-      Object.fromEntries(Object.entries(info.models).map(([name, model]) => [name, migrateModel(model, info.npm)])),
+    models: withModelFilters(migrateModels(info), info),
   }
+}
+
+function migrateModels(info: ConfigProviderV1.Info) {
+  return (
+    info.models &&
+    Object.fromEntries(Object.entries(info.models).map(([name, model]) => [name, migrateModel(model, info.npm)]))
+  )
+}
+
+function withModelFilters<Model extends { readonly disabled?: boolean }>(
+  models: Record<string, Model> | undefined,
+  filters: Pick<ConfigProviderV1.Info, "whitelist" | "blacklist">,
+) {
+  if (!filters.whitelist && !filters.blacklist) return models
+  const result: Record<string, Model | { disabled: boolean }> = { ...models }
+  if (filters.whitelist) {
+    result[ConfigProvider.ModelWildcard] = { ...result[ConfigProvider.ModelWildcard], disabled: true }
+    for (const name of filters.whitelist) result[name] = { ...result[name], disabled: false }
+  }
+  for (const name of filters.blacklist ?? []) result[name] = { ...result[name], disabled: true }
+  return result
 }
 
 function migrateAzureCognitiveServicesProvider(info: ConfigProviderV1.Info) {
@@ -148,19 +168,22 @@ function migrateAzureCognitiveServicesProvider(info: ConfigProviderV1.Info) {
 function migrateGoogleVertexAnthropicProvider(info: ConfigProviderV1.Info) {
   const migrated = migrateStandardProvider(info)
   const packageName = migrated.package ?? Provider.aisdk("@ai-sdk/google-vertex/anthropic")
+  const models = migrateModels(info)
   return {
     ...migrated,
     // The current Google Vertex provider includes Gemini and Claude. Keep the Anthropic SDK on Claude models
     // instead of changing the package inherited by every model on the provider.
     package: undefined,
-    models:
-      migrated.models &&
-      Object.fromEntries(
-        Object.entries(migrated.models).map(([name, model]) => [
-          name,
-          model.package ? model : { ...model, package: packageName },
-        ]),
-      ),
+    models: withModelFilters(
+      models &&
+        Object.fromEntries(
+          Object.entries(models).map(([name, model]) => [
+            name,
+            model.package ? model : { ...model, package: packageName },
+          ]),
+        ),
+      { blacklist: info.blacklist },
+    ),
   }
 }
 
@@ -242,9 +265,7 @@ function migrateModel(info: typeof ConfigProviderV1.Model.Type, npm: string | un
     capabilities,
     headers: info.headers,
     body: migrated?.body,
-    variants:
-      info.variants &&
-      Object.entries(info.variants).map(([id, options]) => ({ id, ...split(options) })),
+    variants: info.variants && Object.entries(info.variants).map(([id, options]) => ({ id, ...split(options) })),
     cost: costs,
     disabled: info.status === "deprecated" ? true : undefined,
     limit: info.limit && {
