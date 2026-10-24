@@ -5350,7 +5350,48 @@ export type CredentialCreateOutput = { data: CredentialEntry }["data"]
 
 export type CredentialUpdateInput = {
   readonly credentialID: { readonly credentialID: string }["credentialID"]
-  readonly label: { readonly label: string }["label"]
+  readonly label: {
+    readonly label: string
+    readonly value?:
+      | (
+          | {
+              readonly type: "oauth"
+              readonly methodID: string
+              readonly refresh: string
+              readonly access: string
+              readonly expires: number
+              readonly metadata?: { readonly [x: string]: JsonValue }
+            }
+          | { readonly type: "key"; readonly key: string; readonly metadata?: { readonly [x: string]: JsonValue } }
+          | {
+              readonly type: "external"
+              readonly methodID: string
+              readonly metadata?: { readonly [x: string]: JsonValue }
+            }
+        )
+      | null
+  }["label"]
+  readonly value?: {
+    readonly label: string
+    readonly value?:
+      | (
+          | {
+              readonly type: "oauth"
+              readonly methodID: string
+              readonly refresh: string
+              readonly access: string
+              readonly expires: number
+              readonly metadata?: { readonly [x: string]: JsonValue }
+            }
+          | { readonly type: "key"; readonly key: string; readonly metadata?: { readonly [x: string]: JsonValue } }
+          | {
+              readonly type: "external"
+              readonly methodID: string
+              readonly metadata?: { readonly [x: string]: JsonValue }
+            }
+        )
+      | null
+  }["value"]
 }
 
 export type CredentialUpdateOutput = void

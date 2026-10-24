@@ -8100,7 +8100,7 @@
             }
           }
         },
-        "description": "Update a stored credential label.",
+        "description": "Update a stored credential label, or rotate its secret value in place.",
         "summary": "Update credential",
         "requestBody": {
           "content": {
@@ -8110,6 +8110,16 @@
                 "properties": {
                   "label": {
                     "type": "string"
+                  },
+                  "value": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Credential.Value"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "required": ["label"],

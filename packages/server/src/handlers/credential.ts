@@ -31,7 +31,7 @@ export const CredentialHandler = HttpApiBuilder.group(Api, "server.credential", 
       "credential.update",
       Effect.fn(function* (ctx) {
         const credential = yield* Credential.Service
-        yield* credential.update(ctx.params.credentialID, { label: ctx.payload.label })
+        yield* credential.update(ctx.params.credentialID, { label: ctx.payload.label, value: ctx.payload.value })
         return HttpApiSchema.NoContent.make()
       }),
     )
