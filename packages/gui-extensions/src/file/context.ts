@@ -42,10 +42,12 @@ export interface FileShared {
     get(session: string, path: string): LineRange | null | undefined
     set(session: string, files: Record<string, LineRange | null>): void
   }
-  /** Reveals a selected line range on a mounted file view when a link action targets it. */
+  /** Reveals a selected line range on a file view when a link action targets it. */
   readonly reveal: {
     register(session: string, path: string, run: () => void): () => void
     run(session: string, path: string): void
+    /** Whether a reveal ran since the last take; the view scrolls to the selection once its row renders. */
+    take(session: string, path: string): boolean
   }
   /** The tab is the session's selected side tab. */
   active(session: MountedSession, id: string): boolean

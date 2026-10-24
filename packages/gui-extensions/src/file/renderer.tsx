@@ -71,6 +71,7 @@ const setup: Setup<typeof File> = (ctx) => {
   const [filters, setFilters] = createStore<Record<string, { text: string; browsing: boolean } | undefined>>({})
 
   const revealListeners = new Map<string, Set<() => void>>()
+  const pendingReveals = new Set<string>()
   let clickController: AbortController | undefined
 
   // Tab objects per session screen, which stays while it routes another session, reused so neither strip updates nor a
@@ -216,7 +217,11 @@ const setup: Setup<typeof File> = (ctx) => {
         }
       },
       run(session, path) {
+        pendingReveals.add(`${session}\n${path}`)
         revealListeners.get(`${session}\n${path}`)?.forEach((fn) => fn())
+      },
+      take(session, path) {
+        return pendingReveals.delete(`${session}\n${path}`)
       },
     },
     active,

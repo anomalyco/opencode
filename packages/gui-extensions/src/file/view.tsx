@@ -64,7 +64,14 @@ type NoteState = { openedComment: string | null; commenting: LineRange | null; s
 
 type FindState = { find: FileSearchHandle | null }
 
-function createScrollSync(input: { get: () => ScrollPos | undefined; set: (pos: ScrollPos) => void }) {
+// Four unwrapped lines above a revealed line: the context the estimate in `renderer.tsx` leaves.
+const REVEAL_MARGIN = 4 * 24
+
+function createScrollSync(input: {
+  get: () => ScrollPos | undefined
+  set: (pos: ScrollPos) => void
+  restored: () => void
+}) {
   const state: ScrollSyncState = {}
   const [code, setCode] = createSignal<HTMLElement[]>([])
 
@@ -133,7 +140,7 @@ function createScrollSync(input: { get: () => ScrollPos | undefined; set: (pos: 
 
     const pos = input.get()
 
-    if (!pos) return
+    if (!pos) return input.restored()
 
     sync()
 
@@ -145,9 +152,21 @@ function createScrollSync(input: { get: () => ScrollPos | undefined; set: (pos: 
 
     if (el.scrollTop !== pos.y) el.scrollTop = pos.y
 
-    if (code().length > 0) return
+    if (code().length === 0 && el.scrollLeft !== pos.x) el.scrollLeft = pos.x
 
-    if (el.scrollLeft !== pos.x) el.scrollLeft = pos.x
+    input.restored()
+  }
+
+  // Scrolls a rendered line to the top of the view, with a few lines of context above it.
+  const scrollToLine = (line: number) => {
+    const el = state.scroll
+    const row = el?.querySelector("diffs-container")?.shadowRoot?.querySelector(`[data-line="${line}"]`)
+
+    if (!el || !(row instanceof HTMLElement)) return false
+
+    el.scrollTop += row.getBoundingClientRect().top - el.getBoundingClientRect().top - REVEAL_MARGIN
+
+    return true
   }
 
   const queueRestore = () => {
@@ -185,6 +204,7 @@ function createScrollSync(input: { get: () => ScrollPos | undefined; set: (pos: 
   return {
     handleScroll,
     queueRestore,
+    scrollToLine,
     setViewport,
   }
 }
@@ -239,9 +259,27 @@ export function SessionFileView(props: { session: MountedSession; screen: Sessio
     return shared.handoff.get(props.session.key, p) ?? null
   })
 
+  // A link's stored scroll is an estimate from unwrapped line heights; wrapped lines and annotations push the real row
+  // further down. The link's reveal is taken when the stored scroll restores, so a view the link mounts sees it too, and
+  // stays pending until the row is measured or the rendered file has no row for it.
+  const reveal = { pending: false, rendered: false }
+
   const scrollSync = createScrollSync({
     get: () => layout.scroll.get(props.session, key()),
     set: (pos) => layout.scroll.set(props.session, key(), pos),
+    restored: () => {
+      const p = path()
+
+      if (p && shared.reveal.take(props.session.key, p)) reveal.pending = true
+
+      if (!reveal.pending) return
+
+      const range = selectedLines()
+
+      if ((range && scrollSync.scrollToLine(Math.min(range.start, range.end))) || reveal.rendered) {
+        reveal.pending = false
+      }
+    },
   })
 
   const selectionPreview = (source: string, selection: FileSelection) => {
@@ -448,14 +486,14 @@ export function SessionFileView(props: { session: MountedSession; screen: Sessio
     },
   )
 
-  const renderFile = (source: string) => (
+  const renderFile = () => (
     <div class="relative overflow-hidden pb-40">
       <Dynamic
         component={fileComponent}
         mode="text"
         file={{
           name: path() ?? "",
-          contents: source,
+          contents: contents(),
           cacheKey: cacheKey(),
         }}
         enableLineSelection
@@ -463,6 +501,7 @@ export function SessionFileView(props: { session: MountedSession; screen: Sessio
         selectedLines={activeSelection()}
         commentedLines={commentedLines()}
         onRendered={() => {
+          reveal.rendered = true
           scrollSync.queueRestore()
         }}
         annotations={commentsUi.annotations()}
@@ -492,10 +531,12 @@ export function SessionFileView(props: { session: MountedSession; screen: Sessio
     </div>
   )
 
-  // The code view scrolls inside ScrollView so line state and scroll position persist per tab.
-  const codeView = (source: string) => (
+  // The code view scrolls inside ScrollView so line state and scroll position persist per tab. It reads the text through
+  // `contents()`, not the loaded value, so a reread (every link click forces one) updates it in place instead of
+  // remounting it scrolled to the top.
+  const codeView = () => (
     <ScrollView class="min-h-0 flex-1" viewportRef={scrollSync.setViewport} onScroll={scrollSync.handleScroll}>
-      {renderFile(source)}
+      {renderFile()}
     </ScrollView>
   )
 
@@ -504,13 +545,13 @@ export function SessionFileView(props: { session: MountedSession; screen: Sessio
       <Switch>
         <Match when={current()?.loaded ? current()?.content : undefined}>
           {(value) => (
-            <Show when={artifact()} fallback={codeView(value().content)}>
+            <Show when={artifact()} fallback={codeView()}>
               <ArtifactView
                 session={props.session}
                 path={path() ?? ""}
                 content={value()}
                 cacheKey={cacheKey()}
-                source={codeView(value().content)}
+                source={codeView()}
               />
             </Show>
           )}
