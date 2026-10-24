@@ -1,4 +1,5 @@
-import { Buffer } from "node:buffer"
+import { Buffer, isUtf8 } from "node:buffer"
+import { MIMEType } from "node:util"
 import { Effect, Option, Schema, SchemaGetter } from "effect"
 import { Tool } from "@opencode/schema/tool"
 import { Route } from "../route/client.js"
@@ -784,7 +785,26 @@ const lowerMedia = Effect.fnUntraced(function* (part: MediaPart, breakpoints?: C
 // content instead of JSON-stringifying base64 into a prompt string.
 const lowerToolResultContentItem = Effect.fnUntraced(function* (item: Tool.Content) {
   if (item.type === "text") return { type: "text" as const, text: item.text } satisfies AnthropicTextBlock
-  return yield* lowerMedia(ProviderShared.toolFileMedia(item))
+  const part = ProviderShared.toolFileMedia(item)
+  const parse = Option.liftThrowable((value: string) => new MIMEType(value))
+  const mime = Option.getOrUndefined(parse(item.mime))
+  const header = /^data:([^,]+);base64,/.exec(item.uri)?.[1]
+  const dataMime = header === undefined ? undefined : Option.getOrUndefined(parse(header))
+  const inline = part.media.inline()
+  const charsets = [mime, dataMime].map((type) => type?.params.get("charset")?.toLowerCase())
+  // The declared MIME owns the type. A data URL may independently declare its encoding.
+  if (
+    mime?.essence.startsWith("text/") &&
+    item.mime.toLowerCase() !== "text/plain" &&
+    inline &&
+    (!/^data:/i.test(item.uri) || dataMime !== undefined) &&
+    charsets.every((charset) => charset === undefined || charset === "utf-8" || charset === "us-ascii")
+  ) {
+    const bytes = Buffer.from(inline.base64, "base64")
+    if (isUtf8(bytes) && (!charsets.includes("us-ascii") || bytes.every((byte) => byte <= 0x7f)))
+      return yield* lowerMedia(ProviderShared.toolFileMedia({ ...item, mime: "text/plain" }))
+  }
+  return yield* lowerMedia(part)
 })
 
 const lowerToolResultContent = Effect.fnUntraced(function* (part: ToolResultPart) {
