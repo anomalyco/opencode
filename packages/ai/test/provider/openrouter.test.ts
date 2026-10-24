@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { CacheHint, LanguageModel, LLM, Message } from "../../src/index.js"
+import { CacheHint, LanguageModel, LLM, Message, ToolCallPart } from "../../src/index.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import * as OpenRouter from "../../src/providers/openrouter.js"
@@ -611,6 +611,99 @@ describe("OpenRouter", () => {
           reasoning_text: undefined,
         },
       ])
+    }),
+  )
+  for (const kind of ["image", "PDF", "mixed"] as const)
+    it.effect(`anchors Gemini tool ${kind} with text while preserving encrypted reasoning`, () =>
+      Effect.gen(function* () {
+        const details = [
+          {
+            type: "reasoning.encrypted",
+            data: "opaque-signature",
+            format: "google-gemini-v1",
+            id: "call_image",
+            index: 0,
+          },
+        ]
+        const files = [
+          ...(kind !== "PDF"
+            ? [{ type: "file" as const, uri: "data:image/png;base64,AAECAw==", mime: "image/png", name: "pixel.png" }]
+            : []),
+          ...(kind !== "image"
+            ? [
+                {
+                  type: "file" as const,
+                  uri: "data:application/pdf;base64,JVBERi0=",
+                  mime: "application/pdf",
+                  name: "guide.pdf",
+                },
+              ]
+            : []),
+        ]
+        const prepared = yield* compileRequest(
+          LLM.request({
+            model: OpenRouter.configure({ apiKey: "test-key" }).model("google/gemini-4-argon"),
+            cache: "none",
+            messages: [
+              Message.user("Read pixel.png"),
+              Message.assistant([
+                { type: "reasoning", text: "", providerMetadata: { openrouter: { reasoningDetails: details } } },
+                ToolCallPart.make({ id: "call_image", name: "read", input: { path: "pixel.png" } }),
+              ]),
+              Message.tool({
+                id: "call_image",
+                name: "read",
+                result: {
+                  type: "content",
+                  value: [{ type: "text", text: "Image read successfully" }, ...files],
+                },
+              }),
+            ],
+          }),
+        )
+        expect(prepared.body.messages.map((message) => message.role)).toEqual(["user", "assistant", "tool", "user"])
+        expect(prepared.body.messages[1]).toMatchObject({ reasoning_details: details })
+        expect(prepared.body.messages[2]).toEqual({
+          role: "tool",
+          tool_call_id: "call_image",
+          content: "Image read successfully",
+        })
+        expect(prepared.body.messages[3]).toEqual({
+          role: "user",
+          content: [
+            { type: "text", text: "Attached media from tool result:" },
+            ...files.map((file) =>
+              file.mime === "image/png"
+                ? { type: "image_url", image_url: { url: file.uri } }
+                : { type: "file", file: { filename: file.name, file_data: file.uri } },
+            ),
+          ],
+        })
+      }),
+    )
+
+  it.effect("keeps non-Gemini OpenRouter tool images unchanged", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: OpenRouter.configure({ apiKey: "test-key" }).model("openai/gpt-4o-mini"),
+          cache: "none",
+          messages: [
+            Message.tool({
+              id: "call_image",
+              name: "read",
+              result: {
+                type: "content",
+                value: [{ type: "file", uri: "data:image/png;base64,AAECAw==", mime: "image/png" }],
+              },
+            }),
+          ],
+        }),
+      )
+      expect(prepared.body.messages.at(-1)).toEqual({
+        role: "user",
+        content: [{ type: "image_url", image_url: { url: "data:image/png;base64,AAECAw==" } }],
+      })
     }),
   )
 })
