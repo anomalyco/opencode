@@ -234,6 +234,12 @@ export function ComposerEditor(props: ComposerEditorProps) {
             role="textbox"
             aria-multiline="true"
             aria-label={i18n.t("ui.promptInput.label")}
+            aria-autocomplete={view.prediction?.text() ? "inline" : undefined}
+            aria-description={
+              view.prediction?.text()
+                ? i18n.t("prompt.prediction.description", { text: view.prediction.text()! })
+                : undefined
+            }
             dir={state.mode === "normal" ? "auto" : "ltr"}
             contenteditable={!props.disabled && !props.readOnly}
             autocapitalize={state.mode === "normal" ? "sentences" : "off"}
@@ -241,19 +247,21 @@ export function ComposerEditor(props: ComposerEditorProps) {
             spellcheck={state.mode === "normal"}
             // @ts-expect-error
             autocomplete="off"
-            class="relative z-10 block min-h-[60px] w-full whitespace-pre-wrap bg-transparent px-4 pt-4 pb-2 text-[13px] font-[440] leading-5 text-v2-text-text-base focus:outline-none [&_[data-mention=file]]:text-syntax-property [&_[data-mention=agent]]:text-syntax-type [&_[data-mention=reference]]:text-syntax-keyword"
+            class="relative z-10 col-start-1 row-start-1 block min-h-[60px] w-full whitespace-pre-wrap bg-transparent px-4 pt-4 pb-2 text-[13px] font-[440] leading-5 text-v2-text-text-base focus:outline-none [&_[data-mention=file]]:text-syntax-property [&_[data-mention=agent]]:text-syntax-type [&_[data-mention=reference]]:text-syntax-keyword"
             classList={{ "font-mono!": state.mode === "shell", "opacity-50": props.disabled }}
             style={{
               "unicode-bidi": state.mode === "normal" ? "plaintext" : undefined,
               "text-align": "start",
             }}
             onInput={(event) => {
+              view.prediction?.dismiss()
               const cursor = composerCursor(event.currentTarget)
               const prompt = parseComposerEditor(event.currentTarget)
               const attachments = props.controller.parts().filter(isAttachment)
               localInput = true
               props.controller.onInput(prompt.map((part) => part.content).join(""), [...prompt, ...attachments], cursor)
             }}
+            onCompositionStart={() => view.prediction?.dismiss()}
             onKeyDown={(event) => {
               if (!view.draftOnly && props.controller.onKeyDown(event)) return
               const mod = event.metaKey || event.ctrlKey
@@ -296,12 +304,14 @@ export function ComposerEditor(props: ComposerEditorProps) {
           />
           <Show when={!props.controller.value()}>
             <div
+              aria-hidden={view.prediction?.text() ? true : undefined}
               dir={state.mode === "normal" ? "auto" : "ltr"}
-              class="pointer-events-none absolute inset-x-0 top-0 px-4 pt-4 text-[13px] font-[440] leading-5 text-v2-text-text-faint"
+              class="pointer-events-none col-start-1 row-start-1 whitespace-pre-wrap px-4 pt-4 pb-2 text-[13px] font-[440] leading-5 text-v2-text-text-faint"
               classList={{ "font-mono!": state.mode === "shell" }}
               style={{ "unicode-bidi": state.mode === "normal" ? "plaintext" : undefined, "text-align": "start" }}
             >
-              {view.placeholder?.() ??
+              {view.prediction?.text() ??
+                view.placeholder?.() ??
                 (state.mode === "shell"
                   ? i18n.t("ui.promptInput.placeholder.shell")
                   : i18n.t("ui.promptInput.placeholder.normal", { slash: "/", at: "@" }))}
@@ -370,6 +380,11 @@ export function ComposerEditor(props: ComposerEditorProps) {
               </Show>
             </div>
           </div>
+          <Show when={view.prediction?.text()}>
+            <span aria-hidden="true" class="me-2 whitespace-nowrap text-[12px] leading-4 text-v2-text-text-faint">
+              {i18n.t("prompt.prediction.accept")}
+            </span>
+          </Show>
           <div data-slot="composer-actions" class="flex shrink-0 items-center">
             <Show when={state.mode === "normal"}>
               <ComposerEditorAlternateDelivery

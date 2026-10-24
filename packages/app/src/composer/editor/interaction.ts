@@ -22,6 +22,7 @@ import {
 } from "../suggestions/machine"
 import { clonePrompt, isAttachment, promptLength } from "../prompt-parts"
 import type { ComposerQueue } from "../adapter"
+import type { ComposerPrediction } from "../prediction"
 
 export type ComposerSelectControl = {
   options: Accessor<ComposerOption[]>
@@ -33,6 +34,7 @@ export type ComposerSelectControl = {
 export type ComposerEditorView = {
   draftOnly?: boolean
   placeholder?: Accessor<string>
+  prediction?: ComposerPrediction
   add?: {
     onAttach: () => void
   }
@@ -264,6 +266,34 @@ export function createComposerEditor(input: {
     }
 
     if (handled) return true
+
+    const prediction = input.view.prediction
+
+    if (
+      prediction?.text() &&
+      !event.isComposing &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.altKey &&
+      !event.shiftKey
+    ) {
+      if (event.key === "Tab") {
+        event.preventDefault()
+        const text = prediction.text()!
+        prediction.dismiss()
+        draft.setText(text)
+        setEditorCursor(editor, text.length)
+
+        return true
+      }
+
+      if (event.key === "Escape") {
+        event.preventDefault()
+        prediction.dismiss()
+
+        return true
+      }
+    }
 
     if (event.key === "Escape" && input.view.submit.queue?.editing()) {
       event.preventDefault()

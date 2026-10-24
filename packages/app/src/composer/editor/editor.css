@@ -2,6 +2,10 @@
   content: "\200B";
 }
 
+[data-component="composer-scroll"] > [data-scrollable] {
+  display: grid;
+}
+
 /* Masks only cover hidden content; they do not reserve space in the toolbar. */
 [data-slot="composer-controls"][data-overflow-start="true"] {
   --mask-start: 16px;

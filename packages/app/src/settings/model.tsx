@@ -122,6 +122,7 @@ const generalSchema = Persistence.struct({
   mobileDiffWrap: Persistence.optional(Schema.Boolean),
   terminalPlacement: Schema.Literals(["side", "bottom"]),
   followUpBehavior: Schema.Literals(["queue", "steer"]),
+  composerPredictions: Schema.Boolean,
 })
 
 const appearanceSchema = Persistence.struct({
@@ -283,6 +284,7 @@ export const defaultSettings: Settings = {
     mobileTitlebarPosition: "top",
     terminalPlacement: "side",
     followUpBehavior: "steer",
+    composerPredictions: false,
   },
   appearance: { fontSize: 14, mono: "", sans: "", terminal: "", tabLayout: "horizontal" },
   keybinds: {},
@@ -374,6 +376,13 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         followUpBehavior: withFallback(() => store.general?.followUpBehavior, defaultSettings.general.followUpBehavior),
         setFollowUpBehavior(value: FollowUpBehavior) {
           setStore("general", "followUpBehavior", value)
+        },
+        composerPredictions: withFallback(
+          () => store.general?.composerPredictions,
+          defaultSettings.general.composerPredictions,
+        ),
+        setComposerPredictions(value: boolean) {
+          setStore("general", "composerPredictions", value)
         },
       },
       visibility: {

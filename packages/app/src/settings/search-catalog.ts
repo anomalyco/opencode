@@ -56,6 +56,13 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   },
   {
     tab: "general",
+    label: "settings.general.row.composerPredictions.title",
+    description: "settings.general.row.composerPredictions.description",
+    target: "settings-composer-predictions",
+    keywords: "prompt suggestion prediction follow up autocomplete",
+  },
+  {
+    tab: "general",
     label: "settings.general.row.pinchZoom.title",
     target: "settings-pinch-zoom",
     available: "desktop",

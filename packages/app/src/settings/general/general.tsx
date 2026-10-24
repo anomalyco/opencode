@@ -263,6 +263,19 @@ export const SettingsGeneral: Component = () => {
         <TerminalPlacementSetting />
         <FollowUpBehaviorSetting />
 
+        <SettingsRow
+          title={language.t("settings.general.row.composerPredictions.title")}
+          description={language.t("settings.general.row.composerPredictions.description")}
+        >
+          <div data-action="settings-composer-predictions">
+            <Switch
+              aria-label={language.t("settings.general.row.composerPredictions.title")}
+              checked={settings.general.composerPredictions()}
+              onChange={(checked) => settings.general.setComposerPredictions(checked)}
+            />
+          </div>
+        </SettingsRow>
+
         <Show when={desktop()}>
           <SettingsRow
             title={language.t("settings.general.row.pinchZoom.title")}

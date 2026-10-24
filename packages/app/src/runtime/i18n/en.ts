@@ -841,6 +841,11 @@ export const dict = {
   "settings.general.row.showCustomAgents.description":
     "Switch between agents in the composer. When hidden, defaults to Build agent.",
   "settings.general.row.followUpBehavior.title": "Follow-up behavior",
+  "settings.general.row.composerPredictions.title": "Show prompt predictions",
+  "settings.general.row.composerPredictions.description":
+    "Suggest a follow-up after each response using the session's model. Additional provider usage may apply.",
+  "prompt.prediction.accept": "Tab to accept",
+  "prompt.prediction.description": "Suggested follow-up: {{text}} Press Tab to accept or Escape to dismiss.",
   "settings.general.row.followUpBehavior.description":
     "Choose whether to queue follow-ups or steer the current turn. Use {{keybind}} to switch.",
   "settings.general.row.followUpBehavior.queue": "Queue",
