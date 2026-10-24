@@ -19,6 +19,9 @@ import {
   pickerParent,
   pickerRoot,
   pickerAbsoluteInput,
+  pickerDisplaySeparator,
+  withPickerSeparator,
+  stripPickerTrailingSeparator,
 } from "./domain"
 
 type Sdk = Parameters<typeof listPickerDirectory>[0]
@@ -462,4 +465,30 @@ test("wraps autocomplete keyboard navigation", () => {
   expect(nextSuggestionIndex(3, 1, 4)).toBe(0)
   expect(nextSuggestionIndex(0, -1, 4)).toBe(3)
   expect(nextSuggestionIndex(0, 1, 0)).toBe(-1)
+})
+
+test.each([
+  ["C:\\repo\\apex", "\\"],
+  ["C:/repo/apex", "/"],
+  ["/home/luke", "/"],
+])("display separator for %p is %p", (value, expected) => {
+  expect(pickerDisplaySeparator(value)).toBe(expected)
+})
+
+test.each([
+  ["C:\\repo\\apex", "C:\\repo\\apex\\"],
+  ["C:\\repo\\apex\\", "C:\\repo\\apex\\"],
+  ["C:/repo/apex", "C:/repo/apex/"],
+  ["/home/luke", "/home/luke/"],
+  ["", ""],
+])("completion appends the matching separator to %p: %p", (value, expected) => {
+  expect(withPickerSeparator(value)).toBe(expected)
+})
+
+test.each([
+  ["C:\\repo\\apex\\", "C:\\repo\\apex"],
+  ["C:/repo/apex/", "C:/repo/apex"],
+  ["C:/repo/apex//", "C:/repo/apex"],
+])("trailing separators are stripped from %p: %p", (value, expected) => {
+  expect(stripPickerTrailingSeparator(value)).toBe(expected)
 })
