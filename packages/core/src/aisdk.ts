@@ -558,8 +558,14 @@ function message(input: LLMRequest["messages"][number]): LanguageModelV3Message[
       ]
     case "user":
       return [{ role: "user", content: input.content.flatMap(userPart) }]
-    case "assistant":
-      return [{ role: "assistant", content: input.content.flatMap(assistantPart) }]
+    case "assistant": {
+      const content = input.content.flatMap(assistantPart).filter((part) => part.type !== "text" || part.text !== "")
+      // Strict providers (DeepSeek, Kimi, LiteLLM-fronted Bedrock) reject an assistant turn with no
+      // model-visible content, permanently bricking the session. Empty text fragments carry no data and
+      // reasoning replay (Anthropic signed blocks, Gemini thought signatures) is unaffected by their removal.
+      if (content.length === 0) return []
+      return [{ role: "assistant", content }]
+    }
     case "tool":
       return toolMessage(input).messages
   }
