@@ -725,6 +725,44 @@ describe("Vcs", () => {
     ),
   )
 
+  it.live("reports an unreadable repository instead of an empty diff", () =>
+    withTmp((root) =>
+      Effect.promise(async () => {
+        const repo = path.join(root, "repo")
+        const worktree = path.join(root, "wt")
+        await fs.mkdir(repo)
+        await initGit(repo, "-b", "main")
+        await fs.writeFile(path.join(repo, "tracked.txt"), "one\n")
+        await commitAll(repo, "initial")
+        await $`git -C ${repo} worktree add --detach ${worktree} HEAD`.quiet()
+        await fs.writeFile(path.join(worktree, "untracked.txt"), "two\n")
+        await fs.rename(path.join(repo, ".git", "worktrees", "wt"), path.join(root, "wt-admin"))
+        return worktree
+      }).pipe(
+        Effect.flatMap((worktree) =>
+          Effect.gen(function* () {
+            const vcs = yield* Vcs.Service
+            const context = host()
+            yield* VcsGitPlugin.Plugin.effect({
+              ...context,
+              vcs: { ...context.vcs, transform: vcs.transform, reload: vcs.reload },
+            })
+
+            // status keeps its empty-list fallback; the diff routes must say the repository is unreadable.
+            expect(yield* vcs.status()).toEqual([])
+            const working = yield* vcs.diff("working").pipe(Effect.exit)
+            expect(Exit.isFailure(working)).toBeTrue()
+            if (Exit.isFailure(working)) expect(Cause.squash(working.cause)).toBeInstanceOf(Vcs.DiffError)
+            const committed = yield* vcs.diff("committed").pipe(Effect.exit)
+            expect(Exit.isFailure(committed)).toBeTrue()
+            const base = yield* vcs.base().pipe(Effect.exit)
+            expect(Exit.isFailure(base)).toBeTrue()
+          }).pipe(provide(worktree, { git: true, worktree })),
+        ),
+      ),
+    ),
+  )
+
   it.live("diffs a feature branch against the default branch", () =>
     withGit((directory) =>
       Effect.gen(function* () {

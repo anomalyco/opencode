@@ -81,7 +81,12 @@ function make(proc: AppProcess.Interface, input: { directory: string; worktree: 
     }),
     status: Effect.fn("VcsGit.status")(function* () {
       const git = ctx.git
-      const ref = (yield* git.hasHead(ctx.directory)) ? "HEAD" : undefined
+      const ref = (yield* git.hasHead(ctx.directory).pipe(
+        // status has no error channel; keep its empty-list fallback for an unreadable repository.
+        Effect.catchTag("Vcs.DiffError", () => Effect.succeed(false)),
+      ))
+        ? "HEAD"
+        : undefined
       const [list, stats] = yield* Effect.all(
         [git.status(ctx.directory), ref ? git.stats(ctx.directory, ref) : Effect.succeed([] as Stat[])],
         { concurrency: 2 },
@@ -351,6 +356,8 @@ function makeGit(proc: AppProcess.Interface, env?: Record<string, string>) {
   })
 
   const hasHead = Effect.fn("VcsGit.hasHead")(function* (cwd: string) {
+    const dir = yield* run(["rev-parse", "--git-dir"], { cwd })
+    if (dir.exitCode !== 0) return yield* new DiffError({ message: "Unable to read Git repository" })
     const result = yield* run(["rev-parse", "--verify", "HEAD"], { cwd })
     return result.exitCode === 0
   })
