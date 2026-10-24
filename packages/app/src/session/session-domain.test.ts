@@ -24,8 +24,8 @@ test("selects user history strictly before the revert boundary", () => {
   const messages: SessionMessageInfo[] = [user("msg_a"), assistant, user("msg_b"), user("msg_c")]
   const users = selectSessionUserMessages(messages)
 
-  expect(users.map((message) => message.id)).toEqual(["msg_a", "msg_b", "msg_c"])
-  expect(selectVisibleSessionUserMessages(users, "msg_b").map((message) => message.id)).toEqual(["msg_a"])
+  expect<unknown>(users.map((message) => message.id)).toEqual(["msg_a", "msg_b", "msg_c"])
+  expect<unknown>(selectVisibleSessionUserMessages(users, "msg_b").map((message) => message.id)).toEqual(["msg_a"])
   expect(selectVisibleSessionUserMessages(users.slice(2), "msg_b")).toEqual([])
   expect(selectVisibleSessionUserMessages(users)).toBe(users)
 })
