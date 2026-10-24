@@ -429,6 +429,24 @@ describe("Session.create", () => {
     }),
   )
 
+  it.effect("inherits the parent's session environment through children", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const parent = yield* session.create({ location })
+      yield* session.environment({ sessionID: parent.id, variables: { PATH: "/parent/bin", MARKER: "from-parent" } })
+
+      const child = yield* session.create({ parentID: parent.id, title: "child" })
+      expect(yield* session.environment({ sessionID: child.id })).toEqual({ PATH: "/parent/bin", MARKER: "from-parent" })
+
+      // Snapshot semantics: later parent changes do not retroactively update children.
+      yield* session.environment({ sessionID: parent.id, variables: { PATH: "/next/bin" } })
+      expect(yield* session.environment({ sessionID: child.id })).toEqual({ PATH: "/parent/bin", MARKER: "from-parent" })
+
+      // A session created without a parent has no environment of its own.
+      expect(yield* session.environment({ sessionID: (yield* session.create({ location })).id })).toBeUndefined()
+    }),
+  )
+
   it.effect("inherits location from an existing parent when omitted", () =>
     Effect.gen(function* () {
       const session = yield* Session.Service

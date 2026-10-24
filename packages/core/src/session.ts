@@ -319,6 +319,12 @@ const layer = Layer.effect(
                 )
             }),
           )
+        // Children inherit the parent's session environment the way they inherit
+        // location, metadata and permissions (snapshot at creation).
+        if (parent) {
+          const variables = yield* environments.get(parent.id)
+          if (variables !== undefined) yield* environments.set(sessionID, variables)
+        }
         if (projected.type === "existing") return projected.session
         // TODO: Restore recorded sessions onto replacement synchronized workspaces in a future API slice.
         return yield* result.get(sessionID).pipe(Effect.orDie)
