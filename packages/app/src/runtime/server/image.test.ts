@@ -54,6 +54,26 @@ describe("readLocalImage", () => {
     )
   })
 
+  // A single leading separator is drive-root-relative on Windows and would read the process drive
+  // (`C:\static`); a URL-style reference names a file under the workspace instead.
+  test("reads a URL-style path of a Windows workspace from the workspace", async () => {
+    const { api, requests } = setup()
+    const blob = await readLocalImage(api, "C:/project", "/static/render/cover.png", new AbortController().signal)
+
+    expect(blob).toBeInstanceOf(Blob)
+    expect(requests[0].url.pathname).toBe("/api/fs/read/static/render/cover.png")
+    expect([...requests[0].url.searchParams]).toEqual([["location[directory]", "C:/project"]])
+  })
+
+  test("reads a URL-style path of a UNC workspace from the workspace", async () => {
+    const { api, requests } = setup()
+    const blob = await readLocalImage(api, "\\\\server\\share\\proj", "/static/cover.png", new AbortController().signal)
+
+    expect(blob).toBeInstanceOf(Blob)
+    expect(requests[0].url.pathname).toBe("/api/fs/read/static/cover.png")
+    expect([...requests[0].url.searchParams]).toEqual([["location[directory]", "\\\\server\\share\\proj"]])
+  })
+
   test.each([
     ["png", "image/png"],
     ["jpeg", "image/jpeg"],

@@ -804,9 +804,10 @@ story("loads file URLs and Windows paths, and leaves unreadable images as alt te
         harness.getByRole("button", { name, exact: true }).evaluate((image: HTMLImageElement) => image.naturalWidth),
       )
       .toBe(1)
+  // A drive-less path has no absolute meaning on a Windows workspace, so it is read inside the project.
   await expect
     .poll(() => [...requested].sort())
-    .toEqual(["/api/fs/read/chart%25.png", "/api/fs/read/missing.png", "/api/fs/read/windows.png"])
+    .toEqual(["/api/fs/read/chart%25.png", "/api/fs/read/tmp/missing.png", "/api/fs/read/windows.png"])
   await expect(harness.getByRole("button", { name: "Unavailable" })).not.toHaveAttribute("src")
   await harness.getByLabel("Markdown text").fill("Still usable")
   await expect(harness.locator('[data-component="markdown"]')).toHaveText("Still usable")
