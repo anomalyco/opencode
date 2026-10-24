@@ -47,7 +47,9 @@ export function createSessionTimelineInteraction(session: SessionModel) {
   const pin = () => setState("follow", { sessionKey: session.identity.sessionKey(), pinned: true })
 
   const unpin = () => {
-    if (!scroller || scroller.scrollHeight - scroller.clientHeight <= 1) return
+    // Already unpinned: the geometry read cannot change the outcome.
+    if (!pinned()) return
+    if (!scroller || !scrollGeometry(scroller).overflow) return
     setState("follow", { sessionKey: session.identity.sessionKey(), pinned: false })
   }
 
@@ -109,16 +111,22 @@ export function createSessionTimelineInteraction(session: SessionModel) {
     setState("messageID", message?.id)
   }
 
-  const jumpThreshold = (element: HTMLDivElement) => Math.max(400, element.clientHeight)
+  // The scroll path reads geometry from several call sites, and each read can force a
+  // synchronous layout. Read each property once and derive the shared values here.
+  const scrollGeometry = (element: HTMLDivElement) => {
+    const clientHeight = element.clientHeight
+    const max = element.scrollHeight - clientHeight
+
+    return { clientHeight, max, overflow: max > 1 }
+  }
 
   const updateScrollState = (element: HTMLDivElement) => {
-    const max = element.scrollHeight - element.clientHeight
-    const distance = max - element.scrollTop
-    const overflow = max > 1
-    const jump = overflow && distance > jumpThreshold(element)
+    const geometry = scrollGeometry(element)
+    const distance = geometry.max - element.scrollTop
+    const jump = geometry.overflow && distance > Math.max(400, geometry.clientHeight)
 
-    if (state.scroll.overflow === overflow && state.scroll.jump === jump) return
-    setState("scroll", { overflow, jump })
+    if (state.scroll.overflow === geometry.overflow && state.scroll.jump === jump) return
+    setState("scroll", { overflow: geometry.overflow, jump })
   }
 
   const scheduleScrollState = (element: HTMLDivElement) => {
@@ -259,7 +267,7 @@ export function createSessionTimelineInteraction(session: SessionModel) {
 
       if (!pinned() || timeline.history.loading() || !scroller) return
 
-      if (scroller.scrollHeight > scroller.clientHeight + 1 || !timeline.history.more()) return
+      if (scrollGeometry(scroller).overflow || !timeline.history.more()) return
       void loadOlder()
     })
   }
