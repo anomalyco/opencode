@@ -9,15 +9,7 @@ const lru = new Map<string, number>()
 let total = 0
 
 export function approxBytes(content: FileContent) {
-  const patchBytes =
-    content.patch?.hunks.reduce((sum, hunk) => {
-      return sum + hunk.lines.reduce((lineSum, line) => lineSum + line.length, 0)
-    }, 0) ?? 0
-
-  // V8 keeps an ASCII string such as base64 at one byte per character; other text may take two.
-  const body = content.bytes?.byteLength ?? content.content.length * (content.encoding === "base64" ? 1 : 2)
-
-  return body + ((content.diff?.length ?? 0) + patchBytes) * 2
+  return content.type === "binary" ? (content.bytes?.byteLength ?? 0) : content.content.length * 2
 }
 
 function setBytes(path: string, nextBytes: number) {

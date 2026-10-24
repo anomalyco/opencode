@@ -100,10 +100,10 @@ export default function ArtifactView(props: {
     return value !== "binary" && previewableKinds.includes(value)
   })
 
+  const text = () => (props.content.type === "text" ? props.content.content : "")
+
   const table = createMemo(() =>
-    kind() === "table"
-      ? parseDelimited(props.content.content, props.path.toLowerCase().endsWith(".tsv") ? "\t" : ",")
-      : undefined,
+    kind() === "table" ? parseDelimited(text(), props.path.toLowerCase().endsWith(".tsv") ? "\t" : ",") : undefined,
   )
 
   const meta = createMemo(() => {
@@ -136,16 +136,8 @@ export default function ArtifactView(props: {
 
   const rendered = () => (
     <ScrollView class="min-h-0 flex-1">
-      <Show
-        when={kind() === "markdown"}
-        fallback={<ArtifactMermaid text={props.content.content} cacheKey={props.cacheKey} />}
-      >
-        <ArtifactMarkdown
-          session={props.session}
-          path={props.path}
-          text={props.content.content}
-          cacheKey={props.cacheKey}
-        />
+      <Show when={kind() === "markdown"} fallback={<ArtifactMermaid text={text()} cacheKey={props.cacheKey} />}>
+        <ArtifactMarkdown session={props.session} path={props.path} text={text()} cacheKey={props.cacheKey} />
       </Show>
     </ScrollView>
   )
