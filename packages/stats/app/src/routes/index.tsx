@@ -851,7 +851,8 @@ function isDenseColumnRange(range: UsageRange) {
 function scrollDenseChartToEnd(element: HTMLDivElement | undefined, range: UsageRange, count: number) {
   if (!element || count <= 0 || !isDenseColumnRange(range) || typeof window === "undefined") return
   window.requestAnimationFrame(() => {
-    element.scrollLeft = Number.MAX_SAFE_INTEGER
+    // WebKit ignores out-of-range values like Number.MAX_SAFE_INTEGER, so scroll to the real end.
+    element.scrollLeft = element.scrollWidth
   })
 }
 
