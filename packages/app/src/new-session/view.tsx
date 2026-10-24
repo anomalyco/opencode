@@ -295,7 +295,7 @@ function NewSessionLocation(props: {
             data-action="prompt-project"
             aria-haspopup="dialog"
             aria-description={language.t("session.new.workspace.trigger.tooltip")}
-            class="flex h-7 min-w-0 max-w-full items-center gap-1.5 rounded-sm text-start ps-1.5 pe-2 text-v2-text-text-muted transition-colors hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-text-text-base focus-visible:outline-none"
+            class="flex h-7 min-w-0 max-w-full items-center gap-1.5 rounded-sm text-start px-1.5 text-v2-text-text-muted transition-colors hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-text-text-base focus-visible:outline-none"
             onClick={props.onClick}
           >
             <ProjectAvatar
@@ -323,6 +323,7 @@ function NewSessionLocation(props: {
                 class="size-1.5 shrink-0 rounded-full bg-v2-text-text-accent"
               />
             </Show>
+            <Icon name="chevron-down" size="small" class="-ms-0.5 shrink-0 text-v2-icon-icon-muted" />
           </button>
         </Tooltip>
         {props.branch}
