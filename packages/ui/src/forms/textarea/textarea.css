@@ -6,10 +6,11 @@
   padding: 0 2px 2px 0;
   width: 280px;
   min-height: 80px;
+  position: relative;
   border: 0;
   border-radius: 6px;
   outline: 1px solid transparent;
-  outline-offset: 0;
+  outline-offset: -1px;
   background:
     linear-gradient(180deg, var(--v2-alpha-light-2) 0%, var(--v2-alpha-light-0) 100%), var(--v2-background-bg-base);
   box-shadow: var(--v2-elevation-button-neutral);
@@ -17,8 +18,18 @@
   align-self: stretch;
   transition:
     background 85ms ease-out,
-    outline-color 85ms ease-out,
     box-shadow 85ms ease-out;
+}
+
+/* An overlay, so scrolled text cannot paint over the border. */
+[data-component="textarea-v2"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px transparent;
+  pointer-events: none;
+  transition: box-shadow 85ms ease-out;
 }
 
 [data-component="textarea-v2"]:where(:hover):not([data-disabled], [data-invalid]):not(:focus-within) {
@@ -28,13 +39,21 @@
 }
 
 [data-component="textarea-v2"]:where(:focus-within):not([data-disabled], [data-invalid]) {
-  outline-color: var(--v2-border-border-focus);
+  outline-width: 2px;
+  outline-offset: -2px;
   box-shadow: none;
 }
 
+[data-component="textarea-v2"]:where(:focus-within):not([data-disabled], [data-invalid])::after {
+  box-shadow: inset 0 0 0 1px var(--v2-border-border-focus);
+}
+
 [data-component="textarea-v2"]:where([data-invalid]):not([data-disabled]) {
-  outline-color: var(--v2-state-fg-danger);
   box-shadow: none;
+}
+
+[data-component="textarea-v2"]:where([data-invalid]):not([data-disabled])::after {
+  box-shadow: inset 0 0 0 1px var(--v2-state-fg-danger);
 }
 
 [data-component="textarea-v2"]:where([data-disabled]) {

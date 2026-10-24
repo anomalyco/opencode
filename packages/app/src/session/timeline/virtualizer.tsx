@@ -891,7 +891,7 @@ export function createTimelineVirtualizer(input: Input) {
           onKeyDown={handleListKeyDown}
           onScroll={handleListScroll}
           onClick={input.onSelectionInteraction}
-          class="relative min-w-0 w-full h-full"
+          class="relative min-w-0 w-full h-full [--scroll-view-focus-radius:10px_10px_0_0]"
           style={{ "--sticky-accordion-top": input.showHeader() ? "48px" : "0px" }}
         >
           <Show when={input.showHeader()} fallback={<div aria-hidden="true" class="h-4 md:hidden" />}>

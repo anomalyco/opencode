@@ -160,7 +160,7 @@ function ToggleCell(props: {
       aria-label={`${props.label}: ${props.value}`}
       aria-pressed={props.active}
       classList={{
-        "flex min-w-0 items-center font-mono uppercase hover:bg-surface-raised-base focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-border-focus": true,
+        "flex min-w-0 items-center font-mono uppercase hover:bg-surface-raised-base focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-v2-border-border-focus": true,
         "min-h-[20px] w-fit justify-start rounded px-1.5 py-0.5 text-left": !!props.inline,
         "min-h-[42px] w-full flex-col justify-center rounded-[8px] px-0.5 py-1 text-center": !props.inline,
         "bg-surface-raised-base text-text-strong": props.active,

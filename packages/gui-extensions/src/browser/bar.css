@@ -29,7 +29,7 @@
 
   &[data-editing] {
     padding-inline-start: 8px;
-    box-shadow: inset 0 0 0 0.5px var(--v2-border-border-focus);
+    box-shadow: inset 0 0 0 1px var(--v2-border-border-focus);
   }
 
   /* A focused page address sits where it sat at rest, 32px in; typed text and the placeholder sit at 30px. */

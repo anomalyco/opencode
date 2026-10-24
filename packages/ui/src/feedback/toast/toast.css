@@ -36,9 +36,8 @@
   }
 
   &:focus-visible {
-    box-shadow:
-      var(--v2-elevation-floating),
-      0 0 0 2px var(--v2-border-border-focus);
+    outline: 2px solid var(--v2-border-border-focus);
+    outline-offset: 2px;
   }
 
   &[data-expanded="true"] {
@@ -72,7 +71,9 @@
     flex-direction: column;
     gap: 4px;
     min-width: 0;
-    overflow: hidden;
+    /* Clip long content without cutting off the focus ring of a button at its edge. */
+    overflow: clip;
+    overflow-clip-margin: 4px;
   }
 
   &:has(> [data-icon]) > [data-content] {
@@ -211,7 +212,8 @@
     flex-direction: column;
     gap: 4px;
     min-width: 0;
-    overflow: hidden;
+    overflow: clip;
+    overflow-clip-margin: 4px;
   }
 }
 

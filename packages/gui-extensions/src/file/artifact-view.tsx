@@ -639,8 +639,7 @@ function ArtifactVideo(props: MediaProps) {
           onClick={toggle}
           style={box.ready ? { left: `${box.left}px`, top: `${box.top}px` } : { right: "72px", bottom: "48px" }}
           classList={{
-            "absolute z-10 flex size-12 items-center justify-center transition-opacity focus-visible:opacity-100 focus-visible:outline-none":
-              true,
+            "absolute z-10 flex size-12 items-center justify-center transition-opacity focus-visible:opacity-100": true,
             "opacity-100": controlsVisible(),
             "pointer-events-none opacity-0": !controlsVisible(),
           }}
@@ -757,30 +756,34 @@ function ArtifactTable(props: { parsed: ReturnType<typeof parseDelimited> }) {
   const body = () => parsed().rows.slice(1)
 
   return (
-    <div class="min-h-0 flex-1 overflow-auto">
-      <table data-slot="artifact-table" class="min-w-full text-13-regular text-text-base">
-        <thead>
-          <tr>
-            <th data-index />
-            <For each={header()}>{(cell) => <th>{cell}</th>}</For>
-          </tr>
-        </thead>
-        <tbody>
-          <For each={body()}>
-            {(row, index) => (
-              <tr>
-                <td data-index>{index() + 1}</td>
-                <For each={header()}>{(_, column) => <td>{row[column()] ?? ""}</td>}</For>
-              </tr>
-            )}
-          </For>
-        </tbody>
-      </table>
-      <Show when={parsed().total > parsed().rows.length}>
-        <div class="px-4 py-3 text-12-regular text-text-weak">
-          {ctx.t("view.table.truncated", { shown: parsed().rows.length - 1, total: parsed().total - 1 })}
-        </div>
-      </Show>
+    <div class="relative flex min-h-0 flex-1 flex-col">
+      <div class="peer min-h-0 flex-1 overflow-auto outline-none">
+        <table data-slot="artifact-table" class="min-w-full text-13-regular text-text-base">
+          <thead>
+            <tr>
+              <th data-index />
+              <For each={header()}>{(cell) => <th>{cell}</th>}</For>
+            </tr>
+          </thead>
+          <tbody>
+            <For each={body()}>
+              {(row, index) => (
+                <tr>
+                  <td data-index>{index() + 1}</td>
+                  <For each={header()}>{(_, column) => <td>{row[column()] ?? ""}</td>}</For>
+                </tr>
+              )}
+            </For>
+          </tbody>
+        </table>
+        <Show when={parsed().total > parsed().rows.length}>
+          <div class="px-4 py-3 text-12-regular text-text-weak">
+            {ctx.t("view.table.truncated", { shown: parsed().rows.length - 1, total: parsed().total - 1 })}
+          </div>
+        </Show>
+      </div>
+      {/* The sticky header would cover the scroller's own outline, so the focus ring is laid over it. */}
+      <div class="pointer-events-none absolute inset-0 z-[1] peer-focus-visible:outline-2 peer-focus-visible:outline-offset-[-2px] peer-focus-visible:outline-v2-border-border-focus" />
     </div>
   )
 }
@@ -802,7 +805,7 @@ function ArtifactFont(props: { path: string; content: FileContent }) {
   })
 
   return (
-    <div class="min-h-0 flex-1 overflow-auto">
+    <div class="min-h-0 flex-1 overflow-auto focus-visible:outline-offset-[-2px]">
       <div class="mx-auto flex w-full max-w-3xl flex-col gap-6 px-8 py-8" style={{ "font-family": `"${family()}"` }}>
         <div class="text-text-strong" style={{ "font-size": "56px", "line-height": "1.1" }}>
           {getFilename(props.path).replace(/\.[^.]+$/, "")}

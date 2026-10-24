@@ -15,6 +15,7 @@
 [data-component="file-tree-v2"] [data-slot="file-tree-v2-row"] {
   --file-tree-v2-row-overlay: transparent;
 
+  position: relative;
   box-sizing: border-box;
   width: 100%;
   min-width: max-content;
@@ -61,6 +62,26 @@
 
 [data-component="file-tree-v2"] [data-slot="file-tree-v2-row"][data-selected]:hover {
   background-color: var(--v2-overlay-simple-overlay-pressed);
+}
+
+/* Each row's sticky end paints over its own outline and its neighbours, so a focused row is raised
+   and draws its inside ring as an overlay above that end. */
+[data-component="file-tree-v2"] > :has([data-slot="file-tree-v2-row"]:focus-visible) {
+  z-index: 1;
+}
+
+[data-component="file-tree-v2"] [data-slot="file-tree-v2-row"]:focus-visible {
+  outline: none;
+}
+
+[data-component="file-tree-v2"] [data-slot="file-tree-v2-row"]:focus-visible::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 2px var(--v2-border-border-focus);
+  pointer-events: none;
 }
 
 [data-component="file-tree-v2"]

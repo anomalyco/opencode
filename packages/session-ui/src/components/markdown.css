@@ -178,7 +178,7 @@
   }
 
   .markdown-session-link:focus-visible {
-    outline: 2px solid currentColor;
+    outline: 2px solid var(--v2-border-border-focus);
     outline-offset: 2px;
   }
 
@@ -296,6 +296,13 @@
     background: var(--v2-background-bg-layer-02);
     direction: ltr;
     unicode-bidi: isolate;
+  }
+
+  [data-component="markdown-mermaid"]:focus-visible,
+  pre:focus-visible,
+  table:focus-visible {
+    outline: 2px solid var(--v2-border-border-focus);
+    outline-offset: -2px;
   }
 
   [data-component="markdown-mermaid"] > svg {

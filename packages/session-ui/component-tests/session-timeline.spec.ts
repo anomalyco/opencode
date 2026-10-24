@@ -8,15 +8,17 @@ story("spaces an error between a shell result and expanded updates", async ({ mo
   const shellBox = (await shell.boundingBox())!
   const errorBox = (await error.boundingBox())!
   const updatesBox = (await updates.boundingBox())!
+  // The trigger bleeds past its column for focus ring room; its content stays aligned.
+  const updatesContentBox = (await updates.locator(":scope > *").first().boundingBox())!
   expect(errorBox.y - (shellBox.y + shellBox.height)).toBe(24)
   expect(updatesBox.y - (errorBox.y + errorBox.height)).toBe(8)
-  expect(updatesBox.x).toBe(errorBox.x)
+  expect(updatesContentBox.x).toBe(errorBox.x)
   await updates.click()
   const notice = timeline.locator('[data-slot="session-timeline-notice"]')
   await expect(notice).toContainText("Instructions updated")
   const expandedBox = (await updates.boundingBox())!
   expect((await notice.boundingBox())!.y - (expandedBox.y + expandedBox.height)).toBe(0)
-  expect((await notice.boundingBox())!.x - expandedBox.x).toBe(12)
+  expect((await notice.boundingBox())!.x - updatesContentBox.x).toBe(12)
   expect(expandedBox.height).toBe(28)
 })
 

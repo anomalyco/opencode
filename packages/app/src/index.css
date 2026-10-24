@@ -44,6 +44,11 @@
     visibility: hidden;
   }
 
+  /* Timeline rows clip paint to their measured size. Let a keyboard-focused control's ring paint past the edge. */
+  [data-timeline-key]:has(:focus-visible) {
+    overflow-clip-margin: 4px !important;
+  }
+
   [data-slot="session-side-panel-presence"][data-opened="true"] {
     animation: side-region-presence-in 240ms cubic-bezier(0.22, 1, 0.36, 1);
   }

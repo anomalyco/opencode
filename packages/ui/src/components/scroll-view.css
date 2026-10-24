@@ -15,6 +15,28 @@
   outline: none;
 }
 
+/* The viewport's outline would sit under its content, so a sibling draws the ring; z-index 11 clears scroll fades. */
+.scroll-view__viewport:focus-visible {
+  isolation: isolate;
+}
+
+.scroll-view__focus-ring {
+  position: absolute;
+  inset-block: 0;
+  inset-inline: 0 var(--scroll-view-focus-inset-end, 0);
+  z-index: 11;
+  display: none;
+  border-radius: var(--scroll-view-focus-radius, 0);
+  box-shadow: inset 0 0 0 2px var(--v2-border-border-focus);
+  outline: 2px solid transparent;
+  outline-offset: -2px;
+  pointer-events: none;
+}
+
+.scroll-view__viewport:focus-visible ~ .scroll-view__focus-ring {
+  display: block;
+}
+
 .scroll-view[data-orientation="horizontal"] .scroll-view__viewport {
   overflow-x: auto;
   overflow-y: hidden;

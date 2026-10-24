@@ -61,6 +61,10 @@
   }
 }
 
+[data-component="first-provider-model-scroll"] .settings-models-group-trigger:focus-visible {
+  outline-offset: -2px;
+}
+
 [data-component="first-provider-models"] .settings-section {
   gap: 8px;
 }

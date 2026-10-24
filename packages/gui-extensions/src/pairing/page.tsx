@@ -288,7 +288,7 @@ function DialogPairing(props: {
   const refresh = () => (
     <button
       type="button"
-      class="rounded-[4px] px-1 text-12-regular leading-[var(--line-height-compact)] text-v2-text-text-muted underline-offset-2 hover:text-v2-text-text-base hover:underline focus-visible:underline focus-visible:outline-none disabled:opacity-50"
+      class="rounded-[4px] px-1 text-12-regular leading-[var(--line-height-compact)] text-v2-text-text-muted underline-offset-2 hover:text-v2-text-text-base hover:underline focus-visible:underline disabled:opacity-50"
       disabled={code.isFetching}
       onClick={() => {
         clearTimeout(copied.timeout)

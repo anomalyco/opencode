@@ -12,10 +12,11 @@
     gap: 8px;
     width: 280px;
     height: 28px;
+    position: relative;
     border: 0;
     border-radius: 6px;
     outline: 1px solid transparent;
-    outline-offset: 0;
+    outline-offset: -1px;
     background:
       linear-gradient(180deg, var(--v2-alpha-light-6) 0%, var(--v2-alpha-light-2) 100%), var(--v2-background-bg-base);
     box-shadow: var(--v2-elevation-button-neutral);
@@ -23,8 +24,18 @@
     align-self: stretch;
     transition:
       background 85ms ease-out,
-      outline-color 85ms ease-out,
       box-shadow 85ms ease-out;
+  }
+
+  /* An overlay, so neither the field's content nor a consumer's box-shadow covers the border. */
+  [data-component="text-input-v2"]::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    box-shadow: inset 0 0 0 1px transparent;
+    pointer-events: none;
+    transition: box-shadow 85ms ease-out;
   }
 
   [data-component="text-input-v2"][data-appearance="large"] {
@@ -38,13 +49,21 @@
   }
 
   [data-component="text-input-v2"]:where(:focus-within):not([data-disabled], [data-invalid]) {
-    outline-color: var(--v2-border-border-focus);
+    outline-width: 2px;
+    outline-offset: -2px;
     box-shadow: none;
   }
 
+  [data-component="text-input-v2"]:where(:focus-within):not([data-disabled], [data-invalid])::after {
+    box-shadow: inset 0 0 0 1px var(--v2-border-border-focus);
+  }
+
   [data-component="text-input-v2"]:where([data-invalid]):not([data-disabled]) {
-    outline-color: var(--v2-state-fg-danger);
     box-shadow: none;
+  }
+
+  [data-component="text-input-v2"]:where([data-invalid]):not([data-disabled])::after {
+    box-shadow: inset 0 0 0 1px var(--v2-state-fg-danger);
   }
 
   [data-component="text-input-v2"]:where([data-disabled]) {
@@ -152,7 +171,7 @@
 
   [data-component="text-input-v2"] [data-slot="text-input-v2-icon-button"]:focus-visible {
     outline: 2px solid var(--v2-border-border-focus);
-    outline-offset: 1px;
+    outline-offset: 2px;
   }
 
   [data-component="text-input-v2"]:where([data-disabled]) [data-slot="text-input-v2-icon-button"] {
@@ -172,6 +191,10 @@
     padding: 0;
     border-radius: 6px;
     margin-inline-end: -8px;
+  }
+
+  [data-component="text-input-v2"] [data-slot="text-input-v2-icon-button"][data-variant="clear"]:focus-visible {
+    outline-offset: -2px;
   }
 
   [data-component="text-input-v2"][data-invalid]:not([data-disabled]) [data-slot="text-input-v2-input"] {

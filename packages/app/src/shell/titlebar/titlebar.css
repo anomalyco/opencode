@@ -102,8 +102,7 @@
   [data-component="icon-button-v2"][data-variant="ghost-muted"]:is(:focus-visible, [data-state="focus"]):not(
     :disabled
   ) {
-  outline: none;
-  background-color: var(--v2-overlay-simple-overlay-hover);
+  outline-offset: -2px;
 }
 
 [data-slot="titlebar-tab-item"]

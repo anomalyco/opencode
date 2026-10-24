@@ -66,6 +66,10 @@
     border-radius: var(--radius-md);
     background: var(--surface-base);
 
+    &:focus-within {
+      box-shadow: inset 0 0 0 1px var(--v2-border-border-focus);
+    }
+
     [data-slot="list-search-container"] {
       display: flex;
       align-items: center;
@@ -286,9 +290,11 @@
             display: none;
           }
 
-          &[data-active="true"] {
+          &[data-active="true"],
+          &:focus-visible {
             border-radius: var(--radius-md);
-            background: var(--surface-raised-base-hover);
+            background: var(--v2-overlay-simple-overlay-hover);
+            outline: none;
             [data-slot="list-item-active-icon"] {
               display: inline-flex;
             }
@@ -298,10 +304,7 @@
             }
           }
           &:active {
-            background: var(--surface-raised-base-active);
-          }
-          &:focus-visible {
-            outline: none;
+            background: var(--v2-overlay-simple-overlay-pressed);
           }
         }
 

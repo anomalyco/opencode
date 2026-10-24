@@ -66,7 +66,9 @@ export type ThemeToken = string
 
 export type CssVarRef = `var(--${string})`
 
-export type ColorValue = HexColor | CssVarRef
+export type RgbaColor = `rgba(${string})`
+
+export type ColorValue = HexColor | CssVarRef | RgbaColor
 
 export type V2ColorValue = HexColor | CssVarRef | string
 

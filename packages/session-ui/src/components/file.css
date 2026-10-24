@@ -10,6 +10,17 @@
   overflow: hidden;
 }
 
+/* Pierre's isolated code layers paint over an inset outline, so the viewer draws its ring on an overlay. */
+[data-component="file"]:focus-visible::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  outline: 2px solid var(--v2-border-border-focus);
+  outline-offset: -2px;
+}
+
 [data-component="file"][data-mode="diff"] {
   [data-slot="diff-hunk-separator-line-number"] {
     position: sticky;

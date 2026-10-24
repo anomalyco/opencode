@@ -153,7 +153,7 @@ export function MobileViewTabs(props: {
                     {(entry) => (
                       <button
                         type="button"
-                        class="flex min-h-11 w-full items-center gap-2 rounded-[4px] py-1 ps-3 pe-2 text-start text-[13px] font-[440] leading-[var(--line-height-base)] text-v2-text-text-base hover:bg-[var(--v2-overlay-simple-overlay-hover)] focus-visible:outline-none focus-visible:bg-[var(--v2-overlay-simple-overlay-hover)] aria-pressed:bg-[var(--v2-overlay-simple-overlay-pressed)]"
+                        class="flex min-h-11 w-full items-center gap-2 rounded-[4px] py-1 ps-3 pe-2 text-start text-[13px] font-[440] leading-[var(--line-height-base)] text-v2-text-text-base hover:bg-[var(--v2-overlay-simple-overlay-hover)] focus-visible:outline-offset-[-2px] aria-pressed:bg-[var(--v2-overlay-simple-overlay-pressed)]"
                         aria-pressed={props.current === entry.key}
                         onClick={() => {
                           props.onSelect(entry.key)
@@ -174,7 +174,7 @@ export function MobileViewTabs(props: {
                     {(entry) => (
                       <button
                         type="button"
-                        class="flex min-h-11 w-full items-center gap-2 rounded-[4px] py-1 ps-3 pe-2 text-start text-[13px] font-[440] leading-[var(--line-height-base)] text-v2-text-text-base hover:bg-[var(--v2-overlay-simple-overlay-hover)] focus-visible:outline-none focus-visible:bg-[var(--v2-overlay-simple-overlay-hover)]"
+                        class="flex min-h-11 w-full items-center gap-2 rounded-[4px] py-1 ps-3 pe-2 text-start text-[13px] font-[440] leading-[var(--line-height-base)] text-v2-text-text-base hover:bg-[var(--v2-overlay-simple-overlay-hover)] focus-visible:outline-offset-[-2px]"
                         onClick={() => setStore("drawer", entry.key)}
                       >
                         <Show when={entry.mobile.icon}>

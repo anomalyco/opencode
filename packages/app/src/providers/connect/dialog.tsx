@@ -202,7 +202,7 @@ export const DialogConnectProvider: Component<{
           <Match when={controller.selected()}>
             <button
               type="button"
-              class="flex size-5 items-center justify-center rounded-sm text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
+              class="flex size-5 items-center justify-center rounded-sm text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover"
               onClick={() => back.current()}
               aria-label={language.t("common.goBack")}
             >
@@ -341,7 +341,7 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
                       <button
                         type="button"
                         data-provider-id={provider.id}
-                        class="flex min-h-9 w-full items-center gap-2 rounded-md px-3 py-2.5 text-left text-[13px] leading-text-compact tracking-[-0.04px] hover:bg-v2-overlay-simple-overlay-hover focus:bg-v2-overlay-simple-overlay-hover focus:outline-none"
+                        class="flex min-h-9 w-full items-center gap-2 rounded-md px-3 py-2.5 text-left text-[13px] leading-text-compact tracking-[-0.04px] hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
                         classList={{ "bg-v2-overlay-simple-overlay-hover": store.active === provider.id }}
                         onMouseEnter={() => setStore("active", provider.id)}
                         disabled={store.connecting !== undefined}

@@ -800,7 +800,7 @@ export const Terminal = (props: TerminalProps) => {
       classList={{
         ...local.classList,
         "select-text": true,
-        "size-full px-6 py-3 font-mono relative overflow-hidden": true,
+        "size-full px-6 py-3 font-mono relative overflow-hidden outline-none": true,
         [local.class ?? ""]: !!local.class,
       }}
       {...others}

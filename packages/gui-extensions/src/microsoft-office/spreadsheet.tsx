@@ -234,7 +234,7 @@ export default function OfficeSpreadsheet(props: FileViewerProps) {
                     aria-controls={panel}
                     aria-selected={tab.index === active()}
                     tabIndex={tab.index === active() ? 0 : -1}
-                    class="h-7 shrink-0 rounded-md px-2.5 text-13-regular text-text-weak hover:bg-v2-background-bg-layer-02 aria-selected:bg-v2-background-bg-layer-02 aria-selected:text-text-strong"
+                    class="h-7 shrink-0 rounded-md px-2.5 text-13-regular text-text-weak hover:bg-v2-background-bg-layer-02 focus-visible:outline-offset-[-2px] aria-selected:bg-v2-background-bg-layer-02 aria-selected:text-text-strong"
                     onClick={() => show(tab.index)}
                   >
                     {tab.name}
@@ -1062,7 +1062,7 @@ function SpreadsheetGrid(props: {
         </div>
       </div>
       {/* The canvas would cover the scroller's own outline, so the focus ring is laid over both. */}
-      <div class="pointer-events-none absolute inset-0 peer-focus-visible:shadow-[inset_0_0_0_2px_var(--v2-border-border-focus)]" />
+      <div class="pointer-events-none absolute inset-0 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-[-2px] peer-focus-visible:outline-v2-border-border-focus" />
       <Show when={state.failed}>
         <div
           role="status"
