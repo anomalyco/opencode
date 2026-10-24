@@ -1373,19 +1373,7 @@ export type MessageListInput = {
   readonly limit?: number | undefined
   readonly order?: "asc" | "desc" | undefined
   readonly cursor?: string | undefined
-  readonly type?:
-    | "agent-switched"
-    | "model-switched"
-    | "location-switched"
-    | "user"
-    | "synthetic"
-    | "system"
-    | "skill"
-    | "shell"
-    | "assistant"
-    | "compaction"
-    | "idle"
-    | undefined
+  readonly type?: SessionMessage.Type | undefined
 }
 export type MessageListOutput = {
   readonly data: ReadonlyArray<SessionMessage.Info>

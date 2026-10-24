@@ -147,34 +147,7 @@
         "operationId": "location.get",
         "parameters": [
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           }
         ],
         "security": [],
@@ -275,34 +248,7 @@
         "operationId": "agent.list",
         "parameters": [
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           }
         ],
         "security": [],
@@ -379,34 +325,7 @@
             "required": true
           },
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           }
         ],
         "security": [],
@@ -479,34 +398,7 @@
         "operationId": "plugin.list",
         "parameters": [
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           }
         ],
         "security": [],
@@ -575,34 +467,7 @@
         "operationId": "plugin.check",
         "parameters": [
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           }
         ],
         "security": [],
@@ -694,34 +559,7 @@
         "operationId": "plugin.update",
         "parameters": [
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           }
         ],
         "security": [],
@@ -833,19 +671,7 @@
             "required": false
           },
           {
-            "name": "search",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false
+            "$ref": "#/components/parameters/query.search"
           },
           {
             "name": "parentID",
@@ -872,20 +698,7 @@
             "required": false
           },
           {
-            "name": "archived",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "enum": ["true", "false"]
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false
+            "$ref": "#/components/parameters/query.archived"
           },
           {
             "name": "directory",
@@ -903,19 +716,7 @@
             "required": false
           },
           {
-            "name": "project",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "$ref": "#/components/schemas/Project.ID"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false
+            "$ref": "#/components/parameters/query.project"
           },
           {
             "name": "subpath",
@@ -1178,19 +979,7 @@
             "required": false
           },
           {
-            "name": "project",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "$ref": "#/components/schemas/Project.ID"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false
+            "$ref": "#/components/parameters/query.project"
           },
           {
             "name": "timezone",
@@ -1373,12 +1162,7 @@
         "operationId": "experimental.session.export",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Session.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.sessionID.Session.ID"
           },
           {
             "name": "sanitize",
@@ -1522,12 +1306,7 @@
         "operationId": "session.get",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Session.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.sessionID.Session.ID"
           }
         ],
         "security": [],
@@ -1588,12 +1367,7 @@
         "operationId": "session.remove",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Session.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.sessionID.Session.ID"
           }
         ],
         "security": [],
@@ -1640,12 +1414,7 @@
         "operationId": "session.update",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Session.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.sessionID.Session.ID"
           }
         ],
         "security": [],
@@ -1755,12 +1524,7 @@
         "operationId": "session.fork",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Session.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.sessionID.Session.ID"
           }
         ],
         "security": [],
@@ -1856,12 +1620,7 @@
         "operationId": "session.switchAgent",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Session.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.sessionID.Session.ID"
           }
         ],
         "security": [],
@@ -1934,12 +1693,7 @@
         "operationId": "session.switchModel",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Session.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.sessionID.Session.ID"
           }
         ],
         "security": [],
@@ -2012,12 +1766,7 @@
         "operationId": "session.move",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Session.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.sessionID.Session.ID"
           }
         ],
         "security": [],
@@ -2093,12 +1842,7 @@
         "operationId": "session.prompt",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Session.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.sessionID.Session.ID"
           }
         ],
         "security": [],
@@ -2246,12 +1990,7 @@
         "operationId": "session.command",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Session.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.sessionID.Session.ID"
           }
         ],
         "security": [],
@@ -2368,12 +2107,7 @@
         "operationId": "experimental.session.skill",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Session.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.sessionID.Session.ID"
           }
         ],
         "security": [],
@@ -2459,12 +2193,7 @@
         "operationId": "session.synthetic",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Session.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.sessionID.Session.ID"
           }
         ],
         "security": [],
@@ -2604,12 +2333,7 @@
         "operationId": "session.shell",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Session.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.sessionID.Session.ID"
           }
         ],
         "security": [],
@@ -2692,12 +2416,7 @@
         "operationId": "session.compact",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Session.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.sessionID.Session.ID"
           }
         ],
         "security": [],
@@ -2810,12 +2529,7 @@
         "operationId": "experimental.session.wait",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Session.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.sessionID.Session.ID"
           }
         ],
         "security": [],
@@ -2881,12 +2595,7 @@
         "operationId": "session.revert.stage",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Session.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.sessionID.Session.ID"
           }
         ],
         "security": [],
@@ -3006,12 +2715,7 @@
         "operationId": "session.revert.clear",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Session.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.sessionID.Session.ID"
           }
         ],
         "security": [],
@@ -3086,12 +2790,7 @@
         "operationId": "session.revert.commit",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Session.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.sessionID.Session.ID"
           }
         ],
         "security": [],
@@ -3156,12 +2855,7 @@
         "operationId": "session.context",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Session.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.sessionID.Session.ID"
           }
         ],
         "security": [],
@@ -3237,12 +2931,7 @@
         "operationId": "session.diff",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Session.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.sessionID.Session.ID"
           },
           {
             "name": "from",
@@ -3376,12 +3065,7 @@
         "operationId": "session.inbox.list",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Session.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.sessionID.Session.ID"
           }
         ],
         "security": [],
@@ -3447,20 +3131,10 @@
         "operationId": "session.inbox.cancel",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Session.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.sessionID.Session.ID"
           },
           {
-            "name": "inboxID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Session.Message.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.inboxID.Session.Message.ID"
           }
         ],
         "security": [],
@@ -3507,20 +3181,10 @@
         "operationId": "session.inbox.update",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Session.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.sessionID.Session.ID"
           },
           {
-            "name": "inboxID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Session.Message.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.inboxID.Session.Message.ID"
           }
         ],
         "security": [],
@@ -3596,12 +3260,7 @@
         "operationId": "experimental.session.instructions.entry.list",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Session.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.sessionID.Session.ID"
           }
         ],
         "security": [],
@@ -3674,20 +3333,10 @@
         "operationId": "experimental.session.instructions.entry.put",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Session.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.sessionID.Session.ID"
           },
           {
-            "name": "key",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/InstructionEntry.Key"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.key.InstructionEntry.Key"
           }
         ],
         "security": [],
@@ -3766,20 +3415,10 @@
         "operationId": "experimental.session.instructions.entry.remove",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Session.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.sessionID.Session.ID"
           },
           {
-            "name": "key",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/InstructionEntry.Key"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.key.InstructionEntry.Key"
           }
         ],
         "security": [],
@@ -3835,12 +3474,7 @@
         "operationId": "session.generate",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Session.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.sessionID.Session.ID"
           }
         ],
         "security": [],
@@ -3930,12 +3564,7 @@
         "operationId": "session.log",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Session.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.sessionID.Session.ID"
           },
           {
             "name": "after",
@@ -4103,12 +3732,7 @@
         "operationId": "session.interrupt",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Session.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.sessionID.Session.ID"
           },
           {
             "name": "resume",
@@ -4187,12 +3811,7 @@
         "operationId": "session.background",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Session.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.sessionID.Session.ID"
           }
         ],
         "security": [],
@@ -4248,12 +3867,7 @@
         "operationId": "session.message.get",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Session.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.sessionID.Session.ID"
           },
           {
             "name": "messageID",
@@ -4331,12 +3945,7 @@
         "operationId": "session.form.list",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "type": "string"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.sessionID"
           }
         ],
         "security": [],
@@ -4407,12 +4016,7 @@
         "operationId": "session.form.create",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "type": "string"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.sessionID"
           }
         ],
         "security": [],
@@ -4502,20 +4106,10 @@
         "operationId": "session.form.get",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "type": "string"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.sessionID"
           },
           {
-            "name": "formID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Form.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.formID.Form.ID"
           }
         ],
         "security": [],
@@ -4586,20 +4180,10 @@
         "operationId": "session.form.cancel",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "type": "string"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.sessionID"
           },
           {
-            "name": "formID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Form.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.formID.Form.ID"
           },
           {
             "name": "message",
@@ -4683,20 +4267,10 @@
         "operationId": "session.form.reply",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "type": "string"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.sessionID"
           },
           {
-            "name": "formID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Form.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.formID.Form.ID"
           }
         ],
         "security": [],
@@ -4782,12 +4356,7 @@
         "operationId": "session.environment",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Session.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.sessionID.Session.ID"
           }
         ],
         "security": [],
@@ -4856,12 +4425,7 @@
         "operationId": "session.view",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Session.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.sessionID.Session.ID"
           }
         ],
         "security": [],
@@ -4927,12 +4491,7 @@
         "operationId": "session.message.list",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Session.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.sessionID.Session.ID"
           },
           {
             "name": "limit",
@@ -4989,20 +4548,7 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string",
-                  "enum": [
-                    "agent-switched",
-                    "model-switched",
-                    "location-switched",
-                    "user",
-                    "synthetic",
-                    "system",
-                    "skill",
-                    "shell",
-                    "assistant",
-                    "compaction",
-                    "idle"
-                  ]
+                  "$ref": "#/components/schemas/Session.Message.Type"
                 },
                 {
                   "type": "null"
@@ -5083,34 +4629,7 @@
         "operationId": "model.list",
         "parameters": [
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           }
         ],
         "security": [],
@@ -5189,34 +4708,7 @@
         "operationId": "model.default",
         "parameters": [
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           }
         ],
         "security": [],
@@ -5542,34 +5034,7 @@
         "operationId": "provider.list",
         "parameters": [
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           }
         ],
         "security": [],
@@ -5656,34 +5121,7 @@
             "required": true
           },
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           }
         ],
         "security": [],
@@ -5766,34 +5204,7 @@
         "operationId": "integration.list",
         "parameters": [
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           }
         ],
         "security": [],
@@ -5862,42 +5273,10 @@
         "operationId": "integration.get",
         "parameters": [
           {
-            "name": "integrationID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Integration.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.integrationID.Integration.ID"
           },
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           }
         ],
         "security": [],
@@ -5970,34 +5349,7 @@
         "operationId": "experimental.integration.wellknown.add",
         "parameters": [
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           }
         ],
         "security": [],
@@ -6063,42 +5415,10 @@
         "operationId": "integration.connect.key",
         "parameters": [
           {
-            "name": "integrationID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Integration.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.integrationID.Integration.ID"
           },
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           }
         ],
         "security": [],
@@ -6191,42 +5511,10 @@
         "operationId": "integration.connect.external",
         "parameters": [
           {
-            "name": "integrationID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Integration.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.integrationID.Integration.ID"
           },
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           }
         ],
         "security": [],
@@ -6319,42 +5607,10 @@
         "operationId": "integration.oauth.connect",
         "parameters": [
           {
-            "name": "integrationID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Integration.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.integrationID.Integration.ID"
           },
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           }
         ],
         "security": [],
@@ -6457,50 +5713,13 @@
         "operationId": "integration.oauth.status",
         "parameters": [
           {
-            "name": "integrationID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Integration.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.integrationID.Integration.ID"
           },
           {
-            "name": "attemptID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Integration.AttemptID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.attemptID.Integration.AttemptID"
           },
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           }
         ],
         "security": [],
@@ -6574,50 +5793,13 @@
         "operationId": "integration.oauth.cancel",
         "parameters": [
           {
-            "name": "integrationID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Integration.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.integrationID.Integration.ID"
           },
           {
-            "name": "attemptID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Integration.AttemptID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.attemptID.Integration.AttemptID"
           },
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           }
         ],
         "security": [],
@@ -6666,50 +5848,13 @@
         "operationId": "integration.oauth.complete",
         "parameters": [
           {
-            "name": "integrationID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Integration.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.integrationID.Integration.ID"
           },
           {
-            "name": "attemptID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Integration.AttemptID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.attemptID.Integration.AttemptID"
           },
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           }
         ],
         "security": [],
@@ -6791,42 +5936,10 @@
         "operationId": "integration.command.connect",
         "parameters": [
           {
-            "name": "integrationID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Integration.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.integrationID.Integration.ID"
           },
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           }
         ],
         "security": [],
@@ -6929,50 +6042,13 @@
         "operationId": "integration.command.status",
         "parameters": [
           {
-            "name": "integrationID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Integration.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.integrationID.Integration.ID"
           },
           {
-            "name": "attemptID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Integration.AttemptID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.attemptID.Integration.AttemptID"
           },
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           }
         ],
         "security": [],
@@ -7046,50 +6122,13 @@
         "operationId": "integration.command.cancel",
         "parameters": [
           {
-            "name": "integrationID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Integration.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.integrationID.Integration.ID"
           },
           {
-            "name": "attemptID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Integration.AttemptID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.attemptID.Integration.AttemptID"
           },
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           }
         ],
         "security": [],
@@ -7138,34 +6177,7 @@
         "operationId": "mcp.list",
         "parameters": [
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           }
         ],
         "security": [],
@@ -7234,42 +6246,10 @@
         "operationId": "experimental.mcp.add",
         "parameters": [
           {
-            "name": "server",
-            "in": "path",
-            "schema": {
-              "type": "string"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.server"
           },
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           }
         ],
         "security": [],
@@ -7340,42 +6320,10 @@
         "operationId": "experimental.mcp.remove",
         "parameters": [
           {
-            "name": "server",
-            "in": "path",
-            "schema": {
-              "type": "string"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.server"
           },
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           }
         ],
         "security": [],
@@ -7431,42 +6379,10 @@
         "operationId": "experimental.mcp.connect",
         "parameters": [
           {
-            "name": "server",
-            "in": "path",
-            "schema": {
-              "type": "string"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.server"
           },
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           }
         ],
         "security": [],
@@ -7522,42 +6438,10 @@
         "operationId": "experimental.mcp.disconnect",
         "parameters": [
           {
-            "name": "server",
-            "in": "path",
-            "schema": {
-              "type": "string"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.server"
           },
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           }
         ],
         "security": [],
@@ -7613,34 +6497,7 @@
         "operationId": "mcp.resource.catalog",
         "parameters": [
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           }
         ],
         "security": [],
@@ -7706,57 +6563,13 @@
         "operationId": "experimental.mcp.client.token",
         "parameters": [
           {
-            "name": "x-opencode-ticket",
-            "in": "header",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false
+            "$ref": "#/components/parameters/header.x-opencode-ticket"
           },
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           },
           {
-            "name": "name",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": true
+            "$ref": "#/components/parameters/query.name"
           }
         ],
         "security": [],
@@ -7860,12 +6673,7 @@
             "required": false
           },
           {
-            "name": "name",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": true
+            "$ref": "#/components/parameters/query.name"
           },
           {
             "name": "ticket",
@@ -8066,12 +6874,7 @@
         "operationId": "credential.update",
         "parameters": [
           {
-            "name": "credentialID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Credential.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.credentialID.Credential.ID"
           }
         ],
         "security": [],
@@ -8125,12 +6928,7 @@
         "operationId": "credential.remove",
         "parameters": [
           {
-            "name": "credentialID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Credential.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.credentialID.Credential.ID"
           }
         ],
         "security": [],
@@ -8169,12 +6967,7 @@
         "operationId": "credential.activate",
         "parameters": [
           {
-            "name": "credentialID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Credential.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.credentialID.Credential.ID"
           }
         ],
         "security": [],
@@ -8213,20 +7006,7 @@
         "operationId": "project.list",
         "parameters": [
           {
-            "name": "archived",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "enum": ["true", "false"]
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false
+            "$ref": "#/components/parameters/query.archived"
           }
         ],
         "security": [],
@@ -8378,34 +7158,7 @@
         "operationId": "form.list",
         "parameters": [
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           }
         ],
         "security": [],
@@ -8474,34 +7227,7 @@
         "operationId": "permission.request.list",
         "parameters": [
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           }
         ],
         "security": [],
@@ -8648,12 +7374,7 @@
         "operationId": "permission.saved.update",
         "parameters": [
           {
-            "name": "id",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/PermissionSaved.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.id.PermissionSaved.ID"
           }
         ],
         "security": [],
@@ -8764,12 +7485,7 @@
         "operationId": "permission.saved.remove",
         "parameters": [
           {
-            "name": "id",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/PermissionSaved.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.id.PermissionSaved.ID"
           }
         ],
         "security": [],
@@ -8818,12 +7534,7 @@
         "operationId": "session.permission.create",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Session.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.sessionID.Session.ID"
           }
         ],
         "security": [],
@@ -8956,12 +7667,7 @@
         "operationId": "session.permission.list",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Session.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.sessionID.Session.ID"
           }
         ],
         "security": [],
@@ -9034,20 +7740,10 @@
         "operationId": "session.permission.get",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Session.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.sessionID.Session.ID"
           },
           {
-            "name": "requestID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Permission.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.requestID.Permission.ID"
           }
         ],
         "security": [],
@@ -9120,20 +7816,10 @@
         "operationId": "session.permission.reply",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Session.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.sessionID.Session.ID"
           },
           {
-            "name": "requestID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Permission.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.requestID.Permission.ID"
           }
         ],
         "security": [],
@@ -9219,34 +7905,7 @@
         "operationId": "fs.read",
         "parameters": [
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           }
         ],
         "security": [],
@@ -9310,34 +7969,7 @@
         "operationId": "fs.list",
         "parameters": [
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           },
           {
             "name": "path",
@@ -9429,34 +8061,7 @@
         "operationId": "fs.find",
         "parameters": [
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           },
           {
             "name": "query",
@@ -9476,19 +8081,7 @@
             "required": false
           },
           {
-            "name": "limit",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false
+            "$ref": "#/components/parameters/query.limit"
           }
         ],
         "security": [],
@@ -9557,34 +8150,7 @@
         "operationId": "experimental.fs.write",
         "parameters": [
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           },
           {
             "name": "path",
@@ -9670,34 +8236,7 @@
         "operationId": "command.list",
         "parameters": [
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           }
         ],
         "security": [],
@@ -9766,34 +8305,7 @@
         "operationId": "skill.list",
         "parameters": [
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           }
         ],
         "security": [],
@@ -9878,34 +8390,7 @@
             "required": true
           },
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           }
         ],
         "security": [],
@@ -10111,34 +8596,7 @@
         "operationId": "pty.list",
         "parameters": [
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           }
         ],
         "security": [],
@@ -10205,34 +8663,7 @@
         "operationId": "pty.create",
         "parameters": [
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           }
         ],
         "security": [],
@@ -10332,42 +8763,10 @@
         "operationId": "pty.get",
         "parameters": [
           {
-            "name": "ptyID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Pty.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.ptyID.Pty.ID"
           },
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           }
         ],
         "security": [],
@@ -10438,42 +8837,10 @@
         "operationId": "pty.update",
         "parameters": [
           {
-            "name": "ptyID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Pty.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.ptyID.Pty.ID"
           },
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           }
         ],
         "security": [],
@@ -10575,42 +8942,10 @@
         "operationId": "pty.remove",
         "parameters": [
           {
-            "name": "ptyID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Pty.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.ptyID.Pty.ID"
           },
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           }
         ],
         "security": [],
@@ -10666,57 +9001,13 @@
         "operationId": "pty.connect.token",
         "parameters": [
           {
-            "name": "ptyID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Pty.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.ptyID.Pty.ID"
           },
           {
-            "name": "x-opencode-ticket",
-            "in": "header",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false
+            "$ref": "#/components/parameters/header.x-opencode-ticket"
           },
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           }
         ],
         "security": [],
@@ -10799,12 +9090,7 @@
         "operationId": "pty.connect",
         "parameters": [
           {
-            "name": "ptyID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Pty.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.ptyID.Pty.ID"
           },
           {
             "in": "query",
@@ -10814,18 +9100,10 @@
             }
           },
           {
-            "in": "query",
-            "name": "cursor",
-            "schema": {
-              "type": "string"
-            }
+            "$ref": "#/components/parameters/query.cursor"
           },
           {
-            "in": "query",
-            "name": "ticket",
-            "schema": {
-              "type": "string"
-            }
+            "$ref": "#/components/parameters/query.ticket"
           }
         ],
         "security": [],
@@ -10899,12 +9177,7 @@
         "operationId": "server.experimental.persistentPty.read",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Session.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.sessionID.Session.ID"
           },
           {
             "name": "lines",
@@ -10989,12 +9262,7 @@
         "operationId": "server.experimental.persistentPty.list",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Session.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.sessionID.Session.ID"
           }
         ],
         "security": [],
@@ -11056,12 +9324,7 @@
         "operationId": "server.experimental.persistentPty.create",
         "parameters": [
           {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Session.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.sessionID.Session.ID"
           }
         ],
         "security": [],
@@ -11239,12 +9502,7 @@
         "operationId": "server.experimental.persistentPty.get",
         "parameters": [
           {
-            "name": "ptyID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Pty.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.ptyID.Pty.ID"
           }
         ],
         "security": [],
@@ -11313,12 +9571,7 @@
         "operationId": "server.experimental.persistentPty.update",
         "parameters": [
           {
-            "name": "ptyID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Pty.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.ptyID.Pty.ID"
           }
         ],
         "security": [],
@@ -11397,12 +9650,7 @@
         "operationId": "server.experimental.persistentPty.remove",
         "parameters": [
           {
-            "name": "ptyID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Pty.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.ptyID.Pty.ID"
           }
         ],
         "security": [],
@@ -11459,12 +9707,7 @@
         "operationId": "server.experimental.persistentPty.snapshot",
         "parameters": [
           {
-            "name": "ptyID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Pty.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.ptyID.Pty.ID"
           }
         ],
         "security": [],
@@ -11535,27 +9778,10 @@
         "operationId": "server.experimental.persistentPty.connectToken",
         "parameters": [
           {
-            "name": "ptyID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Pty.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.ptyID.Pty.ID"
           },
           {
-            "name": "x-opencode-ticket",
-            "in": "header",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false
+            "$ref": "#/components/parameters/header.x-opencode-ticket"
           }
         ],
         "security": [],
@@ -11636,19 +9862,10 @@
         "operationId": "persistentPty.connect",
         "parameters": [
           {
-            "name": "ptyID",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Pty.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.ptyID.Pty.ID"
           },
           {
-            "in": "query",
-            "name": "cursor",
-            "schema": {
-              "type": "string"
-            }
+            "$ref": "#/components/parameters/query.cursor"
           },
           {
             "in": "query",
@@ -11679,11 +9896,7 @@
             }
           },
           {
-            "in": "query",
-            "name": "ticket",
-            "schema": {
-              "type": "string"
-            }
+            "$ref": "#/components/parameters/query.ticket"
           }
         ],
         "security": [],
@@ -11760,34 +9973,7 @@
         "operationId": "shell.list",
         "parameters": [
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           }
         ],
         "security": [],
@@ -11854,34 +10040,7 @@
         "operationId": "shell.create",
         "parameters": [
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           }
         ],
         "security": [],
@@ -11974,42 +10133,10 @@
         "operationId": "shell.get",
         "parameters": [
           {
-            "name": "id",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Shell.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.id.Shell.ID"
           },
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           }
         ],
         "security": [],
@@ -12080,42 +10207,10 @@
         "operationId": "shell.remove",
         "parameters": [
           {
-            "name": "id",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Shell.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.id.Shell.ID"
           },
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           }
         ],
         "security": [],
@@ -12164,42 +10259,10 @@
         "operationId": "shell.output",
         "parameters": [
           {
-            "name": "id",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Shell.ID"
-            },
-            "required": true
+            "$ref": "#/components/parameters/path.id.Shell.ID"
           },
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           },
           {
             "name": "cursor",
@@ -12308,34 +10371,7 @@
         "operationId": "reference.list",
         "parameters": [
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           }
         ],
         "security": [],
@@ -12661,34 +10697,7 @@
         "operationId": "vcs.init",
         "parameters": [
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           },
           {
             "name": "provider",
@@ -12782,34 +10791,7 @@
         "operationId": "vcs.get",
         "parameters": [
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           }
         ],
         "security": [],
@@ -12875,34 +10857,7 @@
         "operationId": "vcs.base",
         "parameters": [
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           }
         ],
         "security": [],
@@ -12985,34 +10940,7 @@
         "operationId": "vcs.status",
         "parameters": [
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           }
         ],
         "security": [],
@@ -13081,64 +11009,13 @@
         "operationId": "vcs.branch.list",
         "parameters": [
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           },
           {
-            "name": "search",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false
+            "$ref": "#/components/parameters/query.search"
           },
           {
-            "name": "limit",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false
+            "$ref": "#/components/parameters/query.limit"
           }
         ],
         "security": [],
@@ -13204,34 +11081,7 @@
         "operationId": "vcs.diff",
         "parameters": [
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           },
           {
             "name": "mode",
@@ -13526,34 +11376,7 @@
         "operationId": "debug.location.evict",
         "parameters": [
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           }
         ],
         "security": [],
@@ -13703,34 +11526,7 @@
         "operationId": "websearch.providers",
         "parameters": [
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           }
         ],
         "security": [],
@@ -13809,34 +11605,7 @@
         "operationId": "websearch.query",
         "parameters": [
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           }
         ],
         "security": [],
@@ -13932,34 +11701,7 @@
         "operationId": "config.get",
         "parameters": [
           {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "$ref": "#/components/parameters/query.location"
           }
         ],
         "security": [],
@@ -20157,6 +17899,22 @@
         "required": ["status", "input"],
         "additionalProperties": false
       },
+      "Session.Message.Type": {
+        "type": "string",
+        "enum": [
+          "agent-switched",
+          "model-switched",
+          "location-switched",
+          "user",
+          "synthetic",
+          "system",
+          "skill",
+          "shell",
+          "assistant",
+          "compaction",
+          "idle"
+        ]
+      },
       "Session.Message.User": {
         "type": "object",
         "properties": {
@@ -21326,7 +19084,241 @@
         "additionalProperties": false
       }
     },
-    "securitySchemes": {}
+    "securitySchemes": {},
+    "parameters": {
+      "header.x-opencode-ticket": {
+        "name": "x-opencode-ticket",
+        "in": "header",
+        "schema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "required": false
+      },
+      "path.attemptID.Integration.AttemptID": {
+        "name": "attemptID",
+        "in": "path",
+        "schema": {
+          "$ref": "#/components/schemas/Integration.AttemptID"
+        },
+        "required": true
+      },
+      "path.credentialID.Credential.ID": {
+        "name": "credentialID",
+        "in": "path",
+        "schema": {
+          "$ref": "#/components/schemas/Credential.ID"
+        },
+        "required": true
+      },
+      "path.formID.Form.ID": {
+        "name": "formID",
+        "in": "path",
+        "schema": {
+          "$ref": "#/components/schemas/Form.ID"
+        },
+        "required": true
+      },
+      "path.id.PermissionSaved.ID": {
+        "name": "id",
+        "in": "path",
+        "schema": {
+          "$ref": "#/components/schemas/PermissionSaved.ID"
+        },
+        "required": true
+      },
+      "path.id.Shell.ID": {
+        "name": "id",
+        "in": "path",
+        "schema": {
+          "$ref": "#/components/schemas/Shell.ID"
+        },
+        "required": true
+      },
+      "path.inboxID.Session.Message.ID": {
+        "name": "inboxID",
+        "in": "path",
+        "schema": {
+          "$ref": "#/components/schemas/Session.Message.ID"
+        },
+        "required": true
+      },
+      "path.integrationID.Integration.ID": {
+        "name": "integrationID",
+        "in": "path",
+        "schema": {
+          "$ref": "#/components/schemas/Integration.ID"
+        },
+        "required": true
+      },
+      "path.key.InstructionEntry.Key": {
+        "name": "key",
+        "in": "path",
+        "schema": {
+          "$ref": "#/components/schemas/InstructionEntry.Key"
+        },
+        "required": true
+      },
+      "path.ptyID.Pty.ID": {
+        "name": "ptyID",
+        "in": "path",
+        "schema": {
+          "$ref": "#/components/schemas/Pty.ID"
+        },
+        "required": true
+      },
+      "path.requestID.Permission.ID": {
+        "name": "requestID",
+        "in": "path",
+        "schema": {
+          "$ref": "#/components/schemas/Permission.ID"
+        },
+        "required": true
+      },
+      "path.server": {
+        "name": "server",
+        "in": "path",
+        "schema": {
+          "type": "string"
+        },
+        "required": true
+      },
+      "path.sessionID": {
+        "name": "sessionID",
+        "in": "path",
+        "schema": {
+          "type": "string"
+        },
+        "required": true
+      },
+      "path.sessionID.Session.ID": {
+        "name": "sessionID",
+        "in": "path",
+        "schema": {
+          "$ref": "#/components/schemas/Session.ID"
+        },
+        "required": true
+      },
+      "query.archived": {
+        "name": "archived",
+        "in": "query",
+        "schema": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": ["true", "false"]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "required": false
+      },
+      "query.cursor": {
+        "in": "query",
+        "name": "cursor",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "query.limit": {
+        "name": "limit",
+        "in": "query",
+        "schema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "required": false
+      },
+      "query.location": {
+        "name": "location",
+        "in": "query",
+        "schema": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "directory": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "required": false,
+        "style": "deepObject",
+        "explode": true
+      },
+      "query.name": {
+        "name": "name",
+        "in": "query",
+        "schema": {
+          "type": "string"
+        },
+        "required": true
+      },
+      "query.project": {
+        "name": "project",
+        "in": "query",
+        "schema": {
+          "anyOf": [
+            {
+              "$ref": "#/components/schemas/Project.ID"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "required": false
+      },
+      "query.search": {
+        "name": "search",
+        "in": "query",
+        "schema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "required": false
+      },
+      "query.ticket": {
+        "in": "query",
+        "name": "ticket",
+        "schema": {
+          "type": "string"
+        }
+      }
+    }
   },
   "security": [],
   "tags": [

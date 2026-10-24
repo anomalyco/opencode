@@ -319,4 +319,22 @@ export type Info =
   | Assistant
   | Compaction
   | Idle
+// Keyed by message type so a new message type cannot be left out of the literal set.
+const Types = {
+  "agent-switched": true,
+  "model-switched": true,
+  "location-switched": true,
+  user: true,
+  synthetic: true,
+  system: true,
+  skill: true,
+  shell: true,
+  assistant: true,
+  compaction: true,
+  idle: true,
+} satisfies Record<Info["type"], true>
+
+export const Type = Schema.Literals(Object.keys(Types) as ReadonlyArray<Info["type"]>).annotate({
+  identifier: "Session.Message.Type",
+})
 export type Type = Info["type"]

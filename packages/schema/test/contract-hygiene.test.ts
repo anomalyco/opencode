@@ -199,6 +199,7 @@ describe("contract hygiene", () => {
       Session.ListCursor,
       Session.ListFilter,
       Session.Revert,
+      SessionMessage.Type,
       SessionInbox.Delivery,
       SessionInbox.UserPayload,
       SessionInbox.SyntheticPayload,
