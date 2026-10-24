@@ -307,10 +307,7 @@ export const dict = {
   "download.meta.description": "OpenCode'u macOS, Windows ve Linux için indirin",
   "download.section.terminal": "OpenCode Terminal",
   "download.section.desktop": "OpenCode Desktop",
-  "download.section.extensions": "OpenCode Eklentileri",
-  "download.section.integrations": "OpenCode Entegrasyonları",
   "download.action.download": "İndir",
-  "download.action.install": "Kur",
 
   "download.platform.macosAppleSilicon": "macOS (Apple Silicon)",
   "download.platform.macosIntel": "macOS (Intel)",

@@ -295,10 +295,7 @@ export const dict = {
   "download.meta.description": "macOS, Windows, Linux용 OpenCode 다운로드",
   "download.section.terminal": "OpenCode 터미널",
   "download.section.desktop": "OpenCode 데스크톱",
-  "download.section.extensions": "OpenCode 확장 프로그램",
-  "download.section.integrations": "OpenCode 통합",
   "download.action.download": "다운로드",
-  "download.action.install": "설치",
 
   "download.platform.macosAppleSilicon": "macOS (Apple Silicon)",
   "download.platform.macosIntel": "macOS (Intel)",

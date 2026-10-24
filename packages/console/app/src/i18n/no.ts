@@ -305,10 +305,7 @@ export const dict = {
   "download.meta.description": "Last ned OpenCode for macOS, Windows og Linux",
   "download.section.terminal": "OpenCode Terminal",
   "download.section.desktop": "OpenCode Desktop",
-  "download.section.extensions": "OpenCode Extensions",
-  "download.section.integrations": "OpenCode Integrations",
   "download.action.download": "Last ned",
-  "download.action.install": "Installer",
 
   "download.platform.macosAppleSilicon": "macOS (Apple Silicon)",
   "download.platform.macosIntel": "macOS (Intel)",

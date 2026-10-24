@@ -303,10 +303,7 @@ export const dict = {
   "download.meta.description": "Завантажте OpenCode для macOS, Windows та Linux",
   "download.section.terminal": "Термінал OpenCode",
   "download.section.desktop": "Десктоп OpenCode",
-  "download.section.extensions": "Розширення OpenCode",
-  "download.section.integrations": "Інтеграції OpenCode",
   "download.action.download": "Завантажити",
-  "download.action.install": "Встановити",
 
   "download.platform.macosAppleSilicon": "macOS (Apple Silicon)",
   "download.platform.macosIntel": "macOS (Intel)",
