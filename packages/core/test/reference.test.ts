@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Deferred, Effect, Exit, Layer, Scope } from "effect"
+import { Context, Deferred, Effect, Exit, Layer, Scope } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Bus } from "@opencode/core/bus"
 import { AbsolutePath } from "@opencode/core/schema"
@@ -9,6 +9,9 @@ import { Global } from "@opencode/util/global"
 import { Reference } from "@opencode/core/reference"
 import { Repository } from "@opencode/core/repository"
 import { RepositoryCache } from "@opencode/core/repository-cache"
+import { Location } from "@opencode/core/location"
+import { Workspace } from "@opencode/core/workspace"
+import { location } from "./fixture/location"
 import { it } from "./lib/effect"
 
 const cache = Layer.mock(RepositoryCache.Service, {
@@ -16,9 +19,59 @@ const cache = Layer.mock(RepositoryCache.Service, {
 })
 const referenceLayer = AppNodeBuilder.build(LayerNode.group([Reference.node, Bus.node]), [
   RepositoryCache.node.replace(cache),
+  Location.node.replace(Layer.succeed(Location.Service, location({ directory: AbsolutePath.make("/project") }))),
 ])
 
 describe("Reference", () => {
+  for (const caller of ["absent", "different"] as const) {
+    it.effect(`keeps updates scoped to their owner when the caller location is ${caller}`, () =>
+      Effect.gen(function* () {
+        const context = yield* Layer.build(AppNodeBuilder.build(Bus.node))
+        const bus = Context.get(context, Bus.Service)
+        const owners = [
+          Location.Ref.make({ directory: AbsolutePath.make("/first") }),
+          Location.Ref.make({ directory: AbsolutePath.make("/second"), workspaceID: Workspace.ID.make("wrk_docs") }),
+        ]
+        const entries = yield* Effect.forEach(owners, (owner) =>
+          Effect.gen(function* () {
+            const context = yield* Layer.build(
+              AppNodeBuilder.build(LayerNode.group([Reference.node, Bus.node, Location.node]), [
+                Bus.node.replace(Layer.succeed(Bus.Service, bus)),
+                RepositoryCache.node.replace(cache),
+                Location.node.replace(Layer.succeed(Location.Service, location(owner))),
+              ]),
+            )
+            return { owner, references: Context.get(context, Reference.Service) }
+          }),
+        )
+        const observed: Array<Location.Ref | undefined> = []
+        const unsubscribe = yield* bus.listen((event) =>
+          Effect.sync(() => {
+            if (event.type === Reference.Event.Updated.type) observed.push(event.location)
+          }),
+        )
+        yield* Effect.addFinalizer(() => unsubscribe)
+
+        const update = Effect.gen(function* () {
+          for (const entry of entries) {
+            const registration = yield* entry.references.transform((editor) =>
+              editor.add("docs", Reference.LocalSource.make({ type: "local", path: entry.owner.directory })),
+            )
+            yield* entry.references.reload()
+            expect((yield* entry.references.list()).map((info) => info.path)).toEqual([entry.owner.directory])
+            yield* registration.dispose
+            expect(yield* entry.references.list()).toEqual([])
+          }
+        })
+        yield* caller === "absent"
+          ? update
+          : update.pipe(Effect.provideService(Location.Service, location({ directory: AbsolutePath.make("/caller") })))
+
+        expect(observed).toEqual(owners.flatMap((owner) => [owner, owner, owner]))
+      }).pipe(Effect.scoped),
+    )
+  }
+
   it.effect("reads the current editor source by name", () =>
     Effect.gen(function* () {
       const references = yield* Reference.Service
@@ -60,6 +113,7 @@ describe("Reference", () => {
     })
     const referenceLayer = AppNodeBuilder.build(LayerNode.group([Reference.node, Bus.node]), [
       RepositoryCache.node.replace(cache),
+      Location.node.replace(Layer.succeed(Location.Service, location({ directory: AbsolutePath.make("/project") }))),
     ])
 
     return Effect.gen(function* () {

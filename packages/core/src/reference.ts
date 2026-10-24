@@ -5,6 +5,7 @@ import { Context, Effect, Layer, Scope } from "effect"
 import { Reference } from "@opencode/schema/reference"
 import { Global } from "@opencode/util/global"
 import { Bus } from "./bus.js"
+import { Location } from "./location.js"
 import { Repository } from "./repository.js"
 import { RepositoryCache } from "./repository-cache.js"
 import { AbsolutePath } from "./schema.js"
@@ -46,6 +47,7 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const global = yield* Global.Service
     const bus = yield* Bus.Service
+    const location = yield* Location.Service
     const cache = yield* RepositoryCache.Service
     const scope = yield* Scope.Scope
     const list = (): Info[] =>
@@ -104,7 +106,11 @@ const layer = Layer.effect(
       notify: () =>
         Effect.gen(function* () {
           yield* refresh().pipe(Effect.forkIn(scope))
-          yield* bus.publish(Reference.Event.Updated, {})
+          yield* bus.publish(
+            Reference.Event.Updated,
+            {},
+            { location: { directory: location.directory, workspaceID: location.workspaceID } },
+          )
         }),
     })
 
@@ -124,5 +130,5 @@ const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Global.node, Bus.node, RepositoryCache.node],
+  deps: [Global.node, Bus.node, Location.node, RepositoryCache.node],
 })
