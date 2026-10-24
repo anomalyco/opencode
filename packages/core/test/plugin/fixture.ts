@@ -41,6 +41,7 @@ import { WorktreeStrategies } from "@opencode/core/worktree/strategies"
 import { Effect, Layer } from "effect"
 import { tempLocationLayer } from "../fixture/location"
 import { emptyMcpLayer } from "../fixture/mcp"
+import { offlineModels } from "../fixture/models"
 
 const npmLayer = Layer.succeed(
   Npm.Service,
@@ -119,6 +120,7 @@ export const makePluginTestLayer = (permission = permissionLayer) =>
       Mcp.node.replace(emptyMcpLayer),
       Generate.node.replace(generateLayer),
       Permission.node.replace(permission),
+      offlineModels,
     ],
   ).pipe(Layer.provideMerge(configLayer))
 

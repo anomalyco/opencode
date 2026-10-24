@@ -43,6 +43,10 @@
       "node": "./src/pty/pty.node.ts",
       "default": "./src/pty/pty.bun.ts"
     },
+    "#claude-agent-sdk": {
+      "workerd": "./src/claude-agent/claude/agent-sdk.workerd.ts",
+      "default": "./src/claude-agent/claude/agent-sdk.ts"
+    },
     "#persistent-pty-binary": {
       "workerd": "./src/persistent-pty/binary.workerd.ts",
       "bun": "./src/persistent-pty/binary.bun.ts",
@@ -77,9 +81,9 @@
   },
   "devDependencies": {
     "@ai-sdk/openai-compatible": "2.0.41",
+    "@anthropic-ai/claude-agent-sdk": "0.3.301",
     "@effect/platform-node": "catalog:",
     "@effect/sql-sqlite-bun": "catalog:",
-    "@modelcontextprotocol/server": "2.3.1",
     "@opencode/http-recorder": "workspace:*",
     "@parcel/watcher-darwin-arm64": "2.5.1",
     "@parcel/watcher-darwin-x64": "2.5.1",
@@ -107,6 +111,7 @@
     "@lydell/node-pty": "catalog:",
     "@modelcontextprotocol/client": "2.3.1",
     "@modelcontextprotocol/core": "2.3.1",
+    "@modelcontextprotocol/server": "2.3.1",
     "@opencode-ai/pty": "0.3.1",
     "@opencode/ai": "workspace:*",
     "@opencode/codemode": "workspace:*",
@@ -136,5 +141,13 @@
     "web-tree-sitter": "0.25.10",
     "which": "6.0.1",
     "zod": "catalog:"
+  },
+  "peerDependencies": {
+    "@anthropic-ai/claude-agent-sdk": "0.3.301"
+  },
+  "peerDependenciesMeta": {
+    "@anthropic-ai/claude-agent-sdk": {
+      "optional": true
+    }
   }
 }
