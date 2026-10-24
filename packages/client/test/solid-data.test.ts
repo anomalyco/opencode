@@ -232,6 +232,81 @@ test("reconciles a stale running tool when execution settles", async () => {
   }
 })
 
+test("a delayed metadata read cannot restore a deleted session", async () => {
+  const requested = Promise.withResolvers<void>()
+  const response = Promise.withResolvers<Response>()
+  const info = session(0)
+  const setup = dataFixture(() => {
+    requested.resolve()
+    return response.promise
+  })
+
+  try {
+    setup.data.session.remember(info)
+    setup.data.session.invalidate(info.id)
+    const reading = setup.data.session.sync(info.id)
+    await requested.promise
+    setup.emit({
+      id: "evt_deleted",
+      created: 1,
+      type: "session.deleted",
+      durable: { aggregateID: info.id, seq: 1, version: 1 },
+      data: { sessionID: info.id },
+    })
+    expect(setup.data.session.get(info.id)).toBeUndefined()
+    response.resolve(Response.json({ data: info }))
+    await reading
+    expect(setup.data.session.get(info.id)).toBeUndefined()
+    expect(setup.data.session.family(info.id)).toEqual([])
+  } finally {
+    response.resolve(Response.json({ data: info }))
+    setup.dispose()
+  }
+})
+
+test("a delayed family read cannot restore or synchronize a deleted child", async () => {
+  const requested = Promise.withResolvers<void>()
+  const response = Promise.withResolvers<Response>()
+  const root = session(0)
+  const child = { ...root, id: "ses_child", parentID: root.id }
+  const setup = dataFixture((url) => {
+    if (url.pathname === `/api/session/${root.id}`) return Response.json({ data: root })
+    if (url.pathname === "/api/session") {
+      requested.resolve()
+      return response.promise
+    }
+    if (url.pathname === `/api/session/${child.id}`)
+      return Response.json(
+        { _tag: "SessionNotFoundError", sessionID: child.id, message: "Session not found" },
+        { status: 404 },
+      )
+    throw new Error(`Unexpected request: ${url}`)
+  })
+
+  try {
+    setup.data.session.remember(child)
+    const reading = setup.data.session.sync(root.id, { children: true })
+    await requested.promise
+    setup.emit({
+      id: "evt_deleted",
+      created: 1,
+      type: "session.deleted",
+      durable: { aggregateID: child.id, seq: 1, version: 1 },
+      data: { sessionID: child.id },
+    })
+    expect(setup.data.session.get(child.id)).toBeUndefined()
+    response.resolve(Response.json({ data: [child], cursor: {} }))
+    await reading
+    expect(setup.data.session.get(child.id)).toBeUndefined()
+    expect(setup.data.session.family(root.id)).toEqual([root.id])
+    expect(setup.data.session.get(root.id)).toEqual(root)
+    await expect(setup.data.session.sync(child.id)).rejects.toThrow("Session not found")
+  } finally {
+    response.resolve(Response.json({ data: [], cursor: {} }))
+    setup.dispose()
+  }
+})
+
 test("revalidates after an event overtakes an active session read", async () => {
   let release!: () => void
   const gate = new Promise<void>((resolve) => (release = resolve))
@@ -1206,6 +1281,29 @@ function modelInfo(name: string): ModelInfo {
     enabled: true,
     limit: { context: 8192, output: 1024 },
   }
+}
+
+function dataFixture(read: (url: URL) => Response | Promise<Response>) {
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async (input, init) => read(new URL((input instanceof Request ? input : new Request(input, init)).url)),
+  })
+  return createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: "/project",
+      event: {
+        on: () => () => {},
+        listen(handler) {
+          listeners.add(handler)
+          return () => listeners.delete(handler)
+        },
+      },
+    }),
+    emit: (details: OpenCodeEvent) => listeners.forEach((listener) => listener({ name: details.type, details })),
+    dispose,
+  }))
 }
 
 function activityFixture(read: () => Response | Promise<Response>) {
