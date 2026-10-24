@@ -161,6 +161,10 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
           }),
         )
       },
+      "session.goal.updated": () => Effect.void,
+      "session.goal.cleared": () => Effect.void,
+      "session.todo.updated": () => Effect.void,
+      "session.todo.verified": () => Effect.void,
       "session.synthetic": (event) => {
         return adapter.appendMessage(
           SessionMessage.Synthetic.make({

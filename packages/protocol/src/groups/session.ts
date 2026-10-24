@@ -2,6 +2,7 @@ import { SessionMessage } from "@opencode/schema/session-message"
 import { SessionInbox } from "@opencode/schema/session-inbox"
 import { PromptInput } from "@opencode/schema/prompt-input"
 import { Session } from "@opencode/schema/session"
+import { SessionGoal } from "@opencode/schema/session-goal"
 import { SessionStats } from "@opencode/schema/session-stats"
 import { InstructionEntry } from "@opencode/schema/instruction-entry"
 import { Project } from "@opencode/schema/project"
@@ -715,6 +716,65 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
             summary: "Background blocking session tools",
             description:
               "Move active foreground backgroundable tools for this session into background observation. Idle requests are a no-op.",
+          }),
+        ),
+    )
+    .add(
+      HttpApiEndpoint.get("session.goal.get", "/api/session/:sessionID/goal", {
+        params: { sessionID: Session.ID },
+        success: Schema.Struct({ data: SessionGoal.State }),
+        error: SessionNotFoundError,
+      })
+        .middleware(sessionLocationMiddleware)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.goal.get",
+            summary: "Get session goal",
+            description:
+              "Read the session's goal, todo list, and progress. `armed` is process-local: it reports whether this OpenCode process is currently willing to run the goal.",
+          }),
+        ),
+    )
+    .add(
+      HttpApiEndpoint.post("session.goal.update", "/api/session/:sessionID/goal", {
+        params: { sessionID: Session.ID },
+        payload: Schema.Struct({
+          action: Schema.Literals(["set", "clear", "edit", "pause", "resume"]),
+          objective: Schema.String.pipe(Schema.optional),
+          expectedRevision: Schema.Number.pipe(Schema.optional),
+          expectedGoalID: SessionGoal.ID.pipe(Schema.optional),
+        }),
+        success: Schema.Struct({ data: SessionGoal.Snapshot }),
+        error: [SessionNotFoundError, ConflictError],
+      })
+        .middleware(sessionLocationMiddleware)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.goal.update",
+            summary: "Update session goal",
+            description:
+              "Set, clear, edit, pause, or resume the session goal. `pause` is the user's cancel: it disarms the goal in this OpenCode process and interrupts the running turn. `expectedRevision` and `expectedGoalID` are an optional compare-and-set pair; supply both or neither, and omit them for last-write-wins.",
+          }),
+        ),
+    )
+    .add(
+      HttpApiEndpoint.put("session.todo.replace", "/api/session/:sessionID/todo", {
+        params: { sessionID: Session.ID },
+        payload: Schema.Struct({
+          todos: Schema.Array(SessionGoal.TodoInput),
+          expectedRevision: Schema.Number.pipe(Schema.optional),
+          expectedGoalID: SessionGoal.ID.pipe(Schema.optional),
+        }),
+        success: HttpApiSchema.NoContent,
+        error: [SessionNotFoundError, ConflictError],
+      })
+        .middleware(sessionLocationMiddleware)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.todo.replace",
+            summary: "Replace session todo list",
+            description:
+              "Replace the whole todo list for the session's current goal. `expectedRevision` and `expectedGoalID` are an optional compare-and-set pair; supply both or neither, and omit them for last-write-wins.",
           }),
         ),
     )

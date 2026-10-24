@@ -25,6 +25,7 @@ import { SessionInbox } from "./session-inbox.js"
 import { Project } from "./project.js"
 import { SessionFork } from "./session-fork.js"
 import { Permission } from "./permission.js"
+import { SessionGoal } from "./session-goal.js"
 
 const Base = {
   sessionID: SessionID,
@@ -282,6 +283,55 @@ export const InstructionsUpdated = Event.durable({
   },
 })
 export type InstructionsUpdated = typeof InstructionsUpdated.Type
+
+export namespace Goal {
+  export const Updated = Event.durable({
+    type: "session.goal.updated",
+    ...options,
+    schema: {
+      ...Base,
+      snapshot: SessionGoal.Snapshot,
+    },
+  })
+  export type Updated = typeof Updated.Type
+
+  export const Cleared = Event.durable({
+    type: "session.goal.cleared",
+    ...options,
+    schema: {
+      ...Base,
+      goalID: SessionGoal.ID,
+      revision: NonNegativeInt,
+    },
+  })
+  export type Cleared = typeof Cleared.Type
+}
+
+export namespace Todo {
+  export const Updated = Event.durable({
+    type: "session.todo.updated",
+    ...options,
+    schema: {
+      ...Base,
+      /** The goal revision this list advances to; a list that does not advance it is dropped. */
+      revision: NonNegativeInt,
+      todos: Schema.Array(SessionGoal.TodoInput),
+    },
+  })
+  export type Updated = typeof Updated.Type
+
+  export const Verified = Event.durable({
+    type: "session.todo.verified",
+    ...options,
+    schema: {
+      ...Base,
+      /** The goal revision the verifier judged; a stale revision is rejected. */
+      revision: NonNegativeInt,
+      items: Schema.Array(SessionGoal.TodoVerification),
+    },
+  })
+  export type Verified = typeof Verified.Type
+}
 
 export const Synthetic = Event.durable({
   type: "session.synthetic",
@@ -678,6 +728,10 @@ export const Definitions = Event.inventory(
   Execution.Failed,
   Execution.Interrupted,
   InstructionsUpdated,
+  Goal.Updated,
+  Goal.Cleared,
+  Todo.Updated,
+  Todo.Verified,
   Synthetic,
   Skill.Activated,
   Shell.Started,
