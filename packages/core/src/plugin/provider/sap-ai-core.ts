@@ -14,7 +14,8 @@ export const SapAICorePlugin = define({
         if (evt.model.providerID !== Provider.ID.make("sap-ai-core")) return
         const serviceKey =
           process.env.AICORE_SERVICE_KEY ??
-          (typeof evt.options.serviceKey === "string" ? evt.options.serviceKey : undefined)
+          (typeof evt.options.serviceKey === "string" ? evt.options.serviceKey : undefined) ??
+          (typeof evt.options.apiKey === "string" ? evt.options.apiKey : undefined)
         if (serviceKey && !process.env.AICORE_SERVICE_KEY) process.env.AICORE_SERVICE_KEY = serviceKey
 
         const factory = yield* loadSDKFactory(npm, evt.package)
