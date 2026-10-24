@@ -48,6 +48,7 @@ export class ServiceFailureError extends Schema.TaggedError<ServiceFailureError>
   safeMessage: Schema.String,
   service: Schema.optional(Schema.String),
   errorName: Schema.optional(Schema.String),
+  retryable: Schema.optional(Schema.Boolean),
 }) {}
 
 export class ServerUnavailableError extends Schema.TaggedError<ServerUnavailableError>()(
@@ -56,9 +57,10 @@ export class ServerUnavailableError extends Schema.TaggedError<ServerUnavailable
 ) {}
 
 export class CatalogNotReadyError extends Schema.TaggedError<CatalogNotReadyError>()("ACPCatalogNotReadyError", {
-  reason: Schema.Literals(["models", "agents"]),
+  reason: Schema.Literals(["models", "agents", "plugins"]),
 }) {
   override get message() {
+    if (this.reason === "plugins") return "Location plugins are still activating; retry this request"
     return this.reason === "models" ? "No models are available" : "No primary agents are available"
   }
 }
@@ -121,6 +123,7 @@ export function toRequestError(error: Error): RequestError {
         {
           ...(error.service ? { service: error.service } : {}),
           ...(error.errorName ? { errorName: error.errorName } : {}),
+          ...(error.retryable !== undefined ? { retryable: error.retryable } : {}),
         },
         error.safeMessage,
       )

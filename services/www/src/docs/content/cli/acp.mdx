@@ -223,10 +223,10 @@ OpenCode adds them to the session's directory for the life of the `opencode acp`
 directory can use them. OpenCode passes HTTP headers through and doesn't use OAuth for these servers. It doesn't
 advertise MCP over SSE, and it doesn't support MCP over ACP.
 
-| Case                             | Behavior                                                            |
-| -------------------------------- | ------------------------------------------------------------------- |
+| Case                             | Behavior                                                           |
+| -------------------------------- | ------------------------------------------------------------------ |
 | Same name as a configured server | The client's server replaces the configured one in that directory. |
-| [Policies](/policies)            | `integration.use` rules still apply.                                |
+| [Policies](/policies)            | `integration.use` rules still apply.                               |
 
 ```json
 { "type": "http", "name": "docs", "url": "https://mcp.example.com", "headers": [] }
@@ -334,6 +334,22 @@ session. Each update carries `_meta["opencode/child-session"]`. OpenCode prefixe
 
 Permission requests from a child session carry the same key on `toolCall._meta`. After the prompt ends, OpenCode stops
 sending child session updates. Permission requests and questions from child sessions still reach the client.
+
+### Plugin activation readiness
+
+If Location plugins are still activating after the bounded catalog wait, `session/new`, `session/load`, and
+`session/resume` return this error. Clients can retry the same request later; a failed resume does not delete the session.
+
+```json
+{
+  "code": -32603,
+  "message": "Internal error: Location plugins are still activating; retry this request",
+  "data": { "errorName": "CatalogNotReady", "service": "plugin", "retryable": true }
+}
+```
+
+Check the error data rather than the message text. Other service failures do not carry this activation retry marker.
+Closing the ACP connection cancels its pending catalog wait.
 
 ### Retry status
 
