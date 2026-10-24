@@ -3,7 +3,7 @@ import { emptyInputJsonSchema } from "@opencode/ai/tool"
 import { isRecord } from "@opencode/ai/utils/record"
 import { Tool } from "@opencode/schema/tool"
 import type { StandardJSONSchemaV1, StandardSchemaV1 } from "@standard-schema/spec"
-import { Cache, Effect, JsonPointer, JsonSchema, Schema, SchemaIssue, SchemaRepresentation } from "effect"
+import { Cache, Context, Effect, JsonPointer, JsonSchema, Schema, SchemaIssue, SchemaRepresentation } from "effect"
 import { $ZodType, toJSONSchema } from "zod/v4/core"
 
 const formatEffectIssues = SchemaIssue.makeFormatterStandardSchemaV1()
@@ -18,6 +18,11 @@ const jsonSchemas = Effect.runSync(
       }).pipe(Effect.orElseSucceed(() => undefined)),
   }),
 )
+
+// The tool the request snapshot captured for a call name, provided to `execute.before` hooks.
+export const CapturedTool = Context.Reference<(name: string) => Tool.Info | undefined>("@opencode/Tool/CapturedTool", {
+  defaultValue: () => () => undefined,
+})
 
 export const definition = (tool: Tool.Info<any, any>): ToolDefinition => ({
   type: "tool",
