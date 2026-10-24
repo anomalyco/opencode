@@ -14,6 +14,7 @@ import { FileSystem } from "./filesystem.js"
 import { FileSystemSearch } from "./filesystem/search.js"
 import { Generate } from "./generate.js"
 import { Voice } from "./voice.js"
+import { UsageLimits } from "./usage-limits.js"
 import { Form } from "./form.js"
 import { Image } from "./image.js"
 import { LocationWatcher } from "./filesystem/location-watcher.js"
@@ -99,6 +100,7 @@ const nodes = [
   Form.node,
   Generate.node,
   Voice.node,
+  UsageLimits.node,
   ReadToolFileSystem.node,
   McpTool.node,
   SessionInstructions.node,

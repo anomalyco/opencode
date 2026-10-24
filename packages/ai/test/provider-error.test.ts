@@ -313,6 +313,26 @@ describe("provider error classification", () => {
     })
     const cases: ReadonlyArray<[number, { error: { message: string } }]> = [
       [429, typed("GoUsageLimitError", "Go usage limit exceeded")],
+      [429, typed("BudgetLimitError", "A budget policy for this model has been reached.")],
+      // Google clients get Google's envelope, naming the refusal in its ErrorInfo.
+      [
+        429,
+        {
+          error: {
+            code: 429,
+            status: "RESOURCE_EXHAUSTED",
+            message: "A budget policy for this model has been reached.",
+            details: [
+              {
+                "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+                reason: "BudgetLimitError",
+                domain: "opencode.ai",
+                metadata: { coverage: "models", resetsAt: "2026-11-01T00:00:00.000Z" },
+              },
+            ],
+          },
+        },
+      ],
       [429, typed("FreeUsageLimitError", "Rate limit exceeded. Please try again later.")],
       [402, typed("CreditLimitExceeded", "Credit limit exceeded.")],
       [402, substituted("Insufficient account funds")],
@@ -324,7 +344,7 @@ describe("provider error classification", () => {
         ([status, body]) =>
           classifyProviderFailure({ message: body.error.message, status, rawBody: JSON.stringify(body) })._tag,
       ),
-    ).toEqual(Array(6).fill("QuotaExceeded"))
+    ).toEqual(Array(8).fill("QuotaExceeded"))
   })
 
   test("classifies Z.ai plan and balance limits as quota rather than throttling", () => {

@@ -13926,6 +13926,116 @@
         }
       }
     },
+    "/api/experimental/usage/limits": {
+      "get": {
+        "tags": ["usage"],
+        "operationId": "experimental.usage.limits",
+        "parameters": [
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "location": {
+                      "$ref": "#/components/schemas/Location.PublicRef"
+                    },
+                    "data": {
+                      "anyOf": [
+                        {
+                          "$ref": "#/components/schemas/UsageLimits.Info"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": ["location", "data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "LocationNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Return the OpenCode Go allowance and Console budgets of the OpenCode Console workspace the location is signed in to, or null when it isn't signed in.",
+        "summary": "Get usage limits"
+      }
+    },
     "/api/config": {
       "get": {
         "tags": ["config"],
@@ -20899,6 +21009,157 @@
         "required": ["_tag", "message"],
         "additionalProperties": false
       },
+      "UsageLimits.Budget": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "limit": {
+            "$ref": "#/components/schemas/Money.USD"
+          },
+          "spent": {
+            "$ref": "#/components/schemas/Money.USD"
+          },
+          "scope": {
+            "type": "string",
+            "enum": ["each", "combined"]
+          },
+          "per": {
+            "type": "string",
+            "enum": ["set", "model"]
+          },
+          "coverage": {
+            "type": "string",
+            "enum": ["all", "models"]
+          },
+          "models": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UsageLimits.BudgetModel"
+            }
+          },
+          "vendors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "inputPriceAtLeast": {
+            "$ref": "#/components/schemas/Money.USDPerMillionTokens"
+          },
+          "picked": {
+            "type": "boolean"
+          },
+          "shared": {
+            "type": "boolean"
+          },
+          "resetsAt": {
+            "type": "number",
+            "description": "Milliseconds since the Unix epoch"
+          }
+        },
+        "required": [
+          "id",
+          "limit",
+          "spent",
+          "scope",
+          "per",
+          "coverage",
+          "models",
+          "vendors",
+          "picked",
+          "shared",
+          "resetsAt"
+        ],
+        "additionalProperties": false
+      },
+      "UsageLimits.BudgetModel": {
+        "type": "object",
+        "properties": {
+          "providerID": {
+            "$ref": "#/components/schemas/Provider.ID"
+          },
+          "modelID": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "spent": {
+            "$ref": "#/components/schemas/Money.USD"
+          }
+        },
+        "required": ["providerID", "modelID", "name"],
+        "additionalProperties": false
+      },
+      "UsageLimits.Go": {
+        "type": "object",
+        "properties": {
+          "rolling": {
+            "$ref": "#/components/schemas/UsageLimits.Meter"
+          },
+          "weekly": {
+            "$ref": "#/components/schemas/UsageLimits.Meter"
+          },
+          "monthly": {
+            "$ref": "#/components/schemas/UsageLimits.Meter"
+          }
+        },
+        "required": ["rolling", "weekly", "monthly"],
+        "additionalProperties": false
+      },
+      "UsageLimits.Info": {
+        "type": "object",
+        "properties": {
+          "workspace": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "usageURL": {
+                "type": "string"
+              }
+            },
+            "required": ["id", "usageURL"],
+            "additionalProperties": false
+          },
+          "go": {
+            "$ref": "#/components/schemas/UsageLimits.Go"
+          },
+          "budgets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UsageLimits.Budget"
+            }
+          }
+        },
+        "required": ["workspace", "budgets"],
+        "additionalProperties": false
+      },
+      "UsageLimits.Meter": {
+        "type": "object",
+        "properties": {
+          "percent": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "limited": {
+            "type": "boolean"
+          },
+          "resetsAt": {
+            "type": "number",
+            "description": "Milliseconds since the Unix epoch"
+          }
+        },
+        "required": ["percent", "limited", "resetsAt"],
+        "additionalProperties": false
+      },
       "V2EventEncoded": {
         "type": "string",
         "contentMediaType": "application/json"
@@ -21449,6 +21710,10 @@
     {
       "name": "websearch",
       "description": "Location-scoped web search routes."
+    },
+    {
+      "name": "usage",
+      "description": "Experimental usage limit routes."
     },
     {
       "name": "config",

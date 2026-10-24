@@ -272,6 +272,8 @@ import type {
   WebsearchProvidersOutput,
   WebsearchQueryInput,
   WebsearchQueryOutput,
+  UsageLimitsInput,
+  UsageLimitsOutput,
   ConfigGetInput,
   ConfigGetOutput,
   ConfigShellsOutput,
@@ -2281,6 +2283,20 @@ export function make(options: ClientOptions) {
             path: `/api/websearch`,
             query: { location: input["location"] },
             body: { query: input["query"], providerID: input["providerID"] },
+            successStatus: 200,
+            declaredStatuses: [400, 401, 404, 503],
+            empty: false,
+          },
+          requestOptions,
+        ),
+    },
+    usage: {
+      limits: (input?: UsageLimitsInput, requestOptions?: RequestOptions) =>
+        request<UsageLimitsOutput>(
+          {
+            method: "GET",
+            path: `/api/experimental/usage/limits`,
+            query: { location: input?.["location"] },
             successStatus: 200,
             declaredStatuses: [400, 401, 404, 503],
             empty: false,

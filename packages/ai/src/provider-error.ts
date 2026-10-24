@@ -126,6 +126,7 @@ const QUOTA_CODES = new Set([
   "usage_not_included",
   "billing_error",
   "gousagelimiterror",
+  "budgetlimiterror",
   "freeusagelimiterror",
   "creditlimitexceeded",
 ])
