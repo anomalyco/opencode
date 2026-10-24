@@ -22,8 +22,9 @@ export type Displays = {
 }
 
 // Bounds are only trusted when they still fit on one of the current displays; otherwise the window
-// falls back to the default size on the primary display. A saved maximized or fullscreen state
-// without bounds is kept so manage() can restore it.
+// falls back to the default size, capped to the matched display and placed at its global origin.
+// A saved maximized or fullscreen state is kept even when bounds are missing or rejected so
+// manageWindowState() can restore it.
 export function resolveWindowState(saved: unknown, defaults: { width: number; height: number }, displays: Displays) {
   const state = isState(saved) ? saved : undefined
 
@@ -40,12 +41,18 @@ export function resolveWindowState(saved: unknown, defaults: { width: number; he
 
   if (visible) return state
 
+  const matched = displays.matching({ x: state.x, y: state.y, width: state.width, height: state.height })
+
+  const display = displays.all().find((bounds) => sameBounds(bounds, matched)) ?? displays.primary()
+
   return {
-    width: defaults.width,
-    height: defaults.height,
-    x: 0,
-    y: 0,
-    displayBounds: displays.primary(),
+    width: Math.min(defaults.width, display.width),
+    height: Math.min(defaults.height, display.height),
+    x: display.x,
+    y: display.y,
+    displayBounds: display,
+    isMaximized: state.isMaximized,
+    isFullScreen: state.isFullScreen,
   } satisfies WindowState
 }
 
@@ -133,4 +140,8 @@ function within(state: WindowState & { x: number; y: number }, bounds: Rectangle
     state.x + state.width <= bounds.x + bounds.width &&
     state.y + state.height <= bounds.y + bounds.height
   )
+}
+
+function sameBounds(a: Rectangle, b: Rectangle) {
+  return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height
 }
