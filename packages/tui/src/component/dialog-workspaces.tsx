@@ -52,7 +52,10 @@ export function DialogWorkspaces(props: DialogWorkspacesProps) {
   const [removing, setRemoving] = createSignal(props.initialRemoving)
   const [replacementCurrent, setReplacementCurrent] = createSignal<string>()
   const [loadError, setLoadError] = createSignal<unknown>()
-  onMount(() => dialog.setSize("xlarge"))
+  onMount(() => {
+    dialog.setSize("xlarge")
+    void sessionData.project.sync().catch(() => undefined)
+  })
 
   function reopen(initialRemoving?: string) {
     dialog.replace(() => (
@@ -376,12 +379,16 @@ export function DialogWorkspaces(props: DialogWorkspacesProps) {
                 ...(route.data.type === "session"
                   ? [{ command: "dialog.move_session.move", title: "move", onTrigger: move }]
                   : []),
-                {
-                  command: "dialog.move_session.new",
-                  title: "new",
-                  selection: "none",
-                  onTrigger: () => void create(),
-                },
+                ...(sessionData.project.get(props.projectID)?.vcs === "git"
+                  ? [
+                      {
+                        command: "dialog.move_session.new",
+                        title: "new",
+                        selection: "none" as const,
+                        onTrigger: () => void create(),
+                      },
+                    ]
+                  : []),
                 {
                   command: "dialog.move_session.delete",
                   title: "delete",

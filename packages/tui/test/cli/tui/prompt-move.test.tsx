@@ -149,6 +149,20 @@ test("refresh explicitly scans the project and preserves the worktree filter", a
   }
 })
 
+test.each([
+  { git: true, shows: true },
+  { git: false, shows: false },
+])("offers new worktree only for git projects (git=$git)", async (input) => {
+  const fixture = await renderMove({ directory: clone, home: true, git: input.git })
+  try {
+    await fixture.move.open()
+    const frame = await fixture.app.waitForFrame((frame) => frame.includes("Worktrees") && frame.includes(linked))
+    expect(frame.includes("new ctrl+a")).toBe(input.shows)
+  } finally {
+    fixture.app.renderer.destroy()
+  }
+})
+
 test.each([false, true])("Ctrl+M moves only an existing session (home=%s)", async (home) => {
   const fixture = await renderMove({ directory: clone, home })
   try {
@@ -288,6 +302,7 @@ async function renderMove(input: {
   unavailable?: "session" | "location"
   showMissingLocation?: boolean
   moveFails?: boolean
+  git?: boolean
 }) {
   const launch = input.launch ?? (input.home ? input.directory : main)
   const requests: unknown[] = []
@@ -316,7 +331,15 @@ async function renderMove(input: {
       })
     }
     if (url.pathname === "/api/project")
-      return json([{ id: "proj_test", canonical: main, time: { created: 1, updated: 1 }, sandboxes: [] }])
+      return json([
+        {
+          id: "proj_test",
+          canonical: main,
+          ...(input.git === false ? {} : { vcs: "git" }),
+          time: { created: 1, updated: 1 },
+          sandboxes: [],
+        },
+      ])
     if (url.pathname === "/api/session/ses_clone") {
       reads.session++
       if (input.unavailable === "session") return json({ message: "Session unavailable" }, { status: 404 })
