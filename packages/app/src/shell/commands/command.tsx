@@ -11,6 +11,7 @@ import { keybindRenames } from "@/settings/keybinds/migration"
 import en from "@/runtime/i18n/en"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 
+// oxlint-disable-next-line anti-slop/no-runtime-typeof -- navigator is absent during server-side rendering.
 const IS_MAC = typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
 
 const PALETTE_ID = "command.palette"
@@ -66,14 +67,50 @@ export function keyFromKeyboardEvent(event: KeyboardEvent) {
   return event.code.slice(3).toLowerCase()
 }
 
+function keybindKeysFromKeyboardEvent(event: KeyboardEvent) {
+  const key = keyFromKeyboardEvent(event)
+
+  if (
+    (!event.ctrlKey && !event.metaKey) ||
+    event.altKey ||
+    event.isComposing ||
+    event.getModifierState("AltGraph") ||
+    !/^[^\p{ASCII}\p{Script=Latin}]$/u.test(event.key)
+  )
+    return [key]
+
+  // Keep literal bindings first, then try the physical position on non-Latin layouts.
+  if (/^Key[A-Z]$/.test(event.code)) return [key, event.code.slice(3).toLowerCase()]
+
+  const punctuation = new Map([
+    ["Comma", "comma"],
+    ["Period", "."],
+    ["Semicolon", ";"],
+    ["Quote", "'"],
+    ["BracketLeft", "["],
+    ["BracketRight", "]"],
+    ["Backslash", "\\"],
+    ["Slash", "/"],
+    ["Backquote", "`"],
+    ["Minus", "-"],
+    ["Equal", "="],
+  ])
+
+  const physical = punctuation.get(event.code)
+
+  return physical ? [key, physical] : [key]
+}
+
 function signature(key: string, ctrl: boolean, meta: boolean, shift: boolean, alt: boolean) {
   const mask = (ctrl ? 1 : 0) | (meta ? 2 : 0) | (shift ? 4 : 0) | (alt ? 8 : 0)
 
   return `${key}:${mask}`
 }
 
-function signatureFromEvent(event: KeyboardEvent) {
-  return signature(keyFromKeyboardEvent(event), event.ctrlKey, event.metaKey, event.shiftKey, event.altKey)
+function signaturesFromEvent(event: KeyboardEvent) {
+  return keybindKeysFromKeyboardEvent(event).map((key) =>
+    signature(key, event.ctrlKey, event.metaKey, event.shiftKey, event.altKey),
+  )
 }
 
 export type KeybindConfig = string
@@ -232,10 +269,10 @@ export function parseKeybind(config: string): Keybind[] {
 }
 
 export function matchKeybind(keybinds: Keybind[], event: KeyboardEvent): boolean {
-  const eventKey = keyFromKeyboardEvent(event)
+  const eventKeys = keybindKeysFromKeyboardEvent(event)
 
   for (const kb of keybinds) {
-    const keyMatch = kb.key === eventKey
+    const keyMatch = eventKeys.includes(kb.key)
     const ctrlMatch = kb.ctrl === (event.ctrlKey || false)
     const metaMatch = kb.meta === (event.metaKey || false)
     const shiftMatch = kb.shift === (event.shiftKey || false)
@@ -262,6 +299,7 @@ function displayKeybindParts(kb: Keybind, t?: (key: KeyLabel) => string) {
 
   if (!kb.key) return parts
 
+  // oxlint-disable-next-line anti-slop/no-known-value-widening -- Parsed keybind strings index this display dictionary.
   const keys: Record<string, string> = {
     arrowup: "↑",
     arrowdown: "↓",
@@ -271,6 +309,7 @@ function displayKeybindParts(kb: Keybind, t?: (key: KeyLabel) => string) {
     plus: "+",
   }
 
+  // oxlint-disable-next-line anti-slop/no-known-value-widening -- Parsed keybind strings index this display dictionary.
   const named: Record<string, KeyLabel> = {
     backspace: "common.key.backspace",
     delete: "common.key.delete",
@@ -335,6 +374,7 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
     const settings = useSettings()
     const language = useLanguage()
 
+    // SAFETY: register populates this initially empty list exclusively with CommandRegistration entries.
     const [store, setStore] = createStore({
       registrations: [] as CommandRegistration[],
       suspendCount: 0,
@@ -488,26 +528,29 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
     const handleKeyDown = (event: KeyboardEvent) => {
       if (suspended() || dialog.active) return
 
-      const sig = signatureFromEvent(event)
-      const isPalette = palette().has(sig)
-      const option = resolveKeybindOption(keymap().get(sig), event)
-      const modified = event.ctrlKey || event.metaKey || event.altKey
-      const isTab = event.key === "Tab"
+      for (const sig of signaturesFromEvent(event)) {
+        const isPalette = palette().has(sig)
+        const option = resolveKeybindOption(keymap().get(sig), event)
+        const modified = event.ctrlKey || event.metaKey || event.altKey
+        const isTab = event.key === "Tab"
 
-      if (isEditableTarget(event.target) && !isPalette && !option?.editable && !modified && !isTab) return
+        if (isEditableTarget(event.target) && !isPalette && !option?.editable && !modified && !isTab) return
 
-      if (isPalette) {
+        if (isPalette) {
+          event.preventDefault()
+          event.stopPropagation()
+          showPalette()
+
+          return
+        }
+
+        if (!option) continue
         event.preventDefault()
         event.stopPropagation()
-        showPalette()
+        void option.onSelect?.("keybind")
 
         return
       }
-
-      if (!option) return
-      event.preventDefault()
-      event.stopPropagation()
-      void option.onSelect?.("keybind")
     }
 
     onMount(() => {
@@ -517,7 +560,9 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
     function register(cb: () => CommandOption[]): void
     function register(key: string, cb: () => CommandOption[]): void
     function register(key: string | (() => CommandOption[]), cb?: () => CommandOption[]) {
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Discriminates the public register overloads.
       const id = typeof key === "string" ? key : undefined
+      // oxlint-disable-next-line anti-slop/no-runtime-typeof -- Discriminates the public register overloads.
       const next = typeof key === "function" ? key : cb
 
       if (!next) return
