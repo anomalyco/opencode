@@ -11,6 +11,7 @@ import {
   untrack,
 } from "solid-js"
 import { createStore } from "solid-js/store"
+import { Icon } from "@opencode/ui/icon"
 import type { FileDiffInfo } from "@opencode/client/promise"
 import {
   createKeyed,
@@ -120,6 +121,13 @@ const setup: Setup<typeof Review> = (ctx) => {
     get title() {
       return count() > 0 ? ctx.plural("tab.count", count()) : ctx.t("tab.title")
     },
+    // The same icon as the empty changes view.
+    label: () => (
+      <div class="flex items-center gap-1.5">
+        <Icon name="review" size="small" />
+        <span>{tab.title}</span>
+      </div>
+    ),
     pinned: true,
     // Without focusable content the panel itself joins the tab order.
     get tabbable() {
