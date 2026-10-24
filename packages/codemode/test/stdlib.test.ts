@@ -2093,3 +2093,24 @@ describe("Uint8Array callback methods", () => {
     ).toEqual([0, 2, -1, 0, 2])
   })
 })
+
+describe("CodeMode whole-program function expression", () => {
+  // A function expression used as the whole program used to evaluate to a
+  // function object, cross the boundary as null, and run nothing.
+  test("invokes the function and returns its value", async () => {
+    expect(await value(`async () => 42`)).toBe(42)
+    expect(await value(`async () => { return "done" }`)).toBe("done")
+  })
+
+  test("keeps body-form programs working", async () => {
+    expect(await value(`return 7`)).toBe(7)
+  })
+})
+
+describe("CodeMode does not invoke incidental function values", () => {
+  // Only a bare function expression program is invoked; a function that is just
+  // a value must not run (it would execute code the program never asked for).
+  test("leaves a returned function value uncalled", async () => {
+    expect(await value(`const f = async () => 42; return f`)).toBe(null)
+  })
+})

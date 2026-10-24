@@ -4,7 +4,7 @@ import type { DataValue, Diagnostic, ResolvedExecutionLimits, Result } from "../
 import { toBoundary } from "../data.js"
 import { ToolRuntime } from "../tool-runtime.js"
 import { normalizeError } from "./errors.js"
-import type { Value } from "./objects.js"
+import { Callable, type Value } from "./objects.js"
 import { createBuiltins } from "./intrinsics.js"
 import { Pending } from "./promises.js"
 import { Interpreter } from "./interpreter.js"
@@ -43,7 +43,18 @@ export const executeProgram = <R>(
           // The main job holds the turn until leftover promise work is interrupted.
           return yield* pending.turn.hold(
             Effect.gen(function* () {
-              const result = (yield* toBoundary(ctx, yield* ctx.run(program))) ?? null
+              // A program that is exactly one function expression
+              // (`async () => {...}` / `async (tools) => {...}`) evaluates to a
+              // callable; invoke it so the code runs instead of silently
+              // resolving to null. Only this bare shape is invoked: a function
+              // that merely happens to be a value (`const f = ...; return f`,
+              // `return Promise.resolve(() => 5)`, `return Date`) must not be
+              // called, since that would run code the program never asked for.
+              const evaluated = yield* ctx.run(program)
+              const value = bareFunctionProgram(program) && evaluated instanceof Callable
+                ? yield* ctx.call(evaluated, null, [])
+                : evaluated
+              const result = (yield* toBoundary(ctx, value)) ?? null
               returned = { value: result, pending }
               const warnings = yield* pending.interrupt()
               return {
@@ -195,4 +206,18 @@ const boundOutput = (result: Result, maxOutputBytes: number): Result => {
         toolCalls: result.toolCalls,
       }
     : { ok: false, error: result.error, ...logsPart, truncated: true, toolCalls: result.toolCalls }
+}
+
+/**
+ * True when the whole program is one bare function expression (`async () => {...}`).
+ * Only that shape is invoked: a callable that merely appears as a returned value
+ * (e.g. `return Date`, `return Promise.resolve(() => 5)`) is left as-is.
+ */
+const bareFunctionProgram = (program: Program): boolean => {
+  if (program.body.length !== 1) return false
+  const statement = program.body[0]
+  if (statement.type !== "ExpressionStatement") return false
+  return (
+    statement.expression.type === "ArrowFunctionExpression" || statement.expression.type === "FunctionExpression"
+  )
 }
