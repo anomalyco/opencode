@@ -27,6 +27,13 @@ export type PromptPartRef = {
   index: number
 }
 
+export type PromptHistoryScope = "global" | "session"
+
+export type PromptHistoryEntry = {
+  sessionID: string | undefined
+  prompt: PromptInfo
+}
+
 export const emptyPrompt = (): PromptInfo => ({ text: "", files: [], agents: [], skills: [], pasted: [] })
 
 // Part ranges are textarea offsets, so shift by the measured offset rather than string length.
@@ -59,19 +66,42 @@ export function appendPrompt(prompt: PromptInfo, following: PromptInfo, widthMet
 
 export const MAX_HISTORY_ENTRIES = 50
 
+// Returns the next cursor position, or undefined when the move is not allowed: the composer
+// must hold the current item (or be empty) to start navigating, and the cursor never passes
+// the oldest entry or the newest one (0 is the empty draft).
+function nextIndex(items: PromptInfo[], index: number, direction: 1 | -1, input: string) {
+  const current = items.at(index)
+  if (!current) return undefined
+  if (current.text !== input && input.length) return undefined
+  const next = index + direction
+  if (Math.abs(next) > items.length || next > 0) return undefined
+  return next
+}
+
 export function parsePromptHistory(text: string) {
   return text
     .split("\n")
     .filter(Boolean)
     .map((line) => {
       try {
-        return parsePromptInfo(JSON.parse(line))
+        const value: unknown = JSON.parse(line)
+        if (!value || typeof value !== "object") return
+        // Persisted entries are flat (`{ ...prompt, sessionID? }`) so older readers keep
+        // working; only the in-memory entry is split.
+        const { sessionID, ...prompt } = value as Record<string, unknown>
+        const info = parsePromptInfo(prompt)
+        if (!info) return
+        return { sessionID: typeof sessionID === "string" ? sessionID : undefined, prompt: info }
       } catch {
         return undefined
       }
     })
-    .filter((line): line is PromptInfo => line !== undefined)
+    .filter((line): line is PromptHistoryEntry => line !== undefined)
     .slice(-MAX_HISTORY_ENTRIES)
+}
+
+export function serializeHistoryEntry(entry: PromptHistoryEntry): string {
+  return JSON.stringify({ ...entry.prompt, sessionID: entry.sessionID })
 }
 
 export function isDuplicateEntry(previous: PromptInfo | undefined, next: PromptInfo): boolean {
@@ -97,46 +127,66 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
 
       // Rewrite valid retained entries to self-heal corruption and enforce the limit.
       if (lines.length > 0)
-        writeText(historyPath, lines.map((line) => JSON.stringify(line)).join("\n") + "\n").catch(() => {})
+        writeText(historyPath, lines.map(serializeHistoryEntry).join("\n") + "\n").catch(() => {})
     })
 
-    const [store, setStore] = createStore({ index: 0, history: [] as PromptInfo[] })
+    const [store, setStore] = createStore({ index: 0, history: [] as PromptHistoryEntry[] })
+    const sessionIndices = new Map<string | undefined, number>()
 
     return {
-      move(direction: 1 | -1, input: string) {
-        if (!store.history.length) return undefined
-        const current = store.history.at(store.index)
-        if (!current) return undefined
-        if (current.text !== input && input.length) return
-        const next = store.index + direction
-        if (Math.abs(next) > store.history.length || next > 0) return
-        setStore("index", next)
-        if (next === 0) return emptyPrompt()
-        return store.history.at(next)
-      },
-      append(item: PromptInfo) {
-        const entry = structuredClone(unwrap(item))
-        if (isDuplicateEntry(store.history.at(-1), entry)) {
-          setStore("index", 0)
-          return
+      move(sessionID: string | undefined, direction: 1 | -1, input: string, scope: PromptHistoryScope) {
+        if (scope === "session") {
+          const items = store.history.filter((entry) => entry.sessionID === sessionID).map((entry) => entry.prompt)
+          const next = nextIndex(items, sessionIndices.get(sessionID) ?? 0, direction, input)
+          if (next === undefined) return undefined
+          sessionIndices.set(sessionID, next)
+          return next === 0 ? emptyPrompt() : items.at(next)
         }
+        const items = store.history.map((entry) => entry.prompt)
+        const next = nextIndex(items, store.index, direction, input)
+        if (next === undefined) return undefined
+        setStore("index", next)
+        return next === 0 ? emptyPrompt() : items.at(next)
+      },
+      append(sessionID: string | undefined, item: PromptInfo, scope: PromptHistoryScope) {
+        const entry = { sessionID, prompt: structuredClone(unwrap(item)) }
+        // Session scope dedupes against the session's own last prompt, because the recall
+        // pool is the session's history and not the file's; global scope keeps the old
+        // whole-file behavior.
+        const previous =
+          scope === "session"
+            ? store.history.findLast((existing) => existing.sessionID === sessionID)?.prompt
+            : store.history.at(-1)?.prompt
+        // Every submit returns every composer to its draft position, including the home
+        // composer that submitted under a session it just created.
+        sessionIndices.clear()
+        setStore("index", 0)
+        if (isDuplicateEntry(previous, entry.prompt)) return
         let trimmed = false
         setStore(
           produce((draft) => {
             draft.history.push(entry)
             if (draft.history.length > MAX_HISTORY_ENTRIES) {
-              draft.history = draft.history.slice(-MAX_HISTORY_ENTRIES)
+              // In session scope the active session's prompts are trimmed last: other
+              // sessions must not push them out of a scoped recall.
+              if (scope === "session") {
+                while (draft.history.length > MAX_HISTORY_ENTRIES) {
+                  const oldestOther = draft.history.findIndex((existing) => existing.sessionID !== sessionID)
+                  draft.history.splice(oldestOther === -1 ? 0 : oldestOther, 1)
+                }
+              } else {
+                draft.history = draft.history.slice(-MAX_HISTORY_ENTRIES)
+              }
               trimmed = true
             }
-            draft.index = 0
           }),
         )
 
         if (trimmed) {
-          writeText(historyPath, store.history.map((line) => JSON.stringify(line)).join("\n") + "\n").catch(() => {})
+          writeText(historyPath, store.history.map(serializeHistoryEntry).join("\n") + "\n").catch(() => {})
           return
         }
-        appendText(historyPath, JSON.stringify(entry) + "\n").catch(() => {})
+        appendText(historyPath, serializeHistoryEntry(entry) + "\n").catch(() => {})
       },
     }
   },

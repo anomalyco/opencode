@@ -206,6 +206,7 @@ export function Prompt(props: PromptProps) {
   const currentLocation = useLocation()
   const args = useArgs()
   const config = useConfig().data
+  const historyScope = createMemo(() => config.prompt?.history_scope ?? "global")
   const dialog = useDialog()
   const toast = useToast()
   const status = createMemo(() => data.session.status(props.sessionID ?? ""))
@@ -1040,7 +1041,7 @@ export function Prompt(props: PromptProps) {
               return
             }
 
-            const item = history.move(-1, input.plainText)
+            const item = history.move(props.sessionID, -1, input.plainText, historyScope())
             if (!item) return false
             input.setText(item.text)
             setStore("prompt", item)
@@ -1080,7 +1081,7 @@ export function Prompt(props: PromptProps) {
               return
             }
 
-            const item = history.move(1, input.plainText)
+            const item = history.move(props.sessionID, 1, input.plainText, historyScope())
             if (!item) return false
             input.setText(item.text)
             setStore("prompt", item)
@@ -1307,7 +1308,7 @@ export function Prompt(props: PromptProps) {
       })
       return true
     }
-    history.append(entry)
+    history.append(target, entry, historyScope())
     if (currentMode === "shell") {
       move.startSubmit()
       const send = () => client.api.session.shell({ sessionID: target, command: inputText })
@@ -1525,10 +1526,14 @@ export function Prompt(props: PromptProps) {
       (store.prompt.files?.length ?? 0) > 0 ||
       (store.prompt.agents?.length ?? 0) > 0
     ) {
-      history.append({
-        ...store.prompt,
-        mode: store.mode,
-      })
+      history.append(
+        props.sessionID,
+        {
+          ...store.prompt,
+          mode: store.mode,
+        },
+        historyScope(),
+      )
     }
     resetComposer()
   }

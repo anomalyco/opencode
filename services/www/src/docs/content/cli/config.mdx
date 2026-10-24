@@ -92,7 +92,8 @@ Configure mouse capture, scrolling, editor context, pastes, and prompt image pre
   "prompt": {
     "editor": true,
     "paste": "compact",
-    "image_preview": false
+    "image_preview": false,
+    "history_scope": "global"
   }
 }
 ```
@@ -107,8 +108,13 @@ Configure mouse capture, scrolling, editor context, pastes, and prompt image pre
 | `prompt.editor`            | boolean                         | Includes the active editor file or selection as prompt context.             |
 | `prompt.paste`             | `compact` or `full`             | Shows large pastes as compact placeholders or as full text.                  |
 | `prompt.image_preview`     | boolean                         | Shows image attachment previews above the prompt input.                     |
+| `prompt.history_scope`     | `global` or `session`           | Recalls prompts from every session or only the current session.             |
 
 </div>
+
+`prompt.history_scope` scopes recall, not storage: every session's prompts still persist in the
+shared `prompt-history.jsonl` in both modes. It is not a data-retention or privacy control,
+though with `session` another session can no longer recall a prompt entered in this one.
 
 ## Sessions
 
