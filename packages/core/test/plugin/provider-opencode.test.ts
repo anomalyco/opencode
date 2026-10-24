@@ -680,6 +680,50 @@ describe("OpencodePlugin", () => {
     ),
   )
 
+  it.live("applies provider compatibility from Console config and keeps model overrides", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() =>
+        Bun.serve({
+          port: 0,
+          fetch: () =>
+            Response.json({
+              providers: {
+                remote: {
+                  package: "aisdk:@ai-sdk/openai-compatible",
+                  settings: { baseURL: "https://gateway.audit.invalid/v1" },
+                  compatibility: { maxTokensField: "max_tokens" },
+                  models: {
+                    inherited: {},
+                    overridden: { compatibility: { maxTokensField: "max_completion_tokens" } },
+                  },
+                },
+              },
+            }),
+        }),
+      ),
+      (server) =>
+        Effect.gen(function* () {
+          const credentials = yield* Credential.Service
+          const providers = yield* Provider.Service
+          const models = yield* Model.Service
+          yield* credentials.create({
+            integrationID: Integration.ID.make("opencode"),
+            value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: server.url.origin } }),
+          })
+
+          yield* addPlugin()
+
+          const provider = required(yield* providers.get(Provider.ID.make("remote")))
+          expect(provider.compatibility).toMatchObject({ maxTokensField: "max_tokens" })
+          const inherited = required(yield* models.get(Provider.ID.make("remote"), Model.ID.make("inherited")))
+          expect(inherited.compatibility).toMatchObject({ maxTokensField: "max_tokens" })
+          const overridden = required(yield* models.get(Provider.ID.make("remote"), Model.ID.make("overridden")))
+          expect(overridden.compatibility).toMatchObject({ maxTokensField: "max_completion_tokens" })
+        }),
+      (server) => Effect.promise(() => server.stop(true)),
+    ),
+  )
+
   it.effect("refreshes hosted search with Console config, retains it on failure, and skips unchanged snapshots", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => {

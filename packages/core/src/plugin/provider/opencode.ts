@@ -289,6 +289,8 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Manag
           if (item.canonical !== undefined) provider.canonical = item.canonical
           if (item.name !== undefined) provider.name = item.name
           provider.package = item.package ?? provider.package
+          if (item.compatibility !== undefined)
+            provider.compatibility = { ...provider.compatibility, ...item.compatibility }
           provider.settings = Provider.mergeOverlay(
             withoutCredentials(provider.settings),
             withoutCredentials(item.settings),
