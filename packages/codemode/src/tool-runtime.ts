@@ -113,7 +113,16 @@ export const toolExpression = (path: string) =>
     .join("")
 
 export class ToolReference {
+  private readonly children = new Map<string, ToolReference>()
   constructor(readonly path: ReadonlyArray<string>) {}
+  /** One reference per path, so `tools.a === tools.a` holds like any other member read. */
+  child(key: string): ToolReference {
+    const existing = this.children.get(key)
+    if (existing !== undefined) return existing
+    const created = new ToolReference([...this.path, key])
+    this.children.set(key, created)
+    return created
+  }
 }
 
 // Dots in tool names are namespace separators; the last tool for a canonical path wins.

@@ -20,7 +20,7 @@ import {
   type Value,
 } from "./objects.js"
 import type { Interpreter } from "./interpreter.js"
-import { toPrimitiveString } from "./callback.js"
+import { toPrimitiveString, withPrimitives } from "./callback.js"
 import { formatValue } from "../stdlib/console.js"
 
 export const normalizeError = (error: unknown): Diagnostic => {
@@ -48,7 +48,9 @@ export const normalizeError = (error: unknown): Diagnostic => {
   if (error instanceof Throw) {
     const value = error.value
     if (value instanceof ErrorObj) {
-      return value.host ? normalizeError(value.host) : { kind: "ExecutionFailure", message: errorToString(value) }
+      return value.host
+        ? normalizeError(value.host)
+        : { kind: "ExecutionFailure", message: errorToString(get(value, "name"), get(value, "message")) }
     }
     let message: string
     if (containsRuntimeReference(value)) {
@@ -113,9 +115,7 @@ export const materialize = <R>(ctx: Interpreter<R>, thrown: unknown): Value => {
 }
 
 /** Error.prototype.toString: `name: message`, omitting whichever side is empty. */
-const errorToString = (self: Obj): string => {
-  const name = get(self, "name")
-  const message = get(self, "message")
+const errorToString = (name: Value, message: Value): string => {
   const shownName = name === undefined ? "Error" : coerceToString(name)
   const shownMessage = message === undefined ? "" : coerceToString(message)
   if (shownMessage === "") return shownName
@@ -179,7 +179,16 @@ export const errorGlobal = <R>(type: ErrorType, ctx: Interpreter<R>) => {
   })
   if (type === "Error") {
     methods(builtins, prototype, [
-      ["toString", 0, (thisValue) => errorToString(receiver(Obj, thisValue, "Error.prototype.toString"))],
+      [
+        "toString",
+        0,
+        (thisValue) => {
+          const self = receiver(Obj, thisValue, "Error.prototype.toString")
+          return withPrimitives(ctx, "string", [get(self, "name"), get(self, "message")], ([name, message]) =>
+            errorToString(name, message),
+          )
+        },
+      ],
     ])
     methods(builtins, ctor, [["isError", 1, (_, args) => args[0] instanceof ErrorObj]])
     return ctor

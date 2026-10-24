@@ -884,7 +884,6 @@ built-ins/AsyncGeneratorFunction/invoked-as-constructor-no-arguments.js  # TypeE
 built-ins/AsyncGeneratorFunction/invoked-as-function-multiple-arguments.js  # TypeError: The Function constructor is not supported; write the function inline.
 built-ins/AsyncGeneratorFunction/invoked-as-function-no-arguments.js  # TypeError: The Function constructor is not supported; write the function inline.
 built-ins/AsyncGeneratorFunction/invoked-as-function-single-argument.js  # TypeError: The Function constructor is not supported; write the function inline.
-built-ins/AsyncGeneratorFunction/prototype/not-callable.js  # Expected SameValue(«"function"», «"object"») to be true
 built-ins/AsyncGeneratorPrototype/next/this-val-not-async-generator.js  # TypeError: Cannot read properties of undefined (reading '…').
 built-ins/AsyncGeneratorPrototype/return/this-val-not-async-generator.js  # TypeError: Cannot read properties of undefined (reading '…').
 built-ins/AsyncGeneratorPrototype/throw/this-val-not-async-generator.js  # TypeError: Cannot read properties of undefined (reading '…').
@@ -900,7 +899,6 @@ built-ins/Date/prototype/toJSON/invoke-result.js  # TypeError: Date.prototype.to
 built-ins/Date/prototype/toJSON/to-primitive-value-of.js  # TypeError: Date.prototype.toJSON called on incompatible receiver a data object.
 built-ins/Date/prototype/toString/format.js  # Expected SameValue(«null», «null») to be false
 built-ins/Date/prototype/toString/negative-year.js  # Date.prototype.toString serializes year -1 to "-0001" Expected SameValue(«undefined», «"-0001"») to 
-built-ins/Error/prototype/toString/tostring-message-throws-toprimitive.js  # ToPrimitive(msg) called by ToString(msg) throws TypeError Expected a TypeError to be thrown but no e
 built-ins/Function/15.3.5-1gs.js  # Expected a TypeError to be thrown but no exception was thrown at all
 built-ins/Function/15.3.5-2gs.js  # Expected a TypeError to be thrown but no exception was thrown at all
 built-ins/Function/15.3.5.4_2-1gs.js  # Expected a TypeError to be thrown but no exception was thrown at all
@@ -931,7 +929,6 @@ built-ins/GeneratorFunction/invoked-as-constructor-no-arguments.js  # TypeError:
 built-ins/GeneratorFunction/invoked-as-function-multiple-arguments.js  # TypeError: The Function constructor is not supported; write the function inline.
 built-ins/GeneratorFunction/invoked-as-function-no-arguments.js  # TypeError: The Function constructor is not supported; write the function inline.
 built-ins/GeneratorFunction/invoked-as-function-single-argument.js  # TypeError: The Function constructor is not supported; write the function inline.
-built-ins/GeneratorFunction/prototype/not-callable.js  # Expected SameValue(«"function"», «"object"») to be true
 built-ins/GeneratorPrototype/throw/from-state-completed.js  # Expected a E but got a TypeError
 built-ins/GeneratorPrototype/throw/from-state-suspended-start.js  # Expected a E but got a TypeError
 built-ins/Iterator/from/return-method-returns-iterator-result.js  # Iterator next must be a function.
@@ -1468,12 +1465,10 @@ language/expressions/function/dstr/ary-init-iter-get-err-array-prototype.js  # E
 language/expressions/function/dstr/ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
 language/expressions/function/dstr/dflt-ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/expressions/function/dstr/dflt-ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
-language/expressions/generators/default-proto.js  # Expected SameValue(«object», «undefined») to be true
 language/expressions/generators/dstr/ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/expressions/generators/dstr/ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
 language/expressions/generators/dstr/dflt-ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/expressions/generators/dstr/dflt-ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
-language/expressions/generators/prototype-relation-to-function.js  # Expected SameValue(«object», «») to be true
 language/expressions/greater-than-or-equal/S11.8.4_A3.2_T1.2.js  # TypeError: Binary operators require data values.
 language/expressions/greater-than/S11.8.2_A3.2_T1.2.js  # TypeError: Binary operators require data values.
 language/expressions/in/S8.12.6_A2_T2.js  # TypeError: Robin cannot be constructed: user-defined constructors and classes are not supported. Cal
@@ -1559,7 +1554,6 @@ language/expressions/super/prop-expr-obj-key-err.js  # unsupported syntax Super
 language/expressions/super/prop-expr-obj-ref-strict.js  # unsupported syntax Super
 language/expressions/super/prop-expr-obj-unresolvable.js  # Expected SameValue(«SyntaxError», «ReferenceError») to be true
 language/expressions/tagged-template/constructor-invocation.js  # The called value cannot be constructed: user-defined constructors and classes are not supported.
-language/expressions/tagged-template/template-object-frozen-strict.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/expressions/this/11.1.1-1.js  # Expected SameValue(«undefined», «undefined») to be false
 language/expressions/unary-minus/S11.4.7_A3_T5.js  # TypeError: Unary operators require data values.
 language/expressions/unary-plus/S11.4.6_A3_T5.js  # TypeError: Unary operators require data values.
@@ -1588,7 +1582,6 @@ language/statements/async-generator/dstr/dflt-ary-ptrn-elem-id-iter-val-array-pr
 language/statements/async-generator/return-undefined-implicit-and-explicit.js  # Actual ["tick 1", "tick 2", "g1 ret", "g2 ret", "g3 ret", "g4 ret"] and expected ["tick 1", "g1 ret"
 language/statements/const/dstr/ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/const/dstr/ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
-language/statements/for-in/S12.6.4_A7_T2.js  # for...in visits keys deleted during the loop
 language/statements/for-in/order-enumerable-shadowed.js  # Object.create property descriptors are not supported; assign the fields after creating the object.
 language/statements/for-in/S12.6.4_A6.1.js  # TypeError: FACTORY cannot be constructed: user-defined constructors and classes are not supported. C
 language/statements/for-in/S12.6.4_A6.js  # TypeError: FACTORY cannot be constructed: user-defined constructors and classes are not supported. C
@@ -1660,12 +1653,10 @@ language/statements/function/dstr/ary-init-iter-get-err-array-prototype.js  # Ex
 language/statements/function/dstr/ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
 language/statements/function/dstr/dflt-ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/function/dstr/dflt-ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
-language/statements/generators/default-proto.js  # generator functions have no GeneratorFunction.prototype
 language/statements/generators/dstr/ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/generators/dstr/ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
 language/statements/generators/dstr/dflt-ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/generators/dstr/dflt-ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
-language/statements/generators/prototype-relation-to-function.js  # generator functions have no GeneratorFunction.prototype
 language/statements/generators/restricted-properties.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/labeled/value-await-non-module.js  # Failed to parse TypeScript: Expression expected.
 language/statements/let/dstr/ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all

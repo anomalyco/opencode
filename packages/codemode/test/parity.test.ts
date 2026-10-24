@@ -1382,7 +1382,7 @@ describe("Object.getPrototypeOf and Object.create", () => {
     expect((await error(`Object.getPrototypeOf(Symbol.iterator)`)).message).toContain("cannot convert a symbol")
   })
 
-  test("Object.create links the prototype: inherited reads, in, and own-only keys", async () => {
+  test("Object.create links the prototype: inherited reads, in, own-only keys, and for...in", async () => {
     expect(
       await value(`
         const p = { greet(name) { return "hi " + name }, a: 1 }
@@ -1392,7 +1392,7 @@ describe("Object.getPrototypeOf and Object.create", () => {
         for (const key in c) seen.push(key)
         return ["greet" in c, Object.keys(c), c.hasOwnProperty("a"), c.a, c.greet(c.name), Object.getPrototypeOf(c) === p, Object.getPrototypeOf(Object.create(null)), seen]
       `),
-    ).toEqual([true, ["name"], false, 1, "hi x", true, null, ["name"]])
+    ).toEqual([true, ["name"], false, 1, "hi x", true, null, ["name", "greet", "a"]])
   })
 
   test("Object.create rejects non-object prototypes and property descriptors", async () => {
@@ -1982,5 +1982,81 @@ describe("WeakMap and WeakSet", () => {
     expect((await error(`WeakMap()`)).message).toContain("new")
     expect((await error(`WeakMap.prototype.get.call(new Map(), {})`)).message).toContain("incompatible receiver")
     expect((await error(`structuredClone(new WeakSet())`)).message).toContain("DataCloneError")
+  })
+})
+
+describe("small language leftovers", () => {
+  test("for...in walks the prototype chain and skips keys deleted before their turn", async () => {
+    expect(
+      await value(`
+        const o = Object.create({ a: 1, shadowed: 1 })
+        o.b = 2
+        o.shadowed = 3
+        const keys = []
+        for (const k in o) keys.push(k)
+        const live = { a: 1, b: 2, c: 3 }
+        const seen = []
+        for (const k in live) { seen.push(k); delete live.b; live.z = 1 }
+        const none = []
+        for (const k in []) none.push(k)
+        for (const k in new TypeError("x")) none.push(k)
+        return [keys, seen, none]
+      `),
+    ).toEqual([["b", "shadowed", "a"], ["a", "c"], []])
+  })
+
+  test("tagged template objects are frozen", async () => {
+    expect(
+      await value(`
+        const tag = (s) => s
+        const f = () => tag\`a\${1}b\`
+        return [f() === f(), Object.isFrozen(f()), Object.isFrozen(f().raw)]
+      `),
+    ).toEqual([true, true, true])
+    expect((await error("const tag = (s) => s; tag`a`[0] = 'x'")).message).toContain("read only")
+  })
+
+  test("Array.prototype.toString delegates to join", async () => {
+    expect(
+      await value(`
+        const a = [1, 2]
+        a.join = () => "j"
+        const b = [1]
+        b.join = 5
+        return [a + "", String(a), \`\${a}\`, b.toString(), Array.prototype.toString.call([3, [4]])]
+      `),
+    ).toEqual(["j", "j", "j", "[object Array]", "3,4"])
+  })
+
+  test("Error.prototype.toString converts object name and message", async () => {
+    expect(
+      await value(`
+        const e = new Error("m")
+        e.message = { toString() { return "obj" } }
+        e.name = { valueOf() { return "N" }, toString() { return "T" } }
+        return [String(e), Error.prototype.toString.call({ name: "", message: "m" }), Error.prototype.toString.call({})]
+      `),
+    ).toEqual(["T: obj", "m", "Error"])
+    expect(
+      (await error(`const e = new Error(); e.message = { toString() { throw new RangeError("r") } }; String(e)`))
+        .message,
+    ).toContain("r")
+  })
+
+  test("generator functions inherit from GeneratorFunction.prototype", async () => {
+    expect(
+      await value(`
+        function* g() {}
+        async function* ag() {}
+        const GFP = Object.getPrototypeOf(g)
+        g.prototype = null
+        return [
+          typeof GFP, GFP === Function.prototype, Object.getPrototypeOf(GFP) === Function.prototype,
+          GFP.prototype.constructor === GFP, Object.getPrototypeOf(ag) === GFP, typeof g.bind,
+          Object.getPrototypeOf(g()) === GFP.prototype,
+        ]
+      `),
+    ).toEqual(["object", false, true, true, false, "function", true])
+    expect((await error(`function* g() {} Object.getPrototypeOf(g)()`)).message).toContain("not a function")
   })
 })
