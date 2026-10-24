@@ -378,6 +378,8 @@ export function reduceSessionRows(
     if (message.type !== "assistant") {
       if (message.type === "idle") {
         flushTurn(rows)
+        if (message.error?.type === "output-limit")
+          rows.push({ entry: { type: "message", messageID: message.id }, closesPrevious: true })
         return rows
       }
       if (message.type === "synthetic" && !message.description?.trim()) return rows

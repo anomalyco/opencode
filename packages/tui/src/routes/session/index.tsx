@@ -1960,6 +1960,20 @@ function SessionMessageView(props: { message: SessionMessageInfo }) {
 
 function ExecutionError(props: { error: NonNullable<Extract<SessionMessageInfo, { type: "idle" }>["error"]> }) {
   const theme = useTheme()
+  if (props.error.type === "output-limit")
+    return (
+      <box paddingLeft={3}>
+        <text fg={theme.text.feedback.error.base}>
+          Error: Model repeatedly reached its output token limit before producing a complete response.
+        </text>
+        <text fg={theme.text.feedback.warning.base}>
+          Tip: Reduce reasoning effort or increase output tokens.
+        </text>
+        <text fg={theme.text.feedback.warning.base}>
+          If context is near its limit, run /compact.
+        </text>
+      </box>
+    )
   return (
     <box paddingLeft={3}>
       <text fg={theme.text.feedback.error.base}>Error: {errorMessage(props.error)}</text>
