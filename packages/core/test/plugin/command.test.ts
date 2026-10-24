@@ -12,7 +12,7 @@ import { SessionInbox } from "@opencode/schema/session-inbox"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { DateTime } from "effect"
-import { emptyMcpLayer } from "../fixture/mcp"
+import { emptyMcp, emptyMcpLayer } from "../fixture/mcp"
 import { location } from "../fixture/location"
 import { testEffect } from "../lib/effect"
 import { host } from "./host"
@@ -33,6 +33,89 @@ const it = testEffect(
 )
 
 describe("CommandPlugin.Plugin", () => {
+  for (const fixture of [
+    {
+      name: "preserves embedded text resources alongside instructions",
+      messages: [
+        { role: "user", content: { type: "text", text: "Review this policy:" } },
+        {
+          role: "user",
+          content: {
+            type: "resource",
+            resource: { uri: "policy://review", mimeType: "application/json", text: '{"region":"EU"}' },
+          },
+        },
+      ],
+      text: 'Review this policy:\n{"region":"EU"}',
+    },
+    {
+      name: "preserves prompts consisting only of an embedded text resource",
+      messages: [
+        {
+          role: "user",
+          content: {
+            type: "resource",
+            resource: { uri: "policy://review", mimeType: "text/plain", text: "Keep production data in the EU." },
+          },
+        },
+      ],
+      text: "Keep production data in the EU.",
+    },
+  ] satisfies { name: string; messages: Mcp.PromptResult["messages"]; text: string }[]) {
+    it.effect(fixture.name, () =>
+      Effect.gen(function* () {
+        const command = yield* Command.Service
+        const prompts: string[] = []
+        yield* CommandPlugin.Plugin.effect(
+          host({
+            command: {
+              list: () => Effect.die("unused command.list"),
+              transform: command.transform,
+              reload: command.reload,
+            },
+            session: {
+              prompt: (input) =>
+                Effect.sync(() => {
+                  prompts.push(input.text)
+                  return SessionInbox.User.make({
+                    id: SessionMessage.ID.make("msg_test"),
+                    sessionID: input.sessionID,
+                    time: { created: DateTime.makeUnsafe(0) },
+                    type: "user",
+                    payload: { text: input.text },
+                    delivery: input.delivery ?? "steer",
+                  })
+                }),
+            },
+          }),
+        ).pipe(
+          Effect.provideService(
+            Location.Service,
+            Location.Service.of(location({ directory }, { projectDirectory: project })),
+          ),
+          Effect.provideService(
+            Mcp.Service,
+            Mcp.Service.of({
+              ...emptyMcp,
+              prompts: () => Effect.succeed([{ server: Mcp.ServerName.make("docs"), name: "review" }]),
+              prompt: () =>
+                Effect.succeed({ server: Mcp.ServerName.make("docs"), name: "review", messages: fixture.messages }),
+            }),
+          ),
+        )
+        yield* command.execute({
+          name: "docs:review",
+          invocation: {
+            sessionID: Session.ID.make("ses_test"),
+            prompt: { text: "" },
+            delivery: "queue",
+          },
+        })
+        expect(prompts).toEqual([fixture.text])
+      }),
+    )
+  }
+
   it.effect("registers built-in init and review commands", () =>
     Effect.gen(function* () {
       const command = yield* Command.Service
