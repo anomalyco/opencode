@@ -630,6 +630,8 @@ The configuration key becomes the provider prefix and each `models` key becomes 
 }
 ```
 
+A [LiteLLM proxy](/models#litellm) needs no model list. OpenCode discovers its models from `/v1/models`.
+
 ## Errors
 
 Provider and model errors usually identify the failed stage. Check the server process environment and the exact model

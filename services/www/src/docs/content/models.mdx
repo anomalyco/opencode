@@ -309,13 +309,14 @@ for Alibaba Model Studio models, which accept the same markers but ignore them o
 
 ## Local
 
-OpenCode automatically discovers models from Ollama, LM Studio, and vLLM at their default local addresses. You can also
-configure any OpenAI-compatible server manually.
+OpenCode automatically discovers models from Ollama, LM Studio, vLLM, and LiteLLM at their default local addresses. You
+can also configure any OpenAI-compatible server manually.
 
 ```text
 ollama/gemma3:4b
 lmstudio/google/gemma-4-26b-a4b
 vllm/Qwen/Qwen3-Coder-30B-A3B-Instruct
+litellm/gpt-6-luna
 ```
 
 ### Ollama
@@ -420,6 +421,64 @@ For another endpoint or an authenticated server, set its OpenAI-compatible URL:
 - Disable discovery with `"plugins": ["-opencode.provider.vllm"]`.
 - Path-prefixed proxies are supported. For example, `https://example.com/vllm/v1` checks `/vllm/health` and discovers
   `/vllm/v1/models`.
+
+### LiteLLM
+
+With a [LiteLLM proxy](https://docs.litellm.ai/docs/proxy/quick_start) listening at `http://127.0.0.1:4000`, select a
+model by the name in your proxy configuration with the `litellm` provider ID:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "litellm/gpt-6-luna",
+}
+```
+
+OpenCode first checks `/health/liveliness`, so another OpenAI-compatible server on port 4000 is not shown as LiteLLM.
+Then it refreshes `/v1/models` in the background. It uses `max_input_tokens` as the context limit when the proxy
+reports it, and it excludes models whose `mode` is not `chat`.
+
+Discovered models advertise text input and output, but not vision or tools. `/v1/models` does not report what the model
+behind each name supports. To use tools and images with a model, set its capabilities. Discovery keeps this setting:
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "litellm": {
+      "models": {
+        "gpt-6-luna": {
+          "capabilities": {
+            "tools": true,
+            "input": ["text", "image"],
+            "output": ["text"],
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+For another host or a proxy with [virtual keys](https://docs.litellm.ai/docs/proxy/virtual_keys), set its URL and key:
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "litellm": {
+      "settings": {
+        "baseURL": "https://litellm.example.com/v1",
+        "apiKey": "{env:LITELLM_API_KEY}",
+      },
+    },
+  },
+}
+```
+
+- Omit `apiKey` when the proxy does not require authentication. A proxy that requires a key is not discovered without
+  one.
+- Disable discovery with `"plugins": ["-opencode.provider.litellm"]`.
+- Path-prefixed proxies are supported. For example, `https://example.com/litellm/v1` checks
+  `/litellm/health/liveliness` and discovers `/litellm/v1/models`.
 
 ### Compatible
 
