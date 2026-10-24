@@ -24,6 +24,7 @@ function fixture(
   releasePackage = name,
   formula?: string,
   executableOverride?: (root: string, home: string) => Effect.Effect<string, PlatformError.PlatformError, FileSystem.FileSystem>,
+  link?: FileSystem.FileSystem["link"],
 ) {
   return Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem
@@ -90,6 +91,7 @@ function fixture(
       Effect.provideService(Global.Service, global),
       Effect.provideService(FileSystem.FileSystem, {
         ...fs,
+        link: link ?? fs.link,
         remove: (target, options) =>
           failCleanup && target.startsWith(global.cache)
             ? Effect.fail(
@@ -410,6 +412,125 @@ const links = (directory: string) =>
   existsSync(directory) ? readdirSync(directory).filter((name) => name.startsWith("opencode-")) : []
 const upgradeLinks = (directory: string) =>
   links(directory).filter((name) => name.startsWith(`opencode-upgrade-${process.pid}-`))
+
+windows("windows refuses an upgrade before package replacement when image retention fails", () =>
+  Effect.gen(function* () {
+    const test = yield* fixture()
+    // A file in place of the retention directory makes the real hard-link operation fail.
+    yield* test.fs.writeFileString(test.global.cache, "blocked")
+    const result = yield* test.updater.upgrade("npm", "2.3.4").pipe(Effect.flip, Effect.option)
+    expect(test.commands).toEqual([])
+    expect(yield* test.fs.readFileString(test.executable)).toBe("binary")
+    expect(result._tag).toBe("Some")
+    if (result._tag === "Some") {
+      expect(result.value).toBeInstanceOf(Updater.UpgradeError)
+      if (result.value instanceof Updater.UpgradeError) expect(result.value.retry).toContain("separate terminal")
+    }
+  }),
+)
+
+windows("windows refuses package removal when its temporary image retention fails", () =>
+  Effect.gen(function* () {
+    const test = yield* fixture()
+    yield* test.fs.writeFileString(test.global.tmp, "blocked")
+    const removal = test.updater.removal("npm")
+    if (!removal) return yield* Effect.die("Expected npm removal command")
+    const result = yield* removal.run.pipe(Effect.flip, Effect.option)
+    expect(test.commands).toEqual([])
+    expect(yield* test.fs.readFileString(test.executable)).toBe("binary")
+    expect(result._tag).toBe("Some")
+  }),
+)
+;(["curl", "winget"] as const).forEach((method) => {
+  ;(["EPERM", "EXDEV"] as const).forEach((code) => {
+    windows("windows stops the " + method + " installer when image retention fails with " + code, () =>
+      Effect.gen(function* () {
+        const test = yield* fixture(
+          () => ({}),
+          "@opencode/cli",
+          false,
+          "@opencode/cli",
+          undefined,
+          (root, home) =>
+            Effect.succeed(
+              method === "curl"
+                ? path.join(home, ".opencode", "bin", "opencode.exe")
+                : path.join(root, "WinGet", "Packages", "Anomaly.OpenCode_test", "opencode.exe"),
+            ),
+          () =>
+            Effect.fail(
+              PlatformError.systemError({
+                _tag: "Unknown",
+                module: "FileSystem",
+                method: "link",
+                cause: Object.assign(new Error(code), { code }),
+              }),
+            ),
+        )
+        const error = yield* test.updater.upgrade(method, "2.3.4").pipe(Effect.flip)
+        expect(error).toBeInstanceOf(Updater.UpgradeError)
+        if (error instanceof Updater.UpgradeError) {
+          expect(error.retry).toContain(method === "curl" ? "OpenCode installer" : "package-manager")
+          expect(error.retry).toContain("separate terminal")
+        }
+        // Curl may download its script, but neither installation method may replace an unprotected image.
+        expect(test.commands.map((command) => command[0])).toEqual(method === "curl" ? ["curl"] : [])
+        expect(yield* test.fs.readFileString(test.executable)).toBe("binary")
+      }),
+    )
+  })
+})
+;[
+  { fallback: true, previous: false, exitCode: 0 },
+  { fallback: false, previous: false, exitCode: 0 },
+  { fallback: false, previous: true, exitCode: 0 },
+  { fallback: true, previous: false, exitCode: 1 },
+].forEach(({ fallback, previous, exitCode }) => {
+  windows(
+    "windows returns retained-image cleanup information after uninstall: fallback=" +
+      fallback +
+      ", previous=" +
+      previous +
+      ", exit=" +
+      exitCode,
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem
+        const test = yield* fixture(
+          () => ({ exitCode }),
+          "@opencode/cli",
+          false,
+          "@opencode/cli",
+          undefined,
+          undefined,
+          (source, target) =>
+            fallback && path.basename(path.dirname(target)) === "tmp"
+              ? Effect.fail(
+                  PlatformError.systemError({
+                    _tag: "Unknown",
+                    module: "FileSystem",
+                    method: "link",
+                    cause: Object.assign(new Error("cross-device link"), { code: "EXDEV" }),
+                  }),
+                )
+              : fs.link(source, target),
+        )
+        const directory = path.join(path.dirname(test.global.home), ".opencode", "retained-images")
+        yield* fs.makeDirectory(directory, { recursive: true })
+        yield* fs.writeFileString(path.join(directory, "unrelated.txt"), "keep")
+        // A service may have used fallback storage even when uninstall can use the ordinary tmp directory.
+        if (previous) yield* fs.writeFileString(path.join(directory, "opencode-service-4-aa.exe"), "service image")
+        const removal = test.updater.removal("npm")
+        if (!removal) return yield* Effect.die("Expected npm removal command")
+        const result = yield* removal.run.pipe(Effect.exit)
+        expect(result._tag).toBe(exitCode === 0 ? "Success" : "Failure")
+        // The caller owns user-visible cleanup instructions; diagnostic logs cannot carry this contract.
+        if (result._tag === "Success")
+          expect(result.value.retainedDirectory).toBe(fallback || previous ? directory : undefined)
+        expect(test.commands).toEqual([["npm", "uninstall", "--global", "@opencode/cli"]])
+      }),
+  )
+})
 
 windows("windows keeps a second link to the running binary in the cache while the installer runs", () =>
   Effect.gen(function* () {

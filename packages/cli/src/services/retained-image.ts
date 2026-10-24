@@ -16,25 +16,56 @@ export const retain = Effect.fnUntraced(function* (directory: string, role: "ser
   const fs = yield* FileSystem.FileSystem
   return yield* Effect.acquireRelease(
     Effect.gen(function* () {
-      yield* fs.makeDirectory(directory, { recursive: true }).pipe(Effect.ignore)
-      const names = yield* fs.readDirectory(directory).pipe(Effect.orElseSucceed((): string[] => []))
-      yield* Effect.forEach(names, (name) =>
-        Effect.gen(function* () {
-          const pid = Number(pattern.exec(name)?.[1])
-          if (!pid || (yield* alive(pid))) return
-          yield* fs.remove(path.join(directory, name)).pipe(Effect.ignore)
-        }),
-      )
-      const target = path.join(directory, `opencode-${role}-${process.pid}-${randomBytes(4).toString("hex")}.exe`)
       const executable = yield* fs.realPath(process.execPath).pipe(Effect.orElseSucceed(() => process.execPath))
-      return yield* fs.link(executable, target).pipe(
-        Effect.as(target),
+      const link = (directory: string) =>
+        Effect.gen(function* () {
+          yield* fs.makeDirectory(directory, { recursive: true }).pipe(Effect.ignore)
+          const names = yield* fs.readDirectory(directory).pipe(Effect.orElseSucceed((): string[] => []))
+          yield* Effect.forEach(names, (name) =>
+            Effect.gen(function* () {
+              const pid = Number(pattern.exec(name)?.[1])
+              if (!pid || (yield* alive(pid))) return
+              yield* fs.remove(path.join(directory, name)).pipe(Effect.ignore)
+            }),
+          )
+          const target = path.join(directory, `opencode-${role}-${process.pid}-${randomBytes(4).toString("hex")}.exe`)
+          return yield* fs.link(executable, target).pipe(Effect.as(target))
+        })
+      return yield* link(directory).pipe(
+        Effect.catch((error) => {
+          const cause = error.reason.cause
+          const fallback = fallbackDirectory(executable)
+          if (
+            process.platform !== "win32" ||
+            !(cause instanceof Error) ||
+            !("code" in cause) ||
+            cause.code !== "EXDEV" ||
+            !fallback
+          )
+            return Effect.fail(error)
+          return link(fallback)
+        }),
         Effect.tapError((cause) => Effect.logWarning("could not link the running binary", { cause })),
         Effect.orElseSucceed(() => undefined),
       )
     }),
     // The last link of a still-running image refuses deletion; a later sweep removes it.
     (target) => (target === undefined ? Effect.void : fs.remove(target).pipe(Effect.ignore)),
+  )
+})
+
+/** Find package fallback images, including those retained before this operation chose ordinary tmp. */
+export const remaining = Effect.fnUntraced(function* (executable: string) {
+  const directory = fallbackDirectory(executable)
+  if (!directory) return undefined
+  const fs = yield* FileSystem.FileSystem
+  return yield* fs.readDirectory(directory).pipe(
+    Effect.map((names) => (names.some((name) => pattern.test(name)) ? directory : undefined)),
+    Effect.catch((error) =>
+      error.reason._tag === "NotFound"
+        ? Effect.succeed(undefined)
+        : Effect.logWarning("could not inspect retained images", { cause: error }).pipe(Effect.as(directory)),
+    ),
   )
 })
 
@@ -71,3 +102,10 @@ const alive = (pid: number) =>
     Effect.as(true),
     Effect.catch((cause) => Effect.succeed(!(cause instanceof Error && "code" in cause && cause.code === "ESRCH"))),
   )
+
+function fallbackDirectory(executable: string) {
+  const modules = executable.toLowerCase().indexOf(`${path.sep}node_modules${path.sep}`)
+  if (modules === -1) return undefined
+  // Keep links outside the first node_modules, including all native optional dependencies.
+  return path.join(executable.slice(0, modules + 1), ".opencode", "retained-images")
+}
