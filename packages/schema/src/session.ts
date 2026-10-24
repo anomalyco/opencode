@@ -102,7 +102,10 @@ export const ListFilter = Schema.Struct({
   ...ListFilterFields,
   directory: AbsolutePath.pipe(Schema.optional),
   project: Project.ID.pipe(Schema.optional),
-  subpath: RelativePath.pipe(Schema.optional),
+  subpath: RelativePath.pipe(Schema.optional).annotate({
+    description:
+      "Match a session's subpath exactly, relative to the project root. Empty or omitted applies no path filter. Ignored unless `project` is also set.",
+  }),
 }).annotate({ identifier: "Session.ListFilter" })
 export interface ListFilter extends Schema.Schema.Type<typeof ListFilter> {}
 
