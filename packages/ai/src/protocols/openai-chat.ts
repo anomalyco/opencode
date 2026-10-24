@@ -25,6 +25,7 @@ import {
 import { classifyProviderFailure } from "../provider-error.js"
 import { isRecord, JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
 import { cacheControl } from "./utils/cache.js"
+import { MistralToolID } from "./utils/mistral-tool-id.js"
 import { OpenResponsesOptions } from "./utils/open-responses-options.js"
 import { Lifecycle } from "./utils/lifecycle.js"
 import { ToolStream } from "./utils/tool-stream.js"
@@ -575,15 +576,12 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, options:
       modelID.includes("deepseek"))
   const reasoningField = request.model.compatibility?.reasoningField
   const mistral = ["mistral", "devstral", "codestral", "pixtral", "mixtral"].some((family) => modelID.includes(family))
+  const mistralToolID = mistral ? MistralToolID.normalizer(request) : undefined
   const lowering = {
     ...options,
     providerMetadataKey: request.model.route.providerMetadataKey ?? request.model.provider,
     toolCallID: (id: string) => {
-      if (mistral)
-        return id
-          .replace(/[^a-zA-Z0-9]/g, "")
-          .slice(0, 9)
-          .padEnd(9, "0")
+      if (mistralToolID) return mistralToolID(id)
       if (modelID.includes("claude")) return id.replace(/[^a-zA-Z0-9_-]/g, "_")
       if (request.model.provider === "openai" || request.model.provider === "azure" || modelID.startsWith("openai/"))
         return id.slice(0, 40)

@@ -5,6 +5,7 @@ import { LLM, LLMRequest, Message, ToolCallPart, ToolChoice, ToolDefinition } fr
 import { Auth, LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import * as OpenAICompatibleChat from "../../src/protocols/openai-compatible-chat.js"
+import { MistralToolID } from "../../src/protocols/utils/mistral-tool-id.js"
 import { it } from "../lib/effect.js"
 import { dynamicResponse, fixedResponse } from "../lib/http.js"
 import { sseEvents } from "../lib/sse.js"
@@ -234,11 +235,16 @@ describe("OpenAI-compatible Chat route", () => {
     Effect.gen(function* () {
       const longID = `call_${"a".repeat(48)}`
       const cases = [
-        { provider: "custom", model: "mistral-small", id: "toolu_01CBhTTz95qkd9LJMdC9sf8t", expected: "toolu01CB" },
-        { provider: "custom", model: "devstral-small", id: "abc", expected: "abc000000" },
-        { provider: "custom", model: "codestral-latest", id: "toolu_01CBhTTz95", expected: "toolu01CB" },
-        { provider: "custom", model: "pixtral-large", id: "toolu_01CBhTTz95", expected: "toolu01CB" },
-        { provider: "custom", model: "open-mixtral-8x22b", id: "toolu_01CBhTTz95", expected: "toolu01CB" },
+        {
+          provider: "custom",
+          model: "mistral-small",
+          id: "toolu_01CBhTTz95qkd9LJMdC9sf8t",
+          expected: MistralToolID.hash("toolu_01CBhTTz95qkd9LJMdC9sf8t"),
+        },
+        { provider: "custom", model: "devstral-small", id: "abc", expected: MistralToolID.hash("abc") },
+        { provider: "custom", model: "codestral-latest", id: "toolu_01CBhTTz95", expected: MistralToolID.hash("toolu_01CBhTTz95") },
+        { provider: "custom", model: "pixtral-large", id: "toolu_01CBhTTz95", expected: MistralToolID.hash("toolu_01CBhTTz95") },
+        { provider: "custom", model: "open-mixtral-8x22b", id: "toolu_01CBhTTz95", expected: MistralToolID.hash("toolu_01CBhTTz95") },
         { provider: "gateway", model: "anthropic/claude-sonnet-4", id: "call|item/+", expected: "call_item__" },
         { provider: "gateway", model: "openai/gpt-4o", id: longID, expected: longID.slice(0, 40) },
         { provider: "custom", model: "ordinary-model", id: "call|item/+", expected: "call|item/+" },
@@ -265,6 +271,33 @@ describe("OpenAI-compatible Chat route", () => {
           ])
         }),
       )
+    }),
+  )
+
+  it.effect("keeps GLM-style tool call IDs distinct for mistral-family models", () =>
+    Effect.gen(function* () {
+      const first = "chatcmpl-tool-99557ad68a6e6efc"
+      const second = "chatcmpl-tool-1234567890abcdef"
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: OpenAICompatibleChat.route
+            .with({ provider: "custom", endpoint: { baseURL: "https://api.custom.test/v1" } })
+            .model({ id: "mistral/zai-glm-5-3-flash" }),
+          messages: [
+            Message.assistant(
+              [first, second].map((id) => ToolCallPart.make({ id, name: "lookup", input: {} })),
+            ),
+            Message.tool({ id: first, name: "lookup", result: { type: "content", value: [] } }),
+            Message.tool({ id: second, name: "lookup", result: { type: "content", value: [] } }),
+          ],
+        }),
+      )
+      expect(prepared.body.messages).toMatchObject([
+        { role: "assistant", tool_calls: [{ id: MistralToolID.hash(first) }, { id: MistralToolID.hash(second) }] },
+        { role: "tool", tool_call_id: MistralToolID.hash(first) },
+        { role: "tool", tool_call_id: MistralToolID.hash(second) },
+      ])
+      expect(MistralToolID.hash(first)).not.toBe(MistralToolID.hash(second))
     }),
   )
 
