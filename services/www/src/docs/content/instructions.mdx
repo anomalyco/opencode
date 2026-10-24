@@ -18,6 +18,11 @@ Commit project instruction files so everyone working in the repository receives 
 
 Place `AGENTS.md` in the directory where its guidance should apply. OpenCode loads the global file followed by every `AGENTS.md` from the current workspace directory toward the home directory. For workspaces outside the home directory, it stops at the project root.
 
+The global file is `$XDG_CONFIG_HOME/opencode/AGENTS.md` when the server starts
+with `XDG_CONFIG_HOME` set, or `~/.config/opencode/AGENTS.md` otherwise, unless
+`OPENCODE_CONFIG_DIR` overrides the directory. This
+applies to CLI and desktop sessions using that server; see [global configuration](/config#locations).
+
 ```text
 ~/.config/opencode/AGENTS.md
 ~/code/my-project/AGENTS.md

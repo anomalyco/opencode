@@ -68,6 +68,16 @@ Put user settings for every project in the global configuration:
 ~/.config/opencode/opencode.json(c)
 ```
 
+Set `XDG_CONFIG_HOME` in the environment of the OpenCode server process to use
+`$XDG_CONFIG_HOME/opencode/opencode.json(c)` instead. The same directory holds
+the global [`AGENTS.md`](/instructions#scope). `OPENCODE_CONFIG_DIR`, when set,
+takes precedence and names the configuration directory directly.
+
+This also applies to the server used by the desktop app. Make the variable
+available when that server starts; changing a terminal's environment does not
+change an already running server. For a remote connection, set it on the remote
+server rather than the client.
+
 Put project settings in either of these files:
 
 ```text
