@@ -175,12 +175,12 @@ function createSync() {
   // that window are already covered, since the reload has not read anything yet.
   type Pending = { promise: Promise<void>; invalidated: boolean; started: boolean }
   const state = new Map<string, true | Pending>()
-  const start = (key: string, load: () => Promise<void>, wait?: Promise<void>) => {
+  const start = (key: string, load: (current: () => boolean) => Promise<void>, wait?: Promise<void>) => {
     const entry: Pending = { promise: Promise.resolve(), invalidated: false, started: !wait }
     state.set(key, entry)
     const run = () => {
       entry.started = true
-      return load()
+      return load(() => state.get(key) === entry && !entry.invalidated)
     }
     entry.promise = (wait ? wait.catch(() => undefined).then(run) : run())
       .then(() => {
@@ -192,7 +192,7 @@ function createSync() {
     return entry.promise
   }
   return {
-    run(key: string, load: () => Promise<void>) {
+    run(key: string, load: (current: () => boolean) => Promise<void>) {
       const active = state.get(key)
       if (active === true) return Promise.resolve()
       if (!active) return start(key, load)
@@ -1130,18 +1130,52 @@ export function createData(config: CreateDataInput) {
         if (store.session.info[event.data.sessionID]) {
           setStore("session", "info", event.data.sessionID, "revert", undefined)
         }
-        // The projector also deletes inbox items enqueued at or after the boundary without a cancel event.
-        setStore(
-          "session",
-          "pending",
-          event.data.sessionID,
-          (store.session.pending[event.data.sessionID] ?? []).filter((item) => item.id < event.data.to),
+        const transcript = store.session.message[event.data.sessionID]
+        const messageRead = sync.pending(`session.message:${event.data.sessionID}`)
+        const pendingRead = sync.pending(`session.pending:${event.data.sessionID}`)
+        const loadedPending = store.session.pending[event.data.sessionID] !== undefined
+        result.session.pending.invalidate(event.data.sessionID)
+        const boundary = transcript?.findIndex((item) => item.id === event.data.to) ?? -1
+        if (transcript)
+          message.update(event.data.sessionID, (draft, index) => {
+            const removed = draft.splice(boundary < 0 ? 0 : boundary)
+            for (const item of removed) {
+              if (!outbox.has(item.id)) {
+                index.delete(item.id)
+                continue
+              }
+              index.set(item.id, draft.length)
+              draft.push(item)
+            }
+          })
+        // Drop clipped pending rows now, but retain surviving inputs so a delivery arriving
+        // during revalidation can still move their transcript row and set its delivery time.
+        if (loadedPending)
+          setStore(
+            "session",
+            "pending",
+            event.data.sessionID,
+            (store.session.pending[event.data.sessionID] ?? []).filter(
+              (item) => outbox.has(item.id) || messageIndex.get(event.data.sessionID)?.has(item.id),
+            ),
+          )
+        // Session-list info alone must not turn an unviewed transcript into a loaded cache.
+        if (transcript === undefined && !messageRead) {
+          if (loadedPending || pendingRead) refresh(() => result.session.pending.sync(event.data.sessionID))
+          return
+        }
+        if (boundary > 0 && !messageRead) {
+          refresh(() => result.session.pending.sync(event.data.sessionID))
+          return
+        }
+        if (boundary <= 0) setStore("session", "messageCursor", event.data.sessionID, undefined)
+        result.session.message.invalidate(event.data.sessionID)
+        refresh(() =>
+          Promise.all([
+            result.session.message.sync(event.data.sessionID),
+            result.session.pending.sync(event.data.sessionID),
+          ]),
         )
-        message.update(event.data.sessionID, (draft, index) => {
-          const position = draft.findIndex((item) => item.id >= event.data.to)
-          if (position === -1) return
-          for (const item of draft.splice(position)) index.delete(item.id)
-        })
         return
       case "session.compaction.delta":
         if (!store.session.message[event.data.sessionID]) return
@@ -1465,11 +1499,12 @@ export function createData(config: CreateDataInput) {
             : "starting"
         },
         sync(sessionID: string) {
-          return sync.run(`session.pending:${sessionID}`, async () => {
+          return sync.run(`session.pending:${sessionID}`, async (currentRead) => {
             const updates = new Map<string, SessionInboxInfo | SessionInbox.Delivery | undefined>()
             pendingUpdates.set(sessionID, updates)
             try {
               const snapshot = await api().session.inbox.list({ sessionID })
+              if (!currentRead()) return
               // Events can overtake this HTTP response on a remote connection.
               // Reconcile them before an older snapshot can resurrect delivered input.
               const current = new Map(snapshot.map((item) => [item.id, item]))
@@ -1690,12 +1725,13 @@ export function createData(config: CreateDataInput) {
           return position === undefined ? undefined : messages?.[position]
         },
         sync(sessionID: string) {
-          return sync.run(`session.message:${sessionID}`, async () => {
+          return sync.run(`session.message:${sessionID}`, async (currentRead) => {
             const response = await api().message.list({
               sessionID,
               limit: config.initialMessageLimit?.() ?? messagePageLimit,
               order: "desc",
             })
+            if (!currentRead()) return
             const fetched = response.data.toReversed()
             // Same protection as the pending sync: a re-fetch racing an
             // admission must not wipe its local transcript row.
@@ -1763,7 +1799,7 @@ export function createData(config: CreateDataInput) {
                 },
                 { signal },
               )
-              if (signal?.aborted) return
+              if (signal?.aborted || store.session.messageCursor[sessionID] !== cursor) return
               fetched.push(...response.data)
               next = response.cursor.next ?? undefined
               if (!options?.all) break

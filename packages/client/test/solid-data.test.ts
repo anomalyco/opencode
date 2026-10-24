@@ -2,7 +2,14 @@ import { expect, test } from "bun:test"
 import { getEventListeners } from "node:events"
 import { createRoot } from "solid-js"
 import { createData, type CreateDataInput } from "../src/solid"
-import { OpenCode, type ModelInfo, type OpenCodeEvent, type Project, type SessionInfo } from "../src/promise"
+import {
+  OpenCode,
+  type ModelInfo,
+  type OpenCodeEvent,
+  type Project,
+  type SessionInboxUser,
+  type SessionInfo,
+} from "../src/promise"
 
 const session = (viewed: number): SessionInfo => ({
   id: "ses_refresh",
@@ -1236,6 +1243,385 @@ function activityFixture(read: () => Response | Promise<Response>) {
     emit: (details: OpenCodeEvent) => listeners.forEach((listener) => listener({ name: details.type, details })),
     dispose,
   }))
+}
+
+test("a committed revert does not load a never-viewed session transcript", async () => {
+  const setup = revertFixture([["msg_survivor"]])
+  try {
+    setup.data.session.remember({ ...session(0), revert: { messageID: "msg_boundary" } })
+    setup.commit("msg_boundary")
+    expect(setup.data.session.get("ses_refresh")?.revert).toBeUndefined()
+    expect(setup.reads).toEqual({ messages: 0, pending: 0 })
+    // Opening it afterwards must perform its first read, not reuse a background load.
+    await setup.data.session.message.sync("ses_refresh")
+    expect(setup.reads).toEqual({ messages: 1, pending: 0 })
+    expect(setup.data.session.message.list("ses_refresh").map((message) => message.id)).toEqual(["msg_survivor"])
+  } finally {
+    setup.dispose()
+  }
+})
+
+test.each([true, false])(
+  "a committed revert clears stale pending rows before reload, remembered=%s",
+  async (remembered) => {
+    const survivor: SessionInboxUser = {
+      id: "msg_z_survivor",
+      sessionID: "ses_refresh",
+      type: "user",
+      delivery: "queue",
+      payload: { text: "Survivor" },
+      time: { created: 1 },
+    }
+    const setup = revertFixture([["msg_boundary", "msg_earlier"]], survivor, undefined, remembered)
+    try {
+      await setup.data.session.message.sync("ses_refresh")
+      setup.emit({
+        id: "evt_stale",
+        created: 2,
+        type: "session.inbox.enqueued",
+        data: {
+          sessionID: "ses_refresh",
+          inboxID: "msg_stale",
+          item: { type: "user", payload: { text: "Stale" }, delivery: "queue" },
+        },
+      })
+      const submitting = setup.data.session.prompt({
+        sessionID: "ses_refresh",
+        id: "msg_replacement",
+        text: "Replacement",
+      })
+      setup.commit("msg_boundary")
+      expect(setup.data.session.pending.list("ses_refresh").map((item) => item.id)).toEqual(["msg_replacement"])
+      await submitting
+      await wait(() => setup.data.session.pending.list("ses_refresh").some((item) => item.id === survivor.id))
+      expect(setup.data.session.pending.list("ses_refresh").map((item) => item.id)).toEqual([
+        survivor.id,
+        "msg_replacement",
+      ])
+      expect(setup.data.session.message.get("ses_refresh", "msg_stale")).toBeUndefined()
+    } finally {
+      setup.dispose()
+    }
+  },
+)
+
+test("a surviving input delivered during revert revalidation keeps its delivery position and time", async () => {
+  const response = Promise.withResolvers<Response>()
+  const pending: SessionInboxUser = {
+    id: "msg_survivor",
+    sessionID: "ses_refresh",
+    type: "user",
+    payload: { text: "Survivor" },
+    delivery: "queue",
+    time: { created: 1 },
+  }
+  let reads = 0
+  const setup = revertFixture([], undefined, (url) => {
+    if (url.pathname.endsWith("/message"))
+      return Response.json({
+        data: ["msg_boundary", "msg_middle", pending.id, "msg_older"].map(revertMessage),
+        cursor: {},
+      })
+    return ++reads === 1 ? Response.json({ data: [pending] }) : response.promise
+  })
+  try {
+    await setup.data.session.message.sync("ses_refresh")
+    await setup.data.session.pending.sync("ses_refresh")
+    setup.commit("msg_boundary")
+    await wait(() => reads === 2)
+    setup.emit({
+      id: "evt_delivered",
+      created: 10,
+      type: "session.inbox.delivered",
+      data: { sessionID: "ses_refresh", inboxID: pending.id, delivery: "steer" },
+    })
+    response.resolve(Response.json({ data: [] }))
+    await setup.data.session.pending.sync("ses_refresh")
+    expect(setup.data.session.message.list("ses_refresh").map((message) => message.id)).toEqual([
+      "msg_older",
+      "msg_middle",
+      pending.id,
+    ])
+    expect(setup.data.session.message.get("ses_refresh", pending.id)?.time.created).toBe(10)
+    expect(setup.data.session.pending.list("ses_refresh")).toEqual([])
+  } finally {
+    response.resolve(Response.json({ data: [] }))
+    setup.dispose()
+  }
+})
+
+test("projects a committed revert by transcript position, not message ID order", async () => {
+  const setup = revertFixture([["msg_a_later", "msg_m_boundary", "msg_z_earlier"]])
+  try {
+    await setup.data.session.message.sync("ses_refresh")
+    setup.commit("msg_m_boundary")
+    expect(setup.data.session.message.list("ses_refresh").map((message) => message.id)).toEqual(["msg_z_earlier"])
+    expect(setup.data.session.message.get("ses_refresh", "msg_z_earlier")).toBeDefined()
+    expect(setup.data.session.message.get("ses_refresh", "msg_a_later")).toBeUndefined()
+  } finally {
+    setup.dispose()
+  }
+})
+
+test("reloads surviving history when a committed revert boundary is outside the loaded page", async () => {
+  const setup = revertFixture([["msg_newer"], ["msg_survivor"]])
+  try {
+    await setup.data.session.message.sync("ses_refresh")
+    setup.commit("msg_boundary")
+    await wait(() => setup.data.session.message.get("ses_refresh", "msg_survivor") !== undefined)
+    expect(setup.reads.messages).toBe(2)
+    expect(setup.data.session.message.list("ses_refresh").map((message) => message.id)).toEqual(["msg_survivor"])
+    expect(setup.data.session.message.more("ses_refresh")).toBe(false)
+  } finally {
+    setup.dispose()
+  }
+})
+
+test("reloads surviving pending work after a committed revert without comparing IDs", async () => {
+  const pending: SessionInboxUser = {
+    id: "msg_z_queued",
+    sessionID: "ses_refresh",
+    time: { created: 1 },
+    type: "user",
+    payload: { text: "Queued first" },
+    delivery: "queue",
+  }
+  const setup = revertFixture([["msg_m_boundary"]], pending)
+  try {
+    await setup.data.session.message.sync("ses_refresh")
+    setup.emit({
+      id: "evt_queued",
+      created: 1,
+      type: "session.inbox.enqueued",
+      durable: { aggregateID: "ses_refresh", seq: 1, version: 1 },
+      data: {
+        sessionID: "ses_refresh",
+        inboxID: pending.id,
+        item: { type: "user", payload: pending.payload, delivery: "queue" },
+      },
+    })
+    setup.commit("msg_m_boundary")
+    await wait(() => setup.reads.pending === 1)
+    await wait(() => setup.data.session.pending.list("ses_refresh").some((item) => item.id === pending.id))
+    expect(setup.data.session.input.list("ses_refresh")).toEqual([pending.id])
+  } finally {
+    setup.dispose()
+  }
+})
+
+test("keeps an unacknowledged replacement through a committed revert", async () => {
+  const setup = revertFixture([["msg_a_later", "msg_m_boundary", "msg_z_earlier"]])
+  try {
+    await setup.data.session.message.sync("ses_refresh")
+    const admitted = setup.data.session.prompt({ id: "msg_replacement", sessionID: "ses_refresh", text: "Replacement" })
+    setup.commit("msg_m_boundary")
+    expect(setup.data.session.message.list("ses_refresh").map((message) => message.id)).toEqual([
+      "msg_z_earlier",
+      "msg_replacement",
+    ])
+    expect(setup.data.session.message.get("ses_refresh", "msg_replacement")).toBeDefined()
+    await admitted
+    await wait(() => setup.reads.pending === 1)
+    expect(setup.data.session.pending.list("ses_refresh").map((item) => item.id)).toEqual(["msg_replacement"])
+  } finally {
+    setup.dispose()
+  }
+})
+
+test("a committed revert supersedes an in-flight transcript read", async () => {
+  const stale = Promise.withResolvers<Response>()
+  const fresh = Promise.withResolvers<Response>()
+  let reads = 0
+  const old = () =>
+    Response.json({ data: ["msg_a_later", "msg_m_boundary", "msg_z_earlier"].map(revertMessage), cursor: {} })
+  const setup = revertFixture([], undefined, (url) => {
+    if (url.pathname.endsWith("/inbox")) return Response.json({ data: [] })
+    reads++
+    if (reads === 1) return old()
+    return reads === 2 ? stale.promise : fresh.promise
+  })
+  try {
+    await setup.data.session.message.sync("ses_refresh")
+    setup.data.session.message.invalidate("ses_refresh")
+    const loading = setup.data.session.message.sync("ses_refresh")
+    await wait(() => reads === 2)
+    setup.commit("msg_m_boundary")
+    stale.resolve(old())
+    await loading
+    await wait(() => reads === 3)
+    expect(setup.data.session.message.list("ses_refresh").map((message) => message.id)).toEqual(["msg_z_earlier"])
+    fresh.resolve(Response.json({ data: [revertMessage("msg_z_earlier")], cursor: {} }))
+  } finally {
+    stale.resolve(old())
+    fresh.resolve(Response.json({ data: [], cursor: {} }))
+    setup.dispose()
+  }
+})
+
+test("a committed revert refreshes a deleted page-edge cursor", async () => {
+  const cursors: (string | null)[] = []
+  const setup = revertFixture([], undefined, (url) => {
+    if (url.pathname.endsWith("/inbox")) return Response.json({ data: [] })
+    const cursor = url.searchParams.get("cursor")
+    cursors.push(cursor)
+    if (cursors.length === 1)
+      return Response.json({ data: [revertMessage("msg_boundary")], cursor: { next: "deleted" } })
+    if (cursor === "deleted") return Response.json({ data: [], cursor: {} })
+    if (cursor === "surviving") return Response.json({ data: [revertMessage("msg_older")], cursor: {} })
+    return Response.json({ data: [revertMessage("msg_survivor")], cursor: { next: "surviving" } })
+  })
+  try {
+    await setup.data.session.message.sync("ses_refresh")
+    setup.commit("msg_boundary")
+    await wait(() => setup.data.session.message.get("ses_refresh", "msg_survivor") !== undefined)
+    await setup.data.session.message.loadMore("ses_refresh")
+    expect(cursors).toEqual([null, null, "surviving"])
+    expect(setup.data.session.message.list("ses_refresh").map((message) => message.id)).toEqual([
+      "msg_older",
+      "msg_survivor",
+    ])
+  } finally {
+    setup.dispose()
+  }
+})
+
+test("a committed revert supersedes a pending read before it can rematerialize deleted input", async () => {
+  const stale = Promise.withResolvers<Response>()
+  let reads = 0
+  const setup = revertFixture([], undefined, (url) => {
+    if (url.pathname.endsWith("/message")) {
+      return Response.json({ data: ["msg_a_later", "msg_m_boundary", "msg_z_earlier"].map(revertMessage), cursor: {} })
+    }
+    return ++reads === 1 ? stale.promise : Response.json({ data: [] })
+  })
+  try {
+    await setup.data.session.message.sync("ses_refresh")
+    const loading = setup.data.session.pending.sync("ses_refresh")
+    await wait(() => reads === 1)
+    setup.commit("msg_m_boundary")
+    stale.resolve(
+      Response.json({
+        data: [
+          {
+            id: "msg_removed",
+            sessionID: "ses_refresh",
+            type: "user",
+            payload: { text: "Removed" },
+            delivery: "queue",
+            time: { created: 1 },
+          },
+        ],
+      }),
+    )
+    await loading
+    await wait(() => reads === 2 && setup.data.session.pending.list("ses_refresh").length === 0)
+    expect(setup.data.session.message.list("ses_refresh").map((message) => message.id)).toEqual(["msg_z_earlier"])
+  } finally {
+    stale.resolve(Response.json({ data: [] }))
+    setup.dispose()
+  }
+})
+
+test("a committed revert supersedes an older-page load using a deleted cursor", async () => {
+  const stale = Promise.withResolvers<Response>()
+  const cursors: (string | null)[] = []
+  const setup = revertFixture([], undefined, (url) => {
+    if (url.pathname.endsWith("/inbox")) return Response.json({ data: [] })
+    const cursor = url.searchParams.get("cursor")
+    cursors.push(cursor)
+    if (cursor === "old") return stale.promise
+    if (cursors.length === 1) return Response.json({ data: [revertMessage("msg_latest")], cursor: { next: "old" } })
+    return Response.json({ data: [revertMessage("msg_survivor")], cursor: { next: "fresh" } })
+  })
+  try {
+    await setup.data.session.message.sync("ses_refresh")
+    const loading = setup.data.session.message.loadMore("ses_refresh")
+    await wait(() => cursors.includes("old"))
+    setup.commit("msg_boundary")
+    await wait(() => setup.data.session.message.get("ses_refresh", "msg_survivor") !== undefined)
+    stale.resolve(Response.json({ data: ["msg_later", "msg_boundary"].map(revertMessage), cursor: {} }))
+    await loading
+    expect(setup.data.session.message.list("ses_refresh").map((message) => message.id)).toEqual(["msg_survivor"])
+    expect(setup.data.session.message.more("ses_refresh")).toBe(true)
+  } finally {
+    stale.resolve(Response.json({ data: [], cursor: {} }))
+    setup.dispose()
+  }
+})
+
+function revertMessage(id: string) {
+  return { id, type: "user", text: id, time: { created: 1 } }
+}
+
+function revertFixture(
+  pages: string[][],
+  pending?: SessionInboxUser,
+  read?: (url: URL) => Response | Promise<Response>,
+  remembered = true,
+) {
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  const reads = { messages: 0, pending: 0 }
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async (input, init) => {
+      const url = new URL((input instanceof Request ? input : new Request(input, init)).url)
+      if (read) return read(url)
+      if (url.pathname === "/api/session/ses_refresh/message") {
+        const page = pages[Math.min(reads.messages++, pages.length - 1)] ?? []
+        return Response.json({
+          data: page.map((id, index) => ({ id, type: "user", text: id, time: { created: page.length - index } })),
+          cursor: reads.messages === 1 ? { next: "older" } : {},
+        })
+      }
+      if (url.pathname === "/api/session/ses_refresh/inbox") {
+        reads.pending++
+        return Response.json({ data: pending ? [pending] : [] })
+      }
+      if (url.pathname === "/api/session/ses_refresh/prompt") {
+        return Response.json({
+          data: {
+            id: "msg_replacement",
+            sessionID: "ses_refresh",
+            type: "user",
+            payload: { text: "Replacement" },
+            delivery: "steer",
+            time: { created: 4 },
+          },
+        })
+      }
+      throw new Error(`Unexpected request: ${url.pathname}`)
+    },
+  })
+  const emit = (details: OpenCodeEvent) => listeners.forEach((listener) => listener({ name: details.type, details }))
+  return createRoot((dispose) => {
+    const data = createData({
+      api: () => api,
+      directory: "/project",
+      connection: { status: () => "connected" },
+      event: {
+        on: () => () => {},
+        listen(handler) {
+          listeners.add(handler)
+          return () => listeners.delete(handler)
+        },
+      },
+    })
+    if (remembered) data.session.remember(session(0))
+    return {
+      data,
+      dispose,
+      emit,
+      reads,
+      commit: (to: string) =>
+        emit({
+          id: "evt_revert_committed",
+          created: 5,
+          type: "session.revert.committed",
+          durable: { aggregateID: "ses_refresh", seq: 3, version: 1 },
+          data: { sessionID: "ses_refresh", to },
+        }),
+    }
+  })
 }
 
 async function wait(check: () => boolean) {
