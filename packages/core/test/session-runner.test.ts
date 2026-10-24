@@ -4136,6 +4136,44 @@ describe("SessionRunnerLLM", () => {
     expect(yield* s.context).toMatchObject(expected)
   })
 
+  scenario("preserves raw tool IDs across prompts and projection replay", function* (s) {
+    yield* s.llm.push(
+      TestLLM.tool("read:0", "echo", { text: "first" }),
+      [],
+      TestLLM.tool("read:0", "echo", { text: "second" }),
+      [],
+      TestLLM.stop(),
+    )
+    yield* s.runPrompt("Read first")
+    yield* s.runPrompt("Read second")
+    const stored = yield* s.context
+    expect(
+      stored.flatMap((message) =>
+        message.type === "assistant"
+          ? message.content.filter((part) => part.type === "tool").map((part) => part.id)
+          : [],
+      ),
+    ).toEqual(["read:0", "read:0"])
+
+    yield* replaySessionProjection(sessionID)
+    expect(yield* s.context).toEqual(stored)
+    yield* s.runPrompt("Inspect replay")
+    expect(
+      s.requests
+        .at(-1)
+        ?.messages.flatMap((message) =>
+          message.content.flatMap((part) =>
+            part.type === "tool-call" || part.type === "tool-result" ? [{ type: part.type, id: part.id }] : [],
+          ),
+        ),
+    ).toEqual([
+      { type: "tool-call", id: "read:0" },
+      { type: "tool-result", id: "read:0" },
+      { type: "tool-call", id: "read:0" },
+      { type: "tool-result", id: "read:0" },
+    ])
+  })
+
   scenario("joins concurrent resume calls into one active provider run", function* (s) {
     yield* s.admit("Run once")
 

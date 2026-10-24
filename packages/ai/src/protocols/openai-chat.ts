@@ -591,6 +591,15 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, options:
     },
   }
   const requireAssistantAfterTool = request.model.compatibility?.requireAssistantAfterTool ?? mistral
+  const formatToolID = lowering.toolCallID
+  const groups = request.messages.map((message) =>
+    message.role === "assistant" ? message.content.filter((part) => part.type === "tool-call") : [],
+  )
+  const reserved = new Set(groups.flatMap((calls) => calls.map((call) => formatToolID(call.id))))
+  const used = new Set<string>()
+  const groupIDs = new Map<string, string>()
+  let nextID = 0
+  lowering.toolCallID = (id) => groupIDs.get(id) ?? formatToolID(id)
   const bridgeTools = () => {
     if (requireAssistantAfterTool && messages.at(-1)?.role === "tool")
       messages.push({ role: "assistant", content: "Done." })
@@ -602,6 +611,28 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, options:
     messages.push({ role: "user", content: pendingAttachments.splice(0) })
   }
   for (const message of request.messages) {
+    if (message.role === "user" || message.role === "assistant") groupIDs.clear()
+    if (message.role === "assistant") {
+      const calls = message.content.filter((part) => part.type === "tool-call")
+      // Preserve ambiguous IDs only within this group, without guessing a pairing.
+      const ambiguous = new Set(calls.map((call) => call.id)).size !== calls.length
+      for (const part of calls) {
+        const formatted = formatToolID(part.id)
+        if (ambiguous) {
+          used.add(formatted)
+          continue
+        }
+        let id = formatted
+        // Nine alphanumeric characters satisfy every existing family formatter.
+        // Reserve future originals too, so allocation cannot rename a unique call.
+        while (used.has(id)) {
+          id = (nextID++).toString(36).padStart(9, "0")
+          if (reserved.has(id)) id = formatted
+        }
+        used.add(id)
+        groupIDs.set(part.id, id)
+      }
+    }
     if (message.role === "user") bridgeTools()
     if (message.role === "system") {
       const part = yield* ProviderShared.wrappedSystemUpdate("OpenAI Chat", message)
