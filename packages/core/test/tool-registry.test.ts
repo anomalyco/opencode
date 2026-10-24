@@ -1067,6 +1067,72 @@ describe("Tool", () => {
     }),
   )
 
+  it.effect("keeps a finite shared default deadline", () =>
+    Effect.gen(function* () {
+      expect(Tool.DEFAULT_TOOL_TIMEOUT_MS).toBe(5 * 60 * 1000)
+    }),
+  )
+
+  it.live("fails a never-settling tool with a terminal timeout error", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      yield* transform(service, {
+        hanging: {
+          name: "hanging",
+          description: "Hanging",
+          input: Schema.Struct({}),
+          options: { codemode: false, timeoutMs: 50 },
+          execute: () => Effect.never,
+        },
+      })
+      expect(
+        yield* executeTool(service, {
+          sessionID,
+          ...identity,
+          call: { type: "tool-call", id: "call-hanging", name: "hanging", input: {} },
+        }),
+      ).toMatchObject({
+        status: "error",
+        error: { type: "tool.execution", message: expect.stringContaining("timed out after 50ms") },
+      })
+    }),
+  )
+
+  it.live("discards a late completion after timeout without corrupting later calls", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      const gate = yield* Deferred.make<void>()
+      yield* transform(service, {
+        slow: {
+          name: "slow",
+          description: "Slow",
+          input: Schema.Struct({ text: Schema.String }),
+          output: Schema.Struct({ text: Schema.String }),
+          options: { codemode: false, timeoutMs: 50 },
+          execute: ({ text }) => Deferred.await(gate).pipe(Effect.as({ output: { text }, content: text })),
+        },
+      })
+      const snapshot = yield* service.snapshot()
+      const fiber = yield* snapshot
+        .execute({
+          sessionID,
+          ...identity,
+          call: { type: "tool-call", id: "call-slow", name: "slow", input: { text: "slow" } },
+        })
+        .pipe(Effect.forkScoped)
+      const failure = yield* Fiber.join(fiber).pipe(Effect.flip)
+      expect(failure.message).toContain("timed out")
+      yield* Deferred.succeed(gate, undefined)
+      expect(
+        yield* snapshot.execute({
+          sessionID,
+          ...identity,
+          call: { type: "tool-call", id: "call-slow-retry", name: "slow", input: { text: "slow" } },
+        }),
+      ).toMatchObject({ output: { text: "slow" } })
+    }),
+  )
+
   it.effect("registers, advertises, and executes a Zod tool", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service
