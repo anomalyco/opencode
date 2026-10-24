@@ -30,6 +30,16 @@ export const discover = Effect.fn("service.discover")(function* (options: Discov
   return found.endpoint
 })
 
+/** Discover like `discover`, then settle a stale persistent-terminal handoff as `ensure` does when it reuses a service. */
+export const reuse = Effect.fn("service.reuse")(function* (options: DiscoverOptions = {}) {
+  const found = (yield* registered(options.file)).service
+  if (found?.state !== "ready") return undefined
+  if (!found.compatible) return undefined
+  if (!matchesVersion(found.version, options)) return undefined
+  yield* Effect.tryPromise(() => PtyHandoff.complete(options.file ?? fallback(), found.info))
+  return found.endpoint
+})
+
 /** Recognize an authenticated compatible service bound to an expected URL, including while it starts or fails. */
 export const incumbent = Effect.fn("service.incumbent")(function* (
   options: DiscoverOptions & { readonly url: string },
@@ -197,4 +207,4 @@ const terminate = Effect.fnUntraced(function* (info: Info, options: { readonly f
 })
 
 /** Effect-based local service lifecycle operations. */
-export const Service = { discover, incumbent, ensure, stop, headers, Info }
+export const Service = { discover, reuse, incumbent, ensure, stop, headers, Info }
