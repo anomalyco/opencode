@@ -200,13 +200,31 @@ const layer = Layer.effect(
               return (yield* fs.resolve(path.dirname(found[0]))) === directory
             }),
           )
+          // A directory can also change identity while staying inside one repository,
+          // for example when a remote is added and the ID becomes remote-derived.
+          // Sessions created under the earlier ID follow the directory to the new one.
+          // The global project is excluded: its unborn-git directory rows are already
+          // covered by the previous/global candidates above.
+          const adopting = yield* db
+            .select({ id: WorktreeTable.project_id })
+            .from(WorktreeTable)
+            .where(
+              and(
+                eq(WorktreeTable.directory, item.directory),
+                ne(WorktreeTable.project_id, item.projectID),
+                ne(WorktreeTable.project_id, ID.global),
+              ),
+            )
+            .all()
+            .pipe(Effect.orDie)
+          const adoptedIDs = [...new Set([...adopted.map((candidate) => candidate.id), ...adopting.map((row) => row.id)])]
           yield* bus.publish(
             Worktree.Event.Resolved,
             {
               projectID: item.projectID,
               directory: item.directory,
               previous: project.previous ?? ID.global,
-              ...(adopted.length ? { adopted: adopted.map((candidate) => candidate.id) } : {}),
+              ...(adoptedIDs.length ? { adopted: adoptedIDs } : {}),
             },
             {
               commit: () =>

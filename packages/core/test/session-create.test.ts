@@ -245,6 +245,36 @@ describe("Session.create", () => {
     ),
   )
 
+  projectIt.live("moves sessions to the remote-derived project id when a remote is added later", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const session = yield* Session.Service
+        const projects = yield* Project.Service
+        const ref = Location.Ref.make({ directory: AbsolutePath.make(directory) })
+        yield* Effect.promise(async () => {
+          await initGit(directory)
+          await fs.writeFile(path.join(directory, "README.md"), "test\n")
+          await $`git add README.md`.cwd(directory)
+          await $`git commit -qm initial`.cwd(directory)
+        })
+        const before = yield* session.create({ location: ref, title: "Before the remote" })
+        const root = yield* projects.resolve(ref.directory)
+        expect(root.vcs?.type).toBe("git")
+        expect(root.id).not.toBe(Project.ID.global)
+
+        yield* Effect.promise(() => $`git remote add origin git@github.com:owner/late.git`.cwd(directory).quiet())
+        const project = yield* projects.resolve(ref.directory)
+        expect(project.id).toBe(Project.ID.make(Hash.fast("git-remote:github.com/owner/late")))
+        expect(project.id).not.toBe(root.id)
+
+        const moved = yield* session.get(before.id)
+        expect(moved).toMatchObject({ projectID: project.id, location: ref })
+        const page = yield* session.list({ project: project.id })
+        expect(page.data.map((item) => item.id)).toContain(before.id)
+      }),
+    ),
+  )
+
   liveIt.live("does not adopt nested repositories or sessions in another workspace", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
