@@ -20,6 +20,7 @@ import { Instance } from "@opencode/core/instance/service"
 import { SessionTransfer } from "@opencode/core/session/transfer"
 import { ShellSelect } from "@opencode/core/shell/select"
 import { Job } from "@opencode/core/job"
+import { ShellJob } from "@opencode/core/session/shell-job"
 import { Mcp } from "@opencode/core/mcp/index"
 import { Global } from "@opencode/util/global"
 import { FSUtil } from "@opencode/util/fs-util"
@@ -57,6 +58,7 @@ const applicationServiceNodes = [
   EventLogger.node,
   httpClient,
   Job.node,
+  ShellJob.node,
   Project.node,
   Project.sweepNode,
   Worktree.node,

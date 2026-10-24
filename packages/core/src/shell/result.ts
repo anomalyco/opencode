@@ -7,7 +7,7 @@ export type Result = {
   capture: { output: string; truncated: boolean } | undefined
 }
 
-type Output = { output: string; truncated: boolean; exit?: number; signal?: string; timeout?: boolean }
+export type Output = { output: string; truncated: boolean; exit?: number; signal?: string; timeout?: boolean }
 
 const missing = "Shell command output is no longer available."
 export const unavailable: Shell.Output = {

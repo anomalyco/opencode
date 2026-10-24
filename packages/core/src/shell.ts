@@ -152,6 +152,7 @@ const layer = () =>
             if (command.timeoutFiber) yield* Fiber.interrupt(command.timeoutFiber)
             // Teardown interrupts pending commands; it is not a terminal command failure.
             yield* Deferred.interrupt(command.done)
+            yield* bus.publish(Shell.Event.Deleted, { id: command.info.id })
           }
           commands.clear()
           exitOrder.length = 0

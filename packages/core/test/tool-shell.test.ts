@@ -28,13 +28,14 @@ import { SessionEvent } from "@opencode/core/session/event"
 import { SessionExecution } from "@opencode/core/session/execution"
 import { SessionMessage } from "@opencode/core/session/message"
 import { SessionStore } from "@opencode/core/session/store"
+import { ShellJob } from "@opencode/core/session/shell-job"
 import { Permission } from "@opencode/core/permission"
 import { PermissionSaved } from "@opencode/core/permission/saved"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginSupervisor } from "@opencode/core/plugin/supervisor"
 import { Shell } from "@opencode/core/shell"
 import { ShellSelect } from "@opencode/core/shell/select"
-import { ID } from "@opencode/schema/shell"
+import { Event, ID } from "@opencode/schema/shell"
 import { ShellTool } from "@opencode/core/tool/plugin/shell"
 import { ToolOutput } from "@opencode/core/tool-output"
 import { Tool } from "@opencode/core/tool"
@@ -136,6 +137,7 @@ const shellPluginSupervisor = makeLocationNode({
     Permission.node,
     Session.node,
     Job.node,
+    ShellJob.node,
     Shell.node,
     ShellSelect.node,
     Tool.node,
@@ -146,6 +148,7 @@ const nodes = LayerNode.group([
   Database.node,
   Bus.node,
   Job.node,
+  ShellJob.node,
   Session.node,
   SessionExecution.node,
   LocationServiceMap.node,
@@ -1317,6 +1320,7 @@ describe("ShellTool", () => {
             Permission.node,
             Session.node,
             Job.node,
+            ShellJob.node,
             Shell.node,
             ShellSelect.node,
             Tool.node,
@@ -1552,6 +1556,61 @@ describe("ShellTool", () => {
         (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
       ),
     { timeout: 15_000 },
+  )
+
+  it.live("publishes shell deletion when its location is torn down", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          reset()
+          const bus = yield* Bus.Service
+          const deleted = yield* bus.subscribe(Event.Deleted).pipe(
+            Stream.filter((event) => event.location?.directory === tmp.path),
+            Stream.runHead,
+            Effect.forkScoped({ startImmediately: true }),
+          )
+          const info = yield* withSession(tmp.path, () =>
+            Effect.gen(function* () {
+              const shell = yield* Shell.Service
+              return yield* shell.create({ command: idleCommand, timeout: 0 })
+            }),
+          )
+
+          expect((yield* Fiber.join(deleted).pipe(Effect.timeout("2 seconds"))).valueOrUndefined?.data.id).toBe(info.id)
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+    ),
+  )
+
+  it.live("notifies the session when a background shell location is torn down", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          reset()
+          const bus = yield* Bus.Service
+          const admitted = yield* bus.subscribe(SessionEvent.InboxEnqueued).pipe(
+            Stream.filter((event) => event.data.sessionID === sessionID && event.data.item.type === "synthetic"),
+            Stream.runHead,
+            Effect.forkScoped({ startImmediately: true }),
+          )
+          const result = yield* withSession(tmp.path, (registry) =>
+            executeTool(registry, call({ command: idleCommand, background: true })),
+          )
+          const event = (yield* Fiber.join(admitted).pipe(Effect.timeout("5 seconds"))).valueOrUndefined
+          expect(event?.data.item.payload).toMatchObject({
+            description: idleCommand,
+            metadata: {
+              source: "shell",
+              jobID: result.metadata?.shellID,
+              shellID: result.metadata?.shellID,
+              state: "cancelled",
+            },
+          })
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+    ),
   )
 
   it.live("returns the shell id for a background command", () =>
