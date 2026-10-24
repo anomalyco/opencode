@@ -19,6 +19,37 @@ const setup: Setup<typeof Debug> = (ctx) => {
     })
   }
 
+  const hide = () => {
+    bar.update((draft) => {
+      draft.visible = false
+    })
+  }
+
+  // Offered by main only in debug builds. The bar stays open while diagnostics run, so they are never silently on.
+  const memory = ctx.uses.memory
+
+  const memoryState = () => {
+    const live = memory()
+
+    return live.status === "active" ? live.value.state() : undefined
+  }
+
+  const memoryControl = () => {
+    const live = memory()
+    const state = memoryState()
+
+    if (live.status !== "active" || !state) return
+
+    return {
+      on: state.on,
+      env: state.env,
+      toggle: () => {
+        // The environment's choice lasts for the launch.
+        if (!state.env) void live.value.set(!state.on)
+      },
+    }
+  }
+
   const toggleMotion = () => {
     bar.update((draft) => {
       draft.motion = !draft.motion
@@ -78,11 +109,12 @@ const setup: Setup<typeof Debug> = (ctx) => {
     at: "window.bottom",
     render: () => (
       <>
-        <Show when={visible()}>
+        <Show when={visible() || memoryState()?.on}>
           <Suspense>
             <DebugBar
               diagnostics={import.meta.env.DEV}
-              onClose={toggle}
+              memory={memoryControl()}
+              onClose={hide}
               motion={Motion ? { open: motion(), toggle: toggleMotion } : undefined}
               inline
             />

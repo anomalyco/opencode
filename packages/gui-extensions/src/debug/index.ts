@@ -1,6 +1,6 @@
 import { Schema } from "effect"
 import { Extension, Store } from "../sdk"
-import { HeapSnapshots } from "./contract"
+import { HeapSnapshots, MemoryDiagnostics } from "./contract"
 import en from "./i18n/en"
 
 export default Extension.define({
@@ -11,8 +11,10 @@ export default Extension.define({
       visible: false,
       motion: false,
     }),
+    // Whether the debug bar turned memory diagnostics on. Read only in debug builds.
+    memory: Store.main(Schema.Boolean, false),
   },
-  provides: { heap: HeapSnapshots },
+  provides: { heap: HeapSnapshots, memory: MemoryDiagnostics },
   i18n: {
     en,
     am: () => import("./i18n/am"),

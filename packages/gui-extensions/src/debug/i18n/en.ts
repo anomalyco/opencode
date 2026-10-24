@@ -37,6 +37,11 @@ export default {
   "mem.label": "MEM",
   "mem.tipUnavailable": "Used JS heap vs heap limit. Chromium only.",
   "mem.tip": "Used JS heap vs heap limit. {{used}} of {{limit}}.",
+  "memory.label": "MEMLOG",
+  "memory.tip":
+    "Memory diagnostics: log app memory to the desktop logs every 30 seconds. Stays on across restarts until turned off; the bar stays open while it runs.",
+  "memory.tipEnv": "Memory diagnostics are on for this launch: OPENCODE_DESKTOP_MEMORY_LOG is set.",
+  "memory.env": "ENV",
   "motion.label": "KNOBS",
   "motion.title": "Knobs",
   "motion.tip": "Tune live. Changes persist on this device.",

@@ -184,6 +184,7 @@ function ToggleCell(props: {
 export default function DebugBar(props: {
   diagnostics?: boolean
   inline?: boolean
+  memory?: { on: boolean; env: boolean; toggle: () => void }
   motion?: { open: boolean; toggle: () => void }
   onClose?: () => void
 }) {
@@ -720,6 +721,18 @@ export default function DebugBar(props: {
               onClick={() => void toggleFocus()}
             />
           </Show>
+        </Show>
+        <Show when={props.memory}>
+          {(memory) => (
+            <ToggleCell
+              active={memory().on}
+              inline={props.inline}
+              label={ctx.t("memory.label")}
+              tip={ctx.t(memory().env ? "memory.tipEnv" : "memory.tip")}
+              value={ctx.t(memory().env ? "memory.env" : memory().on ? "focus.on" : "focus.off")}
+              onClick={() => memory().toggle()}
+            />
+          )}
         </Show>
         <Show when={props.motion}>
           <div class="ms-auto flex items-center gap-[9px]">

@@ -12,6 +12,7 @@
     "./sdk/main": "./src/sdk/main.ts",
     "./sdk/bridge": "./src/sdk/bridge.ts",
     "./terminal": "./src/terminal/index.ts",
+    "./debug/options": "./src/debug/options.ts",
     "./updater": "./src/updater/contract.ts"
   },
   "scripts": {
