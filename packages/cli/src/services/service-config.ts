@@ -154,7 +154,10 @@ export const read = Effect.fn("cli.service-config.read")(function* () {
   const info = yield* decodeInfo(text.value).pipe(Effect.option)
   if (Option.isSome(info)) return info.value
   const legacy = decodeLegacy(text.value)
-  if (Option.isNone(legacy)) return {} as Info
+  // A file that exists but cannot be decoded is not an absent configuration. Every mutating path
+  // writes back `{ ...read(), changed }`, so reading it as empty silently discards the password,
+  // hostname, cors and env that are still in the file.
+  if (Option.isNone(legacy)) return yield* Effect.fail(new Error(`Invalid service configuration: ${configFile}`))
   // Repair the file in place so every reader sees the same route.
   const { remote: enabled, ...rest } = legacy.value
   const repaired: Info = enabled ? { ...rest, remote: { route: route() } } : rest
