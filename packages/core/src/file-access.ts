@@ -35,6 +35,8 @@ export interface Target {
   readonly absolute: AbsolutePath
   /** Location-relative for internal paths, absolute for external paths. */
   readonly resource: string
+  /** The resources permission rules match: the written path and its symlink-resolved real path. */
+  readonly ruleResources: readonly string[]
   readonly externalDirectory?: ExternalDirectoryAuthorization
 }
 
@@ -87,27 +89,55 @@ const layer = Layer.effect(
     const location = yield* Location.Service
     const permission = yield* Permission.Service
 
+    /**
+     * Resolve symlinks in the longest existing prefix of `absolute`, keeping the not-yet-existing
+     * tail lexical, so a link cannot change which file the permission rules are matched against.
+     */
+    const resolveReal = Effect.fn("FileAccess.resolveReal")(function* (absolute: string) {
+      const missing: string[] = []
+      let current = absolute
+      while (true) {
+        const stat = yield* fs
+          .stat(current)
+          .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined))
+        if (stat) break
+        const parent = path.dirname(current)
+        if (parent === current) break
+        missing.unshift(path.basename(current))
+        current = parent
+      }
+      const real = yield* fs.resolve(current)
+      return missing.length === 0 ? real : path.join(real, ...missing)
+    })
+
     const resolve = Effect.fn("FileAccess.resolve")(function* (input: ResolveInput) {
       const absolute = AbsolutePath.make(resolvePath(location.directory, input.path))
+      const real = yield* resolveReal(absolute)
       const worktree = path.resolve(location.project.directory)
       const internal =
-        FSUtil.contains(location.directory, absolute) ||
-        (worktree !== path.parse(worktree).root && FSUtil.contains(worktree, absolute))
+        FSUtil.contains(location.directory, real) ||
+        (worktree !== path.parse(worktree).root && FSUtil.contains(worktree, real))
       if (internal) {
+        const resource = slash(path.relative(location.directory, absolute) || ".")
+        const realResource = slash(path.relative(location.directory, real) || ".")
         return {
           absolute,
-          resource: slash(path.relative(location.directory, absolute) || "."),
+          resource,
+          ruleResources: Array.dedupe([resource, realResource]),
         } satisfies Target
       }
+      // #58638: 类型判定与 external 目录都取 symlink 解析后的 real 路径，
+      // 避免 junction/symlink 指向的目标绕过 external_directory 规则。
       const type =
         input.kind ??
-        (yield* Environment.typeFollowing(files, absolute).pipe(
+        (yield* Environment.typeFollowing(files, real).pipe(
           Effect.catchTag("Environment.NotFound", () => Effect.undefined),
         ))
-      const directory = AbsolutePath.make(type === "directory" ? absolute : path.dirname(absolute))
+      const directory = AbsolutePath.make(type === "directory" ? real : path.dirname(real))
       return {
         absolute,
         resource: slash(absolute),
+        ruleResources: Array.dedupe([slash(absolute), slash(real)]),
         externalDirectory: {
           action: "external_directory",
           directory,
@@ -148,7 +178,7 @@ const layer = Layer.effect(
       if (!sibling) yield* authorizeExternal([target], context)
       yield* permission.assert({
         action: "read",
-        resources: [target.resource],
+        resources: target.ruleResources,
         save: ["*"],
         ...Permission.invocation(context),
       })
