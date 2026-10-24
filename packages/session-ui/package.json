@@ -49,7 +49,7 @@
     "generate:progress-indicator": "bun script/generate-session-progress-indicator.ts",
     "typecheck": "bun check --no-script -b",
     "typecheck:tsc": "tsc -b",
-    "test": "bun test src --only-failures",
+    "test": "bun test --conditions=browser src --only-failures",
     "test:components": "playwright test --config playwright.components.config.ts",
     "test:components:ui": "playwright test --config playwright.components.config.ts --ui"
   },

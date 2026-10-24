@@ -1,6 +1,27 @@
 import { GlobalRegistrator } from "@happy-dom/global-registrator"
 import { afterAll, beforeAll, expect, test } from "bun:test"
-import { parseMarkdownNodes } from "./markdown-solid"
+import { assign, insert } from "solid-js/web"
+import { createMarkdownRenderer, parseMarkdownNodes } from "./markdown-solid"
+
+// `bun test` transpiles the renderer's JSX with the classic runtime, so the test supplies the
+// pragma it calls. `assign` and `insert` keep the element and child handling the same.
+Object.assign(globalThis, {
+  React: {
+    createElement(
+      type: string | ((props: Record<string, unknown>) => unknown),
+      props: Record<string, unknown> | null,
+      ...children: unknown[]
+    ) {
+      if (typeof type === "function") return type({ ...props, children: children.length > 1 ? children : children[0] })
+
+      const element = document.createElement(type)
+      assign(element, props ?? {}, false, true)
+      for (const child of children) insert(element, child as Node)
+
+      return element
+    },
+  },
+})
 
 beforeAll(() => GlobalRegistrator.register())
 
@@ -86,4 +107,23 @@ test("marks words for animation only when requested", () => {
     text: "Hello",
     animate: true,
   })
+})
+
+test("streams a paragraph word by word into the spans of a single render", () => {
+  const words = ["Hello", "world", "again"]
+  const streamed = document.createElement("div")
+  const renderer = createMarkdownRenderer(streamed, "<p>Hello</p>", true)
+  let spans = Array.from(streamed.querySelectorAll("[data-markdown-word]"))
+
+  for (const index of words.slice(1).keys()) {
+    renderer.update(`<p>${words.slice(0, index + 2).join(" ")}</p>`, true, true)
+    const next = Array.from(streamed.querySelectorAll("[data-markdown-word]"))
+    expect(spans.every((span, position) => next[position] === span)).toBe(true)
+    spans = next
+  }
+
+  const oneShot = document.createElement("div")
+  createMarkdownRenderer(oneShot, `<p>${words.join(" ")}</p>`, true)
+  expect(streamed.innerHTML.replaceAll(' data-markdown-enter=""', "")).toBe(oneShot.innerHTML)
+  renderer.dispose()
 })
