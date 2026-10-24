@@ -1,6 +1,23 @@
 export * as SessionStore from "./store.js"
 
-import { and, asc, desc, eq, gt, isNotNull, isNull, like, lt, notInArray, or, sql, type SQL } from "drizzle-orm"
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  getTableColumns,
+  gt,
+  inArray,
+  isNotNull,
+  isNull,
+  like,
+  lt,
+  notInArray,
+  or,
+  sql,
+  type SQL,
+} from "drizzle-orm"
 import { Context, Effect, Layer, Schema } from "effect"
 import { Project } from "@opencode/schema/project"
 import { Workspace } from "@opencode/schema/workspace"
@@ -51,10 +68,40 @@ export type MessagesInput = {
   }
 }
 
+export type SearchInput = {
+  /** Every whitespace-separated term must appear, case-insensitively, in the message text. */
+  query: string
+  limit: number
+}
+
+export type PageInput = {
+  sessionID: Session.ID
+  /** Index of the first message, counting from 0. Omit for the latest messages. */
+  offset?: number
+  limit: number
+}
+
 export interface Interface {
   readonly get: (sessionID: Session.ID) => Effect.Effect<Session.Info | undefined>
   readonly list: (input?: ListInput) => Effect.Effect<Session.Info[]>
   readonly messages: (input: MessagesInput) => Effect.Effect<SessionMessage.Info[], MessageDecodeError>
+  /** Messages by their index in the session, counting from 0, plus the session's total message count. */
+  readonly page: (input: PageInput) => Effect.Effect<
+    {
+      readonly total: number
+      readonly messages: Array<{ readonly index: number; readonly message: SessionMessage.Info }>
+    },
+    MessageDecodeError
+  >
+  /** Message counts by session. Sessions without messages are left out. */
+  readonly counts: (sessionIDs: ReadonlyArray<Session.ID>) => Effect.Effect<Map<Session.ID, number>>
+  /** User and assistant messages whose text matches, newest first, across every session. */
+  readonly search: (
+    input: SearchInput,
+  ) => Effect.Effect<
+    Array<{ readonly sessionID: Session.ID; readonly index: number; readonly message: SessionMessage.Info }>,
+    MessageDecodeError
+  >
   readonly context: (sessionID: Session.ID) => Effect.Effect<SessionMessage.Info[], MessageDecodeError>
   readonly message: (
     messageID: SessionMessage.ID,
@@ -177,6 +224,69 @@ const layer = Layer.effect(
         return yield* Effect.forEach(
           direction === "previous" ? rows.toReversed() : rows,
           SessionHistory.decodeMessageRow,
+        )
+      }),
+      page: Effect.fn("SessionStore.page")(function* (input) {
+        const total =
+          (yield* db
+            .select({ total: count() })
+            .from(SessionMessageTable)
+            .where(eq(SessionMessageTable.session_id, input.sessionID))
+            .get()
+            .pipe(Effect.orDie))?.total ?? 0
+        const offset = input.offset ?? Math.max(0, total - input.limit)
+        const rows = yield* db
+          .select()
+          .from(SessionMessageTable)
+          .where(eq(SessionMessageTable.session_id, input.sessionID))
+          .orderBy(asc(SessionMessageTable.seq))
+          .limit(input.limit)
+          .offset(offset)
+          .all()
+          .pipe(Effect.orDie)
+        const messages = yield* Effect.forEach(rows, (row, index) =>
+          SessionHistory.decodeMessageRow(row).pipe(Effect.map((message) => ({ index: offset + index, message }))),
+        )
+        return { total, messages }
+      }),
+      counts: Effect.fn("SessionStore.counts")(function* (sessionIDs) {
+        if (sessionIDs.length === 0) return new Map<Session.ID, number>()
+        const rows = yield* db
+          .select({ sessionID: SessionMessageTable.session_id, total: count() })
+          .from(SessionMessageTable)
+          .where(inArray(SessionMessageTable.session_id, [...sessionIDs]))
+          .groupBy(SessionMessageTable.session_id)
+          .all()
+          .pipe(Effect.orDie)
+        return new Map(rows.map((row) => [row.sessionID, row.total]))
+      }),
+      search: Effect.fn("SessionStore.search")(function* (input) {
+        // A user message's text, or the text parts of an assistant message. Reasoning and tool parts are left out.
+        const text = sql`coalesce(json_extract(${SessionMessageTable.data}, '$.text'), '') || char(10) || coalesce((select group_concat(json_extract(part.value, '$.text'), char(10)) from json_each(${SessionMessageTable.data}, '$.content') as part where json_extract(part.value, '$.type') = 'text'), '')`
+        const rows = yield* db
+          .select({
+            ...getTableColumns(SessionMessageTable),
+            // Count earlier messages for the 0-based index. Outer columns are qualified because Drizzle omits the table name.
+            index: sql<number>`(select count(*) from ${SessionMessageTable} as earlier where earlier.session_id = "session_message"."session_id" and earlier.seq < "session_message"."seq")`,
+          })
+          .from(SessionMessageTable)
+          .where(
+            and(
+              or(eq(SessionMessageTable.type, "user"), eq(SessionMessageTable.type, "assistant")),
+              ...input.query
+                .split(/\s+/)
+                .filter(Boolean)
+                .map((term) => sql`${text} like ${`%${term.replace(/[\\%_]/g, "\\$&")}%`} escape '\\'`),
+            ),
+          )
+          .orderBy(desc(SessionMessageTable.time_created), desc(SessionMessageTable.id))
+          .limit(input.limit)
+          .all()
+          .pipe(Effect.orDie)
+        return yield* Effect.forEach(rows, (row) =>
+          SessionHistory.decodeMessageRow(row).pipe(
+            Effect.map((message) => ({ sessionID: row.session_id, index: row.index, message })),
+          ),
         )
       }),
       context: Effect.fn("SessionStore.context")((sessionID) => SessionHistory.load(db, sessionID, "latest")),

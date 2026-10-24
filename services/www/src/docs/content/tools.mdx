@@ -229,9 +229,22 @@ The `opencode` Code Mode namespace contains session utilities:
 - `session_move` moves the current session, or another selected session, to a
   relative or absolute `directory`. The move takes effect at a safe boundary,
   so destination-dependent work belongs in a later call.
+- `session_list` lists sessions across projects, most recently updated first,
+  with each session's message count. With `search`, it finds sessions whose
+  title or messages contain every word, and returns the `index` and a snippet
+  of each matching message.
+- `session_read` reads a session's messages by index, counting from 0,
+  including those from before compaction. Omit `offset` for the latest
+  messages, or pass a match's `index` to read from that message. It also
+  returns the session's `total` message count. Set `tools` to include tool
+  calls and their output. Long text is shortened.
 
 ```text
 Rename this session to "Timeout cleanup", then move it to the new worktree.
+```
+
+```text
+Find where we decided against chains of accepts and read that discussion.
 ```
 
 These utilities do not request a built-in permission action.
