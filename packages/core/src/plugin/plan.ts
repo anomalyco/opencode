@@ -59,10 +59,18 @@ export const Plugin = define({
       const missing = event.agent === plan && reminder !== enterReminder
       const stale = event.agent !== plan && reminder === enterReminder
       const text = missing ? enterReminder : stale ? leave : undefined
+      // A reminder alone as the final user turn makes some models refuse the request, which is what an
+      // agent switch mid-turn produces: the transcript ends on a tool result. Re-place a reminder an
+      // earlier request left there, then keep any reminder ahead of that trailing assistant/tool run so
+      // the request still ends where the model expects to continue.
+      const moved = tailReminder(event.messages, enterReminder)
+      if (!text && moved === undefined) return Effect.void
+      if (moved !== undefined) {
+        event.messages.splice(event.messages.length - 1, 1)
+        event.messages.splice(reminderPoint(event.messages), 0, Message.user(moved))
+      }
       if (!text) return Effect.void
-      // Before the user's prompt, matching where agent-switch reminders land.
-      const at = event.messages.at(-1)?.role === "user" ? event.messages.length - 1 : event.messages.length
-      event.messages.splice(at, 0, Message.user(text))
+      event.messages.splice(reminderPoint(event.messages), 0, Message.user(text))
       return ctx.session
         .synthetic({ sessionID: event.sessionID, text, resume: false })
         .pipe(
@@ -111,10 +119,32 @@ function switchReminder(
   return undefined
 }
 
+/** The reminder text when a message is a user turn holding nothing but that reminder. */
+function reminderText(message: Message, enterReminder: string) {
+  if (message.role !== "user" || message.content.length !== 1) return undefined
+  const part = message.content[0]
+  if (part?.type !== "text") return undefined
+  return part.text === enterReminder || part.text === leave ? part.text : undefined
+}
+
 function lastReminder(messages: ReadonlyArray<Message>, enterReminder: string) {
-  return messages.reduce<string | undefined>((found, message) => {
-    const part = message.role === "user" && message.content.length === 1 ? message.content[0] : undefined
-    if (part?.type !== "text") return found
-    return part.text === enterReminder || part.text === leave ? part.text : found
-  }, undefined)
+  return messages.reduce<string | undefined>(
+    (found, message) => reminderText(message, enterReminder) ?? found,
+    undefined,
+  )
+}
+
+/** The reminder a previous request left as the final turn, which only an agent switch mid-turn produces. */
+function tailReminder(messages: ReadonlyArray<Message>, enterReminder: string) {
+  if (messages.length < 2) return undefined
+  return reminderText(messages.at(-1)!, enterReminder)
+}
+
+/**
+ * Where a reminder belongs: before the user's prompt when one ends the request, otherwise ahead of the
+ * trailing assistant/tool run, so the request keeps ending on the turn the model continues from.
+ */
+function reminderPoint(messages: ReadonlyArray<Message>) {
+  if (messages.at(-1)?.role === "user") return messages.length - 1
+  return messages.findLastIndex((message) => message.role === "user") + 1
 }

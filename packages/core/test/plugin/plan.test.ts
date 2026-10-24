@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Message, ToolFailure } from "@opencode/ai"
+import { Message, ToolFailure, ToolResultPart } from "@opencode/ai"
 import { DateTime, Effect, Option, Stream, Types } from "effect"
 import type { SessionContext } from "@opencode/plugin/effect/session"
 import type { ToolHooks } from "@opencode/plugin/effect/tool"
@@ -201,6 +201,60 @@ describe("plan plugin reminders", () => {
       const middle = messages[1]?.content[0]
       expect(middle?.type === "text" && middle.text).toContain("NO LONGER in Plan mode")
       expect(persisted).toHaveLength(1)
+    }),
+  )
+
+  it.effect("keeps a switch reminder ahead of a trailing tool result", () =>
+    Effect.gen(function* () {
+      const { enter } = yield* reminders
+      const { persisted, contextHook } = yield* run()
+      // An agent switch mid-turn leaves the transcript ending on a tool result, not a prompt.
+      const messages = [
+        Message.user(enter),
+        Message.user("implement it"),
+        Message.assistant("reading"),
+        Message.tool(ToolResultPart.make({ id: "call_1", name: "read", result: { type: "content", value: [] } })),
+      ]
+      yield* contextHook(request(build, messages))
+      expect(messages.at(-1)?.role).toBe("tool")
+      expect(messages.map((message) => message.role)).toEqual(["user", "user", "user", "assistant", "tool"])
+      const placed = messages[2]?.content[0]
+      expect(placed?.type === "text" && placed.text).toContain("NO LONGER in Plan mode")
+      expect(persisted).toHaveLength(1)
+    }),
+  )
+
+  it.effect("moves a reminder already persisted at the tail ahead of the trailing run", () =>
+    Effect.gen(function* () {
+      const { enter, leave } = yield* reminders
+      const { persisted, contextHook } = yield* run()
+      // A previous request appended the leave reminder after the tool result and persisted it.
+      const messages = [
+        Message.user(enter),
+        Message.user("implement it"),
+        Message.assistant("reading"),
+        Message.tool(ToolResultPart.make({ id: "call_1", name: "read", result: { type: "content", value: [] } })),
+        Message.user(leave),
+      ]
+      yield* contextHook(request(build, messages))
+      expect(messages.at(-1)?.role).toBe("tool")
+      const placed = messages[2]?.content[0]
+      expect(placed?.type === "text" && placed.text).toContain("NO LONGER in Plan mode")
+      expect(persisted).toHaveLength(0)
+    }),
+  )
+
+  it.effect("moves a reminder persisted after the user's prompt before it", () =>
+    Effect.gen(function* () {
+      const { enter, leave } = yield* reminders
+      const { persisted, contextHook } = yield* run()
+      // The user switched agents after sending the prompt but before the reply arrived.
+      const messages = [Message.user(enter), Message.user("implement it"), Message.user(leave)]
+      yield* contextHook(request(build, messages))
+      expect(messages).toHaveLength(3)
+      const last = messages.at(-1)?.content[0]
+      expect(last?.type === "text" && last.text).toBe("implement it")
+      expect(persisted).toHaveLength(0)
     }),
   )
 
