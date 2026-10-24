@@ -1,5 +1,5 @@
 import { useTerminalDimensions } from "@opentui/solid"
-import { createMemo, createSignal } from "solid-js"
+import { createMemo, createSignal, onMount } from "solid-js"
 import { Keymap } from "../context/keymap"
 import { useTheme } from "../context/theme"
 import { DialogHeader, DialogLayout, useDialog } from "../ui/dialog"
@@ -18,8 +18,10 @@ export function DialogImagePreview(props: { images: readonly ImagePreviewItem[];
   const current = createMemo(() => props.images[index()])
   const imageHeight = createMemo(() => Math.max(3, dimensions().height - 8))
 
-  dialog.setSize("xlarge")
-  dialog.setCentered(true)
+  onMount(() => {
+    dialog.setSize("xlarge")
+    dialog.setCentered(true)
+  })
 
   function move(direction: number) {
     if (props.images.length < 2) return
