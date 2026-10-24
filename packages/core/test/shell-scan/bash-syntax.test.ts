@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
+import { zshUsesFifoProcessSubstitution } from "../fixture/bash"
 import { ShellParse } from "../../src/shell/parse.js"
 import { ShellScan } from "../../src/shell/scan.js"
 
@@ -89,6 +90,12 @@ describe("ordinary Bash and Zsh syntax", () => {
   for (const shell of ["bash", "zsh"]) {
     const executable = Bun.which(shell)
     for (const [source] of fixtures) {
+      // zsh's no-exec parse still opens FIFO-based process substitutions, so
+      // use an equivalent command substitution where /dev/fd is unavailable.
+      const portableSource =
+        shell === "zsh" && zshUsesFifoProcessSubstitution()
+          ? source.replace("array=(<(scan_probe))", 'array=("$(scan_probe)")')
+          : source
       // These are Bash spellings; Zsh's fd allocation is a standalone statement. Bash parses extglob
       // patterns only when extglob is enabled.
       test.skipIf(
@@ -101,7 +108,7 @@ describe("ordinary Bash and Zsh syntax", () => {
           ...(shell === "bash" ? ["--noprofile", "--norc"] : ["-f"]),
           "-n",
           "-c",
-          source + "\n:",
+          portableSource + "\n:",
         ])
         expect(result.stderr.toString()).toBe("")
         // Zsh negates the skipped command's status even under NOEXEC.

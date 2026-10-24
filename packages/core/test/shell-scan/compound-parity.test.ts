@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
+import { zshUsesFifoProcessSubstitution } from "../fixture/bash"
 import { ShellParse } from "../../src/shell/parse.js"
 import { ShellScan } from "../../src/shell/scan.js"
 
@@ -103,6 +104,13 @@ describe("Zsh parenthesized loop acceptance", () => {
 })
 
 describe("real-shell compound syntax", () => {
+  // zsh's FIFO process substitution blocks unless the path is opened; the
+  // scanner-only loop tests above still use the original source.
+  const zshLoopSources = loops.map((fixture) =>
+    zshUsesFifoProcessSubstitution()
+      ? fixture.source.replace("<(printf one)", '"$(printf one)"')
+      : fixture.source,
+  )
   for (const shell of ["bash", "zsh"]) {
     const executable = Bun.which(shell)
     test
@@ -110,7 +118,7 @@ describe("real-shell compound syntax", () => {
       .each([
         ...bodies.map((body) => `probe() ${body}; probe`),
         ...bodies.map((body) => `printf '%s' "$(probe() ${body}; probe)"`),
-        ...(shell === "zsh" ? loops.map((fixture) => fixture.source) : []),
+        ...(shell === "zsh" ? zshLoopSources : []),
       ])(`${shell}: %s`, (source) => {
       if (!executable) throw new Error(`${shell} is unavailable`)
       const execution = Bun.spawnSync(
