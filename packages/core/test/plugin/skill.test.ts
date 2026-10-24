@@ -49,6 +49,13 @@ describe("SkillPlugin.Plugin", () => {
           description: expect.stringContaining("opencode issue"),
         }),
       )
+      expect(skills).toContainEqual(
+        expect.objectContaining({
+          id: "guided-review",
+          name: "Guided Review",
+          description: expect.stringContaining("code changes reviewed"),
+        }),
+      )
       expect(report?.content).toContain("- opencode version: 1.2.3")
       expect(report?.content).toContain("- install/channel: beta")
     }),
