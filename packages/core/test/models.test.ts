@@ -64,7 +64,7 @@ const fixtureSnapshot = [
         family: undefined,
         package: undefined,
         settings: { provider: "acme" },
-        capabilities: { tools: true, input: [], output: [], temperature: true },
+        capabilities: { tools: true, reasoning: false, input: [], output: [], temperature: true },
         variants: [],
         time: { released: Date.parse("2026-01-01") },
         cost: [
@@ -127,7 +127,7 @@ const fixture2Snapshot = [
         family: undefined,
         package: undefined,
         settings: { provider: "beta" },
-        capabilities: { tools: false, input: [], output: [], temperature: false },
+        capabilities: { tools: false, reasoning: true, input: [], output: [], temperature: false },
         variants: [],
         time: { released: Date.parse("2026-02-01") },
         cost: [

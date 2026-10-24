@@ -174,7 +174,13 @@ export type ModelMaxTokensField = "max_completion_tokens" | "max_tokens"
 
 export type ModelCacheFormat = "anthropic" | "alibaba"
 
-export type ModelCapabilities = { tools: boolean; input: Array<string>; output: Array<string>; temperature?: boolean }
+export type ModelCapabilities = {
+  tools: boolean
+  reasoning?: boolean
+  input: Array<string>
+  output: Array<string>
+  temperature?: boolean
+}
 
 export type MoneyUSDPerMillionTokens = number
 

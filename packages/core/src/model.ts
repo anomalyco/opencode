@@ -29,13 +29,19 @@ export const Capabilities = Model.Capabilities
 export type Capabilities = Model.Capabilities
 
 /** Merges partial config capabilities onto a base model's capabilities, defaulting unset fields. */
-export const mergeCapabilities = (config: Partial<Capabilities>, base: Capabilities | undefined) => {
-  const fallback = base ?? Capabilities.default()
+export const mergeCapabilities = (
+  config: Partial<Omit<Capabilities, "reasoning">> & { reasoning?: boolean | { readonly supported: boolean } },
+  base: Capabilities | undefined,
+) => {
+  const fallback: Capabilities = base ?? Capabilities.default()
+  // Config may carry the rich reasoning object; the runtime capability flag is its `supported` boolean.
+  const reasoning = typeof config.reasoning === "object" ? config.reasoning.supported : config.reasoning
   return {
     tools: config.tools ?? fallback.tools,
     input: [...(config.input ?? fallback.input)],
     output: [...(config.output ?? fallback.output)],
     temperature: config.temperature ?? base?.temperature,
+    reasoning: reasoning ?? fallback.reasoning,
   }
 }
 

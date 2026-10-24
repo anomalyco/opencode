@@ -223,9 +223,13 @@ function migrateModel(info: typeof ConfigProviderV1.Model.Type, npm: string | un
   ]
   const defaults = Model.Capabilities.default()
   const capabilities =
-    info.tool_call !== undefined || info.modalities?.input !== undefined || info.modalities?.output !== undefined
+    info.tool_call !== undefined ||
+    info.modalities?.input !== undefined ||
+    info.modalities?.output !== undefined ||
+    info.reasoning !== undefined
       ? {
           tools: info.tool_call ?? defaults.tools,
+          ...(info.reasoning === undefined ? {} : { reasoning: { supported: info.reasoning } }),
           input: info.modalities?.input ?? defaults.input,
           output: info.modalities?.output ?? defaults.output,
         }

@@ -17381,6 +17381,9 @@
           "tools": {
             "type": "boolean"
           },
+          "reasoning": {
+            "type": "boolean"
+          },
           "input": {
             "type": "array",
             "items": {

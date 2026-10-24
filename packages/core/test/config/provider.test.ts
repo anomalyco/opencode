@@ -481,6 +481,42 @@ describe("ConfigProviderPlugin.Plugin", () => {
     }),
   )
 
+  it.effect("keeps a config-declared reasoning capability", () =>
+    Effect.gen(function* () {
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
+      const providerID = Provider.ID.make("custom")
+      const modelID = Model.ID.make("reasoning")
+      yield* providers.transform((editor) => {
+        editor.models.update(providerID, modelID, (model) => {
+          model.capabilities = { tools: false, input: ["text"], output: ["text"] }
+        })
+      })
+      const entries = [
+        new Document({
+          type: "document",
+          info: decode({
+            providers: {
+              custom: {
+                package: "aisdk:@ai-sdk/openai-compatible",
+                models: { reasoning: { capabilities: { reasoning: { supported: true } } } },
+              },
+            },
+          }),
+        }),
+      ]
+
+      yield* addPlugin(entries)
+
+      expect((yield* models.get(providerID, modelID))?.capabilities).toEqual({
+        tools: false,
+        reasoning: true,
+        input: ["text"],
+        output: ["text"],
+      })
+    }),
+  )
+
   it.effect("resolves a config model with only input/output capabilities using default tools", () =>
     Effect.gen(function* () {
       const models = yield* Model.Service

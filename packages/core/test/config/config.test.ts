@@ -1086,6 +1086,34 @@ describe("Config", () => {
     })
   })
 
+  test("preserves a model's declared reasoning through the v1 provider migration", () => {
+    const migrated = migrateV1({
+      provider: {
+        localtest: {
+          npm: "@ai-sdk/openai-compatible",
+          models: {
+            "glm-flash": { name: "GLM Flash", reasoning: true },
+            "plain-model": { name: "Plain Model", tool_call: true },
+            silent: { name: "Silent" },
+          },
+        },
+      },
+    })
+
+    expect(migrated.providers?.localtest?.models?.["glm-flash"]?.capabilities).toEqual({
+      tools: true,
+      reasoning: { supported: true },
+      input: ["text", "image"],
+      output: ["text"],
+    })
+    expect(migrated.providers?.localtest?.models?.["plain-model"]?.capabilities).toEqual({
+      tools: true,
+      input: ["text", "image"],
+      output: ["text"],
+    })
+    expect(migrated.providers?.localtest?.models?.silent?.capabilities).toBeUndefined()
+  })
+
   test("renames old provider IDs while migrating v1 configuration", () => {
     const migrated = migrateV1({
       model: "azure-cognitive-services/deployment",

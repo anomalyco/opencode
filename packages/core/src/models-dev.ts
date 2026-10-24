@@ -251,6 +251,7 @@ function modelInfo(
     settings: Object.keys(settings).length === 0 ? undefined : settings,
     capabilities: {
       tools: model.tool_call,
+      reasoning: model.reasoning,
       input: [...(model.modalities?.input ?? [])],
       output: [...(model.modalities?.output ?? [])],
       temperature: model.temperature,
