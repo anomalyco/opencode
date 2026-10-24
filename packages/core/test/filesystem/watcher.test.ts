@@ -3,6 +3,7 @@ import { describe, expect } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { Deferred, Duration, Effect, Fiber, Layer, Option, Schedule, Stream } from "effect"
+import { TestClock } from "effect/testing"
 import { Config } from "@opencode/core/config"
 import { ConfigLocationWatcherPlugin } from "@opencode/core/config/plugin/location-watcher"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -35,6 +36,10 @@ const configLayer = Config.testLayer()
 function withNative(native: Watcher.NativeInterface) {
   return Effect.provide(Watcher.layer().pipe(Layer.provide(Layer.succeed(Watcher.Native, native))))
 }
+
+// Longer than the watcher's idle grace window, so adjusting the TestClock by it
+// always drains the delayed release.
+const IDLE_WINDOW = "5 seconds"
 
 function countingNative() {
   const counts = { subscribes: 0, unsubscribes: 0 }
@@ -78,7 +83,12 @@ describe("Watcher lifecycle", () => {
           path: "/shared/opencode.json",
           type: "create",
         })
-        expect(counts).toEqual({ ready: 1, closed: 1 })
+        // The grace window keeps the native subscription alive after the last
+        // consumer leaves, so the release lands only once the window elapses.
+        expect(counts).toEqual({ ready: 1, closed: 0 })
+        yield* TestClock.adjust(IDLE_WINDOW)
+        yield* Effect.yieldNow
+        expect(counts.closed).toBe(1)
       }).pipe(
         withNative({
           subscribe: (input) =>
@@ -108,6 +118,48 @@ describe("Watcher lifecycle", () => {
       yield* Stream.runDrain(stream)
       expect(counts.ready).toBe(0)
     }).pipe(withNative({ subscribe: () => Effect.undefined }))
+  })
+
+  it.effect("reuses the native subscription when a consumer resubscribes within the idle window", () => {
+    const { native, counts } = countingNative()
+    return Effect.gen(function* () {
+      const watcher = yield* Watcher.Service
+      const input = { path: "/flap", type: "directory" as const }
+      const acquire = (ready: Deferred.Deferred<void>) =>
+        watcher
+          .subscribe(input, Deferred.succeed(ready, undefined))
+          .pipe(Effect.flatMap(Stream.runDrain), Effect.forkScoped({ startImmediately: true }))
+
+      const first = yield* Deferred.make<void>()
+      const fiber = yield* acquire(first)
+      yield* Deferred.await(first)
+      yield* Fiber.interrupt(fiber)
+
+      const second = yield* Deferred.make<void>()
+      yield* acquire(second)
+      yield* Deferred.await(second)
+
+      expect(counts).toEqual({ subscribes: 1, unsubscribes: 0 })
+    }).pipe(withNative(native))
+  })
+
+  it.effect("releases the native subscription once the idle window elapses", () => {
+    const { native, counts } = countingNative()
+    return Effect.gen(function* () {
+      const watcher = yield* Watcher.Service
+      const ready = yield* Deferred.make<void>()
+      const fiber = yield* watcher
+        .subscribe({ path: "/flap", type: "directory" }, Deferred.succeed(ready, undefined))
+        .pipe(Effect.flatMap(Stream.runDrain), Effect.forkScoped({ startImmediately: true }))
+      yield* Deferred.await(ready)
+      yield* Fiber.interrupt(fiber)
+
+      expect(counts.unsubscribes).toBe(0)
+      yield* TestClock.adjust(IDLE_WINDOW)
+      yield* Effect.yieldNow
+
+      expect(counts.unsubscribes).toBe(1)
+    }).pipe(withNative(native))
   })
 
   it.live("watches only named immediate entries, including missing directories", () =>
@@ -199,6 +251,8 @@ describe("Watcher lifecycle", () => {
 
       yield* Fiber.interrupt(second)
       expect(counts.subscribes).toBe(1)
+      yield* TestClock.adjust(IDLE_WINDOW)
+      yield* Effect.yieldNow
       expect(counts.unsubscribes).toBe(1)
     }).pipe(withNative(native))
   })

@@ -393,11 +393,12 @@ describe("ConfigSkillPlugin.Plugin", () => {
           yield* emitAndWait({ type: "update", path: source })
 
           expect((yield* skill.list()).find((item) => item.id === "bro")?.description).toBe("Second")
+          // The reload re-registers the same source watch, which the idle grace
+          // window reuses instead of restarting the native subscription.
           expect(yield* watcher.subscriptions()).toEqual([
             { path: first, type: "directory", ignore: SkillScan.ignore.toSorted() },
             { path: source, type: "file" },
             { path: second, type: "directory", ignore: SkillScan.ignore.toSorted() },
-            { path: source, type: "file" },
           ])
         }),
       ),
