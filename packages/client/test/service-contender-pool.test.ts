@@ -25,7 +25,7 @@ test("remembers the first startup failure and reports it once no attempt is left
 
   expect(pool.reap()).toBeUndefined()
   expect(pool.failure()?.message).toContain("first failure")
-  expect(pool.shouldRecruit(false)).toBe(false)
+  expect(pool.shouldRecruit(undefined)).toBe(false)
 
   survivor.child.kill("SIGKILL")
   await finished(survivor)
@@ -46,18 +46,21 @@ test("evicting a replaced owner forgets its failure and restarts the spawn clock
 
   expect(pool.failure()).toBeUndefined()
   expect(pool.reap()).toBeUndefined()
-  expect(pool.shouldRecruit(false)).toBe(true)
+  expect(pool.shouldRecruit(undefined)).toBe(true)
   expect(owner.child.exitCode).toBeNull()
 })
 
-test("an unanswered registration gets one spawn delay before an attempt competes", () => {
+test("an unanswered registration gets one spawn delay before an attempt competes, unless its process is gone", () => {
   const timing = { ...defaultEnsureTiming, spawnDelay: 60_000 }
-  expect(contenderPool(timing).shouldRecruit(false)).toBe(true)
+  expect(contenderPool(timing).shouldRecruit(undefined)).toBe(true)
 
   const registered = contenderPool(timing)
-  expect(registered.shouldRecruit(true)).toBe(false)
+  expect(registered.shouldRecruit(process.pid)).toBe(false)
   registered.recruitNow()
-  expect(registered.shouldRecruit(true)).toBe(true)
+  expect(registered.shouldRecruit(process.pid)).toBe(true)
+
+  // A restart or crash leaves the registration behind; no process will ever answer it.
+  expect(contenderPool(timing).shouldRecruit(2_147_483_647)).toBe(true)
 })
 
 test("keeps at most two attempts alive", async () => {
@@ -65,11 +68,11 @@ test("keeps at most two attempts alive", async () => {
   const exiting = clean()
   pool.add(running())
   pool.add(exiting)
-  expect(pool.shouldRecruit(false)).toBe(false)
+  expect(pool.shouldRecruit(undefined)).toBe(false)
 
   await finished(exiting)
   expect(pool.reap()).toBeUndefined()
-  expect(pool.shouldRecruit(false)).toBe(true)
+  expect(pool.shouldRecruit(undefined)).toBe(true)
 })
 
 test("clean exits back off up to the maximum spawn delay", async () => {
@@ -83,10 +86,10 @@ test("clean exits back off up to the maximum spawn delay", async () => {
   // The base delay (200 ms) has passed, but the backed-off delay (300 ms) has not, unless a
   // loaded machine overslept past it.
   await Bun.sleep(Math.max(0, 250 - (Date.now() - start)))
-  if (Date.now() - start < 290) expect(pool.shouldRecruit(false)).toBe(false)
+  if (Date.now() - start < 290) expect(pool.shouldRecruit(undefined)).toBe(false)
   // Doubling would give 400 ms; the cap allows an attempt at 300 ms.
   await Bun.sleep(Math.max(0, 320 - (Date.now() - start)))
-  expect(pool.shouldRecruit(false)).toBe(true)
+  expect(pool.shouldRecruit(undefined)).toBe(true)
 })
 
 test("an answering service resets the backoff to the base spawn delay", async () => {
@@ -100,7 +103,7 @@ test("an answering service resets the backoff to the base spawn delay", async ()
   pool.serviceAnswered()
   // Backed off, the next attempt would wait 400 ms; after the reset it waits the base 200 ms.
   await Bun.sleep(Math.max(0, 250 - (Date.now() - start)))
-  expect(pool.shouldRecruit(false)).toBe(true)
+  expect(pool.shouldRecruit(undefined)).toBe(true)
 })
 
 function spawn(code: string) {
