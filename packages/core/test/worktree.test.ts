@@ -3,7 +3,7 @@ import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
 import { and, eq, isNull } from "drizzle-orm"
-import { Context, Effect, Exit, Fiber, Layer, Queue, Scope, Stream } from "effect"
+import { Context, Effect, Exit, Fiber, Layer, PlatformError, Queue, Scope, Stream } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { AbsolutePath } from "@opencode/core/schema"
@@ -57,6 +57,7 @@ function worktreeLayer(
   bus: Bus.Interface,
   data: string,
   workspaceID?: Workspace.ID,
+  filesystem?: FSUtil.Interface,
 ) {
   return AppNodeBuilder.build(
     LayerNode.group([Worktree.node, WorktreeStrategies.node, Git.node, FSUtil.node, Location.node, Global.node]),
@@ -64,6 +65,7 @@ function worktreeLayer(
       Database.node.replace(Layer.succeed(Database.Service, database)),
       Bus.node.replace(Layer.succeed(Bus.Service, bus)),
       Global.node.replace(Global.layerWith({ data })),
+      ...(filesystem ? [FSUtil.node.replace(Layer.succeed(FSUtil.Service, filesystem))] : []),
       Location.node.replace(
         Layer.succeed(
           Location.Service,
@@ -467,6 +469,158 @@ describe("Worktree", () => {
       yield* worktree.remove({ directory: source.directory, force: false })
     }),
   )
+
+  for (const force of [false, true]) {
+    it.live(`forgets an externally removed Git worktree with force=${force}`, () =>
+      Effect.gen(function* () {
+        const input = yield* setup()
+        const worktree = yield* fixtureWorktree()
+        const parent = abs(`${input.root.path}-removed-worktree`)
+        yield* Effect.addFinalizer(() => Effect.promise(() => fs.rm(parent, { recursive: true, force: true })))
+        const created = yield* worktree.create({ directory: parent, name: "removed" })
+        yield* Effect.promise(() => $`git worktree remove ${created.directory}`.cwd(input.sourceDirectory).quiet())
+        expect(yield* stored(input.projectID)).toContainEqual({ directory: created.directory, strategy: "git" })
+
+        const bus = yield* Bus.Service
+        const event = yield* bus
+          .subscribe(Worktree.Event.Updated)
+          .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+        yield* Effect.yieldNow
+        yield* worktree.remove({ directory: created.directory, force })
+
+        expect(yield* stored(input.projectID)).not.toContainEqual({ directory: created.directory, strategy: "git" })
+        expect(yield* Fiber.join(event)).toHaveLength(1)
+        expect(yield* Effect.promise(() => fs.stat(input.sourceDirectory))).toBeDefined()
+      }),
+    )
+  }
+
+  for (const strategy of [undefined, Worktree.StrategyID.make("custom")]) {
+    it.live(`keeps a missing non-Git directory record with strategy=${strategy}`, () =>
+      Effect.gen(function* () {
+        const input = yield* setup()
+        const worktree = yield* fixtureWorktree()
+        const directory = abs(path.join(input.sourceDirectory, "missing"))
+        yield* input.db
+          .insert(WorktreeTable)
+          .values({ project_id: input.projectID, directory, strategy })
+          .run()
+          .pipe(Effect.orDie)
+
+        const error = yield* worktree.remove({ directory, force: true }).pipe(Effect.flip)
+
+        expect(error).toBeInstanceOf(WorktreeDirectory.DirectoryUnavailableError)
+        expect(yield* stored(input.projectID)).toContainEqual({ directory, strategy: strategy ?? null })
+      }),
+    )
+  }
+
+  it.live("keeps a missing worktree owned by a plugin overriding the git strategy", () =>
+    Effect.gen(function* () {
+      const input = yield* setup()
+      const worktree = yield* fixtureWorktree()
+      const directory = abs(path.join(input.sourceDirectory, "missing-plugin-checkout"))
+      const removed: string[] = []
+      yield* worktree.transform((editor) =>
+        editor.add({
+          id: Worktree.StrategyID.make("git"),
+          create: () => Effect.fail(new Error("unused")),
+          list: () => Effect.succeed([]),
+          remove: (input) => Effect.sync(() => void removed.push(input.directory)),
+        }),
+      )
+      yield* input.db
+        .insert(WorktreeTable)
+        .values({ project_id: input.projectID, directory, strategy: Worktree.StrategyID.make("git") })
+        .run()
+        .pipe(Effect.orDie)
+
+      const error = yield* worktree.remove({ directory, force: true }).pipe(Effect.flip)
+
+      expect(error).toBeInstanceOf(WorktreeDirectory.DirectoryUnavailableError)
+      expect(yield* stored(input.projectID)).toContainEqual({ directory, strategy: "git" })
+      expect(removed).toEqual([])
+    }),
+  )
+
+  it.live("keeps a Git worktree record when its directory was replaced by a file", () =>
+    Effect.gen(function* () {
+      const input = yield* setup()
+      const worktree = yield* fixtureWorktree()
+      const directory = abs(path.join(input.sourceDirectory, "not-a-directory"))
+      yield* Effect.promise(() => fs.writeFile(directory, "keep this file"))
+      yield* input.db
+        .insert(WorktreeTable)
+        .values({ project_id: input.projectID, directory, strategy: Worktree.StrategyID.make("git") })
+        .run()
+        .pipe(Effect.orDie)
+
+      const error = yield* worktree.remove({ directory, force: true }).pipe(Effect.flip)
+
+      expect(error).toBeInstanceOf(WorktreeDirectory.DirectoryUnavailableError)
+      expect(yield* stored(input.projectID)).toContainEqual({ directory, strategy: "git" })
+      expect(yield* Effect.promise(() => fs.readFile(directory, "utf8"))).toBe("keep this file")
+    }),
+  )
+
+  it.live("keeps a Git worktree record when its directory was replaced by a dangling link", () =>
+    Effect.gen(function* () {
+      const input = yield* setup()
+      const worktree = yield* fixtureWorktree()
+      const directory = abs(path.join(input.sourceDirectory, "dangling"))
+      const target = path.join(input.sourceDirectory, "missing-target")
+      yield* Effect.promise(() => fs.symlink(target, directory, "junction"))
+      yield* input.db
+        .insert(WorktreeTable)
+        .values({ project_id: input.projectID, directory, strategy: Worktree.StrategyID.make("git") })
+        .run()
+        .pipe(Effect.orDie)
+
+      const error = yield* worktree.remove({ directory, force: true }).pipe(Effect.flip)
+
+      expect(error).toBeInstanceOf(WorktreeDirectory.DirectoryUnavailableError)
+      expect(yield* stored(input.projectID)).toContainEqual({ directory, strategy: "git" })
+      expect((yield* Effect.promise(() => fs.lstat(directory))).isSymbolicLink()).toBe(true)
+    }),
+  )
+
+  for (const code of ["EACCES", "EPERM"]) {
+    it.live(`keeps a Git worktree record when checking its path fails with ${code}`, () =>
+      Effect.gen(function* () {
+        const input = yield* setup()
+        const filesystem = yield* FSUtil.Service
+        const database = yield* Database.Service
+        const bus = yield* Bus.Service
+        const directory = abs(path.join(input.sourceDirectory, "inaccessible"))
+        yield* input.db
+          .insert(WorktreeTable)
+          .values({ project_id: input.projectID, directory, strategy: Worktree.StrategyID.make("git") })
+          .run()
+          .pipe(Effect.orDie)
+        const cause = PlatformError.systemError({
+          _tag: code === "EACCES" ? "PermissionDenied" : "Unknown",
+          module: "FileSystem",
+          method: "exists",
+          pathOrDescriptor: directory,
+          cause: Object.assign(new Error(code), { code }),
+        })
+        const error = yield* Effect.gen(function* () {
+          const worktree = yield* fixtureWorktree()
+          return yield* worktree.remove({ directory, force: true }).pipe(Effect.flip)
+        }).pipe(
+          Effect.provide(
+            worktreeLayer(input.sourceDirectory, input.projectID, database, bus, input.root.path, undefined, {
+              ...filesystem,
+              exists: (target) => (target === directory ? Effect.fail(cause) : filesystem.exists(target)),
+            }),
+          ),
+        )
+
+        expect(error).toBeInstanceOf(WorktreeDirectory.DirectoryUnavailableError)
+        expect(yield* stored(input.projectID)).toContainEqual({ directory, strategy: "git" })
+      }),
+    )
+  }
 
   it.live("requires force to remove a dirty git worktree", () =>
     Effect.gen(function* () {
