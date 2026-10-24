@@ -1,6 +1,6 @@
 export * as ServerProcess from "./process"
 
-import { NodeHttpServer } from "@effect/platform-node"
+import { NodeHttpServer, NodeHttpServerRequest } from "@effect/platform-node"
 import { Bus } from "@opencode/core/bus"
 import { SessionRestart } from "@opencode/core/session/execution/restart"
 import { InstallationEvent } from "@opencode/schema/installation-event"
@@ -9,8 +9,8 @@ import { hasPersistentPtyConnectTicketURL } from "@opencode/protocol/groups/pers
 import { hasMcpClientTicketURL } from "@opencode/protocol/groups/mcp"
 import { isPairingConnectURL } from "@opencode/protocol/groups/server"
 import { Global } from "@opencode/util/global"
-import { Cause, Context, Effect, Exit, Latch, Layer, Option, Ref, Scope } from "effect"
-import { HttpMiddleware, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
+import { Cause, Context, Effect, Exit, Latch, Layer, Option, Ref, Scope, Stream } from "effect"
+import { HttpBody, HttpMiddleware, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http"
 import { NetAddress } from "effect/net"
 import { createServer } from "node:http"
 import { ServerAuth } from "./auth"
@@ -70,7 +70,24 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
   // Request fibers may continue inbound trace context, but must not inherit the server startup parent.
   yield* bound.http
     .serve(
-      (transform ? transform(app) : app).pipe(
+      Effect.gen(function* () {
+        const response = yield* (transform ? transform(app) : app)
+        if (response.body._tag !== "Stream" || !response.headers["content-type"]?.startsWith("text/event-stream"))
+          return response
+        const request = yield* HttpServerRequest.HttpServerRequest
+        return HttpServerResponse.setBody(
+          response,
+          HttpBody.stream(
+            response.body.stream.pipe(
+              // The Node sender has written the headers when it starts pulling the body.
+              // Flush them before waiting for events, including on Bun's Windows HTTP implementation.
+              Stream.onStart(Effect.sync(() => NodeHttpServerRequest.toServerResponse(request).flushHeaders())),
+            ),
+            response.body.contentType,
+            response.body.contentLength,
+          ),
+        )
+      }).pipe(
         HttpMiddleware.compression(),
         HttpMiddleware.cors({ allowedOrigins: (origin) => isAllowedCorsOrigin(origin, options), maxAge: 86_400 }),
       ),
