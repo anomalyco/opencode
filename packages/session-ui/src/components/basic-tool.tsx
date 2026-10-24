@@ -11,6 +11,8 @@ import {
   type Accessor,
   type JSX,
 } from "solid-js"
+import type { SessionMessageAssistantTool } from "@opencode/client/promise"
+import { ToolElapsed } from "./tool-elapsed"
 import { animate, type AnimationPlaybackControls } from "motion"
 import { useI18n } from "@opencode/ui/context/i18n"
 import { createStore } from "solid-js/store"
@@ -42,6 +44,7 @@ export interface BasicToolProps {
   children?: JSX.Element
   /** Declare known content without constructing lazy JSX to test its presence. */
   hasContent?: boolean
+  time?: SessionMessageAssistantTool["time"]
   status?: string
   hideDetails?: boolean
   defaultOpen?: boolean
@@ -288,6 +291,7 @@ export function BasicTool(props: BasicToolProps) {
             </Match>
             <Match when={true}>{triggerContent() as JSX.Element}</Match>
           </Switch>
+          <ToolElapsed time={props.time} running={props.status === "running"} />
         </div>
       </div>
       <Show when={hasChildren() && !props.hideDetails && !props.locked && (!pending() || props.allowOpenWhilePending)}>
@@ -397,6 +401,7 @@ function args(input: Record<string, unknown> | undefined) {
 
 export function GenericTool(props: {
   tool: string
+  time?: SessionMessageAssistantTool["time"]
   status?: string
   hideDetails?: boolean
   input?: Record<string, unknown>
@@ -407,6 +412,7 @@ export function GenericTool(props: {
     <BasicTool
       icon="mcp"
       status={props.status}
+      time={props.time}
       trigger={{
         title: i18n.t("ui.basicTool.called", { tool: props.tool }),
         subtitle: label(props.input),

@@ -60,6 +60,9 @@
     min-width: 0;
     max-width: 100%;
     font-size: 13px;
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
   }
 
   [data-slot="basic-tool-tool-info-structured"] {
@@ -178,6 +181,7 @@
   }
 
   [data-component="tool-trigger"],
+  [data-slot="basic-tool-tool-info"],
   [data-slot="basic-tool-tool-info-main"] {
     gap: 6px;
   }

@@ -27,6 +27,7 @@ import { Icon } from "@opencode/ui/icon"
 import { Button } from "@opencode/ui/button"
 import { TextReveal } from "@opencode/ui/text-reveal"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
+import { ToolElapsed } from "../components/tool-elapsed"
 import { BasicTool } from "../components/basic-tool"
 import { reasoningHeading } from "../timeline/projection"
 import { Card } from "@opencode/ui/card"
@@ -813,6 +814,12 @@ export function AssistantReasoningContent(props: {
                   active={props.streaming}
                 />
               </span>
+              <Show when={props.streaming && props.content.time?.created !== undefined}>
+                <ToolElapsed
+                  time={{ created: props.content.time!.created, ran: props.content.time!.created }}
+                  running
+                />
+              </Show>
               <Show
                 when={props.streaming && !open()}
                 fallback={

@@ -16,6 +16,7 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { useServer } from "@/runtime/server/current"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { Timeline } from "@opencode/session-ui/timeline/projection"
+import { ToolElapsed } from "@opencode/session-ui/tool-elapsed"
 import { createSessionTimelineRowRenderer } from "@opencode/session-ui/timeline/row"
 import { getReadyMarkdown, preloadMarkdown } from "@opencode/session-ui/markdown-cache"
 import { createTimelineController, type TimelineController, type TimelineSessionSource } from "./controller"
@@ -398,6 +399,15 @@ function MessageTimelineView(
   // Undelivered input waits below the work the model has seen, so live status moves into the row above it.
   const activityRow = createMemo(() => projection.rows().some((row) => Predicate.isTagged(row, "Activity")))
 
+  // The working row tracks the active turn from its user prompt, so it keeps counting until the turn finishes.
+  const workingTime = createMemo(() => {
+    const id = projection.activeMessageID()
+    if (!id) return undefined
+    const message = messageByID().get(id)
+    if (message?.type !== "user") return undefined
+    return { created: message.time.created, ran: message.time.created }
+  })
+
   const activity = () => (
     <Show when={showWorking() || backgroundHintPresence.present()}>
       <div
@@ -408,8 +418,9 @@ function MessageTimelineView(
       >
         <div class={`flex h-9 items-center gap-2 pt-3 text-[13px] font-[530] leading-text-compact ${turnPadding()}`}>
           <Show when={showWorking()}>
-            <div data-component="session-working" role="status">
+            <div data-component="session-working" role="status" class="flex items-center gap-1.5">
               <TextShimmer text={language.t("session.timeline.working")} active />
+              <ToolElapsed time={workingTime()} running />
             </div>
           </Show>
           <Show when={backgroundHintPresence.present()}>

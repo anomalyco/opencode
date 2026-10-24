@@ -208,7 +208,14 @@ export function createSessionTimelineRowRenderer(input: {
           if (ref.messageID !== ref.partID || !message) return []
 
           if (message.type === "shell")
-            return [{ type: "shell", id: ref.partID, render: () => <Shell messageID={ref.messageID} grouped /> }]
+            return [
+              {
+                type: "shell",
+                id: ref.partID,
+                render: () => <Shell messageID={ref.messageID} grouped />,
+                time: message.time,
+              } as const,
+            ]
 
           if (message.type !== "assistant" && message.type !== "user")
             return [{ type: "notice", id: ref.partID, render: () => <Notice messageID={ref.messageID} grouped /> }]
