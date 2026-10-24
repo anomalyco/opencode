@@ -5,6 +5,7 @@ import { WebSearch } from "@opencode/core/websearch"
 import { WebSearchExa } from "@opencode/core/plugin/websearch/exa"
 import { WebSearchFirecrawl } from "@opencode/core/plugin/websearch/firecrawl"
 import { WebSearchParallel } from "@opencode/core/plugin/websearch/parallel"
+import { WebSearchScrapeDo } from "@opencode/core/plugin/websearch/scrapedo"
 import { WebSearchTavily } from "@opencode/core/plugin/websearch/tavily"
 import { WebSearchTinyFish } from "@opencode/core/plugin/websearch/tinyfish"
 import { host, integrationHost, webSearchHost } from "./host"
@@ -41,6 +42,7 @@ describe("built-in web search providers", () => {
     WebSearchExa.Plugin,
     WebSearchParallel.Plugin,
     WebSearchFirecrawl.Plugin,
+    WebSearchScrapeDo.Plugin,
     WebSearchTavily.Plugin,
     WebSearchTinyFish.Plugin,
   ].forEach((plugin) => {
@@ -368,6 +370,91 @@ describe("built-in web search providers", () => {
         body: { method: "tools/call" },
       })
       expect(requests[3]?.headers["x-tinyfish-access-mode"]).toBeUndefined()
+    }),
+  )
+
+  it.effect("registers Scrape.do and passes its token as a query parameter", () =>
+    Effect.gen(function* () {
+      resetWebSearchFixture(
+        JSON.stringify({
+          organic_results: [
+            {
+              position: 1,
+              title: "Effect",
+              link: "https://effect.website",
+              snippet: "Effect documentation",
+            },
+          ],
+        }),
+      )
+      const integrations = yield* Integration.Service
+      const websearch = yield* WebSearch.Service
+      yield* WebSearchScrapeDo.Plugin.effect(
+        host({ integration: integrationHost(integrations), websearch: webSearchHost(websearch) }),
+      )
+
+      expect(yield* integrations.get(Integration.ID.make("scrapedo"))).toMatchObject({
+        id: "scrapedo",
+        name: "Scrape.do",
+        methods: [{ type: "key" }, { type: "env", names: ["SCRAPEDO_API_KEY"] }],
+      })
+      yield* integrations.connection.key({
+        integrationID: Integration.ID.make("scrapedo"),
+        key: "scrapedo-secret",
+      })
+
+      expect(yield* websearch.query({ query: "effect typescript", providerID: WebSearch.ID.make("scrapedo") })).toEqual(
+        new WebSearch.Response({
+          providerID: WebSearch.ID.make("scrapedo"),
+          results: [
+            {
+              url: "https://effect.website",
+              title: "Effect",
+              content: "Effect documentation",
+              time: {},
+            },
+          ],
+        }),
+      )
+      expect(requests[0]).toMatchObject({
+        url: `${WebSearchScrapeDo.endpoint}?token=scrapedo-secret&q=effect+typescript`,
+        headers: expect.any(Object),
+      })
+      expect(requests[0]?.body).toBeUndefined()
+    }),
+  )
+
+  it.effect("keeps Scrape.do results without snippets and treats missing results as empty", () =>
+    Effect.gen(function* () {
+      resetWebSearchFixture(
+        JSON.stringify({
+          organic_results: [
+            { title: "Effect", link: "https://effect.website", snippet: "Effect documentation" },
+            { title: "Effect PDF", link: "https://effect.website/guide.pdf" },
+          ],
+        }),
+      )
+      const integrations = yield* Integration.Service
+      const websearch = yield* WebSearch.Service
+      yield* WebSearchScrapeDo.Plugin.effect(
+        host({ integration: integrationHost(integrations), websearch: webSearchHost(websearch) }),
+      )
+      yield* integrations.connection.key({
+        integrationID: Integration.ID.make("scrapedo"),
+        key: "scrapedo-secret",
+      })
+
+      expect(
+        (yield* websearch.query({ query: "effect", providerID: WebSearch.ID.make("scrapedo") })).results,
+      ).toEqual([
+        { url: "https://effect.website", title: "Effect", content: "Effect documentation", time: {} },
+        { url: "https://effect.website/guide.pdf", title: "Effect PDF", time: {} },
+      ])
+
+      resetWebSearchFixture(JSON.stringify({}))
+      expect(
+        (yield* websearch.query({ query: "nothing", providerID: WebSearch.ID.make("scrapedo") })).results,
+      ).toEqual([])
     }),
   )
 })

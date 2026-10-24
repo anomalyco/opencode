@@ -40,6 +40,7 @@ export function executeCallSummary(call: ExecuteCall) {
 export function webSearchProviderName(provider: unknown) {
   if (typeof provider !== "string" || !provider) return ""
   if (provider === "opencode") return "OpenCode"
+  if (provider === "scrapedo") return "Scrape.do"
   return `${provider[0].toUpperCase()}${provider.slice(1)}`
 }
 
