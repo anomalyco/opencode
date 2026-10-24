@@ -4,7 +4,7 @@ import type { Context } from "@opencode/plugin/effect/plugin"
 import type { RpcRegistration } from "@opencode/plugin/effect/rpc"
 import type { Session } from "@opencode/schema/session"
 import { Tool } from "@opencode/schema/tool"
-import { Deferred, Effect, Schema, Stream } from "effect"
+import { Deferred, Effect, Option, Schema, Stream } from "effect"
 import { Browser } from "./rpc.js"
 import { BrowserTunnel } from "./tunnel.js"
 
@@ -77,10 +77,18 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
     .register(Browser.Definition, {
       attach: (input, call) =>
         Effect.gen(function* () {
-          const session = yield* ctx.session
-            .get({ sessionID: input.sessionID })
-            .pipe(Effect.mapError(() => call.error("unavailable", "Session not found.", {})))
-          if (session.location.directory !== ctx.location.directory)
+          const committed = yield* Deferred.make<void>()
+          if (input.draft)
+            yield* ctx.event.subscribe().pipe(
+              Stream.filter((event) => event.type === "session.created" && event.data.sessionID === input.sessionID),
+              Stream.take(1),
+              Stream.runForEach(() => Deferred.succeed(committed, undefined)),
+              Effect.forkScoped({ startImmediately: true }),
+            )
+          const session = yield* ctx.session.get({ sessionID: input.sessionID }).pipe(Effect.option)
+          if (Option.isNone(session) && !input.draft)
+            return yield* Effect.fail(call.error("unavailable", "Session not found.", {}))
+          if (Option.isSome(session) && session.value.location.directory !== ctx.location.directory)
             return yield* Effect.fail(call.error("unavailable", "Session belongs to another location.", {}))
           const browser = yield* Effect.acquireRelease(
             Effect.gen(function* () {
@@ -98,9 +106,26 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
             }),
             (browser) => (browsers.get(input.sessionID) === browser ? close(input.sessionID) : Effect.void),
           )
-          yield* grant(input.sessionID)
+          // A draft can browse through this Location's network without creating a Session or granting agent tools.
+          // The reserved id becomes a real Session on its first prompt; only then does this attachment grant access.
+          if (Option.isSome(session)) yield* grant(input.sessionID)
+          if (Option.isNone(session))
+            yield* Deferred.await(committed).pipe(
+              Effect.andThen(
+                ctx.session
+                  .get({ sessionID: input.sessionID })
+                  .pipe(
+                    Effect.flatMap((created) =>
+                      created.location.directory === ctx.location.directory
+                        ? grant(input.sessionID).pipe(Effect.andThen(Effect.never))
+                        : close(input.sessionID),
+                    ),
+                  ),
+              ),
+              Effect.forkScoped({ startImmediately: true }),
+            )
           yield* rpc.events
-            .emit("control", { type: "attached", connectionID: input.connectionID, version: 4 })
+            .emit("control", { type: "attached", connectionID: input.connectionID, version: input.version })
             .pipe(Effect.orDie)
           return yield* Deferred.await(browser.closed)
         }).pipe(Effect.scoped),

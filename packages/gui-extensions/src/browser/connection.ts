@@ -38,7 +38,7 @@ type ConnectionState = {
 export function createConnection(input: {
   client: () => Client | undefined
   listen: (binding: string, listener: (event: PaneEvent) => void) => () => void
-  target: () => { server: string; session: string }
+  target: () => { server: string; session: string; draft?: { directory: string } }
   /**
    * `mirror` applies the current tabs to the strip; call it right after storing the state, in the same batch, or
    * later once the strip can be written. A mirror that never runs leaves the strip's tabs as they are. `native` is true
@@ -215,6 +215,14 @@ export function createConnection(input: {
 
   return {
     wake: register,
+    /** A different workspace needs a new network attachment; its tab inventory is restored into that attachment. */
+    retarget() {
+      state.registration?.close()
+      state.registration = undefined
+      state.embeds = {}
+      blocked = false
+      register()
+    },
     /** Follows the pane's Ipc going away and coming back. */
     refresh() {
       if (!input.client()) {
@@ -264,7 +272,7 @@ export function createConnection(input: {
 function open(
   client: Client,
   listen: (binding: string, listener: (event: PaneEvent) => void) => () => void,
-  target: { server: string; session: string; restore?: Browser.State },
+  target: { server: string; session: string; draft?: { directory: string }; restore?: Browser.State },
   listener: (event: PaneEvent) => void,
   failed: (cause: unknown) => void,
 ): Registration {

@@ -112,7 +112,7 @@ export function createReviewModel(input: {
     }
 
     // Turn snapshots are captured only for Git sessions.
-    if (project?.vcs === "git" && view().id) list.push("turn")
+    if (project?.vcs === "git" && !view().draft && view().id) list.push("turn")
 
     return list
   })
@@ -220,7 +220,7 @@ export function createReviewModel(input: {
   )
 
   createKeyed(opened, () => {
-    if (diffQuery.isFetching) return
+    if (diffQuery.isFetching || !wantsReview()) return
 
     if (input.demand.tree > 0) {
       refresh()
@@ -291,13 +291,15 @@ export function createReviewModel(input: {
         const data = session.server.data
 
         data.project.invalidate()
-        data.session.invalidate(session.id)
+
+        if (!session.draft) data.session.invalidate(session.id)
         data.location.invalidate(location)
         data.location.vcs.invalidate(location)
         await data.project.sync()
 
         if (!alive()) return
-        await data.session.sync(session.id)
+
+        if (!session.draft) await data.session.sync(session.id)
 
         if (!alive()) return
         await Promise.all([data.location.syncInfo(location), data.location.vcs.sync(location)])
@@ -457,7 +459,7 @@ export function createReviewModel(input: {
   }))
 
   const open = () => {
-    if (!layout.side.opened(view())) layout.side.toggle(view())
+    layout.open("review:changes", view())
   }
 
   const openPath = (path: string) =>

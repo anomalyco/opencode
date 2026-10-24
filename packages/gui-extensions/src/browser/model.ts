@@ -33,6 +33,7 @@ type Live = {
   connection: Connection
   registration?: Registration
   revision: number
+  directory?: string
   /** Strip writes waiting for the session's location, without which the strip cannot be written. */
   held: { mirror?: () => void; focus?: Browser.TabID }
   /** The agent's previews waiting for the session's screen, which resolves their paths. */
@@ -87,6 +88,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   const owner = getOwner()
   const history = ctx.stores.history
   const [state, setState] = createStore<ModelState>({ attachments: {}, unsupported: {}, errors: {}, pages: {} })
+  const supportKey = (session: SessionRef) => `${session.server.id}${session.draft ? "\ndraft" : ""}`
   const [panes, setPanes] = createSignal<readonly PaneHandle[]>([])
   const live = new Map<string, Live>()
   const listeners = new Map<string, (event: PaneEvent) => void>()
@@ -135,7 +137,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
   const wakeCurrent = () => {
     if (document.visibilityState !== "visible") return
-    const view = sessions.current()
+    const view = sessions.current({ drafts: true })
 
     if (view) live.get(view.key)?.connection.wake()
   }
@@ -168,7 +170,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   const attach = (ref: SessionRef) => {
     const id = ref.key
 
-    if (live.has(id) || state.unsupported[ref.server.id] || !ref.server.compatible) return
+    if (live.has(id) || state.unsupported[supportKey(ref)] || !ref.server.compatible) return
 
     const entry: Live = {
       ref,
@@ -185,7 +187,11 @@ export function createModel(ctx: SetupContext<typeof definition>) {
             listeners.delete(binding)
           }
         },
-        target: () => ({ server: ref.server.id, session: ref.id }),
+        target: () => ({
+          server: ref.server.id,
+          session: ref.id,
+          draft: ref.draft && ref.location ? { directory: ref.location.directory } : undefined,
+        }),
         // Focus requests write to the owning session's panel even while another shell tab is routed,
         // so the side panel and browser tab are already selected when the user returns to it.
         focus: (tabID) => {
@@ -212,7 +218,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
         address: (tabID) => addressed.get(id)?.forEach((listener) => listener(tabID)),
         change: (next, mirror, native) => {
           if (next.error === "browser.pane.unsupported") {
-            setState("unsupported", ref.server.id, true)
+            setState("unsupported", supportKey(ref), true)
 
             return close(id)
           }
@@ -290,9 +296,21 @@ export function createModel(ctx: SetupContext<typeof definition>) {
           }),
       )
 
+      // A draft can change its selected workspace before its Session exists. Keep its tabs, but never keep using
+      // the previous workspace's network and file roots. Saving in the same directory keeps the native pages.
+      createKeyed(
+        () => ref.location?.directory,
+        (directory) => {
+          const previous = entry.directory
+          entry.directory = directory
+
+          if (previous !== undefined && previous !== directory) entry.connection.retarget()
+        },
+      )
+
       // Previews made while another session was on screen open once the user returns to this one.
       createKeyed(
-        () => sessions.current()?.key === ref.key && ctx.screen.current(),
+        () => sessions.current({ drafts: true })?.key === ref.key && ctx.screen.current({ drafts: true }),
         () => entry.previews.splice(0).forEach((path) => preview(entry, path)),
       )
 
@@ -308,19 +326,19 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
   // The routed session attaches, once its server is compatible.
   createKeyed(() => {
-    const view = sessions.current()
+    const view = sessions.current({ drafts: true })
 
     if (!view?.id) return
-    const ref = sessions.list().find((item) => item.key === view.key)
+    const ref = sessions.list({ drafts: true }).find((item) => item.key === view.key)
 
-    return ref?.server.compatible ? ref : undefined
+    return ref?.server.compatible && !state.unsupported[supportKey(ref)] ? ref : undefined
   }, attach)
 
   // An attachment closes with its shell tab, or when its server stops being compatible. The store's keys mirror `live`,
   // and reading them follows new attachments.
   createKeyed(
     () => {
-      const owned = new Set(sessions.list().map((ref) => ref.key))
+      const owned = new Set(sessions.list({ drafts: true }).map((ref) => ref.key))
 
       const stale = Object.keys(state.attachments).filter((id) => {
         const entry = live.get(id)
@@ -336,7 +354,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
   // These are edges, not a reactive dependency on suspended state: eviction while the window
   // remains focused must not immediately reopen the browser and defeat resource cleanup.
-  createKeyed(() => sessions.current()?.key, wakeCurrent)
+  createKeyed(() => sessions.current({ drafts: true })?.key, wakeCurrent)
   makeEventListener(window, "focus", wakeCurrent)
   makeEventListener(document, "visibilitychange", wakeCurrent)
   makeEventListener(document, "pointerdown", wakeCurrent)
@@ -355,13 +373,13 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   const pending = (session: SessionRef) => {
     const value = attachment(session)
 
-    if (!value) return !state.unsupported[session.server.id] && session.server.compatible && !session.pending
+    if (!value) return !state.unsupported[supportKey(session)] && session.server.compatible && !session.pending
 
     return value.registration !== undefined && !value.browser && !value.error
   }
 
   const available = (session: SessionRef) =>
-    !state.unsupported[session.server.id] && !!session.id && session.server.compatible && !layout.narrow()
+    !state.unsupported[supportKey(session)] && !!session.id && session.server.compatible && !layout.narrow()
 
   const tab = (session: Session, tabID: string) => attachment(session)?.browser?.tabs.find((item) => item.id === tabID)
 
@@ -390,9 +408,9 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
   // Only the routed session has a file model to resolve workspace paths with: the session screen's.
   const files = (session: Session) => {
-    const screen = ctx.screen.current()
+    const screen = ctx.screen.current({ drafts: true })
 
-    return screen && sessions.current()?.key === session.key ? screen.file : undefined
+    return screen && sessions.current({ drafts: true })?.key === session.key ? screen.file : undefined
   }
 
   // The desktop's own sidecar shares this disk, and its browser pane accepts file:// URLs inside the
@@ -415,9 +433,9 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   // The agent's browser.preview tool: the file extension opens HTML in the browser, other files in the file panel. Only the
   // session's screen resolves workspace paths, so a preview for a session that is not on screen waits for it.
   const preview = (entry: Live, path: string) => {
-    const view = sessions.current()
+    const view = sessions.current({ drafts: true })
 
-    if (view?.key === entry.ref.key && ctx.screen.current()) {
+    if (view?.key === entry.ref.key && ctx.screen.current({ drafts: true })) {
       links.open({ href: path, session: view, background: true })
 
       return

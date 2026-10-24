@@ -20,7 +20,7 @@ import type { SessionModel } from "@/session/model"
 import { SESSION_PANEL_WIDTH_MIN } from "@/session/session-panel-width"
 import { SessionPanelFrame } from "@/session/session-frame"
 import { useExtensionHost } from "@/runtime/extension/host"
-import { ExtensionLinks } from "@/runtime/extension/render"
+import { ExtensionLinks, ExtensionSlot } from "@/runtime/extension/render"
 import { createPanelSidebar, createRegion, DockRegion, MobilePanel } from "@/runtime/extension/panels"
 import { createMobileViews, MobileViewTabs } from "@/runtime/extension/mobile"
 import { useExtensionAttachment } from "@/runtime/extension/host-apis"
@@ -34,7 +34,6 @@ import { createTimelineSearchController } from "./timeline/search-controller"
 import { TimelineSearchBar } from "./timeline/search-bar"
 import { ActiveSessionComposerRegion, createActiveSessionRegion } from "./composer/region"
 import { SessionIdentityHeader } from "./session-identity-header"
-import { SessionReviewToggle } from "./header/session-header-actions"
 import { SessionRunningMenu } from "./header/session-running-menu"
 import { createAnimatedPresence } from "@/runtime/animated-presence"
 import { createTimelineCache } from "./timeline/cache"
@@ -75,6 +74,9 @@ function SessionScreenContent(props: {
     view: props.view,
     screen: props.screen,
     tabs: session.layout.tabs,
+    onEmpty: () => {
+      if (session.layout.view().side.opened()) session.layout.view().side.toggle()
+    },
   })
 
   onCleanup(attachment.region(region))
@@ -83,6 +85,7 @@ function SessionScreenContent(props: {
   const screen = createSessionScreenLayout(session, {
     wide: region.wide,
     sidebar: () => host.items(Slot).some((item) => item.value.at === "session.panel.sidebar"),
+    tabs: () => region.keys().length > 0,
   })
 
   const timeline = createSessionTimelineInteraction(session)
@@ -382,7 +385,7 @@ function SessionScreenContent(props: {
               onPointerDown={hideTimelineScrollbar}
               onClick={hideTimelineScrollbar}
             >
-              <SessionReviewToggle />
+              <ExtensionSlot at="session.panel.toggle" input={{ session: props.view(), screen: props.screen }} />
             </div>
           </Show>
           <div

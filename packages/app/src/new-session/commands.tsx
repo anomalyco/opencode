@@ -2,6 +2,7 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import { useSettingsCommand } from "@/settings/command"
 import { useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
+import { useSessionLayout } from "@/session/session-layout"
 
 export function useNewSessionCommands(input: {
   restoreFocus: () => void
@@ -17,9 +18,16 @@ export function useNewSessionCommands(input: {
   const command = useCommand()
   const dialog = useDialog()
   const language = useLanguage()
+  const layout = useSessionLayout()
 
   useSettingsCommand()
   command.register("new-session", () => [
+    {
+      id: "panel.toggle",
+      title: language.t("command.panel.toggle"),
+      category: language.t("command.category.view"),
+      onSelect: () => layout.view().side.toggle(),
+    },
     {
       id: "command.palette",
       title: language.t("command.palette"),

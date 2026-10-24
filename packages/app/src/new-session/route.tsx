@@ -51,6 +51,11 @@ function ResolvedDraftContent(props: { draft: DraftTab }) {
   const server = useServer()
   const tabs = useTabs()
 
+  const directory = () =>
+    props.draft.worktree && props.draft.worktree !== "main" && props.draft.worktree !== "create"
+      ? props.draft.worktree
+      : props.draft.directory
+
   return (
     <Show
       when={!server.health?.incompatible}
@@ -77,9 +82,9 @@ function ResolvedDraftContent(props: { draft: DraftTab }) {
           </SessionRouteFrame>
         )}
       >
-        <ModelsProvider directory={props.draft.directory}>
-          <LocationProvider directory={props.draft.directory}>
-            <SessionUIProvider directory={props.draft.directory} server={props.draft.server}>
+        <ModelsProvider directory={directory()}>
+          <LocationProvider directory={directory()}>
+            <SessionUIProvider directory={directory()} server={props.draft.server}>
               <DraftProviders>
                 <NewSession draftId={props.draft.draftID} />
               </DraftProviders>

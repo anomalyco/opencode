@@ -3,7 +3,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test"
 import { base64Encode } from "@opencode/util/encode"
 import { SERVER, holdRoute, project, provider, session, workspaceKey } from "../utils/app"
 import { mockOpenCodeServer } from "../utils/mock-server"
-import { fileDiff, fileNode, openSession } from "../utils/workspace"
+import { fileDiff, fileNode, openDraft, openFileBrowser, openSession, toggleSidePanel } from "../utils/workspace"
 import { expectSessionTitle } from "../utils/waits"
 
 test.use({ viewport: { width: 1440, height: 900 } })
@@ -114,7 +114,113 @@ test("a rejected Git init releases its session's button without showing an error
   await expect(init).toBeEnabled()
 })
 
-test("open file tab browses, searches, and tracks missing files", async ({ page }) => {
+test("draft panes browse and review without creating a session, then keep their state on the first message", async ({
+  page,
+}) => {
+  const creates = { count: 0 }
+  const directory = "C:/OpenCode/DraftPanes"
+
+  const workspace = await openDraft(page, {
+    name: "DraftPanes",
+    fileList: (path) => (path ? [] : [fileNode(directory, "README.md")]),
+    vcsDiff: [fileDiff("README.md")],
+    fileContent: () => ({ type: "text", content: "Draft workspace file" }),
+    onSessionCreate: () => {
+      creates.count++
+    },
+  })
+
+  const modifier = await page.evaluate(() => (/Mac|iPod|iPhone|iPad/.test(navigator.platform) ? "Meta" : "Control"))
+  const panel = page.locator("#review-panel")
+  const files = panel.getByRole("tab", { name: "File Browser", exact: true })
+  const review = panel.locator("#session-side-panel-review-tab")
+
+  await workspace.editor.fill("Keep this draft")
+  await page.keyboard.press(`${modifier}+e`)
+  await expect(files).toHaveAttribute("aria-selected", "true")
+  await expect(panel.getByRole("combobox", { name: "Filter files", exact: true })).toBeFocused()
+  await expect(review).toHaveCount(0)
+  await files.locator("..").getByRole("button", { name: "Close tab", exact: true }).click()
+  await expect(files).toHaveCount(0)
+  await expect(panel).toBeHidden()
+  await page.keyboard.press(`${modifier}+e`)
+  await expect(panel.getByRole("combobox", { name: "Filter files", exact: true })).toBeFocused()
+  await page.keyboard.press(`${modifier}+e`)
+  await expect(panel).toBeHidden()
+  await expect(workspace.editor).toHaveText("Keep this draft")
+  expect(creates.count).toBe(0)
+
+  await page.keyboard.press(`${modifier}+Shift+r`)
+  await expect(review).toHaveAttribute("aria-selected", "true")
+  await expect(panel.getByText("Git changes", { exact: true })).toBeVisible()
+  await review.locator("..").getByRole("button", { name: "Close tab", exact: true }).click()
+  await expect(review).toHaveCount(0)
+  await expect(panel).toBeHidden()
+  await page.keyboard.press(`${modifier}+Shift+r`)
+  await expect(review).toHaveAttribute("aria-selected", "true")
+  await panel.getByRole("button", { name: "Add tab", exact: true }).click()
+  await page.getByRole("menuitem", { name: /^File Browser/ }).click()
+  await expect(files).toHaveAttribute("aria-selected", "true")
+  await panel.getByRole("button", { name: /^README\.md/ }).click()
+  await expect(panel.getByText("Draft workspace file", { exact: true })).toBeVisible()
+  expect(creates.count).toBe(0)
+
+  await workspace.editor.press("Enter")
+  await expect(page).toHaveURL(/\/session\/ses_/)
+  const file = panel.getByRole("tab", { name: "README.md", exact: true })
+
+  await expect(file).toHaveAttribute("aria-selected", "true")
+  await review.locator("..").getByRole("button", { name: "Close tab", exact: true }).click()
+  await expect(review).toHaveCount(0)
+  await expect(file).toHaveAttribute("aria-selected", "true")
+  await file.locator("..").getByRole("button", { name: "Close tab", exact: true }).click()
+  await expect(file).toHaveCount(0)
+  await expect(panel).toBeHidden()
+  expect(creates.count).toBe(1)
+})
+
+test("file browser shortcut opens workspace files without replacing quick open", async ({ page }) => {
+  const workspace = await openSession(page, {
+    name: "FileBrowserShortcut",
+    fileList: (path) => (path ? [] : [fileNode("C:/OpenCode/FileBrowserShortcut", "README.md")]),
+  })
+
+  const modifier = await page.evaluate(() => (/Mac|iPod|iPhone|iPad/.test(navigator.platform) ? "Meta" : "Control"))
+  const panel = page.locator("#review-panel")
+  const toggle = page.getByRole("button", { name: "Toggle review", exact: true })
+  const browser = panel.getByRole("tab", { name: "File Browser", exact: true })
+  const filter = panel.getByRole("combobox", { name: "Filter files", exact: true })
+
+  await expect(toggle).toHaveAttribute("aria-expanded", "false")
+  await workspace.editor.focus()
+  await expect(workspace.editor).toBeFocused()
+  await page.keyboard.press(`${modifier}+e`)
+  await expect(browser).toHaveAttribute("aria-selected", "true")
+
+  await page.keyboard.press(`${modifier}+e`)
+  await expect(panel).toBeHidden()
+  await page.keyboard.press(`${modifier}+e`)
+  await expect(filter).toBeFocused()
+  await expect(filter).toBeFocused()
+  await expect(panel.getByRole("button", { name: "README.md", exact: true })).toBeVisible()
+
+  await page.keyboard.press(`${modifier}+p`)
+  const palette = page.getByRole("dialog")
+  await expect(palette.getByRole("textbox")).toBeFocused()
+  await expect(palette.getByRole("textbox")).toHaveAttribute("placeholder", "Search files, commands, and sessions")
+  await palette.getByRole("textbox").press("Escape")
+  await expect(palette).toHaveCount(0)
+  await expect(browser).toHaveAttribute("aria-selected", "true")
+
+  await panel.getByRole("button", { name: "Add tab", exact: true }).click()
+  const launcher = page.getByRole("menuitem", { name: /^File Browser/ })
+  await expect(launcher).toContainText("E")
+  await launcher.click()
+  await expect(filter).toBeFocused()
+  await expect(browser).toHaveAttribute("aria-selected", "true")
+})
+
+test("file browser tab browses, searches, and tracks missing files", async ({ page }) => {
   const searches: { query: string; dirs?: string; limit?: number }[] = []
   const directory = "C:/OpenCode/ReviewOpenFile"
   const files = Array.from({ length: 80 }, (_, index) => `file-${String(index).padStart(2, "0")}.ts`)
@@ -146,22 +252,22 @@ test("open file tab browses, searches, and tracks missing files", async ({ page 
   const sidebar = panel.locator('[data-slot="session-review-v2-sidebar"]')
   const sidebarToggle = panel.getByRole("button", { name: "Toggle file tree" })
   const contextButton = page.getByRole("button", { name: "Toggle session context" })
-  const openFile = panel.getByRole("button", { name: "Open file" })
+  const openFile = () => openFileBrowser(page)
   const tab = (name: string) => panel.getByRole("tab", { name, exact: true })
   await contextButton.click()
   await expect(tab("Context")).toHaveAttribute("aria-selected", "true")
-  await openFile.click()
-  await expect(tab("Open file")).toHaveAttribute("aria-selected", "true")
+  await openFile()
+  await expect(tab("File Browser")).toHaveAttribute("aria-selected", "true")
   await expect(sidebarToggle).toBeDisabled()
   await expect(sidebar).toBeVisible()
   await contextButton.click()
   await expect(tab("Context")).toHaveAttribute("aria-selected", "true")
-  await expect(tab("Open file")).toHaveAttribute("aria-selected", "false")
+  await expect(tab("File Browser")).toHaveAttribute("aria-selected", "false")
   await expect(sidebar).toBeHidden()
-  await openFile.click()
+  await openFile()
   const filter = panel.getByRole("combobox", { name: "Filter files" })
   await expect(filter).toBeFocused()
-  await expect(tab("Open file")).toHaveAttribute("aria-selected", "true")
+  await expect(tab("File Browser")).toHaveAttribute("aria-selected", "true")
   await expect(panel.getByText("ReviewOpenFile", { exact: true })).toBeVisible()
 
   await panel.getByRole("button", { name: "README.md" }).click()
@@ -192,7 +298,7 @@ test("open file tab browses, searches, and tracks missing files", async ({ page 
   await expect(tab("README.md")).toHaveAttribute("aria-selected", "true")
   await expect(panel.getByText("contents:README.md", { exact: true })).toBeVisible()
 
-  await openFile.click()
+  await openFile()
   await expect(tab("README.md")).toHaveCount(0)
   await expect(sidebar).toBeVisible()
   await filter.fill("nested")
@@ -205,15 +311,15 @@ test("open file tab browses, searches, and tracks missing files", async ({ page 
   await expect(panel.getByText("contents:src/nested.ts", { exact: true })).toBeVisible()
   expect(searches).toContainEqual({ query: "nested", dirs: "file", limit: 200 })
 
-  await openFile.click()
+  await openFile()
   await expect(tab("nested.ts")).toHaveCount(1)
-  await expect(tab("Open file")).toHaveAttribute("aria-selected", "true")
+  await expect(tab("File Browser")).toHaveAttribute("aria-selected", "true")
   await expect(sidebarToggle).toBeDisabled()
   await panel.locator("#session-side-panel-review-tab").click()
   await expect(sidebarToggle).toBeEnabled()
-  await tab("Open file").click()
+  await tab("File Browser").click()
   await page.keyboard.press("Control+w")
-  await expect(tab("Open file")).toHaveCount(0)
+  await expect(tab("File Browser")).toHaveCount(0)
   await expect(tab("nested.ts")).toHaveAttribute("aria-selected", "true")
 
   // The file browser beside file tabs keeps its DOM and scroll position across preview and pinned tab switches.
@@ -256,11 +362,11 @@ test("open file tab browses, searches, and tracks missing files", async ({ page 
   await expect(tab("file-79.ts")).toHaveCount(1)
   await contextButton.click()
   await expect(tab("Context")).toHaveCount(0)
-  await expect(tab("nested.ts")).toHaveAttribute("aria-selected", "true")
+  await expect(panel.locator("#session-side-panel-review-tab")).toHaveAttribute("aria-selected", "true")
 })
 
 for (const listed of [false, true]) {
-  test(`the open file heading names a subfolder session ${listed ? "after its sidebar project" : "after its folder"}`, async ({
+  test(`the file browser heading names a subfolder session ${listed ? "after its sidebar project" : "after its folder"}`, async ({
     page,
   }) => {
     const root = "C:/OpenCode/BrowserRepo"
@@ -284,7 +390,7 @@ for (const listed of [false, true]) {
       },
     })
     const panel = page.locator("#review-panel")
-    await panel.getByRole("button", { name: "Open file" }).click()
+    await openFileBrowser(page)
     await expect(panel.getByRole("button", { name: "README.md" })).toBeVisible()
     await expect(panel.locator('[data-slot="session-review-v2-sidebar-title"]')).toHaveText(
       listed ? "Custom app" : "app",
@@ -316,18 +422,19 @@ test("context closes the side region only when its button opened it", async ({ p
 
   await contextButton.click()
   await expect(context).toHaveAttribute("aria-selected", "true")
-  await expect(toggle).toHaveAttribute("aria-expanded", "true")
+  await expect(panel).toBeVisible()
+  await expect(toggle).toHaveAttribute("aria-expanded", "false")
   await contextButton.click()
   await expect(context).toHaveCount(0)
   await expect(toggle).toHaveAttribute("aria-expanded", "false")
 
-  // Reopening the region by hand makes it the user's, so closing Context leaves Review open.
+  // Opening Review explicitly makes it an ordinary sibling; closing Context keeps that tab.
   await contextButton.click()
   await expect(context).toHaveAttribute("aria-selected", "true")
   await toggle.click()
-  await expect(toggle).toHaveAttribute("aria-expanded", "false")
-  await toggle.click()
   await expect(toggle).toHaveAttribute("aria-expanded", "true")
+  await expect(context).toHaveAttribute("aria-selected", "false")
+  await contextButton.click()
   await expect(context).toHaveAttribute("aria-selected", "true")
   await contextButton.click()
   await expect(context).toHaveCount(0)
@@ -451,8 +558,8 @@ test("file tree expands Windows paths and scrolls long names in both directions"
   })
 
   const panel = page.locator("#review-panel")
-  await panel.getByRole("button", { name: "Open file" }).click()
-  await expect(panel.getByRole("tab", { name: "Open file" })).toHaveAttribute("aria-selected", "true")
+  await openFileBrowser(page)
+  await expect(panel.getByRole("tab", { name: "File Browser" })).toHaveAttribute("aria-selected", "true")
   const sidebar = panel.locator('[data-component="session-review-v2-sidebar-root"]')
   const frontend = panel.locator('[data-slot="file-tree-v2-row"][data-path="frontend"]')
   await expect(frontend.getByText("frontend", { exact: true })).toBeVisible()
@@ -847,7 +954,7 @@ test("video files over 25 MB play in the viewer, expand into the theatre overlay
   )
 
   const panel = page.locator("#review-panel")
-  await panel.getByRole("button", { name: "Open file" }).click()
+  await openFileBrowser(page)
   await panel.getByRole("button", { name: file }).click()
   await expect(panel.getByRole("tab", { name: file, exact: true })).toHaveAttribute("aria-selected", "true")
 
@@ -936,7 +1043,7 @@ test("restores review state and the side-panel tab per session", async ({ page }
   await toggle.click()
   await page.getByRole("button", { name: "gamma.ts" }).click()
   await selectedFile("gamma.ts")
-  await panel.getByRole("button", { name: "Open file" }).click()
+  await openFileBrowser(page)
   await panel.getByRole("button", { name: "README.md" }).click()
   await selectedTab("README.md")
 
@@ -952,8 +1059,8 @@ test("restores review state and the side-panel tab per session", async ({ page }
 
   await switchSession("Gamma review state")
   await toggle.click()
-  await panel.getByRole("button", { name: "Open file" }).click()
-  await selectedTab("Open file")
+  await openFileBrowser(page)
+  await selectedTab("File Browser")
 
   await switchSession("Alpha review state")
   await selectedTab("README.md")
@@ -963,11 +1070,11 @@ test("restores review state and the side-panel tab per session", async ({ page }
   await switchSession("Beta review state")
   await selectedTab("Context")
   await switchSession("Gamma review state")
-  await selectedTab("Open file")
+  await selectedTab("File Browser")
 
   await page.reload()
   await expectSessionTitle(page, "Gamma review state")
-  await selectedTab("Open file")
+  await selectedTab("File Browser")
   await switchSession("Beta review state")
   await selectedTab("Context")
   await review.click()
@@ -983,14 +1090,14 @@ test("restores review state and the side-panel tab per session", async ({ page }
   await selectedTab("README.md")
 
   // A hidden side-panel tab does not claim Close Tab while the side region is collapsed.
-  await toggle.click()
+  await toggleSidePanel(page)
   await expect(panel).toBeHidden()
   await page.keyboard.press("Control+w")
   await expect(page.locator("[data-titlebar-tab-slot]", { hasText: "Alpha review state" })).toHaveCount(0)
   await expectSessionTitle(page, "Beta review state")
   await page.keyboard.press("Control+Shift+T")
   await expectSessionTitle(page, "Alpha review state")
-  await toggle.click()
+  await toggleSidePanel(page)
   await selectedTab("README.md")
 
   await page.keyboard.press("Control+w")
@@ -1223,7 +1330,7 @@ for (const direction of ["ltr", "rtl"] as const) {
 
     for (const control of [
       panel.locator('[data-slot="session-side-panel-actions"]'),
-      panel.getByRole("button", { name: "Open file", exact: true }),
+      panel.getByRole("button", { name: "Add tab", exact: true }),
     ]) {
       await expect
         .poll(async () => {

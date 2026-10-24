@@ -11,12 +11,19 @@ import {
   untrack,
 } from "solid-js"
 import { createStore } from "solid-js/store"
+import { Icon } from "@opencode/ui/icon"
+import { IconButton } from "@opencode/ui/icon-button"
+import { Keybind } from "@opencode/ui/keybind"
+import { Tooltip } from "@opencode/ui/tooltip"
 import type { FileDiffInfo } from "@opencode/client/promise"
 import {
+  Command,
   createKeyed,
   LinkHandler,
+  MenuItem,
   Panel,
   SettingsPage,
+  Slot,
   usePanel,
   type PanelTab,
   type SessionScreen,
@@ -70,10 +77,10 @@ const setup: Setup<typeof Review> = (ctx) => {
   const [entry, setEntry] = createSignal<{ screen: SessionScreen; model: ReviewModel; dispose: () => void }>()
 
   createKeyed(
-    ctx.screen.current,
+    () => ctx.screen.current({ drafts: true }),
     (screen) => {
       const current = untrack(entry)
-      const initial = untrack(sessions.current)
+      const initial = untrack(() => sessions.current({ drafts: true }))
 
       if (current?.screen === screen || !initial) return
 
@@ -82,7 +89,9 @@ const setup: Setup<typeof Review> = (ctx) => {
         createRoot((dispose) => {
           // The routed session of this screen; the last one stays while none is routed for a moment.
           const view = createMemo<MountedSession>(
-            (last) => (ctx.screen.current() === screen ? sessions.current() : undefined) ?? last,
+            (last) =>
+              (ctx.screen.current({ drafts: true }) === screen ? sessions.current({ drafts: true }) : undefined) ??
+              last,
             initial,
           )
 
@@ -96,7 +105,7 @@ const setup: Setup<typeof Review> = (ctx) => {
         const current = untrack(entry)
 
         queueMicrotask(() => {
-          if (sessions.current() || untrack(entry) !== current) return
+          if (sessions.current({ drafts: true }) || untrack(entry) !== current) return
 
           current?.dispose()
           setEntry(undefined)
@@ -120,7 +129,6 @@ const setup: Setup<typeof Review> = (ctx) => {
     get title() {
       return count() > 0 ? ctx.plural("tab.count", count()) : ctx.t("tab.title")
     },
-    pinned: true,
     // Without focusable content the panel itself joins the tab order.
     get tabbable() {
       return !(count() > 0 || layout.sidebar.opened())
@@ -137,12 +145,11 @@ const setup: Setup<typeof Review> = (ctx) => {
   ctx.add(Panel, {
     id: "main",
     region: "side",
+    drafts: true,
     // The split diff needs the wider session minimum while the side region is open.
     get wide() {
       return diff.value.diffStyle === "split"
     },
-    // The review tab is pinned, never stored; a stored key, such as one from before extensions, leaves the strip.
-    transient: true,
     legacy: { review: TAB },
     mobile: {
       get title() {
@@ -151,7 +158,7 @@ const setup: Setup<typeof Review> = (ctx) => {
       order: 10,
       kind: "tab",
     },
-    list: (input) => (!layout.narrow() && input.session.project ? [tab] : []),
+    list: (input) => (!layout.narrow() && input.session.project && input.open.includes(TAB) ? [tab] : []),
     render: (props) => {
       const frame = usePanel()
 
@@ -206,6 +213,66 @@ const setup: Setup<typeof Review> = (ctx) => {
     },
   })
 
+  ctx.add(Command, (): Command | undefined => {
+    const session = sessions.current({ drafts: true })
+
+    if (!session) return undefined
+
+    return {
+      id: "toggle",
+      title: ctx.t("command.toggle"),
+      group: ctx.t("command.category.view"),
+      section: "navigation",
+      bind: "mod+shift+r",
+      run: () => layout.toggle(KEY, session, layout.narrow() ? undefined : { tab: "select" }),
+    }
+  })
+
+  ctx.add(Slot, {
+    at: "session.panel.toggle",
+    render: (input) => (
+      <Tooltip
+        class="shrink-0"
+        placement="bottom"
+        value={
+          <>
+            {ctx.t("command.toggle")}
+            <Keybind keys={[...ctx.keybinds.keybind("review.toggle")]} variant="neutral" />
+          </>
+        }
+      >
+        <IconButton
+          type="button"
+          variant="ghost-muted"
+          size="large"
+          class="shrink-0"
+          state={layout.state(KEY, input.session) === "visible" ? "pressed" : undefined}
+          onClick={() => layout.toggle(KEY, input.session, layout.narrow() ? undefined : { tab: "select" })}
+          aria-label={ctx.t("command.toggle")}
+          aria-expanded={layout.state(KEY, input.session) === "visible"}
+          aria-controls="review-panel"
+          icon={<Icon name="sidebar-right" />}
+        />
+      </Tooltip>
+    ),
+  })
+
+  ctx.add(MenuItem, {
+    menu: "session.panel",
+    id: "open",
+    get title() {
+      return ctx.t("tab.title")
+    },
+    icon: "code",
+    keybind: "review.toggle",
+    order: 30,
+    run() {
+      const session = sessions.current({ drafts: true })
+
+      if (session) layout.open(KEY, session, layout.narrow() ? undefined : { tab: "select" })
+    },
+  })
+
   const reveals = new Set<() => void>()
 
   // A review comment in the composer reveals its diff.
@@ -213,7 +280,7 @@ const setup: Setup<typeof Review> = (ctx) => {
     priority: 1,
     match: (link) => link.origin === "review",
     open(link) {
-      const session = sessions.current()
+      const session = sessions.current({ drafts: true })
 
       if (!session || (link.session && link.session.key !== session.key)) return
 
@@ -262,10 +329,7 @@ const setup: Setup<typeof Review> = (ctx) => {
     details: (session) => modelFor(session)?.details(),
     focus: (session, path) => modelFor(session)?.focusFile(path),
     open(session) {
-      // The session details' changes row: narrow screens switch to the Changes view; wide ones open the side region.
-      if (layout.narrow()) return layout.open(KEY, session)
-
-      if (!layout.side.opened(session)) layout.side.toggle(session)
+      layout.open(KEY, session, layout.narrow() ? undefined : { tab: "select" })
     },
     watch,
     onReveal(listener) {

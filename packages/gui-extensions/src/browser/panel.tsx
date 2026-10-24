@@ -445,8 +445,13 @@ export default function SessionBrowserPane(props: {
   // A tab the user just opened starts in its address field, once its blank page is on screen. Syncs DOM focus.
   createKeyed(
     () => (visible() && empty() ? state()?.id : undefined),
-    () => {
-      if (props.model.opened(props.session)) focusAddress()
+    (id) => {
+      if (!props.model.opened(props.session)) return
+
+      // A blank page can exist on the first render, before the address input's ref has been assigned.
+      queueMicrotask(() => {
+        if (input?.isConnected && visible() && state()?.id === id) focusAddress()
+      })
     },
   )
 

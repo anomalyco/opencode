@@ -193,7 +193,9 @@ export function SessionFileBrowserTab(props: {
           <SessionFilePanelV2Empty>
             <div class="flex flex-col items-center gap-2 text-center text-text-weak">
               <Icon name="file-tree" size="large" class="mb-2" />
-              <div class="text-[13px] font-medium leading-[13px] text-text-strong">{ctx.t("command.open")}</div>
+              <div class="text-[13px] font-medium leading-[var(--line-height-base)] text-text-strong">
+                {ctx.t("command.browse")}
+              </div>
               <div class="h-5 text-13-regular leading-5">{ctx.t("selectToOpen")}</div>
             </div>
           </SessionFilePanelV2Empty>
@@ -209,7 +211,7 @@ export function SessionFileBrowserTab(props: {
   )
 }
 
-/** The side panel render every file tab and the "Open file" launcher share. */
+/** The side panel render every file tab and the File Browser launcher share. */
 export default function FileBrowser(props: {
   tab: Accessor<PanelTab>
   session: MountedSession

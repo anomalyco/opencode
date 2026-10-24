@@ -284,14 +284,19 @@ export function createHostApis() {
       },
     }),
     sessions: () => ({
-      list: () => current()?.sessions() ?? [],
-      current: () => current()?.current(),
+      list: (options) => (current()?.sessions() ?? []).filter((session) => options?.drafts || !session.draft),
+      current: (options) => {
+        const session = current()?.current()
+
+        return session?.draft && !options?.drafts ? undefined : session
+      },
     }),
     screen: () => ({
-      current: () => {
+      current: (options) => {
         const attached = current()
+        const session = attached?.current()
 
-        return attached?.current() ? attached.screen() : undefined
+        return session && (options?.drafts || !session.draft) ? attached?.screen() : undefined
       },
     }),
     // Before the interface mounts, reads return what an empty layout holds and writes wait for it.
@@ -300,7 +305,7 @@ export function createHostApis() {
       ready: () => current()?.layout.ready() ?? false,
       open: (key, session, options) => write((value) => value.layout.open(key, session, options)),
       close: (key, session) => write((value) => value.layout.close(key, session)),
-      toggle: (key, session) => write((value) => value.layout.toggle(key, session)),
+      toggle: (key, session, options) => write((value) => value.layout.toggle(key, session, options)),
       state: (key, session) => current()?.layout.state(key, session) ?? "closed",
       stored: (session) => current()?.layout.stored(extension, session) ?? [],
       side: {
@@ -448,28 +453,55 @@ export function createExtensionAttachment(apis: HostApis) {
   }
 
   const sessions = createMemo(() => {
-    const owned = new Set(tabs.store.filter((tab) => tab.type === "session").map(tabKey))
+    const owned = new Set(tabs.store.map(tabKey))
     Array.from(refs).forEach(([key, ref]) => {
       if (!owned.has(ref.tab)) refs.delete(key)
     })
     tabs.store.forEach((tab) => {
-      if (tab.type !== "session") return
+      if (!tab.sessionId) return
       const target = server(tab.server)
 
       if (!target) return
-      Array.from(new Set([tab.sessionId, tab.routeSessionId ?? tab.sessionId])).forEach((id) => {
+      const ids = tab.type === "session" ? [tab.sessionId, tab.routeSessionId ?? tab.sessionId] : [tab.sessionId]
+
+      Array.from(new Set(ids)).forEach((id) => {
         const key = `${tab.server}\n${id}`
 
         if (refs.has(key)) return
+
+        const ownedTab = () =>
+          tabs.store.find(
+            (item) =>
+              item.server === target.id &&
+              (item.sessionId === id || (item.type === "session" && item.routeSessionId === id)),
+          )
+
         refs.set(key, {
           key,
           id,
-          tab: tabKey(tab),
+          get tab() {
+            const current = ownedTab()
+
+            return current ? tabKey(current) : tabKey(tab)
+          },
           server: target,
+          get draft() {
+            return ownedTab()?.type === "draft"
+          },
           get pending() {
             return target.data.session.creating(id)
           },
           get location() {
+            const current = ownedTab()
+
+            if (current?.type === "draft")
+              return {
+                directory:
+                  current.worktree && current.worktree !== "main" && current.worktree !== "create"
+                    ? current.worktree
+                    : current.directory,
+              }
+
             return target.data.session.get(id)?.location
           },
         })
@@ -482,7 +514,12 @@ export function createExtensionAttachment(apis: HostApis) {
   const routed = createMemo(() => {
     const value = route()
 
-    return value.type === "session" ? `${value.server}\n${value.sessionId}` : undefined
+    if (value.type === "session") return `${value.server}\n${value.sessionId}`
+
+    if (value.type !== "draft") return undefined
+    const tab = tabs.store.find((tab) => tab.type === "draft" && tab.draftID === value.draftID)
+
+    return tab?.sessionId ? `${tab.server}\n${tab.sessionId}` : undefined
   })
 
   const current = createMemo(() => {
@@ -550,6 +587,7 @@ export function createExtensionAttachment(apis: HostApis) {
   })
 
   const shellTab = (session: SessionRef) =>
+    tabs.store.find((tab) => tabKey(tab) === session.tab) ??
     findSessionTab(tabs.store, ServerConnection.Key.make(session.server.id), session.id)
 
   const sideOpened = (session: SessionRef) => !!tabs.region(shellTab(session), "side")
@@ -617,7 +655,7 @@ export function createExtensionAttachment(apis: HostApis) {
     return untrack(() =>
       host
         .items(Panel)
-        .filter((item) => item.value.region === "side")
+        .filter((item) => item.value.region === "side" && (!view.draft || item.value.drafts))
         .flatMap((item) => {
           const prefix = `${item.extension}:`
           const open = stored.flatMap((key) => (key.startsWith(prefix) ? [key.slice(prefix.length)] : []))
@@ -691,6 +729,8 @@ export function createExtensionAttachment(apis: HostApis) {
     if (!value) return located.hold(session, () => close(key, session))
     const tab = listed(session, value).find((entry) => entry.key === key)?.tab
     layout.panel.close(value, key)
+
+    if (layout.panel.state(value).all.length === 0) tabs.setRegion(shellTab(session), "side", false)
     const view = mountedSession(session)
     const currentScreen = screen()
 
@@ -753,7 +793,7 @@ export function createExtensionAttachment(apis: HostApis) {
     )
   })
 
-  const toggle = (key: string, session: SessionRef) => {
+  const toggle = (key: string, session: SessionRef, options?: OpenOptions) => {
     if (provider(key)?.value.region === "dock") return setDock(session, !dockOpened(session))
     const value = stateKey(session)
 
@@ -774,7 +814,7 @@ export function createExtensionAttachment(apis: HostApis) {
 
     // A panel opened into an open region makes the region the user's.
     if (region) openedFor.delete(region)
-    open(key, session)
+    open(key, session, options)
     const opened = sideVisits().get(session.key)
 
     if (!region && opened) openedFor.set(opened, key)

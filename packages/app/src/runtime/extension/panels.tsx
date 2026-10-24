@@ -100,10 +100,16 @@ export function createRegion(input: {
   view: Accessor<MountedSession>
   screen: SessionScreen
   tabs: Tabs
+  onEmpty?: () => void
 }) {
   const host = useExtensionHost()
   const stored = () => input.tabs().all()
-  const providers = createMemo(() => host.items(Panel).filter((item) => item.value.region === input.region))
+
+  const providers = createMemo(() =>
+    host
+      .items(Panel)
+      .filter((item) => item.value.region === input.region && (!input.view().draft || item.value.drafts)),
+  )
 
   const entries = createMemo(() =>
     providers().flatMap((item) => {
@@ -228,7 +234,7 @@ export function createRegion(input: {
 
       return key ? byKey().get(key) : undefined
     }),
-    wide: createMemo(() => providers().some((item) => item.value.wide)),
+    wide: createMemo(() => !!byKey().get(active() ?? "")?.provider.wide),
     /** An extension's tab ids in the stored strip. */
     openFor: (extension: string) =>
       stored().flatMap((key) => (key.startsWith(`${extension}:`) ? [key.slice(extension.length + 1)] : [])),
@@ -239,6 +245,8 @@ export function createRegion(input: {
     close(key: string) {
       const entry = byKey().get(key)
       input.tabs().close(key)
+
+      if (input.tabs().all().length === 0) input.onEmpty?.()
 
       if (entry)
         entry.provider.close?.(

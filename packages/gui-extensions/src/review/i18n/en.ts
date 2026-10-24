@@ -1,4 +1,5 @@
 export default {
+  "command.toggle": "Toggle review",
   "tab.title": "Review",
   "tab.count.one": "{{count}} file changed",
   "tab.count.other": "{{count}} files changed",

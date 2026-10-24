@@ -237,6 +237,8 @@ export interface Panel {
    *   empty) of the first dock panel.
    */
   readonly region: "side" | "dock"
+  /** Also renders on an unsent draft. Its `session.draft` is true and no server Session exists yet. Defaults to false. */
+  readonly drafts?: boolean
   /** Asks for the wider session minimum while the side region is open. Reactive. */
   readonly wide?: boolean
   /** Tabs are not restored: stored keys this panel stops listing leave the strip. See also `PanelTab.transient`. */
@@ -554,6 +556,13 @@ export interface SlotMap {
     readonly session: MountedSession
     /** The timeline is the one on screen. */
     readonly active: boolean
+  }
+  /** Panel controls at the upper inline end of the conversation, outside panel animations. */
+  readonly "session.panel.toggle": {
+    /** The owning session or draft screen. */
+    readonly screen: SessionScreen
+    /** The routed session or unsent draft. */
+    readonly session: MountedSession
   }
   /** The actions at the end of the side region's tab strip. */
   readonly "session.panel.end": {

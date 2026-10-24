@@ -283,7 +283,7 @@ function OpenInBrowserButton(props: { session: MountedSession; path: string }) {
           icon="globe"
           onClick={() => {
             // The screen's workspace root, read when the user acts.
-            const root = ctx.screen.current()?.file.root
+            const root = ctx.screen.current({ drafts: true })?.file.root
 
             if (root !== undefined) browser().open(props.session, workspaceFileUrl(root, props.path))
           }}
@@ -639,8 +639,7 @@ function ArtifactVideo(props: MediaProps) {
           onClick={toggle}
           style={box.ready ? { left: `${box.left}px`, top: `${box.top}px` } : { right: "72px", bottom: "48px" }}
           classList={{
-            "absolute z-10 flex size-12 items-center justify-center transition-opacity focus-visible:opacity-100 focus-visible:outline-none":
-              true,
+            "absolute z-10 flex size-12 items-center justify-center transition-opacity focus-visible:opacity-100 focus-visible:outline-none": true,
             "opacity-100": controlsVisible(),
             "pointer-events-none opacity-0": !controlsVisible(),
           }}

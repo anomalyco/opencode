@@ -14,6 +14,7 @@ import { createStore, produce } from "solid-js/store"
 import { Icon } from "@opencode/ui/icon"
 import { encodeFilePath, getFilename } from "@opencode/util/path"
 import {
+  Command,
   createKeyed,
   bindExtension,
   LinkHandler,
@@ -119,7 +120,7 @@ const setup: Setup<typeof File> = (ctx) => {
 
   // Opens on the session screen, whose file model serves the routed session `session` is.
   const open = (session: MountedSession, path: string, options?: OpenOptions) => {
-    const screen = ctx.screen.current()
+    const screen = ctx.screen.current({ drafts: true })
 
     if (!screen) return
 
@@ -259,12 +260,12 @@ const setup: Setup<typeof File> = (ctx) => {
   const launcher: PanelTab = {
     id: OPEN,
     get title() {
-      return ctx.t("command.open")
+      return ctx.t("command.browse")
     },
     label: () => (
       <div class="flex items-center gap-1.5">
         <Icon name="file-tree" size="small" />
-        <span>{ctx.t("command.open")}</span>
+        <span>{ctx.t("command.browse")}</span>
       </div>
     ),
     draggable: false,
@@ -302,6 +303,7 @@ const setup: Setup<typeof File> = (ctx) => {
   ctx.add(Panel, {
     id: "main",
     region: "side",
+    drafts: true,
     legacy: { "open-file": OPEN },
     // Older builds stored some files as absolute paths; one file is one tab once the workspace root is known.
     // Resolves the stored URL once and encodes the result, so an encoded name such as a%23b.txt stays one file.
@@ -365,22 +367,44 @@ const setup: Setup<typeof File> = (ctx) => {
     },
   })
 
+  const browse = () => {
+    const session = sessions.current({ drafts: true })
+
+    if (!session) return
+
+    openPicker(session, shared.filter.get(session.key))
+  }
+
+  ctx.add(Command, (): Command | undefined => {
+    if (!sessions.current({ drafts: true })) return undefined
+
+    return {
+      id: "browse",
+      title: ctx.t("command.browse"),
+      group: ctx.t("command.category.file"),
+      section: "navigation",
+      bind: "mod+e",
+      run: () => {
+        const session = sessions.current({ drafts: true })
+
+        if (!session) return
+
+        if (layout.state(`file:${OPEN}`, session) === "visible") return layout.toggle(`file:${OPEN}`, session)
+        browse()
+      },
+    }
+  })
+
   ctx.add(MenuItem, {
     menu: "session.panel",
     id: "open",
     get title() {
-      return ctx.t("command.open")
+      return ctx.t("command.browse")
     },
     icon: "file-tree",
-    keybind: "file.open",
+    keybind: "file.browse",
     order: 10,
-    run() {
-      const session = sessions.current()
-
-      if (!session) return
-
-      openPicker(session, shared.filter.get(session.key))
-    },
+    run: browse,
   })
 
   const OpenInAppButton = lazy(() => import("./open-in-app"))
@@ -503,8 +527,8 @@ const setup: Setup<typeof File> = (ctx) => {
 
   // Messages style a path as a link only when this says the file exists.
   const linkExists = (link: Link): boolean | Promise<boolean> => {
-    const session = sessions.current()
-    const files = ctx.screen.current()?.file
+    const session = sessions.current({ drafts: true })
+    const files = ctx.screen.current({ drafts: true })?.file
 
     if (!session || !files || (link.session && link.session.key !== session.key)) return false
 
@@ -527,8 +551,8 @@ const setup: Setup<typeof File> = (ctx) => {
     match: () => true,
     exists: linkExists,
     open(link) {
-      const session = sessions.current()
-      const screen = ctx.screen.current()
+      const session = sessions.current({ drafts: true })
+      const screen = ctx.screen.current({ drafts: true })
       const files = screen?.file
 
       if (!session || !screen || !files || (link.session && link.session.key !== session.key)) return
@@ -555,9 +579,11 @@ const setup: Setup<typeof File> = (ctx) => {
       const sessionKey = session.key
 
       const stillCurrent = () => {
-        const current = sessions.current()
+        const current = sessions.current({ drafts: true })
 
-        return !signal.aborted && current?.key === sessionKey && ctx.screen.current() === screen ? current : undefined
+        return !signal.aborted && current?.key === sessionKey && ctx.screen.current({ drafts: true }) === screen
+          ? current
+          : undefined
       }
 
       const openResolvedFile = (targetPath: string, selection?: LineRange) => {
@@ -631,20 +657,19 @@ const setup: Setup<typeof File> = (ctx) => {
   createKeyed(ctx.uses.changes, (changes) => onCleanup(changes.onReveal(() => shared.tree.setTab("changes"))))
 
   // A new workspace directory drops loaded files; reload the selected file tab.
-  const root = createMemo<string | undefined>((previous) => ctx.screen.current()?.file.root ?? previous)
+  const root = createMemo<string | undefined>((previous) => ctx.screen.current({ drafts: true })?.file.root ?? previous)
 
   const moved = createMemo(on(root, () => ({}), { defer: true }))
 
   createKeyed(moved, () => {
-    const session = sessions.current()
-    const screen = ctx.screen.current()
+    const session = sessions.current({ drafts: true })
+    const screen = ctx.screen.current({ drafts: true })
 
     if (!session || !screen) return
 
     const id = focused.get(screen)
 
-    if (id && active(session, id))
-      void screen.file.sync(fileTabPath(screen.file, id), { force: true, silent: true })
+    if (id && active(session, id)) void screen.file.sync(fileTabPath(screen.file, id), { force: true, silent: true })
   })
 }
 

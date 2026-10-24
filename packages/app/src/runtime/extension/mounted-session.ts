@@ -40,7 +40,12 @@ type ObjectRoot = { dispose?: () => void }
  * The routed session as extensions see it: one frozen object per routed session, a new one each time the screen
  * routes another session, and the `SessionScreen` that owns the route-following files, comments and composer.
  */
-export function createMountedSession(session: SessionModel) {
+export function createMountedSession(session: {
+  identity: Pick<SessionModel["identity"], "sessionID">
+  workspace: Pick<SessionModel["workspace"], "directory">
+  layout: Pick<SessionModel["layout"], "tabKey">
+  draft?: boolean
+}) {
   const file = useFile()
   const comments = useComments()
   const composer = useComposerState()
@@ -179,6 +184,7 @@ export function createMountedSession(session: SessionModel) {
     const view: MountedSession = Object.freeze({
       key: `${server.key}\n${id}`,
       id,
+      draft: session.draft,
       tab: input.tab,
       visit: input.visit,
       server: serverRef,
@@ -186,7 +192,7 @@ export function createMountedSession(session: SessionModel) {
         return server.ctx.data.session.creating(id)
       },
       get location() {
-        return info()?.location
+        return session.draft ? { directory } : info()?.location
       },
       get project() {
         return project()
