@@ -20,6 +20,16 @@ describe("window state", () => {
     expect(resolveWindowState(saved, defaults, displays)).toEqual(saved)
   })
 
+  test("keeps edge-snapped bounds within the platform border tolerance", () => {
+    const saved = { x: -7, y: -7, width: 1000, height: 700, displayBounds: primary }
+    expect(resolveWindowState(saved, defaults, displays)).toEqual(saved)
+  })
+
+  test("falls back when the saved window is far outside a display", () => {
+    const saved = { x: -200, y: 100, width: 1000, height: 700, displayBounds: primary }
+    expect(resolveWindowState(saved, defaults, displays)).toEqual({ ...defaults, x: 0, y: 0, displayBounds: primary })
+  })
+
   test("falls back to the default size on the primary display when the saved display is gone", () => {
     const saved = { x: 5000, y: 100, width: 1000, height: 700, displayBounds: { x: 4480, y: 0, width: 1920, height: 1080 } }
     expect(resolveWindowState(saved, defaults, displays)).toEqual({ ...defaults, x: 0, y: 0, displayBounds: primary })
@@ -27,12 +37,26 @@ describe("window state", () => {
 
   test("uses defaults without a position when nothing usable was saved", () => {
     expect(resolveWindowState(undefined, defaults, displays)).toEqual(defaults)
-    expect(resolveWindowState({ width: 0, height: -1 }, defaults, displays)).toEqual(defaults)
-    expect(resolveWindowState("junk", defaults, displays)).toEqual(defaults)
   })
 
   test("keeps a maximized flag even without bounds", () => {
     expect(resolveWindowState({ isMaximized: true }, defaults, displays)).toEqual({ ...defaults, isMaximized: true })
+  })
+
+  test("keeps maximized and fullscreen flags when saved bounds are unusable", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "opencode-window-state-"))
+    const file = path.join(dir, "window-state-a.json")
+
+    const cases = [
+      ['{"isMaximized":true,"width":0,"height":0}', { ...defaults, isMaximized: true }],
+      ['{"isMaximized":true,"x":10.5,"y":0,"width":1000,"height":700}', { ...defaults, isMaximized: true }],
+      ['{"isFullScreen":true,"x":null,"y":null,"width":1000,"height":700}', { ...defaults, isFullScreen: true }],
+    ] as const
+
+    for (const [contents, expected] of cases) {
+      writeFileSync(file, contents)
+      expect(resolveWindowState(readWindowState(file), defaults, displays)).toEqual(expected)
+    }
   })
 
   test("reads the file electron-window-state wrote and ignores an unreadable one", () => {
@@ -51,6 +75,8 @@ describe("window state", () => {
       isMaximized: false,
       isFullScreen: false,
     })
+    writeFileSync(file, '{"width":0,"height":-1}')
+    expect(readWindowState(file)).toBeUndefined()
     writeFileSync(file, "{oops")
     expect(readWindowState(file)).toBeUndefined()
     expect(readWindowState(path.join(dir, "missing.json"))).toBeUndefined()
