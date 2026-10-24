@@ -83,6 +83,7 @@ import { PaneResizeHandle } from "./ui/pane-resize-handle"
 import { clickedLink } from "./ui/link"
 import { ThemeErrorToast } from "./component/theme-error-toast"
 import { createThemeSource, ThemeProvider, useTheme, useThemes } from "./context/theme"
+import { systemAppearance } from "./theme/system"
 import { Home } from "./routes/home"
 import { PromptHistoryProvider } from "./prompt/history"
 import { FrecencyProvider } from "./prompt/frecency"
@@ -311,7 +312,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
       )
       renderer.once("destroy", () => shutdown.openUnsafe())
       yield* Effect.tryPromise(async () => {
-        const mode = handoff?.mode ?? (await renderer.waitForThemeMode(1000)) ?? "dark"
+        const mode = handoff?.mode ?? (await renderer.waitForThemeMode(1000)) ?? (await systemAppearance()) ?? "dark"
         if (renderer.isDestroyed) return
 
         await render(() => {
