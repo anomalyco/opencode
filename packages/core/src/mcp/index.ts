@@ -832,17 +832,50 @@ export const layer = (options?: Options) =>
               tool: input.name,
               message: unavailable(target.name, target.entry.status),
             })
-          const result = yield* recovering(target.name, target.entry, target.entry.client, (connection) =>
-            connection.callTool({ name: input.name, args: input.args, sessionID: input.sessionID }),
-          ).pipe(
-            Effect.mapError(
+          // Capture the connection the call actually ran on. recovering() may replace entry.client
+          // after a session expiry / re-auth, so a late 401 from the old connection must not tear
+          // down the newer one. Only act when entry.client is still this exact connection.
+          let ranOnConnection: McpClient.Connection | undefined
+          const result = yield* recovering(target.name, target.entry, target.entry.client, (connection) => {
+            ranOnConnection = connection
+            return connection.callTool({ name: input.name, args: input.args, sessionID: input.sessionID })
+          }).pipe(
+            // A precisely-detected auth failure (real HTTP 401 / SDK UnauthorizedError surfaced as
+            // NeedsAuthError): stop the server and mark it needs_auth rather than letting each call
+            // turn into another refresh. Match by the tagged error, not message text.
+            Effect.catchIf(
+              (error) => "_tag" in error && error._tag === "MCP.NeedsAuthError",
               (error) =>
-                new ToolCallError({
-                  server: target.name,
-                  tool: input.name,
-                  message: `MCP tool "${input.name}" on server "${target.name}" failed: ${error.message}`,
+                Effect.gen(function* () {
+                  // Teardown serializes with other lifecycle ops and only stops a server that is still
+                  // live on the exact connection the call ran on, mirroring recover()/whenLive() in case
+                  // the connection was replaced or stopped while the call ran. Status + publish also
+                  // happen under the lock and only when the guard passes, so we can't overwrite a newer
+                  // disconnected/disabled status.
+                  yield* Effect.gen(function* () {
+                    if (target.entry.client !== ranOnConnection) return
+                    yield* stopServer(target.name, target.entry)
+                    target.entry.status = { status: "needs_auth", error: error.message }
+                    yield* bus.publish(McpEvent.StatusChanged, { server: target.name })
+                  }).pipe(locks.withLock(target.name))
+                  return yield* Effect.fail(
+                    new ToolCallError({
+                      server: target.name,
+                      tool: input.name,
+                      message: `MCP tool "${input.name}" on server "${target.name}" requires authentication: ${error.message}`,
+                    }),
+                  )
                 }),
             ),
+            Effect.mapError((error) => {
+              if (error instanceof ToolCallError) return error
+              const message = error instanceof Error ? error.message : String(error)
+              return new ToolCallError({
+                server: target.name,
+                tool: input.name,
+                message: `MCP tool "${input.name}" on server "${target.name}" failed: ${message}`,
+              })
+            }),
           )
           return { ...result, server: target.name, tool: input.name }
         }),
