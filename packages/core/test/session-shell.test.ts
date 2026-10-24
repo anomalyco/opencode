@@ -3,13 +3,16 @@ import fs from "fs/promises"
 import path from "path"
 import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, Option, Schedule, Stream } from "effect"
 import { Bus } from "@opencode/core/bus"
+import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { AbsolutePath } from "@opencode/core/schema"
+import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Session } from "@opencode/core/session"
 import { SessionEvent } from "@opencode/core/session/event"
 import { SessionExecution } from "@opencode/core/session/execution"
+import { SessionInbox } from "@opencode/core/session/inbox"
 import { SessionRunCoordinator } from "@opencode/core/session/run-coordinator"
 import { Shell } from "@opencode/core/shell"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -57,11 +60,14 @@ const executionLayer = Layer.effect(
 )
 
 const it = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Bus.node, Session.node, SessionExecution.node, LocationServiceMap.node]), [
-    Bus.node.replace(Bus.configured({ persist: true })),
-    SessionExecution.node.replace(executionLayer.pipe(Layer.provide(controlLayer))),
-    offlineModels,
-  ]).pipe(Layer.provideMerge(controlLayer)),
+  AppNodeBuilder.build(
+    LayerNode.group([Database.node, Bus.node, Session.node, SessionExecution.node, LocationServiceMap.node]),
+    [
+      Bus.node.replace(Bus.configured({ persist: true })),
+      SessionExecution.node.replace(executionLayer.pipe(Layer.provide(controlLayer))),
+      offlineModels,
+    ],
+  ).pipe(Layer.provideMerge(controlLayer)),
 )
 
 const setup = Effect.gen(function* () {
@@ -73,6 +79,14 @@ const setup = Effect.gen(function* () {
   const control = yield* ExecutionControl
   const execution = yield* SessionExecution.Service
   return { tmp, session, created, shell, control, execution }
+})
+
+const undo = Effect.fn(function* (fixture: Effect.Success<typeof setup>) {
+  const database = yield* Database.Service
+  const bus = yield* Bus.Service
+  const prompt = yield* fixture.session.prompt({ sessionID: fixture.created.id, text: "Undo this", resume: false })
+  yield* SessionInbox.promote(database.db, bus, fixture.created.id, "steer")
+  return yield* fixture.session.revert.stage({ sessionID: fixture.created.id, messageID: prompt.id, files: false })
 })
 
 const log = (session: Session.Interface, sessionID: Session.ID, follow = false) =>
@@ -106,6 +120,89 @@ const launch = Effect.fn(function* (fixture: Effect.Success<typeof setup>, name:
 })
 
 describe("Session.shell", () => {
+  it.live("commits staged undo before accepting a shell and retains repeated shell output", () =>
+    Effect.gen(function* () {
+      const fixture = yield* setup
+      const reverted = yield* undo(fixture)
+      for (const exit of [0, 7]) {
+        yield* fixture.session.shell({ sessionID: fixture.created.id, command: `echo accepted-${exit}; exit ${exit}` })
+        expect((yield* fixture.session.get(fixture.created.id)).revert).toBeUndefined()
+      }
+      const events = yield* log(fixture.session, fixture.created.id).pipe(Stream.runCollect)
+      expect(events.map((event) => event.type)).toEqual([
+        "session.created",
+        "session.inbox.enqueued",
+        "session.inbox.delivered",
+        "session.revert.staged",
+        "session.revert.committed",
+        "session.shell.started",
+        "session.shell.ended",
+        "session.inbox.enqueued",
+        "session.shell.started",
+        "session.shell.ended",
+        "session.inbox.enqueued",
+      ])
+      expect(events[4]).toMatchObject({ data: { to: reverted.messageID } })
+      expect(yield* fixture.session.messages({ sessionID: fixture.created.id, order: "asc" })).toMatchObject([
+        { type: "shell", status: "exited", exit: 0, output: { output: expect.stringContaining("accepted-0") } },
+        { type: "shell", status: "exited", exit: 7, output: { output: expect.stringContaining("accepted-7") } },
+      ])
+      expect(fixture.control.wakes).toEqual([])
+    }),
+  )
+
+  it.live("reloads undo state after delayed shell preparation without discarding redo history", () =>
+    Effect.gen(function* () {
+      const fixture = yield* setup
+      const reverted = yield* undo(fixture)
+      const locations = yield* LocationServiceMap.Service
+      const hooks = yield* PluginHooks.Service.pipe(Effect.provide(locations.get(fixture.created.location)))
+      const entered = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      yield* Effect.addFinalizer(() => Deferred.succeed(release, undefined))
+      yield* hooks.register("shell", "create.before", () =>
+        Deferred.succeed(entered, undefined).pipe(Effect.andThen(Deferred.await(release))),
+      )
+      const caller = yield* fixture.session
+        .shell({ sessionID: fixture.created.id, command: "echo after-redo" })
+        .pipe(Effect.forkScoped)
+      yield* Deferred.await(entered)
+      yield* Deferred.succeed(fixture.control.release, undefined)
+      yield* fixture.session.revert.clear(fixture.created.id)
+      yield* Deferred.succeed(release, undefined)
+      yield* Fiber.join(caller)
+      expect((yield* fixture.session.get(fixture.created.id)).revert).toBeUndefined()
+      expect(yield* fixture.session.messages({ sessionID: fixture.created.id, order: "asc" })).toMatchObject([
+        { id: reverted.messageID, type: "user" },
+        { type: "shell", status: "exited", output: { output: expect.stringContaining("after-redo") } },
+      ])
+      expect(
+        (yield* log(fixture.session, fixture.created.id).pipe(Stream.runCollect)).filter(
+          (event) => event.type === "session.revert.committed",
+        ),
+      ).toEqual([])
+    }),
+  )
+
+  it.live("retains staged undo and redo when shell startup fails", () =>
+    Effect.gen(function* () {
+      const fixture = yield* setup
+      const reverted = yield* undo(fixture)
+      // Keep the Location initialized, but invalidate the real child's working directory.
+      yield* Effect.promise(() => fs.rm(fixture.tmp.path, { recursive: true, force: true }))
+      const exit = yield* fixture.session
+        .shell({ sessionID: fixture.created.id, command: "echo should-not-start" })
+        .pipe(Effect.exit)
+      expect(Exit.isFailure(exit)).toBe(true)
+      expect((yield* fixture.session.get(fixture.created.id)).revert).toEqual(reverted)
+      yield* fixture.session.revert.clear(fixture.created.id)
+      expect((yield* fixture.session.get(fixture.created.id)).revert).toBeUndefined()
+      expect(yield* fixture.session.messages({ sessionID: fixture.created.id })).toMatchObject([
+        { id: reverted.messageID, type: "user" },
+      ])
+    }),
+  )
+
   it.live("runs shells concurrently with an active model and waits for each shell's own completion", () =>
     Effect.gen(function* () {
       const fixture = yield* setup

@@ -113,6 +113,23 @@ describe("Session.revert files", () => {
             "Keep this later edit.\n",
           )
           expect((yield* session.get(created.id)).revert).toBeUndefined()
+
+          yield* session.revert.stage({ sessionID: created.id, messageID: prompt.id })
+          yield* session.shell({ sessionID: created.id, command: "echo accepted after undo" })
+          expect((yield* session.get(created.id)).revert).toBeUndefined()
+          expect(yield* Effect.promise(() => Bun.file(original).text())).toBe("Preserve this content.\n")
+          expect(yield* Effect.promise(() => Bun.file(renamed).exists())).toBe(false)
+          expect(yield* Effect.promise(() => Bun.file(path.join(directory, "unrelated.txt")).text())).toBe(
+            "Keep this later edit.\n",
+          )
+          expect(yield* session.messages({ sessionID: created.id })).toMatchObject([
+            {
+              type: "shell",
+              status: "exited",
+              exit: 0,
+              output: { output: expect.stringContaining("accepted after undo") },
+            },
+          ])
         }).pipe(Effect.provide(LocationServiceMap.Service.get(created.location)))
       }),
     // Real Location/plugin startup and Git snapshots can exceed five seconds under CI load.

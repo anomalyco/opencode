@@ -205,6 +205,9 @@ export const make = Effect.fn("Session.make")(function* () {
         ),
         Effect.orDie,
       )
+      // Startup can wait for plugins, so reload undo state before accepting new history.
+      const current = yield* get(sessionID)
+      if (current.revert) yield* SessionRevert.commit(bus, current)
       yield* bus.publish(
         SessionEvent.Shell.Started,
         {
