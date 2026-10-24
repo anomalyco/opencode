@@ -2,7 +2,7 @@
 
 import { ensurePluginRuntime } from "@opencode/plugin/runtime"
 import { NodeRuntime, NodeServices } from "@effect/platform-node"
-import { Cause, Effect } from "effect"
+import { Cause, Console, Effect } from "effect"
 import { getErrorReported } from "effect/Runtime"
 import { Commands } from "./commands/commands"
 import { Runtime } from "./framework/runtime"
@@ -17,6 +17,7 @@ import { Npm } from "@opencode/util/npm"
 import { EffectFlock } from "@opencode/util/effect-flock"
 import { Heap } from "./heap"
 import { CpuProfile } from "./cpu-profile"
+import { Output } from "./output"
 
 ensurePluginRuntime()
 
@@ -115,6 +116,7 @@ Effect.gen(function* () {
     }).pipe(Effect.andThen(Effect.failCause(cause))),
   ),
   Effect.annotateLogs({ role: "cli" }),
+  Effect.provideService(Console.Console, Output.console),
   Effect.provide(Config.layer),
   Effect.provide(Updater.layer),
   Effect.provide(
@@ -137,6 +139,7 @@ Effect.gen(function* () {
   ),
   Effect.provide(NodeServices.layer),
   Effect.scoped,
+  Effect.ensuring(Effect.promise(Output.flush)),
   Effect.tap(() => Effect.sync(() => process.exit(process.exitCode ?? 0))),
   // runMain's default reporter logs the fatal cause to stdout. Write it to stderr instead: the
   // desktop and `Service.ensure` only capture stderr from `serve --service`, so this is the only
