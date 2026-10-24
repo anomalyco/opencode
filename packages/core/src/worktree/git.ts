@@ -4,6 +4,7 @@ import { Effect } from "effect"
 import { Worktree } from "@opencode/schema/worktree"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Git } from "../git.js"
+import { AbsolutePath } from "../schema.js"
 import { canonical, DirectoryUnavailableError } from "./directory.js"
 import type { Strategy } from "./strategies.js"
 
@@ -11,21 +12,32 @@ export const make = Effect.gen(function* () {
   const fs = yield* FSUtil.Service
   const git = yield* Git.Service
 
+  // `git.repo.discover` searches ancestor directories, so a plain directory that
+  // only sits under a repository would otherwise run worktree operations against
+  // that repository. Keep every operation inside the checkout it was asked about:
+  // the discovered repository's root must be the requested directory itself.
+  const repositoryAt = Effect.fnUntraced(function* (directory: AbsolutePath) {
+    const repository = yield* git.repo.discover(directory)
+    if (!repository) return undefined
+    if ((yield* canonical(fs, repository.worktree)) !== (yield* canonical(fs, directory))) return undefined
+    return repository
+  })
+
   return {
     id: Worktree.StrategyID.make("git"),
     create: Effect.fn("Worktree.Git.create")(function* (input) {
-      const repository = yield* git.repo.discover(input.sourceDirectory)
+      const repository = yield* repositoryAt(input.sourceDirectory)
       if (!repository) return yield* new DirectoryUnavailableError({ directory: input.sourceDirectory })
       yield* git.worktree.create({ repository, directory: input.directory, ref: input.branch })
       return { directory: yield* canonical(fs, input.directory) }
     }),
     remove: Effect.fn("Worktree.Git.remove")(function* (input) {
-      const repository = yield* git.repo.discover(input.directory)
+      const repository = yield* repositoryAt(input.directory)
       if (!repository) return yield* new DirectoryUnavailableError({ directory: input.directory })
       yield* git.worktree.remove({ repository, directory: input.directory, force: input.force })
     }),
     list: Effect.fn("Worktree.Git.list")(function* (directory) {
-      const repository = yield* git.repo.discover(directory)
+      const repository = yield* repositoryAt(directory)
       if (!repository) return yield* new DirectoryUnavailableError({ directory })
       const entries = yield* git.worktree.list(repository)
       return yield* Effect.forEach(entries, (entry) =>
