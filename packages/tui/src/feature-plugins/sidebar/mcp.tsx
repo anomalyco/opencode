@@ -1,12 +1,18 @@
 import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { BuiltinTuiPlugin } from "../builtins"
-import { createMemo, For, Match, Show, Switch, createSignal } from "solid-js"
+import { createMemo, For, Match, Show, Switch, createSignal, useContext } from "solid-js"
+import { LocalContext } from "../../context/local"
+import { onClick } from "../../ui/click"
 
 const id = "internal:sidebar-mcp"
 
 function View(props: { api: TuiPluginApi }) {
   const [open, setOpen] = createSignal(true)
   const theme = () => props.api.theme.current
+  // Clicking a server toggles it. A host without the app's local state (a test
+  // harness) still renders the list, without the toggle.
+  const local = useContext(LocalContext)
+  const pending = (name: string) => local?.mcp.pending() === name
   const list = createMemo(() => props.api.state.mcp())
   const on = createMemo(() => list().filter((item) => item.status === "connected").length)
   const bad = createMemo(
@@ -46,14 +52,14 @@ function View(props: { api: TuiPluginApi }) {
         <Show when={list().length <= 2 || open()}>
           <For each={list()}>
             {(item) => (
-              <box flexDirection="row" gap={1}>
+              <box flexDirection="row" gap={1} {...onClick(() => local?.mcp.toggle(item.name))}>
                 <text
                   flexShrink={0}
                   style={{
-                    fg: dot(item.status),
+                    fg: pending(item.name) ? theme().textMuted : dot(item.status),
                   }}
                 >
-                  •
+                  {pending(item.name) ? "⋯" : "•"}
                 </text>
                 <text fg={theme().text} wrapMode="word">
                   {item.name}{" "}

@@ -61,6 +61,34 @@ The output of the command is added to the conversation as a tool result.
 
 ---
 
+## Clickable elements
+
+These parts of the screen act when you click them. Where a keybind or slash command does the same, the click runs it:
+
+| Element | Where | Action |
+| --- | --- | --- |
+| A pasted-text placeholder, such as `[Pasted ~12 lines]` | In the prompt | Opens the pasted text to read and edit. See [Paste summary](#paste-summary) |
+| Agent name | Below the prompt | Opens the agent picker (`/agents`) |
+| Model and provider | Below the prompt | Opens the model picker (`/models`) |
+| Variant | Below the prompt, when one is selected | Opens the variant picker (`/variants`) |
+| `tab agents` | Below the prompt | Switches to the next agent, like `tab` |
+| `ctrl+p commands` | Below the prompt | Opens the command palette |
+| `esc interrupt` | Below the prompt, while the agent works | Like pressing `esc`: the first click asks for a second, and a second click within 5 seconds interrupts the agent |
+| Token, context and cost usage | Below the prompt, and the Context section of the session sidebar | Opens the status dialog (`/status`) |
+| Directory | Below the prompt, the session sidebar footer, the home screen footer | Copies the directory's path |
+| Model in a message footer | After `▣` and the agent below an answer | Opens the model picker with the model that turn ran on highlighted |
+| Session title | Top of the session sidebar | Renames the session (`/rename`) |
+| Session or message ID (`ses_...`, `msg_...`) | The sidebar, and text the agent or a tool wrote | Copies the ID |
+| An MCP server | MCP section of the session sidebar | Connects or disconnects that server, as `/mcps` does, without opening the dialog. The dot shows `⋯` until the server answers. |
+| A modified file | Modified Files section of the session sidebar | Opens the diff viewer (`/diff`) at that file |
+| A todo | Todo section of the session sidebar | Copies the todo and adds it to the end of the prompt |
+| MCP count and `/status` | Home screen footer | Opens the status dialog (`/status`) |
+| Connect provider | "Getting started" box in the session sidebar | Opens the provider list (`/connect`) |
+
+A click counts only when the mouse is pressed and released on the same cell. Dragging across any of these selects and copies its text instead, as it does elsewhere, and nothing happens on hover. A click on an ID inside a message or tool call copies the ID instead of opening the message or tool around it.
+
+---
+
 ## Commands
 
 When using the OpenCode TUI, you can type `/` followed by a command name to quickly execute actions. For example:
@@ -409,11 +437,58 @@ This is separate from `opencode.json`, which configures server/runtime behavior.
 - `scroll_acceleration.enabled` - Enable macOS-style scroll acceleration for smooth, natural scrolling. When enabled, scroll speed increases with rapid scrolling gestures and stays precise for slower movements. **This setting takes precedence over `scroll_speed` and overrides it when enabled.**
 - `scroll_speed` - Controls how fast the TUI scrolls when using scroll commands (minimum: `0.001`, supports decimal values). Defaults to `3`. **Note: This is ignored if `scroll_acceleration.enabled` is set to `true`.**
 - `diff_style` - Controls diff rendering. `"auto"` adapts to terminal width, `"stacked"` always shows a single-column layout.
+- `prompt.paste_summary` - When a paste is replaced by a placeholder such as `[Pasted ~12 lines]`, and what the placeholder says. See [Paste summary](#paste-summary).
+- `prompt.undo_depth` - How many steps of prompt edits undo can take back. Defaults to `500`. See [Undo in the prompt](#undo-in-the-prompt).
 - `cursor` - Controls the terminal cursor in TUI input fields. `style` defaults to `"block"`, can be `"underline"`, `"line"`, or `"default"`; `blinking` defaults to `true`. When `style` is `"default"`, the terminal default cursor is restored, so `blinking` has no effect.
 - `mouse` - Enable or disable mouse capture in the TUI (default: `true`). When disabled, the terminal's native mouse selection/scrolling behavior is preserved.
 - `attention` - Configures TUI desktop notifications and sounds. Disabled by default.
 
 Use `OPENCODE_TUI_CONFIG` to load a custom TUI config path.
+
+### Paste summary
+
+A paste of three lines or more, or of more than 150 characters, goes into the prompt as a placeholder such as `[Pasted ~12 lines]`; the pasted text is sent in its place. `prompt.paste_summary` changes when that happens and what the placeholder says:
+
+```json title="tui.json"
+{
+  "prompt": {
+    "paste_summary": {
+      "lines": 10,
+      "characters": 2000,
+      "format": "[Pasted {lines} lines, {bytes} B: {excerpt}]",
+      "excerpt": 40
+    }
+  }
+}
+```
+
+- `lines` - A paste of at least this many lines is summarized. Defaults to `3`.
+- `characters` - A paste longer than this many characters is summarized. Defaults to `150`.
+- `format` - The placeholder. Defaults to `"[Pasted ~{lines} lines]"`. `{lines}` is the paste's line count, `{characters}` its length, `{bytes}` its size in UTF-8 bytes, and `{excerpt}` its start, with line breaks and repeated spaces collapsed.
+- `excerpt` - How many characters `{excerpt}` shows before it is cut with `…`. Defaults to `30`.
+
+With the example above, a 12-line stack trace that starts with `TypeError: Cannot read properties of undefined` shows as `[Pasted 12 lines, 1834 B: TypeError: Cannot read properties of und…]`. **Disable paste summary** in the command palette turns summarizing off for every paste, and **Enable paste summary** turns it back on.
+
+Click a placeholder to see the text behind it. It opens in the same editor as the prompt, with the same keys, mouse caret placement and undo. <kbd>enter</kbd> or <kbd>esc</kbd> saves and closes, and the prompt's newline keys (`input_newline`, such as <kbd>shift+enter</kbd>) add a line. The placeholder keeps the edited text, and its label is redone from `format` when the text changed it, such as a new line count. Above the editor, **Keep as block** does the same as <kbd>enter</kbd>, and **Insert inline** replaces the placeholder with the text itself, as if it had been pasted without one. Click a button, or press <kbd>tab</kbd> to move from the editor to Keep as block, Insert inline and back to the editor wherever the caret is (<kbd>shift+tab</kbd> goes the other way), and <kbd>enter</kbd> to press the selected one. <kbd>up</kbd> on the editor's first line also selects the buttons, <kbd>left</kbd> and <kbd>right</kbd> move between them, and <kbd>down</kbd> goes back to the text. Saving empty text removes the placeholder. Undo in the prompt takes back either change.
+
+### Undo in the prompt
+
+`input_undo` and `input_redo` (see [Keybinds](/docs/keybinds)) step back and forward through what you did in the prompt:
+
+- Typing comes back a word at a time. A pause of more than a second, moving the caret, or switching between typing and deleting also starts a new step.
+- A paste, a word or line delete such as <kbd>ctrl+w</kbd> or <kbd>ctrl+u</kbd>, a newline, clearing the prompt and recalling a previous prompt are each one step.
+- Undo restores pasted-text placeholders and attachments with their content, not only their labels.
+- After you submit, undo brings back what you sent, as if you had pressed up to recall it. The turn it started keeps running, and redo empties the prompt again.
+
+The history is shared by the prompts in one OpenCode window and holds `prompt.undo_depth` steps, 500 by default:
+
+```json title="tui.json"
+{
+  "prompt": {
+    "undo_depth": 1000
+  }
+}
+```
 
 ### Attention
 
