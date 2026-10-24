@@ -104,6 +104,26 @@ describe("FileAccess.authorizeRead", () => {
     })
   }
 
+  it.live("authorizes an external directory reached through an in-location symlink", () => {
+    const requests: Permission.AssertInput[] = []
+    return Effect.gen(function* () {
+      const access = yield* FileAccess.Service
+      const location = yield* Location.Service
+      const outside = yield* tmpdirScoped()
+      yield* Effect.promise(async () => {
+        await fs.writeFile(path.join(outside.path, "secret.txt"), "secret")
+        await fs.symlink(path.join(outside.path, "secret.txt"), path.join(location.directory, "key"))
+      })
+      const target = yield* access.authorizeRead("key", invocation)
+
+      expect(target.absolute).toBe(AbsolutePath.make(path.join(outside.path, "secret.txt")))
+      expect(requests).toMatchObject([
+        { action: "external_directory", resources: [slash(path.join(outside.path, "*"))] },
+        { action: "read", resources: [slash(path.join(outside.path, "secret.txt"))] },
+      ])
+    }).pipe(provide(requests))
+  })
+
   it.live("reuses a sibling's directory approval only for the supplied recovery call", () => {
     const requests: Permission.AssertInput[] = []
     return Effect.gen(function* () {
