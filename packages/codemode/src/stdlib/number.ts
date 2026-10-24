@@ -7,7 +7,7 @@ import { coerce, coercion } from "./value.js"
 
 export const numberGlobal = <R>(ctx: Interpreter<R>) => {
   const builtins = ctx.builtins
-  const number = constructor<R>(builtins, builtins.Number, {
+  const number = constructor(builtins, builtins.Number, {
     name: "Number",
     length: 1,
     call: coercion(ctx, "Number").call,
@@ -59,7 +59,7 @@ export const numberGlobal = <R>(ctx: Interpreter<R>) => {
 
 export const booleanGlobal = <R>(ctx: Interpreter<R>) => {
   const builtins = ctx.builtins
-  const boolean = constructor<R>(builtins, builtins.Boolean, {
+  const boolean = constructor(builtins, builtins.Boolean, {
     name: "Boolean",
     length: 1,
     call: coercion(ctx, "Boolean").call,
