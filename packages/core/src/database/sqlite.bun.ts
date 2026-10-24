@@ -23,10 +23,15 @@ interface Config extends Sqlite.ClientConfig {
 const make = (options: Config) =>
   Effect.gen(function* () {
     const native = (yield* Sqlite.Native) as Database
+    const statements = Sqlite.makeStatementCache(
+      (query) => native.prepare<Record<string, unknown>, SQLQueryBindings[]>(query),
+      (statement) => statement.finalize(),
+    )
+    yield* Effect.addFinalizer(() => Effect.sync(() => statements.clear()))
 
     const run = (query: string, params: ReadonlyArray<unknown> = []) =>
       Effect.withFiber<Array<Record<string, unknown>>, SqlError>((fiber) => {
-        const statement = native.query<Record<string, unknown>, SQLQueryBindings[]>(query)
+        const statement = statements.get(query)
         // @ts-ignore bun-types missing safeIntegers method, fixed in https://github.com/oven-sh/bun/pull/26627
         statement.safeIntegers(Context.get(fiber.context, SqlClient.SafeIntegers))
         try {
@@ -42,7 +47,7 @@ const make = (options: Config) =>
 
     const runValues = (query: string, params: ReadonlyArray<unknown> = []) =>
       Effect.withFiber<Array<unknown[]>, SqlError>((fiber) => {
-        const statement = native.query<unknown, SQLQueryBindings[]>(query)
+        const statement = statements.get(query)
         // @ts-ignore bun-types missing safeIntegers method, fixed in https://github.com/oven-sh/bun/pull/26627
         statement.safeIntegers(Context.get(fiber.context, SqlClient.SafeIntegers))
         try {

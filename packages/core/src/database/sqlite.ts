@@ -24,6 +24,40 @@ type RunValues = (
   params?: ReadonlyArray<unknown>,
 ) => Effect.Effect<ReadonlyArray<ReadonlyArray<unknown>>, SqlError>
 
+// Bounded because multi-row inserts and inArray produce SQL strings that vary with input size.
+const statementCacheSize = 500
+
+// Statements are only used synchronously and run to completion, so a cached
+// statement is never shared by two in-flight executions.
+export const makeStatementCache = <S>(prepare: (query: string) => S, finalize: (statement: S) => void) => {
+  const statements = new Map<string, S>()
+  return {
+    get(query: string) {
+      const cached = statements.get(query)
+      if (cached !== undefined) {
+        // Reinsert to mark as most recently used.
+        statements.delete(query)
+        statements.set(query, cached)
+        return cached
+      }
+      const statement = prepare(query)
+      statements.set(query, statement)
+      if (statements.size > statementCacheSize) {
+        const oldest = statements.entries().next().value
+        if (oldest) {
+          statements.delete(oldest[0])
+          finalize(oldest[1])
+        }
+      }
+      return statement
+    },
+    clear() {
+      statements.forEach(finalize)
+      statements.clear()
+    },
+  }
+}
+
 export const makeConnection = <Extensions extends object>(run: Run, runValues: RunValues, extensions: Extensions) =>
   identity<Connection & Extensions>({
     execute(query, params, transformRows) {
