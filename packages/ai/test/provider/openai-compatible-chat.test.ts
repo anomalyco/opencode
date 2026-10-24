@@ -634,4 +634,106 @@ describe("OpenAI-compatible Chat route", () => {
       })
     }),
   )
+
+  it.effect("ignores a reasoning-only delta after a stop finish reason", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              deltaChunk({ content: "Hello" }),
+              deltaChunk({}, "stop"),
+              deltaChunk({ reasoning_content: "late reasoning" }),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.text).toBe("Hello")
+      expect(response.finishReason).toEqual({ normalized: "stop", raw: "stop" })
+      expect(response.reasoning).toBe("")
+    }),
+  )
+
+  it.effect("ignores a reasoning-only delta after a tool_calls finish reason", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              deltaChunk({ content: "Calling" }),
+              deltaChunk({
+                tool_calls: [{ index: 0, id: "call_1", function: { name: "lookup", arguments: '{"q":"x"}' } }],
+              }),
+              deltaChunk({}, "tool_calls"),
+              deltaChunk({ reasoning: "late reasoning" }),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.toolCalls).toMatchObject([{ id: "call_1", name: "lookup", input: { q: "x" } }])
+      expect(response.finishReason).toEqual({ normalized: "tool-calls", raw: "tool_calls" })
+      expect(response.reasoning).toBe("")
+    }),
+  )
+
+  it.effect("ignores a reasoning_details-only delta after the finish reason", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              deltaChunk({ content: "Hello" }),
+              deltaChunk({}, "stop"),
+              deltaChunk({ reasoning_details: [{ type: "reasoning.text", text: "late reasoning", index: 0 }] }),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.text).toBe("Hello")
+      expect(response.finishReason).toEqual({ normalized: "stop", raw: "stop" })
+      expect(response.reasoning).toBe("")
+    }),
+  )
+
+  it.effect("keeps usage from a late reasoning-only chunk", () =>
+    Effect.gen(function* () {
+      const usage = { prompt_tokens: 5, completion_tokens: 2, total_tokens: 7 }
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(deltaChunk({ content: "Hello" }), deltaChunk({}, "stop"), {
+              ...deltaChunk({ reasoning_content: "late reasoning" }),
+              usage,
+            }),
+          ),
+        ),
+      )
+
+      expect(response.reasoning).toBe("")
+      expect(response.usage).toMatchObject({ inputTokens: 5, outputTokens: 2, totalTokens: 7 })
+    }),
+  )
+
+  it.effect("rejects a late delta that carries content alongside reasoning", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              deltaChunk({ content: "Hello" }),
+              deltaChunk({}, "stop"),
+              deltaChunk({ reasoning_content: "late reasoning", content: " late" }),
+            ),
+          ),
+        ),
+        Effect.flip,
+      )
+
+      expect(error.message).toContain("OpenAI Chat received content after the finish reason")
+      expect(error.reason._tag).toBe("InvalidProviderOutput")
+    }),
+  )
 })

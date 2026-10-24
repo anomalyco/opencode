@@ -1045,11 +1045,12 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
     let lifecycle = state.lifecycle
 
     const reasoning = reasoningDelta(delta, state.reasoningField)
+    // Some providers flush reasoning after the finish chunk. The finish reason
+    // already fixed the answer and its tool calls, so drop the trailing
+    // reasoning instead of failing the whole step.
     const hasLateContent =
       Boolean(delta?.content) ||
       Boolean(delta?.refusal) ||
-      reasoning !== undefined ||
-      (Array.isArray(delta?.reasoning_details) && delta.reasoning_details.length > 0) ||
       toolDeltas.some((tool) => Boolean(tool.id) || Boolean(tool.function?.name) || Boolean(tool.function?.arguments))
     if (state.finishReason !== undefined) {
       if (hasLateContent)
