@@ -98,6 +98,10 @@ const layer = Layer.effect(
       const candidate = yield* Effect.gen(function* () {
         if (agent.model) {
           const info = yield* model.get(agent.model.providerID, agent.model.id)
+          if (!info)
+            yield* Effect.logWarning(
+              `configured title model ${agent.model.providerID}/${agent.model.id} is unavailable; falling back to the session model`,
+            )
           return info && { info, variant: agent.model.variant ?? minimalVariant(info) }
         }
         if (!primary) return
