@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Message, ToolFailure } from "@opencode/ai"
 import { DateTime, Effect, Option, Stream, Types } from "effect"
-import type { SessionContext } from "@opencode/plugin/effect/session"
+import type { SessionContext, SessionHooks } from "@opencode/plugin/effect/session"
 import type { ToolHooks } from "@opencode/plugin/effect/tool"
 import { Agent } from "@opencode/core/agent"
 import { Environment } from "@opencode/core/environment/index"
@@ -35,9 +35,13 @@ const agentSelected = (agent: Agent.ID, previous: Agent.ID): SessionEvent.AgentS
 })
 
 /** Runs the plan plugin against stubbed domains, capturing persisted reminders and the context hook. */
-const run = Effect.fnUntraced(function* (events: ReadonlyArray<SessionEvent.AgentSelected> = []) {
+const run = Effect.fnUntraced(function* (
+  events: ReadonlyArray<SessionEvent.AgentSelected> = [],
+  sessionAgent: Agent.ID | undefined = undefined,
+) {
   const persisted = new Array<string>()
   let contextHook: ((input: SessionContext) => Effect.Effect<void>) | undefined
+  let promptHook: ((input: SessionHooks["prompt"]) => Effect.Effect<void>) | undefined
   let toolHook: ((input: ToolHooks["execute.after"]) => Effect.Effect<void>) | undefined
   const defaults = Agent.Info.default(plan)
   const planAgent = {
@@ -45,11 +49,19 @@ const run = Effect.fnUntraced(function* (events: ReadonlyArray<SessionEvent.Agen
     permissions: [...defaults.permissions],
   } satisfies Types.DeepMutable<Agent.Info>
   const driver = Environment.makeMemoryDriver()
+  // The session's agent when `get` is called: undefined models a session
+  // created without an explicit agent, so `default_agent` decides.
+  let currentAgent: Agent.ID | undefined = sessionAgent
+  // Only id/agent are read by the prompt hook; the rest satisfies the schema.
+  // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
+  const sessionInfo = { id: sessionID } as unknown as Session.Info
   yield* PlanPlugin.Plugin.effect(
     host({
       agent: {
         get: () => Effect.die("unused agent.get"),
-        list: () => Effect.die("unused agent.list"),
+        // The prompt hook only reads data[0]; the location wrapper is not exercised.
+        // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
+        list: () => Effect.succeed({ location: {} as never, data: [planAgent] }),
         reload: () => Effect.die("unused agent.reload"),
         transform: (callback) => {
           callback({
@@ -81,8 +93,10 @@ const run = Effect.fnUntraced(function* (events: ReadonlyArray<SessionEvent.Agen
         subscribe: () => Stream.fromIterable(events),
       },
       session: {
+        get: (input) => Effect.succeed({ ...sessionInfo, id: input.sessionID, agent: currentAgent }),
         hook: (name, callback) => {
           if (name === "context") contextHook = callback as (input: SessionContext) => Effect.Effect<void>
+          if (name === "prompt") promptHook = callback as unknown as (input: SessionHooks["prompt"]) => Effect.Effect<void>
           return Effect.succeed({ dispose: Effect.void })
         },
         synthetic: (input) => {
@@ -109,7 +123,8 @@ const run = Effect.fnUntraced(function* (events: ReadonlyArray<SessionEvent.Agen
   )
   if (!contextHook) return yield* Effect.die("plan plugin did not register a context hook")
   if (!toolHook) return yield* Effect.die("plan plugin did not register a tool hook")
-  return { persisted, contextHook, toolHook, files: Environment.makeFiles(driver), planAgent }
+  if (!promptHook) return yield* Effect.die("plan plugin did not register a prompt hook")
+  return { persisted, contextHook, promptHook, toolHook, files: Environment.makeFiles(driver), planAgent }
 })
 
 const request = (agent: Agent.ID, messages: Array<Message>): SessionContext => ({
@@ -152,6 +167,39 @@ const reminders = Effect.gen(function* () {
   const buildRun = yield* run()
   yield* buildRun.contextHook(request(build, [Message.user(planRun.persisted[0]!)]))
   return { enter: planRun.persisted[0]!, leave: buildRun.persisted[0]! }
+})
+
+const promptEvent = (sessionAgent: Agent.ID | undefined): SessionHooks["prompt"] => ({
+  sessionID,
+  messageID: SessionMessage.ID.make("msg_plan_prompt"),
+  prompt: { text: "Reply with exactly PROBE_C and do not use any tools." },
+  delivery: "steer",
+  _sessionAgent: sessionAgent,
+} as unknown as SessionHooks["prompt"])
+
+describe("plan plugin default-agent reminder ordering (#58287)", () => {
+  it.effect("persists the reminder before the first prompt when default_agent is plan", () =>
+    Effect.gen(function* () {
+      const { persisted, promptHook } = yield* run([], undefined)
+      yield* promptHook(promptEvent(undefined))
+      // Admitted before the user's message: the synthetic lands first in the
+      // log, so the first request already carries it - no post-response
+      // reminder, no second, unprompted turn.
+      expect(persisted).toHaveLength(1)
+      expect(persisted[0]).toContain("You are in Plan mode")
+      // Idempotent for the session: a second prompt does not re-inject.
+      yield* promptHook(promptEvent(undefined))
+      expect(persisted).toHaveLength(1)
+    }),
+  )
+
+  it.effect("does not inject when the session carries an explicit agent", () =>
+    Effect.gen(function* () {
+      const { persisted, promptHook } = yield* run([], build)
+      yield* promptHook(promptEvent(build))
+      expect(persisted).toHaveLength(0)
+    }),
+  )
 })
 
 describe("plan plugin reminders", () => {

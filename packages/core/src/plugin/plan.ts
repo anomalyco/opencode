@@ -3,6 +3,7 @@ export * as PlanPlugin from "./plan.js"
 import { Message, ToolFailure } from "@opencode/ai"
 import { define } from "@opencode/plugin/effect/plugin"
 import { Agent } from "@opencode/schema/agent"
+import type { Session } from "@opencode/schema/session"
 import type { SessionEvent } from "@opencode/schema/session-event"
 import { Global } from "@opencode/util/global"
 import { Effect, Stream } from "effect"
@@ -51,6 +52,33 @@ export const Plugin = define({
       })
       return Effect.void
     })
+
+    // `default_agent` resolves silently inside context selection, so a session
+    // created without an explicit agent never emits an agent-switch event and the
+    // context reconcile below would first fire mid-generation: its synthetic is
+    // admitted while the first turn runs, the inbox promotes it as new input when
+    // that turn ends, and the model starts a second, unprompted turn (#58287).
+    // Persisting the reminder before the user's message is admitted gives the
+    // ordering an explicit `--agent plan` already produces at session creation.
+    const defaulted = new Set<Session.ID>()
+    ctx.session.hook("prompt", (event) =>
+      Effect.gen(function* () {
+        if (defaulted.has(event.sessionID)) return
+        const session = yield* ctx.session.get({ sessionID: event.sessionID }).pipe(Effect.orDie)
+        if (session.agent !== undefined) return
+        const { data: agents } = yield* ctx.agent.list().pipe(Effect.orDie)
+        const first = agents[0]
+        if (first?.id !== plan) return
+        defaulted.add(event.sessionID)
+        yield* ctx.session
+          .synthetic({ sessionID: event.sessionID, text: enterReminder, resume: false })
+          .pipe(
+            Effect.catchCause((cause) =>
+              Effect.logWarning("failed to persist Plan mode reminder", { sessionID: event.sessionID, cause }),
+            ),
+          )
+      }),
+    )
 
     // Compaction and committed reverts can strip reminders while the session's agent stays
     // put. Reconcile per request, appending near the tail so the cached prefix stays warm.
