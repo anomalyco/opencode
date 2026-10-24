@@ -202,7 +202,7 @@ function validate(input: MiniCommandInput) {
 }
 
 function localDirectory(): string {
-  const root = process.env.PWD ?? process.cwd()
+  const root = process.cwd()
   try {
     process.chdir(root)
     return process.cwd()
