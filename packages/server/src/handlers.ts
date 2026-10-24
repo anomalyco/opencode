@@ -1,6 +1,7 @@
 import { Layer } from "effect"
 import { GenerateHandler } from "./handlers/generate"
 import { VoiceHandler } from "./handlers/voice"
+import { MediaHandler } from "./handlers/media"
 import { MessageHandler } from "./handlers/message"
 import { ModelHandler } from "./handlers/model"
 import { ProviderHandler } from "./handlers/provider"
@@ -41,6 +42,7 @@ export const handlers = Layer.mergeAll(
   PluginHandler,
   SessionHandler,
   MessageHandler,
+  MediaHandler,
   ModelHandler,
   GenerateHandler,
   VoiceHandler,

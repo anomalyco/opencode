@@ -65,6 +65,28 @@ export const PublicSessionMessage = Schema.Union([
   SessionMessage.Idle,
 ]).annotate({ identifier: "Session.Message.Info" })
 
+export const PublicMediaSessionMessage = Schema.Union([
+  SessionMessage.AgentSelected,
+  SessionMessage.ModelSelected,
+  PublicLocationSwitched,
+  SessionMessage.MediaUser,
+  SessionMessage.Synthetic,
+  SessionMessage.System,
+  SessionMessage.Skill,
+  SessionMessage.Shell,
+  SessionMessage.MediaAssistant,
+  SessionMessage.Compaction,
+  SessionMessage.Idle,
+]).annotate({ identifier: "Session.Message.MediaInfo" })
+
+export const SessionMediaMessagesResponse = Schema.Struct({
+  data: Schema.Array(PublicMediaSessionMessage),
+  cursor: Schema.Struct({
+    previous: Schema.String.pipe(Schema.optional),
+    next: Schema.String.pipe(Schema.optional),
+  }),
+}).annotate({ identifier: "SessionMediaMessagesResponse" })
+
 export const MessageGroup = HttpApiGroup.make("server.message")
   .add(
     HttpApiEndpoint.get("session.messages", "/api/session/:sessionID/message", {

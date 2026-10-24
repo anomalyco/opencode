@@ -42,6 +42,7 @@ export const groupNames = {
   "server.plugin": "plugin",
   "server.session": "session",
   "server.message": "message",
+  "server.media": "media",
   "server.model": "model",
   "server.generate": "generate",
   "server.voice": "voice",
@@ -71,6 +72,7 @@ export const promiseOmitEndpoints = new Set(["pty.connect", "persistentPty.conne
 export const effectOmitEndpoints = new Set([
   "fs.read",
   "fs.write",
+  "media.get",
   "pty.connect",
   "persistentPty.connect",
   "mcp.client",

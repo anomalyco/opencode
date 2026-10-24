@@ -58,7 +58,11 @@ const layer = Layer.effect(
       export: Effect.fn("SessionTransfer.export")(function* (input) {
         const data = {
           info: yield* sessions.get(input.sessionID),
-          messages: (yield* sessions.messages({ sessionID: input.sessionID, order: "asc" })).filter(isSettled),
+          messages: (
+            yield* sessions
+              .messages({ sessionID: input.sessionID, order: "asc" })
+              .pipe(SessionMediaBlob.withMediaUri(false))
+          ).filter(isSettled),
         }
         return input.sanitize ? sanitize(data) : data
       }),
@@ -75,6 +79,14 @@ const layer = Layer.effect(
         const project = yield* projects.resolve(input.location.directory)
         yield* upsertProject(db, project).pipe(Effect.orDie)
         const importedAt = yield* Clock.currentTimeMillis
+        for (const message of input.data.messages) {
+          if (message.type !== "user" || !message.files) continue
+          for (const file of message.files) {
+            if (!("data" in file) || typeof file.data !== "string") {
+              return yield* Effect.die(new Error("SessionTransfer.import requires inline attachment data"))
+            }
+          }
+        }
         const messages = input.data.messages.filter(isSettled).map((message, index) => {
           const encoded = encodeMessage(message)
           const { id: _, type, ...data } = encoded

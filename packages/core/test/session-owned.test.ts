@@ -257,8 +257,9 @@ describe("Session-owned handles", () => {
 
       expect(retried).toEqual(first)
       expect(first.payload.text).toBe("Original prepared")
-      expect(first.payload.files?.[0]?.mime).toBe("text/plain")
-      expect(Buffer.from(first.payload.files?.[0]?.data ?? "", "base64").toString()).toBe(
+      const firstFile = first.payload.files?.[0]
+      expect(firstFile?.mime).toBe("text/plain")
+      expect(Buffer.from(firstFile && "data" in firstFile ? firstFile.data : "", "base64").toString()).toBe(
         yield* Effect.promise(() => Bun.file(import.meta.path).text()),
       )
       expect(calls).toEqual(["Original"])

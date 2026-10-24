@@ -83,6 +83,22 @@ export const Content = Schema.Union([TextContent, FileContent])
   .annotate({ identifier: "Tool.Content" })
 export type Content = Schema.Schema.Type<typeof Content>
 
+export interface MediaFileContent extends Schema.Schema.Type<typeof MediaFileContent> {}
+export const MediaFileContent = Schema.Struct({
+  type: Schema.Literal("file"),
+  uri: Schema.String,
+  mime: Schema.String,
+  bytes: Schema.optional(Schema.Int),
+  width: Schema.optional(Schema.Int),
+  height: Schema.optional(Schema.Int),
+  name: Schema.optional(Schema.String),
+}).annotate({ identifier: "Tool.MediaFileContent" })
+
+export const MediaContent = Schema.Union([TextContent, MediaFileContent])
+  .pipe(Schema.toTaggedUnion("type"))
+  .annotate({ identifier: "Tool.MediaContent" })
+export type MediaContent = Schema.Schema.Type<typeof MediaContent>
+
 export interface Result<Output extends ValueSchema<any> | undefined = ValueSchema<any> | undefined> {
   readonly output?: OutputValue<Output>
   readonly content?: string | ReadonlyArray<Content>

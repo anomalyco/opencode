@@ -47,6 +47,24 @@ export const FileAttachment = Schema.Struct({
     })),
   )
 
+export interface MediaFileAttachment extends Schema.Schema.Type<typeof MediaFileAttachment> {}
+export const MediaFileAttachment = Schema.Struct({
+  uri: Schema.String,
+  mime: Schema.String,
+  width: Schema.Int.pipe(optional),
+  height: Schema.Int.pipe(optional),
+  bytes: Schema.Int.pipe(optional),
+  name: Schema.String.pipe(optional),
+  description: Schema.String.pipe(optional),
+  mention: PromptMention.pipe(optional),
+  origin: FileSource.pipe(optional),
+}).annotate({ identifier: "Prompt.MediaFileAttachment" })
+
+export type Attachment = FileAttachment | MediaFileAttachment
+export const Attachment = Schema.Union([FileAttachment, MediaFileAttachment]).annotate({
+  identifier: "Prompt.Attachment",
+})
+
 export interface AgentAttachment extends Schema.Schema.Type<typeof AgentAttachment> {}
 export const AgentAttachment = Schema.Struct({
   name: Schema.String,
@@ -81,3 +99,11 @@ export const Prompt = Schema.Struct({
         }),
     })),
   )
+
+export interface MediaPrompt extends Schema.Schema.Type<typeof MediaPrompt> {}
+export const MediaPrompt = Schema.Struct({
+  text: Schema.String,
+  files: Schema.Array(Attachment).pipe(optional),
+  agents: Schema.Array(AgentAttachment).pipe(optional),
+  skills: Schema.Array(SkillAttachment).pipe(optional),
+}).annotate({ identifier: "Prompt.Media" })

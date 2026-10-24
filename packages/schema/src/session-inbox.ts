@@ -3,7 +3,7 @@ export * as SessionInbox from "./session-inbox.js"
 import { Schema } from "effect"
 import { Location } from "./location.js"
 import { Project } from "./project.js"
-import { Prompt } from "./prompt.js"
+import { MediaPrompt, Prompt } from "./prompt.js"
 import { DateTimeUtcFromMillis, optional, RelativePath } from "./schema.js"
 import { SessionID } from "./session-id.js"
 import { SessionMessage } from "./session-message.js"
@@ -16,6 +16,12 @@ export const UserPayload = Schema.Struct({
   ...Prompt.fields,
   metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(optional),
 }).annotate({ identifier: "Session.Inbox.UserPayload" })
+
+export interface MediaUserPayload extends Schema.Schema.Type<typeof MediaUserPayload> {}
+export const MediaUserPayload = Schema.Struct({
+  ...MediaPrompt.fields,
+  metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(optional),
+}).annotate({ identifier: "Session.Inbox.MediaUserPayload" })
 
 export interface SyntheticPayload extends Schema.Schema.Type<typeof SyntheticPayload> {}
 export const SyntheticPayload = Schema.Struct({
@@ -58,6 +64,13 @@ const Enqueued = {
 export interface User extends Schema.Schema.Type<typeof User> {}
 export const User = Schema.Struct({ ...Enqueued, ...UserItem.fields }).annotate({ identifier: "Session.Inbox.User" })
 
+const MediaUserItem = Schema.Struct({ type: Schema.tag("user"), payload: MediaUserPayload, delivery: Delivery })
+
+export interface MediaUser extends Schema.Schema.Type<typeof MediaUser> {}
+export const MediaUser = Schema.Struct({ ...Enqueued, ...MediaUserItem.fields }).annotate({
+  identifier: "Session.Inbox.MediaUser",
+})
+
 export interface Synthetic extends Schema.Schema.Type<typeof Synthetic> {}
 export const Synthetic = Schema.Struct({ ...Enqueued, ...SyntheticItem.fields }).annotate({
   identifier: "Session.Inbox.Synthetic",
@@ -76,3 +89,9 @@ export const Info = Schema.Union([User, Synthetic, Compaction, Move]).pipe(
   Schema.annotate({ identifier: "Session.Inbox.Info" }),
 )
 export type Info = typeof Info.Type
+
+export const MediaInfo = Schema.Union([MediaUser, Synthetic, Compaction, Move]).pipe(
+  Schema.toTaggedUnion("type"),
+  Schema.annotate({ identifier: "Session.Inbox.MediaInfo" }),
+)
+export type MediaInfo = typeof MediaInfo.Type

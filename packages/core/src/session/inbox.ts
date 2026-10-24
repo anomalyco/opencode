@@ -9,6 +9,9 @@ import {
   Delivery,
   Info,
   Item,
+  MediaInfo,
+  MediaUser,
+  MediaUserPayload,
   Move,
   MovePayload,
   Synthetic,
@@ -34,6 +37,9 @@ export {
   Delivery,
   Info,
   Item,
+  MediaInfo,
+  MediaUser,
+  MediaUserPayload,
   Move,
   MovePayload,
   Synthetic,
@@ -50,6 +56,7 @@ export {
 export type Promotable = "input" | "steer"
 
 const decodeUser = Schema.decodeUnknownSync(UserPayload)
+const decodeMediaUser = Schema.decodeUnknownSync(MediaUserPayload)
 const encodeUser = Schema.encodeSync(UserPayload)
 const decodeSynthetic = Schema.decodeUnknownSync(SyntheticPayload)
 const encodeSynthetic = Schema.encodeSync(SyntheticPayload)
@@ -74,7 +81,7 @@ function matches<Type extends Item["type"]>(
   return stored.sessionID === request.sessionID && stored.type === request.type
 }
 
-const fromRow = (row: typeof SessionInboxTable.$inferSelect): Info => {
+const fromRow = (row: typeof SessionInboxTable.$inferSelect, mediaUri = false): Info => {
   const base = {
     id: row.id,
     sessionID: row.session_id,
@@ -89,13 +96,21 @@ const fromRow = (row: typeof SessionInboxTable.$inferSelect): Info => {
     })
   if (row.type === "move")
     return Move.make({ ...base, type: "move", payload: decodeMove(row.payload), delivery: row.delivery })
-  if (row.type === "user")
+  if (row.type === "user") {
+    if (mediaUri)
+      return MediaUser.make({
+        ...base,
+        type: "user",
+        payload: decodeMediaUser(row.payload),
+        delivery: row.delivery,
+      }) as unknown as Info
     return User.make({
       ...base,
       type: "user",
       payload: decodeUser(row.payload),
       delivery: row.delivery,
     })
+  }
   if (row.type === "synthetic")
     return Synthetic.make({
       ...base,
@@ -109,8 +124,9 @@ const fromRow = (row: typeof SessionInboxTable.$inferSelect): Info => {
 export const find = Effect.fn("SessionInbox.find")(function* (db: DatabaseService, id: SessionMessage.ID) {
   const row = yield* db.select().from(SessionInboxTable).where(eq(SessionInboxTable.id, id)).get().pipe(Effect.orDie)
   if (row === undefined) return undefined
+  const mediaUri = yield* SessionMediaBlob.MediaUriCapability
   const [hydrated] = yield* SessionMediaBlob.hydrateInbox(db, [row])
-  return fromRow(hydrated!)
+  return fromRow(hydrated!, mediaUri)
 })
 
 const promotedFromMessage = Effect.fn("SessionInbox.promotedFromMessage")(function* (
@@ -128,10 +144,23 @@ const promotedFromMessage = Effect.fn("SessionInbox.promotedFromMessage")(functi
   if (row === undefined) return undefined
   if (row.session_id !== sessionID || (row.type !== "user" && row.type !== "synthetic"))
     return yield* new LifecycleConflict({ id })
+  const mediaUri = yield* SessionMediaBlob.MediaUriCapability
   const [message] = yield* SessionHistory.decodeMessageRows(db, [row]).pipe(Effect.orDie)
   if (!message) return undefined
   const base = { id, sessionID, time: { created: message.time.created }, delivery }
-  if (message.type === "user")
+  if (message.type === "user") {
+    if (mediaUri)
+      return MediaUser.make({
+        ...base,
+        type: "user",
+        payload: MediaUserPayload.make({
+          text: message.text,
+          files: message.files,
+          agents: message.agents,
+          skills: message.skills,
+          metadata: message.metadata,
+        }),
+      }) as unknown as Info
     return User.make({
       ...base,
       type: "user",
@@ -143,6 +172,7 @@ const promotedFromMessage = Effect.fn("SessionInbox.promotedFromMessage")(functi
         metadata: message.metadata,
       }),
     })
+  }
   if (message.type === "synthetic")
     return Synthetic.make({
       ...base,
@@ -419,7 +449,8 @@ export const list = Effect.fn("SessionInbox.list")(function* (db: DatabaseServic
     .orderBy(asc(SessionInboxTable.enqueued_seq))
     .all()
     .pipe(Effect.orDie)
-  return (yield* SessionMediaBlob.hydrateInbox(db, rows)).map(fromRow)
+  const mediaUri = yield* SessionMediaBlob.MediaUriCapability
+  return (yield* SessionMediaBlob.hydrateInbox(db, rows)).map((row) => fromRow(row, mediaUri))
 })
 
 export const moveIDs = Effect.fn("SessionInbox.moveIDs")(function* (db: DatabaseService, sessionID: SessionSchema.ID) {

@@ -26,7 +26,11 @@ export const messageToText = (message: SessionMessage.Info): string => {
         ) ?? []
       const files =
         message.files?.map((file) => {
-          const name = file.name ?? (file.source.type === "uri" ? file.source.uri : "inline attachment")
+          const source =
+            "source" in file
+              ? file.source
+              : (file as { readonly origin?: { readonly type: string; readonly uri?: string } }).origin
+          const name = file.name ?? (source?.type === "uri" ? source.uri : "inline attachment")
           return `[Attached ${file.mime}: ${name}]`
         }) ?? []
       return [...skills, `[User]: ${message.text}`, ...files].join("\n")

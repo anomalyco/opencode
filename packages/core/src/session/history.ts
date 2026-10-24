@@ -16,6 +16,7 @@ import { SessionMessageTable } from "./sql.js"
 type DatabaseService = Database.Interface["db"]
 
 const decode = Schema.decodeUnknownEffect(SessionMessage.Info)
+const decodeMedia = Schema.decodeUnknownEffect(SessionMessage.MediaInfo)
 const decodeSync = Schema.decodeUnknownSync(SessionMessage.Info)
 
 /**
@@ -90,8 +91,14 @@ const rowInput = (row: typeof SessionMessageTable.$inferSelect) => ({
 
 export const decodeMessageRowSync = (row: typeof SessionMessageTable.$inferSelect) => decodeSync(rowInput(row))
 
-export const decodeMessageRow = (row: typeof SessionMessageTable.$inferSelect) =>
-  decode(rowInput(row)).pipe(
+export const decodeMessageRow = (
+  row: typeof SessionMessageTable.$inferSelect,
+  mediaUri = false,
+): Effect.Effect<SessionMessage.Info, MessageDecodeError> =>
+  (mediaUri
+    ? (decodeMedia(rowInput(row)) as unknown as Effect.Effect<SessionMessage.Info, Schema.SchemaError>)
+    : decode(rowInput(row))
+  ).pipe(
     Effect.mapError(
       () =>
         new MessageDecodeError({
@@ -106,7 +113,8 @@ export const decodeMessageRows = Effect.fnUntraced(function* (
   db: DatabaseService,
   rows: ReadonlyArray<typeof SessionMessageTable.$inferSelect>,
 ) {
-  return yield* Effect.forEach(yield* SessionMediaBlob.hydrate(db, rows), decodeMessageRow)
+  const mediaUri = yield* SessionMediaBlob.MediaUriCapability
+  return yield* Effect.forEach(yield* SessionMediaBlob.hydrate(db, rows), (row) => decodeMessageRow(row, mediaUri))
 })
 
 const messageEntries = Effect.fnUntraced(function* (
@@ -131,8 +139,9 @@ const messageEntries = Effect.fnUntraced(function* (
     .orderBy(asc(SessionMessageTable.seq))
     .all()
     .pipe(Effect.orDie)
+  const mediaUri = yield* SessionMediaBlob.MediaUriCapability
   const decoded = yield* Effect.forEach(yield* SessionMediaBlob.hydrate(db, rows), (row) =>
-    decodeMessageRow(row).pipe(Effect.map((message) => ({ seq: row.seq, message }))),
+    decodeMessageRow(row, mediaUri).pipe(Effect.map((message) => ({ seq: row.seq, message }))),
   )
   // A window that cannot replay leaves nothing to start from, so read from the compaction before it.
   const start = decoded[0]
@@ -207,7 +216,7 @@ export const entriesForRunner = Effect.fn("SessionHistory.entriesForRunner")(fun
   return yield* db
     .transaction(() =>
       Effect.gen(function* () {
-        const messages = yield* messageEntries(db, sessionID, boundary)
+        const messages = yield* messageEntries(db, sessionID, boundary).pipe(SessionMediaBlob.withMediaUri(false))
         return {
           initial: yield* InstructionState.initial(db, sessionID, instructions),
           entries: messages,
@@ -227,7 +236,7 @@ export const preview = Effect.fn("SessionHistory.preview")(function* (
   return yield* db
     .transaction(() =>
       Effect.gen(function* () {
-        const messages = yield* messageEntries(db, sessionID, boundary)
+        const messages = yield* messageEntries(db, sessionID, boundary).pipe(SessionMediaBlob.withMediaUri(false))
         // An active assistant may contain an unresolved tool call, so only preview the settled prefix.
         const unsettled = messages.findIndex(
           (entry) => entry.message.type === "assistant" && entry.message.time.completed === undefined,

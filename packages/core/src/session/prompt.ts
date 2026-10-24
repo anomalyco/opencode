@@ -6,9 +6,11 @@ import { SessionInbox } from "@opencode/schema/session-inbox"
 import type { Session } from "@opencode/schema/session"
 import type { SessionMessage } from "@opencode/schema/session-message"
 import { FSUtil } from "@opencode/util/fs-util"
-import { Effect } from "effect"
+import { eq } from "drizzle-orm"
+import { Effect, Option } from "effect"
 import path from "path"
 import { fileURLToPath } from "url"
+import { Database } from "../database/database.js"
 import { Image } from "../image.js"
 import { Instance } from "../instance/service.js"
 import { Mime } from "../mime.js"
@@ -16,6 +18,8 @@ import { Plugin } from "../plugin/service.js"
 import { PluginHooks } from "../plugin/hooks.js"
 import { Skill } from "../skill.js"
 import { AttachmentError, SkillNotFoundError } from "./error.js"
+import { SessionMediaBlob } from "./media-blob.js"
+import { MediaBlobTable } from "./sql.js"
 
 export type Input = {
   text: string
@@ -92,6 +96,7 @@ const materializeAttachment = Effect.fn("SessionPrompt.materializeAttachment")(f
   input: PromptInput.FileAttachment,
 ) {
   const label = attachmentLabel(input)
+  const mediaHash = SessionMediaBlob.hashFromUri(input.uri)
   const resolved = input.uri.startsWith("data:")
     ? {
         bytes: yield* decodeDataURL(input.uri, label),
@@ -101,7 +106,9 @@ const materializeAttachment = Effect.fn("SessionPrompt.materializeAttachment")(f
         name: undefined,
         mime: undefined,
       }
-    : yield* readFileAttachment(input.uri)
+    : mediaHash !== undefined
+      ? yield* readMediaBlobAttachment(input.uri, mediaHash)
+      : yield* readFileAttachment(input.uri)
   if (resolved.bytes.byteLength > MAX_ATTACHMENT_BYTES)
     return yield* new AttachmentError({
       uri: label,
@@ -144,6 +151,37 @@ const normalizeImageAttachment = Effect.fn("SessionPrompt.normalizeImageAttachme
     Effect.mapError((error) => new AttachmentError({ uri: label, message: error.message })),
   )
   return { data: Base64.make(normalized.content), mime: normalized.mime }
+})
+
+const readMediaBlobAttachment = Effect.fn("SessionPrompt.readMediaBlobAttachment")(function* (
+  uri: string,
+  hash: string,
+) {
+  const database = yield* Effect.serviceOption(Database.Service)
+  if (Option.isNone(database))
+    return yield* new AttachmentError({
+      uri,
+      message: `Unable to read attachment: ${uri}`,
+    })
+  const row = yield* database.value.db
+    .select({ mime: MediaBlobTable.mime, data: MediaBlobTable.data })
+    .from(MediaBlobTable)
+    .where(eq(MediaBlobTable.hash, hash))
+    .get()
+    .pipe(Effect.orDie)
+  if (!row)
+    return yield* new AttachmentError({
+      uri,
+      message: `Unable to read attachment: ${uri}`,
+    })
+  return {
+    bytes: Buffer.from(row.data),
+    source: { type: "inline" as const },
+    start: undefined,
+    end: undefined,
+    name: undefined,
+    mime: row.mime,
+  }
 })
 
 const readFileAttachment = Effect.fn("SessionPrompt.readFileAttachment")(function* (uri: string) {

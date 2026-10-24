@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionMessageUser } from "@opencode/client/promise"
-import { extractPromptContext, extractPromptFromMessage } from "./prompt"
+import { extractPromptContext, extractPromptFromMessage, type PromptSource } from "./prompt"
 import { buildPromptRequest } from "./request"
 import { contextItemKey } from "./schema"
 
@@ -192,6 +192,61 @@ describe("extractPromptFromMessage", () => {
         name: "Review",
         content: "@review",
       },
+    ])
+  })
+
+  test("restores media-uri attachments and file:// origins when data and source are omitted", () => {
+    const message = {
+      id: "msg_media",
+      type: "user",
+      text: "inspect @src/app.ts",
+      files: [
+        {
+          uri: "/api/media/hash_image",
+          mime: "image/png",
+          width: 640,
+          height: 480,
+          bytes: 4096,
+          name: "screen.png",
+        },
+        {
+          uri: "/api/media/hash_mention",
+          mime: "text/plain",
+          bytes: 128,
+          origin: { type: "uri", uri: "file:///repo/src/app.ts?start=3&end=7" },
+          name: "app.ts",
+          mention: { text: "@src/app.ts", start: 8, end: 19 },
+        },
+        {
+          uri: "/api/media/hash_context",
+          mime: "text/plain",
+          bytes: 256,
+          origin: { type: "uri", uri: "file:///repo/src/context.ts" },
+          name: "context.ts",
+        },
+      ],
+      time: { created: 1 },
+    } satisfies PromptSource & { type: "user"; time: { created: number } }
+
+    expect(extractPromptFromMessage(message, { directory: "/repo" })).toMatchObject([
+      { type: "text", content: "inspect " },
+      {
+        type: "file",
+        content: "@src/app.ts",
+        path: "src/app.ts",
+        url: "file:///repo/src/app.ts?start=3&end=7",
+        selection: { startLine: 3, endLine: 7 },
+      },
+      {
+        type: "image",
+        filename: "screen.png",
+        mime: "image/png",
+        blob: { id: "/api/media/hash_image", url: "/api/media/hash_image" },
+      },
+    ])
+
+    expect(extractPromptContext(message, { directory: "/repo" }).files).toEqual([
+      { type: "file", path: "src/context.ts", name: "context.ts" },
     ])
   })
 })

@@ -36,7 +36,7 @@ import { SessionEvent } from "@opencode/schema/session-event"
 import { EventLog } from "@opencode/schema/event-log"
 import { FileDiff } from "@opencode/schema/file-diff"
 import { Form } from "@opencode/schema/form"
-import { PublicSessionMessage } from "./message.js"
+import { PublicMediaSessionMessage, PublicSessionMessage } from "./message.js"
 
 const SessionActive = Schema.Struct({
   type: Schema.Literal("running"),
@@ -68,6 +68,29 @@ const PublicInboxInfo = Schema.Union([
   SessionInbox.Compaction,
   PublicMove,
 ]).annotate({ identifier: "Session.Inbox.Info" })
+
+export const PublicMediaInboxInfo = Schema.Union([
+  SessionInbox.MediaUser,
+  SessionInbox.Synthetic,
+  SessionInbox.Compaction,
+  PublicMove,
+]).annotate({ identifier: "Session.Inbox.MediaInfo" })
+
+export const SessionMediaPromptResponse = Schema.Struct({
+  data: SessionInbox.MediaUser,
+})
+
+export const SessionMediaContextResponse = Schema.Struct({
+  data: Schema.Array(PublicMediaSessionMessage),
+})
+
+export const SessionMediaInboxResponse = Schema.Struct({
+  data: Schema.Array(PublicMediaInboxInfo),
+})
+
+export const SessionMediaMessageResponse = Schema.Struct({
+  data: PublicMediaSessionMessage,
+})
 
 // Transcripts exported before v2.1 carry older names for native data. The wire stays plain JSON so any export file
 // is accepted; decoding upgrades those names and then validates the current message shape.

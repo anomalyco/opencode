@@ -1,11 +1,19 @@
 import { Session } from "@opencode/core/session"
+import { SessionMediaBlob } from "@opencode/core/session/media-blob"
 import { SessionStats } from "@opencode/core/session/stats"
 import { SessionTitle } from "@opencode/core/session/title"
 import { SessionTransfer } from "@opencode/core/session/transfer"
 import { InstructionEntry } from "@opencode/core/session/instruction-entry"
 import { Form } from "@opencode/core/form"
 import { DateTime, Effect, Stream } from "effect"
+import { HttpServerResponse } from "effect/http"
 import { HttpApiBuilder, HttpApiSchema } from "effect/http-api"
+import {
+  SessionMediaContextResponse,
+  SessionMediaInboxResponse,
+  SessionMediaMessageResponse,
+  SessionMediaPromptResponse,
+} from "@opencode/protocol/groups/session"
 import { Api } from "../api"
 import {
   ConflictError,
@@ -278,7 +286,8 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.prompt",
         Effect.fn(function* (ctx) {
-          return {
+          const mediaUri = SessionMediaBlob.hasMediaUriCapability(ctx.request.headers)
+          const response = {
             data: yield* session
               .prompt({
                 sessionID: ctx.params.sessionID,
@@ -292,6 +301,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                 resume: ctx.payload.resume,
               })
               .pipe(
+                SessionMediaBlob.withMediaUri(mediaUri),
                 Effect.catchTag("Session.NotFoundError", missingSession),
                 Effect.catchTag("Session.PromptConflictError", (error) =>
                   Effect.fail(
@@ -310,6 +320,11 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                 locationErrors,
               ),
           }
+          if (mediaUri)
+            return yield* HttpServerResponse.schemaJson(SessionMediaPromptResponse)(
+              response as unknown as typeof SessionMediaPromptResponse.Type,
+            ).pipe(Effect.orDie)
+          return response
         }),
       )
       .handle(
@@ -482,14 +497,21 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.context",
         Effect.fn(function* (ctx) {
-          return {
+          const mediaUri = SessionMediaBlob.hasMediaUriCapability(ctx.request.headers)
+          const response = {
             data: yield* session
               .context(ctx.params.sessionID)
               .pipe(
+                SessionMediaBlob.withMediaUri(mediaUri),
                 Effect.catchTag("Session.NotFoundError", missingSession),
                 Effect.catchTag("Session.MessageDecodeError", failedMessageDecode),
               ),
           }
+          if (mediaUri)
+            return yield* HttpServerResponse.schemaJson(SessionMediaContextResponse)(
+              response as unknown as typeof SessionMediaContextResponse.Type,
+            ).pipe(Effect.orDie)
+          return response
         }),
       )
       .handle(
@@ -512,11 +534,20 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.inbox.list",
         Effect.fn(function* (ctx) {
-          return {
+          const mediaUri = SessionMediaBlob.hasMediaUriCapability(ctx.request.headers)
+          const response = {
             data: yield* session
               .inbox(ctx.params.sessionID)
-              .pipe(Effect.catchTag("Session.NotFoundError", missingSession)),
+              .pipe(
+                SessionMediaBlob.withMediaUri(mediaUri),
+                Effect.catchTag("Session.NotFoundError", missingSession),
+              ),
           }
+          if (mediaUri)
+            return yield* HttpServerResponse.schemaJson(SessionMediaInboxResponse)(
+              response as unknown as typeof SessionMediaInboxResponse.Type,
+            ).pipe(Effect.orDie)
+          return response
         }),
       )
       .handle(
@@ -603,9 +634,19 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.message",
         Effect.fn(function* (ctx) {
+          const mediaUri = SessionMediaBlob.hasMediaUriCapability(ctx.request.headers)
           yield* session.get(ctx.params.sessionID).pipe(Effect.catchTag("Session.NotFoundError", missingSession))
-          const message = yield* session.message(ctx.params)
-          if (message) return { data: message }
+          const message = yield* session
+            .message(ctx.params)
+            .pipe(SessionMediaBlob.withMediaUri(mediaUri))
+          if (message) {
+            const response = { data: message }
+            if (mediaUri)
+              return yield* HttpServerResponse.schemaJson(SessionMediaMessageResponse)(
+                response as unknown as typeof SessionMediaMessageResponse.Type,
+              ).pipe(Effect.orDie)
+            return response
+          }
           return yield* new MessageNotFoundError({
             sessionID: ctx.params.sessionID,
             messageID: ctx.params.messageID,

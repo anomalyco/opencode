@@ -2,7 +2,7 @@ import { createEffect, createMemo, onCleanup, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useMutation } from "@tanstack/solid-query"
 import { Option, Schema } from "effect"
-import type { SessionInboxInfo } from "@opencode/client/promise"
+import type { PromptAttachment, SessionInboxInfo } from "@opencode/client/promise"
 import { SessionMessage } from "@opencode/schema/session-message"
 import type { ComposerDelivery } from "@/composer/adapter"
 import type { ComposerStateTarget } from "@/composer/submission-state"
@@ -10,6 +10,7 @@ import type { ContextItem, ImageAttachmentPart, PathAttachmentPart, Prompt } fro
 import { appendPrompt, clonePrompt, isAttachment, promptLength } from "@/composer/prompt-parts"
 import { buildPromptRequest } from "@/composer/request"
 import { blobDataUrl, createLegacyBlobReference } from "@/runtime/persistence/drafts"
+import { mediaHashFromUri } from "@/runtime/server/media"
 import { readPromptPresentation } from "@/composer/comment-note"
 import { extractPromptContext, extractPromptFromMessage } from "@/composer/prompt"
 import { useData } from "@/runtime/server/current"
@@ -18,6 +19,7 @@ import { useWorkspaceLocation } from "@/workspaces/location"
 import { useLanguage } from "@/runtime/i18n/language"
 import { showToast } from "@/shell/notifications/toast"
 
+type QueuedPromptFile = PromptAttachment
 export type QueuedPrompt = Extract<SessionInboxInfo, { type: "user" }>
 
 type EditStash = {
@@ -60,15 +62,22 @@ export function createSessionQueue(input: {
       if (change.type === "reorder") return rewrite(change.inboxIDs)
 
       if (change.type === "undo") {
-        await server.api.session.inbox.cancel({ sessionID: input.sessionID, inboxID: change.item.id })
+        // Rehydrate `/api/media/<hash>` attachments before cancelling: cancelling the inbox item
+        // removes its media_ref and sweeps unreferenced blobs from `media_blob`.
+        const rehydrated = await undoQueuedPrompt({
+          prompt: change.prompt,
+          readMedia: (hash) => server.api.media.get({ hash }),
+          cancelInboxItem: () =>
+            server.api.session.inbox.cancel({ sessionID: input.sessionID, inboxID: change.item.id }),
+        })
         const draft = input.draft.current()
 
         // A prompt of only comments or attachments adds no text, so it needs no paragraph break.
         const prompt = !promptLength(draft)
-          ? [...change.prompt, ...draft.filter(isAttachment)]
-          : promptLength(change.prompt)
-            ? appendPrompt(draft, change.prompt)
-            : [...clonePrompt(draft), ...change.prompt.filter(isAttachment)]
+          ? [...rehydrated, ...draft.filter(isAttachment)]
+          : promptLength(rehydrated)
+            ? appendPrompt(draft, rehydrated)
+            : [...clonePrompt(draft), ...rehydrated.filter(isAttachment)]
 
         input.draft.set(prompt, promptLength(prompt))
         change.context.forEach((item) => input.draft.context.add(item))
@@ -398,8 +407,9 @@ export function queuedPromptText(item: QueuedPrompt) {
 // return as path parts. Mentions and `file://` context stay in the payload; see
 // editedPromptInput.
 export function queuedPromptAttachments(item: QueuedPrompt): (ImageAttachmentPart | PathAttachmentPart)[] {
+  const files = (item.payload.files ?? []) as QueuedPromptFile[]
   return [
-    ...(item.payload.files ?? [])
+    ...files
       .filter((file) => isComposerAttachment(file))
       .map(
         (file, index): ImageAttachmentPart => ({
@@ -407,7 +417,9 @@ export function queuedPromptAttachments(item: QueuedPrompt): (ImageAttachmentPar
           id: `${item.id}:file:${index}`,
           filename: file.name ?? "attachment",
           mime: file.mime,
-          blob: createLegacyBlobReference(`data:${file.mime};base64,${file.data}`),
+          blob: createLegacyBlobReference(
+            "uri" in file ? file.uri : `data:${file.mime};base64,${file.data}`,
+          ),
         }),
       ),
     ...(readPromptPresentation(item.payload.metadata)?.attachments ?? []).map(
@@ -422,14 +434,56 @@ export function queuedPromptAttachments(item: QueuedPrompt): (ImageAttachmentPar
   ]
 }
 
-// A stored file re-admits by the URI it came from, as the TUI does, so a file:// reference keeps its
-// provenance (review comment files stay recognizable) instead of turning into an inline snapshot.
-function storedFileUri(file: NonNullable<QueuedPrompt["payload"]["files"]>[number]) {
-  return file.source.type === "uri" ? file.source.uri : `data:${file.mime};base64,${file.data}`
+function encodeBase64Bytes(bytes: Uint8Array) {
+  const chunkSize = 0x8000
+  let binary = ""
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize))
+  }
+  return btoa(binary)
 }
 
-function isComposerAttachment(file: NonNullable<QueuedPrompt["payload"]["files"]>[number]) {
-  return !file.mention && file.source.type === "inline"
+export async function rehydrateQueuedPromptMedia(
+  prompt: Prompt,
+  readMedia: (hash: string) => Promise<Uint8Array>,
+): Promise<Prompt> {
+  return Promise.all(
+    prompt.map(async (part) => {
+      if (part.type !== "image") return part
+      const hash = mediaHashFromUri(part.blob.id) ?? mediaHashFromUri(part.blob.url)
+      if (!hash) return part
+      const bytes = await readMedia(hash)
+      const dataUrl = `data:${part.mime};base64,${encodeBase64Bytes(bytes)}`
+      return {
+        ...part,
+        blob: createLegacyBlobReference(dataUrl),
+      }
+    }),
+  )
+}
+
+export async function undoQueuedPrompt(input: {
+  prompt: Prompt
+  readMedia: (hash: string) => Promise<Uint8Array>
+  cancelInboxItem: () => Promise<unknown>
+}): Promise<Prompt> {
+  const rehydrated = await rehydrateQueuedPromptMedia(input.prompt, input.readMedia)
+  await input.cancelInboxItem()
+  return rehydrated
+}
+
+// A stored file re-admits by the URI it came from, as the TUI does, so a file:// reference keeps its
+// provenance (review comment files stay recognizable) instead of turning into an inline snapshot.
+function storedFileUri(file: QueuedPromptFile) {
+  const source = "source" in file ? file.source : file.origin
+  return source?.type === "uri"
+    ? source.uri
+    : ("uri" in file ? file.uri : `data:${file.mime};base64,${file.data}`)
+}
+
+function isComposerAttachment(file: QueuedPromptFile) {
+  const source = "source" in file ? file.source : file.origin
+  return !file.mention && (!source || source.type === "inline")
 }
 
 // Confirming an edit submits the current composer content as the replacement:

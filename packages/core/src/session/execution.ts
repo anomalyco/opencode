@@ -7,6 +7,7 @@ import { Job } from "../job.js"
 import { Instance } from "../instance/service.js"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { SessionEvent } from "./event.js"
+import { SessionMediaBlob } from "./media-blob.js"
 import { SessionRunCoordinator } from "./run-coordinator.js"
 import { SessionRunner } from "./runner/index.js"
 import { SessionSchema } from "./schema.js"
@@ -92,6 +93,7 @@ export const layer = Layer.effect(
       const result = yield* SessionRunner.Service.use((runner) =>
         runner.drain({ sessionID, force, continuation, promotable }),
       ).pipe(
+        SessionMediaBlob.withMediaUri(false),
         instances.provide(session),
         Effect.tapCause((cause) =>
           Cause.hasInterruptsOnly(cause)

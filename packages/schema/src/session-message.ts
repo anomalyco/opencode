@@ -2,11 +2,11 @@ export * as SessionMessage from "./session-message.js"
 
 import { Schema } from "effect"
 import { optional } from "./schema.js"
-import { Content } from "./tool.js"
+import { Content, MediaContent } from "./tool.js"
 import { Location } from "./location.js"
 import { Model } from "./model.js"
 import { Project } from "./project.js"
-import { Prompt } from "./prompt.js"
+import { MediaPrompt, Prompt } from "./prompt.js"
 import { DateTimeUtcFromMillis, PositiveInt, RelativePath, statics } from "./schema.js"
 import { ascending } from "./identifier.js"
 import { Shell as ShellSchema } from "./shell.js"
@@ -82,6 +82,16 @@ export const User = Schema.Struct({
   skills: Prompt.fields.skills,
   type: Schema.tag("user"),
 }).annotate({ identifier: "Session.Message.User" })
+
+export interface MediaUser extends Schema.Schema.Type<typeof MediaUser> {}
+export const MediaUser = Schema.Struct({
+  ...Base,
+  text: MediaPrompt.fields.text,
+  files: MediaPrompt.fields.files,
+  agents: MediaPrompt.fields.agents,
+  skills: MediaPrompt.fields.skills,
+  type: Schema.tag("user"),
+}).annotate({ identifier: "Session.Message.MediaUser" })
 
 export interface Synthetic extends Schema.Schema.Type<typeof Synthetic> {}
 export const Synthetic = Schema.Struct({
@@ -160,6 +170,31 @@ export const ToolState = Schema.Union([ToolStateStreaming, ToolStateRunning, Too
 )
 export type ToolState = ToolStateStreaming | ToolStateRunning | ToolStateCompleted | ToolStateError
 
+export interface MediaToolStateCompleted extends Schema.Schema.Type<typeof MediaToolStateCompleted> {}
+export const MediaToolStateCompleted = Schema.Struct({
+  status: Schema.tag("completed"),
+  input: Schema.Record(Schema.String, Schema.Unknown),
+  content: Schema.NonEmptyArray(MediaContent),
+  metadata: Schema.Record(Schema.String, Schema.Json).pipe(optional),
+}).annotate({ identifier: "Session.Message.ToolState.MediaCompleted" })
+
+export interface MediaToolStateError extends Schema.Schema.Type<typeof MediaToolStateError> {}
+export const MediaToolStateError = Schema.Struct({
+  status: Schema.tag("error"),
+  input: Schema.Record(Schema.String, Schema.Unknown),
+  error: SessionError.Error,
+  content: Schema.NonEmptyArray(MediaContent).pipe(optional),
+  metadata: Schema.Record(Schema.String, Schema.Json).pipe(optional),
+}).annotate({ identifier: "Session.Message.ToolState.MediaError" })
+
+export const MediaToolState = Schema.Union([
+  ToolStateStreaming,
+  ToolStateRunning,
+  MediaToolStateCompleted,
+  MediaToolStateError,
+]).pipe(Schema.toTaggedUnion("status"))
+export type MediaToolState = ToolStateStreaming | ToolStateRunning | MediaToolStateCompleted | MediaToolStateError
+
 export interface AssistantTool extends Schema.Schema.Type<typeof AssistantTool> {}
 export const AssistantTool = Schema.Struct({
   type: Schema.tag("tool"),
@@ -237,6 +272,23 @@ export const Assistant = Schema.Struct({
     completed: DateTimeUtcFromMillis.pipe(optional),
   }),
 }).annotate({ identifier: "Session.Message.Assistant" })
+
+export interface MediaAssistantTool extends Schema.Schema.Type<typeof MediaAssistantTool> {}
+export const MediaAssistantTool = Schema.Struct({
+  ...AssistantTool.fields,
+  state: MediaToolState,
+}).annotate({ identifier: "Session.Message.Assistant.MediaTool" })
+
+export const MediaAssistantContent = Schema.Union([AssistantText, AssistantReasoning, MediaAssistantTool]).pipe(
+  Schema.toTaggedUnion("type"),
+)
+export type MediaAssistantContent = AssistantText | AssistantReasoning | MediaAssistantTool
+
+export interface MediaAssistant extends Schema.Schema.Type<typeof MediaAssistant> {}
+export const MediaAssistant = Schema.Struct({
+  ...Assistant.fields,
+  content: MediaAssistantContent.pipe(Schema.Array),
+}).annotate({ identifier: "Session.Message.Assistant.Media" })
 
 const CompactionBase = { type: Schema.tag("compaction"), ...Base }
 
@@ -317,6 +369,32 @@ export type Info =
   | Skill
   | Shell
   | Assistant
+  | Compaction
+  | Idle
+
+export const MediaInfo = Schema.Union([
+  AgentSelected,
+  ModelSelected,
+  LocationSwitched,
+  MediaUser,
+  Synthetic,
+  System,
+  Skill,
+  Shell,
+  MediaAssistant,
+  Compaction,
+  Idle,
+]).annotate({ identifier: "Session.Message.MediaInfo" })
+export type MediaInfo =
+  | AgentSelected
+  | ModelSelected
+  | LocationSwitched
+  | MediaUser
+  | Synthetic
+  | System
+  | Skill
+  | Shell
+  | MediaAssistant
   | Compaction
   | Idle
 export type Type = Info["type"]

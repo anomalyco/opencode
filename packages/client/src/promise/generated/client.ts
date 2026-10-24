@@ -103,6 +103,8 @@ import type {
   SessionViewOutput,
   MessageListInput,
   MessageListOutput,
+  MediaGetInput,
+  MediaGetOutput,
   ModelListInput,
   ModelListOutput,
   ModelDefaultInput,
@@ -1122,6 +1124,20 @@ export function make(options: ClientOptions) {
             successStatus: 200,
             declaredStatuses: [400, 401, 404, 500],
             empty: false,
+          },
+          requestOptions,
+        ),
+    },
+    media: {
+      get: (input: MediaGetInput, requestOptions?: RequestOptions) =>
+        request<MediaGetOutput>(
+          {
+            method: "GET",
+            path: `/api/media/${encodeURIComponent(input.hash)}`,
+            successStatus: 200,
+            declaredStatuses: [400, 401, 404],
+            empty: false,
+            binary: true,
           },
           requestOptions,
         ),

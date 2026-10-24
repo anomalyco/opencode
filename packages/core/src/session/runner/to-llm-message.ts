@@ -10,12 +10,20 @@ import {
 import type { Model } from "@opencode/schema/model"
 import { Option, Schema } from "effect"
 import { fileURLToPath } from "url"
+import { SessionMediaBlob } from "../media-blob.js"
 import { SessionMessage } from "../message.js"
 import { SessionHistory } from "../history.js"
 import { SessionRecentText } from "../recent-text.js"
-import type { FileAttachment } from "@opencode/schema/prompt"
+import type { Attachment, FileAttachment } from "@opencode/schema/prompt"
 
 const imageMimes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"])
+
+const requireInlineAttachment = (file: Attachment): FileAttachment => {
+  if ("data" in file && typeof file.data === "string") return file
+  throw new Error(
+    `Defect: unrehydrated media attachment reached toLLMMessages (${"uri" in file ? file.uri : (file.name ?? file.mime)})`,
+  )
+}
 
 const media = (file: FileAttachment): ContentPart => ({
   type: "media",
@@ -83,14 +91,15 @@ const attachmentContent = (file: FileAttachment): ContentPart[] => {
   return []
 }
 
-const userAttachmentContent = (files: readonly FileAttachment[]) => {
-  const eligible = files.filter(
+const userAttachmentContent = (files: readonly Attachment[]) => {
+  const inlineFiles = files.map(requireInlineAttachment)
+  const eligible = inlineFiles.filter(
     (file) => imageMimes.has(file.mime) && file.source.type === "inline" && file.mention?.text,
   )
-  if (eligible.length < 2) return files.flatMap(attachmentContent)
+  if (eligible.length < 2) return inlineFiles.flatMap(attachmentContent)
 
   const seen = new Map<string, Set<string>>()
-  return files.flatMap((file) => {
+  return inlineFiles.flatMap((file) => {
     if (!imageMimes.has(file.mime) || file.source.type !== "inline" || !file.mention?.text)
       return attachmentContent(file)
     const metadata = JSON.stringify([file.mime, file.name ?? null, file.description ?? null, file.mention.text])
@@ -124,10 +133,22 @@ const toolCall = (tool: SessionMessage.AssistantTool, providerMetadata: Provider
     providerMetadata,
   })
 
+const assertHydratedToolContent = (
+  content: ReadonlyArray<{ readonly type: string; readonly uri?: string }> | undefined,
+) => {
+  if (!content) return
+  for (const item of content) {
+    if (item.type === "file" && typeof item.uri === "string" && item.uri.startsWith(SessionMediaBlob.URI_PREFIX)) {
+      throw new Error(`Defect: unrehydrated tool media ref reached toLLMMessages (${item.uri})`)
+    }
+  }
+}
+
 const toolResult = (tool: SessionMessage.AssistantTool, providerMetadata: ProviderMetadata | undefined) => {
   if (tool.state.status === "completed") {
     // TODO: Materialize remote and managed URIs before provider-history lowering.
     const content = tool.state.content
+    assertHydratedToolContent(content)
     const single = content.length === 1 ? content[0] : undefined
     return ToolResultPart.make({
       id: tool.id,
@@ -141,6 +162,7 @@ const toolResult = (tool: SessionMessage.AssistantTool, providerMetadata: Provid
     })
   }
   if (tool.state.status === "error") {
+    assertHydratedToolContent(tool.state.content)
     return ToolResultPart.make({
       id: tool.id,
       name: tool.name,

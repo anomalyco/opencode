@@ -367,8 +367,9 @@ describe("Session.prompt", () => {
         source: { type: "uri", uri: sourceUri.href },
         name: "main.ts",
       })
+      const firstFile = message.payload.files?.[0]
       expect(
-        Buffer.from(message.payload.files?.[0]?.data ?? "", "base64")
+        Buffer.from(firstFile && "data" in firstFile ? firstFile.data : "", "base64")
           .toString("utf8")
           .replace(/\r$/, ""),
       ).toBe('import { describe, expect } from "bun:test"')
@@ -394,7 +395,8 @@ describe("Session.prompt", () => {
         source: { type: "uri", uri },
         name: "source",
       })
-      expect(Buffer.from(message.payload.files?.[0]?.data ?? "", "base64").toString("utf8")).toContain(
+      const firstDirFile = message.payload.files?.[0]
+      expect(Buffer.from(firstDirFile && "data" in firstDirFile ? firstDirFile.data : "", "base64").toString("utf8")).toContain(
         "session-prompt.test.ts",
       )
     }),

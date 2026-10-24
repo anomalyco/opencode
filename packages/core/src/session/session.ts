@@ -172,6 +172,7 @@ export const make = Effect.fn("Session.make")(function* () {
               const writeEnabled = yield* SessionMediaBlob.isWriteEnabled.pipe(instances.provide(session))
               return { item, writeEnabled }
             }).pipe(
+              Effect.provideService(Database.Service, database),
               Effect.provideService(Instance.Service, instances),
               Effect.provideService(FSUtil.Service, fs),
             ),

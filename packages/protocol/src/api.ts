@@ -2,6 +2,7 @@ import { Context } from "effect"
 import { HttpApi, HttpApiGroup, HttpApiMiddleware, OpenApi } from "effect/http-api"
 import { SchemaErrorMiddleware } from "./middleware/schema-error.js"
 import { GenerateGroup } from "./groups/generate.js"
+import { MediaGroup } from "./groups/media.js"
 import { VoiceGroup } from "./groups/voice.js"
 import { MessageGroup } from "./groups/message.js"
 import { ModelGroup } from "./groups/model.js"
@@ -98,6 +99,7 @@ type ApiGroups<
   | typeof MigrationGroup
   | typeof WorktreeGroup
   | typeof GenerateGroup
+  | typeof MediaGroup
   | typeof VoiceGroup
   | typeof PersistentPtyGroup
   | typeof CredentialGroup
@@ -169,6 +171,7 @@ const makeApiFromGroup = <
     .add(PluginGroup.middleware(locationMiddleware))
     .add(makeSessionGroup(sessionLocationMiddleware, formLocationMiddleware))
     .add(MessageGroup)
+    .add(MediaGroup)
     .add(ModelGroup.middleware(locationMiddleware))
     .add(GenerateGroup)
     .add(VoiceGroup)

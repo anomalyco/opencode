@@ -1,4 +1,4 @@
-import type { PromptFileAttachment } from "@opencode/client/promise"
+import type { PromptAttachment } from "@opencode/client/promise"
 
 export type SessionUserComment =
   | {
@@ -26,7 +26,7 @@ export type SessionUserAttachmentReference = {
 }
 
 export type SessionUserActions = {
-  openAttachment?: (file: PromptFileAttachment) => void
+  openAttachment?: (file: PromptAttachment) => void
   revert?: (input: { sessionID: string; messageID: string }) => Promise<void> | void
   /**
    * An input the server has not delivered yet. Like the TUI, a pending steer can move to the queue or be deleted;

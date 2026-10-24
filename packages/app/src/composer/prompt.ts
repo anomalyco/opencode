@@ -1,6 +1,6 @@
 import type { FileAttachmentPart, ImageAttachmentPart, PathAttachmentPart, Prompt } from "@/composer/state"
 import { createLegacyBlobReference } from "@/runtime/persistence/drafts"
-import type { SessionMessageUser } from "@opencode/client/promise"
+import type { PromptAttachment, SessionMessageUser } from "@opencode/client/promise"
 import { commentContextItem, readPromptPresentation } from "./comment-note"
 import { buildPromptRequest } from "./request"
 import { contextItemKey, type FileContextItem } from "./schema"
@@ -60,7 +60,12 @@ function selectionFromFileUrl(url: string): Extract<Inline, { type: "file" }>["s
 }
 
 // A user message or a pending inbox item: the materialized transcript row shares the inbox payload's shape.
-export type PromptSource = Pick<SessionMessageUser, "id" | "text" | "files" | "agents" | "skills" | "metadata">
+export type PromptSource = Omit<
+  Pick<SessionMessageUser, "id" | "text" | "files" | "agents" | "skills" | "metadata">,
+  "files"
+> & {
+  files?: ReadonlyArray<PromptAttachment>
+}
 
 // Restores the composer content that produced a prompt, losing nothing it carried. File references
 // without a mention return as context through extractPromptContext; unmentioned agents and skills
@@ -89,7 +94,13 @@ export function extractPromptFromMessage(
 
   for (const file of message.files ?? []) {
     const mention = file.mention
-    const uri = file.source.type === "uri" ? file.source.uri : `data:${file.mime};base64,${file.data}`
+    const source = "source" in file ? file.source : file.origin
+    const fileUri = "uri" in file ? file.uri : undefined
+    const fileData = "data" in file ? file.data : undefined
+    const uri =
+      source?.type === "uri"
+        ? source.uri
+        : (fileUri ?? (fileData !== undefined ? `data:${file.mime};base64,${fileData}` : ""))
 
     if (mention) {
       inline.push({
@@ -108,18 +119,16 @@ export function extractPromptFromMessage(
     }
 
     // A file reference returns as a context chip through extractPromptContext.
-    if (file.source.type === "uri" && file.source.uri.startsWith("file:")) continue
+    if (source?.type === "uri" && source.uri.startsWith("file:")) continue
 
-    // Stored files carry their bytes, and an empty file has empty data; only a local handoff row
+    // Stored files carry their bytes or media URI, and an empty file has empty data; only a local handoff row
     // leaves data empty because its bytes live at a blob URL.
-    const stored = file.source.type === "inline" || !!file.data
+    const stored = (!source || source.type === "inline") && (fileUri !== undefined || fileData !== undefined)
 
     const dataUrl =
-      file.source.type === "uri" && file.source.uri.startsWith("data:")
-        ? file.source.uri
-        : stored
-          ? `data:${file.mime};base64,${file.data}`
-          : undefined
+      source?.type === "uri" && source.uri.startsWith("data:")
+        ? source.uri
+        : (fileUri ?? (stored ? `data:${file.mime};base64,${fileData ?? ""}` : undefined))
 
     if (!dataUrl) continue
     attachments.push({
@@ -183,11 +192,12 @@ export function extractPromptContext(message: PromptSource, opts?: { directory?:
   )
 
   const files = (message.files ?? []).flatMap((file): FileContextItem[] => {
-    if (file.mention || file.source.type !== "uri" || !file.source.uri.startsWith("file:")) return []
+    const source = "source" in file ? file.source : file.origin
+    if (file.mention || source?.type !== "uri" || !source.uri.startsWith("file:")) return []
 
-    if (regenerated.has(file.source.uri)) return []
+    if (regenerated.has(source.uri)) return []
 
-    const absolute = decodeFilePath(stripQueryAndHash(stripFileProtocol(file.source.uri))).replace(
+    const absolute = decodeFilePath(stripQueryAndHash(stripFileProtocol(source.uri))).replace(
       /^\/([A-Za-z]:)/,
       "$1",
     )
@@ -196,8 +206,8 @@ export function extractPromptContext(message: PromptSource, opts?: { directory?:
       {
         type: "file",
         // The workspace root itself has no relative path, so it keeps its absolute one.
-        path: (directory && createPathHelpers(() => directory).normalize(file.source.uri)) || absolute,
-        selection: selectionFromFileUrl(file.source.uri),
+        path: (directory && createPathHelpers(() => directory).normalize(source.uri)) || absolute,
+        selection: selectionFromFileUrl(source.uri),
         name: file.name,
         description: file.description,
       },

@@ -110,6 +110,8 @@ export function SessionUIProvider(
         get: (input) => turnDiffs()?.get(input),
         load: (input) => turnDiffs()?.load(input, () => serverSDK.api.session.diff(input)),
       }}
+      readMedia={(uri, mime, signal) => serverSDK.media.load(uri, mime, signal)}
+      peekMedia={(uri, mime) => serverSDK.media.peek(uri, mime)}
       onNavigateToSession={navigateToSession}
       onSessionHref={href}
     >
