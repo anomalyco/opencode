@@ -9,6 +9,7 @@ import { Deferred, Effect, Schema, Scope } from "effect"
 import { Config } from "../../config.js"
 import { Environment } from "../../environment/index.js"
 import { Job } from "../../job.js"
+import { Location } from "../../location.js"
 import { FileAccess } from "../../file-access.js"
 import { Permission } from "../../permission.js"
 import { NonNegativeInt } from "../../schema.js"
@@ -100,12 +101,71 @@ const backgroundResult = (shellID: string, file: string) => ({
   status: "running" as const,
 })
 
+const reclaimBackground = (
+  jobs: Job.Interface,
+  sessions: Session.Interface,
+  background: Job.Background,
+): Effect.Effect<void, unknown> =>
+  Effect.gen(function* () {
+    const recovery = background.recovery
+    if (recovery.kind !== "shell") return
+    const info = (yield* jobs.wait({ id: background.id })).info
+    if (!info || info.status === "running") return
+    const text =
+      info.status === "completed"
+        ? (info.output ?? background.output ?? "Command completed")
+        : info.status === "error"
+          ? (info.error ?? background.error ?? "Command failed")
+          : "Cancelled"
+    yield* sessions
+      .synthetic({
+        id: background.notificationID,
+        sessionID: recovery.sessionID,
+        description: recovery.command,
+        ...ShellResult.notification({
+          jobID: background.id,
+          shellID: recovery.shellID,
+          command: recovery.command,
+          state: info.status,
+          text,
+        }),
+      })
+      .pipe(Effect.catchTag("Session.NotFoundError", () => Effect.void))
+    yield* jobs.completeBackground(background.notificationID)
+  })
+
+const reclaimBackgrounds = (
+  jobs: Job.Interface,
+  sessions: Session.Interface,
+  location: Location.Info,
+): Effect.Effect<void, unknown> =>
+  Effect.gen(function* () {
+    const pending = yield* jobs.pendingBackground
+    const owned: Job.Background[] = []
+    for (const background of pending) {
+      const recovery = background.recovery
+      if (recovery.kind !== "shell") continue
+      // Job is process-global, so every location sees every marker. Reclaim only shells whose
+      // session lives here; another location's live observer still owns those.
+      const session = yield* sessions.get(recovery.sessionID).pipe(Effect.orElseSucceed(() => undefined))
+      if (!session) continue
+      if (session.location.directory !== location.directory) continue
+      if (session.location.workspaceID !== location.workspaceID) continue
+      owned.push(background)
+    }
+    yield* Effect.forEach(owned, (background) => reclaimBackground(jobs, sessions, background), {
+      concurrency: "unbounded",
+      discard: true,
+    })
+  })
+
 export const Plugin = {
   id: "opencode.tool.shell",
   effect: Effect.fn("ShellTool.Plugin")(function* (ctx: Context) {
     const sessions = yield* Session.Service
     const jobs = yield* Job.Service
     const scope = yield* Scope.Scope
+    const location = yield* Location.Service
     const environment = yield* Environment.Service
     const access = yield* FileAccess.Service
     const shell = yield* Shell.Service
@@ -187,6 +247,11 @@ export const Plugin = {
       },
       Effect.forkIn(scope, { startImmediately: true }),
     )
+
+    // A rebuilt activation closes the scope that owned the previous notification observers. Reclaim
+    // persisted backgrounds owned by this process so their completion still reaches the Session.
+    // Jobs from a previous process are unknown here and stay for restart recovery.
+    yield* reclaimBackgrounds(jobs, sessions, location).pipe(Effect.forkIn(scope, { startImmediately: true }))
 
     yield* ctx.tool
       .transform((editor) =>
