@@ -48,6 +48,7 @@ import { formLocationLayer } from "./middleware/form-location"
 import { sessionLocationLayer } from "./middleware/session-location"
 import { ServerInfo } from "./server-info"
 import type { ServerOptions } from "./options"
+import { withoutParentSpan } from "./request-tracing"
 
 const applicationServiceNodes = [
   Global.node,
@@ -159,7 +160,7 @@ function makeRoutes<AuthError, AuthServices>(
         }),
       )
     : build(overrides)
-  return serviceLayer.pipe(
+  const routes = serviceLayer.pipe(
     Layer.flatMap((context) => {
       const services = Layer.succeedContext(context)
       const requestServices = Layer.merge(
@@ -190,4 +191,7 @@ function makeRoutes<AuthError, AuthServices>(
       return Layer.merge(api, V1Migration.layer.pipe(Layer.provide(services)))
     }),
   )
+  // HTTP handlers and cached location runtimes retain their construction context.
+  // Keep the server startup span out of that context before either is built.
+  return Layer.effectContext(Layer.build(routes).pipe(withoutParentSpan))
 }

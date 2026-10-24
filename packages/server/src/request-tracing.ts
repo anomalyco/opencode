@@ -1,4 +1,9 @@
-import { Context, Effect, Scope, Tracer } from "effect"
+import { Context, Effect, Tracer } from "effect"
 
-export const withoutParentSpan = <A, E>(effect: Effect.Effect<A, E, Scope.Scope>) =>
-  effect.pipe(Effect.updateContext((context: Context.Context<Scope.Scope>) => Context.omit(Tracer.ParentSpan)(context)))
+/** Removes ambient tracing state; the wrapped effect must not require ParentSpan as a service. */
+export const withoutParentSpan = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  effect.pipe(
+    Effect.updateContext(
+      (context: Context.Context<R>) => Context.omit(Tracer.ParentSpan)(context) as Context.Context<R>,
+    ),
+  )
