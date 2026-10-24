@@ -643,7 +643,7 @@ ID before changing packages.
 | `Azure resource name is missing` | Set `providers.azure.settings.resourceName`, `AZURE_RESOURCE_NAME`, or a complete `settings.baseURL`. |
 | Vertex does not appear | Set a resolvable project in provider settings or a supported project variable. ADC alone does not activate the provider. |
 | Bedrock does not appear | Provide a profile or another supported AWS credential-chain input. `AWS_REGION` by itself only selects a region. |
-| Ollama has no models | Confirm the server exposes `/api/tags` and `/api/show` at the path derived from `baseURL`, and that `/api/show` reports the `completion` capability. |
+| Ollama has no models | If connected to a Console workspace, check whether **Managed providers only** is enabled in its **Settings › General**; see [workspace providers](/console/providers#use-in-opencode). Otherwise, confirm the server exposes `/api/tags` and `/api/show` at the path derived from `baseURL`, and that `/api/show` reports the `completion` capability. |
 | Copilot has no models | Confirm the active OAuth account has Copilot Chat access. A failed model sync is logged as `failed to sync GitHub Copilot models`. |
 
 V2 rejects the retired provider IDs with a direct replacement. Use `azure/<model>` instead of

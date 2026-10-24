@@ -318,6 +318,10 @@ lmstudio/google/gemma-4-26b-a4b
 vllm/Qwen/Qwen3-Coder-30B-A3B-Instruct
 ```
 
+If your connected Console workspace has **Managed providers only** enabled, these locally discovered providers are
+removed from the catalog. Ask a workspace administrator to turn it off in **Settings › General** to use local models.
+Local configuration cannot override the workspace's [provider policy](/console/providers#use-in-opencode).
+
 ### Ollama
 
 With Ollama listening at `http://127.0.0.1:11434`, select a discovered model with the `ollama` provider ID:
