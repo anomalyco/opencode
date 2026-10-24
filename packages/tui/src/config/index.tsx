@@ -3,7 +3,7 @@ export * as Config from "."
 import { createBindingLookup } from "@opentui/keymap/extras"
 import { Vcs } from "@opencode/schema/vcs"
 import { Schema } from "effect"
-import { createContext, onCleanup, type JSX, useContext } from "solid-js"
+import { createContext, createSignal, onCleanup, type JSX, useContext } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { safeWatch } from "../util/watch"
 import path from "path"
@@ -12,6 +12,7 @@ import { TuiKeybind } from "./keybind"
 export interface Interface {
   readonly path?: string
   readonly get: () => Promise<Info>
+  readonly diagnostic?: () => string | undefined
   readonly update: (update: (draft: any) => void) => Promise<Info>
 }
 
@@ -341,6 +342,7 @@ export function resolve(
 const ConfigContext = createContext<{
   data: Resolved
   path?: string
+  diagnostic: () => string | undefined
   update: Interface["update"]
 }>()
 
@@ -352,10 +354,12 @@ export function ConfigProvider(props: {
 }) {
   const [config, setConfig] = createStore(props.config)
   const host = props.service
+  const [diagnostic, setDiagnostic] = createSignal(host?.diagnostic?.())
   const apply = (info: Info) => setConfig(reconcile(resolve(info, props.options ?? { terminalSuspend: true })))
   const update = async (update: (draft: any) => void) => {
     if (!host) throw new Error("Config updates are not available")
     const info = await host.update(update)
+    setDiagnostic(host.diagnostic?.())
     apply(info)
     return info
   }
@@ -363,14 +367,20 @@ export function ConfigProvider(props: {
   const watcher = host?.path
     ? safeWatch(path.dirname(host.path), () => {
         reload = reload
-          .then(() => host.get())
-          .then(apply)
+          .then(async () => {
+            const info = await host.get()
+            const issue = host.diagnostic?.()
+            setDiagnostic(issue)
+            apply(info)
+          })
           .catch(() => {})
       })
     : undefined
   onCleanup(() => watcher?.close())
   return (
-    <ConfigContext.Provider value={{ data: config, path: host?.path, update }}>{props.children}</ConfigContext.Provider>
+    <ConfigContext.Provider value={{ data: config, path: host?.path, diagnostic, update }}>
+      {props.children}
+    </ConfigContext.Provider>
   )
 }
 

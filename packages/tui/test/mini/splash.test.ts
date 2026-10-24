@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { RGBA, TextAttributes, type ScrollbackWriter } from "@opentui/core"
 import { createTestRenderer } from "@opentui/core/testing"
-import { entrySplash, entrySplashLayout, exitSplash } from "../../src/mini/splash"
+import { configWarning, entrySplash, entrySplashLayout, exitSplash } from "../../src/mini/splash"
 import { stringWidth } from "../../src/util/string-width"
 
 const preview = "1.18.4-preview.abcd1234567890"
@@ -39,6 +39,11 @@ async function renderSplash(writer: ScrollbackWriter, width: number) {
     app.renderer.destroy()
   }
 }
+
+test.each([100, 40])("renders an invalid CLI config warning in Mini scrollback at width %i", async (width) => {
+  const result = await renderSplash(configWarning("Invalid CLI config at /tmp/cli.json: leader. File ignored."), width)
+  expect(result.rows.join("")).toContain("leader. File ignored.")
+})
 
 test.each([
   { width: 80, mono: false, detail: "~/src/wt/oc-mini-v2", metadata: " vlocal · ~/src/wt/oc-mini-v2" },

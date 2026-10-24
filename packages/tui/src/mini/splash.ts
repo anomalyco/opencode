@@ -245,6 +245,25 @@ export function splashMeta(input: SplashInput): SplashMeta {
   }
 }
 
+export function configWarning(message: string): ScrollbackWriter {
+  return (ctx) => {
+    const width = Math.max(1, Math.trunc(ctx.width))
+    const height = 1 + Math.ceil(stringWidth(message) / width)
+    return {
+      root: new TextRenderable(ctx.renderContext, {
+        width,
+        height,
+        content: `\n${message}`,
+        wrapMode: "char",
+      }),
+      width,
+      height,
+      startOnNewLine: true,
+      trailingNewline: true,
+    }
+  }
+}
+
 export function entrySplash(input: {
   version: string
   detail?: string
