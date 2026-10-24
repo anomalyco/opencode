@@ -510,3 +510,33 @@ Alternatively, you can add something like this to your [AGENTS.md](/docs/rules/)
 ```md title="AGENTS.md"
 If you are unsure how to do something, use `gh_grep` to search code examples from GitHub.
 ```
+
+---
+
+### Employed
+
+Add the [Employed MCP server](https://jobs.guaqai.me/connectors) to search live job postings and research employers' hiring.
+
+```json title="opencode.json" {4-7}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "employed": {
+      "type": "remote",
+      "url": "https://jobs.guaqai.me/mcp"
+    }
+  }
+}
+```
+
+Then sign in with your Employed account:
+
+```bash
+opencode mcp auth employed
+```
+
+Add `use employed` to your prompts to search jobs.
+
+```txt "use employed"
+Find remote backend engineering roles that mention Go. use employed
+```
