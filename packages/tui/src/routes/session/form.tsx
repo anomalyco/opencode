@@ -88,6 +88,8 @@ export function FormPrompt(props: { form: FormWithLocation }) {
 
   let textarea: TextareaRenderable | undefined
   const [inputTarget, setInputTarget] = createSignal<TextareaRenderable>()
+  let content: ScrollBoxRenderable | undefined
+  let choices: BoxRenderable | undefined
   let review: ScrollBoxRenderable | undefined
 
   const message = createMemo(() => {
@@ -137,7 +139,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
     return current?.type === "external" ? current : undefined
   })
   const confirm = createMemo(() => !single() && store.tab >= fields().length)
-  const reviewMaxHeight = createMemo(() => Math.max(3, dimensions().height - 14))
+  const contentMaxHeight = createMemo(() => Math.max(3, dimensions().height - 14))
   const configuredRows = createMemo(() => {
     const current = answerField()
     return current ? formRows(current) : []
@@ -238,6 +240,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
     }
     target.focusable = true
     target.focus()
+    if (other()) select(store.selected)
   })
 
   onCleanup(
@@ -312,6 +315,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
   }
 
   function selectTab(index: number) {
+    content?.scrollTo(0)
     const next = fields()[index]
     setStore("tab", index)
     setStore("selected", next && isFormAnswerField(next) ? formSelected(next, store.answers[next.key]) : 0)
@@ -319,8 +323,15 @@ export function FormPrompt(props: { form: FormWithLocation }) {
     setStore("error", "")
   }
 
+  function select(index: number) {
+    setStore("selected", index)
+    const row = choices?.getChildren()[index]
+    if (row) content?.scrollChildIntoView(row.id)
+  }
+
   function selectOption() {
     if (other()) {
+      select(store.selected)
       if (!multi()) {
         setStore("editing", true)
         return
@@ -345,7 +356,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
   function pasteCustom(value: string) {
     const current = answerField()
     if (!current || textual() || !custom() || confirm()) return false
-    setStore("selected", rows().length)
+    select(rows().length)
     updateCustom(current, input() + value)
     setStore("editing", true)
     return true
@@ -612,7 +623,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
           if (textual() || !textarea || textarea.isDestroyed || store.selected === 0) return false
           if (textarea.scrollY + textarea.visualCursor.visualRow > 0) return false
           setStore("editing", false)
-          setStore("selected", store.selected - 1)
+          select(store.selected - 1)
         },
       },
       {
@@ -716,12 +727,24 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                 { bind: "j", title: "Scroll review", group: "Form", run: () => review?.scrollBy(1) },
               ]
             : [
+                {
+                  bind: "pageup",
+                  title: "Scroll form up",
+                  group: "Form",
+                  run: () => content?.scrollBy(-1, "viewport"),
+                },
+                {
+                  bind: "pagedown",
+                  title: "Scroll form down",
+                  group: "Form",
+                  run: () => content?.scrollBy(1, "viewport"),
+                },
                 ...Array.from({ length: max }, (_, index) => ({
                   bind: String(index + 1),
                   title: `Select answer ${index + 1}`,
                   group: "Form",
                   run: () => {
-                    setStore("selected", index)
+                    select(index)
                     selectOption()
                   },
                 })),
@@ -729,25 +752,25 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                   bind: "up",
                   title: "Previous answer",
                   group: "Form",
-                  run: () => setStore("selected", (store.selected - 1 + total) % total),
+                  run: () => select((store.selected - 1 + total) % total),
                 },
                 {
                   bind: "k",
                   title: "Previous answer",
                   group: "Form",
-                  run: () => setStore("selected", (store.selected - 1 + total) % total),
+                  run: () => select((store.selected - 1 + total) % total),
                 },
                 {
                   bind: "down",
                   title: "Next answer",
                   group: "Form",
-                  run: () => setStore("selected", (store.selected + 1) % total),
+                  run: () => select((store.selected + 1) % total),
                 },
                 {
                   bind: "j",
                   title: "Next answer",
                   group: "Form",
-                  run: () => setStore("selected", (store.selected + 1) % total),
+                  run: () => select((store.selected + 1) % total),
                 },
                 { bind: "return", title: "Select answer", group: "Form", run: () => selectOption() },
                 ...(multi()
@@ -878,7 +901,12 @@ export function FormPrompt(props: { form: FormWithLocation }) {
         </Show>
 
         <Show when={!confirm() && answerField()}>
-          <box paddingLeft={1} gap={1}>
+          <scrollbox
+            maxHeight={contentMaxHeight()}
+            contentOptions={{ minHeight: 0, paddingLeft: 1, gap: 1 }}
+            scrollbarOptions={{ visible: false }}
+            ref={(r: ScrollBoxRenderable) => (content = r)}
+          >
             <box>
               <text fg={theme.text.base}>{answerField()!.description ?? formLabel(answerField()!)}</text>
             </box>
@@ -909,7 +937,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
               </box>
             </Show>
             <Show when={!textual()}>
-              <box>
+              <box ref={(r: BoxRenderable) => (choices = r)}>
                 <For each={rows()}>
                   {(row, i) => {
                     const active = () => i() === store.selected
@@ -920,8 +948,8 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                     }
                     return (
                       <box
-                        onMouseMove={() => setStore("selected", i())}
-                        onMouseDown={() => setStore("selected", i())}
+                        onMouseMove={() => select(i())}
+                        onMouseDown={() => select(i())}
                         onMouseUp={() => {
                           if (renderer.getSelection()?.getSelectedText()) return
                           selectOption()
@@ -974,8 +1002,8 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                 </For>
                 <Show when={custom()}>
                   <box
-                    onMouseMove={() => setStore("selected", rows().length)}
-                    onMouseDown={() => setStore("selected", rows().length)}
+                    onMouseMove={() => select(rows().length)}
+                    onMouseDown={() => select(rows().length)}
                     onMouseUp={() => {
                       if (renderer.getSelection()?.getSelectedText()) return
                       selectOption()
@@ -1057,12 +1085,12 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                 </Show>
               </box>
             </Show>
-          </box>
+          </scrollbox>
         </Show>
 
         <Show when={confirm()}>
           <scrollbox
-            maxHeight={reviewMaxHeight()}
+            maxHeight={contentMaxHeight()}
             contentOptions={{ minHeight: 0 }}
             scrollbarOptions={{ visible: false }}
             ref={(r: ScrollBoxRenderable) => (review = r)}
@@ -1142,7 +1170,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
               {"↑↓"} <span style={{ fg: theme.text.muted }}>select</span>
             </text>
           </Show>
-          <Show when={confirm() && reviewContentHeight() > reviewMaxHeight()}>
+          <Show when={confirm() && reviewContentHeight() > contentMaxHeight()}>
             <text fg={theme.text.base}>
               {"↑↓"} <span style={{ fg: theme.text.muted }}>scroll</span>
             </text>
