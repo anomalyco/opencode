@@ -91,6 +91,8 @@ export const Plugin = {
     const permission = yield* Permission.Service
     const hook = (event: SessionHooks["context"]) =>
       Effect.sync(() => {
+        // The snapshot omits execute when that action is wholly denied.
+        if (!event.tools.execute) return
         event.system.push(
           SystemPart.make(
             "When you create a worktree outside the current working directory and intend to use it as your primary working directory, consider using `execute` to call `tools.opencode.session_move` and make the worktree the session's working directory.",
