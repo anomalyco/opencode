@@ -192,8 +192,6 @@ export const dict = {
   "settings.timeline.category.subagents": "Subagentes",
   "settings.timeline.category.notices": "Avisos",
   "settings.timeline.category.tools": "Otras herramientas",
-  "session.background.shell.many": "{{count}} shells",
-  "session.background.subagent.many": "{{count}} subagentes",
   "settings.about.otherContributor.many": "{{count}} más",
   "toast.migration.progress.clearingOldEvents": "Borrando eventos antiguos",
   "toast.migration.progress.migratingSessions": "Migrando sesiones",
@@ -642,7 +640,6 @@ export const dict = {
 
   "session.question.minimize": "Minimizar pregunta",
   "session.question.restore": "Restaurar pregunta",
-  "session.question.pending.many": "{{count}} de preguntas pendientes",
 
   "session.new.project.new": "Nuevo proyecto",
   "session.new.project.search": "Buscar proyectos",
@@ -965,7 +962,6 @@ export const dict = {
   "session.error.incompatible.description":
     "{{server}} ejecuta OpenCode {{version}}, que no es compatible con esta aplicación. Actualiza el servidor a OpenCode V2 para continuar.",
   "session.background.moveInline": "Pulsa {{keybind}} para pasar el trabajo en curso a segundo plano",
-  "session.background.runningCount.many": "{{count}} de elementos en curso en segundo plano",
   "settings.general.row.terminalPlacement.title": "Posición del terminal",
   "settings.general.row.terminalPlacement.description": "Elige dónde se abre el terminal en las sesiones",
   "settings.general.row.terminalPlacement.side": "Lateral",
