@@ -637,10 +637,13 @@ export function Session(props: {
   onCleanup(() => {
     sessionDisposed = true
   })
-  // Restore the prompt when the free allowance stops it, and offer OpenCode Go on the first hit in a day.
+  // Restore the prompt when the free allowance or a Go usage limit stops it, and offer OpenCode Go on the first free-limit
+  // hit in a day.
   onCleanup(
     data.on("session.step.failed", (event) => {
-      if (event.data.sessionID !== route.sessionID || event.data.error.type !== "provider.free-limit") return
+      const type = event.data.error.type
+      if (event.data.sessionID !== route.sessionID) return
+      if (type !== "provider.free-limit" && type !== "provider.go-limit") return
       if (handledFreeLimits.has(event.data.assistantMessageID)) return
       handledFreeLimits.add(event.data.assistantMessageID)
       const current = prompt()
@@ -663,7 +666,7 @@ export function Session(props: {
           break
         }
       }
-      if (dialog.stack.length > 0) return
+      if (type === "provider.go-limit" || dialog.stack.length > 0) return
       if (goUpsell.dontShow || goUpsellMemory.dontShow) return
       const now = Date.now()
       const seen = Math.max(goUpsell.lastSeenAt ?? 0, goUpsellMemory.lastSeenAt ?? 0)
@@ -723,7 +726,7 @@ export function Session(props: {
           if (!claimed || !canOpen()) return
           dialog.replace(() => (
             <DialogGoUpsell
-              reset={freeLimitReset(event.data.error.retryAfterMs, event.created)}
+              reset={limitReset(event.data.error.retryAfterMs, event.created)}
               canContinue={hasRecalledPrompt}
               onDontShowAgain={() => {
                 updateGoUpsellMemory((draft) => {
@@ -2021,19 +2024,22 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
   const duration = createMemo(() => SessionTurn.duration(messages(), props.message, turn()))
   const tokensPerSecond = createMemo(() => SessionTurn.tokensPerSecond(messages(), props.message, turn()))
   const interrupted = createMemo(() => props.message.error?.message === "Step interrupted")
-  const freeLimit = createMemo(() => props.message.error?.type === "provider.free-limit")
+  const usageLimit = createMemo(() => {
+    const type = props.message.error?.type
+    return type === "provider.free-limit" || type === "provider.go-limit"
+  })
   return (
     <>
       <Show when={props.message.error && !interrupted() && !props.message.retry}>
         <Show
-          when={freeLimit()}
+          when={usageLimit()}
           fallback={
             <box paddingLeft={3}>
               <text fg={theme.text.feedback.error.base}>Error: {errorMessage(props.message.error)}</text>
             </box>
           }
         >
-          <FreeLimitNotice message={props.message} />
+          <UsageLimitNotice message={props.message} />
         </Show>
       </Show>
       <AssistantRetry retry={props.message.retry} />
@@ -2505,7 +2511,7 @@ function QueuedPromptDock(props: { prompts: { id: string; text: string }[]; onOp
   )
 }
 
-function freeLimitReset(delay: number | undefined, base: number) {
+function limitReset(delay: number | undefined, base: number) {
   if (delay === undefined || !Number.isFinite(delay) || delay < 0 || delay > 7 * 86_400_000 || !Number.isFinite(base))
     return
   const at = base + delay
@@ -2516,18 +2522,33 @@ function freeLimitReset(delay: number | undefined, base: number) {
     : Locale.datetime(at)
 }
 
-function FreeLimitNotice(props: { message: Pick<SessionMessageAssistant, "error" | "time"> }) {
+function UsageLimitNotice(props: { message: Pick<SessionMessageAssistant, "error" | "time"> }) {
   const theme = useTheme()
+  const go = createMemo(() => props.message.error?.type === "provider.go-limit")
   const reset = createMemo(() =>
-    freeLimitReset(props.message.error?.retryAfterMs, props.message.time.completed ?? props.message.time.created),
+    limitReset(props.message.error?.retryAfterMs, props.message.time.completed ?? props.message.time.created),
   )
+  const headline = createMemo(() => {
+    if (go()) return `You've reached your OpenCode Go usage limit.${reset() ? ` It resets at ${reset()}.` : ""}`
+    return `You've used today's free messages.${reset() ? ` They reset at ${reset()}.` : ""}`
+  })
   return (
     <box paddingLeft={3} flexDirection="column">
-      <text fg={theme.text.muted}>You've used today's free messages.{reset() ? ` They reset at ${reset()}.` : ""}</text>
-      <text fg={theme.text.muted}>
-        Upgrade to OpenCode Go → <span style={{ fg: theme.text.base }}>/connect</span> · Switch model →{" "}
-        <span style={{ fg: theme.text.base }}>/models</span>
-      </text>
+      <text fg={theme.text.muted}>{headline()}</text>
+      <Show
+        when={go()}
+        fallback={
+          <text fg={theme.text.muted}>
+            Upgrade to OpenCode Go → <span style={{ fg: theme.text.base }}>/connect</span> · Switch model →{" "}
+            <span style={{ fg: theme.text.base }}>/models</span>
+          </text>
+        }
+      >
+        <text fg={theme.text.muted}>
+          Switch model → <span style={{ fg: theme.text.base }}>/models</span> · Enable usage from your balance in the
+          Console
+        </text>
+      </Show>
     </box>
   )
 }

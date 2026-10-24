@@ -170,6 +170,19 @@ describe("internal notifications TUI plugin", () => {
     } as OpenCodeEvent)
     expect(harness.toasts).toHaveLength(2)
     expect(harness.notifications).toHaveLength(2)
+
+    harness.emit(executionStarted("go-limit"))
+    harness.emit({
+      id: "go-limit-failed",
+      created: 0,
+      type: "session.execution.failed",
+      data: {
+        sessionID: "session",
+        error: { type: "provider.go-limit", message: "OpenCode Go usage limit reached." },
+      },
+    } as OpenCodeEvent)
+    expect(harness.toasts).toHaveLength(2)
+    expect(harness.notifications).toHaveLength(2)
   })
 
   test.each<Route>([{ type: "home" }, { type: "session", sessionID: "other" }])(

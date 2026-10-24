@@ -573,7 +573,7 @@ export namespace Timeline {
           new TimelineRow.Error({
             userMessageID: turnID,
             text: unwrapErrorMessage(lastAssistant.error.message),
-            ...freeLimit(lastAssistant),
+            ...usageLimit(lastAssistant),
             ...budgetLimit(lastAssistant),
           }),
         )
@@ -595,7 +595,7 @@ export namespace Timeline {
               new TimelineRow.Error({
                 userMessageID: turnID,
                 text: unwrapErrorMessage(entry.message.error.message),
-                ...freeLimit(entry.message),
+                ...usageLimit(entry.message),
                 ...budgetLimit(entry.message),
               }),
             )
@@ -649,11 +649,15 @@ export namespace Timeline {
 
 const MAX_RETRY_AFTER_MS = 7 * 86_400_000
 
-function freeLimit(
+function usageLimit(
   message: Pick<SessionMessageAssistant, "error"> & { time: { created: number; completed?: number } },
 ) {
-  if (message.error?.type !== "provider.free-limit") return {}
-  const delay = message.error.retryAfterMs
+  const type = message.error?.type
+
+  if (type !== "provider.free-limit" && type !== "provider.go-limit") return {}
+
+  const kind = type === "provider.go-limit" ? ("go-limit" as const) : ("free-limit" as const)
+  const delay = message.error?.retryAfterMs
   const base = message.time.completed ?? message.time.created
 
   if (
@@ -664,12 +668,9 @@ function freeLimit(
     !Number.isFinite(base) ||
     Number.isNaN(new Date(base + delay).getTime())
   )
-    return { kind: "free-limit" as const }
+    return { kind }
 
-  return {
-    kind: "free-limit" as const,
-    resetAt: base + delay,
-  }
+  return { kind, resetAt: base + delay }
 }
 
 // OpenCode Console says when the budget resets in its refusal's metadata, which every protocol's envelope names `resetsAt`.

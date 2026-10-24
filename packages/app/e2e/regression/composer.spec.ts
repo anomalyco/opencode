@@ -261,6 +261,172 @@ test("the free usage limit opens the Go dialog once, leaves a readable notice, a
   await expect(view.editor).toHaveText("")
 })
 
+test("the Go usage limit opens the composer tray, switches to a free model, and says when free models run out too", async ({
+  page,
+}) => {
+  await page.clock.setFixedTime(T0)
+  const sessionID = "ses_go_limit"
+  const model = { id: "glm-5-go", providerID: "opencode-go" }
+
+  const view = await openSession(page, {
+    name: "GoLimit",
+    sessions: [{ id: sessionID, agent: "build", model }],
+    onFileWrite: () => undefined,
+    provider: () => ({
+      all: [
+        {
+          id: "opencode",
+          name: "OpenCode",
+          models: {
+            "big-pickle": { id: "big-pickle", name: "Big Pickle", cost: { input: 0, output: 0 }, limit: { context: 200_000 } },
+          },
+        },
+        {
+          id: "opencode-go",
+          name: "OpenCode Go",
+          models: {
+            "glm-5-go": { id: "glm-5-go", name: "GLM-5 Go", cost: { input: 1, output: 1 }, limit: { context: 200_000 } },
+          },
+        },
+      ],
+      connected: ["opencode", "opencode-go"],
+      default: { build: "opencode-go/glm-5-go" },
+    }),
+    pageMessages: () => ({
+      items: [
+        { id: "msg_go_user", type: "user", text: "Refactor the parser", time: { created: T0 } },
+        { id: "msg_go_assistant", type: "assistant", agent: "build", model, content: [], time: { created: T0 + 1 } },
+      ],
+    }),
+  })
+
+  await expect(page.getByText("Refactor the parser", { exact: true })).toBeVisible()
+
+  const durable = (seq: number) => ({ aggregateID: sessionID, seq, version: 1 as const })
+  const location = { directory: view.directory }
+
+  const body = {
+    type: "error",
+    error: { type: "GoUsageLimitError", message: "Go usage limit exceeded" },
+    metadata: { workspace: "wrk_go_limit", limitName: "5 hour" },
+  }
+
+  await view.push([
+    {
+      id: "evt_go_limit_1",
+      created: T0 + 2,
+      type: "session.step.failed",
+      location,
+      durable: durable(1),
+      data: {
+        sessionID,
+        assistantMessageID: "msg_go_assistant",
+        error: {
+          type: "provider.go-limit",
+          message: "OpenCode Go usage limit reached.",
+          status: 429,
+          response: { body: JSON.stringify(body) },
+          retryAfterMs: 3_600_000,
+        },
+      },
+    },
+  ])
+
+  const tray = page.locator('[data-component="session-go-limit-tray"]')
+  await expect(tray).toContainText("Go limit reached.")
+  await expect(tray).toContainText(/Back at .+, in 1h 0m\./)
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+  await expect(
+    page.getByRole("status").filter({ hasText: /^You've reached your OpenCode Go usage limit\. It resets at / }),
+  ).toBeVisible()
+  await expect(view.editor).toHaveText("Refactor the parser")
+  await expect(page.getByText("OpenCode Go usage limit reached.")).toHaveCount(0)
+
+  // One click moves the session to a free model and keeps the prompt.
+  await tray.getByRole("button", { name: "Switch to a free model", exact: true }).click()
+  await expect(tray).toHaveCount(0)
+  await expect(page.locator('[data-action="composer-model"]')).toContainText("Big Pickle")
+  await expect(view.editor).toHaveText("Refactor the parser")
+
+  // Running out of free messages while the Go limit holds reopens the tray instead of the free-tier upsell.
+  await view.push([
+    {
+      id: "evt_go_limit_2",
+      created: T0 + 3,
+      type: "session.step.started",
+      location,
+      durable: durable(2),
+      data: { sessionID, assistantMessageID: "msg_go_assistant_2", agent: "build", model, started: T0 + 3 },
+    },
+    {
+      id: "evt_go_limit_3",
+      created: T0 + 4,
+      type: "session.step.failed",
+      location,
+      durable: durable(3),
+      data: {
+        sessionID,
+        assistantMessageID: "msg_go_assistant_2",
+        error: { type: "provider.free-limit", message: "Free usage limit reached.", status: 429, retryAfterMs: 1_800_000 },
+      },
+    },
+  ])
+
+  await expect(tray).toContainText("Go and free limits reached.")
+  await expect(tray).toContainText(/Go is back at .+, free models at .+\./)
+  await expect(tray.getByRole("button", { name: "Use credits", exact: true })).toBeVisible()
+  await expect(tray.getByRole("button", { name: "Switch to a free model", exact: true })).toHaveCount(0)
+  await expect(page.getByRole("dialog", { name: "Free limit reached" })).toHaveCount(0)
+})
+
+test("ChatGPT's usage limit opens the ChatGPT usage dialog", async ({ page }) => {
+  await page.clock.setFixedTime(T0)
+  const sessionID = "ses_chatgpt_limit"
+  const model = { id: "gpt-5.5", providerID: "openai" }
+
+  const view = await openSession(page, {
+    name: "ChatGPTLimit",
+    sessions: [{ id: sessionID, agent: "build", model }],
+    onFileWrite: () => undefined,
+    pageMessages: () => ({
+      items: [
+        { id: "msg_chatgpt_user", type: "user", text: "Refactor the parser", time: { created: T0 } },
+        {
+          id: "msg_chatgpt_assistant",
+          type: "assistant",
+          agent: "build",
+          model,
+          content: [],
+          time: { created: T0 + 1 },
+        },
+      ],
+    }),
+  })
+
+  await expect(page.getByText("Refactor the parser", { exact: true })).toBeVisible()
+
+  await view.push([
+    {
+      id: "evt_chatgpt_limit_1",
+      created: T0 + 2,
+      type: "session.step.failed",
+      location: { directory: view.directory },
+      durable: { aggregateID: sessionID, seq: 1, version: 1 },
+      data: {
+        sessionID,
+        assistantMessageID: "msg_chatgpt_assistant",
+        error: {
+          type: "provider.chatgpt-limit",
+          message: "ChatGPT usage limit reached. Check ChatGPT Settings → Usage for details.",
+          status: 429,
+        },
+      },
+    },
+  ])
+
+  await expect(page.getByRole("dialog", { name: "ChatGPT usage limit reached" })).toBeVisible()
+})
+
 test("a catalog refresh cannot replace an existing session's model", async ({ page }) => {
   const alpha = { id: "alpha", name: "Alpha", variants: { high: {} } }
   const beta = { id: "beta", name: "Beta" }

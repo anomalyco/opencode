@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
-import { GoUpsellState, isChatGPTUsageLimit } from "./usage-exceeded-dialogs"
+import { GoUpsellState, goLimitLink } from "./usage-exceeded-dialogs"
 import { Persistence } from "@/runtime/persistence/schema"
 
 const decode = Schema.decodeUnknownSync(
@@ -39,16 +39,34 @@ describe("usage exceeded preferences", () => {
   })
 })
 
-describe("ChatGPT usage limit", () => {
-  const message =
-    "ChatGPT usage limit reached. Try again after your allowance resets; check ChatGPT Settings → Usage for details."
+describe("Go limit link", () => {
+  const body = (json: string) => ({
+    type: "provider.go-limit",
+    message: "OpenCode Go usage limit reached.",
+    response: { body: json },
+  })
 
-  test.each([
-    [{ type: "provider.rate-limit", message, status: 429 }, true],
-    [{ type: "provider.unknown", message }, true],
-    [{ type: "provider.rate-limit", message: "Rate limit exceeded", status: 429 }, false],
-    [{ type: "provider.rate-limit", message: "ChatGPT usage limit reached" }, false],
-  ] as const)("matches %o: %p", (failure, expected) => {
-    expect(isChatGPTUsageLimit(failure)).toBe(expected)
+  test("opens the Go settings of the workspace that hit the limit", () => {
+    expect(
+      goLimitLink(
+        body(
+          JSON.stringify({
+            type: "error",
+            error: { type: "GoUsageLimitError", message: "Go usage limit exceeded" },
+            metadata: { workspace: "wrk_go_limit", limitName: "5 hour" },
+          }),
+        ),
+      ),
+    ).toBe("https://opencode.ai/console/wrk_go_limit/go")
+  })
+
+  test("falls back to the Console when the body has no workspace", () => {
+    expect(goLimitLink(body(JSON.stringify({ error: { type: "GoUsageLimitError" } })))).toBe(
+      "https://opencode.ai/console",
+    )
+    expect(goLimitLink({ type: "provider.go-limit", message: "limit", response: { body: "not json" } })).toBe(
+      "https://opencode.ai/console",
+    )
+    expect(goLimitLink({ type: "provider.go-limit", message: "limit" })).toBe("https://opencode.ai/console")
   })
 })

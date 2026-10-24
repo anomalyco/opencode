@@ -30,8 +30,13 @@ const FREE_USAGE_LIMIT_MESSAGE =
 const BUDGET_LIMIT_MESSAGE = "Workspace usage limit reached. Model use is paused until the limit resets."
 const MODEL_BUDGET_LIMIT_MESSAGE = "You've reached the spend limit for this model. Switch models to keep going."
 
+const GO_USAGE_LIMIT_MESSAGE =
+  "OpenCode Go usage limit reached. Switch models, or enable usage from your balance in the Console to keep going."
+
 export function toSessionError(cause: unknown): SessionError.Error {
   if (cause instanceof AIError) {
+    if (cause.reason.body?.includes("subscription_sharing_usage_limit_exceeded"))
+      return providerError("provider.chatgpt-limit", cause.reason)
     switch (cause.reason._tag) {
       case "RateLimit":
         return providerError("provider.rate-limit", cause.reason)
@@ -40,6 +45,8 @@ export function toSessionError(cause: unknown): SessionError.Error {
       case "QuotaExceeded":
         if (cause.reason.body?.includes("FreeUsageLimitError"))
           return { ...providerError("provider.free-limit", cause.reason), message: FREE_USAGE_LIMIT_MESSAGE }
+        if (cause.reason.body?.includes("GoUsageLimitError"))
+          return { ...providerError("provider.go-limit", cause.reason), message: GO_USAGE_LIMIT_MESSAGE }
         if (cause.reason.body?.includes("BudgetLimitError")) return budgetLimit(cause.reason)
         return providerError("provider.quota", cause.reason)
       case "ContentPolicy":

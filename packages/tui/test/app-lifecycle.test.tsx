@@ -2549,6 +2549,71 @@ test("free usage limit claims suppression atomically across two TUI instances an
   expect(frame).not.toContain("Connect OpenCode Go")
 })
 
+test("Go usage limit restores the prompt and leaves a muted notice with the reset time instead of an error", async () => {
+  await using state = await tmpdir()
+  const session = {
+    id: "ses_go_limit",
+    projectID: "proj_test",
+    location: { directory },
+    title: "Go limit",
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    time: { created: 1, updated: 1 },
+  }
+  const error = {
+    type: "provider.go-limit",
+    message: "OpenCode Go usage limit reached.",
+    status: 429,
+    retryAfterMs: 3_600_000,
+  }
+  await using setup = await createAppFixture({
+    width: 100,
+    state: state.path,
+    args: { sessionID: session.id },
+    config: { animations: false, tabs: { mode: "off" } },
+    fetch: (url) => {
+      if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
+      if (url.pathname === `/api/session/${session.id}`) return json({ data: session })
+      if (url.pathname === `/api/session/${session.id}/message`)
+        return json({
+          data: [
+            {
+              id: "msg_go_assistant",
+              type: "assistant",
+              agent: "build",
+              model: { id: "glm-5-go", providerID: "opencode-go" },
+              content: [],
+              time: { created: 2 },
+            },
+            { id: "msg_go_user", type: "user", text: "Refactor the parser", time: { created: 1 } },
+          ],
+          cursor: {},
+        })
+      if ([`/api/session/${session.id}/inbox`, `/api/session/${session.id}/permission`].includes(url.pathname))
+        return json({ data: [] })
+      return undefined
+    },
+  })
+  await setup.ready
+  await setup.waitForFrame((frame) => frame.includes("Refactor the parser"))
+  setup.events.emit({
+    id: "evt_go_limit_1",
+    created: 3,
+    type: "session.step.failed",
+    durable: { aggregateID: session.id, seq: 1, version: 1 },
+    data: { sessionID: session.id, assistantMessageID: "msg_go_assistant", error },
+  })
+  await setup.waitForFrame(
+    (frame) =>
+      frame.includes("You've reached your OpenCode Go usage limit. It resets at") &&
+      frame.split("Refactor the parser").length === 3,
+  )
+  const frame = setup.captureCharFrame()
+  expect(frame).toContain("Switch model → /models")
+  expect(frame).not.toContain("Error:")
+  expect(frame).not.toContain("Free limit reached")
+})
+
 test("free usage limit modal manages live animation FPS and adapts to 44x24 and 60x12 terminals", async () => {
   const session = {
     id: "ses_free_limit_anim",
