@@ -139,6 +139,11 @@ const layer = Layer.effect(
         return ID.make(tree)
       }).pipe(
         Effect.catch((cause) => Effect.logWarning("failed to capture snapshot", { cause }).pipe(Effect.as(undefined))),
+        // A spawn failure (e.g. EPERM on Windows) arrives as a defect, not a typed failure, and would
+        // otherwise fail the whole step for this best-effort capture.
+        Effect.catchDefect((cause) =>
+          Effect.logWarning("failed to capture snapshot", { cause }).pipe(Effect.as(undefined)),
+        ),
       )
     })
 
