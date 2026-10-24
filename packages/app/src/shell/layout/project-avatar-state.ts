@@ -65,8 +65,11 @@ export function useSessionTabAvatarState(
     if (needsAttention()) return false
 
     // Like the TUI, work waiting in the inbox counts as busy; parked synthetic context does not.
+    // A background shell keeps running after the turn that started it ends, so it counts too.
     const busy = (id: string) =>
-      data.session.status(id) === "running" || data.session.pending.list(id).some((item) => item.type !== "synthetic")
+      data.session.status(id) === "running" ||
+      data.session.pending.list(id).some((item) => item.type !== "synthetic") ||
+      data.shell.listBySession(id).some((shell) => shell.status === "running")
 
     if (root?.())
       return data.session.list().some((session) => data.session.root(session.id) === sessionId() && busy(session.id))

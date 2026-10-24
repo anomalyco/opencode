@@ -604,6 +604,57 @@ test("inactive tabs stay busy while work waits in their inbox, and pulse on a ne
   await expect(tab(a.id).locator('[data-slot="tab-prompt-pulse"]')).toHaveCount(0)
 })
 
+test("inactive tabs stay busy while a background shell runs, including one a subagent started", async ({ page }) => {
+  const directory = "C:/OpenCode/TabShell"
+  const child = { id: "ses_tab_c_child", title: "Tab C subagent", parentID: c.id }
+  const state = { exited: false }
+
+  const shell = (id: string, sessionID: string, status: "running" | "exited") => ({
+    id,
+    status,
+    command: "bun run check",
+    cwd: directory,
+    shell: "bash",
+    file: `/tmp/${id}.out`,
+    metadata: { sessionID },
+    time: { started: 1 },
+  })
+
+  const workspace = await openSession(page, {
+    name: "TabShell",
+    sessions: [a, b, c, child],
+    seed: { tabs: [a.id, b.id, c.id] },
+    // The list can still hold a shell that already exited; it is not work.
+    shellCommands: () => [
+      shell("sh_tab_a", a.id, "exited"),
+      ...(state.exited ? [] : [shell("sh_tab_b", b.id, "running")]),
+      shell("sh_tab_c", child.id, "running"),
+    ],
+  })
+
+  const tab = (id: string) => page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(id)}"])`)
+  const progress = '[data-component="session-progress-indicator-v2"]'
+
+  await expect(tab(b.id).locator(progress)).toBeVisible()
+  await expect(tab(c.id).locator(progress)).toBeVisible()
+  await expect(tab(a.id).locator("[data-titlebar-tab-title]")).toHaveText(a.title)
+  await expect(tab(a.id).locator(progress)).toHaveCount(0)
+
+  state.exited = true
+  await workspace.push([
+    {
+      id: "evt_tab_b_shell_exited",
+      created: 2,
+      type: "shell.exited",
+      location: { directory },
+      data: { id: "sh_tab_b", status: "exited", exit: 0 },
+    } satisfies Extract<OpenCodeEvent, { type: "shell.exited" }>,
+  ])
+
+  await expect(tab(b.id).locator(progress)).toHaveCount(0)
+  await expect(tab(c.id).locator(progress)).toBeVisible()
+})
+
 test("selecting a tab with waiting work waits for its transcript instead of showing only the inbox", async ({
   page,
 }) => {
