@@ -116,7 +116,13 @@ For project-specific TUI settings, add `tui.json` alongside it.
 Place project specific config in the root of your project.
 :::
 
-When OpenCode starts up, it first looks for a config file in the current directory, then traverses up to the nearest Git directory.
+When OpenCode starts up, it looks for `opencode.json` / `opencode.jsonc` starting in the current directory and walking up the directory tree. Inside a Git repository, the walk stops at the Git worktree root. Outside a Git repository, it continues all the way up to the filesystem root (`/`).
+
+Every config file found along the way is merged - files closer to the current directory take precedence.
+
+:::caution
+A stray `opencode.json` in an ancestor directory (for example `~/opencode.json`) silently applies to every non-Git directory below it and can override credentials or model settings from your global config. You can inspect the resolved configuration with `opencode debug config`.
+:::
 
 This is also safe to be checked into Git and uses the same schema as the global one.
 

@@ -220,6 +220,7 @@ Here are some common issues and how to resolve them.
 1. Try re-authenticating with the `/connect` command in the TUI
 2. Check that your API keys are valid
 3. Ensure your network allows connections to the provider's API
+4. If you get `401 Unauthorized` but your API key is valid (for example, `curl` with the same key succeeds), check for a stray `opencode.json` / `opencode.jsonc` in an ancestor directory of your working directory. OpenCode merges config files found while walking up the directory tree - outside a Git repository, all the way up to `/` - and an ancestor config can override the credentials in your global config. Run `opencode debug config` to inspect the resolved configuration, and audit ancestor directories (especially your home directory) for forgotten config files. You can also set `OPENCODE_DISABLE_PROJECT_CONFIG=1` to skip project config discovery.
 
 ---
 
