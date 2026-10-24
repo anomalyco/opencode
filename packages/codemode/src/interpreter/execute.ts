@@ -94,6 +94,7 @@ export const executeProgram = <R>(
           )
 
     return operation.pipe(
+      Effect.onInterrupt(() => hooks["execution.interrupted"]?.({ logs: [...logs] }) ?? Effect.void),
       Effect.catchCause((cause) =>
         Cause.hasInterruptsOnly(cause)
           ? Effect.interrupt

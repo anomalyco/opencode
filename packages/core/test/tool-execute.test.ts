@@ -6,7 +6,8 @@ import { Agent } from "@opencode/schema/agent"
 import { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
 import type { Info } from "@opencode/schema/tool"
-import { Effect, Schema } from "effect"
+import { Deferred, Effect, Fiber, Schema } from "effect"
+import { it } from "./lib/effect"
 
 const context = {
   sessionID: Session.ID.make("ses_execute"),
@@ -210,3 +211,68 @@ test("executions share the prepared runtime of an inventory while keeping per-ca
   )
   expect(conversions).toBe(2)
 })
+
+it.effect("interrupted executions sharing an inventory retain only their own results and logs", () =>
+  Effect.gen(function* () {
+    const first = yield* Deferred.make<void>()
+    const second = yield* Deferred.make<void>()
+    const partials: Array<{ id: string; content: ReadonlyArray<Tool.Content> }> = []
+    const echo: Info = {
+      name: "echo",
+      description: "Echo per-call data",
+      input: Schema.Struct({ value: Schema.String }),
+      output: Schema.String,
+      execute: ({ value }, context) => Effect.succeed({ output: `${context.id}:${value}` }),
+    }
+    const wait: Info = {
+      name: "wait",
+      description: "Wait for interruption",
+      input: Schema.Struct({}),
+      output: Schema.String,
+      execute: (_, context) =>
+        Deferred.succeed(context.id === "call_first" ? first : second, undefined).pipe(Effect.andThen(Effect.never)),
+    }
+    const inventory = {
+      tools: new Map([
+        ["echo", echo],
+        ["wait", wait],
+      ]),
+    }
+    const run = (id: string) =>
+      CodeModeTool.create(inventory, (_, tool, input, context) => execute(tool, input, context)).execute(
+        { code: `console.log("${id}-log"); await tools.echo({ value: "${id}-result" }); await tools.wait({});` },
+        {
+          ...context,
+          id: Tool.CallID.make(id),
+          interrupted: (content) =>
+            Effect.sync(() => {
+              partials.push({ id, content })
+            }),
+        },
+      )
+    // Build the shared runtime before either invocation installs its own state.
+    expect(CodeModeTool.catalog(inventory).tools).toHaveLength(2)
+    const left = yield* run("call_first").pipe(Effect.forkChild({ startImmediately: true }))
+    const right = yield* run("call_second").pipe(Effect.forkChild({ startImmediately: true }))
+    yield* Deferred.await(first)
+    yield* Deferred.await(second)
+    yield* Fiber.interrupt(left)
+    expect(partials).toHaveLength(1)
+    expect(partials[0].id).toBe("call_first")
+    expect(JSON.stringify(partials[0].content)).toContain("call_first-result")
+    expect(JSON.stringify(partials[0].content)).toContain("call_first-log")
+    expect(JSON.stringify(partials[0].content)).not.toContain("call_second")
+    yield* Fiber.interrupt(right)
+    expect(partials).toHaveLength(2)
+    expect(partials[1].id).toBe("call_second")
+    expect(JSON.stringify(partials[1].content)).toContain("call_second-result")
+    expect(JSON.stringify(partials[1].content)).toContain("call_second-log")
+    expect(JSON.stringify(partials[1].content)).not.toContain("call_first")
+    const next = yield* CodeModeTool.create(inventory, (_, tool, input, context) =>
+      execute(tool, input, context),
+    ).execute({ code: 'return await tools.echo({ value: "fresh" })' }, context)
+    expect(next.output.output).toBe("call_execute:fresh")
+    expect(next.metadata.toolCalls).toHaveLength(1)
+    expect(partials).toHaveLength(2)
+  }),
+)

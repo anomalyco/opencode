@@ -103,6 +103,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     settled: boolean
     providerExecuted: boolean
     progress?: Tool.Metadata
+    interrupted?: NonEmptyContent
     input?: InputExcerpt
     malformed?: boolean
   }
@@ -381,6 +382,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
           ? { ...error, message: `${error.message} (sessionID: ${tool.progress.sessionID})` }
           : error,
       ...failureSnapshot(tool, metadata),
+      ...(error.type === "aborted" && tool.interrupted !== undefined ? { content: tool.interrupted } : {}),
       executed: tool.providerExecuted,
     })
     return true
@@ -605,6 +607,13 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     })
   })
 
+  const interrupted = Effect.fnUntraced(function* (id: string, content: NonEmptyContent) {
+    const tool = tools.get(id)
+    if (!tool?.called || tool.settled)
+      return yield* Effect.die(new Error(`Tool interruption content outside running call: ${id}`))
+    tool.interrupted = content
+  })
+
   /** Publishes one canonical terminal event for a locally executed tool call. */
   const toolExecution = Effect.fnUntraced(function* (id: string, name: string, result: Tool.NormalizedResult) {
     const tool = tools.get(id)
@@ -632,6 +641,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
       return publishTraced(event)
     },
     progress,
+    interrupted,
     toolExecution,
     flush,
     failAssistant,

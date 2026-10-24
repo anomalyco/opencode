@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Cause, Effect, Schema } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Schema } from "effect"
 import { CodeMode, Extension, Tool, toolError } from "../src/index.js"
 
 const run = (tool: Tool.Tool<never>) =>
@@ -161,6 +161,49 @@ describe("CodeMode host failure boundary", () => {
 })
 
 describe("CodeMode call hooks", () => {
+  test("delivers logs after interrupted call cleanup without consuming interruption", async () => {
+    const snapshots: Array<ReadonlyArray<string>> = []
+    const events: string[] = []
+    const exit = await Effect.runPromise(
+      Effect.gen(function* () {
+        const waiting = yield* Deferred.make<void>()
+        const runtime = CodeMode.make({
+          tools: {
+            pending: Tool.make({
+              description: "Wait until interrupted",
+              input: Schema.Struct({}),
+              output: Schema.String,
+              execute: () => Deferred.succeed(waiting, undefined).pipe(Effect.andThen(Effect.never)),
+            }),
+          },
+          hooks: {
+            "tool.after": (_, result) =>
+              Effect.sync(() => {
+                events.push(result.status)
+              }),
+            "execution.interrupted": ({ logs }) =>
+              Effect.sync(() => {
+                events.push("snapshot")
+                snapshots.push(logs)
+              }),
+          },
+        })
+        const fiber = yield* runtime
+          .execute('console.log("before interrupt"); await tools.pending({})')
+          .pipe(Effect.forkChild)
+        yield* Deferred.await(waiting)
+        yield* Fiber.interrupt(fiber)
+        const exit = yield* Fiber.await(fiber)
+        const completed = yield* runtime.execute('console.log("next execution"); return 42')
+        expect(completed).toMatchObject({ ok: true, value: 42, logs: ["next execution"] })
+        return exit
+      }),
+    )
+    expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBe(true)
+    expect(events).toEqual(["interrupted", "snapshot"])
+    expect(snapshots).toEqual([["before interrupt"]])
+  })
+
   const ended = (result: CodeMode.CallResult) => {
     if (result.status !== "failure") return result.status
     return `failure:${result.error instanceof Error ? result.error.message : String(result.error)}`

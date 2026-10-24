@@ -94,6 +94,9 @@ receive `{ extension, name, args }`. An `after` hook also receives how the call 
 `failure` with its error, or `interrupted`). A failing `before` hook denies the call, and the program catches the
 failure as a thrown error.
 
+`execution.interrupted` receives `{ logs }` after interrupted calls finish cleanup. The execution still propagates
+interruption; the host can persist these logs alongside results observed by `tool.after` for later recovery.
+
 ### `Extension.make`
 
 Extensions are host functions a program calls directly as globals, such as `fetch`. Unlike tools they are not in the
