@@ -1,5 +1,6 @@
 import { expect } from "bun:test"
 import { Session } from "@opencode/schema/session"
+import { SessionMessage } from "@opencode/schema/session-message"
 import { Effect, Schema } from "effect"
 import { it } from "../../core/test/lib/effect"
 import { ServerFetch } from "../src/fetch"
@@ -150,3 +151,42 @@ it.live("rejects an invalid imported message without creating the session", () =
     }).pipe(Effect.scoped),
   )
 })
+
+// 9400 messages bind 9400 x 7 = 65800 parameters, above the 65536 per-statement
+// SQLite limit, so this transcript previously failed the whole import with a 500.
+it.live("imports a transcript above the SQLite per-statement parameter limit", () =>
+  Effect.gen(function* () {
+    const request = yield* setup
+    const template = Schema.decodeUnknownSync(SessionResponse)(yield* request("/api/session", {}))
+    const id = Session.ID.create()
+    const imported = Schema.decodeUnknownSync(SessionResponse)(
+      yield* request("/api/experimental/session/import", {
+        info: { ...template.data, id },
+        messages: Array.from({ length: 9400 }, (_, index) =>
+          index % 2 === 0
+            ? {
+                id: SessionMessage.ID.create(),
+                type: "user" as const,
+                text: `repro user ${index}`,
+                files: [],
+                agents: [],
+                skills: [],
+                time: { created: index },
+              }
+            : {
+                id: SessionMessage.ID.create(),
+                type: "assistant" as const,
+                agent: "build",
+                model: { id: "repro", providerID: "repro", variant: "default" },
+                content: [{ type: "text" as const, text: `repro assistant ${index}` }],
+                finish: "stop" as const,
+                time: { created: index, streamed: index, completed: index },
+              },
+        ),
+      }),
+    )
+    expect(imported.data.id).toBe(id)
+    const exported = yield* request(`/api/experimental/session/${id}/export`)
+    expect((exported as { data: { messages: unknown[] } }).data.messages).toHaveLength(9400)
+  }).pipe(Effect.scoped),
+)
