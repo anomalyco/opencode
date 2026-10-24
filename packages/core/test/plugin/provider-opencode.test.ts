@@ -1879,6 +1879,78 @@ describe("OpencodePlugin", () => {
     ),
   )
 
+  it.live("sends plain JSON to a Console baseURL when the canonical provider compresses its own requests", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const requests: { encoding: string | null; body: unknown }[] = []
+        const server = Bun.serve({
+          port: 0,
+          fetch: async (request) => {
+            if (new URL(request.url).pathname === "/responses") {
+              requests.push({
+                encoding: request.headers.get("content-encoding"),
+                body: JSON.parse(await request.text()),
+              })
+              return new Response('data: {"type":"response.completed","response":{"id":"resp_test"}}\n\n', {
+                headers: { "content-type": "text/event-stream" },
+              })
+            }
+            const origin = new URL(request.url).origin
+            const models = { astra: { modelID: "api-astra" } }
+            return Response.json({
+              providers: {
+                [Provider.ID.openai]: { package: "aisdk:@ai-sdk/openai", settings: { baseURL: origin }, models },
+                remote: { canonical: "openai", package: "aisdk:@ai-sdk/openai", settings: { baseURL: origin }, models },
+                explicit: {
+                  canonical: "openai",
+                  package: "aisdk:@ai-sdk/openai",
+                  settings: { baseURL: origin, encoding: "gzip" },
+                  models,
+                },
+              },
+            })
+          },
+        })
+        return { requests, server }
+      }),
+      ({ requests, server }) =>
+        Effect.gen(function* () {
+          const credentials = yield* Credential.Service
+          const providers = yield* Provider.Service
+          const models = yield* Model.Service
+          // ChatGPT token sharing compresses requests to its upstream before the Console overlay clones the provider.
+          yield* providers.transform((editor) => {
+            editor.update(Provider.ID.openai, (provider) => {
+              provider.settings = { ...provider.settings, encoding: "zstd" }
+            })
+          })
+          const credential = Credential.Key.make({
+            type: "key",
+            key: "secret",
+            metadata: { server: server.url.origin },
+          })
+          yield* credentials.create({ integrationID: Integration.ID.make("opencode"), value: credential })
+          yield* addPlugin()
+          const send = Effect.fn(function* (providerID: Provider.ID) {
+            const model = required(yield* models.get(providerID, Model.ID.make("astra")))
+            const resolved = yield* ModelResolver.resolveModel(model, undefined, credential)
+            yield* LLMClient.stream(LLM.request({ model: resolved, prompt: "Hello" })).pipe(
+              Stream.runDrain,
+              Effect.provide(LLMClient.layer.pipe(Layer.provide(RequestExecutor.layer))),
+            )
+            return required(requests.at(-1))
+          })
+          for (const providerID of [Provider.ID.openai, Provider.ID.make("remote")]) {
+            const request = yield* send(providerID)
+            expect(request.encoding).toBeNull()
+            expect(request.body).toMatchObject({ model: "api-astra" })
+          }
+          expect(required(yield* providers.get(Provider.ID.make("explicit"))).settings?.encoding).toBe("gzip")
+        }),
+      ({ server }) => Effect.promise(() => server.stop(true)),
+    ),
+  )
+
   it.effect("uses a public key and disables paid models without credentials", () =>
     withEnv({ OPENCODE_API_KEY: undefined }, () =>
       Effect.gen(function* () {
