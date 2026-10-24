@@ -65,6 +65,7 @@ for (const close of [false, true]) {
         if (request.method() === "GET" && inbox) inboxReads.push(inbox[1])
       })
       await page.addInitScript(() => {
+        // SAFETY: ProbeWindow only adds the optional global that this script installs.
         const host = window as ProbeWindow
         host.__prefetchBodies = {}
         const text = Response.prototype.text
@@ -99,6 +100,7 @@ for (const close of [false, true]) {
       await waitForStableTimeline(page, pages[sessions[0].id].at(-2)!.id)
       // Every inactive tab's scheduled attention request must finish. This gates on the
       // same production callback as prefetch, without a sleep or waiting for a removed read.
+      // SAFETY: the init script above installed __prefetchBodies before the page loaded.
       await page.waitForFunction(
         (ids) => ids.every((id) => (window as ProbeWindow).__prefetchBodies![`/api/session/${id}/form`] > 0),
         sessions.slice(1).map((session) => session.id),
@@ -117,8 +119,10 @@ for (const close of [false, true]) {
       }
 
       gate.resolve()
+      // SAFETY: the init script above installed __prefetchBodies before the page loaded.
       await page.waitForFunction(
-        (ids) => ids.every((id) => (window as ProbeWindow).__prefetchBodies![`/api/session/${id}/message`] > 0),
+        (ids) =>
+          ids.every((id) => (window as ProbeWindow).__prefetchBodies![`/api/experimental/session/${id}/timeline`] > 0),
         reads,
       )
       await expectSessionTitle(page, sessions[0].title)

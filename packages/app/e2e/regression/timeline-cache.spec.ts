@@ -148,7 +148,7 @@ test("fills a short cold transcript before revealing it", async ({ page }) => {
 
 test("recovers from a failed cold history load when another session is selected", async ({ page }) => {
   await openTabs(page, { pageMessages: placeholderHistory })
-  await page.route(`**/api/session/${fixture.targetID}/message?*`, (route) =>
+  await page.route(`**/api/experimental/session/${fixture.targetID}/timeline?*`, (route) =>
     route.fulfill({ status: 500, json: { message: "History unavailable" } }),
   )
   await page.goto(sessionHref(fixture.sourceID))
@@ -585,9 +585,7 @@ async function sampleTabPaint(page: Page, sessionID: string) {
   return {
     async firstPaint() {
       await expect.poll(read).toBeDefined()
-      await expect
-        .poll(() => page.evaluate(() => window.__tabPaint!.settled))
-        .toBe(true)
+      await expect.poll(() => page.evaluate(() => window.__tabPaint!.settled)).toBe(true)
 
       return (await read())!
     },

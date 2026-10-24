@@ -12,6 +12,7 @@ import { HttpApiBuilder, HttpApiSchema } from "effect/http-api"
 import { Socket } from "effect/socket"
 import { Api } from "../api"
 import { CorsConfig, isAllowedRequestOrigin } from "../cors"
+import { MessageList } from "./message"
 import { type Outbound, runPtySocket } from "./pty-socket"
 
 export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experimental", (handlers) =>
@@ -19,8 +20,10 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
     const tickets = yield* PtyTicket.Service
     const cors = yield* CorsConfig
     const pty = yield* PersistentPty.Service
+    const messages = yield* MessageList
 
     return handlers
+      .handle("session.timeline", (ctx) => messages(ctx.params.sessionID, ctx.query, { omitReadMedia: true }))
       .handle(
         "persistentPty.read",
         Effect.fn(function* (ctx) {

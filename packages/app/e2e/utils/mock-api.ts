@@ -471,5 +471,14 @@ const Group = HttpApiGroup.make("mock")
       error: MockBadRequest.pipe(HttpApiSchema.status(400)),
     }),
   )
+  .add(
+    // The app's timeline store reads message pages from here; same pages as messageList.
+    HttpApiEndpoint.get("sessionTimeline", "/api/experimental/session/:sessionID/timeline", {
+      params: SessionParams,
+      query: Query,
+      success: Json,
+      error: MockBadRequest.pipe(HttpApiSchema.status(400)),
+    }),
+  )
 
 export const MockApi = HttpApi.make("mock").add(Group)

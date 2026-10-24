@@ -176,7 +176,8 @@ function createServerController(
   const sdk = createServerSdkContext(conn, scope)
 
   const source = createData({
-    api: () => sdk.api,
+    // Only the timeline store uses the display projection; every other caller gets the stable route.
+    api: () => ({ ...sdk.api, message: { ...sdk.api.message, list: sdk.api.experimental.session.timeline } }),
     initialMessageLimit: () => (timelinePreset(settings.general.timelineDetail())?.id === "compact" ? 40 : 20),
     event: {
       on: sdk.event.on,

@@ -61,7 +61,10 @@ test("keeps the parent title anchored when opening a subagent", async ({ page })
     // Measuring before then can read the detached heading, whose empty bounds put the start at 0.
     const agents = page.getByRole("button", { name: "Used 1 Agent", exact: true })
     await expect(agents).toBeVisible()
-    const start = await titleInlineStart(page.locator("[data-session-title]").getByRole("heading", { name: parentTitle }))
+
+    const start = await titleInlineStart(
+      page.locator("[data-session-title]").getByRole("heading", { name: parentTitle }),
+    )
 
     await agents.click()
     await page.locator(`a[href="${sessionHref(childID)}"]`).click()
@@ -175,7 +178,7 @@ test("shows parent lineage while the child timeline loads", async ({ page }) => 
   const requested = Promise.withResolvers<void>()
   const release = Promise.withResolvers<void>()
   await page.route(
-    (url) => url.pathname === `/api/session/${childID}/message` && url.port === serverPort,
+    (url) => url.pathname === `/api/experimental/session/${childID}/timeline` && url.port === serverPort,
     async (route) => {
       requested.resolve()
       await release.promise

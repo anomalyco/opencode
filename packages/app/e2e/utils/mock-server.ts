@@ -763,6 +763,34 @@ function mockHandlers(
       new MockUnsupported({ message: `The mock server does not ${operation}; configure ${handler} for this scenario` }),
     )
 
+  // The stable message list and the experimental timeline serve the same pages.
+  const listMessages = (sessionID: string, query: { cursor?: string; limit?: number; order?: string }) => {
+    const token = query.cursor
+    const before = token ? state.cursors.get(token) : undefined
+
+    if (token && !before) return Effect.fail(new MockBadRequest({ message: "Invalid cursor" }))
+
+    return Effect.gen(function* () {
+      config.onMessages?.({ sessionID, before, phase: "start" })
+
+      if (config.beforeMessagesResponse) {
+        yield* Effect.promise(() => config.beforeMessagesResponse!({ sessionID, before }))
+      }
+
+      yield* delay
+      const pageData = config.pageMessages(sessionID, query.limit ?? 50, before)
+      config.onMessages?.({ sessionID, before, phase: "end" })
+      const cursor = pageData.cursor ? `cursor_${++state.nextCursor}` : undefined
+
+      if (cursor) state.cursors.set(cursor, pageData.cursor!)
+
+      return {
+        data: query.order === "asc" ? pageData.items : pageData.items.toReversed(),
+        cursor: { next: cursor },
+      }
+    })
+  }
+
   return HttpApiBuilder.group(MockApi, "mock", (handlers) =>
     handlers
       .handleRaw("event", () => {
@@ -1379,32 +1407,8 @@ function mockHandlers(
 
             return { data: message }
           }),
-        messageList: (ctx) => {
-          const token = ctx.query.cursor
-          const before = token ? state.cursors.get(token) : undefined
-
-          if (token && !before) return Effect.fail(new MockBadRequest({ message: "Invalid cursor" }))
-
-          return Effect.gen(function* () {
-            config.onMessages?.({ sessionID: ctx.params.sessionID, before, phase: "start" })
-
-            if (config.beforeMessagesResponse) {
-              yield* Effect.promise(() => config.beforeMessagesResponse!({ sessionID: ctx.params.sessionID, before }))
-            }
-
-            yield* delay
-            const pageData = config.pageMessages(ctx.params.sessionID, ctx.query.limit ?? 50, before)
-            config.onMessages?.({ sessionID: ctx.params.sessionID, before, phase: "end" })
-            const cursor = pageData.cursor ? `cursor_${++state.nextCursor}` : undefined
-
-            if (cursor) state.cursors.set(cursor, pageData.cursor!)
-
-            return {
-              data: ctx.query.order === "asc" ? pageData.items : pageData.items.toReversed(),
-              cursor: { next: cursor },
-            }
-          })
-        },
+        messageList: (ctx) => listMessages(ctx.params.sessionID, ctx.query),
+        sessionTimeline: (ctx) => listMessages(ctx.params.sessionID, ctx.query),
       }),
   )
 }

@@ -12,7 +12,46 @@ const messages: SessionMessageInfo[] = [
     type: "assistant",
     agent: "build",
     model: { providerID: "test", id: "test" },
-    content: [{ type: "text", text: "First answer" }],
+    content: [
+      { type: "text", text: "First answer" },
+      {
+        type: "tool",
+        id: "call_read",
+        name: "read",
+        time: { created: 410, completed: 420 },
+        state: {
+          status: "completed",
+          input: { path: "/fixture/image.png" },
+          content: [
+            { type: "text", text: "Image read successfully" },
+            { type: "file", uri: "data:image/png;base64,AQID", mime: "image/png" },
+            { type: "file", uri: "https://fixture/image.png", mime: "image/png" },
+          ],
+        },
+      },
+      {
+        type: "tool",
+        id: "call_read_only_image",
+        name: "read",
+        time: { created: 422, completed: 424 },
+        state: {
+          status: "completed",
+          input: { path: "/fixture/only.png" },
+          content: [{ type: "file", uri: "data:image/png;base64,BwgJ", mime: "image/png" }],
+        },
+      },
+      {
+        type: "tool",
+        id: "call_execute",
+        name: "execute",
+        time: { created: 430, completed: 440 },
+        state: {
+          status: "completed",
+          input: { code: "screenshot()" },
+          content: [{ type: "file", uri: "data:image/png;base64,BAUG", mime: "image/png" }],
+        },
+      },
+    ],
     finish: "stop",
     time: { created: 400, completed: 500 },
   },
@@ -85,6 +124,66 @@ it.live("filters message types before paginating in either direction through the
         messages[8],
       ])
       expect((await fixture.api.message.list({ sessionID: fixture.sessionID, type: "shell" })).data).toEqual([])
+    })
+  }),
+)
+
+it.live("omits read-tool media from the experimental timeline only", () =>
+  Effect.gen(function* () {
+    const fixture = yield* setup
+    yield* Effect.promise(async () => {
+      const assistant = messages[1]
+      if (assistant.type !== "assistant") throw new Error("Expected assistant fixture")
+      expect((await fixture.api.message.list({ sessionID: fixture.sessionID, type: "assistant" })).data).toEqual([
+        assistant,
+      ])
+      expect(
+        (await fixture.api.experimental.session.timeline({ sessionID: fixture.sessionID, type: "assistant" })).data,
+      ).toEqual([
+        {
+          ...assistant,
+          content: [
+            assistant.content[0],
+            {
+              type: "tool",
+              id: "call_read",
+              name: "read",
+              time: { created: 410, completed: 420 },
+              state: {
+                status: "completed",
+                input: { path: "/fixture/image.png" },
+                content: [
+                  { type: "text", text: "Image read successfully" },
+                  { type: "file", uri: "https://fixture/image.png", mime: "image/png" },
+                ],
+              },
+            },
+            {
+              type: "tool",
+              id: "call_read_only_image",
+              name: "read",
+              time: { created: 422, completed: 424 },
+              state: {
+                status: "completed",
+                input: { path: "/fixture/only.png" },
+                content: [{ type: "text", text: "Image read successfully" }],
+              },
+            },
+            assistant.content[3],
+          ],
+        },
+      ])
+      expect(await fixture.api.session.message.get({ sessionID: fixture.sessionID, messageID: assistant.id })).toEqual(
+        assistant,
+      )
+
+      const input = { sessionID: fixture.sessionID, type: "user", limit: 2 } as const
+      const timeline = await fixture.api.experimental.session.timeline({ ...input, order: "asc" })
+      expect(timeline).toEqual(await fixture.api.message.list({ ...input, order: "asc" }))
+      if (!timeline.cursor.next) throw new Error("Expected a next cursor")
+      expect(
+        (await fixture.api.experimental.session.timeline({ ...input, cursor: timeline.cursor.next })).data,
+      ).toEqual([messages[5], messages[7]])
     })
   }),
 )

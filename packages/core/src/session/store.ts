@@ -45,9 +45,34 @@ export type MessagesInput = {
   limit?: number
   order?: "asc" | "desc"
   type?: SessionMessage.Type
+  /** Timeline projection: drop inline read-tool files, which the client opens by path. */
+  omitReadMedia?: boolean
   cursor?: {
     id: SessionMessage.ID
     direction: "previous" | "next"
+  }
+}
+
+/** Read images can be opened by path; execute images must stay inline. */
+function omitReadMedia(message: SessionMessage.Info): SessionMessage.Info {
+  if (message.type !== "assistant") return message
+  return {
+    ...message,
+    content: message.content.map((part) => {
+      if (part.type !== "tool" || part.name !== "read") return part
+      if (part.state.status !== "completed" && part.state.status !== "error") return part
+      if (!part.state.content) return part
+      const content = part.state.content.filter((item) => !(item.type === "file" && item.uri.startsWith("data:")))
+      if (content.length === part.state.content.length) return part
+      return {
+        ...part,
+        state: {
+          ...part.state,
+          // Tool content is nonempty. Preserve the read tool's existing image-only success text.
+          content: [content[0] ?? { type: "text", text: "Image read successfully" }, ...content.slice(1)],
+        },
+      }
+    }),
   }
 }
 
@@ -174,10 +199,11 @@ const layer = Layer.effect(
         const rows = yield* (input.limit === undefined ? query.all() : query.limit(input.limit).all()).pipe(
           Effect.orDie,
         )
-        return yield* Effect.forEach(
+        const messages = yield* Effect.forEach(
           direction === "previous" ? rows.toReversed() : rows,
           SessionHistory.decodeMessageRow,
         )
+        return input.omitReadMedia ? messages.map(omitReadMedia) : messages
       }),
       context: Effect.fn("SessionStore.context")((sessionID) => SessionHistory.load(db, sessionID, "latest")),
       message: Effect.fn("SessionStore.message")(function* (messageID) {

@@ -679,7 +679,9 @@ test.describe("Working", () => {
     await expect(working).toBeVisible()
 
     await timeline.send(partUpdated(toolPart("prt_read_four", "read", "running", { path: "src/four.ts" })))
-    await expect(group.locator('[data-slot="basic-tool-tool-subtitle"]')).toHaveText("one.ts, two.ts, three.ts, four.ts")
+    await expect(group.locator('[data-slot="basic-tool-tool-subtitle"]')).toHaveText(
+      "one.ts, two.ts, three.ts, four.ts",
+    )
     await expect(working).toBeVisible()
 
     await timeline.send(partUpdated(toolPart("prt_read_four", "read", "completed", { path: "src/four.ts" })))
@@ -1359,7 +1361,9 @@ test.describe("background shortcut", () => {
 
     expect(breadcrumbOrder).toEqual(["session-title-parent", "session-title-child"])
     await expect(header.locator('[data-slot="session-title-separator"]')).toHaveCount(1)
-    await expect(header.getByRole("heading").getByRole("button", { name: "Draft TUI proposal +2 running" })).toBeEnabled()
+    await expect(
+      header.getByRole("heading").getByRole("button", { name: "Draft TUI proposal +2 running" }),
+    ).toBeEnabled()
 
     await trigger.click()
     await expect(list.getByRole("menuitem")).toHaveText([
@@ -1374,7 +1378,7 @@ test.describe("background shortcut", () => {
     const release = Promise.withResolvers<void>()
 
     await page.route(
-      (url) => url.pathname === "/api/session/ses_sibling_two/message",
+      (url) => url.pathname === "/api/experimental/session/ses_sibling_two/timeline",
       async (route) => {
         requested.resolve()
         await release.promise
