@@ -52,6 +52,7 @@ import { SessionRunnerModel } from "@opencode/core/session/runner/model"
 import { SessionUsage } from "@opencode/core/session/usage"
 import { PluginSupervisor } from "@opencode/core/plugin/supervisor"
 import { Plugin } from "@opencode/core/plugin"
+import { offlineModels } from "./fixture/models"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { PluginPromise } from "@opencode/core/plugin/promise"
 import { OptimizePlugin } from "@opencode/core/plugin/optimize"
@@ -412,6 +413,7 @@ const layer = Layer.unwrap(
       small: () => Effect.undefined,
     })
     const replacements: LayerNode.Replacements = [
+      offlineModels,
       Snapshot.node.replace(Snapshot.noopLayer),
       LayerNodePlatform.llmClient.replace(TestLLM.clientLayer.pipe(Layer.provide(testLLM))),
       SessionRunnerModel.node.replace(models),

@@ -1,6 +1,7 @@
 export * as SessionContext from "./context.js"
 
 import { Model } from "../model.js"
+import { ModelsDev } from "../models-dev.js"
 import { Permission } from "../permission.js"
 import { Context, Effect, Layer } from "effect"
 import { Agent } from "../agent.js"
@@ -76,6 +77,7 @@ const layer = Layer.effect(
     const agents = yield* Agent.Service
     const builtins = yield* InstructionBuiltIns.Service
     const model = yield* Model.Service
+    const catalogs = yield* ModelsDev.Service
     const db = (yield* Database.Service).db
     const discovery = yield* InstructionDiscovery.Service
     const entries = yield* InstructionEntry.Service
@@ -89,7 +91,8 @@ const layer = Layer.effect(
     const store = yield* SessionStore.Service
     const registry = yield* Tool.Service
 
-    const resolveModel = (session: SessionSchema.Info) => models.resolve(session, model.available)
+    const resolveModel = (session: SessionSchema.Info) =>
+      models.resolve(session, model.available, () => catalogs.ready)
 
     const selectTitle = Effect.fn("SessionContext.selectTitle")(function* (session: SessionSchema.Info) {
       const agent = yield* agents.get(Agent.ID.make("title"))
@@ -215,6 +218,7 @@ export const node = makeLocationNode({
     Location.node,
     McpInstructions.node,
     McpTool.node,
+    ModelsDev.node,
     ReferenceInstructions.node,
     SessionRunnerModel.node,
     SessionModelRequest.node,

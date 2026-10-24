@@ -38,6 +38,8 @@ export interface Interface {
   readonly resolve: (
     session: SessionSchema.Info,
     available: () => Effect.Effect<ReadonlyArray<Model.Info>>,
+    /** Waits for a background catalog refresh when the selected model is not in the boot snapshot. */
+    awaitCatalog?: () => Effect.Effect<void>,
   ) => Effect.Effect<Resolved, Error>
 }
 
@@ -74,7 +76,7 @@ const layer = Layer.effect(
     const resolver = yield* ModelResolver.Service
     const agents = yield* Agent.Service
     return Service.of({
-      resolve: Effect.fn("SessionRunnerModel.resolve")(function* (session, available) {
+      resolve: Effect.fn("SessionRunnerModel.resolve")(function* (session, available, awaitCatalog) {
         // Location plugins populate and filter the catalog asynchronously during layer startup.
         if (!session.model) {
           const agent = (yield* agents.select(session.agent)).info?.model
@@ -87,15 +89,24 @@ const layer = Layer.effect(
           if (resolved) return resolved
           return yield* new ModelNotSelectedError({ sessionID: session.id })
         }
-        const selected = (yield* available()).find(
-          (model) => model.providerID === session.model?.providerID && model.id === session.model.id,
-        )
-        if (!selected)
-          return yield* new ModelUnavailableError({
-            providerID: session.model.providerID,
-            modelID: session.model.id,
-          })
-        return yield* resolver.resolveModel(selected, session.model.variant)
+        const model = session.model
+        const find = (models: ReadonlyArray<Model.Info>) =>
+          models.find((item) => item.providerID === model.providerID && item.id === model.id)
+        const selected = find(yield* available())
+        if (selected) return yield* resolver.resolveModel(selected, model.variant)
+        if (!awaitCatalog)
+          return yield* new ModelUnavailableError({ providerID: model.providerID, modelID: model.id })
+        // The bundled catalog is only the boot floor; a model added since the last snapshot is
+        // supplied by the initial refresh. Wait for that attempt, then give the provider catalog a
+        // moment to apply it before reporting the selection as unavailable.
+        yield* awaitCatalog().pipe(Effect.timeout("10 seconds"), Effect.ignore)
+        const deadline = Date.now() + 1_000
+        while (Date.now() < deadline) {
+          const late = find(yield* available())
+          if (late) return yield* resolver.resolveModel(late, model.variant)
+          yield* Effect.sleep("25 millis")
+        }
+        return yield* new ModelUnavailableError({ providerID: model.providerID, modelID: model.id })
       }),
     })
   }),

@@ -625,6 +625,67 @@ describe("LocationServiceMap", () => {
     ),
   )
 
+  it.live("waits for the catalog refresh before rejecting an explicitly selected model", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+          const session = Session.Info.make({
+            id: Session.ID.make("ses_late_model"),
+            projectID: Project.ID.global,
+            title: "test",
+            model: {
+              id: Model.ID.make("chat"),
+              providerID: Provider.ID.make("late"),
+            },
+            cost: Money.USD.zero,
+            tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
+            location,
+          })
+
+          const resolved = yield* Effect.gen(function* () {
+            const providers = yield* Provider.Service
+            const modelState = yield* Model.Service
+            const models = yield* SessionRunnerModel.Service
+
+            yield* providers.transform((editor) => {
+              editor.update(Provider.ID.make("late"), (provider) => {
+                provider.package = "@opencode/ai/providers/openai"
+              })
+              editor.models.update(Provider.ID.make("late"), Model.ID.make("chat"), () => {})
+            })
+
+            const failure = yield* models.resolve(session, () => Effect.succeed([])).pipe(Effect.flip)
+            expect(failure).toMatchObject({
+              _tag: "SessionRunnerModel.ModelUnavailableError",
+              providerID: "late",
+              modelID: "chat",
+            })
+
+            // The first sample models an explicit selection before the refresh lands; the retry
+            // after `awaitCatalog` sees the refreshed catalog.
+            let first = true
+            const available = () =>
+              modelState.available().pipe(
+                Effect.map((models) => {
+                  if (!first) return models
+                  first = false
+                  return []
+                }),
+              )
+            return yield* models.resolve(session, available, () => Effect.void)
+          }).pipe(Effect.provide(LocationServiceMap.Service.get(location)))
+
+          expect(resolved.ref).toMatchObject({ providerID: "late", id: "chat" })
+        }),
+      ),
+    ),
+  )
+
   it.live("preserves the selected catalog identity when the package model id differs", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),

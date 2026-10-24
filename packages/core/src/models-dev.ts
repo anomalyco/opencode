@@ -1,4 +1,4 @@
-import { Cause, Context, Duration, Effect, Layer, Option, Schedule, Schema, Semaphore } from "effect"
+import { Cause, Context, Duration, Effect, Latch, Layer, Option, Schedule, Schema, Semaphore } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/http"
 import { ModelsDev } from "@opencode/schema/models-dev"
 import { Money } from "@opencode/schema/money"
@@ -275,6 +275,8 @@ export { Event } from "@opencode/schema/models-dev"
 export interface Interface {
   readonly get: () => Effect.Effect<readonly Snapshot[]>
   readonly refresh: (force?: boolean) => Effect.Effect<void>
+  /** Resolves once the first background refresh attempt has settled (or immediately when none runs). */
+  readonly ready: Effect.Effect<void>
 }
 
 export const Options = Schema.Struct({
@@ -449,12 +451,19 @@ export const layer = (options?: Options) =>
           )
       })
 
+      const ready = Latch.makeUnsafe()
       if (fetch && !process.argv.includes("--get-yargs-completions")) {
         // Schedule.spaced runs the effect once, then waits between completions.
-        yield* Effect.forkScoped(refresh().pipe(Effect.repeat(Schedule.spaced(ttl)), Effect.ignore))
-      }
+        yield* Effect.forkScoped(
+          refresh().pipe(
+            Effect.andThen(Effect.sync(() => ready.openUnsafe())),
+            Effect.repeat(Schedule.spaced(ttl)),
+            Effect.ignore,
+          ),
+        )
+      } else ready.openUnsafe()
 
-      return Service.of({ get, refresh })
+      return Service.of({ get, refresh, ready: ready.await })
     }),
   )
 

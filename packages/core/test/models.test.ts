@@ -223,6 +223,18 @@ const initialState: MockState = {
 }
 
 describe("ModelsDev Service", () => {
+  it.live("ready resolves after the first refresh attempt", () =>
+    Effect.gen(function* () {
+      const cache = makeCache()
+      const state = yield* Ref.make(initialState)
+      yield* ModelsDev.Service.use((service) => service.ready).pipe(
+        Effect.provide(buildLayer(state, cache, { fetch: true })),
+        Effect.timeout("2 seconds"),
+      )
+      expect((yield* Ref.get(state)).calls.length).toBeGreaterThan(0)
+    }),
+  )
+
   it.live("get() returns normalized snapshots from KV when a cache entry exists", () =>
     Effect.gen(function* () {
       const cache = makeCache()

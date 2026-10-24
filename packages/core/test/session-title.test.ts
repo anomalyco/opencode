@@ -36,6 +36,7 @@ import { AbsolutePath } from "@opencode/core/schema"
 import { Money } from "@opencode/schema/money"
 import { Deferred, Effect, Fiber, Layer, Stream } from "effect"
 import { testEffect } from "./lib/effect"
+import { offlineModels } from "./fixture/models"
 
 let requests: LLMRequest[] = []
 let selectedSmall: Model.Info | undefined
@@ -117,6 +118,7 @@ const it = testEffect(
       SessionTitle.node,
     ]),
     [
+      offlineModels,
       llmClient.replace(client),
       Model.node.replace(smallModels),
       SessionRunnerModel.node.replace(models),

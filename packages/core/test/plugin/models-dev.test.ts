@@ -128,7 +128,7 @@ describe("ModelsDevPlugin", () => {
     Effect.gen(function* () {
       const { providerID, modelID, snapshot } = richSnapshot()
       const pristine = JSON.stringify(snapshot)
-      const source = ModelsDev.Service.of({ get: () => Effect.succeed(snapshot), refresh: () => Effect.void })
+      const source = ModelsDev.Service.of({ get: () => Effect.succeed(snapshot), refresh: () => Effect.void, ready: Effect.void })
       const first = yield* owner
       const second = yield* owner
       for (const each of [first, second]) {
@@ -265,7 +265,7 @@ describe("ModelsDevPlugin", () => {
       const current = { snapshot: initial.snapshot }
       const source = ModelsDev.Service.of({
         get: () => Effect.sync(() => current.snapshot),
-        refresh: () => Effect.void,
+        refresh: () => Effect.void, ready: Effect.void,
       })
       const first = yield* owner
       const second = yield* owner
@@ -307,7 +307,7 @@ describe("ModelsDevPlugin", () => {
             yield* location.bus.publish(ModelsDev.Event.Refreshed, {})
             return data
           }),
-        refresh: () => Effect.void,
+        refresh: () => Effect.void, ready: Effect.void,
       })
       yield* ModelsDevPlugin.effect(location.host).pipe(
         Effect.provideService(ModelsDev.Service, source),
@@ -356,7 +356,7 @@ describe("ModelsDevPlugin", () => {
               ],
             },
           ] satisfies readonly ModelsDev.Snapshot[]),
-        refresh: () => Effect.void,
+        refresh: () => Effect.void, ready: Effect.void,
       })
       const pluginHost = yield* PluginHost.make(plugins)
       yield* ModelsDevPlugin.effect(pluginHost).pipe(Effect.provideService(ModelsDev.Service, modelsDev))
@@ -426,7 +426,7 @@ describe("ModelsDevPlugin", () => {
       ).pipe(
         Effect.provideService(
           ModelsDev.Service,
-          ModelsDev.Service.of({ get: () => Effect.succeed(snapshot), refresh: () => Effect.void }),
+          ModelsDev.Service.of({ get: () => Effect.succeed(snapshot), refresh: () => Effect.void, ready: Effect.void }),
         ),
       )
 
@@ -566,7 +566,7 @@ describe("ModelsDevPlugin", () => {
               ],
             },
           ] satisfies readonly ModelsDev.Snapshot[]),
-        refresh: () => Effect.void,
+        refresh: () => Effect.void, ready: Effect.void,
       })
 
       yield* ModelsDevPlugin.effect(
@@ -693,7 +693,7 @@ describe("ModelsDevPlugin", () => {
           ModelsDev.Service,
           ModelsDev.Service.of({
             get: () => Effect.succeed(snapshots),
-            refresh: () => Effect.void,
+            refresh: () => Effect.void, ready: Effect.void,
           }),
         ),
       )
@@ -843,7 +843,7 @@ describe("ModelsDevPlugin", () => {
                       ],
                     },
                   ] satisfies readonly ModelsDev.Snapshot[]),
-                refresh: () => Effect.void,
+                refresh: () => Effect.void, ready: Effect.void,
               }),
             ),
           )
@@ -901,7 +901,7 @@ describe("ModelsDevPlugin", () => {
       ).pipe(
         Effect.provideService(
           ModelsDev.Service,
-          ModelsDev.Service.of({ get: () => Effect.succeed([snapshot]), refresh: () => Effect.void }),
+          ModelsDev.Service.of({ get: () => Effect.succeed([snapshot]), refresh: () => Effect.void, ready: Effect.void }),
         ),
       )
 
@@ -950,7 +950,7 @@ describe("ModelsDevPlugin", () => {
           ModelsDev.Service,
           ModelsDev.Service.of({
             get: () => Effect.succeed(snapshots),
-            refresh: () => Effect.void,
+            refresh: () => Effect.void, ready: Effect.void,
           }),
         ),
       )
@@ -1008,7 +1008,7 @@ describe("ModelsDevPlugin", () => {
                   models: [],
                 },
               ] satisfies readonly ModelsDev.Snapshot[]),
-            refresh: () => Effect.void,
+            refresh: () => Effect.void, ready: Effect.void,
           }),
         ),
       )

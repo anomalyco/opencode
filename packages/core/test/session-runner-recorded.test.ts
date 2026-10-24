@@ -38,6 +38,7 @@ import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { OptimizePlugin } from "@opencode/core/plugin/optimize"
 import { IdentityPlugin } from "@opencode/core/plugin/identity"
 import { describe, expect } from "bun:test"
+import { offlineModels } from "./fixture/models"
 import { eq } from "drizzle-orm"
 import { Effect, Layer } from "effect"
 import path from "node:path"
@@ -95,6 +96,7 @@ const promptModels = Layer.mock(Model.Service, {
 })
 const runnerLayer = (llmClient: Layer.Layer<LLMClientService>) =>
   AppNodeBuilder.build(SessionRunnerLLM.node, [
+    offlineModels,
     Snapshot.node.replace(Snapshot.noopLayer),
     LayerNodePlatform.llmClient.replace(llmClient),
     SessionRunnerModel.node.replace(models),
@@ -149,6 +151,7 @@ const testLayer = (llmClient: Layer.Layer<LLMClientService>) =>
       Session.node,
     ]),
     [
+      offlineModels,
       Bus.node.replace(Bus.configured({ persist: true })),
       LocationServiceMap.node.replace(promptLocationNode),
       LayerNodePlatform.llmClient.replace(llmClient),

@@ -57,6 +57,7 @@ import { asc, eq } from "drizzle-orm"
 import { Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { testEffect } from "./lib/effect"
+import { offlineModels } from "./fixture/models"
 
 const requests: LLMRequest[] = []
 const options: Array<StreamOptions | undefined> = []
@@ -152,6 +153,7 @@ const it = testEffect(
       llmClient,
     ]),
     [
+      offlineModels,
       Bus.node.replace(Bus.configured({ persist: true })),
       llmClient.replace(client),
       SessionRunnerModel.node.replace(models),
