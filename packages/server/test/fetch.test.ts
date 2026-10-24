@@ -372,6 +372,39 @@ it.live("returns 404 when a previously readable file is deleted", () =>
   ).pipe(Effect.scoped),
 )
 
+it.live("waits for plugin activation when OAuth is the first request for a directory", () =>
+  Effect.gen(function* () {
+    const config = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-oauth-startup-")))
+    const handler = yield* ServerFetch.make({
+      ...options,
+      config: {
+        directory: config.path,
+        project: false,
+        content: JSON.stringify({ plugins: [path.join(import.meta.dir, "fixture/oauth-plugin")] }),
+      },
+    })
+    const response = yield* Effect.promise(() =>
+      handler(
+        new Request("http://opencode.local/api/integration/test-oauth/connect/oauth", {
+          method: "POST",
+          headers: { "content-type": "application/json", "x-opencode-directory": encodeURIComponent(config.path) },
+          body: JSON.stringify({ methodID: "device" }),
+        }),
+      ),
+    )
+
+    expect(response.status).toBe(200)
+    const body = Schema.decodeUnknownSync(Schema.Struct({ data: Integration.Attempt }))(
+      yield* Effect.promise(() => response.json()),
+    )
+    expect(body.data).toMatchObject({
+      mode: "auto",
+      url: "https://example.invalid/device",
+      instructions: "Enter the device code",
+    })
+  }),
+)
+
 it.live("cancels a stale OpenAI OAuth callback server before falling back", () =>
   Effect.gen(function* () {
     const requests = yield* occupy(1455, true)
