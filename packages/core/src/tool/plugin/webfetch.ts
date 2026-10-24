@@ -123,7 +123,7 @@ export const Plugin = {
                 source: { type: "tool", messageID: context.messageID, id: context.id },
               })
 
-              const { body, contentType } = yield* Effect.gen(function* () {
+              const { body, contentType, status } = yield* Effect.gen(function* () {
                 const response = yield* execute(http, input.url, input.format).pipe(
                   Effect.catchIf(isCloudflareChallenge, () => execute(http, input.url, input.format, "opencode")),
                 )
@@ -133,7 +133,7 @@ export const Plugin = {
                   return yield* Effect.fail(new Error(`Unsupported fetched image content type: ${mime}`))
                 if (!Mime.isTextual(mime))
                   return yield* Effect.fail(new Error(`Unsupported fetched file content type: ${mime}`))
-                return { body: yield* collectBody(response), contentType }
+                return { body: yield* collectBody(response), contentType, status: response.status }
               }).pipe(
                 Effect.timeoutOrElse({
                   duration: Duration.seconds(input.timeout ?? DEFAULT_TIMEOUT_SECONDS),
@@ -142,7 +142,12 @@ export const Plugin = {
               )
               const content = new TextDecoder().decode(body)
               const output = yield* Effect.try({
-                try: () => convert(content, contentType, input.format),
+                try: () => {
+                  const converted = convert(content, contentType, input.format)
+                  if (input.format !== "html" && contentType.includes("text/html") && content.trim() && !converted.trim())
+                    return `No readable content was extracted from this HTML response (HTTP ${status}; ${contentType}).`
+                  return converted
+                },
                 catch: (error) => error,
               })
               const result = {
