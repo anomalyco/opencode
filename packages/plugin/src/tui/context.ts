@@ -487,6 +487,21 @@ export interface Keymap {
   }
 }
 
+export interface PromptDraft {
+  /** Composer text as shown. Attachments and collapsed pastes appear as their labels, e.g. `@src/app.ts`, `[Pasted ~3 lines]`. */
+  readonly text: string
+  /** Selected range of `text` in UTF-16 indices (String.prototype.slice units). start === end is the caret. */
+  readonly selection: { readonly start: number; readonly end: number }
+  readonly mode: "normal" | "shell"
+}
+
+export interface Prompt {
+  /** The mounted composer's draft, or undefined when no composer is mounted. Reactive when read in a Solid computation. */
+  current(): PromptDraft | undefined
+  /** Appends text to the end of the composer and moves the cursor after it. Existing attachments are unchanged. Returns false when no composer is mounted or this plugin is no longer active. */
+  append(text: string): boolean
+}
+
 export interface UI {
   readonly dialog: Dialog
   readonly toast: Toast
@@ -537,6 +552,7 @@ export interface UI {
       set(variant: string | undefined): boolean
     }
   }
+  readonly prompt: Prompt
   /** Claims a place in the slot tree; see SlotClaim. */
   readonly slot: (claim: SlotClaim) => () => void
 }

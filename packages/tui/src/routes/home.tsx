@@ -3,7 +3,6 @@ import { createEffect, createMemo, createSignal, onMount, Show, untrack } from "
 import { Logo } from "../component/logo"
 import { useArgs } from "../context/args"
 import { useRouteData } from "../context/route"
-import { usePromptRef } from "../context/prompt"
 import { useLocal } from "../context/local"
 import { useEditorContext } from "../context/editor"
 import { useData } from "../context/data"
@@ -24,7 +23,6 @@ const placeholder = {
 
 export function Home() {
   const route = useRouteData("home")
-  const promptRef = usePromptRef()
   const [ref, setRef] = createSignal<PromptRef | undefined>()
   const args = useArgs()
   const local = useLocal()
@@ -52,7 +50,6 @@ export function Home() {
 
   const bind = (r: PromptRef | undefined) => {
     setRef(r)
-    promptRef.set(r)
     if (once || !r || route.prompt || !args.prompt) return
     r.set({ text: args.prompt, files: [], agents: [], pasted: [] })
     once = true

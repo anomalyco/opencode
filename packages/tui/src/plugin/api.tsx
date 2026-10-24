@@ -31,6 +31,7 @@ import { useStorage } from "../context/storage"
 import { useSessionTabs } from "../context/session-tabs"
 import { useOptionalPanel } from "../context/panel"
 import { useLocal } from "../context/local"
+import { usePromptRef } from "../context/prompt"
 import { abbreviateHome } from "../util/path-format"
 
 export type Dispose = () => Promise<void>
@@ -82,6 +83,7 @@ export function usePluginHost() {
     sessionTabs: useSessionTabs(),
     panel: useOptionalPanel(),
     local: useLocal(),
+    prompt: usePromptRef(),
   }
 }
 
@@ -293,6 +295,14 @@ export function createPluginContext(input: {
             host.local.model.variant.set(variant)
             return true
           },
+        },
+      },
+      prompt: {
+        current: () => host.prompt.current?.draft(),
+        append(text: unknown) {
+          if (typeof text !== "string") throw new TypeError("Prompt text must be a string")
+          if (!cleanups) return false
+          return host.prompt.current?.append(text) ?? false
         },
       },
       slot(value: SlotClaim) {
