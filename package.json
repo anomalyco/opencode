@@ -104,7 +104,7 @@
       "vite": "7.3.6",
       "@solidjs/meta": "0.29.4",
       "@solidjs/router": "1.0.0",
-      "@solidjs/start": "https://pkg.pr.new/@solidjs/start@dfb2020",
+      "@solidjs/start": "https://pkg.pr.new/solidjs/solid-start/@solidjs/start@dfb2020",
       "@sentry/solid": "10.71.0",
       "@sentry/vite-plugin": "5.4.0",
       "solid-js": "1.9.15",
