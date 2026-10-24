@@ -1,4 +1,4 @@
-export const dict: Record<string, string> = {
+export const dict = {
   "ui.sessionReview.title": "Setubroytingar",
   "ui.sessionReview.title.git": "Git broytingar",
   "ui.sessionReview.title.branch": "Greinabroytingar",

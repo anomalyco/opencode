@@ -1,4 +1,4 @@
-export const dict: Record<string, string> = {
+export const dict = {
   "ui.common.fileCount.one": "{{count}} tiedosto",
   "ui.common.fileCount.other": "{{count}} tiedostoa",
   "ui.messagePart.compaction.started": "Istunnon tiivistys aloitettu",
