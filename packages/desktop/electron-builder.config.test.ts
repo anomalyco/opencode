@@ -82,6 +82,22 @@ test("legacy Linux launcher stays hidden", async () => {
   expect(desktop).toContain("NoDisplay=true")
 })
 
+test.each(channels)("linux packages keep the sandbox helper setuid-root on $channel", async ({ channel }) => {
+  // The default electron-builder postinst keeps 0755 whenever user namespaces
+  // work in dpkg's context, but the app itself may run AppArmor-confined, gain
+  // NoNewPrivs, and break pkexec elevation for in-app updates (exit 127).
+  // Every channel's deb/rpm therefore uses the custom after-install script
+  // with the unconditional setuid (anomalyco/opencode#58157).
+  const config = load(channel)
+
+  for (const target of [config.deb, config.rpm]) {
+    const script = path.join(import.meta.dirname, target?.afterInstall ?? "")
+    expect(await Bun.file(script).exists()).toBe(true)
+    const body = await Bun.file(script).text()
+    expect(body).toContain("chmod 4755 '/opt/${sanitizedProductName}/chrome-sandbox'")
+  }
+})
+
 test("shared packaging defaults", async () => {
   const config = load("dev")
   expect(config.mac?.sign).toBeFunction()

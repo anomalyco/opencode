@@ -235,6 +235,11 @@ const getBase = (appId: string): Configuration => {
   }
 }
 
+// Custom `--after-install` replacing electron-builder's default template (see
+// scripts/after-install.sh): the sandbox helper is unconditionally setuid-root.
+// https://github.com/anomalyco/opencode/issues/58157
+const afterInstall = "scripts/after-install.sh"
+
 export function getConfig() {
   const channel = resolveChannel()
   const appId = APP_IDS[channel]
@@ -246,8 +251,8 @@ export function getConfig() {
         ...base,
         appId,
         productName: "OpenCode Dev",
-        deb: { fpm: [metainfoFpm(appId)] },
-        rpm: { packageName: "opencode-dev", fpm: [rpmNoBuildIdLinksFpm, metainfoFpm(appId)] },
+        deb: { afterInstall, fpm: [metainfoFpm(appId)] },
+        rpm: { packageName: "opencode-dev", afterInstall, fpm: [rpmNoBuildIdLinksFpm, metainfoFpm(appId)] },
       }
     }
 
@@ -262,8 +267,8 @@ export function getConfig() {
           url: "https://opencode.ai/update/api/beta/desktop/opencode/",
           channel: "latest",
         },
-        deb: { fpm: [metainfoFpm(appId)] },
-        rpm: { packageName: "opencode-beta", fpm: [rpmNoBuildIdLinksFpm, metainfoFpm(appId)] },
+        deb: { afterInstall, fpm: [metainfoFpm(appId)] },
+        rpm: { packageName: "opencode-beta", afterInstall, fpm: [rpmNoBuildIdLinksFpm, metainfoFpm(appId)] },
       }
     }
 
@@ -278,8 +283,8 @@ export function getConfig() {
           url: "https://opencode.ai/update/api/latest/desktop/opencode/",
           channel: "latest",
         },
-        deb: { fpm: [metainfoFpm(appId), legacyDesktopEntryFpm] },
-        rpm: { packageName: "opencode", fpm: [rpmNoBuildIdLinksFpm, metainfoFpm(appId), legacyDesktopEntryFpm] },
+        deb: { afterInstall, fpm: [metainfoFpm(appId), legacyDesktopEntryFpm] },
+        rpm: { packageName: "opencode", afterInstall, fpm: [rpmNoBuildIdLinksFpm, metainfoFpm(appId), legacyDesktopEntryFpm] },
       }
     }
   }
