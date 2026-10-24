@@ -229,6 +229,18 @@ test("restores durable agents even when the agent selector is hidden", () => {
   expect(selection(local)).toEqual({ agent: "plan", model: "b", variant: "high" })
 })
 
+test.each([true, false])("new sessions use the server-selected default with picker visibility %s", (visible) => {
+  const f = fixture({ agents: [agent("custom"), agent("build"), agent("plan")] })
+  f.set("route", "id", undefined)
+  f.set("visible", visible)
+  const { local } = f.mount()
+  expect(local.agent.current()?.name).toBe("custom")
+  f.set("visible", !visible)
+  expect(local.agent.current()?.name).toBe("custom")
+  local.agent.set("plan")
+  expect(local.agent.current()?.name).toBe("plan")
+})
+
 test("waits for initial configuration and reloads it after reconnecting", () => {
   const f = fixture({ config: "provider/b" })
   f.set("configLoaded", false)
