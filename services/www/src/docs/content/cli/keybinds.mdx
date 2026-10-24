@@ -231,6 +231,12 @@ The retired `diff.toggle`, `diff.expand`, `diff.expand_all`, `diff.collapse`, an
 | `session.tab.select.9`                | `<leader>9,ctrl+9`      | Switch to session tab 9                  |
 | `session.tab.select.10`               | `<leader>0,ctrl+0`      | Switch to session tab 10                 |
 
+### Windows Terminal
+
+Windows Terminal binds `ctrl+tab` and `ctrl+shift+tab` to its own tab actions, so those keys never reach OpenCode. Use `alt+down` and `alt+up` to switch session tabs instead. Both are unbound in Windows Terminal and arrive as `CSI 1 ; 3 B` and `CSI 1 ; 3 A`, which the parser reads as `down` and `up` with the alt modifier.
+
+Unbinding `ctrl+tab` in the terminal's `settings.json` does not fix this on its own. Windows Terminal ignores the kitty keyboard protocol that OpenCode requests, and OpenCode does not turn on `win32-input-mode` yet, so the terminal keeps sending the legacy encoding: `ctrl+tab` arrives as a plain `tab`, and `ctrl+shift+tab` arrives as a plain `shift+tab`.
+
 ## Models And Agents
 
 | ID                             | Default     | Description                          |
