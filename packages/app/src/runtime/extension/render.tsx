@@ -1,6 +1,8 @@
 import { createMemo, ErrorBoundary, For, onMount, Show, untrack, type JSX, type ParentProps } from "solid-js"
 import { Portal } from "solid-js/web"
 import { MarkdownProvider, useMarkdown } from "@opencode/session-ui/context/markdown"
+import { SourcesProvider } from "@opencode/session-ui/context/sources"
+import { sourcesExperiment } from "@opencode/session-ui/sources/experiment"
 import { ExtensionContext, Slot, Style, type MountedSession, type SlotMap } from "@opencode/gui-extensions/sdk"
 import { useExtensionHost } from "./host"
 
@@ -64,7 +66,10 @@ export function ExtensionStyles() {
   )
 }
 
-/** Routes local markdown links in the session to extension LinkHandler contributions, keeping image loading. */
+/**
+ * Routes local markdown links in the session to extension LinkHandler contributions, keeping image loading. A turn's
+ * sources chip opens its turn through the Sources extension's handler.
+ */
 export function ExtensionLinks(props: ParentProps<{ session: MountedSession }>) {
   const host = useExtensionHost()
   const markdown = useMarkdown()
@@ -76,7 +81,13 @@ export function ExtensionLinks(props: ParentProps<{ session: MountedSession }>) 
       // Untracked: markdown calls this inside its render effect, which must not follow the routed session.
       localFileExists={(href) => untrack(() => host.links.exists({ href, session: props.session }))}
     >
-      {props.children}
+      <SourcesProvider
+        enabled={sourcesExperiment.enabled}
+        icons={sourcesExperiment.icons}
+        onOpen={(from) => void host.links.open({ href: from, origin: "sources", session: props.session })}
+      >
+        {props.children}
+      </SourcesProvider>
     </MarkdownProvider>
   )
 }

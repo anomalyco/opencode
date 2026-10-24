@@ -12,6 +12,7 @@ import {
 import { currentToolError, currentToolInput, currentToolMetadata, currentToolOutput } from "./current-tool-state"
 import { currentStreamingInput } from "./streaming-input"
 import type { UserRun } from "../timeline/user-runs"
+import type { TurnSources } from "../sources/sources"
 // Registers the genui_render renderer with the tool registry.
 import "../genui/tool"
 
@@ -55,6 +56,8 @@ export function SessionAssistantContent(props: {
   contentID: string
   showAssistantCopyPartID?: string | null
   turnDurationMs?: number | null
+  sources?: TurnSources
+  onOpenSources?: () => void
   defaultOpen?: boolean
   reasoningDefaultOpen?: boolean
   toolOpen?: boolean
@@ -71,6 +74,8 @@ export function SessionAssistantContent(props: {
             message={props.message}
             showCopy={props.showAssistantCopyPartID === props.contentID}
             turnDurationMs={props.turnDurationMs}
+            sources={props.sources}
+            onOpenSources={props.onOpenSources}
           />
         )}
       </Match>

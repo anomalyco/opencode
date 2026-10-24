@@ -6,6 +6,7 @@ import {
   Index,
   on,
   onCleanup,
+  onMount,
   Show,
   untrack,
   type ComponentProps,
@@ -21,6 +22,9 @@ import { linkSegments } from "../components/link-segments"
 import { sessionReferenceText, setupSessionLinks } from "../components/markdown-session-links"
 import { useMarkdown } from "../context/markdown"
 import { useMessageMenu } from "../context/message-menu"
+import { useSources } from "../context/sources"
+import { SourcesChip } from "../sources/sources-chip"
+import type { TurnSources } from "../sources/sources"
 import { ImagePreview } from "@opencode/ui/image-preview"
 import { getFilename } from "@opencode/util/path"
 import { AttachmentCard } from "./attachment-card"
@@ -897,11 +901,19 @@ export function AssistantTextContent(props: {
   message: SessionMessageAssistant
   showCopy: boolean
   turnDurationMs?: number | null
+  /** The finished turn's web searches and fetches, shown as a chip in its footer. */
+  sources?: TurnSources
+  onOpenSources?: () => void
 }) {
   const data = useData()
   const i18n = useI18n()
   const menu = useMessageMenu()
+  const sourcesHost = useSources()
   const numfmt = createMemo(() => new Intl.NumberFormat(i18n.locale()))
+  // A footer that arrives after the reply rendered belongs to a turn that just finished, so its chip fades in.
+  let rendered = false
+  onMount(() => (rendered = true))
+  const sources = () => (props.showCopy && sourcesHost?.enabled ? props.sources : undefined)
 
   const interrupted = () => {
     const type = props.message.error?.type.toLowerCase()
@@ -971,39 +983,55 @@ export function AssistantTextContent(props: {
             <Menu.Item onSelect={() => void copy()}>{i18n.t("ui.message.copyResponse")}</Menu.Item>
           </MessageOptions>
         </Show>
-        <Show when={!menu() && props.showCopy}>
-          <div data-slot="text-part-copy-wrapper" data-interrupted={interrupted() ? "" : undefined}>
-            <MessageActionButton
-              icon={copied() ? "check" : "copy"}
-              size="small"
-              label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={copy}
-              aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
-            />
-            <Show when={meta().length > 0}>
-              <span data-slot="text-part-meta">
-                <For each={meta()}>
-                  {(label, index) => (
-                    <>
-                      <Show when={index() > 0}>
-                        <span data-slot="text-part-meta-separator" aria-hidden="true">
-                          {"\u00B7"}
-                        </span>
-                      </Show>
-                      <span data-slot="text-part-meta-item" dir="auto">
-                        {label}
-                      </span>
-                    </>
-                  )}
-                </For>
-              </span>
-            </Show>
-          </div>
+        <Show when={sources()} fallback={<Show when={!menu() && props.showCopy}>{copyFooter()}</Show>}>
+          {(value) => (
+            <div data-slot="text-part-footer">
+              <SourcesChip
+                sources={value()}
+                icons={sourcesHost?.icons ?? "letters"}
+                appear={rendered}
+                onOpen={() => props.onOpenSources?.()}
+              />
+              <Show when={!menu()}>{copyFooter()}</Show>
+            </div>
+          )}
         </Show>
       </div>
     </Show>
   )
+
+  function copyFooter() {
+    return (
+      <div data-slot="text-part-copy-wrapper" data-interrupted={interrupted() ? "" : undefined}>
+        <MessageActionButton
+          icon={copied() ? "check" : "copy"}
+          size="small"
+          label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={copy}
+          aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
+        />
+        <Show when={meta().length > 0}>
+          <span data-slot="text-part-meta">
+            <For each={meta()}>
+              {(label, index) => (
+                <>
+                  <Show when={index() > 0}>
+                    <span data-slot="text-part-meta-separator" aria-hidden="true">
+                      {"\u00B7"}
+                    </span>
+                  </Show>
+                  <span data-slot="text-part-meta-item" dir="auto">
+                    {label}
+                  </span>
+                </>
+              )}
+            </For>
+          </span>
+        </Show>
+      </div>
+    )
+  }
 }
 
 export function AssistantReasoningContent(props: {

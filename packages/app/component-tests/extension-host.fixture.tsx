@@ -1,3 +1,4 @@
+import type { SessionMessageInfo } from "@opencode/client/promise"
 import { DialogProvider } from "@opencode/ui/context/dialog"
 import {
   Panel,
@@ -389,7 +390,12 @@ function RealHost(props: ParentProps<{ definitions: readonly Definition[]; captu
  * does: a new session object each time, delivered through the same reactive inputs, while the one screen object
  * `ctx.screen` returns follows the route. Its composer records which session each attachment reached.
  */
-export function mountSessionRegion(input: { definitions: readonly Definition[]; active: string }) {
+export function mountSessionRegion(input: {
+  definitions: readonly Definition[]
+  active: string
+  /** The routed session's messages, as its server holds them. */
+  messages?: readonly SessionMessageInfo[]
+}) {
   const container = document.createElement("div")
   document.body.appendChild(container)
   const hosts: ExtensionHost[] = []
@@ -397,9 +403,18 @@ export function mountSessionRegion(input: { definitions: readonly Definition[]; 
   const attached: string[] = []
 
   const object = (id: string) => {
-    const value = { key: `fixture\n${id}`, id, tab: id, pending: false, location: { directory: "/repo" }, visit: {} }
+    const value = {
+      key: `fixture\n${id}`,
+      id,
+      tab: id,
+      pending: false,
+      location: { directory: "/repo" },
+      visit: {},
+      server: { data: { session: { message: { list: () => input.messages ?? [] } } } },
+    }
 
-    // SAFETY: the region and slot pass the object through; the test's extension reads only `key` and `id`.
+    // SAFETY: the region and slot pass the object through; the test's extensions read only `key`, `id` and the
+    // server's message list.
     // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
     return value as unknown as MountedSession
   }

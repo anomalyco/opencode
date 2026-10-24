@@ -20,7 +20,7 @@ import type { ComposerPersistedState } from "@/composer/types"
 import { Button } from "@opencode/ui/button"
 import { Icon } from "@opencode/ui/icon"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
-import { Show, type ComponentProps } from "solid-js"
+import { children, Show, type ComponentProps, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/runtime/i18n/language"
 import type { WebSearchRequestModel } from "./requests/websearch"
@@ -96,6 +96,8 @@ export type SessionPreviewProps = {
     onStop?: (item: SessionActivityItem) => void
   }
   timelineDetail?: TimelineDetail
+  /** Content for the side panel, shown beside the timeline while present. */
+  side?: JSX.Element
 }
 
 export function SessionPreview(props: SessionPreviewProps) {
@@ -183,6 +185,7 @@ export function createPromptController(input: {
 
 function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void }) {
   const language = useLanguage()
+  const side = children(() => props.side)
 
   const [state, setState] = createStore<{
     activity: string
@@ -316,7 +319,12 @@ function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void 
                     composer={<Composer model={prompt.controller} borderUnderlay />}
                   />
                 </section>
-                <Show when={state.reviewOpened}>
+                <Show when={side()}>
+                  <aside class="flex w-[400px] min-w-0 flex-none flex-col border-l border-v2-border-border-base">
+                    {side()}
+                  </aside>
+                </Show>
+                <Show when={!side() && state.reviewOpened}>
                   <aside
                     id="review-panel"
                     class="min-w-0 flex-1 flex flex-col gap-2 border-l border-v2-border-border-base md:max-w-[52%]"
