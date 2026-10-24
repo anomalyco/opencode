@@ -66,10 +66,9 @@ export function createPromptProjectController(input: {
     const projects = controls.available.filter((project) => !project.server || project.server.key === controls.server)
 
     return (
-      projects.find(
-        (project) =>
-          pathKey(project.worktree) === key || project.sandboxes?.some((sandbox) => pathKey(sandbox) === key),
-      ) ?? projects.find((project) => controls.projectID && project.id === controls.projectID)
+      projects.find((project) => pathKey(project.worktree) === key) ??
+      projects.find((project) => project.sandboxes?.some((sandbox) => pathKey(sandbox) === key)) ??
+      projects.find((project) => controls.projectID && project.id === controls.projectID)
     )
   }
 
