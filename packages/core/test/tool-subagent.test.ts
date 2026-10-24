@@ -318,6 +318,66 @@ describe("SubagentTool", () => {
     ),
   )
 
+  for (const hook of ["context", "compaction", "generate"] as const) {
+    for (const fixture of [
+      { name: "default root", depth: 0, limit: undefined, visible: true },
+      { name: "default child", depth: 1, limit: undefined, visible: false },
+      { name: "configured child", depth: 1, limit: 2, visible: true },
+      { name: "configured grandchild", depth: 2, limit: 2, visible: false },
+      { name: "disabled root", depth: 0, limit: 0, visible: false },
+    ]) {
+      productionIt.live(`advertises subagents within depth limit: ${hook}, ${fixture.name}`, () =>
+        Effect.acquireRelease(
+          Effect.promise(() => tmpdir()),
+          (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+        ).pipe(
+          Effect.flatMap((dir) =>
+            Effect.gen(function* () {
+              if (fixture.limit !== undefined)
+                yield* Effect.promise(() =>
+                  Bun.write(
+                    path.join(dir.path, "opencode.json"),
+                    JSON.stringify({ experimental: { subagent_depth: fixture.limit } }),
+                  ),
+                )
+              const sessions = yield* Session.Service
+              const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+              let session = yield* sessions.create({ location })
+              for (let depth = 0; depth < fixture.depth; depth++)
+                session = yield* sessions.create({ parentID: session.id, title: "worker" })
+              yield* withSubagent(session.location)
+              const locations = yield* LocationServiceMap.Service
+              const services = locations.get(session.location)
+              const registry = yield* Tool.Service.pipe(Effect.provide(services))
+              const hooks = yield* PluginHooks.Service.pipe(Effect.provide(services))
+              const snapshot = yield* registry.snapshot()
+              expect(snapshot.definitions.some((tool) => tool.name === SubagentTool.name)).toBe(true)
+              const event = yield* hooks.trigger("session", hook, {
+                sessionID: session.id,
+                agent: toolIdentity.agent,
+                model: parentModel,
+                system: [],
+                messages: [],
+                options: {},
+                tools: Object.fromEntries(
+                  snapshot.definitions.map((tool) => [
+                    tool.name,
+                    { description: tool.description, input: tool.inputSchema },
+                  ]),
+                ),
+              })
+              expect(SubagentTool.name in event.tools).toBe(fixture.visible)
+              if (fixture.visible)
+                expect(event.tools[SubagentTool.name]?.description).toContain("Available subagents:")
+              // Prompt filtering must not remove the registered execution guard.
+              expect((yield* registry.snapshot()).definitions.some((tool) => tool.name === SubagentTool.name)).toBe(true)
+            }),
+          ),
+        ),
+      )
+    }
+  }
+
   it.live("prevents subagents from launching subagents by default", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),

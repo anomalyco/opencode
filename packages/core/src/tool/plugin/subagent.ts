@@ -97,6 +97,18 @@ export const Plugin = {
       return ref
     })
 
+    const depthLimit = Effect.fnUntraced(function* (sessionID: SessionSchema.ID) {
+      const parent = yield* sessions.get(sessionID)
+      let current = parent
+      let depth = 0
+      while (current.parentID) {
+        depth++
+        current = yield* sessions.get(current.parentID)
+      }
+      const limit = Config.latest(yield* config.entries(), "experimental")?.subagent_depth ?? 1
+      return { parent, limit, reached: depth >= limit }
+    })
+
     yield* ctx.tool
       .transform((editor) =>
         editor.add({
@@ -107,29 +119,14 @@ export const Plugin = {
           output: Output,
           execute: (input, context) =>
             Effect.gen(function* () {
-              const parent = yield* sessions
-                .get(context.sessionID)
-                .pipe(
-                  Effect.mapError(
-                    (error) => new ToolFailure({ message: `Parent session not found: ${context.sessionID}`, error }),
-                  ),
-                )
-              let current = parent
-              let depth = 0
-              while (current.parentID) {
-                depth++
-                current = yield* sessions
-                  .get(current.parentID)
-                  .pipe(
-                    Effect.mapError(
-                      (error) => new ToolFailure({ message: `Parent session not found: ${current.parentID}`, error }),
-                    ),
-                  )
-              }
-              const limit = Config.latest(yield* config.entries(), "experimental")?.subagent_depth ?? 1
-              if (depth >= limit)
+              const depth = yield* depthLimit(context.sessionID).pipe(
+                Effect.mapError(
+                  (error) => new ToolFailure({ message: `Parent session not found: ${error.sessionID}`, error }),
+                ),
+              )
+              if (depth.reached)
                 return yield* new ToolFailure({
-                  message: `Subagent depth limit reached (${limit}). Increase "experimental.subagent_depth" to allow nested subagents.`,
+                  message: `Subagent depth limit reached (${depth.limit}). Increase "experimental.subagent_depth" to allow nested subagents.`,
                 })
               const agent = yield* agents.resolve(input.agent)
               if (agent === undefined) return yield* new ToolFailure({ message: `Unknown agent: ${input.agent}` })
@@ -181,7 +178,7 @@ export const Plugin = {
                 )
               }
 
-              const model = override ?? agent.model ?? parent.model
+              const model = override ?? agent.model ?? depth.parent.model
               const child =
                 existing ??
                 (yield* sessions
@@ -283,6 +280,11 @@ export const Plugin = {
       Effect.gen(function* () {
         const tool = event.tools[name]
         if (!tool) return
+        const depth = yield* depthLimit(event.sessionID).pipe(Effect.orDie)
+        if (depth.reached) {
+          delete event.tools[name]
+          return
+        }
         const selected = yield* agents.resolve(event.agent)
         if (!selected) return
         const available = (yield* agents.list())
