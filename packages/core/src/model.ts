@@ -283,6 +283,11 @@ const layer = Layer.effect(
             model.capabilities.input.some((item) => item.startsWith("text")) &&
             model.capabilities.output.some((item) => item.startsWith("text")),
         )
+        const hasPaid = models.some((model) => (model.cost[0]?.input ?? 0) > 0)
+        if (hasPaid) {
+          const free = models.filter((model) => model.cost.length > 0 && (model.cost[0]?.input ?? 0) === 0)
+          if (free.length) return free[0]
+        }
         return ["gpt-luna", "gemini-flash-lite", "gemini-flash", "claude-haiku"].flatMap(
           (family) => models.find((model) => model.family === family) ?? [],
         )[0]
