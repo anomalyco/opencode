@@ -343,7 +343,7 @@ const lowerMessages = Effect.fnUntraced(function* (
     pendingImages.length = 0
   }
 
-  for (const message of request.messages) {
+  for (const [messageIndex, message] of request.messages.entries()) {
     if (message.role !== "tool") flushImages()
     if (message.role === "system") {
       const part = yield* ProviderShared.wrappedSystemUpdate("Bedrock Converse", message)
@@ -415,9 +415,14 @@ const lowerMessages = Effect.fnUntraced(function* (
     }
 
     const content: BedrockUserBlock[] = []
-    for (const part of message.content) {
+    for (const [partIndex, part] of message.content.entries()) {
       if (!ProviderShared.supportsContent(part, ["tool-result"]))
-        return yield* ProviderShared.unsupportedContent("Bedrock Converse", "tool", ["tool-result"])
+        return yield* ProviderShared.unsupportedContent(
+          "Bedrock Converse",
+          "tool",
+          ["tool-result"],
+          ProviderShared.contentLocation(part, messageIndex, partIndex),
+        )
       const result = yield* lowerToolResult(part, documentNames, normalizeID)
       const images: BedrockMedia.ImageBlock[] = hoistImages
         ? result.toolResult.content.filter((item) => "image" in item)

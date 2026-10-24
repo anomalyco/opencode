@@ -977,9 +977,14 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, breakpoi
     }
 
     const content: AnthropicToolResultBlock[] = []
-    for (const part of message.content) {
+    for (const [partIndex, part] of message.content.entries()) {
       if (!ProviderShared.supportsContent(part, ["tool-result"]))
-        return yield* ProviderShared.unsupportedContent("Anthropic Messages", "tool", ["tool-result"])
+        return yield* ProviderShared.unsupportedContent(
+          "Anthropic Messages",
+          "tool",
+          ["tool-result"],
+          ProviderShared.contentLocation(part, index, partIndex),
+        )
       content.push({
         type: "tool_result",
         tool_use_id: scrubToolCallID(part.id),

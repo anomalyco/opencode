@@ -387,7 +387,29 @@ export const unsupportedContent = (
   route: string,
   role: LLMRequest["messages"][number]["role"],
   types: ReadonlyArray<ContentType>,
-) => invalidRequest(`${route} ${role} messages only support ${formatContentTypes(types)} content for now`)
+  detail?: string,
+) =>
+  invalidRequest(
+    `${route} ${role} messages only support ${formatContentTypes(types)} content for now${detail ? ` (${detail})` : ""}`,
+  )
+
+/**
+ * Locate an unsupported content part within a request, e.g.
+ * `message #2 part #0 type=text tool_call_id=call_1`, for `unsupportedContent`'s
+ * optional `detail`. Only tool-call parts carry a tool call id — other parts
+ * with an `id` field (e.g. compaction checkpoints) are deliberately unlabeled.
+ */
+export const contentLocation = (part: ContentPart, messageIndex?: number, partIndex?: number): string => {
+  const id = part.type === "tool-call" ? part.id : undefined
+  return [
+    messageIndex === undefined ? undefined : `message #${messageIndex}`,
+    partIndex === undefined ? undefined : `part #${partIndex}`,
+    `type=${part.type}`,
+    typeof id === "string" ? `tool_call_id=${id}` : undefined,
+  ]
+    .filter((segment) => segment !== undefined)
+    .join(" ")
+}
 
 /**
  * Build a `validate` step from a Schema decoder. Replaces the per-route
