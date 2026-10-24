@@ -3,6 +3,7 @@ export * as ShellSelect from "./select.js"
 import path from "path"
 import { readFile } from "fs/promises"
 import { statSync } from "fs"
+import { spawnSync } from "child_process"
 import { Context, Effect, Layer, Schema } from "effect"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { FSUtil } from "@opencode/util/fs-util"
@@ -161,11 +162,49 @@ function info(file: string, options?: Options, bin?: string): Item {
   }
 }
 
-export function args(file: string, command: string) {
+export function args(file: string, command: string, env: Record<string, string | undefined> = process.env) {
   const n = name(file)
   if (n === "cmd") return ["/c", command]
   if (ps(file)) return ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command]
+  // MSYS2 and Cygwin programs such as Git Bash split their Windows command line with their own rules, which
+  // collapse `\\` to `\` inside the quotes Node and Bun add. Encode the command so it splits back unchanged
+  // while it still runs as the -c string, keeping bash's exec of the last command and with it tree kill on
+  // timeout. A leading space, which bash ignores, guarantees the quotes and keeps a leading drive letter
+  // from switching the runtime to DOS path rules. Node already doubles backslash runs before `"` and at the
+  // end. Commands over about 8K are still truncated by the runtime's glob buffer, and noglob uses other rules.
+  const posix = runtime(file)
+  if (posix && glob(env[posix === "msys" ? "MSYS" : "CYGWIN"]))
+    return ["-c", " " + command.replace(/\\+(?=[^"])/g, (run) => run + run)]
   return ["-c", command]
+}
+
+const runtimes = new Map<string, "msys" | "cygwin" | undefined>()
+
+// Ask the shell which runtime it uses rather than inferring it from its install layout. The WSL launcher under
+// the Windows directory is skipped: asking would boot WSL.
+function runtime(file: string) {
+  if (process.platform !== "win32") return
+  const n = name(file)
+  if (n !== "bash" && n !== "sh") return
+  if (!runtimes.has(file)) {
+    const ostype = system(file)
+      ? undefined
+      : spawnSync(file, ["-c", "echo $OSTYPE"], { encoding: "utf8", windowsHide: true, timeout: 5000 }).stdout?.trim()
+    runtimes.set(file, ostype === "msys" || ostype === "cygwin" ? ostype : undefined)
+  }
+  return runtimes.get(file)
+}
+
+function system(file: string) {
+  const exe = rooted(file) ? FSUtil.windowsPath(file) : findExecutable(file)
+  if (!exe) return false
+  const relative = path.win32.relative(process.env.SystemRoot ?? "C:\\Windows", exe)
+  return !relative.startsWith("..") && !path.win32.isAbsolute(relative)
+}
+
+// The last glob option in MSYS or CYGWIN wins; globbing is on by default.
+function glob(options = "") {
+  return options.split(/\s+/).findLast((option) => /^(no)?glob\b/.test(option)) !== "noglob"
 }
 
 // Resolve afresh so removing a shell does not leave terminals using a stale cached path.
