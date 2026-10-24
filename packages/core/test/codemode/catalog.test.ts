@@ -117,21 +117,24 @@ describe("CodeModeCatalog.summarize", () => {
 describe("CodeModeInstructions.render", () => {
   test("inlines complete catalogs without search guidance", () => {
     const instructions = render([lookup])
-    expect(instructions).toContain("## Available tools")
+    expect(instructions).toContain("## Code Mode tools (call only inside `execute`)")
     expect(instructions).toContain("- orders (1 tool)")
     expect(instructions).toContain(`  - ${lookup.signature} // Look up an order by ID`)
     expect(instructions).not.toContain("search")
-    expect(instructions).toContain("They cannot be called directly. They only work inside code you pass to `execute`.")
+    expect(instructions).toContain("Your regular tools (such as `read`, `edit`, `shell` and `grep`) are separate")
+    expect(instructions).toContain(
+      "The tools listed below cannot be called directly. They only work inside code you pass to `execute`.",
+    )
     expect(instructions).toContain("The catalog is complete. Do not guess tool names.")
   })
 
   test("adds search guidance when the catalog exceeds the budget", () => {
     const partial = render([lookup], 0)
-    expect(partial).toContain("## Available tools")
+    expect(partial).toContain("## Code Mode tools (call only inside `execute`)")
     expect(partial).toContain("- orders (1 tool, none shown)")
-    expect(partial).toContain("They cannot be called directly, and neither can `search`.")
+    expect(partial).toContain("The tools listed below cannot be called directly, and neither can `search`.")
     expect(partial).toContain(
-      "The catalog is partial. Inside `execute`, use `search(...)` to find a tool, then call it by the `path` in the result. `search` is synchronous. Call it without `await`; it does not return a Promise.",
+      "The catalog is partial. Before calling a tool that is not listed below, find it with the global `search(...)` function (not `tools.search`). Do not guess tool names. `search` is synchronous. Call it without `await`; it does not return a Promise.",
     )
     expect(partial).toContain("- search({")
     expect(partial).toContain("  /** @integer @exclusiveMinimum 0 */\n  limit?: number,")
@@ -194,7 +197,7 @@ describe("CodeModeInstructions.update", () => {
       `Changed tool listings supersede the previously listed ones:\n  - ${changed.signature} // Echo text`,
     )
     expect(text).toContain("The following tools are no longer available and must not be called: tools.orders.lookup.")
-    expect(text).not.toContain("## Available tools")
+    expect(text).not.toContain("## Code Mode tools (call only inside `execute`)")
   })
 
   test("names removed tools with exact callable expressions including bracket notation", () => {
@@ -225,14 +228,14 @@ describe("CodeModeInstructions.update", () => {
       "The Code Mode tool catalog has changed. This catalog supersedes the previous Code Mode tool catalog.",
     )
     expect(text).toContain("The catalog is partial.")
-    expect(text).toContain("## Available tools")
+    expect(text).toContain("## Code Mode tools (call only inside `execute`)")
   })
 
   test("falls back to full replacement when the delta is larger than the catalog", () => {
     const previous = Array.from({ length: 200 }, (_, index) => entry(`bulk.tool${index}`, `Tool ${index}`))
     const text = update([...previous, echo], [echo])
     expect(text).toContain("This catalog supersedes the previous Code Mode tool catalog.")
-    expect(text).toContain("## Available tools")
+    expect(text).toContain("## Code Mode tools (call only inside `execute`)")
     expect(text).toContain("The catalog is complete.")
     expect(text).not.toContain("The following tools are no longer available")
   })
@@ -243,6 +246,6 @@ describe("CodeModeInstructions.update", () => {
     expect(text).toContain("`alpha` now has 11 tools")
     expect(text).toContain("search them again before relying on previous results")
     expect(text).not.toContain("tools.alpha.tool10(input:")
-    expect(text).not.toContain("## Available tools")
+    expect(text).not.toContain("## Code Mode tools (call only inside `execute`)")
   })
 })

@@ -8,13 +8,15 @@ import { CodeModeCatalog } from "./catalog.js"
 // prettier-ignore
 const prompt = (hasMoreTools: boolean) => `# Code Mode
 
-Use the \`execute\` tool to call the tools listed below. They cannot be called directly${hasMoreTools ? ", and neither can \`search\`. Both" : ". They"} only work inside code you pass to \`execute\`.
+Code Mode adds the extra tools listed below, which you call from JavaScript inside the \`execute\` tool. Your regular tools (such as \`read\`, \`edit\`, \`shell\` and \`grep\`) are separate: keep calling them directly as usual. They do not exist inside \`execute\`.
 
-${hasMoreTools ? `The catalog is partial. Inside \`execute\`, use \`search(...)\` to find a tool, then call it by the \`path\` in the result. \`search\` is synchronous. Call it without \`await\`; it does not return a Promise. Do not guess tool names.
+The tools listed below cannot be called directly${hasMoreTools ? ", and neither can \`search\`. Both" : ". They"} only work inside code you pass to \`execute\`.
+
+${hasMoreTools ? `The catalog is partial. Before calling a tool that is not listed below, find it with the global \`search(...)\` function (not \`tools.search\`). Do not guess tool names. \`search\` is synchronous. Call it without \`await\`; it does not return a Promise. Each result's \`path\` is the complete call expression: write it out as code, for example \`await tools.ns.tool_name({ ... })\`. Do not use it as a key such as \`tools[path]\`.
 
 - ${searchSignature}` : "The catalog is complete. Do not guess tool names."}
 
-## Available tools`
+## Code Mode tools (call only inside \`execute\`)`
 
 export function render(catalog: CodeModeCatalog.Summary) {
   if (catalog.total === 0)
