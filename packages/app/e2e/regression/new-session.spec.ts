@@ -1,8 +1,8 @@
 import { expect, test, type Locator, type Page } from "@playwright/test"
 import type { OpenCodeEvent, WorktreeDirectory } from "@opencode/client/promise"
 import { draftHref, expectPath, provider, sessionHref } from "../utils/app"
-import type { MockAnswer } from "../utils/mock-server"
-import { openDraft, openSession, openWorktreeDraft, type WorkspaceInput } from "../utils/workspace"
+import { mockMissingLocation, type MockAnswer } from "../utils/mock-server"
+import { mockWorkspace, openDraft, openSession, openWorktreeDraft, type WorkspaceInput } from "../utils/workspace"
 
 const directory = "C:/OpenCode/WorkspacePending"
 
@@ -49,6 +49,35 @@ test.use({
 test("the new session screen does not show session details", async ({ page }) => {
   await openDraft(page, { name: "Summary" })
   await expect(page.getByRole("button", { name: "Session details", exact: true })).toHaveCount(0)
+})
+
+// A draft whose worktree was removed outside the app has no Location, so it could load no models or agents.
+test("a draft whose folder is gone explains it and moves to another folder", async ({ page }) => {
+  const gone = "C:/OpenCode/DraftGone-removed-worktree"
+
+  const { directory } = await mockWorkspace(page, {
+    name: "DraftGone",
+    sessions: [],
+    fileList: () => [],
+    seed: { tabs: [{ draft: "draft_gone", directory: gone }] },
+  })
+
+  await mockMissingLocation(page, gone)
+  await page.goto(draftHref("draft_gone"))
+
+  const status = page.getByRole("status").filter({ hasText: "Folder unavailable" })
+  await expect(status).toContainText(gone)
+  await expect(editor(page)).toHaveCount(0)
+
+  await page.getByRole("button", { name: "Choose directory", exact: true }).click()
+  const picker = page.getByRole("dialog", { name: "Choose directory", exact: true })
+  await picker.getByRole("combobox").fill(directory)
+  await picker.getByRole("combobox").press("Enter")
+  await picker.getByRole("button", { name: "Select folder", exact: true }).click()
+
+  await expect(status).toHaveCount(0)
+  await expect(editor(page)).toBeEditable()
+  await expect(page.locator('[data-action="composer-model"]')).toBeVisible()
 })
 
 test("the dark new session panel exposes no lighter background at its rounded corners", async ({ page }) => {

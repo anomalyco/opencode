@@ -1,6 +1,7 @@
 import { useDialog } from "@opencode/ui/context/dialog"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { Icon } from "@opencode/ui/icon"
+import { sameDirectory } from "@opencode/util/path"
 import { Show, createMemo, createSignal } from "solid-js"
 import { Schema } from "effect"
 import createPresence from "solid-presence"
@@ -20,6 +21,7 @@ import { NEW_SESSION_CONTENT_WIDTH } from "@/new-session/layout"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
 import type { NewSessionWorkspaceController } from "./workspace/controller"
+import { DraftLocationMissing } from "./location-missing"
 import { NewSessionWordmark } from "./wordmark"
 
 const providerTipDismissalDuration = 30 * 24 * 60 * 60 * 1000
@@ -38,7 +40,18 @@ export function NewSessionView(props: {
   composer: ComposerModel
   project: PromptProjectController
   workspace: NewSessionWorkspaceController
+  /** Moves the draft to another folder, when its own no longer exists. */
+  onRelocate: (directory: string) => void
 }) {
+  const location = useWorkspaceLocation()
+
+  // Only the server's LocationNotFoundError for the draft's own folder replaces the composer.
+  const missing = createMemo(() => {
+    const ref = location().missing
+
+    return ref && sameDirectory(ref.directory, location().ref.directory) ? ref.directory : undefined
+  })
+
   const [onboarding, setOnboarding, , onboardingReady] = persisted(
     Persist.global("workspace-onboarding"),
     WorkspaceOnboardingSchema,
@@ -65,7 +78,9 @@ export function NewSessionView(props: {
           <div class={NEW_SESSION_CONTENT_WIDTH}>
             <NewSessionWordmark />
             <div class="mt-8 flex flex-col gap-8">
-              <Composer model={props.composer} />
+              <Show when={missing()} fallback={<Composer model={props.composer} />}>
+                {(directory) => <DraftLocationMissing directory={directory()} onChoose={props.onRelocate} />}
+              </Show>
               <Show when={props.project.empty()}>
                 <PromptProjectAddButton controller={props.project} />
               </Show>
