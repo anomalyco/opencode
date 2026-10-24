@@ -502,15 +502,16 @@ Run `opencode mcp auth` without a name to pick from the OAuth-capable servers:
 opencode mcp auth
 ```
 
-To remove a server, delete its entry from the project or global configuration where it was added:
+Remove a server from configuration, including local servers that do not use OAuth:
 
-```jsonc
-{
-  "mcp": {
-    "servers": {},
-  },
-}
+```sh
+opencode mcp remove
+opencode mcp remove paper --global --yes
 ```
+
+Without a name, a searchable chooser shows each server's config file and Project, Inherited, or Global scope. Use `--local` for project and inherited files, or `--global` for global files. If a name appears in several files, choose one; only that entry is removed. Scripts must pass a name and `--yes`, and ambiguous names fail without changing any files.
+
+Removal preserves other servers and settings. It does not delete scripts or credentials; `opencode mcp logout` only removes OAuth credentials and leaves configuration in place.
 
 Disconnecting a server in `/mcps` does not change configuration. Edit configuration directly for OAuth client settings, timeouts, working directories, or to keep a server disconnected:
 
