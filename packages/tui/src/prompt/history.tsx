@@ -1,4 +1,5 @@
 import path from "path"
+import { pathToFileURL } from "url"
 import { measureEditText, type WidthMethod } from "@opentui/core"
 import { onMount } from "solid-js"
 import { createStore, produce, unwrap } from "solid-js/store"
@@ -17,7 +18,8 @@ export type PastedText = {
   }
 }
 
-export type PromptInfo = Types.DeepMutable<Pick<PromptInput.Prompt, "text" | "files" | "agents" | "skills">> & {
+export type PromptInfo = Types.DeepMutable<Pick<PromptInput.Prompt, "text" | "agents" | "skills">> & {
+  files?: Array<Types.DeepMutable<PromptInput.FileAttachment> & { workspaceRelative?: string }>
   pasted: PastedText[]
   mode?: "normal" | "shell"
 }
@@ -28,6 +30,22 @@ export type PromptPartRef = {
 }
 
 export const emptyPrompt = (): PromptInfo => ({ text: "", files: [], agents: [], skills: [], pasted: [] })
+
+export function restorePromptHistory(prompt: PromptInfo, directory?: string): PromptInfo {
+  const restored = structuredClone(unwrap(prompt))
+  if (!directory) return restored
+  return {
+    ...restored,
+    files: restored.files?.map((file) => {
+      if (!file.workspaceRelative || !URL.canParse(file.uri)) return file
+      const original = new URL(file.uri)
+      if (original.protocol !== "file:") return file
+      const uri = pathToFileURL(path.resolve(directory, file.workspaceRelative))
+      uri.search = original.search
+      return { ...file, uri: uri.href }
+    }),
+  }
+}
 
 // Part ranges are textarea offsets, so shift by the measured offset rather than string length.
 export function appendPrompt(prompt: PromptInfo, following: PromptInfo, widthMethod: WidthMethod): PromptInfo {
@@ -103,7 +121,7 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
     const [store, setStore] = createStore({ index: 0, history: [] as PromptInfo[] })
 
     return {
-      move(direction: 1 | -1, input: string) {
+      move(direction: 1 | -1, input: string, directory?: string) {
         if (!store.history.length) return undefined
         const current = store.history.at(store.index)
         if (!current) return undefined
@@ -112,7 +130,8 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
         if (Math.abs(next) > store.history.length || next > 0) return
         setStore("index", next)
         if (next === 0) return emptyPrompt()
-        return store.history.at(next)
+        const item = store.history.at(next)
+        return item && restorePromptHistory(item, directory)
       },
       append(item: PromptInfo) {
         const entry = structuredClone(unwrap(item))

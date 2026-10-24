@@ -1040,7 +1040,11 @@ export function Prompt(props: PromptProps) {
               return
             }
 
-            const item = history.move(-1, input.plainText)
+            const item = history.move(
+              -1,
+              input.plainText,
+              currentLocation.ref?.directory ?? data.location.default().directory,
+            )
             if (!item) return false
             input.setText(item.text)
             setStore("prompt", item)
@@ -1080,7 +1084,11 @@ export function Prompt(props: PromptProps) {
               return
             }
 
-            const item = history.move(1, input.plainText)
+            const item = history.move(
+              1,
+              input.plainText,
+              currentLocation.ref?.directory ?? data.location.default().directory,
+            )
             if (!item) return false
             input.setText(item.text)
             setStore("prompt", item)
@@ -1324,7 +1332,12 @@ export function Prompt(props: PromptProps) {
           sessionID: target,
           name: slashHead.name,
           text: slashHead.arguments,
-          files: entry.files,
+          files: entry.files?.map((file) => ({
+            uri: file.uri,
+            name: file.name,
+            description: file.description,
+            mention: file.mention,
+          })),
           agents: entry.agents,
           skills: entry.skills?.length ? entry.skills : undefined,
           delivery,
@@ -1365,7 +1378,12 @@ export function Prompt(props: PromptProps) {
         .prompt({
           sessionID: target,
           text: inputText,
-          files: entry.files,
+          files: entry.files?.map((file) => ({
+            uri: file.uri,
+            name: file.name,
+            description: file.description,
+            mention: file.mention,
+          })),
           agents: entry.agents,
           skills: entry.skills?.length ? entry.skills : undefined,
           delivery,

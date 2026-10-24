@@ -1,10 +1,13 @@
 import { describe, expect, test } from "bun:test"
+import path from "path"
+import { pathToFileURL } from "url"
 import { measureEditText } from "@opentui/core"
 import {
   appendPrompt,
   isDuplicateEntry,
   MAX_HISTORY_ENTRIES,
   parsePromptHistory,
+  restorePromptHistory,
   type PromptInfo,
 } from "../../src/prompt/history"
 
@@ -16,6 +19,27 @@ const entry = (text: string, files: PromptInfo["files"] = []): PromptInfo => ({
 })
 
 describe("prompt history", () => {
+  test("restores only marked workspace files without changing stored history", () => {
+    const old = path.resolve("history-a")
+    const next = path.resolve("history-b")
+    const uri = pathToFileURL(path.join(old, "test")).href + "?start=2&end=3"
+    const value = entry("@test @reference", [
+      { uri, workspaceRelative: "test", mention: { start: 0, end: 5, text: "@test" } },
+      { uri, name: "reference", mention: { start: 6, end: 16, text: "@reference" } },
+      { uri, name: "absolute" },
+      { uri: "data:image/png;base64,AAA", name: "clipboard" },
+    ])
+    const stored = structuredClone(value)
+    const restored = restorePromptHistory(value, next)
+    expect(restored.files?.[0]?.uri).toBe(pathToFileURL(path.join(next, "test")).href + "?start=2&end=3")
+    expect(restored.files?.slice(1)).toEqual(stored.files?.slice(1))
+    const mention = restored.files?.[0]?.mention
+    if (mention) mention.start = 99
+    expect(value).toEqual(stored)
+    expect(restorePromptHistory(value, old).files?.[0]?.uri).toBe(uri)
+    expect(restorePromptHistory(entry("legacy", [{ uri }]), next).files?.[0]?.uri).toBe(uri)
+  })
+
   test("recovers valid JSONL entries around corruption", () => {
     const control = entry("a\u001b[31mb\fc\0d\r\n")
     expect(parsePromptHistory(`${JSON.stringify(control)}\nnot-json\n${JSON.stringify(entry("two"))}\n`)).toEqual([
