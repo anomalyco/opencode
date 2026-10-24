@@ -550,6 +550,8 @@ export const dict = {
   "session.queue.attachments.one": "{{count}} attachment",
   "session.queue.attachments.other": "{{count}} attachments",
   "session.timeline.working": "Working",
+  "session.timeline.promptNavigation": "Prompt navigation",
+  "session.timeline.jumpToPrompt": "Jump to prompt {{index}}",
   "session.running.working.one": "{{count}} working",
   "session.running.working.other": "{{count}} working",
   "session.running.running.one": "{{count}} running",

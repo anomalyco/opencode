@@ -27,6 +27,7 @@ import { createStore, reconcile } from "solid-js/store"
 import { createMediaQuery } from "@solid-primitives/media"
 import type { createTimelineProjection } from "./projection"
 import { observeElementOffsetReconnectAware } from "./observe-element-offset"
+import { PromptRail, type PromptRailEntry } from "./prompt-rail"
 import { filterVirtualIndexes } from "./virtual-items"
 
 const fallbackItemSize = 60
@@ -38,6 +39,18 @@ const pendingMarkdown = '[data-component="markdown"]:not([data-markdown-ready])'
 const endEpsilon = 0.5
 
 const upwardKeys = new Set(["up", "page-up", "home"])
+
+// Wheel deltas arrive in pixels, lines, or pages depending on the device and platform.
+function wheelPixels(event: WheelEvent, page: number) {
+  switch (event.deltaMode) {
+    case WheelEvent.DOM_DELTA_LINE:
+      return event.deltaY * 16
+    case WheelEvent.DOM_DELTA_PAGE:
+      return event.deltaY * page
+    default:
+      return event.deltaY
+  }
+}
 
 const cache = new Map<
   string,
@@ -120,6 +133,14 @@ export function createTimelineVirtualizer(input: Input) {
 
   const rows = input.projection.rows
   const rowByKey = input.projection.rowByKey
+
+  const promptRows = createMemo(() =>
+    rows().flatMap((row, index) =>
+      Predicate.isTagged(row, "UserMessage") ? [{ id: row.userMessageID, index }] : [],
+    ),
+  )
+
+  const [activePrompt, setActivePrompt] = createSignal<string>()
 
   const rowKeys = createMemo(() => rows().map(TimelineRow.key), undefined, {
     equals: (previous, next) => previous.length === next.length && previous.every((key, index) => key === next[index]),
@@ -291,6 +312,67 @@ export function createTimelineVirtualizer(input: Input) {
     get rangeExtractor() {
       return rangeExtractor()
     },
+  })
+
+  // The prompt whose row has started under the sticky header is the one being read. While following
+  // the end, the newest prompt owns the view even when a short answer leaves it near the bottom.
+  const syncActivePrompt = () => {
+    const prompts = promptRows()
+
+    if (!prompts.length) {
+      setActivePrompt(undefined)
+
+      return
+    }
+
+    const root = listRoot()
+
+    if (!root || input.pinned()) {
+      setActivePrompt(prompts.at(-1)!.id)
+
+      return
+    }
+
+    // A prompt owns the view once its row begins above the fold, which also keeps the clicked
+    // prompt highlighted after a jump even when the next one is close behind it.
+    const threshold = root.scrollTop + topOffset() + 8
+
+    const current =
+      prompts.findLast((prompt) => (virtualizer.measurementsCache[prompt.index]?.start ?? Infinity) <= threshold) ??
+      prompts[0]!
+
+    setActivePrompt(current.id)
+  }
+
+  const jumpToPrompt = (prompt: PromptRailEntry) => {
+    if (!active()) return
+
+    prepareNavigation()
+    input.onUnpin()
+    setActivePrompt(prompt.id)
+    const item = virtualizer.measurementsCache[prompt.index]
+
+    // Land below the sticky session header instead of under it.
+    if (item) virtualizer.scrollToOffset(Math.max(0, item.start - topOffset()))
+    else virtualizer.scrollToIndex(prompt.index, { align: "center" })
+  }
+
+  const handlePromptRailWheel = (event: WheelEvent) => {
+    const root = listRoot()
+
+    if (!root) return
+    event.preventDefault()
+    releaseAnchor()
+    input.onUserScroll(event.target)
+
+    if (event.deltaY < 0) input.onUnpin()
+    root.scrollTop += wheelPixels(event, root.clientHeight)
+  }
+
+  createEffect(() => {
+    promptRows()
+    input.pinned()
+    syncActivePrompt()
   })
 
   const resizeItem = virtualizer.resizeItem
@@ -644,6 +726,7 @@ export function createTimelineVirtualizer(input: Input) {
 
     if (active()) input.setScrollRef(root)
     viewportObserver?.observe(root)
+    syncActivePrompt()
     settleColdBottom()
     // The scrollbar thumb sits beside the viewport and stops its pointerdown from propagating, so
     // listen on the ScrollView root in the capture phase: thumb drags are user scrolls too.
@@ -773,6 +856,7 @@ export function createTimelineVirtualizer(input: Input) {
     settleColdBottom()
     input.onScheduleScrollState(root)
     input.onHistoryScroll()
+    syncActivePrompt()
   }
 
   function View(props: ViewProps) {
@@ -921,6 +1005,14 @@ export function createTimelineVirtualizer(input: Input) {
             </div>
           </div>
         </ScrollView>
+        <Show when={!rendering.initialTail}>
+          <PromptRail
+            prompts={promptRows}
+            current={activePrompt}
+            onJump={jumpToPrompt}
+            onWheel={handlePromptRailWheel}
+          />
+        </Show>
       </div>
     )
   }
