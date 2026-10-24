@@ -496,6 +496,7 @@ export const dict = {
   "error.chain.configInvalidWithMessage": "Config file at {{path}} is invalid: {{message}}",
 
   "notification.permission.title": "Permission required",
+  "notification.question.title": "Question requires an answer",
 
   "notification.session.responseReady.title": "Response ready",
   "notification.session.error.title": "Session error",
