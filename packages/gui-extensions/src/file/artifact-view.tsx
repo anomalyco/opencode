@@ -16,17 +16,21 @@ import { makeEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Button } from "@opencode/ui/button"
 import { FileIcon } from "@opencode/ui/file-icon"
+import { Icon } from "@opencode/ui/icon"
+import { IconButton } from "@opencode/ui/icon-button"
 import { SegmentedControl, SegmentedControlItem } from "@opencode/ui/segmented-control"
 import { ScrollView } from "@opencode/ui/scroll-view"
+import { Tooltip } from "@opencode/ui/tooltip"
 import { Markdown } from "@opencode/session-ui/markdown"
 import { MarkdownProvider, useMarkdown } from "@opencode/session-ui/context/markdown"
 import { artifactKind, type ArtifactKind } from "@opencode/util/artifact"
 import { getDirectory, getFilename } from "@opencode/util/path"
-import { createKeyed, useExtension, type FileContent, type MountedSession } from "../sdk"
+import { createKeyed, createLatest, useExtension, type FileContent, type MountedSession } from "../sdk"
 import { blobUrlFromContent, bytesFromContent, contentBytes, parseDelimited, resolveArtifactPath } from "./artifact"
 import { current, useShared } from "./context"
 import { FileViewer } from "./contract"
-import { workspaceFileUrl } from "./path"
+import { checkAppInstalled, showRequestError } from "./open-in-app"
+import { resolveOpenInAppPath, workspaceFileUrl } from "./path"
 
 type ArtifactMode = "preview" | "source"
 
@@ -159,6 +163,7 @@ export default function ArtifactView(props: {
         actions={
           <Show when={kind() === "html"}>
             <OpenInBrowserButton session={props.session} path={props.path} />
+            <OpenInChromeButton session={props.session} path={props.path} />
           </Show>
         }
       />
@@ -291,6 +296,61 @@ function OpenInBrowserButton(props: { session: MountedSession; path: string }) {
           {ctx.t("view.openInBrowser")}
         </Button>
       )}
+    </Show>
+  )
+}
+
+/** The app name the macOS desktop resolves in `launch`. */
+const CHROME = "Google Chrome"
+
+/**
+ * Opens the on-disk file in Chrome, independently of the workspace's editor choice or browser pane. The desktop's
+ * launch names the app, so the action exists only where that name resolves: a macOS desktop, local workspace, HTML file.
+ */
+function OpenInChromeButton(props: { session: MountedSession; path: string }) {
+  const ctx = useExtension()
+  const shared = useShared()
+  const desktop = () => (ctx.desktop?.os === "macos" ? ctx.desktop : undefined)
+  // The same window-lifetime installation check the open-in-app menu uses.
+  const installed = createLatest(desktop, (value) => checkAppInstalled(value, shared, CHROME))
+  const [opening, setOpening] = createSignal(false)
+
+  const target = () => {
+    if (!props.path || !props.session.server.local) return undefined
+
+    // The mounted file's own workspace, not whichever screen is active when the user clicks.
+    const path = resolveOpenInAppPath(props.session.directory, props.path)
+
+    return path.startsWith("/") ? path : undefined
+  }
+
+  const available = () => !!desktop() && !installed.loading && !!installed.latest && !!target()
+
+  return (
+    <Show when={available()}>
+      <Tooltip value={ctx.t("view.openInChrome")} placement="bottom" class="flex shrink-0 items-center">
+        <IconButton
+          variant="ghost"
+          icon={<Icon name="arrow-up-right" />}
+          aria-label={ctx.t("view.openInChrome")}
+          disabled={opening()}
+          onClick={() => {
+            const app = desktop()
+            const path = target()
+
+            if (opening() || !available() || !app || !path) return
+            setOpening(true)
+            void app
+              .launch(path, CHROME)
+              .catch((err) => {
+                if (!ctx.signal.aborted) showRequestError(ctx, err)
+              })
+              .finally(() => {
+                if (!ctx.signal.aborted) setOpening(false)
+              })
+          }}
+        />
+      </Tooltip>
     </Show>
   )
 }

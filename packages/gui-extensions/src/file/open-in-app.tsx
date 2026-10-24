@@ -7,9 +7,17 @@ import { Spinner } from "@opencode/ui/spinner"
 import { SplitButton, SplitButtonAction, SplitButtonMenuTrigger } from "@opencode/ui/split-button"
 import { showToast } from "@opencode/ui/toast"
 import { Tooltip } from "@opencode/ui/tooltip"
-import { createLatest, useExtension, type Context, type OS, type MountedSession, type SessionScreen } from "../sdk"
+import {
+  createLatest,
+  useExtension,
+  type Context,
+  type Desktop,
+  type OS,
+  type MountedSession,
+  type SessionScreen,
+} from "../sdk"
 import type { OpenApp } from "./apps"
-import { useShared, type OpenRequest } from "./context"
+import { useShared, type FileShared, type OpenRequest } from "./context"
 import { openInAppParentPath } from "./path"
 
 const MAC_OPEN_APPS = [
@@ -60,12 +68,27 @@ function fileManagerApp(os: OS) {
 }
 
 // A rejection's reason: usually an Error, else whatever the platform rejected with.
-const showRequestError = (ctx: Context, err: Error | string) => {
+export const showRequestError = (ctx: Context, err: Error | string) => {
   showToast({
     variant: "error",
     title: ctx.t("common.requestFailed"),
     description: err instanceof Error ? err.message : String(err),
   })
+}
+
+/** One availability check per app for the window's lifetime, shared by every open action. */
+export function checkAppInstalled(desktop: Desktop | undefined, shared: FileShared, app: string) {
+  const cached = shared.installed.get(app)
+
+  if (cached) return cached
+
+  const request = Promise.resolve(desktop?.installed(app))
+    .then(Boolean)
+    .catch(() => false)
+
+  shared.installed.set(app, request)
+
+  return request
 }
 
 export function useOpenInApp(input: { session: MountedSession; path: () => string; request?: OpenRequest }) {
@@ -77,27 +100,13 @@ export function useOpenInApp(input: { session: MountedSession; path: () => strin
   const apps = createMemo(() => openAppsForOS(os()))
   const fileManager = createMemo(() => fileManagerApp(os()))
 
-  const checkAppExists = (app: string) => {
-    const cached = shared.installed.get(app)
-
-    if (cached) return cached
-
-    const request = Promise.resolve(desktop?.installed(app))
-      .then(Boolean)
-      .catch(() => false)
-
-    shared.installed.set(app, request)
-
-    return request
-  }
-
   // Which of the OS's apps are installed; none are listed until the check answers.
   const installed = createLatest(
     () => desktop && apps(),
     (list) =>
-      Promise.all(list.map((app) => checkAppExists(app.openWith).then((ok) => [app.id, ok] as const))).then(
-        (entries) => new Map<OpenApp, boolean>(entries),
-      ),
+      Promise.all(
+        list.map((app) => checkAppInstalled(desktop, shared, app.openWith).then((ok) => [app.id, ok] as const)),
+      ).then((entries) => new Map<OpenApp, boolean>(entries)),
   )
 
   const options = createMemo(() => {

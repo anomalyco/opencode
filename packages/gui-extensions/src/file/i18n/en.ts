@@ -10,6 +10,7 @@ export default {
   "view.fit": "Fit",
   "view.source": "Source",
   "view.openInBrowser": "Open in browser",
+  "view.openInChrome": "Open in Chrome",
   "view.fullscreen": "Enter full screen",
   "view.exitFullscreen": "Exit full screen",
   "view.binary": "Binary file · {{size}}",
