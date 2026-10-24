@@ -123,12 +123,12 @@ export default {
     },
     {
       filetype: "php",
-      wasm: "https://github.com/tree-sitter/tree-sitter-php/releases/download/v0.24.2/tree-sitter-php.wasm",
+      // tree-sitter-php.wasm is the HTML-embedded grammar that requires <?php tags to trigger highlighting.
+      // tree-sitter-php_only.wasm is the bare PHP grammar that highlights PHP without <?php tags.
+      wasm: "https://github.com/tree-sitter/tree-sitter-php/releases/download/v0.24.2/tree-sitter-php_only.wasm",
       queries: {
         highlights: [
-          // NOTE: This nvim-treesitter query is currently broken, because the parser is not compatible with the query apparently.
-          // "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/php/highlights.scm",
-          "https://github.com/tree-sitter/tree-sitter-php/raw/refs/heads/master/queries/highlights.scm",
+          "https://raw.githubusercontent.com/nvim-treesitter/nvim-treesitter/refs/heads/master/queries/php_only/highlights.scm",
         ],
       },
     },
