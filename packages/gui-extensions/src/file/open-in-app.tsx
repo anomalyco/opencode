@@ -31,6 +31,7 @@ const WINDOWS_OPEN_APPS = [
   { id: "vscode", label: "open.app.vscode", icon: "vscode", openWith: "code" },
   { id: "cursor", label: "open.app.cursor", icon: "cursor", openWith: "cursor" },
   { id: "zed", label: "open.app.zed", icon: "zed", openWith: "zed" },
+  { id: "pwsh", label: "open.app.powershell7", icon: "powershell", openWith: "pwsh" },
   { id: "powershell", label: "open.app.powershell", icon: "powershell", openWith: "powershell" },
   { id: "sublime-text", label: "open.app.sublimeText", icon: "sublime-text", openWith: "Sublime Text" },
 ] as const

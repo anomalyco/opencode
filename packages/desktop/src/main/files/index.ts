@@ -88,7 +88,7 @@ function make(fs: FileSystem.FileSystem, path: Path.Path) {
     openPath: Effect.fn("DesktopFiles.openPath")(function* (target: string, application?: string) {
       if (!application) return yield* Effect.promise(() => shell.openPath(target))
 
-      if (process.platform === "win32" && /^powershell(\.exe)?$/i.test(path.basename(application))) {
+      if (process.platform === "win32" && /^(?:powershell|pwsh)(?:\.exe)?$/i.test(path.basename(application))) {
         const info = yield* fs.stat(target)
         const cwd = info.type === "Directory" ? target : path.dirname(target)
 

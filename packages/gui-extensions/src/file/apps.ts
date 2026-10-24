@@ -14,6 +14,7 @@ const OPEN_APPS = [
   "xcode",
   "android-studio",
   "powershell",
+  "pwsh",
   "sublime-text",
 ] as const
 
