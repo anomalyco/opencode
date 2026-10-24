@@ -1,4 +1,5 @@
 import {
+  children,
   createComponent,
   createContext,
   createMemo,
@@ -116,7 +117,7 @@ export function Slot<Path extends SlotPath>(props: SlotProps<Path>) {
   // merged getter.
   const contribution = (claim: Claim<SlotRender>) => (
     <PluginBoundary id={claim.plugin} where={`slot ${path}`}>
-      {createComponent(claim.render, mergeProps(input))}
+      <SlotOutput render={() => createComponent(claim.render, mergeProps(input))} />
     </PluginBoundary>
   )
   return (
@@ -141,4 +142,18 @@ export function Slot<Path extends SlotPath>(props: SlotProps<Path>) {
       <For each={slotted().after}>{contribution}</For>
     </>
   )
+}
+
+// Bare text is only valid under <text>, but slots mount under host boxes, and
+// the host's insert would throw outside the plugin's boundary. Resolving the
+// output here makes bare text fail as a contained plugin crash instead.
+function SlotOutput(props: { readonly render: () => JSX.Element }) {
+  const output = children(() => props.render())
+  const nodes = createMemo(() => {
+    const resolved = output.toArray()
+    if (resolved.some((node) => typeof node === "string" || typeof node === "number"))
+      throw new Error("slot render returned text; wrap it in <text>")
+    return resolved
+  })
+  return <>{nodes()}</>
 }
