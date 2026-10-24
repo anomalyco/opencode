@@ -59,9 +59,11 @@ export function createLocalProviderPlugin<Discovered>(input: {
         })
 
         yield* ctx.provider.transform((providers) => {
-          if (loaded.models.length === 0) return
-          for (const model of providers.get(input.providerID)?.models.values() ?? []) {
-            providers.models.remove(input.providerID, model.id)
+          if (loaded.models.length === 0 && !source.current.explicit) return
+          if (loaded.models.length > 0) {
+            for (const model of providers.get(input.providerID)?.models.values() ?? []) {
+              providers.models.remove(input.providerID, model.id)
+            }
           }
           providers.update(input.providerID, (provider) => {
             provider.name = input.name
@@ -133,8 +135,13 @@ export function createLocalProviderPlugin<Discovered>(input: {
             next.baseURL === source.current.baseURL &&
             next.apiKey === source.current.apiKey &&
             next.root === source.current.root
-          )
+          ) {
+            if (next.explicit === source.current.explicit) return
+            // Keep pending discovery results valid when only explicit configuration changes.
+            source.current.explicit = next.explicit
+            yield* ctx.provider.reload()
             return
+          }
           source.current = next
           loaded.models = []
           loaded.hash = "[]"
@@ -186,6 +193,9 @@ function createClient(
 }
 
 function configured(entries: readonly Entry[], providerID: string, origin: string | undefined, suffix: RegExp) {
+  const explicit = entries.some(
+    (entry) => entry.type === "document" && entry.info.providers?.[providerID] !== undefined,
+  )
   const settings = foldSettings(entries, providerID, undefined)
   const baseURL = (
     typeof settings?.baseURL === "string"
@@ -195,9 +205,9 @@ function configured(entries: readonly Entry[], providerID: string, origin: strin
         : ""
   ).replace(/\/+$/, "")
   const apiKey = typeof settings?.apiKey === "string" ? settings.apiKey : undefined
-  if (!URL.canParse(baseURL)) return { baseURL, apiKey }
+  if (!URL.canParse(baseURL)) return { baseURL, apiKey, explicit }
   const url = new URL(baseURL)
-  if (url.protocol !== "http:" && url.protocol !== "https:") return { baseURL, apiKey }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return { baseURL, apiKey, explicit }
   const prefix = url.pathname.replace(/\/+$/, "").replace(suffix, "")
   const endpoint = (path: string) => {
     const next = new URL(url)
@@ -206,5 +216,5 @@ function configured(entries: readonly Entry[], providerID: string, origin: strin
     next.hash = ""
     return next.toString()
   }
-  return { baseURL, apiKey, root: endpoint(""), endpoint }
+  return { baseURL, apiKey, explicit, root: endpoint(""), endpoint }
 }

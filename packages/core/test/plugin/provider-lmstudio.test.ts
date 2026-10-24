@@ -225,6 +225,10 @@ describe("LMStudioPlugin", () => {
             yield* config.setEntries([configuration(baseURL, "secret"), configuration(baseURL, null)])
             yield* bus.publish(Event.Updated, {})
             yield* eventually(providers.get(providerID), (provider) => provider?.settings?.apiKey === "")
+            yield* eventually(
+              Effect.sync(() => requests),
+              (items) => items.some((item) => item.authorization === null && item.path === "/proxy/api/v1/models"),
+            )
             expect(requests).toContainEqual({ authorization: null, path: "/proxy/api/v1/models" })
 
             requests.splice(0)
@@ -232,6 +236,13 @@ describe("LMStudioPlugin", () => {
             yield* config.setEntries([configuration(apiBaseURL, "api-secret")])
             yield* bus.publish(Event.Updated, {})
             yield* eventually(providers.get(providerID), (provider) => provider?.settings?.baseURL === apiBaseURL)
+            yield* eventually(
+              Effect.sync(() => requests),
+              (items) =>
+                items.some(
+                  (item) => item.authorization === "Bearer api-secret" && item.path === "/proxy/api/v1/models",
+                ),
+            )
             expect(requests).toContainEqual({ authorization: "Bearer api-secret", path: "/proxy/api/v1/models" })
           }),
         ({ initial, configured }) => Effect.promise(() => Promise.all([initial.stop(true), configured.stop(true)])),
