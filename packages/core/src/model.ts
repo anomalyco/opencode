@@ -1,7 +1,7 @@
 import { Model } from "@opencode/schema/model"
 import { Provider } from "./provider.js"
 import type { DeepMutable } from "./schema.js"
-import { Context, Effect, Layer, Stream } from "effect"
+import { Context, Effect, Equal, Layer, Stream } from "effect"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Bus } from "./bus.js"
 import { State } from "./state.js"
@@ -243,11 +243,19 @@ const layer = Layer.effect(
       ),
     )
     const reload = () => prepare.pipe(Effect.andThen(state.reload()))
-    let published: typeof cached
+    let published: { value: typeof cached; input: Provider.Snapshot | undefined } | undefined
     const notify: Effect.Effect<void> = Effect.gen(function* () {
       const value = yield* read()
-      if (value === published) return
-      published = value
+      if (value === published?.value) return
+      // Provider already publishes only real changes, so content is compared only when a model reload ran on the
+      // same provider input.
+      const unchanged =
+        published?.value !== undefined &&
+        published.input === input &&
+        Equal.equals(published.value.data.defaultModel, value.data.defaultModel) &&
+        Equal.equals(published.value.all, value.all)
+      published = { value, input }
+      if (unchanged) return
       yield* bus.publish(
         Model.Event.Updated,
         {},

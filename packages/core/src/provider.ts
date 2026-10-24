@@ -1,6 +1,6 @@
 export * as Provider from "./provider.js"
 
-import { Context, Effect, Layer, Option, Schema, Stream, Struct } from "effect"
+import { Context, Effect, Equal, Layer, Option, Schema, Stream, Struct } from "effect"
 import { Provider } from "@opencode/schema/provider"
 import { Model } from "@opencode/schema/model"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
@@ -444,7 +444,7 @@ const layer = Layer.effect(
     // Registrations may outlive a borrowed service layer; their later disposal must
     // not query dependencies that have already closed.
     yield* Effect.addFinalizer(() => State.shutdown(state.reload()))
-    let cached: { records: Snapshot["records"]; value: Snapshot } | undefined
+    let cached: { records: Snapshot["records"]; available: Snapshot["available"]; value: Snapshot } | undefined
     const snapshot = Effect.fn("Provider.snapshot")(function* () {
       while (true) {
         const revision = integrations.revision()
@@ -471,12 +471,24 @@ const layer = Layer.effect(
         // A credential change that leaves the same definitions available is not a catalog change.
         if (
           cached?.records === records &&
-          cached.value.available.length === available.length &&
-          cached.value.available.every((record, index) => record === available[index])
+          cached.available.length === available.length &&
+          cached.available.every((record, index) => record === available[index])
         )
           return cached.value
+        // A reload rebuilds every record, so an identical rebuild is only detectable by content. Equal caches
+        // hashes per object, which is only sound once the records can no longer change.
+        freeze(records, true)
+        if (
+          cached &&
+          cached.available.length === available.length &&
+          cached.available.every((record, index) => record.provider.id === available[index]?.provider.id) &&
+          Equal.equals(cached.value.records, records)
+        ) {
+          cached = { records, available, value: cached.value }
+          return cached.value
+        }
         const value = freeze({ records, available, providers: available.map((record) => record.provider) }, true)
-        cached = { records, value }
+        cached = { records, available, value }
         return value
       }
     })
