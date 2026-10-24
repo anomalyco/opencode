@@ -26,6 +26,7 @@ import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNodePlatform } from "@opencode/core/effect/app-node-platform"
 import { LayerNode } from "@opencode/util/effect/layer-node"
+import { Global } from "@opencode/util/global"
 import { Bus } from "@opencode/core/bus"
 import { Event } from "@opencode/schema/event"
 import { App } from "@opencode/core/app"
@@ -56,6 +57,7 @@ import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { PluginPromise } from "@opencode/core/plugin/promise"
 import { OptimizePlugin } from "@opencode/core/plugin/optimize"
 import { IdentityPlugin } from "@opencode/core/plugin/identity"
+import { PlanPlugin } from "@opencode/core/plugin/plan"
 import { QuestionTool } from "@opencode/core/tool/plugin/question"
 import { Agent } from "@opencode/core/agent"
 import { Config } from "@opencode/core/config"
@@ -84,6 +86,7 @@ import { promptLocationNode } from "./fixture/prompt-location"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { Expected } from "./lib/session-message"
 import { permissionLayer } from "./lib/permission"
+import { executeTool, registerToolPlugin, toolIdentity } from "./lib/tool"
 import { agentHost, modelHost, host, noProviders } from "./plugin/host"
 import { CodeModeInstructions } from "@opencode/core/codemode/instructions"
 
@@ -597,6 +600,32 @@ const scenario = (
       return yield* body(s)
     }),
   )
+
+const installPlan = Effect.fnUntraced(function* (s: Scenario) {
+  const agents = yield* Agent.Service
+  const hooks = yield* PluginHooks.Service
+  yield* registerToolPlugin(
+    PlanPlugin.Plugin,
+    {
+      agent: {
+        ...agentHost(agents),
+        list: () => agents.list().pipe(Effect.map((data) => ({ location: host().location, data }))),
+      },
+      event: { subscribe: () => s.bus.subscribe([SessionEvent.Created, SessionEvent.AgentSelected]) },
+      session: {
+        get: (input) => s.session.get(input.sessionID),
+        context: (input) => s.session.context(input.sessionID),
+        switchAgent: s.session.switchAgent,
+        synthetic: s.session.synthetic,
+        hook: (name, callback) => hooks.register("session", name, callback),
+      },
+    },
+    (name, callback) => hooks.register("tool", name, callback),
+  ).pipe(
+    Effect.provideService(Global.Service, Global.Service.of(Global.make())),
+    Effect.provide(permissionLayer({ assert: () => Effect.void })),
+  )
+})
 
 // Nominal retry gaps: exponential from 2s capped at 10s, for 10 retries.
 const RETRY_GAPS = [2_000, 4_000, 8_000, ...Array<number>(7).fill(10_000)]
@@ -1125,6 +1154,158 @@ describe("SessionRunnerLLM", () => {
       ]),
     ])
   })
+
+  for (const decision of ["approve", "decline", "cancel"] as const) {
+    scenario(`plan_exit ${decision} preserves context and only switches on approval`, function* (s) {
+      const forms = yield* Form.Service
+      yield* installPlan(s)
+      yield* s.session.switchAgent({ sessionID, agent: Agent.ID.make("plan") })
+      yield* s.session.switchModel({
+        sessionID,
+        model: { providerID: Provider.ID.make("fake"), id: Model.ID.make("fake-model") },
+      })
+      yield* s.admit("Implement the agreed plan")
+      yield* s.llm.push(TestLLM.tool("call-plan-exit", "plan_exit", {}), TestLLM.text("Continue", "text-continue"))
+
+      const approval = yield* s.bus.subscribe(Form.Event.Created).pipe(
+        Stream.take(1),
+        Stream.runForEach((event) =>
+          Effect.gen(function* () {
+            expect((yield* s.session.get(sessionID)).agent).toBe(Agent.ID.make("plan"))
+            expect(event.data.form.metadata?.kind).toBe("question")
+            if (decision === "cancel") {
+              yield* forms.cancel(event.data.form.id)
+              return
+            }
+            yield* forms.reply({ id: event.data.form.id, answer: { approval: decision } })
+          }),
+        ),
+        Effect.forkScoped({ startImmediately: true }),
+      )
+      const exit = yield* s.resume.pipe(Effect.exit)
+      yield* Fiber.join(approval)
+
+      expect((yield* s.session.get(sessionID)).agent).toBe(Agent.ID.make(decision === "approve" ? "build" : "plan"))
+      expect((yield* s.session.get(sessionID)).model).toEqual({
+        providerID: Provider.ID.make("fake"),
+        id: Model.ID.make("fake-model"),
+        variant: Model.VariantID.make("default"),
+      })
+      expect(s.requests[0]?.tools.map((tool) => tool.name)).toContain("plan_exit")
+      if (decision === "cancel") {
+        expect(s.requests).toHaveLength(1)
+        expect(exit._tag).toBe("Failure")
+        if (exit._tag === "Failure") {
+          expect(Cause.hasInterruptsOnly(exit.cause)).toBe(true)
+        }
+        return
+      }
+      expect(exit._tag).toBe("Success")
+      expect(s.requests).toHaveLength(2)
+      expect(userTexts(s.requests[1])).toContain("Implement the agreed plan")
+      expect(s.requests[1]?.tools.some((tool) => tool.name === "plan_exit")).toBe(decision !== "approve")
+      expect(userTexts(s.requests[1]).join("\n")).toContain(
+        decision === "approve" ? "NO LONGER in Plan mode" : "You are in Plan mode",
+      )
+      if (decision === "approve") {
+        const texts = userTexts(s.requests[1])
+        expect(texts.filter((text) => text.includes("NO LONGER in Plan mode"))).toHaveLength(1)
+        expect(yield* s.inbox).toEqual([])
+
+        yield* s.llm.push(TestLLM.text("Still in Build", "text-build"))
+        yield* s.runPrompt("Continue in Build")
+        expect(s.requests).toHaveLength(3)
+        expect(userTexts(s.requests[2])).toEqual([...texts, "Continue in Build"])
+        expect(yield* s.inbox).toEqual([])
+      }
+    })
+  }
+
+  scenario("persists a manual Plan exit without queuing work or repeating the reminder", function* (s) {
+    yield* installPlan(s)
+    const reminders = yield* s.bus
+      .subscribe(SessionEvent.Synthetic)
+      .pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
+    yield* s.session.switchAgent({ sessionID, agent: Agent.ID.make("plan") })
+    yield* s.session.switchAgent({ sessionID, agent: Agent.ID.make("build") })
+    expect(Array.from(yield* Fiber.join(reminders)).map((event) => event.data.text)).toEqual([
+      expect.stringContaining("You are in Plan mode"),
+      expect.stringContaining("NO LONGER in Plan mode"),
+    ])
+    expect(yield* s.inbox).toEqual([])
+    expect(s.requests).toHaveLength(0)
+
+    yield* s.llm.push(TestLLM.text("First Build reply", "text-build-first"))
+    yield* s.runPrompt("Implement after the manual switch")
+    const texts = userTexts(s.requests[0])
+    expect(texts.filter((text) => text.includes("NO LONGER in Plan mode"))).toHaveLength(1)
+
+    yield* s.llm.push(TestLLM.text("Second Build reply", "text-build-second"))
+    yield* s.runPrompt("Continue in Build")
+    expect(s.requests).toHaveLength(2)
+    expect(userTexts(s.requests[1])).toEqual([...texts, "Continue in Build"])
+    expect(yield* s.inbox).toEqual([])
+  })
+
+  for (const target of ["missing", "hidden", "subagent"] as const) {
+    scenario(`plan_exit rejects a ${target} Build agent without asking for approval`, function* (s) {
+      yield* installPlan(s)
+      const agents = yield* Agent.Service
+      const registry = yield* Tool.Service
+      const forms = yield* Form.Service
+      yield* agents.transform((editor) => {
+        if (target === "missing") {
+          editor.remove(Agent.ID.make("build"))
+          return
+        }
+        editor.update(Agent.ID.make("build"), (agent) => {
+          if (target === "hidden") {
+            agent.hidden = true
+            return
+          }
+          agent.mode = "subagent"
+        })
+      })
+      yield* s.session.switchAgent({ sessionID, agent: Agent.ID.make("plan") })
+
+      expect(
+        yield* executeTool(registry, {
+          sessionID,
+          ...toolIdentity,
+          agent: Agent.ID.make("plan"),
+          call: { type: "tool-call", id: "call-plan-exit", name: "plan_exit", input: {} },
+        }),
+      ).toMatchObject({ status: "error", error: { message: "The Build agent is not available for this session." } })
+      expect(yield* forms.list({ sessionID })).toEqual([])
+      expect((yield* s.session.get(sessionID)).agent).toBe(Agent.ID.make("plan"))
+    })
+  }
+
+  for (const placement of ["build", "child"] as const) {
+    scenario(`plan_exit rejects a ${placement} session without changing its agent`, function* (s) {
+      yield* installPlan(s)
+      const registry = yield* Tool.Service
+      const forms = yield* Form.Service
+      yield* s.session.switchAgent({ sessionID, agent: Agent.ID.make(placement === "build" ? "build" : "plan") })
+      if (placement === "child") {
+        yield* s.db.update(SessionTable).set({ parent_id: otherSessionID }).where(eq(SessionTable.id, sessionID)).run()
+      }
+
+      expect(
+        yield* executeTool(registry, {
+          sessionID,
+          ...toolIdentity,
+          agent: Agent.ID.make(placement === "build" ? "build" : "plan"),
+          call: { type: "tool-call", id: "call-plan-exit", name: "plan_exit", input: {} },
+        }),
+      ).toMatchObject({
+        status: "error",
+        error: { message: "plan_exit is only available in a top-level Plan session." },
+      })
+      expect(yield* forms.list({ sessionID })).toEqual([])
+      expect((yield* s.session.get(sessionID)).agent).toBe(Agent.ID.make(placement === "build" ? "build" : "plan"))
+    })
+  }
 
   scenario("executes a tool renamed by a session context hook", function* (s) {
     const hooks = yield* PluginHooks.Service

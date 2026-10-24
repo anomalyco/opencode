@@ -1,10 +1,13 @@
 import { describe, expect } from "bun:test"
 import { Message, ToolFailure } from "@opencode/ai"
-import { DateTime, Effect, Option, Stream, Types } from "effect"
+import { DateTime, Effect, Layer, Option, Stream, Types } from "effect"
 import type { SessionContext } from "@opencode/plugin/effect/session"
 import type { ToolHooks } from "@opencode/plugin/effect/tool"
 import { Agent } from "@opencode/core/agent"
+import { Bus } from "@opencode/core/bus"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Environment } from "@opencode/core/environment/index"
+import { Form } from "@opencode/core/form"
 import { Event } from "@opencode/schema/event"
 import { Model } from "@opencode/core/model"
 import { PlanPlugin } from "@opencode/core/plugin/plan"
@@ -12,19 +15,20 @@ import { Permission } from "@opencode/core/permission"
 import { Provider } from "@opencode/core/provider"
 import { Session } from "@opencode/core/session"
 import { SessionEvent } from "@opencode/core/session/event"
-import { SessionInbox } from "@opencode/core/session/inbox"
 import { SessionMessage } from "@opencode/core/session/message"
 import { Tool } from "@opencode/schema/tool"
 import { Global } from "@opencode/util/global"
 import path from "path"
-import { it } from "../lib/effect"
+import { testEffect } from "../lib/effect"
 import { host } from "./host"
+import { permissionLayer } from "../lib/permission"
 
 const sessionID = Session.ID.make("ses_plan_test")
 const plan = Agent.ID.make("plan")
 const build = Agent.ID.make("build")
 const home = "/home/plan-test"
 const planDirectory = path.join(home, ".opencode", "plan")
+const it = testEffect(AppNodeBuilder.build(Bus.node))
 
 const agentSelected = (agent: Agent.ID, previous: Agent.ID): SessionEvent.AgentSelected => ({
   id: Event.ID.create(),
@@ -37,6 +41,12 @@ const agentSelected = (agent: Agent.ID, previous: Agent.ID): SessionEvent.AgentS
 /** Runs the plan plugin against stubbed domains, capturing persisted reminders and the context hook. */
 const run = Effect.fnUntraced(function* (events: ReadonlyArray<SessionEvent.AgentSelected> = []) {
   const persisted = new Array<string>()
+  const bus = yield* Bus.Service
+  yield* bus.project(SessionEvent.Synthetic, (event) =>
+    Effect.sync(() => {
+      persisted.push(event.data.text)
+    }),
+  )
   let contextHook: ((input: SessionContext) => Effect.Effect<void>) | undefined
   let toolHook: ((input: ToolHooks["execute.after"]) => Effect.Effect<void>) | undefined
   const defaults = Agent.Info.default(plan)
@@ -65,7 +75,7 @@ const run = Effect.fnUntraced(function* (events: ReadonlyArray<SessionEvent.Agen
         },
       },
       tool: {
-        transform: () => Effect.die("unused tool.transform"),
+        transform: () => Effect.succeed({ dispose: Effect.void }),
         reload: () => Effect.die("unused tool.reload"),
         list: () => Effect.die("unused tool.list"),
         hook: (name, callback) => {
@@ -81,26 +91,25 @@ const run = Effect.fnUntraced(function* (events: ReadonlyArray<SessionEvent.Agen
         subscribe: () => Stream.fromIterable(events),
       },
       session: {
+        context: () =>
+          Effect.succeed(
+            persisted.map((text, index) =>
+              SessionMessage.Synthetic.make({
+                id: SessionMessage.ID.make(`msg_plan_test_${index}`),
+                type: "synthetic",
+                text,
+                time: { created: DateTime.makeUnsafe(0) },
+              }),
+            ),
+          ),
         hook: (name, callback) => {
           if (name === "context") contextHook = callback as (input: SessionContext) => Effect.Effect<void>
           return Effect.succeed({ dispose: Effect.void })
         },
-        synthetic: (input) => {
-          persisted.push(input.text)
-          return Effect.succeed(
-            SessionInbox.Synthetic.make({
-              id: SessionMessage.ID.make("msg_plan_test"),
-              sessionID,
-              time: { created: DateTime.makeUnsafe(0) },
-              type: "synthetic",
-              payload: { text: input.text },
-              delivery: "steer",
-            }),
-          )
-        },
       },
     }),
   ).pipe(
+    Effect.provide(Layer.merge(Layer.mock(Form.Service, {}), permissionLayer())),
     Effect.provideService(Global.Service, Global.Service.of({ ...Global.make(), home })),
     Effect.provideService(
       Environment.Service,
@@ -150,12 +159,15 @@ const reminders = Effect.gen(function* () {
   const planRun = yield* run()
   yield* planRun.contextHook(request(plan, []))
   const buildRun = yield* run()
-  yield* buildRun.contextHook(request(build, [Message.user(planRun.persisted[0]!)]))
-  return { enter: planRun.persisted[0]!, leave: buildRun.persisted[0]! }
+  const messages = [Message.user(planRun.persisted[0]!)]
+  yield* buildRun.contextHook(request(build, messages))
+  const part = messages[0]?.content[0]
+  if (part?.type !== "text") return yield* Effect.die("plan plugin did not inject a leave reminder")
+  return { enter: planRun.persisted[0]!, leave: part.text }
 })
 
 describe("plan plugin reminders", () => {
-  it.effect("injects enter and leave reminders on agent switches", () =>
+  it.effect("persists enter and leave reminders on agent switches", () =>
     Effect.gen(function* () {
       const { persisted } = yield* run([agentSelected(plan, build), agentSelected(build, plan)])
       yield* settle(persisted, 2)
@@ -191,7 +203,7 @@ describe("plan plugin reminders", () => {
     }),
   )
 
-  it.effect("reconciles a stale enter reminder with a leave reminder", () =>
+  it.effect("reconciles and persists a stale enter reminder with a leave reminder", () =>
     Effect.gen(function* () {
       const { enter } = yield* reminders
       const { persisted, contextHook } = yield* run()
