@@ -72,6 +72,7 @@ const layer = Layer.effect(
               stdout: "ignore",
               stderr: "ignore",
             }),
+            { timeout: "2 minutes" },
           )
           .pipe(
             Effect.catch((error) =>
