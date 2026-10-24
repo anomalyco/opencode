@@ -1,5 +1,5 @@
 import { RGBA } from "@opentui/core"
-import { Schema } from "effect"
+import { Schema, SchemaIssue } from "effect"
 import { expandTheme, mergeTheme } from "./expand.js"
 import {
   ActionState,
@@ -36,10 +36,31 @@ function decodeThemeDefinition(input: unknown) {
   }
 }
 
+const formatIssues = SchemaIssue.makeFormatterStandardSchemaV1()
+
 export function themeDecodeError(error: unknown, name: string) {
-  const message = Schema.isSchemaError(error) ? error.message : String(error)
-  const value = /got ("[^"]*"|\S+)/.exec(message)?.[1] ?? "value"
-  return new Error(`Invalid theme: ${name} ${value} is an invalid value`, { cause: error })
+  // Resolution failures (a missing reference, a cycle) already say what is wrong, so keep that sentence.
+  if (!Schema.isSchemaError(error))
+    return new Error(`Invalid theme: ${name}: ${error instanceof Error ? error.message : String(error)}`, {
+      cause: error,
+    })
+  const issues = formatIssues(error.issue).issues
+  // Decoding stops at the first broken token, so a union that fails every alternative reports one token
+  // more than once. Count distinct tokens, not issues, or the suffix claims a second broken token.
+  const tokens = new Set(issues.map(tokenPath))
+  const first = issues.at(0)
+  // The toast shows only this line, so name the token and keep it short enough to read.
+  const rest = tokens.size > 1 ? ` (+${tokens.size - 1} more)` : ""
+  const detail = first ? `${tokenPath(first)}: ${first.message}` : "invalid document"
+  return new Error(`Invalid theme: ${name}: ${detail}${rest}`, { cause: error })
+}
+
+/** `["base","background","base"]` as `base.background.base`, so the message names the failing token. */
+function tokenPath(issue: { readonly path?: ReadonlyArray<unknown> }) {
+  const segments = (issue.path ?? []).map((segment) =>
+    typeof segment === "object" && segment !== null && "key" in segment ? segment.key : segment,
+  )
+  return segments.length === 0 ? "theme" : segments.join(".")
 }
 
 export function parseThemeDocument(input: unknown, name = "theme") {
