@@ -1854,30 +1854,28 @@ export function Prompt(props: PromptProps) {
             </box>
           </box>
         </box>
+        {/* Half height strip under the panel: the top half keeps the panel background, the bottom
+            half shows the page. Uses the lower half block with a swapped background because CJK
+            console fonts (GB2312, Big5, Shift-JIS) have no upper half block, and the Windows console
+            host paints unsupported characters as a box. The border cap is dropped for the same
+            reason: those fonts have no half height vertical either. */}
         <box
           height={1}
           border={["left"]}
-          borderColor={borderHighlight()}
           customBorderChars={{
             ...EmptyBorder,
-            vertical: promptBg().a !== 0 ? "╹" : " ",
+            vertical: " ",
           }}
         >
           <box
             height={1}
             border={["bottom"]}
-            borderColor={promptBg()}
-            customBorderChars={
-              promptBg().a !== 0
-                ? {
-                    ...EmptyBorder,
-                    horizontal: "▀",
-                  }
-                : {
-                    ...EmptyBorder,
-                    horizontal: " ",
-                  }
-            }
+            borderColor={theme.background.base}
+            backgroundColor={promptBg()}
+            customBorderChars={{
+              ...EmptyBorder,
+              horizontal: "▄",
+            }}
           />
         </box>
         <box width="100%" flexDirection="row" justifyContent="space-between" gap={2}>
