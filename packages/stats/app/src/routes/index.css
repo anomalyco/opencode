@@ -8731,9 +8731,13 @@ body {
     --top-models-mobile-bar-width: 18px;
   }
 
+  /* The bars row is one gap wider than the axis, so leave out the trailing gap here to keep each bar slot exactly bar width + gap. A fractional slot drifts the dot grid off the pixel grid and smears a dot column every few bars. */
   [data-page="stats"] [data-component="top-models-chart"][data-dense-labels="true"] [data-slot="top-models-axis"],
   [data-page="stats"] [data-component="top-models-chart"][data-dense-labels="true"] [data-slot="top-models-bars"] {
-    min-width: calc(var(--top-models-count) * (var(--top-models-mobile-bar-width) + var(--top-models-bar-gap)));
+    min-width: calc(
+      var(--top-models-count) * (var(--top-models-mobile-bar-width) + var(--top-models-bar-gap)) -
+        var(--top-models-bar-gap)
+    );
   }
 
   [data-page="stats"] [data-component="market-share"][data-dense-labels="true"] {
