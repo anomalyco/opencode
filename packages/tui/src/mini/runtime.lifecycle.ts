@@ -18,6 +18,7 @@ import {
 } from "@opentui/core"
 import { isFallbackTitle } from "@opencode/util/session-title-fallback"
 import { setTerminalTitle } from "../util/renderer"
+import { Locale } from "../util/locale"
 import { monoSnapshot } from "./mono"
 import { entrySplash, exitSplash } from "./splash"
 import { resolveRunTheme } from "./theme"
@@ -179,7 +180,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
   const setTitle = (title?: string) => {
     if (input.host.platform !== "linux") return
     if (!title || isFallbackTitle(title)) return setTerminalTitle(renderer, "OpenCode")
-    setTerminalTitle(renderer, `OC | ${title.length > 40 ? title.slice(0, 37) + "…" : title}`)
+    setTerminalTitle(renderer, `OC | ${Locale.truncate(title, 40)}`)
   }
   setTitle(input.sessionTitle)
   const theme = await resolveRunTheme(renderer, tuiConfig.theme, mono)
