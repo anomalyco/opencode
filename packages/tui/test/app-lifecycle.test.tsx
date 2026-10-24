@@ -2776,12 +2776,10 @@ test("restarting after an update tells the user to start OpenCode again", async 
   await using state = await tmpdir()
   const setup = await createTestRenderer({ width: 80, height: 24 })
   await setup.renderer.setupTerminal()
-  const started = Promise.withResolvers<void>()
-  const setTitle = setup.renderer.setTerminalTitle.bind(setup.renderer)
-  setup.renderer.setTerminalTitle = (title) => {
-    if (title === "OpenCode") started.resolve()
-    setTitle(title)
-  }
+  // Without a running frame loop, waitForFrame gives up as soon as no render is scheduled, which happens while the
+  // home route is still loading on a busy runner.
+  setup.renderer.start()
+  const ready = Promise.withResolvers<void>()
   const events = createEventStream()
   const calls = createFetch(undefined, events)
   const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
@@ -2800,7 +2798,7 @@ test("restarting after an update tells the user to start OpenCode again", async 
         server: { endpoint: { url: server.url.toString() } },
         config: { get: async () => ({}), update: async () => ({}) },
         packages: { prepare: async () => ({ directory: "" }) },
-        terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
+        terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: ready.resolve }),
         updater: {
           remote: false,
           subscribe: () => () => {},
@@ -2812,7 +2810,7 @@ test("restarting after an update tells the user to start OpenCode again", async 
       }).pipe(Effect.provide(Global.layerWith({ state: state.path })), Effect.provide(FileSystem.layerNoop({}))),
     )
 
-    await started.promise
+    await ready.promise
     await setup.waitForFrame((frame) => frame.includes("commands"))
     await setup.mockInput.typeText("/update")
     await setup.waitForFrame((frame) => frame.includes("Update OpenCode"))
@@ -2833,12 +2831,10 @@ test("quitting after a background update tells the user to start OpenCode again"
   await using state = await tmpdir()
   const setup = await createTestRenderer({ width: 80, height: 24 })
   await setup.renderer.setupTerminal()
-  const started = Promise.withResolvers<void>()
-  const setTitle = setup.renderer.setTerminalTitle.bind(setup.renderer)
-  setup.renderer.setTerminalTitle = (title) => {
-    if (title === "OpenCode") started.resolve()
-    setTitle(title)
-  }
+  // Without a running frame loop, waitForFrame gives up as soon as no render is scheduled, which happens while the
+  // home route is still loading on a busy runner.
+  setup.renderer.start()
+  const ready = Promise.withResolvers<void>()
   const events = createEventStream()
   const calls = createFetch(undefined, events)
   const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
@@ -2857,7 +2853,7 @@ test("quitting after a background update tells the user to start OpenCode again"
         server: { endpoint: { url: server.url.toString() } },
         config: { get: async () => ({}), update: async () => ({}) },
         packages: { prepare: async () => ({ directory: "" }) },
-        terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
+        terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: ready.resolve }),
         updater: {
           remote: false,
           subscribe: (notify) => {
@@ -2872,7 +2868,7 @@ test("quitting after a background update tells the user to start OpenCode again"
       }).pipe(Effect.provide(Global.layerWith({ state: state.path })), Effect.provide(FileSystem.layerNoop({}))),
     )
 
-    await started.promise
+    await ready.promise
     await setup.waitForFrame((frame) => frame.includes("commands"))
     await setup.waitForFrame((frame) => frame.includes("restart to use v2.0.0"))
     await setup.mockInput.typeText("/exit")
