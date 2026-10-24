@@ -538,6 +538,50 @@ describe("Git capture recovery", () => {
     }),
   )
 
+  const unixTest = process.platform === "win32" ? it.live.skip : it.live
+  unixTest("leaves a tracked path that became a unix socket out of the capture", () =>
+    Effect.gen(function* () {
+      const { project, repository, capture } = yield* setup
+      const git = yield* Git.Service
+      const before = yield* capture()
+      yield* Effect.acquireRelease(
+        Effect.promise(async () => {
+          await fs.rm(path.join(project, "a.txt"))
+          return Bun.listen({ unix: path.join(project, "a.txt"), socket: { data() {} } })
+        }),
+        (server) => Effect.sync(() => server.stop(true)),
+      )
+      yield* Effect.promise(() => Bun.write(path.join(project, "b.txt"), "changed\n"))
+      const after = yield* capture()
+      expect(yield* git.tree.files({ repository, from: before, to: after })).toEqual([RelativePath.make("b.txt")])
+      expect(
+        yield* Effect.promise(() => $`git --git-dir ${repository.gitDirectory} ls-tree ${after} a.txt`.text()),
+      ).toStartWith("100644 blob ")
+    }),
+  )
+
+  unixTest("keeps a symlink whose target is a socket in the capture", () =>
+    Effect.gen(function* () {
+      const { root, project, repository, capture } = yield* setup
+      const git = yield* Git.Service
+      const before = yield* capture()
+      yield* Effect.acquireRelease(
+        Effect.promise(async () => {
+          const server = Bun.listen({ unix: path.join(root.path, "target.sock"), socket: { data() {} } })
+          await fs.rm(path.join(project, "a.txt"))
+          await fs.symlink(path.join(root.path, "target.sock"), path.join(project, "a.txt"))
+          return server
+        }),
+        (server) => Effect.sync(() => server.stop(true)),
+      )
+      const after = yield* capture()
+      expect(yield* git.tree.files({ repository, from: before, to: after })).toEqual([RelativePath.make("a.txt")])
+      expect(
+        yield* Effect.promise(() => $`git --git-dir ${repository.gitDirectory} ls-tree ${after} a.txt`.text()),
+      ).toStartWith("120000 blob ")
+    }),
+  )
+
   it.live("keeps the index when Git cannot even start", () =>
     Effect.gen(function* () {
       const { root, project, repository, capture } = yield* setup

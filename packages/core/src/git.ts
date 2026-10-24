@@ -489,18 +489,41 @@ const layer = Layer.effect(
         input.excluded ??
         (input.ignores ? yield* ignored({ repository: input.ignores, paths: candidates }) : new Set<RelativePath>())
       const maximum = input.maximumUntrackedFileBytes
+      const untracked = new Set(input.changes.untracked)
+      // One stat per candidate decides both limits. A missing path is a deletion, which `--remove` handles.
+      const stats = new Map(
+        yield* Effect.forEach(
+          candidates.filter((item) => !excluded.has(item)),
+          (item) =>
+            fs.stat(path.join(input.repository.worktree, item)).pipe(
+              Effect.map((info) => [item, info] as const),
+              Effect.orElseSucceed(() => [item, undefined] as const),
+            ),
+          { concurrency: 8 },
+        ),
+      )
+      // update-index refuses sockets, FIFOs and device nodes, and a single one aborts the whole call,
+      // so such a path keeps whatever the index already holds for it. `stat` follows links, and Git
+      // records a link itself without opening its target, so a link is never left out.
+      const special = (yield* Effect.forEach(
+        candidates.filter((item) => {
+          const type = stats.get(item)?.type
+          return type !== undefined && type !== "File" && type !== "Directory"
+        }),
+        (item) =>
+          fs.readLink(path.join(input.repository.worktree, item)).pipe(
+            Effect.as(undefined),
+            Effect.orElseSucceed(() => item),
+          ),
+        { concurrency: 8 },
+      )).filter((item): item is RelativePath => item !== undefined)
       const skipped = maximum
-        ? (yield* Effect.forEach(
-            input.changes.untracked.filter((item) => !excluded.has(item)),
-            (item) =>
-              fs.stat(path.join(input.repository.worktree, item)).pipe(
-                Effect.map((info) => (info.type === "File" && Number(info.size) > maximum ? item : undefined)),
-                Effect.orElseSucceed(() => undefined),
-              ),
-            { concurrency: 8 },
-          )).filter((item): item is RelativePath => item !== undefined)
+        ? candidates.filter((item) => {
+            const info = stats.get(item)
+            return untracked.has(item) && info?.type === "File" && Number(info.size) > maximum
+          })
         : []
-      const skip = new Set(skipped)
+      const skip = new Set([...special, ...skipped])
       const added = candidates.filter((item) => !excluded.has(item) && !skip.has(item))
       // Untracked paths are not in the index, so only tracked paths that are now ignored need removing.
       const removed = input.changes.tracked.filter((item) => excluded.has(item))

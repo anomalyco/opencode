@@ -58,6 +58,7 @@ captures eligible files below `packages/app`, not changes elsewhere in the repos
 | Non-ignored untracked files up to 2 MiB each | Yes | `packages/app/notes.txt` |
 | Git-ignored files | No | `packages/app/dist/app.js` |
 | Individual untracked files larger than 2 MiB | No | `packages/app/debug.log` |
+| Sockets, FIFOs, and device nodes | No | `.codex/app-server-control/app-server-control.sock` |
 | Files outside the active directory | No | `packages/server/src/index.ts` |
 | Git metadata and other side effects | No | commits, branches, databases, or processes |
 
