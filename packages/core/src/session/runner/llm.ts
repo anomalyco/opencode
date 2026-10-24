@@ -229,6 +229,7 @@ const layer = Layer.effect(
         const prepared = yield* context.request.primary({
           session: loaded.session,
           agent: loaded.agent.id,
+          agentRequest: loaded.agent.info.request,
           model: loaded.model,
           tools: loaded.tools,
           system: transcript.system,

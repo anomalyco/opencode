@@ -47,6 +47,7 @@ export const generate = Effect.fn("SessionGenerate.generate")(function* (input: 
     const prepared = yield* context.request.generate({
       session: selection.session,
       agent: selection.agent.id,
+        agentRequest: selection.agent.info.request,
       model,
       tools: selection.tools,
       system: transcript.system,

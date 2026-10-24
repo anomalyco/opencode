@@ -337,8 +337,10 @@ color: "#ff6b6b"
 ```
 
 <Callout type="warning">
-  The V2 session runner preserves these values but does not yet send them with model requests. Configure active request
-  settings on the provider, model, or model variant instead.
+  Agent `body` is a raw JSON overlay, applied after provider, model, and variant body defaults and after protocol
+  encoding. Use provider field names such as `temperature` and `top_p`. Model-request hooks may override headers;
+  OpenCode-owned session headers are protected from agent overrides regardless of casing. Agent `request.settings`
+  is not yet applied.
 </Callout>
 
 Do not use legacy top-level fields such as `temperature`, `top_p`, `prompt`, `permission`, `tools`, `disable`, or `maxSteps` in new V2 agent configuration.

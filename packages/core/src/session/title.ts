@@ -71,6 +71,7 @@ export const layer = Layer.effect(
       const prepared = yield* context.request.title({
         session: input.session,
         agent: input.agent.id,
+        agentRequest: input.agent.request,
         model: input.model,
         system: input.agent.system ? [SystemPart.make(input.agent.system)] : [],
         messages: [Message.user(input.text)],

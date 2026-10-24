@@ -70,6 +70,7 @@ export interface Prepared<Event = SessionRequest> {
 export interface Input {
   readonly session: SessionSchema.Info
   readonly agent: Agent.ID
+  readonly agentRequest?: Agent.Info["request"]
   readonly model: SessionRunnerModel.Resolved
   readonly tools?: Tool.Snapshot
   readonly system: Array<SystemPart>
@@ -272,7 +273,24 @@ export const layer = Layer.effect(
       const base = LLM.request({
         model: model.model,
         http: {
+          body: input.agentRequest?.body,
           headers: {
+            ...Object.fromEntries(
+              Object.entries(input.agentRequest?.headers ?? {}).filter(
+                ([name]) =>
+                  ![
+                    "x-opencode-session-id",
+                    "x-opencode-parent-session-id",
+                    "x-session-affinity",
+                    "x-session-id",
+                    "x-parent-session-id",
+                    "user-agent",
+                    "x-opencode-project",
+                    "x-opencode-session",
+                    "x-opencode-client",
+                  ].includes(name.toLowerCase()),
+              ),
+            ),
             "x-opencode-session-id": session.id,
             ...(session.parentID ? { "x-opencode-parent-session-id": session.parentID } : {}),
             "x-session-affinity": affinity,
