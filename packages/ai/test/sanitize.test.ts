@@ -44,6 +44,26 @@ describe("sanitizeSurrogates", () => {
     ])
   })
 
+  test("removes NUL bytes from nested message text and tool output", () => {
+    const sanitized = sanitizeRequest(
+      LLM.request({
+        model,
+        tools: [tool],
+        messages: [
+          Message.user("user \u0000text"),
+          Message.tool({ id: "call_1", name: "lookup", result: { output: ["HEAD\u0000multi_ack"] } }),
+        ],
+      }),
+    )
+
+    expect(sanitized.messages).toEqual([
+      Message.user("user text"),
+      Message.tool({ id: "call_1", name: "lookup", result: { output: ["HEADmulti_ack"] } }),
+    ])
+    const clean = "clean string"
+    expect(sanitizeSurrogates(clean)).toBe(clean)
+  })
+
   test("keeps clean requests equal and shares unchanged nested values", () => {
     const messages = [Message.user("hello \u{1F600}"), Message.assistant("hi")]
     const request = LLM.request({
