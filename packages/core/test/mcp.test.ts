@@ -2348,17 +2348,17 @@ testEffect(Layer.empty).effect("coalesces queued MCP tool notifications after in
     const registration = yield* McpTool.Service
     const bus = yield* Bus.Service
     yield* registration.flush
-    expect(reads).toBe(1)
-    expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["demo_read_1", "execute"])
+    expect(reads).toBe(2)
+    expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["demo_read_2", "execute"])
 
     yield* bus.publish(McpEvent.ToolsChanged, { server: "demo" })
-    yield* advance(() => reads >= 2)
-    expect(reads).toBe(2)
-    yield* Effect.forEach(Array.from({ length: 20 }), () => bus.publish(McpEvent.ToolsChanged, { server: "demo" }))
     yield* advance(() => reads >= 3)
-    yield* drain
     expect(reads).toBe(3)
-    expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["demo_read_3", "execute"])
+    yield* Effect.forEach(Array.from({ length: 20 }), () => bus.publish(McpEvent.ToolsChanged, { server: "demo" }))
+    yield* advance(() => reads >= 4)
+    yield* drain
+    expect(reads).toBe(4)
+    expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["demo_read_4", "execute"])
   }).pipe(
     Effect.provide(
       AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node, Bus.node]), [
@@ -2381,6 +2381,36 @@ testEffect(Layer.empty).effect("coalesces queued MCP tool notifications after in
     ),
   )
 })
+
+testEffect(Layer.empty).effect("refreshes a resumed MCP catalog before the debounced notification", () =>
+  Effect.gen(function* () {
+    const catalog = yield* Ref.make<Mcp.Tool[]>([])
+    yield* Effect.gen(function* () {
+      const registry = yield* Tool.Service
+      const registration = yield* McpTool.Service
+      const bus = yield* Bus.Service
+      yield* registration.flush
+      expect(codeModeListings((yield* registry.snapshot()).codeModeCatalog!)).toEqual([])
+      yield* Ref.set(catalog, [
+        { server: Mcp.ServerName.make("echo"), name: "echo", inputSchema: { type: "object", properties: {} } },
+      ])
+      yield* bus.publish(McpEvent.ToolsChanged, { server: "echo" })
+      // A resumed turn must see connected tools without waiting out the notification debounce.
+      yield* registration.flush
+      expect(codeModeListings((yield* registry.snapshot()).codeModeCatalog!).map((tool) => tool.path)).toEqual([
+        "echo.echo",
+      ])
+    }).pipe(
+      Effect.provide(
+        AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node, Bus.node]), [
+          Mcp.node.replace(Layer.mock(Mcp.Service, { tools: () => Ref.get(catalog) })),
+          Permission.node.replace(Layer.mock(Permission.Service, { assert: () => Effect.void })),
+          Image.node.replace(imagePassthrough),
+        ]),
+      ),
+    )
+  }),
+)
 
 it.effect("advertises MCP output schemas to Code Mode", () =>
   Effect.gen(function* () {
