@@ -147,7 +147,17 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
           : {
               onListen: (address, shutdown) =>
                 Effect.gen(function* () {
-                  if (!config.password) yield* ServiceConfig.password(password)
+                  if (!config.password) {
+                    yield* ServiceConfig.password(password).pipe(
+                      Effect.catch((error) => {
+                        if (config.remote !== undefined) return Effect.fail(error)
+                        return Effect.logWarning(
+                          "Could not persist the local service password; continuing with an ephemeral password",
+                          { cause: error },
+                        )
+                      }),
+                    )
+                  }
                   return yield* ServiceRegistration.register({
                     address,
                     password,

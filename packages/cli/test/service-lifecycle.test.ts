@@ -15,6 +15,7 @@ import { isolatedEnv } from "./fixture/environment"
 
 const entry = path.join(import.meta.dir, "../src/index.ts")
 const serviceTest = process.platform === "win32" ? test.skip : test
+const readOnlyConfigTest = process.platform === "win32" || process.getuid?.() === 0 ? test.skip : test
 
 serviceTest(
   "concurrent CLI and client starts converge on one server",
@@ -164,6 +165,25 @@ serviceTest(
     const info = await until(() => snapshot(home).then((state) => state.info))
     await observe(home, (state) => state.servers.length === 1 && state.servers[0] === info.pid)
     await stopped(home)
+  },
+  120_000,
+)
+
+readOnlyConfigTest(
+  "starts a local service when the config directory is read-only",
+  async () => {
+    await using home = await serviceHome()
+    const config = path.join(home.root, "config")
+    await fs.chmod(config, 0o555)
+    try {
+      await cli(home, "service", "start")
+      const info = await settled(home)
+      expect(info.password).toBeTruthy()
+      expect(await Bun.file(path.join(config, "service-local.json")).json()).toEqual({ port: home.port })
+      await stopped(home)
+    } finally {
+      await fs.chmod(config, 0o755)
+    }
   },
   120_000,
 )
