@@ -34,7 +34,9 @@ function isText(bytes: Uint8Array) {
   if (bytes.length === 0) return true
   if (bytes.includes(0)) return false
   try {
-    new TextDecoder("utf-8", { fatal: true }).decode(bytes, { stream: true })
+    const decoder = new TextDecoder("utf-8", { fatal: true })
+    decoder.decode(bytes, { stream: true })
+    decoder.decode() // flush: reject truncated multi-byte sequences at end of buffer
   } catch {
     return false
   }
