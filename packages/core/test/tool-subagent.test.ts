@@ -27,6 +27,7 @@ import { SessionExecution } from "@opencode/core/session/execution"
 import { SessionRestart } from "@opencode/core/session/execution/restart"
 import { SessionInbox } from "@opencode/core/session/inbox"
 import { SessionMessage } from "@opencode/core/session/message"
+import { SessionContext } from "@opencode/core/session/context"
 import { SessionRunnerModel } from "@opencode/core/session/runner/model"
 import { SessionStore } from "@opencode/core/session/store"
 import { SubagentJob } from "@opencode/core/session/subagent-job"
@@ -208,6 +209,94 @@ const withSubagent = (location: Location.Ref) =>
   })
 
 describe("SubagentTool", () => {
+  for (const item of [
+    {
+      name: "session deny over agent allow",
+      agent: "allow",
+      visible: false,
+      permissions: [{ action: "subagent", resource: "reviewer", effect: "deny" }],
+    },
+    {
+      name: "session allow over agent deny",
+      agent: "deny",
+      visible: true,
+      permissions: [{ action: "subagent", resource: "reviewer", effect: "allow" }],
+    },
+    {
+      name: "session ask over agent deny",
+      agent: "deny",
+      visible: true,
+      permissions: [{ action: "subagent", resource: "reviewer", effect: "ask" }],
+    },
+    {
+      name: "ordered session wildcard and target rules",
+      agent: "deny",
+      visible: true,
+      permissions: [
+        { action: "subagent", resource: "*", effect: "deny" },
+        { action: "subagent", resource: "reviewer", effect: "allow" },
+      ],
+    },
+  ] as const) {
+    productionIt.live(`advertises subagent targets using ${item.name}`, () =>
+      Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+      ).pipe(
+        Effect.flatMap((dir) =>
+          Effect.gen(function* () {
+            const sessions = yield* Session.Service
+            const parent = yield* sessions.create({
+              location: Location.Ref.make({ directory: AbsolutePath.make(dir.path) }),
+              agent: toolIdentity.agent,
+              model: parentModel,
+              permissions: item.permissions,
+            })
+            yield* withSubagent(parent.location)
+            const locations = yield* LocationServiceMap.Service
+            yield* Effect.gen(function* () {
+              const agents = yield* Agent.Service
+              yield* agents.transform((editor) =>
+                editor.update(toolIdentity.agent, (agent) => {
+                  agent.permissions = [
+                    { action: "*", resource: "*", effect: "allow" },
+                    { action: SubagentTool.name, resource: "reviewer", effect: item.agent },
+                  ]
+                }),
+              )
+              const agent = yield* agents.resolve(toolIdentity.agent)
+              if (!agent) throw new Error("build agent missing")
+              const registry = yield* Tool.Service
+              const context = yield* SessionContext.Service
+              const requests = context.request
+              const ruleset = Permission.merge(agent.permissions, parent.permissions ?? [])
+              for (const kind of ["primary", "compaction", "generate"] as const) {
+                const prepared = yield* requests[kind]({
+                  session: parent,
+                  agent: toolIdentity.agent,
+                  model: SessionRunnerModel.resolved(
+                    LanguageModel.make({ id: "parent", provider: "test", route: OpenAIChat.route }),
+                    {
+                      capabilities: { tools: true, input: ["text"], output: ["text"] },
+                      cost: [],
+                      limit: { context: 200_000, output: 32_000 },
+                    },
+                  ),
+                  tools: yield* registry.snapshot(ruleset),
+                  system: [],
+                  messages: [],
+                })
+                const tool = prepared.request.tools.find((tool) => tool.name === SubagentTool.name)
+                expect(tool).toBeDefined()
+                expect(tool?.description?.includes("- reviewer:")).toBe(item.visible)
+              }
+            }).pipe(Effect.provide(locations.get(parent.location)))
+          }),
+        ),
+      ),
+    )
+  }
+
   completionIt.live("admits one durable completion across live delivery and restart replay", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
