@@ -14,6 +14,7 @@ import { RemoteTunnel } from "./remote-tunnel"
 
 export const Info = Schema.Struct({
   disabled: Schema.optional(Schema.Boolean),
+  auth: Schema.optional(Schema.Boolean),
   // Present when remote access is on. The route is generated, never user-set: the secret subdomain the service is
   // served on.
   remote: Schema.optional(Schema.Struct({ route: Schema.String })),
@@ -28,7 +29,7 @@ export const Info = Schema.Struct({
 })
 export type Info = typeof Info.Type
 
-const keys = ["disabled", "remote", "hostname", "port", "password", "cors", "env"] as const
+const keys = ["disabled", "auth", "remote", "hostname", "port", "password", "cors", "env"] as const
 type Key = (typeof keys)[number]
 
 const decodeInfo = Schema.decodeUnknownEffect(Schema.fromJsonString(Info))
@@ -102,6 +103,7 @@ export const migrateConfig = Effect.fnUntraced(function* (legacy: string, file: 
 function configKey(key: string): Key {
   if (
     key === "disabled" ||
+    key === "auth" ||
     key === "remote" ||
     key === "hostname" ||
     key === "port" ||
@@ -215,6 +217,9 @@ export const get = Effect.fn("cli.service-config.get")(function* (key?: string, 
   const selected = configKey(key)
   if (selected !== "env" && name !== undefined) throw new Error(`Usage: opencode service get ${selected}`)
   switch (selected) {
+    case "auth": {
+      return String((yield* read()).auth ?? true)
+    }
     case "disabled": {
       return String((yield* read()).disabled ?? false)
     }
@@ -247,6 +252,12 @@ export const set = Effect.fn("cli.service-config.set")(function* (key: string, v
   if (selected !== "env" && nestedValue !== undefined)
     throw new Error(`Usage: opencode service set ${selected} <value>`)
   switch (selected) {
+    case "auth": {
+      if (value !== "true" && value !== "false") throw new Error("Auth must be true or false")
+      yield* Service.stop(yield* options())
+      yield* write({ ...(yield* read()), auth: value === "true" })
+      return
+    }
     case "disabled": {
       if (value !== "true" && value !== "false") throw new Error("Disabled must be true or false")
       if (value === "true") yield* Service.stop(yield* options())
@@ -309,6 +320,12 @@ export const unset = Effect.fn("cli.service-config.unset")(function* (key: strin
   const selected = configKey(key)
   if (selected !== "env" && name !== undefined) throw new Error(`Usage: opencode service unset ${selected}`)
   switch (selected) {
+    case "auth": {
+      yield* Service.stop(yield* options())
+      const { auth: _auth, ...next } = yield* read()
+      yield* write(next)
+      return
+    }
     case "disabled": {
       const { disabled: _disabled, ...next } = yield* read()
       yield* write(next)

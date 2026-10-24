@@ -259,3 +259,18 @@ it.live("server info lists remote URLs alongside local addresses while they are 
     expect((yield* info()).urls).toEqual([base])
   }),
 )
+
+it.live("allows requests without credentials when authentication is disabled", () =>
+  Effect.gen(function* () {
+    const server = yield* ServerProcess.start<never, never>({
+      hostname: "127.0.0.1",
+      port: 0,
+      app: { version: "test-version" },
+      database: { path: ":memory:" },
+    })
+    const response = yield* Effect.promise(() => fetch(new URL("/api/info", HttpServer.formatAddress(server.address))))
+
+    expect(response.status).toBe(200)
+    expect(yield* Effect.promise(() => response.json())).toMatchObject({ version: "test-version" })
+  }),
+)

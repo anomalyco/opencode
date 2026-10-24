@@ -13,7 +13,7 @@ const decodeInfo = Schema.decodeUnknownEffect(infoJson)
 
 export const register = Effect.fnUntraced(function* (options: {
   readonly address: NetAddress.SocketAddress
-  readonly password: string
+  readonly password?: string
   readonly id: string
   readonly file: string
   readonly shutdown: Effect.Effect<void>
@@ -26,7 +26,7 @@ export const register = Effect.fnUntraced(function* (options: {
     version: OPENCODE_VERSION,
     url: HttpServer.formatAddress(options.address),
     pid: process.pid,
-    password: options.password,
+    ...(options.password ? { password: options.password } : {}),
   }
   const encoded = yield* encodeInfo(info)
   const current = fs.readFileString(options.file).pipe(Effect.flatMap(decodeInfo))

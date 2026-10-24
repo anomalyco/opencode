@@ -12,6 +12,10 @@ export const password = Config.Redacted("OPENCODE_PASSWORD").pipe(
   Config.withDefault(undefined),
 )
 
+// Whether servers require authentication. Prefer a positive environment
+// variable so deployments can opt out with an explicit `false`.
+export const auth = Config.Boolean("OPENCODE_AUTH").pipe(Config.withDefault(true))
+
 export function session() {
   return Object.fromEntries(
     Object.entries(process.env).filter(
