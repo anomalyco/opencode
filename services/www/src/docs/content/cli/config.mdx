@@ -156,7 +156,8 @@ Configure the persistent session tab strip:
     "mode": "auto",
     "scope": "cwd",
     "layout": "horizontal",
-    "indicators": "status"
+    "indicators": "status",
+    "label": "title"
   }
 }
 ```
@@ -165,17 +166,23 @@ The legacy boolean `tabs.enabled` setting remains supported: `true` is `on` and 
 
 <div class="docs-table-scroll" role="region" aria-label="Tab settings" tabIndex={0}>
 
-| Setting           | Values                      | Description                                                                   |
-| ----------------- | --------------------------- | ----------------------------------------------------------------------------- |
-| `tabs.mode`       | `auto`, `on`, or `off`      | Uses tabs automatically, always, or never. Auto hides them inside Herdr.       |
-| `tabs.scope`      | `cwd` or `global`           | Keeps separate tabs per working directory or shares them globally.            |
-| `tabs.layout`     | `horizontal` or `vertical`  | Places tabs in a horizontal strip or a vertical sidebar.                      |
-| `tabs.indicators` | `status` or `numbers`       | Shows status icons or always shows tab numbers.                               |
+| Setting           | Values                                     | Description                                                                   |
+| ----------------- | ------------------------------------------ | ----------------------------------------------------------------------------- |
+| `tabs.mode`       | `auto`, `on`, or `off`                     | Uses tabs automatically, always, or never. Auto hides them inside Herdr.       |
+| `tabs.scope`      | `cwd` or `global`                          | Keeps separate tabs per working directory or shares them globally.            |
+| `tabs.layout`     | `horizontal` or `vertical`                 | Places tabs in a horizontal strip or a vertical sidebar.                      |
+| `tabs.indicators` | `status` or `numbers`                      | Shows status icons or always shows tab numbers.                               |
+| `tabs.label`      | `title`, `project`, `path`, or `directory` | Adds the project name, path, or directory name to tab labels.                 |
 
 </div>
 
 Number indicators retain status colors and background animations. Ctrl+number shortcuts switch tabs in either indicator
 mode.
+
+Set `tabs.label` to `project`, `path`, or `directory` to tell same-titled sessions apart: horizontal tabs prefix the
+title with the project name, the `~`-shortened directory, or just the directory's name — useful when two packages of
+one repository share a project name — and vertical tabs show it in the detail line. The stored session title stays
+untouched.
 
 ## Diffs
 

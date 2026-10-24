@@ -9,6 +9,13 @@ export function abbreviateHome(input: string, home: string) {
   return "~/" + relative.split(paths.sep).join("/")
 }
 
+// The final path segment, split by the same win32/posix rule as the rest of this module so a
+// Windows directory divides on backslashes.
+export function basename(input: string, home: string) {
+  const paths = windowsPath(home) || windowsPath(input) ? path.win32 : path.posix
+  return paths.basename(input)
+}
+
 export function formatPath(
   input: string | undefined,
   options: { base: string; home?: string; forwardSlashes?: boolean },

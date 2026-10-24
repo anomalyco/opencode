@@ -70,6 +70,7 @@ test("resolves nested config and keybind defaults", () => {
     scope: "cwd",
     layout: "horizontal",
     indicators: "status",
+    label: "title",
   })
   expect(config.session.new_location).toBe("launch")
   expect(config.session.tps).toBe(true)
@@ -101,6 +102,10 @@ test("shows resolved tab defaults in settings", () => {
   expect(settings.find((setting) => setting.path.join(".") === "tabs.indicators")).toMatchObject({
     default: "status",
     values: ["status", "numbers"],
+  })
+  expect(settings.find((setting) => setting.path.join(".") === "tabs.label")).toMatchObject({
+    default: "title",
+    values: ["title", "project", "path", "directory"],
   })
 })
 

@@ -188,6 +188,16 @@ export const settings: Setting[] = [
     keywords: ["tab numbers", "number mode", "status icons"],
   },
   {
+    title: "Label",
+    category: "Tabs",
+    path: ["tabs", "label"],
+    description: "What context prefixes tab labels besides the session title",
+    default: "title",
+    values: ["title", "project", "path", "directory"],
+    labels: ["title only", "project name", "project path", "directory name"],
+    keywords: ["directory", "folder", "project", "path", "prefix", "basename"],
+  },
+  {
     title: "Layout",
     category: "Diffs",
     path: ["diffs", "view"],

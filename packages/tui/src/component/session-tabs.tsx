@@ -23,6 +23,7 @@ import { Portal, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { useConfig } from "../config"
 import { useSessionTabs } from "../context/session-tabs"
 import { useData } from "../context/data"
+import { useTuiPaths } from "../context/runtime"
 import { useClipboard } from "../context/clipboard"
 import { useTheme } from "../context/theme"
 import {
@@ -31,6 +32,8 @@ import {
   NEW_SESSION_TAB_TITLE,
   sessionTabComplete,
   sessionTabDetail,
+  sessionTabDetailName,
+  sessionTabLabel,
   sessionTabNumberLabel,
   seedSessionTabMotion,
   sessionTabOverflowWidth,
@@ -126,6 +129,35 @@ function tabFeedbackColor(status: SessionTabsStatus, theme: ReturnType<typeof us
   if (status.attention) return theme.hue.accent[200]
   if (status.unread === "error") return theme.text.feedback.error.base
   return undefined
+}
+
+// The detail line shown by the vertical sidebar and prefixed to horizontal titles by
+// tabs.label. In path mode the project name is replaced with the home-abbreviated session
+// directory, and in directory mode with only the directory's final segment.
+function tabDetail(
+  sessionID: string,
+  tabs: SessionTabsController,
+  data: ReturnType<typeof useData> | undefined,
+  label: "title" | "project" | "path" | "directory",
+  home: string,
+) {
+  const fixture = tabs.detail?.(sessionID)
+  if (fixture !== undefined) return fixture
+  const session = data?.session.get(sessionID)
+  const project = session ? data?.project.get(session.projectID) : undefined
+  const vcs = session ? data?.location.vcs.info(session.location) : undefined
+  const location = session ? data?.location.info(session.location) : undefined
+  return sessionTabDetail(
+    sessionTabDetailName(
+      label,
+      projectName(project, session?.location.directory) ?? "",
+      session?.location.directory ?? "",
+      home,
+    ),
+    vcs?.branch.current,
+    vcs?.branch.default,
+    !!location && location.project.directory !== location.project.canonical,
+  )
 }
 
 function TabIndicator(props: {
@@ -576,20 +608,8 @@ function VerticalSessionTabs(props: {
   })
   const [hoverY, setHoverY] = createSignal(0)
   const [scrollTop, setScrollTop] = createSignal(0)
-  const detail = (sessionID: string) => {
-    const fixture = tabs.detail?.(sessionID)
-    if (fixture !== undefined) return fixture
-    const session = data?.session.get(sessionID)
-    const project = session ? data?.project.get(session.projectID) : undefined
-    const vcs = session ? data?.location.vcs.info(session.location) : undefined
-    const location = session ? data?.location.info(session.location) : undefined
-    return sessionTabDetail(
-      projectName(project, session?.location.directory) ?? "",
-      vcs?.branch.current,
-      vcs?.branch.default,
-      !!location && location.project.directory !== location.project.canonical,
-    )
-  }
+  const paths = useTuiPaths()
+  const detail = (sessionID: string) => tabDetail(sessionID, tabs, data, config.tabs.label, paths.home)
   // OpenTUI captures the first drag target, which may differ from the tab pressed on a fast move.
   const [dragging, setDragging] = createSignal<string>()
   const [preview, setPreview] = createSignal<{ sessionID: string; index: number }>()
@@ -1295,6 +1315,7 @@ function HorizontalSessionTabs(props: {
   const dimensions = useTerminalDimensions()
   const theme = useTheme()
   const config = useConfig().data
+  const paths = useTuiPaths()
   const animations = () => props.animations ?? config.animations ?? true
   const [addHovered, setAddHovered] = createSignal(false)
   const marquee = createTabMarquee(animations)
@@ -1580,7 +1601,11 @@ function HorizontalSessionTabs(props: {
           const glowColor = createMemo(() => tint(background(), feedbackColor() ?? unreadColor(), glowLevel()))
           const glows = () =>
             Boolean(status().attention || (!selected() && !status().busy && status().unread !== undefined))
-          const title = () => data?.session.get(tab.sessionID)?.title ?? tab.title ?? "Untitled session"
+          const title = () => {
+            const label = data?.session.get(tab.sessionID)?.title ?? tab.title ?? "Untitled session"
+            if (config.tabs.label === "title") return label
+            return sessionTabLabel(tabDetail(tab.sessionID, tabs, data, config.tabs.label, paths.home), label)
+          }
           const tabNumber = createMemo(() => items().findIndex((item) => item.sessionID === tab.sessionID) + 1)
           const numberWidth = () => Math.max(2, String(items().length).length)
           // Hovering reveals the close mark, so the title's right bound shifts left of it.
