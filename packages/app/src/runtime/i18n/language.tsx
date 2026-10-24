@@ -143,6 +143,7 @@ const loaders: Record<Exclude<Locale, "en">, () => Promise<Dictionary>> = {
   et: () => merge(import("@/runtime/i18n/et"), import("@opencode/ui/i18n/et")),
   fa: () => merge(import("@/runtime/i18n/fa"), import("@opencode/ui/i18n/fa")),
   fo: () => merge(import("@/runtime/i18n/fo"), import("@opencode/ui/i18n/fo")),
+  gl: () => merge(import("@/runtime/i18n/gl"), import("@opencode/ui/i18n/gl")),
   hr: () => merge(import("@/runtime/i18n/hr"), import("@opencode/ui/i18n/hr")),
   hu: () => merge(import("@/runtime/i18n/hu"), import("@opencode/ui/i18n/hu")),
   hy: () => merge(import("@/runtime/i18n/hy"), import("@opencode/ui/i18n/hy")),
