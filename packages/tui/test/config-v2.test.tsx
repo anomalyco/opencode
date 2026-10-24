@@ -114,6 +114,17 @@ test("shows the TPS default in session settings", () => {
   expect(setting?.default).toBe(true)
 })
 
+test("takes shell collapse limits in whole lines and lists them in session settings", () => {
+  const decode = Schema.decodeUnknownSync(Info)
+  expect(decode({ session: { shell_lines: 20, shell_command_lines: 5 } })).toEqual({
+    session: { shell_lines: 20, shell_command_lines: 5 },
+  })
+  expect(() => decode({ session: { shell_lines: 0 } })).toThrow()
+  expect(() => decode({ session: { shell_command_lines: 1.5 } })).toThrow()
+  expect(settings.find((setting) => setting.path.join(".") === "session.shell_lines")?.default).toBe(10)
+  expect(settings.find((setting) => setting.path.join(".") === "session.shell_command_lines")?.default).toBe(2)
+})
+
 test("shows transcript verbosity in session settings", () => {
   expect(settings.find((setting) => setting.path.join(".") === "session.verbosity")).toMatchObject({
     category: "Session",

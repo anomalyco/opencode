@@ -3002,6 +3002,7 @@ function ShellDisplay(props: {
 }) {
   const theme = useTheme()
   const ctx = use()
+  const config = useConfig()
   const client = useClient()
   const data = useData()
   const pathFormatter = usePathFormatter()
@@ -3086,11 +3087,13 @@ function ShellDisplay(props: {
     }
     return stripAnsi(props.output?.trim() ?? "")
   })
-  const maxLines = 10
-  const maxChars = createMemo(() => maxLines * Math.max(20, ctx.width - 6 - (isRunning() ? 2 : 0)))
+  const maxLines = createMemo(() => config.data.session?.shell_lines ?? 10)
+  const maxChars = createMemo(() => maxLines() * Math.max(20, ctx.width - 6 - (isRunning() ? 2 : 0)))
   const prefix = createMemo(() => (workdir() && workdir() !== "." ? `cd ${workdir()} && ` : ""))
   const input = createMemo(() => (props.command ? `${isRunning() ? "" : "$ "}${prefix()}${props.command}` : ""))
-  const collapsed = createMemo(() => collapseShellOutput(input(), output(), maxLines, maxChars()))
+  const collapsed = createMemo(() =>
+    collapseShellOutput(input(), output(), maxLines(), maxChars(), config.data.session?.shell_command_lines ?? 2),
+  )
   const limitedInput = createMemo(() => (expanded() ? input() : collapsed().input))
   const limitedOutput = createMemo(() => (expanded() ? output() : collapsed().output))
   const expandable = createMemo(() => Boolean(props.shellID) || collapsed().overflow)
