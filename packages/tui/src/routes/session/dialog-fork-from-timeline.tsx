@@ -3,6 +3,7 @@ import { useSync } from "../../context/sync"
 import { DialogSelect, type DialogSelectOption } from "../../ui/dialog-select"
 import type { TextPart } from "@opencode-ai/sdk/v2"
 import { Locale } from "../../util/locale"
+import { useTuiConfig } from "../../config"
 import { useSDK } from "../../context/sdk"
 import { useRoute } from "../../context/route"
 import { useDialog, type DialogContext } from "../../ui/dialog"
@@ -12,6 +13,7 @@ import { stripPromptPartIDs as strip } from "../../prompt/part"
 export function DialogForkFromTimeline(props: { sessionID: string; onMove: (messageID?: string) => void }) {
   const sync = useSync()
   const dialog = useDialog()
+  const tuiConfig = useTuiConfig()
   const sdk = useSDK()
   const route = useRoute()
 
@@ -43,7 +45,7 @@ export function DialogForkFromTimeline(props: { sessionID: string; onMove: (mess
       result.push({
         title: part.text.replace(/\n/g, " "),
         value: message.id,
-        footer: Locale.time(message.time.created),
+        footer: Locale.time(message.time.created, tuiConfig.datetime_format),
         onSelect: async (dialog) => {
           const forked = await sdk.client.session.fork({
             sessionID: props.sessionID,

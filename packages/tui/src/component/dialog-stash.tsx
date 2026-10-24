@@ -5,8 +5,9 @@ import { Locale } from "../util/locale"
 import { useTheme } from "../context/theme"
 import { usePromptStash, type StashEntry } from "./prompt/stash"
 import { useCommandShortcut } from "../keymap"
+import { useTuiConfig } from "../config"
 
-function getRelativeTime(timestamp: number): string {
+function getRelativeTime(timestamp: number, format?: Locale.DateTimeFormat): string {
   const now = Date.now()
   const diff = now - timestamp
   const seconds = Math.floor(diff / 1000)
@@ -18,7 +19,7 @@ function getRelativeTime(timestamp: number): string {
   if (minutes < 60) return `${minutes}m ago`
   if (hours < 24) return `${hours}h ago`
   if (days < 7) return `${days}d ago`
-  return Locale.datetime(timestamp)
+  return Locale.datetime(timestamp, format)
 }
 
 function getStashPreview(input: string, maxLength: number = 50): string {
@@ -30,6 +31,7 @@ export function DialogStash(props: { onSelect: (entry: StashEntry) => void }) {
   const dialog = useDialog()
   const stash = usePromptStash()
   const { theme } = useTheme()
+  const tuiConfig = useTuiConfig()
 
   const [toDelete, setToDelete] = createSignal<number>()
   const deleteHint = useCommandShortcut("stash.delete")
@@ -45,7 +47,7 @@ export function DialogStash(props: { onSelect: (entry: StashEntry) => void }) {
           title: isDeleting ? `Press ${deleteHint()} again to confirm` : getStashPreview(entry.input),
           bg: isDeleting ? theme.error : undefined,
           value: index,
-          description: getRelativeTime(entry.timestamp),
+          description: getRelativeTime(entry.timestamp, tuiConfig.datetime_format),
           footer: lineCount > 1 ? `~${lineCount} lines` : undefined,
         }
       })

@@ -70,17 +70,19 @@ import * as Model from "../../util/model"
 import { formatTranscript } from "../../util/transcript"
 import { sessionEpilogue } from "../../util/presentation"
 import { setPreLayoutSiblingMargin } from "../../util/layout"
-import { useTuiConfig } from "../../config"
+import { TuiConfig, useTuiConfig } from "../../config"
 import { useClipboard } from "../../context/clipboard"
 import { nextThinkingMode, reasoningSummary, useThinkingMode, type ThinkingMode } from "../../context/thinking"
 import { getScrollAcceleration } from "../../util/scroll"
-import { collapseToolOutput } from "../../util/collapse-tool-output"
+import { isLandmark, navigationTargets, pickNavigationTarget, type NavigationScope } from "./navigation"
+import { collapseHeadTail, collapseToolOutput } from "../../util/collapse-tool-output"
 import { usePluginRuntime } from "../../plugin/runtime"
 import { DialogRetryAction } from "../../component/dialog-retry-action"
 import { getRevertDiffFiles } from "../../util/revert-diff"
 import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useOpencodeKeymap } from "../../keymap"
 import { usePathFormatter } from "../../context/path-format"
 import { LocationProvider } from "../../context/location"
+import { secondTicker } from "../../util/ticker"
 
 addDefaultParsers(parsers.parsers)
 
@@ -122,6 +124,8 @@ const sessionBindingCommands = [
   "session.sidebar.toggle",
   "session.toggle.conceal",
   "session.toggle.timestamps",
+  "session.toggle.turn_time",
+  "session.toggle.turn_duration",
   "session.toggle.thinking",
   "session.toggle.actions",
   "session.toggle.scrollbar",
@@ -131,6 +135,10 @@ const sessionBindingCommands = [
   "session.messages_last_user",
   "session.message.next",
   "session.message.previous",
+  "session.block.next",
+  "session.block.previous",
+  "session.landmark.next",
+  "session.landmark.previous",
   "messages.copy",
   "session.copy",
   "session.export",
@@ -151,15 +159,20 @@ const sessionGlobalBindingCommands = [
 
 const sessionGlobalUnfocusedBindingCommands = ["session.first", "session.last"] as const
 
+// "Show/Hide generic tool output" while tui.json's tool_output.collapse decides; lasts until exit.
+const [genericOutputToggled, setGenericOutputToggled] = createSignal<boolean>()
+// Footer toggles over elements tui.json decides, by "element.type"; they last until opencode exits.
+const [footerOverrides, setFooterOverrides] = createSignal<Record<string, boolean>>({})
+
 const context = createContext<{
   width: number
   sessionID: string
   conceal: () => boolean
   thinkingMode: () => ThinkingMode
   showThinking: () => boolean
-  showTimestamps: () => boolean
+  footer: (element: TuiConfig.FooterElement, type: TuiConfig.TimestampType, id: string, partID?: string) => boolean
   showDetails: () => boolean
-  showGenericToolOutput: () => boolean
+  showGenericToolOutput: (tool?: string) => boolean
   diffWrapMode: () => "word" | "none"
   providers: () => ReadonlyMap<string, Provider>
   sync: ReturnType<typeof useSync>
@@ -257,13 +270,19 @@ export function Session() {
   const thinking = useThinkingMode()
   const thinkingMode = thinking.mode
   const showThinking = createMemo(() => true)
-  const [timestamps, setTimestamps] = kv.signal<"hide" | "show">("timestamps", "hide")
   const [showDetails, setShowDetails] = kv.signal("tool_details_visibility", true)
   const [showAssistantMetadata, _setShowAssistantMetadata] = kv.signal("assistant_metadata_visibility", true)
   const [showScrollbar, setShowScrollbar] = kv.signal("scrollbar_visible", false)
   const [diffWrapMode] = kv.signal<"word" | "none">("diff_wrap_mode", "word")
   const [_animationsEnabled, _setAnimationsEnabled] = kv.signal("animations_enabled", true)
-  const [showGenericToolOutput, setShowGenericToolOutput] = kv.signal("generic_tool_output_visibility", false)
+  const [savedGenericToolOutput, setSavedGenericToolOutput] = kv.signal("generic_tool_output_visibility", false)
+  const showGenericToolOutput = (tool?: string) =>
+    TuiConfig.genericToolOutputShown({
+      config: tuiConfig.tool_output,
+      tool,
+      saved: savedGenericToolOutput(),
+      toggled: genericOutputToggled(),
+    })
 
   const wide = createMemo(() => dimensions().width > 120)
   const sidebarVisible = createMemo(() => {
@@ -272,7 +291,49 @@ export function Session() {
     if (sidebar() === "auto" && wide()) return true
     return false
   })
-  const showTimestamps = createMemo(() => timestamps() === "show")
+  // An element set in tui.json (`footer`, the legacy `timestamps` list for time, or legacy `turn_timing`
+  // for turns) decides on every
+  // start and its toggle lasts until exit: kv.json usually already holds a "timestamps" value, persisted
+  // alongside any other kv write, which would mask the config. Unset, the toggles persist in kv.
+  const footerSelections = createMemo(() =>
+    TuiConfig.footerSelections(tuiConfig, {
+      timestamps: kv.get("timestamps", "hide") === "show",
+      turnTime: kv.get("turn_timing_time"),
+      turnDuration: kv.get("turn_timing_duration"),
+    }),
+  )
+  const footerToggled = (element: TuiConfig.FooterElement, type: TuiConfig.TimestampType) =>
+    footerOverrides()[`${element}.${type}`] ?? TuiConfig.footerSelects(footerSelections()[element], type)
+  const toggleFooter = (
+    element: TuiConfig.FooterElement,
+    type: TuiConfig.TimestampType,
+    persist: (show: boolean) => void,
+  ) => {
+    const show = !footerToggled(element, type)
+    if (!TuiConfig.footerConfigured(tuiConfig, element, type)) return persist(show)
+    // Toggling back to what tui.json selects restores it exactly, 'important' included.
+    const configured = TuiConfig.footerSelects(footerSelections()[element], type)
+    setFooterOverrides((overrides) => {
+      const next = { ...overrides, [`${element}.${type}`]: show }
+      if (show === configured) delete next[`${element}.${type}`]
+      return next
+    })
+    if (show !== configured)
+      toast.show({
+        message: `${show ? "Showing" : "Hiding"} ${type === "user" ? "prompt" : "turn"} ${element === "time" ? "times" : "durations"} until opencode exits: tui.json decides them`,
+        variant: "info",
+      })
+  }
+  const landmarks = createMemo(() =>
+    Object.values(footerSelections()).some((selection) => selection.important)
+      ? navigationTargets(messages(), (messageID) => sync.data.part[messageID] ?? [], "landmark")
+      : undefined,
+  )
+  const footer = (element: TuiConfig.FooterElement, type: TuiConfig.TimestampType, id: string, partID?: string) =>
+    footerOverrides()[`${element}.${type}`] ??
+    TuiConfig.footerShows(footerSelections()[element], type, () =>
+      isLandmark(landmarks() ?? new Set(), sync.data.part[id] ?? [], id, partID),
+    )
   const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() ? 42 : 0) - 4)
   const providers = createMemo(() => Model.index(sync.data.provider))
 
@@ -372,50 +433,20 @@ export function Session() {
     })
   })
 
-  // Helper: Find next visible message boundary in direction
-  const findNextVisibleMessage = (direction: "next" | "prev"): string | null => {
-    const children = scroll.getChildren()
-    const messagesList = messages()
-    const scrollTop = scroll.y
-
-    // Get visible messages sorted by position, filtering for valid non-synthetic, non-ignored content
-    const visibleMessages = children
-      .filter((c) => {
-        if (!c.id) return false
-        const message = messagesList.find((m) => m.id === c.id)
-        if (!message) return false
-
-        // Check if message has valid non-synthetic, non-ignored text parts
-        const parts = sync.data.part[message.id]
-        if (!parts || !Array.isArray(parts)) return false
-
-        return parts.some((part) => part && part.type === "text" && !part.synthetic && !part.ignored)
-      })
-      .sort((a, b) => a.y - b.y)
-
-    if (visibleMessages.length === 0) return null
-
-    if (direction === "next") {
-      // Find first message below current position
-      return visibleMessages.find((c) => c.y > scrollTop + 10)?.id ?? null
-    }
-    // Find last message above current position
-    return [...visibleMessages].reverse().find((c) => c.y < scrollTop - 10)?.id ?? null
-  }
-
-  // Helper: Scroll to message in direction or fallback to page scroll
-  const scrollToMessage = (direction: "next" | "prev", dialog: ReturnType<typeof useDialog>) => {
-    const targetID = findNextVisibleMessage(direction)
-
-    if (!targetID) {
-      scroll.scrollBy(direction === "next" ? scroll.height : -scroll.height)
-      dialog.clear()
-      return
-    }
-
-    const child = scroll.getChildren().find((c) => c.id === targetID)
-    if (child) scroll.scrollBy(child.y - scroll.y - 1)
+  // Brings the next or previous block to the top of the viewport, one row
+  // below its edge. Past the last block the view returns to the bottom and
+  // follows new output again; before the first it goes to the top.
+  const scrollToBlock = (scope: NavigationScope, direction: "next" | "prev") => {
     dialog.clear()
+    const targets = navigationTargets(messages(), (messageID) => sync.data.part[messageID] ?? [], scope)
+    const anchor = scroll.y + 1
+    const target = pickNavigationTarget(
+      scroll.getChildren().filter((child) => targets.has(child.id)),
+      anchor,
+      direction,
+    )
+    if (target) return scroll.scrollBy(target.y - anchor)
+    scroll.scrollTo(direction === "next" ? scroll.scrollHeight : 0)
   }
 
   function toBottom() {
@@ -627,7 +658,7 @@ export function Session() {
       },
     },
     {
-      title: showTimestamps() ? "Hide timestamps" : "Show timestamps",
+      title: footerToggled("time", "user") ? "Hide timestamps" : "Show timestamps",
       value: "session.toggle.timestamps",
       category: "Session",
       slash: {
@@ -635,7 +666,31 @@ export function Session() {
         aliases: ["toggle-timestamps"],
       },
       run: () => {
-        setTimestamps((prev) => (prev === "show" ? "hide" : "show"))
+        toggleFooter("time", "user", (show) => kv.set("timestamps", show ? "show" : "hide"))
+        dialog.clear()
+      },
+    },
+    {
+      title: footerToggled("time", "assistant") ? "Hide turn times" : "Show turn times",
+      value: "session.toggle.turn_time",
+      category: "Session",
+      slash: {
+        name: "turn-times",
+      },
+      run: () => {
+        toggleFooter("time", "assistant", (show) => kv.set("turn_timing_time", show))
+        dialog.clear()
+      },
+    },
+    {
+      title: footerToggled("duration", "assistant") ? "Hide turn durations" : "Show turn durations",
+      value: "session.toggle.turn_duration",
+      category: "Session",
+      slash: {
+        name: "turn-durations",
+      },
+      run: () => {
+        toggleFooter("duration", "assistant", (show) => kv.set("turn_timing_duration", show))
         dialog.clear()
       },
     },
@@ -679,8 +734,15 @@ export function Session() {
       value: "session.toggle.generic_tool_output",
       category: "Session",
       run: () => {
-        setShowGenericToolOutput((prev) => !prev)
         dialog.clear()
+        const next = !showGenericToolOutput()
+        if (tuiConfig.tool_output?.collapse?.generic === undefined) return setSavedGenericToolOutput(() => next)
+        setGenericOutputToggled(next ? undefined : false)
+        if (!next)
+          toast.show({
+            message: "Generic tool output hidden until opencode exits: tui.json sets tool_output.collapse.generic",
+            variant: "info",
+          })
       },
     },
     {
@@ -799,14 +861,42 @@ export function Session() {
       value: "session.message.next",
       category: "Session",
       hidden: true,
-      run: () => scrollToMessage("next", dialog),
+      run: () => scrollToBlock("prompt", "next"),
     },
     {
       title: "Previous message",
       value: "session.message.previous",
       category: "Session",
       hidden: true,
-      run: () => scrollToMessage("prev", dialog),
+      run: () => scrollToBlock("prompt", "prev"),
+    },
+    {
+      title: "Next block",
+      value: "session.block.next",
+      category: "Session",
+      hidden: true,
+      run: () => scrollToBlock("block", "next"),
+    },
+    {
+      title: "Previous block",
+      value: "session.block.previous",
+      category: "Session",
+      hidden: true,
+      run: () => scrollToBlock("block", "prev"),
+    },
+    {
+      title: "Next landmark",
+      value: "session.landmark.next",
+      category: "Session",
+      hidden: true,
+      run: () => scrollToBlock("landmark", "next"),
+    },
+    {
+      title: "Previous landmark",
+      value: "session.landmark.previous",
+      category: "Session",
+      hidden: true,
+      run: () => scrollToBlock("landmark", "prev"),
     },
     {
       title: "Copy last assistant message",
@@ -1100,7 +1190,7 @@ export function Session() {
           conceal,
           thinkingMode,
           showThinking,
-          showTimestamps,
+          footer,
           showDetails,
           showGenericToolOutput,
           diffWrapMode,
@@ -1322,7 +1412,9 @@ function UserMessage(props: {
   const queued = createMemo(() => props.pending !== undefined && props.index > props.pending)
   const color = createMemo(() => local.agent.color(props.message.agent))
   const queuedFg = createMemo(() => selectedForeground(theme, color()))
-  const metadataVisible = createMemo(() => queued() || ctx.showTimestamps())
+  const time = createMemo(() => ctx.footer("time", "user", props.message.id))
+  const messageID = createMemo(() => ctx.footer("message_id", "user", props.message.id))
+  const metadataVisible = createMemo(() => queued() || time() || messageID())
 
   const compaction = createMemo(() => props.parts.find((x) => x.type === "compaction"))
 
@@ -1369,20 +1461,29 @@ function UserMessage(props: {
                 </For>
               </box>
             </Show>
-            <Show
-              when={queued()}
-              fallback={
-                <Show when={ctx.showTimestamps()}>
-                  <text fg={theme.textMuted}>
-                    <span style={{ fg: theme.textMuted }}>
-                      {Locale.todayTimeOrDateTime(props.message.time.created)}
-                    </span>
-                  </text>
+            <Show when={metadataVisible()}>
+              <text
+                marginTop={userFooterGap(text(), files().length, time() || messageID()) ? 1 : 0}
+                fg={theme.textMuted}
+              >
+                <Show
+                  when={queued()}
+                  fallback={
+                    <Show when={time()}>
+                      <span style={{ fg: theme.textMuted }}>
+                        {Locale.todayTimeOrDateTime(props.message.time.created, ctx.tui.datetime_format)}
+                      </span>
+                    </Show>
+                  }
+                >
+                  <span style={{ bg: color(), fg: queuedFg(), bold: true }}> QUEUED </span>
                 </Show>
-              }
-            >
-              <text fg={theme.textMuted}>
-                <span style={{ bg: color(), fg: queuedFg(), bold: true }}> QUEUED </span>
+                <Show when={messageID()}>
+                  <span style={{ fg: theme.textMuted }}>
+                    {queued() || time() ? " · " : ""}
+                    {props.message.id}
+                  </span>
+                </Show>
               </text>
             </Show>
           </box>
@@ -1392,7 +1493,11 @@ function UserMessage(props: {
         <box
           marginTop={1}
           border={["top"]}
-          title=" Compaction "
+          title={
+            ctx.footer("time", "compaction", props.message.id)
+              ? ` Compaction · ${Locale.todayTimeOrDateFirst(props.message.time.created, ctx.tui.datetime_format)} `
+              : " Compaction "
+          }
           titleAlignment="center"
           borderColor={theme.borderActive}
         />
@@ -1407,7 +1512,9 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
   const { theme } = useTheme()
   const sync = useSync()
   const messages = createMemo(() => sync.data.message[props.message.sessionID] ?? [])
-  const model = createMemo(() => Model.name(ctx.providers(), props.message.providerID, props.message.modelID))
+  const model = createMemo(() =>
+    Model.label(ctx.providers(), props.message.providerID, props.message.modelID, ctx.tui.model_label),
+  )
 
   const final = createMemo(() => {
     return props.message.finish && !["tool-calls", "unknown"].includes(props.message.finish)
@@ -1419,6 +1526,33 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
     const user = messages().find((x) => x.role === "user" && x.id === props.message.parentID)
     if (!user || !user.time) return 0
     return props.message.time.completed - user.time.created
+  })
+
+  const shows = (element: TuiConfig.FooterElement) => ctx.footer(element, "assistant", props.message.id)
+  // Time, duration and the message ID also give a turn's earlier messages a footer once they finish.
+  const completed = createMemo(() =>
+    (shows("time") || shows("duration") || shows("message_id")) && props.message.time.completed
+      ? props.message.time.completed
+      : undefined,
+  )
+  const details = createMemo(() => {
+    const aborted = props.message.error?.name === "MessageAbortedError"
+    const end = props.message.time.completed
+    return [
+      shows("agent") && { text: Locale.titlecase(props.message.mode), fg: theme.text },
+      shows("model") && { text: model(), fg: theme.textMuted },
+      shows("variant") && props.message.variant && { text: props.message.variant, fg: theme.textMuted },
+      shows("time") && end && { text: Locale.todayTimeOrDateFirst(end, ctx.tui.datetime_format), fg: theme.textMuted },
+      shows("duration") &&
+        end && { text: Locale.duration(Math.max(0, end - props.message.time.created)), fg: theme.textMuted },
+      shows("total") &&
+        duration() && {
+          text: `${Locale.duration(duration())}${shows("duration") ? " total" : ""}`,
+          fg: theme.textMuted,
+        },
+      aborted && { text: "interrupted", fg: theme.textMuted },
+      shows("message_id") && { text: props.message.id, fg: theme.textMuted },
+    ].flatMap((detail) => (detail ? [detail] : []))
   })
 
   const childShortcut = useCommandShortcut("session.child.first")
@@ -1478,10 +1612,18 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
           borderColor={theme.error}
         >
           <text fg={theme.textMuted}>{errorMessage(props.message.error)}</text>
+          <Show when={ctx.footer("time", "error", props.message.id)}>
+            <text fg={theme.textMuted}>
+              {Locale.todayTimeOrDateFirst(
+                props.message.time.completed ?? props.message.time.created,
+                ctx.tui.datetime_format,
+              )}
+            </text>
+          </Show>
         </box>
       </Show>
       <Switch>
-        <Match when={props.last || final() || props.message.error?.name === "MessageAbortedError"}>
+        <Match when={props.last || final() || props.message.error?.name === "MessageAbortedError" || completed()}>
           <box ref={(el: BoxRenderable) => alwaysSeparate.add(el)} paddingLeft={3}>
             <text marginTop={1}>
               <span
@@ -1494,14 +1636,16 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
               >
                 ▣{" "}
               </span>{" "}
-              <span style={{ fg: theme.text }}>{Locale.titlecase(props.message.mode)}</span>
-              <span style={{ fg: theme.textMuted }}> · {model()}</span>
-              <Show when={duration()}>
-                <span style={{ fg: theme.textMuted }}> · {Locale.duration(duration())}</span>
-              </Show>
-              <Show when={props.message.error?.name === "MessageAbortedError"}>
-                <span style={{ fg: theme.textMuted }}> · interrupted</span>
-              </Show>
+              <For each={details()}>
+                {(detail, index) => (
+                  <>
+                    <Show when={index() > 0}>
+                      <span style={{ fg: theme.textMuted }}> · </span>
+                    </Show>
+                    <span style={{ fg: detail.fg }}>{detail.text}</span>
+                  </>
+                )}
+              </For>
             </text>
           </box>
         </Match>
@@ -1549,6 +1693,7 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
   return (
     <Show when={content() || opaque()}>
       <box
+        id={props.part.id}
         ref={(el: BoxRenderable) => alwaysSeparate.add(el)}
         paddingLeft={3}
         marginTop={1}
@@ -1561,7 +1706,16 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
             open={!inMinimal() || expanded()}
             done={isDone()}
             title={summary().title}
-            duration={isDone() ? Locale.duration(duration()) : undefined}
+            time={
+              ctx.footer("time", "reasoning", props.message.id, props.part.id) && props.part.time.end !== undefined
+                ? Locale.todayTimeOrDateFirst(props.part.time.end, ctx.tui.datetime_format)
+                : undefined
+            }
+            duration={
+              isDone() && ctx.footer("duration", "reasoning", props.message.id, props.part.id)
+                ? Locale.duration(duration())
+                : undefined
+            }
             encrypted={opaque()}
           />
         </box>
@@ -1588,6 +1742,7 @@ function ReasoningHeader(props: {
   open: boolean
   done: boolean
   title: string | null
+  time?: string
   duration?: string
   encrypted?: boolean
 }) {
@@ -1597,8 +1752,9 @@ function ReasoningHeader(props: {
       ? RGBA.fromValues(theme.warning.r, theme.warning.g, theme.warning.b, theme.thinkingOpacity)
       : theme.warning
   const completed = () => {
-    if (props.encrypted) return `Thought${props.duration ? ` · ${props.duration}` : ""}`
-    const detail = [props.title, props.duration].filter(Boolean).join(" · ")
+    const timing = [props.time, props.duration].filter(Boolean).join(" · ")
+    if (props.encrypted) return `Thought${timing ? ` · ${timing}` : ""}`
+    const detail = [props.title, timing].filter(Boolean).join(" · ")
     return `${props.toggleable ? (props.open ? "- " : "+ ") : ""}Thought${detail ? `: ${detail}` : ""}`
   }
 
@@ -1623,7 +1779,13 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
   const { theme, syntax } = useTheme()
   return (
     <Show when={props.part.text.trim()}>
-      <box ref={(el: BoxRenderable) => alwaysSeparate.add(el)} paddingLeft={3} marginTop={1} flexShrink={0}>
+      <box
+        id={props.part.id}
+        ref={(el: BoxRenderable) => alwaysSeparate.add(el)}
+        paddingLeft={3}
+        marginTop={1}
+        flexShrink={0}
+      >
         <markdown
           syntaxStyle={syntax()}
           streaming={true}
@@ -1634,6 +1796,9 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
           fg={theme.markdownText}
           bg={theme.background}
         />
+        <Show when={ctx.footer("time", "text", props.message.id, props.part.id) && props.part.time?.end}>
+          {(end) => <text fg={theme.textMuted}>{Locale.todayTimeOrDateFirst(end(), ctx.tui.datetime_format)}</text>}
+        </Show>
       </box>
     </Show>
   )
@@ -1735,9 +1900,15 @@ function GenericTool(props: ToolProps) {
   const ctx = use()
   const output = createMemo(() => props.output?.trim() ?? "")
   const [expanded, setExpanded] = createSignal(false)
-  const maxLines = 3
-  const maxChars = createMemo(() => maxLines * Math.max(20, ctx.width - 6))
-  const collapsed = createMemo(() => collapseToolOutput(output(), maxLines, maxChars()))
+  const collapsed = createMemo(() =>
+    collapseOutput(
+      output(),
+      TuiConfig.toolOutputLimit(ctx.tui.tool_output, props.tool, "generic"),
+      ctx.width,
+      TuiConfig.toolOutputTail(ctx.tui.tool_output, props.tool, "generic"),
+      TuiConfig.toolOutputHead(ctx.tui.tool_output, props.tool, "generic"),
+    ),
+  )
   const limited = createMemo(() => {
     if (expanded() || !collapsed().overflow) return output()
     return collapsed().output
@@ -1745,9 +1916,15 @@ function GenericTool(props: ToolProps) {
 
   return (
     <Show
-      when={props.output && ctx.showGenericToolOutput()}
+      when={props.output && ctx.showGenericToolOutput(props.tool)}
       fallback={
-        <InlineTool icon="⚙" pending="Writing command…" complete={true} part={props.part}>
+        <InlineTool
+          icon="⚙"
+          pending="Writing command…"
+          complete={true}
+          part={props.part}
+          footerBelow={input(props.input).includes("\n")}
+        >
           {props.tool} {input(props.input)}
         </InlineTool>
       }
@@ -1755,14 +1932,14 @@ function GenericTool(props: ToolProps) {
       <BlockTool
         title={`# ${props.tool} ${input(props.input)}`}
         part={props.part}
+        hint={expandHint(collapsed().overflow, expanded())}
         onClick={collapsed().overflow ? () => setExpanded((prev) => !prev) : undefined}
       >
-        <box gap={1}>
-          <text fg={theme.text}>{limited()}</text>
-          <Show when={collapsed().overflow}>
-            <text fg={theme.textMuted}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
-          </Show>
-        </box>
+        <Show when={!collapsed().overflow || expanded() || limited()}>
+          <box gap={1}>
+            <text fg={theme.text}>{limited()}</text>
+          </box>
+        </Show>
       </BlockTool>
     </Show>
   )
@@ -1777,6 +1954,7 @@ function InlineTool(props: {
   failure?: string
   spinner?: boolean
   separate?: boolean
+  footerBelow?: boolean
   children: JSX.Element
   part: ToolPart
   onClick?: () => void
@@ -1805,6 +1983,7 @@ function InlineTool(props: {
   )
 
   const failed = createMemo(() => Boolean(error() && !denied()))
+  const timestamp = createMemo(() => formatToolTimestamp(props.part.state, toolFooter(ctx, props.part)))
   const clickable = createMemo(() => Boolean(props.onClick || failed()))
   const fg = createMemo(() => {
     if (props.color) return props.color
@@ -1817,6 +1996,7 @@ function InlineTool(props: {
 
   return (
     <InlineToolRow
+      id={props.part.id}
       icon={props.icon}
       iconColor={props.iconColor}
       color={fg()}
@@ -1830,6 +2010,9 @@ function InlineTool(props: {
       failure={props.failure}
       spinner={props.spinner}
       separate={props.separate}
+      footerBelow={props.footerBelow}
+      timestamp={timestamp()}
+      timestampColor={theme.textMuted}
       onMouseOver={() => clickable() && setHover(true)}
       onMouseOut={() => setHover(false)}
       onMouseUp={() => {
@@ -1847,6 +2030,7 @@ function InlineTool(props: {
 }
 
 export function InlineToolRow(props: {
+  id?: string
   icon: string
   iconColor?: RGBA
   color?: RGBA
@@ -1860,6 +2044,9 @@ export function InlineToolRow(props: {
   failure?: string
   spinner?: boolean
   separate?: boolean
+  footerBelow?: boolean
+  timestamp?: string
+  timestampColor?: RGBA
   children: JSX.Element
   onMouseOver?: () => void
   onMouseOut?: () => void
@@ -1867,6 +2054,7 @@ export function InlineToolRow(props: {
 }) {
   return (
     <box
+      id={props.id}
       paddingLeft={3}
       onMouseOver={props.onMouseOver}
       onMouseOut={props.onMouseOut}
@@ -1884,6 +2072,13 @@ export function InlineToolRow(props: {
       <Switch>
         <Match when={props.spinner}>
           <Spinner color={props.color} children={props.children} />
+          <Show when={props.timestamp}>
+            <box paddingLeft={INLINE_TOOL_ICON_WIDTH}>
+              <text fg={props.timestampColor}>
+                {props.timestamp}
+              </text>
+            </box>
+          </Show>
         </Match>
         <Match when={true}>
           <Show
@@ -1912,8 +2107,16 @@ export function InlineToolRow(props: {
                 attributes={props.denied ? TextAttributes.STRIKETHROUGH : undefined}
               >
                 {props.failed && !props.complete ? (props.failure ?? props.children) : props.children}
+                <Show when={!props.footerBelow && props.timestamp}>
+                  <span style={{ fg: props.timestampColor }}> · {props.timestamp}</span>
+                </Show>
               </text>
             </box>
+            <Show when={props.footerBelow && props.timestamp}>
+              <box paddingLeft={INLINE_TOOL_ICON_WIDTH}>
+                <text fg={props.timestampColor}>{props.timestamp}</text>
+              </box>
+            </Show>
           </Show>
         </Match>
       </Switch>
@@ -1929,16 +2132,22 @@ export function InlineToolRow(props: {
 function BlockTool(props: {
   title?: string
   children: JSX.Element
+  hint?: string
   onClick?: () => void
   part?: ToolPart
   spinner?: boolean
 }) {
   const { theme } = useTheme()
+  const ctx = use()
   const renderer = useRenderer()
   const [hover, setHover] = createSignal(false)
   const error = createMemo(() => (props.part?.state.status === "error" ? props.part.state.error : undefined))
+  const timestamp = createMemo(() =>
+    props.part ? formatToolTimestamp(props.part.state, toolFooter(ctx, props.part)) : undefined,
+  )
   return (
     <box
+      id={props.part?.id}
       ref={(el: BoxRenderable) => alwaysSeparate.add(el)}
       border={["left"]}
       paddingTop={1}
@@ -1971,8 +2180,20 @@ function BlockTool(props: {
         )}
       </Show>
       {props.children}
+      <Show when={props.hint}>
+        {(hint) => (
+          <text fg={theme.textMuted}>
+            {timestamp() ? `${hint()} · ${timestamp()}` : hint()}
+          </text>
+        )}
+      </Show>
       <Show when={error()}>
         <text fg={theme.error}>{error()}</text>
+      </Show>
+      <Show when={!props.hint && timestamp()}>
+        <text paddingLeft={props.title ? 3 : 0} fg={theme.textMuted}>
+          {timestamp()}
+        </text>
       </Show>
     </box>
   )
@@ -1985,13 +2206,27 @@ function Shell(props: ToolProps) {
   const isRunning = createMemo(() => props.part.state.status === "running")
   const output = createMemo(() => stripAnsi(stringValue(props.metadata.output)?.trim() ?? ""))
   const [expanded, setExpanded] = createSignal(false)
-  const maxLines = 10
-  const maxChars = createMemo(() => maxLines * Math.max(20, ctx.width - 6))
-  const collapsed = createMemo(() => collapseToolOutput(output(), maxLines, maxChars()))
+  const collapsed = createMemo(() =>
+    collapseOutput(
+      output(),
+      TuiConfig.toolOutputLimit(ctx.tui.tool_output, props.tool, "bash"),
+      ctx.width,
+      TuiConfig.toolOutputTail(ctx.tui.tool_output, props.tool, "bash"),
+      TuiConfig.toolOutputHead(ctx.tui.tool_output, props.tool, "bash"),
+    ),
+  )
   const limited = createMemo(() => {
     if (expanded() || !collapsed().overflow) return output()
     return collapsed().output
   })
+  // The command is cut after `tool_input.collapse` rendered rows, apart from the output's own limit;
+  // one click expands both.
+  const command = createMemo(() => stringValue(props.input.command) ?? "")
+  const commandLimit = createMemo(() => TuiConfig.toolInputLimit(ctx.tui.tool_input, props.tool, "bash"))
+  const [commandClipped, setCommandClipped] = createSignal(false)
+  const overflow = createMemo(
+    () => collapsed().overflow || (commandLimit() === 0 ? command().length > 0 : commandClipped()),
+  )
 
   const workdirDisplay = createMemo(() => {
     const workdir = stringValue(props.input.workdir)
@@ -2013,17 +2248,17 @@ function Shell(props: ToolProps) {
         <BlockTool
           title={title()}
           part={props.part}
-          onClick={collapsed().overflow ? () => setExpanded((prev) => !prev) : undefined}
+          hint={expandHint(overflow(), expanded())}
+          onClick={overflow() ? () => setExpanded((prev) => !prev) : undefined}
         >
           <box gap={1}>
-            <Show when={isRunning()} fallback={<text fg={theme.text}>$ {stringValue(props.input.command)}</text>}>
-              <Spinner color={theme.text}>{stringValue(props.input.command)}</Spinner>
-            </Show>
-            <Show when={output()}>
+            <ClippedRows limit={commandLimit()} expanded={expanded()} onClip={setCommandClipped}>
+              <Show when={isRunning()} fallback={<text fg={theme.text}>$ {command()}</text>}>
+                <Spinner color={theme.text}>{command()}</Spinner>
+              </Show>
+            </ClippedRows>
+            <Show when={limited()}>
               <text fg={theme.text}>{limited()}</text>
-            </Show>
-            <Show when={collapsed().overflow}>
-              <text fg={theme.textMuted}>{expanded() ? "Click to collapse" : "Click to expand"}</text>
             </Show>
           </box>
         </BlockTool>
@@ -2043,20 +2278,32 @@ function Write(props: ToolProps) {
   const code = createMemo(() => {
     return stringValue(props.input.content) ?? ""
   })
+  const collapse = useBlockCollapse(
+    () => props.tool,
+    "write",
+    () => code().length > 0,
+  )
 
   return (
     <Switch>
       <Match when={props.metadata.diagnostics !== undefined}>
-        <BlockTool title={"# Wrote " + pathFormatter.format(stringValue(props.input.filePath))} part={props.part}>
-          <line_number fg={theme.textMuted} minWidth={3} paddingRight={1}>
-            <code
-              conceal={false}
-              fg={theme.text}
-              filetype={filetype(stringValue(props.input.filePath))}
-              syntaxStyle={syntax()}
-              content={code()}
-            />
-          </line_number>
+        <BlockTool
+          title={"# Wrote " + pathFormatter.format(stringValue(props.input.filePath))}
+          part={props.part}
+          hint={collapse.hint()}
+          onClick={collapse.onClick()}
+        >
+          <ClippedRows limit={collapse.limit()} expanded={collapse.expanded()} onClip={collapse.setClipped}>
+            <line_number fg={theme.textMuted} minWidth={3} paddingRight={1}>
+              <code
+                conceal={false}
+                fg={theme.text}
+                filetype={filetype(stringValue(props.input.filePath))}
+                syntaxStyle={syntax()}
+                content={code()}
+              />
+            </line_number>
+          </ClippedRows>
           <Diagnostics diagnostics={props.metadata.diagnostics} filePath={stringValue(props.input.filePath) ?? ""} />
         </BlockTool>
       </Match>
@@ -2245,6 +2492,115 @@ function Task(props: ToolProps) {
   )
 }
 
+// The footer elements every tool call takes, whichever renderer draws it.
+function toolFooter(ctx: ReturnType<typeof use>, part: ToolPart) {
+  const shows = (element: TuiConfig.FooterElement) => ctx.footer(element, "tool", part.messageID, part.id)
+  const messageID = TuiConfig.toolFooterShowsMessageID((type) =>
+    type === "tool" ? shows("message_id") : ctx.footer("message_id", "assistant", part.messageID),
+  )
+  const duration = shows("duration")
+  return {
+    time: shows("time"),
+    duration,
+    messageID: messageID ? part.messageID : undefined,
+    format: ctx.tui.datetime_format,
+    now: duration && part.state.status === "running" ? secondTicker.watch() : undefined,
+  }
+}
+
+// A tool's text output cut to `limit` lines and that many lines' worth of characters; undefined never cuts.
+export function collapseOutput(output: string, limit: number | undefined, width: number, tail = false, head = 0) {
+  if (limit === undefined) return { output, overflow: false }
+  const chars = limit * Math.max(20, width - 6)
+  const collapsed = collapseToolOutput(output, limit, chars)
+  if (!tail || limit === 0 || !collapsed.overflow) return collapsed
+  return { output: collapseHeadTail(output, head, limit, chars), overflow: true }
+}
+
+// Collapsing for a tool block drawn by a component (code, diff) rather than as text: shows the
+// first `limit` rows of what it renders, and reports whether anything is hidden.
+function useBlockCollapse(tool: () => string, group: TuiConfig.ToolOutputGroup, content: () => boolean) {
+  const ctx = use()
+  const limit = createMemo(() => TuiConfig.toolOutputLimit(ctx.tui.tool_output, tool(), group))
+  const [expanded, setExpanded] = createSignal(false)
+  const [clipped, setClipped] = createSignal(false)
+  const overflow = () => (limit() === 0 ? content() : clipped())
+  return {
+    limit,
+    expanded,
+    setClipped,
+    hint: () => expandHint(overflow(), expanded()),
+    onClick: () => (overflow() ? () => setExpanded((value) => !value) : undefined),
+  }
+}
+
+export function ClippedRows(props: {
+  limit: number | undefined
+  expanded: boolean
+  onClip: (clipped: boolean) => void
+  children: JSX.Element
+}) {
+  return (
+    <Show when={props.limit !== undefined && !props.expanded} fallback={props.children}>
+      <Show when={props.limit! > 0}>
+        <box maxHeight={props.limit} overflow="hidden" flexShrink={0}>
+          <box
+            flexShrink={0}
+            onSizeChange={function () {
+              props.onClip(this.height > props.limit!)
+            }}
+          >
+            {props.children}
+          </box>
+        </box>
+      </Show>
+    </Show>
+  )
+}
+
+function expandHint(overflow: boolean, expanded: boolean) {
+  if (!overflow) return
+  return expanded ? "Click to collapse" : "Click to expand"
+}
+
+// A running call shows when it started and a whole-second stopwatch up to `now`; a finished one
+// when it ended and how long it ran.
+export function formatToolTimestamp(
+  state: ToolPart["state"],
+  show: {
+    time: boolean
+    duration: boolean
+    messageID?: string
+    format?: Locale.DateTimeFormat
+    now?: number
+  } = {
+    time: true,
+    duration: true,
+  },
+) {
+  if (state.status === "pending") return
+  const running = state.status === "running"
+  const details = running
+    ? [
+        show.time && Locale.todayTimeOrDateFirst(state.time.start, show.format),
+        show.duration && show.now !== undefined && Locale.stopwatch(show.now - state.time.start),
+        show.messageID,
+      ]
+    : [
+        show.time && Locale.todayTimeOrDateFirst(state.time.end, show.format),
+        show.duration && Locale.duration(Math.max(0, state.time.end - state.time.start), true),
+        show.messageID,
+      ]
+  const shown = details.flatMap((detail) => (detail ? [detail] : []))
+  return shown.length ? shown.join(" · ") : undefined
+}
+
+// A prompt's footer (time, message ID) sits one blank line below its text, unless the file chips
+// already pad it or the text itself ends in a blank line.
+export function userFooterGap(text: string, files: number, footer: boolean) {
+  return footer && files === 0 && !/\n[ \t]*$/.test(text)
+}
+
 export function formatSubagentToolcalls(count: number) {
   return `${count} toolcall${count === 1 ? "" : "s"}`
 }
@@ -2337,32 +2693,44 @@ function Edit(props: ToolProps) {
   const ft = createMemo(() => filetype(stringValue(props.input.filePath)))
 
   const diffContent = createMemo(() => stringValue(props.metadata.diff) ?? "")
+  const collapse = useBlockCollapse(
+    () => props.tool,
+    "edit",
+    () => diffContent().length > 0,
+  )
 
   return (
     <Switch>
       <Match when={stringValue(props.metadata.diff) !== undefined}>
-        <BlockTool title={"← Edit " + pathFormatter.format(stringValue(props.input.filePath))} part={props.part}>
-          <box paddingLeft={1}>
-            <diff
-              diff={diffContent()}
-              view={view()}
-              filetype={ft()}
-              syntaxStyle={syntax()}
-              showLineNumbers={true}
-              width="100%"
-              wrapMode={ctx.diffWrapMode()}
-              fg={theme.text}
-              addedBg={theme.diffAddedBg}
-              removedBg={theme.diffRemovedBg}
-              contextBg={theme.diffContextBg}
-              addedSignColor={theme.diffHighlightAdded}
-              removedSignColor={theme.diffHighlightRemoved}
-              lineNumberFg={theme.diffLineNumber}
-              lineNumberBg={theme.diffContextBg}
-              addedLineNumberBg={theme.diffAddedLineNumberBg}
-              removedLineNumberBg={theme.diffRemovedLineNumberBg}
-            />
-          </box>
+        <BlockTool
+          title={"← Edit " + pathFormatter.format(stringValue(props.input.filePath))}
+          part={props.part}
+          hint={collapse.hint()}
+          onClick={collapse.onClick()}
+        >
+          <ClippedRows limit={collapse.limit()} expanded={collapse.expanded()} onClip={collapse.setClipped}>
+            <box paddingLeft={1}>
+              <diff
+                diff={diffContent()}
+                view={view()}
+                filetype={ft()}
+                syntaxStyle={syntax()}
+                showLineNumbers={true}
+                width="100%"
+                wrapMode={ctx.diffWrapMode()}
+                fg={theme.text}
+                addedBg={theme.diffAddedBg}
+                removedBg={theme.diffRemovedBg}
+                contextBg={theme.diffContextBg}
+                addedSignColor={theme.diffHighlightAdded}
+                removedSignColor={theme.diffHighlightRemoved}
+                lineNumberFg={theme.diffLineNumber}
+                lineNumberBg={theme.diffContextBg}
+                addedLineNumberBg={theme.diffAddedLineNumberBg}
+                removedLineNumberBg={theme.diffRemovedLineNumberBg}
+              />
+            </box>
+          </ClippedRows>
           <Diagnostics diagnostics={props.metadata.diagnostics} filePath={stringValue(props.input.filePath) ?? ""} />
         </BlockTool>
       </Match>
@@ -2425,21 +2793,31 @@ function ApplyPatch(props: ToolProps) {
     <Switch>
       <Match when={files().length > 0}>
         <For each={files()}>
-          {(file) => (
-            <BlockTool title={title(file)} part={props.part}>
-              <Show
-                when={file.type !== "delete"}
-                fallback={
-                  <text fg={theme.diffRemoved}>
-                    -{file.deletions} line{file.deletions !== 1 ? "s" : ""}
-                  </text>
-                }
-              >
-                <Diff diff={file.patch} filePath={file.filePath} />
-                <Diagnostics diagnostics={props.metadata.diagnostics} filePath={file.movePath ?? file.filePath} />
-              </Show>
-            </BlockTool>
-          )}
+          {(file) => {
+            // A deleted file is one line already, so only the other files collapse.
+            const collapse = useBlockCollapse(
+              () => props.tool,
+              "apply_patch",
+              () => file.type !== "delete" && file.patch.length > 0,
+            )
+            return (
+              <BlockTool title={title(file)} part={props.part} hint={collapse.hint()} onClick={collapse.onClick()}>
+                <Show
+                  when={file.type !== "delete"}
+                  fallback={
+                    <text fg={theme.diffRemoved}>
+                      -{file.deletions} line{file.deletions !== 1 ? "s" : ""}
+                    </text>
+                  }
+                >
+                  <ClippedRows limit={collapse.limit()} expanded={collapse.expanded()} onClip={collapse.setClipped}>
+                    <Diff diff={file.patch} filePath={file.filePath} />
+                  </ClippedRows>
+                  <Diagnostics diagnostics={props.metadata.diagnostics} filePath={file.movePath ?? file.filePath} />
+                </Show>
+              </BlockTool>
+            )
+          }}
         </For>
       </Match>
       <Match when={true}>

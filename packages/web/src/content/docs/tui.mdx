@@ -379,6 +379,11 @@ You can customize TUI behavior through `tui.json` (or `tui.jsonc`).
     "enabled": false
   },
   "diff_style": "auto",
+  "model_label": "name",
+  "footer": {
+    "time": "user,tool",
+    "duration": "important"
+  },
   "cursor": {
     "style": "block",
     "blinking": true
@@ -409,11 +414,202 @@ This is separate from `opencode.json`, which configures server/runtime behavior.
 - `scroll_acceleration.enabled` - Enable macOS-style scroll acceleration for smooth, natural scrolling. When enabled, scroll speed increases with rapid scrolling gestures and stays precise for slower movements. **This setting takes precedence over `scroll_speed` and overrides it when enabled.**
 - `scroll_speed` - Controls how fast the TUI scrolls when using scroll commands (minimum: `0.001`, supports decimal values). Defaults to `3`. **Note: This is ignored if `scroll_acceleration.enabled` is set to `true`.**
 - `diff_style` - Controls diff rendering. `"auto"` adapts to terminal width, `"stacked"` always shows a single-column layout.
+- `footer` - Chooses which details message footers and other transcript entries show: agent, model, variant, time, duration, total and message ID. See [Footer](#footer).
+- `datetime_format` - How times and dates are written. See [Date and time format](#date-and-time-format).
+- `tool_output.collapse` - How much of a tool's output shows before **Click to expand**. See [Tool output](#tool-output).
+- `model_label` - How message footers and the prompt name a model: `"name"` (default) shows its display name, such as `Claude Sonnet 4.5`; `"id"` shows `providerID/modelID`, such as `anthropic/claude-sonnet-4-5`.
+- `turn_timing`, `footer_variant`, `timestamps` - Older settings that `footer` replaces; they keep working. See [Older footer settings](#older-footer-settings).
 - `cursor` - Controls the terminal cursor in TUI input fields. `style` defaults to `"block"`, can be `"underline"`, `"line"`, or `"default"`; `blinking` defaults to `true`. When `style` is `"default"`, the terminal default cursor is restored, so `blinking` has no effect.
 - `mouse` - Enable or disable mouse capture in the TUI (default: `true`). When disabled, the terminal's native mouse selection/scrolling behavior is preserved.
 - `attention` - Configures TUI desktop notifications and sounds. Disabled by default.
 
 Use `OPENCODE_TUI_CONFIG` to load a custom TUI config path.
+
+### Footer
+
+`footer` chooses which details the session transcript shows, one key per detail. Every key takes the same value:
+
+- `"all"` or `true` - everywhere the detail applies.
+- `"none"` or `false` - nowhere.
+- `"important"` - only on landmarks, the entries <kbd>ctrl+shift+up</kbd> and <kbd>ctrl+shift+down</kbd> stop on: your prompts, the final response of each turn, and question, todo and subagent tool calls. An assistant footer counts when its message holds one of those.
+- A list of entry types, as a comma-separated string such as `"user,tool"` or an array such as `["user", "tool"]`. It may include `"important"`: `"user,important"`.
+
+| Key          | Shows                                                                                    | Applies to                                                                  | Default            |
+| ------------ | ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- | ------------------ |
+| `agent`      | The agent that ran the turn                                                              | `assistant`                                                                 | `"all"`            |
+| `model`      | The model the turn ran on, named per `model_label`                                       | `assistant`                                                                 | `"all"`            |
+| `variant`    | The variant the turn ran with, such as its reasoning effort (`high`), after the model    | `assistant`                                                                 | `"none"`           |
+| `time`       | When the entry happened                                                                  | `user`, `assistant`, `text`, `reasoning`, `tool`, `error`, `compaction`     | see below          |
+| `duration`   | How long the entry took                                                                  | `assistant`, `reasoning`, `tool`                                            | `"reasoning"`      |
+| `total`      | Time from your prompt to the end of the turn                                             | `assistant`, final message of a turn only                                   | `"all"`            |
+| `message_id` | The message ID (`msg_...`), which you can select with the mouse to copy                  | `user`, `assistant`, `tool`                                                 | `"none"`           |
+
+| Type         | Where                                                         |
+| ------------ | ------------------------------------------------------------- |
+| `user`       | Below the prompt                                              |
+| `assistant`  | In the turn footer                                            |
+| `text`       | Below an assistant text block, when it finished               |
+| `reasoning`  | In the thinking block header                                  |
+| `tool`       | Every tool call, plugin and MCP tools included                |
+| `error`      | In the error box of a failed turn                             |
+| `compaction` | In the compaction divider, when compaction started            |
+
+A type a key does not apply to has no effect, so `"all"` and `"important"` select only the entries listed under _Applies to_. A turn's last message always has a footer; `time`, `duration` and `message_id` also give its earlier messages, such as tool-call steps, a footer once they finish. A time from today shows the time of day; an older one shows the date, then the time, written per [`datetime_format`](#date-and-time-format). On a tool call, `time`, `duration` and `message_id` follow the call on one line, `· 9:16 PM · 1.5s · msg_...`; a call drawn as a block, or one whose arguments span lines, puts them on its own last line so a long command or prompt cannot push them out of sight. A block that ends in a hint keeps them on that line: `Click to expand · 9:16 PM · 1.5s`.
+
+Each message ID appears once. A tool call belongs to its assistant message, so the tool call shows the message's ID only when the message's own footer does not: with `"message_id": "tool"`, or when `"important"` leaves that step's footer out. With `"all"`, the ID is in the assistant footer and the tool calls show only their time and duration.
+
+While a tool call runs, its footer shows when it started and a stopwatch that ticks every second in whole seconds: `16:25:29 · 37s`, `16:25:29 · 2m 5s`. Once it finishes, the footer shows when it finished and how long it ran, with tenths of a second up to 11 minutes: `4.8s`, `2m 5.3s`, then `11m 0s`. One clock drives every running call, and it stops when none is running.
+
+A prompt's footer sits one blank line below the prompt's text, unless the text already ends with a blank line or file chips sit between them.
+
+```json title="tui.json"
+{
+  "footer": {
+    "variant": "all",
+    "time": "important",
+    "duration": "assistant,tool",
+    "message_id": ["user", "assistant"]
+  }
+}
+```
+
+The `/timestamps`, `/turn-times` and `/turn-durations` commands flip prompt times, turn times and turn durations. For a key set in `footer` (or the older `timestamps` and `turn_timing`), the change lasts until the TUI exits and tui.json decides again on the next start. For a key left unset, the change is remembered.
+
+### Date and time format
+
+`datetime_format` sets how times and dates are written in message footers, entry timestamps, the compaction divider and the timeline and stash dialogs. It has a `date` and a `time` pattern. Entries from today show only the time; older ones show the date, then the time. A part left unset keeps your locale's format (`2:20 PM`, `10/7/2026`), so with neither set nothing changes.
+
+```json title="tui.json"
+{
+  "datetime_format": {
+    "date": "YYYY-MM-DD",
+    "time": "HH:mm:ss"
+  }
+}
+```
+
+This shows `14:20:07` for today and `2026-10-07 14:20:07` for an older entry. At midnight, entries already on screen switch to the date-and-time form on their own; a closed laptop or a clock change is caught within the hour.
+
+| Part   | Token  | Writes                    |
+| ------ | ------ | ------------------------- |
+| `date` | `YYYY` | Year, `2026`              |
+| `date` | `YY`   | Two-digit year, `26`      |
+| `date` | `MM`   | Month, `01`-`12`          |
+| `date` | `M`    | Month, `1`-`12`           |
+| `date` | `DD`   | Day, `01`-`31`            |
+| `date` | `D`    | Day, `1`-`31`             |
+| `time` | `HH`   | Hour, `00`-`23`           |
+| `time` | `H`    | Hour, `0`-`23`            |
+| `time` | `hh`   | Hour, `01`-`12`           |
+| `time` | `h`    | Hour, `1`-`12`            |
+| `time` | `mm`   | Minute, `00`-`59`         |
+| `time` | `m`    | Minute, `0`-`59`          |
+| `time` | `ss`   | Second, `00`-`59`         |
+| `time` | `s`    | Second, `0`-`59`          |
+| `time` | `A`    | `AM` or `PM`              |
+| `time` | `a`    | `am` or `pm`              |
+
+Uppercase `MM` is always the month and lowercase `mm` the minute. Each part accepts only its own tokens, so a time written as `HH:MM:SS` is rejected rather than shown with the month in place of the minute. Any other letter must be put in brackets: `h[h]mm` writes `2h20`. Digits, spaces and punctuation are written as they are.
+
+### Tool output
+
+`tool_output.collapse` sets how many lines of a tool block's output show before **Click to expand**. Clicking the block expands it to the full output, and clicking again collapses it.
+
+```json title="tui.json"
+{
+  "tool_output": {
+    "collapse": {
+      "bash": 0,
+      "generic": 10,
+      "edit": 20,
+      "vibeterm_prompt_session": 0
+    }
+  }
+}
+```
+
+| Key           | Covers                                                          | Default   |
+| ------------- | --------------------------------------------------------------- | --------- |
+| `bash`        | Shell commands and their output                                 | `10`      |
+| `generic`     | Plugin, MCP and other tools without a view of their own         | `3`       |
+| `write`       | The content of a written file                                   | `"never"` |
+| `edit`        | The diff of an edited file                                      | `"never"` |
+| `apply_patch` | The diff of each patched file                                   | `"never"` |
+| a tool name   | That tool only, overriding its group: `"vibeterm_prompt_session"` | its group |
+
+Each value is a number of lines or `"never"`:
+
+- A number shows that many lines, then `…` and the hint. A long line counts as more than one: the preview is capped at that many lines' worth of characters.
+- `0` hides the output until clicked, even with `tail` and `head` (below) set. The block is just its title or command, a blank line, and the hint, with the [footer](#footer) on the hint line: `Click to expand · 16:13:02 · 1.5s`.
+- `"never"` always shows all of it, with no hint.
+
+`write`, `edit` and `apply_patch` count rendered rows of the file or diff, so a side-by-side diff collapses to that many rows. A deleted file in a patch is a single line and never collapses. Generic tools show their output only while **Show generic tool output** is on, unless `generic` or the tool's own name is set here: then the output shows, collapsed to that limit, on every start. With `generic` set, **Hide generic tool output** lasts until OpenCode exits.
+
+`tool_output.tail` shows the **last** lines of collapsed output instead of the first, under `(N earlier lines)`, per group (`bash`, `generic`) or tool name. A tool name overrides its group. It is off by default.
+
+```json title="tui.json"
+{
+  "tool_output": {
+    "collapse": { "bash": 10 },
+    "tail": { "bash": true, "browser": false }
+  }
+}
+```
+
+With `bash` at 10, a 40-line output collapses to `(31 earlier lines)` and lines 32 to 40.
+
+`tool_output.head` keeps the **first** lines as well: with `tail` on, that many first lines stay above a `(N more lines)` marker, and the last lines fill the rest of the `collapse` limit. It is set per group (`bash`, `generic`) or tool name, a tool name overrides its group, and it is `0` by default. To see the first 2 and the last 2 lines of bash output:
+
+```json title="tui.json"
+{
+  "tool_output": {
+    "collapse": { "bash": 5 },
+    "tail": { "bash": true },
+    "head": { "bash": 2 }
+  }
+}
+```
+
+A 40-line output then collapses to:
+
+```
+output line 1
+output line 2
+(36 more lines)
+output line 39
+output line 40
+```
+
+- The `collapse` limit counts every row, the marker included: `5` is 2 first lines, the marker and 2 last lines.
+- `head` is at most the limit minus 2, so at least one last line shows. It does nothing while `tail` is off.
+- `collapse` at `0` keeps the output hidden until clicked whatever `tail` and `head` say. For a head and a tail, set the limit to `head` + 1 + the number of last lines.
+
+### Tool input
+
+`tool_input.collapse` sets how many rendered rows of a tool call's input show before **Click to expand**. It takes the same values as `tool_output.collapse`, per group or tool name:
+
+```json title="tui.json"
+{
+  "tool_input": {
+    "collapse": { "bash": 5 }
+  }
+}
+```
+
+| Key         | Covers                               | Default   |
+| ----------- | ------------------------------------ | --------- |
+| `bash`      | The shell command, heredocs included | `"never"` |
+| a tool name | That tool only, overriding its group | its group |
+
+The command keeps its wrapping and is cut after that many rows; `0` hides it until clicked. The command and its output keep separate limits: `tool_output.collapse` still decides the output's lines. One click expands both, and the hint and [footer](#footer) are the same as for output.
+
+### Older footer settings
+
+These keep working when the matching `footer` key is unset, and `footer` wins when both are set:
+
+- `turn_timing.time: true` is `footer.time: "assistant"`, and `turn_timing.duration: true` adds `assistant` to `footer.duration`. Set, they decide turns on every start and the `/turn-times` and `/turn-durations` toggles last until OpenCode exits.
+- `footer_variant: true` is `footer.variant: "all"`.
+- `timestamps` takes the type list `footer.time` takes, without `"important"`, and overrides `turn_timing.time`. Its `tool` type also adds tool call durations, as `footer.duration: "tool"` does.
 
 ### Attention
 

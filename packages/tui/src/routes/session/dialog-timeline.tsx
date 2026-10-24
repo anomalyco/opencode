@@ -3,6 +3,7 @@ import { useSync } from "../../context/sync"
 import { DialogSelect, type DialogSelectOption } from "../../ui/dialog-select"
 import type { TextPart } from "@opencode-ai/sdk/v2"
 import { Locale } from "../../util/locale"
+import { useTuiConfig } from "../../config"
 import { DialogMessage } from "./dialog-message"
 import { useDialog } from "../../ui/dialog"
 import type { PromptInfo } from "../../component/prompt/history"
@@ -14,6 +15,7 @@ export function DialogTimeline(props: {
 }) {
   const sync = useSync()
   const dialog = useDialog()
+  const tuiConfig = useTuiConfig()
 
   onMount(() => {
     dialog.setSize("large")
@@ -31,7 +33,7 @@ export function DialogTimeline(props: {
       result.push({
         title: part.text.replace(/\n/g, " "),
         value: message.id,
-        footer: Locale.time(message.time.created),
+        footer: Locale.time(message.time.created, tuiConfig.datetime_format),
         onSelect: (dialog) => {
           dialog.replace(() => (
             <DialogMessage messageID={message.id} sessionID={props.sessionID} setPrompt={props.setPrompt} />

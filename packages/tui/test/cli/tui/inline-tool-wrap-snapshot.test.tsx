@@ -7,6 +7,10 @@ import {
   formatSubagentRetry,
   formatSubagentTitle,
   formatSubagentToolcalls,
+  ClippedRows,
+  collapseOutput,
+  formatToolTimestamp,
+  userFooterGap,
   InlineToolRow,
   parseApplyPatchFiles,
   parseDiagnostics,
@@ -16,6 +20,7 @@ import {
   alwaysSeparate,
   toolDisplay,
 } from "../../../src/routes/session"
+import { Locale } from "../../../src/util/locale"
 
 let testSetup: Awaited<ReturnType<typeof testRender>> | undefined
 
@@ -238,6 +243,167 @@ describe("TUI inline tool wrapping", () => {
     const frame = await renderFrame(() => <FailedCompleteToolFixture />, { width: 72, height: 3 })
     expect(frame).toContain("Read src/index.ts")
     expect(frame).not.toContain("Read failed")
+  })
+
+  test("appends the tool timestamp after the row text", async () => {
+    const frame = await renderFrame(
+      () => (
+        <InlineToolRow icon="→" complete={true} pending="" timestamp="1:07 PM · 1.2s">
+          Read src/index.ts
+        </InlineToolRow>
+      ),
+      { width: 72, height: 3 },
+    )
+    expect(frame).toContain("→ Read src/index.ts · 1:07 PM · 1.2s")
+  })
+
+  test("puts the tool footer on its own line when the row spans lines", async () => {
+    const frame = await renderFrame(
+      () => (
+        <InlineToolRow icon="⚙" complete={true} pending="" footerBelow={true} timestamp="1:07 PM · 1.2s">
+          {"vtps [prompt=first line\nsecond line]"}
+        </InlineToolRow>
+      ),
+      { width: 72, height: 4 },
+    )
+    const lines = frame.split("\n").map((line) => line.trim())
+    expect(lines).toContain("second line]")
+    expect(lines).toContain("1:07 PM · 1.2s")
+  })
+
+  test("tool output collapses to its limit, hides it all at 0, and never cuts without one", () => {
+    const output = ["one", "two", "three", "four"].join("\n")
+    expect(collapseOutput(output, undefined, 80)).toEqual({ output, overflow: false })
+    expect(collapseOutput(output, 2, 80)).toEqual({ output: "one\ntwo\n…", overflow: true })
+    expect(collapseOutput(output, 4, 80)).toEqual({ output, overflow: false })
+    expect(collapseOutput(output, 0, 80)).toEqual({ output: "", overflow: true })
+    expect(collapseOutput("", 0, 80)).toEqual({ output: "", overflow: false })
+  })
+
+  test("a clipped block shows its first rows and reports that more are hidden", async () => {
+    const clips: boolean[] = []
+    const rows = () => (
+      <box>
+        <For each={["row 1", "row 2", "row 3", "row 4"]}>{(row) => <text>{row}</text>}</For>
+      </box>
+    )
+    const frame = await renderFrame(
+      () => (
+        <box>
+          <ClippedRows limit={2} expanded={false} onClip={(clipped) => clips.push(clipped)}>
+            {rows()}
+          </ClippedRows>
+          <text>after</text>
+        </box>
+      ),
+      { width: 20, height: 6 },
+    )
+    expect(frame.split("\n")).toEqual(["row 1", "row 2", "after"])
+    expect(clips.at(-1)).toBe(true)
+    const open = await renderFrame(
+      () => (
+        <box>
+          <ClippedRows limit={2} expanded={true} onClip={() => {}}>
+            {rows()}
+          </ClippedRows>
+          <text>after</text>
+        </box>
+      ),
+      { width: 20, height: 6 },
+    )
+    expect(open.split("\n")).toEqual(["row 1", "row 2", "row 3", "row 4", "after"])
+    const hidden = await renderFrame(
+      () => (
+        <box>
+          <ClippedRows limit={0} expanded={false} onClip={() => {}}>
+            {rows()}
+          </ClippedRows>
+          <text>after</text>
+        </box>
+      ),
+      { width: 20, height: 6 },
+    )
+    expect(hidden).toBe("after")
+  })
+
+  for (const width of [40, 80, 160]) {
+    test(`a command clipped to 2 rows shows the first 2 rows it wraps to at ${width} columns`, async () => {
+      const command =
+        "$ cp ./tmp/op13-keyguard-check.png /home/nowaker/projekty/modern/worldmodern/.vibeterm/tmp/./tmp/op13-keyguard-check.png /home/nowaker/projekty/modern/worldmodern/.vibeterm/tmp/opencode/op13-keyguard-check.png 2>&1 && ls -la /home/nowaker/projekty/modern/worldmodern/.vibeterm/tmp/opencode /home/nowaker/projekty/modern/worldmodern/.vibeterm/tmp/opencode/op13-keyguard-check.png"
+      const rows = (frame: string) =>
+        frame
+          .split("\n")
+          .map((line) => line.trimEnd())
+          .filter(Boolean)
+      const full = rows(await renderFrame(() => <text>{command}</text>, { width, height: 20 }))
+      expect(full.length).toBeGreaterThan(2)
+      let clipped = false
+      const cut = rows(
+        await renderFrame(
+          () => (
+            <box>
+              <ClippedRows limit={2} expanded={false} onClip={(value) => (clipped = value)}>
+                <text>{command}</text>
+              </ClippedRows>
+              <text>after</text>
+            </box>
+          ),
+          { width, height: 20 },
+        ),
+      )
+      expect(cut).toEqual([...full.slice(0, 2), "after"])
+      expect(clipped).toBe(true)
+    })
+  }
+
+  test("formats a running tool call's start time and whole-second stopwatch", () => {
+    const start = new Date()
+    start.setHours(16, 25, 29, 0)
+    const state = { status: "running" as const, input: {}, time: { start: start.getTime() } }
+    const time = Locale.todayTimeOrDateFirst(start.getTime())
+    expect(formatToolTimestamp(state, { time: true, duration: true, now: start.getTime() + 37_600 })).toBe(
+      `${time} · 37s`,
+    )
+    expect(formatToolTimestamp(state, { time: true, duration: true, now: start.getTime() + 125_000 })).toBe(
+      `${time} · 2m 5s`,
+    )
+    expect(formatToolTimestamp(state, { time: false, duration: false })).toBeUndefined()
+    expect(formatToolTimestamp({ status: "pending", input: {}, raw: "" })).toBeUndefined()
+  })
+
+  test("a prompt's footer sits one blank line below its text", () => {
+    expect(userFooterGap("hello", 0, true)).toBe(true)
+    expect(userFooterGap("hello\n", 0, true)).toBe(false)
+    expect(userFooterGap("hello\n  ", 0, true)).toBe(false)
+    expect(userFooterGap("hello", 1, true)).toBe(false)
+    expect(userFooterGap("hello", 0, false)).toBe(false)
+  })
+
+  test("formats a finished tool call's end time and duration", () => {
+    const end = new Date()
+    end.setHours(13, 7, 0, 0)
+    const start = end.getTime() - 1234
+    const input = {}
+    const time = Locale.todayTimeOrDateFirst(end.getTime())
+    expect(formatToolTimestamp({ status: "pending", input, raw: "" })).toBeUndefined()
+    expect(formatToolTimestamp({ status: "running", input, time: { start } })).toBe(Locale.todayTimeOrDateFirst(start))
+    expect(
+      formatToolTimestamp({
+        status: "completed",
+        input,
+        output: "",
+        title: "",
+        metadata: {},
+        time: { start, end: end.getTime() },
+      }),
+    ).toBe(`${time} · 1.2s`)
+    expect(formatToolTimestamp({ status: "error", input, error: "boom", time: { start, end: end.getTime() } })).toBe(
+      `${time} · 1.2s`,
+    )
+    const completed = { status: "completed" as const, input, output: "", title: "", metadata: {}, time: { start, end: end.getTime() } }
+    expect(formatToolTimestamp(completed, { time: false, duration: true, messageID: "msg_1" })).toBe("1.2s · msg_1")
+    expect(formatToolTimestamp(completed, { time: false, duration: false, messageID: "msg_1" })).toBe("msg_1")
+    expect(formatToolTimestamp(completed, { time: false, duration: false })).toBeUndefined()
   })
 
   test("filters malformed nested tool wire data", () => {
