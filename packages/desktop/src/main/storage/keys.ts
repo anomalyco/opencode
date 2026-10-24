@@ -2,6 +2,8 @@ export const SETTINGS_STORE = "opencode.settings"
 
 export const FIRST_LAUNCH_ONBOARDING_COMPLETE_KEY = "firstLaunchOnboardingComplete"
 
+export const DEFAULT_PROJECT_DIRECTORY_KEY = "defaultProjectDirectory"
+
 export const PINCH_ZOOM_ENABLED_KEY = "pinchZoomEnabled"
 
 export const BACKGROUND_COLOR_KEY = "backgroundColor"
