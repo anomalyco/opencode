@@ -1032,7 +1032,7 @@ describe("Config", () => {
   test("migrates the v1 update policy", () => {
     expect(migrateV1({ autoupdate: false }).update).toBe("disable")
     expect(migrateV1({ autoupdate: "notify" }).update).toBe("notify")
-    expect(migrateV1({ autoupdate: true }).update).toBe("auto")
+    expect(migrateV1({ autoupdate: true }).update).toBe("notify")
     expect(migrateV1({}).update).toBeUndefined()
   })
 

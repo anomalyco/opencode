@@ -86,14 +86,8 @@ export function normalize(input: unknown): Result {
     : undefined
   if (legacyMedia !== undefined) encoded.media = legacyMedia
   if (legacySnapshots !== undefined) encoded.snapshots = legacySnapshots
-  const migratedUpdate =
-    legacyUpdate === false
-      ? "disable"
-      : legacyUpdate === "notify"
-        ? "notify"
-        : legacyUpdate === true
-          ? "auto"
-          : undefined
+  // V1 never installed updates automatically; `autoupdate: true` only enabled update notices.
+  const migratedUpdate = legacyUpdate === undefined ? undefined : legacyUpdate === false ? "disable" : "notify"
   const update = prefer(migratedUpdate, nativeUpdate, ["update"], diagnostics)
   if (update !== undefined) encoded.update = update
   if (legacyShare !== undefined) encoded.share = legacyShare
