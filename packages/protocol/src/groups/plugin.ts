@@ -10,6 +10,7 @@ export const PluginGroup = HttpApiGroup.make("server.plugin")
     HttpApiEndpoint.get("plugin.list", "/api/plugin", {
       query: LocationQuery,
       success: Location.response(Schema.Array(Plugin.Info)),
+      error: ServiceUnavailableError,
     })
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
@@ -25,7 +26,7 @@ export const PluginGroup = HttpApiGroup.make("server.plugin")
       query: LocationQuery,
       payload: Schema.Struct({ target: Schema.String.pipe(Schema.optional) }),
       success: Location.response(Schema.Array(Plugin.Info)),
-      error: InvalidRequestError,
+      error: [InvalidRequestError, ServiceUnavailableError],
     })
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
