@@ -2,8 +2,11 @@ import { RGBA, TextAttributes } from "@opentui/core"
 import { useTerminalDimensions } from "@opentui/solid"
 import { createMemo, Show } from "solid-js"
 import { useTheme } from "../../context/theme"
+import { onClick } from "../../ui/click"
 import { Locale } from "../../util/locale"
 import { stringWidth } from "../../util/string-width"
+
+export type PromptMetadataTarget = "agent" | "model" | "variant"
 
 export function PromptMetadataRow(props: {
   mode: "normal" | "shell"
@@ -17,9 +20,15 @@ export function PromptMetadataRow(props: {
   agentAlpha: number
   modelAlpha: number
   variantAlpha: number
+  onPick?: (target: PromptMetadataTarget) => void
 }) {
   const theme = useTheme()
   const dimensions = useTerminalDimensions()
+  const agentPick = onClick(() => {
+    if (props.mode === "normal") props.onPick?.("agent")
+  })
+  const modelPick = onClick(() => props.onPick?.("model"))
+  const variantPick = onClick(() => props.onPick?.("variant"))
   const layout = createMemo(() => {
     if (props.mode === "shell") return { agent: props.agent ?? "Shell", model: "" }
     return promptMetadataLayout({
@@ -40,7 +49,11 @@ export function PromptMetadataRow(props: {
         fallback={<box height={1} />}
       >
         <Show when={layout().agent}>
-          {(agent) => <text fg={fade(props.highlight, props.agentAlpha)}>{agent()}</text>}
+          {(agent) => (
+            <text fg={fade(props.highlight, props.agentAlpha)} {...agentPick}>
+              {agent()}
+            </text>
+          )}
         </Show>
         <Show when={props.mode === "normal" && layout().auto}>
           <text fg={fade(theme.text.muted, props.agentAlpha)}>auto</text>
@@ -56,12 +69,13 @@ export function PromptMetadataRow(props: {
               wrapMode="none"
               truncate
               fg={fade(props.muted ? theme.text.muted : theme.text.base, props.modelAlpha)}
+              {...modelPick}
             >
               {layout().model}
             </text>
             <Show when={layout().provider}>
               {(provider) => (
-                <text flexShrink={0} fg={fade(theme.text.muted, props.modelAlpha)}>
+                <text flexShrink={0} fg={fade(theme.text.muted, props.modelAlpha)} {...modelPick}>
                   {provider()}
                 </text>
               )}
@@ -73,6 +87,7 @@ export function PromptMetadataRow(props: {
                   <text
                     fg={fade(theme.text.feedback.warning.base, props.variantAlpha)}
                     attributes={TextAttributes.BOLD}
+                    {...variantPick}
                   >
                     {variant()}
                   </text>

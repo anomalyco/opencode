@@ -1850,6 +1850,7 @@ export function Prompt(props: PromptProps) {
                 agentAlpha={agentMetaAlpha()}
                 modelAlpha={modelMetaAlpha()}
                 variantAlpha={variantMetaAlpha()}
+                onPick={(target) => keymap.dispatch(`${target}.list`)}
               />
             </box>
           </box>
