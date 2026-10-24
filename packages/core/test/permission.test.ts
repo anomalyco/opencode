@@ -577,9 +577,9 @@ describe("shell scanner permission impact", () => {
       approved: ["git status *", "Write-Output *"],
       exact: ["git status", "Write-Output done"],
       denied: "git\tstatus",
-      savedEffect: ["allow", "ask"],
-      exactEffect: ["allow", "ask"],
-      deniedEffect: ["allow", "deny"],
+      savedEffect: ["ask", "ask"],
+      exactEffect: ["ask", "ask"],
+      deniedEffect: ["deny", "deny"],
     },
     {
       name: "PowerShell equals-joined argument",
@@ -721,9 +721,12 @@ describe("shell scanner permission impact", () => {
       name: "PowerShell tab prefix",
       shell: "pwsh",
       command: "git\tstatus; Write-Output done",
-      grants: [["Write-Output *"], ["git\tstatus *", "Write-Output *"]],
+      grants: [
+        ["git\tstatus *", "Write-Output *"],
+        ["git\tstatus *", "Write-Output *"],
+      ],
       repeat: [
-        ["allow", "ask"],
+        ["allow", "allow"],
         ["allow", "allow"],
       ],
       next: "git status",
