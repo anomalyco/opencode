@@ -96,6 +96,34 @@ The `providers` object is keyed by the provider ID used in model references, suc
 | `body` | JSON fields merged into request bodies. |
 | `models` | Models to add or override, keyed by the OpenCode model ID. |
 
+### Discovered models
+
+OpenCode reads `GET {baseURL}/models` from OpenAI-compatible providers, so `models` can be omitted. This covers gateways
+such as LiteLLM:
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "litellm": {
+      "name": "LiteLLM",
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "http://127.0.0.1:4000/v1",
+      },
+    },
+  },
+}
+```
+
+- Discovery authenticates with the saved key, an `env` variable, or `settings.apiKey`, and sends the provider `headers`.
+- Discovery only adds missing models. Models listed under `models` keep their configuration.
+- Models that report a non-chat `mode`, such as embedding models, are skipped. Entries without a `mode` are treated as
+  chat models; hide one by listing it under `models` with `"disabled": true`.
+- The list refreshes every five minutes and after config or credential changes, and survives temporary outages.
+- Discovered models use the same defaults as a model listed without settings. Override them under `models`.
+- Ollama, LM Studio, and vLLM keep their own [discovery](/models#local).
+- Disable discovery with `"plugins": ["-opencode.provider.openai-compatible"]`.
+
 ## Endpoint
 
 Override `settings.baseURL` to send a catalog provider through a proxy or compatible endpoint. Its existing package,
