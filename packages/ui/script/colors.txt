@@ -229,6 +229,7 @@
 --button-ghost-hover2: var(--smoke-light-alpha-3);
 
 --v2-background-bg-base: var(--v2-grey-50);
+--v2-background-bg-input: var(--v2-background-bg-base);
 --v2-background-bg-deep: var(--v2-grey-100);
 --v2-background-bg-layer-01: var(--v2-grey-100);
 --v2-background-bg-layer-02: var(--v2-grey-200);

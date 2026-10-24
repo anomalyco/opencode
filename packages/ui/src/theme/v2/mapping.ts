@@ -33,6 +33,7 @@ const darkAgentTokens: Record<string, V2ColorValue> = {
 
 const light: Record<string, V2ColorValue> = {
   "v2-background-bg-base": ref("v2-grey-100"),
+  "v2-background-bg-input": ref("v2-background-bg-base"),
   "v2-background-bg-deep": ref("v2-grey-200"),
   "v2-background-bg-layer-01": ref("v2-grey-300"),
   "v2-background-bg-layer-02": ref("v2-grey-400"),
@@ -101,6 +102,7 @@ const light: Record<string, V2ColorValue> = {
 
 const dark: Record<string, V2ColorValue> = {
   "v2-background-bg-base": ref("v2-grey-1000"),
+  "v2-background-bg-input": ref("v2-background-bg-base"),
   "v2-background-bg-deep": ref("v2-grey-1100"),
   "v2-background-bg-layer-01": ref("v2-grey-800"),
   "v2-background-bg-layer-02": ref("v2-grey-600"),
