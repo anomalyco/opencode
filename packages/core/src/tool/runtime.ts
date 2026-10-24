@@ -185,7 +185,12 @@ const toJsonSchema = (schema: Schema.Top): JsonSchema.JsonSchema => {
       ? document.schema
       : { ...document.schema, $defs: document.definitions },
   )
-  return dropDefinitionsIfResolved(inlineLocalReferences(normalized)) as JsonSchema.JsonSchema
+  // llama.cpp's JSON-schema-to-grammar converter (before ggml-org/llama.cpp#26939)
+  // rejects patterns that do not start with "^" and end with "$" and fails the
+  // whole request with HTTP 400. Effect's isStartingWith check emits "^ses"
+  // style patterns, so anchor the trailing end before sending. The accepted set
+  // is unchanged for the single-line values these fields hold.
+  return anchorPatterns(dropDefinitionsIfResolved(inlineLocalReferences(normalized))) as JsonSchema.JsonSchema
 }
 
 const flattenAllOf = (value: unknown): unknown => {
@@ -197,6 +202,53 @@ const flattenAllOf = (value: unknown): unknown => {
     return schema
   const { allOf, ...rest } = schema
   return flattenAllOf({ ...Object.assign({}, ...allOf), ...rest })
+}
+
+const anchorPatterns = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(anchorPatterns)
+  if (!isRecord(value)) return value
+  return Object.fromEntries(
+    Object.entries(value).map(([key, item]) => [
+      key,
+      key === "pattern" && typeof item === "string" ? anchorPattern(item) : anchorPatterns(item),
+    ]),
+  )
+}
+
+const anchorPattern = (pattern: string) => {
+  if (pattern === "^" || !startsWithAnchor(pattern) || endsWithAnchor(pattern)) return pattern
+  const body = pattern.slice(1)
+  // A top-level "|" only anchors the first branch ("^a|b" also matches any value
+  // containing "b"), so appending ".*$" would narrow the accepted set. Leave it.
+  if (topLevelAlternation(body)) return pattern
+  return `^${body}.*$`
+}
+
+const startsWithAnchor = (pattern: string) => pattern.startsWith("^") && isUnescaped(pattern, 0)
+
+const endsWithAnchor = (pattern: string) => pattern.endsWith("$") && isUnescaped(pattern, pattern.length - 1)
+
+const isUnescaped = (value: string, index: number) => {
+  let backslashes = 0
+  for (let i = index - 1; i >= 0 && value[i] === "\\"; i--) backslashes++
+  return backslashes % 2 === 0
+}
+
+const topLevelAlternation = (pattern: string) => {
+  let inClass = false
+  let depth = 0
+  for (let i = 0; i < pattern.length; i++) {
+    const char = pattern[i]
+    if (char === "\\") i++
+    else if (char === "[") inClass = true
+    else if (char === "]") inClass = false
+    else if (!inClass) {
+      if (char === "(") depth++
+      else if (char === ")") depth--
+      else if (char === "|" && depth === 0) return true
+    }
+  }
+  return false
 }
 
 const canFlattenAllOf = (allOf: ReadonlyArray<Record<string, unknown>>, parent: Record<string, unknown>) => {
