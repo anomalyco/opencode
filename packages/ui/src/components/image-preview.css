@@ -58,6 +58,26 @@
         object-fit: contain;
         border-radius: var(--radius-md);
       }
+
+      &:has([data-slot="image-preview-footer"]) [data-slot="image-preview-image"] {
+        max-height: calc(90vh - 140px);
+      }
+
+      [data-slot="image-preview-footer"] {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 0 12px 12px;
+      }
+
+      [data-slot="image-preview-counter"] {
+        min-width: 44px;
+        text-align: center;
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+        opacity: 0.65;
+      }
     }
   }
 }

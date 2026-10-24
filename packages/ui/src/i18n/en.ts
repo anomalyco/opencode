@@ -181,6 +181,9 @@ const source = {
   "ui.textField.copied": "Copied",
 
   "ui.imagePreview.alt": "Image preview",
+  "ui.imagePreview.previous": "Previous image",
+  "ui.imagePreview.next": "Next image",
+  "ui.imagePreview.counter": "{{current}} of {{total}}",
   "ui.scrollView.ariaLabel": "scrollable content",
 
   "ui.tool.read": "Read",

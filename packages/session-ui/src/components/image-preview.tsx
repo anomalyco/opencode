@@ -6,18 +6,35 @@ export function createImagePreview() {
   const dialog = useDialog()
   const i18n = useI18n()
 
-  const open = (event: MouseEvent | KeyboardEvent) => {
-    if (!(event.currentTarget instanceof HTMLImageElement)) return
-    const src = event.currentTarget.currentSrc || event.currentTarget.getAttribute("src")
-
-    if (!src) return
-    const alt = event.currentTarget.alt || i18n.t("ui.imagePreview.alt")
-    event.preventDefault()
-    event.stopPropagation()
-    dialog.show(() => <ImagePreview src={src} alt={alt} />)
-  }
-
   return (root: HTMLElement) => {
+    const open = (event: MouseEvent | KeyboardEvent) => {
+      if (!(event.currentTarget instanceof HTMLImageElement)) return
+
+      const clicked = event.currentTarget
+
+      const items = Array.from(root.querySelectorAll<HTMLImageElement>("img:not([data-markdown-favicon])")).flatMap(
+        (image) => {
+          const src = image.currentSrc || image.getAttribute("src")
+
+          if (!src) return []
+
+          return [{ image, src, alt: image.alt || i18n.t("ui.imagePreview.alt") }]
+        },
+      )
+
+      if (!items.length) return
+
+      const initial = items.findIndex((item) => item.image === clicked)
+      event.preventDefault()
+      event.stopPropagation()
+      dialog.show(() => (
+        <ImagePreview
+          images={items.map(({ src, alt }) => ({ src, alt }))}
+          initial={Math.max(0, initial)}
+        />
+      ))
+    }
+
     root.querySelectorAll<HTMLImageElement>("img:not([data-markdown-favicon])").forEach((image) => {
       image.setAttribute("role", "button")
       image.setAttribute("aria-haspopup", "dialog")
@@ -26,6 +43,7 @@ export function createImagePreview() {
       image.onclick = open
       image.onkeydown = (event) => {
         if (event.key !== "Enter" && event.key !== " ") return
+
         open(event)
       }
     })
