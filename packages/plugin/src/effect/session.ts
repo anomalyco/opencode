@@ -136,6 +136,16 @@ export interface SessionRetry {
   decision: SessionRetryDecision
 }
 
+/**
+ * Runs when a Session finishes model work and has no pending input, just before it goes idle.
+ * It does not run after interruption, failure, or control-only work such as a manual compaction.
+ * Input admitted by the hook, such as a synthetic message, runs in the same execution instead
+ * of the Session going idle.
+ */
+export interface SessionIdle {
+  readonly sessionID: Session.ID
+}
+
 export interface SessionHooks {
   readonly prompt: SessionPrompt
   readonly context: SessionContext
@@ -149,6 +159,7 @@ export interface SessionHooks {
   readonly "experimental.ws.send": SessionWebSocketSend
   readonly "experimental.ws.receive": SessionWebSocketReceive
   readonly retry: SessionRetry
+  readonly idle: SessionIdle
 }
 
 export type SessionDomain = Pick<
