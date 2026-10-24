@@ -48,6 +48,10 @@ const GENERATION_KEYS = new Set(Object.keys(GenerationOptions.fields))
 const OUTPUT_TOKEN_FALLBACK = 32_000
 // No reply needs more, however much the model allows.
 const OUTPUT_TOKEN_MAX = 256_000
+// A title never needs more; without a bound a local thinking model can reason in circles
+// for minutes on the background title request while the user waits (#54401). Sized to leave
+// room for a small thinking budget, so budget-aware providers don't reject the request.
+const TITLE_OUTPUT_MAX = 4_096
 // Prompt text is estimated at about 4 characters per token, which can run low on dense text such as code.
 const ESTIMATE_ERROR = 0.15
 // Never ask for less; only reachable with automatic compaction off, since it keeps the window from filling this far.
@@ -241,8 +245,9 @@ export const layer = Layer.effect(
       const given = new Map(
         tools.definitions.map((t) => [{ description: t.description, input: { ...t.inputSchema } }, t] as const),
       )
-      // Hooks see the default output limit and may change or remove it. Titles and generate keep the provider default,
-      // because their reasoning is hard to budget.
+      // Hooks see the default output limit and may change or remove it. Titles get a small
+      // bound so background thinking-model runs cannot outpace the main request; generate
+      // keeps the provider default, because its reasoning is hard to budget.
       const shaped = yield* shape(
         {
           sessionID: session.id,
@@ -252,7 +257,9 @@ export const layer = Layer.effect(
           options:
             kind === "primary" || kind === "compaction"
               ? { maxTokens: outputLimit(model.limit, input.inputTokens) }
-              : {},
+              : kind === "title"
+                ? { maxTokens: Math.min(outputLimit(model.limit, input.inputTokens), TITLE_OUTPUT_MAX) }
+                : {},
         },
         Object.fromEntries(Array.from(given, ([d, t]) => [t.name, d])),
       )
