@@ -242,6 +242,7 @@ const layer = Layer.effect(
                   Effect.map((match) => ({
                     ...match.data,
                     path: { text: normalizePath(match.data.path.text) },
+                    lines: { text: match.data.lines.text.replace(/\r?\n$/, "") },
                     submatches: match.data.submatches.slice(0, MAX_SUBMATCHES),
                   })),
                   Effect.mapError((cause) => failure("Invalid ripgrep match output", cause)),
