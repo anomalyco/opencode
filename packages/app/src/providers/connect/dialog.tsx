@@ -52,7 +52,7 @@ import {
 import { ConsoleAuthorization } from "./console"
 import { DialogChatGPTPlanWelcome } from "./chatgpt-welcome"
 import { authServerName, RemoteAuthNotice } from "./remote"
-import { providerAccounts, type ProviderAccount } from "@/settings/providers/accounts"
+import { connectPickerIntegrations, providerAccounts, type ProviderAccount } from "@/settings/providers/accounts"
 import { AccountNameInput } from "@/settings/providers/account-name"
 import { useProviderAccountActions } from "@/settings/providers/account-actions"
 import { IconButton } from "@opencode/ui/icon-button"
@@ -237,18 +237,27 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
     filter: "",
   })
 
-  const featured = ["opencode-go", "opencode", "anthropic", "openai", "google", "openrouter", "vercel"]
+  const featured = ["opencode", "opencode-go", "anthropic", "openai", "google", "openrouter", "vercel"]
   const custom = () => ({ id: CUSTOM_ID, name: language.t("dialog.provider.custom.label") })
 
   const all = createMemo(() => {
     language.locale()
     const query = store.filter.trim().toLowerCase()
 
-    const values = [custom(), ...integrations.list()]
+    const values = [
+      custom(),
+      ...connectPickerIntegrations(integrations.list()).map((provider) =>
+        provider.id === "opencode" ? { ...provider, name: language.t("dialog.provider.opencode.name") } : provider,
+      ),
+    ]
 
     if (!query) return values
 
-    return values.filter((provider) => `${provider.id} ${provider.name}`.toLowerCase().includes(query))
+    return values.filter((provider) =>
+      `${provider.id} ${provider.name} ${provider.id === "opencode" ? "go zen console" : ""}`
+        .toLowerCase()
+        .includes(query),
+    )
   })
 
   const popular = createMemo(() =>
@@ -363,11 +372,7 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
                         </Show>
                         <Show when={CONSOLE_PROVIDERS.has(provider.id) && accountCount(provider) === 0}>
                           <span class="min-w-0 truncate font-[440] text-v2-text-text-muted">
-                            {language.t(
-                              provider.id === "opencode"
-                                ? "dialog.provider.opencode.tagline"
-                                : "dialog.provider.opencodeGo.tagline",
-                            )}
+                            {language.t("dialog.provider.opencodeAll.tagline")}
                           </span>
                           <span class="flex h-4 shrink-0 items-center rounded-xs border-[0.5px] border-v2-border-border-base bg-v2-background-bg-layer-03 px-1 text-[11px] font-[530] leading-none tracking-[0.05px] text-v2-text-text-muted">
                             {language.t("dialog.provider.tag.recommended")}
@@ -450,6 +455,8 @@ function ProviderConnection(props: {
     switching?: string
     activating?: string
     renaming?: string
+    /** The OpenCode row stores a Go API key under `opencode-go`. */
+    keyProvider?: string
   }>({
     adding: false,
     direct: false,
@@ -473,11 +480,14 @@ function ProviderConnection(props: {
 
   const showAccounts = () => !!props.accounts && !state.adding && accounts().length > 0
 
+  // Only a key attempt uses the picked key provider, so going back to sign in never reaches Go's providers.
+  const keyProvider = () => (controller.currentMethod()?.type === "key" ? state.keyProvider : undefined)
+
   const controller = createProviderConnectionController({
     provider: () => integrationID,
     // A Go service-account key still belongs to the `opencode-go` integration (zen/go/v1),
     // exactly as before; only the sign-in is shared with the Console.
-    keyProvider: () => props.provider,
+    keyProvider: () => keyProvider() ?? props.provider,
     directory,
     manual: () => isConsole || (!!props.accounts && accounts().length > 0),
     prepare: isConsole ? prepareConsoleCatalog : undefined,
@@ -534,7 +544,10 @@ function ProviderConnection(props: {
 
   const connectionProviders = createMemo(() =>
     (data.location.provider.list(location()) ?? []).filter(
-      (provider) => provider.id === props.provider || provider.integrationID === integrationID,
+      (provider) =>
+        provider.id === props.provider ||
+        provider.integrationID === integrationID ||
+        (keyProvider() !== undefined && provider.integrationID === keyProvider()),
     ),
   )
 
@@ -619,10 +632,12 @@ function ProviderConnection(props: {
   const provider = createMemo(() => ({
     id: props.provider,
     name:
-      integrations.list().find((item) => item.id === props.provider)?.name ??
-      providers.all().get(props.provider)?.name ??
-      controller.integration()?.name ??
-      props.provider,
+      props.provider === "opencode"
+        ? language.t("dialog.provider.opencode.name")
+        : (integrations.list().find((item) => item.id === props.provider)?.name ??
+          providers.all().get(props.provider)?.name ??
+          controller.integration()?.name ??
+          props.provider),
   }))
 
   const methodLabel = (value?: { type?: string; label?: string }) => {
@@ -1040,7 +1055,9 @@ function ProviderConnection(props: {
         </p>
         <form onSubmit={handleSubmit} class="flex flex-col items-start gap-5 self-stretch">
           <label class="flex w-full flex-col gap-2 font-[530] leading-4 text-v2-text-text-base">
-            {language.t("provider.connect.apiKey.label", { provider: provider().name })}
+            {language.t("provider.connect.apiKey.label", {
+              provider: props.provider !== "opencode" ? provider().name : keyProvider() ? "Go" : "Zen",
+            })}
             <TextInput
               ref={apiKey}
               class="!w-full"
@@ -1320,14 +1337,27 @@ function ProviderConnection(props: {
         <Show when={keyIndex() !== -1}>
           <div data-component="console-service-account" class="flex h-7 items-center gap-1 text-[13px]">
             <span class="text-v2-text-text-faint">{language.t("provider.connect.console.serviceAccount")}</span>
-            <Button
-              variant="ghost-muted"
-              data-action="provider-connect-api-key"
-              disabled={consoleStarting()}
-              onClick={() => void controller.auth.select(keyIndex())}
-            >
-              {language.t("provider.connect.console.useApiKey")}
-            </Button>
+            <For each={props.provider === "opencode" ? [undefined, "opencode-go"] : [undefined]}>
+              {(keyProvider) => (
+                <Button
+                  variant="ghost-muted"
+                  data-action="provider-connect-api-key"
+                  disabled={consoleStarting()}
+                  onClick={() => {
+                    setState("keyProvider", keyProvider)
+                    void controller.auth.select(keyIndex())
+                  }}
+                >
+                  {language.t(
+                    props.provider !== "opencode"
+                      ? "provider.connect.console.useApiKey"
+                      : keyProvider
+                        ? "provider.connect.opencode.goKey"
+                        : "provider.connect.opencode.zenKey",
+                  )}
+                </Button>
+              )}
+            </For>
           </div>
         </Show>
       </div>
@@ -1544,9 +1574,6 @@ function ProviderConnection(props: {
                   }
                 >
                   {language.t("provider.connect.title.anthropicProMax")}
-                </Match>
-                <Match when={props.provider === "opencode"}>
-                  {language.t("provider.connect.title", { provider: language.t("provider.connect.opencode.name") })}
                 </Match>
                 <Match when={true}>{language.t("provider.connect.title", { provider: provider().name })}</Match>
               </Switch>

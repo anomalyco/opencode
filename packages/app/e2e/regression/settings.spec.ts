@@ -799,8 +799,18 @@ const consoleIntegrations = [
 ]
 
 for (const row of [
-  { provider: "OpenCode Console", connect: "Connect OpenCode Console", signIn: "Connecting to OpenCode Console" },
-  { provider: "OpenCode Go", connect: "Connect OpenCode Go", signIn: "Connecting to OpenCode Go" },
+  {
+    provider: "OpenCode Console",
+    connect: "Connect OpenCode",
+    signIn: "Connecting to OpenCode",
+    keys: ["Zen API key", "Go API key"],
+  },
+  {
+    provider: "OpenCode Go",
+    connect: "Connect OpenCode Go",
+    signIn: "Connecting to OpenCode Go",
+    keys: ["Use API key"],
+  },
 ]) {
   test(`providers: ${row.provider} signs in from the Console intro`, async ({ page, context }) => {
     const url = "https://auth.example.test/device?user_code=ABCD-EFGH"
@@ -820,9 +830,9 @@ for (const row of [
     const intro = page.getByRole("dialog", { name: row.connect, exact: true })
     const container = page.locator('[data-slot="dialog-container"]')
     await expect(
-      intro.getByText("Sign in with your OpenCode Console account to use the available models."),
+      intro.getByText("Sign in with your OpenCode account to use your Go subscription or Console workspace."),
     ).toBeVisible()
-    await expect(intro.getByRole("button", { name: "Use API key", exact: true })).toBeVisible()
+    for (const key of row.keys) await expect(intro.getByRole("button", { name: key, exact: true })).toBeVisible()
     expect((await container.boundingBox())?.height).toBe(512)
 
     const popup = page.waitForEvent("popup")
@@ -836,10 +846,124 @@ for (const row of [
     const signIn = page.getByRole("dialog", { name: row.signIn, exact: true })
     await expect(signIn.getByRole("group", { name: "Device code: ABCD-EFGH", exact: true })).toBeVisible()
     await expect(signIn.getByRole("button", { name: "Copy sign-in link", exact: true })).toBeVisible()
-    await expect(signIn.getByRole("button", { name: "Use API key", exact: true })).toHaveCount(0)
+    for (const key of row.keys) await expect(signIn.getByRole("button", { name: key, exact: true })).toHaveCount(0)
     await expect.poll(async () => (await container.boundingBox())?.height).toBeLessThan(512)
   })
 }
+
+// The OpenCode row stores a Zen key under `opencode` and a Go key under `opencode-go`; sign-in stays with `opencode`.
+// Before connecting, only the keyless OpenCode catalog exists, so the connection counts as the first one (any other
+// provider with models would count as an existing connection). Connecting adds the Go, integration-less and Console
+// workspace providers in the same refresh, so the "Connected to" step must pick only the ones for this connection.
+function openCodeCatalog(state: { connected: boolean }) {
+  const model = (id: string, name: string) => ({
+    [id]: { id, name, cost: { input: 0, output: 0 }, limit: { context: 200_000 } },
+  })
+
+  return () => ({
+    all: [
+      { id: "opencode", integrationID: "opencode", name: "OpenCode", models: model("zen-model", "Zen Model") },
+      ...(state.connected
+        ? [
+            {
+              id: "opencode-go",
+              integrationID: "opencode-go",
+              name: "OpenCode Go",
+              models: model("glm-5-go", "GLM-5 Go"),
+            },
+            { id: "local", name: "Local", models: model("local-model", "Local Model") },
+            {
+              id: "workspace",
+              integrationID: "opencode",
+              name: "Workspace",
+              models: model("workspace-model", "Workspace Model"),
+            },
+          ]
+        : []),
+    ],
+    connected: [],
+  })
+}
+
+for (const row of [
+  { key: "Zen API key", integrationID: "opencode", models: ["Zen Model"], hidden: ["Local Model", "GLM-5 Go"] },
+  { key: "Go API key", integrationID: "opencode-go", models: ["GLM-5 Go"], hidden: ["Local Model"] },
+]) {
+  test(`providers: the OpenCode row stores a ${row.key} under ${row.integrationID}`, async ({ page }) => {
+    const state = { connected: false }
+    const keys: Array<{ integrationID: string; body: unknown }> = []
+    const { settings } = await open(page, {
+      integrations: consoleIntegrations,
+      provider: openCodeCatalog(state),
+      onConnectKey: (input) => {
+        keys.push(input)
+        state.connected = true
+      },
+    })
+
+    await settings.getByRole("tab", { name: "Providers", exact: true }).click()
+    await settings
+      .locator(".settings-provider-row", { hasText: "OpenCode Console" })
+      .getByRole("button", { name: "Connect", exact: true })
+      .click()
+    const dialog = page.getByRole("dialog")
+    await dialog.getByRole("button", { name: row.key, exact: true }).click()
+    await dialog.getByPlaceholder("API key").fill("sk-test")
+    await dialog.getByRole("button", { name: "Continue", exact: true }).click()
+
+    await expect.poll(() => keys).toEqual([{ integrationID: row.integrationID, body: { key: "sk-test" } }])
+    const connected = page.getByRole("dialog", { name: /^Connected to / })
+    for (const name of row.models) await expect(connected.getByRole("radio", { name, exact: true })).toBeVisible()
+    for (const name of row.hidden) await expect(connected.getByRole("radio", { name, exact: true })).toHaveCount(0)
+  })
+}
+
+test("providers: going back from the Go key to sign in connects only the Console workspace", async ({
+  page,
+  context,
+}) => {
+  const url = "https://auth.example.test/device?user_code=ABCD-EFGH"
+  const state = { connected: false }
+  const keys: string[] = []
+  const oauth: string[] = []
+  await context.route("https://auth.example.test/**", (route) => route.fulfill({ body: "Sign in" }))
+  const { settings } = await open(page, {
+    integrations: consoleIntegrations,
+    provider: openCodeCatalog(state),
+    onConnectKey: (input) => keys.push(input.integrationID),
+    onIntegrationOAuth: (input) => {
+      oauth.push(input.integrationID)
+
+      return { url }
+    },
+    onIntegrationOAuthStatus: () => {
+      state.connected = true
+
+      return "complete"
+    },
+  })
+
+  await settings.getByRole("tab", { name: "Providers", exact: true }).click()
+  await settings
+    .locator(".settings-provider-row", { hasText: "OpenCode Console" })
+    .getByRole("button", { name: "Connect", exact: true })
+    .click()
+  const dialog = page.getByRole("dialog")
+  await dialog.getByRole("button", { name: "Go API key", exact: true }).click()
+  await expect(dialog.getByPlaceholder("API key")).toBeVisible()
+  await dialog.getByRole("button", { name: "Navigate back", exact: true }).click()
+
+  const popup = page.waitForEvent("popup")
+  await dialog.getByRole("button", { name: "Continue in the browser", exact: true }).click()
+  await expect(await popup).toHaveURL(url)
+
+  const connected = page.getByRole("dialog", { name: /^Connected to / })
+  await expect(connected.getByRole("radio", { name: "Workspace Model", exact: true })).toBeVisible()
+  await expect(connected.getByRole("radio", { name: "GLM-5 Go", exact: true })).toHaveCount(0)
+  await expect(connected.getByRole("radio", { name: "Local Model", exact: true })).toHaveCount(0)
+  expect(oauth).toEqual(["opencode"])
+  expect(keys).toEqual([])
+})
 
 test("providers: the connect dialog lists connected providers and manages their accounts", async ({ page }) => {
   const accounts = [
