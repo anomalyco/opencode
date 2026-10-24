@@ -901,6 +901,32 @@ test("event.subscribe accepts a fragmented SSE event below the size limit", asyn
   await expect(client.event.subscribe()[Symbol.asyncIterator]().next()).resolves.toEqual({ done: false, value: event })
 })
 
+test("event.subscribe accepts sub-limit SSE events whose combined size exceeds the limit", async () => {
+  const events = ["a", "b"].map((text) => ({
+    id: `evt_${text}`,
+    type: "test.large",
+    data: { output: text.repeat(8 * 1024 * 1024) },
+  }))
+  const encoded = new TextEncoder().encode(events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join(""))
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async () =>
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(encoded)
+            controller.close()
+          },
+        }),
+        { headers: { "content-type": "text/event-stream" } },
+      ),
+  })
+
+  const iterator = client.event.subscribe()[Symbol.asyncIterator]()
+  await expect(iterator.next()).resolves.toEqual({ done: false, value: events[0] })
+  await expect(iterator.next()).resolves.toEqual({ done: false, value: events[1] })
+})
+
 test("event.subscribe rejects an SSE event above the size limit", async () => {
   const client = OpenCode.make({
     baseUrl: "http://localhost:3000",
