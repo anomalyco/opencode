@@ -3,7 +3,8 @@ import { type HomeProjectSelection, useLayout } from "@/shell/state/layout"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { useTabs } from "@/shell/tabs/tabs"
 import { toggleHomeProjectSelection } from "@/shell/layout/helpers"
-import { createEffect, createMemo, startTransition } from "solid-js"
+import { createEffect, createMemo, startTransition, untrack } from "solid-js"
+import { useSearchParams } from "@solidjs/router"
 import type { SessionInfo } from "@opencode/client/promise"
 import { pathKey } from "@/workspaces/path-key"
 import { addProjects } from "./projects/add"
@@ -13,6 +14,7 @@ export function createHomeController() {
   const global = useGlobal()
   const servers = useServers()
   const tabs = useTabs()
+  const [search, setSearch] = useSearchParams<{ folder?: string }>()
   const selection = layout.home.selection
 
   const focusedServer = createMemo<ServerConnection.Any | undefined>(
@@ -69,6 +71,31 @@ export function createHomeController() {
     )
       return
     setSelection({ server: current.server })
+  })
+  createEffect(() => {
+    // `/?folder=<directory>` opens that directory like launching opencode in it, as VS Code web's `?folder=` does.
+    // Wait for the persisted projects and tabs, or their hydration would overwrite the added project and draft.
+    // The page's own server is provided first, so the link opens there rather than on the last focused server.
+    const folder = search.folder
+    const conn = servers.list[0]
+
+    if (!folder || !conn || !servers.hydrated() || !tabs.ready()) return
+    untrack(() => {
+      setSearch({ folder: undefined }, { replace: true })
+      const ctx = global.ensureServerCtx(conn)
+      void ctx.sdk.api.location
+        .get({ location: { directory: folder } })
+        .then(() => {
+          const directory =
+            ctx.projects.list().find((project) => pathKey(project.worktree) === pathKey(folder))?.worktree ??
+            pathKey(folder)
+
+          addProjects(ctx, [directory])
+          setSelection({ server: ServerConnection.key(conn), directory })
+          openProjectNewSession(conn, directory)
+        })
+        .catch(() => undefined)
+    })
   })
 
   function setSelection(next: HomeProjectSelection) {

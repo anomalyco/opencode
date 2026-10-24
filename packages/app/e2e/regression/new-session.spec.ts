@@ -1,8 +1,8 @@
 import { expect, test, type Locator, type Page } from "@playwright/test"
 import type { OpenCodeEvent, WorktreeDirectory } from "@opencode/client/promise"
 import { draftHref, expectPath, provider, sessionHref } from "../utils/app"
-import type { MockAnswer } from "../utils/mock-server"
-import { openDraft, openSession, openWorktreeDraft, type WorkspaceInput } from "../utils/workspace"
+import { mockMissingLocation, type MockAnswer } from "../utils/mock-server"
+import { mockWorkspace, openDraft, openSession, openWorktreeDraft, type WorkspaceInput } from "../utils/workspace"
 
 const directory = "C:/OpenCode/WorkspacePending"
 
@@ -404,6 +404,43 @@ test("executes a selected slash command after creating its worktree", async ({ p
   await expect(submit(page)).toBeEnabled()
   expect(mock.creates).toEqual([expect.objectContaining({ id: pending.sessionID, location: { directory: workspace } })])
   expect(mock.prompts).toEqual([])
+})
+
+test("a ?folder= link opens a draft in that folder, and new sessions from Home stay there", async ({ page }) => {
+  const other = "C:/OpenCode/FolderOther"
+  const missing = "C:/OpenCode/FolderMissing"
+  const creates: unknown[] = []
+  const projects = page.locator('[data-component="home-project-row"]')
+
+  const workspace = await mockWorkspace(page, {
+    name: "FolderParam",
+    sessions: [],
+    onSessionCreate: (body) => {
+      creates.push(body.location)
+    },
+    seed: { projects: { local: [{ worktree: other }] }, lastProject: { local: other }, tabs: [] },
+  })
+
+  await mockMissingLocation(page, missing)
+  await page.goto(`/?folder=${encodeURIComponent(missing)}`)
+  await expect(page).toHaveURL((url) => url.pathname === "/" && !url.searchParams.has("folder"))
+  await expect(projects).toHaveCount(1)
+
+  // The trailing slash is trimmed, so the session and project use the folder as written without it.
+  await page.goto(`/?folder=${encodeURIComponent(`${workspace.directory}/`)}`)
+  await expect(page).toHaveURL((url) => url.pathname === "/new-session" && !url.searchParams.has("folder"))
+  await editor(page).fill(text)
+  await submit(page).click()
+  await expect.poll(() => creates).toEqual([{ directory: workspace.directory }])
+
+  await page.getByRole("button", { name: "Home", exact: true }).click()
+  await expectPath(page, "/")
+  await expect(projects).toHaveCount(2)
+  await page.locator('[data-action="home-new-session"]').click()
+  await expect(page).toHaveURL((url) => url.pathname === "/new-session")
+  await editor(page).fill(followUp)
+  await submit(page).click()
+  await expect.poll(() => creates).toEqual([{ directory: workspace.directory }, { directory: workspace.directory }])
 })
 
 const accentRoot = "C:/OpenCode/WorkspaceAccent"
