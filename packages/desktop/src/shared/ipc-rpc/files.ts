@@ -2,6 +2,13 @@ import { Schema } from "effect"
 import { Rpc, RpcGroup } from "effect/rpc"
 import { Transferable } from "effect/workers"
 
+export class AttachmentSizeLimitError extends Schema.TaggedError<AttachmentSizeLimitError>()(
+  "DesktopAttachmentSizeLimit",
+  {
+    message: Schema.String,
+  },
+) {}
+
 const OptionalString = Schema.optional(Schema.String)
 
 const PickerOptions = Schema.Struct({
@@ -34,11 +41,13 @@ export const FilesOpenDirectoryPicker = Rpc.make("FilesOpenDirectoryPicker", {
 export const FilesOpenFilePicker = Rpc.make("FilesOpenFilePicker", {
   payload: { options: Schema.optional(FilePickerOptions) },
   success: Schema.NullOr(PickedFiles),
+  error: AttachmentSizeLimitError,
 })
 
 export const FilesReadPickedFile = Rpc.make("FilesReadPickedFile", {
   payload: { token: Schema.String, path: Schema.String },
   success: Transferable.Uint8Array,
+  error: AttachmentSizeLimitError,
 })
 
 export const FilesReleasePickedFiles = Rpc.make("FilesReleasePickedFiles", {

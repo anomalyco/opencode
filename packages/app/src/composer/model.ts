@@ -379,7 +379,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
         showToast({
           variant: "error",
           title: language.t("common.requestFailed"),
-          description: error instanceof Error ? error.message : String(error),
+          description: composerErrorMessage(language, error),
         }),
       readClipboardImage: platform.readClipboardImage,
       getPathForFile: platform.getPathForFile,
