@@ -86,6 +86,18 @@ function stepFailed(message: string): V2Event {
   }
 }
 
+const rateLimited = { type: "provider.rate_limit", message: "Rate limit exceeded", status: 429 }
+
+function retryScheduled(at: number): V2Event {
+  return {
+    id: "evt_retry_scheduled",
+    created: 2,
+    type: "session.retry.scheduled",
+    durable: { aggregateID: "ses_1", seq: 2, version: 1 },
+    data: { sessionID: "ses_1", assistantMessageID: "msg_assistant", attempt: 2, at, error: rateLimited },
+  }
+}
+
 function executionFailed(message: string): V2Event {
   return {
     id: "evt_execution_failed",
@@ -451,6 +463,49 @@ describe("runNonInteractivePrompt", () => {
       expect.anything(),
     )
     expect(process.exitCode).toBe(1)
+  })
+
+  test("reports scheduled provider retries in JSON", async () => {
+    const output = await capture({
+      format: "json",
+      turn: (messageID) => [prompted(messageID), retryScheduled(1_800_000), settled()],
+    })
+
+    expect(
+      output.stdout
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line)),
+    ).toEqual([{ type: "retry", timestamp: 2, sessionID: "ses_1", attempt: 2, next: 1_800_000, error: rateLimited }])
+    expect(output.stderr).toBe("")
+  })
+
+  test("V1 JSON output flushes step_start before a scheduled retry", async () => {
+    const output = await capture({
+      compatibility: "v1",
+      format: "json",
+      turn: (messageID) => [prompted(messageID), stepStarted(), retryScheduled(1_800_000), settled()],
+    })
+
+    expect(
+      output.stdout
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line)),
+    ).toEqual([
+      expect.objectContaining({ type: "step_start", part: expect.objectContaining({ type: "step-start" }) }),
+      expect.objectContaining({ type: "retry", attempt: 2, next: 1_800_000, error: rateLimited }),
+    ])
+    expect(output.stderr).toBe("")
+  })
+
+  test("reports scheduled provider retries on stderr in default output", async () => {
+    const output = await capture({
+      turn: (messageID) => [prompted(messageID), retryScheduled(Date.now() + 3_600_000), settled()],
+    })
+
+    expect(output.stdout).toBe("")
+    expect(output.stderr).toContain("in 60m (attempt 2): Rate limit exceeded")
   })
 
   test("V1 JSON output flushes step_start before an unrelated step failure", async () => {
