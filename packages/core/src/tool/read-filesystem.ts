@@ -151,11 +151,17 @@ export const read = Effect.fn("ReadTool.read")(function* (
   const paged = first.info.size > MAX_READ_BYTES || page.offset !== undefined || page.limit !== undefined
   if (!paged) {
     if (first.bytes.includes(0)) return yield* new BinaryFileError({ resource })
+    let decoded: string
+    try {
+      decoded = new TextDecoder("utf-8", { fatal: true }).decode(first.bytes)
+    } catch {
+      return yield* new BinaryFileError({ resource })
+    }
     return {
       type: "file" as const,
       uri: pathToFileURL(input).href,
       name: path.basename(input),
-      content: new TextDecoder().decode(first.bytes).split("\n").map(clampLine).join("\n"),
+      content: decoded.split("\n").map(clampLine).join("\n"),
       encoding: "utf8" as const,
       mime: mimeType(input),
     }
@@ -205,7 +211,13 @@ export const read = Effect.fn("ReadTool.read")(function* (
         const binary = leaves.some((leaf) => {
           const length = Math.min(leaf.summary.bytes, consumed - checked)
           checked += leaf.summary.bytes
-          return length > 0 && leaf.bytes.subarray(0, length).includes(0)
+          if (length > 0 && leaf.bytes.subarray(0, length).includes(0)) return true
+          try {
+            new TextDecoder("utf-8", { fatal: true }).decode(leaf.bytes.subarray(0, length))
+          } catch {
+            return true
+          }
+          return false
         })
         return yield* makeTextPage(input, resource, translated, binary, lineCount(lines, leaves.at(-1)?.bytes.at(-1)))
       }
