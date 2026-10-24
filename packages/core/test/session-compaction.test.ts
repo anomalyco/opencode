@@ -318,7 +318,8 @@ it.effect("auto compaction estimates current content against the buffered prompt
     const due = (context: SessionContext.Loaded) =>
       compaction.compact({ reason: "auto", context }).pipe(Effect.map((outcome) => outcome.status !== "skipped"))
 
-    // 85% of the input limit, which takes precedence over the context window.
+    // 85% of the input limit, which takes precedence over the context window. The output reservation fits
+    // between the two limits, so it does not add to the reserve.
     const inputLimited = { context: 400_000, input: 272_000, output: 128_000 }
     expect(yield* due(input(231_199, inputLimited))).toBe(false)
     expect(yield* due(input(231_200, inputLimited))).toBe(true)
@@ -335,10 +336,16 @@ it.effect("auto compaction estimates current content against the buffered prompt
     expect(yield* due(input(83_999, contextLimited))).toBe(false)
     expect(yield* due(input(84_000, contextLimited))).toBe(true)
 
-    // The reply limit does not lower the ceiling.
+    // The reply limit lowers the ceiling only past the default reserve.
     const outputLimited = { context: 100_000, output: 30_000 }
-    expect(yield* due(input(83_999, outputLimited))).toBe(false)
-    expect(yield* due(input(84_000, outputLimited))).toBe(true)
+    expect(yield* due(input(69_999, outputLimited))).toBe(false)
+    expect(yield* due(input(70_000, outputLimited))).toBe(true)
+
+    // A 15% buffer of a large window can fall below the 256k output reservation, so the reservation keeps the
+    // ceiling at the request ceiling (#58463: a 1M window with 393,216 output compacts at 792,576, not 85%).
+    const largeWindow = { context: 1_048_576, output: 393_216 }
+    expect(yield* due(input(792_575, largeWindow))).toBe(false)
+    expect(yield* due(input(792_576, largeWindow))).toBe(true)
 
     // A buffer that leaves the model no room, such as one set for a larger model, falls back to the default reserve.
     yield* Effect.scoped(
@@ -346,6 +353,15 @@ it.effect("auto compaction estimates current content against the buffered prompt
         yield* compaction.transform((editor) => editor.configure({ buffer: 100_000 }))
         expect(yield* due(input(60_000, contextLimited))).toBe(false)
         expect(yield* due(input(84_000, contextLimited))).toBe(true)
+      }),
+    )
+
+    // A user-set buffer stays authoritative; the output reservation does not raise it.
+    yield* Effect.scoped(
+      Effect.gen(function* () {
+        yield* compaction.transform((editor) => editor.configure({ buffer: 8_000 }))
+        expect(yield* due(input(91_999, outputLimited))).toBe(false)
+        expect(yield* due(input(92_000, outputLimited))).toBe(true)
       }),
     )
 
@@ -599,7 +615,8 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
       "x-opencode-session": parentID,
       "x-opencode-client": "opencode",
     })
-    expect(requests[0]?.generation).toEqual(GenerationOptions.make({ maxTokens: 30_000 }))
+    // The reservation raises the default reserve to 32k of the 200k window, so the summary asks for all the room left.
+    expect(requests[0]?.generation).toEqual(GenerationOptions.make({ maxTokens: 32_000 }))
     expect(JSON.stringify(requests[0]?.messages)).toContain("Manual compaction should include this short conversation.")
     expect(JSON.stringify(requests[0]?.messages)).toContain("Use Effect services and generators.")
     expect(JSON.stringify(requests[0]?.messages)).toContain("User shell pwd completed: /project")
@@ -681,7 +698,7 @@ it.effect("summary compaction past the ceiling keeps the conversation unchanged 
   Effect.gen(function* () {
     requests = []
     const session = yield* insertSession(Session.ID.make("ses_compaction_near_window"))
-    // About 182k estimated tokens: past the 170k ceiling, within the 184k left after reserving room for the summary.
+    // About 182k estimated tokens: past the 168k ceiling, within the 184k left after reserving room for the summary.
     const messages = ["first", "second"].map((label) =>
       SessionMessage.User.make({
         id: SessionMessage.ID.create(),
@@ -706,7 +723,7 @@ it.effect(
       requests = []
       const session = yield* insertSession(Session.ID.make("ses_compaction_older_fallback"))
       // About 190k estimated tokens in total, past the 184k left for the summary. The 160k before the retained
-      // 30k latest exchange fits the 170k ceiling.
+      // 30k latest exchange fits the 168k ceiling.
       const messages = [
         ["older", 640_000],
         ["latest", 120_000],
@@ -754,7 +771,7 @@ it.effect("compaction keeps the output limit for a request that fits its target"
   Effect.gen(function* () {
     requests = []
     const session = yield* insertSession(Session.ID.make("ses_fitting_compaction"))
-    // About 160k estimated tokens, under the 170k target, leaving 40k of the 200k window.
+    // About 160k estimated tokens, under the 168k target, leaving 40k of the 200k window.
     const messages = [
       SessionMessage.User.make({
         id: SessionMessage.ID.create(),
@@ -766,7 +783,7 @@ it.effect("compaction keeps the output limit for a request that fits its target"
 
     expect(yield* compactManually(session, messages)).toEqual({ status: "completed" })
     expect(requests).toHaveLength(1)
-    expect(requests[0]?.generation).toEqual(GenerationOptions.make({ maxTokens: 30_000 }))
+    expect(requests[0]?.generation).toEqual(GenerationOptions.make({ maxTokens: 32_000 }))
   }),
 )
 
@@ -889,7 +906,7 @@ const measured = (text: string, input: number) =>
   })
 
 /**
- * A 200k window compacts at 170k and starts a background summary at 85% of that, 144.5k. `near` ends past that
+ * A 200k window compacts at 168k and starts a background summary at 85% of that, 142.8k. `near` ends past that
  * point; `due` continues it past the threshold.
  */
 const precomputeHistory = () => {
