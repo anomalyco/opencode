@@ -36,7 +36,8 @@
   <a href="README.uk.md">Українська</a> |
   <a href="README.bn.md">বাংলা</a> |
   <a href="README.gr.md">Ελληνικά</a> |
-  <a href="README.vi.md">Tiếng Việt</a>
+  <a href="README.vi.md">Tiếng Việt</a> |
+  <a href="README.gl.md">Galego</a>
 </p>
 
 [![OpenCode Terminal UI](services/site/public/v1/docs/assets/lander/screenshot.png)](https://opencode.ai)

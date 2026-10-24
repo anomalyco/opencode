@@ -14,6 +14,7 @@ export default Plugin.define({
     br: () => import("./i18n/br"),
     bs: () => import("./i18n/bs"),
     ca: () => import("./i18n/ca"),
+    gl: () => import("./i18n/gl"),
     cs: () => import("./i18n/cs"),
     da: () => import("./i18n/da"),
     de: () => import("./i18n/de"),
