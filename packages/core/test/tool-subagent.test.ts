@@ -150,28 +150,32 @@ const productionIt = testEffect(AppNodeBuilder.build(nodes, replacements))
 const it = testEffect(
   AppNodeBuilder.build(nodes, [...replacements, PluginSupervisor.node.replace(subagentPluginSupervisor)]),
 )
+const completionLLM = TestLLM.testLayer({ fallback: TestLLM.text(childText, "completion") })
 const completionIt = testEffect(
-  AppNodeBuilder.build(LayerNode.group([nodes, SessionRestart.node, KV.node]), [
-    Global.node.replace(tempGlobalLayer),
-    offlineModels,
-    PluginSupervisor.node.replace(subagentPluginSupervisor),
-    LayerNodePlatform.llmClient.replace(TestLLM.testLayer({ fallback: TestLLM.text(childText, "completion") })),
-    SessionRunnerModel.node.replace(
-      Layer.succeed(SessionRunnerModel.Service, {
-        resolve: () =>
-          Effect.succeed(
-            SessionRunnerModel.resolved(
-              LanguageModel.make({ id: "child", provider: "test", route: OpenAIChat.route }),
-              {
-                capabilities: { tools: true, input: ["text"], output: ["text"] },
-                cost: [],
-                limit: { context: 200_000, output: 32_000 },
-              },
+  Layer.merge(
+    completionLLM,
+    AppNodeBuilder.build(LayerNode.group([nodes, SessionRestart.node, KV.node]), [
+      Global.node.replace(tempGlobalLayer),
+      offlineModels,
+      PluginSupervisor.node.replace(subagentPluginSupervisor),
+      LayerNodePlatform.llmClient.replace(completionLLM),
+      SessionRunnerModel.node.replace(
+        Layer.succeed(SessionRunnerModel.Service, {
+          resolve: () =>
+            Effect.succeed(
+              SessionRunnerModel.resolved(
+                LanguageModel.make({ id: "child", provider: "test", route: OpenAIChat.route }),
+                {
+                  capabilities: { tools: true, input: ["text"], output: ["text"] },
+                  cost: [],
+                  limit: { context: 200_000, output: 32_000 },
+                },
+              ),
             ),
-          ),
-      }),
-    ),
-  ]),
+        }),
+      ),
+    ]),
+  ),
 )
 
 const withSubagent = (location: Location.Ref) =>
@@ -820,6 +824,88 @@ describe("SubagentTool", () => {
           expect(synthetic).toHaveLength(1)
           expect(synthetic[0]?.text).toContain(`<subagent sessionID="${childID}" state="completed"`)
           expect(synthetic[0]?.text).toContain(childText)
+        }),
+      ),
+    ),
+  )
+
+  completionIt.live("reports the child's final message only after its background work is handled", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const sessions = yield* Session.Service
+          const parent = yield* sessions.create({
+            location: Location.Ref.make({ directory: AbsolutePath.make(dir.path) }),
+            model: parentModel,
+          })
+          yield* withSubagent(parent.location)
+          const child = yield* sessions.create({ parentID: parent.id, agent: Agent.ID.make("reviewer") })
+          const locations = yield* LocationServiceMap.Service
+          const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
+          const jobs = yield* Job.Service
+          const bus = yield* Bus.Service
+          const llm = yield* TestLLM.Test
+          const release = yield* Deferred.make<void>()
+          yield* jobs.start({
+            id: "child-background-shell",
+            type: "shell",
+            recovery: { kind: "shell", sessionID: child.id, shellID: "child-shell", command: "sleep" },
+            run: Deferred.await(release).pipe(Effect.as("done")),
+          })
+          const background = yield* jobs.background("child-background-shell")
+          if (!background?.notificationID) return yield* Effect.die("Expected a background notification ID")
+          const admitted = yield* bus.subscribe(SessionEvent.InboxEnqueued).pipe(
+            Stream.filter((event) => event.data.sessionID === parent.id && event.data.item.type === "synthetic"),
+            Stream.take(1),
+            Stream.runCollect,
+            Effect.forkScoped({ startImmediately: true }),
+          )
+          const before = (yield* llm.requests()).length
+          yield* llm.push(TestLLM.text("before notice", "before"), TestLLM.text("after notice", "after"))
+
+          yield* executeTool(registry, {
+            sessionID: parent.id,
+            ...toolIdentity,
+            call: {
+              type: "tool-call",
+              id: "call-background-child-jobs",
+              name: SubagentTool.name,
+              input: {
+                agent: "reviewer",
+                description: "background review",
+                prompt: "review",
+                sessionID: child.id,
+                background: true,
+              },
+            },
+          })
+          yield* llm.wait(before + 1)
+          yield* Effect.sleep("200 millis")
+          expect(admitted.pollUnsafe()).toBeUndefined()
+          expect((yield* llm.requests()).length).toBe(before + 1)
+
+          // Deliver the notice the way the shell tool's background observer does.
+          yield* Deferred.succeed(release, undefined)
+          yield* jobs.wait({ id: "child-background-shell" })
+          // Admission can lag the job; the child must not run again until the notice arrives.
+          yield* Effect.sleep("200 millis")
+          expect((yield* llm.requests()).length).toBe(before + 1)
+          yield* sessions.synthetic({
+            id: background.notificationID,
+            sessionID: child.id,
+            description: "sleep",
+            text: "Background command finished",
+          })
+          yield* jobs.completeBackground(background.notificationID)
+          const admission = Array.from(yield* Fiber.join(admitted))[0]
+          if (admission?.data.item.type !== "synthetic") return yield* Effect.die("Expected synthetic inbox item")
+          expect(admission.data.item.payload.text).toBe(
+            `<subagent sessionID="${child.id}" state="completed" description="background review">\nafter notice\n</subagent>`,
+          )
+          expect((yield* llm.requests()).length).toBe(before + 2)
         }),
       ),
     ),
