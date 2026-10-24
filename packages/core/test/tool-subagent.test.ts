@@ -3,6 +3,7 @@ import { Deferred, Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { LanguageModel } from "@opencode/ai"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { TestLLM } from "@opencode/ai/testing"
+import fs from "fs/promises"
 import path from "path"
 import { Money } from "@opencode/schema/money"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -281,6 +282,66 @@ describe("SubagentTool", () => {
         }),
       ),
     ),
+  )
+
+  productionIt.live("discovers an agent created after the session started", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const agentsDirectory = path.join(dir.path, ".opencode", "agents")
+          yield* Effect.promise(() => fs.mkdir(agentsDirectory, { recursive: true }))
+
+          const sessions = yield* Session.Service
+          const parent = yield* sessions.create({
+            location: Location.Ref.make({ directory: AbsolutePath.make(dir.path) }),
+            model: parentModel,
+            title: "Late agent",
+          })
+          yield* withSubagent(parent.location)
+
+          const locations = yield* LocationServiceMap.Service
+          const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
+
+          // The agent file appears after the session started, the way a running
+          // session writes one.
+          yield* Effect.promise(() =>
+            fs.writeFile(
+              path.join(agentsDirectory, "tester.md"),
+              "---\nmode: subagent\n---\nTest runner agent.",
+            ),
+          )
+          const locationAgents = yield* Agent.Service.pipe(Effect.provide(locations.get(parent.location)))
+          // Bounded well under the per-test timeout, so a broken reload fails on the
+          // assertion below rather than on the test timeout.
+          // The watcher is real, so give the reload room, but stay well under the
+          // test timeout: a reload that never happens must fail on the assertion
+          // below, not on the timeout.
+          for (let attempt = 0; attempt < 200; attempt++) {
+            if ((yield* locationAgents.get(Agent.ID.make("tester"))) !== undefined) break
+            yield* Effect.sleep("50 millis")
+          }
+
+          const result = yield* executeTool(registry, {
+            sessionID: parent.id,
+            ...toolIdentity,
+            call: {
+              type: "tool-call",
+              id: "call-late-agent",
+              name: SubagentTool.name,
+              input: { agent: "tester", description: "test", prompt: "run" },
+            },
+          })
+          // The location's agent catalog sees the file that appeared after the session started.
+          expect((yield* locationAgents.get(Agent.ID.make("tester")))?.mode).toBe("subagent")
+          // And the subagent tool can actually run it.
+          expect(result).toMatchObject({ status: "completed" })
+        }),
+      ),
+    ),
+    { timeout: 30_000 },
   )
 
   productionIt.live("registers globally while resolving agents from the caller location", () =>
