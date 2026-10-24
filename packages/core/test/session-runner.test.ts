@@ -5605,6 +5605,38 @@ describe("SessionRunnerLLM", () => {
     ])
   })
 
+  for (const fixture of [
+    { raw: "sensitive", message: 'The provider response ended with an unknown finish reason: "sensitive"' },
+    {
+      raw: 'sensitive\n"quoted"',
+      message: 'The provider response ended with an unknown finish reason: "sensitive\\n\\"quoted\\""',
+    },
+    { raw: "", message: 'The provider response ended with an unknown finish reason: ""' },
+    { raw: undefined, message: "The provider response ended with an unknown finish reason." },
+  ]) {
+    scenario(`preserves unknown finish diagnostics for ${JSON.stringify(fixture.raw)}`, function* (s) {
+      const hooks = yield* PluginHooks.Service
+      yield* hooks.register("session", "retry", (event) =>
+        Effect.sync(() => {
+          expect(event.decision.retry).toBe(true)
+          event.decision = { retry: false }
+        }),
+      )
+      yield* s.llm.push(TestLLM.complete({ reason: { normalized: "unknown", raw: fixture.raw } }))
+
+      const failure = yield* s.runPrompt("Explain the provider finish").pipe(Effect.flip)
+
+      expect(failure.message).toBe(fixture.message)
+      expect(s.requests).toHaveLength(1)
+      expect(yield* s.context).toMatchObject([
+        Expected.user("Explain the provider finish"),
+        { type: "assistant", finish: "error", error: { type: "provider.invalid-output", message: fixture.message } },
+      ])
+      yield* replaySessionProjection(sessionID)
+      expect(requireAssistant(yield* s.context).error?.message).toBe(fixture.message)
+    })
+  }
+
   scenario("retries an unknown finish before output", function* (s) {
     yield* s.admit("Retry unknown finish")
     yield* s.llm.push([
