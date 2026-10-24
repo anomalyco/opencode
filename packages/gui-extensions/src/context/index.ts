@@ -50,6 +50,7 @@ export default Extension.define({
     no: () => import("./i18n/no"),
     pa: () => import("./i18n/pa"),
     pl: () => import("./i18n/pl"),
+    pt: () => import("./i18n/pt"),
     ro: () => import("./i18n/ro"),
     ru: () => import("./i18n/ru"),
     si: () => import("./i18n/si"),
