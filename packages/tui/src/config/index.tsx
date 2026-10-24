@@ -50,13 +50,56 @@ export const Attention = Schema.Struct({
   sounds: Schema.optional(AttentionSounds),
 }).annotate({ description: "Attention notification and sound settings" })
 
-const PromptSize = Schema.Int.check(Schema.isGreaterThan(0))
+// Rows or columns, or a percentage from "1%" to "100%" of the room the prompt has.
+const PromptSize = Schema.Union([
+  Schema.Int.check(Schema.isGreaterThan(0)),
+  Schema.String.check(Schema.isPattern(/^(100|[1-9][0-9]?)%$/)),
+])
 export const Prompt = Schema.Struct({
-  max_height: Schema.optional(PromptSize).annotate({ description: "Prompt textarea max height" }),
+  min_height: Schema.optional(PromptSize).annotate({
+    description: [
+      "Rows the prompt's text area starts at, before it grows with its text (default: 1).",
+      "A percentage such as '30%' is of the rows the prompt can have on screen after everything else's",
+    ].join(" "),
+  }),
+  max_height: Schema.optional(PromptSize).annotate({
+    description: [
+      "Rows the prompt's text area grows to before it scrolls (default: a third of the terminal height, at least 6).",
+      "A percentage such as '80%' is of the rows the prompt can have on screen after everything else's.",
+      "The prompt never grows past the screen",
+    ].join(" "),
+  }),
   max_width: Schema.optional(Schema.Union([PromptSize, Schema.Literal("auto")])).annotate({
-    description: "Home prompt max width: a positive integer for a fixed cap, or 'auto' to scale with terminal width",
+    description: [
+      "Home prompt max width: columns for a fixed cap (default: 75), a percentage such as '80%' of the",
+      "home screen's width, or 'auto' to scale with terminal width",
+    ].join(" "),
   }),
 }).annotate({ description: "Prompt size settings" })
+
+export const Home = Schema.Struct({
+  logo: Schema.optional(Schema.Boolean).annotate({
+    description: "Show the OpenCode logo above the home screen prompt (default: true)",
+  }),
+  tips: Schema.optional(Schema.Boolean).annotate({
+    description:
+      "Show a tip on the home screen (default: true). Set here, it decides on every start and the 'Show tips' / 'Hide tips' command lasts until the TUI exits; unset, that command is remembered",
+  }),
+  prompt_position: Schema.optional(Schema.Literals(["middle", "top", "bottom"])).annotate({
+    description: [
+      "Where the home screen prompt sits: 'middle' (default) centers it, 'top' puts it at the top so it grows",
+      "down, 'bottom' on the footer so it grows up, with the tip above the logo. The logo stays directly above the prompt",
+    ].join(" "),
+  }),
+  prompt_min_height: Schema.optional(PromptSize).annotate({
+    description:
+      "Rows the home screen prompt starts at, or a percentage of the rows it can have (default: prompt.min_height)",
+  }),
+  prompt_max_height: Schema.optional(PromptSize).annotate({
+    description:
+      "Rows the home screen prompt grows to before it scrolls, or a percentage of the rows it can have (default: prompt.max_height)",
+  }),
+}).annotate({ description: "Home screen settings" })
 
 export const Info = Schema.Struct({
   $schema: Schema.optional(Schema.String),
@@ -67,6 +110,7 @@ export const Info = Schema.Struct({
   leader_timeout: Schema.optional(LeaderTimeout),
   attention: Schema.optional(Attention),
   prompt: Schema.optional(Prompt),
+  home: Schema.optional(Home),
   scroll_speed: Schema.optional(ScrollSpeed).annotate({ description: "TUI scroll speed" }),
   scroll_acceleration: Schema.optional(ScrollAcceleration),
   diff_style: Schema.optional(DiffStyle),

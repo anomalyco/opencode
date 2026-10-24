@@ -57,6 +57,7 @@ import { usePromptWorkspace } from "./workspace"
 import { usePromptMove } from "./move"
 import { readLocalAttachment } from "./local-attachment"
 import { useLocation } from "../../context/location"
+import { CHROME_ROWS, rows } from "./size"
 
 registerOpencodeSpinner()
 
@@ -69,6 +70,8 @@ export type PromptProps = {
   hint?: JSX.Element
   right?: JSX.Element
   showPlaceholder?: boolean
+  // Rows the whole prompt may take on screen; the text area never grows past what is left of them.
+  space?: number
   placeholders?: {
     normal?: string[]
     shell?: string[]
@@ -1342,12 +1345,33 @@ export function Prompt(props: PromptProps) {
       }),
     }
   })
-  const maxHeight = createMemo(() => tuiConfig.prompt?.max_height ?? Math.max(6, Math.floor(dimensions().height / 3)))
+  // Rows the prompt takes around its text area, measured once it is laid out: the status row can
+  // wrap. Sizes change one renderable at a time during a layout pass, so it reads them after it.
+  const [chrome, setChrome] = createSignal(CHROME_ROWS)
+  const measureChrome = () =>
+    queueMicrotask(() => {
+      if (!anchor || !input || anchor.isDestroyed || input.isDestroyed || props.visible === false) return
+      setChrome(anchor.height - input.height)
+    })
+  const textRows = createMemo(() =>
+    // The home prompt (no session) takes the home.prompt_* heights, falling back to prompt.*.
+    rows({
+      min: (props.sessionID ? undefined : tuiConfig.home?.prompt_min_height) ?? tuiConfig.prompt?.min_height,
+      max: (props.sessionID ? undefined : tuiConfig.home?.prompt_max_height) ?? tuiConfig.prompt?.max_height,
+      terminalHeight: dimensions().height,
+      space: props.space === undefined ? undefined : props.space - chrome(),
+    }),
+  )
   const moveLabelWidth = createMemo(() => Math.max(12, Math.min(44, dimensions().width - 48)))
 
   return (
     <>
-      <box ref={(r: BoxRenderable) => (anchor = r)} visible={props.visible !== false} width="100%">
+      <box
+        ref={(r: BoxRenderable) => (anchor = r)}
+        visible={props.visible !== false}
+        width="100%"
+        onSizeChange={measureChrome}
+      >
         <box
           width="100%"
           border={["left"]}
@@ -1372,8 +1396,9 @@ export function Prompt(props: PromptProps) {
               placeholderColor={theme.textMuted}
               textColor={leader() ? theme.textMuted : theme.text}
               focusedTextColor={leader() ? theme.textMuted : theme.text}
-              minHeight={1}
-              maxHeight={maxHeight()}
+              minHeight={textRows().min}
+              maxHeight={textRows().max}
+              onSizeChange={measureChrome}
               onContentChange={() => {
                 const value = input.plainText
                 setStore("prompt", "input", value)
