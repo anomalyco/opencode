@@ -583,6 +583,32 @@ describe("ModelResolver", () => {
     }),
   )
 
+  it.effect("sends declared MiniMax Messages effort levels", () =>
+    Effect.gen(function* () {
+      const base = model(Provider.aisdk("@ai-sdk/anthropic"), {
+        providerID: Provider.ID.make("minimax-coding-plan"),
+        modelID: "MiniMax-M3.1-Flash-Preview",
+      })
+      const catalog = Info.make({
+        ...base,
+        variants: Variant.resolve(base, [{ type: "effort", values: ["low", "max"] }]),
+      })
+      for (const effort of ["low", "max"]) {
+        const resolved = yield* ModelResolver.resolveModel(
+          catalog,
+          VariantID.make(effort),
+          Credential.Key.make({ type: "key", key: "fixture" }),
+        )
+        const prepared = yield* compileRequest(LLM.request({ model: resolved, prompt: "Hello" }))
+
+        expect(resolved.route.id).toBe("minimax-messages")
+        expect(resolved.route.defaults.http?.body).toMatchObject({ output_config: { effort } })
+        expect(prepared.body).toMatchObject({ model: "MiniMax-M3.1-Flash-Preview" })
+        expect(prepared.body).not.toMatchObject({ thinking: { type: "disabled" } })
+      }
+    }),
+  )
+
   it.effect("sends xAI Responses effort variants with reasoning summaries", () =>
     Effect.gen(function* () {
       const base = model("@opencode/ai/providers/xai", { providerID: Provider.ID.make("xai"), modelID: "grok-4.6" })
