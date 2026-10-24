@@ -1,3 +1,9 @@
+import { Skill } from "@opencode/schema/skill"
+import { Shell } from "@opencode/schema/shell"
+import { Provider } from "@opencode/schema/provider"
+import { Model } from "@opencode/schema/model"
+import { Agent } from "@opencode/schema/agent"
+import { SessionMessage } from "@opencode/schema/session-message"
 import { describe, expect, test } from "bun:test"
 import { Predicate } from "effect"
 import type { SessionMessageAssistant, SessionMessageAssistantTool, SessionMessageInfo } from "@opencode/client/promise"
@@ -8,21 +14,37 @@ import { createTimelineProjection, Timeline, TimelineRow } from "./projection"
 describe("current session timeline rows", () => {
   test("derives turns and tagged rows from chronological current messages", () => {
     const source = [
-      { id: "msg_1", type: "user", text: "first", time: { created: 1 } },
       {
-        id: "msg_2",
+        id: SessionMessage.ID.make("msg_1", { disableChecks: true }),
+        type: "user",
+        text: "first",
+        time: { created: 1 },
+      },
+      {
+        id: SessionMessage.ID.make("msg_2", { disableChecks: true }),
         type: "assistant",
-        agent: "build",
-        model: { id: "model", providerID: "provider" },
+        agent: Agent.ID.make("build", { disableChecks: true }),
+        model: {
+          id: Model.ID.make("model", { disableChecks: true }),
+          providerID: Provider.ID.make("provider", { disableChecks: true }),
+        },
         content: [{ type: "text", text: "answer" }],
         time: { created: 2, completed: 3 },
       },
-      { id: "msg_3", type: "user", text: "second", time: { created: 4 } },
       {
-        id: "msg_4",
+        id: SessionMessage.ID.make("msg_3", { disableChecks: true }),
+        type: "user",
+        text: "second",
+        time: { created: 4 },
+      },
+      {
+        id: SessionMessage.ID.make("msg_4", { disableChecks: true }),
         type: "assistant",
-        agent: "build",
-        model: { id: "model", providerID: "provider" },
+        agent: Agent.ID.make("build", { disableChecks: true }),
+        model: {
+          id: Model.ID.make("model", { disableChecks: true }),
+          providerID: Provider.ID.make("provider", { disableChecks: true }),
+        },
         content: [{ type: "reasoning", text: "working" }],
         time: { created: 5 },
       },
@@ -30,7 +52,7 @@ describe("current session timeline rows", () => {
 
     const result = Timeline.constructSessionMessageRows(source, true, { type: "busy" })
 
-    expect(result.activeMessageID).toBe("msg_3")
+    expect<unknown>(result.activeMessageID).toBe("msg_3")
     expect(result.rows.map(TimelineRow.key)).toEqual([
       "user-message:msg_1",
       "assistant-part:part:part:msg_2:msg_2:text:0",
@@ -43,9 +65,9 @@ describe("current session timeline rows", () => {
   test("renders a current shell message as a standalone turn", () => {
     const source = [
       {
-        id: "msg_shell",
+        id: SessionMessage.ID.make("msg_shell", { disableChecks: true }),
         type: "shell",
-        shellID: "shell_1",
+        shellID: Shell.ID.make("shell_1", { disableChecks: true }),
         command: "pwd",
         status: "exited",
         exit: 0,
@@ -53,7 +75,7 @@ describe("current session timeline rows", () => {
         time: { created: 1, completed: 2 },
       },
       {
-        id: "msg_shell_completion",
+        id: SessionMessage.ID.make("msg_shell_completion", { disableChecks: true }),
         type: "synthetic",
         text: "User shell pwd completed: /repo",
         metadata: { source: "shell", shellID: "shell_1", state: "completed" },
@@ -63,24 +85,27 @@ describe("current session timeline rows", () => {
 
     const result = Timeline.constructSessionMessageRows(source, true, { type: "idle" })
 
-    expect(result.activeMessageID).toBe("msg_shell")
+    expect<unknown>(result.activeMessageID).toBe("msg_shell")
     expect(result.rows.map(TimelineRow.key)).toEqual(["shell:msg_shell"])
   })
 
   test("keeps assistant content when no user root is available", () => {
     const source = [
       {
-        id: "msg_notice",
+        id: SessionMessage.ID.make("msg_notice", { disableChecks: true }),
         type: "synthetic",
         text: "done",
         description: "Background work completed",
         time: { created: 1 },
       },
       {
-        id: "msg_assistant",
+        id: SessionMessage.ID.make("msg_assistant", { disableChecks: true }),
         type: "assistant",
-        agent: "build",
-        model: { id: "model", providerID: "provider" },
+        agent: Agent.ID.make("build", { disableChecks: true }),
+        model: {
+          id: Model.ID.make("model", { disableChecks: true }),
+          providerID: Provider.ID.make("provider", { disableChecks: true }),
+        },
         content: [{ type: "text", text: "result" }],
         time: { created: 2, completed: 3 },
       },
@@ -88,7 +113,7 @@ describe("current session timeline rows", () => {
 
     const result = Timeline.constructSessionMessageRows(source, true, { type: "idle" })
 
-    expect(result.activeMessageID).toBe("msg_assistant")
+    expect<unknown>(result.activeMessageID).toBe("msg_assistant")
     expect(result.rows.map(TimelineRow.key)).toEqual([
       "notice:msg_notice",
       "assistant-part:part:part:msg_assistant:msg_assistant:text:0",
@@ -97,18 +122,31 @@ describe("current session timeline rows", () => {
 
   test("keeps CLI notice messages between the assistant steps they surround", () => {
     const source: SessionMessageInfo[] = [
-      { id: "msg_user", type: "user", text: "run", time: { created: 1 } },
-      { id: "msg_agent", type: "agent-switched", agent: "explore", time: { created: 2 } },
       {
-        id: "msg_assistant_1",
+        id: SessionMessage.ID.make("msg_user", { disableChecks: true }),
+        type: "user",
+        text: "run",
+        time: { created: 1 },
+      },
+      {
+        id: SessionMessage.ID.make("msg_agent", { disableChecks: true }),
+        type: "agent-switched",
+        agent: Agent.ID.make("explore", { disableChecks: true }),
+        time: { created: 2 },
+      },
+      {
+        id: SessionMessage.ID.make("msg_assistant_1", { disableChecks: true }),
         type: "assistant",
-        agent: "explore",
-        model: { id: "model", providerID: "provider" },
+        agent: Agent.ID.make("explore", { disableChecks: true }),
+        model: {
+          id: Model.ID.make("model", { disableChecks: true }),
+          providerID: Provider.ID.make("provider", { disableChecks: true }),
+        },
         content: [{ type: "text", text: "started" }],
         time: { created: 3, completed: 4 },
       },
       {
-        id: "msg_background",
+        id: SessionMessage.ID.make("msg_background", { disableChecks: true }),
         type: "synthetic",
         text: "result",
         description: "Search code",
@@ -116,30 +154,43 @@ describe("current session timeline rows", () => {
         time: { created: 5 },
       },
       {
-        id: "msg_model",
+        id: SessionMessage.ID.make("msg_model", { disableChecks: true }),
         type: "model-switched",
-        model: { id: "next", providerID: "provider" },
+        model: {
+          id: Model.ID.make("next", { disableChecks: true }),
+          providerID: Provider.ID.make("provider", { disableChecks: true }),
+        },
         time: { created: 6 },
       },
       {
-        id: "msg_assistant_2",
+        id: SessionMessage.ID.make("msg_assistant_2", { disableChecks: true }),
         type: "assistant",
-        agent: "explore",
-        model: { id: "next", providerID: "provider" },
+        agent: Agent.ID.make("explore", { disableChecks: true }),
+        model: {
+          id: Model.ID.make("next", { disableChecks: true }),
+          providerID: Provider.ID.make("provider", { disableChecks: true }),
+        },
         content: [{ type: "text", text: "finished" }],
         time: { created: 7, completed: 8 },
       },
       {
-        id: "msg_restart",
+        id: SessionMessage.ID.make("msg_restart", { disableChecks: true }),
         type: "synthetic",
         text: "continue",
         description: "Continuing after restart",
         metadata: { notice: "restart" },
         time: { created: 9 },
       },
-      { id: "msg_skill", type: "skill", skill: "review", name: "Review", text: "instructions", time: { created: 10 } },
       {
-        id: "msg_compaction",
+        id: SessionMessage.ID.make("msg_skill", { disableChecks: true }),
+        type: "skill",
+        skill: Skill.ID.make("review", { disableChecks: true }),
+        name: "Review",
+        text: "instructions",
+        time: { created: 10 },
+      },
+      {
+        id: SessionMessage.ID.make("msg_compaction", { disableChecks: true }),
         type: "compaction",
         status: "completed",
         reason: "auto",
@@ -165,25 +216,50 @@ describe("current session timeline rows", () => {
 
   test("does not infer thinking from an optimistic busy turn", () => {
     const source = [
-      { id: "msg_z", type: "user", text: "existing", time: { created: 1 } },
-      { id: "msg_a", type: "user", text: "pending", time: { created: 2 } },
+      {
+        id: SessionMessage.ID.make("msg_z", { disableChecks: true }),
+        type: "user",
+        text: "existing",
+        time: { created: 1 },
+      },
+      {
+        id: SessionMessage.ID.make("msg_a", { disableChecks: true }),
+        type: "user",
+        text: "pending",
+        time: { created: 2 },
+      },
     ] satisfies SessionMessageInfo[]
 
     const result = Timeline.constructSessionMessageRows(source, true, { type: "busy" })
 
-    expect(result.activeMessageID).toBe("msg_a")
+    expect<unknown>(result.activeMessageID).toBe("msg_a")
     expect(result.rows.map(TimelineRow.key)).toEqual(["user-message:msg_z", "turn-gap:msg_a", "user-message:msg_a"])
   })
 
   test("does not infer thinking above a queued user message", () => {
     const source = [
-      { id: "msg_active", type: "user", text: "active", time: { created: 1 } },
-      { id: "msg_queued", type: "user", text: "queued", time: { created: 2 } },
+      {
+        id: SessionMessage.ID.make("msg_active", { disableChecks: true }),
+        type: "user",
+        text: "active",
+        time: { created: 1 },
+      },
+      {
+        id: SessionMessage.ID.make("msg_queued", { disableChecks: true }),
+        type: "user",
+        text: "queued",
+        time: { created: 2 },
+      },
     ] satisfies SessionMessageInfo[]
 
-    const result = Timeline.constructSessionMessageRows(source, true, { type: "busy" }, new Set(["msg_queued"]))
+    const result = Timeline.constructSessionMessageRows(
+      source,
+      true,
+      { type: "busy" },
+      new Set([SessionMessage.ID.make("msg_queued", { disableChecks: true })]),
+    )
 
-    expect(result.activeMessageID).toBe("msg_active")
+    expect<unknown>(result.activeMessageID).toBe("msg_active")
     expect(result.rows.map(TimelineRow.key)).toEqual([
       "user-message:msg_active",
       "activity",
@@ -197,12 +273,20 @@ describe("current session timeline rows", () => {
     const statuses = ["streaming", "running"] as const
     statuses.forEach((status) => {
       const source = [
-        { id: "msg_user", type: "user", text: "delegate", time: { created: 1 } },
         {
-          id: "msg_assistant",
+          id: SessionMessage.ID.make("msg_user", { disableChecks: true }),
+          type: "user",
+          text: "delegate",
+          time: { created: 1 },
+        },
+        {
+          id: SessionMessage.ID.make("msg_assistant", { disableChecks: true }),
           type: "assistant",
-          agent: "build",
-          model: { id: "model", providerID: "provider" },
+          agent: Agent.ID.make("build", { disableChecks: true }),
+          model: {
+            id: Model.ID.make("model", { disableChecks: true }),
+            providerID: Provider.ID.make("provider", { disableChecks: true }),
+          },
           content: [
             {
               type: "tool",
@@ -228,12 +312,20 @@ describe("current session timeline rows", () => {
 
   test("renders retry state from the current assistant message", () => {
     const source = [
-      { id: "msg_user", type: "user", text: "retry", time: { created: 1 } },
       {
-        id: "msg_assistant",
+        id: SessionMessage.ID.make("msg_user", { disableChecks: true }),
+        type: "user",
+        text: "retry",
+        time: { created: 1 },
+      },
+      {
+        id: SessionMessage.ID.make("msg_assistant", { disableChecks: true }),
         type: "assistant",
-        agent: "build",
-        model: { id: "model", providerID: "provider" },
+        agent: Agent.ID.make("build", { disableChecks: true }),
+        model: {
+          id: Model.ID.make("model", { disableChecks: true }),
+          providerID: Provider.ID.make("provider", { disableChecks: true }),
+        },
         content: [],
         retry: { attempt: 2, at: 10, error: { type: "ProviderError", message: "rate limited" } },
         time: { created: 2 },
@@ -375,10 +467,18 @@ describe("current session timeline rows", () => {
     const document = storyDocument([{ type: "reasoning", text: "Active thought" }], true)
 
     const result = Timeline.constructSessionMessageRows(
-      [...document.messages, { type: "user", id: "queued", text: "Next task", time: { created: 10 } }],
+      [
+        ...document.messages,
+        {
+          type: "user",
+          id: SessionMessage.ID.make("queued", { disableChecks: true }),
+          text: "Next task",
+          time: { created: 10 },
+        },
+      ],
       true,
       document.status,
-      new Set(["queued"]),
+      new Set([SessionMessage.ID.make("queued", { disableChecks: true })]),
     )
 
     expect(result.rows.map((row) => row._tag)).toEqual([
@@ -395,15 +495,23 @@ describe("current session timeline rows", () => {
     const document = storyDocument([{ type: "text", text: "Working" }], true)
 
     const result = Timeline.constructSessionMessageRows(
-      [...document.messages, { type: "user", id: "queued", text: "Next task", time: { created: 10 } }],
+      [
+        ...document.messages,
+        {
+          type: "user",
+          id: SessionMessage.ID.make("queued", { disableChecks: true }),
+          text: "Next task",
+          time: { created: 10 },
+        },
+      ],
       true,
       document.status,
-      new Set(["queued"]),
+      new Set([SessionMessage.ID.make("queued", { disableChecks: true })]),
       false,
       false,
       undefined,
       undefined,
-      ["inb_compact"],
+      [SessionMessage.ID.make("inb_compact", { disableChecks: true })],
     )
 
     expect(result.rows.map((row) => row._tag)).toEqual([
@@ -421,7 +529,7 @@ describe("current session timeline rows", () => {
     const document = storyDocument([{ type: "text", text: "Working" }], true)
 
     const notice = {
-      id: "notice",
+      id: SessionMessage.ID.make("notice", { disableChecks: true }),
       type: "synthetic",
       text: "done",
       description: "Background work completed",
@@ -432,12 +540,12 @@ describe("current session timeline rows", () => {
       [...document.messages, notice],
       true,
       document.status,
-      new Set(["notice"]),
+      new Set([SessionMessage.ID.make("notice", { disableChecks: true })]),
       false,
       false,
       undefined,
       undefined,
-      ["inb_compact"],
+      [SessionMessage.ID.make("inb_compact", { disableChecks: true })],
     )
 
     expect(result.rows.map((row) => row._tag)).toEqual([
@@ -482,7 +590,7 @@ describe("current session timeline rows", () => {
     const document = storyDocument([{ type: "reasoning", text: "Active thought" }], true)
 
     const notice = {
-      id: "notice",
+      id: SessionMessage.ID.make("notice", { disableChecks: true }),
       type: "synthetic",
       text: "done",
       description: "Background work completed",
@@ -521,17 +629,37 @@ describe("current session timeline rows", () => {
 
   test("keeps divider notices outside grouped context rows", () => {
     const source = [
-      { id: "msg_user", type: "user", text: "move", time: { created: 1 } },
       {
-        id: "msg_assistant",
+        id: SessionMessage.ID.make("msg_user", { disableChecks: true }),
+        type: "user",
+        text: "move",
+        time: { created: 1 },
+      },
+      {
+        id: SessionMessage.ID.make("msg_assistant", { disableChecks: true }),
         type: "assistant",
-        agent: "build",
-        model: { id: "model", providerID: "provider" },
+        agent: Agent.ID.make("build", { disableChecks: true }),
+        model: {
+          id: Model.ID.make("model", { disableChecks: true }),
+          providerID: Provider.ID.make("provider", { disableChecks: true }),
+        },
         content: [storyTool("tool_read", "read", "completed", {})],
         time: { created: 2, completed: 3 },
       },
-      { id: "msg_moved", type: "location-switched", location: { directory: "/tmp/next" }, time: { created: 4 } },
-      { id: "msg_skill", type: "skill", skill: "review", name: "Review", text: "instructions", time: { created: 5 } },
+      {
+        id: SessionMessage.ID.make("msg_moved", { disableChecks: true }),
+        type: "location-switched",
+        location: { directory: "/tmp/next" },
+        time: { created: 4 },
+      },
+      {
+        id: SessionMessage.ID.make("msg_skill", { disableChecks: true }),
+        type: "skill",
+        skill: Skill.ID.make("review", { disableChecks: true }),
+        name: "Review",
+        text: "instructions",
+        time: { created: 5 },
+      },
     ] satisfies SessionMessageInfo[]
 
     const rows = Timeline.constructSessionMessageRows(
@@ -556,20 +684,31 @@ describe("current session timeline rows", () => {
   test("keeps assistant errors and retries before later notices", () => {
     const result = Timeline.constructSessionMessageRows(
       [
-        { id: "msg_user", type: "user", text: "continue", time: { created: 1 } },
         {
-          id: "msg_blocked",
+          id: SessionMessage.ID.make("msg_user", { disableChecks: true }),
+          type: "user",
+          text: "continue",
+          time: { created: 1 },
+        },
+        {
+          id: SessionMessage.ID.make("msg_blocked", { disableChecks: true }),
           type: "assistant",
-          agent: "build",
-          model: { id: "model", providerID: "provider" },
+          agent: Agent.ID.make("build", { disableChecks: true }),
+          model: {
+            id: Model.ID.make("model", { disableChecks: true }),
+            providerID: Provider.ID.make("provider", { disableChecks: true }),
+          },
           content: [{ type: "text", text: "partial" }],
           error: { type: "provider.content-filter", message: "Provider blocked the response" },
           time: { created: 2, completed: 3 },
         },
         {
-          id: "msg_model",
+          id: SessionMessage.ID.make("msg_model", { disableChecks: true }),
           type: "model-switched",
-          model: { id: "next", providerID: "provider" },
+          model: {
+            id: Model.ID.make("next", { disableChecks: true }),
+            providerID: Provider.ID.make("provider", { disableChecks: true }),
+          },
           time: { created: 4 },
         },
       ],
@@ -581,21 +720,32 @@ describe("current session timeline rows", () => {
 
     const retry = Timeline.constructSessionMessageRows(
       [
-        { id: "msg_user", type: "user", text: "retry", time: { created: 1 } },
         {
-          id: "msg_retry",
+          id: SessionMessage.ID.make("msg_user", { disableChecks: true }),
+          type: "user",
+          text: "retry",
+          time: { created: 1 },
+        },
+        {
+          id: SessionMessage.ID.make("msg_retry", { disableChecks: true }),
           type: "assistant",
-          agent: "build",
-          model: { id: "model", providerID: "provider" },
+          agent: Agent.ID.make("build", { disableChecks: true }),
+          model: {
+            id: Model.ID.make("model", { disableChecks: true }),
+            providerID: Provider.ID.make("provider", { disableChecks: true }),
+          },
           content: [],
           error: { type: "ProviderError", message: "rate limited" },
           retry: { attempt: 2, at: 10, error: { type: "ProviderError", message: "rate limited" } },
           time: { created: 2 },
         },
         {
-          id: "msg_model",
+          id: SessionMessage.ID.make("msg_model", { disableChecks: true }),
           type: "model-switched",
-          model: { id: "next", providerID: "provider" },
+          model: {
+            id: Model.ID.make("next", { disableChecks: true }),
+            providerID: Provider.ID.make("provider", { disableChecks: true }),
+          },
           time: { created: 3 },
         },
       ],
@@ -608,27 +758,41 @@ describe("current session timeline rows", () => {
 
   test("suppresses an earlier error when the turn recovers across a notice", () => {
     const source = [
-      { id: "msg_user", type: "user", text: "recover", time: { created: 1 } },
       {
-        id: "msg_failed",
+        id: SessionMessage.ID.make("msg_user", { disableChecks: true }),
+        type: "user",
+        text: "recover",
+        time: { created: 1 },
+      },
+      {
+        id: SessionMessage.ID.make("msg_failed", { disableChecks: true }),
         type: "assistant",
-        agent: "build",
-        model: { id: "model", providerID: "provider" },
+        agent: Agent.ID.make("build", { disableChecks: true }),
+        model: {
+          id: Model.ID.make("model", { disableChecks: true }),
+          providerID: Provider.ID.make("provider", { disableChecks: true }),
+        },
         content: [],
         error: { type: "ProviderError", message: "temporary failure" },
         time: { created: 2, completed: 3 },
       },
       {
-        id: "msg_model",
+        id: SessionMessage.ID.make("msg_model", { disableChecks: true }),
         type: "model-switched",
-        model: { id: "next", providerID: "provider" },
+        model: {
+          id: Model.ID.make("next", { disableChecks: true }),
+          providerID: Provider.ID.make("provider", { disableChecks: true }),
+        },
         time: { created: 4 },
       },
       {
-        id: "msg_recovery",
+        id: SessionMessage.ID.make("msg_recovery", { disableChecks: true }),
         type: "assistant",
-        agent: "build",
-        model: { id: "next", providerID: "provider" },
+        agent: Agent.ID.make("build", { disableChecks: true }),
+        model: {
+          id: Model.ID.make("next", { disableChecks: true }),
+          providerID: Provider.ID.make("provider", { disableChecks: true }),
+        },
         content: [{ type: "text", text: "recovered" }],
         time: { created: 5, completed: 6 },
       },
@@ -643,12 +807,20 @@ describe("current session timeline rows", () => {
 
   test("does not render the retry error twice", () => {
     const source = [
-      { id: "msg_user", type: "user", text: "retry", time: { created: 1 } },
       {
-        id: "msg_assistant",
+        id: SessionMessage.ID.make("msg_user", { disableChecks: true }),
+        type: "user",
+        text: "retry",
+        time: { created: 1 },
+      },
+      {
+        id: SessionMessage.ID.make("msg_assistant", { disableChecks: true }),
         type: "assistant",
-        agent: "build",
-        model: { id: "model", providerID: "provider" },
+        agent: Agent.ID.make("build", { disableChecks: true }),
+        model: {
+          id: Model.ID.make("model", { disableChecks: true }),
+          providerID: Provider.ID.make("provider", { disableChecks: true }),
+        },
         content: [],
         error: { type: "ProviderError", message: "The provider response ended unexpectedly." },
         retry: {
@@ -672,21 +844,32 @@ describe("current session timeline rows", () => {
 
   test("removes a failed assistant error when the turn continues streaming", () => {
     const source = [
-      { id: "msg_user", type: "user", text: "recover", time: { created: 1 } },
       {
-        id: "msg_failed",
+        id: SessionMessage.ID.make("msg_user", { disableChecks: true }),
+        type: "user",
+        text: "recover",
+        time: { created: 1 },
+      },
+      {
+        id: SessionMessage.ID.make("msg_failed", { disableChecks: true }),
         type: "assistant",
-        agent: "build",
-        model: { id: "model", providerID: "provider" },
+        agent: Agent.ID.make("build", { disableChecks: true }),
+        model: {
+          id: Model.ID.make("model", { disableChecks: true }),
+          providerID: Provider.ID.make("provider", { disableChecks: true }),
+        },
         content: [],
         error: { type: "ProviderError", message: "temporary failure" },
         time: { created: 2, completed: 3 },
       },
       {
-        id: "msg_recovery",
+        id: SessionMessage.ID.make("msg_recovery", { disableChecks: true }),
         type: "assistant",
-        agent: "build",
-        model: { id: "model", providerID: "provider" },
+        agent: Agent.ID.make("build", { disableChecks: true }),
+        model: {
+          id: Model.ID.make("model", { disableChecks: true }),
+          providerID: Provider.ID.make("provider", { disableChecks: true }),
+        },
         content: [{ type: "text", text: "streaming again" }],
         time: { created: 4 },
       },
@@ -699,12 +882,20 @@ describe("current session timeline rows", () => {
 
   test("keeps content IDs and groups adjacent context tools", () => {
     const source = [
-      { id: "msg_user", type: "user", text: "inspect", time: { created: 1 } },
       {
-        id: "msg_assistant",
+        id: SessionMessage.ID.make("msg_user", { disableChecks: true }),
+        type: "user",
+        text: "inspect",
+        time: { created: 1 },
+      },
+      {
+        id: SessionMessage.ID.make("msg_assistant", { disableChecks: true }),
         type: "assistant",
-        agent: "build",
-        model: { id: "model", providerID: "provider" },
+        agent: Agent.ID.make("build", { disableChecks: true }),
+        model: {
+          id: Model.ID.make("model", { disableChecks: true }),
+          providerID: Provider.ID.make("provider", { disableChecks: true }),
+        },
         content: [
           { type: "text", text: " " },
           { type: "reasoning", text: "hidden" },
@@ -745,7 +936,7 @@ describe("current session timeline rows", () => {
     const result = Timeline.constructSessionMessageRows(source, false, { type: "idle" })
     const groups = result.rows.flatMap((row) => (Predicate.isTagged(row, "AssistantPart") ? [row.group] : []))
 
-    expect(groups).toEqual([
+    expect<unknown>(groups).toEqual([
       {
         type: "context",
         key: "context:msg_assistant:tool_read",
@@ -757,7 +948,10 @@ describe("current session timeline rows", () => {
       {
         type: "part",
         key: "part:msg_assistant:msg_assistant:text:1",
-        ref: { messageID: "msg_assistant", partID: "msg_assistant:text:1" },
+        ref: {
+          messageID: "msg_assistant",
+          partID: "msg_assistant:text:1",
+        },
       },
     ])
   })
@@ -785,12 +979,20 @@ describe("current session timeline rows", () => {
     } satisfies SessionMessageAssistantTool
 
     const source = [
-      { id: "msg_user", type: "user", text: "inspect", time: { created: 1 } },
       {
-        id: "msg_assistant",
+        id: SessionMessage.ID.make("msg_user", { disableChecks: true }),
+        type: "user",
+        text: "inspect",
+        time: { created: 1 },
+      },
+      {
+        id: SessionMessage.ID.make("msg_assistant", { disableChecks: true }),
         type: "assistant",
-        agent: "build",
-        model: { id: "model", providerID: "provider" },
+        agent: Agent.ID.make("build", { disableChecks: true }),
+        model: {
+          id: Model.ID.make("model", { disableChecks: true }),
+          providerID: Provider.ID.make("provider", { disableChecks: true }),
+        },
         content: [read, grep],
         time: { created: 2 },
       },
@@ -800,7 +1002,7 @@ describe("current session timeline rows", () => {
       Predicate.isTagged(row, "AssistantPart") ? [row.group] : [],
     )
 
-    expect(groups).toEqual([
+    expect<unknown>(groups).toEqual([
       {
         type: "part",
         key: "part:msg_assistant:tool_read",
@@ -824,16 +1026,21 @@ describe("current session timeline rows", () => {
     })
 
     const assistant = (id: string, name: string) => ({
-      id,
+      id: SessionMessage.ID.make(id, { disableChecks: true }),
       type: "assistant" as const,
-      agent: "build",
-      model: { id: "model", providerID: "provider" },
+      agent: Agent.ID.make("build"),
+      model: { id: Model.ID.make("model"), providerID: Provider.ID.make("provider") },
       content: [tool(name)],
       time: { created: 2 },
     })
 
     const source = [
-      { id: "msg_user", type: "user", text: "inspect", time: { created: 1 } },
+      {
+        id: SessionMessage.ID.make("msg_user", { disableChecks: true }),
+        type: "user",
+        text: "inspect",
+        time: { created: 1 },
+      },
       assistant("msg_assistant_1", "read"),
       assistant("msg_assistant_2", "execute"),
       assistant("msg_assistant_3", "grep"),
@@ -853,12 +1060,20 @@ describe("current session timeline rows", () => {
 
   test("groups adjacent successful patches and leaves failed patches separate", () => {
     const source = [
-      { id: "msg_user", type: "user", text: "edit", time: { created: 1 } },
       {
-        id: "msg_assistant",
+        id: SessionMessage.ID.make("msg_user", { disableChecks: true }),
+        type: "user",
+        text: "edit",
+        time: { created: 1 },
+      },
+      {
+        id: SessionMessage.ID.make("msg_assistant", { disableChecks: true }),
         type: "assistant",
-        agent: "build",
-        model: { id: "model", providerID: "provider" },
+        agent: Agent.ID.make("build", { disableChecks: true }),
+        model: {
+          id: Model.ID.make("model", { disableChecks: true }),
+          providerID: Provider.ID.make("provider", { disableChecks: true }),
+        },
         content: [
           {
             type: "tool",
@@ -932,7 +1147,7 @@ describe("current session timeline rows", () => {
     const result = Timeline.constructSessionMessageRows(source, false, { type: "idle" }, undefined, false, true)
     const groups = result.rows.flatMap((row) => (Predicate.isTagged(row, "AssistantPart") ? [row.group] : []))
 
-    expect(groups).toEqual([
+    expect<unknown>(groups).toEqual([
       {
         type: "file",
         key: "part:msg_assistant:tool_patch_1",
@@ -944,7 +1159,10 @@ describe("current session timeline rows", () => {
       {
         type: "part",
         key: "part:msg_assistant:tool_patch_failed",
-        ref: { messageID: "msg_assistant", partID: "tool_patch_failed" },
+        ref: {
+          messageID: "msg_assistant",
+          partID: "tool_patch_failed",
+        },
       },
       {
         type: "file",
@@ -961,12 +1179,20 @@ describe("current session timeline rows", () => {
 
   test("groups every consecutive collapsed tool in chronological order", () => {
     const source = [
-      { id: "msg_user", type: "user", text: "work", time: { created: 1 } },
       {
-        id: "msg_assistant",
+        id: SessionMessage.ID.make("msg_user", { disableChecks: true }),
+        type: "user",
+        text: "work",
+        time: { created: 1 },
+      },
+      {
+        id: SessionMessage.ID.make("msg_assistant", { disableChecks: true }),
         type: "assistant",
-        agent: "build",
-        model: { id: "model", providerID: "provider" },
+        agent: Agent.ID.make("build", { disableChecks: true }),
+        model: {
+          id: Model.ID.make("model", { disableChecks: true }),
+          providerID: Provider.ID.make("provider", { disableChecks: true }),
+        },
         content: [
           ...["shell", "subagent", "patch", "shell", "edit", "write", "grep"].map(
             (name, index): SessionMessageAssistantTool => ({
@@ -1024,12 +1250,20 @@ describe("current session timeline rows", () => {
     { shell: true, edit: true, types: ["part", "file", "context"] },
   ])("keeps tools expanded by settings outside collapsed groups ($shell, $edit)", ({ shell, edit, types }) => {
     const source = [
-      { id: "msg_user", type: "user", text: "work", time: { created: 1 } },
       {
-        id: "msg_assistant",
+        id: SessionMessage.ID.make("msg_user", { disableChecks: true }),
+        type: "user",
+        text: "work",
+        time: { created: 1 },
+      },
+      {
+        id: SessionMessage.ID.make("msg_assistant", { disableChecks: true }),
         type: "assistant",
-        agent: "build",
-        model: { id: "model", providerID: "provider" },
+        agent: Agent.ID.make("build", { disableChecks: true }),
+        model: {
+          id: Model.ID.make("model", { disableChecks: true }),
+          providerID: Provider.ID.make("provider", { disableChecks: true }),
+        },
         content: ["shell", "edit", "write", "patch", "read"].map(
           (name, index): SessionMessageAssistantTool => ({
             type: "tool" as const,
@@ -1124,7 +1358,7 @@ describe("current session timeline rows", () => {
             storyTool("active", name, phase.status, {}, "metadata" in phase ? { metadata: phase.metadata } : {}),
           ])
             .messages.filter((message) => message.type === "assistant")
-            .map((message) => ({ ...message, id: "next-step" })),
+            .map((message) => ({ ...message, id: SessionMessage.ID.make("next-step", { disableChecks: true }) })),
         ],
         status: { type: "busy" },
         reasoningMode: "hidden",
@@ -1177,12 +1411,20 @@ describe("current session timeline rows", () => {
 
   test("keeps active and background work standalone when no group precedes them", () => {
     const source: SessionMessageInfo[] = [
-      { id: "msg_user", type: "user", text: "work", time: { created: 1 } },
       {
-        id: "msg_assistant",
+        id: SessionMessage.ID.make("msg_user", { disableChecks: true }),
+        type: "user",
+        text: "work",
+        time: { created: 1 },
+      },
+      {
+        id: SessionMessage.ID.make("msg_assistant", { disableChecks: true }),
         type: "assistant",
-        agent: "build",
-        model: { id: "model", providerID: "provider" },
+        agent: Agent.ID.make("build", { disableChecks: true }),
+        model: {
+          id: Model.ID.make("model", { disableChecks: true }),
+          providerID: Provider.ID.make("provider", { disableChecks: true }),
+        },
         content: [
           {
             type: "tool",
@@ -1229,12 +1471,20 @@ describe("current session timeline rows", () => {
 
   test("keeps failed calls inside a collapsed mixed-tool stack", () => {
     const source: SessionMessageInfo[] = [
-      { id: "msg_user", type: "user", text: "search", time: { created: 1 } },
       {
-        id: "msg_assistant",
+        id: SessionMessage.ID.make("msg_user", { disableChecks: true }),
+        type: "user",
+        text: "search",
+        time: { created: 1 },
+      },
+      {
+        id: SessionMessage.ID.make("msg_assistant", { disableChecks: true }),
         type: "assistant",
-        agent: "build",
-        model: { id: "model", providerID: "provider" },
+        agent: Agent.ID.make("build", { disableChecks: true }),
+        model: {
+          id: Model.ID.make("model", { disableChecks: true }),
+          providerID: Provider.ID.make("provider", { disableChecks: true }),
+        },
         content: [
           {
             type: "tool",
@@ -1281,7 +1531,7 @@ describe("current session timeline rows", () => {
       Predicate.isTagged(row, "AssistantPart") ? [row.group] : [],
     )
 
-    expect(groups).toEqual([
+    expect<unknown>(groups).toEqual([
       {
         type: "context",
         key: "context:msg_assistant:tool_glob_failed",
@@ -1301,21 +1551,32 @@ describe("current session timeline rows", () => {
 
   test("places a divider after interrupted output unless the turn compacts", () => {
     const messages = [
-      { id: "msg_user", type: "user", text: "continue", time: { created: 1 } },
       {
-        id: "msg_interrupted",
+        id: SessionMessage.ID.make("msg_user", { disableChecks: true }),
+        type: "user",
+        text: "continue",
+        time: { created: 1 },
+      },
+      {
+        id: SessionMessage.ID.make("msg_interrupted", { disableChecks: true }),
         type: "assistant",
-        agent: "build",
-        model: { id: "model", providerID: "provider" },
+        agent: Agent.ID.make("build", { disableChecks: true }),
+        model: {
+          id: Model.ID.make("model", { disableChecks: true }),
+          providerID: Provider.ID.make("provider", { disableChecks: true }),
+        },
         content: [{ type: "text", text: "before" }],
         error: { type: "ExecutionInterrupted", message: "stopped" },
         time: { created: 2, completed: 3 },
       },
       {
-        id: "msg_continued",
+        id: SessionMessage.ID.make("msg_continued", { disableChecks: true }),
         type: "assistant",
-        agent: "build",
-        model: { id: "model", providerID: "provider" },
+        agent: Agent.ID.make("build", { disableChecks: true }),
+        model: {
+          id: Model.ID.make("model", { disableChecks: true }),
+          providerID: Provider.ID.make("provider", { disableChecks: true }),
+        },
         content: [{ type: "text", text: "after" }],
         time: { created: 4, completed: 5 },
       },
@@ -1332,7 +1593,7 @@ describe("current session timeline rows", () => {
       messages[0],
       messages[1],
       {
-        id: "msg_compaction",
+        id: SessionMessage.ID.make("msg_compaction", { disableChecks: true }),
         type: "compaction",
         status: "completed",
         reason: "auto",
@@ -1349,18 +1610,26 @@ describe("current session timeline rows", () => {
 
   test("surfaces failed idle errors when no assistant step owns the failure", () => {
     const preStep = [
-      { id: "msg_user", type: "user", text: "prompt", time: { created: 1 } },
       {
-        id: "msg_idle",
+        id: SessionMessage.ID.make("msg_user", { disableChecks: true }),
+        type: "user",
+        text: "prompt",
+        time: { created: 1 },
+      },
+      {
+        id: SessionMessage.ID.make("msg_idle", { disableChecks: true }),
         type: "idle",
         outcome: "failed",
         error: { type: "provider.no-route", message: "Model unavailable: opencode/gpt-5.2" },
         time: { created: 2 },
       },
       {
-        id: "msg_model",
+        id: SessionMessage.ID.make("msg_model", { disableChecks: true }),
         type: "model-switched",
-        model: { id: "next", providerID: "provider" },
+        model: {
+          id: Model.ID.make("next", { disableChecks: true }),
+          providerID: Provider.ID.make("provider", { disableChecks: true }),
+        },
         time: { created: 3 },
       },
     ] satisfies SessionMessageInfo[]
@@ -1368,22 +1637,33 @@ describe("current session timeline rows", () => {
     const preStepRows = Timeline.constructSessionMessageRows(preStep, true, { type: "idle" }).rows
     expect(preStepRows.map((row) => row._tag)).toEqual(["UserMessage", "Error", "Notice"])
     expect(preStepRows[1]).toEqual(
-      new TimelineRow.Error({ userMessageID: "msg_user", text: "Model unavailable: opencode/gpt-5.2" }),
+      new TimelineRow.Error({
+        userMessageID: SessionMessage.ID.make("msg_user", { disableChecks: true }),
+        text: "Model unavailable: opencode/gpt-5.2",
+      }),
     )
 
     const betweenSteps = [
-      { id: "msg_user", type: "user", text: "prompt", time: { created: 1 } },
       {
-        id: "msg_assistant",
+        id: SessionMessage.ID.make("msg_user", { disableChecks: true }),
+        type: "user",
+        text: "prompt",
+        time: { created: 1 },
+      },
+      {
+        id: SessionMessage.ID.make("msg_assistant", { disableChecks: true }),
         type: "assistant",
-        agent: "build",
-        model: { id: "model", providerID: "provider" },
+        agent: Agent.ID.make("build", { disableChecks: true }),
+        model: {
+          id: Model.ID.make("model", { disableChecks: true }),
+          providerID: Provider.ID.make("provider", { disableChecks: true }),
+        },
         content: [storyTool("tool_read", "read", "completed", {})],
         finish: "tool-calls",
         time: { created: 2, completed: 3 },
       },
       {
-        id: "msg_idle",
+        id: SessionMessage.ID.make("msg_idle", { disableChecks: true }),
         type: "idle",
         outcome: "failed",
         error: { type: "unknown", message: "Failed to execute statement" },
@@ -1396,19 +1676,27 @@ describe("current session timeline rows", () => {
     ).toEqual(["UserMessage", "AssistantPart", "Error"])
 
     const duplicate = [
-      { id: "msg_user", type: "user", text: "prompt", time: { created: 1 } },
       {
-        id: "msg_assistant",
+        id: SessionMessage.ID.make("msg_user", { disableChecks: true }),
+        type: "user",
+        text: "prompt",
+        time: { created: 1 },
+      },
+      {
+        id: SessionMessage.ID.make("msg_assistant", { disableChecks: true }),
         type: "assistant",
-        agent: "build",
-        model: { id: "model", providerID: "provider" },
+        agent: Agent.ID.make("build", { disableChecks: true }),
+        model: {
+          id: Model.ID.make("model", { disableChecks: true }),
+          providerID: Provider.ID.make("provider", { disableChecks: true }),
+        },
         content: [],
         finish: "error",
         error: { type: "provider.auth", message: "Your organization does not have access to this model." },
         time: { created: 2, completed: 3 },
       },
       {
-        id: "msg_idle",
+        id: SessionMessage.ID.make("msg_idle", { disableChecks: true }),
         type: "idle",
         outcome: "failed",
         error: { type: "provider.auth", message: "Your organization does not have access to this model." },
@@ -1421,18 +1709,26 @@ describe("current session timeline rows", () => {
     )
 
     const exhausted = [
-      { id: "msg_user", type: "user", text: "prompt", time: { created: 1 } },
       {
-        id: "msg_assistant",
+        id: SessionMessage.ID.make("msg_user", { disableChecks: true }),
+        type: "user",
+        text: "prompt",
+        time: { created: 1 },
+      },
+      {
+        id: SessionMessage.ID.make("msg_assistant", { disableChecks: true }),
         type: "assistant",
-        agent: "build",
-        model: { id: "model", providerID: "provider" },
+        agent: Agent.ID.make("build", { disableChecks: true }),
+        model: {
+          id: Model.ID.make("model", { disableChecks: true }),
+          providerID: Provider.ID.make("provider", { disableChecks: true }),
+        },
         content: [],
         error: { type: "aborted", message: "Step interrupted" },
         time: { created: 2, completed: 3 },
       },
       {
-        id: "msg_idle",
+        id: SessionMessage.ID.make("msg_idle", { disableChecks: true }),
         type: "idle",
         outcome: "failed",
         error: {
@@ -1445,7 +1741,7 @@ describe("current session timeline rows", () => {
 
     expect(Timeline.constructSessionMessageRows(exhausted, true, { type: "idle" }).rows.at(-1)).toEqual(
       new TimelineRow.Error({
-        userMessageID: "msg_user",
+        userMessageID: SessionMessage.ID.make("msg_user", { disableChecks: true }),
         text: "Execution was interrupted repeatedly and will not be resumed automatically.",
       }),
     )

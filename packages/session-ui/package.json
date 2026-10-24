@@ -81,6 +81,7 @@
     "motion": "12.34.5",
     "remend": "catalog:",
     "solid-js": "catalog:",
-    "strip-ansi": "7.1.2"
+    "strip-ansi": "7.1.2",
+    "@opencode/schema": "workspace:*"
   }
 }
