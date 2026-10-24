@@ -3,6 +3,7 @@ import { createRequire } from "node:module"
 import solidPlugin from "vite-plugin-solid"
 import tailwindcss from "@tailwindcss/vite"
 import { fileURLToPath } from "url"
+import { typography } from "./typography.js"
 
 const theme = fileURLToPath(new URL("./public/oc-theme-preload.js", import.meta.url))
 
@@ -102,6 +103,9 @@ export default [
         },
         define: {
           "import.meta.env.VITE_OPENCODE_CHANNEL": JSON.stringify(channel),
+        },
+        css: {
+          postcss: { plugins: [typography()] },
         },
         worker: {
           format: "es",

@@ -966,6 +966,13 @@ export interface Appearance {
    * @param kind - `mono`, the terminal and code font.
    */
   font(kind: "mono"): string
+  /**
+   * The base font size in CSS pixels. Defaults to 14 before the app interface mounts. Reactive.
+   *
+   * @example
+   * const size = ctx.appearance.fontSize()
+   */
+  fontSize(): number
 }
 
 /** The app's route. */

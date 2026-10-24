@@ -241,7 +241,7 @@ SDK icon fields use `IconName` from `@opencode/ui/icons/catalog`, a dependency-f
 | `ctx.embeds`                 | `Embeds`                                                       | Shows a web page the main entry created                           |
 | `ctx.build`                  | `Build`                                                        | Version, channel, platform, packaged                              |
 | `ctx.locale`                 | `Locale`                                                       | Locale and writing direction                                      |
-| `ctx.appearance`             | `Appearance`                                                   | The user's mono font                                              |
+| `ctx.appearance`             | `Appearance`                                                   | The user's mono font and base font size                            |
 | `ctx.router`                 | `Router`                                                       | The route path, and whether it is changing                        |
 | `ctx.keybinds`               | `Keybinds`                                                     | Display and matching of command keybinds                          |
 | `ctx.servers`                | `Servers`                                                      | The servers the app lists, and each one's live `ServerRef`        |
