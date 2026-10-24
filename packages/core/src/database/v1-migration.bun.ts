@@ -553,26 +553,31 @@ export function run(
           INSERT OR IGNORE INTO project (id, worktree, time_created, time_updated, time_active, sandboxes)
           VALUES (${Project.ID.global}, ${path.parse(global.data).root}, ${now}, ${now}, ${now}, '[]')
         `)
-      if (state === undefined)
-        yield* db
-          .transaction((tx) =>
-            Effect.gen(function* () {
-              while (true) {
+      if (state === undefined) {
+        // Commit each batch so a large legacy event log cannot grow one WAL
+        // transaction for the entire cleanup. Missing state resumes remaining rows.
+        while (true) {
+          const deleted = yield* db
+            .transaction((tx) =>
+              Effect.gen(function* () {
                 yield* tx.run(sql`
                     DELETE FROM event
                     WHERE rowid IN (SELECT rowid FROM event LIMIT ${EVENT_DELETE_BATCH_SIZE})
                   `)
                 const deleted = (yield* tx.get<{ value: number }>(sql`SELECT changes() AS value`))?.value ?? 0
-                if (deleted < EVENT_DELETE_BATCH_SIZE) break
-                yield* Effect.yieldNow
-              }
-              yield* tx
-                .insert(KVTable)
-                .values({ key: MIGRATION_STATE_KEY, value: { phase: "sessions" } })
-                .run()
-            }),
-          )
-          .pipe(Effect.orDie)
+                if (deleted < EVENT_DELETE_BATCH_SIZE)
+                  yield* tx
+                    .insert(KVTable)
+                    .values({ key: MIGRATION_STATE_KEY, value: { phase: "sessions" } })
+                    .run()
+                return deleted
+              }),
+            )
+            .pipe(Effect.orDie)
+          if (deleted < EVENT_DELETE_BATCH_SIZE) break
+          yield* Effect.yieldNow
+        }
+      }
       const sourceTotal = yield* countNextSessions(nextPath(options, global.data))
       const legacyTotal = (yield* db.get<{ value: number }>(sql`SELECT COUNT(*) AS value FROM session`))?.value ?? 0
       const cursor = state?.phase === "sessions" ? state.cursor : undefined

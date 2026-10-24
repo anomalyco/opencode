@@ -941,6 +941,72 @@ describe("V1Migration database workflow", () => {
     )
   })
 
+  test("commits event cleanup batches and resumes after reopening a failed migration", async () => {
+    await using tmp = await tmpdir()
+    const boot = <A, E>(effect: Effect.Effect<A, E, Database.Service | Global.Service>) =>
+      Effect.runPromise(
+        effect.pipe(
+          Effect.provide(Database.layer({ path: path.join(tmp.path, "opencode.db") })),
+          Effect.provideService(Global.Service, Global.make({ data: tmp.path })),
+          Effect.scoped,
+        ),
+      )
+
+    await boot(
+      Effect.gen(function* () {
+        const { db } = yield* Database.Service
+        yield* createLegacyTables(db)
+        yield* db.run(
+          sql`INSERT INTO project (id, worktree, time_created, time_updated, sandboxes) VALUES ('global', '/tmp/test', 1, 2, '[]')`,
+        )
+        yield* db.run(
+          sql`INSERT INTO session (id, project_id, slug, directory, title, version, time_created, time_updated) VALUES ('ses_test', 'global', 'test', '/tmp/test', 'Test', '1', 1, 2)`,
+        )
+        yield* db.run(
+          sql`INSERT INTO message (id, session_id, time_created, time_updated, data) VALUES ('msg_user', 'ses_test', 10, 11, ${user("msg_user").data})`,
+        )
+        yield* db.run(
+          sql`INSERT INTO part (id, message_id, session_id, time_created, time_updated, data) VALUES ('prt_text', 'msg_user', 'ses_test', 10, 11, '{"type":"text","text":"preserved history"}')`,
+        )
+        yield* db.run(sql`INSERT INTO event_sequence (aggregate_id, seq) VALUES ('stale', 2500)`)
+        yield* db.run(sql`
+          WITH RECURSIVE rows(value) AS (
+            VALUES(1)
+            UNION ALL
+            SELECT value + 1 FROM rows WHERE value < 2500
+          )
+          INSERT INTO event (id, aggregate_id, seq, created, type, data)
+          SELECT printf('event_%04d', value), 'stale', value, 1, 'session.renamed.1', json_object('payload', hex(zeroblob(2048)))
+          FROM rows
+        `)
+        yield* db.run(sql`
+          CREATE TRIGGER fail_cleanup BEFORE DELETE ON event WHEN OLD.id = 'event_1001'
+          BEGIN SELECT RAISE(ABORT, 'cleanup interrupted'); END
+        `)
+        const result = yield* V1Migration.run().pipe(Effect.exit)
+        expect(result._tag).toBe("Failure")
+      }),
+    )
+
+    await boot(
+      Effect.gen(function* () {
+        const { db } = yield* Database.Service
+        expect(yield* db.get(sql`SELECT COUNT(*) AS count FROM event`)).toEqual({ count: 1500 })
+        expect(yield* db.get(sql`SELECT value FROM kv WHERE key = 'migration.v1-v2'`)).toBeUndefined()
+        expect(yield* db.get(sql`SELECT id FROM session_v2 WHERE id = 'ses_test'`)).toBeUndefined()
+        expect(yield* db.get(sql`SELECT id FROM message WHERE id = 'msg_user'`)).toEqual({ id: "msg_user" })
+        yield* db.run(sql`DROP TRIGGER fail_cleanup`)
+        expect(yield* V1Migration.run()).toEqual({ status: "completed" })
+        expect(yield* db.get(sql`SELECT COUNT(*) AS count FROM event`)).toEqual({ count: 0 })
+        expect(
+          yield* db.get(sql`SELECT json_extract(data, '$.text') AS text FROM session_message WHERE id = 'msg_user'`),
+        ).toEqual({ text: "preserved history" })
+        expect(yield* V1Migration.status()).toEqual({ status: "completed" })
+        expect(yield* V1Migration.run()).toEqual({ status: "completed" })
+      }),
+    )
+  })
+
   test("imports previous V2 sessions and messages containing apostrophes", async () => {
     await using tmp = await tmpdir()
     const filename = path.join(tmp.path, "opencode-next.db")
