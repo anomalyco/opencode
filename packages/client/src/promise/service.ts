@@ -1,10 +1,11 @@
 import { readFile, rm } from "node:fs/promises"
 import type { DiscoverOptions, Endpoint, Info, EnsureOptions, StopOptions } from "../service.js"
-import { contenderPool, spawnServiceContender } from "../service-contender.js"
+import { contenderPool, ownerState, spawnServiceContender } from "../service-contender.js"
 import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
 import { matchesVersion } from "../service-version.js"
 import { PtyHandoff } from "../pty-handoff.js"
 import { decide, fallback, headers, probeResult, same } from "../service-probe.js"
+import { recoveryPolicy } from "../service-recovery.js"
 
 export * from "../service.js"
 export { headers }
@@ -29,7 +30,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
   const timing = ensureTiming(options)
   const deadline = Date.now() + timing.promiseTimeout
   const pool = contenderPool(timing)
-  let timeouts: { readonly info: Info; readonly count: number } | undefined
+  const recovery = recoveryPolicy(timing)
   let announced = false
 
   const announce = (reason: "missing" | "version-mismatch", previousVersion?: string) => {
@@ -52,21 +53,26 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
       if (Date.now() >= deadline)
         throw pool.failure() ?? new Error("Timed out waiting for the background service to start")
       const registration = await registered(options.file, timing.requestTimeout)
-      if (registration.timedOut && registration.info !== undefined) {
-        timeouts = {
-          info: registration.info,
-          count: timeouts !== undefined && same(timeouts.info, registration.info) ? timeouts.count + 1 : 1,
-        }
-        if (timeouts.count >= 3) {
-          announce("missing")
-          console.warn("Background service is unresponsive; recovery cannot preserve persistent terminals")
-          await PtyHandoff.clear(options.file ?? fallback())
-          await terminate(registration.info, options, timing)
-          pool.evict(registration.info.pid)
-          pool.recruitNow()
-          timeouts = undefined
-        }
-      } else timeouts = undefined
+      const info = registration.info
+      const ownerAlive = info === undefined ? false : !stopped(info.pid)
+      const unresponsive = recovery.observe({
+        now: performance.now(),
+        info,
+        timedOut: registration.timedOut,
+        stalled: registration.stalled,
+        alive: ownerAlive,
+      })
+      if (unresponsive && info !== undefined) {
+        announce("missing")
+        console.warn("Background service is unresponsive; replacing it")
+        await PtyHandoff.prepare(options.file ?? fallback(), info, timing.requestTimeout).catch((cause: unknown) =>
+          console.warn("Failed to prepare persistent terminals for replacement", cause),
+        )
+        await terminate(info, options, timing)
+        pool.evict(info.pid)
+        pool.recruitNow()
+        recovery.replaced()
+      }
 
       if (registration.service !== undefined) {
         pool.serviceAnswered()
@@ -87,7 +93,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
       } else {
         const failed = pool.reap()
         if (failed !== undefined) throw failed
-        if (pool.shouldRecruit(registration.info !== undefined)) {
+        if (pool.shouldRecruit(ownerState(info, registration, ownerAlive))) {
           announce("missing")
           pool.add(await spawnContender())
         }
@@ -123,7 +129,7 @@ async function read(file?: string) {
 
 async function registered(file?: string, timeout?: number) {
   const info = await read(file)
-  if (info === undefined) return { info: undefined, service: undefined, timedOut: false }
+  if (info === undefined) return { info: undefined, service: undefined, timedOut: false, stalled: false }
   return { info, ...(await probeResult(info, timeout)) }
 }
 
