@@ -374,6 +374,7 @@ export function createDialogApi(
               description={options.description ? () => <text>{options.description}</text> : undefined}
               placeholder={options.placeholder}
               value={options.value}
+              secret={options.secret}
               onConfirm={(value) => {
                 done(value)
                 api.clear()

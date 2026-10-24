@@ -22,6 +22,8 @@ async function mountPrompt(input: {
   root: string
   keybinds: Partial<TuiKeybind.Keybinds>
   onConfirm: (value: string) => void
+  value?: string
+  secret?: boolean
 }) {
   const state = path.join(input.root, "state")
   await mkdir(state, { recursive: true })
@@ -44,7 +46,14 @@ async function mountPrompt(input: {
 
     function Prompt() {
       onCleanup(Keymap.use().mode.push("modal"))
-      return <DialogPrompt title="Rename Session" value="draft" onConfirm={input.onConfirm} />
+      return (
+        <DialogPrompt
+          title="Rename Session"
+          value={input.value ?? "draft"}
+          secret={input.secret}
+          onConfirm={input.onConfirm}
+        />
+      )
     }
 
     return (
@@ -180,6 +189,108 @@ test("dialog prompt submit can be disabled", async () => {
 
     expect(confirmed).toEqual([])
     expect(textarea.plainText).toBe("draft")
+  } finally {
+    await prompt.cleanup()
+  }
+})
+
+test("dialog prompt masks a secret value without echoing it", async () => {
+  await using tmp = await tmpdir()
+  const confirmed: string[] = []
+  const prompt = await mountPrompt({
+    root: tmp.path,
+    keybinds: {
+      "input.submit": "super+return",
+      "dialog.prompt.submit": "return,shift+return,alt+return,ctrl+j",
+    },
+    onConfirm: (value) => confirmed.push(value),
+    secret: true,
+  })
+
+  try {
+    await wait(() => prompt.app.renderer.currentFocusedEditor instanceof TextareaRenderable)
+    const textarea = prompt.app.renderer.currentFocusedEditor
+    if (!(textarea instanceof TextareaRenderable)) throw new Error("expected focused dialog textarea")
+
+    const frame = await prompt.app.waitForFrame((value) => value.includes("*****"))
+    expect(frame).not.toContain("draft")
+
+    // Selection must not resolve the masked value either.
+    prompt.app.mockInput.pressKey("END")
+    prompt.app.mockInput.pressArrow("left", { shift: true })
+    expect(prompt.app.renderer.getSelection()?.getSelectedText()).toBe("")
+    expect(textarea.plainText).toBe("draft")
+
+    prompt.app.mockInput.pressEnter()
+
+    expect(confirmed).toEqual(["draft"])
+    expect(textarea.plainText).toBe("draft")
+  } finally {
+    await prompt.cleanup()
+  }
+})
+
+test("dialog prompt shows the placeholder and masks typed secret text", async () => {
+  await using tmp = await tmpdir()
+  const confirmed: string[] = []
+  const prompt = await mountPrompt({
+    root: tmp.path,
+    keybinds: {
+      "input.submit": "super+return",
+      "dialog.prompt.submit": "return,shift+return,alt+return,ctrl+j",
+    },
+    onConfirm: (value) => confirmed.push(value),
+    secret: true,
+    value: "",
+  })
+
+  try {
+    await wait(() => prompt.app.renderer.currentFocusedEditor instanceof TextareaRenderable)
+    const textarea = prompt.app.renderer.currentFocusedEditor
+    if (!(textarea instanceof TextareaRenderable)) throw new Error("expected focused dialog textarea")
+
+    const placeholder = await prompt.app.waitForFrame((frame) => frame.includes("Enter text"))
+    expect(placeholder).toContain("Enter text")
+
+    prompt.app.mockInput.typeText("hunter2")
+    const frame = await prompt.app.waitForFrame((value) => value.includes("*******"))
+    expect(frame).not.toContain("hunter2")
+
+    prompt.app.mockInput.pressEnter()
+
+    expect(confirmed).toEqual(["hunter2"])
+    expect(textarea.plainText).toBe("hunter2")
+  } finally {
+    await prompt.cleanup()
+  }
+})
+
+test("dialog prompt echoes the value when secret is not set", async () => {
+  await using tmp = await tmpdir()
+  const confirmed: string[] = []
+  const prompt = await mountPrompt({
+    root: tmp.path,
+    keybinds: {
+      "input.submit": "super+return",
+      "dialog.prompt.submit": "return,shift+return,alt+return,ctrl+j",
+    },
+    onConfirm: (value) => confirmed.push(value),
+  })
+
+  try {
+    await wait(() => prompt.app.renderer.currentFocusedEditor instanceof TextareaRenderable)
+
+    const frame = await prompt.app.waitForFrame((value) => value.includes("draft"))
+    expect(frame).toContain("draft")
+
+    // A normal prompt still exposes its selection.
+    prompt.app.mockInput.pressKey("END")
+    prompt.app.mockInput.pressArrow("left", { shift: true })
+    expect(prompt.app.renderer.getSelection()?.getSelectedText()).toBe("t")
+
+    prompt.app.mockInput.pressEnter()
+
+    expect(confirmed).toEqual(["draft"])
   } finally {
     await prompt.cleanup()
   }
