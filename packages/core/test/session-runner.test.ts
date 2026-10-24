@@ -4816,6 +4816,62 @@ describe("SessionRunnerLLM", () => {
     expect(s.requests[0]?.promptCacheKey).toBe(parentID)
   })
 
+  scenario("uses root cache affinity for nested child model requests", function* (s) {
+    const rootID = Session.ID.make("ses_runner_nested_root")
+    const parentID = Session.ID.make("ses_runner_nested_parent")
+    const adopt = (id: Session.ID, parent: Session.ID) =>
+      s.db.update(SessionTable).set({ parent_id: parent }).where(eq(SessionTable.id, id)).run().pipe(Effect.orDie)
+
+    yield* insertSession(rootID)
+    yield* insertSession(parentID)
+    yield* adopt(parentID, rootID)
+    yield* adopt(sessionID, parentID)
+    yield* s.runPrompt("Run nested child request")
+
+    expect(s.requests[0]?.http?.headers).toMatchObject({
+      "x-opencode-parent-session-id": parentID,
+      "x-session-affinity": rootID,
+      "X-Session-Id": rootID,
+      "x-parent-session-id": parentID,
+      "x-opencode-session": rootID,
+    })
+    expect(s.requests[0]?.promptCacheKey).toBe(rootID)
+  })
+
+  scenario("uses root cache affinity for every fork in a fork chain", function* (s) {
+    const rootID = Session.ID.make("ses_runner_fork_root")
+    const middleID = Session.ID.make("ses_runner_fork_middle")
+    const fork = (id: Session.ID, source: Session.ID) =>
+      s.db
+        .update(SessionTable)
+        .set({ fork_session_id: source, fork_boundary: { type: "before", messageID: SessionMessage.ID.create() } })
+        .where(eq(SessionTable.id, id))
+        .run()
+        .pipe(Effect.orDie)
+
+    yield* insertSession(rootID)
+    yield* insertSession(middleID)
+    yield* fork(middleID, rootID)
+    yield* fork(sessionID, middleID)
+    yield* Effect.forEach([rootID, middleID, sessionID], (id) =>
+      s.session
+        .prompt({ sessionID: id, text: "Run forked request", resume: false })
+        .pipe(Effect.andThen(s.session.resume(id))),
+    )
+
+    expect(s.requests.map((request) => request.promptCacheKey)).toEqual([rootID, rootID, rootID])
+    expect(s.requests.map((request) => request.http?.headers)).toEqual(
+      [rootID, middleID, sessionID].map((id) =>
+        expect.objectContaining({
+          "x-opencode-session-id": id,
+          "x-session-affinity": rootID,
+          "X-Session-Id": rootID,
+          "x-opencode-session": rootID,
+        }),
+      ),
+    )
+  })
+
   scenario("runs different sessions concurrently", function* (s) {
     yield* insertSession(otherSessionID)
     yield* s.admit("Run first")
