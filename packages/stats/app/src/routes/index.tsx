@@ -221,6 +221,14 @@ function Hero(props: { updatedAt: string | null; summary?: string }) {
     onCleanup(() => timeouts.forEach((timeout) => window.clearTimeout(timeout)))
   })
 
+  let canvas!: HTMLDivElement
+  onMount(() => {
+    const observer = new ResizeObserver(() => alignHeroCut(canvas))
+    observer.observe(canvas)
+    void document.fonts.ready.then(() => alignHeroCut(canvas))
+    onCleanup(() => observer.disconnect())
+  })
+
   return (
     <section data-section="hero">
       <p data-slot="hero-meta" role="status" aria-atomic="true">
@@ -262,7 +270,7 @@ function Hero(props: { updatedAt: string | null; summary?: string }) {
           <span data-slot="hero-meta-empty">{i18n.t("home.noRows")}</span>
         )}
       </p>
-      <div data-slot="hero-canvas">
+      <div data-slot="hero-canvas" ref={canvas}>
         <div data-slot="hero-pattern" aria-hidden="true" />
         <h1>
           <a data-slot="heading-link" href="#overview">
@@ -274,6 +282,55 @@ function Hero(props: { updatedAt: string | null; summary?: string }) {
       </div>
     </section>
   )
+}
+
+const HERO_DOT = { pitch: 6, size: 2, gap: 15 }
+
+// A cut-out edge can't land on a dot, so the visible gap is set by where the grid falls. The grid phase that gives the
+// title and the copy the same gap is solved for each axis, and the cut-outs end midway between dot columns.
+function alignHeroCut(canvas: HTMLElement) {
+  const title = canvas.querySelector("h1")
+  const copy = canvas.querySelector<HTMLElement>('[data-slot="hero-copy"]')
+  if (!title || !copy) return
+  const titleStyle = getComputedStyle(title)
+  if (titleStyle.position !== "absolute") return canvas.removeAttribute("style")
+  const copyStyle = getComputedStyle(copy)
+  const box = canvas.getBoundingClientRect()
+  const titleBox = title.getBoundingClientRect()
+  const copyBox = copy.getBoundingClientRect()
+  const bearing = rightBearing(title, titleStyle)
+  const titleRight = titleBox.right - box.left - parseFloat(titleStyle.paddingRight) - bearing
+  const titleBottom = titleBox.bottom - box.top - parseFloat(titleStyle.paddingBottom)
+  const copyLeft = copyBox.left - box.left + parseFloat(copyStyle.paddingLeft)
+  const copyTop = copyBox.top - box.top + parseFloat(copyStyle.paddingTop)
+  const x = matchedGap(titleRight, copyLeft)
+  const y = matchedGap(titleBottom, copyTop)
+  const cut = (gap: number) => `${gap - HERO_DOT.size}px`
+  canvas.style.setProperty("--hero-grid", `${devicePixel(titleRight + x)}px ${devicePixel(titleBottom + y)}px`)
+  canvas.style.setProperty("--hero-title-cut-x", cut(x - bearing))
+  canvas.style.setProperty("--hero-cut-x", cut(x))
+  canvas.style.setProperty("--hero-cut-y", cut(y))
+}
+
+// The gap that the dots after `first` and the dots before `second` can share. Equal gaps repeat every half pitch, so
+// this picks the one closest to the target.
+function matchedGap(first: number, second: number) {
+  const half = HERO_DOT.pitch / 2
+  const min = HERO_DOT.gap - half / 2
+  const offset = ((second - first - HERO_DOT.size) / 2 - min) % half
+  return min + ((offset + half) % half)
+}
+
+function rightBearing(el: HTMLElement, style: CSSStyleDeclaration) {
+  const context = document.createElement("canvas").getContext("2d")
+  if (!context) return 0
+  context.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`
+  const metrics = context.measureText(el.textContent ?? "")
+  return Math.max(0, metrics.width - metrics.actualBoundingBoxRight)
+}
+
+function devicePixel(value: number) {
+  return Math.round(value * devicePixelRatio) / devicePixelRatio
 }
 
 function HeroMetaTickerPart(props: { previous: string; current: string; ticking: boolean }) {

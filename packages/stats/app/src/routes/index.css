@@ -1004,16 +1004,19 @@ body {
     position: relative;
     display: block;
     height: 232px;
+    /* The title is trimmed to its cap height, so this keeps the meta-to-title gap it had with line-height leading. */
+    margin-top: 8px;
     overflow: hidden;
   }
 
+  /* The title and copy cut-outs are trimmed to their ink, and Hero places the grid so both cut-outs leave the same gap. */
   [data-page="stats"] [data-slot="hero-pattern"] {
     position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 1280px;
-    height: 351px;
-    transform: translate(-50%, -50%);
+    inset: 0;
+    width: auto;
+    height: auto;
+    mask-position: var(--hero-grid, 0 0);
+    -webkit-mask-position: var(--hero-grid, 0 0);
   }
 
   [data-page="stats"] [data-section="hero"] h1 {
@@ -1023,9 +1026,10 @@ body {
     z-index: 1;
     width: max-content;
     max-width: 100%;
-    padding: 0 12px 12px 0;
+    padding: 0 var(--hero-title-cut-x, 11px) var(--hero-cut-y, 13px) 0;
     background: var(--stats-bg);
     white-space: nowrap;
+    text-box: trim-both cap alphabetic;
   }
 
   [data-page="stats"] [data-slot="hero-copy"] {
@@ -1033,10 +1037,13 @@ body {
     right: 0;
     bottom: 0;
     z-index: 1;
-    width: min(563px, 100%);
-    padding: 12px 0 0 16px;
+    box-sizing: content-box;
+    width: min(33ch, 100%);
+    padding: var(--hero-cut-y, 13px) 0 0 var(--hero-cut-x, 13px);
     background: var(--stats-bg);
-    text-align: right;
+    text-align: justify;
+    text-align-last: right;
+    text-box: trim-both cap alphabetic;
   }
 
   [data-page="stats"] [data-slot="hero-copy-break"] {
