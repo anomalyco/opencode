@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import type { McpServer } from "@agentclientprotocol/sdk"
 import { Schema } from "effect"
 import { currentValue } from "./select-options"
-import { makeSession, rpcError, secondModel, startWire, type Wire } from "./wire-fixture"
+import { durableEvent, ephemeralEvent, makeSession, rpcError, secondModel, startWire, type Wire } from "./wire-fixture"
 
 describe("acp session lifecycle over the wire", () => {
   test("initialize advertises capabilities, negotiates the version, and offers terminal auth only when asked", async () => {
@@ -182,6 +182,32 @@ describe("acp session lifecycle over the wire", () => {
       directory: "/workspace",
       config: { type: "remote", url: "https://example.com/mcp", headers: { Authorization: "Bearer x" }, oauth: false },
     })
+  })
+  test("adds MCP servers again after their location shuts down", async () => {
+    const local: McpServer = { name: "tools", command: "bun", args: ["server.ts"], env: [] }
+    await using acp = await startWire()
+    await acp.initialize()
+    const session = await acp.newSession("/workspace", [local])
+    const shutdown = async (directory: string, agent: string) => {
+      const count = () => acp.updates.filter((item) => item.update.sessionUpdate === "config_option_update").length
+      const before = count()
+      acp.server.send(
+        ephemeralEvent("location.shutdown", {}, { directory }),
+        durableEvent("session.agent.selected", { sessionID: session.sessionId, agent }),
+      )
+      // Selections share the shutdown's event stream, so this update means the shutdown was handled.
+      await acp.until(() => count() > before, "config option update")
+    }
+
+    await shutdown("/elsewhere", "plan")
+    await acp.prompt(session.sessionId, "hello")
+    expect(acp.server.mcp).toHaveLength(1)
+
+    await shutdown("/workspace", "build")
+    await acp.prompt(session.sessionId, "hello")
+    await acp.prompt(session.sessionId, "hello")
+    await acp.request("session/resume", { cwd: "/workspace", sessionId: session.sessionId, mcpServers: [local] })
+    expect(acp.server.mcp.map((item) => item.name)).toEqual(["tools", "tools"])
   })
   test("rejects relative cwds, MCP-over-ACP, and SSE servers before creating or loading a session", async () => {
     await using acp = await startWire()
