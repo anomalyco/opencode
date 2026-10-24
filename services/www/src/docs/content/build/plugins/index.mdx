@@ -1400,7 +1400,9 @@ differently:
 - `context` runs for the agent loop, including tool-driven continuations.
 - `compaction` runs for checkpoint summaries. `messages` is the transcript being summarized; OpenCode appends its
   summary prompt after hooks run. Set `result` to record the compaction yourself and skip the model call; it takes the
-  same fields as a completed compaction message.
+  same fields as a completed compaction message. If the transcript must be reduced to fit, `compaction` and
+  `model.request` run again on a fresh reduced draft, without edits from earlier attempts. A supplied `result`
+  completes compaction immediately; it is not reduced or carried into another attempt.
 - `generate` runs for transient `ctx.session.generate` calls.
 - `title` runs for title generation. It has no `agent` or `tools`. Set `result` to supply the title yourself.
 

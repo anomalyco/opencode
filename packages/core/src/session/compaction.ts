@@ -454,12 +454,13 @@ export const layer = Layer.effect(
       const prompt = buildPrompt(previous !== undefined, previous?.summary.includes(LEGACY_HEADING) ?? false)
       const headings = SUMMARY_TEMPLATE.split("\n").filter((line) => line.startsWith("##"))
       const filled = (text: string) => text.split("\n").some((line) => headings.includes(line.trim()))
-      const prepared = yield* prepare(context, messages, budget)
+      const build = (room?: number) => prepare(context, messages, budget, undefined, room, keepID)
 
       // Hooks saw the request without the summary prompt, so it is appended here. A reply that ignores the
       // template gets one reminder before it counts as a failure.
-      const send = (request: LLMRequest) =>
+      const send = (prepared: Prepared) =>
         Effect.gen(function* () {
+          const request = prepared.request
           const prompted = fitOutput(
             LLMRequest.update(request, { messages: [...request.messages, Message.user(prompt)] }),
             context.model.limit,
@@ -492,10 +493,11 @@ export const layer = Layer.effect(
       const fit = trigger.reason === "overflow" ? budget : Math.max(budget, summaryRoom(context.model.limit))
       const result = yield* deliver(
         trigger,
-        prepared,
+        () => prepare(context, messages, budget),
+        build,
         budget - overhead,
         send,
-        { fit: fit - overhead, history: withoutTail(prepared.request, keepID) },
+        fit - overhead,
         background,
       )
       if (!keepID) return result
@@ -524,7 +526,7 @@ export const layer = Layer.effect(
       if (!context.messages.some(SessionRecentText.messageToText)) return yield* Effect.fail(NOTHING_TO_COMPACT)
       const unsupported = (message: string) =>
         Effect.fail<Failure>({ error: { type: "provider.unsupported-operation", message } })
-      const prepared = yield* prepare(context, context.messages, budget, "session")
+      const build = (room?: number) => prepare(context, context.messages, budget, "session", room)
 
       const toResult = (window: ReadonlyArray<Message>, usage: Usage | undefined) =>
         spend(context.session.id, usage && SessionUsage.record(usage, context.model.cost)).pipe(
@@ -535,7 +537,8 @@ export const layer = Layer.effect(
           }),
         )
 
-      const send = (request: LLMRequest) => {
+      const send = (prepared: Prepared) => {
+        const request = prepared.request
         if (LLMClient.canCompact(request, { mechanism: "trigger" })) {
           return Effect.gen(function* () {
             const history = yield* SessionHistory.load(db, context.session.id, "local").pipe(Effect.orDie)
@@ -552,12 +555,13 @@ export const layer = Layer.effect(
         return unsupported(`Native compaction is not supported for ${request.model.provider}/${request.model.route.id}`)
       }
 
-      return yield* deliver(trigger, prepared, budget, send)
+      return yield* deliver(trigger, build, build, budget, send)
     })
 
     /**
-     * Sends the request as-is if it is estimated to fit `shrink.fit`, else `shrink.history` as-is if it fits `target`,
-     * and otherwise `shrink.history` as text aimed at `target` (see `flattenAndDropOldest`).
+     * Sends the request as-is if it is estimated to fit `fit`, else rebuilds the history without the retained tail.
+     * That history is sent unchanged if it fits `target`, otherwise as text (see `flattenAndDropOldest`).
+     * Every changed draft passes through request hooks again; edits from earlier attempts do not accumulate.
      * Limits and estimates can be wrong, so until the provider rejects something as too long, a request that cannot
      * be made to fit is sent whole: unchanged, or as text once its media has to go. A "too long" rejection means the
      * estimate ran low, so the next attempts aim at 85%, 70%, 50%, then 35% of the first rejected request's estimate,
@@ -569,56 +573,61 @@ export const layer = Layer.effect(
      */
     const deliver = Effect.fnUntraced(function* (
       trigger: Trigger,
-      prepared: Prepared,
+      initial: () => Effect.Effect<Prepared | undefined>,
+      build: (room?: number) => Effect.Effect<Prepared | undefined>,
       target: number,
-      send: (request: LLMRequest) => Effect.Effect<Result, AIError | Failure>,
-      shrink: { readonly fit: number; readonly history: LLMRequest } = { fit: target, history: prepared.request },
+      send: (prepared: Prepared) => Effect.Effect<Result, AIError | Failure>,
+      fit = target,
       background?: Background,
     ): Effect.fn.Return<Result, Failure> {
       const context = trigger.context
+      let prepared = yield* initial()
+      if (!prepared) return yield* Effect.fail(NOTHING_TO_COMPACT)
       if (prepared.event.result) return yield* fromHook(context, prepared.event.result, background)
 
       const policy = yield* SessionRunnerRetry.policy(context.session.id)
       let rejections = 0
       let rejected: number | undefined
-      let asText = false
-      let fit = shrink.fit
+      let forceText = false
+      let flattened = false
+      let rebuild = estimateRequest(prepared.request) > fit
 
       while (true) {
-        const unchanged = asText
-          ? undefined
-          : estimateRequest(prepared.request) <= fit
-            ? prepared.request
-            : estimateRequest(shrink.history) <= target
-              ? shrink.history
-              : undefined
-        const request =
-          unchanged ??
-          flattenAndDropOldest(shrink.history, context, target) ??
-          (rejections > 0
-            ? undefined
-            : asText
-              ? flattenAndDropOldest(shrink.history, context, Number.POSITIVE_INFINITY)
-              : shrink.history)
-        if (!request) {
-          return yield* Effect.fail<Failure>({
-            error: {
-              type: "compaction.failed",
-              message:
-                "The compaction request cannot be reduced further without losing the latest exchange or checkpoint",
-            },
-          })
+        if (rebuild) {
+          const history = forceText ? undefined : yield* build()
+          if (history?.event.result) return yield* fromHook(context, history.event.result, background)
+          const unchanged = history && estimateRequest(history.request) <= target
+          // Reserve the latest hooked system overhead; flattened drafts omit tool definitions.
+          const overhead = estimateRequest({ ...(history ?? prepared).request, tools: [], messages: [] })
+          const next = unchanged ? history : yield* build(target - overhead)
+          const candidate =
+            next ?? (rejections > 0 ? undefined : forceText ? yield* build(Number.POSITIVE_INFINITY) : history)
+          if (!candidate) {
+            return yield* Effect.fail<Failure>({
+              error: {
+                type: "compaction.failed",
+                message:
+                  "The compaction request cannot be reduced further without losing the latest exchange or checkpoint",
+              },
+            })
+          }
+          prepared = candidate
+          flattened = (!unchanged && next !== undefined) || forceText
+          rebuild = false
         }
+        if (prepared.event.result) return yield* fromHook(context, prepared.event.result, background)
+        const request = prepared.request
 
-        const attempt = yield* Effect.result(send(request))
+        const attempt = yield* Effect.result(send(prepared))
         if (Result.isSuccess(attempt)) return attempt.success
         const cause = attempt.failure
         if (!(cause instanceof AIError)) return yield* Effect.fail(cause)
         const error = toSessionError(cause)
         const tooLarge = cause.reason._tag === "InvalidRequest" && cause.reason.classification === "payload-too-large"
 
-        if (tooLarge && (request === prepared.request || request === shrink.history)) {
-          asText = true
+        if (tooLarge && !flattened) {
+          forceText = true
+          rebuild = true
           continue
         }
 
@@ -627,7 +636,7 @@ export const layer = Layer.effect(
           if (step === undefined) return yield* Effect.fail<Failure>({ error })
           rejected ??= estimateRequest(request)
           target = Math.floor(rejected * step)
-          fit = target
+          rebuild = true
           rejections++
           continue
         }
@@ -657,20 +666,19 @@ export const layer = Layer.effect(
      * detail is lost from the oldest history first and whole exchanges are omitted only as a last resort. The newest
      * exchange is never omitted; undefined when the transcript cannot fit even so.
      */
-    const flattenAndDropOldest = (request: LLMRequest, context: SessionContext.Loaded, target: number) => {
+    const flattenAndDropOldest = (messages: ReadonlyArray<Message>, context: SessionContext.Loaded, budget: number) => {
       const previous = previousCompaction(context.messages)
       const end =
-        request.messages.findLastIndex(
+        messages.findLastIndex(
           (message) =>
             (previous !== undefined && message.id === previous.id) ||
             message.content.some((part) => part.type === "compaction"),
         ) + 1
       const summary = previous !== undefined && !SessionHistory.isNativeCompaction(previous) ? previous : undefined
-      // TODO: Read the previous summary from the hooked request once it no longer merges summary and recent into one
-      // message. Until then it is rebuilt from storage, which drops a compaction hook's edits to that message.
+      // This is a fresh draft from history; request hooks run after it has been reduced.
       const lead = summary
         ? toLLMMessages([{ ...summary, metadata: { ...summary.metadata, recent: "" } }], context.model.ref)
-        : request.messages.slice(0, end)
+        : messages.slice(0, end)
       const recent = summary ? SessionRecentText.kept(summary) : ""
 
       // A user message and everything after it, up to the next one, is one exchange. Each is rendered at every level
@@ -678,7 +686,7 @@ export const layer = Layer.effect(
       // shortened text: whole until it is omitted.
       const exchanges = [
         ...(recent ? [TRANSCRIPT_LEVELS.map((level) => (level === OMITTED ? "" : recent))] : []),
-        ...request.messages
+        ...messages
           .slice(end)
           .reduce<Message[][]>((groups, message) => {
             if (message.role === "user" || groups.length === 0) groups.push([message])
@@ -701,8 +709,8 @@ export const layer = Layer.effect(
       const size = (text: string) => (text ? Token.estimate(text) + 1 : 0)
       // Room for the longest possible note is set aside before choosing what to keep.
       const room =
-        target -
-        estimateRequest({ system: request.system, tools: [], messages: lead }) -
+        budget -
+        lead.reduce((sum, message) => sum + estimateMessage(message), 0) -
         Token.estimate(note(exchanges.length))
 
       const levels = exchanges.map(() => 0)
@@ -724,7 +732,7 @@ export const layer = Layer.effect(
         .map((renders, index) => renders[levels[index]])
         .filter(Boolean)
         .join("\n\n")
-      return LLMRequest.update(request, { tools: [], messages: [...lead, Message.user(note(omitted) + text)] })
+      return [...lead, Message.user(note(omitted) + text)]
     }
 
     const stream = (
@@ -793,11 +801,11 @@ export const layer = Layer.effect(
     }
 
     /**
-     * The conversation as the runner would send it, after request hooks.
+     * The conversation as the runner would send it, optionally reduced, then passed through request hooks.
      *
      * The output limit leaves room for `budget`, the most `deliver` sends. The request prepared here can be larger
-     * when the conversation overshot the threshold, and is only shrunk to fit after hooks have seen it, so sizing the
-     * output to it would leave next to no room. A prompt the estimate undersells is rejected and shrunk like any
+     * when the conversation overshot the threshold. Reduced attempts are rebuilt from history before hooks run, so
+     * sizing the output to the full conversation would leave next to no room. An underestimated prompt is shrunk like any
      * other.
      */
     const prepare = (
@@ -805,13 +813,21 @@ export const layer = Layer.effect(
       messages: ReadonlyArray<SessionMessage.Info>,
       budget: number,
       webSocket?: "session",
+      room?: number,
+      keepID?: SessionMessage.ID,
     ) => {
       const base = transcript(context, messages)
+      base.messages = withoutTail(base.messages, keepID)
+      if (room !== undefined) {
+        const reduced = flattenAndDropOldest(base.messages, context, room)
+        if (!reduced) return Effect.succeed(undefined)
+        base.messages = reduced
+      }
       return requests.compaction({
         session: context.session,
         agent: context.agent.id,
         model: context.model,
-        tools: context.tools,
+        tools: room === undefined ? context.tools : undefined,
         system: base.system,
         messages: base.messages,
         webSocket,
@@ -965,10 +981,9 @@ const splitConversation = (messages: ReadonlyArray<SessionMessage.Info>, keep: n
 }
 
 /** The request without the retained tail, which starts at the message with ID `from`. */
-const withoutTail = (request: LLMRequest, from: SessionMessage.ID | undefined) => {
-  const index = from === undefined ? -1 : request.messages.findIndex((message) => message.id === from)
-  if (index < 0) return request
-  return LLMRequest.update(request, { messages: request.messages.slice(0, index) })
+const withoutTail = (messages: Message[], from: SessionMessage.ID | undefined) => {
+  const index = from === undefined ? -1 : messages.findIndex((message) => message.id === from)
+  return index < 0 ? messages : messages.slice(0, index)
 }
 
 const recentStart = (
