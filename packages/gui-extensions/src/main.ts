@@ -1,5 +1,6 @@
 import { Extension } from "./sdk/main"
 import context from "./context"
+import agents from "./agents"
 import btw from "./btw"
 import debug from "./debug"
 import terminal from "./terminal"
@@ -19,6 +20,7 @@ import microsoftOffice from "./microsoft-office"
  */
 export const builtins = Extension.compose(
   context,
+  agents,
   btw,
   { ...debug, main: () => import("./debug/main") },
   terminal,
