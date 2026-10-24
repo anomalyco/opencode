@@ -602,24 +602,36 @@ const lowerMessages = Effect.fnUntraced(function* (
 ) {
   const input: OpenResponsesInputItem[] = []
   const providerMetadataKey = metadataKey(request.model)
+  let toolUpdateBoundary = -1
 
   for (const message of request.messages) {
     const rawMetadata = message.providerMetadata?.[providerMetadataKey]
     const metadata = rawMetadata === undefined ? undefined : yield* decodeMessageMetadata(rawMetadata)
     if (message.role === "system") {
+      const afterToolResult = input.at(-1)?.type === "function_call_output" || input.length === toolUpdateBoundary
       const update = effortUpdate(message)
       if (update) {
         // Consecutive updates are rejected, so a newer one replaces its predecessor.
         const last = input.at(-1)
         if (last !== undefined && "type" in last && last.type === "configuration_update") input.pop()
         input.push({ type: "configuration_update", reasoning: { effort: update.effort ?? DEFAULT_EFFORT } })
+        if (afterToolResult) toolUpdateBoundary = input.length
         continue
       }
-      input.push({
-        type: "message",
-        role: "developer",
-        content: ProviderShared.joinText(yield* ProviderShared.systemUpdateText(adapter.name, message)),
-      })
+      const content = yield* ProviderShared.systemUpdateText(adapter.name, message)
+      // Responses gateways reject new developer context in a tool-result section.
+      // Keep consecutive updates in place using the existing escaped user fallback;
+      // only an emitted conversation item starts a new section.
+      if (afterToolResult) {
+        input.push({
+          type: "message",
+          role: "user",
+          content: [{ type: "input_text", text: ProviderShared.wrapSystemUpdate(content) }],
+        })
+        toolUpdateBoundary = input.length
+        continue
+      }
+      input.push({ type: "message", role: "developer", content: ProviderShared.joinText(content) })
       continue
     }
 
