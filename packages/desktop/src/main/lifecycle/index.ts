@@ -32,7 +32,8 @@ const runtime = Layer.effect(
     const windows = yield* makeMainWindows()
     const createWindow = windows.create
     const restoreWindows = windows.restore
-    const pendingDeepLinks: string[] = []
+    // Windows and Linux pass the link that launched the app as an argument; later ones arrive via second-instance.
+    const pendingDeepLinks = process.argv.filter((arg) => arg.startsWith("opencode://"))
     let shutdownReady = false
     const prepareToRestart = shutdown.run.pipe(Effect.ensuring(Effect.sync(() => (shutdownReady = true))))
 

@@ -12,17 +12,20 @@ import {
   useCurrentRoute,
   useLanguage,
   useExtensionServers,
+  useGlobal,
+  useServers,
   useTabs,
   type LayoutRoute,
 } from "@opencode/app/desktop"
 import { useTheme } from "@opencode/ui/theme/context"
 import type { BaseRouterProps } from "@solidjs/router"
-import { createEffect, createMemo, createResource, lazy, Show, Suspense } from "solid-js"
+import { createEffect, createMemo, createResource, lazy, onCleanup, Show, Suspense } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { ElectronAPI } from "./api-types"
 import { DesktopFirstLaunchOnboarding } from "./onboarding"
 import { createDesktopPlatform } from "./platform"
 import { bindDesktopMenu } from "./platform/menu"
+import { bindDeepLinks } from "./startup/deep-links"
 import { createSidecarResolver, initializationData, sidecarHttp } from "./startup/initialization"
 import { preloadStoredLocale } from "./startup/locale"
 import { LoadingSplash } from "./startup/splash"
@@ -122,6 +125,7 @@ export function DesktopApp(props: { api: ElectronAPI; version: string }) {
             onReady={() => setStartup("onboardingReady", true)}
           />
           <DesktopEffects api={props.api} />
+          <DesktopDeepLinks />
           <Suspense fallback={null}>
             <Show when={initializationData(sidecar)} keyed>
               {(server) => <MigrationStatus server={server} />}
@@ -194,6 +198,39 @@ function DesktopEffects(props: { api: ElectronAPI }) {
     const background = getComputedStyle(document.documentElement).getPropertyValue("--background-base").trim()
 
     if (background) void props.api.setBackgroundColor(background)
+  })
+
+  return null
+}
+
+// Deep links open on the local server once the window's tabs have loaded, so a new draft is not lost to hydration.
+function DesktopDeepLinks() {
+  const servers = useServers()
+  const global = useGlobal()
+  const tabs = useTabs()
+
+  createEffect(() => {
+    const conn = servers.list.find(ServerConnection.builtin)
+
+    if (!conn || !tabs.ready()) return
+    const server = ServerConnection.key(conn)
+    bindDeepLinks((link) => {
+      if (link.type === "open-session") {
+        const tab = tabs.addSessionTab({ server, sessionId: link.sessionID })
+
+        if (tab.type !== "session") return
+        tabs.rememberSessionRoute(tab, link.sessionID)
+        tabs.select(tab)
+
+        return
+      }
+
+      const projects = global.ensureServerCtx(conn).projects
+      projects.open(link.directory)
+      projects.touch(link.directory)
+      void tabs.newDraft({ server, directory: link.directory }, link.prompt)
+    })
+    onCleanup(() => bindDeepLinks(undefined))
   })
 
   return null
