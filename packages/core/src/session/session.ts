@@ -258,18 +258,18 @@ export const make = Effect.fn("Session.make")(function* () {
     input: { id?: SessionMessage.ID; delivery?: SessionInbox.Delivery },
   ) {
     const session = yield* get(sessionID)
-    if (session.revert) yield* SessionRevert.commit(bus, session)
     const inputID = input.id ?? SessionMessage.ID.create()
     const admitted = yield* admission
       .admitCompaction({
         id: inputID,
         sessionID,
         delivery: input.delivery ?? "steer",
+        beforeAdmit: session.revert ? SessionRevert.commit(bus, session) : undefined,
       })
       .pipe(
         Effect.catchTag("SessionInbox.LifecycleConflict", () => new CompactionConflictError({ sessionID, inputID })),
       )
-    yield* execution.wake(sessionID)
+    if (!(yield* get(sessionID)).revert) yield* execution.wake(sessionID)
     return admitted
   })
   const wait = Effect.fn("Session.wait")(function* (sessionID: SessionSchema.ID) {

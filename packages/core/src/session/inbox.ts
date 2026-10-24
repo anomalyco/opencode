@@ -214,6 +214,7 @@ export const make = Effect.fn("SessionInbox.make")(function* () {
     readonly id: SessionMessage.ID
     readonly sessionID: SessionSchema.ID
     readonly delivery: Delivery
+    readonly beforeAdmit?: Effect.Effect<void>
   }) {
     return yield* serialized(
       input.sessionID,
@@ -225,6 +226,7 @@ export const make = Effect.fn("SessionInbox.make")(function* () {
         }
         if (yield* promotedFromMessage(db, input.sessionID, input.id, input.delivery))
           return yield* new LifecycleConflict({ id: input.id })
+        if (input.beforeAdmit) yield* input.beforeAdmit
         const pending = (yield* list(db, input.sessionID)).find((item) => item.type === "compaction")
         if (pending) return pending
         return yield* admit({
