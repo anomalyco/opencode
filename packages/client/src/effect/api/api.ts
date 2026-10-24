@@ -23,6 +23,7 @@ import type { Event } from "@opencode/schema/event"
 import type { EventLog } from "@opencode/schema/event-log"
 import type { Workspace } from "@opencode/schema/workspace"
 import type { Instruction } from "@opencode/schema/instruction"
+import type { SessionGoal } from "@opencode/schema/session-goal"
 import type { Snapshot } from "@opencode/schema/snapshot"
 import type { Shell } from "@opencode/schema/shell"
 import type { Form } from "@opencode/schema/form"
@@ -722,6 +723,58 @@ export type SessionLogOutput =
           readonly id: Event.ID
           readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
+          readonly type: "session.goal.updated"
+          readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
+          readonly location?:
+            | { readonly directory: AbsolutePath; readonly workspaceID?: Workspace.ID | undefined }
+            | undefined
+          readonly data: { readonly sessionID: Session.ID; readonly snapshot: SessionGoal.Snapshot }
+        }
+      | {
+          readonly id: Event.ID
+          readonly created: number
+          readonly metadata?: { readonly [x: string]: unknown } | undefined
+          readonly type: "session.goal.cleared"
+          readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
+          readonly location?:
+            | { readonly directory: AbsolutePath; readonly workspaceID?: Workspace.ID | undefined }
+            | undefined
+          readonly data: { readonly sessionID: Session.ID; readonly goalID: SessionGoal.ID; readonly revision: number }
+        }
+      | {
+          readonly id: Event.ID
+          readonly created: number
+          readonly metadata?: { readonly [x: string]: unknown } | undefined
+          readonly type: "session.todo.updated"
+          readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
+          readonly location?:
+            | { readonly directory: AbsolutePath; readonly workspaceID?: Workspace.ID | undefined }
+            | undefined
+          readonly data: {
+            readonly sessionID: Session.ID
+            readonly revision: number
+            readonly todos: ReadonlyArray<SessionGoal.TodoInput>
+          }
+        }
+      | {
+          readonly id: Event.ID
+          readonly created: number
+          readonly metadata?: { readonly [x: string]: unknown } | undefined
+          readonly type: "session.todo.verified"
+          readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
+          readonly location?:
+            | { readonly directory: AbsolutePath; readonly workspaceID?: Workspace.ID | undefined }
+            | undefined
+          readonly data: {
+            readonly sessionID: Session.ID
+            readonly revision: number
+            readonly items: ReadonlyArray<SessionGoal.TodoVerification>
+          }
+        }
+      | {
+          readonly id: Event.ID
+          readonly created: number
+          readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.synthetic"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
           readonly location?:
@@ -1212,7 +1265,7 @@ export type SessionLogOutput =
             | undefined
           readonly data: {
             readonly sessionID: Session.ID
-            readonly source: "title" | "compaction"
+            readonly source: "title" | "compaction" | "goal-verify"
             readonly cost: Money.USD
             readonly allowance?: Money.USD | undefined
             readonly tokens: {
@@ -1253,6 +1306,33 @@ export type SessionBackgroundOutput = void
 export type SessionBackgroundOperation<E = never> = (
   input: SessionBackgroundInput,
 ) => Effect.Effect<SessionBackgroundOutput, E>
+
+export type SessionGoalGetInput = { readonly sessionID: Session.ID }
+export type SessionGoalGetOutput = SessionGoal.State
+export type SessionGoalGetOperation<E = never> = (input: SessionGoalGetInput) => Effect.Effect<SessionGoalGetOutput, E>
+
+export type SessionGoalUpdateInput = {
+  readonly sessionID: Session.ID
+  readonly action: "set" | "clear" | "edit" | "pause" | "resume"
+  readonly objective?: string | undefined
+  readonly expectedRevision?: number | undefined
+  readonly expectedGoalID?: SessionGoal.ID | undefined
+}
+export type SessionGoalUpdateOutput = SessionGoal.Snapshot
+export type SessionGoalUpdateOperation<E = never> = (
+  input: SessionGoalUpdateInput,
+) => Effect.Effect<SessionGoalUpdateOutput, E>
+
+export type SessionTodoReplaceInput = {
+  readonly sessionID: Session.ID
+  readonly todos: ReadonlyArray<SessionGoal.TodoInput>
+  readonly expectedRevision?: number | undefined
+  readonly expectedGoalID?: SessionGoal.ID | undefined
+}
+export type SessionTodoReplaceOutput = void
+export type SessionTodoReplaceOperation<E = never> = (
+  input: SessionTodoReplaceInput,
+) => Effect.Effect<SessionTodoReplaceOutput, E>
 
 export type SessionMessageGetInput = { readonly sessionID: Session.ID; readonly messageID: SessionMessage.ID }
 export type SessionMessageGetOutput = SessionMessage.Info
@@ -1359,6 +1439,8 @@ export interface SessionApi<E = never> {
   readonly log: SessionLogOperation<E>
   readonly interrupt: SessionInterruptOperation<E>
   readonly background: SessionBackgroundOperation<E>
+  readonly goal: { readonly get: SessionGoalGetOperation<E>; readonly update: SessionGoalUpdateOperation<E> }
+  readonly todo: { readonly replace: SessionTodoReplaceOperation<E> }
   readonly message: { readonly get: SessionMessageGetOperation<E> }
   readonly form: {
     readonly list: SessionFormListOperation<E>

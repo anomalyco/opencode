@@ -2,6 +2,7 @@ export * as SessionContext from "./context.js"
 
 import { Model } from "../model.js"
 import { Permission } from "../permission.js"
+import { eq } from "drizzle-orm"
 import { Context, Effect, Layer } from "effect"
 import { Agent } from "../agent.js"
 import { CodeModeInstructions } from "../codemode/instructions.js"
@@ -23,6 +24,7 @@ import { SessionMessage } from "./message.js"
 import { SessionModelRequest } from "./model-request.js"
 import { SessionRunnerModel } from "./runner/model.js"
 import { SessionSchema } from "./schema.js"
+import { SessionGoalTable } from "./sql.js"
 import { SessionStore } from "./store.js"
 
 export interface Selection {
@@ -69,6 +71,34 @@ export interface Interface {
 
 /** Location-scoped model-context loader for durable Session Steps. */
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionContext") {}
+
+/**
+ * The tools a goal owns, by the names the goal plugins register. A Session without
+ * a goal has nothing for them to act on, so it is not offered them: every request
+ * would otherwise carry two definitions that only invite a call the goal refuses.
+ */
+const goalTools = new Set(["goal", "goal_todo"])
+
+/**
+ * The tool set a Session is offered, narrowed to the tools its own state can use.
+ * The goal row is read here, by table, because the goal domain's service reaches
+ * Session execution, which reaches this module: importing it would close a module
+ * cycle over one existence check.
+ */
+export const forSession = Effect.fn("SessionContext.forSession")(function* (
+  db: Database.Interface["db"],
+  tools: Tool.Snapshot,
+  sessionID: SessionSchema.ID,
+) {
+  const goal = yield* db
+    .select({ sessionID: SessionGoalTable.session_id })
+    .from(SessionGoalTable)
+    .where(eq(SessionGoalTable.session_id, sessionID))
+    .get()
+    .pipe(Effect.orDie)
+  if (goal) return tools
+  return { ...tools, definitions: tools.definitions.filter((tool) => !goalTools.has(tool.name)) }
+})
 
 const layer = Layer.effect(
   Service,
@@ -161,7 +191,7 @@ const layer = Layer.effect(
           loaded.builtins,
           loaded.entries,
         ]),
-        tools: loaded.tools,
+        tools: yield* forSession(db, loaded.tools, session.id),
       }
     })
 

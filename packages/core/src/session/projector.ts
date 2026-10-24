@@ -12,6 +12,7 @@ import { SessionMessage } from "./message.js"
 import { SessionMessageUpdater } from "./message-updater.js"
 import { SessionInbox } from "./inbox.js"
 import { InstructionState } from "./instruction-state.js"
+import { SessionGoal } from "./goal.js"
 import { SessionInboxTable, SessionMessageTable, SessionTable } from "./sql.js"
 import { InstructionEntry } from "./instruction-entry.js"
 import { Slug } from "../util/slug.js"
@@ -682,6 +683,12 @@ const layer = Layer.effectDiscard(
           item: event.data.item,
           timeCreated: event.created,
         })
+        // The goal driver defers a round as a synthetic row tagged with its source.
+        // Counting it in the same transaction keeps `session_goal.rounds` derivable
+        // from the event log: a replay rebuilds the budget, and clients that follow
+        // events see the count move.
+        if (event.data.item.type === "synthetic" && event.data.item.payload.metadata?.["source"] === "goal")
+          yield* SessionGoal.projectRoundScheduled(db, event.data.sessionID)
         yield* db
           .update(SessionTable)
           .set({ time_updated: event.created })
@@ -710,6 +717,29 @@ const layer = Layer.effectDiscard(
       Effect.gen(function* () {
         yield* run(db, event)
         yield* InstructionState.apply(db, event.data.sessionID, event.durable.seq, event.data.delta)
+      }),
+    )
+    yield* bus.project(SessionEvent.Goal.Updated, (event) =>
+      SessionGoal.projectUpdated(db, { sessionID: event.data.sessionID, snapshot: event.data.snapshot }),
+    )
+    yield* bus.project(SessionEvent.Goal.Cleared, (event) =>
+      SessionGoal.projectCleared(db, {
+        sessionID: event.data.sessionID,
+        goalID: event.data.goalID,
+      }),
+    )
+    yield* bus.project(SessionEvent.Todo.Updated, (event) =>
+      SessionGoal.projectTodoUpdated(db, {
+        sessionID: event.data.sessionID,
+        revision: event.data.revision,
+        todos: event.data.todos,
+      }),
+    )
+    yield* bus.project(SessionEvent.Todo.Verified, (event) =>
+      SessionGoal.projectTodoVerified(db, {
+        sessionID: event.data.sessionID,
+        revision: event.data.revision,
+        items: event.data.items,
       }),
     )
     yield* bus.project(SessionEvent.Synthetic, (event) => run(db, event))

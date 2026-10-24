@@ -59,6 +59,10 @@ import { Reference } from "../reference.js"
 import { WebSearch } from "../websearch.js"
 import { Ripgrep } from "../ripgrep.js"
 import { Session } from "../session.js"
+import { SessionGoal } from "../session/goal.js"
+import { SessionGoalActivation } from "../session/goal-activation.js"
+import { SessionGoalVerify } from "../session/goal-verify.js"
+import { SessionContext } from "../session/context.js"
 import { SessionCompaction } from "../session/compaction.js"
 import { SessionInstructions } from "../session/instructions.js"
 import { SubagentJob } from "../session/subagent-job.js"
@@ -71,6 +75,8 @@ import { Watcher } from "../filesystem/watcher.js"
 import { PatchTool } from "../tool/plugin/patch.js"
 import { EditTool } from "../tool/plugin/edit.js"
 import { GlobTool } from "../tool/plugin/glob.js"
+import { GoalTool } from "../tool/plugin/goal.js"
+import { GoalTodoTool } from "../tool/plugin/goal-todo.js"
 import { GrepTool } from "../tool/plugin/grep.js"
 import { McpResourceTools } from "../tool/plugin/mcp-resource.js"
 import { OpenCodeTools } from "../tool/plugin/opencode.js"
@@ -90,6 +96,7 @@ import { WriteTool } from "../tool/plugin/write.js"
 import { AgentPlugin } from "./agent.js"
 import BrowserPlugin from "@opencode/plugin-browser"
 import { CommandPlugin } from "./command.js"
+import { GoalPlugin } from "./goal.js"
 import { IdentityPlugin } from "./identity.js"
 import { PlanPlugin } from "./plan.js"
 import { ModelsDevPlugin } from "./models-dev.js"
@@ -142,6 +149,10 @@ const services = [
   WebSearch.Service,
   Ripgrep.Service,
   Session.Service,
+  SessionGoal.Service,
+  SessionGoalActivation.Service,
+  SessionGoalVerify.Service,
+  SessionContext.Service,
   SessionCompaction.Service,
   SessionInstructions.Service,
   SubagentJob.Service,
@@ -196,6 +207,10 @@ export const requirements = LayerNode.group([
   WebSearch.node,
   Ripgrep.node,
   Session.node,
+  SessionGoal.node,
+  SessionGoalActivation.node,
+  SessionGoalVerify.node,
+  SessionContext.node,
   SessionCompaction.node,
   SessionInstructions.node,
   SubagentJob.node,
@@ -234,8 +249,11 @@ const pre = [
   ...OptimizePlugin.Plugins,
   VerbosityPlugin.Plugin,
   IdentityPlugin.Plugin,
+  GoalPlugin.Plugin,
   EditTool.Plugin,
   GlobTool.Plugin,
+  GoalTool.Plugin,
+  GoalTodoTool.Plugin,
   GrepTool.Plugin,
   OpenCodeTools.Plugin,
   McpResourceTools.Plugin,
