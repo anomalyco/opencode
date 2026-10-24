@@ -27,14 +27,53 @@ export function sanitize(content: string) {
   const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/)
   if (!match) return content
   const frontmatter = match[1]
-  const result = frontmatter.split(/\r?\n/).flatMap((line) => {
-    if (line.trim().startsWith("#") || line.trim() === "" || /^\s+/.test(line)) return [line]
-    const entry = line.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*(.*)$/)
-    if (!entry) return [line]
-    const value = entry[2].trim()
-    if (value === "" || value === ">" || value === "|" || value.startsWith('"') || value.startsWith("'")) return [line]
-    if (!value.includes(":")) return [line]
-    return [`${entry[1]}: |-`, `  ${value}`]
+  const lines = frontmatter.split(/\r?\n/)
+  const entry = (line: string) => line.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*(.*)$/)
+  const plain = (value: string) =>
+    value !== "" && value !== ">" && value !== "|" && !value.startsWith('"') && !value.startsWith("'")
+
+  // Pass 1: quote a plain scalar that begins with a flow indicator ([ or {) when
+  // it is not valid flow syntax. YAML reads the leading bracket as a flow
+  // collection, so `description: [Team] Does a thing` throws (text after the
+  // closing bracket) and the whole document is dropped silently. A well-formed
+  // flow collection is left alone, including an alias reference like
+  // `permissions: [*rule]` which must stay a flow sequence.
+  const flowFixed = lines.flatMap((line) => {
+    const found = entry(line)
+    if (!found) return [line]
+    const value = found[2].trim()
+    if (!plain(value)) return [line]
+    if (!/^[\[{]/.test(value)) return [line]
+    if (!/^[\[{].*[\]}]\s*\S/.test(value)) return [line]
+    return [`${found[1]}: ${JSON.stringify(value)}`]
   })
-  return content.replace(frontmatter, () => result.join("\n"))
+
+  // Pass 2: retry any remaining plain scalar containing an unquoted colon as a
+  // block scalar. Pure anchor definitions, aliases and tags are structural YAML
+  // and must be left untouched, but values that merely start with `*`/`&`/`!`
+  // (`description: *Important*: read this`) still need the fallback.
+  const colonFixed = flowFixed.flatMap((line) => {
+    const found = entry(line)
+    if (!found) return [line]
+    const value = found[2].trim()
+    if (!plain(value)) return [line]
+    // Flow values were settled in pass 1; never block-scalar them here.
+    if (/^[\[{]/.test(value)) return [line]
+    if (/^&[A-Za-z0-9_-]+(?:\s|$)/.test(value)) return [line]
+    if (/^\*[A-Za-z0-9_-]+$/.test(value)) return [line]
+    if (/^![A-Za-z0-9_-]+$/.test(value)) return [line]
+    if (!value.includes(":")) return [line]
+    return [`${found[1]}: |-`, `  ${value}`]
+  })
+
+  return content.replace(frontmatter, () => colonFixed.join("\n"))
+}
+
+function parseable(frontmatter: string): boolean {
+  try {
+    matter(`---\n${frontmatter}\n---\n`, {})
+    return true
+  } catch {
+    return false
+  }
 }
