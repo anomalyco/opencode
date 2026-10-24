@@ -129,7 +129,7 @@ export function createPermissionAutoApprover(input: { sdk: ServerSDK; data: Data
   // A request from a session this client has not loaded needs that session's
   // project before a per-project choice can apply to it.
   function consider(permission: PermissionRequest) {
-    if (covers(undefined) || input.data.session.get(permission.sessionID)) return approve(permission)
+    if (input.data.session.get(permission.sessionID)) return approve(permission)
     void input.sdk.api.session
       .get({ sessionID: permission.sessionID })
       .then((session) => approve(permission, session.projectID))
