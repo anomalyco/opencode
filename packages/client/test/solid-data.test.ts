@@ -1167,6 +1167,54 @@ test("loads bounded message pages", async () => {
   }
 })
 
+// Forked IDs end in `_<seq>`, where `_10` sorts before `_9`; iOS mints uppercase IDs.
+test.each([
+  ["forked", ["msg_fork_9", "msg_fork_10", "msg_fork_11"]],
+  ["mixed-case", ["msg_d4f1", "msg_A47D", "msg_e2b9"]],
+])("drops %s messages from a committed revert boundary by list position", async (_, ids) => {
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async () =>
+      Response.json({
+        data: ids.map((id) => ({ id, type: "user", text: id, time: { created: 1 } })).toReversed(),
+        cursor: {},
+      }),
+  })
+  const setup = createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: "/project",
+      event: {
+        on: () => () => {},
+        listen(handler) {
+          listeners.add(handler)
+          return () => listeners.delete(handler)
+        },
+      },
+    }),
+    dispose,
+  }))
+
+  try {
+    await setup.data.session.message.sync("ses_refresh")
+    const event: OpenCodeEvent = {
+      id: "evt_revert",
+      created: 2,
+      type: "session.revert.committed",
+      durable: { aggregateID: "ses_refresh", seq: 1, version: 1 },
+      data: { sessionID: "ses_refresh", to: ids[1] },
+    }
+    listeners.forEach((listener) => listener({ name: event.type, details: event }))
+
+    expect(setup.data.session.message.list("ses_refresh").map((message) => message.id)).toEqual([ids[0]])
+    expect(setup.data.session.message.get("ses_refresh", ids[0])?.id).toBe(ids[0])
+    expect(setup.data.session.message.get("ses_refresh", ids[2])).toBeUndefined()
+  } finally {
+    setup.dispose()
+  }
+})
+
 test.each(["success", "failure", "cancel", "cancel-retry", "cancel-page", "join-cancel", "join-failure"])(
   "bulk history (%s)",
   async (mode) => {

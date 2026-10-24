@@ -1152,23 +1152,32 @@ export function createData(config: CreateDataInput) {
         if (store.session.info[event.data.sessionID])
           setStore("session", "info", event.data.sessionID, "revert", undefined)
         return
-      case "session.revert.committed":
+      case "session.revert.committed": {
         if (store.session.info[event.data.sessionID]) {
           setStore("session", "info", event.data.sessionID, "revert", undefined)
         }
-        // The projector also deletes inbox items enqueued at or after the boundary without a cancel event.
+        // Messages are in server sequence order, but IDs do not sort by it (forked IDs end in `_<seq>`, and iOS
+        // mints mixed-case IDs), so cut by position. A boundary missing from the loaded tail is older than all of it.
+        const removed = new Set<string>()
+        message.update(event.data.sessionID, (draft, index) => {
+          for (const item of draft.splice(index.get(event.data.to) ?? 0)) {
+            index.delete(item.id)
+            removed.add(item.id)
+          }
+        })
+        if (!store.session.pending[event.data.sessionID]?.length) return
         setStore(
           "session",
           "pending",
           event.data.sessionID,
-          (store.session.pending[event.data.sessionID] ?? []).filter((item) => item.id < event.data.to),
+          (store.session.pending[event.data.sessionID] ?? []).filter((item) => !removed.has(item.id)),
         )
-        message.update(event.data.sessionID, (draft, index) => {
-          const position = draft.findIndex((item) => item.id >= event.data.to)
-          if (position === -1) return
-          for (const item of draft.splice(position)) index.delete(item.id)
-        })
+        // The projector also deletes inbox items enqueued at or after the boundary without a cancel event. Only the
+        // server knows their enqueue order, so reread the inbox.
+        result.session.pending.invalidate(event.data.sessionID)
+        refresh(() => result.session.pending.sync(event.data.sessionID))
         return
+      }
       case "session.compaction.delta":
         message.update(event.data.sessionID, (draft) => {
           const current = message.compaction(draft)
