@@ -365,7 +365,9 @@ describe("ConfigProviderPlugin.Plugin", () => {
       expect(yield* integrations.get(Integration.ID.make("litellm"))).toMatchObject({
         id: "litellm",
         name: "litellm",
+        configured: true,
         methods: [{ type: "key", label: "Manually enter API Key" }],
+        connections: [],
       })
     }),
   )

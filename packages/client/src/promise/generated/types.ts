@@ -2577,6 +2577,7 @@ export type SessionEventDurable =
 export type IntegrationInfo = {
   id: IntegrationID
   name: string
+  configured?: boolean
   metadata?: { [x: string]: any }
   methods: Array<IntegrationMethod>
   connections: Array<ConnectionInfo>
