@@ -23,7 +23,19 @@ const fileNames = new Set([
 export function inlineCodeKind(text: string): "path" | "url" | undefined {
   if (/^https?:\/\//i.test(text)) return "url"
 
-  if (!text || /\s/.test(text) || /^[a-z][a-z0-9+.-]*:\/\//i.test(text)) return
+  if (!text || /^[a-z][a-z0-9+.-]*:\/\//i.test(text)) return
+
+  // Text with spaces is only a path when it starts like one, so `git add src/foo.ts` stays code.
+  const spaced = text.includes(" ") || text.includes("\t")
+  const startsLikePath =
+    /^[a-z]:/i.test(text) ||
+    text.startsWith("/") ||
+    text.startsWith("\\") ||
+    text.startsWith("./") ||
+    text.startsWith("../") ||
+    text.startsWith(".\\") ||
+    text.startsWith("..\\")
+  if (spaced && !startsLikePath) return
 
   // Code, globs and markup, not paths.
   if (/[{}<>"'`;=|&*,]/.test(text)) return

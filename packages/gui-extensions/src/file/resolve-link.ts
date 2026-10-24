@@ -57,7 +57,7 @@ export async function findFileLink(input: {
  * workspace paths by the search index.
  */
 export async function checkFileLinkExists(input: {
-  readonly files: Pick<Files, "search" | "resolve" | "exists">
+  readonly files: Pick<Files, "search" | "resolve" | "kind">
   readonly href: string
   readonly signal: AbortSignal
 }): Promise<boolean> {
@@ -67,9 +67,17 @@ export async function checkFileLinkExists(input: {
   // server connect to the host just to answer.
   if (!parsed.path || parsed.path.startsWith("~") || parsed.path.startsWith("//")) return false
 
-  if (isAbsoluteLink(parsed.path)) return input.files.exists(input.files.resolve(parsed.path))
+  const existing = (path: string) => {
+    const resolved = input.files.resolve(path)
 
-  return !!(await findFileLink({ files: input.files, path: parsed.path, signal: input.signal }))
+    return resolved ? input.files.kind(resolved).then((kind) => kind !== undefined) : Promise.resolve(false)
+  }
+
+  if (isAbsoluteLink(parsed.path)) return existing(parsed.path)
+  if (await findFileLink({ files: input.files, path: parsed.path, signal: input.signal })) return true
+
+  // The search index covers files only; a directory named in a message still gets a link.
+  return existing(parsed.path)
 }
 
 function extractLineSelection(input: string, isFileUrl: boolean) {

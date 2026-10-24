@@ -227,18 +227,20 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     }
 
     // Lists the parent directory instead of reading the file, so checking a path a message names transfers no content.
-    const exists = (input: string) => {
+    const kind = (input: string): Promise<"file" | "directory" | undefined> => {
       const file = path.normalize(input)
 
-      if (!file) return Promise.resolve(false)
+      if (!file) return Promise.resolve(undefined)
 
       const parent = /[\\/]/.test(file) ? getDirectory(file) : undefined
 
       return serverSDK.api.file.list({ path: parent, location: { directory: scope() } }).then(
-        (x) => x.data.some((entry) => entry.type === "file" && getFilename(entry.path) === getFilename(file)),
-        () => false,
+        (x) => x.data.find((entry) => getFilename(entry.path) === getFilename(file))?.type,
+        () => undefined,
       )
     }
+
+    const exists = (input: string) => kind(input).then((type) => type !== undefined)
 
     const search = (query: string, dirs: "true" | "false", options?: { limit?: number; signal?: AbortSignal }) =>
       serverSDK.api.file
@@ -331,6 +333,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       notFound: (input: string) => store.file[path.normalize(input)]?.notFound ?? false,
       load,
       exists,
+      kind,
       scrollTop,
       scrollLeft,
       setScrollTop,

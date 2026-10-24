@@ -502,6 +502,22 @@ const setup: Setup<typeof File> = (ctx) => {
   }
 
   // Messages style a path as a link only when this says the file exists.
+  // Listing a directory answers both the linkify check and the click, so reuse it per session and path.
+  const kinds = new Map<string, "file" | "directory" | undefined>()
+  const kindOf = (
+    files: { readonly root: string; kind(path: string): Promise<"file" | "directory" | undefined> },
+    path: string,
+  ): Promise<"file" | "directory" | undefined> => {
+    const key = `${files.root} ${path}`
+    if (kinds.has(key)) return Promise.resolve(kinds.get(key))
+
+    return files.kind(path).then((kind) => {
+      kinds.set(key, kind)
+
+      return kind
+    })
+  }
+
   const linkExists = (link: Link): boolean | Promise<boolean> => {
     const session = sessions.current()
     const files = ctx.screen.current()?.file
@@ -516,7 +532,7 @@ const setup: Setup<typeof File> = (ctx) => {
         const path = parseFileLink(link.href).path
         const direct = path.startsWith("//") || path.startsWith("~") ? undefined : resolve(files, path, link.base)
 
-        return direct ? files.exists(direct) : false
+        return direct ? kindOf(files, direct).then((kind) => kind !== undefined) : false
       })
       .catch(() => false)
   }
@@ -560,18 +576,36 @@ const setup: Setup<typeof File> = (ctx) => {
         return !signal.aborted && current?.key === sessionKey && ctx.screen.current() === screen ? current : undefined
       }
 
-      const openResolvedFile = (targetPath: string, selection?: LineRange) => {
+      const openResolvedFile = async (targetPath: string, selection?: LineRange) => {
         const routed = stillCurrent()
 
-        if (!routed) return Promise.resolve()
+        if (!routed) return
+
+        // A directory has no tab to open: reveal it in the file tree instead of loading it as a file,
+        // which would fail with a not-found toast.
+        if ((await kindOf(files, targetPath)) === "directory") {
+          const latest = stillCurrent()
+
+          if (!latest) return
+          // Absolute directories outside the workspace have no tree node.
+          if (!/^[a-z]:\//i.test(targetPath) && !targetPath.startsWith("/")) files.tree.expand(targetPath)
+          shared.tree.setTab("all")
+          if (layout.narrow() && !layout.side.opened(latest)) layout.side.toggle(latest)
+
+          return
+        }
+
+        const current = stillCurrent()
+
+        if (!current) return
 
         // The browser pane shows HTML it can load. While it is pending or off, the file opens as a tab instead.
         const pane = ctx.uses.browser()
 
-        if (artifactKind(targetPath) === "html" && pane.status === "active" && pane.value.canOpen(routed, targetPath)) {
-          pane.value.open(routed, workspaceFileUrl(files.root, targetPath))
+        if (artifactKind(targetPath) === "html" && pane.status === "active" && pane.value.canOpen(current, targetPath)) {
+          pane.value.open(current, workspaceFileUrl(files.root, targetPath))
 
-          return Promise.resolve()
+          return
         }
 
         // Confirm the file exists before a tab appears for it; a file deleted since its link rendered shows the load

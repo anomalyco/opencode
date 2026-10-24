@@ -81,20 +81,23 @@ describe("findFileLink", () => {
 })
 
 describe("checkFileLinkExists", () => {
-  test("confirms indexed and absolute files without reading them", async () => {
-    const onDisk = new Set(["C:/tmp/out.html"])
+  test("confirms indexed and absolute files and directories without reading them", async () => {
+    const onDisk = new Map<string, "file" | "directory">([
+      ["C:/tmp/out.html", "file"],
+      ["C:/tmp/docs", "directory"],
+    ])
     const signal = new AbortController().signal
 
     const check = (href: string) =>
       checkFileLinkExists({
         files: {
           ...files,
-          exists: async (path: string) => {
+          kind: async (path: string) => {
             if (path.startsWith("//")) throw new Error(`checked a network share: ${path}`)
 
-            return onDisk.has(path)
+            return onDisk.get(path)
           },
-          resolve: (path: string) => path,
+          resolve: (path: string) => (path === "docs" ? "C:/tmp/docs" : path),
         },
         href,
         signal,
@@ -104,6 +107,8 @@ describe("checkFileLinkExists", () => {
     expect(await check("index.ts")).toBe(true)
     expect(await check("Interaction.ts")).toBe(false)
     expect(await check("C:/tmp/out.html")).toBe(true)
+    expect(await check("C:/tmp/docs")).toBe(true)
+    expect(await check("docs")).toBe(true)
     expect(await check("C:/tmp/missing.html")).toBe(false)
     expect(await check("~/README.md")).toBe(false)
     expect(await check("\\\\host\\share\\x.ts")).toBe(false)
