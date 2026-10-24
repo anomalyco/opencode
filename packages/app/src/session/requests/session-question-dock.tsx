@@ -6,7 +6,6 @@ import { IconButton } from "@opencode/ui/icon-button"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { DockPrompt } from "@opencode/session-ui/dock-prompt"
 import { Icon } from "@opencode/ui/icon"
-import { TextInput } from "@opencode/ui/text-input"
 import { useSpring } from "@opencode/ui/motion-spring"
 import { showToast } from "@/shell/notifications/toast"
 import type { FormAnswer, FormInfo, FormMultiselectField, FormStringField } from "@opencode/client/promise"
@@ -112,7 +111,7 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
   let root: HTMLDivElement | undefined
   let optionsRef: HTMLDivElement | undefined
   let customRef: HTMLButtonElement | undefined
-  let customInput: HTMLInputElement | undefined
+  let customInput: HTMLTextAreaElement | undefined
   let optsRef: HTMLButtonElement[] = []
   let replied = false
   let focusFrame: number | undefined
@@ -162,6 +161,16 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
 
     setStore("answers", store.tab, next ? [next] : [])
   }
+
+  const resizeInput = (el: HTMLTextAreaElement) => {
+    el.style.height = "0px"
+    el.style.height = `${el.scrollHeight}px`
+  }
+
+  createEffect(() => {
+    input()
+    if (customInput) resizeInput(customInput)
+  })
 
   const measure = () => {
     if (!root) return
@@ -715,9 +724,13 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
             >
               <Mark multi={multi()} picked={on()} />
             </button>
-            <TextInput
-              ref={(el) => (customInput = el)}
+            <textarea
+              ref={(el) => {
+                customInput = el
+                resizeInput(el)
+              }}
               class="question-custom-field"
+              rows={1}
               dir="auto"
               aria-label={customLabel()}
               placeholder={customLabel()}
@@ -745,7 +758,7 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
 
                 if ((e.metaKey || e.ctrlKey) && !e.altKey) return
 
-                if (e.key !== "Enter") return
+                if (e.key !== "Enter" || e.shiftKey || e.isComposing || e.keyCode === 229) return
                 e.preventDefault()
                 commitCustom()
               }}
