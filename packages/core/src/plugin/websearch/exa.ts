@@ -1,9 +1,10 @@
 export * as WebSearchExa from "./exa.js"
 
 import { define } from "@opencode/plugin/effect/plugin"
-import { Effect, Schema, Scope } from "effect"
-import { HttpClient } from "effect/http"
+import { Duration, Effect, Schema, Scope } from "effect"
+import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { WebSearchMcp } from "./mcp.js"
+import { WebSearchProviderSettings } from "./settings.js"
 
 export const endpoint = "https://mcp.exa.ai/mcp"
 
@@ -18,6 +19,24 @@ const McpOutput = Schema.Struct({
       type: Schema.Literal("text"),
       text: Schema.String,
       _meta: Schema.Struct({ searchTime: Schema.Number }).pipe(Schema.optional),
+    }),
+  ),
+})
+
+const RestRequest = Schema.Struct({
+  query: Schema.String,
+  numResults: Schema.Number,
+  contents: Schema.Struct({ text: Schema.Boolean }),
+})
+
+const RestResponse = Schema.Struct({
+  results: Schema.Array(
+    Schema.Struct({
+      url: Schema.String,
+      title: Schema.NullOr(Schema.String).pipe(Schema.optional),
+      publishedDate: Schema.NullOr(Schema.String).pipe(Schema.optional),
+      text: Schema.NullOr(Schema.String).pipe(Schema.optional),
+      highlights: Schema.NullOr(Schema.Array(Schema.String)).pipe(Schema.optional),
     }),
   ),
 })
@@ -41,12 +60,12 @@ export const Plugin = define<HttpClient.HttpClient | Scope.Scope>({
       editor.add({
         id: "exa",
         name: "Exa",
-        execute: (input) =>
+        execute: (input, settings) =>
           Effect.gen(function* () {
-            const connection = yield* ctx.integration.connection.active("exa")
-            const credential = connection ? yield* ctx.integration.connection.resolve(connection) : undefined
-            const url = new URL(endpoint)
-            if (credential?.type === "key") url.searchParams.set("exaApiKey", credential.key)
+            if (settings?.endpoint) return yield* callRest(http, settings.endpoint, settings.apiKey, input.query)
+            const resolved = yield* WebSearchProviderSettings.resolve(ctx.integration, "exa", settings, endpoint)
+            const url = new URL(resolved.endpoint)
+            if (resolved.key) url.searchParams.set("exaApiKey", resolved.key)
             const result = yield* WebSearchMcp.call(
               http,
               url.toString(),
@@ -61,6 +80,40 @@ export const Plugin = define<HttpClient.HttpClient | Scope.Scope>({
     })
   }),
 })
+
+function callRest(http: HttpClient.HttpClient, url: string, apiKey: string | undefined, query: string) {
+  return Effect.gen(function* () {
+    const request = yield* HttpClientRequest.post(url).pipe(
+      HttpClientRequest.acceptJson,
+      HttpClientRequest.setHeaders(apiKey ? { "x-api-key": apiKey } : {}),
+      HttpClientRequest.schemaBodyJson(RestRequest)({
+        query,
+        numResults: 8,
+        contents: { text: true },
+      }),
+    )
+    const response = yield* HttpClient.withScope(HttpClient.filterStatusOk(http))
+      .execute(request)
+      .pipe(
+        Effect.flatMap(HttpClientResponse.schemaBodyJson(RestResponse)),
+        Effect.scoped,
+        Effect.timeoutOrElse({
+          duration: Duration.seconds(25),
+          orElse: () => Effect.fail(new Error("Exa web search request timed out")),
+        }),
+      )
+    return response.results.map((item) => {
+      const published = item.publishedDate ? Date.parse(item.publishedDate) : undefined
+      const content = item.text ?? item.highlights?.join("\n\n")
+      return {
+        url: item.url,
+        ...(item.title ? { title: item.title } : {}),
+        ...(content ? { content } : {}),
+        time: { ...(published !== undefined && Number.isFinite(published) ? { published } : {}) },
+      }
+    })
+  })
+}
 
 function parseResults(text: string) {
   return text.split(/\n\n---\n\n/).flatMap((block) => {

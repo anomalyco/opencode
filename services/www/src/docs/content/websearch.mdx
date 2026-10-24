@@ -52,6 +52,29 @@ Use `"random"` to choose an available provider automatically. Each session keeps
 }
 ```
 
+## Custom endpoints
+
+Any provider can be pointed at a different endpoint and given its key from configuration instead of an environment variable or `/connect`. This is useful behind a proxy or self-hosted gateway.
+
+When `endpoint` is set, OpenCode calls that URL instead of the hosted service, using the provider's own protocol (for Exa this switches from the hosted MCP server to the Exa REST search API). The hosted service is not contacted, and the stored or environment credential is not forwarded, so set `apiKey` explicitly.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "exa",
+    "providers": {
+      "exa": {
+        "endpoint": "https://search.example.com/v1/exa/search",
+        "apiKey": "your-key",
+      },
+    },
+  },
+}
+```
+
+`apiKey` accepts a literal, or an `{env:NAME}` or `{file:path}` reference resolved before use. Set `apiKey` without an `endpoint` to replace the provider's stored or environment credential.
+
 ## Limits
 
 When a provider returns HTTP 429, random selection retries the search with another available provider. The rate-limited provider waits for its `Retry-After` period, or 60 seconds when the response does not include a valid period.

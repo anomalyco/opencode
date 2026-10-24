@@ -13,6 +13,17 @@ export const Provider = Schema.Struct({
   name: Schema.String,
 }).annotate({ identifier: "WebSearch.Provider" })
 
+export interface Settings extends Schema.Schema.Type<typeof Settings> {}
+export const Settings = Schema.Struct({
+  endpoint: Schema.String.pipe(optional).annotate({
+    description:
+      "Search API endpoint to use instead of the provider's hosted service. The stored or environment credential is not forwarded to a custom endpoint; set apiKey explicitly.",
+  }),
+  apiKey: Schema.String.pipe(optional).annotate({
+    description: "API key for the provider, used in place of a stored or environment credential",
+  }),
+}).annotate({ identifier: "WebSearch.Settings" })
+
 export interface Input extends Schema.Schema.Type<typeof Input> {}
 export const Input = Schema.Struct({
   query: Schema.String,
