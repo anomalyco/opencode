@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { adjacentTabKey, mergeVisibleTabOrder } from "./tab-order"
+import { adjacentTabKey, mergeVisibleTabOrder, orderTabsByRecency } from "./tab-order"
 
 test("finds the nearest accepted tab in either direction, wrapping around", () => {
   const order = ["a", "b", "c", "d", "e"]
@@ -19,4 +19,17 @@ test("merges reordered visible tabs around hidden tabs", () => {
     "a",
     "b",
   ])
+})
+
+test("orders tabs by recent activity and leaves unknown tabs at the end", () => {
+  const tabs = [{ id: "a" }, { id: "b" }, { id: "c" }, { id: "d" }]
+  const times: Record<string, number | undefined> = { a: 10, c: 30 }
+
+  expect(orderTabsByRecency(tabs, (tab) => times[tab.id]).map((tab) => tab.id)).toEqual(["c", "a", "b", "d"])
+})
+
+test("keeps the stored order for tabs with the same activity", () => {
+  const tabs = [{ id: "a" }, { id: "b" }, { id: "c" }]
+
+  expect(orderTabsByRecency(tabs, () => 5).map((tab) => tab.id)).toEqual(["a", "b", "c"])
 })

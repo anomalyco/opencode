@@ -17,7 +17,7 @@ import { useSessionTabAvatarState } from "@/shell/layout/project-avatar-state"
 import { createTabComposerState } from "@/composer/persistence"
 import { base64Encode } from "@opencode/util/encode"
 import { showToast } from "@/shell/notifications/toast"
-import { adjacentTabKey, mergeVisibleTabOrder } from "./tab-order"
+import { adjacentTabKey, mergeVisibleTabOrder, orderTabsByRecency } from "./tab-order"
 import type { SessionInfo } from "@opencode/client/promise"
 
 function SessionTabSlot(props: {
@@ -282,7 +282,22 @@ export function TitlebarTabStrip(props: {
   let listRef!: HTMLDivElement
   const [visibility, setVisibility] = createStore<Record<string, boolean>>({})
   const [unread, setUnread] = createStore<Record<string, boolean>>({})
-  const visibleTabs = createMemo(() => props.tabs.filter((tab) => tab.type === "draft" || visibility[tabKey(tab)]))
+
+  // A vertical rail reads top-down as a list of chats, so it follows session activity instead of the order
+  // tabs were opened in. Horizontal tabs keep the browser convention, where the dragged order is the order.
+  const orderedTabs = createMemo(() => {
+    if (!vertical()) return props.tabs
+
+    const time = (tab: Tab) => {
+      if (tab.type === "draft") return Number.MAX_SAFE_INTEGER
+      const session = global.serverCtx(tab.server)?.data.session.get(tab.sessionId)
+
+      return session ? (session.time.updated ?? session.time.created) : undefined
+    }
+
+    return orderTabsByRecency(props.tabs, time)
+  })
+  const visibleTabs = createMemo(() => orderedTabs().filter((tab) => tab.type === "draft" || visibility[tabKey(tab)]))
   const visibleTabIds = () => visibleTabs().map(tabKey)
 
   command.register("titlebar-tab-cycle", () => [
@@ -335,7 +350,7 @@ export function TitlebarTabStrip(props: {
   function selectAdjacentTab(offset: -1 | 1, include?: (key: string) => boolean) {
     const current = props.currentTab
     const key = adjacentTabKey(visibleTabIds(), current ? tabKey(current) : undefined, offset, include)
-    const next = props.tabs.find((tab) => tabKey(tab) === key)
+    const next = orderedTabs().find((tab) => tabKey(tab) === key)
 
     if (next) props.onNavigate(next)
   }
@@ -356,17 +371,24 @@ export function TitlebarTabStrip(props: {
         }}
       >
         <DragDropProvider
-          sensors={[
-            PointerSensor.configure({
-              activationConstraints: (event) =>
-                event.pointerType === "touch"
-                  ? [new PointerActivationConstraints.Distance({ value: 8 })]
-                  : [new PointerActivationConstraints.Distance({ value: 4 })],
-              preventActivation: (event) =>
-                event.target instanceof Element &&
-                !!event.target.closest('[data-slot="tab-close"], [contenteditable="true"], [contenteditable="plaintext-only"]'),
-            }),
-          ]}
+          // A recency-ordered rail has no manual order to drag into; the vertical layout keeps its rows fixed.
+          sensors={
+            vertical()
+              ? []
+              : [
+                  PointerSensor.configure({
+                    activationConstraints: (event) =>
+                      event.pointerType === "touch"
+                        ? [new PointerActivationConstraints.Distance({ value: 8 })]
+                        : [new PointerActivationConstraints.Distance({ value: 4 })],
+                    preventActivation: (event) =>
+                      event.target instanceof Element &&
+                      !!event.target.closest(
+                        '[data-slot="tab-close"], [contenteditable="true"], [contenteditable="plaintext-only"]',
+                      ),
+                  }),
+                ]
+          }
           modifiers={[
             vertical() ? RestrictToVerticalAxis : RestrictToHorizontalAxis,
             RestrictToElement.configure({ element: () => listRef }),
@@ -414,7 +436,7 @@ export function TitlebarTabStrip(props: {
             classList={{ "flex-row items-center": !vertical(), "flex-col items-stretch": vertical() }}
             ref={listRef}
           >
-            <For each={props.tabs}>
+            <For each={orderedTabs()}>
               {(tab) => {
                 const id = tabKey(tab)
                 let ref!: HTMLDivElement

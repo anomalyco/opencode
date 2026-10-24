@@ -16,6 +16,11 @@ export function adjacentTabKey(
   ).find(include)
 }
 
+/** Newest activity first. Tabs without a known time keep their stored order after the ones that have one. */
+export function orderTabsByRecency<T>(tabs: T[], time: (tab: T) => number | undefined) {
+  return tabs.toSorted((a, b) => (time(b) ?? -1) - (time(a) ?? -1))
+}
+
 export function mergeVisibleTabOrder(all: string[], current: string[], next: string[]) {
   const visible = new Set(current)
   const reordered = next.values()
