@@ -50,6 +50,10 @@ const unsupportedExperimental = [
   "primary_tools",
   "continue_loop_on_deny",
 ] as const
+// Key spellings each `oauth` block form accepts. The direct `mcp.<name>` form takes both the legacy
+// camelCase and the native snake_case names; the native `mcp.servers.<name>` form takes the native ones.
+const directMcpOAuthKeys = Object.keys(ConfigMCPV1.OAuth.fields)
+const nativeMcpOAuthKeys = Object.keys(ConfigMCP.OAuth.fields)
 const unsupportedProvider = ["id", "whitelist", "blacklist"] as const
 const unsupportedModel = ["release_date", "attachment", "reasoning", "temperature", "experimental"] as const
 const LegacyAutoupdate = Schema.Literals([true, false, "notify"])
@@ -273,9 +277,13 @@ function normalizeMcp(input: Record<string, unknown>, encoded: Record<string, un
           return
         }
         if (name === "servers" && !isDirectLegacyMcp(value)) {
+          const raw = isRecord(value) ? value : {}
           Object.entries(
             decodeMap(expandServerTimeouts(value), ConfigMCP.Server, path, diagnostics, decodeEncoded),
-          ).forEach(([key, server]) => setOwn(nativeServers, key, server))
+          ).forEach(([key, server]) => {
+            diagnoseMcpOAuth(raw[key], nativeMcpOAuthKeys, [...path, key], diagnostics)
+            setOwn(nativeServers, key, server)
+          })
           return
         }
         if (name === "timeout" && !isDirectLegacyMcp(value)) {
@@ -288,8 +296,10 @@ function normalizeMcp(input: Record<string, unknown>, encoded: Record<string, un
           return
         }
         const server = decodeValue(ConfigMCPV1.Info, value, path, diagnostics)
-        if (server !== undefined)
+        if (server !== undefined) {
+          diagnoseMcpOAuth(value, directMcpOAuthKeys, path, diagnostics)
           setOwn(legacyServers, name, canonical(ConfigMCP.Server, ConfigMigrateV1.migrateMcp(server)))
+        }
       })
     }
   }
@@ -656,6 +666,14 @@ function diagnoseSelectionMap(value: unknown, path: string[], diagnostics: Diagn
   if (!isRecord(value)) return
   Object.entries(value).forEach(([name, entry]) => {
     if (isRecord(entry)) diagnoseSelection(entry, [...path, name], diagnostics)
+  })
+}
+
+function diagnoseMcpOAuth(server: unknown, keys: ReadonlyArray<string>, path: string[], diagnostics: Diagnostic[]) {
+  if (!isRecord(server) || !isRecord(server.oauth)) return
+  Object.keys(server.oauth).forEach((key) => {
+    if (keys.includes(key)) return
+    diagnostics.push({ kind: "unsupported", path: [...path, "oauth", key], message: "omitted unsupported setting" })
   })
 }
 

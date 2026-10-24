@@ -38,6 +38,14 @@ export const OAuth = Schema.Struct({
   redirectUri: Schema.optional(Schema.String).annotate({
     description: "OAuth redirect URI (default: http://127.0.0.1:19876/mcp/oauth/callback).",
   }),
+  // A direct `mcp.<name>` entry decodes with this schema, and its `oauth` block is also where users
+  // copy the snake_case keys the current docs show. Accept both spellings so neither is dropped
+  // silently; ConfigMigrateV1.migrateMcp lets the native spelling win when a config carries both.
+  client_id: Schema.optional(Schema.String),
+  client_secret: Schema.optional(Schema.String),
+  callback_port: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 }))),
+  redirect_uri: Schema.optional(Schema.String),
+  auth_server_metadata_url: Schema.optional(Schema.String),
 }).annotate({ identifier: "McpOAuthConfig" })
 export type OAuth = Schema.Schema.Type<typeof OAuth>
 
