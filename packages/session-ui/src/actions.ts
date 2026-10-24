@@ -1,4 +1,4 @@
-import type { PromptFileAttachment } from "@opencode/client/promise"
+import type { PromptAttachment } from "@opencode/client/promise"
 
 export type SessionUserComment =
   | {
@@ -33,7 +33,7 @@ export type SessionUserAttachmentReference = {
 }
 
 export type SessionUserActions = {
-  openAttachment?: (file: PromptFileAttachment) => void
+  openAttachment?: (file: PromptAttachment) => void
   /** Opens the model picker, which a budget notice offers when a budget pauses the model in use. */
   chooseModel?: () => void
   revert?: (input: { sessionID: string; messageID: string }) => Promise<void> | void

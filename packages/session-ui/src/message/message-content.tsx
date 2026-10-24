@@ -43,7 +43,7 @@ import { springStyle } from "@opencode/ui/motion/solid"
 import { userRunSpring, type UserRun } from "../timeline/user-runs"
 import type {
   PromptAgentAttachment,
-  PromptFileAttachment,
+  PromptAttachment,
   SessionMessageAssistant,
   SessionMessageAssistantReasoning,
   SessionMessageCompaction,
@@ -52,7 +52,7 @@ import type {
 import type { SessionUserActions, SessionUserAttachmentReference, SessionUserComment } from "../actions"
 import { agentLabel } from "./agent-label"
 import { relativeTime, useNow } from "./relative-time"
-import { attached, typeLabel } from "../components/message-file"
+import { attached, imageAttachmentPlaceholderStyle, typeLabel } from "../components/message-file"
 
 export async function writeClipboard(text: string): Promise<boolean> {
   const body = typeof document === "undefined" ? undefined : document.body
@@ -326,9 +326,10 @@ export function CurrentUserMessageDisplay(props: {
   const status = createMemo(() => props.actions?.pending?.status(props.message.id))
   const pending = createMemo(() => status() !== undefined && status() !== "queued")
   const waiting = createMemo(() => status() === "steering" || status() === "stranded")
-  const attachments = createMemo(() => (props.message.files ?? []).filter(attached))
+  const files = createMemo(() => (props.message.files ?? []) as PromptAttachment[])
+  const attachments = createMemo(() => files().filter(attached))
   const references = createMemo(() => props.references ?? [])
-  const inlineFiles = createMemo(() => (props.message.files ?? []).filter((file) => !!file.mention))
+  const inlineFiles = createMemo(() => files().filter((file) => !!file.mention))
   const agents = createMemo(() => props.message.agents ?? [])
   const comments = createMemo(() => props.comments ?? [])
   const numfmt = createMemo(() => new Intl.NumberFormat(i18n.locale()))
@@ -567,14 +568,70 @@ export function CurrentUserMessageDisplay(props: {
         </For>
         <Index each={attachments()}>
           {(file) => {
-            const url = () => {
-              const source = file().source
+            const directUrl = () => {
+              const current = file()
+              const source = "source" in current ? current.source : current.origin
 
-              return source.type === "uri" ? source.uri : `data:${file().mime};base64,${file().data}`
+              if (source?.type === "uri") return source.uri
+
+              if ("data" in current && current.data !== undefined) {
+                return `data:${current.mime};base64,${current.data}`
+              }
+
+              if ("uri" in current && current.uri) return data.peekMedia?.(current.uri, current.mime)
+
+              return undefined
             }
 
+            const [resolvedUrl, setResolvedUrl] = createSignal<string | undefined>(directUrl())
+
+            createEffect(() => {
+              const current = file()
+              const direct = directUrl()
+
+              if (direct !== undefined) {
+                setResolvedUrl(direct)
+
+                return
+              }
+
+              const uri = "uri" in current ? current.uri : undefined
+
+              if (!uri || !data.readMedia) {
+                setResolvedUrl(uri)
+
+                return
+              }
+
+              const controller = new AbortController()
+              onCleanup(() => controller.abort())
+              void data
+                .readMedia(uri, current.mime, controller.signal)
+                .then((loaded) => {
+                  if (!controller.signal.aborted) setResolvedUrl(loaded)
+                })
+                .catch(() => {
+                  if (!controller.signal.aborted) setResolvedUrl(undefined)
+                })
+            })
+
+            const url = () => directUrl() ?? resolvedUrl()
             const name = () => file().name ?? i18n.t("ui.message.attachment.alt")
             const image = () => file().mime.startsWith("image/")
+            const width = () => {
+              const current = file()
+              return "width" in current ? current.width : undefined
+            }
+            const height = () => {
+              const current = file()
+              return "height" in current ? current.height : undefined
+            }
+            const placeholderStyle = () =>
+              imageAttachmentPlaceholderStyle({
+                width: width(),
+                height: height(),
+                loaded: Boolean(url()),
+              })
 
             return (
               <Show
@@ -583,13 +640,29 @@ export function CurrentUserMessageDisplay(props: {
                   <div
                     data-slot="user-message-attachment"
                     data-type="image"
-                    data-clickable="true"
+                    data-clickable={url() ? "true" : undefined}
+                    data-placeholder={url() ? undefined : "true"}
+                    data-width={width()}
+                    data-height={height()}
+                    style={placeholderStyle()}
                     onClick={(event) => {
+                      const src = url()
                       const origin = event.currentTarget
-                      dialog.show(() => <ImagePreview src={url()} alt={name()} origin={origin} />)
+
+                      if (src) dialog.show(() => <ImagePreview src={src} alt={name()} origin={origin} />)
                     }}
                   >
-                    <img data-slot="user-message-attachment-image" src={url()} alt={name()} />
+                    <Show when={url()}>
+                      {(src) => (
+                        <img
+                          data-slot="user-message-attachment-image"
+                          src={src()}
+                          width={width()}
+                          height={height()}
+                          alt={name()}
+                        />
+                      )}
+                    </Show>
                   </div>
                 }
               >
@@ -704,7 +777,7 @@ export function CurrentUserMessageDisplay(props: {
 
 function CurrentHighlightedText(props: {
   text: string
-  files: PromptFileAttachment[]
+  files: PromptAttachment[]
   agents: PromptAgentAttachment[]
 }) {
   const segments = createMemo(() => {

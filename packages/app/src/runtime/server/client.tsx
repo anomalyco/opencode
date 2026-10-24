@@ -3,6 +3,8 @@ import { createClientConnection, createPtyClient, type ClientConnectionStatus } 
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { type Accessor, createEffect, on, onCleanup } from "solid-js"
 import { createApiForServer, type ServerApi } from "@/runtime/server/api"
+import { createMediaCache, type MediaCache } from "@/runtime/server/media"
+import { setMediaBlobLoader } from "@/runtime/persistence/drafts"
 import { usePlatform } from "@/runtime/platform/platform"
 import { ServerConnection } from "./registry"
 import { createRefCountMap } from "@/runtime/server/refcount"
@@ -65,6 +67,7 @@ type ServerSDKBase = {
   /** The connection the API currently uses, which a managed server's reconnect may replace. */
   http: ServerConnection.HttpBase
   api: ServerApi
+  media: MediaCache
   pty: ReturnType<typeof createPtyClient>
   connection: {
     status: Accessor<ServerConnectionStatus>
@@ -77,6 +80,13 @@ type ServerSDKBase = {
 function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerScope): ServerSDKBase {
   const platform = usePlatform()
   const transport = createServerTransport({ http: server.http, fetch: platform.fetch })
+  const media = createMediaCache(() => transport.api)
+  const serverKey = ServerConnection.key(server)
+  setMediaBlobLoader(serverKey, (uri) => media.load(uri))
+  onCleanup(() => {
+    setMediaBlobLoader(serverKey, undefined)
+    media.dispose()
+  })
 
   if (server.type === "plugin") {
     createEffect(
@@ -118,6 +128,7 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     get api() {
       return transport.api
     },
+    media,
     get pty() {
       return transport.pty
     },
