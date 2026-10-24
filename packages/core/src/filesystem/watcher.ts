@@ -7,7 +7,7 @@ import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Cause, Context, Effect, Layer, PubSub, RcMap, Stream } from "effect"
 import { lazy } from "../util/lazy.js"
-import { watch } from "node:fs"
+import { existsSync, watch } from "node:fs"
 import path from "path"
 import loadBinding from "./watcher-binding.js"
 
@@ -206,7 +206,12 @@ export const nativeLayer = Layer.succeed(
         return Effect.sync(() => {
           const directory = input.type === "file" ? path.dirname(input.target) : input.target
           const names = new Set(input.type === "file" ? [path.basename(input.target)] : input.names)
-          const subscription = watch(directory, { recursive: false }, (_event, file) => {
+          const subscription = watch(directory, { recursive: false }, (event, file) => {
+            // Bun on Windows keeps emitting rename events for a removed watch root.
+            if (event === "rename" && (file === directory || !existsSync(directory))) {
+              subscription.close()
+              return
+            }
             if (file && !names.has(file)) return
             for (const name of file ? [file] : names) {
               input.publish({ path: path.join(directory, name), type: "update" })

@@ -1,5 +1,5 @@
 import { $ } from "bun"
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { Deferred, Duration, Effect, Fiber, Layer, Option, Schedule, Stream } from "effect"
@@ -54,6 +54,33 @@ function countingNative() {
 }
 
 describe("Watcher lifecycle", () => {
+  test.each(["file", "entries"])("releases a native %s watcher when its directory is removed", async (type) => {
+    await using tmp = await tmpdir()
+    const directory = path.join(tmp.path, "watched")
+    await fs.mkdir(directory)
+    const child = Bun.spawn(
+      [process.execPath, path.join(import.meta.dir, "../fixture/removed-watcher.ts"), directory, type],
+      {
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    )
+    try {
+      const [code, stdout, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ])
+      expect(stderr).toBe("")
+      expect(stdout).toContain("watching")
+      expect(stdout).toContain("removed")
+      expect(code).toBe(0)
+    } finally {
+      child.kill()
+      await child.exited
+    }
+  })
+
   it.effect("signals readiness after acquisition and buffers updates published by the ready callback", () =>
     Effect.gen(function* () {
       const publish = yield* Deferred.make<(update: Watcher.Update) => void>()
