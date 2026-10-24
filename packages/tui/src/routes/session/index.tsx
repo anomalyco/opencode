@@ -86,6 +86,7 @@ import { useEpilogue } from "../../context/epilogue"
 import { normalizePath } from "../../util/path"
 import { PermissionPrompt } from "./permission"
 import { FormPrompt } from "./form"
+import { createSessionRequests } from "../../util/session-requests"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { DialogExportResult } from "../../ui/dialog-export-result"
 import { useConfig, useNewDesigns } from "../../config"
@@ -202,19 +203,13 @@ export function Session(props: {
     if (session()?.parentID) return []
     return data.session.family(route.sessionID).filter((id) => id !== route.sessionID)
   })
-  const permissions = createMemo(() => {
-    if (session()?.parentID) return []
-    return [route.sessionID, ...descendantSessionIDs()].flatMap(
-      (sessionID) => data.session.permission.list(sessionID) ?? [],
-    )
-  })
+  const promptSessionIDs = createMemo(() => (session()?.parentID ? [] : [route.sessionID, ...descendantSessionIDs()]))
+  const permissions = createSessionRequests(promptSessionIDs, data.session.permission.list)
   const promptedPermissions = createMemo(() => (local.permission.mode === "autoaccept" ? [] : permissions()))
+  const sessionForms = createSessionRequests(promptSessionIDs, data.session.form.list)
   const forms = createMemo(() => {
     const global = data.session.form.list("global", location()) ?? []
-    if (session()?.parentID) return global
-    return [route.sessionID, ...descendantSessionIDs()]
-      .flatMap((sessionID) => data.session.form.list(sessionID) ?? [])
-      .concat(global)
+    return sessionForms().concat(global)
   })
   const pendingUsers = createMemo(() =>
     data.session.pending.list(route.sessionID).flatMap((item) => (item.type === "user" ? [item] : [])),
