@@ -3017,6 +3017,13 @@ function ShellDisplay(props: {
   const workdir = createMemo(() => pathFormatter.format(props.workdir))
   const [expanded, setExpanded] = createSignal(false)
   const [backgroundOutput, setBackgroundOutput] = createSignal("")
+  const STATUS_WORDS = ["Working…", "Thinking…", "Cooking…"]
+  const [statusIndex, setStatusIndex] = createSignal(0)
+  createEffect(() => {
+    if (!isRunning()) return
+    const id = setInterval(() => setStatusIndex((i) => (i + 1) % STATUS_WORDS.length), 1500)
+    onCleanup(() => clearInterval(id))
+  })
   const [outputTruncated, setOutputTruncated] = createSignal(false)
   let loading = false
   let drainRequested = false
@@ -3127,6 +3134,7 @@ function ShellDisplay(props: {
           >
             <box flexDirection="row" gap={1}>
               <Spinner color={color()} />
+              <text fg={color()}>{STATUS_WORDS[statusIndex()]}</text>
               <text
                 fg={color()}
                 wrapMode={expanded() ? "word" : "char"}
@@ -3138,7 +3146,7 @@ function ShellDisplay(props: {
               </text>
             </box>
           </Show>
-          <Show when={limitedOutput()}>
+          <Show when={!isRunning() && limitedOutput()}>
             <text fg={theme.text.muted}>{limitedOutput()}</text>
           </Show>
         </Show>
