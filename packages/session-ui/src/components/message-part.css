@@ -172,7 +172,6 @@
     white-space: pre-wrap;
     word-break: break-word;
     overflow: hidden;
-    unicode-bidi: plaintext;
     background: var(--v2-background-bg-layer-02);
     border: none;
     padding: 8px 12px;
@@ -183,6 +182,10 @@
 
     @media (prefers-reduced-motion: reduce) {
       transition: none;
+    }
+
+    [data-slot="user-message-line"] {
+      unicode-bidi: isolate;
     }
 
     [data-highlight="file"],

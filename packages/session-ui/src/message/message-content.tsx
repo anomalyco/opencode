@@ -15,6 +15,7 @@ import { useData } from "../context"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { useI18n } from "@opencode/ui/context/i18n"
 import { Markdown } from "../components/markdown"
+import { textDirection } from "../components/text-direction"
 import { ImagePreview } from "@opencode/ui/image-preview"
 import { getFilename } from "@opencode/util/path"
 import { AttachmentCard } from "./attachment-card"
@@ -401,7 +402,11 @@ export function CurrentUserMessageDisplay(props: {
               </Tooltip>
             </div>
           </Show>
-          <div data-slot="user-message-text" dir="auto" data-comments={comments().length > 0 ? "true" : undefined}>
+          <div
+            data-slot="user-message-text"
+            dir={textDirection(props.text ?? "")}
+            data-comments={comments().length > 0 ? "true" : undefined}
+          >
             <CurrentHighlightedText text={props.text} files={inlineFiles()} agents={agents()} />
             <Show when={comments().length > 0}>
               <UserMessageComments comments={comments()} bounded />
@@ -523,7 +528,9 @@ function CurrentHighlightedText(props: {
   files: PromptFileAttachment[]
   agents: PromptAgentAttachment[]
 }) {
-  const segments = createMemo(() => {
+  // A prompt can switch language line by line, so each line resolves its own
+  // direction instead of inheriting one answer for the whole message.
+  const lines = createMemo(() => {
     const references = [
       ...props.files.flatMap((file) =>
         file.mention ? [{ start: file.mention.start, end: file.mention.end, type: "file" as const }] : [],
@@ -533,30 +540,50 @@ function CurrentHighlightedText(props: {
       ),
     ].sort((a, b) => a.start - b.start)
 
-    const result: HighlightSegment[] = []
+    const segments: HighlightSegment[] = []
     let last = 0
     references.forEach((reference) => {
       if (reference.start < last) return
 
-      if (reference.start > last) result.push({ text: props.text.slice(last, reference.start) })
-      result.push({ text: props.text.slice(reference.start, reference.end), type: reference.type })
+      if (reference.start > last) segments.push({ text: props.text.slice(last, reference.start) })
+      segments.push({ text: props.text.slice(reference.start, reference.end), type: reference.type })
       last = reference.end
     })
 
-    if (last < props.text.length) result.push({ text: props.text.slice(last) })
+    if (last < props.text.length) segments.push({ text: props.text.slice(last) })
 
-    return result
+    return segments.reduce<HighlightSegment[][]>(
+      (lines, segment) => {
+        segment.text.split("\n").forEach((text, index) => {
+          if (index > 0) lines.push([])
+
+          if (text) lines[lines.length - 1].push({ text, type: segment.type })
+        })
+
+        return lines
+      },
+      [[]],
+    )
   })
 
   return (
-    <For each={segments()}>
-      {(segment) => (
-        <span data-highlight={segment.type}>
-          <Show when={segment.type && segment.text.startsWith("@")} fallback={segment.text}>
-            <span data-slot="user-message-mention-prefix">@</span>
-            {segment.text.slice(1)}
-          </Show>
-        </span>
+    <For each={lines()}>
+      {(line, index) => (
+        <>
+          {index() > 0 ? "\n" : ""}
+          <span data-slot="user-message-line" dir={textDirection(line.map((segment) => segment.text).join(""))}>
+            <For each={line}>
+              {(segment) => (
+                <span data-highlight={segment.type}>
+                  <Show when={segment.type && segment.text.startsWith("@")} fallback={segment.text}>
+                    <span data-slot="user-message-mention-prefix">@</span>
+                    {segment.text.slice(1)}
+                  </Show>
+                </span>
+              )}
+            </For>
+          </span>
+        </>
       )}
     </For>
   )

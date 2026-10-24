@@ -3,6 +3,7 @@ import { parseSmallMarkdown } from "@opencode/ui/context/marked-base"
 import DOMPurify from "dompurify"
 import { MarkdownWorkerDisposedError, parseMarkdown } from "./markdown-worker"
 import { localImagePath, localLinkPath } from "./markdown-image"
+import { textDirection } from "./text-direction"
 
 export type MarkdownCacheEntry = {
   raw: string
@@ -29,6 +30,64 @@ const config = {
   FORBID_CONTENTS: ["style", "script"],
   ADD_TAGS: ["svg", "path"],
   ADD_ATTR: ["d", "viewBox", "preserveAspectRatio", "xmlns", "target"],
+}
+
+// Code and math are isolated and always render left to right, so they must not
+// decide the direction of the prose around them.
+const codeSelector = "code, pre, script, style, math"
+
+// Blocks own their paragraph direction. List containers place their markers and
+// tables order their columns from it, so they are included with the text blocks.
+const directionalBlocks = new Set([
+  "P",
+  "H1",
+  "H2",
+  "H3",
+  "H4",
+  "H5",
+  "H6",
+  "LI",
+  "DT",
+  "DD",
+  "UL",
+  "OL",
+  "BLOCKQUOTE",
+  "TABLE",
+  "CAPTION",
+  "FIGCAPTION",
+  "SUMMARY",
+  "TD",
+  "TH",
+])
+
+function blockText(node: Element) {
+  const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT)
+  let text = ""
+
+  for (let current = walker.nextNode(); current; current = walker.nextNode()) {
+    if (current.parentElement?.closest(codeSelector)) continue
+
+    text += current.nodeValue ?? ""
+  }
+
+  return text
+}
+
+// A list reads item by item, so its markers and indentation follow the language
+// most of its items are written in instead of their combined text.
+function blockDirection(node: Element) {
+  if (!node.matches("ul, ol")) return textDirection(blockText(node))
+
+  const directions = Array.from(node.children)
+    .filter((child) => child.tagName === "LI")
+    .map((child) => textDirection(blockText(child)))
+
+  const rtl = directions.filter((direction) => direction === "rtl").length
+  const ltr = directions.filter((direction) => direction === "ltr").length
+
+  if (rtl === ltr) return directions[0]
+
+  return rtl > ltr ? "rtl" : "ltr"
 }
 
 if (typeof window !== "undefined" && purifier.isSupported) {
@@ -68,6 +127,13 @@ if (typeof window !== "undefined" && purifier.isSupported) {
     set.add("noopener")
     set.add("noreferrer")
     node.setAttribute("rel", Array.from(set).join(" "))
+  })
+  purifier.addHook("afterSanitizeAttributes", (node: Element) => {
+    if (!(node instanceof HTMLElement) || !directionalBlocks.has(node.tagName)) return
+
+    const direction = blockDirection(node)
+
+    if (direction) node.setAttribute("dir", direction)
   })
 }
 

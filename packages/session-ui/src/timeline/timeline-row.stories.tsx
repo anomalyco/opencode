@@ -9,6 +9,7 @@ import {
   CURRENT_SESSION_ID,
   STORY_MODEL,
   STORY_TIME,
+  arabicPromptDocument,
   attachmentsAndCommentsDocument,
   attachmentsAndCommentsPresentation,
   compactionCancelledDocument,
@@ -459,6 +460,17 @@ export const VoiceMessages = {
       description="A voice call's agent prompts on the user's behalf: its framing, or the user's spoken words, with a Voice badge on the bubble."
       document={voiceDocument}
       presentation={voicePresentation}
+      width="480px"
+    />
+  ),
+}
+
+export const ArabicPrompt = {
+  render: () => (
+    <CurrentSessionTimelineStory
+      title="Arabic prompt that starts with a Latin word"
+      description="The message box follows the language the prompt is mostly written in, not its first strong character."
+      document={arabicPromptDocument}
       width="480px"
     />
   ),
