@@ -20,7 +20,21 @@ export default Runtime.handler(Commands, (input) =>
   Effect.gen(function* () {
     const requestedDirectory = Option.getOrUndefined(input.directory)
     const requestedServer = Option.getOrUndefined(input.server)
-    if (requestedDirectory !== undefined) process.chdir(requestedDirectory)
+    if (requestedDirectory !== undefined) {
+      const changed = yield* Effect.try(() => process.chdir(requestedDirectory)).pipe(
+        Effect.match({
+          onSuccess: () => true,
+          onFailure: (error) => {
+            process.stderr.write(
+              `Cannot open directory "${requestedDirectory}": ${errorMessage(error.cause)}\nRun "opencode --help" for usage.\n`,
+            )
+            process.exitCode = 1
+            return false
+          },
+        }),
+      )
+      if (!changed) return
+    }
     const preflight = UpdatePreflight.make()
     yield* Effect.addFinalizer(() => Effect.promise(() => preflight.close()))
     const serviceStarts = yield* Queue.unbounded<{
@@ -56,7 +70,10 @@ export default Runtime.handler(Commands, (input) =>
       session !== undefined &&
       (yield* Effect.tryPromise({
         try: () =>
-          findSession(OpenCode.make({ baseUrl: server.endpoint.url, headers: Service.headers(server.endpoint) }), session),
+          findSession(
+            OpenCode.make({ baseUrl: server.endpoint.url, headers: Service.headers(server.endpoint) }),
+            session,
+          ),
         catch: (cause) => new Error(errorMessage(cause)),
       })) !== undefined
     const updater = yield* Updater.Service
