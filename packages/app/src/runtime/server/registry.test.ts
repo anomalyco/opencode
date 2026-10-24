@@ -72,6 +72,26 @@ test("treats WSL sidecars as remote server connections", () => {
   expect(ServerConnection.local({ type: "http", http: { url: "https://server.example.test" } })).toBe(false)
 })
 
+test("file servers win URL collisions without persisting their credentials or losing UI servers", () => {
+  const file: ServerConnection.Http = {
+    type: "http",
+    source: "settings",
+    http: { url: "https://studio.example" },
+    displayName: "Studio",
+  }
+
+  const ui: ServerConnection.Http = { type: "http", http: { url: "https://other.example", password: "saved" } }
+
+  const stored: ServerConnection.Http[] = [
+    { type: "http", http: { url: file.http.url, password: "stale" }, displayName: "Old" },
+    ui,
+  ]
+
+  expect(resolveServerList({ props: [file], stored })).toEqual([file, ui])
+  expect(canRemoveServer({ key: ServerConnection.key(file), provided: [file], stored })).toBe(false)
+  expect(resolveServerList({ stored })).toEqual(stored)
+})
+
 test("keeps exact persisted server identities and prevents removing provided servers", () => {
   const stored = Schema.decodeUnknownSync(serverSchema())({
     list: ["http://localhost:4096", "http://localhost:4096/", "http://127.0.0.1:4096"],
@@ -94,7 +114,9 @@ test("used and last projects follow dynamic server scopes, and migration consume
     }),
   )
 
-  const props: { server: ServerConnection.Key; canonicalLocalServer?: ServerConnection.Key } = {
+  type Selection = { server: ServerConnection.Key; canonicalLocalServer?: ServerConnection.Key }
+
+  const props: Selection = {
     server: ServerConnection.Key.make("https://remote.example"),
   }
 

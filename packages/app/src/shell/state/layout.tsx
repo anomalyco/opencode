@@ -247,6 +247,14 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       initialLayout(servers.list[0] ? ServerConnection.key(servers.list[0]) : undefined),
     )
 
+    // A launch default takes precedence over the previous Home selection, once storage has hydrated.
+    createEffect(() => {
+      const server = servers.defaultServer
+
+      if (!ready() || !server) return
+      setStore("home", "selection", reconcile({ server }))
+    })
+
     const [ephemeral, setEphemeral] = createStore<{
       sessionTabPreview: Record<string, string | undefined>
       // The pane a pane's "+" menu asked the next new tab to open in.

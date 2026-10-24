@@ -99,7 +99,7 @@ function AppLayout(props: ParentProps) {
   const signedOut = () => {
     const only = servers.list.length === 1 ? servers.list[0] : undefined
 
-    if (only?.type !== "http") return
+    if (only?.type !== "http" || only.source === "settings") return
 
     return global.servers.health[ServerConnection.key(only)]?.unauthorized ? only : undefined
   }

@@ -108,6 +108,9 @@ export function resolveServerList(input: {
 
     const existing = deduped.get(key)
 
+    // File-managed connections are launch inputs, never copied into renderer persistence.
+    if (existing?.type === "http" && existing.source === "settings") continue
+
     if (existing)
       deduped.set(key, {
         ...existing,
@@ -136,7 +139,7 @@ export namespace ServerConnection {
   export type HttpBase = typeof ServerHttpBase.Type
 
   // Regular web connections
-  export type Http = typeof ServerHttp.Type
+  export type Http = typeof ServerHttp.Type & { source?: "settings" }
 
   // Regular desktop server
   export type Sidecar = {
@@ -199,7 +202,11 @@ export namespace ServerConnection {
 export const { use: useServers, provider: ServersProvider } = createSimpleContext({
   name: "Server",
   gate: true,
-  init: (props: { canonicalLocalServer?: ServerConnection.Key; servers?: Array<ServerConnection.Any> }) => {
+  init: (props: {
+    canonicalLocalServer?: ServerConnection.Key
+    defaultServer?: string
+    servers?: Array<ServerConnection.Any>
+  }) => {
     const [store, setStore, _, hydrated] = persisted(
       {
         ...Persist.global("server"),
@@ -209,13 +216,18 @@ export const { use: useServers, provider: ServersProvider } = createSimpleContex
       ServerState,
       { list: [], hidden: {}, lastProjectID: {}, usedProjectIDs: {}, hostnames: {}, projects: {} },
     )
+
     const language = useLanguage()
 
     const allServers = createMemo((): Array<ServerConnection.Any> => {
       return resolveServerList({ stored: store.list, props: props.servers })
     })
 
-    const visibleServers = createMemo(() => allServers().filter((conn) => !store.hidden[ServerConnection.key(conn)]))
+    const visibleServers = createMemo(() =>
+      allServers().filter(
+        (conn) => ServerConnection.key(conn) === props.defaultServer || !store.hidden[ServerConnection.key(conn)],
+      ),
+    )
 
     function add(input: ServerConnection.Http) {
       const url_ = normalizeServerUrl(input.http.url)
@@ -273,6 +285,9 @@ export const { use: useServers, provider: ServersProvider } = createSimpleContex
       )
 
     return {
+      get defaultServer() {
+        return props.defaultServer ? ServerConnection.Key.make(props.defaultServer) : undefined
+      },
       get list() {
         return allServers()
       },

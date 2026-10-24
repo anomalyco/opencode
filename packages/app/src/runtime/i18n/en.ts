@@ -35,6 +35,8 @@ export const dict = {
   "server.action.authenticate": "Authenticate",
   "server.status.connecting": "Connecting over SSH…",
   "server.thisComputer": "This computer",
+  "server.source.settings": "From opencode.settings",
+  "server.settings.fallback": "Your server settings couldn't be read; using the local server.",
   "server.status.authentication": "Authentication required",
   "command.category.suggested": "Suggested",
   "command.category.view": "View",

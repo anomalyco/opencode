@@ -7,13 +7,14 @@ import { keptStages, serviceFile, serviceVersion, shouldRetryEnsure } from "./cl
 import { DesktopCli } from "./desktop-cli"
 import { SidecarCredentials } from "./sidecar-credentials"
 import { sidecarProbe } from "./sidecar-probe"
+import { configuredServers } from "./configured-servers"
 
 export * as BackgroundService from "./background-service"
 
 const RegisteredService = Schema.Struct({ version: Schema.optional(Schema.String) })
 
 export interface Interface {
-  readonly connection: Effect.Effect<SidecarCredentials.Data>
+  readonly connection: Effect.Effect<SidecarCredentials.Data | null>
   readonly reconnect: Effect.Effect<SidecarCredentials.Data>
 }
 
@@ -23,6 +24,12 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const context = yield* Effect.context<FileSystem.FileSystem | Path.Path | DesktopCli.Service>()
+
+    if (!configuredServers().startLocalServer)
+      return Service.of({
+        connection: Effect.succeed(null),
+        reconnect: Effect.die(new Error("Local server startup is disabled in opencode.settings")),
+      })
 
     return Service.of(
       yield* BackgroundServiceState.make({

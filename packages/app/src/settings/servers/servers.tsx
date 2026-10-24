@@ -115,7 +115,10 @@ function SettingsServersHeader(props: { title: string; onAddServer: () => void }
   )
 }
 
-function ServerConnectionRow(props: { entry: SettingsServer; onServerChange?: (server: ServerConnection.Any) => void }) {
+function ServerConnectionRow(props: {
+  entry: SettingsServer
+  onServerChange?: (server: ServerConnection.Any) => void
+}) {
   const dialog = useDialog()
   const language = useLanguage()
   const controller = useServerCollectionController()
@@ -126,7 +129,7 @@ function ServerConnectionRow(props: { entry: SettingsServer; onServerChange?: (s
 
   // An HTTP server that rejects its saved credentials signs in again through the edit dialog.
   const signedOut = (server: ServerConnection.Any) =>
-    server.type === "http" && health()?.unauthorized ? server : undefined
+    server.type === "http" && server.source !== "settings" && health()?.unauthorized ? server : undefined
 
   return (
     <Show
@@ -145,6 +148,15 @@ function ServerConnectionRow(props: { entry: SettingsServer; onServerChange?: (s
                   <bdi class="settings-servers-meta" dir="ltr">
                     {server().http.url}
                   </bdi>
+                  <Show
+                    when={
+                      server().type === "http" &&
+                      props.entry.connection?.type === "http" &&
+                      props.entry.connection.source === "settings"
+                    }
+                  >
+                    <span class="settings-servers-meta">{language.t("server.source.settings")}</span>
+                  </Show>
                 </div>
               </div>
               <div class="settings-servers-actions">

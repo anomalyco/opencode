@@ -12,10 +12,13 @@ import {
   useCurrentRoute,
   useExtensionServers,
   useTabs,
+  useLanguage,
   type LayoutRoute,
 } from "@opencode/app/desktop"
 import { useTheme } from "@opencode/ui/theme/context"
+import { showToast } from "@opencode/ui/toast"
 import type { BaseRouterProps } from "@solidjs/router"
+import { useNavigate } from "@solidjs/router"
 import { createEffect, createMemo, createResource, lazy, Show, Suspense } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { ElectronAPI } from "./api-types"
@@ -61,6 +64,7 @@ export function DesktopApp(props: { api: ElectronAPI; version: string }) {
 
   const platform = createDesktopPlatform(props.api, windowState)
   const [sidecar, { mutate: setSidecar }] = createResource(() => props.api.awaitInitialization())
+  const [settings] = createResource(() => props.api.getServerSettings())
 
   const [locale] = createResource(() => preloadStoredLocale(platform))
 
@@ -83,11 +87,26 @@ export function DesktopApp(props: { api: ElectronAPI; version: string }) {
 
   function ReadyApp() {
     const extensions = useExtensionServers()
-    const ready = createMemo(() => !firstLaunch.loading && !sidecar.loading && !locale.loading && extensions.ready())
+
+    const ready = createMemo(
+      () => !firstLaunch.loading && !sidecar.loading && !locale.loading && !settings.loading && extensions.ready(),
+    )
 
     const servers = createMemo(() => {
       const data = initializationData(sidecar)
       const list: ServerConnection.Any[] = []
+
+      if (settings.state === "ready")
+        list.push(
+          ...settings().servers.map(
+            (server): ServerConnection.Http => ({
+              type: "http",
+              source: "settings",
+              http: { url: server.url },
+              displayName: server.name,
+            }),
+          ),
+        )
 
       if (data) {
         list.push({
@@ -105,7 +124,15 @@ export function DesktopApp(props: { api: ElectronAPI; version: string }) {
 
     return (
       <Show when={ready()}>
-        <AppInterface servers={servers()} router={router}>
+        <AppInterface
+          servers={servers()}
+          defaultServer={settings.state === "ready" ? settings().defaultServer : undefined}
+          router={router}
+        >
+          <DesktopDefaultServer
+            url={settings.state === "ready" ? settings().defaultServer : undefined}
+            fallback={settings.state === "ready" && settings().fallback}
+          />
           <DesktopStartupReady
             routeReady={!initialRoute.loading && startup.onboardingReady}
             onReady={() => setStartup("ready", true)}
@@ -161,6 +188,20 @@ export function DesktopApp(props: { api: ElectronAPI; version: string }) {
       </AppBaseProviders>
     </PlatformProvider>
   )
+}
+
+function DesktopDefaultServer(props: { url?: string; fallback: boolean }) {
+  const navigate = useNavigate()
+  const language = useLanguage()
+
+  createEffect(() => {
+    if (props.fallback) showToast({ variant: "error", title: language.t("server.settings.fallback"), duration: 10000 })
+  })
+  createEffect(() => {
+    if (props.url) navigate("/", { replace: true })
+  })
+
+  return null
 }
 
 function DesktopStartupReady(props: {

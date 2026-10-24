@@ -48,6 +48,7 @@ import {
   onNativeTranslations,
 } from "../native/translations"
 import { SidecarCredentials } from "../service/sidecar-credentials"
+import { configuredServers } from "../service/configured-servers"
 import type { Database } from "../storage/database"
 import type { StateStore } from "../storage/state"
 import { getLastFocusedWindow, getMainWindows, onMainWindow } from "../windows"
@@ -243,9 +244,11 @@ export function createHost(input: {
 
     if (!endpoint) return undefined
 
-    const authorization = endpoint.password
-      ? `Basic ${Buffer.from(`${endpoint.username ?? "opencode"}:${endpoint.password}`).toString("base64")}`
-      : SidecarCredentials.authorization(sidecar, endpoint.url)
+    const authorization =
+      configuredServers().authorization(endpoint.url) ??
+      (endpoint.password
+        ? `Basic ${Buffer.from(`${endpoint.username ?? "opencode"}:${endpoint.password}`).toString("base64")}`
+        : SidecarCredentials.authorization(sidecar, endpoint.url))
 
     return {
       id,

@@ -1,6 +1,7 @@
 import type { BrowserWindow } from "electron"
-import { SidecarCredentials } from "../service/sidecar-credentials"
-import { addRendererHeaders, hasHeader, upsertHeader } from "./headers"
+import { configuredServers } from "../service/configured-servers"
+import { addRendererHeaders } from "./headers"
+import { rendererRequestHeaders } from "./request-headers"
 import { isRendererUrl } from "./scheme"
 
 const rendererPermissions = new Set(["clipboard-sanitized-write", "notifications"])
@@ -43,7 +44,7 @@ export function allowRendererPermissions(win: BrowserWindow) {
   })
 }
 
-export function wireNavigationPolicy(win: BrowserWindow, openExternalURL: (url: string) => unknown) {
+export function wireNavigationPolicy(win: BrowserWindow, openExternalURL: (url: string) => void) {
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (!isRendererUrl(url)) openExternalURL(url)
 
@@ -65,18 +66,8 @@ export function wireRendererHeaders(win: BrowserWindow) {
   // embedded pages) can reach the same loopback origin and must not inherit its access. Requests with
   // no frame, such as from a service worker, are not credentialed either; the renderer registers none.
   win.webContents.session.webRequest.onBeforeSendHeaders(
-    { urls: ["http://127.0.0.1/*", "http://localhost/*"] },
-    (details, callback) => {
-      const frame = details.frame
-      const renderer = !!frame && frame.parent === null && isRendererUrl(frame.url)
-      const authorization = renderer && SidecarCredentials.authorization(SidecarCredentials.get(), details.url)
-
-      if (authorization && !hasHeader(details.requestHeaders, "Authorization")) {
-        upsertHeader(details.requestHeaders, "Authorization", authorization)
-      }
-
-      callback({ requestHeaders: details.requestHeaders })
-    },
+    { urls: ["http://*/*", "https://*/*"] },
+    rendererRequestHeaders((url) => configuredServers().authorization(url)),
   )
   win.webContents.session.webRequest.onHeadersReceived((details, callback) => {
     const responseHeaders = details.responseHeaders ?? {}

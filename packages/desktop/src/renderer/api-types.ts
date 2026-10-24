@@ -13,7 +13,8 @@ import type {
 } from "../shared/ipc-contract"
 
 export type ElectronAPI = {
-  awaitInitialization(): Promise<ServerReadyData>
+  awaitInitialization(): Promise<ServerReadyData | null>
+  getServerSettings(): Promise<{ servers: { url: string; name?: string }[]; defaultServer?: string; fallback: boolean }>
   reconnectService(): Promise<ServerReadyData>
   consumeInitialDeepLinks(): Promise<string[]>
   isFirstLaunchOnboardingPending(): Promise<boolean>

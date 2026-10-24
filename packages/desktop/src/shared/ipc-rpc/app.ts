@@ -5,7 +5,15 @@ const ServerReadyData = Schema.Struct({
   url: Schema.String,
 })
 
-export const AppAwaitInitialization = Rpc.make("AppAwaitInitialization", { success: ServerReadyData })
+export const AppAwaitInitialization = Rpc.make("AppAwaitInitialization", { success: Schema.NullOr(ServerReadyData) })
+
+export const AppGetServerSettings = Rpc.make("AppGetServerSettings", {
+  success: Schema.Struct({
+    servers: Schema.Array(Schema.Struct({ url: Schema.String, name: Schema.optional(Schema.String) })),
+    defaultServer: Schema.optional(Schema.String),
+    fallback: Schema.Boolean,
+  }),
+})
 
 export const AppReconnectService = Rpc.make("AppReconnectService", { success: ServerReadyData })
 
@@ -62,6 +70,7 @@ export const AppRelaunch = Rpc.make("AppRelaunch")
 
 export const AppRpcs = RpcGroup.make(
   AppAwaitInitialization,
+  AppGetServerSettings,
   AppReconnectService,
   AppConsumeInitialDeepLinks,
   AppIsFirstLaunchOnboardingPending,

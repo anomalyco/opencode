@@ -15,7 +15,8 @@ import { finishFirstLaunchOnboarding, isFirstLaunchOnboardingPending } from "../
 import { BackgroundService } from "../service/background-service"
 import { DesktopCli } from "../service/desktop-cli"
 import { SidecarCredentials } from "../service/sidecar-credentials"
-import { getLastFocusedWindow, setBackgroundColor } from "../windows"
+import { configuredServers } from "../service/configured-servers"
+import { getLastFocusedWindow, getMainWindows, setBackgroundColor } from "../windows"
 import { sender } from "./context"
 
 export const appHandlers = AppRpcs.toLayer(
@@ -28,7 +29,19 @@ export const appHandlers = AppRpcs.toLayer(
     const runFork = Effect.runForkWith(yield* Effect.context())
 
     return AppRpcs.of({
-      AppAwaitInitialization: () => background.connection.pipe(Effect.map(SidecarCredentials.ready)),
+      AppAwaitInitialization: () =>
+        background.connection.pipe(Effect.map((data) => data && SidecarCredentials.ready(data))),
+      AppGetServerSettings: (_, context) =>
+        Effect.sync(() => {
+          const settings = configuredServers()
+          const active = getLastFocusedWindow() ?? getMainWindows()[0]
+
+          return {
+            ...settings.public,
+            fallback: settings.fallback,
+            defaultServer: active?.webContents === sender(handoff, context) ? settings.public.defaultServer : undefined,
+          }
+        }),
       AppReconnectService: () => background.reconnect.pipe(Effect.map(SidecarCredentials.ready)),
       AppConsumeInitialDeepLinks: () => Effect.sync(lifecycle.consumeInitialDeepLinks),
       AppIsFirstLaunchOnboardingPending: isFirstLaunchOnboardingPending,

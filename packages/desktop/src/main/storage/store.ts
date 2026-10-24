@@ -8,6 +8,14 @@ const cache = new Map<string, SettingsStore>()
 
 export type SettingsStore = ReturnType<typeof createSettingsStore>
 
+// SAFETY: settings belong to independent owners; each owner decodes its value when reading it.
+// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- see SAFETY above
+type SettingsValues = Record<string, unknown>
+
+// SAFETY: a read preserves the generic store until each setting's owner decodes it.
+// oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- see SAFETY above
+type SettingsRead = { data: SettingsValues; error?: string }
+
 // Main-process settings only (onboarding, default server, window list, appearance, extension storage).
 // These are read synchronously before the storage layer exists and written on user action, so a
 // synchronous whole-file write is acceptable here. Renderer state goes through DesktopStorage.
@@ -30,7 +38,8 @@ export function getStore(name = SETTINGS_STORE) {
 }
 
 export function createSettingsStore(file: string) {
-  let data = read(file)
+  const loaded = read(file)
+  let data = loaded.data
 
   const write = () => {
     mkdirSync(path.dirname(file), { recursive: true })
@@ -40,7 +49,12 @@ export function createSettingsStore(file: string) {
 
   return {
     path: file,
+    readError: loaded.error,
+    // SAFETY: callers decode their own settings schema at this persistence boundary.
+    // oxlint-disable-next-line anti-slop/no-unknown-returns -- see SAFETY above
     get: (key: string): unknown => data[key],
+    // SAFETY: this generic store preserves each owner's independently validated value.
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- see SAFETY above
     set: (key: string, value: unknown) => {
       if (value === undefined) throw new TypeError(`Use \`delete()\` to clear values: ${key}`)
       data = { ...data, [key]: value }
@@ -54,16 +68,26 @@ export function createSettingsStore(file: string) {
 }
 
 // A missing file is an empty store. An unreadable one is set aside instead of blocking startup.
-function read(file: string): Record<string, unknown> {
-  if (!existsSync(file)) return {}
+function read(file: string): SettingsRead {
+  if (!existsSync(file)) return { data: {} }
 
   try {
     const parsed: unknown = JSON.parse(readFileSync(file, "utf8"))
 
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {}
-  } catch {
-    renameSync(file, `${file}.corrupt`)
+    // SAFETY: JSON.parse returned an object; exclude arrays and null before treating it as a key/value store.
+    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- see SAFETY above
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      // SAFETY: the guard above established a JSON object; values are decoded by their owners.
+      return { data: parsed as SettingsValues }
+    }
 
-    return {}
+    return { data: {}, error: "opencode.settings: expected a JSON object" }
+  } catch {
+    // An unreadable settings file may also be impossible to rename.
+    try {
+      renameSync(file, `${file}.corrupt`)
+    } catch {}
+
+    return { data: {}, error: "opencode.settings: invalid JSON or unreadable file" }
   }
 }

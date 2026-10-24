@@ -1,6 +1,6 @@
 import type { ElectronAPI } from "../api-types"
 
-type SidecarData = Awaited<ReturnType<ElectronAPI["awaitInitialization"]>>
+type SidecarData = NonNullable<Awaited<ReturnType<ElectronAPI["awaitInitialization"]>>>
 
 export function initializationData<A>(state: (() => A | undefined) & { error: unknown }) {
   if (state.error !== undefined) throw markLocalServerStartup(state.error)
@@ -16,7 +16,7 @@ export function sidecarHttp(data: SidecarData) {
 
 export function createSidecarResolver(input: {
   api: Pick<ElectronAPI, "reconnectService">
-  current: () => SidecarData | undefined
+  current: () => SidecarData | null | undefined
   update: (data: SidecarData) => void
 }) {
   return async (signal: AbortSignal) => {
@@ -31,10 +31,12 @@ export function createSidecarResolver(input: {
   }
 }
 
-function sameSidecar(current: SidecarData | undefined, next: SidecarData) {
+function sameSidecar(current: SidecarData | null | undefined, next: SidecarData) {
   return current?.url === next.url
 }
 
+// SAFETY: resource failures are untyped exceptions; normalize them to Error at this boundary.
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- see SAFETY above
 function markLocalServerStartup(error: unknown) {
   const failure = error instanceof Error ? error : new Error(String(error))
   Object.defineProperty(failure, "localServerStartup", { value: true })

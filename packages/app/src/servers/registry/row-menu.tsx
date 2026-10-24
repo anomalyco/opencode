@@ -58,7 +58,9 @@ export const ServerRowMenuView: Component<{
   onOpenChange?: (open: boolean) => void
 }> = (props) => {
   const builtin = () => ServerConnection.builtin(props.server)
-  const httpServer = () => (props.server.type === "http" ? props.server : undefined)
+
+  const httpServer = () =>
+    props.server.type === "http" && props.server.source !== "settings" ? props.server : undefined
 
   return (
     <Menu gutter={6} modal={false} placement="bottom-end" open={props.open} onOpenChange={props.onOpenChange}>
