@@ -60,9 +60,7 @@ export function createNewSessionWorkspaceController(input: {
   const settings = useSettings()
   const tabs = useTabs()
 
-  const [state, setState] = createStore({
-    existing: undefined as { projectID: string; directory: string } | undefined,
-  })
+  const [state, setState] = createStore<{ existing?: { projectID: string; directory: string } }>({})
 
   const currentProject = createMemo(() => {
     const projectID = data.location.info({ directory: sdk().directory })?.project.id
@@ -118,12 +116,15 @@ export function createNewSessionWorkspaceController(input: {
     return workspaceSelectionDirectories(project, worktreeItems())
   })
 
+  // Unknown until this project's inventory loads: cached project worktrees carry no strategy, so counting them would
+  // report zero managed worktrees and briefly offer the workspace tip to projects that already use worktrees.
   const managedWorktrees = createMemo(() => {
     const project = currentProject()
+    const loaded = worktreesLoaded() ? worktrees.latest : undefined
 
-    if (!project) return 0
+    if (!project || loaded?.projectID !== project.id) return
 
-    return worktreeItems().filter(
+    return loaded.items.filter(
       (item) => item.strategy !== undefined && !sameDirectory(project.worktree, item.directory),
     ).length
   })
