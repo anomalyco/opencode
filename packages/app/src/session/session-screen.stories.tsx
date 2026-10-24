@@ -14,6 +14,7 @@ import {
   subagentDocument,
   terminalPassedDocument,
 } from "@opencode/session-ui/storybook"
+import type { SubagentStatus } from "./composer/subagent-bar"
 import { SessionPreview } from "./story-model"
 
 const description = "opencode · modular-session-ui"
@@ -203,16 +204,21 @@ export const ReviewPlusTerminal = {
 }
 
 export const ChildSession = {
-  render: () => (
+  args: { status: "running", title: "Trace why the sidebar flickers on resize", permission: false },
+  argTypes: { status: { control: "select", options: ["running", "succeeded", "failed", "interrupted"] } },
+  render: (args: { status: SubagentStatus; title: string; permission: boolean }) => (
     <SessionPreview
       title="Inspect the child Session"
       description={description}
-      document={subagentDocument}
+      document={args.permission ? permissionPendingDocument : subagentDocument}
+      request={args.permission ? { type: "permission", value: activePermissionRequest } : undefined}
       child={{
         agent: "surveyor",
+        title: args.title,
         model: { provider: "Anthropic", name: "Claude Opus 5.5", variant: "high" },
-        status: "running",
+        status: args.status,
         started: Date.now() - 65_000,
+        ended: args.status === "running" ? undefined : Date.now() + 187_000,
       }}
     />
   ),
@@ -226,6 +232,7 @@ export const ChildSessionDone = {
       document={subagentDocument}
       child={{
         agent: "surveyor",
+        title: "Map every caller of the legacy theme tokens",
         model: { provider: "Anthropic", name: "Claude Opus 5.5", variant: "high" },
         status: "succeeded",
         started: 0,
