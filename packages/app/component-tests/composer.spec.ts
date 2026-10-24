@@ -12,8 +12,13 @@ for (const direction of ["ltr", "rtl"]) {
       const actions = component.locator('[data-slot="composer-actions"]')
       const submit = component.locator('[data-action="composer-submit"]')
       const add = component.locator('[data-action="composer-attach"]')
-      const agent = controls.getByRole("button", { name: "Choose agent" })
-      const variant = controls.getByRole("button", { name: "Choose model variant" })
+
+      // The trigger names itself "<value>: <control label>" so a screen reader announces the
+      // selected value. Match the shape rather than the fixture's label, which is deliberately
+      // long here and may change.
+      const agent = controls.getByRole("button", { name: /: Choose agent$/ })
+      const variant = controls.getByRole("button", { name: /: Choose model variant$/ })
+
       await expect(controls).toHaveCSS("overflow-x", "auto")
       await expect(controls).toHaveCSS("overscroll-behavior-x", "contain")
       await expect(controls).toHaveCSS("direction", direction)
