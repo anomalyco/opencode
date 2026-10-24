@@ -1,14 +1,26 @@
 import { createMemo, lazy, on, onCleanup, Suspense } from "solid-js"
+import { showToast } from "@opencode/ui/toast"
 import { Command, createKeyed, onIdle, Panel, type Setup } from "../sdk"
-import type Terminal from "./index"
+import { Terminal } from "./contract"
+import type TerminalExtension from "./index"
 import { createTerminalModel, type TerminalWorkspace } from "./model"
 
 const DOCK = "terminal:main"
 
-const setup: Setup<typeof Terminal> = (ctx) => {
+const setup: Setup<typeof TerminalExtension> = (ctx) => {
   const sessions = ctx.sessions
   const layout = ctx.layout
-  const model = createTerminalModel({ storage: ctx.storage, sessions })
+
+  const model = createTerminalModel({
+    storage: ctx.storage,
+    sessions,
+    onError: (reason) =>
+      showToast({
+        variant: "error",
+        title: ctx.t("createFailed"),
+        description: reason,
+      }),
+  })
 
   onCleanup(model.dispose)
   // The host withdraws the listener with the extension.
@@ -93,6 +105,16 @@ const setup: Setup<typeof Terminal> = (ctx) => {
       },
     }),
   )
+
+  ctx.provide(Terminal, {
+    open(session, directory) {
+      const terminal = model.load(session)
+
+      layout.open(DOCK, session)
+      // Creating the tab here rather than leaving the dock's first one to do it is what starts it in `directory`.
+      terminal.new(directory)
+    },
+  })
 
   ctx.add(
     Command,

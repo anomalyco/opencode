@@ -2,6 +2,7 @@ import { Schema } from "effect"
 import { Browser } from "../browser/contract"
 import { Changes } from "../review/contract"
 import { Extension, Store } from "../sdk"
+import { Terminal } from "../terminal/contract"
 import { OpenAppPreferences } from "./apps"
 import { FileTree, OpenInApp } from "./contract"
 import en from "./i18n/en"
@@ -12,7 +13,7 @@ export default Extension.define({
   id: "file",
   provides: { tree: FileTree, openIn: OpenInApp },
   // Without review the tree lists only the workspace files; without the browser, HTML opens as a file tab.
-  uses: { changes: Changes, browser: Browser },
+  uses: { changes: Changes, browser: Browser, terminal: Terminal },
   stores: {
     tree: Store.global(
       TreeState,

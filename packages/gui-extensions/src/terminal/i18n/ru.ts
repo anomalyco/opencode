@@ -3,6 +3,7 @@ export default {
   "command.toggle": "Переключить терминал",
   "command.new": "Новый терминал",
   "command.new.description": "Создать новую вкладку терминала",
+  createFailed: "Не удалось открыть терминал",
   loading: "Загрузка терминала…",
   "title.numbered": "Терминал {{number}}",
   close: "Закрыть терминал",
