@@ -903,11 +903,17 @@ const layer = Layer.effect(
       return {
         diffs: files.map((entry) => {
           const stat = stats.get(entry.file)
+          const binary = stat?.binary ?? false
+          const chunk = binary ? undefined : patches.get(entry.file)
+          // Only a cut-off patch output means the budget withheld this file;
+          // otherwise a missing chunk is a parse failure, not a truncation.
+          const withheld = patch.truncated && !binary && chunk === undefined
           return {
             ...entry,
             additions: stat?.additions ?? 0,
             deletions: stat?.deletions ?? 0,
-            patch: stat?.binary ? "" : (patches.get(entry.file) ?? VcsPatch.emptyPatch(entry.file)),
+            patch: binary ? "" : (chunk ?? VcsPatch.emptyPatch(entry.file)),
+            ...(withheld ? { truncated: true as const } : {}),
           } satisfies FileDiff.Info
         }),
         patchBytes: Buffer.byteLength(patch.text),

@@ -230,6 +230,9 @@ describe("Git trees", () => {
       expect(diffs[0]?.patch).toContain("+caf\u00e9\n")
       expect(diffs[1]?.patch).toContain("+small\n")
       expect(diffs[2]?.patch).toBe(VcsPatch.emptyPatch("b-large.txt"))
+      expect(diffs[2]?.truncated).toBe(true)
+      expect(diffs[0]?.truncated).toBeUndefined()
+      expect(diffs[1]?.truncated).toBeUndefined()
       expect(diffs[3]?.patch).toBe("")
       expect(yield* git.tree.diff({ repository, from: before, to: after, paths: [] })).toEqual([])
     }),

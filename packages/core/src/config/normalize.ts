@@ -287,9 +287,22 @@ function normalizeMcp(input: Record<string, unknown>, encoded: Record<string, un
           )
           return
         }
-        const server = decodeValue(ConfigMCPV1.Info, value, path, diagnostics)
-        if (server !== undefined)
+        // Try V1 first with a temp diagnostics array so a V1 failure doesn't
+        // pollute diagnostics when the V2 fallback succeeds.
+        const v1Diag: Diagnostic[] = []
+        const server = decodeValue(ConfigMCPV1.Info, value, path, v1Diag)
+        if (server !== undefined) {
           setOwn(legacyServers, name, canonical(ConfigMCP.Server, ConfigMigrateV1.migrateMcp(server)))
+          return
+        }
+        // V2-only shape (e.g. disabled/timeout-object) — V1 decode failed, try V2
+        const v2Server = decodeValue(ConfigMCP.Server, value, path, diagnostics)
+        if (v2Server !== undefined) {
+          setOwn(nativeServers, name, v2Server)
+          return
+        }
+        // Both failed — surface the V1 diagnostic (more actionable for legacy users)
+        diagnostics.push(...v1Diag)
       })
     }
   }

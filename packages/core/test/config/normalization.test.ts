@@ -483,6 +483,29 @@ describe("ConfigNormalize", () => {
     expect(unknown.diagnostics.map((item) => [item.kind, item.path])).toEqual([["invalid", ["mcp", "timeout"]]])
   })
 
+  test("accepts V2-only server shape defined directly under mcp (not under mcp.servers)", () => {
+    // timeout as object is V2-only; V1 expects a PositiveInt and fails, triggering V2 fallback
+    const result = normalized({
+      mcp: {
+        "my-server": { type: "local", command: ["run"], timeout: { catalog: 6000 } },
+      },
+    })
+    expect((result.encoded.mcp as { servers: Record<string, unknown> }).servers).toEqual({
+      "my-server": { type: "local", command: ["run"], timeout: { catalog: 6000 } },
+    })
+    expect(result.diagnostics).toEqual([])
+  })
+
+  test("still rejects truly invalid server shapes under mcp", () => {
+    const result = normalized({
+      mcp: {
+        "bad-server": { unknownField: true },
+      },
+    })
+    expect(result.encoded.mcp).toBeUndefined()
+    expect(result.diagnostics.some((item) => item.kind === "invalid" && item.path.join(".").startsWith("mcp.bad-server"))).toBe(true)
+  })
+
   test("merges bounded compaction leaves and omits unsupported leaves", () => {
     const result = normalized({
       compaction: {
